@@ -23,20 +23,9 @@ jobs:
           username: ${{ secrets.SERVER_USER }}   # SSH username
           key: ${{ secrets.SERVER_SSH_KEY }}     # Private SSH key from GitHub Secrets
           script: |
-            # Go to your project folder
-            cd /home/gen7fuel/gen7hub
-
-            # Pull latest code
-            git pull origin main
-
-            # Stop Docker containers
-            docker compose down
-
-            # Remove only the specific build volume (optional)
-            docker volume rm gen7hub_dist || true
-
-            # Rebuild and start containers in detached mode
+            cd /home/gen7fuel/gen7hub && \
+            git checkout main && \
+            git pull origin main && \
+            docker compose down && \
+            docker volume rm gen7hub_dist || true && \
             docker compose up --build -d
-
-            # Optional: clean up dangling images to save space
-            # docker image prune -f
