@@ -1,0 +1,12 @@
+services:
+  upload-service:
+    container_name: cdn
+    build: ./
+    volumes:
+      - uploads:/app/uploads
+    ports:
+      - "5001:5001"
+    restart: always
+
+volumes:
+  uploads:

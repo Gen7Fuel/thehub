@@ -1,0 +1,59 @@
+services:
+  mongo:
+    container_name: mongo
+    image: mongo:4.4
+    volumes:
+      - mongodb_data:/data/db
+    ports:
+      - "27018:27017"
+    restart: always
+  backend:
+    container_name: backend
+    build: ./backend
+    ports:
+      - "5000:5000"
+    environment:
+      - MONGO_URI=mongodb://mongo:27017/main
+      - JWT_SECRET
+      - UPLOAD_SERVICE_URL=http://cdn:5001
+    depends_on:
+      - mongo
+    restart: always
+  cdn:
+    container_name: cdn
+    build: ./cdn
+    volumes:
+      - uploads:/app/uploads
+    ports:
+      - "5001:5001"
+    depends_on:
+      - mongo
+    restart: always
+
+  frontend:
+    container_name: frontend
+    build: ./frontend
+    volumes:
+      - dist:/app/dist
+    depends_on:
+      - backend
+      - cdn
+    restart: no
+
+  caddy:
+    container_name: webserver
+    image: caddy:latest
+    ports:
+      - "3000:3000"
+      # - "443:443"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile
+      - dist:/usr/share/caddy
+    depends_on:
+      - frontend
+    restart: always
+
+volumes:
+  dist:
+  uploads:
+  mongodb_data:
