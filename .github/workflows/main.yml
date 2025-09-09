@@ -39,4 +39,4 @@ jobs:
             docker compose up --build -d
 
             # Optional: clean up dangling images to save space
-            docker image prune -f
+            # docker image prune -f
