@@ -5,6 +5,7 @@ const path = require('path');
 const cors = require('cors');
 const fs = require('fs');
 
+// this app is only for CDN services like upload and download images/files.
 const app = express();
 app.use(cors());    //Aloows other websites to access the Express server. Specifically helping browsers to allow requests from frontend React to Backend Express.
 app.use(express.json({ limit: '50mb' }));   // The limit of json payloads coming with incominh requests. By defualt is 100 kb.

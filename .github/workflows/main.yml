@@ -24,7 +24,6 @@ jobs:
           key: ${{ secrets.SERVER_SSH_KEY }}     # Private SSH key from GitHub Secrets
           script: |
             cd /home/gen7fuel/gen7hub && \
-            git checkout main && \
             git pull origin main && \
             docker compose down && \
             docker volume rm gen7hub_dist || true && \
