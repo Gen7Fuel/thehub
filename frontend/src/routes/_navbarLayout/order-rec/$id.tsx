@@ -562,8 +562,8 @@ function RouteComponent() {
                             <TooltipProvider>
                               <Tooltip>
                                 <TooltipTrigger asChild>
-                                    <span className="px-3 py-1 bg-gray-800 text-white rounded-lg cursor-pointer shadow-sm hover:bg-gray-700">
-                                      <b>{item.onHandQty}</b>
+                                    <span className="px-3 py-1 bg-gray-800 text-white rounded-lg cursor-pointer shadow-sm hover:bg-gray-700"> 
+                                      <b>{item.onHandQty}</b>  
                                     </span>
                                 </TooltipTrigger>
                                 <TooltipContent>
@@ -579,13 +579,13 @@ function RouteComponent() {
                         <td className="px-4 py-3">{item.minStock}</td>
                         <td className="px-4 py-3">{item.itemsToOrder}</td>
                         <td className="px-4 py-3">{item.unitInCase}</td>
-                        <td className="px-4 py-3">
+                        <td className="px-4 py-3"> 
                           {item.casesToOrderOld !== undefined && item.casesToOrder !== item.casesToOrderOld ? (
                             <TooltipProvider>
                               <Tooltip>
-                                <TooltipTrigger asChild>
+                                <TooltipTrigger asChild> 
                                     <span className="px-3 py-1 bg-gray-800 text-white rounded-lg cursor-pointer shadow-sm hover:bg-gray-700">
-                                      <b>{item.casesToOrder}</b>
+                                      <b>{item.casesToOrder}</b>  
                                     </span>
                                 </TooltipTrigger>
                                 <TooltipContent>
