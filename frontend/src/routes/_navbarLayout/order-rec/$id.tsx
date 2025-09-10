@@ -585,7 +585,7 @@ function RouteComponent() {
                               <Tooltip>
                                 <TooltipTrigger asChild>
                                     <span className="px-3 py-1 bg-gray-800 text-white rounded-lg cursor-pointer shadow-sm hover:bg-gray-700">
-                                      <b>{item.casesToOrder}</b> //Dark gray box with white text when a change has been to the value
+                                      <b>{item.casesToOrder}</b>
                                     </span>
                                 </TooltipTrigger>
                                 <TooltipContent>
