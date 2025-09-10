@@ -334,8 +334,14 @@ function RouteComponent() {
 
         // Item line (starts with GTIN)
         const columns = Papa.parse(line, { skipEmptyLines: true }).data[0] as string[];
+        
+        const firstCell = columns[0]?.trim()
+        if (firstCell === 'TOTALS:'){
+          break;
+        }
+        
         if (columns && columns.length > 0) {
-          const firstColumn = columns[0]?.trim().replace(/\D/g, '');
+          const firstColumn = firstCell.replace(/\D/g, '');
           if (firstColumn && /^\d{12,}$/.test(firstColumn) && currentCategory) {
             const itemData: ItemData = {
               gtin: firstColumn,
