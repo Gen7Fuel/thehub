@@ -1,5 +1,6 @@
 name: Deploy to Server
 
+# Trigger on pushes to the main branch
 on:
   push:
     branches:
@@ -10,30 +11,24 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
+      # Step 1: Checkout repo (optional, mainly for GitHub Actions context)
       - name: Checkout repository
         uses: actions/checkout@v4
 
+      # Step 2: SSH to server and run deployment commands
       - name: Deploy via SSH
         uses: appleboy/ssh-action@v0.1.7
         with:
-          host: ${{ secrets.SERVER_HOST }}
-          username: ${{ secrets.SERVER_USER }}
-          key: ${{ secrets.SERVER_SSH_KEY }}
+          host: ${{ secrets.SERVER_HOST }}       # Server IP or hostname
+          username: ${{ secrets.SERVER_USER }}   # SSH username
+          key: ${{ secrets.SERVER_SSH_KEY }}     # Private SSH key from GitHub Secrets
           script: |
             cd /home/gen7fuel/gen7hub
 
-            # Create/overwrite backend/.env with GitHub Secrets
-            cat > backend/.env <<EOF
-            MONGO_URI=${{ secrets.MONGO_URI }}
-            JWT_SECRET=${{ secrets.JWT_SECRET }}
-            NODE_ENV=production
-            PORT=3000
-            EOF
+            export MONGO_URI=${{ secrets.MONGO_URI }}
+            export JWT_SECRET=${{ secrets.JWT_SECRET }}
 
-            # Pull latest code
             git pull origin main
-
-            # Rebuild and restart containers
             docker compose down
             docker volume rm gen7hub_dist || true
-            docker compose up -d --build
+            docker compose up --build -d

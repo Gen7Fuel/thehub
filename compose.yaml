@@ -13,8 +13,8 @@ services:
     ports:
       - "5000:5000"
     environment:
-      - MONGO_URI=mongodb://mongo:27017/main
-      - JWT_SECRET
+      - MONGO_URI=${MONGO_URI}
+      - JWT_SECRET=${JWT_SECRET}
       - UPLOAD_SERVICE_URL=http://cdn:5001
     depends_on:
       - mongo
