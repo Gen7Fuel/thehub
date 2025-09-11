@@ -410,6 +410,7 @@ function RouteComponent() {
             disabled={switchLoading}
             onCheckedChange={(val:boolean) => handleSwitchChange("orderPlaced", val)}
             id="orderPlaced-switch"
+            className="data-[state=checked]:bg-green-500 relative"
           />
           <label htmlFor="orderPlaced-switch" className="text-sm">Order Placed</label>
         </div>
@@ -419,6 +420,7 @@ function RouteComponent() {
             disabled={switchLoading}
             onCheckedChange={(val:boolean) => handleSwitchChange("delivered", val)}
             id="delivered-switch"
+            className="data-[state=checked]:bg-green-500 relative"
           />
           <label htmlFor="delivered-switch" className="text-sm">Delivered</label>
         </div>
@@ -472,25 +474,20 @@ function RouteComponent() {
       <Accordion type="single" collapsible className="w-full">
         {orderRec.categories.map((cat: any, catIdx: number) => (
           <AccordionItem key={catIdx} value={cat.name}>
-            {/* <AccordionTrigger className="flex items-center justify-between w-full">
-              <span>{cat.name}</span>
-              <span className={`ml-2 px-2 py-1 rounded text-xs ${cat.completed ? 'bg-green-100 text-green-700' : 'bg-gray-200 text-gray-700'}`}>
-                {cat.completed ? 'Completed' : 'Incomplete'}
-              </span>
-            </AccordionTrigger> */}
-            <AccordionTrigger className="flex items-center justify-between w-full">
-              <span>
+            <AccordionTrigger className="w-full flex items-center">
+              <span className="flex-1 flex items-center gap-1">
                 {cat.name}
                 {cat.items.some(
                   (item: any) =>
                     (item.onHandQtyOld !== undefined && item.onHandQty !== item.onHandQtyOld) ||
                     (item.casesToOrderOld !== undefined && item.casesToOrder !== item.casesToOrderOld)
                 ) && (
-                  <span className="text-red-500 font-bold ml-1" title="This group has changed items">*</span>
+                  <span className="text-red-500 font-bold" title="This group has changed items">*</span>
                 )}
               </span>
-              <span className={`ml-2 px-2 py-1 rounded text-xs ${cat.completed ? 'bg-green-100 text-green-700' : 'bg-gray-200 text-gray-700'}`}>
-                {cat.completed ? 'Completed' : 'Incomplete'}
+              <span
+                className={`px-2 py-1 rounded text-xs mr-2 ${cat.completed ? "bg-green-100 text-green-700" : "bg-gray-200 text-gray-700"}`}>
+                {cat.completed ? "Completed" : "Incomplete"}
               </span>
             </AccordionTrigger>
             <AccordionContent>
@@ -556,13 +553,13 @@ function RouteComponent() {
                           <span>{item.vin}</span>
                           <span>{item.itemName}</span>
                         </td>
-                        <td className="px-4 py-3">{item.size}</td>
-                        <td className="px-4 py-3">
+                        <td className="px-4 py-3 text-center">{item.size}</td>
+                        <td className="px-4 py-3 text-center">
                           {item.onHandQtyOld !== undefined && item.onHandQty !== item.onHandQtyOld ? (
                             <TooltipProvider>
                               <Tooltip>
                                 <TooltipTrigger asChild>
-                                    <span className="px-3 py-1 bg-gray-800 text-white rounded-lg cursor-pointer shadow-sm hover:bg-gray-700"> 
+                                    <span className="px-3 py-1 bg-gray-800 text-white rounded-lg cursor-pointer shadow-sm hover:bg-gray-700 text-center"> 
                                       <b>{item.onHandQty}</b>  
                                     </span>
                                 </TooltipTrigger>
@@ -575,16 +572,16 @@ function RouteComponent() {
                             item.onHandQty
                           )}
                         </td>
-                        <td className="px-4 py-3">{item.forecast}</td>
-                        <td className="px-4 py-3">{item.minStock}</td>
-                        <td className="px-4 py-3">{item.itemsToOrder}</td>
-                        <td className="px-4 py-3">{item.unitInCase}</td>
-                        <td className="px-4 py-3"> 
+                        <td className="px-4 py-3 text-center">{item.forecast}</td>
+                        <td className="px-4 py-3 text-center">{item.minStock}</td>
+                        <td className="px-4 py-3 text-center">{item.itemsToOrder}</td>
+                        <td className="px-4 py-3 text-center">{item.unitInCase}</td>
+                        <td className="px-4 py-3 text-center"> 
                           {item.casesToOrderOld !== undefined && item.casesToOrder !== item.casesToOrderOld ? (
                             <TooltipProvider>
                               <Tooltip>
                                 <TooltipTrigger asChild> 
-                                    <span className="px-3 py-1 bg-gray-800 text-white rounded-lg cursor-pointer shadow-sm hover:bg-gray-700">
+                                    <span className="px-3 py-1 bg-gray-800 text-white rounded-lg cursor-pointer shadow-sm hover:bg-gray-700 text-center">
                                       <b>{item.casesToOrder}</b>  
                                     </span>
                                 </TooltipTrigger>
