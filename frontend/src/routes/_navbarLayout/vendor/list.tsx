@@ -1,22 +1,16 @@
 import { createFileRoute } from '@tanstack/react-router'
 import { useEffect, useState } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { LocationPicker } from "@/components/custom/locationPicker";
 import { Pencil } from "lucide-react";
 
-interface StationSupply {
-  name: string;
-  upc: string;
-  size: string;
-}
-
 interface Vendor {
   _id: string;
   name: string;
-  location: string;
-  station_supplies: StationSupply[];
+  category?: string;
+  order_placement_method?: string;
+  vendor_order_frequency?: number;
 }
 
 export const Route = createFileRoute('/_navbarLayout/vendor/list')({
@@ -84,7 +78,9 @@ function RouteComponent() {
                 <thead>
                   <tr className="bg-muted">
                     <th className="p-2 border">Vendor Name</th>
-                    <th className="p-2 border">Location</th>
+                    <th className="p-2 border">Category</th>
+                    <th className="p-2 border">Order Placement Method</th>
+                    <th className="p-2 border">Order Frequency</th>
                     {/* <th className="p-2 border">Station Supplies</th> */}
                     <th className="p-2 border">Actions</th>
                   </tr>
@@ -93,9 +89,9 @@ function RouteComponent() {
                   {vendors.map((vendor) => (
                     <tr key={vendor._id} className="hover:bg-accent">
                       <td className="p-2 border font-medium">{vendor.name}</td>
-                      <td className="p-2 border">
-                        <Badge>{vendor.location}</Badge>
-                      </td>
+                      <td className="p-2 border font-medium">{vendor.category}</td>
+                      <td className="p-2 border font-medium">{vendor.order_placement_method}</td>
+                      <td className="p-2 border font-medium">{vendor.vendor_order_frequency}</td>
                       {/* <td className="p-2 border">
                         <div className="max-h-40 overflow-y-auto">
                           <table className="w-full text-xs">
