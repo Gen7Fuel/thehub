@@ -6,7 +6,8 @@
     "start": "vite --port 3030",
     "build": "vite build && tsc",
     "serve": "vite preview",
-    "test": "vitest run"
+    "test": "vitest run",
+    "dev": "vite --host --port 5173"
   },
   "dependencies": {
     "@radix-ui/react-accordion": "^1.2.11",

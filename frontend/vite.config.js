@@ -27,9 +27,12 @@ export default defineConfig({
     },
   },
   server: {
+    watch: {
+      usePolling: true,
+    },
     proxy: {
-      '/api': 'http://localhost:5000',
-      '/cdn': 'http://localhost:5001',
+      '/api': 'http://backend:5000',
+      '/cdn': 'http://cdn:5001',
     }
   }
 });
