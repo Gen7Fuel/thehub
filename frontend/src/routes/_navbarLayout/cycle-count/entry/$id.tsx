@@ -275,6 +275,7 @@ function RouteComponent() {
             }}
             disabled={cycle.completed}
             id="day-complete-switch"
+            className="data-[state=checked]:bg-green-500 relative"
           />
           <label htmlFor="day-complete-switch" className="ml-2">
             Mark this day as completed
@@ -343,6 +344,23 @@ function RouteComponent() {
                               className="w-20 border rounded px-2 py-1"
                               value={item.boh}
                               onChange={e => handleInputChange(item._id, 'boh', e.target.value)}
+                              onFocus={e => {
+                                // Saving the current value in localStorage before clearing
+                                localStorage.setItem(`boh-${item._id}`, e.target.value);
+                                e.target.value = ''; // clearing the box
+                              }}
+                              onBlur={e => {
+                                if (e.target.value === '') {
+                                  // If nothing entered, restoring the old value from localStorage
+                                  const oldValue = localStorage.getItem(`boh-${item._id}`);
+                                  if (oldValue !== null) {
+                                    handleInputChange(item._id, 'boh', oldValue);
+                                  }
+                                } else {
+                                  // If the value changes to something new, persist it
+                                  handleInputChange(item._id, 'boh', e.target.value);
+                                }
+                              }}
                               disabled={cycle.completed}
                             />
                           </td>
@@ -353,6 +371,23 @@ function RouteComponent() {
                               className="w-20 border rounded px-2 py-1"
                               value={item.foh}
                               onChange={e => handleInputChange(item._id, 'foh', e.target.value)}
+                              onFocus={e => {
+                                // Saving the current value in localStorage before clearing
+                                localStorage.setItem(`foh-${item._id}`, e.target.value);
+                                e.target.value = ''; // clearing the box
+                              }}
+                              onBlur={e => {
+                                if (e.target.value === '') {
+                                  // If nothing entered, restoring the old value from localStorage
+                                  const oldValue = localStorage.getItem(`foh-${item._id}`);
+                                  if (oldValue !== null) {
+                                    handleInputChange(item._id, 'foh', oldValue);
+                                  }
+                                } else {
+                                  // If the value changes to something new, persist it
+                                  handleInputChange(item._id, 'foh', e.target.value);
+                                }
+                              }}
                               disabled={cycle.completed}
                             />
                           </td>
