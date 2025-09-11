@@ -702,6 +702,7 @@ function RouteComponent() {
                           onChange={e => handleChange(catIdx, itemIdx, field, Number(e.target.value))}
                           onFocus={e => e.target.select()}
                           className="w-24 text-center text-gray-900 font-semibold disabled:text-gray-900"
+                          disabled
                         />
                       </div>
                     )}
