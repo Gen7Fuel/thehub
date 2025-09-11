@@ -31,8 +31,8 @@ export default defineConfig({
       usePolling: true,
     },
     proxy: {
-      '/api': 'http://backend:5000',
-      '/cdn': 'http://cdn:5001',
+      '/api': 'http://localhost:5000',
+      '/cdn': 'http://localhost:5001',
     }
   }
 });
