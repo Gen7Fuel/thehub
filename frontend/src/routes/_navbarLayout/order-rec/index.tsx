@@ -230,6 +230,7 @@ function RouteComponent() {
   const [error, setError] = useState<string | null>(null)
   const [site, setSite] = useState<string>(localStorage.getItem('location') || '')
   const [vendor, setVendor] = useState<string>('')
+  const [includeStationSupplies, setIncludeStationSupplies] = useState(false);
 
   const onDrop = useCallback(async (acceptedFiles: File[]) => {
     const file = acceptedFiles[0]
@@ -364,11 +365,21 @@ function RouteComponent() {
       const filteredCategories = categories.filter(cat => cat.items.length > 0);
 
       // add authorization header with bearer token
-      await axios.post('/api/order-rec', { categories: filteredCategories, site, vendor, email: localStorage.getItem('email') }, {
-        headers: {
-          Authorization: `Bearer ${localStorage.getItem('token')}`
+      await axios.post(
+        '/api/order-rec',
+        {
+          categories: filteredCategories,
+          site,
+          vendor,
+          email: localStorage.getItem('email'),
+          includeStationSupplies
+        },
+        {
+          headers: {
+            Authorization: `Bearer ${localStorage.getItem('token')}`
+          }
         }
-      });
+      );
 
       toast.success('File uploaded and order recommendation submitted!');
   
@@ -445,6 +456,18 @@ function RouteComponent() {
             <div>
               <label className="block text-sm font-medium mb-1">Vendor</label>
               <VendorPicker value={vendor} setVendor={setVendor} location={site} />
+            </div>
+            <div className="mb-4 flex items-center gap-2">
+              <input
+                type="checkbox"
+                id="include-station-supplies"
+                checked={includeStationSupplies}
+                onChange={e => setIncludeStationSupplies(e.target.checked)}
+                className="mr-2"
+              />
+              <label htmlFor="include-station-supplies" className="text-sm">
+                Include station supplies
+              </label>
             </div>
           </div>
 
