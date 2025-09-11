@@ -408,7 +408,7 @@ function RouteComponent() {
           <Switch
             checked={!!orderRec?.orderPlaced}
             disabled={switchLoading}
-            onCheckedChange={val => handleSwitchChange("orderPlaced", val)}
+            onCheckedChange={(val:boolean) => handleSwitchChange("orderPlaced", val)}
             id="orderPlaced-switch"
           />
           <label htmlFor="orderPlaced-switch" className="text-sm">Order Placed</label>
@@ -417,7 +417,7 @@ function RouteComponent() {
           <Switch
             checked={!!orderRec?.delivered}
             disabled={switchLoading}
-            onCheckedChange={val => handleSwitchChange("delivered", val)}
+            onCheckedChange={(val:boolean) => handleSwitchChange("delivered", val)}
             id="delivered-switch"
           />
           <label htmlFor="delivered-switch" className="text-sm">Delivered</label>
@@ -562,8 +562,8 @@ function RouteComponent() {
                             <TooltipProvider>
                               <Tooltip>
                                 <TooltipTrigger asChild>
-                                    <span className="px-3 py-1 bg-gray-800 text-white rounded-lg cursor-pointer shadow-sm hover:bg-gray-700">
-                                      <b>{item.onHandQty}</b>
+                                    <span className="px-3 py-1 bg-gray-800 text-white rounded-lg cursor-pointer shadow-sm hover:bg-gray-700"> 
+                                      <b>{item.onHandQty}</b>  
                                     </span>
                                 </TooltipTrigger>
                                 <TooltipContent>
@@ -579,13 +579,13 @@ function RouteComponent() {
                         <td className="px-4 py-3">{item.minStock}</td>
                         <td className="px-4 py-3">{item.itemsToOrder}</td>
                         <td className="px-4 py-3">{item.unitInCase}</td>
-                        <td className="px-4 py-3">
+                        <td className="px-4 py-3"> 
                           {item.casesToOrderOld !== undefined && item.casesToOrder !== item.casesToOrderOld ? (
                             <TooltipProvider>
                               <Tooltip>
-                                <TooltipTrigger asChild>
+                                <TooltipTrigger asChild> 
                                     <span className="px-3 py-1 bg-gray-800 text-white rounded-lg cursor-pointer shadow-sm hover:bg-gray-700">
-                                      <b>{item.casesToOrder}</b>
+                                      <b>{item.casesToOrder}</b>  
                                     </span>
                                 </TooltipTrigger>
                                 <TooltipContent>
@@ -626,7 +626,7 @@ function RouteComponent() {
       </Accordion>
 
       {/* Modal for editing item */}
-      <Dialog open={!!editItem} onOpenChange={open => !open && setEditItem(null)}>
+      <Dialog open={!!editItem} onOpenChange={(open:boolean) => !open && setEditItem(null)}>
         <DialogContent>
           <DialogHeader>
             <DialogTitle className="text-center">
@@ -682,7 +682,6 @@ function RouteComponent() {
                           onChange={e => handleChange(catIdx, itemIdx, field, Number(e.target.value))}
                           onFocus={e => e.target.select()}
                           className="w-24 text-center text-gray-900 font-semibold disabled:text-gray-900"
-                          disabled
                         />
                         <Button
                           type="button"
@@ -703,7 +702,6 @@ function RouteComponent() {
                           onChange={e => handleChange(catIdx, itemIdx, field, Number(e.target.value))}
                           onFocus={e => e.target.select()}
                           className="w-24 text-center text-gray-900 font-semibold disabled:text-gray-900"
-                          disabled
                         />
                       </div>
                     )}
