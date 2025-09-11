@@ -44,6 +44,7 @@ function RouteComponent() {
 
   useEffect(() => {
     if (location) {
+      localStorage.setItem("location", location);
       fetchOrderRecs(location, showAdvanced ? vendor : '', showAdvanced ? date : undefined, setOrderRecs, setError, setLoading)
     }
   }, [date, location, vendor, showAdvanced])
