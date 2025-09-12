@@ -8,761 +8,464 @@
 // You should NOT make any changes in this file as it will be overwritten.
 // Additionally, you should also exclude this file from your linter and/or formatter to prevent it from being checked or modified.
 
-import { Route as rootRouteImport } from './routes/__root'
-import { Route as NavbarLayoutRouteImport } from './routes/_navbarLayout'
-import { Route as NavbarLayoutIndexRouteImport } from './routes/_navbarLayout/index'
-import { Route as NavbarLayoutVendorRouteImport } from './routes/_navbarLayout/vendor'
-import { Route as NavbarLayoutStatusRouteImport } from './routes/_navbarLayout/status'
-import { Route as NavbarLayoutSettingsRouteImport } from './routes/_navbarLayout/settings'
-import { Route as NavbarLayoutReportsRouteImport } from './routes/_navbarLayout/reports'
-import { Route as NavbarLayoutPoRouteImport } from './routes/_navbarLayout/po'
-import { Route as NavbarLayoutPayablesRouteImport } from './routes/_navbarLayout/payables'
-import { Route as NavbarLayoutOrderRecRouteImport } from './routes/_navbarLayout/order-rec'
-import { Route as NavbarLayoutKardpollRouteImport } from './routes/_navbarLayout/kardpoll'
-import { Route as NavbarLayoutFleetRouteImport } from './routes/_navbarLayout/fleet'
-import { Route as NavbarLayoutDailyReportsRouteImport } from './routes/_navbarLayout/daily-reports'
-import { Route as NavbarLayoutCycleCountRouteImport } from './routes/_navbarLayout/cycle-count'
-import { Route as NavbarLayoutAuditRouteImport } from './routes/_navbarLayout/audit'
-import { Route as authRegisterRouteImport } from './routes/(auth)/register'
-import { Route as authLoginRouteImport } from './routes/(auth)/login'
-import { Route as NavbarLayoutVendorIndexRouteImport } from './routes/_navbarLayout/vendor/index'
-import { Route as NavbarLayoutStatusIndexRouteImport } from './routes/_navbarLayout/status/index'
-import { Route as NavbarLayoutSettingsIndexRouteImport } from './routes/_navbarLayout/settings/index'
-import { Route as NavbarLayoutPoIndexRouteImport } from './routes/_navbarLayout/po/index'
-import { Route as NavbarLayoutPayablesIndexRouteImport } from './routes/_navbarLayout/payables/index'
-import { Route as NavbarLayoutOrderRecIndexRouteImport } from './routes/_navbarLayout/order-rec/index'
-import { Route as NavbarLayoutKardpollIndexRouteImport } from './routes/_navbarLayout/kardpoll/index'
-import { Route as NavbarLayoutFleetIndexRouteImport } from './routes/_navbarLayout/fleet/index'
-import { Route as NavbarLayoutCycleCountIndexRouteImport } from './routes/_navbarLayout/cycle-count/index'
-import { Route as NavbarLayoutAuditIndexRouteImport } from './routes/_navbarLayout/audit/index'
-import { Route as NavbarLayoutVendorListRouteImport } from './routes/_navbarLayout/vendor/list'
-import { Route as NavbarLayoutStatusListRouteImport } from './routes/_navbarLayout/status/list'
-import { Route as NavbarLayoutSettingsUsersRouteImport } from './routes/_navbarLayout/settings/users'
-import { Route as NavbarLayoutSettingsPaypointsRouteImport } from './routes/_navbarLayout/settings/paypoints'
-import { Route as NavbarLayoutReportsSalesSummaryRouteImport } from './routes/_navbarLayout/reports/sales-summary'
-import { Route as NavbarLayoutReportsOtherRouteImport } from './routes/_navbarLayout/reports/other'
-import { Route as NavbarLayoutPoSignatureRouteImport } from './routes/_navbarLayout/po/signature'
-import { Route as NavbarLayoutPoReceiptRouteImport } from './routes/_navbarLayout/po/receipt'
-import { Route as NavbarLayoutPoListRouteImport } from './routes/_navbarLayout/po/list'
-import { Route as NavbarLayoutPayablesReviewRouteImport } from './routes/_navbarLayout/payables/review'
-import { Route as NavbarLayoutPayablesListRouteImport } from './routes/_navbarLayout/payables/list'
-import { Route as NavbarLayoutPayablesImagesRouteImport } from './routes/_navbarLayout/payables/images'
-import { Route as NavbarLayoutOrderRecListRouteImport } from './routes/_navbarLayout/order-rec/list'
-import { Route as NavbarLayoutOrderRecDashboardRouteImport } from './routes/_navbarLayout/order-rec/dashboard'
-import { Route as NavbarLayoutOrderRecIdRouteImport } from './routes/_navbarLayout/order-rec/$id'
-import { Route as NavbarLayoutKardpollListRouteImport } from './routes/_navbarLayout/kardpoll/list'
-import { Route as NavbarLayoutFleetListRouteImport } from './routes/_navbarLayout/fleet/list'
-import { Route as NavbarLayoutDailyReportsShiftWorksheetRouteImport } from './routes/_navbarLayout/daily-reports/shift-worksheet'
-import { Route as NavbarLayoutDailyReportsCashSummaryRouteImport } from './routes/_navbarLayout/daily-reports/cash-summary'
-import { Route as NavbarLayoutCycleCountListRouteImport } from './routes/_navbarLayout/cycle-count/list'
-import { Route as NavbarLayoutAuditListRouteImport } from './routes/_navbarLayout/audit/list'
-import { Route as NavbarLayoutAuditChecklistRouteImport } from './routes/_navbarLayout/audit/checklist'
-import { Route as NavbarLayoutAuditIdRouteImport } from './routes/_navbarLayout/audit/$id'
-import { Route as NavbarLayoutSettingsUsersIndexRouteImport } from './routes/_navbarLayout/settings/users/index'
-import { Route as NavbarLayoutSettingsPaypointsIndexRouteImport } from './routes/_navbarLayout/settings/paypoints/index'
-import { Route as NavbarLayoutReportsSalesSummaryIndexRouteImport } from './routes/_navbarLayout/reports/sales-summary/index'
-import { Route as NavbarLayoutDailyReportsShiftWorksheetIndexRouteImport } from './routes/_navbarLayout/daily-reports/shift-worksheet/index'
-import { Route as NavbarLayoutVendorEditIdRouteImport } from './routes/_navbarLayout/vendor/edit/$id'
-import { Route as NavbarLayoutSettingsUsersUserIdRouteImport } from './routes/_navbarLayout/settings/users/$userId'
-import { Route as NavbarLayoutSettingsPaypointsSiteRouteImport } from './routes/_navbarLayout/settings/paypoints/$site'
-import { Route as NavbarLayoutReportsSalesSummaryUploadRouteImport } from './routes/_navbarLayout/reports/sales-summary/upload'
-import { Route as NavbarLayoutDailyReportsShiftWorksheetCreateRouteImport } from './routes/_navbarLayout/daily-reports/shift-worksheet/create'
-import { Route as NavbarLayoutDailyReportsShiftWorksheetWorksheetRouteImport } from './routes/_navbarLayout/daily-reports/shift-worksheet/$worksheet'
-import { Route as NavbarLayoutCycleCountEntryIdRouteImport } from './routes/_navbarLayout/cycle-count/entry/$id'
-import { Route as NavbarLayoutAuditChecklistTemplateIdRouteImport } from './routes/_navbarLayout/audit/checklist/$templateId'
+// Import Routes
 
-const NavbarLayoutRoute = NavbarLayoutRouteImport.update({
+import { Route as rootRoute } from './routes/__root'
+import { Route as NavbarLayoutImport } from './routes/_navbarLayout'
+import { Route as NavbarLayoutIndexImport } from './routes/_navbarLayout/index'
+import { Route as NavbarLayoutVendorImport } from './routes/_navbarLayout/vendor'
+import { Route as NavbarLayoutStatusImport } from './routes/_navbarLayout/status'
+import { Route as NavbarLayoutSettingsImport } from './routes/_navbarLayout/settings'
+import { Route as NavbarLayoutReportsImport } from './routes/_navbarLayout/reports'
+import { Route as NavbarLayoutPoImport } from './routes/_navbarLayout/po'
+import { Route as NavbarLayoutPayablesImport } from './routes/_navbarLayout/payables'
+import { Route as NavbarLayoutOrderRecImport } from './routes/_navbarLayout/order-rec'
+import { Route as NavbarLayoutKardpollImport } from './routes/_navbarLayout/kardpoll'
+import { Route as NavbarLayoutFleetImport } from './routes/_navbarLayout/fleet'
+import { Route as NavbarLayoutDailyReportsImport } from './routes/_navbarLayout/daily-reports'
+import { Route as NavbarLayoutCycleCountImport } from './routes/_navbarLayout/cycle-count'
+import { Route as NavbarLayoutAuditImport } from './routes/_navbarLayout/audit'
+import { Route as authRegisterImport } from './routes/(auth)/register'
+import { Route as authLoginImport } from './routes/(auth)/login'
+import { Route as NavbarLayoutVendorIndexImport } from './routes/_navbarLayout/vendor/index'
+import { Route as NavbarLayoutStatusIndexImport } from './routes/_navbarLayout/status/index'
+import { Route as NavbarLayoutSettingsIndexImport } from './routes/_navbarLayout/settings/index'
+import { Route as NavbarLayoutPoIndexImport } from './routes/_navbarLayout/po/index'
+import { Route as NavbarLayoutPayablesIndexImport } from './routes/_navbarLayout/payables/index'
+import { Route as NavbarLayoutOrderRecIndexImport } from './routes/_navbarLayout/order-rec/index'
+import { Route as NavbarLayoutKardpollIndexImport } from './routes/_navbarLayout/kardpoll/index'
+import { Route as NavbarLayoutFleetIndexImport } from './routes/_navbarLayout/fleet/index'
+import { Route as NavbarLayoutCycleCountIndexImport } from './routes/_navbarLayout/cycle-count/index'
+import { Route as NavbarLayoutAuditIndexImport } from './routes/_navbarLayout/audit/index'
+import { Route as NavbarLayoutVendorListImport } from './routes/_navbarLayout/vendor/list'
+import { Route as NavbarLayoutStatusListImport } from './routes/_navbarLayout/status/list'
+import { Route as NavbarLayoutSettingsUsersImport } from './routes/_navbarLayout/settings/users'
+import { Route as NavbarLayoutSettingsPaypointsImport } from './routes/_navbarLayout/settings/paypoints'
+import { Route as NavbarLayoutReportsSalesSummaryImport } from './routes/_navbarLayout/reports/sales-summary'
+import { Route as NavbarLayoutReportsOtherImport } from './routes/_navbarLayout/reports/other'
+import { Route as NavbarLayoutPoSignatureImport } from './routes/_navbarLayout/po/signature'
+import { Route as NavbarLayoutPoReceiptImport } from './routes/_navbarLayout/po/receipt'
+import { Route as NavbarLayoutPoListImport } from './routes/_navbarLayout/po/list'
+import { Route as NavbarLayoutPayablesReviewImport } from './routes/_navbarLayout/payables/review'
+import { Route as NavbarLayoutPayablesListImport } from './routes/_navbarLayout/payables/list'
+import { Route as NavbarLayoutPayablesImagesImport } from './routes/_navbarLayout/payables/images'
+import { Route as NavbarLayoutOrderRecListImport } from './routes/_navbarLayout/order-rec/list'
+import { Route as NavbarLayoutOrderRecDashboardImport } from './routes/_navbarLayout/order-rec/dashboard'
+import { Route as NavbarLayoutOrderRecIdImport } from './routes/_navbarLayout/order-rec/$id'
+import { Route as NavbarLayoutKardpollListImport } from './routes/_navbarLayout/kardpoll/list'
+import { Route as NavbarLayoutFleetListImport } from './routes/_navbarLayout/fleet/list'
+import { Route as NavbarLayoutDailyReportsShiftWorksheetImport } from './routes/_navbarLayout/daily-reports/shift-worksheet'
+import { Route as NavbarLayoutDailyReportsCashSummaryImport } from './routes/_navbarLayout/daily-reports/cash-summary'
+import { Route as NavbarLayoutCycleCountListImport } from './routes/_navbarLayout/cycle-count/list'
+import { Route as NavbarLayoutAuditListImport } from './routes/_navbarLayout/audit/list'
+import { Route as NavbarLayoutAuditChecklistImport } from './routes/_navbarLayout/audit/checklist'
+import { Route as NavbarLayoutAuditIdImport } from './routes/_navbarLayout/audit/$id'
+import { Route as NavbarLayoutSettingsUsersIndexImport } from './routes/_navbarLayout/settings/users/index'
+import { Route as NavbarLayoutSettingsPaypointsIndexImport } from './routes/_navbarLayout/settings/paypoints/index'
+import { Route as NavbarLayoutReportsSalesSummaryIndexImport } from './routes/_navbarLayout/reports/sales-summary/index'
+import { Route as NavbarLayoutDailyReportsShiftWorksheetIndexImport } from './routes/_navbarLayout/daily-reports/shift-worksheet/index'
+import { Route as NavbarLayoutVendorEditIdImport } from './routes/_navbarLayout/vendor/edit/$id'
+import { Route as NavbarLayoutSettingsUsersUserIdImport } from './routes/_navbarLayout/settings/users/$userId'
+import { Route as NavbarLayoutSettingsPaypointsSiteImport } from './routes/_navbarLayout/settings/paypoints/$site'
+import { Route as NavbarLayoutReportsSalesSummaryUploadImport } from './routes/_navbarLayout/reports/sales-summary/upload'
+import { Route as NavbarLayoutDailyReportsShiftWorksheetCreateImport } from './routes/_navbarLayout/daily-reports/shift-worksheet/create'
+import { Route as NavbarLayoutDailyReportsShiftWorksheetWorksheetImport } from './routes/_navbarLayout/daily-reports/shift-worksheet/$worksheet'
+import { Route as NavbarLayoutCycleCountEntryIdImport } from './routes/_navbarLayout/cycle-count/entry/$id'
+import { Route as NavbarLayoutAuditChecklistTemplateIdImport } from './routes/_navbarLayout/audit/checklist/$templateId'
+
+// Create/Update Routes
+
+const NavbarLayoutRoute = NavbarLayoutImport.update({
   id: '/_navbarLayout',
-  getParentRoute: () => rootRouteImport,
+  getParentRoute: () => rootRoute,
 } as any)
-const NavbarLayoutIndexRoute = NavbarLayoutIndexRouteImport.update({
+
+const NavbarLayoutIndexRoute = NavbarLayoutIndexImport.update({
   id: '/',
   path: '/',
   getParentRoute: () => NavbarLayoutRoute,
 } as any)
-const NavbarLayoutVendorRoute = NavbarLayoutVendorRouteImport.update({
+
+const NavbarLayoutVendorRoute = NavbarLayoutVendorImport.update({
   id: '/vendor',
   path: '/vendor',
   getParentRoute: () => NavbarLayoutRoute,
 } as any)
-const NavbarLayoutStatusRoute = NavbarLayoutStatusRouteImport.update({
+
+const NavbarLayoutStatusRoute = NavbarLayoutStatusImport.update({
   id: '/status',
   path: '/status',
   getParentRoute: () => NavbarLayoutRoute,
 } as any)
-const NavbarLayoutSettingsRoute = NavbarLayoutSettingsRouteImport.update({
+
+const NavbarLayoutSettingsRoute = NavbarLayoutSettingsImport.update({
   id: '/settings',
   path: '/settings',
   getParentRoute: () => NavbarLayoutRoute,
 } as any)
-const NavbarLayoutReportsRoute = NavbarLayoutReportsRouteImport.update({
+
+const NavbarLayoutReportsRoute = NavbarLayoutReportsImport.update({
   id: '/reports',
   path: '/reports',
   getParentRoute: () => NavbarLayoutRoute,
 } as any)
-const NavbarLayoutPoRoute = NavbarLayoutPoRouteImport.update({
+
+const NavbarLayoutPoRoute = NavbarLayoutPoImport.update({
   id: '/po',
   path: '/po',
   getParentRoute: () => NavbarLayoutRoute,
 } as any)
-const NavbarLayoutPayablesRoute = NavbarLayoutPayablesRouteImport.update({
+
+const NavbarLayoutPayablesRoute = NavbarLayoutPayablesImport.update({
   id: '/payables',
   path: '/payables',
   getParentRoute: () => NavbarLayoutRoute,
 } as any)
-const NavbarLayoutOrderRecRoute = NavbarLayoutOrderRecRouteImport.update({
+
+const NavbarLayoutOrderRecRoute = NavbarLayoutOrderRecImport.update({
   id: '/order-rec',
   path: '/order-rec',
   getParentRoute: () => NavbarLayoutRoute,
 } as any)
-const NavbarLayoutKardpollRoute = NavbarLayoutKardpollRouteImport.update({
+
+const NavbarLayoutKardpollRoute = NavbarLayoutKardpollImport.update({
   id: '/kardpoll',
   path: '/kardpoll',
   getParentRoute: () => NavbarLayoutRoute,
 } as any)
-const NavbarLayoutFleetRoute = NavbarLayoutFleetRouteImport.update({
+
+const NavbarLayoutFleetRoute = NavbarLayoutFleetImport.update({
   id: '/fleet',
   path: '/fleet',
   getParentRoute: () => NavbarLayoutRoute,
 } as any)
-const NavbarLayoutDailyReportsRoute =
-  NavbarLayoutDailyReportsRouteImport.update({
-    id: '/daily-reports',
-    path: '/daily-reports',
-    getParentRoute: () => NavbarLayoutRoute,
-  } as any)
-const NavbarLayoutCycleCountRoute = NavbarLayoutCycleCountRouteImport.update({
+
+const NavbarLayoutDailyReportsRoute = NavbarLayoutDailyReportsImport.update({
+  id: '/daily-reports',
+  path: '/daily-reports',
+  getParentRoute: () => NavbarLayoutRoute,
+} as any)
+
+const NavbarLayoutCycleCountRoute = NavbarLayoutCycleCountImport.update({
   id: '/cycle-count',
   path: '/cycle-count',
   getParentRoute: () => NavbarLayoutRoute,
 } as any)
-const NavbarLayoutAuditRoute = NavbarLayoutAuditRouteImport.update({
+
+const NavbarLayoutAuditRoute = NavbarLayoutAuditImport.update({
   id: '/audit',
   path: '/audit',
   getParentRoute: () => NavbarLayoutRoute,
 } as any)
-const authRegisterRoute = authRegisterRouteImport.update({
+
+const authRegisterRoute = authRegisterImport.update({
   id: '/(auth)/register',
   path: '/register',
-  getParentRoute: () => rootRouteImport,
+  getParentRoute: () => rootRoute,
 } as any)
-const authLoginRoute = authLoginRouteImport.update({
+
+const authLoginRoute = authLoginImport.update({
   id: '/(auth)/login',
   path: '/login',
-  getParentRoute: () => rootRouteImport,
+  getParentRoute: () => rootRoute,
 } as any)
-const NavbarLayoutVendorIndexRoute = NavbarLayoutVendorIndexRouteImport.update({
+
+const NavbarLayoutVendorIndexRoute = NavbarLayoutVendorIndexImport.update({
   id: '/',
   path: '/',
   getParentRoute: () => NavbarLayoutVendorRoute,
 } as any)
-const NavbarLayoutStatusIndexRoute = NavbarLayoutStatusIndexRouteImport.update({
+
+const NavbarLayoutStatusIndexRoute = NavbarLayoutStatusIndexImport.update({
   id: '/',
   path: '/',
   getParentRoute: () => NavbarLayoutStatusRoute,
 } as any)
-const NavbarLayoutSettingsIndexRoute =
-  NavbarLayoutSettingsIndexRouteImport.update({
-    id: '/',
-    path: '/',
-    getParentRoute: () => NavbarLayoutSettingsRoute,
-  } as any)
-const NavbarLayoutPoIndexRoute = NavbarLayoutPoIndexRouteImport.update({
+
+const NavbarLayoutSettingsIndexRoute = NavbarLayoutSettingsIndexImport.update({
+  id: '/',
+  path: '/',
+  getParentRoute: () => NavbarLayoutSettingsRoute,
+} as any)
+
+const NavbarLayoutPoIndexRoute = NavbarLayoutPoIndexImport.update({
   id: '/',
   path: '/',
   getParentRoute: () => NavbarLayoutPoRoute,
 } as any)
-const NavbarLayoutPayablesIndexRoute =
-  NavbarLayoutPayablesIndexRouteImport.update({
-    id: '/',
-    path: '/',
-    getParentRoute: () => NavbarLayoutPayablesRoute,
-  } as any)
-const NavbarLayoutOrderRecIndexRoute =
-  NavbarLayoutOrderRecIndexRouteImport.update({
-    id: '/',
-    path: '/',
-    getParentRoute: () => NavbarLayoutOrderRecRoute,
-  } as any)
-const NavbarLayoutKardpollIndexRoute =
-  NavbarLayoutKardpollIndexRouteImport.update({
-    id: '/',
-    path: '/',
-    getParentRoute: () => NavbarLayoutKardpollRoute,
-  } as any)
-const NavbarLayoutFleetIndexRoute = NavbarLayoutFleetIndexRouteImport.update({
+
+const NavbarLayoutPayablesIndexRoute = NavbarLayoutPayablesIndexImport.update({
+  id: '/',
+  path: '/',
+  getParentRoute: () => NavbarLayoutPayablesRoute,
+} as any)
+
+const NavbarLayoutOrderRecIndexRoute = NavbarLayoutOrderRecIndexImport.update({
+  id: '/',
+  path: '/',
+  getParentRoute: () => NavbarLayoutOrderRecRoute,
+} as any)
+
+const NavbarLayoutKardpollIndexRoute = NavbarLayoutKardpollIndexImport.update({
+  id: '/',
+  path: '/',
+  getParentRoute: () => NavbarLayoutKardpollRoute,
+} as any)
+
+const NavbarLayoutFleetIndexRoute = NavbarLayoutFleetIndexImport.update({
   id: '/',
   path: '/',
   getParentRoute: () => NavbarLayoutFleetRoute,
 } as any)
+
 const NavbarLayoutCycleCountIndexRoute =
-  NavbarLayoutCycleCountIndexRouteImport.update({
+  NavbarLayoutCycleCountIndexImport.update({
     id: '/',
     path: '/',
     getParentRoute: () => NavbarLayoutCycleCountRoute,
   } as any)
-const NavbarLayoutAuditIndexRoute = NavbarLayoutAuditIndexRouteImport.update({
+
+const NavbarLayoutAuditIndexRoute = NavbarLayoutAuditIndexImport.update({
   id: '/',
   path: '/',
   getParentRoute: () => NavbarLayoutAuditRoute,
 } as any)
-const NavbarLayoutVendorListRoute = NavbarLayoutVendorListRouteImport.update({
+
+const NavbarLayoutVendorListRoute = NavbarLayoutVendorListImport.update({
   id: '/list',
   path: '/list',
   getParentRoute: () => NavbarLayoutVendorRoute,
 } as any)
-const NavbarLayoutStatusListRoute = NavbarLayoutStatusListRouteImport.update({
+
+const NavbarLayoutStatusListRoute = NavbarLayoutStatusListImport.update({
   id: '/list',
   path: '/list',
   getParentRoute: () => NavbarLayoutStatusRoute,
 } as any)
-const NavbarLayoutSettingsUsersRoute =
-  NavbarLayoutSettingsUsersRouteImport.update({
-    id: '/users',
-    path: '/users',
-    getParentRoute: () => NavbarLayoutSettingsRoute,
-  } as any)
+
+const NavbarLayoutSettingsUsersRoute = NavbarLayoutSettingsUsersImport.update({
+  id: '/users',
+  path: '/users',
+  getParentRoute: () => NavbarLayoutSettingsRoute,
+} as any)
+
 const NavbarLayoutSettingsPaypointsRoute =
-  NavbarLayoutSettingsPaypointsRouteImport.update({
+  NavbarLayoutSettingsPaypointsImport.update({
     id: '/paypoints',
     path: '/paypoints',
     getParentRoute: () => NavbarLayoutSettingsRoute,
   } as any)
+
 const NavbarLayoutReportsSalesSummaryRoute =
-  NavbarLayoutReportsSalesSummaryRouteImport.update({
+  NavbarLayoutReportsSalesSummaryImport.update({
     id: '/sales-summary',
     path: '/sales-summary',
     getParentRoute: () => NavbarLayoutReportsRoute,
   } as any)
-const NavbarLayoutReportsOtherRoute =
-  NavbarLayoutReportsOtherRouteImport.update({
-    id: '/other',
-    path: '/other',
-    getParentRoute: () => NavbarLayoutReportsRoute,
-  } as any)
-const NavbarLayoutPoSignatureRoute = NavbarLayoutPoSignatureRouteImport.update({
+
+const NavbarLayoutReportsOtherRoute = NavbarLayoutReportsOtherImport.update({
+  id: '/other',
+  path: '/other',
+  getParentRoute: () => NavbarLayoutReportsRoute,
+} as any)
+
+const NavbarLayoutPoSignatureRoute = NavbarLayoutPoSignatureImport.update({
   id: '/signature',
   path: '/signature',
   getParentRoute: () => NavbarLayoutPoRoute,
 } as any)
-const NavbarLayoutPoReceiptRoute = NavbarLayoutPoReceiptRouteImport.update({
+
+const NavbarLayoutPoReceiptRoute = NavbarLayoutPoReceiptImport.update({
   id: '/receipt',
   path: '/receipt',
   getParentRoute: () => NavbarLayoutPoRoute,
 } as any)
-const NavbarLayoutPoListRoute = NavbarLayoutPoListRouteImport.update({
+
+const NavbarLayoutPoListRoute = NavbarLayoutPoListImport.update({
   id: '/list',
   path: '/list',
   getParentRoute: () => NavbarLayoutPoRoute,
 } as any)
-const NavbarLayoutPayablesReviewRoute =
-  NavbarLayoutPayablesReviewRouteImport.update({
+
+const NavbarLayoutPayablesReviewRoute = NavbarLayoutPayablesReviewImport.update(
+  {
     id: '/review',
     path: '/review',
     getParentRoute: () => NavbarLayoutPayablesRoute,
-  } as any)
-const NavbarLayoutPayablesListRoute =
-  NavbarLayoutPayablesListRouteImport.update({
-    id: '/list',
-    path: '/list',
-    getParentRoute: () => NavbarLayoutPayablesRoute,
-  } as any)
-const NavbarLayoutPayablesImagesRoute =
-  NavbarLayoutPayablesImagesRouteImport.update({
+  } as any,
+)
+
+const NavbarLayoutPayablesListRoute = NavbarLayoutPayablesListImport.update({
+  id: '/list',
+  path: '/list',
+  getParentRoute: () => NavbarLayoutPayablesRoute,
+} as any)
+
+const NavbarLayoutPayablesImagesRoute = NavbarLayoutPayablesImagesImport.update(
+  {
     id: '/images',
     path: '/images',
     getParentRoute: () => NavbarLayoutPayablesRoute,
-  } as any)
-const NavbarLayoutOrderRecListRoute =
-  NavbarLayoutOrderRecListRouteImport.update({
-    id: '/list',
-    path: '/list',
-    getParentRoute: () => NavbarLayoutOrderRecRoute,
-  } as any)
+  } as any,
+)
+
+const NavbarLayoutOrderRecListRoute = NavbarLayoutOrderRecListImport.update({
+  id: '/list',
+  path: '/list',
+  getParentRoute: () => NavbarLayoutOrderRecRoute,
+} as any)
+
 const NavbarLayoutOrderRecDashboardRoute =
-  NavbarLayoutOrderRecDashboardRouteImport.update({
+  NavbarLayoutOrderRecDashboardImport.update({
     id: '/dashboard',
     path: '/dashboard',
     getParentRoute: () => NavbarLayoutOrderRecRoute,
   } as any)
-const NavbarLayoutOrderRecIdRoute = NavbarLayoutOrderRecIdRouteImport.update({
+
+const NavbarLayoutOrderRecIdRoute = NavbarLayoutOrderRecIdImport.update({
   id: '/$id',
   path: '/$id',
   getParentRoute: () => NavbarLayoutOrderRecRoute,
 } as any)
-const NavbarLayoutKardpollListRoute =
-  NavbarLayoutKardpollListRouteImport.update({
-    id: '/list',
-    path: '/list',
-    getParentRoute: () => NavbarLayoutKardpollRoute,
-  } as any)
-const NavbarLayoutFleetListRoute = NavbarLayoutFleetListRouteImport.update({
+
+const NavbarLayoutKardpollListRoute = NavbarLayoutKardpollListImport.update({
+  id: '/list',
+  path: '/list',
+  getParentRoute: () => NavbarLayoutKardpollRoute,
+} as any)
+
+const NavbarLayoutFleetListRoute = NavbarLayoutFleetListImport.update({
   id: '/list',
   path: '/list',
   getParentRoute: () => NavbarLayoutFleetRoute,
 } as any)
+
 const NavbarLayoutDailyReportsShiftWorksheetRoute =
-  NavbarLayoutDailyReportsShiftWorksheetRouteImport.update({
+  NavbarLayoutDailyReportsShiftWorksheetImport.update({
     id: '/shift-worksheet',
     path: '/shift-worksheet',
     getParentRoute: () => NavbarLayoutDailyReportsRoute,
   } as any)
+
 const NavbarLayoutDailyReportsCashSummaryRoute =
-  NavbarLayoutDailyReportsCashSummaryRouteImport.update({
+  NavbarLayoutDailyReportsCashSummaryImport.update({
     id: '/cash-summary',
     path: '/cash-summary',
     getParentRoute: () => NavbarLayoutDailyReportsRoute,
   } as any)
-const NavbarLayoutCycleCountListRoute =
-  NavbarLayoutCycleCountListRouteImport.update({
+
+const NavbarLayoutCycleCountListRoute = NavbarLayoutCycleCountListImport.update(
+  {
     id: '/list',
     path: '/list',
     getParentRoute: () => NavbarLayoutCycleCountRoute,
-  } as any)
-const NavbarLayoutAuditListRoute = NavbarLayoutAuditListRouteImport.update({
+  } as any,
+)
+
+const NavbarLayoutAuditListRoute = NavbarLayoutAuditListImport.update({
   id: '/list',
   path: '/list',
   getParentRoute: () => NavbarLayoutAuditRoute,
 } as any)
-const NavbarLayoutAuditChecklistRoute =
-  NavbarLayoutAuditChecklistRouteImport.update({
+
+const NavbarLayoutAuditChecklistRoute = NavbarLayoutAuditChecklistImport.update(
+  {
     id: '/checklist',
     path: '/checklist',
     getParentRoute: () => NavbarLayoutAuditRoute,
-  } as any)
-const NavbarLayoutAuditIdRoute = NavbarLayoutAuditIdRouteImport.update({
+  } as any,
+)
+
+const NavbarLayoutAuditIdRoute = NavbarLayoutAuditIdImport.update({
   id: '/$id',
   path: '/$id',
   getParentRoute: () => NavbarLayoutAuditRoute,
 } as any)
+
 const NavbarLayoutSettingsUsersIndexRoute =
-  NavbarLayoutSettingsUsersIndexRouteImport.update({
+  NavbarLayoutSettingsUsersIndexImport.update({
     id: '/',
     path: '/',
     getParentRoute: () => NavbarLayoutSettingsUsersRoute,
   } as any)
+
 const NavbarLayoutSettingsPaypointsIndexRoute =
-  NavbarLayoutSettingsPaypointsIndexRouteImport.update({
+  NavbarLayoutSettingsPaypointsIndexImport.update({
     id: '/',
     path: '/',
     getParentRoute: () => NavbarLayoutSettingsPaypointsRoute,
   } as any)
+
 const NavbarLayoutReportsSalesSummaryIndexRoute =
-  NavbarLayoutReportsSalesSummaryIndexRouteImport.update({
+  NavbarLayoutReportsSalesSummaryIndexImport.update({
     id: '/',
     path: '/',
     getParentRoute: () => NavbarLayoutReportsSalesSummaryRoute,
   } as any)
+
 const NavbarLayoutDailyReportsShiftWorksheetIndexRoute =
-  NavbarLayoutDailyReportsShiftWorksheetIndexRouteImport.update({
+  NavbarLayoutDailyReportsShiftWorksheetIndexImport.update({
     id: '/',
     path: '/',
     getParentRoute: () => NavbarLayoutDailyReportsShiftWorksheetRoute,
   } as any)
-const NavbarLayoutVendorEditIdRoute =
-  NavbarLayoutVendorEditIdRouteImport.update({
-    id: '/edit/$id',
-    path: '/edit/$id',
-    getParentRoute: () => NavbarLayoutVendorRoute,
-  } as any)
+
+const NavbarLayoutVendorEditIdRoute = NavbarLayoutVendorEditIdImport.update({
+  id: '/edit/$id',
+  path: '/edit/$id',
+  getParentRoute: () => NavbarLayoutVendorRoute,
+} as any)
+
 const NavbarLayoutSettingsUsersUserIdRoute =
-  NavbarLayoutSettingsUsersUserIdRouteImport.update({
+  NavbarLayoutSettingsUsersUserIdImport.update({
     id: '/$userId',
     path: '/$userId',
     getParentRoute: () => NavbarLayoutSettingsUsersRoute,
   } as any)
+
 const NavbarLayoutSettingsPaypointsSiteRoute =
-  NavbarLayoutSettingsPaypointsSiteRouteImport.update({
+  NavbarLayoutSettingsPaypointsSiteImport.update({
     id: '/$site',
     path: '/$site',
     getParentRoute: () => NavbarLayoutSettingsPaypointsRoute,
   } as any)
+
 const NavbarLayoutReportsSalesSummaryUploadRoute =
-  NavbarLayoutReportsSalesSummaryUploadRouteImport.update({
+  NavbarLayoutReportsSalesSummaryUploadImport.update({
     id: '/upload',
     path: '/upload',
     getParentRoute: () => NavbarLayoutReportsSalesSummaryRoute,
   } as any)
+
 const NavbarLayoutDailyReportsShiftWorksheetCreateRoute =
-  NavbarLayoutDailyReportsShiftWorksheetCreateRouteImport.update({
+  NavbarLayoutDailyReportsShiftWorksheetCreateImport.update({
     id: '/create',
     path: '/create',
     getParentRoute: () => NavbarLayoutDailyReportsShiftWorksheetRoute,
   } as any)
+
 const NavbarLayoutDailyReportsShiftWorksheetWorksheetRoute =
-  NavbarLayoutDailyReportsShiftWorksheetWorksheetRouteImport.update({
+  NavbarLayoutDailyReportsShiftWorksheetWorksheetImport.update({
     id: '/$worksheet',
     path: '/$worksheet',
     getParentRoute: () => NavbarLayoutDailyReportsShiftWorksheetRoute,
   } as any)
+
 const NavbarLayoutCycleCountEntryIdRoute =
-  NavbarLayoutCycleCountEntryIdRouteImport.update({
+  NavbarLayoutCycleCountEntryIdImport.update({
     id: '/entry/$id',
     path: '/entry/$id',
     getParentRoute: () => NavbarLayoutCycleCountRoute,
   } as any)
+
 const NavbarLayoutAuditChecklistTemplateIdRoute =
-  NavbarLayoutAuditChecklistTemplateIdRouteImport.update({
+  NavbarLayoutAuditChecklistTemplateIdImport.update({
     id: '/$templateId',
     path: '/$templateId',
     getParentRoute: () => NavbarLayoutAuditChecklistRoute,
   } as any)
 
-export interface FileRoutesByFullPath {
-  '/login': typeof authLoginRoute
-  '/register': typeof authRegisterRoute
-  '/audit': typeof NavbarLayoutAuditRouteWithChildren
-  '/cycle-count': typeof NavbarLayoutCycleCountRouteWithChildren
-  '/daily-reports': typeof NavbarLayoutDailyReportsRouteWithChildren
-  '/fleet': typeof NavbarLayoutFleetRouteWithChildren
-  '/kardpoll': typeof NavbarLayoutKardpollRouteWithChildren
-  '/order-rec': typeof NavbarLayoutOrderRecRouteWithChildren
-  '/payables': typeof NavbarLayoutPayablesRouteWithChildren
-  '/po': typeof NavbarLayoutPoRouteWithChildren
-  '/reports': typeof NavbarLayoutReportsRouteWithChildren
-  '/settings': typeof NavbarLayoutSettingsRouteWithChildren
-  '/status': typeof NavbarLayoutStatusRouteWithChildren
-  '/vendor': typeof NavbarLayoutVendorRouteWithChildren
-  '/': typeof NavbarLayoutIndexRoute
-  '/audit/$id': typeof NavbarLayoutAuditIdRoute
-  '/audit/checklist': typeof NavbarLayoutAuditChecklistRouteWithChildren
-  '/audit/list': typeof NavbarLayoutAuditListRoute
-  '/cycle-count/list': typeof NavbarLayoutCycleCountListRoute
-  '/daily-reports/cash-summary': typeof NavbarLayoutDailyReportsCashSummaryRoute
-  '/daily-reports/shift-worksheet': typeof NavbarLayoutDailyReportsShiftWorksheetRouteWithChildren
-  '/fleet/list': typeof NavbarLayoutFleetListRoute
-  '/kardpoll/list': typeof NavbarLayoutKardpollListRoute
-  '/order-rec/$id': typeof NavbarLayoutOrderRecIdRoute
-  '/order-rec/dashboard': typeof NavbarLayoutOrderRecDashboardRoute
-  '/order-rec/list': typeof NavbarLayoutOrderRecListRoute
-  '/payables/images': typeof NavbarLayoutPayablesImagesRoute
-  '/payables/list': typeof NavbarLayoutPayablesListRoute
-  '/payables/review': typeof NavbarLayoutPayablesReviewRoute
-  '/po/list': typeof NavbarLayoutPoListRoute
-  '/po/receipt': typeof NavbarLayoutPoReceiptRoute
-  '/po/signature': typeof NavbarLayoutPoSignatureRoute
-  '/reports/other': typeof NavbarLayoutReportsOtherRoute
-  '/reports/sales-summary': typeof NavbarLayoutReportsSalesSummaryRouteWithChildren
-  '/settings/paypoints': typeof NavbarLayoutSettingsPaypointsRouteWithChildren
-  '/settings/users': typeof NavbarLayoutSettingsUsersRouteWithChildren
-  '/status/list': typeof NavbarLayoutStatusListRoute
-  '/vendor/list': typeof NavbarLayoutVendorListRoute
-  '/audit/': typeof NavbarLayoutAuditIndexRoute
-  '/cycle-count/': typeof NavbarLayoutCycleCountIndexRoute
-  '/fleet/': typeof NavbarLayoutFleetIndexRoute
-  '/kardpoll/': typeof NavbarLayoutKardpollIndexRoute
-  '/order-rec/': typeof NavbarLayoutOrderRecIndexRoute
-  '/payables/': typeof NavbarLayoutPayablesIndexRoute
-  '/po/': typeof NavbarLayoutPoIndexRoute
-  '/settings/': typeof NavbarLayoutSettingsIndexRoute
-  '/status/': typeof NavbarLayoutStatusIndexRoute
-  '/vendor/': typeof NavbarLayoutVendorIndexRoute
-  '/audit/checklist/$templateId': typeof NavbarLayoutAuditChecklistTemplateIdRoute
-  '/cycle-count/entry/$id': typeof NavbarLayoutCycleCountEntryIdRoute
-  '/daily-reports/shift-worksheet/$worksheet': typeof NavbarLayoutDailyReportsShiftWorksheetWorksheetRoute
-  '/daily-reports/shift-worksheet/create': typeof NavbarLayoutDailyReportsShiftWorksheetCreateRoute
-  '/reports/sales-summary/upload': typeof NavbarLayoutReportsSalesSummaryUploadRoute
-  '/settings/paypoints/$site': typeof NavbarLayoutSettingsPaypointsSiteRoute
-  '/settings/users/$userId': typeof NavbarLayoutSettingsUsersUserIdRoute
-  '/vendor/edit/$id': typeof NavbarLayoutVendorEditIdRoute
-  '/daily-reports/shift-worksheet/': typeof NavbarLayoutDailyReportsShiftWorksheetIndexRoute
-  '/reports/sales-summary/': typeof NavbarLayoutReportsSalesSummaryIndexRoute
-  '/settings/paypoints/': typeof NavbarLayoutSettingsPaypointsIndexRoute
-  '/settings/users/': typeof NavbarLayoutSettingsUsersIndexRoute
-}
-export interface FileRoutesByTo {
-  '/login': typeof authLoginRoute
-  '/register': typeof authRegisterRoute
-  '/daily-reports': typeof NavbarLayoutDailyReportsRouteWithChildren
-  '/reports': typeof NavbarLayoutReportsRouteWithChildren
-  '/': typeof NavbarLayoutIndexRoute
-  '/audit/$id': typeof NavbarLayoutAuditIdRoute
-  '/audit/checklist': typeof NavbarLayoutAuditChecklistRouteWithChildren
-  '/audit/list': typeof NavbarLayoutAuditListRoute
-  '/cycle-count/list': typeof NavbarLayoutCycleCountListRoute
-  '/daily-reports/cash-summary': typeof NavbarLayoutDailyReportsCashSummaryRoute
-  '/fleet/list': typeof NavbarLayoutFleetListRoute
-  '/kardpoll/list': typeof NavbarLayoutKardpollListRoute
-  '/order-rec/$id': typeof NavbarLayoutOrderRecIdRoute
-  '/order-rec/dashboard': typeof NavbarLayoutOrderRecDashboardRoute
-  '/order-rec/list': typeof NavbarLayoutOrderRecListRoute
-  '/payables/images': typeof NavbarLayoutPayablesImagesRoute
-  '/payables/list': typeof NavbarLayoutPayablesListRoute
-  '/payables/review': typeof NavbarLayoutPayablesReviewRoute
-  '/po/list': typeof NavbarLayoutPoListRoute
-  '/po/receipt': typeof NavbarLayoutPoReceiptRoute
-  '/po/signature': typeof NavbarLayoutPoSignatureRoute
-  '/reports/other': typeof NavbarLayoutReportsOtherRoute
-  '/status/list': typeof NavbarLayoutStatusListRoute
-  '/vendor/list': typeof NavbarLayoutVendorListRoute
-  '/audit': typeof NavbarLayoutAuditIndexRoute
-  '/cycle-count': typeof NavbarLayoutCycleCountIndexRoute
-  '/fleet': typeof NavbarLayoutFleetIndexRoute
-  '/kardpoll': typeof NavbarLayoutKardpollIndexRoute
-  '/order-rec': typeof NavbarLayoutOrderRecIndexRoute
-  '/payables': typeof NavbarLayoutPayablesIndexRoute
-  '/po': typeof NavbarLayoutPoIndexRoute
-  '/settings': typeof NavbarLayoutSettingsIndexRoute
-  '/status': typeof NavbarLayoutStatusIndexRoute
-  '/vendor': typeof NavbarLayoutVendorIndexRoute
-  '/audit/checklist/$templateId': typeof NavbarLayoutAuditChecklistTemplateIdRoute
-  '/cycle-count/entry/$id': typeof NavbarLayoutCycleCountEntryIdRoute
-  '/daily-reports/shift-worksheet/$worksheet': typeof NavbarLayoutDailyReportsShiftWorksheetWorksheetRoute
-  '/daily-reports/shift-worksheet/create': typeof NavbarLayoutDailyReportsShiftWorksheetCreateRoute
-  '/reports/sales-summary/upload': typeof NavbarLayoutReportsSalesSummaryUploadRoute
-  '/settings/paypoints/$site': typeof NavbarLayoutSettingsPaypointsSiteRoute
-  '/settings/users/$userId': typeof NavbarLayoutSettingsUsersUserIdRoute
-  '/vendor/edit/$id': typeof NavbarLayoutVendorEditIdRoute
-  '/daily-reports/shift-worksheet': typeof NavbarLayoutDailyReportsShiftWorksheetIndexRoute
-  '/reports/sales-summary': typeof NavbarLayoutReportsSalesSummaryIndexRoute
-  '/settings/paypoints': typeof NavbarLayoutSettingsPaypointsIndexRoute
-  '/settings/users': typeof NavbarLayoutSettingsUsersIndexRoute
-}
-export interface FileRoutesById {
-  __root__: typeof rootRouteImport
-  '/_navbarLayout': typeof NavbarLayoutRouteWithChildren
-  '/(auth)/login': typeof authLoginRoute
-  '/(auth)/register': typeof authRegisterRoute
-  '/_navbarLayout/audit': typeof NavbarLayoutAuditRouteWithChildren
-  '/_navbarLayout/cycle-count': typeof NavbarLayoutCycleCountRouteWithChildren
-  '/_navbarLayout/daily-reports': typeof NavbarLayoutDailyReportsRouteWithChildren
-  '/_navbarLayout/fleet': typeof NavbarLayoutFleetRouteWithChildren
-  '/_navbarLayout/kardpoll': typeof NavbarLayoutKardpollRouteWithChildren
-  '/_navbarLayout/order-rec': typeof NavbarLayoutOrderRecRouteWithChildren
-  '/_navbarLayout/payables': typeof NavbarLayoutPayablesRouteWithChildren
-  '/_navbarLayout/po': typeof NavbarLayoutPoRouteWithChildren
-  '/_navbarLayout/reports': typeof NavbarLayoutReportsRouteWithChildren
-  '/_navbarLayout/settings': typeof NavbarLayoutSettingsRouteWithChildren
-  '/_navbarLayout/status': typeof NavbarLayoutStatusRouteWithChildren
-  '/_navbarLayout/vendor': typeof NavbarLayoutVendorRouteWithChildren
-  '/_navbarLayout/': typeof NavbarLayoutIndexRoute
-  '/_navbarLayout/audit/$id': typeof NavbarLayoutAuditIdRoute
-  '/_navbarLayout/audit/checklist': typeof NavbarLayoutAuditChecklistRouteWithChildren
-  '/_navbarLayout/audit/list': typeof NavbarLayoutAuditListRoute
-  '/_navbarLayout/cycle-count/list': typeof NavbarLayoutCycleCountListRoute
-  '/_navbarLayout/daily-reports/cash-summary': typeof NavbarLayoutDailyReportsCashSummaryRoute
-  '/_navbarLayout/daily-reports/shift-worksheet': typeof NavbarLayoutDailyReportsShiftWorksheetRouteWithChildren
-  '/_navbarLayout/fleet/list': typeof NavbarLayoutFleetListRoute
-  '/_navbarLayout/kardpoll/list': typeof NavbarLayoutKardpollListRoute
-  '/_navbarLayout/order-rec/$id': typeof NavbarLayoutOrderRecIdRoute
-  '/_navbarLayout/order-rec/dashboard': typeof NavbarLayoutOrderRecDashboardRoute
-  '/_navbarLayout/order-rec/list': typeof NavbarLayoutOrderRecListRoute
-  '/_navbarLayout/payables/images': typeof NavbarLayoutPayablesImagesRoute
-  '/_navbarLayout/payables/list': typeof NavbarLayoutPayablesListRoute
-  '/_navbarLayout/payables/review': typeof NavbarLayoutPayablesReviewRoute
-  '/_navbarLayout/po/list': typeof NavbarLayoutPoListRoute
-  '/_navbarLayout/po/receipt': typeof NavbarLayoutPoReceiptRoute
-  '/_navbarLayout/po/signature': typeof NavbarLayoutPoSignatureRoute
-  '/_navbarLayout/reports/other': typeof NavbarLayoutReportsOtherRoute
-  '/_navbarLayout/reports/sales-summary': typeof NavbarLayoutReportsSalesSummaryRouteWithChildren
-  '/_navbarLayout/settings/paypoints': typeof NavbarLayoutSettingsPaypointsRouteWithChildren
-  '/_navbarLayout/settings/users': typeof NavbarLayoutSettingsUsersRouteWithChildren
-  '/_navbarLayout/status/list': typeof NavbarLayoutStatusListRoute
-  '/_navbarLayout/vendor/list': typeof NavbarLayoutVendorListRoute
-  '/_navbarLayout/audit/': typeof NavbarLayoutAuditIndexRoute
-  '/_navbarLayout/cycle-count/': typeof NavbarLayoutCycleCountIndexRoute
-  '/_navbarLayout/fleet/': typeof NavbarLayoutFleetIndexRoute
-  '/_navbarLayout/kardpoll/': typeof NavbarLayoutKardpollIndexRoute
-  '/_navbarLayout/order-rec/': typeof NavbarLayoutOrderRecIndexRoute
-  '/_navbarLayout/payables/': typeof NavbarLayoutPayablesIndexRoute
-  '/_navbarLayout/po/': typeof NavbarLayoutPoIndexRoute
-  '/_navbarLayout/settings/': typeof NavbarLayoutSettingsIndexRoute
-  '/_navbarLayout/status/': typeof NavbarLayoutStatusIndexRoute
-  '/_navbarLayout/vendor/': typeof NavbarLayoutVendorIndexRoute
-  '/_navbarLayout/audit/checklist/$templateId': typeof NavbarLayoutAuditChecklistTemplateIdRoute
-  '/_navbarLayout/cycle-count/entry/$id': typeof NavbarLayoutCycleCountEntryIdRoute
-  '/_navbarLayout/daily-reports/shift-worksheet/$worksheet': typeof NavbarLayoutDailyReportsShiftWorksheetWorksheetRoute
-  '/_navbarLayout/daily-reports/shift-worksheet/create': typeof NavbarLayoutDailyReportsShiftWorksheetCreateRoute
-  '/_navbarLayout/reports/sales-summary/upload': typeof NavbarLayoutReportsSalesSummaryUploadRoute
-  '/_navbarLayout/settings/paypoints/$site': typeof NavbarLayoutSettingsPaypointsSiteRoute
-  '/_navbarLayout/settings/users/$userId': typeof NavbarLayoutSettingsUsersUserIdRoute
-  '/_navbarLayout/vendor/edit/$id': typeof NavbarLayoutVendorEditIdRoute
-  '/_navbarLayout/daily-reports/shift-worksheet/': typeof NavbarLayoutDailyReportsShiftWorksheetIndexRoute
-  '/_navbarLayout/reports/sales-summary/': typeof NavbarLayoutReportsSalesSummaryIndexRoute
-  '/_navbarLayout/settings/paypoints/': typeof NavbarLayoutSettingsPaypointsIndexRoute
-  '/_navbarLayout/settings/users/': typeof NavbarLayoutSettingsUsersIndexRoute
-}
-export interface FileRouteTypes {
-  fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths:
-    | '/login'
-    | '/register'
-    | '/audit'
-    | '/cycle-count'
-    | '/daily-reports'
-    | '/fleet'
-    | '/kardpoll'
-    | '/order-rec'
-    | '/payables'
-    | '/po'
-    | '/reports'
-    | '/settings'
-    | '/status'
-    | '/vendor'
-    | '/'
-    | '/audit/$id'
-    | '/audit/checklist'
-    | '/audit/list'
-    | '/cycle-count/list'
-    | '/daily-reports/cash-summary'
-    | '/daily-reports/shift-worksheet'
-    | '/fleet/list'
-    | '/kardpoll/list'
-    | '/order-rec/$id'
-    | '/order-rec/dashboard'
-    | '/order-rec/list'
-    | '/payables/images'
-    | '/payables/list'
-    | '/payables/review'
-    | '/po/list'
-    | '/po/receipt'
-    | '/po/signature'
-    | '/reports/other'
-    | '/reports/sales-summary'
-    | '/settings/paypoints'
-    | '/settings/users'
-    | '/status/list'
-    | '/vendor/list'
-    | '/audit/'
-    | '/cycle-count/'
-    | '/fleet/'
-    | '/kardpoll/'
-    | '/order-rec/'
-    | '/payables/'
-    | '/po/'
-    | '/settings/'
-    | '/status/'
-    | '/vendor/'
-    | '/audit/checklist/$templateId'
-    | '/cycle-count/entry/$id'
-    | '/daily-reports/shift-worksheet/$worksheet'
-    | '/daily-reports/shift-worksheet/create'
-    | '/reports/sales-summary/upload'
-    | '/settings/paypoints/$site'
-    | '/settings/users/$userId'
-    | '/vendor/edit/$id'
-    | '/daily-reports/shift-worksheet/'
-    | '/reports/sales-summary/'
-    | '/settings/paypoints/'
-    | '/settings/users/'
-  fileRoutesByTo: FileRoutesByTo
-  to:
-    | '/login'
-    | '/register'
-    | '/daily-reports'
-    | '/reports'
-    | '/'
-    | '/audit/$id'
-    | '/audit/checklist'
-    | '/audit/list'
-    | '/cycle-count/list'
-    | '/daily-reports/cash-summary'
-    | '/fleet/list'
-    | '/kardpoll/list'
-    | '/order-rec/$id'
-    | '/order-rec/dashboard'
-    | '/order-rec/list'
-    | '/payables/images'
-    | '/payables/list'
-    | '/payables/review'
-    | '/po/list'
-    | '/po/receipt'
-    | '/po/signature'
-    | '/reports/other'
-    | '/status/list'
-    | '/vendor/list'
-    | '/audit'
-    | '/cycle-count'
-    | '/fleet'
-    | '/kardpoll'
-    | '/order-rec'
-    | '/payables'
-    | '/po'
-    | '/settings'
-    | '/status'
-    | '/vendor'
-    | '/audit/checklist/$templateId'
-    | '/cycle-count/entry/$id'
-    | '/daily-reports/shift-worksheet/$worksheet'
-    | '/daily-reports/shift-worksheet/create'
-    | '/reports/sales-summary/upload'
-    | '/settings/paypoints/$site'
-    | '/settings/users/$userId'
-    | '/vendor/edit/$id'
-    | '/daily-reports/shift-worksheet'
-    | '/reports/sales-summary'
-    | '/settings/paypoints'
-    | '/settings/users'
-  id:
-    | '__root__'
-    | '/_navbarLayout'
-    | '/(auth)/login'
-    | '/(auth)/register'
-    | '/_navbarLayout/audit'
-    | '/_navbarLayout/cycle-count'
-    | '/_navbarLayout/daily-reports'
-    | '/_navbarLayout/fleet'
-    | '/_navbarLayout/kardpoll'
-    | '/_navbarLayout/order-rec'
-    | '/_navbarLayout/payables'
-    | '/_navbarLayout/po'
-    | '/_navbarLayout/reports'
-    | '/_navbarLayout/settings'
-    | '/_navbarLayout/status'
-    | '/_navbarLayout/vendor'
-    | '/_navbarLayout/'
-    | '/_navbarLayout/audit/$id'
-    | '/_navbarLayout/audit/checklist'
-    | '/_navbarLayout/audit/list'
-    | '/_navbarLayout/cycle-count/list'
-    | '/_navbarLayout/daily-reports/cash-summary'
-    | '/_navbarLayout/daily-reports/shift-worksheet'
-    | '/_navbarLayout/fleet/list'
-    | '/_navbarLayout/kardpoll/list'
-    | '/_navbarLayout/order-rec/$id'
-    | '/_navbarLayout/order-rec/dashboard'
-    | '/_navbarLayout/order-rec/list'
-    | '/_navbarLayout/payables/images'
-    | '/_navbarLayout/payables/list'
-    | '/_navbarLayout/payables/review'
-    | '/_navbarLayout/po/list'
-    | '/_navbarLayout/po/receipt'
-    | '/_navbarLayout/po/signature'
-    | '/_navbarLayout/reports/other'
-    | '/_navbarLayout/reports/sales-summary'
-    | '/_navbarLayout/settings/paypoints'
-    | '/_navbarLayout/settings/users'
-    | '/_navbarLayout/status/list'
-    | '/_navbarLayout/vendor/list'
-    | '/_navbarLayout/audit/'
-    | '/_navbarLayout/cycle-count/'
-    | '/_navbarLayout/fleet/'
-    | '/_navbarLayout/kardpoll/'
-    | '/_navbarLayout/order-rec/'
-    | '/_navbarLayout/payables/'
-    | '/_navbarLayout/po/'
-    | '/_navbarLayout/settings/'
-    | '/_navbarLayout/status/'
-    | '/_navbarLayout/vendor/'
-    | '/_navbarLayout/audit/checklist/$templateId'
-    | '/_navbarLayout/cycle-count/entry/$id'
-    | '/_navbarLayout/daily-reports/shift-worksheet/$worksheet'
-    | '/_navbarLayout/daily-reports/shift-worksheet/create'
-    | '/_navbarLayout/reports/sales-summary/upload'
-    | '/_navbarLayout/settings/paypoints/$site'
-    | '/_navbarLayout/settings/users/$userId'
-    | '/_navbarLayout/vendor/edit/$id'
-    | '/_navbarLayout/daily-reports/shift-worksheet/'
-    | '/_navbarLayout/reports/sales-summary/'
-    | '/_navbarLayout/settings/paypoints/'
-    | '/_navbarLayout/settings/users/'
-  fileRoutesById: FileRoutesById
-}
-export interface RootRouteChildren {
-  NavbarLayoutRoute: typeof NavbarLayoutRouteWithChildren
-  authLoginRoute: typeof authLoginRoute
-  authRegisterRoute: typeof authRegisterRoute
-}
+// Populate the FileRoutesByPath interface
 
 declare module '@tanstack/react-router' {
   interface FileRoutesByPath {
@@ -770,431 +473,433 @@ declare module '@tanstack/react-router' {
       id: '/_navbarLayout'
       path: ''
       fullPath: ''
-      preLoaderRoute: typeof NavbarLayoutRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/_navbarLayout/': {
-      id: '/_navbarLayout/'
-      path: '/'
-      fullPath: '/'
-      preLoaderRoute: typeof NavbarLayoutIndexRouteImport
-      parentRoute: typeof NavbarLayoutRoute
-    }
-    '/_navbarLayout/vendor': {
-      id: '/_navbarLayout/vendor'
-      path: '/vendor'
-      fullPath: '/vendor'
-      preLoaderRoute: typeof NavbarLayoutVendorRouteImport
-      parentRoute: typeof NavbarLayoutRoute
-    }
-    '/_navbarLayout/status': {
-      id: '/_navbarLayout/status'
-      path: '/status'
-      fullPath: '/status'
-      preLoaderRoute: typeof NavbarLayoutStatusRouteImport
-      parentRoute: typeof NavbarLayoutRoute
-    }
-    '/_navbarLayout/settings': {
-      id: '/_navbarLayout/settings'
-      path: '/settings'
-      fullPath: '/settings'
-      preLoaderRoute: typeof NavbarLayoutSettingsRouteImport
-      parentRoute: typeof NavbarLayoutRoute
-    }
-    '/_navbarLayout/reports': {
-      id: '/_navbarLayout/reports'
-      path: '/reports'
-      fullPath: '/reports'
-      preLoaderRoute: typeof NavbarLayoutReportsRouteImport
-      parentRoute: typeof NavbarLayoutRoute
-    }
-    '/_navbarLayout/po': {
-      id: '/_navbarLayout/po'
-      path: '/po'
-      fullPath: '/po'
-      preLoaderRoute: typeof NavbarLayoutPoRouteImport
-      parentRoute: typeof NavbarLayoutRoute
-    }
-    '/_navbarLayout/payables': {
-      id: '/_navbarLayout/payables'
-      path: '/payables'
-      fullPath: '/payables'
-      preLoaderRoute: typeof NavbarLayoutPayablesRouteImport
-      parentRoute: typeof NavbarLayoutRoute
-    }
-    '/_navbarLayout/order-rec': {
-      id: '/_navbarLayout/order-rec'
-      path: '/order-rec'
-      fullPath: '/order-rec'
-      preLoaderRoute: typeof NavbarLayoutOrderRecRouteImport
-      parentRoute: typeof NavbarLayoutRoute
-    }
-    '/_navbarLayout/kardpoll': {
-      id: '/_navbarLayout/kardpoll'
-      path: '/kardpoll'
-      fullPath: '/kardpoll'
-      preLoaderRoute: typeof NavbarLayoutKardpollRouteImport
-      parentRoute: typeof NavbarLayoutRoute
-    }
-    '/_navbarLayout/fleet': {
-      id: '/_navbarLayout/fleet'
-      path: '/fleet'
-      fullPath: '/fleet'
-      preLoaderRoute: typeof NavbarLayoutFleetRouteImport
-      parentRoute: typeof NavbarLayoutRoute
-    }
-    '/_navbarLayout/daily-reports': {
-      id: '/_navbarLayout/daily-reports'
-      path: '/daily-reports'
-      fullPath: '/daily-reports'
-      preLoaderRoute: typeof NavbarLayoutDailyReportsRouteImport
-      parentRoute: typeof NavbarLayoutRoute
-    }
-    '/_navbarLayout/cycle-count': {
-      id: '/_navbarLayout/cycle-count'
-      path: '/cycle-count'
-      fullPath: '/cycle-count'
-      preLoaderRoute: typeof NavbarLayoutCycleCountRouteImport
-      parentRoute: typeof NavbarLayoutRoute
-    }
-    '/_navbarLayout/audit': {
-      id: '/_navbarLayout/audit'
-      path: '/audit'
-      fullPath: '/audit'
-      preLoaderRoute: typeof NavbarLayoutAuditRouteImport
-      parentRoute: typeof NavbarLayoutRoute
-    }
-    '/(auth)/register': {
-      id: '/(auth)/register'
-      path: '/register'
-      fullPath: '/register'
-      preLoaderRoute: typeof authRegisterRouteImport
-      parentRoute: typeof rootRouteImport
+      preLoaderRoute: typeof NavbarLayoutImport
+      parentRoute: typeof rootRoute
     }
     '/(auth)/login': {
       id: '/(auth)/login'
       path: '/login'
       fullPath: '/login'
-      preLoaderRoute: typeof authLoginRouteImport
-      parentRoute: typeof rootRouteImport
+      preLoaderRoute: typeof authLoginImport
+      parentRoute: typeof rootRoute
     }
-    '/_navbarLayout/vendor/': {
-      id: '/_navbarLayout/vendor/'
+    '/(auth)/register': {
+      id: '/(auth)/register'
+      path: '/register'
+      fullPath: '/register'
+      preLoaderRoute: typeof authRegisterImport
+      parentRoute: typeof rootRoute
+    }
+    '/_navbarLayout/audit': {
+      id: '/_navbarLayout/audit'
+      path: '/audit'
+      fullPath: '/audit'
+      preLoaderRoute: typeof NavbarLayoutAuditImport
+      parentRoute: typeof NavbarLayoutImport
+    }
+    '/_navbarLayout/cycle-count': {
+      id: '/_navbarLayout/cycle-count'
+      path: '/cycle-count'
+      fullPath: '/cycle-count'
+      preLoaderRoute: typeof NavbarLayoutCycleCountImport
+      parentRoute: typeof NavbarLayoutImport
+    }
+    '/_navbarLayout/daily-reports': {
+      id: '/_navbarLayout/daily-reports'
+      path: '/daily-reports'
+      fullPath: '/daily-reports'
+      preLoaderRoute: typeof NavbarLayoutDailyReportsImport
+      parentRoute: typeof NavbarLayoutImport
+    }
+    '/_navbarLayout/fleet': {
+      id: '/_navbarLayout/fleet'
+      path: '/fleet'
+      fullPath: '/fleet'
+      preLoaderRoute: typeof NavbarLayoutFleetImport
+      parentRoute: typeof NavbarLayoutImport
+    }
+    '/_navbarLayout/kardpoll': {
+      id: '/_navbarLayout/kardpoll'
+      path: '/kardpoll'
+      fullPath: '/kardpoll'
+      preLoaderRoute: typeof NavbarLayoutKardpollImport
+      parentRoute: typeof NavbarLayoutImport
+    }
+    '/_navbarLayout/order-rec': {
+      id: '/_navbarLayout/order-rec'
+      path: '/order-rec'
+      fullPath: '/order-rec'
+      preLoaderRoute: typeof NavbarLayoutOrderRecImport
+      parentRoute: typeof NavbarLayoutImport
+    }
+    '/_navbarLayout/payables': {
+      id: '/_navbarLayout/payables'
+      path: '/payables'
+      fullPath: '/payables'
+      preLoaderRoute: typeof NavbarLayoutPayablesImport
+      parentRoute: typeof NavbarLayoutImport
+    }
+    '/_navbarLayout/po': {
+      id: '/_navbarLayout/po'
+      path: '/po'
+      fullPath: '/po'
+      preLoaderRoute: typeof NavbarLayoutPoImport
+      parentRoute: typeof NavbarLayoutImport
+    }
+    '/_navbarLayout/reports': {
+      id: '/_navbarLayout/reports'
+      path: '/reports'
+      fullPath: '/reports'
+      preLoaderRoute: typeof NavbarLayoutReportsImport
+      parentRoute: typeof NavbarLayoutImport
+    }
+    '/_navbarLayout/settings': {
+      id: '/_navbarLayout/settings'
+      path: '/settings'
+      fullPath: '/settings'
+      preLoaderRoute: typeof NavbarLayoutSettingsImport
+      parentRoute: typeof NavbarLayoutImport
+    }
+    '/_navbarLayout/status': {
+      id: '/_navbarLayout/status'
+      path: '/status'
+      fullPath: '/status'
+      preLoaderRoute: typeof NavbarLayoutStatusImport
+      parentRoute: typeof NavbarLayoutImport
+    }
+    '/_navbarLayout/vendor': {
+      id: '/_navbarLayout/vendor'
+      path: '/vendor'
+      fullPath: '/vendor'
+      preLoaderRoute: typeof NavbarLayoutVendorImport
+      parentRoute: typeof NavbarLayoutImport
+    }
+    '/_navbarLayout/': {
+      id: '/_navbarLayout/'
       path: '/'
-      fullPath: '/vendor/'
-      preLoaderRoute: typeof NavbarLayoutVendorIndexRouteImport
-      parentRoute: typeof NavbarLayoutVendorRoute
-    }
-    '/_navbarLayout/status/': {
-      id: '/_navbarLayout/status/'
-      path: '/'
-      fullPath: '/status/'
-      preLoaderRoute: typeof NavbarLayoutStatusIndexRouteImport
-      parentRoute: typeof NavbarLayoutStatusRoute
-    }
-    '/_navbarLayout/settings/': {
-      id: '/_navbarLayout/settings/'
-      path: '/'
-      fullPath: '/settings/'
-      preLoaderRoute: typeof NavbarLayoutSettingsIndexRouteImport
-      parentRoute: typeof NavbarLayoutSettingsRoute
-    }
-    '/_navbarLayout/po/': {
-      id: '/_navbarLayout/po/'
-      path: '/'
-      fullPath: '/po/'
-      preLoaderRoute: typeof NavbarLayoutPoIndexRouteImport
-      parentRoute: typeof NavbarLayoutPoRoute
-    }
-    '/_navbarLayout/payables/': {
-      id: '/_navbarLayout/payables/'
-      path: '/'
-      fullPath: '/payables/'
-      preLoaderRoute: typeof NavbarLayoutPayablesIndexRouteImport
-      parentRoute: typeof NavbarLayoutPayablesRoute
-    }
-    '/_navbarLayout/order-rec/': {
-      id: '/_navbarLayout/order-rec/'
-      path: '/'
-      fullPath: '/order-rec/'
-      preLoaderRoute: typeof NavbarLayoutOrderRecIndexRouteImport
-      parentRoute: typeof NavbarLayoutOrderRecRoute
-    }
-    '/_navbarLayout/kardpoll/': {
-      id: '/_navbarLayout/kardpoll/'
-      path: '/'
-      fullPath: '/kardpoll/'
-      preLoaderRoute: typeof NavbarLayoutKardpollIndexRouteImport
-      parentRoute: typeof NavbarLayoutKardpollRoute
-    }
-    '/_navbarLayout/fleet/': {
-      id: '/_navbarLayout/fleet/'
-      path: '/'
-      fullPath: '/fleet/'
-      preLoaderRoute: typeof NavbarLayoutFleetIndexRouteImport
-      parentRoute: typeof NavbarLayoutFleetRoute
-    }
-    '/_navbarLayout/cycle-count/': {
-      id: '/_navbarLayout/cycle-count/'
-      path: '/'
-      fullPath: '/cycle-count/'
-      preLoaderRoute: typeof NavbarLayoutCycleCountIndexRouteImport
-      parentRoute: typeof NavbarLayoutCycleCountRoute
-    }
-    '/_navbarLayout/audit/': {
-      id: '/_navbarLayout/audit/'
-      path: '/'
-      fullPath: '/audit/'
-      preLoaderRoute: typeof NavbarLayoutAuditIndexRouteImport
-      parentRoute: typeof NavbarLayoutAuditRoute
-    }
-    '/_navbarLayout/vendor/list': {
-      id: '/_navbarLayout/vendor/list'
-      path: '/list'
-      fullPath: '/vendor/list'
-      preLoaderRoute: typeof NavbarLayoutVendorListRouteImport
-      parentRoute: typeof NavbarLayoutVendorRoute
-    }
-    '/_navbarLayout/status/list': {
-      id: '/_navbarLayout/status/list'
-      path: '/list'
-      fullPath: '/status/list'
-      preLoaderRoute: typeof NavbarLayoutStatusListRouteImport
-      parentRoute: typeof NavbarLayoutStatusRoute
-    }
-    '/_navbarLayout/settings/users': {
-      id: '/_navbarLayout/settings/users'
-      path: '/users'
-      fullPath: '/settings/users'
-      preLoaderRoute: typeof NavbarLayoutSettingsUsersRouteImport
-      parentRoute: typeof NavbarLayoutSettingsRoute
-    }
-    '/_navbarLayout/settings/paypoints': {
-      id: '/_navbarLayout/settings/paypoints'
-      path: '/paypoints'
-      fullPath: '/settings/paypoints'
-      preLoaderRoute: typeof NavbarLayoutSettingsPaypointsRouteImport
-      parentRoute: typeof NavbarLayoutSettingsRoute
-    }
-    '/_navbarLayout/reports/sales-summary': {
-      id: '/_navbarLayout/reports/sales-summary'
-      path: '/sales-summary'
-      fullPath: '/reports/sales-summary'
-      preLoaderRoute: typeof NavbarLayoutReportsSalesSummaryRouteImport
-      parentRoute: typeof NavbarLayoutReportsRoute
-    }
-    '/_navbarLayout/reports/other': {
-      id: '/_navbarLayout/reports/other'
-      path: '/other'
-      fullPath: '/reports/other'
-      preLoaderRoute: typeof NavbarLayoutReportsOtherRouteImport
-      parentRoute: typeof NavbarLayoutReportsRoute
-    }
-    '/_navbarLayout/po/signature': {
-      id: '/_navbarLayout/po/signature'
-      path: '/signature'
-      fullPath: '/po/signature'
-      preLoaderRoute: typeof NavbarLayoutPoSignatureRouteImport
-      parentRoute: typeof NavbarLayoutPoRoute
-    }
-    '/_navbarLayout/po/receipt': {
-      id: '/_navbarLayout/po/receipt'
-      path: '/receipt'
-      fullPath: '/po/receipt'
-      preLoaderRoute: typeof NavbarLayoutPoReceiptRouteImport
-      parentRoute: typeof NavbarLayoutPoRoute
-    }
-    '/_navbarLayout/po/list': {
-      id: '/_navbarLayout/po/list'
-      path: '/list'
-      fullPath: '/po/list'
-      preLoaderRoute: typeof NavbarLayoutPoListRouteImport
-      parentRoute: typeof NavbarLayoutPoRoute
-    }
-    '/_navbarLayout/payables/review': {
-      id: '/_navbarLayout/payables/review'
-      path: '/review'
-      fullPath: '/payables/review'
-      preLoaderRoute: typeof NavbarLayoutPayablesReviewRouteImport
-      parentRoute: typeof NavbarLayoutPayablesRoute
-    }
-    '/_navbarLayout/payables/list': {
-      id: '/_navbarLayout/payables/list'
-      path: '/list'
-      fullPath: '/payables/list'
-      preLoaderRoute: typeof NavbarLayoutPayablesListRouteImport
-      parentRoute: typeof NavbarLayoutPayablesRoute
-    }
-    '/_navbarLayout/payables/images': {
-      id: '/_navbarLayout/payables/images'
-      path: '/images'
-      fullPath: '/payables/images'
-      preLoaderRoute: typeof NavbarLayoutPayablesImagesRouteImport
-      parentRoute: typeof NavbarLayoutPayablesRoute
-    }
-    '/_navbarLayout/order-rec/list': {
-      id: '/_navbarLayout/order-rec/list'
-      path: '/list'
-      fullPath: '/order-rec/list'
-      preLoaderRoute: typeof NavbarLayoutOrderRecListRouteImport
-      parentRoute: typeof NavbarLayoutOrderRecRoute
-    }
-    '/_navbarLayout/order-rec/dashboard': {
-      id: '/_navbarLayout/order-rec/dashboard'
-      path: '/dashboard'
-      fullPath: '/order-rec/dashboard'
-      preLoaderRoute: typeof NavbarLayoutOrderRecDashboardRouteImport
-      parentRoute: typeof NavbarLayoutOrderRecRoute
-    }
-    '/_navbarLayout/order-rec/$id': {
-      id: '/_navbarLayout/order-rec/$id'
-      path: '/$id'
-      fullPath: '/order-rec/$id'
-      preLoaderRoute: typeof NavbarLayoutOrderRecIdRouteImport
-      parentRoute: typeof NavbarLayoutOrderRecRoute
-    }
-    '/_navbarLayout/kardpoll/list': {
-      id: '/_navbarLayout/kardpoll/list'
-      path: '/list'
-      fullPath: '/kardpoll/list'
-      preLoaderRoute: typeof NavbarLayoutKardpollListRouteImport
-      parentRoute: typeof NavbarLayoutKardpollRoute
-    }
-    '/_navbarLayout/fleet/list': {
-      id: '/_navbarLayout/fleet/list'
-      path: '/list'
-      fullPath: '/fleet/list'
-      preLoaderRoute: typeof NavbarLayoutFleetListRouteImport
-      parentRoute: typeof NavbarLayoutFleetRoute
-    }
-    '/_navbarLayout/daily-reports/shift-worksheet': {
-      id: '/_navbarLayout/daily-reports/shift-worksheet'
-      path: '/shift-worksheet'
-      fullPath: '/daily-reports/shift-worksheet'
-      preLoaderRoute: typeof NavbarLayoutDailyReportsShiftWorksheetRouteImport
-      parentRoute: typeof NavbarLayoutDailyReportsRoute
-    }
-    '/_navbarLayout/daily-reports/cash-summary': {
-      id: '/_navbarLayout/daily-reports/cash-summary'
-      path: '/cash-summary'
-      fullPath: '/daily-reports/cash-summary'
-      preLoaderRoute: typeof NavbarLayoutDailyReportsCashSummaryRouteImport
-      parentRoute: typeof NavbarLayoutDailyReportsRoute
-    }
-    '/_navbarLayout/cycle-count/list': {
-      id: '/_navbarLayout/cycle-count/list'
-      path: '/list'
-      fullPath: '/cycle-count/list'
-      preLoaderRoute: typeof NavbarLayoutCycleCountListRouteImport
-      parentRoute: typeof NavbarLayoutCycleCountRoute
-    }
-    '/_navbarLayout/audit/list': {
-      id: '/_navbarLayout/audit/list'
-      path: '/list'
-      fullPath: '/audit/list'
-      preLoaderRoute: typeof NavbarLayoutAuditListRouteImport
-      parentRoute: typeof NavbarLayoutAuditRoute
-    }
-    '/_navbarLayout/audit/checklist': {
-      id: '/_navbarLayout/audit/checklist'
-      path: '/checklist'
-      fullPath: '/audit/checklist'
-      preLoaderRoute: typeof NavbarLayoutAuditChecklistRouteImport
-      parentRoute: typeof NavbarLayoutAuditRoute
+      fullPath: '/'
+      preLoaderRoute: typeof NavbarLayoutIndexImport
+      parentRoute: typeof NavbarLayoutImport
     }
     '/_navbarLayout/audit/$id': {
       id: '/_navbarLayout/audit/$id'
       path: '/$id'
       fullPath: '/audit/$id'
-      preLoaderRoute: typeof NavbarLayoutAuditIdRouteImport
-      parentRoute: typeof NavbarLayoutAuditRoute
+      preLoaderRoute: typeof NavbarLayoutAuditIdImport
+      parentRoute: typeof NavbarLayoutAuditImport
     }
-    '/_navbarLayout/settings/users/': {
-      id: '/_navbarLayout/settings/users/'
+    '/_navbarLayout/audit/checklist': {
+      id: '/_navbarLayout/audit/checklist'
+      path: '/checklist'
+      fullPath: '/audit/checklist'
+      preLoaderRoute: typeof NavbarLayoutAuditChecklistImport
+      parentRoute: typeof NavbarLayoutAuditImport
+    }
+    '/_navbarLayout/audit/list': {
+      id: '/_navbarLayout/audit/list'
+      path: '/list'
+      fullPath: '/audit/list'
+      preLoaderRoute: typeof NavbarLayoutAuditListImport
+      parentRoute: typeof NavbarLayoutAuditImport
+    }
+    '/_navbarLayout/cycle-count/list': {
+      id: '/_navbarLayout/cycle-count/list'
+      path: '/list'
+      fullPath: '/cycle-count/list'
+      preLoaderRoute: typeof NavbarLayoutCycleCountListImport
+      parentRoute: typeof NavbarLayoutCycleCountImport
+    }
+    '/_navbarLayout/daily-reports/cash-summary': {
+      id: '/_navbarLayout/daily-reports/cash-summary'
+      path: '/cash-summary'
+      fullPath: '/daily-reports/cash-summary'
+      preLoaderRoute: typeof NavbarLayoutDailyReportsCashSummaryImport
+      parentRoute: typeof NavbarLayoutDailyReportsImport
+    }
+    '/_navbarLayout/daily-reports/shift-worksheet': {
+      id: '/_navbarLayout/daily-reports/shift-worksheet'
+      path: '/shift-worksheet'
+      fullPath: '/daily-reports/shift-worksheet'
+      preLoaderRoute: typeof NavbarLayoutDailyReportsShiftWorksheetImport
+      parentRoute: typeof NavbarLayoutDailyReportsImport
+    }
+    '/_navbarLayout/fleet/list': {
+      id: '/_navbarLayout/fleet/list'
+      path: '/list'
+      fullPath: '/fleet/list'
+      preLoaderRoute: typeof NavbarLayoutFleetListImport
+      parentRoute: typeof NavbarLayoutFleetImport
+    }
+    '/_navbarLayout/kardpoll/list': {
+      id: '/_navbarLayout/kardpoll/list'
+      path: '/list'
+      fullPath: '/kardpoll/list'
+      preLoaderRoute: typeof NavbarLayoutKardpollListImport
+      parentRoute: typeof NavbarLayoutKardpollImport
+    }
+    '/_navbarLayout/order-rec/$id': {
+      id: '/_navbarLayout/order-rec/$id'
+      path: '/$id'
+      fullPath: '/order-rec/$id'
+      preLoaderRoute: typeof NavbarLayoutOrderRecIdImport
+      parentRoute: typeof NavbarLayoutOrderRecImport
+    }
+    '/_navbarLayout/order-rec/dashboard': {
+      id: '/_navbarLayout/order-rec/dashboard'
+      path: '/dashboard'
+      fullPath: '/order-rec/dashboard'
+      preLoaderRoute: typeof NavbarLayoutOrderRecDashboardImport
+      parentRoute: typeof NavbarLayoutOrderRecImport
+    }
+    '/_navbarLayout/order-rec/list': {
+      id: '/_navbarLayout/order-rec/list'
+      path: '/list'
+      fullPath: '/order-rec/list'
+      preLoaderRoute: typeof NavbarLayoutOrderRecListImport
+      parentRoute: typeof NavbarLayoutOrderRecImport
+    }
+    '/_navbarLayout/payables/images': {
+      id: '/_navbarLayout/payables/images'
+      path: '/images'
+      fullPath: '/payables/images'
+      preLoaderRoute: typeof NavbarLayoutPayablesImagesImport
+      parentRoute: typeof NavbarLayoutPayablesImport
+    }
+    '/_navbarLayout/payables/list': {
+      id: '/_navbarLayout/payables/list'
+      path: '/list'
+      fullPath: '/payables/list'
+      preLoaderRoute: typeof NavbarLayoutPayablesListImport
+      parentRoute: typeof NavbarLayoutPayablesImport
+    }
+    '/_navbarLayout/payables/review': {
+      id: '/_navbarLayout/payables/review'
+      path: '/review'
+      fullPath: '/payables/review'
+      preLoaderRoute: typeof NavbarLayoutPayablesReviewImport
+      parentRoute: typeof NavbarLayoutPayablesImport
+    }
+    '/_navbarLayout/po/list': {
+      id: '/_navbarLayout/po/list'
+      path: '/list'
+      fullPath: '/po/list'
+      preLoaderRoute: typeof NavbarLayoutPoListImport
+      parentRoute: typeof NavbarLayoutPoImport
+    }
+    '/_navbarLayout/po/receipt': {
+      id: '/_navbarLayout/po/receipt'
+      path: '/receipt'
+      fullPath: '/po/receipt'
+      preLoaderRoute: typeof NavbarLayoutPoReceiptImport
+      parentRoute: typeof NavbarLayoutPoImport
+    }
+    '/_navbarLayout/po/signature': {
+      id: '/_navbarLayout/po/signature'
+      path: '/signature'
+      fullPath: '/po/signature'
+      preLoaderRoute: typeof NavbarLayoutPoSignatureImport
+      parentRoute: typeof NavbarLayoutPoImport
+    }
+    '/_navbarLayout/reports/other': {
+      id: '/_navbarLayout/reports/other'
+      path: '/other'
+      fullPath: '/reports/other'
+      preLoaderRoute: typeof NavbarLayoutReportsOtherImport
+      parentRoute: typeof NavbarLayoutReportsImport
+    }
+    '/_navbarLayout/reports/sales-summary': {
+      id: '/_navbarLayout/reports/sales-summary'
+      path: '/sales-summary'
+      fullPath: '/reports/sales-summary'
+      preLoaderRoute: typeof NavbarLayoutReportsSalesSummaryImport
+      parentRoute: typeof NavbarLayoutReportsImport
+    }
+    '/_navbarLayout/settings/paypoints': {
+      id: '/_navbarLayout/settings/paypoints'
+      path: '/paypoints'
+      fullPath: '/settings/paypoints'
+      preLoaderRoute: typeof NavbarLayoutSettingsPaypointsImport
+      parentRoute: typeof NavbarLayoutSettingsImport
+    }
+    '/_navbarLayout/settings/users': {
+      id: '/_navbarLayout/settings/users'
+      path: '/users'
+      fullPath: '/settings/users'
+      preLoaderRoute: typeof NavbarLayoutSettingsUsersImport
+      parentRoute: typeof NavbarLayoutSettingsImport
+    }
+    '/_navbarLayout/status/list': {
+      id: '/_navbarLayout/status/list'
+      path: '/list'
+      fullPath: '/status/list'
+      preLoaderRoute: typeof NavbarLayoutStatusListImport
+      parentRoute: typeof NavbarLayoutStatusImport
+    }
+    '/_navbarLayout/vendor/list': {
+      id: '/_navbarLayout/vendor/list'
+      path: '/list'
+      fullPath: '/vendor/list'
+      preLoaderRoute: typeof NavbarLayoutVendorListImport
+      parentRoute: typeof NavbarLayoutVendorImport
+    }
+    '/_navbarLayout/audit/': {
+      id: '/_navbarLayout/audit/'
       path: '/'
-      fullPath: '/settings/users/'
-      preLoaderRoute: typeof NavbarLayoutSettingsUsersIndexRouteImport
-      parentRoute: typeof NavbarLayoutSettingsUsersRoute
+      fullPath: '/audit/'
+      preLoaderRoute: typeof NavbarLayoutAuditIndexImport
+      parentRoute: typeof NavbarLayoutAuditImport
     }
-    '/_navbarLayout/settings/paypoints/': {
-      id: '/_navbarLayout/settings/paypoints/'
+    '/_navbarLayout/cycle-count/': {
+      id: '/_navbarLayout/cycle-count/'
       path: '/'
-      fullPath: '/settings/paypoints/'
-      preLoaderRoute: typeof NavbarLayoutSettingsPaypointsIndexRouteImport
-      parentRoute: typeof NavbarLayoutSettingsPaypointsRoute
+      fullPath: '/cycle-count/'
+      preLoaderRoute: typeof NavbarLayoutCycleCountIndexImport
+      parentRoute: typeof NavbarLayoutCycleCountImport
     }
-    '/_navbarLayout/reports/sales-summary/': {
-      id: '/_navbarLayout/reports/sales-summary/'
+    '/_navbarLayout/fleet/': {
+      id: '/_navbarLayout/fleet/'
       path: '/'
-      fullPath: '/reports/sales-summary/'
-      preLoaderRoute: typeof NavbarLayoutReportsSalesSummaryIndexRouteImport
-      parentRoute: typeof NavbarLayoutReportsSalesSummaryRoute
+      fullPath: '/fleet/'
+      preLoaderRoute: typeof NavbarLayoutFleetIndexImport
+      parentRoute: typeof NavbarLayoutFleetImport
     }
-    '/_navbarLayout/daily-reports/shift-worksheet/': {
-      id: '/_navbarLayout/daily-reports/shift-worksheet/'
+    '/_navbarLayout/kardpoll/': {
+      id: '/_navbarLayout/kardpoll/'
       path: '/'
-      fullPath: '/daily-reports/shift-worksheet/'
-      preLoaderRoute: typeof NavbarLayoutDailyReportsShiftWorksheetIndexRouteImport
-      parentRoute: typeof NavbarLayoutDailyReportsShiftWorksheetRoute
+      fullPath: '/kardpoll/'
+      preLoaderRoute: typeof NavbarLayoutKardpollIndexImport
+      parentRoute: typeof NavbarLayoutKardpollImport
     }
-    '/_navbarLayout/vendor/edit/$id': {
-      id: '/_navbarLayout/vendor/edit/$id'
-      path: '/edit/$id'
-      fullPath: '/vendor/edit/$id'
-      preLoaderRoute: typeof NavbarLayoutVendorEditIdRouteImport
-      parentRoute: typeof NavbarLayoutVendorRoute
+    '/_navbarLayout/order-rec/': {
+      id: '/_navbarLayout/order-rec/'
+      path: '/'
+      fullPath: '/order-rec/'
+      preLoaderRoute: typeof NavbarLayoutOrderRecIndexImport
+      parentRoute: typeof NavbarLayoutOrderRecImport
     }
-    '/_navbarLayout/settings/users/$userId': {
-      id: '/_navbarLayout/settings/users/$userId'
-      path: '/$userId'
-      fullPath: '/settings/users/$userId'
-      preLoaderRoute: typeof NavbarLayoutSettingsUsersUserIdRouteImport
-      parentRoute: typeof NavbarLayoutSettingsUsersRoute
+    '/_navbarLayout/payables/': {
+      id: '/_navbarLayout/payables/'
+      path: '/'
+      fullPath: '/payables/'
+      preLoaderRoute: typeof NavbarLayoutPayablesIndexImport
+      parentRoute: typeof NavbarLayoutPayablesImport
     }
-    '/_navbarLayout/settings/paypoints/$site': {
-      id: '/_navbarLayout/settings/paypoints/$site'
-      path: '/$site'
-      fullPath: '/settings/paypoints/$site'
-      preLoaderRoute: typeof NavbarLayoutSettingsPaypointsSiteRouteImport
-      parentRoute: typeof NavbarLayoutSettingsPaypointsRoute
+    '/_navbarLayout/po/': {
+      id: '/_navbarLayout/po/'
+      path: '/'
+      fullPath: '/po/'
+      preLoaderRoute: typeof NavbarLayoutPoIndexImport
+      parentRoute: typeof NavbarLayoutPoImport
     }
-    '/_navbarLayout/reports/sales-summary/upload': {
-      id: '/_navbarLayout/reports/sales-summary/upload'
-      path: '/upload'
-      fullPath: '/reports/sales-summary/upload'
-      preLoaderRoute: typeof NavbarLayoutReportsSalesSummaryUploadRouteImport
-      parentRoute: typeof NavbarLayoutReportsSalesSummaryRoute
+    '/_navbarLayout/settings/': {
+      id: '/_navbarLayout/settings/'
+      path: '/'
+      fullPath: '/settings/'
+      preLoaderRoute: typeof NavbarLayoutSettingsIndexImport
+      parentRoute: typeof NavbarLayoutSettingsImport
     }
-    '/_navbarLayout/daily-reports/shift-worksheet/create': {
-      id: '/_navbarLayout/daily-reports/shift-worksheet/create'
-      path: '/create'
-      fullPath: '/daily-reports/shift-worksheet/create'
-      preLoaderRoute: typeof NavbarLayoutDailyReportsShiftWorksheetCreateRouteImport
-      parentRoute: typeof NavbarLayoutDailyReportsShiftWorksheetRoute
+    '/_navbarLayout/status/': {
+      id: '/_navbarLayout/status/'
+      path: '/'
+      fullPath: '/status/'
+      preLoaderRoute: typeof NavbarLayoutStatusIndexImport
+      parentRoute: typeof NavbarLayoutStatusImport
     }
-    '/_navbarLayout/daily-reports/shift-worksheet/$worksheet': {
-      id: '/_navbarLayout/daily-reports/shift-worksheet/$worksheet'
-      path: '/$worksheet'
-      fullPath: '/daily-reports/shift-worksheet/$worksheet'
-      preLoaderRoute: typeof NavbarLayoutDailyReportsShiftWorksheetWorksheetRouteImport
-      parentRoute: typeof NavbarLayoutDailyReportsShiftWorksheetRoute
-    }
-    '/_navbarLayout/cycle-count/entry/$id': {
-      id: '/_navbarLayout/cycle-count/entry/$id'
-      path: '/entry/$id'
-      fullPath: '/cycle-count/entry/$id'
-      preLoaderRoute: typeof NavbarLayoutCycleCountEntryIdRouteImport
-      parentRoute: typeof NavbarLayoutCycleCountRoute
+    '/_navbarLayout/vendor/': {
+      id: '/_navbarLayout/vendor/'
+      path: '/'
+      fullPath: '/vendor/'
+      preLoaderRoute: typeof NavbarLayoutVendorIndexImport
+      parentRoute: typeof NavbarLayoutVendorImport
     }
     '/_navbarLayout/audit/checklist/$templateId': {
       id: '/_navbarLayout/audit/checklist/$templateId'
       path: '/$templateId'
       fullPath: '/audit/checklist/$templateId'
-      preLoaderRoute: typeof NavbarLayoutAuditChecklistTemplateIdRouteImport
-      parentRoute: typeof NavbarLayoutAuditChecklistRoute
+      preLoaderRoute: typeof NavbarLayoutAuditChecklistTemplateIdImport
+      parentRoute: typeof NavbarLayoutAuditChecklistImport
+    }
+    '/_navbarLayout/cycle-count/entry/$id': {
+      id: '/_navbarLayout/cycle-count/entry/$id'
+      path: '/entry/$id'
+      fullPath: '/cycle-count/entry/$id'
+      preLoaderRoute: typeof NavbarLayoutCycleCountEntryIdImport
+      parentRoute: typeof NavbarLayoutCycleCountImport
+    }
+    '/_navbarLayout/daily-reports/shift-worksheet/$worksheet': {
+      id: '/_navbarLayout/daily-reports/shift-worksheet/$worksheet'
+      path: '/$worksheet'
+      fullPath: '/daily-reports/shift-worksheet/$worksheet'
+      preLoaderRoute: typeof NavbarLayoutDailyReportsShiftWorksheetWorksheetImport
+      parentRoute: typeof NavbarLayoutDailyReportsShiftWorksheetImport
+    }
+    '/_navbarLayout/daily-reports/shift-worksheet/create': {
+      id: '/_navbarLayout/daily-reports/shift-worksheet/create'
+      path: '/create'
+      fullPath: '/daily-reports/shift-worksheet/create'
+      preLoaderRoute: typeof NavbarLayoutDailyReportsShiftWorksheetCreateImport
+      parentRoute: typeof NavbarLayoutDailyReportsShiftWorksheetImport
+    }
+    '/_navbarLayout/reports/sales-summary/upload': {
+      id: '/_navbarLayout/reports/sales-summary/upload'
+      path: '/upload'
+      fullPath: '/reports/sales-summary/upload'
+      preLoaderRoute: typeof NavbarLayoutReportsSalesSummaryUploadImport
+      parentRoute: typeof NavbarLayoutReportsSalesSummaryImport
+    }
+    '/_navbarLayout/settings/paypoints/$site': {
+      id: '/_navbarLayout/settings/paypoints/$site'
+      path: '/$site'
+      fullPath: '/settings/paypoints/$site'
+      preLoaderRoute: typeof NavbarLayoutSettingsPaypointsSiteImport
+      parentRoute: typeof NavbarLayoutSettingsPaypointsImport
+    }
+    '/_navbarLayout/settings/users/$userId': {
+      id: '/_navbarLayout/settings/users/$userId'
+      path: '/$userId'
+      fullPath: '/settings/users/$userId'
+      preLoaderRoute: typeof NavbarLayoutSettingsUsersUserIdImport
+      parentRoute: typeof NavbarLayoutSettingsUsersImport
+    }
+    '/_navbarLayout/vendor/edit/$id': {
+      id: '/_navbarLayout/vendor/edit/$id'
+      path: '/edit/$id'
+      fullPath: '/vendor/edit/$id'
+      preLoaderRoute: typeof NavbarLayoutVendorEditIdImport
+      parentRoute: typeof NavbarLayoutVendorImport
+    }
+    '/_navbarLayout/daily-reports/shift-worksheet/': {
+      id: '/_navbarLayout/daily-reports/shift-worksheet/'
+      path: '/'
+      fullPath: '/daily-reports/shift-worksheet/'
+      preLoaderRoute: typeof NavbarLayoutDailyReportsShiftWorksheetIndexImport
+      parentRoute: typeof NavbarLayoutDailyReportsShiftWorksheetImport
+    }
+    '/_navbarLayout/reports/sales-summary/': {
+      id: '/_navbarLayout/reports/sales-summary/'
+      path: '/'
+      fullPath: '/reports/sales-summary/'
+      preLoaderRoute: typeof NavbarLayoutReportsSalesSummaryIndexImport
+      parentRoute: typeof NavbarLayoutReportsSalesSummaryImport
+    }
+    '/_navbarLayout/settings/paypoints/': {
+      id: '/_navbarLayout/settings/paypoints/'
+      path: '/'
+      fullPath: '/settings/paypoints/'
+      preLoaderRoute: typeof NavbarLayoutSettingsPaypointsIndexImport
+      parentRoute: typeof NavbarLayoutSettingsPaypointsImport
+    }
+    '/_navbarLayout/settings/users/': {
+      id: '/_navbarLayout/settings/users/'
+      path: '/'
+      fullPath: '/settings/users/'
+      preLoaderRoute: typeof NavbarLayoutSettingsUsersIndexImport
+      parentRoute: typeof NavbarLayoutSettingsUsersImport
     }
   }
 }
+
+// Create and export the route tree
 
 interface NavbarLayoutAuditChecklistRouteChildren {
   NavbarLayoutAuditChecklistTemplateIdRoute: typeof NavbarLayoutAuditChecklistTemplateIdRoute
@@ -1509,11 +1214,724 @@ const NavbarLayoutRouteWithChildren = NavbarLayoutRoute._addFileChildren(
   NavbarLayoutRouteChildren,
 )
 
+export interface FileRoutesByFullPath {
+  '': typeof NavbarLayoutRouteWithChildren
+  '/login': typeof authLoginRoute
+  '/register': typeof authRegisterRoute
+  '/audit': typeof NavbarLayoutAuditRouteWithChildren
+  '/cycle-count': typeof NavbarLayoutCycleCountRouteWithChildren
+  '/daily-reports': typeof NavbarLayoutDailyReportsRouteWithChildren
+  '/fleet': typeof NavbarLayoutFleetRouteWithChildren
+  '/kardpoll': typeof NavbarLayoutKardpollRouteWithChildren
+  '/order-rec': typeof NavbarLayoutOrderRecRouteWithChildren
+  '/payables': typeof NavbarLayoutPayablesRouteWithChildren
+  '/po': typeof NavbarLayoutPoRouteWithChildren
+  '/reports': typeof NavbarLayoutReportsRouteWithChildren
+  '/settings': typeof NavbarLayoutSettingsRouteWithChildren
+  '/status': typeof NavbarLayoutStatusRouteWithChildren
+  '/vendor': typeof NavbarLayoutVendorRouteWithChildren
+  '/': typeof NavbarLayoutIndexRoute
+  '/audit/$id': typeof NavbarLayoutAuditIdRoute
+  '/audit/checklist': typeof NavbarLayoutAuditChecklistRouteWithChildren
+  '/audit/list': typeof NavbarLayoutAuditListRoute
+  '/cycle-count/list': typeof NavbarLayoutCycleCountListRoute
+  '/daily-reports/cash-summary': typeof NavbarLayoutDailyReportsCashSummaryRoute
+  '/daily-reports/shift-worksheet': typeof NavbarLayoutDailyReportsShiftWorksheetRouteWithChildren
+  '/fleet/list': typeof NavbarLayoutFleetListRoute
+  '/kardpoll/list': typeof NavbarLayoutKardpollListRoute
+  '/order-rec/$id': typeof NavbarLayoutOrderRecIdRoute
+  '/order-rec/dashboard': typeof NavbarLayoutOrderRecDashboardRoute
+  '/order-rec/list': typeof NavbarLayoutOrderRecListRoute
+  '/payables/images': typeof NavbarLayoutPayablesImagesRoute
+  '/payables/list': typeof NavbarLayoutPayablesListRoute
+  '/payables/review': typeof NavbarLayoutPayablesReviewRoute
+  '/po/list': typeof NavbarLayoutPoListRoute
+  '/po/receipt': typeof NavbarLayoutPoReceiptRoute
+  '/po/signature': typeof NavbarLayoutPoSignatureRoute
+  '/reports/other': typeof NavbarLayoutReportsOtherRoute
+  '/reports/sales-summary': typeof NavbarLayoutReportsSalesSummaryRouteWithChildren
+  '/settings/paypoints': typeof NavbarLayoutSettingsPaypointsRouteWithChildren
+  '/settings/users': typeof NavbarLayoutSettingsUsersRouteWithChildren
+  '/status/list': typeof NavbarLayoutStatusListRoute
+  '/vendor/list': typeof NavbarLayoutVendorListRoute
+  '/audit/': typeof NavbarLayoutAuditIndexRoute
+  '/cycle-count/': typeof NavbarLayoutCycleCountIndexRoute
+  '/fleet/': typeof NavbarLayoutFleetIndexRoute
+  '/kardpoll/': typeof NavbarLayoutKardpollIndexRoute
+  '/order-rec/': typeof NavbarLayoutOrderRecIndexRoute
+  '/payables/': typeof NavbarLayoutPayablesIndexRoute
+  '/po/': typeof NavbarLayoutPoIndexRoute
+  '/settings/': typeof NavbarLayoutSettingsIndexRoute
+  '/status/': typeof NavbarLayoutStatusIndexRoute
+  '/vendor/': typeof NavbarLayoutVendorIndexRoute
+  '/audit/checklist/$templateId': typeof NavbarLayoutAuditChecklistTemplateIdRoute
+  '/cycle-count/entry/$id': typeof NavbarLayoutCycleCountEntryIdRoute
+  '/daily-reports/shift-worksheet/$worksheet': typeof NavbarLayoutDailyReportsShiftWorksheetWorksheetRoute
+  '/daily-reports/shift-worksheet/create': typeof NavbarLayoutDailyReportsShiftWorksheetCreateRoute
+  '/reports/sales-summary/upload': typeof NavbarLayoutReportsSalesSummaryUploadRoute
+  '/settings/paypoints/$site': typeof NavbarLayoutSettingsPaypointsSiteRoute
+  '/settings/users/$userId': typeof NavbarLayoutSettingsUsersUserIdRoute
+  '/vendor/edit/$id': typeof NavbarLayoutVendorEditIdRoute
+  '/daily-reports/shift-worksheet/': typeof NavbarLayoutDailyReportsShiftWorksheetIndexRoute
+  '/reports/sales-summary/': typeof NavbarLayoutReportsSalesSummaryIndexRoute
+  '/settings/paypoints/': typeof NavbarLayoutSettingsPaypointsIndexRoute
+  '/settings/users/': typeof NavbarLayoutSettingsUsersIndexRoute
+}
+
+export interface FileRoutesByTo {
+  '/login': typeof authLoginRoute
+  '/register': typeof authRegisterRoute
+  '/daily-reports': typeof NavbarLayoutDailyReportsRouteWithChildren
+  '/reports': typeof NavbarLayoutReportsRouteWithChildren
+  '/': typeof NavbarLayoutIndexRoute
+  '/audit/$id': typeof NavbarLayoutAuditIdRoute
+  '/audit/checklist': typeof NavbarLayoutAuditChecklistRouteWithChildren
+  '/audit/list': typeof NavbarLayoutAuditListRoute
+  '/cycle-count/list': typeof NavbarLayoutCycleCountListRoute
+  '/daily-reports/cash-summary': typeof NavbarLayoutDailyReportsCashSummaryRoute
+  '/fleet/list': typeof NavbarLayoutFleetListRoute
+  '/kardpoll/list': typeof NavbarLayoutKardpollListRoute
+  '/order-rec/$id': typeof NavbarLayoutOrderRecIdRoute
+  '/order-rec/dashboard': typeof NavbarLayoutOrderRecDashboardRoute
+  '/order-rec/list': typeof NavbarLayoutOrderRecListRoute
+  '/payables/images': typeof NavbarLayoutPayablesImagesRoute
+  '/payables/list': typeof NavbarLayoutPayablesListRoute
+  '/payables/review': typeof NavbarLayoutPayablesReviewRoute
+  '/po/list': typeof NavbarLayoutPoListRoute
+  '/po/receipt': typeof NavbarLayoutPoReceiptRoute
+  '/po/signature': typeof NavbarLayoutPoSignatureRoute
+  '/reports/other': typeof NavbarLayoutReportsOtherRoute
+  '/status/list': typeof NavbarLayoutStatusListRoute
+  '/vendor/list': typeof NavbarLayoutVendorListRoute
+  '/audit': typeof NavbarLayoutAuditIndexRoute
+  '/cycle-count': typeof NavbarLayoutCycleCountIndexRoute
+  '/fleet': typeof NavbarLayoutFleetIndexRoute
+  '/kardpoll': typeof NavbarLayoutKardpollIndexRoute
+  '/order-rec': typeof NavbarLayoutOrderRecIndexRoute
+  '/payables': typeof NavbarLayoutPayablesIndexRoute
+  '/po': typeof NavbarLayoutPoIndexRoute
+  '/settings': typeof NavbarLayoutSettingsIndexRoute
+  '/status': typeof NavbarLayoutStatusIndexRoute
+  '/vendor': typeof NavbarLayoutVendorIndexRoute
+  '/audit/checklist/$templateId': typeof NavbarLayoutAuditChecklistTemplateIdRoute
+  '/cycle-count/entry/$id': typeof NavbarLayoutCycleCountEntryIdRoute
+  '/daily-reports/shift-worksheet/$worksheet': typeof NavbarLayoutDailyReportsShiftWorksheetWorksheetRoute
+  '/daily-reports/shift-worksheet/create': typeof NavbarLayoutDailyReportsShiftWorksheetCreateRoute
+  '/reports/sales-summary/upload': typeof NavbarLayoutReportsSalesSummaryUploadRoute
+  '/settings/paypoints/$site': typeof NavbarLayoutSettingsPaypointsSiteRoute
+  '/settings/users/$userId': typeof NavbarLayoutSettingsUsersUserIdRoute
+  '/vendor/edit/$id': typeof NavbarLayoutVendorEditIdRoute
+  '/daily-reports/shift-worksheet': typeof NavbarLayoutDailyReportsShiftWorksheetIndexRoute
+  '/reports/sales-summary': typeof NavbarLayoutReportsSalesSummaryIndexRoute
+  '/settings/paypoints': typeof NavbarLayoutSettingsPaypointsIndexRoute
+  '/settings/users': typeof NavbarLayoutSettingsUsersIndexRoute
+}
+
+export interface FileRoutesById {
+  __root__: typeof rootRoute
+  '/_navbarLayout': typeof NavbarLayoutRouteWithChildren
+  '/(auth)/login': typeof authLoginRoute
+  '/(auth)/register': typeof authRegisterRoute
+  '/_navbarLayout/audit': typeof NavbarLayoutAuditRouteWithChildren
+  '/_navbarLayout/cycle-count': typeof NavbarLayoutCycleCountRouteWithChildren
+  '/_navbarLayout/daily-reports': typeof NavbarLayoutDailyReportsRouteWithChildren
+  '/_navbarLayout/fleet': typeof NavbarLayoutFleetRouteWithChildren
+  '/_navbarLayout/kardpoll': typeof NavbarLayoutKardpollRouteWithChildren
+  '/_navbarLayout/order-rec': typeof NavbarLayoutOrderRecRouteWithChildren
+  '/_navbarLayout/payables': typeof NavbarLayoutPayablesRouteWithChildren
+  '/_navbarLayout/po': typeof NavbarLayoutPoRouteWithChildren
+  '/_navbarLayout/reports': typeof NavbarLayoutReportsRouteWithChildren
+  '/_navbarLayout/settings': typeof NavbarLayoutSettingsRouteWithChildren
+  '/_navbarLayout/status': typeof NavbarLayoutStatusRouteWithChildren
+  '/_navbarLayout/vendor': typeof NavbarLayoutVendorRouteWithChildren
+  '/_navbarLayout/': typeof NavbarLayoutIndexRoute
+  '/_navbarLayout/audit/$id': typeof NavbarLayoutAuditIdRoute
+  '/_navbarLayout/audit/checklist': typeof NavbarLayoutAuditChecklistRouteWithChildren
+  '/_navbarLayout/audit/list': typeof NavbarLayoutAuditListRoute
+  '/_navbarLayout/cycle-count/list': typeof NavbarLayoutCycleCountListRoute
+  '/_navbarLayout/daily-reports/cash-summary': typeof NavbarLayoutDailyReportsCashSummaryRoute
+  '/_navbarLayout/daily-reports/shift-worksheet': typeof NavbarLayoutDailyReportsShiftWorksheetRouteWithChildren
+  '/_navbarLayout/fleet/list': typeof NavbarLayoutFleetListRoute
+  '/_navbarLayout/kardpoll/list': typeof NavbarLayoutKardpollListRoute
+  '/_navbarLayout/order-rec/$id': typeof NavbarLayoutOrderRecIdRoute
+  '/_navbarLayout/order-rec/dashboard': typeof NavbarLayoutOrderRecDashboardRoute
+  '/_navbarLayout/order-rec/list': typeof NavbarLayoutOrderRecListRoute
+  '/_navbarLayout/payables/images': typeof NavbarLayoutPayablesImagesRoute
+  '/_navbarLayout/payables/list': typeof NavbarLayoutPayablesListRoute
+  '/_navbarLayout/payables/review': typeof NavbarLayoutPayablesReviewRoute
+  '/_navbarLayout/po/list': typeof NavbarLayoutPoListRoute
+  '/_navbarLayout/po/receipt': typeof NavbarLayoutPoReceiptRoute
+  '/_navbarLayout/po/signature': typeof NavbarLayoutPoSignatureRoute
+  '/_navbarLayout/reports/other': typeof NavbarLayoutReportsOtherRoute
+  '/_navbarLayout/reports/sales-summary': typeof NavbarLayoutReportsSalesSummaryRouteWithChildren
+  '/_navbarLayout/settings/paypoints': typeof NavbarLayoutSettingsPaypointsRouteWithChildren
+  '/_navbarLayout/settings/users': typeof NavbarLayoutSettingsUsersRouteWithChildren
+  '/_navbarLayout/status/list': typeof NavbarLayoutStatusListRoute
+  '/_navbarLayout/vendor/list': typeof NavbarLayoutVendorListRoute
+  '/_navbarLayout/audit/': typeof NavbarLayoutAuditIndexRoute
+  '/_navbarLayout/cycle-count/': typeof NavbarLayoutCycleCountIndexRoute
+  '/_navbarLayout/fleet/': typeof NavbarLayoutFleetIndexRoute
+  '/_navbarLayout/kardpoll/': typeof NavbarLayoutKardpollIndexRoute
+  '/_navbarLayout/order-rec/': typeof NavbarLayoutOrderRecIndexRoute
+  '/_navbarLayout/payables/': typeof NavbarLayoutPayablesIndexRoute
+  '/_navbarLayout/po/': typeof NavbarLayoutPoIndexRoute
+  '/_navbarLayout/settings/': typeof NavbarLayoutSettingsIndexRoute
+  '/_navbarLayout/status/': typeof NavbarLayoutStatusIndexRoute
+  '/_navbarLayout/vendor/': typeof NavbarLayoutVendorIndexRoute
+  '/_navbarLayout/audit/checklist/$templateId': typeof NavbarLayoutAuditChecklistTemplateIdRoute
+  '/_navbarLayout/cycle-count/entry/$id': typeof NavbarLayoutCycleCountEntryIdRoute
+  '/_navbarLayout/daily-reports/shift-worksheet/$worksheet': typeof NavbarLayoutDailyReportsShiftWorksheetWorksheetRoute
+  '/_navbarLayout/daily-reports/shift-worksheet/create': typeof NavbarLayoutDailyReportsShiftWorksheetCreateRoute
+  '/_navbarLayout/reports/sales-summary/upload': typeof NavbarLayoutReportsSalesSummaryUploadRoute
+  '/_navbarLayout/settings/paypoints/$site': typeof NavbarLayoutSettingsPaypointsSiteRoute
+  '/_navbarLayout/settings/users/$userId': typeof NavbarLayoutSettingsUsersUserIdRoute
+  '/_navbarLayout/vendor/edit/$id': typeof NavbarLayoutVendorEditIdRoute
+  '/_navbarLayout/daily-reports/shift-worksheet/': typeof NavbarLayoutDailyReportsShiftWorksheetIndexRoute
+  '/_navbarLayout/reports/sales-summary/': typeof NavbarLayoutReportsSalesSummaryIndexRoute
+  '/_navbarLayout/settings/paypoints/': typeof NavbarLayoutSettingsPaypointsIndexRoute
+  '/_navbarLayout/settings/users/': typeof NavbarLayoutSettingsUsersIndexRoute
+}
+
+export interface FileRouteTypes {
+  fileRoutesByFullPath: FileRoutesByFullPath
+  fullPaths:
+    | ''
+    | '/login'
+    | '/register'
+    | '/audit'
+    | '/cycle-count'
+    | '/daily-reports'
+    | '/fleet'
+    | '/kardpoll'
+    | '/order-rec'
+    | '/payables'
+    | '/po'
+    | '/reports'
+    | '/settings'
+    | '/status'
+    | '/vendor'
+    | '/'
+    | '/audit/$id'
+    | '/audit/checklist'
+    | '/audit/list'
+    | '/cycle-count/list'
+    | '/daily-reports/cash-summary'
+    | '/daily-reports/shift-worksheet'
+    | '/fleet/list'
+    | '/kardpoll/list'
+    | '/order-rec/$id'
+    | '/order-rec/dashboard'
+    | '/order-rec/list'
+    | '/payables/images'
+    | '/payables/list'
+    | '/payables/review'
+    | '/po/list'
+    | '/po/receipt'
+    | '/po/signature'
+    | '/reports/other'
+    | '/reports/sales-summary'
+    | '/settings/paypoints'
+    | '/settings/users'
+    | '/status/list'
+    | '/vendor/list'
+    | '/audit/'
+    | '/cycle-count/'
+    | '/fleet/'
+    | '/kardpoll/'
+    | '/order-rec/'
+    | '/payables/'
+    | '/po/'
+    | '/settings/'
+    | '/status/'
+    | '/vendor/'
+    | '/audit/checklist/$templateId'
+    | '/cycle-count/entry/$id'
+    | '/daily-reports/shift-worksheet/$worksheet'
+    | '/daily-reports/shift-worksheet/create'
+    | '/reports/sales-summary/upload'
+    | '/settings/paypoints/$site'
+    | '/settings/users/$userId'
+    | '/vendor/edit/$id'
+    | '/daily-reports/shift-worksheet/'
+    | '/reports/sales-summary/'
+    | '/settings/paypoints/'
+    | '/settings/users/'
+  fileRoutesByTo: FileRoutesByTo
+  to:
+    | '/login'
+    | '/register'
+    | '/daily-reports'
+    | '/reports'
+    | '/'
+    | '/audit/$id'
+    | '/audit/checklist'
+    | '/audit/list'
+    | '/cycle-count/list'
+    | '/daily-reports/cash-summary'
+    | '/fleet/list'
+    | '/kardpoll/list'
+    | '/order-rec/$id'
+    | '/order-rec/dashboard'
+    | '/order-rec/list'
+    | '/payables/images'
+    | '/payables/list'
+    | '/payables/review'
+    | '/po/list'
+    | '/po/receipt'
+    | '/po/signature'
+    | '/reports/other'
+    | '/status/list'
+    | '/vendor/list'
+    | '/audit'
+    | '/cycle-count'
+    | '/fleet'
+    | '/kardpoll'
+    | '/order-rec'
+    | '/payables'
+    | '/po'
+    | '/settings'
+    | '/status'
+    | '/vendor'
+    | '/audit/checklist/$templateId'
+    | '/cycle-count/entry/$id'
+    | '/daily-reports/shift-worksheet/$worksheet'
+    | '/daily-reports/shift-worksheet/create'
+    | '/reports/sales-summary/upload'
+    | '/settings/paypoints/$site'
+    | '/settings/users/$userId'
+    | '/vendor/edit/$id'
+    | '/daily-reports/shift-worksheet'
+    | '/reports/sales-summary'
+    | '/settings/paypoints'
+    | '/settings/users'
+  id:
+    | '__root__'
+    | '/_navbarLayout'
+    | '/(auth)/login'
+    | '/(auth)/register'
+    | '/_navbarLayout/audit'
+    | '/_navbarLayout/cycle-count'
+    | '/_navbarLayout/daily-reports'
+    | '/_navbarLayout/fleet'
+    | '/_navbarLayout/kardpoll'
+    | '/_navbarLayout/order-rec'
+    | '/_navbarLayout/payables'
+    | '/_navbarLayout/po'
+    | '/_navbarLayout/reports'
+    | '/_navbarLayout/settings'
+    | '/_navbarLayout/status'
+    | '/_navbarLayout/vendor'
+    | '/_navbarLayout/'
+    | '/_navbarLayout/audit/$id'
+    | '/_navbarLayout/audit/checklist'
+    | '/_navbarLayout/audit/list'
+    | '/_navbarLayout/cycle-count/list'
+    | '/_navbarLayout/daily-reports/cash-summary'
+    | '/_navbarLayout/daily-reports/shift-worksheet'
+    | '/_navbarLayout/fleet/list'
+    | '/_navbarLayout/kardpoll/list'
+    | '/_navbarLayout/order-rec/$id'
+    | '/_navbarLayout/order-rec/dashboard'
+    | '/_navbarLayout/order-rec/list'
+    | '/_navbarLayout/payables/images'
+    | '/_navbarLayout/payables/list'
+    | '/_navbarLayout/payables/review'
+    | '/_navbarLayout/po/list'
+    | '/_navbarLayout/po/receipt'
+    | '/_navbarLayout/po/signature'
+    | '/_navbarLayout/reports/other'
+    | '/_navbarLayout/reports/sales-summary'
+    | '/_navbarLayout/settings/paypoints'
+    | '/_navbarLayout/settings/users'
+    | '/_navbarLayout/status/list'
+    | '/_navbarLayout/vendor/list'
+    | '/_navbarLayout/audit/'
+    | '/_navbarLayout/cycle-count/'
+    | '/_navbarLayout/fleet/'
+    | '/_navbarLayout/kardpoll/'
+    | '/_navbarLayout/order-rec/'
+    | '/_navbarLayout/payables/'
+    | '/_navbarLayout/po/'
+    | '/_navbarLayout/settings/'
+    | '/_navbarLayout/status/'
+    | '/_navbarLayout/vendor/'
+    | '/_navbarLayout/audit/checklist/$templateId'
+    | '/_navbarLayout/cycle-count/entry/$id'
+    | '/_navbarLayout/daily-reports/shift-worksheet/$worksheet'
+    | '/_navbarLayout/daily-reports/shift-worksheet/create'
+    | '/_navbarLayout/reports/sales-summary/upload'
+    | '/_navbarLayout/settings/paypoints/$site'
+    | '/_navbarLayout/settings/users/$userId'
+    | '/_navbarLayout/vendor/edit/$id'
+    | '/_navbarLayout/daily-reports/shift-worksheet/'
+    | '/_navbarLayout/reports/sales-summary/'
+    | '/_navbarLayout/settings/paypoints/'
+    | '/_navbarLayout/settings/users/'
+  fileRoutesById: FileRoutesById
+}
+
+export interface RootRouteChildren {
+  NavbarLayoutRoute: typeof NavbarLayoutRouteWithChildren
+  authLoginRoute: typeof authLoginRoute
+  authRegisterRoute: typeof authRegisterRoute
+}
+
 const rootRouteChildren: RootRouteChildren = {
   NavbarLayoutRoute: NavbarLayoutRouteWithChildren,
   authLoginRoute: authLoginRoute,
   authRegisterRoute: authRegisterRoute,
 }
-export const routeTree = rootRouteImport
+
+export const routeTree = rootRoute
   ._addFileChildren(rootRouteChildren)
   ._addFileTypes<FileRouteTypes>()
+
+/* ROUTE_MANIFEST_START
+{
+  "routes": {
+    "__root__": {
+      "filePath": "__root.tsx",
+      "children": [
+        "/_navbarLayout",
+        "/(auth)/login",
+        "/(auth)/register"
+      ]
+    },
+    "/_navbarLayout": {
+      "filePath": "_navbarLayout.tsx",
+      "children": [
+        "/_navbarLayout/audit",
+        "/_navbarLayout/cycle-count",
+        "/_navbarLayout/daily-reports",
+        "/_navbarLayout/fleet",
+        "/_navbarLayout/kardpoll",
+        "/_navbarLayout/order-rec",
+        "/_navbarLayout/payables",
+        "/_navbarLayout/po",
+        "/_navbarLayout/reports",
+        "/_navbarLayout/settings",
+        "/_navbarLayout/status",
+        "/_navbarLayout/vendor",
+        "/_navbarLayout/"
+      ]
+    },
+    "/(auth)/login": {
+      "filePath": "(auth)/login.tsx"
+    },
+    "/(auth)/register": {
+      "filePath": "(auth)/register.tsx"
+    },
+    "/_navbarLayout/audit": {
+      "filePath": "_navbarLayout/audit.tsx",
+      "parent": "/_navbarLayout",
+      "children": [
+        "/_navbarLayout/audit/$id",
+        "/_navbarLayout/audit/checklist",
+        "/_navbarLayout/audit/list",
+        "/_navbarLayout/audit/"
+      ]
+    },
+    "/_navbarLayout/cycle-count": {
+      "filePath": "_navbarLayout/cycle-count.tsx",
+      "parent": "/_navbarLayout",
+      "children": [
+        "/_navbarLayout/cycle-count/list",
+        "/_navbarLayout/cycle-count/",
+        "/_navbarLayout/cycle-count/entry/$id"
+      ]
+    },
+    "/_navbarLayout/daily-reports": {
+      "filePath": "_navbarLayout/daily-reports.tsx",
+      "parent": "/_navbarLayout",
+      "children": [
+        "/_navbarLayout/daily-reports/cash-summary",
+        "/_navbarLayout/daily-reports/shift-worksheet"
+      ]
+    },
+    "/_navbarLayout/fleet": {
+      "filePath": "_navbarLayout/fleet.tsx",
+      "parent": "/_navbarLayout",
+      "children": [
+        "/_navbarLayout/fleet/list",
+        "/_navbarLayout/fleet/"
+      ]
+    },
+    "/_navbarLayout/kardpoll": {
+      "filePath": "_navbarLayout/kardpoll.tsx",
+      "parent": "/_navbarLayout",
+      "children": [
+        "/_navbarLayout/kardpoll/list",
+        "/_navbarLayout/kardpoll/"
+      ]
+    },
+    "/_navbarLayout/order-rec": {
+      "filePath": "_navbarLayout/order-rec.tsx",
+      "parent": "/_navbarLayout",
+      "children": [
+        "/_navbarLayout/order-rec/$id",
+        "/_navbarLayout/order-rec/dashboard",
+        "/_navbarLayout/order-rec/list",
+        "/_navbarLayout/order-rec/"
+      ]
+    },
+    "/_navbarLayout/payables": {
+      "filePath": "_navbarLayout/payables.tsx",
+      "parent": "/_navbarLayout",
+      "children": [
+        "/_navbarLayout/payables/images",
+        "/_navbarLayout/payables/list",
+        "/_navbarLayout/payables/review",
+        "/_navbarLayout/payables/"
+      ]
+    },
+    "/_navbarLayout/po": {
+      "filePath": "_navbarLayout/po.tsx",
+      "parent": "/_navbarLayout",
+      "children": [
+        "/_navbarLayout/po/list",
+        "/_navbarLayout/po/receipt",
+        "/_navbarLayout/po/signature",
+        "/_navbarLayout/po/"
+      ]
+    },
+    "/_navbarLayout/reports": {
+      "filePath": "_navbarLayout/reports.tsx",
+      "parent": "/_navbarLayout",
+      "children": [
+        "/_navbarLayout/reports/other",
+        "/_navbarLayout/reports/sales-summary"
+      ]
+    },
+    "/_navbarLayout/settings": {
+      "filePath": "_navbarLayout/settings.tsx",
+      "parent": "/_navbarLayout",
+      "children": [
+        "/_navbarLayout/settings/paypoints",
+        "/_navbarLayout/settings/users",
+        "/_navbarLayout/settings/"
+      ]
+    },
+    "/_navbarLayout/status": {
+      "filePath": "_navbarLayout/status.tsx",
+      "parent": "/_navbarLayout",
+      "children": [
+        "/_navbarLayout/status/list",
+        "/_navbarLayout/status/"
+      ]
+    },
+    "/_navbarLayout/vendor": {
+      "filePath": "_navbarLayout/vendor.tsx",
+      "parent": "/_navbarLayout",
+      "children": [
+        "/_navbarLayout/vendor/list",
+        "/_navbarLayout/vendor/",
+        "/_navbarLayout/vendor/edit/$id"
+      ]
+    },
+    "/_navbarLayout/": {
+      "filePath": "_navbarLayout/index.tsx",
+      "parent": "/_navbarLayout"
+    },
+    "/_navbarLayout/audit/$id": {
+      "filePath": "_navbarLayout/audit/$id.tsx",
+      "parent": "/_navbarLayout/audit"
+    },
+    "/_navbarLayout/audit/checklist": {
+      "filePath": "_navbarLayout/audit/checklist.tsx",
+      "parent": "/_navbarLayout/audit",
+      "children": [
+        "/_navbarLayout/audit/checklist/$templateId"
+      ]
+    },
+    "/_navbarLayout/audit/list": {
+      "filePath": "_navbarLayout/audit/list.tsx",
+      "parent": "/_navbarLayout/audit"
+    },
+    "/_navbarLayout/cycle-count/list": {
+      "filePath": "_navbarLayout/cycle-count/list.tsx",
+      "parent": "/_navbarLayout/cycle-count"
+    },
+    "/_navbarLayout/daily-reports/cash-summary": {
+      "filePath": "_navbarLayout/daily-reports/cash-summary.tsx",
+      "parent": "/_navbarLayout/daily-reports"
+    },
+    "/_navbarLayout/daily-reports/shift-worksheet": {
+      "filePath": "_navbarLayout/daily-reports/shift-worksheet.tsx",
+      "parent": "/_navbarLayout/daily-reports",
+      "children": [
+        "/_navbarLayout/daily-reports/shift-worksheet/$worksheet",
+        "/_navbarLayout/daily-reports/shift-worksheet/create",
+        "/_navbarLayout/daily-reports/shift-worksheet/"
+      ]
+    },
+    "/_navbarLayout/fleet/list": {
+      "filePath": "_navbarLayout/fleet/list.tsx",
+      "parent": "/_navbarLayout/fleet"
+    },
+    "/_navbarLayout/kardpoll/list": {
+      "filePath": "_navbarLayout/kardpoll/list.tsx",
+      "parent": "/_navbarLayout/kardpoll"
+    },
+    "/_navbarLayout/order-rec/$id": {
+      "filePath": "_navbarLayout/order-rec/$id.tsx",
+      "parent": "/_navbarLayout/order-rec"
+    },
+    "/_navbarLayout/order-rec/dashboard": {
+      "filePath": "_navbarLayout/order-rec/dashboard.tsx",
+      "parent": "/_navbarLayout/order-rec"
+    },
+    "/_navbarLayout/order-rec/list": {
+      "filePath": "_navbarLayout/order-rec/list.tsx",
+      "parent": "/_navbarLayout/order-rec"
+    },
+    "/_navbarLayout/payables/images": {
+      "filePath": "_navbarLayout/payables/images.tsx",
+      "parent": "/_navbarLayout/payables"
+    },
+    "/_navbarLayout/payables/list": {
+      "filePath": "_navbarLayout/payables/list.tsx",
+      "parent": "/_navbarLayout/payables"
+    },
+    "/_navbarLayout/payables/review": {
+      "filePath": "_navbarLayout/payables/review.tsx",
+      "parent": "/_navbarLayout/payables"
+    },
+    "/_navbarLayout/po/list": {
+      "filePath": "_navbarLayout/po/list.tsx",
+      "parent": "/_navbarLayout/po"
+    },
+    "/_navbarLayout/po/receipt": {
+      "filePath": "_navbarLayout/po/receipt.tsx",
+      "parent": "/_navbarLayout/po"
+    },
+    "/_navbarLayout/po/signature": {
+      "filePath": "_navbarLayout/po/signature.tsx",
+      "parent": "/_navbarLayout/po"
+    },
+    "/_navbarLayout/reports/other": {
+      "filePath": "_navbarLayout/reports/other.tsx",
+      "parent": "/_navbarLayout/reports"
+    },
+    "/_navbarLayout/reports/sales-summary": {
+      "filePath": "_navbarLayout/reports/sales-summary.tsx",
+      "parent": "/_navbarLayout/reports",
+      "children": [
+        "/_navbarLayout/reports/sales-summary/upload",
+        "/_navbarLayout/reports/sales-summary/"
+      ]
+    },
+    "/_navbarLayout/settings/paypoints": {
+      "filePath": "_navbarLayout/settings/paypoints.tsx",
+      "parent": "/_navbarLayout/settings",
+      "children": [
+        "/_navbarLayout/settings/paypoints/$site",
+        "/_navbarLayout/settings/paypoints/"
+      ]
+    },
+    "/_navbarLayout/settings/users": {
+      "filePath": "_navbarLayout/settings/users.tsx",
+      "parent": "/_navbarLayout/settings",
+      "children": [
+        "/_navbarLayout/settings/users/$userId",
+        "/_navbarLayout/settings/users/"
+      ]
+    },
+    "/_navbarLayout/status/list": {
+      "filePath": "_navbarLayout/status/list.tsx",
+      "parent": "/_navbarLayout/status"
+    },
+    "/_navbarLayout/vendor/list": {
+      "filePath": "_navbarLayout/vendor/list.tsx",
+      "parent": "/_navbarLayout/vendor"
+    },
+    "/_navbarLayout/audit/": {
+      "filePath": "_navbarLayout/audit/index.tsx",
+      "parent": "/_navbarLayout/audit"
+    },
+    "/_navbarLayout/cycle-count/": {
+      "filePath": "_navbarLayout/cycle-count/index.tsx",
+      "parent": "/_navbarLayout/cycle-count"
+    },
+    "/_navbarLayout/fleet/": {
+      "filePath": "_navbarLayout/fleet/index.tsx",
+      "parent": "/_navbarLayout/fleet"
+    },
+    "/_navbarLayout/kardpoll/": {
+      "filePath": "_navbarLayout/kardpoll/index.tsx",
+      "parent": "/_navbarLayout/kardpoll"
+    },
+    "/_navbarLayout/order-rec/": {
+      "filePath": "_navbarLayout/order-rec/index.tsx",
+      "parent": "/_navbarLayout/order-rec"
+    },
+    "/_navbarLayout/payables/": {
+      "filePath": "_navbarLayout/payables/index.tsx",
+      "parent": "/_navbarLayout/payables"
+    },
+    "/_navbarLayout/po/": {
+      "filePath": "_navbarLayout/po/index.tsx",
+      "parent": "/_navbarLayout/po"
+    },
+    "/_navbarLayout/settings/": {
+      "filePath": "_navbarLayout/settings/index.tsx",
+      "parent": "/_navbarLayout/settings"
+    },
+    "/_navbarLayout/status/": {
+      "filePath": "_navbarLayout/status/index.tsx",
+      "parent": "/_navbarLayout/status"
+    },
+    "/_navbarLayout/vendor/": {
+      "filePath": "_navbarLayout/vendor/index.tsx",
+      "parent": "/_navbarLayout/vendor"
+    },
+    "/_navbarLayout/audit/checklist/$templateId": {
+      "filePath": "_navbarLayout/audit/checklist/$templateId.tsx",
+      "parent": "/_navbarLayout/audit/checklist"
+    },
+    "/_navbarLayout/cycle-count/entry/$id": {
+      "filePath": "_navbarLayout/cycle-count/entry/$id.tsx",
+      "parent": "/_navbarLayout/cycle-count"
+    },
+    "/_navbarLayout/daily-reports/shift-worksheet/$worksheet": {
+      "filePath": "_navbarLayout/daily-reports/shift-worksheet/$worksheet.tsx",
+      "parent": "/_navbarLayout/daily-reports/shift-worksheet"
+    },
+    "/_navbarLayout/daily-reports/shift-worksheet/create": {
+      "filePath": "_navbarLayout/daily-reports/shift-worksheet/create.tsx",
+      "parent": "/_navbarLayout/daily-reports/shift-worksheet"
+    },
+    "/_navbarLayout/reports/sales-summary/upload": {
+      "filePath": "_navbarLayout/reports/sales-summary/upload.tsx",
+      "parent": "/_navbarLayout/reports/sales-summary"
+    },
+    "/_navbarLayout/settings/paypoints/$site": {
+      "filePath": "_navbarLayout/settings/paypoints/$site.tsx",
+      "parent": "/_navbarLayout/settings/paypoints"
+    },
+    "/_navbarLayout/settings/users/$userId": {
+      "filePath": "_navbarLayout/settings/users/$userId.tsx",
+      "parent": "/_navbarLayout/settings/users"
+    },
+    "/_navbarLayout/vendor/edit/$id": {
+      "filePath": "_navbarLayout/vendor/edit/$id.tsx",
+      "parent": "/_navbarLayout/vendor"
+    },
+    "/_navbarLayout/daily-reports/shift-worksheet/": {
+      "filePath": "_navbarLayout/daily-reports/shift-worksheet/index.tsx",
+      "parent": "/_navbarLayout/daily-reports/shift-worksheet"
+    },
+    "/_navbarLayout/reports/sales-summary/": {
+      "filePath": "_navbarLayout/reports/sales-summary/index.tsx",
+      "parent": "/_navbarLayout/reports/sales-summary"
+    },
+    "/_navbarLayout/settings/paypoints/": {
+      "filePath": "_navbarLayout/settings/paypoints/index.tsx",
+      "parent": "/_navbarLayout/settings/paypoints"
+    },
+    "/_navbarLayout/settings/users/": {
+      "filePath": "_navbarLayout/settings/users/index.tsx",
+      "parent": "/_navbarLayout/settings/users"
+    }
+  }
+}
+ROUTE_MANIFEST_END */
