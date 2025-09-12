@@ -68,20 +68,27 @@ function RouteComponent() {
       setStatus("Failed to delete permission");
     }
   };
+  
+  const handleSync = async () => {
+    try {
+      await axios.post(
+        "/api/permissions/sync",
+        {},
+        {
+          headers: {
+            Authorization: `Bearer ${localStorage.getItem("token")}`,
+          },
+        }
+      );
+      setStatus("Permissions synced for all users!");
+    } catch (err) {
+      console.error(err);
+      setStatus("Failed to sync permissions");
+    }
+  };
 
   return (
     <div className="flex">
-      {/* Sidebar like PayPoints */}
-      {/* <aside className="flex flex-col w-1/4 p-4 border-r border-gray-300 border-dashed justify-start items-end">
-        <Link
-          to="/settings/permissions"
-          activeProps={{ className: "bg-gray-100 rounded-md" }}
-          className="p-2"
-        >
-          All Permissions
-        </Link>
-      </aside> */}
-
       {/* Main content */}
       <main className="w-3/4 p-4">
         <h2 className="text-lg font-bold mb-2">Permissions</h2>
@@ -103,6 +110,12 @@ function RouteComponent() {
             Add
           </button>
         </form>
+        <button
+          onClick={handleSync}
+          className="px-4 py-2 bg-green-500 text-white rounded hover:bg-green-600"
+        >
+            Sync
+        </button>
 
         {/* List all permissions */}
         <ul className="space-y-2">
