@@ -155,7 +155,7 @@ function RouteComponent() {
         // Send the email
         await axios.post("/api/send-email", {
           to: storeEmail,
-          cc: ["grayson@gen7fuel.com", "mohammad@gen7fuel.com"],
+          cc: ["grayson@gen7fuel.com", "mohammad@gen7fuel.com", userEmail],
           subject,
           text: html,
           isHtml: true,
