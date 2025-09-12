@@ -32,12 +32,12 @@ jobs:
       # 5. Build CDN (npm install only)
       - name: Build CDN
         run: |
-          cd ../cdn
+          cd cdn
           npm install
 
       # 6. Build frontend
       - name: Build frontend
         run: |
-          cd ../frontend
+          cd frontend
           npm install
           npm run build
