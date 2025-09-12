@@ -1,6 +1,7 @@
 const express = require('express');
 const router = express.Router();
 const OrderRec = require('../models/OrderRec');
+const Vendor = require('../models/Vendor');
 
 // Get all
 router.get('/', async (req, res) => {
@@ -114,7 +115,11 @@ router.put('/:id', async (req, res) => {
 // Create one
 router.post('/', async (req, res) => {
   try {
-    const { categories, site, vendor, email } = req.body;
+    let { categories, site, vendor, email, includeStationSupplies } = req.body;
+
+    console.log('includeStationSupplies:', includeStationSupplies);
+    console.log('Looking for vendor:', { _id: vendor, location: site });
+
     if (!categories || !Array.isArray(categories) || categories.length === 0) {
       return res.status(400).json({ message: 'Categories are required.' });
     }
@@ -124,6 +129,34 @@ router.post('/', async (req, res) => {
     if (!vendor) {
       return res.status(400).json({ message: 'Vendor is required.' });
     }
+
+    // If includeStationSupplies is true, fetch vendor and append station supplies
+    if (includeStationSupplies) {
+      const vendorDoc = await Vendor.findOne({ _id: vendor, location: site });
+      if (vendorDoc && vendorDoc.station_supplies && vendorDoc.station_supplies.length > 0) {
+        categories.push({
+          number: (categories.length + 1).toString(),
+          name: 'Station Supplies',
+          items: vendorDoc.station_supplies.map(supply => ({
+            gtin: supply.upc,
+            vin: supply.vin,
+            itemName: supply.name,
+            size: supply.size,
+            onHandQty: 0,
+            forecast: 0,
+            minStock: 0,
+            itemsToOrder: 0,
+            unitInCase: 0,
+            casesToOrder: 0,
+            onHandQtyOld: 0,
+            casesToOrderOld: 0,
+          })),
+        });
+      }
+
+      console.log('Found vendorDoc:', vendorDoc);
+    }
+
 
     // Set onHandQtyOld and casesToOrderOld for each item
     const categoriesWithOld = categories.map(category => ({
@@ -142,6 +175,36 @@ router.post('/', async (req, res) => {
     res.status(500).json({ message: err.message });
   }
 });
+// router.post('/', async (req, res) => {
+//   try {
+//     const { categories, site, vendor, email } = req.body;
+//     if (!categories || !Array.isArray(categories) || categories.length === 0) {
+//       return res.status(400).json({ message: 'Categories are required.' });
+//     }
+//     if (!site) {
+//       return res.status(400).json({ message: 'Site is required.' });
+//     }
+//     if (!vendor) {
+//       return res.status(400).json({ message: 'Vendor is required.' });
+//     }
+
+//     // Set onHandQtyOld and casesToOrderOld for each item
+//     const categoriesWithOld = categories.map(category => ({
+//       ...category,
+//       items: category.items.map(item => ({
+//         ...item,
+//         onHandQtyOld: item.onHandQty,
+//         casesToOrderOld: item.casesToOrder,
+//       })),
+//     }));
+
+//     const orderRec = new OrderRec({ categories: categoriesWithOld, site, vendor, email });
+//     await orderRec.save();
+//     res.status(201).json(orderRec);
+//   } catch (err) {
+//     res.status(500).json({ message: err.message });
+//   }
+// });
 
 // PATCH /api/order-rec/:id
 router.patch('/:id', async (req, res) => {

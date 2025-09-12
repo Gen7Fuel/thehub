@@ -1,0 +1,43 @@
+name: CI
+
+on:
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      # 1. Checkout code
+      - uses: actions/checkout@v4
+
+      # 2. Setup Node.js
+      - name: Setup Node
+        uses: actions/setup-node@v3
+        with:
+          node-version: 23
+
+      # 3. Build all Docker Compose services
+      - name: Build Docker Compose services
+        run: |
+          docker compose -f compose.dev.yaml build
+
+      # 4. Build backend (npm install only)
+      - name: Build backend
+        run: |
+          cd backend
+          npm install
+
+      # 5. Build CDN (npm install only)
+      - name: Build CDN
+        run: |
+          cd cdn
+          npm install
+
+      # 6. Build frontend
+      - name: Build frontend
+        run: |
+          cd frontend
+          npm install
+          npm run build
