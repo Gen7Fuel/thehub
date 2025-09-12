@@ -1,10 +1,10 @@
 const mongoose = require("mongoose");
 
-// DELETE FILE
-const permissionsSchema = new mongoose.Schema({
-  userId: { type: mongoose.Schema.Types.ObjectId, ref: "User", required: true },
-  modules: [{ type: String, required: true }], // List of accessible modules
-  locations: [{ type: mongoose.Schema.Types.ObjectId, ref: "Location", required: true }] // List of accessible locations
+const PermissionSchema = new mongoose.Schema({
+  name: { type: String, required: true, unique: true },
 });
 
-module.exports = mongoose.model("Permissions", permissionsSchema);
+// ✅ This will use "permissions" automatically
+const Permission = mongoose.model("Permission", PermissionSchema);
+
+module.exports = Permission;

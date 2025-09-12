@@ -12,6 +12,7 @@ function RouteComponent() {
   const links = [
     { to: '/settings/paypoints', label: 'Pay Points' },
     { to: '/settings/users', label: 'Users' },
+    { to: '/settings/permissions', label: 'Permissions' }
   ]
 
   return (
