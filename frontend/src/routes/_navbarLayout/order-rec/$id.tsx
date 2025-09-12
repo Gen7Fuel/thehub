@@ -379,7 +379,7 @@ function RouteComponent() {
         >
           <Trash2 className="w-5 h-5" />
         </Button>
-        {orderRec.filename?.includes('CoreMark') && (
+        {orderRec.filename?.includes('Core-Mark') && (
           <Button
             variant="outline"
             onClick={handleTemplate}
