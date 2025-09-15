@@ -14,6 +14,8 @@ export const Route = createFileRoute('/_navbarLayout/status/list')({
 
 function RouteComponent() {
   const [date, setDate] = React.useState<Date | undefined>(new Date());
+  if (date)
+    console.log('Selected date:', new Date(date.setHours(0, 0, 0, 0)).toISOString());
 
   const [stationName, setStationName] = React.useState<string>(localStorage.getItem('location') || '');
   const [statusSales, setStatusSales] = React.useState<
@@ -39,8 +41,10 @@ function RouteComponent() {
       // add authorization header with bearer token
       const response = await axios.get('/api/status-sales', {
         params: {
-          startDate: toUTC(date).toISOString().split('T')[0],
-          endDate: toUTC(date).toISOString().split('T')[0],
+          // startDate: toUTC(date).toISOString().split('T')[0],
+          // endDate: toUTC(date).toISOString().split('T')[0],
+          startDate: new Date(date.setHours(0, 0, 0, 0)).toISOString(),
+          endDate: new Date(date.setHours(23, 59, 59, 999)).toISOString(),
           stationName,
         },
         headers: {
@@ -124,6 +128,7 @@ function RouteComponent() {
             <th className="border-dashed border-b border-gray-300 px-4 py-2">Fuel Grade</th>
             <th className="border-dashed border-b border-gray-300 px-4 py-2">Amount (L)</th>
             <th className="border-dashed border-b border-gray-300 px-4 py-2">Total (CAD)</th>
+            <th className="border-dashed border-b border-gray-300 px-4 py-2">createdAt</th>
           </tr>
         </thead>
         <tbody>
@@ -144,6 +149,7 @@ function RouteComponent() {
                 <td className="border-dashed border-t border-gray-300 px-4 py-2">{sale.fuelGrade}</td>
                 <td className="border-dashed border-t border-gray-300 px-4 py-2">{sale.amount.toFixed(2)}</td>
                 <td className="border-dashed border-t border-gray-300 px-4 py-2">{sale.total.toFixed(2)}</td>
+                <td className="border-dashed border-t border-gray-300 px-4 py-2">{sale.createdAt.replace('T', '---')}</td>
               </tr>
               {sale.amount > 200 && (
                 <tr key={index} className="hover:bg-gray-50">
