@@ -14,61 +14,35 @@ router.get("/", async (req, res) => {
   }
 });
 
-// Add new permission & sync
+// Add new permission
 router.post("/", async (req, res) => {
   const { name } = req.body;
   if (!name) return res.status(400).json({ error: "Permission name required" });
 
   try {
-    // 1. Create the new permission
+    // 1. Add new permission to collection
     const newPermission = new Permission({ name });
     await newPermission.save();
 
-    // Syncing all users permissions to same
-    const permissions = await Permission.find().lean();
-    const permissionNames = permissions.map(p => p.name);
-
-    const users = await User.find();
-
-    for (const user of users) {
-      let updatedAccess = { ...user.access };
-
-      // add missing
-      permissionNames.forEach(name => {
-        if (!(name in updatedAccess)) {
-          updatedAccess[name] = false;
-        }
-      });
-
-      await User.updateOne(
-        { _id: user._id },
-        { $set: { access: updatedAccess } }
-      );
-    }
     res.status(201).json({
       success: true,
-      message: `Permission added and synced for all users.`,
+      message: `Permission '${name}' added.`,
     });
-
   } catch (err) {
     console.error("Error adding permission:", err);
-    res.status(500).json({ error: "Failed to add permission" });
+    res.status(500).json({
+      error: "Failed to add permission",
+      details: err.message,
+    });
   }
 });
 
 
-
-// Delete permission by ID and sync all users
+// Delete permission by ID
 router.delete("/:id", async (req, res) => {
   try {
     const deleted = await Permission.findByIdAndDelete(req.params.id);
     if (!deleted) return res.status(404).json({ error: "Not found" });
-
-    // Remove this key from all users' access
-    await User.updateMany(
-      {},
-      { $unset: { [`access.${deleted.name}`]: "" } }
-    );
 
     res.status(200).json({ message: "Deleted successfully and removed from users" });
   } catch (err) {
@@ -77,36 +51,71 @@ router.delete("/:id", async (req, res) => {
   }
 });
 
-// Sync permissions to all users
-// router.post("/sync", async (req, res) => {
-//   try {
-//     const permissions = await Permission.find().lean();
-//     const permissionNames = permissions.map(p => p.name);
+// Sync permissions with all users (add missing, remove old)
+router.post("/sync", async (req, res) => {
+  try {
+    const permissions = await Permission.find().lean();
+    const permissionNames = permissions.map(p => p.name);
 
-//     const users = await User.find();
+    const users = await User.find();
 
-//     for (const user of users) {
-//       let updatedAccess = { ...user.access };
+    for (const user of users) {
+      let updatedAccess = {};
 
-//       // add missing
-//       permissionNames.forEach(name => {
-//         if (!(name in updatedAccess)) {
-//           updatedAccess[name] = false;
-//         }
-//       });
+      // Add missing permissions, preserve old values
+      permissionNames.forEach(perm => {
+        updatedAccess[perm] = user.access?.[perm] ?? false;
+      });
 
-//       await User.updateOne(
-//         { _id: user._id },
-//         { $set: { access: updatedAccess } }
-//       );
-//     }
+      // Assign cleaned object back
+      user.access = updatedAccess;
+      await user.save();
+    }
 
-//     res.json({ message: "Permissions synced for all users" });
-//   } catch (error) {
-//     console.error("Error syncing permissions:", error);
-//     res.status(500).json({ error: "Internal server error" });
-//   }
-// });
+    res.json({ success: true, message: "Permissions synced for all users." });
+  } catch (error) {
+    console.error("Error syncing permissions:", error);
+    res.status(500).json({ error: "Failed to sync permissions" });
+  }
+});
 
+
+// Edit (rename) a permission
+router.put("/:id", async (req, res) => {
+  const { id } = req.params;
+  const { newName } = req.body;
+
+  try {
+    const permission = await Permission.findById(id);
+    if (!permission) return res.status(404).json({ error: "Permission not found" });
+
+    const oldName = permission.name;
+
+    // Check duplicate
+    const exists = await Permission.findOne({ name: newName });
+    if (exists) {
+      return res.status(400).json({ error: "Permission with this name already exists" });
+    }
+
+    // Update permission name in collection
+    permission.name = newName;
+    await permission.save();
+
+    // Rename field in all users
+    await User.updateMany(
+      { [`access.${oldName}`]: { $exists: true } },
+      {
+        $rename: {
+          [`access.${oldName}`]: `access.${newName}`
+        }
+      }
+    );
+
+    res.json({ message: "Permission renamed successfully" });
+  } catch (err) {
+    console.error("Error renaming permission:", err);
+    res.status(500).json({ error: "Failed to rename permission" });
+  }
+});
 
 module.exports = router;

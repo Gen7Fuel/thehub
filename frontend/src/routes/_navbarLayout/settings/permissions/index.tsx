@@ -1,6 +1,8 @@
 import { createFileRoute, Outlet } from "@tanstack/react-router";
 import axios from "axios";
 import { useState } from "react";
+import { Pencil } from "lucide-react";
+
 
 export const Route = createFileRoute("/_navbarLayout/settings/permissions/")({
   component: RouteComponent,
@@ -74,6 +76,48 @@ function RouteComponent() {
     }
   };
 
+  const handleSync = async () => {
+    try {
+      const res = await axios.post(
+        "/api/permissions/sync",
+        {},
+        { headers: { Authorization: `Bearer ${localStorage.getItem("token")}` } }
+      );
+      alert(res.data.message);
+      setStatus(res.data.message);
+      window.location.reload();
+    } catch (err) {
+      console.error(err);
+      setStatus("Failed to sync permissions");
+    }
+  };
+
+const handleEdit = async (id: string, currentName: string) => {
+  const newName = prompt(`Rename permission '${currentName}' to:`, currentName);
+  if (!newName) return; // canceled
+  if (newName.trim() === currentName.trim()) return;
+
+  try {
+    const response = await axios.put(
+      `/api/permissions/${id}`,
+      { newName: newName.trim() },
+      { headers: { Authorization: `Bearer ${localStorage.getItem("token")}` } }
+    );
+
+    // show success details: use alert to be visible
+    const msg = response.data?.message || "Permission renamed successfully";
+    alert(msg + (response.data?.usersModified !== undefined ? `\nUsers modified: ${response.data.usersModified}` : ""));
+    setStatus((response.data?.message || "Renamed"));
+    window.location.reload();
+  } catch (err: any) {
+    console.error("Rename error:", err);
+    // Show backend-provided message if present
+    const serverMsg = err.response?.data?.error || err.response?.data?.details || err.message;
+    alert("Failed to rename permission: " + serverMsg);
+    setStatus("Failed to rename permission: " + (serverMsg || ""));
+  }
+};
+
   return (
     <div className="flex">
       {/* Main content */}
@@ -92,9 +136,16 @@ function RouteComponent() {
           />
           <button
             type="submit"
+            className="px-4 py-2 bg-blue-500 text-white rounded hover:bg-blue-600"
+          >
+            Add
+          </button>
+          <button
+            type="button"
+            onClick={handleSync}
             className="px-4 py-2 bg-green-500 text-white rounded hover:bg-green-600"
           >
-            Add & Sync
+            Sync
           </button>
         </form>
 
@@ -106,12 +157,20 @@ function RouteComponent() {
               className="flex justify-between items-center border px-3 py-2 rounded"
             >
               <span>{perm.name}</span>
-              <button
-                onClick={() => handleDelete(perm._id)}
-                className="px-4 py-2 bg-red-400 text-white rounded hover:bg-red-600"
-              >
-                Delete & Sync
-              </button>
+              <div className="flex gap-2">
+                <button
+                  onClick={() => handleEdit(perm._id, perm.name)}
+                  className="text-blue-500 hover:text-blue-700"
+                >
+                  <Pencil className="h-4 w-4" />
+                </button>
+                <button
+                  onClick={() => handleDelete(perm._id)}
+                  className="px-4 py-2 bg-red-400 text-white rounded hover:bg-red-600"
+                >
+                  Delete
+                </button>
+              </div>
             </li>
           ))}
         </ul>
