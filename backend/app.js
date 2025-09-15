@@ -18,7 +18,7 @@ const fleetRoutes = require("./routes/fleetRoutes");
 const fleetCustomers = require("./routes/fleetCustomerRoutes");
 const salesSummaryRoutes = require("./routes/salesSummaryRoutes");
 const statusSalesRoutes = require("./routes/statusSalesRoutes");
-const emailRoutes = require('./routes/emailRoutes');
+const emailRoutes = require("./routes/emailRoutes");
 const orderRecRoutes = require("./routes/orderRecRoutes");
 const vendorRoutes = require("./routes/vendorRoutes");
 const auditRoutes = require("./routes/audit/auditTemplateRoutes");
@@ -26,6 +26,7 @@ const auditRoutes = require("./routes/audit/auditTemplateRoutes");
 // const CycleCountNewRoutes = require("./routes/cycleCountNewRoutes");
 const cycleCountRoutes = require('./routes/cycleCount2Routes');
 const auth = require("./middleware/authMiddleware");
+const permissionRoutes = require("./routes/permissionRoutes");
 
 dotenv.config();
 connectDB();
@@ -59,6 +60,7 @@ app.use("/api/vendors", vendorRoutes);
 app.use("/api/cycle-counts", cycleCountRoutes);
 // app.use("/api/cycle-count-new", CycleCountNewRoutes);
 app.use("/api/audit", auditRoutes);
+app.use("/api/permissions", permissionRoutes);
 
 
 // Reporting
