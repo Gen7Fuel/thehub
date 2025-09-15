@@ -59,6 +59,7 @@ import { Route as NavbarLayoutAuditListRouteImport } from './routes/_navbarLayou
 import { Route as NavbarLayoutAuditChecklistRouteImport } from './routes/_navbarLayout/audit/checklist'
 import { Route as NavbarLayoutAuditIdRouteImport } from './routes/_navbarLayout/audit/$id'
 import { Route as NavbarLayoutSettingsUsersIndexRouteImport } from './routes/_navbarLayout/settings/users/index'
+import { Route as NavbarLayoutSettingsPermissionsIndexRouteImport } from './routes/_navbarLayout/settings/permissions/index'
 import { Route as NavbarLayoutSettingsPaypointsIndexRouteImport } from './routes/_navbarLayout/settings/paypoints/index'
 import { Route as NavbarLayoutReportsSalesSummaryIndexRouteImport } from './routes/_navbarLayout/reports/sales-summary/index'
 import { Route as NavbarLayoutDailyReportsShiftWorksheetIndexRouteImport } from './routes/_navbarLayout/daily-reports/shift-worksheet/index'
@@ -341,6 +342,12 @@ const NavbarLayoutSettingsUsersIndexRoute =
     path: '/',
     getParentRoute: () => NavbarLayoutSettingsUsersRoute,
   } as any)
+const NavbarLayoutSettingsPermissionsIndexRoute =
+  NavbarLayoutSettingsPermissionsIndexRouteImport.update({
+    id: '/permissions/',
+    path: '/permissions/',
+    getParentRoute: () => NavbarLayoutSettingsRoute,
+  } as any)
 const NavbarLayoutSettingsPaypointsIndexRoute =
   NavbarLayoutSettingsPaypointsIndexRouteImport.update({
     id: '/',
@@ -468,6 +475,7 @@ export interface FileRoutesByFullPath {
   '/daily-reports/shift-worksheet/': typeof NavbarLayoutDailyReportsShiftWorksheetIndexRoute
   '/reports/sales-summary/': typeof NavbarLayoutReportsSalesSummaryIndexRoute
   '/settings/paypoints/': typeof NavbarLayoutSettingsPaypointsIndexRoute
+  '/settings/permissions': typeof NavbarLayoutSettingsPermissionsIndexRoute
   '/settings/users/': typeof NavbarLayoutSettingsUsersIndexRoute
 }
 export interface FileRoutesByTo {
@@ -516,6 +524,7 @@ export interface FileRoutesByTo {
   '/daily-reports/shift-worksheet': typeof NavbarLayoutDailyReportsShiftWorksheetIndexRoute
   '/reports/sales-summary': typeof NavbarLayoutReportsSalesSummaryIndexRoute
   '/settings/paypoints': typeof NavbarLayoutSettingsPaypointsIndexRoute
+  '/settings/permissions': typeof NavbarLayoutSettingsPermissionsIndexRoute
   '/settings/users': typeof NavbarLayoutSettingsUsersIndexRoute
 }
 export interface FileRoutesById {
@@ -580,6 +589,7 @@ export interface FileRoutesById {
   '/_navbarLayout/daily-reports/shift-worksheet/': typeof NavbarLayoutDailyReportsShiftWorksheetIndexRoute
   '/_navbarLayout/reports/sales-summary/': typeof NavbarLayoutReportsSalesSummaryIndexRoute
   '/_navbarLayout/settings/paypoints/': typeof NavbarLayoutSettingsPaypointsIndexRoute
+  '/_navbarLayout/settings/permissions/': typeof NavbarLayoutSettingsPermissionsIndexRoute
   '/_navbarLayout/settings/users/': typeof NavbarLayoutSettingsUsersIndexRoute
 }
 export interface FileRouteTypes {
@@ -644,6 +654,7 @@ export interface FileRouteTypes {
     | '/daily-reports/shift-worksheet/'
     | '/reports/sales-summary/'
     | '/settings/paypoints/'
+    | '/settings/permissions'
     | '/settings/users/'
   fileRoutesByTo: FileRoutesByTo
   to:
@@ -692,6 +703,7 @@ export interface FileRouteTypes {
     | '/daily-reports/shift-worksheet'
     | '/reports/sales-summary'
     | '/settings/paypoints'
+    | '/settings/permissions'
     | '/settings/users'
   id:
     | '__root__'
@@ -755,6 +767,7 @@ export interface FileRouteTypes {
     | '/_navbarLayout/daily-reports/shift-worksheet/'
     | '/_navbarLayout/reports/sales-summary/'
     | '/_navbarLayout/settings/paypoints/'
+    | '/_navbarLayout/settings/permissions/'
     | '/_navbarLayout/settings/users/'
   fileRoutesById: FileRoutesById
 }
@@ -1116,6 +1129,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof NavbarLayoutSettingsUsersIndexRouteImport
       parentRoute: typeof NavbarLayoutSettingsUsersRoute
     }
+    '/_navbarLayout/settings/permissions/': {
+      id: '/_navbarLayout/settings/permissions/'
+      path: '/permissions'
+      fullPath: '/settings/permissions'
+      preLoaderRoute: typeof NavbarLayoutSettingsPermissionsIndexRouteImport
+      parentRoute: typeof NavbarLayoutSettingsRoute
+    }
     '/_navbarLayout/settings/paypoints/': {
       id: '/_navbarLayout/settings/paypoints/'
       path: '/'
@@ -1433,6 +1453,7 @@ interface NavbarLayoutSettingsRouteChildren {
   NavbarLayoutSettingsPaypointsRoute: typeof NavbarLayoutSettingsPaypointsRouteWithChildren
   NavbarLayoutSettingsUsersRoute: typeof NavbarLayoutSettingsUsersRouteWithChildren
   NavbarLayoutSettingsIndexRoute: typeof NavbarLayoutSettingsIndexRoute
+  NavbarLayoutSettingsPermissionsIndexRoute: typeof NavbarLayoutSettingsPermissionsIndexRoute
 }
 
 const NavbarLayoutSettingsRouteChildren: NavbarLayoutSettingsRouteChildren = {
@@ -1440,6 +1461,8 @@ const NavbarLayoutSettingsRouteChildren: NavbarLayoutSettingsRouteChildren = {
     NavbarLayoutSettingsPaypointsRouteWithChildren,
   NavbarLayoutSettingsUsersRoute: NavbarLayoutSettingsUsersRouteWithChildren,
   NavbarLayoutSettingsIndexRoute: NavbarLayoutSettingsIndexRoute,
+  NavbarLayoutSettingsPermissionsIndexRoute:
+    NavbarLayoutSettingsPermissionsIndexRoute,
 }
 
 const NavbarLayoutSettingsRouteWithChildren =
