@@ -128,7 +128,7 @@ function RouteComponent() {
             <th className="border-dashed border-b border-gray-300 px-4 py-2">Fuel Grade</th>
             <th className="border-dashed border-b border-gray-300 px-4 py-2">Amount (L)</th>
             <th className="border-dashed border-b border-gray-300 px-4 py-2">Total (CAD)</th>
-            <th className="border-dashed border-b border-gray-300 px-4 py-2">createdAt</th>
+            {/* <th className="border-dashed border-b border-gray-300 px-4 py-2">createdAt</th> */}
           </tr>
         </thead>
         <tbody>
@@ -149,7 +149,7 @@ function RouteComponent() {
                 <td className="border-dashed border-t border-gray-300 px-4 py-2">{sale.fuelGrade}</td>
                 <td className="border-dashed border-t border-gray-300 px-4 py-2">{sale.amount.toFixed(2)}</td>
                 <td className="border-dashed border-t border-gray-300 px-4 py-2">{sale.total.toFixed(2)}</td>
-                <td className="border-dashed border-t border-gray-300 px-4 py-2">{sale.createdAt.replace('T', '---')}</td>
+                {/* <td className="border-dashed border-t border-gray-300 px-4 py-2">{sale.createdAt.replace('T', '---')}</td> */}
               </tr>
               {sale.amount > 200 && (
                 <tr key={index} className="hover:bg-gray-50">
