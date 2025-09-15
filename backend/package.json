@@ -16,7 +16,7 @@
   },
   "scripts": {
     "start": "node app.js",
-    "dev": "nodemon app.js"
+    "dev": "npx nodemon -L app.js"
   },
   "devDependencies": {
     "@types/nodemailer": "^6.4.17",

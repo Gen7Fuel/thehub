@@ -36,7 +36,7 @@ function RouteComponent() {
   const handleAdd = async (e: React.FormEvent) => {
     e.preventDefault();
     try {
-      await axios.post(
+      const response = await axios.post(
         "/api/permissions",
         { name: newPermission },
         {
@@ -45,6 +45,7 @@ function RouteComponent() {
           },
         }
       );
+      alert(response.data.message); // Add and Sync confirmation
       setStatus("Permission added!");
       setNewPermission("");
       window.location.reload();
@@ -55,6 +56,10 @@ function RouteComponent() {
   };
 
   const handleDelete = async (id: string) => {
+    if (!window.confirm("Are you sure you want to delete this permission?")) {
+      return; // user canceled
+    }
+
     try {
       await axios.delete(`/api/permissions/${id}`, {
         headers: {
@@ -66,24 +71,6 @@ function RouteComponent() {
     } catch (err) {
       console.error(err);
       setStatus("Failed to delete permission");
-    }
-  };
-  
-  const handleSync = async () => {
-    try {
-      await axios.post(
-        "/api/permissions/sync",
-        {},
-        {
-          headers: {
-            Authorization: `Bearer ${localStorage.getItem("token")}`,
-          },
-        }
-      );
-      setStatus("Permissions synced for all users!");
-    } catch (err) {
-      console.error(err);
-      setStatus("Failed to sync permissions");
     }
   };
 
@@ -105,17 +92,11 @@ function RouteComponent() {
           />
           <button
             type="submit"
-            className="px-4 py-2 bg-blue-500 text-white rounded hover:bg-blue-600"
+            className="px-4 py-2 bg-green-500 text-white rounded hover:bg-green-600"
           >
-            Add
+            Add & Sync
           </button>
         </form>
-        <button
-          onClick={handleSync}
-          className="px-4 py-2 bg-green-500 text-white rounded hover:bg-green-600"
-        >
-            Sync
-        </button>
 
         {/* List all permissions */}
         <ul className="space-y-2">
@@ -127,14 +108,13 @@ function RouteComponent() {
               <span>{perm.name}</span>
               <button
                 onClick={() => handleDelete(perm._id)}
-                className="text-red-500 hover:text-red-700"
+                className="px-4 py-2 bg-red-400 text-white rounded hover:bg-red-600"
               >
-                Delete
+                Delete & Sync
               </button>
             </li>
           ))}
         </ul>
-
         {status && <div className="mt-2 text-sm">{status}</div>}
         <Outlet />
       </main>
