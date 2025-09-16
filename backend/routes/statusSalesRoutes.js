@@ -85,9 +85,13 @@ router.get('/', async (req, res) => {
     const query = {};
     if (stationName) query.stationName = stationName;
     if (startDate && endDate) {
+      // query.createdAt = {
+      //   $gte: new Date(startDate + "T00:00:00Z"),
+      //   $lte: new Date(endDate + "T23:59:59"),
+      // };
       query.createdAt = {
-        $gte: new Date(startDate + "T00:00:00Z"),
-        $lte: new Date(endDate + "T23:59:59"),
+        $gte: new Date(startDate),
+        $lte: new Date(endDate),
       };
     }
 
