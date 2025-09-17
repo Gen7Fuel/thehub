@@ -24,7 +24,7 @@ const VendorSchema = new mongoose.Schema({
     default: 'Email'
   },
   vendor_order_frequency: { type: Number },       // 4. Vendor Order Frequency (weeks)
-  last_order_date: { type: Date },                // 5. Last Order Date
+  lastPlacedOrder: { type: Date },             // 5. Last Order Date
 }, { timestamps: true });
 
 const Vendor = mongoose.model('Vendor', VendorSchema);

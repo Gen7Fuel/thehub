@@ -21,7 +21,27 @@ router.get('/', async (req, res) => {
     }
 
     const orderRecs = await OrderRec.find(query).sort({ createdAt: -1 });
-    res.json(orderRecs);
+    res.json( orderRecs
+      // orderRecs.map(r => {
+      //   const obj = r.toObject();
+      //   if (!Array.isArray(obj.statusHistory) || obj.statusHistory.length === 0) {
+      //     obj.statusHistory = [
+      //       { status: obj.currentStatus || "Created", timestamp: obj.createdAt  }
+      //     ];
+      //   } else {
+      //     // If the very first status is "Created" but its timestamp is missing or looks wrong
+      //     const first = obj.statusHistory[0];
+      //     if (
+      //       first.status === "Created" &&
+      //       (!first.timestamp || new Date(first.timestamp).getTime() > Date.now())
+      //     ) {
+      //       first.timestamp = obj.createdAt; // fallback to createdAt
+      //     }
+      //   }
+
+      //   return obj;
+      // })
+    );
   } catch (err) {
     res.status(500).json({ message: err.message });
   }
@@ -168,7 +188,9 @@ router.post('/', async (req, res) => {
       })),
     }));
 
-    const orderRec = new OrderRec({ categories: categoriesWithOld, site, vendor, email });
+    const orderRec = new OrderRec({ categories: categoriesWithOld, site, vendor, email, 
+      currentStatus: "Created", statusHistory: [{ status: "Created", timestamp: new Date() }], 
+      comments: [] });
     await orderRec.save();
     res.status(201).json(orderRec);
   } catch (err) {
@@ -234,5 +256,76 @@ router.delete('/:id', async (req, res) => {
     res.status(500).json({ error: 'Failed to delete order rec.' });
   }
 });
+
+// Update order status
+const STATUS_HIERARCHY = ["Created", "Completed", "Placed", "Delivered", "Invoice Received"];
+
+router.put('/:id/status', async (req, res) => {
+  try {
+    const { status } = req.body;
+    const orderRec = await OrderRec.findById(req.params.id);
+    if (!orderRec) return res.status(404).json({ message: 'Not found' });
+
+    const currentStatus = orderRec.currentStatus || "Created";
+    const currentIndex = STATUS_HIERARCHY.indexOf(currentStatus);
+    const newIndex = STATUS_HIERARCHY.indexOf(status);
+
+    // Update current status
+    orderRec.currentStatus = status;
+
+    // Ensure "Created" exists with proper timestamp
+    let createdEntry = orderRec.statusHistory.find(e => e.status === "Created");
+    if (!createdEntry) {
+      orderRec.statusHistory.unshift({ status: "Created", timestamp: orderRec.createdAt });
+    } else if (!createdEntry.timestamp) {
+      createdEntry.timestamp = orderRec.createdAt;
+    }
+
+    // Find or create entry for the new status
+    let statusEntry = orderRec.statusHistory.find(e => e.status === status);
+    if (!statusEntry) {
+      // Add new status with current timestamp
+      orderRec.statusHistory.push({ status, timestamp: new Date() });
+    } else if (newIndex > currentIndex) {
+      // Moving forward in hierarchy → update timestamp
+      statusEntry.timestamp = new Date();
+    }
+    
+    // If status is "Placed", update vendor lastPlacedOrder
+    if (status === "Placed" && orderRec.vendor) {
+      await Vendor.findOneAndUpdate(
+        { _id: orderRec.vendor, location: orderRec.site },
+        { lastPlacedOrder: new Date() }
+      );
+    }
+
+    await orderRec.save();
+    res.json(orderRec);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ message: err.message });
+  }
+});
+
+
+
+// Adding comments
+router.post('/:id/comments', async (req, res) => {
+  try {
+    const { text, author } = req.body;
+    const orderRec = await OrderRec.findById(req.params.id);
+    if (!orderRec)  return res.status(404).json({ message: 'Not found' });
+
+    orderRec.comments.push({ text, author, timestamp: new Date() });
+    await orderRec.save();
+
+    res.json(orderRec);
+  } catch (err) {
+    console.error("Error adding comment:", err); // Log full error
+    res.status(500).json({ message: err.message });
+  }
+});
+
+
 
 module.exports = router;
