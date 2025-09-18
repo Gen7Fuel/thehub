@@ -181,8 +181,8 @@ function RouteComponent() {
               <label key={site._id} className="flex items-center gap-2">
                 <input
                   type="checkbox"
-                  checked={selectedSites.includes(site._id)}
-                  onChange={() => handleSiteToggle(site._id)}
+                  checked={selectedSites.includes(site.stationName)}
+                  onChange={() => handleSiteToggle(site.stationName)}
                 />
                 {site.stationName}
               </label>
