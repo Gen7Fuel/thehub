@@ -16,7 +16,7 @@ interface SelectTemplate {
 
 interface AuditItem {
   _id?: string;
-  text: string;
+  item: string;
   required: boolean;
   checked?: boolean;
   comment?: string;
