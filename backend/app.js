@@ -27,6 +27,9 @@ const auditRoutes = require("./routes/audit/auditTemplateRoutes");
 const cycleCountRoutes = require('./routes/cycleCount2Routes');
 const auth = require("./middleware/authMiddleware");
 const permissionRoutes = require("./routes/permissionRoutes");
+const selectTemplateRoutes = require("./routes/audit/selectTemplateRoutes");
+// const feedbackTemplateRoutes = require("./routes/audit/feedbackTemplateRoutes");
+
 
 dotenv.config();
 connectDB();
@@ -59,8 +62,11 @@ app.use("/api/order-rec", orderRecRoutes);
 app.use("/api/vendors", vendorRoutes);
 app.use("/api/cycle-counts", cycleCountRoutes);
 // app.use("/api/cycle-count-new", CycleCountNewRoutes);
+app.use("/api/audit/select-templates", selectTemplateRoutes);
+// app.use("/api/audit/follow-up-templates", followUpTemplateRoutes);
 app.use("/api/audit", auditRoutes);
 app.use("/api/permissions", permissionRoutes);
+
 
 
 // Reporting

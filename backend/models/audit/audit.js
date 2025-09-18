@@ -1,7 +1,12 @@
 const mongoose = require('mongoose');
 
 const AuditItemResponseSchema = new mongoose.Schema({
-  text: { type: String, required: true }, // copied from template
+  category: { type: String }, // copied from template
+  item: { type: String, required: true }, // copied from template
+  status: { type: String }, // copied from template
+  followUp: { type: String }, // copied from template
+  assignedTo: { type: String }, // copied from template
+
   checked: { type: Boolean, default: false }, // user response
   photos: [{ type: String }], // URLs to uploaded photos (if any)
   comment: { type: String }, // optional comment/notes

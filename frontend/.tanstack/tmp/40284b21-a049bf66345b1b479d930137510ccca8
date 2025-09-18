@@ -61,12 +61,16 @@ import { Route as NavbarLayoutSettingsUsersIndexRouteImport } from './routes/_na
 import { Route as NavbarLayoutSettingsPermissionsIndexRouteImport } from './routes/_navbarLayout/settings/permissions/index'
 import { Route as NavbarLayoutSettingsPaypointsIndexRouteImport } from './routes/_navbarLayout/settings/paypoints/index'
 import { Route as NavbarLayoutReportsSalesSummaryIndexRouteImport } from './routes/_navbarLayout/reports/sales-summary/index'
+import { Route as NavbarLayoutOldAuditIndexRouteImport } from './routes/_navbarLayout/old.audit/index'
 import { Route as NavbarLayoutDailyReportsShiftWorksheetIndexRouteImport } from './routes/_navbarLayout/daily-reports/shift-worksheet/index'
 import { Route as NavbarLayoutAuditChecklistIndexRouteImport } from './routes/_navbarLayout/audit/checklist/index'
 import { Route as NavbarLayoutVendorEditIdRouteImport } from './routes/_navbarLayout/vendor/edit/$id'
 import { Route as NavbarLayoutSettingsUsersUserIdRouteImport } from './routes/_navbarLayout/settings/users/$userId'
 import { Route as NavbarLayoutSettingsPaypointsSiteRouteImport } from './routes/_navbarLayout/settings/paypoints/$site'
 import { Route as NavbarLayoutReportsSalesSummaryUploadRouteImport } from './routes/_navbarLayout/reports/sales-summary/upload'
+import { Route as NavbarLayoutOldAuditListRouteImport } from './routes/_navbarLayout/old.audit/list'
+import { Route as NavbarLayoutOldAuditChecklistRouteImport } from './routes/_navbarLayout/old.audit/checklist'
+import { Route as NavbarLayoutOldAuditIdRouteImport } from './routes/_navbarLayout/old.audit/$id'
 import { Route as NavbarLayoutDailyReportsShiftWorksheetCreateRouteImport } from './routes/_navbarLayout/daily-reports/shift-worksheet/create'
 import { Route as NavbarLayoutDailyReportsShiftWorksheetWorksheetRouteImport } from './routes/_navbarLayout/daily-reports/shift-worksheet/$worksheet'
 import { Route as NavbarLayoutCycleCountEntryIdRouteImport } from './routes/_navbarLayout/cycle-count/entry/$id'
@@ -75,6 +79,7 @@ import { Route as NavbarLayoutAuditTemplatesChecklistRouteImport } from './route
 import { Route as NavbarLayoutAuditChecklistIdRouteImport } from './routes/_navbarLayout/audit/checklist/$id'
 import { Route as NavbarLayoutAuditTemplatesSelectIndexRouteImport } from './routes/_navbarLayout/audit/templates/select/index'
 import { Route as NavbarLayoutAuditTemplatesChecklistIndexRouteImport } from './routes/_navbarLayout/audit/templates/checklist/index'
+import { Route as NavbarLayoutOldAuditChecklistTemplateIdRouteImport } from './routes/_navbarLayout/old.audit/checklist/$templateId'
 import { Route as NavbarLayoutAuditTemplatesSelectListRouteImport } from './routes/_navbarLayout/audit/templates/select/list'
 import { Route as NavbarLayoutAuditTemplatesSelectIdRouteImport } from './routes/_navbarLayout/audit/templates/select/$id'
 import { Route as NavbarLayoutAuditTemplatesChecklistListRouteImport } from './routes/_navbarLayout/audit/templates/checklist/list'
@@ -364,6 +369,12 @@ const NavbarLayoutReportsSalesSummaryIndexRoute =
     path: '/',
     getParentRoute: () => NavbarLayoutReportsSalesSummaryRoute,
   } as any)
+const NavbarLayoutOldAuditIndexRoute =
+  NavbarLayoutOldAuditIndexRouteImport.update({
+    id: '/old/audit/',
+    path: '/old/audit/',
+    getParentRoute: () => NavbarLayoutRoute,
+  } as any)
 const NavbarLayoutDailyReportsShiftWorksheetIndexRoute =
   NavbarLayoutDailyReportsShiftWorksheetIndexRouteImport.update({
     id: '/',
@@ -400,6 +411,23 @@ const NavbarLayoutReportsSalesSummaryUploadRoute =
     path: '/upload',
     getParentRoute: () => NavbarLayoutReportsSalesSummaryRoute,
   } as any)
+const NavbarLayoutOldAuditListRoute =
+  NavbarLayoutOldAuditListRouteImport.update({
+    id: '/old/audit/list',
+    path: '/old/audit/list',
+    getParentRoute: () => NavbarLayoutRoute,
+  } as any)
+const NavbarLayoutOldAuditChecklistRoute =
+  NavbarLayoutOldAuditChecklistRouteImport.update({
+    id: '/old/audit/checklist',
+    path: '/old/audit/checklist',
+    getParentRoute: () => NavbarLayoutRoute,
+  } as any)
+const NavbarLayoutOldAuditIdRoute = NavbarLayoutOldAuditIdRouteImport.update({
+  id: '/old/audit/$id',
+  path: '/old/audit/$id',
+  getParentRoute: () => NavbarLayoutRoute,
+} as any)
 const NavbarLayoutDailyReportsShiftWorksheetCreateRoute =
   NavbarLayoutDailyReportsShiftWorksheetCreateRouteImport.update({
     id: '/create',
@@ -447,6 +475,12 @@ const NavbarLayoutAuditTemplatesChecklistIndexRoute =
     id: '/',
     path: '/',
     getParentRoute: () => NavbarLayoutAuditTemplatesChecklistRoute,
+  } as any)
+const NavbarLayoutOldAuditChecklistTemplateIdRoute =
+  NavbarLayoutOldAuditChecklistTemplateIdRouteImport.update({
+    id: '/$templateId',
+    path: '/$templateId',
+    getParentRoute: () => NavbarLayoutOldAuditChecklistRoute,
   } as any)
 const NavbarLayoutAuditTemplatesSelectListRoute =
   NavbarLayoutAuditTemplatesSelectListRouteImport.update({
@@ -527,12 +561,16 @@ export interface FileRoutesByFullPath {
   '/cycle-count/entry/$id': typeof NavbarLayoutCycleCountEntryIdRoute
   '/daily-reports/shift-worksheet/$worksheet': typeof NavbarLayoutDailyReportsShiftWorksheetWorksheetRoute
   '/daily-reports/shift-worksheet/create': typeof NavbarLayoutDailyReportsShiftWorksheetCreateRoute
+  '/old/audit/$id': typeof NavbarLayoutOldAuditIdRoute
+  '/old/audit/checklist': typeof NavbarLayoutOldAuditChecklistRouteWithChildren
+  '/old/audit/list': typeof NavbarLayoutOldAuditListRoute
   '/reports/sales-summary/upload': typeof NavbarLayoutReportsSalesSummaryUploadRoute
   '/settings/paypoints/$site': typeof NavbarLayoutSettingsPaypointsSiteRoute
   '/settings/users/$userId': typeof NavbarLayoutSettingsUsersUserIdRoute
   '/vendor/edit/$id': typeof NavbarLayoutVendorEditIdRoute
   '/audit/checklist/': typeof NavbarLayoutAuditChecklistIndexRoute
   '/daily-reports/shift-worksheet/': typeof NavbarLayoutDailyReportsShiftWorksheetIndexRoute
+  '/old/audit': typeof NavbarLayoutOldAuditIndexRoute
   '/reports/sales-summary/': typeof NavbarLayoutReportsSalesSummaryIndexRoute
   '/settings/paypoints/': typeof NavbarLayoutSettingsPaypointsIndexRoute
   '/settings/permissions': typeof NavbarLayoutSettingsPermissionsIndexRoute
@@ -541,6 +579,7 @@ export interface FileRoutesByFullPath {
   '/audit/templates/checklist/list': typeof NavbarLayoutAuditTemplatesChecklistListRoute
   '/audit/templates/select/$id': typeof NavbarLayoutAuditTemplatesSelectIdRoute
   '/audit/templates/select/list': typeof NavbarLayoutAuditTemplatesSelectListRoute
+  '/old/audit/checklist/$templateId': typeof NavbarLayoutOldAuditChecklistTemplateIdRoute
   '/audit/templates/checklist/': typeof NavbarLayoutAuditTemplatesChecklistIndexRoute
   '/audit/templates/select/': typeof NavbarLayoutAuditTemplatesSelectIndexRoute
 }
@@ -581,12 +620,16 @@ export interface FileRoutesByTo {
   '/cycle-count/entry/$id': typeof NavbarLayoutCycleCountEntryIdRoute
   '/daily-reports/shift-worksheet/$worksheet': typeof NavbarLayoutDailyReportsShiftWorksheetWorksheetRoute
   '/daily-reports/shift-worksheet/create': typeof NavbarLayoutDailyReportsShiftWorksheetCreateRoute
+  '/old/audit/$id': typeof NavbarLayoutOldAuditIdRoute
+  '/old/audit/checklist': typeof NavbarLayoutOldAuditChecklistRouteWithChildren
+  '/old/audit/list': typeof NavbarLayoutOldAuditListRoute
   '/reports/sales-summary/upload': typeof NavbarLayoutReportsSalesSummaryUploadRoute
   '/settings/paypoints/$site': typeof NavbarLayoutSettingsPaypointsSiteRoute
   '/settings/users/$userId': typeof NavbarLayoutSettingsUsersUserIdRoute
   '/vendor/edit/$id': typeof NavbarLayoutVendorEditIdRoute
   '/audit/checklist': typeof NavbarLayoutAuditChecklistIndexRoute
   '/daily-reports/shift-worksheet': typeof NavbarLayoutDailyReportsShiftWorksheetIndexRoute
+  '/old/audit': typeof NavbarLayoutOldAuditIndexRoute
   '/reports/sales-summary': typeof NavbarLayoutReportsSalesSummaryIndexRoute
   '/settings/paypoints': typeof NavbarLayoutSettingsPaypointsIndexRoute
   '/settings/permissions': typeof NavbarLayoutSettingsPermissionsIndexRoute
@@ -595,6 +638,7 @@ export interface FileRoutesByTo {
   '/audit/templates/checklist/list': typeof NavbarLayoutAuditTemplatesChecklistListRoute
   '/audit/templates/select/$id': typeof NavbarLayoutAuditTemplatesSelectIdRoute
   '/audit/templates/select/list': typeof NavbarLayoutAuditTemplatesSelectListRoute
+  '/old/audit/checklist/$templateId': typeof NavbarLayoutOldAuditChecklistTemplateIdRoute
   '/audit/templates/checklist': typeof NavbarLayoutAuditTemplatesChecklistIndexRoute
   '/audit/templates/select': typeof NavbarLayoutAuditTemplatesSelectIndexRoute
 }
@@ -654,12 +698,16 @@ export interface FileRoutesById {
   '/_navbarLayout/cycle-count/entry/$id': typeof NavbarLayoutCycleCountEntryIdRoute
   '/_navbarLayout/daily-reports/shift-worksheet/$worksheet': typeof NavbarLayoutDailyReportsShiftWorksheetWorksheetRoute
   '/_navbarLayout/daily-reports/shift-worksheet/create': typeof NavbarLayoutDailyReportsShiftWorksheetCreateRoute
+  '/_navbarLayout/old/audit/$id': typeof NavbarLayoutOldAuditIdRoute
+  '/_navbarLayout/old/audit/checklist': typeof NavbarLayoutOldAuditChecklistRouteWithChildren
+  '/_navbarLayout/old/audit/list': typeof NavbarLayoutOldAuditListRoute
   '/_navbarLayout/reports/sales-summary/upload': typeof NavbarLayoutReportsSalesSummaryUploadRoute
   '/_navbarLayout/settings/paypoints/$site': typeof NavbarLayoutSettingsPaypointsSiteRoute
   '/_navbarLayout/settings/users/$userId': typeof NavbarLayoutSettingsUsersUserIdRoute
   '/_navbarLayout/vendor/edit/$id': typeof NavbarLayoutVendorEditIdRoute
   '/_navbarLayout/audit/checklist/': typeof NavbarLayoutAuditChecklistIndexRoute
   '/_navbarLayout/daily-reports/shift-worksheet/': typeof NavbarLayoutDailyReportsShiftWorksheetIndexRoute
+  '/_navbarLayout/old/audit/': typeof NavbarLayoutOldAuditIndexRoute
   '/_navbarLayout/reports/sales-summary/': typeof NavbarLayoutReportsSalesSummaryIndexRoute
   '/_navbarLayout/settings/paypoints/': typeof NavbarLayoutSettingsPaypointsIndexRoute
   '/_navbarLayout/settings/permissions/': typeof NavbarLayoutSettingsPermissionsIndexRoute
@@ -668,6 +716,7 @@ export interface FileRoutesById {
   '/_navbarLayout/audit/templates/checklist/list': typeof NavbarLayoutAuditTemplatesChecklistListRoute
   '/_navbarLayout/audit/templates/select/$id': typeof NavbarLayoutAuditTemplatesSelectIdRoute
   '/_navbarLayout/audit/templates/select/list': typeof NavbarLayoutAuditTemplatesSelectListRoute
+  '/_navbarLayout/old/audit/checklist/$templateId': typeof NavbarLayoutOldAuditChecklistTemplateIdRoute
   '/_navbarLayout/audit/templates/checklist/': typeof NavbarLayoutAuditTemplatesChecklistIndexRoute
   '/_navbarLayout/audit/templates/select/': typeof NavbarLayoutAuditTemplatesSelectIndexRoute
 }
@@ -727,12 +776,16 @@ export interface FileRouteTypes {
     | '/cycle-count/entry/$id'
     | '/daily-reports/shift-worksheet/$worksheet'
     | '/daily-reports/shift-worksheet/create'
+    | '/old/audit/$id'
+    | '/old/audit/checklist'
+    | '/old/audit/list'
     | '/reports/sales-summary/upload'
     | '/settings/paypoints/$site'
     | '/settings/users/$userId'
     | '/vendor/edit/$id'
     | '/audit/checklist/'
     | '/daily-reports/shift-worksheet/'
+    | '/old/audit'
     | '/reports/sales-summary/'
     | '/settings/paypoints/'
     | '/settings/permissions'
@@ -741,6 +794,7 @@ export interface FileRouteTypes {
     | '/audit/templates/checklist/list'
     | '/audit/templates/select/$id'
     | '/audit/templates/select/list'
+    | '/old/audit/checklist/$templateId'
     | '/audit/templates/checklist/'
     | '/audit/templates/select/'
   fileRoutesByTo: FileRoutesByTo
@@ -781,12 +835,16 @@ export interface FileRouteTypes {
     | '/cycle-count/entry/$id'
     | '/daily-reports/shift-worksheet/$worksheet'
     | '/daily-reports/shift-worksheet/create'
+    | '/old/audit/$id'
+    | '/old/audit/checklist'
+    | '/old/audit/list'
     | '/reports/sales-summary/upload'
     | '/settings/paypoints/$site'
     | '/settings/users/$userId'
     | '/vendor/edit/$id'
     | '/audit/checklist'
     | '/daily-reports/shift-worksheet'
+    | '/old/audit'
     | '/reports/sales-summary'
     | '/settings/paypoints'
     | '/settings/permissions'
@@ -795,6 +853,7 @@ export interface FileRouteTypes {
     | '/audit/templates/checklist/list'
     | '/audit/templates/select/$id'
     | '/audit/templates/select/list'
+    | '/old/audit/checklist/$templateId'
     | '/audit/templates/checklist'
     | '/audit/templates/select'
   id:
@@ -853,12 +912,16 @@ export interface FileRouteTypes {
     | '/_navbarLayout/cycle-count/entry/$id'
     | '/_navbarLayout/daily-reports/shift-worksheet/$worksheet'
     | '/_navbarLayout/daily-reports/shift-worksheet/create'
+    | '/_navbarLayout/old/audit/$id'
+    | '/_navbarLayout/old/audit/checklist'
+    | '/_navbarLayout/old/audit/list'
     | '/_navbarLayout/reports/sales-summary/upload'
     | '/_navbarLayout/settings/paypoints/$site'
     | '/_navbarLayout/settings/users/$userId'
     | '/_navbarLayout/vendor/edit/$id'
     | '/_navbarLayout/audit/checklist/'
     | '/_navbarLayout/daily-reports/shift-worksheet/'
+    | '/_navbarLayout/old/audit/'
     | '/_navbarLayout/reports/sales-summary/'
     | '/_navbarLayout/settings/paypoints/'
     | '/_navbarLayout/settings/permissions/'
@@ -867,6 +930,7 @@ export interface FileRouteTypes {
     | '/_navbarLayout/audit/templates/checklist/list'
     | '/_navbarLayout/audit/templates/select/$id'
     | '/_navbarLayout/audit/templates/select/list'
+    | '/_navbarLayout/old/audit/checklist/$templateId'
     | '/_navbarLayout/audit/templates/checklist/'
     | '/_navbarLayout/audit/templates/select/'
   fileRoutesById: FileRoutesById
@@ -1243,6 +1307,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof NavbarLayoutReportsSalesSummaryIndexRouteImport
       parentRoute: typeof NavbarLayoutReportsSalesSummaryRoute
     }
+    '/_navbarLayout/old/audit/': {
+      id: '/_navbarLayout/old/audit/'
+      path: '/old/audit'
+      fullPath: '/old/audit'
+      preLoaderRoute: typeof NavbarLayoutOldAuditIndexRouteImport
+      parentRoute: typeof NavbarLayoutRoute
+    }
     '/_navbarLayout/daily-reports/shift-worksheet/': {
       id: '/_navbarLayout/daily-reports/shift-worksheet/'
       path: '/'
@@ -1284,6 +1355,27 @@ declare module '@tanstack/react-router' {
       fullPath: '/reports/sales-summary/upload'
       preLoaderRoute: typeof NavbarLayoutReportsSalesSummaryUploadRouteImport
       parentRoute: typeof NavbarLayoutReportsSalesSummaryRoute
+    }
+    '/_navbarLayout/old/audit/list': {
+      id: '/_navbarLayout/old/audit/list'
+      path: '/old/audit/list'
+      fullPath: '/old/audit/list'
+      preLoaderRoute: typeof NavbarLayoutOldAuditListRouteImport
+      parentRoute: typeof NavbarLayoutRoute
+    }
+    '/_navbarLayout/old/audit/checklist': {
+      id: '/_navbarLayout/old/audit/checklist'
+      path: '/old/audit/checklist'
+      fullPath: '/old/audit/checklist'
+      preLoaderRoute: typeof NavbarLayoutOldAuditChecklistRouteImport
+      parentRoute: typeof NavbarLayoutRoute
+    }
+    '/_navbarLayout/old/audit/$id': {
+      id: '/_navbarLayout/old/audit/$id'
+      path: '/old/audit/$id'
+      fullPath: '/old/audit/$id'
+      preLoaderRoute: typeof NavbarLayoutOldAuditIdRouteImport
+      parentRoute: typeof NavbarLayoutRoute
     }
     '/_navbarLayout/daily-reports/shift-worksheet/create': {
       id: '/_navbarLayout/daily-reports/shift-worksheet/create'
@@ -1340,6 +1432,13 @@ declare module '@tanstack/react-router' {
       fullPath: '/audit/templates/checklist/'
       preLoaderRoute: typeof NavbarLayoutAuditTemplatesChecklistIndexRouteImport
       parentRoute: typeof NavbarLayoutAuditTemplatesChecklistRoute
+    }
+    '/_navbarLayout/old/audit/checklist/$templateId': {
+      id: '/_navbarLayout/old/audit/checklist/$templateId'
+      path: '/$templateId'
+      fullPath: '/old/audit/checklist/$templateId'
+      preLoaderRoute: typeof NavbarLayoutOldAuditChecklistTemplateIdRouteImport
+      parentRoute: typeof NavbarLayoutOldAuditChecklistRoute
     }
     '/_navbarLayout/audit/templates/select/list': {
       id: '/_navbarLayout/audit/templates/select/list'
@@ -1711,6 +1810,21 @@ const NavbarLayoutVendorRouteChildren: NavbarLayoutVendorRouteChildren = {
 const NavbarLayoutVendorRouteWithChildren =
   NavbarLayoutVendorRoute._addFileChildren(NavbarLayoutVendorRouteChildren)
 
+interface NavbarLayoutOldAuditChecklistRouteChildren {
+  NavbarLayoutOldAuditChecklistTemplateIdRoute: typeof NavbarLayoutOldAuditChecklistTemplateIdRoute
+}
+
+const NavbarLayoutOldAuditChecklistRouteChildren: NavbarLayoutOldAuditChecklistRouteChildren =
+  {
+    NavbarLayoutOldAuditChecklistTemplateIdRoute:
+      NavbarLayoutOldAuditChecklistTemplateIdRoute,
+  }
+
+const NavbarLayoutOldAuditChecklistRouteWithChildren =
+  NavbarLayoutOldAuditChecklistRoute._addFileChildren(
+    NavbarLayoutOldAuditChecklistRouteChildren,
+  )
+
 interface NavbarLayoutRouteChildren {
   NavbarLayoutAuditRoute: typeof NavbarLayoutAuditRouteWithChildren
   NavbarLayoutCycleCountRoute: typeof NavbarLayoutCycleCountRouteWithChildren
@@ -1725,6 +1839,10 @@ interface NavbarLayoutRouteChildren {
   NavbarLayoutStatusRoute: typeof NavbarLayoutStatusRouteWithChildren
   NavbarLayoutVendorRoute: typeof NavbarLayoutVendorRouteWithChildren
   NavbarLayoutIndexRoute: typeof NavbarLayoutIndexRoute
+  NavbarLayoutOldAuditIdRoute: typeof NavbarLayoutOldAuditIdRoute
+  NavbarLayoutOldAuditChecklistRoute: typeof NavbarLayoutOldAuditChecklistRouteWithChildren
+  NavbarLayoutOldAuditListRoute: typeof NavbarLayoutOldAuditListRoute
+  NavbarLayoutOldAuditIndexRoute: typeof NavbarLayoutOldAuditIndexRoute
 }
 
 const NavbarLayoutRouteChildren: NavbarLayoutRouteChildren = {
@@ -1741,6 +1859,11 @@ const NavbarLayoutRouteChildren: NavbarLayoutRouteChildren = {
   NavbarLayoutStatusRoute: NavbarLayoutStatusRouteWithChildren,
   NavbarLayoutVendorRoute: NavbarLayoutVendorRouteWithChildren,
   NavbarLayoutIndexRoute: NavbarLayoutIndexRoute,
+  NavbarLayoutOldAuditIdRoute: NavbarLayoutOldAuditIdRoute,
+  NavbarLayoutOldAuditChecklistRoute:
+    NavbarLayoutOldAuditChecklistRouteWithChildren,
+  NavbarLayoutOldAuditListRoute: NavbarLayoutOldAuditListRoute,
+  NavbarLayoutOldAuditIndexRoute: NavbarLayoutOldAuditIndexRoute,
 }
 
 const NavbarLayoutRouteWithChildren = NavbarLayoutRoute._addFileChildren(

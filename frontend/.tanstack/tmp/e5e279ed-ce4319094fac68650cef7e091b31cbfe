@@ -11,7 +11,7 @@ interface AuditTemplate {
   items: { text: string; required: boolean }[];
 }
 
-export const Route = createFileRoute('/_navbarLayout/audit/list')({
+export const Route = createFileRoute('/_navbarLayout/old/audit/list')({
   component: RouteComponent,
 })
 

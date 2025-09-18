@@ -3,45 +3,60 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from "@/components/ui/select";
 
+interface SelectOption {
+  text: string;
+  _id: string;
+}
+interface SelectTemplate {
+  _id: string;
+  name: string;
+  options: SelectOption[];
+}
 interface ChecklistItemCardProps {
   item: {
-    text: string;
+    item: string;
     required: boolean;
     checked?: boolean;
     comment?: string;
     photos?: string[];
+    // New fields:
+    category?: string;
+    status?: string;
+    followUp?: string;
+    assignedTo?: string;
   };
   onCheck: (checked: boolean) => void;
   onComment: (comment: string) => void;
   onPhotos: (photos: string[]) => void;
+  onFieldChange?: (field: "status" | "followUp" | "assignedTo", value: string) => void;
+  selectTemplates?: SelectTemplate[];
 }
 
-export function ChecklistItemCard({ item, onCheck, onComment, onPhotos }: ChecklistItemCardProps) {
+export function ChecklistItemCard({
+  item,
+  onCheck,
+  onComment,
+  onPhotos,
+  onFieldChange,
+  selectTemplates = [],
+}: ChecklistItemCardProps) {
   const [commentOpen, setCommentOpen] = useState(false);
   const [commentValue, setCommentValue] = useState(item.comment || "");
-  // const [, setPhotoFiles] = useState<File[]>([]);
-  // const [photoPreviews, setPhotoPreviews] = useState<string[]>(item.photos || []);
   const [photoPreviews, setPhotoPreviews] = useState<string[]>(
     (item.photos || []).map(name => `/cdn/download/${name}`)
   );
   const [imageModalOpen, setImageModalOpen] = useState(false);
   const [modalImage, setModalImage] = useState<string | null>(null);
 
-  // Handle photo upload
-  // const handlePhotoChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-  //   const files = Array.from(e.target.files || []);
-  //   setPhotoFiles(files);
-  //   const previews = files.map(file => URL.createObjectURL(file));
-  //   setPhotoPreviews(previews);
-  //   // You may want to upload files here and get URLs, then call onPhotos(urls)
-  //   onPhotos(previews);
-  // };
+  // Helper to get options for a select template by name
+  const getOptions = (name: string) =>
+    selectTemplates.find(t => t.name === name)?.options || [];
+
   const handlePhotoChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = Array.from(e.target.files || []);
     if (files.length === 0) return;
-
-    // Upload each file to CDN and collect their filenames
     const uploadedFilenames: string[] = [];
     for (const file of files) {
       const formData = new FormData();
@@ -53,20 +68,15 @@ export function ChecklistItemCard({ item, onCheck, onComment, onPhotos }: Checkl
         });
         if (res.ok) {
           const data = await res.json();
-          uploadedFilenames.push(data.filename); // Save the filename returned by the CDN
+          uploadedFilenames.push(data.filename);
         }
-      } catch (err) {
-        // Optionally handle upload error
-      }
+      } catch (err) {}
     }
-
-    // Update the checklist item with the new photo references
     const newPhotos = [...(item.photos || []), ...uploadedFilenames];
     setPhotoPreviews(newPhotos.map(name => `/cdn/download/${name}`));
     onPhotos(newPhotos);
   };
 
-  // Handle comment save
   const handleCommentSave = () => {
     onComment(commentValue);
     setCommentOpen(false);
@@ -78,20 +88,92 @@ export function ChecklistItemCard({ item, onCheck, onComment, onPhotos }: Checkl
   };
 
   return (
-    <div className="border rounded p-4 mb-3 flex flex-col gap-2 bg-muted/50">
+    <div className="border rounded p-4 mb-3 flex flex-col gap-2 bg-muted/50 w-150">
       <div className="flex items-center gap-3">
         <Checkbox
-          id={`checklist-item-${item.text.replace(/\s+/g, "-")}`}
+          id={`checklist-item-${(item.item || "item").replace(/\s+/g, "-")}`}
           checked={!!item.checked}
           onCheckedChange={onCheck}
         />
         <Label
-          htmlFor={`checklist-item-${item.text.replace(/\s+/g, "-")}`}
+          htmlFor={`checklist-item-${(item.item || "item").replace(/\s+/g, "-")}`}
           className="font-medium cursor-pointer"
         >
-          {item.text}
+          {item.item}
         </Label>
       </div>
+      {/* Category */}
+      {item.category && (
+        <div>
+          <span className="font-medium">Category:</span> {item.category}
+        </div>
+      )}
+      <div className="flex gap-4">
+        <div className="flex-1">
+          {/* Status Dropdown */}
+          <div>
+            <label className="block font-medium mb-1">Status</label>
+            <Select
+              value={item.status || ""}
+              onValueChange={val => onFieldChange?.("status", val)}
+            >
+              <SelectTrigger>
+                <SelectValue placeholder="Select status" />
+              </SelectTrigger>
+              <SelectContent>
+                {getOptions(item.status || "").map(opt => (
+                  <SelectItem key={opt._id} value={opt.text}>
+                    {opt.text}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+        </div>
+        <div className="flex-1">
+          {/* Follow Up Dropdown */}
+          <div>
+            <label className="block font-medium mb-1">Follow Up</label>
+            <Select
+              value={item.followUp || ""}
+              onValueChange={val => onFieldChange?.("followUp", val)}
+            >
+              <SelectTrigger>
+                <SelectValue placeholder="Select follow up" />
+              </SelectTrigger>
+              <SelectContent>
+                {getOptions(item.followUp || "").map(opt => (
+                  <SelectItem key={opt._id} value={opt.text}>
+                    {opt.text}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+        </div>
+        <div className="flex-1">
+          {/* Assigned To Dropdown */}
+          <div>
+            <label className="block font-medium mb-1">Assigned To</label>
+            <Select
+              value={item.assignedTo || ""}
+              onValueChange={val => onFieldChange?.("assignedTo", val)}
+            >
+              <SelectTrigger>
+                <SelectValue placeholder="Select assigned to" />
+              </SelectTrigger>
+              <SelectContent>
+                {getOptions(item.assignedTo || "").map(opt => (
+                  <SelectItem key={opt._id} value={opt.text}>
+                    {opt.text}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+        </div>
+      </div>
+      {/* Comment and Photos */}
       <div className="flex gap-2 mt-2">
         <Button variant="outline" type="button" size="sm" onClick={() => setCommentOpen(true)}>
           {item.comment ? "Edit Comment" : "Add Comment"}
@@ -109,13 +191,6 @@ export function ChecklistItemCard({ item, onCheck, onComment, onPhotos }: Checkl
           />
         </label>
       </div>
-      {/* {photoPreviews.length > 0 && (
-        <div className="flex gap-2 mt-2 flex-wrap">
-          {photoPreviews.map((src, idx) => (
-            <img key={idx} src={src} alt={`photo-${idx}`} className="w-16 h-16 object-cover rounded border" />
-          ))}
-        </div>
-      )} */}
       {photoPreviews.length > 0 && (
         <div className="flex gap-2 mt-2 flex-wrap">
           {photoPreviews.map((src, idx) => (
