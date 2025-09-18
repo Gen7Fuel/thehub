@@ -30,6 +30,7 @@ export default function Navbar() {
   const isOrderRec = matchRoute({ to: '/order-rec', fuzzy: true })
   const isCycleCount = matchRoute({ to: '/cycle-count', fuzzy: true })
   const isVendor = matchRoute({ to: '/vendor', fuzzy: true })
+  const isAudit = matchRoute({ to: '/audit', fuzzy: true })
 
   const headerText = () => {
     if (isHome) return 'Home'
@@ -43,6 +44,7 @@ export default function Navbar() {
     if (isOrderRec) return 'Order Rec'
     if (isCycleCount) return 'Cycle Count'
     if (isVendor) return 'Vendor Management'
+    if (isAudit) return 'Station Audits'
     return ''
   }
 

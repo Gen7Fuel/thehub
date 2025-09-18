@@ -4,7 +4,7 @@ import { useEffect, useState } from 'react'
 import { ChecklistItemCard } from "@/components/custom/ChecklistItem";
 import { Button } from "@/components/ui/button";
 
-export const Route = createFileRoute('/_navbarLayout/audit/checklist/$templateId')({
+export const Route = createFileRoute('/_navbarLayout/old/audit/checklist/$templateId')({
   component: RouteComponent,
 })
 

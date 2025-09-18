@@ -1,66 +1,44 @@
-import { createFileRoute, useParams } from '@tanstack/react-router'
-import { useEffect, useState } from "react";
+import { createFileRoute } from '@tanstack/react-router'
+import { useState, useEffect } from "react";
+import { useNavigate } from "@tanstack/react-router";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 
-export const Route = createFileRoute('/_navbarLayout/audit/$id')({
+export const Route = createFileRoute('/_navbarLayout/audit/')({
   component: RouteComponent,
 })
 
-interface AuditItem {
-  _id?: string;
-  text: string;
-  required: boolean;
-}
-
-interface AuditTemplate {
-  _id: string;
-  name: string;
-  description?: string;
-  items: AuditItem[];
-  sites: string[];
-}
-
 function RouteComponent() {
-  const { id } = useParams({ from: '/_navbarLayout/audit/$id' });
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
-  const [items, setItems] = useState<AuditItem[]>([{ text: "", required: true }]);
+  const [items, setItems] = useState([{ text: "", required: true }]);
+  const [saving, setSaving] = useState(false);
   const [locations, setLocations] = useState<{ _id: string; stationName: string }[]>([]);
   const [sites, setSites] = useState<string[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [saving, setSaving] = useState(false);
+  const navigate = useNavigate();
 
   useEffect(() => {
-    const fetchTemplate = async () => {
-      setLoading(true);
-      try {
-        const token = localStorage.getItem("token");
-        // Fetch template
-        const res = await fetch(`/api/audit/${id}`, {
-          headers: { Authorization: `Bearer ${token}` },
-        });
-        if (res.ok) {
-          const data: AuditTemplate = await res.json();
-          setName(data.name);
-          setDescription(data.description || "");
-          setItems(data.items.length > 0 ? data.items : [{ text: "", required: true }]);
-          setSites(data.sites || []);
-        }
-        // Fetch locations
-        const locRes = await fetch("/api/locations", {
-          headers: { Authorization: `Bearer ${token}` },
-        });
-        if (locRes.ok) {
-          const data = await locRes.json();
-          setLocations(data.locations || data);
-        }
-      } finally {
-        setLoading(false);
+    // Fetch locations from your API
+    const fetchLocations = async () => {
+      const token = localStorage.getItem("token");
+      const res = await fetch("/api/locations", {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (res.ok) {
+        const data = await res.json();
+        setLocations(data.locations || data); // adjust if your API returns { locations: [...] }
       }
     };
-    fetchTemplate();
-  }, [id]);
+    fetchLocations();
+  }, []);
+
+  const handleSiteToggle = (site: string) => {
+    setSites(prev =>
+      prev.includes(site)
+        ? prev.filter(s => s !== site)
+        : [...prev, site]
+    );
+  };
 
   const handleItemChange = (idx: number, field: "text" | "required", value: string | boolean) => {
     setItems(items =>
@@ -78,21 +56,13 @@ function RouteComponent() {
     setItems(items => items.filter((_, i) => i !== idx));
   };
 
-  const handleSiteToggle = (site: string) => {
-    setSites(prev =>
-      prev.includes(site)
-        ? prev.filter(s => s !== site)
-        : [...prev, site]
-    );
-  };
-
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setSaving(true);
     try {
       const token = localStorage.getItem("token");
-      const res = await fetch(`/api/audit/${id}`, {
-        method: "PUT",
+      const res = await fetch("/api/audit", {
+        method: "POST",
         headers: {
           "Content-Type": "application/json",
           Authorization: `Bearer ${token}`,
@@ -105,8 +75,7 @@ function RouteComponent() {
         }),
       });
       if (res.ok) {
-        // Optionally show a success message here
-        // Do NOT navigate away
+        navigate({ to: "/audit/list" }); // Navigate to the list page after save
       } else {
         // Optionally handle error
       }
@@ -115,21 +84,11 @@ function RouteComponent() {
     }
   };
 
-  if (loading) {
-    return (
-      <div className="max-w-2xl mx-auto p-6">
-        <Card>
-          <CardContent className="py-12 text-center">Loading...</CardContent>
-        </Card>
-      </div>
-    );
-  }
-
   return (
     <div className="max-w-2xl mx-auto p-6">
       <Card>
         <CardHeader>
-          <CardTitle>Edit Audit Template</CardTitle>
+          <CardTitle>Create Audit Template</CardTitle>
         </CardHeader>
         <CardContent>
           <form onSubmit={handleSubmit} className="space-y-6">
@@ -154,7 +113,7 @@ function RouteComponent() {
             <div>
               <label className="block font-medium mb-2">Checklist Items</label>
               {items.map((item, idx) => (
-                <div key={item._id || idx} className="flex gap-2 mb-2 items-center">
+                <div key={idx} className="flex gap-2 mb-2 items-center">
                   <input
                     className="border rounded px-2 py-1 flex-1"
                     placeholder="Audit question or checklist entry"
@@ -162,14 +121,6 @@ function RouteComponent() {
                     onChange={e => handleItemChange(idx, "text", e.target.value)}
                     required
                   />
-                  {/* <label className="flex items-center gap-1 text-sm">
-                    <input
-                      type="checkbox"
-                      checked={item.required}
-                      onChange={e => handleItemChange(idx, "required", e.target.checked)}
-                    />
-                    Required
-                  </label> */}
                   <Button
                     type="button"
                     variant="destructive"
@@ -200,7 +151,7 @@ function RouteComponent() {
               </div>
             </div>
             <Button type="submit" disabled={saving}>
-              {saving ? "Saving..." : "Save Changes"}
+              {saving ? "Saving..." : "Create Template"}
             </Button>
           </form>
         </CardContent>

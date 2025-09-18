@@ -3,15 +3,42 @@ const router = express.Router();
 const AuditTemplate = require('../../models/audit/auditTemplate');
 const AuditInstance = require('../../models/audit/audit');
 
+// GET /api/audit/category-options
+router.get('/category-options', async (req, res) => {
+  try {
+    const template = await SelectTemplate.findOne({ name: "Category" });
+    if (!template) {
+      return res.status(404).json({ message: "Category template not found" });
+    }
+    res.json(template.options); // Return only the options array
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+});
+
 // --- Template CRUD ---
 
 // Create a new template
+// router.post('/', async (req, res) => {
+//   try {
+//     const template = await AuditTemplate.create(req.body);
+//     res.status(201).json(template);
+//   } catch (err) {
+//     res.status(400).json({ error: err.message });
+//   }
+// });
+
 router.post('/', async (req, res) => {
   try {
-    const template = await AuditTemplate.create(req.body);
-    res.status(201).json(template);
+    const userId = req.user._id;
+    const auditTemplate = new AuditTemplate({
+      ...req.body,
+      createdBy: userId,
+    });
+    await auditTemplate.save();
+    res.status(201).json(auditTemplate);
   } catch (err) {
-    res.status(400).json({ error: err.message });
+    res.status(400).json({ message: err.message });
   }
 });
 
