@@ -11,7 +11,7 @@ import { Input } from '@/components/ui/input'
 import { Textarea } from '@/components/ui/textarea'
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip'
 import { Trash2 } from 'lucide-react'
-import { Switch } from "@/components/ui/switch";
+// import { Switch } from "@/components/ui/switch";
 
 export const Route = createFileRoute('/_navbarLayout/order-rec/$id')({
   component: RouteComponent,
@@ -30,7 +30,7 @@ function RouteComponent() {
   const [savingNote, setSavingNote] = useState(false);
   const [noteSuccess, setNoteSuccess] = useState<string | null>(null);
   const [noteError, setNoteError] = useState<string | null>(null);
-  const [switchLoading, setSwitchLoading] = useState(false);
+  // const [switchLoading, setSwitchLoading] = useState(false);
 
   // Keep textarea in sync if orderRec changes
   useEffect(() => {
@@ -55,21 +55,21 @@ function RouteComponent() {
     fetchOrderRec()
   }, [id])
 
-  const handleSwitchChange = async (field: "orderPlaced" | "delivered", value: boolean) => {
-    setSwitchLoading(true);
-    console.log("Fetching with:", field, value)
-    try {
-      await axios.put(`/api/order-rec/${id}`, { [field]: value }, {
-        headers: {
-          Authorization: `Bearer ${localStorage.getItem('token')}`
-        }
-      });
-      setOrderRec((prev: any) => ({ ...prev, [field]: value }));
-    } catch (err) {
-      alert("Failed to update status.");
-    }
-    setSwitchLoading(false);
-  };
+  // const handleSwitchChange = async (field: "orderPlaced" | "delivered", value: boolean) => {
+  //   setSwitchLoading(true);
+  //   console.log("Fetching with:", field, value)
+  //   try {
+  //     await axios.put(`/api/order-rec/${id}`, { [field]: value }, {
+  //       headers: {
+  //         Authorization: `Bearer ${localStorage.getItem('token')}`
+  //       }
+  //     });
+  //     setOrderRec((prev: any) => ({ ...prev, [field]: value }));
+  //   } catch (err) {
+  //     alert("Failed to update status.");
+  //   }
+  //   setSwitchLoading(false);
+  // };
 
   const handleDelete = async () => {
     const confirmed = window.confirm("Are you sure you want to delete this order rec? This action cannot be undone.");
@@ -403,7 +403,7 @@ function RouteComponent() {
         </div>
       </div>
 
-      <div className="flex gap-8 items-center my-4">
+      {/* <div className="flex gap-8 items-center my-4">
         <div className="flex items-center gap-2">
           <Switch
             checked={!!orderRec?.orderPlaced}
@@ -424,7 +424,7 @@ function RouteComponent() {
           />
           <label htmlFor="delivered-switch" className="text-sm">Delivered</label>
         </div>
-      </div>
+      </div> */}
 
       <div className="mb-8 max-w-2xl mx-auto">
         <form
