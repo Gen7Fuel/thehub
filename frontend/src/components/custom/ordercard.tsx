@@ -1,6 +1,6 @@
 import { Card } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
-// import { Message } from 'lucide-react'
+import { MessageSquareText, MessageSquarePlus, Eye, RefreshCcw  } from 'lucide-react'
 
 interface OrderCardProps {
   id: string
@@ -23,7 +23,7 @@ interface OrderCardProps {
 
 export function OrderCard({
   id,
-  filename,
+  // filename,
   // site,
   currentStatus,
   statusHistory,
@@ -54,11 +54,11 @@ export function OrderCard({
           {/* <div className="font-semibold text-base break-words line-clamp-2" title={filename}>
             {filename}
           </div> */}
-          <div className="text-base text-gray-600 mt-1">
+          <div className="font-semibold text-base text-gray-800 mt-1">
             Status: {currentStatus || "Created"}
           </div>
           {statusHistory && (
-            <div className="text-xs text-gray-400 mt-1">
+            <div className="text-base text-gray-600 mt-1">
               {(() => {
                 console.log("statushistory:", statusHistory)
                 const entry = Array.isArray(statusHistory) ? statusHistory.find(s => s.status === currentStatus) : null;
@@ -85,7 +85,8 @@ export function OrderCard({
                       border border-slate-600 shadow-sm"
             onClick={() => onViewOrder?.(id)}
           >
-            View Order
+            {/* View Order */}
+            <Eye className="w-4 h-4" />
           </Button>
 
           {/* Update Status */}
@@ -95,47 +96,32 @@ export function OrderCard({
                       border border-indigo-500 shadow-sm"
             onClick={() => onUpdateStatus?.()}
           >
-            Update Status
+            {/* Update Status */}
+            <RefreshCcw className="w-4 h-4" />
           </Button>
-        </div>
+        {/* </div> */}
 
 
         {/* Bottom section: View/Add Comment */}
-        {/* Bottom: comment buttons */} 
-        <div className="flex gap-2 mt-2"> 
+        {/* <div className="flex gap-2 mt-2">  */}
           {comments && comments.length > 0 && ( 
             <Button className="flex-1 py-1 px-2 text-sm bg-gray-100 hover:bg-gray-200 text-gray-700 border border-gray-300 rounded-md" 
               onClick={() => onViewComments?.(id)} 
             > 
-              View Comments ({comments.length}) 
+              {/* View Comments ({comments.length})  */}
+              <MessageSquareText className="w-6 h-6 text-gray-700" /> ({comments.length}) 
             </Button> 
           )} 
           <Button className="flex-1 py-1 text-sm bg-gray-50 hover:bg-gray-100 text-gray-700 border border-gray-300 rounded-md" 
               onClick={() => onAddEditComment?.(id, lastComment?.text)} 
           > 
-            Add Comment 
+            {/* Add Comment  */}
+            <MessageSquarePlus className="w-6 h-6 text-gray-700" />
           </Button> 
         </div>
       </div>
-      {/* <div className="flex gap-2 mt-2"> 
-          {comments && comments.length > 0 && ( 
-            <Button className="flex-1 py-1 px-2 text-sm bg-gray-100 hover:bg-gray-200 text-gray-700 border border-gray-300 rounded-md" 
-              onClick={() => onViewComments?.(id)} 
-            > 
-              View Comments ({comments.length}) 
-            </Button> 
-          )} 
-          <Button className="flex-1 py-1 text-sm bg-gray-50 hover:bg-gray-100 text-gray-700 border border-gray-300 rounded-md" 
-              onClick={() => onAddEditComment?.(id, lastComment?.text)} 
-          > 
-            Add Comment 
-          </Button> 
-      </div>
-       */}
-
-      {/* Right panel */}
       <div
-        className="flex flex-col items-center justify-center p-2 h-full rounded-r-2xl"
+        className="flex flex-col items-center justify-center p-2 h-full"
         style={{
             backgroundColor: getRedColor?.(
               getPercentile?.(lastPlacedOrder, vendor_order_frequency) ?? 0,
@@ -144,23 +130,22 @@ export function OrderCard({
               currentStatus
             ) ?? "#f3f4f6"
           }}
-      >
-        {/* <div className="text-sm font-semibold text-gray-800">
-          Last Placed Order
-        </div> */}
-        <div className="text-sm text-gray-700 mt-1">
-          {lastPlacedOrder
-            ? new Date(lastPlacedOrder).toLocaleString("en-CA", {
-                year: "numeric",
-                month: "short",
-                day: "numeric",
-                hour: "2-digit",
-                minute: "2-digit",
-              })
-            : "No order placed yet"}
+        >
+          {/* <div className="text-sm font-semibold text-gray-800">
+            Last Placed Order
+          </div> */}
+          <div className="text-sm text-gray-700 font-semibold mt-1">
+            {lastPlacedOrder
+              ? new Date(lastPlacedOrder).toLocaleString("en-CA", {
+                  year: "numeric",
+                  month: "short",
+                  day: "numeric",
+                  hour: "2-digit",
+                  minute: "2-digit",
+                })
+              : "No record for previous order placed"}
+          </div>
         </div>
-      </div>
-
     </Card>
   )
 }

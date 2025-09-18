@@ -1,22 +1,33 @@
 import { createFileRoute } from "@tanstack/react-router"
-import { useEffect, useState } from "react"
+import React, { useEffect, useState, useMemo } from "react"
 import { OrderCard } from "@/components/custom/ordercard"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
+import { Card } from "@/components/ui/card"
 
 export const Route = createFileRoute("/_navbarLayout/order-rec/dashboard")({
   component: RouteComponent,
 })
 
+type Vendor = {
+  _id: string;
+  name: string;
+  lastPlacedOrder?: string;
+  vendor_order_frequency?: number | string;
+  location: string;
+};
+
 function RouteComponent() {
   const [orderRecs, setOrderRecs] = useState<any[]>([])
-  const [vendors, setVendors] = useState<any[]>([])
+  // const [vendors, setVendors] = useState<any[]>([])
   const [stores, setStores] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
   const [weeks, setWeeks] = useState<string[]>([])
   const [selectedWeek, setSelectedWeek] = useState<string>("")
+  const [uniquevendors, setUniqueVendors] = useState<Record<string, Vendor[]>>({});
+
 
   // Dialog state
   const [viewCommentsOrderId, setViewCommentsOrderId] = useState<string | null>(null)
@@ -26,6 +37,15 @@ function RouteComponent() {
   const [updateStatusOrderId, setUpdateStatusOrderId] = useState<string | null>(null);
   const [newStatus, setNewStatus] = useState<string>("");
 
+    const allVendors = React.useMemo(
+    () =>
+      Array.from(
+        new Set(
+          Object.keys(uniquevendors).map(key => key.split("::")[0])
+        )
+      ),
+    [uniquevendors]
+  );
 
   const handleComment = async (id: string, text: string) => {
     try {
@@ -66,9 +86,18 @@ function RouteComponent() {
       const vendorsRes = await fetch("/api/vendors", {
       headers: { Authorization: `Bearer ${localStorage.getItem("token")}` },
       });
-        if (vendorsRes.ok) {
-          const vendorsData = await vendorsRes.json();
-        setVendors(vendorsData);
+      if (vendorsRes.ok) {
+        const vendorsData: Vendor[] = await vendorsRes.json();
+
+        // Rebuild grouped vendors for table display
+        const grouped = vendorsData.reduce((acc: Record<string, Vendor[]>, v: Vendor) => {
+          const key = `${v.name.trim().toLowerCase()}::${v.location}`; 
+          if (!acc[key]) acc[key] = [];
+          acc[key].push(v);
+          return acc;
+        }, {});
+
+        setUniqueVendors(grouped);
       }
       
       setUpdateStatusOrderId(null);
@@ -123,6 +152,13 @@ function RouteComponent() {
     }
   };
 
+  const formatVendorName = (name: string) => {
+  return name
+    .split(" ")
+    .map(word => word.charAt(0).toUpperCase() + word.slice(1))
+    .join(" ");
+  };
+
 
   useEffect(() => {
     const fetchData = async () => {
@@ -136,8 +172,20 @@ function RouteComponent() {
         const recsData = await recsRes.json()
         const vendorsData = await vendorsRes.json()
         const storesData = await storesRes.json()
+        
+        // setVendors(vendorsData)
+
+        const grouped = vendorsData.reduce((acc: Record<string, Vendor[]>, v: Vendor) => {
+          const key = `${v.name.trim().toLowerCase()}::${v.location}`; 
+          if (!acc[key]) acc[key] = [];
+          acc[key].push(v);
+          return acc;
+        }, {});
+
+
+        setUniqueVendors(grouped);
+
         setOrderRecs(recsData)
-        setVendors(vendorsData)
         setStores(storesData)
         buildWeeks(recsData)
       }
@@ -159,11 +207,14 @@ function RouteComponent() {
   }
 
   const getWeekStart = (date: Date) => {
-    const d = new Date(date)
-    const day = d.getDay()
-    const diff = d.getDate() - day
-    return new Date(d.setDate(diff))
-  }
+    const d = new Date(date);
+    const day = d.getDay(); // 0 = Sunday, 1 = Monday, ..., 6 = Saturday
+    const diff = d.getDate() - (day === 0 ? 6 : day - 1); // shift so Monday is start
+    d.setDate(diff);
+    d.setHours(0, 0, 0, 0);
+    return d;
+  };
+
 
   const filteredOrders = orderRecs.filter((rec) => {
     if (!selectedWeek) return true
@@ -202,70 +253,177 @@ function RouteComponent() {
       {/* Grid */}
       <div className="relative max-h-[80vh]">
         <div className="overflow-x-auto overflow-y-auto max-h-[80vh] max-w-[calc(100vw-100px)] border rounded-lg">
-          <table className="border-collapse">
+          <table className="border-collapse w-full">
             <thead>
               <tr>
                 <th className="border border-gray-300 px-2 py-1 bg-gray-100 text-left w-64 sticky left-0 top-0 z-30">
                   Store \ Vendor
                 </th>
-                {vendors.map(v=>(
-                  <th key={v._id} className="border border-gray-300 px-2 py-1 bg-gray-100 text-center w-80 text-sm truncate sticky top-0 z-20" title={v.name}>
-                    {v.name}
+                {allVendors.map(vendorName => (
+                  <th
+                    key={vendorName}
+                    className="border border-gray-300 px-4 py-3 bg-gray-100 text-center font-medium text-gray-800 text-sm truncate sticky top-0 z-20 shadow-sm"
+                    title={vendorName}
+                  >
+                    {formatVendorName(vendorName)}
                   </th>
                 ))}
               </tr>
             </thead>
+
             <tbody>
-              {stores.map(store=>(
-                <tr key={store._id}>
-                  <td className="border border-gray-300 px-2 py-1 font-semibold w-64 text-sm break-words bg-white sticky left-0 z-20">
-                    {store.stationName}
-                  </td>
-                  {vendors.map(vendor=>{
-                    const rec = lookup[store.stationName]?.[vendor._id]
-                    console.log("rec:", rec);
-                    return <td key={vendor._id} className="border border-gray-300 bg-white w-100 p-0 items-center">
-                      {rec ? (
-                        <OrderCard
-                          key={rec._id}
-                          id={rec._id}
-                          filename={rec.filename}
-                          site={rec.site}
-                          currentStatus={rec.currentStatus}
-                          statusHistory={rec.statusHistory}
-                          comments={rec.comments}
-                          getPercentile={getPercentile} 
-                          getRedColor={getRedColor}
-                          getStatusColor={getStatusColor}
-                          // onUpdateStatus={(status)=>fetch(`/api/order-rec/${rec._id}/status`, {method:"PUT", headers:{"Content-Type":"application/json", Authorization:`Bearer ${localStorage.getItem("token")}`}, body:JSON.stringify({status})})}
-                          onUpdateStatus={() => {
-                              setUpdateStatusOrderId(rec._id);
-                              setNewStatus(rec.currentStatus);
-                          }}
-                          lastPlacedOrder={vendor?.lastPlacedOrder || null}
-                          vendor_order_frequency={vendor?.vendor_order_frequency ? Number(vendor.vendor_order_frequency) : undefined}
-                          onViewOrder={(id)=>window.location.href=`/order-rec/${id}`}
-                          onViewComments={(id)=>{
-                            const recData = orderRecs.find(r=>r._id===id)
-                            setCurrentComments(recData?.comments||[])
-                            setViewCommentsOrderId(id)
-                          }}
-                          onAddEditComment={(id,lastComment)=>{
-                            setCommentText(lastComment||"")
-                            setAddEditCommentOrderId(id)
-                          }}
-                        />
-                      ) : (
-                        <div className="w-110 h-55 flex items-center justify-center rounded-2xl bg-gray-100 text-gray-500 text-sm">
-                          No Orders
-                        </div>
-                      )}
+              {stores
+                .filter(
+                  store =>
+                    store.stationName !== "Sarnia" &&
+                    store.stationName !== "Jocko Point"
+                )
+                .map(store => (
+                  <tr key={store._id}>
+                    {/* Store name column */}
+                    <td className="border border-gray-300 px-4 py-2 font-semibold text-gray-800 bg-gray-50 sticky left-0 z-20 shadow-sm">
+                      {store.stationName}
                     </td>
-                  })}
-                </tr>
-              ))}
+
+                    {/* Vendor columns */}
+                    {allVendors.map(vendorName => {
+                      // Find vendor(s) tied to this store + vendor name
+                      const vendorObjs =
+                        uniquevendors[`${vendorName}::${store.stationName}`];
+
+                      if (!vendorObjs) {
+                        return (
+                          <td
+                            key={vendorName}
+                            className="border border-gray-300 bg-white w-80 p-0 items-center"
+                          >
+                            <div className="w-80 h-40 flex items-center justify-center rounded-2xl bg-gray-100 text-gray-500 text-sm">
+                              Vendor Not Associated
+                            </div>
+                          </td>
+                        );
+                      }
+
+                      // Vendor meta (first object is fine since grouped)
+                      const vendorMeta = vendorObjs[0];
+
+                      // Week range
+                      const weekStart = new Date(selectedWeek);
+                      const weekEnd = new Date(weekStart);
+                      weekEnd.setDate(weekEnd.getDate() + 6);
+
+                      // All orders between this store + vendor historically
+                      const allOrders = orderRecs.filter(
+                        r =>
+                          r.site === store.stationName &&
+                          vendorObjs.some(
+                            vo =>
+                              vo._id ===
+                              (typeof r.vendor === "object" ? r.vendor._id : r.vendor)
+                          )
+                      );
+
+                      // Orders in the selected week
+                      const rec = allOrders.find(
+                        r =>
+                          new Date(r.createdAt) >= weekStart &&
+                          new Date(r.createdAt) <= weekEnd
+                      );
+
+                      return (
+                        <td
+                          key={vendorName}
+                          className="border border-gray-300 bg-white w-80 p-0 items-center"
+                        >
+                          {allOrders.length === 0 ? (
+                            // Case 1: no orders at all
+                            <div className="w-80 h-40 flex items-center justify-center rounded-2xl bg-gray-100 text-gray-500 text-sm">
+                              Vendor Not Associated
+                            </div>
+                          ) : rec ? (
+                            // Case 2: order exists this week → render normal card
+                            <OrderCard
+                              key={rec._id}
+                              id={rec._id}
+                              filename={rec.filename}
+                              site={rec.site}
+                              currentStatus={rec.currentStatus}
+                              statusHistory={rec.statusHistory}
+                              comments={rec.comments}
+                              getPercentile={getPercentile}
+                              getRedColor={getRedColor}
+                              getStatusColor={getStatusColor}
+                              onUpdateStatus={() => {
+                                setUpdateStatusOrderId(rec._id);
+                                setNewStatus(rec.currentStatus);
+                              }}
+                              lastPlacedOrder={vendorMeta?.lastPlacedOrder || undefined}
+                              vendor_order_frequency={
+                                vendorMeta?.vendor_order_frequency
+                                  ? Number(vendorMeta.vendor_order_frequency)
+                                  : undefined
+                              }
+                              onViewOrder={id => (window.location.href = `/order-rec/${id}`)}
+                              onViewComments={id => {
+                                const recData = orderRecs.find(r => r._id === id);
+                                setCurrentComments(recData?.comments || []);
+                                setViewCommentsOrderId(id);
+                              }}
+                              onAddEditComment={(id, lastComment) => {
+                                setCommentText(lastComment || "");
+                                setAddEditCommentOrderId(id);
+                              }}
+                            />
+                          ) : (
+                            // Case 3: orders in history but none this week
+                            <Card className="w-80 overflow-hidden rounded-2xl border border-gray-300 shadow-sm">
+                              {/* Top Section */}
+                              <div className="flex flex-col p-4 h-full justify-between bg-gray-50">
+                                <div className="text-sm font-semibold text-gray-800 text-center">
+                                  No Orders Created This Week
+                                </div>
+                              </div>
+
+                              {/* Bottom Section */}
+                              <div
+                                className="flex flex-col items-center justify-center p-2 bg-gray-100"
+                                style={{
+                                  backgroundColor:
+                                    getRedColor?.(
+                                      getPercentile?.(
+                                        vendorMeta.lastPlacedOrder,
+                                        vendorMeta.vendor_order_frequency
+                                          ? Number(vendorMeta.vendor_order_frequency)
+                                          : undefined
+                                      ) ?? 0,
+                                      vendorMeta.lastPlacedOrder
+                                    ) ?? "#f3f4f6",
+                                }}
+                              >
+                                <div className="text-sm text-gray-700 font-semibold mt-1">
+                                  {vendorMeta?.lastPlacedOrder
+                                    ? new Date(
+                                        vendorMeta.lastPlacedOrder
+                                      ).toLocaleString("en-CA", {
+                                        year: "numeric",
+                                        month: "short",
+                                        day: "numeric",
+                                        hour: "2-digit",
+                                        minute: "2-digit",
+                                      })
+                                    : "No record for previous order placed"}
+                                </div>
+                              </div>
+                            </Card>
+                          )}
+                        </td>
+                      );
+                    })}
+                  </tr>
+                ))}
             </tbody>
           </table>
+
         </div>
       </div>
 
