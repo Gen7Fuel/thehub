@@ -16,8 +16,7 @@ interface SelectTemplate {
 }
 interface ChecklistItemCardProps {
   item: {
-    item: ReactNode;
-    text: string;
+    item: string;
     required: boolean;
     checked?: boolean;
     comment?: string;
