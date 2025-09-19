@@ -6,10 +6,18 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Card } from "@/components/ui/card"
+import { io,Socket } from "socket.io-client"
 
 export const Route = createFileRoute("/_navbarLayout/order-rec/dashboard")({
   component: RouteComponent,
 })
+
+const token = localStorage.getItem("token");
+
+export const socket: Socket = io("http://backend:5000", {
+  auth: { token }, // this will send the JWT during handshake
+  // transports: ["websocket"], // force WS (optional but good for dev)
+});
 
 type Vendor = {
   _id: string;
@@ -192,7 +200,66 @@ function RouteComponent() {
       setLoading(false)
     }
     fetchData()
-  }, [])
+
+    // Setup SSE for real-time order rec updates
+    // const evtSource = new EventSource("/api/order-rec/stream");
+
+    // evtSource.addEventListener("orderUpdated", (event: MessageEvent) => {
+    //   const updatedOrder = JSON.parse(event.data);
+    //   setOrderRecs((prev) =>
+    //     prev.map((r) => (r._id === updatedOrder._id ? updatedOrder : r))
+    //   );
+    // });
+
+    // evtSource.addEventListener("orderCreated", (event: MessageEvent) => {
+    //   const newOrder = JSON.parse(event.data);
+    //   setOrderRecs((prev) => [...prev, newOrder]);
+    // });
+
+    // evtSource.addEventListener("orderDeleted", (event: MessageEvent) => {
+    //   const deletedOrder = JSON.parse(event.data);
+    //   setOrderRecs((prev) => prev.filter((r) => r._id !== deletedOrder._id));
+    // });
+
+    // // Cleanup on unmount
+    // return () => {
+    //   evtSource.close();
+    // };
+
+    // WebSocket listeners
+    socket.on("connect", () => {
+      console.log("Connected to WS server", socket.id);
+    });
+
+    socket.on("orderUpdated", (updatedOrder:any) => {
+      console.log("Order updated:", updatedOrder);
+      setOrderRecs((prev) =>
+        prev.map((r) => (r._id === updatedOrder._id ? updatedOrder : r))
+      );
+    });
+
+    socket.on("orderCreated", (newOrder:any) => {
+      console.log("Order created:", newOrder);
+      setOrderRecs((prev) => [...prev, newOrder]);
+    });
+
+    socket.on("orderDeleted", (deletedOrder:any) => {
+      console.log("Order deleted:", deletedOrder);
+      setOrderRecs((prev) => prev.filter((r) => r._id !== deletedOrder._id));
+    });
+
+    socket.on("connect_error", (err:any) => {
+      console.error("WS connection error:", err.message);
+    });
+
+    // Cleanup on unmount
+    return () => {
+      socket.off("orderUpdated");
+      socket.off("orderCreated");
+      socket.off("orderDeleted");
+      socket.disconnect();
+    };
+  }, []);
 
   const buildWeeks = (data: any[]) => {
     const sundays = new Set<string>()
@@ -275,7 +342,7 @@ function RouteComponent() {
               {stores
                 .filter(
                   store =>
-                    store.stationName !== "Sarnia" &&
+                    // store.stationName !== "Sarnia" &&
                     store.stationName !== "Jocko Point"
                 )
                 .map(store => (

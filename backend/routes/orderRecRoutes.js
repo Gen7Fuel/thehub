@@ -91,7 +91,28 @@ router.put('/:id/item/:catIdx/:itemIdx', async (req, res) => {
     orderRec.completed = orderRec.categories.every(c => c.completed);
 
     orderRec.markModified('categories'); // Ensure Mongoose tracks changes
+    
+    const status = "Completed";
+    if(orderRec.completed){
+      orderRec.currentStatus = status;
+      let statusEntry = orderRec.statusHistory.find(e => e.status === status);
+      if (!statusEntry) {
+        // Add new status with current timestamp
+        orderRec.statusHistory.push({ status, timestamp: new Date() });
+      } else {
+        // Moving forward in hierarchy → update timestamp
+        statusEntry.timestamp = new Date();
+      }
+    } else {
+      orderRec.currentStatus = "Created";
+    }
+    
     await orderRec.save();
+    const io = req.app.get("io");
+    io.emit("orderUpdated", orderRec);
+    // Notify all SSE clients about the update
+    // console.log("Broadcasting SSE orderUpdated for:", orderRec._id);
+    // broadcastSSE(req.app, "orderUpdated", orderRec);
     res.json(orderRec);
   } catch (err) {
     res.status(500).json({ message: err.message });
@@ -192,6 +213,10 @@ router.post('/', async (req, res) => {
       currentStatus: "Created", statusHistory: [{ status: "Created", timestamp: new Date() }], 
       comments: [] });
     await orderRec.save();
+    
+    // Notify all SSE clients about the update
+    // broadcastSSE(req.app, "orderUpdated", orderRec);
+
     res.status(201).json(orderRec);
   } catch (err) {
     res.status(500).json({ message: err.message });
@@ -300,6 +325,10 @@ router.put('/:id/status', async (req, res) => {
     }
 
     await orderRec.save();
+    
+    // Notify all SSE clients about the update
+    // broadcastSSE(req.app, "orderUpdated", orderRec);
+
     res.json(orderRec);
   } catch (err) {
     console.error(err);
@@ -318,6 +347,9 @@ router.post('/:id/comments', async (req, res) => {
 
     orderRec.comments.push({ text, author, timestamp: new Date() });
     await orderRec.save();
+    
+    // Notify all SSE clients about the update
+    // broadcastSSE(req.app, "orderUpdated", orderRec);
 
     res.json(orderRec);
   } catch (err) {
@@ -325,6 +357,45 @@ router.post('/:id/comments', async (req, res) => {
     res.status(500).json({ message: err.message });
   }
 });
+
+
+// server-sent events route for sending order rec updated events
+
+// router.get("/stream", (req, res) => {
+//   const token = req.query.token;
+//   if (!token) return res.status(401).json({ message: "No token" });
+
+//   jwt.verify(token, process.env.JWT_SECRET, (err, decoded) => {
+//     if (err) return res.status(403).json({ message: "Invalid token" });
+
+//     // SSE setup
+//     res.set({
+//       "Content-Type": "text/event-stream",
+//       "Cache-Control": "no-cache",
+//       Connection: "keep-alive",
+//     });
+//     res.flushHeaders();
+
+//     const clients = req.app.get("sseClients") || [];
+//     clients.push(res);
+//     req.app.set("sseClients", clients);
+
+//     req.on("close", () => {
+//       const updated = (req.app.get("sseClients") || []).filter(c => c !== res);
+//       req.app.set("sseClients", updated);
+//     });
+//   });
+// });
+
+
+// // --- Helper: SSE broadcast for order rec live updates ---
+// function broadcastSSE(app, event, data) {
+//   const clients = app.get("sseClients") || [];
+//   for (const client of clients) {
+//     client.write(`event: ${event}\n`);
+//     client.write(`data: ${JSON.stringify(data)}\n\n`);
+//   }
+// } 
 
 
 
