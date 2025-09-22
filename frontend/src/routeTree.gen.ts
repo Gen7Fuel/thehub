@@ -47,9 +47,9 @@ import { Route as NavbarLayoutPoListRouteImport } from './routes/_navbarLayout/p
 import { Route as NavbarLayoutPayablesReviewRouteImport } from './routes/_navbarLayout/payables/review'
 import { Route as NavbarLayoutPayablesListRouteImport } from './routes/_navbarLayout/payables/list'
 import { Route as NavbarLayoutPayablesImagesRouteImport } from './routes/_navbarLayout/payables/images'
+import { Route as NavbarLayoutOrderRecWorkflowRouteImport } from './routes/_navbarLayout/order-rec/workflow'
 import { Route as NavbarLayoutOrderRecListRouteImport } from './routes/_navbarLayout/order-rec/list'
 import { Route as NavbarLayoutOrderRecDashboardcopyRouteImport } from './routes/_navbarLayout/order-rec/dashboard copy'
-import { Route as NavbarLayoutOrderRecDashboardRouteImport } from './routes/_navbarLayout/order-rec/dashboard'
 import { Route as NavbarLayoutOrderRecIdRouteImport } from './routes/_navbarLayout/order-rec/$id'
 import { Route as NavbarLayoutKardpollListRouteImport } from './routes/_navbarLayout/kardpoll/list'
 import { Route as NavbarLayoutFleetListRouteImport } from './routes/_navbarLayout/fleet/list'
@@ -282,6 +282,12 @@ const NavbarLayoutPayablesImagesRoute =
     path: '/images',
     getParentRoute: () => NavbarLayoutPayablesRoute,
   } as any)
+const NavbarLayoutOrderRecWorkflowRoute =
+  NavbarLayoutOrderRecWorkflowRouteImport.update({
+    id: '/workflow',
+    path: '/workflow',
+    getParentRoute: () => NavbarLayoutOrderRecRoute,
+  } as any)
 const NavbarLayoutOrderRecListRoute =
   NavbarLayoutOrderRecListRouteImport.update({
     id: '/list',
@@ -292,12 +298,6 @@ const NavbarLayoutOrderRecDashboardcopyRoute =
   NavbarLayoutOrderRecDashboardcopyRouteImport.update({
     id: '/dashboard copy',
     path: '/dashboard copy',
-    getParentRoute: () => NavbarLayoutOrderRecRoute,
-  } as any)
-const NavbarLayoutOrderRecDashboardRoute =
-  NavbarLayoutOrderRecDashboardRouteImport.update({
-    id: '/dashboard',
-    path: '/dashboard',
     getParentRoute: () => NavbarLayoutOrderRecRoute,
   } as any)
 const NavbarLayoutOrderRecIdRoute = NavbarLayoutOrderRecIdRouteImport.update({
@@ -497,9 +497,9 @@ export interface FileRoutesByFullPath {
   '/fleet/list': typeof NavbarLayoutFleetListRoute
   '/kardpoll/list': typeof NavbarLayoutKardpollListRoute
   '/order-rec/$id': typeof NavbarLayoutOrderRecIdRoute
-  '/order-rec/dashboard': typeof NavbarLayoutOrderRecDashboardRoute
   '/order-rec/dashboard copy': typeof NavbarLayoutOrderRecDashboardcopyRoute
   '/order-rec/list': typeof NavbarLayoutOrderRecListRoute
+  '/order-rec/workflow': typeof NavbarLayoutOrderRecWorkflowRoute
   '/payables/images': typeof NavbarLayoutPayablesImagesRoute
   '/payables/list': typeof NavbarLayoutPayablesListRoute
   '/payables/review': typeof NavbarLayoutPayablesReviewRoute
@@ -556,9 +556,9 @@ export interface FileRoutesByTo {
   '/fleet/list': typeof NavbarLayoutFleetListRoute
   '/kardpoll/list': typeof NavbarLayoutKardpollListRoute
   '/order-rec/$id': typeof NavbarLayoutOrderRecIdRoute
-  '/order-rec/dashboard': typeof NavbarLayoutOrderRecDashboardRoute
   '/order-rec/dashboard copy': typeof NavbarLayoutOrderRecDashboardcopyRoute
   '/order-rec/list': typeof NavbarLayoutOrderRecListRoute
+  '/order-rec/workflow': typeof NavbarLayoutOrderRecWorkflowRoute
   '/payables/images': typeof NavbarLayoutPayablesImagesRoute
   '/payables/list': typeof NavbarLayoutPayablesListRoute
   '/payables/review': typeof NavbarLayoutPayablesReviewRoute
@@ -624,9 +624,9 @@ export interface FileRoutesById {
   '/_navbarLayout/fleet/list': typeof NavbarLayoutFleetListRoute
   '/_navbarLayout/kardpoll/list': typeof NavbarLayoutKardpollListRoute
   '/_navbarLayout/order-rec/$id': typeof NavbarLayoutOrderRecIdRoute
-  '/_navbarLayout/order-rec/dashboard': typeof NavbarLayoutOrderRecDashboardRoute
   '/_navbarLayout/order-rec/dashboard copy': typeof NavbarLayoutOrderRecDashboardcopyRoute
   '/_navbarLayout/order-rec/list': typeof NavbarLayoutOrderRecListRoute
+  '/_navbarLayout/order-rec/workflow': typeof NavbarLayoutOrderRecWorkflowRoute
   '/_navbarLayout/payables/images': typeof NavbarLayoutPayablesImagesRoute
   '/_navbarLayout/payables/list': typeof NavbarLayoutPayablesListRoute
   '/_navbarLayout/payables/review': typeof NavbarLayoutPayablesReviewRoute
@@ -697,9 +697,9 @@ export interface FileRouteTypes {
     | '/fleet/list'
     | '/kardpoll/list'
     | '/order-rec/$id'
-    | '/order-rec/dashboard'
     | '/order-rec/dashboard copy'
     | '/order-rec/list'
+    | '/order-rec/workflow'
     | '/payables/images'
     | '/payables/list'
     | '/payables/review'
@@ -756,9 +756,9 @@ export interface FileRouteTypes {
     | '/fleet/list'
     | '/kardpoll/list'
     | '/order-rec/$id'
-    | '/order-rec/dashboard'
     | '/order-rec/dashboard copy'
     | '/order-rec/list'
+    | '/order-rec/workflow'
     | '/payables/images'
     | '/payables/list'
     | '/payables/review'
@@ -823,9 +823,9 @@ export interface FileRouteTypes {
     | '/_navbarLayout/fleet/list'
     | '/_navbarLayout/kardpoll/list'
     | '/_navbarLayout/order-rec/$id'
-    | '/_navbarLayout/order-rec/dashboard'
     | '/_navbarLayout/order-rec/dashboard copy'
     | '/_navbarLayout/order-rec/list'
+    | '/_navbarLayout/order-rec/workflow'
     | '/_navbarLayout/payables/images'
     | '/_navbarLayout/payables/list'
     | '/_navbarLayout/payables/review'
@@ -1145,6 +1145,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof NavbarLayoutPayablesImagesRouteImport
       parentRoute: typeof NavbarLayoutPayablesRoute
     }
+    '/_navbarLayout/order-rec/workflow': {
+      id: '/_navbarLayout/order-rec/workflow'
+      path: '/workflow'
+      fullPath: '/order-rec/workflow'
+      preLoaderRoute: typeof NavbarLayoutOrderRecWorkflowRouteImport
+      parentRoute: typeof NavbarLayoutOrderRecRoute
+    }
     '/_navbarLayout/order-rec/list': {
       id: '/_navbarLayout/order-rec/list'
       path: '/list'
@@ -1157,13 +1164,6 @@ declare module '@tanstack/react-router' {
       path: '/dashboard copy'
       fullPath: '/order-rec/dashboard copy'
       preLoaderRoute: typeof NavbarLayoutOrderRecDashboardcopyRouteImport
-      parentRoute: typeof NavbarLayoutOrderRecRoute
-    }
-    '/_navbarLayout/order-rec/dashboard': {
-      id: '/_navbarLayout/order-rec/dashboard'
-      path: '/dashboard'
-      fullPath: '/order-rec/dashboard'
-      preLoaderRoute: typeof NavbarLayoutOrderRecDashboardRouteImport
       parentRoute: typeof NavbarLayoutOrderRecRoute
     }
     '/_navbarLayout/order-rec/$id': {
@@ -1546,18 +1546,18 @@ const NavbarLayoutKardpollRouteWithChildren =
 
 interface NavbarLayoutOrderRecRouteChildren {
   NavbarLayoutOrderRecIdRoute: typeof NavbarLayoutOrderRecIdRoute
-  NavbarLayoutOrderRecDashboardRoute: typeof NavbarLayoutOrderRecDashboardRoute
   NavbarLayoutOrderRecDashboardcopyRoute: typeof NavbarLayoutOrderRecDashboardcopyRoute
   NavbarLayoutOrderRecListRoute: typeof NavbarLayoutOrderRecListRoute
+  NavbarLayoutOrderRecWorkflowRoute: typeof NavbarLayoutOrderRecWorkflowRoute
   NavbarLayoutOrderRecIndexRoute: typeof NavbarLayoutOrderRecIndexRoute
 }
 
 const NavbarLayoutOrderRecRouteChildren: NavbarLayoutOrderRecRouteChildren = {
   NavbarLayoutOrderRecIdRoute: NavbarLayoutOrderRecIdRoute,
-  NavbarLayoutOrderRecDashboardRoute: NavbarLayoutOrderRecDashboardRoute,
   NavbarLayoutOrderRecDashboardcopyRoute:
     NavbarLayoutOrderRecDashboardcopyRoute,
   NavbarLayoutOrderRecListRoute: NavbarLayoutOrderRecListRoute,
+  NavbarLayoutOrderRecWorkflowRoute: NavbarLayoutOrderRecWorkflowRoute,
   NavbarLayoutOrderRecIndexRoute: NavbarLayoutOrderRecIndexRoute,
 }
 

@@ -8,15 +8,16 @@ import { Input } from "@/components/ui/input"
 import { Card } from "@/components/ui/card"
 import { io,Socket } from "socket.io-client"
 
-export const Route = createFileRoute("/_navbarLayout/order-rec/dashboard")({
+export const Route = createFileRoute("/_navbarLayout/order-rec/workflow")({
   component: RouteComponent,
 })
 
-const token = localStorage.getItem("token");
+const socketUrl = "http://localhost:5000" ; // container networking
 
-export const socket: Socket = io("http://backend:5000", {
-  auth: { token }, // this will send the JWT during handshake
-  // transports: ["websocket"], // force WS (optional but good for dev)
+export const socket: Socket = io(socketUrl, {
+  auth: { token: localStorage.getItem("token") },
+  transports: ["websocket"],
+  autoConnect: true,
 });
 
 type Vendor = {
@@ -25,6 +26,7 @@ type Vendor = {
   lastPlacedOrder?: string;
   vendor_order_frequency?: number | string;
   location: string;
+  category: string;
 };
 
 function RouteComponent() {
@@ -35,6 +37,9 @@ function RouteComponent() {
   const [weeks, setWeeks] = useState<string[]>([])
   const [selectedWeek, setSelectedWeek] = useState<string>("")
   const [uniquevendors, setUniqueVendors] = useState<Record<string, Vendor[]>>({});
+  const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
+  const STATUS_HIERARCHY = ["Created", "Completed", "Placed", "Delivered", "Invoice Received"];
+
 
 
   // Dialog state
@@ -45,15 +50,38 @@ function RouteComponent() {
   const [updateStatusOrderId, setUpdateStatusOrderId] = useState<string | null>(null);
   const [newStatus, setNewStatus] = useState<string>("");
 
-    const allVendors = React.useMemo(
-    () =>
-      Array.from(
-        new Set(
-          Object.keys(uniquevendors).map(key => key.split("::")[0])
-        )
-      ),
-    [uniquevendors]
-  );
+  const allVendors = React.useMemo(() => {
+    // Extract unique vendor names from keys, like before
+    const allVendorNames = Array.from(
+      new Set(Object.keys(uniquevendors).map(key => key.split("::")[0]))
+    );
+
+     if (!selectedCategory || selectedCategory === "All") {
+      // No category filtering → include all vendors
+      return allVendorNames;
+    }
+
+    // Filter vendors based on selected category
+    return allVendorNames.filter(vendorName => {
+      // Find all entries in uniquevendors that match this vendorName
+      const matches = Object.entries(uniquevendors).filter(([key]) => {
+        const keyVendor = key.split("::")[0]; // lowercase key format
+        return keyVendor === vendorName; // match vendor name
+      });
+
+      // Check if any of the matched vendor objects has the selected category
+      return matches.some(([_, vArr]) => {
+        const category = vArr[0]?.category; 
+        return category && category === selectedCategory;
+      });
+    });
+  }, [uniquevendors, selectedCategory]);
+
+  // Build category list from vendors
+  const allCategories = React.useMemo(() => {
+    const categories = Array.from(new Set(Object.values(uniquevendors).flat().map(v => v.category)));
+    return categories.sort(); // optional sort
+  }, [uniquevendors]);
 
   const handleComment = async (id: string, text: string) => {
     try {
@@ -61,7 +89,7 @@ function RouteComponent() {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
-          Authorization: `Bearer ${localStorage.getItem("token")}`,
+          Authorization: `Bearer ${localStorage.getItem(`token`)}`,
         },
         body: JSON.stringify({
           text,
@@ -84,7 +112,7 @@ function RouteComponent() {
         method: "PUT",
         headers: {
           "Content-Type": "application/json",
-          Authorization: `Bearer ${localStorage.getItem("token")}`,
+          Authorization: `Bearer ${localStorage.getItem(`token`)}`,
         },
         body: JSON.stringify({ status: newStatus }),
       });
@@ -92,7 +120,7 @@ function RouteComponent() {
       const updated = await res.json();
       setOrderRecs((prev) => prev.map((r) => (r._id === updated._id ? updated : r)));
       const vendorsRes = await fetch("/api/vendors", {
-      headers: { Authorization: `Bearer ${localStorage.getItem("token")}` },
+      headers: { Authorization: `Bearer ${localStorage.getItem(`token`)}` },
       });
       if (vendorsRes.ok) {
         const vendorsData: Vendor[] = await vendorsRes.json();
@@ -195,84 +223,75 @@ function RouteComponent() {
 
         setOrderRecs(recsData)
         setStores(storesData)
-        buildWeeks(recsData)
+        buildWeeks(recsData); // always generates current week + previous weeks
       }
       setLoading(false)
     }
     fetchData()
 
-    // Setup SSE for real-time order rec updates
-    // const evtSource = new EventSource("/api/order-rec/stream");
-
-    // evtSource.addEventListener("orderUpdated", (event: MessageEvent) => {
-    //   const updatedOrder = JSON.parse(event.data);
-    //   setOrderRecs((prev) =>
-    //     prev.map((r) => (r._id === updatedOrder._id ? updatedOrder : r))
-    //   );
-    // });
-
-    // evtSource.addEventListener("orderCreated", (event: MessageEvent) => {
-    //   const newOrder = JSON.parse(event.data);
-    //   setOrderRecs((prev) => [...prev, newOrder]);
-    // });
-
-    // evtSource.addEventListener("orderDeleted", (event: MessageEvent) => {
-    //   const deletedOrder = JSON.parse(event.data);
-    //   setOrderRecs((prev) => prev.filter((r) => r._id !== deletedOrder._id));
-    // });
-
-    // // Cleanup on unmount
-    // return () => {
-    //   evtSource.close();
-    // };
-
     // WebSocket listeners
     socket.on("connect", () => {
-      console.log("Connected to WS server", socket.id);
+      // console.log("Connected to WS server", socket.id);
     });
 
-    socket.on("orderUpdated", (updatedOrder:any) => {
-      console.log("Order updated:", updatedOrder);
+    socket.on("orderUpdated", (updatedOrder: any) => {
+      // console.log("📡 Order updated:", updatedOrder);
       setOrderRecs((prev) =>
         prev.map((r) => (r._id === updatedOrder._id ? updatedOrder : r))
       );
     });
 
-    socket.on("orderCreated", (newOrder:any) => {
-      console.log("Order created:", newOrder);
+    socket.on("orderCreated", (newOrder: any) => {
+      // console.log("📡 Order created:", newOrder);
       setOrderRecs((prev) => [...prev, newOrder]);
     });
 
-    socket.on("orderDeleted", (deletedOrder:any) => {
-      console.log("Order deleted:", deletedOrder);
+    socket.on("orderDeleted", (deletedOrder: any) => {
+      // console.log("📡 Order deleted:", deletedOrder);
       setOrderRecs((prev) => prev.filter((r) => r._id !== deletedOrder._id));
     });
 
-    socket.on("connect_error", (err:any) => {
-      console.error("WS connection error:", err.message);
+    socket.on("connect_error", (err: any) => {
+      console.error("❌ WS connection error:", err.message);
     });
 
-    // Cleanup on unmount
     return () => {
+      // cleanup listeners ONLY
       socket.off("orderUpdated");
       socket.off("orderCreated");
       socket.off("orderDeleted");
-      socket.disconnect();
+      socket.off("connect");
+      socket.off("connect_error");
     };
   }, []);
 
   const buildWeeks = (data: any[]) => {
-    const sundays = new Set<string>()
-    data.forEach((rec) => {
-      const created = new Date(rec.createdAt)
-      const sunday = getWeekStart(created)
-      sundays.add(sunday.toISOString().split("T")[0])
-    })
-    const weekList = Array.from(sundays).sort((a,b)=>new Date(b).getTime()-new Date(a).getTime())
-    setWeeks(weekList)
-    if (weekList.length>0) setSelectedWeek(weekList[0])
-  }
+    const weekSet = new Set<string>();
 
+    // 1️⃣ Add all weeks from existing orders
+    data.forEach((rec) => {
+      const created = new Date(rec.createdAt);
+      const monday = getWeekStart(created);
+      weekSet.add(monday.toISOString().split("T")[0]);
+    });
+
+    // 2️⃣ Add current week (in case no orders exist yet for this week)
+    const today = new Date();
+    const currentMonday = getWeekStart(today);
+    weekSet.add(currentMonday.toISOString().split("T")[0]);
+
+    // Sort descending (latest week first)
+    const weekList = Array.from(weekSet).sort(
+      (a, b) => new Date(b).getTime() - new Date(a).getTime()
+    );
+
+    setWeeks(weekList);
+
+    // default to latest week
+    if (weekList.length > 0) setSelectedWeek(weekList[0]);
+  };
+
+  // getWeekStart remains the same
   const getWeekStart = (date: Date) => {
     const d = new Date(date);
     const day = d.getDay(); // 0 = Sunday, 1 = Monday, ..., 6 = Saturday
@@ -282,15 +301,34 @@ function RouteComponent() {
     return d;
   };
 
+  const filteredOrders = orderRecs
+    .filter((rec) => {
+      if (!selectedWeek) return true;
 
-  const filteredOrders = orderRecs.filter((rec) => {
-    if (!selectedWeek) return true
-    const created = new Date(rec.createdAt)
-    const weekStart = new Date(selectedWeek)
-    const weekEnd = new Date(weekStart)
-    weekEnd.setDate(weekEnd.getDate() + 6)
-    return created>=weekStart && created<=weekEnd
-  })
+      // Week range based on selectedWeek (Monday)
+      const selectedMonday = new Date(selectedWeek);
+      selectedMonday.setHours(0, 0, 0, 0);
+
+      const weekStart = new Date(selectedMonday);
+      const weekEnd = new Date(selectedMonday);
+      weekEnd.setDate(weekEnd.getDate() + 6); // Sunday
+
+      const recDate = new Date(rec.createdAt);
+      return recDate >= weekStart && recDate <= weekEnd;
+    }).filter((rec) => {
+      // Filter by selected category
+      if (!selectedCategory || selectedCategory === "All") return true;
+
+      const vendorId = typeof rec.vendor === "object" ? rec.vendor._id : rec.vendor;
+      const vendorMeta = Object.values(uniquevendors)
+        .flat()
+        .find((v) => v._id === vendorId);
+
+      // Only include if vendor category matches
+      return vendorMeta?.category === selectedCategory;
+  });
+
+
 
   const lookup: Record<string, Record<string, any>> = {}
   filteredOrders.forEach((rec) => {
@@ -300,6 +338,28 @@ function RouteComponent() {
     lookup[storeName][vendorId]=rec
   })
 
+  // logic for handling status updates
+  const currentStatus = updateStatusOrderId
+    ? orderRecs.find(r => r._id === updateStatusOrderId)?.currentStatus || ""
+    : "";
+
+  let allowedStatuses: string[] = [];
+  let infoMessage = "";
+
+  if (currentStatus === "Created") {
+    // Cannot update until "Completed" from other end
+    allowedStatuses = [];
+    infoMessage = "The store has not yet completed the Order Rec";
+  } else if (currentStatus) {
+    const currentIndex = STATUS_HIERARCHY.indexOf(currentStatus);
+    if (currentIndex < STATUS_HIERARCHY.length - 1) {
+      allowedStatuses = [STATUS_HIERARCHY[currentIndex + 1]]; // only next status
+    } else {
+      allowedStatuses = []; // Already at final status
+    }
+  }
+
+
   if (loading) return <div>Loading...</div>
 
   return (
@@ -307,16 +367,46 @@ function RouteComponent() {
       {/* Week selector */}
       <div className="flex items-center space-x-4">
         <label className="font-semibold">Select Week:</label>
-        <Select value={selectedWeek} onValueChange={setSelectedWeek}>
+        <Select value={selectedWeek || ""} onValueChange={setSelectedWeek}>
           <SelectTrigger className="w-[200px]">
-            <SelectValue placeholder="Select a week"/>
+            <SelectValue placeholder="Select a week" />
           </SelectTrigger>
           <SelectContent>
-            {weeks.map(w => <SelectItem key={w} value={w}>{w}</SelectItem>)}
+            {weeks.filter(Boolean).map((w) => (
+              <SelectItem key={w} value={w}>
+                {w}
+              </SelectItem>
+            ))}
           </SelectContent>
         </Select>
-      </div>
 
+        {/* Category selector */}
+        <label className="font-semibold">Select Category:</label>
+        <Select value={selectedCategory || "All"} onValueChange={setSelectedCategory}>
+          <SelectTrigger className="w-[200px]">
+            <SelectValue placeholder="Select a category" />
+          </SelectTrigger>
+          <SelectContent>
+            {allCategories.filter(Boolean).map((c) => (
+              <SelectItem key={c} value={c}>
+                {c}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+          {/* Right side: Status Legend */}
+        <div className="flex space-x-4 items-center">
+          {["Created", "Completed", "Placed", "Delivered", "Invoice Received"].map(status => (
+            <div key={status} className="flex items-center space-x-1">
+              <div
+                className="w-4 h-4 rounded-sm"
+                style={{ backgroundColor: getStatusColor(status) }}
+              ></div>
+              <span className="text-xs text-gray-700">{status}</span>
+            </div>
+          ))}
+        </div>
+      </div>
       {/* Grid */}
       <div className="relative max-h-[80vh]">
         <div className="overflow-x-auto overflow-y-auto max-h-[80vh] max-w-[calc(100vw-100px)] border rounded-lg">
@@ -327,11 +417,7 @@ function RouteComponent() {
                   Store \ Vendor
                 </th>
                 {allVendors.map(vendorName => (
-                  <th
-                    key={vendorName}
-                    className="border border-gray-300 px-4 py-3 bg-gray-100 text-center font-medium text-gray-800 text-sm truncate sticky top-0 z-20 shadow-sm"
-                    title={vendorName}
-                  >
+                  <th key={vendorName} className="border ...">
                     {formatVendorName(vendorName)}
                   </th>
                 ))}
@@ -340,6 +426,16 @@ function RouteComponent() {
 
             <tbody>
               {stores
+                .filter(store => {
+                  if (!selectedCategory || selectedCategory === "All") return true;
+
+                  // Check if this store has at least one vendor in the selected category
+                  return Object.values(uniquevendors)
+                    .flat()
+                    .some(vendor => 
+                      vendor.location === store.stationName && vendor.category === selectedCategory
+                    );
+                })
                 .filter(
                   store =>
                     // store.stationName !== "Sarnia" &&
@@ -355,17 +451,20 @@ function RouteComponent() {
                     {/* Vendor columns */}
                     {allVendors.map(vendorName => {
                       // Find vendor(s) tied to this store + vendor name
-                      const vendorObjs =
-                        uniquevendors[`${vendorName}::${store.stationName}`];
-
-                      if (!vendorObjs) {
+                        const vendorObjsRaw = uniquevendors[`${vendorName}::${store.stationName}`];
+                        const vendorObjs = vendorObjsRaw?.filter(
+                          v => !selectedCategory || v.category === selectedCategory
+                        ) || []; 
+                        if (vendorObjs.length === 0) {
                         return (
                           <td
                             key={vendorName}
                             className="border border-gray-300 bg-white w-80 p-0 items-center"
                           >
-                            <div className="w-80 h-40 flex items-center justify-center rounded-2xl bg-gray-100 text-gray-500 text-sm">
-                              Vendor Not Associated
+                            <div className="w-full h-full flex items-center justify-center p-2">
+                              <div className="w-80 h-40 flex items-center justify-center rounded-2xl bg-gray-100 text-gray-500 text-sm">
+                                Vendor Not Associated
+                              </div>
                             </div>
                           </td>
                         );
@@ -402,89 +501,89 @@ function RouteComponent() {
                           key={vendorName}
                           className="border border-gray-300 bg-white w-80 p-0 items-center"
                         >
-                          {allOrders.length === 0 ? (
-                            // Case 1: no orders at all
-                            <div className="w-80 h-40 flex items-center justify-center rounded-2xl bg-gray-100 text-gray-500 text-sm">
-                              Vendor Not Associated
-                            </div>
-                          ) : rec ? (
-                            // Case 2: order exists this week → render normal card
-                            <OrderCard
-                              key={rec._id}
-                              id={rec._id}
-                              filename={rec.filename}
-                              site={rec.site}
-                              currentStatus={rec.currentStatus}
-                              statusHistory={rec.statusHistory}
-                              comments={rec.comments}
-                              getPercentile={getPercentile}
-                              getRedColor={getRedColor}
-                              getStatusColor={getStatusColor}
-                              onUpdateStatus={() => {
-                                setUpdateStatusOrderId(rec._id);
-                                setNewStatus(rec.currentStatus);
-                              }}
-                              lastPlacedOrder={vendorMeta?.lastPlacedOrder || undefined}
-                              vendor_order_frequency={
-                                vendorMeta?.vendor_order_frequency
-                                  ? Number(vendorMeta.vendor_order_frequency)
-                                  : undefined
-                              }
-                              onViewOrder={id => (window.location.href = `/order-rec/${id}`)}
-                              onViewComments={id => {
-                                const recData = orderRecs.find(r => r._id === id);
-                                setCurrentComments(recData?.comments || []);
-                                setViewCommentsOrderId(id);
-                              }}
-                              onAddEditComment={(id, lastComment) => {
-                                setCommentText(lastComment || "");
-                                setAddEditCommentOrderId(id);
-                              }}
-                            />
-                          ) : (
-                            // Case 3: orders in history but none this week
-                            <Card className="w-80 overflow-hidden rounded-2xl border border-gray-300 shadow-sm">
-                              {/* Top Section */}
-                              <div className="flex flex-col p-4 h-full justify-between bg-gray-50">
-                                <div className="text-sm font-semibold text-gray-800 text-center">
-                                  No Orders Created This Week
-                                </div>
-                              </div>
-
-                              {/* Bottom Section */}
-                              <div
-                                className="flex flex-col items-center justify-center p-2 bg-gray-100"
-                                style={{
-                                  backgroundColor:
-                                    getRedColor?.(
-                                      getPercentile?.(
-                                        vendorMeta.lastPlacedOrder,
-                                        vendorMeta.vendor_order_frequency
-                                          ? Number(vendorMeta.vendor_order_frequency)
-                                          : undefined
-                                      ) ?? 0,
-                                      vendorMeta.lastPlacedOrder
-                                    ) ?? "#f3f4f6",
+                          <div className="w-full h-full flex items-center justify-center p-2">
+                            {allOrders.length === 0 ? (
+                              // Case 1: no orders at all
+                              (<div className="w-80 h-40 flex items-center justify-center rounded-2xl bg-gray-100 text-gray-500 text-sm">Vendor Not Associated
+                                                              </div>)
+                            ) : rec ? (
+                              // Case 2: order exists this week → render normal card
+                              (<OrderCard
+                                key={rec._id}
+                                id={rec._id}
+                                filename={rec.filename}
+                                site={rec.site}
+                                currentStatus={rec.currentStatus}
+                                statusHistory={rec.statusHistory}
+                                comments={rec.comments}
+                                getPercentile={getPercentile}
+                                getRedColor={getRedColor}
+                                getStatusColor={getStatusColor}
+                                onUpdateStatus={() => {
+                                  setUpdateStatusOrderId(rec._id);
+                                  setNewStatus(rec.currentStatus);
                                 }}
-                              >
-                                <div className="text-sm text-gray-700 font-semibold mt-1">
-                                  {vendorMeta?.lastPlacedOrder
-                                    ? new Date(
-                                        vendorMeta.lastPlacedOrder
-                                      ).toLocaleString("en-CA", {
-                                        year: "numeric",
-                                        month: "short",
-                                        day: "numeric",
-                                        hour: "2-digit",
-                                        minute: "2-digit",
-                                      })
-                                    : "No record for previous order placed"}
+                                lastPlacedOrder={vendorMeta?.lastPlacedOrder || undefined}
+                                vendor_order_frequency={
+                                  vendorMeta?.vendor_order_frequency
+                                    ? Number(vendorMeta.vendor_order_frequency)
+                                    : undefined
+                                }
+                                onViewOrder={id => (window.location.href = `/order-rec/${id}`)}
+                                onViewComments={id => {
+                                  const recData = orderRecs.find(r => r._id === id);
+                                  setCurrentComments(recData?.comments || []);
+                                  setViewCommentsOrderId(id);
+                                }}
+                                onAddEditComment={(id, lastComment) => {
+                                  setCommentText(lastComment || "");
+                                  setAddEditCommentOrderId(id);
+                                }}
+                              />)
+                            ) : (
+                              // Case 3: orders in history but none this week
+                              (<Card className="w-80 overflow-hidden rounded-2xl border border-gray-300 shadow-sm">
+                                {/* Top Section */}
+                                <div className="flex flex-col p-4 h-full justify-between bg-gray-50">
+                                  <div className="text-sm font-semibold text-gray-800 text-center">
+                                    No Orders Created This Week
+                                  </div>
                                 </div>
-                              </div>
-                            </Card>
-                          )}
+                                {/* Bottom Section */}
+                                <div
+                                  className="flex flex-col items-center justify-center p-2 bg-gray-100"
+                                  style={{
+                                    backgroundColor:
+                                      getRedColor?.(
+                                        getPercentile?.(
+                                          vendorMeta.lastPlacedOrder,
+                                          vendorMeta.vendor_order_frequency
+                                            ? Number(vendorMeta.vendor_order_frequency)
+                                            : undefined
+                                        ) ?? 0,
+                                        vendorMeta.lastPlacedOrder
+                                      ) ?? "#f3f4f6",
+                                  }}
+                                >
+                                  <div className="text-sm text-gray-700 font-semibold mt-1">
+                                    {vendorMeta?.lastPlacedOrder
+                                      ? new Date(
+                                          vendorMeta.lastPlacedOrder
+                                        ).toLocaleString("en-CA", {
+                                          year: "numeric",
+                                          month: "short",
+                                          day: "numeric",
+                                          hour: "2-digit",
+                                          minute: "2-digit",
+                                        })
+                                      : "No record for previous order placed"}
+                                  </div>
+                                </div>
+                              </Card>)
+                            )}
+                          </div>
                         </td>
-                      );
+                      )
                     })}
                   </tr>
                 ))}
@@ -493,7 +592,6 @@ function RouteComponent() {
 
         </div>
       </div>
-
       {/* View Comments Dialog */}
       <Dialog open={!!viewCommentsOrderId} onOpenChange={()=>setViewCommentsOrderId(null)}>
         <DialogContent className="w-[400px] max-w-full">
@@ -519,7 +617,6 @@ function RouteComponent() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
-
       {/* Add/Edit Comment Dialog */}
       <Dialog open={!!addEditCommentOrderId} onOpenChange={() => setAddEditCommentOrderId(null)}>
         <DialogContent>
@@ -551,45 +648,54 @@ function RouteComponent() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
-
-          {/* Status Update Dialog */}
+      {/* Status Update Dialog */}
       <Dialog open={!!updateStatusOrderId} onOpenChange={() => setUpdateStatusOrderId(null)}>
         <DialogContent className="w-[350px] max-w-full">
           <DialogHeader>
             <DialogTitle>Update Status</DialogTitle>
           </DialogHeader>
+
           <div className="flex flex-col gap-4 mt-2">
             <div>
               <span className="font-medium">Current Status: </span>
-              <span>{orderRecs.find((r) => r._id === updateStatusOrderId)?.currentStatus}</span>
+              <span>{currentStatus}</span>
             </div>
-            <Select value={newStatus} onValueChange={setNewStatus}>
+
+            {infoMessage && (
+              <div className="text-sm text-gray-500">{infoMessage}</div>
+            )}
+
+            <Select
+              value={newStatus}
+              onValueChange={setNewStatus}
+              disabled={allowedStatuses.length === 0} // disable if no status can be selected
+            >
               <SelectTrigger className="w-full">
                 <SelectValue placeholder="Select new status" />
               </SelectTrigger>
               <SelectContent>
-                {["Created", "Placed", "Completed", "Delivered", "Invoice Received"]
-                  .filter(
-                    (s) =>
-                      s !== orderRecs.find((r) => r._id === updateStatusOrderId)?.currentStatus
-                  )
-                  .map((status) => (
-                    <SelectItem key={status} value={status}>
-                      {status}
-                    </SelectItem>
-                  ))}
+                {allowedStatuses.map((status) => (
+                  <SelectItem key={status} value={status}>
+                    {status}
+                  </SelectItem>
+                ))}
               </SelectContent>
             </Select>
           </div>
+
           <DialogFooter>
             <Button variant="outline" onClick={() => setUpdateStatusOrderId(null)}>
               Cancel
             </Button>
-            <Button onClick={handleUpdateStatus}>Update</Button>
+            <Button
+              onClick={handleUpdateStatus}
+              disabled={allowedStatuses.length === 0} // disable button if no status allowed
+            >
+              Update
+            </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
-
       {/* View Comments Dialog */}
       <Dialog open={!!viewCommentsOrderId} onOpenChange={() => setViewCommentsOrderId(null)}>
         <DialogContent className="w-[400px] max-w-full">

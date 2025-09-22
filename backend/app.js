@@ -27,8 +27,9 @@ const auditRoutes = require("./routes/audit/auditTemplateRoutes");
 // const cycleCountRoutes = require("./routes/cycleCountRoutes");
 // const CycleCountNewRoutes = require("./routes/cycleCountNewRoutes");
 const cycleCountRoutes = require('./routes/cycleCount2Routes');
+const { auth, authSocket } = require("./middleware/authMiddleware");
 const cycleCountNewRoutes = require('./routes/cycleCountRoutes');
-const auth = require("./middleware/authMiddleware");
+// const auth = require("./middleware/authMiddleware");
 const permissionRoutes = require("./routes/permissionRoutes");
 const selectTemplateRoutes = require("./routes/audit/selectTemplateRoutes");
 // const feedbackTemplateRoutes = require("./routes/audit/feedbackTemplateRoutes");
@@ -48,6 +49,7 @@ app.get('/api/health', (req, res) => res.send('OK'));
 app.use("/api/auth", authRoutes);
 app.use("/api/locations", locationRoutes);
 
+// console.log("Middleware is:",auth);
 app.use(auth);
 
 app.use("/api/users", userRoutes);
@@ -89,26 +91,28 @@ const io = new Server(server, {
   },
 });
 
-// app.set("io", io);
+io.use(authSocket)
+
+app.set("io", io);
 
 // Listen for connections
-io.on("connection", (socket) => {
-  console.log("New client connected:", socket.id);
+// io.on("connection", (socket) => {
+//   console.log("New client connected:", socket.id);
 
-  // Example: listen for events from frontend
-  socket.on("ping", (msg) => {
-    console.log("Got ping:", msg);
-    socket.emit("pong", "Hello from server!");
-  });
+//   // Example: listen for events from frontend
+//   socket.on("ping", (msg) => {
+//     console.log("Got ping:", msg);
+//     socket.emit("pong", "Hello from server!");
+//   });
 
-  socket.on("disconnect", () => {
-    console.log("Client disconnected:", socket.id);
-  });
-});
+//   socket.on("disconnect", () => {
+//     console.log("Client disconnected:", socket.id);
+//   });
+// });
 
 // Replace app.listen with server.listen
 const PORT = process.env.PORT || 5000;
-server.listen(PORT, () => console.log(`Server running on http://localhost:${PORT}`));
+server.listen(PORT);
 
 
 // app.listen(PORT, () => console.log(`Server running on port ${PORT}`));

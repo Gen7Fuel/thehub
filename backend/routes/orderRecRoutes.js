@@ -2,6 +2,7 @@ const express = require('express');
 const router = express.Router();
 const OrderRec = require('../models/OrderRec');
 const Vendor = require('../models/Vendor');
+const CycleCount = require('../models/CycleCount');
 
 // Get all
 router.get('/', async (req, res) => {
@@ -61,7 +62,7 @@ router.get('/:id', async (req, res) => {
 // Update item completion
 router.put('/:id/item/:catIdx/:itemIdx', async (req, res) => {
   try {
-    const { completed } = req.body;
+    const { completed, isChanged } = req.body;
     const orderRec = await OrderRec.findById(req.params.id);
     if (!orderRec) return res.status(404).json({ message: 'Not found' });
 
@@ -109,10 +110,25 @@ router.put('/:id/item/:catIdx/:itemIdx', async (req, res) => {
     
     await orderRec.save();
     const io = req.app.get("io");
-    io.emit("orderUpdated", orderRec);
-    // Notify all SSE clients about the update
-    // console.log("Broadcasting SSE orderUpdated for:", orderRec._id);
-    // broadcastSSE(req.app, "orderUpdated", orderRec);
+    if (io){
+      io.emit("orderUpdated", orderRec);
+    }
+
+    if (isChanged){
+      const normalize = (str) =>
+        str.replace(/^0+/, '').slice(0, -1); // strip leading zeros + drop last digit
+
+      const site = orderRec.site;
+      const normalizedGtin = normalize(item.gtin);
+      if (normalizedGtin) {
+        const result = await CycleCount.updateOne(
+          { site, upc: normalizedGtin },       // find one match
+          { $set: { flagged: true } }          // update just this one
+        );
+        console.log("CycleCount updateOne result:", result);
+      }
+    }
+
     res.json(orderRec);
   } catch (err) {
     res.status(500).json({ message: err.message });
@@ -213,6 +229,11 @@ router.post('/', async (req, res) => {
       currentStatus: "Created", statusHistory: [{ status: "Created", timestamp: new Date() }], 
       comments: [] });
     await orderRec.save();
+    const io = req.app.get("io");
+    if (io){
+      // console.log("Emitting orderCreated for", orderRec._id);
+      io.emit("orderCreated", orderRec);
+    }
     
     // Notify all SSE clients about the update
     // broadcastSSE(req.app, "orderUpdated", orderRec);
@@ -276,6 +297,11 @@ router.delete('/:id', async (req, res) => {
     if (!deleted) {
       return res.status(404).json({ error: 'Order rec not found.' });
     }
+    const io = req.app.get("io");
+    if (io){
+      // console.log("Emitting orderDeleted for", deleted._id);
+      io.emit("orderDeleted", deleted);
+    }
     res.json({ success: true, message: 'Order rec deleted.' });
   } catch (err) {
     res.status(500).json({ error: 'Failed to delete order rec.' });
@@ -325,9 +351,6 @@ router.put('/:id/status', async (req, res) => {
     }
 
     await orderRec.save();
-    
-    // Notify all SSE clients about the update
-    // broadcastSSE(req.app, "orderUpdated", orderRec);
 
     res.json(orderRec);
   } catch (err) {
@@ -357,46 +380,5 @@ router.post('/:id/comments', async (req, res) => {
     res.status(500).json({ message: err.message });
   }
 });
-
-
-// server-sent events route for sending order rec updated events
-
-// router.get("/stream", (req, res) => {
-//   const token = req.query.token;
-//   if (!token) return res.status(401).json({ message: "No token" });
-
-//   jwt.verify(token, process.env.JWT_SECRET, (err, decoded) => {
-//     if (err) return res.status(403).json({ message: "Invalid token" });
-
-//     // SSE setup
-//     res.set({
-//       "Content-Type": "text/event-stream",
-//       "Cache-Control": "no-cache",
-//       Connection: "keep-alive",
-//     });
-//     res.flushHeaders();
-
-//     const clients = req.app.get("sseClients") || [];
-//     clients.push(res);
-//     req.app.set("sseClients", clients);
-
-//     req.on("close", () => {
-//       const updated = (req.app.get("sseClients") || []).filter(c => c !== res);
-//       req.app.set("sseClients", updated);
-//     });
-//   });
-// });
-
-
-// // --- Helper: SSE broadcast for order rec live updates ---
-// function broadcastSSE(app, event, data) {
-//   const clients = app.get("sseClients") || [];
-//   for (const client of clients) {
-//     client.write(`event: ${event}\n`);
-//     client.write(`data: ${JSON.stringify(data)}\n\n`);
-//   }
-// } 
-
-
 
 module.exports = router;

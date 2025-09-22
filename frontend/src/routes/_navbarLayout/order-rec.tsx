@@ -10,7 +10,7 @@ function RouteComponent() {
 
   const isUploadActive = matchRoute({ to: '/order-rec' })
   const isListActive = matchRoute({ to: '/order-rec/list' })
-  const isDashboardActive = matchRoute({ to: '/order-rec/dashboard' })
+  const isDashboardActive = matchRoute({ to: '/order-rec/workflow' })
 
   const access = JSON.parse(localStorage.getItem('access') || '{}')
 
@@ -37,15 +37,16 @@ function RouteComponent() {
             List
           </Button>
         </Link>
-
-        <Link to="/order-rec/dashboard">
+        {access.component_order_rec_workflow && (
+        <Link to="/order-rec/workflow">
           <Button
             {...(isDashboardActive ? {} : { variant: 'outline' } as object)}
             className={`${access.component_order_rec_upload ? 'rounded-l-none' : ''}`}
           >
-            Dashboard
+            Workflow
           </Button>
         </Link>
+        )}
       </div>
       <Outlet />
     </div>

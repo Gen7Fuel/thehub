@@ -28,7 +28,6 @@ const auth = async (req, res, next) => {
 
 // Socket.IO middleware
 const authSocket = async (socket, next) => {
-  console.log("Socket.IO auth hit");
 
   try {
     const token = socket.handshake.auth?.token || null;
@@ -51,6 +50,6 @@ const authSocket = async (socket, next) => {
   }
 };
 
-io.use(authSocket);
+// io.use(authSocket);
 
 module.exports = { auth, authSocket };
