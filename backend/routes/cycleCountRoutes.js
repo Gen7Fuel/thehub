@@ -22,7 +22,7 @@ router.post('/upload-excel', upload.single('file'), async (req, res) => {
       if (!row[0] || !row[1] || !row[2]) continue; // skip if required fields missing
 
       // Remove "Gen 7" and trim site name
-      let siteName = String(row[0]).replace(/Gen 7/gi, '').trim();
+      let siteName = String(row[0]).replace(/Gen ?7/gi, '').trim();
 
       const item = {
         site: siteName,
