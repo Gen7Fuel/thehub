@@ -10,6 +10,8 @@ function RouteComponent() {
 
   const isUploadActive = matchRoute({ to: '/cycle-count' });
   const isListActive = matchRoute({ to: '/cycle-count/list' });
+  const isInputActive = matchRoute({ to: '/cycle-count/input' });
+  const isCountActive = matchRoute({ to: '/cycle-count/count' });
 
   return (
     <div className="pt-16 flex flex-col items-center">
@@ -28,6 +30,22 @@ function RouteComponent() {
             className="rounded-l-none"
           >
             List
+          </Button>
+        </Link>
+        <Link to="/cycle-count/input" activeOptions={{ exact: true }}>
+          <Button
+            {...(!isInputActive && { variant: 'outline' } as object)}
+            className="rounded-l-none"
+          >
+            Input
+          </Button>
+        </Link>
+        <Link to="/cycle-count/count" activeOptions={{ exact: true }}>
+          <Button
+            {...(!isCountActive && { variant: 'outline' } as object)}
+            className="rounded-l-none"
+          >
+            Count
           </Button>
         </Link>
       </div>
