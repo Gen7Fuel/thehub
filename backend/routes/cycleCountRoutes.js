@@ -1,381 +1,250 @@
 const express = require('express');
 const router = express.Router();
+const multer = require('multer');
+const XLSX = require('xlsx');
 const CycleCount = require('../models/CycleCount');
 
-// Create cycle count entries from processed Excel data
-router.post('/from-processed-data', async (req, res) => {
+const upload = multer({ storage: multer.memoryStorage() });
+
+router.post('/upload-excel', upload.single('file'), async (req, res) => {
   try {
-    console.log('🔄 BACKEND: /from-processed-data endpoint hit');
-    const { processedData } = req.body;
-    
-    console.log('📦 Received data:', {
-      hasProcessedData: !!processedData,
-      isArray: Array.isArray(processedData),
-      length: processedData?.length
-    });
-    
-    if (!processedData || !Array.isArray(processedData)) {
-      console.log('❌ Invalid data format, returning 400');
-      return res.status(400).json({ message: 'Invalid processed data format' });
+    if (!req.file) return res.status(400).json({ message: 'No file uploaded' });
+
+    const workbook = XLSX.read(req.file.buffer, { type: 'buffer' });
+    const sheet = workbook.Sheets["Data"];
+    if (!sheet) return res.status(400).json({ message: 'Sheet named "Data" not found' });
+
+    const rows = XLSX.utils.sheet_to_json(sheet, { header: 1 });
+
+    // Skip the first row (title row)
+    for (let i = 1; i < rows.length; i++) {
+      const row = rows[i];
+      if (!row[0] || !row[1] || !row[2]) continue; // skip if required fields missing
+
+      // Remove "Gen 7" and trim site name
+      let siteName = String(row[0]).replace(/Gen 7/gi, '').trim();
+
+      const item = {
+        site: siteName,
+        upc: row[1],
+        name: row[2],
+        category: row[5] || "",
+        grade: row[23] || "",
+        updatedAt: new Date("2025-09-18T00:00:00.000Z"),
+        flagged: false
+      };
+
+      await CycleCount.create(item);
     }
 
-    // Group by site
-    const siteMap = {};
-    processedData.forEach(item => {
-      if (!siteMap[item.Site]) siteMap[item.Site] = [];
-      siteMap[item.Site].push(item);
+    res.json({ message: 'Items uploaded successfully' });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ message: 'Failed to process file' });
+  }
+});
+
+// GET /api/cycle-count/daily-items?site=SiteName&chunkSize=20
+router.get('/daily-items', async (req, res) => {
+  try {
+    const { site, chunkSize = 20 } = req.query;
+    if (!site) return res.status(400).json({ message: "site is required" });
+
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const tomorrow = new Date(today.getTime() + 24 * 60 * 60 * 1000);
+
+    // 1. Fetch flagged items (top)
+    const flaggedItemsRaw = await CycleCount.find({ site: site.toString().trim(), flagged: true });
+    const flaggedItems = CycleCount.sortItems(flaggedItemsRaw).slice(0, 5);
+    const flaggedCount = flaggedItems.length;
+
+    const chunk = parseInt(chunkSize, 10);
+    const dailyCount = Math.max(chunk - flaggedCount, 0);
+
+    // 2. Fetch all unflagged items for the site
+    const allUnflagged = await CycleCount.find({
+      site: site.toString().trim(),
+      flagged: false
     });
 
-    console.log('🏢 Site grouping complete:', Object.keys(siteMap));
+    // 3. All unflagged items counted today (priority)
+    const todayItems = allUnflagged.filter(i => i.updatedAt >= today && i.updatedAt < tomorrow);
 
-    const createdEntries = [];
+    // 4. Calculate how many more items are needed
+    const todayCount = todayItems.length;
+    const moreNeeded = Math.max(dailyCount - todayCount, 0);
 
-    console.log('⚡ Starting Promise.all for site processing...');
-    await Promise.all(
-      Object.entries(siteMap).map(async ([siteName, items]) => {
-        console.log(`📍 Processing site: ${siteName} with ${items.length} items`);
-        
-        // Order by grade, then category (preserving order)
-        const grades = ['A', 'B', 'C'];
-        let ordered = [];
-        grades.forEach(grade => {
-          const gradeItems = items.filter(i => i.Grade === grade);
-          const categoryMap = {};
-          gradeItems.forEach(item => {
-            if (!categoryMap[item.Category]) categoryMap[item.Category] = [];
-            categoryMap[item.Category].push(item);
-          });
-          Object.values(categoryMap).forEach(categoryItems => {
-            ordered.push(...categoryItems);
-          });
-        });
+    // 5. For the remainder, use the A/B/C algorithm, EXCLUDING today's items
+    const grades = ["A", "B", "C"];
+    const groupSize = 6;
+    const groups = Math.floor(moreNeeded / groupSize);
+    const remainder = moreNeeded % groupSize;
 
-        console.log(`📋 Ordered items for ${siteName}: ${ordered.length}`);
+    const numA = 3 * groups + remainder;
+    const numB = 2 * groups;
+    const numC = 1 * groups;
 
-        // Split into weeks and days (30 items per day, 5 days per week)
-        const DAYS = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday'];
-        const ITEMS_PER_DAY = 30;
-        const DAYS_PER_WEEK = DAYS.length;
-        const ITEMS_PER_WEEK = ITEMS_PER_DAY * DAYS_PER_WEEK;
+    // Exclude today's items from the pool
+    const notTodayByGrade = {};
+    grades.forEach(grade => {
+      notTodayByGrade[grade] = allUnflagged
+        .filter(i => i.grade === grade && !(i.updatedAt >= today && i.updatedAt < tomorrow));
+    });
 
-        const totalWeeks = Math.ceil(ordered.length / ITEMS_PER_WEEK);
-        console.log(`📅 ${siteName} will need ${totalWeeks} weeks`);
+    let selectedA = CycleCount.sortItems(notTodayByGrade["A"]).slice(0, numA);
+    let selectedB = CycleCount.sortItems(notTodayByGrade["B"]).slice(0, numB);
+    let selectedC = CycleCount.sortItems(notTodayByGrade["C"]).slice(0, numC);
 
-        // For each week, create entries for each day
-        for (let week = 0; week < totalWeeks; week++) {
-          for (let day = 0; day < DAYS_PER_WEEK; day++) {
-            const startIdx = week * ITEMS_PER_WEEK + day * ITEMS_PER_DAY;
-            const endIdx = startIdx + ITEMS_PER_DAY;
-            const dayItems = ordered.slice(startIdx, endIdx);
+    // 6. Combine today's items (all grades) and the A/B/C breakdown for the rest
+    const result = [
+      ...CycleCount.sortItems(todayItems), // all today's unflagged items first
+      ...selectedA,
+      ...selectedB,
+      ...selectedC
+    ].slice(0, dailyCount); // ensure we don't exceed dailyCount
 
-            if (dayItems.length === 0) continue; // Skip empty days
+    res.json({
+      flaggedItems,
+      items: result
+    });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ message: "Failed to get daily items" });
+  }
+});
 
-            console.log(`📆 Creating entry: ${siteName} - Week ${week + 1}, ${DAYS[day]} (${dayItems.length} items)`);
+// router.get('/daily-items', async (req, res) => {
+//   try {
+//     const { site, chunkSize = 20 } = req.query;
+//     if (!site) return res.status(400).json({ message: "site is required" });
 
-            // Group items by category for this day and transform in one step
-            const categoriesMap = {};
-            dayItems.forEach(item => {
-              if (!categoriesMap[item.Category]) {
-                categoriesMap[item.Category] = [];
-              }
-              categoriesMap[item.Category].push({
-                itemName: item.ItemName,
-                itemCode: item.ItemCode || '',
-                sales: item.Sales || 0, // Keep for grading, hidden from UI
-                grade: item.Grade,
-                counted: false // Initially, no items are counted
-              });
-            });
+//     const today = new Date();
+//     today.setHours(0, 0, 0, 0);
+//     const tomorrow = new Date(today.getTime() + 24 * 60 * 60 * 1000);
 
-            // Convert to categories array (final format for database)
-            const categories = Object.entries(categoriesMap).map(([name, items]) => ({
-              name,
-              items
-            }));
+//     // Get all unflagged items for the site
+//     const allItems = await CycleCount.find({
+//       site: site.toString().trim(),
+//       flagged: false
+//     });
 
-            // Calculate assigned date (start date + week*7 + day)
-            const baseDate = new Date();
-            const assignedDate = new Date(baseDate);
-            assignedDate.setDate(baseDate.getDate() + (week * 7) + day);
+//     // Split by grade
+//     const grades = ["A", "B", "C"];
+//     const itemsByGrade = {};
+//     grades.forEach(grade => {
+//       itemsByGrade[grade] = allItems.filter(i => i.grade === grade);
+//     });
 
-            // Create cycle count entry
-            const cycleCountEntry = new CycleCount({
-              site: siteName,
-              categories,
-              assignedDate,
-              week: week + 1,
-              dayOfWeek: DAYS[day],
-              dayNumber: (week * DAYS_PER_WEEK) + day + 1,
-              itemCount: dayItems.length,
-              completed: false
-            });
+//     // Get today's items by grade
+//     const todayItemsByGrade = {};
+//     grades.forEach(grade => {
+//       todayItemsByGrade[grade] = itemsByGrade[grade].filter(i => i.updatedAt >= today && i.updatedAt < tomorrow);
+//     });
 
-            console.log(`💾 About to save entry:`, {
-              site: cycleCountEntry.site,
-              week: cycleCountEntry.week,
-              day: cycleCountEntry.dayOfWeek,
-              itemCount: cycleCountEntry.itemCount,
-              categoriesCount: categories.length
-            });
+//     // Calculate how many of each grade are needed
+//     const groupSize = 6;
+//     const chunk = parseInt(chunkSize, 10);
+//     const groups = Math.floor(chunk / groupSize);
+//     const remainder = chunk % groupSize;
 
-            try {
-              const savedEntry = await cycleCountEntry.save();
-              console.log(`✅ Successfully saved entry with ID: ${savedEntry._id}`);
-              createdEntries.push(savedEntry);
-            } catch (saveError) {
-              console.error(`❌ Failed to save entry for ${siteName} - Week ${week + 1}, ${DAYS[day]}:`, saveError);
-              throw saveError; // Re-throw to be caught by outer try-catch
-            }
+//     const numA = 3 * groups + remainder;
+//     const numB = 2 * groups;
+//     const numC = 1 * groups;
+
+//     // Start with today's items
+//     let selectedA = CycleCount.sortItems(todayItemsByGrade["A"]).slice(0, numA);
+//     let selectedB = CycleCount.sortItems(todayItemsByGrade["B"]).slice(0, numB);
+//     let selectedC = CycleCount.sortItems(todayItemsByGrade["C"]).slice(0, numC);
+
+//     // Fill up with oldest items if not enough for today
+//     if (selectedA.length < numA) {
+//       const needed = numA - selectedA.length;
+//       const notTodayA = CycleCount.sortItems(itemsByGrade["A"].filter(i => !(i.updatedAt >= today && i.updatedAt < tomorrow) && !selectedA.some(a => a._id.equals(i._id))));
+//       selectedA = [...selectedA, ...notTodayA.slice(0, needed)];
+//     }
+//     if (selectedB.length < numB) {
+//       const needed = numB - selectedB.length;
+//       const notTodayB = CycleCount.sortItems(itemsByGrade["B"].filter(i => !(i.updatedAt >= today && i.updatedAt < tomorrow) && !selectedB.some(b => b._id.equals(i._id))));
+//       selectedB = [...selectedB, ...notTodayB.slice(0, needed)];
+//     }
+//     if (selectedC.length < numC) {
+//       const needed = numC - selectedC.length;
+//       const notTodayC = CycleCount.sortItems(itemsByGrade["C"].filter(i => !(i.updatedAt >= today && i.updatedAt < tomorrow) && !selectedC.some(c => c._id.equals(i._id))));
+//       selectedC = [...selectedC, ...notTodayC.slice(0, needed)];
+//     }
+
+//     // Fetch flagged items for the site
+//     const flaggedItemsRaw = await CycleCount.find({ site: site.toString().trim(), flagged: true });
+//     const flaggedItems = CycleCount.sortItems(flaggedItemsRaw).slice(0, 5);
+
+//     const flaggedCount = flaggedItems.length;
+//     const dailyCount = Math.max(chunk - flaggedCount, 0);
+
+//     const result = [...selectedA, ...selectedB, ...selectedC];
+ 
+
+//     res.json({
+//       flaggedItems,
+//       items: result
+//     });
+//   } catch (err) {
+//     console.error(err);
+//     res.status(500).json({ message: "Failed to get daily items" });
+//   }
+// });
+
+router.post('/save-counts', async (req, res) => {
+  try {
+    const { items } = req.body;
+    if (!Array.isArray(items) || items.length === 0) {
+      return res.status(400).json({ message: "No items to update." });
+    }
+
+    for (const entry of items) {
+      if (!entry._id) continue;
+
+      const foh = entry.foh === "" || entry.foh == null ? 0 : Number(entry.foh);
+      const boh = entry.boh === "" || entry.boh == null ? 0 : Number(entry.boh);
+
+      await CycleCount.findByIdAndUpdate(
+        entry._id,
+        {
+          $set: {
+            foh,
+            boh,
+            flagged: false,
+            updatedAt: new Date()
           }
         }
-      })
-    );
-
-    console.log(`🎉 All sites processed! Created ${createdEntries.length} entries total`);
-
-    res.status(201).json({ 
-      message: 'Cycle count entries created successfully',
-      count: createdEntries.length,
-      entries: createdEntries 
-    });
-  } catch (error) {
-    console.error('❌ CRITICAL ERROR in /from-processed-data:', error);
-    console.error('Error name:', error.name);
-    console.error('Error message:', error.message);
-    if (error.stack) console.error('Error stack:', error.stack);
-    res.status(500).json({ message: 'Failed to create cycle count entries', error: error.message });
-  }
-});
-
-// Get all unique sites
-router.get('/sites', async (req, res) => {
-  try {
-    const sites = await CycleCount.distinct('site');
-    res.json({ sites: sites.sort() });
-  } catch (error) {
-    console.error('Error fetching sites:', error);
-    res.status(500).json({ message: 'Failed to fetch sites' });
-  }
-});
-
-// Create cycle count entries
-router.post('/', async (req, res) => {
-  try {
-    const { cycleCountData, submittedBy } = req.body;
-
-    if (!cycleCountData || !Array.isArray(cycleCountData)) {
-      return res.status(400).json({ message: 'Invalid cycle count data' });
+      );
     }
 
-    const savedCycleCounts = [];
-
-    for (const data of cycleCountData) {
-      const cycleCount = new CycleCount({
-        site: data.site,
-        assignedDate: new Date(data.assignedDate),
-        week: data.week,
-        dayOfWeek: data.dayOfWeek,
-        dayNumber: data.dayNumber,
-        itemCount: data.itemCount,
-        categories: data.categories,
-        completed: data.completed || false,
-        submittedBy: submittedBy
-      });
-
-      const saved = await cycleCount.save();
-      savedCycleCounts.push(saved);
-    }
-
-    res.status(201).json({
-      message: 'Cycle count entries created successfully',
-      cycleCounts: savedCycleCounts,
-      count: savedCycleCounts.length
-    });
-  } catch (error) {
-    console.error('Error creating cycle count entries:', error);
-    res.status(500).json({ message: 'Internal server error' });
+    res.json({ message: "Counts saved successfully." });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ message: "Failed to save counts." });
   }
 });
 
-// Get cycle count entries with filtering
-router.get('/', async (req, res) => {
-  try {
-    const { site, completed, week, dayOfWeek, page = 1, limit = 20 } = req.query;
-    const filter = {};
-    
-    if (site) filter.site = site;
-    if (completed !== undefined) filter.completed = completed === 'true';
-    if (week) filter.week = parseInt(week);
-    if (dayOfWeek) filter.dayOfWeek = dayOfWeek;
-
-    console.log('🔍 GET /api/cycle-counts - Filter:', filter);
-    console.log('📄 Pagination:', { page, limit });
-
-    // Calculate pagination
-    const pageNum = parseInt(page);
-    const limitNum = parseInt(limit);
-    const skip = (pageNum - 1) * limitNum;
-
-    // Get total count for pagination
-    const total = await CycleCount.countDocuments(filter);
-    const totalPages = Math.ceil(total / limitNum);
-
-    // Get paginated results
-    const cycleCounts = await CycleCount.find(filter)
-      .sort({ site: 1, week: 1, dayNumber: 1 })
-      .skip(skip)
-      .limit(limitNum)
-      .lean();
-
-    console.log(`📦 Found ${cycleCounts.length} entries (total: ${total})`);
-
-    // Return in expected format
-    res.json({
-      entries: cycleCounts,
-      pagination: {
-        page: pageNum,
-        limit: limitNum,
-        total,
-        totalPages
-      }
-    });
-  } catch (error) {
-    console.error('❌ Error fetching cycle count entries:', error);
-    res.status(500).json({ message: 'Internal server error' });
-  }
-});
-
-// Get specific cycle count entry
-router.get('/:id', async (req, res) => {
-  try {
-    const cycleCount = await CycleCount.findById(req.params.id);
-    if (!cycleCount) {
-      return res.status(404).json({ message: 'Cycle count entry not found' });
-    }
-    res.json(cycleCount);
-  } catch (error) {
-    console.error('Error fetching cycle count entry:', error);
-    res.status(500).json({ message: 'Internal server error' });
-  }
-});
-
-// Update cycle count entry (for submitting counts)
-router.put('/:id', async (req, res) => {
-  try {
-    const { categories, completed, submittedBy } = req.body;
-    
-    const updateData = {};
-    if (categories) updateData.categories = categories;
-    if (completed !== undefined) {
-      updateData.completed = completed;
-      if (completed && !req.body.submissionDate) {
-        updateData.submissionDate = new Date();
-      }
-    }
-    if (submittedBy) updateData.submittedBy = submittedBy;
-
-    const updatedCycleCount = await CycleCount.findByIdAndUpdate(
-      req.params.id,
-      { $set: updateData },
-      { new: true }
-    );
-
-    if (!updatedCycleCount) {
-      return res.status(404).json({ message: 'Cycle count entry not found' });
-    }
-
-    res.json(updatedCycleCount);
-  } catch (error) {
-    console.error('Error updating cycle count entry:', error);
-    res.status(500).json({ message: 'Internal server error' });
-  }
-});
-
-// Update counted status for specific items
-router.put('/:id/items', async (req, res) => {
-  try {
-    const { itemUpdates } = req.body; // Array of { categoryName, itemName, counted }
-    
-    const cycleCount = await CycleCount.findById(req.params.id);
-    if (!cycleCount) {
-      return res.status(404).json({ message: 'Cycle count entry not found' });
-    }
-
-    // Update counted status for specific items
-    itemUpdates.forEach(update => {
-      const category = cycleCount.categories.find(cat => cat.name === update.categoryName);
-      if (category) {
-        const item = category.items.find(item => item.itemName === update.itemName);
-        if (item) {
-          if (update.counted !== undefined) item.counted = update.counted;
-        }
-      }
-    });
-
-    const updatedCycleCount = await cycleCount.save();
-    res.json(updatedCycleCount);
-  } catch (error) {
-    console.error('Error updating item counted status:', error);
-    res.status(500).json({ message: 'Internal server error' });
-  }
-});
-
-// Delete cycle count entry
-router.delete('/:id', async (req, res) => {
-  try {
-    const deletedCycleCount = await CycleCount.findByIdAndDelete(req.params.id);
-    if (!deletedCycleCount) {
-      return res.status(404).json({ message: 'Cycle count entry not found' });
-    }
-    res.json({ message: 'Cycle count entry deleted successfully' });
-  } catch (error) {
-    console.error('Error deleting cycle count entry:', error);
-    res.status(500).json({ message: 'Internal server error' });
-  }
-});
-
-// Get cycle count statistics
-router.get('/stats/summary', async (req, res) => {
+router.get('/counted-today', async (req, res) => {
   try {
     const { site } = req.query;
-    const filter = {};
-    if (site) filter.site = site;
+    if (!site) return res.status(400).json({ message: "site is required" });
 
-    const stats = await CycleCount.aggregate([
-      { $match: filter },
-      {
-        $group: {
-          _id: '$site',
-          totalEntries: { $sum: 1 },
-          completedEntries: {
-            $sum: { $cond: ['$completed', 1, 0] }
-          },
-          totalItems: { $sum: '$itemCount' },
-          weeks: { $addToSet: '$week' }
-        }
-      },
-      {
-        $project: {
-          site: '$_id',
-          totalEntries: 1,
-          completedEntries: 1,
-          pendingEntries: { $subtract: ['$totalEntries', '$completedEntries'] },
-          totalItems: 1,
-          totalWeeks: { $size: '$weeks' },
-          completionRate: {
-            $multiply: [
-              { $divide: ['$completedEntries', '$totalEntries'] },
-              100
-            ]
-          }
-        }
-      }
-    ]);
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const tomorrow = new Date(today.getTime() + 24 * 60 * 60 * 1000);
 
-    res.json(stats);
-  } catch (error) {
-    console.error('Error fetching cycle count statistics:', error);
-    res.status(500).json({ message: 'Internal server error' });
+    const count = await CycleCount.countDocuments({
+      site: site.toString().trim(),
+      updatedAt: { $gte: today, $lt: tomorrow }
+    });
+
+    res.json({ site, countedToday: count });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ message: "Failed to get today's count." });
   }
 });
 
