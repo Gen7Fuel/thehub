@@ -8,15 +8,15 @@ export const Route = createFileRoute('/_navbarLayout/cycle-count')({
 function RouteComponent() {
   const matchRoute = useMatchRoute();
 
-  const isUploadActive = matchRoute({ to: '/cycle-count' });
-  const isListActive = matchRoute({ to: '/cycle-count/list' });
-  const isInputActive = matchRoute({ to: '/cycle-count/input' });
+  // const isUploadActive = matchRoute({ to: '/cycle-count' });
+  // const isListActive = matchRoute({ to: '/cycle-count/list' });
+  const isInputActive = matchRoute({ to: '/cycle-count' });
   const isCountActive = matchRoute({ to: '/cycle-count/count' });
 
   return (
     <div className="pt-16 flex flex-col items-center">
       <div className="flex mb-4">
-        <Link to="/cycle-count" activeOptions={{ exact: true }}>
+        {/* <Link to="/cycle-count" activeOptions={{ exact: true }}>
           <Button
             {...(isUploadActive ? {} : { variant: 'outline' } as object)}
             className="rounded-r-none"
@@ -31,11 +31,11 @@ function RouteComponent() {
           >
             List
           </Button>
-        </Link>
-        <Link to="/cycle-count/input" activeOptions={{ exact: true }}>
+        </Link> */}
+        <Link to="/cycle-count" activeOptions={{ exact: true }}>
           <Button
             {...(!isInputActive && { variant: 'outline' } as object)}
-            className="rounded-l-none"
+            className="rounded-r-none"
           >
             Input
           </Button>

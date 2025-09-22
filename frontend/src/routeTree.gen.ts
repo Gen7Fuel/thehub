@@ -55,8 +55,6 @@ import { Route as NavbarLayoutKardpollListRouteImport } from './routes/_navbarLa
 import { Route as NavbarLayoutFleetListRouteImport } from './routes/_navbarLayout/fleet/list'
 import { Route as NavbarLayoutDailyReportsShiftWorksheetRouteImport } from './routes/_navbarLayout/daily-reports/shift-worksheet'
 import { Route as NavbarLayoutDailyReportsCashSummaryRouteImport } from './routes/_navbarLayout/daily-reports/cash-summary'
-import { Route as NavbarLayoutCycleCountListRouteImport } from './routes/_navbarLayout/cycle-count/list'
-import { Route as NavbarLayoutCycleCountInputRouteImport } from './routes/_navbarLayout/cycle-count/input'
 import { Route as NavbarLayoutCycleCountCountRouteImport } from './routes/_navbarLayout/cycle-count/count'
 import { Route as NavbarLayoutAuditTemplatesRouteImport } from './routes/_navbarLayout/audit/templates'
 import { Route as NavbarLayoutAuditChecklistRouteImport } from './routes/_navbarLayout/audit/checklist'
@@ -72,7 +70,6 @@ import { Route as NavbarLayoutSettingsPaypointsSiteRouteImport } from './routes/
 import { Route as NavbarLayoutReportsSalesSummaryUploadRouteImport } from './routes/_navbarLayout/reports/sales-summary/upload'
 import { Route as NavbarLayoutDailyReportsShiftWorksheetCreateRouteImport } from './routes/_navbarLayout/daily-reports/shift-worksheet/create'
 import { Route as NavbarLayoutDailyReportsShiftWorksheetWorksheetRouteImport } from './routes/_navbarLayout/daily-reports/shift-worksheet/$worksheet'
-import { Route as NavbarLayoutCycleCountEntryIdRouteImport } from './routes/_navbarLayout/cycle-count/entry/$id'
 import { Route as NavbarLayoutAuditTemplatesSelectRouteImport } from './routes/_navbarLayout/audit/templates/select'
 import { Route as NavbarLayoutAuditTemplatesChecklistRouteImport } from './routes/_navbarLayout/audit/templates/checklist'
 import { Route as NavbarLayoutAuditChecklistIdRouteImport } from './routes/_navbarLayout/audit/checklist/$id'
@@ -331,18 +328,6 @@ const NavbarLayoutDailyReportsCashSummaryRoute =
     path: '/cash-summary',
     getParentRoute: () => NavbarLayoutDailyReportsRoute,
   } as any)
-const NavbarLayoutCycleCountListRoute =
-  NavbarLayoutCycleCountListRouteImport.update({
-    id: '/list',
-    path: '/list',
-    getParentRoute: () => NavbarLayoutCycleCountRoute,
-  } as any)
-const NavbarLayoutCycleCountInputRoute =
-  NavbarLayoutCycleCountInputRouteImport.update({
-    id: '/input',
-    path: '/input',
-    getParentRoute: () => NavbarLayoutCycleCountRoute,
-  } as any)
 const NavbarLayoutCycleCountCountRoute =
   NavbarLayoutCycleCountCountRouteImport.update({
     id: '/count',
@@ -433,12 +418,6 @@ const NavbarLayoutDailyReportsShiftWorksheetWorksheetRoute =
     path: '/$worksheet',
     getParentRoute: () => NavbarLayoutDailyReportsShiftWorksheetRoute,
   } as any)
-const NavbarLayoutCycleCountEntryIdRoute =
-  NavbarLayoutCycleCountEntryIdRouteImport.update({
-    id: '/entry/$id',
-    path: '/entry/$id',
-    getParentRoute: () => NavbarLayoutCycleCountRoute,
-  } as any)
 const NavbarLayoutAuditTemplatesSelectRoute =
   NavbarLayoutAuditTemplatesSelectRouteImport.update({
     id: '/select',
@@ -513,8 +492,6 @@ export interface FileRoutesByFullPath {
   '/audit/checklist': typeof NavbarLayoutAuditChecklistRouteWithChildren
   '/audit/templates': typeof NavbarLayoutAuditTemplatesRouteWithChildren
   '/cycle-count/count': typeof NavbarLayoutCycleCountCountRoute
-  '/cycle-count/input': typeof NavbarLayoutCycleCountInputRoute
-  '/cycle-count/list': typeof NavbarLayoutCycleCountListRoute
   '/daily-reports/cash-summary': typeof NavbarLayoutDailyReportsCashSummaryRoute
   '/daily-reports/shift-worksheet': typeof NavbarLayoutDailyReportsShiftWorksheetRouteWithChildren
   '/fleet/list': typeof NavbarLayoutFleetListRoute
@@ -548,7 +525,6 @@ export interface FileRoutesByFullPath {
   '/audit/checklist/$id': typeof NavbarLayoutAuditChecklistIdRoute
   '/audit/templates/checklist': typeof NavbarLayoutAuditTemplatesChecklistRouteWithChildren
   '/audit/templates/select': typeof NavbarLayoutAuditTemplatesSelectRouteWithChildren
-  '/cycle-count/entry/$id': typeof NavbarLayoutCycleCountEntryIdRoute
   '/daily-reports/shift-worksheet/$worksheet': typeof NavbarLayoutDailyReportsShiftWorksheetWorksheetRoute
   '/daily-reports/shift-worksheet/create': typeof NavbarLayoutDailyReportsShiftWorksheetCreateRoute
   '/reports/sales-summary/upload': typeof NavbarLayoutReportsSalesSummaryUploadRoute
@@ -576,8 +552,6 @@ export interface FileRoutesByTo {
   '/': typeof NavbarLayoutIndexRoute
   '/audit/templates': typeof NavbarLayoutAuditTemplatesRouteWithChildren
   '/cycle-count/count': typeof NavbarLayoutCycleCountCountRoute
-  '/cycle-count/input': typeof NavbarLayoutCycleCountInputRoute
-  '/cycle-count/list': typeof NavbarLayoutCycleCountListRoute
   '/daily-reports/cash-summary': typeof NavbarLayoutDailyReportsCashSummaryRoute
   '/fleet/list': typeof NavbarLayoutFleetListRoute
   '/kardpoll/list': typeof NavbarLayoutKardpollListRoute
@@ -605,7 +579,6 @@ export interface FileRoutesByTo {
   '/status': typeof NavbarLayoutStatusIndexRoute
   '/vendor': typeof NavbarLayoutVendorIndexRoute
   '/audit/checklist/$id': typeof NavbarLayoutAuditChecklistIdRoute
-  '/cycle-count/entry/$id': typeof NavbarLayoutCycleCountEntryIdRoute
   '/daily-reports/shift-worksheet/$worksheet': typeof NavbarLayoutDailyReportsShiftWorksheetWorksheetRoute
   '/daily-reports/shift-worksheet/create': typeof NavbarLayoutDailyReportsShiftWorksheetCreateRoute
   '/reports/sales-summary/upload': typeof NavbarLayoutReportsSalesSummaryUploadRoute
@@ -646,8 +619,6 @@ export interface FileRoutesById {
   '/_navbarLayout/audit/checklist': typeof NavbarLayoutAuditChecklistRouteWithChildren
   '/_navbarLayout/audit/templates': typeof NavbarLayoutAuditTemplatesRouteWithChildren
   '/_navbarLayout/cycle-count/count': typeof NavbarLayoutCycleCountCountRoute
-  '/_navbarLayout/cycle-count/input': typeof NavbarLayoutCycleCountInputRoute
-  '/_navbarLayout/cycle-count/list': typeof NavbarLayoutCycleCountListRoute
   '/_navbarLayout/daily-reports/cash-summary': typeof NavbarLayoutDailyReportsCashSummaryRoute
   '/_navbarLayout/daily-reports/shift-worksheet': typeof NavbarLayoutDailyReportsShiftWorksheetRouteWithChildren
   '/_navbarLayout/fleet/list': typeof NavbarLayoutFleetListRoute
@@ -681,7 +652,6 @@ export interface FileRoutesById {
   '/_navbarLayout/audit/checklist/$id': typeof NavbarLayoutAuditChecklistIdRoute
   '/_navbarLayout/audit/templates/checklist': typeof NavbarLayoutAuditTemplatesChecklistRouteWithChildren
   '/_navbarLayout/audit/templates/select': typeof NavbarLayoutAuditTemplatesSelectRouteWithChildren
-  '/_navbarLayout/cycle-count/entry/$id': typeof NavbarLayoutCycleCountEntryIdRoute
   '/_navbarLayout/daily-reports/shift-worksheet/$worksheet': typeof NavbarLayoutDailyReportsShiftWorksheetWorksheetRoute
   '/_navbarLayout/daily-reports/shift-worksheet/create': typeof NavbarLayoutDailyReportsShiftWorksheetCreateRoute
   '/_navbarLayout/reports/sales-summary/upload': typeof NavbarLayoutReportsSalesSummaryUploadRoute
@@ -722,8 +692,6 @@ export interface FileRouteTypes {
     | '/audit/checklist'
     | '/audit/templates'
     | '/cycle-count/count'
-    | '/cycle-count/input'
-    | '/cycle-count/list'
     | '/daily-reports/cash-summary'
     | '/daily-reports/shift-worksheet'
     | '/fleet/list'
@@ -757,7 +725,6 @@ export interface FileRouteTypes {
     | '/audit/checklist/$id'
     | '/audit/templates/checklist'
     | '/audit/templates/select'
-    | '/cycle-count/entry/$id'
     | '/daily-reports/shift-worksheet/$worksheet'
     | '/daily-reports/shift-worksheet/create'
     | '/reports/sales-summary/upload'
@@ -785,8 +752,6 @@ export interface FileRouteTypes {
     | '/'
     | '/audit/templates'
     | '/cycle-count/count'
-    | '/cycle-count/input'
-    | '/cycle-count/list'
     | '/daily-reports/cash-summary'
     | '/fleet/list'
     | '/kardpoll/list'
@@ -814,7 +779,6 @@ export interface FileRouteTypes {
     | '/status'
     | '/vendor'
     | '/audit/checklist/$id'
-    | '/cycle-count/entry/$id'
     | '/daily-reports/shift-worksheet/$worksheet'
     | '/daily-reports/shift-worksheet/create'
     | '/reports/sales-summary/upload'
@@ -854,8 +818,6 @@ export interface FileRouteTypes {
     | '/_navbarLayout/audit/checklist'
     | '/_navbarLayout/audit/templates'
     | '/_navbarLayout/cycle-count/count'
-    | '/_navbarLayout/cycle-count/input'
-    | '/_navbarLayout/cycle-count/list'
     | '/_navbarLayout/daily-reports/cash-summary'
     | '/_navbarLayout/daily-reports/shift-worksheet'
     | '/_navbarLayout/fleet/list'
@@ -889,7 +851,6 @@ export interface FileRouteTypes {
     | '/_navbarLayout/audit/checklist/$id'
     | '/_navbarLayout/audit/templates/checklist'
     | '/_navbarLayout/audit/templates/select'
-    | '/_navbarLayout/cycle-count/entry/$id'
     | '/_navbarLayout/daily-reports/shift-worksheet/$worksheet'
     | '/_navbarLayout/daily-reports/shift-worksheet/create'
     | '/_navbarLayout/reports/sales-summary/upload'
@@ -1240,20 +1201,6 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof NavbarLayoutDailyReportsCashSummaryRouteImport
       parentRoute: typeof NavbarLayoutDailyReportsRoute
     }
-    '/_navbarLayout/cycle-count/list': {
-      id: '/_navbarLayout/cycle-count/list'
-      path: '/list'
-      fullPath: '/cycle-count/list'
-      preLoaderRoute: typeof NavbarLayoutCycleCountListRouteImport
-      parentRoute: typeof NavbarLayoutCycleCountRoute
-    }
-    '/_navbarLayout/cycle-count/input': {
-      id: '/_navbarLayout/cycle-count/input'
-      path: '/input'
-      fullPath: '/cycle-count/input'
-      preLoaderRoute: typeof NavbarLayoutCycleCountInputRouteImport
-      parentRoute: typeof NavbarLayoutCycleCountRoute
-    }
     '/_navbarLayout/cycle-count/count': {
       id: '/_navbarLayout/cycle-count/count'
       path: '/count'
@@ -1358,13 +1305,6 @@ declare module '@tanstack/react-router' {
       fullPath: '/daily-reports/shift-worksheet/$worksheet'
       preLoaderRoute: typeof NavbarLayoutDailyReportsShiftWorksheetWorksheetRouteImport
       parentRoute: typeof NavbarLayoutDailyReportsShiftWorksheetRoute
-    }
-    '/_navbarLayout/cycle-count/entry/$id': {
-      id: '/_navbarLayout/cycle-count/entry/$id'
-      path: '/entry/$id'
-      fullPath: '/cycle-count/entry/$id'
-      preLoaderRoute: typeof NavbarLayoutCycleCountEntryIdRouteImport
-      parentRoute: typeof NavbarLayoutCycleCountRoute
     }
     '/_navbarLayout/audit/templates/select': {
       id: '/_navbarLayout/audit/templates/select'
@@ -1525,19 +1465,13 @@ const NavbarLayoutAuditRouteWithChildren =
 
 interface NavbarLayoutCycleCountRouteChildren {
   NavbarLayoutCycleCountCountRoute: typeof NavbarLayoutCycleCountCountRoute
-  NavbarLayoutCycleCountInputRoute: typeof NavbarLayoutCycleCountInputRoute
-  NavbarLayoutCycleCountListRoute: typeof NavbarLayoutCycleCountListRoute
   NavbarLayoutCycleCountIndexRoute: typeof NavbarLayoutCycleCountIndexRoute
-  NavbarLayoutCycleCountEntryIdRoute: typeof NavbarLayoutCycleCountEntryIdRoute
 }
 
 const NavbarLayoutCycleCountRouteChildren: NavbarLayoutCycleCountRouteChildren =
   {
     NavbarLayoutCycleCountCountRoute: NavbarLayoutCycleCountCountRoute,
-    NavbarLayoutCycleCountInputRoute: NavbarLayoutCycleCountInputRoute,
-    NavbarLayoutCycleCountListRoute: NavbarLayoutCycleCountListRoute,
     NavbarLayoutCycleCountIndexRoute: NavbarLayoutCycleCountIndexRoute,
-    NavbarLayoutCycleCountEntryIdRoute: NavbarLayoutCycleCountEntryIdRoute,
   }
 
 const NavbarLayoutCycleCountRouteWithChildren =
