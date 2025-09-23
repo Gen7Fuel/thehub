@@ -94,6 +94,7 @@ router.put('/:id/item/:catIdx/:itemIdx', async (req, res) => {
     orderRec.markModified('categories'); // Ensure Mongoose tracks changes
     
     const status = "Completed";
+
     if(orderRec.completed){
       orderRec.currentStatus = status;
       let statusEntry = orderRec.statusHistory.find(e => e.status === status);
@@ -114,20 +115,71 @@ router.put('/:id/item/:catIdx/:itemIdx', async (req, res) => {
       io.emit("orderUpdated", orderRec);
     }
 
-    if (isChanged){
-      const normalize = (str) =>
+    const normalize = (str) =>
         str.replace(/^0+/, '').slice(0, -1); // strip leading zeros + drop last digit
 
-      const site = orderRec.site;
-      const normalizedGtin = normalize(item.gtin);
-      if (normalizedGtin) {
-        const result = await CycleCount.updateOne(
-          { site, upc: normalizedGtin },       // find one match
-          { $set: { flagged: true } }          // update just this one
-        );
-        console.log("CycleCount updateOne result:", result);
-      }
-    }
+    const site = orderRec.site;
+    const normalizedGtin = normalize(item.gtin);
+
+    if (item.completed){
+      // Updating Cycle Count Flag and creating new entry (if dosen't exists)
+      if (isChanged && item.gtin) {
+
+        if (normalizedGtin) {
+          const existing = await CycleCount.findOne({ site, upc: normalizedGtin });
+
+          if (existing) {
+            // Update existing entry
+            existing.flagged = true;
+            existing.updatedAt = new Date(); // store UTC
+            await existing.save();
+            console.log("Updated existing CycleCount:", existing.upc);
+          } else {
+            // Push new entry
+            const newCycleCount = new CycleCount({
+              site,
+              upc: normalizedGtin,
+              name: item.itemName || "", // product name from categories.items
+              category: category.name,
+              grade: "",
+              foh: 0,
+              boh: 0,
+              flagged: true,
+              updatedAt: new Date(), // store UTC
+            });
+            await newCycleCount.save();
+            console.log("Created new CycleCount:", newCycleCount.upc);
+          }
+        }
+      } else { // if it is not changed then update it to false and if not existing then create a new entry
+          if (normalizedGtin) {
+            const existing = await CycleCount.findOne({ site, upc: normalizedGtin });
+
+            if (existing) {
+              // Update existing entry
+              existing.flagged = false;
+              existing.updatedAt = new Date(); // store UTC
+              await existing.save();
+              console.log("Updated existing CycleCount:", existing.upc);
+            } else {
+              // Push new entry
+              const newCycleCount = new CycleCount({
+                site,
+                upc: normalizedGtin,
+                name: item.itemName || "", // product name from categories.items
+                category: category.name,
+                grade: "",
+                foh: 0,
+                boh: 0,
+                flagged: false,
+                updatedAt: new Date(), // store UTC
+              });
+              await newCycleCount.save();
+              console.log("Created new CycleCount:", newCycleCount.upc);
+            }
+          }
+        }
+    } 
 
     res.json(orderRec);
   } catch (err) {

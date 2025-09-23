@@ -387,6 +387,7 @@ function RouteComponent() {
             <SelectValue placeholder="Select a category" />
           </SelectTrigger>
           <SelectContent>
+            <SelectItem value="All">All Categories</SelectItem>
             {allCategories.filter(Boolean).map((c) => (
               <SelectItem key={c} value={c}>
                 {c}
@@ -438,7 +439,7 @@ function RouteComponent() {
                 })
                 .filter(
                   store =>
-                    // store.stationName !== "Sarnia" &&
+                    store.stationName !== "Sarnia" &&
                     store.stationName !== "Jocko Point"
                 )
                 .map(store => (
@@ -453,7 +454,7 @@ function RouteComponent() {
                       // Find vendor(s) tied to this store + vendor name
                         const vendorObjsRaw = uniquevendors[`${vendorName}::${store.stationName}`];
                         const vendorObjs = vendorObjsRaw?.filter(
-                          v => !selectedCategory || v.category === selectedCategory
+                          v => !selectedCategory || selectedCategory === "All" || v.category === selectedCategory
                         ) || []; 
                         if (vendorObjs.length === 0) {
                         return (
