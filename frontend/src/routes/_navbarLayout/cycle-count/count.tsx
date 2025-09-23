@@ -149,13 +149,15 @@ function RouteComponent() {
     setSaving(false);
   };
 
+  const access = JSON.parse(localStorage.getItem('access') || '{}')
+
   return (
     <div className="max-w-3xl mx-auto mt-12">
       <div className="mb-6">
         <LocationPicker
           setStationName={setStationName}
           value="stationName"
-          disabled
+          {...(!access.component_cycle_count_count_location_filter ? { disabled: true } : {})}
           defaultValue={location}
         />
       </div>
