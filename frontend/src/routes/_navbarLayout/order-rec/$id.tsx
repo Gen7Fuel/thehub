@@ -17,6 +17,14 @@ export const Route = createFileRoute('/_navbarLayout/order-rec/$id')({
   component: RouteComponent,
 })
 
+interface Item {
+  gtin: string;
+  onHandQty: number;
+  onHandQtyOld: number;
+  casesToOrder: number;
+  casesToOrderOld: number;
+}
+
 function RouteComponent() {
   const { id } = Route.useParams()
 
@@ -199,13 +207,17 @@ function RouteComponent() {
       setNotifying(false);
     }
   };
+  
+  const isChanged = (item: Item) => {
+    return item.onHandQty !== item.onHandQtyOld || item.casesToOrder !== item.casesToOrderOld;
+  }
 
   // Toggle item completion
-  const handleToggleItemCompleted = async (catIdx: number, itemIdx: number, completed: boolean) => {
+  const handleToggleItemCompleted = async (catIdx: number, itemIdx: number, completed: boolean, isChanged: boolean) => {
     try {
       console.log(`Toggling completion for item at catIdx ${catIdx}, itemIdx ${itemIdx} to ${completed}`);
       // add authorization header with bearer token
-      const res = await axios.put(`/api/order-rec/${id}/item/${catIdx}/${itemIdx}`, { completed }, {
+      const res = await axios.put(`/api/order-rec/${id}/item/${catIdx}/${itemIdx}`, { completed, isChanged },  {
         headers: {
           Authorization: `Bearer ${localStorage.getItem('token')}`
         }
@@ -363,6 +375,8 @@ function RouteComponent() {
     URL.revokeObjectURL(url);
   }
 
+  const access = JSON.parse(localStorage.getItem('access') || '{}')
+
   return (
     <div className="container mx-auto p-6 max-w-6xl">
       <div className="flex items-center justify-between mb-4">
@@ -372,6 +386,7 @@ function RouteComponent() {
         </span>
         <div className="flex gap-2">
         {/* If the order rec vendor is 'CoreMark' then show another button here called 'Template' */}
+        {access.component_order_rec_id_delete_button && (
         <Button
           variant="destructive"
           onClick={handleDelete}
@@ -379,6 +394,7 @@ function RouteComponent() {
         >
           <Trash2 className="w-5 h-5" />
         </Button>
+        )}
         {orderRec.filename?.includes('Core-Mark') && (
           <Button
             variant="outline"
@@ -403,28 +419,37 @@ function RouteComponent() {
         </div>
       </div>
 
-      {/* <div className="flex gap-8 items-center my-4">
-        <div className="flex items-center gap-2">
-          <Switch
-            checked={!!orderRec?.orderPlaced}
-            disabled={switchLoading}
-            onCheckedChange={(val:boolean) => handleSwitchChange("orderPlaced", val)}
-            id="orderPlaced-switch"
-            className="data-[state=checked]:bg-green-500 relative"
-          />
-          <label htmlFor="orderPlaced-switch" className="text-sm">Order Placed</label>
-        </div>
-        <div className="flex items-center gap-2">
-          <Switch
-            checked={!!orderRec?.delivered}
-            disabled={switchLoading}
-            onCheckedChange={(val:boolean) => handleSwitchChange("delivered", val)}
-            id="delivered-switch"
-            className="data-[state=checked]:bg-green-500 relative"
-          />
-          <label htmlFor="delivered-switch" className="text-sm">Delivered</label>
-        </div>
-      </div> */}
+      <div className="flex items-center gap-6 my-4 text-base">
+      {/* Current Status */}
+      <div className="flex items-center gap-2">
+        <span className="font-medium">Current Status:</span>
+        <span
+          className={`
+            px-3 py-1 rounded-full text-white text-sm
+            ${orderRec?.currentStatus === "Created" ? "bg-yellow-100 text-yellow-800" : ""}
+            ${orderRec?.currentStatus === "Completed" ? "bg-yellow-300 text-yellow-900" : ""}
+            ${orderRec?.currentStatus === "Placed" ? "bg-blue-200 text-blue-800" : ""}
+            ${orderRec?.currentStatus === "Delivered" ? "bg-green-200 text-green-800" : ""}
+            ${orderRec?.currentStatus === "Invoice Received" ? "bg-indigo-200 text-indigo-800" : ""}
+          `}
+        >
+          {orderRec?.currentStatus || "N/A"}
+        </span>
+      </div>
+
+      {/* Last Updated */}
+      <div className="flex items-center gap-2 text-gray-600">
+        <span className="font-medium">Last Updated:</span>
+        <span>
+          {orderRec?.statusHistory?.length
+            ? new Date(
+                orderRec.statusHistory[orderRec.statusHistory.length - 1].timestamp
+              ).toLocaleString()
+            : "N/A"}
+        </span>
+      </div>
+    </div>
+
 
       <div className="mb-8 max-w-2xl mx-auto">
         <form
@@ -522,7 +547,7 @@ function RouteComponent() {
                             const newCompleted = !cat.items.every((item: any) => item.completed);
                             for (let itemIdx = 0; itemIdx < cat.items.length; itemIdx++) {
                               if (cat.items[itemIdx].completed !== newCompleted) {
-                                await handleToggleItemCompleted(catIdx, itemIdx, newCompleted);
+                                await handleToggleItemCompleted(catIdx, itemIdx, newCompleted, isChanged(cat.items[itemIdx]));
                               }
                             }
                           }}
@@ -602,7 +627,7 @@ function RouteComponent() {
                             className="cursor-pointer flex justify-center items-center"
                             onClick={e => {
                               e.stopPropagation();
-                              handleToggleItemCompleted(catIdx, itemIdx, !item.completed);
+                              handleToggleItemCompleted(catIdx, itemIdx, !item.completed, isChanged(item));
                             }}
                           >
                             {item.completed ? (

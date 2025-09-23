@@ -2,6 +2,7 @@ const express = require('express');
 const router = express.Router();
 const OrderRec = require('../models/OrderRec');
 const Vendor = require('../models/Vendor');
+const CycleCount = require('../models/CycleCount');
 
 // Get all
 router.get('/', async (req, res) => {
@@ -61,7 +62,7 @@ router.get('/:id', async (req, res) => {
 // Update item completion
 router.put('/:id/item/:catIdx/:itemIdx', async (req, res) => {
   try {
-    const { completed } = req.body;
+    const { completed, isChanged } = req.body;
     const orderRec = await OrderRec.findById(req.params.id);
     if (!orderRec) return res.status(404).json({ message: 'Not found' });
 
@@ -91,7 +92,95 @@ router.put('/:id/item/:catIdx/:itemIdx', async (req, res) => {
     orderRec.completed = orderRec.categories.every(c => c.completed);
 
     orderRec.markModified('categories'); // Ensure Mongoose tracks changes
+    
+    const status = "Completed";
+
+    if(orderRec.completed){
+      orderRec.currentStatus = status;
+      let statusEntry = orderRec.statusHistory.find(e => e.status === status);
+      if (!statusEntry) {
+        // Add new status with current timestamp
+        orderRec.statusHistory.push({ status, timestamp: new Date() });
+      } else {
+        // Moving forward in hierarchy → update timestamp
+        statusEntry.timestamp = new Date();
+      }
+    } else {
+      orderRec.currentStatus = "Created";
+    }
+    
     await orderRec.save();
+    const io = req.app.get("io");
+    if (io){
+      io.emit("orderUpdated", orderRec);
+    }
+
+    const normalize = (str) =>
+        str.replace(/^0+/, '').slice(0, -1); // strip leading zeros + drop last digit
+
+    const site = orderRec.site;
+    const normalizedGtin = normalize(item.gtin);
+
+    if (item.completed){
+      // Updating Cycle Count Flag and creating new entry (if dosen't exists)
+      if (isChanged && item.gtin) {
+
+        if (normalizedGtin) {
+          const existing = await CycleCount.findOne({ site, upc: normalizedGtin });
+
+          if (existing) {
+            // Update existing entry
+            existing.flagged = true;
+            existing.updatedAt = new Date(); // store UTC
+            await existing.save();
+            console.log("Updated existing CycleCount:", existing.upc);
+          } else {
+            // Push new entry
+            const newCycleCount = new CycleCount({
+              site,
+              upc: normalizedGtin,
+              name: item.itemName || "", // product name from categories.items
+              category: category.name,
+              grade: "",
+              foh: 0,
+              boh: 0,
+              flagged: true,
+              updatedAt: new Date(), // store UTC
+            });
+            await newCycleCount.save();
+            console.log("Created new CycleCount:", newCycleCount.upc);
+          }
+        }
+      } else { // if it is not changed then update it to false and if not existing then create a new entry
+          if (normalizedGtin) {
+            const existing = await CycleCount.findOne({ site, upc: normalizedGtin });
+
+            if (existing) {
+              // Update existing entry
+              existing.flagged = false;
+              existing.updatedAt = new Date(); // store UTC
+              await existing.save();
+              console.log("Updated existing CycleCount:", existing.upc);
+            } else {
+              // Push new entry
+              const newCycleCount = new CycleCount({
+                site,
+                upc: normalizedGtin,
+                name: item.itemName || "", // product name from categories.items
+                category: category.name,
+                grade: "",
+                foh: 0,
+                boh: 0,
+                flagged: false,
+                updatedAt: new Date(), // store UTC
+              });
+              await newCycleCount.save();
+              console.log("Created new CycleCount:", newCycleCount.upc);
+            }
+          }
+        }
+    } 
+
     res.json(orderRec);
   } catch (err) {
     res.status(500).json({ message: err.message });
@@ -192,6 +281,15 @@ router.post('/', async (req, res) => {
       currentStatus: "Created", statusHistory: [{ status: "Created", timestamp: new Date() }], 
       comments: [] });
     await orderRec.save();
+    const io = req.app.get("io");
+    if (io){
+      // console.log("Emitting orderCreated for", orderRec._id);
+      io.emit("orderCreated", orderRec);
+    }
+    
+    // Notify all SSE clients about the update
+    // broadcastSSE(req.app, "orderUpdated", orderRec);
+
     res.status(201).json(orderRec);
   } catch (err) {
     res.status(500).json({ message: err.message });
@@ -251,6 +349,11 @@ router.delete('/:id', async (req, res) => {
     if (!deleted) {
       return res.status(404).json({ error: 'Order rec not found.' });
     }
+    const io = req.app.get("io");
+    if (io){
+      // console.log("Emitting orderDeleted for", deleted._id);
+      io.emit("orderDeleted", deleted);
+    }
     res.json({ success: true, message: 'Order rec deleted.' });
   } catch (err) {
     res.status(500).json({ error: 'Failed to delete order rec.' });
@@ -300,6 +403,7 @@ router.put('/:id/status', async (req, res) => {
     }
 
     await orderRec.save();
+
     res.json(orderRec);
   } catch (err) {
     console.error(err);
@@ -318,6 +422,9 @@ router.post('/:id/comments', async (req, res) => {
 
     orderRec.comments.push({ text, author, timestamp: new Date() });
     await orderRec.save();
+    
+    // Notify all SSE clients about the update
+    // broadcastSSE(req.app, "orderUpdated", orderRec);
 
     res.json(orderRec);
   } catch (err) {
@@ -325,7 +432,5 @@ router.post('/:id/comments', async (req, res) => {
     res.status(500).json({ message: err.message });
   }
 });
-
-
 
 module.exports = router;

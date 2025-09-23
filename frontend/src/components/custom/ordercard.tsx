@@ -60,7 +60,6 @@ export function OrderCard({
           {statusHistory && (
             <div className="text-base text-gray-600 mt-1">
               {(() => {
-                console.log("statushistory:", statusHistory)
                 const entry = Array.isArray(statusHistory) ? statusHistory.find(s => s.status === currentStatus) : null;
                 return entry
                   ? new Date(entry.timestamp).toLocaleString("en-CA", {
