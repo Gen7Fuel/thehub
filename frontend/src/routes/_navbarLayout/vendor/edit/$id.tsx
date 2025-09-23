@@ -3,6 +3,7 @@ import { useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { LocationPicker } from "@/components/custom/locationPicker";
+import CreatableSelect from 'react-select/creatable';
 
 interface SupplyItem {
   name: string;
@@ -42,6 +43,8 @@ function RouteComponent() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [category, setCategory] = useState("");
+  const [uniqueVendors, setUniqueVendors] = useState<string[]>([]);
+  const [uniqueCategories, setUniqueCategories] = useState<string[]>([]);
 
   useEffect(() => {
     const fetchVendor = async () => {
@@ -132,6 +135,80 @@ function RouteComponent() {
     }
   };
 
+  useEffect(() => {
+      const fetchVendors = async () => {
+        try {
+          const token = localStorage.getItem("token");
+          const res = await fetch("/api/vendors", {
+            headers: { Authorization: `Bearer ${token}` },
+          });
+          if (!res.ok) throw new Error(`HTTP error! status: ${res.status}`);
+          const data = (await res.json()) as { name: string; category: string }[];
+  
+          // Extract unique vendor names
+          const vendors = Array.from(new Set(data.map((v: any) => v.name).filter(Boolean)));
+          setUniqueVendors(vendors);
+  
+          // Extract unique categories
+          const categories = Array.from(new Set(data.map((v: any) => v.category).filter(Boolean)));
+          setUniqueCategories(categories);
+  
+          console.log("Unique vendors:", vendors);
+          console.log("Unique categories:", categories);
+        } catch (err) {
+          console.error("Failed to fetch vendors:", err);
+        }
+      };
+  
+      fetchVendors();
+    }, []);
+  
+    // Custom styles to match LocationPicker for creatable select
+  const customSelectStyles = {
+    control: (provided: any, state: any) => ({
+      ...provided,
+      width: '100%',
+      maxWidth: '400px',           // same width as LocationPicker
+      minHeight: '40px',           // match LocationPicker height
+      borderRadius: '0.75rem',     // rounded-xl
+      border: '1px solid #d1d5db', // gray-300
+      padding: '0 6px',            // reduce vertical padding
+      boxShadow: state.isFocused ? '0 0 0 2px #3b82f6' : '0 1px 2px rgba(0,0,0,0.05)',
+      '&:hover': {
+        borderColor: '#3b82f6',
+      },
+      fontSize: '0.875rem',  
+    }),
+    menu: (provided: any) => ({
+      ...provided,
+      borderRadius: '0.75rem',
+      maxHeight: '20rem',         // scrollable like LocationPicker
+      overflowY: 'auto',
+      boxShadow: '0 4px 6px rgba(0,0,0,0.1)',
+      zIndex: 50,    
+      fontSize: '0.875rem',             // ensure dropdown overlays everything
+    }),
+    menuPortal: (base: any) => ({
+      ...base,
+      zIndex: 9999,               // for portal usage
+    }),
+    option: (provided: any, state: any) => ({
+      ...provided,
+      padding: '8px 12px',
+      backgroundColor: state.isFocused ? '#eff6ff' : 'white',
+      color: 'black',
+      cursor: 'pointer',
+    }),
+    placeholder: (provided: any) => ({
+      ...provided,
+      color: '#9ca3af', // gray-400
+    }),
+    singleValue: (provided: any) => ({
+      ...provided,
+      color: 'black',
+    }),
+  }
+
   if (loading) {
     return (
       <div className="max-w-2xl mx-auto p-6">
@@ -151,12 +228,22 @@ function RouteComponent() {
         <CardContent>
           <form onSubmit={handleSubmit} className="space-y-6">
             <div>
-              <label className="block font-medium mb-1">Vendor Name</label>
+              {/* <label className="block font-medium mb-1">Vendor Name</label>
               <input
                 className="border rounded px-3 py-2 w-full"
                 value={name}
                 onChange={e => setName(e.target.value)}
                 required
+              /> */}
+              <label className="block font-medium mb-1">Vendor Name</label>
+              <CreatableSelect
+                isClearable
+                options={uniqueVendors.map(v => ({ value: v, label: v }))}
+                onChange={opt => setName(opt?.value || '')}
+                onCreateOption={val => setName(val)}
+                value={name ? { value: name, label: name } : null}
+                placeholder="Select or add new vendor"
+                styles={customSelectStyles}
               />
             </div>
             <div>
@@ -168,7 +255,7 @@ function RouteComponent() {
               />
             </div>
             <div>
-              <label className="block font-medium mb-1">Category</label>
+              {/* <label className="block font-medium mb-1">Category</label>
               <select
                 className="border rounded px-3 py-2 w-full"
                 value={category}
@@ -182,7 +269,18 @@ function RouteComponent() {
                 <option value="Tobacco">Tobacco</option>
                 <option value="Native Crafts">Native Crafts</option>
                 <option value="Other">Other</option>
-              </select>
+              </select> */}
+
+            <label className="block font-medium mb-1">Category</label>
+            <CreatableSelect
+              isClearable
+              options={uniqueCategories.map(c => ({ value: c, label: c }))}
+              value={category ? { value: category, label: category } : null}
+              onChange={opt => setCategory(opt?.value || '')}
+              onCreateOption={val => setCategory(val)}
+              placeholder="Select or add new category"
+              styles={customSelectStyles}
+            />
             </div>
             <div>
               <label className="block font-medium mb-2">Station Supplies</label>
@@ -272,6 +370,7 @@ function RouteComponent() {
                 value={vendorOrderFrequency}
                 onChange={e => setVendorOrderFrequency(e.target.value)}
                 placeholder="e.g. 1.5"
+                required
               />
             </div>
             <div>

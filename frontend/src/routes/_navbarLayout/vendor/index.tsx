@@ -25,7 +25,7 @@ function RouteComponent() {
   const [orderPlacementMethod, setOrderPlacementMethod] = useState("Email");
   const [vendorOrderFrequency, setVendorOrderFrequency] = useState("");
   const [saving, setSaving] = useState(false);
-  const [category, setCategory] = useState("Other");
+  const [category, setCategory] = useState("");
   const [uniqueVendors, setUniqueVendors] = useState<string[]>([]);
   const [uniqueCategories, setUniqueCategories] = useState<string[]>([]);
 
@@ -115,6 +115,51 @@ function RouteComponent() {
     fetchVendors();
   }, []);
 
+  // Custom styles to match LocationPicker for creatable select
+const customSelectStyles = {
+  control: (provided: any, state: any) => ({
+    ...provided,
+    width: '100%',
+    maxWidth: '400px',           // same width as LocationPicker
+    minHeight: '40px',           // match LocationPicker height
+    borderRadius: '0.75rem',     // rounded-xl
+    border: '1px solid #d1d5db', // gray-300
+    padding: '0 6px',            // reduce vertical padding
+    boxShadow: state.isFocused ? '0 0 0 2px #3b82f6' : '0 1px 2px rgba(0,0,0,0.05)',
+    '&:hover': {
+      borderColor: '#3b82f6',
+    },
+    fontSize: '0.875rem',  
+  }),
+  menu: (provided: any) => ({
+    ...provided,
+    borderRadius: '0.75rem',
+    maxHeight: '20rem',         // scrollable like LocationPicker
+    overflowY: 'auto',
+    boxShadow: '0 4px 6px rgba(0,0,0,0.1)',
+    zIndex: 50,    
+    fontSize: '0.875rem',             // ensure dropdown overlays everything
+  }),
+  menuPortal: (base: any) => ({
+    ...base,
+    zIndex: 9999,               // for portal usage
+  }),
+  option: (provided: any, state: any) => ({
+    ...provided,
+    padding: '8px 12px',
+    backgroundColor: state.isFocused ? '#eff6ff' : 'white',
+    color: 'black',
+    cursor: 'pointer',
+  }),
+  placeholder: (provided: any) => ({
+    ...provided,
+    color: '#9ca3af', // gray-400
+  }),
+  singleValue: (provided: any) => ({
+    ...provided,
+    color: 'black',
+  }),
+}
 
   return (
     <div className="max-w-2xl mx-auto p-6">
@@ -141,6 +186,7 @@ function RouteComponent() {
               onCreateOption={val => setName(val)}
               value={name ? { value: name, label: name } : null}
               placeholder="Select or add new vendor"
+              styles={customSelectStyles}
             />
             <div>
               <label className="block font-medium mb-1">Location</label>
@@ -174,6 +220,7 @@ function RouteComponent() {
               onChange={opt => setCategory(opt?.value || '')}
               onCreateOption={val => setCategory(val)}
               placeholder="Select or add new category"
+              styles={customSelectStyles}
             />
             <div>
               <label className="block font-medium mb-2">Station Supplies</label>
