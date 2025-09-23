@@ -1,8 +1,9 @@
 import { createFileRoute } from '@tanstack/react-router'
-import { useState } from "react";
+import React, { useEffect, useState } from "react"
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { LocationPicker } from "@/components/custom/locationPicker";
+import CreatableSelect from 'react-select/creatable';
 
 interface SupplyItem {
   name: string;
@@ -25,6 +26,8 @@ function RouteComponent() {
   const [vendorOrderFrequency, setVendorOrderFrequency] = useState("");
   const [saving, setSaving] = useState(false);
   const [category, setCategory] = useState("Other");
+  const [uniqueVendors, setUniqueVendors] = useState<string[]>([]);
+  const [uniqueCategories, setUniqueCategories] = useState<string[]>([]);
 
   const handleSupplyChange = (idx: number, field: keyof SupplyItem, value: string) => {
     setStationSupplies(supplies =>
@@ -67,6 +70,7 @@ function RouteComponent() {
         }),
       });
       if (res.ok) {
+        alert("New vendor has been added successfully!");
         setName("");
         setLocation("");
         setStationSupplies([]);
@@ -75,14 +79,42 @@ function RouteComponent() {
         setOrderPlacementMethod("Email");
         setVendorOrderFrequency("");
         setCategory("Other");
-        // Optionally show a success message
       } else {
-        // Optionally handle error
+        alert("Failed to add vendor. Please try again.");
       }
     } finally {
       setSaving(false);
     }
   };
+  
+  useEffect(() => {
+    const fetchVendors = async () => {
+      try {
+        const token = localStorage.getItem("token");
+        const res = await fetch("/api/vendors", {
+          headers: { Authorization: `Bearer ${token}` },
+        });
+        if (!res.ok) throw new Error(`HTTP error! status: ${res.status}`);
+        const data = (await res.json()) as { name: string; category: string }[];
+
+        // Extract unique vendor names
+        const vendors = Array.from(new Set(data.map((v: any) => v.name).filter(Boolean)));
+        setUniqueVendors(vendors);
+
+        // Extract unique categories
+        const categories = Array.from(new Set(data.map((v: any) => v.category).filter(Boolean)));
+        setUniqueCategories(categories);
+
+        console.log("Unique vendors:", vendors);
+        console.log("Unique categories:", categories);
+      } catch (err) {
+        console.error("Failed to fetch vendors:", err);
+      }
+    };
+
+    fetchVendors();
+  }, []);
+
 
   return (
     <div className="max-w-2xl mx-auto p-6">
@@ -92,7 +124,7 @@ function RouteComponent() {
         </CardHeader>
         <CardContent>
           <form onSubmit={handleSubmit} className="space-y-6">
-            <div>
+            {/* <div>
               <label className="block font-medium mb-1">Vendor Name</label>
               <input
                 className="border rounded px-3 py-2 w-full"
@@ -100,7 +132,16 @@ function RouteComponent() {
                 onChange={e => setName(e.target.value)}
                 required
               />
-            </div>
+            </div> */}
+            <label className="block font-medium mb-1">Vendor Name</label>
+            <CreatableSelect
+              isClearable
+              options={uniqueVendors.map(v => ({ value: v, label: v }))}
+              onChange={opt => setName(opt?.value || '')}
+              onCreateOption={val => setName(val)}
+              value={name ? { value: name, label: name } : null}
+              placeholder="Select or add new vendor"
+            />
             <div>
               <label className="block font-medium mb-1">Location</label>
               <LocationPicker
@@ -108,7 +149,7 @@ function RouteComponent() {
                 setStationName={setLocation}
               />
             </div>
-            <div>
+            {/* <div>
               <label className="block font-medium mb-1">Category</label>
               <select
                 className="border rounded px-3 py-2 w-full"
@@ -124,7 +165,16 @@ function RouteComponent() {
                 <option value="Native Crafts">Native Crafts</option>
                 <option value="Other">Other</option>
               </select>
-            </div>
+            </div> */}
+            <label className="block font-medium mb-1">Category</label>
+            <CreatableSelect
+              isClearable
+              options={uniqueCategories.map(c => ({ value: c, label: c }))}
+              value={category ? { value: category, label: category } : null}
+              onChange={opt => setCategory(opt?.value || '')}
+              onCreateOption={val => setCategory(val)}
+              placeholder="Select or add new category"
+            />
             <div>
               <label className="block font-medium mb-2">Station Supplies</label>
               {stationSupplies.map((item, idx) => (
@@ -213,6 +263,7 @@ function RouteComponent() {
                 value={vendorOrderFrequency}
                 onChange={e => setVendorOrderFrequency(e.target.value)}
                 placeholder="e.g. 1.5"
+                required
               />
             </div>
             <Button type="submit" disabled={saving}>
