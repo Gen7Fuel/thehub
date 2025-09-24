@@ -21,8 +21,8 @@ interface Item {
   gtin: string;
   onHandQty: number;
   onHandQtyOld: number;
-  casesToOrder: number;
-  casesToOrderOld: number;
+  // casesToOrder: number;
+  // casesToOrderOld: number;
 }
 
 function RouteComponent() {
@@ -209,7 +209,7 @@ function RouteComponent() {
   };
   
   const isChanged = (item: Item) => {
-    return item.onHandQty !== item.onHandQtyOld || item.casesToOrder !== item.casesToOrderOld;
+    return item.onHandQty !== item.onHandQtyOld;
   }
 
   // Toggle item completion
@@ -245,6 +245,14 @@ function RouteComponent() {
       alert('Failed to export Excel file.');
     }
   };
+
+  const handleRowClick = (catIdx: number, itemIdx: number, completed: boolean) => {
+  if (completed) {
+    alert("Completed items cannot be edited. To edit, uncheck the button first.");
+    return;
+  }
+  setEditItem({ catIdx, itemIdx });
+};
 
   async function exportOrderRecToExcel(orderRec: any) {
     const workbook = new ExcelJS.Workbook();
@@ -568,7 +576,7 @@ function RouteComponent() {
                       <tr
                         key={itemIdx}
                         className="cursor-pointer hover:bg-gray-100 transition-all"
-                        onClick={() => setEditItem({ catIdx, itemIdx })}
+                        onClick={() => handleRowClick(catIdx, itemIdx, item.completed)}
                         style={{ height: '56px' }}
                       >
                         {/* <td className="px-4 py-3">{item.gtin}</td>
