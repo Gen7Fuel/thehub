@@ -101,25 +101,75 @@ async function processCSVFile(file: File): Promise<Blob> {
           
           // Check if it's an item line (starts with GTIN - 12+ digits)
           const columns = Papa.parse(line, { skipEmptyLines: true }).data[0] as string[]
-          if (columns && columns.length > 0) {
-            const firstColumn = columns[0]?.trim().replace(/\D/g, '')
+          // if (columns && columns.length > 0) {
+          //   const firstColumn = columns[0]?.trim().replace(/\D/g, '')
             
-            // Check if first column is a GTIN (12+ digits) - keep as string to preserve leading zeros
-            if (firstColumn && /^\d{12,}$/.test(firstColumn) && currentCategory) {
-              const itemData: ItemData = {
-                gtin: firstColumn,                          // Column A (as string)
-                vin: columns[2]?.toString() || '',          // Column C (as string)
-                itemName: columns[3] || '',                 // Column D
-                size: columns[4] || '',                     // Column E
-                onHandQty: parseInt(columns[5]) || 0,       // Column F
-                forecast: parseInt(columns[6]) || 0,        // Column G
-                minStock: parseInt(columns[7]) || 0,        // Column H
-                itemsToOrder: parseInt(columns[8]) || 0,    // Column I
-                unitInCase: parseInt(columns[9]) || 0,      // Column J
-                casesToOrder: parseInt(columns[12]) || 0    // Column M
-              }
+          //   // Check if first column is a GTIN (12+ digits) - keep as string to preserve leading zeros
+          //   if (firstColumn && /^\d{12,}$/.test(firstColumn) && currentCategory) {
+          //     const itemData: ItemData = {
+          //       gtin: firstColumn,                          // Column A (as string)
+          //       vin: columns[2]?.toString() || '',          // Column C (as string)
+          //       itemName: columns[3] || '',                 // Column D
+          //       size: columns[4] || '',                     // Column E
+          //       onHandQty: parseInt(columns[5]) || 0,       // Column F
+          //       forecast: parseInt(columns[6]) || 0,        // Column G
+          //       minStock: parseInt(columns[7]) || 0,        // Column H
+          //       itemsToOrder: parseInt(columns[8]) || 0,    // Column I
+          //       unitInCase: parseInt(columns[9]) || 0,      // Column J
+          //       casesToOrder: parseInt(columns[12]) || 0    // Column M
+          //     }
               
-              currentCategory.items.push(itemData)
+          //     currentCategory.items.push(itemData)
+          //   }
+          // }
+          if (columns && columns.length > 0) {
+            const firstColumn = columns[0]?.trim().replace(/\D/g, '');
+            if (firstColumn && /^\d{12,}$/.test(firstColumn) && currentCategory) {
+              // Check if this is a Cigarette category
+              if (/cigarette/i.test(currentCategory.name)) {
+                // GTIN from current row
+                const gtin = firstColumn;
+                // Search for 'CRT' in column D in the following rows
+                let crtRow = null;
+                for (let searchIdx = dataLines.indexOf(line) + 1; searchIdx < dataLines.length; searchIdx++) {
+                  const searchColumns = Papa.parse(dataLines[searchIdx], { skipEmptyLines: true }).data[0] as string[];
+                  if (searchColumns && searchColumns[3] && /CRT/i.test(searchColumns[3])) {
+                    crtRow = searchColumns;
+                    break;
+                  }
+                }
+                if (crtRow) {
+                  const itemData: ItemData = {
+                    gtin,                                 // GTIN from original row
+                    vin: crtRow[2]?.toString() || '',     // VIN from CRT row
+                    itemName: crtRow[3] || '',            // Item Name from CRT row
+                    size: crtRow[4] || '',                // Size from CRT row
+                    onHandQty: parseInt(crtRow[5]) || 0,  // On Hand Qty from CRT row
+                    forecast: parseInt(crtRow[6]) || 0,   // Forecast from CRT row
+                    minStock: parseInt(crtRow[7]) || 0,   // Min Stock from CRT row
+                    itemsToOrder: parseInt(crtRow[8]) || 0, // Items To Order from CRT row
+                    unitInCase: parseInt(crtRow[9]) || 0,   // Unit In Case from CRT row
+                    casesToOrder: parseInt(crtRow[12]) || 0 // Cases To Order from CRT row
+                  };
+                  currentCategory.items.push(itemData);
+                }
+                // If no CRT row found, skip this item
+              } else {
+                // Non-cigarette logic (as before)
+                const itemData: ItemData = {
+                  gtin: firstColumn,
+                  vin: columns[2]?.toString() || '',
+                  itemName: columns[3] || '',
+                  size: columns[4] || '',
+                  onHandQty: parseInt(columns[5]) || 0,
+                  forecast: parseInt(columns[6]) || 0,
+                  minStock: parseInt(columns[7]) || 0,
+                  itemsToOrder: parseInt(columns[8]) || 0,
+                  unitInCase: parseInt(columns[9]) || 0,
+                  casesToOrder: parseInt(columns[12]) || 0
+                };
+                currentCategory.items.push(itemData);
+              }
             }
           }
         }
