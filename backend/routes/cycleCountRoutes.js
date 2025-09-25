@@ -30,6 +30,8 @@ router.post('/upload-excel', upload.single('file'), async (req, res) => {
         name: row[2],
         category: row[5] || "",
         grade: row[23] || "",
+        gtin: row[24],
+        upc_barcode: row[25],
         updatedAt: new Date("2025-09-18T00:00:00.000Z"),
         flagged: false
       };

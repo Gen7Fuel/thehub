@@ -2,10 +2,12 @@ const mongoose = require('mongoose');
 
 const CycleCountItemSchema = new mongoose.Schema({
   site: { type: String, required: true },
-  upc: { type: String, required: true },
+  upc: { type: String },
   name: { type: String, required: true },
   category: { type: String },
   grade: { type: String },
+  gtin: { type: String},
+  upc_barcode: { type: String},
   foh: { type: Number, default: 0 }, // Front on hand
   boh: { type: Number, default: 0 }, // Back on hand
   updatedAt: { type: Date, default: Date.now },
