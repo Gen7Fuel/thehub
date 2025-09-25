@@ -17,6 +17,7 @@ interface SelectTemplate {
 interface AuditItem {
   _id?: string;
   item: string;
+  checkboxId: string;
   required: boolean;
   checked?: boolean;
   comment?: string;
