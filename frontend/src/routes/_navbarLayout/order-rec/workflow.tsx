@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Card } from "@/components/ui/card"
 import { io,Socket } from "socket.io-client"
+import { useNavigate } from '@tanstack/react-router'
 
 export const Route = createFileRoute("/_navbarLayout/order-rec/workflow")({
   component: RouteComponent,
@@ -31,6 +32,7 @@ type Vendor = {
 
 function RouteComponent() {
   const [orderRecs, setOrderRecs] = useState<any[]>([])
+  const navigate = useNavigate()
   // const [vendors, setVendors] = useState<any[]>([])
   const [stores, setStores] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
@@ -530,7 +532,11 @@ function RouteComponent() {
                                     ? Number(vendorMeta.vendor_order_frequency)
                                     : undefined
                                 }
-                                onViewOrder={id => (window.location.href = `/order-rec/${id}`)}
+                                onViewOrder={id =>
+                                  navigate({
+                                    to: '/order-rec/$id',
+                                    params: { id },
+                                  }) }
                                 onViewComments={id => {
                                   const recData = orderRecs.find(r => r._id === id);
                                   setCurrentComments(recData?.comments || []);
