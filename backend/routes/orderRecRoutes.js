@@ -138,7 +138,7 @@ router.put('/:id/item/:catIdx/:itemIdx', async (req, res) => {
               upc: existing_site[0].upc,
               name: item.itemName || "", // product name from categories.items
               category: category.name,
-              grade: "",
+              grade: "C",
               foh: 0,
               boh: 0,
               flagged: true,
@@ -155,7 +155,7 @@ router.put('/:id/item/:catIdx/:itemIdx', async (req, res) => {
               upc: "",
               name: item.itemName || "", // product name from categories.items
               category: category.name,
-              grade: "",
+              grade: "C",
               foh: 0,
               boh: 0,
               flagged: true,
@@ -186,7 +186,7 @@ router.put('/:id/item/:catIdx/:itemIdx', async (req, res) => {
                 upc: existing_site[0].upc,
                 name: item.itemName || "", // product name from categories.items
                 category: category.name,
-                grade: "",
+                grade: "C",
                 foh: 0,
                 boh: 0,
                 flagged: false,
@@ -203,7 +203,7 @@ router.put('/:id/item/:catIdx/:itemIdx', async (req, res) => {
                 upc: "",
                 name: item.itemName || "", // product name from categories.items
                 category: category.name,
-                grade: "",
+                grade: "C",
                 foh: 0,
                 boh: 0,
                 flagged: false,
