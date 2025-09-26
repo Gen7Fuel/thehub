@@ -1,6 +1,6 @@
 import { useState } from "react";
 // import { Checkbox } from "@/components/ui/checkbox";
-import { Edit, MessageCircle, ImagePlus, Image as ImageIcon } from "lucide-react";
+import { Edit, MessageSquareText, ImagePlus, Image as ImageIcon } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { CheckSquare, Square } from "lucide-react"; 
@@ -106,8 +106,8 @@ export function ChecklistItemCard({
   //       </Label>
   //     </div>
     <div
-      className={`border rounded p-4 mb-3 flex flex-col gap-2 w-150 transition-colors
-        ${item.checked ? "bg-green-100 border-green-400" : "bg-gray-100 border-gray-300"}`}
+      className={`border rounded-2xl p-4 mb-3 flex flex-col gap-2 w-100 transition-colors border-t-5 border-red-100 
+        ${item.checked ? "bg-green-100 border-green-400" : "bg-gray-50 border-gray-300"}`}
     >
       <div className="flex items-center w-full">
         {/* Label on the left */}
@@ -123,17 +123,18 @@ export function ChecklistItemCard({
             type="button"
             size="sm"
             onClick={() => setCommentOpen(true)}
+            className="bg-sky-100 border-gray-300"
           >
             {item.comment ? (
               <Edit className="w-6 h-6 cursor-pointer text-gray-700" />
             ) : (
-              <MessageCircle className="w-6 h-6 cursor-pointer text-gray-700" />
+              <MessageSquareText className="w-6 h-6 cursor-pointer text-gray-700" />
             )}
           </Button>
 
           {/* Attach photo */}
           <label>
-            <Button variant="outline" type="button" size="sm" asChild>
+            <Button variant="outline" type="button" size="sm" className="bg-sky-100 border-gray-300" asChild>
               <span>
                 <ImagePlus className="w-6 h-6 cursor-pointer text-gray-700" />
               </span>
@@ -154,6 +155,7 @@ export function ChecklistItemCard({
               type="button"
               size="sm"
               onClick={() => setViewImagesOpen(true)}
+              className="bg-sky-100 border-gray-300"
             >
               <ImageIcon size={16} className="text-gray-600" />
             </Button>
@@ -184,10 +186,10 @@ export function ChecklistItemCard({
               value={item.status || ""}
               onValueChange={val => onFieldChange?.("status", val)}
             >
-              <SelectTrigger>
-                <SelectValue placeholder="Select status" />
+              <SelectTrigger className="bg-gray-100 border-gray-300 focus:ring-2 focus:ring-green-500">
+                <SelectValue placeholder="Status" />
               </SelectTrigger>
-              <SelectContent>
+              <SelectContent className="bg-white">
                 {getOptions(item.status || "").map(opt => (
                   <SelectItem key={opt._id} value={opt.text}>
                     {opt.text}
@@ -205,8 +207,8 @@ export function ChecklistItemCard({
               value={item.followUp || ""}
               onValueChange={val => onFieldChange?.("followUp", val)}
             >
-              <SelectTrigger>
-                <SelectValue placeholder="Select follow up" />
+              <SelectTrigger className="bg-gray-100 border-gray-300 focus:ring-2 focus:ring-green-500">
+                <SelectValue placeholder="Follow up" />
               </SelectTrigger>
               <SelectContent>
                 {getOptions(item.followUp || "").map(opt => (
@@ -226,8 +228,8 @@ export function ChecklistItemCard({
               value={item.assignedTo || ""}
               onValueChange={val => onFieldChange?.("assignedTo", val)}
             >
-              <SelectTrigger>
-                <SelectValue placeholder="Select assigned to" />
+              <SelectTrigger className="bg-gray-100 border-gray-300 focus:ring-2 focus:ring-green-500">
+                <SelectValue placeholder="Assigned to" />
               </SelectTrigger>
               <SelectContent>
                 {getOptions(item.assignedTo || "").map(opt => (
@@ -295,8 +297,10 @@ export function ChecklistItemCard({
         </DialogContent>
       </Dialog>
       {item.comment && (
-        <div className="mt-2 text-sm text-muted-foreground">
-          <strong>Comment:</strong> {item.comment}
+        <div className="mt-2 p-2 rounded bg-amber-200">
+          <div className="text-sm text-gray-800">
+            <strong>Comment:</strong> {item.comment}
+          </div>
         </div>
       )}
     </div>
