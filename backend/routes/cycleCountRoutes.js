@@ -2,6 +2,7 @@ const express = require('express');
 const router = express.Router();
 const multer = require('multer');
 const XLSX = require('xlsx');
+const { DateTime } = require('luxon');
 const CycleCount = require('../models/CycleCount');
 
 const upload = multer({ storage: multer.memoryStorage() });
@@ -49,12 +50,17 @@ router.post('/upload-excel', upload.single('file'), async (req, res) => {
 // GET /api/cycle-count/daily-items?site=SiteName&chunkSize=20
 router.get('/daily-items', async (req, res) => {
   try {
-    const { site, chunkSize = 20 } = req.query;
+    const { site, chunkSize = 20, timezone = 'UTC' } = req.query;
     if (!site) return res.status(400).json({ message: "site is required" });
 
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
-    const tomorrow = new Date(today.getTime() + 24 * 60 * 60 * 1000);
+    // const today = new Date();
+    // today.setHours(0, 0, 0, 0);
+    // const tomorrow = new Date(today.getTime() + 24 * 60 * 60 * 1000);
+
+    // Get the start and end of today in the user's timezone, then convert to UTC
+    const now = DateTime.now().setZone(timezone);
+    const todayStart = now.startOf('day').toUTC();
+    const tomorrowStart = todayStart.plus({ days: 1 });
 
     // 1. Fetch flagged items (top)
     const flaggedItemsRaw = await CycleCount.find({ site: site.toString().trim(), flagged: true });
@@ -62,16 +68,21 @@ router.get('/daily-items', async (req, res) => {
     const flaggedCount = flaggedItems.length;
 
     const chunk = parseInt(chunkSize, 10);
-    const dailyCount = Math.max(chunk - flaggedCount, 0);
+    const dailyCount = Math.max(chunk - flaggedCount, 0); // number of items on today's list
 
     // 2. Fetch all unflagged items for the site
-    const allUnflagged = await CycleCount.find({
+    let allUnflagged = await CycleCount.find({
       site: site.toString().trim(),
       flagged: false
     });
+    allUnflagged = CycleCount.sortItems(allUnflagged);
 
     // 3. All unflagged items counted today (priority)
-    const todayItems = allUnflagged.filter(i => i.updatedAt >= today && i.updatedAt < tomorrow);
+    // const todayItems = allUnflagged.filter(i => i.updatedAt >= today && i.updatedAt < tomorrow); // NEED TO CHECK UTC
+    const todayItems = allUnflagged.filter(i =>
+      DateTime.fromJSDate(i.updatedAt).toUTC() >= todayStart &&
+      DateTime.fromJSDate(i.updatedAt).toUTC() < tomorrowStart
+    );
 
     // 4. Calculate how many more items are needed
     const todayCount = todayItems.length;
@@ -89,9 +100,16 @@ router.get('/daily-items', async (req, res) => {
 
     // Exclude today's items from the pool
     const notTodayByGrade = {};
+    // grades.forEach(grade => {
+    //   notTodayByGrade[grade] = allUnflagged
+    //     .filter(i => i.grade === grade && !(i.updatedAt >= today && i.updatedAt < tomorrow));
+    // });
     grades.forEach(grade => {
       notTodayByGrade[grade] = allUnflagged
-        .filter(i => i.grade === grade && !(i.updatedAt >= today && i.updatedAt < tomorrow));
+        .filter(i => i.grade === grade && !(
+          DateTime.fromJSDate(i.updatedAt).toUTC() >= todayStart &&
+          DateTime.fromJSDate(i.updatedAt).toUTC() < tomorrowStart
+        ));
     });
 
     let selectedA = CycleCount.sortItems(notTodayByGrade["A"]).slice(0, numA);

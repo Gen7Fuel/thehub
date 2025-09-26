@@ -30,11 +30,11 @@ const TableWithInputs: React.FC<TableWithInputsProps> = ({
             <tr className={headerClassName}>
               <th className="border px-2 py-1">Name</th>
               <th className="border px-2 py-1">UPC</th>
-              {/* <th className="border px-2 py-1">Category</th> */}
-              {/* <th className="border px-2 py-1">Grade</th> */}
+              <th className="border px-2 py-1">Category</th>
+              <th className="border px-2 py-1">Grade</th>
               <th className="border px-2 py-1">BOH</th>
               <th className="border px-2 py-1">FOH</th>
-              {/* <th className="border px-2 py-1">Updated At</th> */}
+              <th className="border px-2 py-1">Updated At</th>
             </tr>
           </thead>
           <tbody>
@@ -47,8 +47,8 @@ const TableWithInputs: React.FC<TableWithInputsProps> = ({
                 >
                   {item.upc_barcode}
                 </td>
-                {/* <td className="border px-2 py-1">{item.category}</td> */}
-                {/* <td className="border px-2 py-1">{item.grade}</td> */}
+                <td className="border px-2 py-1">{item.category}</td>
+                <td className="border px-2 py-1">{item.grade}</td>
                 <td className="border px-2 py-1">
                   <input
                     type="text"
@@ -71,9 +71,9 @@ const TableWithInputs: React.FC<TableWithInputsProps> = ({
                     onChange={e => onInputChange(item._id, "foh", e.target.value)}
                   />
                 </td>
-                {/* <td className="border px-2 py-1">
+                <td className="border px-2 py-1">
                   {item.updatedAt ? new Date(item.updatedAt).toLocaleString() : ""}
-                </td> */}
+                </td>
               </tr>
             ))}
           </tbody>
