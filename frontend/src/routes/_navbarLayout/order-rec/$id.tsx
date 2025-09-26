@@ -153,8 +153,19 @@ function RouteComponent() {
           return;
         }
 
+        interface Vendor {
+          name: string;
+        }
+        // make a call to /api/vendors/:id to get the vendor name
+        const vendor: Vendor = await axios.get(`/api/vendors/${orderRec.vendor}`, {
+          headers: {
+            Authorization: `Bearer ${localStorage.getItem('token')}`
+          }
+        });
+        const vendorName = vendor.name || 'the vendor';
+
         // Prepare subject and body (same as index.tsx)
-        const subject = `Order Rec Uploaded for ${site}`;
+        const subject = `${vendorName} Order Rec Uploaded for ${site}`;
         const html = `
           A new order rec has been uploaded for ${site}.
           Please log in to The Hub to review the order recommendation.

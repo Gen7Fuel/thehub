@@ -12,26 +12,11 @@ function RouteComponent() {
   // const isListActive = matchRoute({ to: '/cycle-count/list' });
   const isInputActive = matchRoute({ to: '/cycle-count' });
   const isCountActive = matchRoute({ to: '/cycle-count/count' });
+  const isDashboardActive = matchRoute({ to: '/cycle-count/dashboard' });
 
   return (
     <div className="pt-16 flex flex-col items-center">
       <div className="flex mb-4">
-        {/* <Link to="/cycle-count" activeOptions={{ exact: true }}>
-          <Button
-            {...(isUploadActive ? {} : { variant: 'outline' } as object)}
-            className="rounded-r-none"
-          >
-            Upload
-          </Button>
-        </Link>
-        <Link to="/cycle-count/list" activeOptions={{ exact: true }}>
-          <Button
-            {...(!isListActive && { variant: 'outline' } as object)}
-            className="rounded-l-none"
-          >
-            List
-          </Button>
-        </Link> */}
         <Link to="/cycle-count" activeOptions={{ exact: true }}>
           <Button
             {...(!isInputActive && { variant: 'outline' } as object)}
@@ -43,9 +28,17 @@ function RouteComponent() {
         <Link to="/cycle-count/count" activeOptions={{ exact: true }}>
           <Button
             {...(!isCountActive && { variant: 'outline' } as object)}
-            className="rounded-l-none"
+            className="rounded-none"
           >
             Count
+          </Button>
+        </Link>
+        <Link to="/cycle-count/dashboard" activeOptions={{ exact: true }}>
+          <Button
+            {...(!isDashboardActive && { variant: 'outline' } as object)}
+            className="rounded-l-none"
+          >
+            Dashboard
           </Button>
         </Link>
       </div>

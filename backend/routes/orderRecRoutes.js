@@ -59,6 +59,36 @@ router.get('/:id', async (req, res) => {
   }
 });
 
+// Get all with optional startDate and endDate filtering
+router.get('/range', async (req, res) => {
+  try {
+    const { site, vendor, startDate, endDate } = req.query;
+    const query = {};
+
+    if (site) query.site = site;
+    if (vendor) query.vendor = vendor;
+
+    if (startDate || endDate) {
+      query.createdAt = {};
+      if (startDate) {
+        const start = new Date(startDate);
+        start.setHours(0, 0, 0, 0);
+        query.createdAt.$gte = start;
+      }
+      if (endDate) {
+        const end = new Date(endDate);
+        end.setHours(23, 59, 59, 999);
+        query.createdAt.$lte = end;
+      }
+    }
+
+    const orderRecs = await OrderRec.find(query).sort({ createdAt: -1 });
+    res.json(orderRecs);
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+});
+
 // Update item completion
 router.put('/:id/item/:catIdx/:itemIdx', async (req, res) => {
   try {
