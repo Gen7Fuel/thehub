@@ -161,7 +161,7 @@ router.put('/:id/item/:catIdx/:itemIdx', async (req, res) => {
           else {
             const existing_site = await CycleCount.find({ gtin: item.gtin }).limit(1);
             
-            if (existing_site){
+            if (existing_site.length === 1){
               // Push new entry using existing information from other sites
               const newCycleCount = new CycleCount({
                 site,
@@ -209,7 +209,7 @@ router.put('/:id/item/:catIdx/:itemIdx', async (req, res) => {
           else {
             const existing_site = await CycleCount.find({ gtin: item.gtin }).limit(1);
               
-            if (existing_site){
+            if (existing_site.length === 1){
               // Push new entry using existing information from other sites
               const newCycleCount = new CycleCount({
                 site,
