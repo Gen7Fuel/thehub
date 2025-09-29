@@ -18,6 +18,9 @@ import {
   ChartTooltipContent,
 } from "@/components/ui/chart";
 
+import { DatePickerWithRange } from '@/components/custom/datePickerWithRange'
+import type { DateRange } from "react-day-picker"
+
 export const Route = createFileRoute('/_navbarLayout/dashboard')({
   component: RouteComponent,
 })
@@ -61,6 +64,17 @@ function RouteComponent() {
   const [loading, setLoading] = useState(true);
   const [startDate, setStartDate] = useState("2025-09-21");
   const [endDate, setEndDate] = useState("2025-09-27");
+  const [date, setDate] = useState<DateRange | undefined>({
+    from: new Date(startDate),
+    to: new Date(endDate),
+  });
+
+  useEffect(() => {
+    if (date?.from && date?.to) {
+      setStartDate(date.from.toISOString().slice(0, 10));
+      setEndDate(date.to.toISOString().slice(0, 10));
+    }
+  }, [date]);
 
   useEffect(() => {
     setLoading(true);
@@ -111,7 +125,7 @@ function RouteComponent() {
     };
 
     fetchAllData();
-  }, [site]);
+  }, [site, startDate, endDate]);
 
   // Find the max number of vendors in any status for row count
   const maxRows = Math.max(...STATUS_KEYS.map(key => orderRecs[key]?.length ?? 0));
@@ -130,11 +144,16 @@ function RouteComponent() {
 
   return (
     <div className="pt-16 flex flex-col items-center">
-      <LocationPicker
-        setStationName={setSite}
-        value="stationName"
-        defaultValue={site}
-      />
+      <div className="flex gap-4">
+        <LocationPicker
+          setStationName={setSite}
+          value="stationName"
+          defaultValue={site}
+        />
+
+        <DatePickerWithRange date={date} setDate={setDate} />
+      </div>
+
       <div className="mt-8 w-full max-w-4xl">
         {loading ? (
           <div className="text-center py-8">Loading...</div>
@@ -180,7 +199,7 @@ function RouteComponent() {
             <div className="flex flex-col md:flex-row gap-8 mb-8">
               <Card className="w-1/2 mt-8">
                 <CardHeader>
-                  <CardTitle>Cycle Counts Bar Chart</CardTitle>
+                  <CardTitle>Cycle Counts</CardTitle>
                   <CardDescription>
                     Daily cycle count entries for {site}
                   </CardDescription>
@@ -213,7 +232,7 @@ function RouteComponent() {
 
               <Card className="w-1/2 mt-8">
                 <CardHeader>
-                  <CardTitle>Sales Bar Chart</CardTitle>
+                  <CardTitle>Sales</CardTitle>
                   <CardDescription>
                     Daily total sales for {site}
                   </CardDescription>
