@@ -48,17 +48,6 @@ router.get('/', async (req, res) => {
   }
 });
 
-// Get one
-router.get('/:id', async (req, res) => {
-  try {
-    const orderRec = await OrderRec.findById(req.params.id);
-    if (!orderRec) return res.status(404).json({ message: 'Not found' });
-    res.json(orderRec);
-  } catch (err) {
-    res.status(500).json({ message: err.message });
-  }
-});
-
 // Get all with optional startDate and endDate filtering
 router.get('/range', async (req, res) => {
   try {
@@ -83,11 +72,56 @@ router.get('/range', async (req, res) => {
     }
 
     const orderRecs = await OrderRec.find(query).sort({ createdAt: -1 });
-    res.json(orderRecs);
+
+    // Status keys and their matching values
+    const statusKeys = {
+      created: "Created",
+      completed: "Completed",
+      placed: "Placed",
+      delivered: "Delivered",
+      invoice_received: "Invoice Received"
+    };
+
+    // Initialize result object
+    const categorized = {
+      created: [],
+      completed: [],
+      placed: [],
+      delivered: [],
+      invoice_received: []
+    };
+
+    orderRecs.forEach(rec => {
+      // Find the key that matches the currentStatus
+      const key = Object.keys(statusKeys).find(
+        k => (rec.currentStatus || "").toLowerCase() === statusKeys[k].toLowerCase()
+      );
+      if (key) {
+        categorized[key].push(rec);
+      } else {
+        // If currentStatus doesn't match, default to "created"
+        categorized.created.push(rec);
+      }
+    });
+
+    res.json(categorized);
   } catch (err) {
     res.status(500).json({ message: err.message });
   }
 });
+
+// Get one
+router.get('/:id', async (req, res) => {
+  try {
+    const orderRec = await OrderRec.findById(req.params.id);
+    if (!orderRec) return res.status(404).json({ message: 'Not found' });
+    res.json(orderRec);
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+});
+
+
 
 // Update item completion
 router.put('/:id/item/:catIdx/:itemIdx', async (req, res) => {

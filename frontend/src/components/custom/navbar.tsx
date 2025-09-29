@@ -84,9 +84,14 @@ export default function Navbar() {
           <span id="name" className="text-sm font-bold text-gray-600 flex items-center">
             {localStorage.getItem('name')}
           </span>
-          <Button variant="ghost" onClick={() => navigate({ to: '/dashboard' })}>
+          {access.module_dashboard && (
+            <Button variant="ghost" onClick={() => navigate({ to: '/dashboard' })}>
+              <Link to="/dashboard">Dashboard</Link>
+            </Button>
+          )}
+          {/* <Button variant="ghost" onClick={() => navigate({ to: '/dashboard' })}>
             <Link to="/dashboard">Dashboard</Link>
-          </Button>
+          </Button> */}
           {access.component_settings && (
             <Button variant="outline" onClick={handleSettings}>Settings</Button>
           )}
