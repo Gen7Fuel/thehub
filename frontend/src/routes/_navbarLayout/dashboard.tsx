@@ -62,12 +62,23 @@ function RouteComponent() {
   const [dailyCounts, setDailyCounts] = useState<{ date: string, count: number }[]>([]);
   const [salesData, setSalesData] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
-  const [startDate, setStartDate] = useState("2025-09-21");
-  const [endDate, setEndDate] = useState("2025-09-27");
+
+  const today = new Date();
+  const sevenDaysAgo = new Date();
+  sevenDaysAgo.setDate(today.getDate() - 7);
+
+  const [startDate, setStartDate] = useState(sevenDaysAgo.toISOString().slice(0, 10));
+  const [endDate, setEndDate] = useState(today.toISOString().slice(0, 10));
   const [date, setDate] = useState<DateRange | undefined>({
-    from: new Date(startDate),
-    to: new Date(endDate),
+    from: sevenDaysAgo,
+    to: today,
   });
+  // const [startDate, setStartDate] = useState("2025-09-21");
+  // const [endDate, setEndDate] = useState("2025-09-27");
+  // const [date, setDate] = useState<DateRange | undefined>({
+  //   from: new Date(startDate),
+  //   to: new Date(endDate),
+  // });
 
   useEffect(() => {
     if (date?.from && date?.to) {
