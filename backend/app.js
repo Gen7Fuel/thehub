@@ -34,7 +34,6 @@ const permissionRoutes = require("./routes/permissionRoutes");
 const selectTemplateRoutes = require("./routes/audit/selectTemplateRoutes");
 // const feedbackTemplateRoutes = require("./routes/audit/feedbackTemplateRoutes");
 
-
 dotenv.config();
 connectDB();
 
@@ -74,11 +73,10 @@ app.use("/api/audit/select-templates", selectTemplateRoutes);
 app.use("/api/audit", auditRoutes);
 app.use("/api/permissions", permissionRoutes);
 
-
-
 // Reporting
 app.use("/api/sales-summary", salesSummaryRoutes);
 app.use("/api/status-sales", statusSalesRoutes);
+app.use('/api/sql', require('./routes/salesRoutes'));
 
 // Misc
 app.use('/api', emailRoutes);
@@ -113,6 +111,5 @@ app.set("io", io);
 // Replace app.listen with server.listen
 const PORT = process.env.PORT || 5000;
 server.listen(PORT);
-
 
 // app.listen(PORT, () => console.log(`Server running on port ${PORT}`));

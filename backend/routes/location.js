@@ -63,13 +63,13 @@ router.get("/:id", async (req, res) => {
 
 // FOR THE ERROR OF PRODUCTION CALLING /api/locations/undefined
 // Get stationName by _id
-router.get("/:stationName", async (req, res) => {
-  const { id } = req.params;
+router.get("/name/:stationName", async (req, res) => {
+  const { stationName } = req.params;
 
   try {
-    const location = await Location.find({ stationName });
+    const location = await Location.findOne({ stationName });
     if (location) {
-      res.status(200).json({ stationName: location.stationName });
+      res.status(200).json(location);
     } else {
       res.status(404).json({ message: "Location not found." });
     }

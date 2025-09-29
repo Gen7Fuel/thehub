@@ -268,4 +268,52 @@ router.get('/counted-today', async (req, res) => {
   }
 });
 
+router.get('/daily-counts', async (req, res) => {
+  try {
+    const { site, startDate, endDate, timezone = 'UTC' } = req.query;
+    if (!site || !startDate || !endDate) {
+      return res.status(400).json({ message: "site, startDate, and endDate are required" });
+    }
+
+    const start = DateTime.fromISO(startDate, { zone: timezone }).startOf('day');
+    const end = DateTime.fromISO(endDate, { zone: timezone }).endOf('day');
+
+    // Get all entries in the date range
+    const entries = await CycleCount.find({
+      site: site.toString().trim(),
+      updatedAt: {
+        $gte: start.toJSDate(),
+        $lte: end.toJSDate()
+      }
+    });
+
+    // Count per day
+    const counts = {};
+    let cursor = start;
+    while (cursor <= end) {
+      const dayStart = cursor;
+      const dayEnd = cursor.plus({ days: 1 });
+      const dayKey = dayStart.toISODate();
+
+      counts[dayKey] = entries.filter(e => {
+        const updated = DateTime.fromJSDate(e.updatedAt).setZone(timezone);
+        return updated >= dayStart && updated < dayEnd;
+      }).length;
+
+      cursor = dayEnd;
+    }
+
+    // Convert counts to array for chart compatibility
+    const data = Object.entries(counts).map(([date, count]) => ({
+      date,
+      count
+    }));
+
+    res.json({ site, data });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ message: "Failed to get daily counts." });
+  }
+});
+
 module.exports = router;
