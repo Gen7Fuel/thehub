@@ -26,13 +26,14 @@ interface ChecklistItem {
   status: string;
   followUp: string;
   assignedTo: string;
+  frequency?: "daily" | "weekly" | "monthly" | "";
 }
 
 function RouteComponent() {
   const { id } = useParams({ from: '/_navbarLayout/audit/templates/checklist/$id' });
   const [selectTemplates, setSelectTemplates] = useState<SelectTemplate[]>([]);
   const [items, setItems] = useState<ChecklistItem[]>([
-    { category: "", item: "", status: "", followUp: "Follow Up", assignedTo: "Assigned To" },
+    { category: "", item: "", status: "", followUp: "Follow Up", assignedTo: "Assigned To", frequency: "daily" },
   ]);
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
@@ -81,8 +82,9 @@ function RouteComponent() {
                 status: item.status || "",
                 followUp: item.followUp || "",
                 assignedTo: item.assignedTo || "",
+                frequency: item.frequency || "",
               }))
-            : [{ category: "", item: "", status: "", followUp: "", assignedTo: "" }]
+            : [{ category: "", item: "", status: "", followUp: "", assignedTo: "",  frequency: ""}]
         );
         setSelectedSites(res.data.sites || []);
       })
@@ -106,8 +108,10 @@ function RouteComponent() {
     );
   };
 
+  // const addRow = () =>
+  //   setItems([...items, { category: "", item: "", status: "", followUp: "Follow Up", assignedTo: "Assigned To" }]);
   const addRow = () =>
-    setItems([...items, { category: "", item: "", status: "", followUp: "Follow Up", assignedTo: "Assigned To" }]);
+    setItems([...items, { category: "", item: "", status: "", followUp: "Follow Up", assignedTo: "Assigned To", frequency: "" }]);
 
   const removeRow = (idx: number) =>
     setItems(items => items.length > 1 ? items.filter((_, i) => i !== idx) : items);
@@ -124,7 +128,9 @@ function RouteComponent() {
       status: row.status,
       followUp: row.followUp,
       assignedTo: row.assignedTo,
+      frequency: row.frequency, // NEW
     }));
+
 
     const payload = {
       name,
@@ -198,6 +204,7 @@ function RouteComponent() {
                 <th className="border px-2 py-1">Status</th>
                 <th className="border px-2 py-1">Follow Up</th>
                 <th className="border px-2 py-1">Assigned To</th>
+                <th className="border px-2 py-1">Frequency</th>
                 <th className="border px-2 py-1"></th>
               </tr>
             </thead>
@@ -277,6 +284,21 @@ function RouteComponent() {
                             {opt.name}
                           </SelectItem>
                         ))}
+                      </SelectContent>
+                    </Select>
+                  </td>
+                  <td className="border px-2 py-1">
+                    <Select
+                      value={row.frequency}
+                      onValueChange={(val) => handleItemChange(idx, "frequency", val as "daily" | "weekly" | "monthly")}
+                    >
+                      <SelectTrigger>
+                        <SelectValue placeholder="Select" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="daily">Daily</SelectItem>
+                        <SelectItem value="weekly">Weekly</SelectItem>
+                        <SelectItem value="monthly">Monthly</SelectItem>
                       </SelectContent>
                     </Select>
                   </td>

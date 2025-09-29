@@ -34,6 +34,7 @@ interface ChecklistItemCardProps {
   onPhotos: (photos: string[]) => void;
   onFieldChange?: (field: "status" | "followUp" | "assignedTo", value: string) => void;
   selectTemplates?: SelectTemplate[];
+  catColor: string;
 }
 
 export function ChecklistItemCard({
@@ -43,6 +44,7 @@ export function ChecklistItemCard({
   onPhotos,
   onFieldChange,
   selectTemplates = [],
+  catColor,
 }: ChecklistItemCardProps) {
   const [commentOpen, setCommentOpen] = useState(false);
   const [commentValue, setCommentValue] = useState(item.comment || "");
@@ -90,6 +92,7 @@ export function ChecklistItemCard({
     setImageModalOpen(true);
   };
 
+
   return (
   //   <div className="border rounded p-4 mb-3 flex flex-col gap-2 bg-muted/50 w-150">
   //     <div className="flex items-center gap-3">
@@ -106,9 +109,11 @@ export function ChecklistItemCard({
   //       </Label>
   //     </div>
     <div
-      className={`border rounded-2xl p-4 mb-3 flex flex-col gap-2 w-100 transition-colors border-t-5 border-red-100 
-        ${item.checked ? "bg-green-100 border-green-400" : "bg-gray-50 border-gray-300"}`}
+      className={`border-2 rounded-2xl p-4 mb-3 flex flex-col gap-2 w-100 transition-colors
+        ${item.checked ? "bg-green-100" : "bg-gray-50"}
+        ${catColor || "border-gray-300"}  border-t-5`}
     >
+
       <div className="flex items-center w-full">
         {/* Label on the left */}
         <Label className="font-medium text-lg cursor-pointer">

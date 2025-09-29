@@ -23,6 +23,27 @@ router.get('/', async (req, res) => {
   }
 });
 
+// Get a single template (with optional frequency filter)
+router.get('/:id', async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { frequency } = req.query; // daily / weekly / monthly / all
+    const template = await AuditTemplate.findById(id).lean();
+    if (!template) return res.status(404).json({ error: 'Not found' });
+
+    let items = template.items || [];
+    if (frequency && frequency !== 'all') {
+      items = items.filter(item => item.frequency === frequency);
+    }
+
+    res.json({ ...template, items });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+
 // Get a single select template by ID
 router.get('/:id', async (req, res) => {
   try {
