@@ -15,6 +15,10 @@ services:
     environment:
       - MONGO_URI=${MONGO_URI}
       - JWT_SECRET=${JWT_SECRET}
+      - SQL_SERVER=${SQL_SERVER}
+      - SQL_DB=${SQL_DB}
+      - SQL_USER=${SQL_USER}
+      - SQL_PASSWORD=${SQL_PASSWORD}
       - UPLOAD_SERVICE_URL=http://cdn:5001
     depends_on:
       - mongo
