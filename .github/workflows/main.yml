@@ -27,6 +27,10 @@ jobs:
 
             export MONGO_URI=${{ secrets.MONGO_URI }}
             export JWT_SECRET=${{ secrets.JWT_SECRET }}
+            export SQL_SERVER=${{ secrets.SQL_SERVER }}
+            export SQL_DB=${{ secrets.SQL_DB }}
+            export SQL_USER=${{ secrets.SQL_USER }}
+            export SQL_PASSWORD=${{ secrets.SQL_PASSWORD }}
 
             git pull origin main
             docker compose down
