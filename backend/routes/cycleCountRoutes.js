@@ -134,86 +134,6 @@ router.get('/daily-items', async (req, res) => {
   }
 });
 
-// router.get('/daily-items', async (req, res) => {
-//   try {
-//     const { site, chunkSize = 20 } = req.query;
-//     if (!site) return res.status(400).json({ message: "site is required" });
-
-//     const today = new Date();
-//     today.setHours(0, 0, 0, 0);
-//     const tomorrow = new Date(today.getTime() + 24 * 60 * 60 * 1000);
-
-//     // Get all unflagged items for the site
-//     const allItems = await CycleCount.find({
-//       site: site.toString().trim(),
-//       flagged: false
-//     });
-
-//     // Split by grade
-//     const grades = ["A", "B", "C"];
-//     const itemsByGrade = {};
-//     grades.forEach(grade => {
-//       itemsByGrade[grade] = allItems.filter(i => i.grade === grade);
-//     });
-
-//     // Get today's items by grade
-//     const todayItemsByGrade = {};
-//     grades.forEach(grade => {
-//       todayItemsByGrade[grade] = itemsByGrade[grade].filter(i => i.updatedAt >= today && i.updatedAt < tomorrow);
-//     });
-
-//     // Calculate how many of each grade are needed
-//     const groupSize = 6;
-//     const chunk = parseInt(chunkSize, 10);
-//     const groups = Math.floor(chunk / groupSize);
-//     const remainder = chunk % groupSize;
-
-//     const numA = 3 * groups + remainder;
-//     const numB = 2 * groups;
-//     const numC = 1 * groups;
-
-//     // Start with today's items
-//     let selectedA = CycleCount.sortItems(todayItemsByGrade["A"]).slice(0, numA);
-//     let selectedB = CycleCount.sortItems(todayItemsByGrade["B"]).slice(0, numB);
-//     let selectedC = CycleCount.sortItems(todayItemsByGrade["C"]).slice(0, numC);
-
-//     // Fill up with oldest items if not enough for today
-//     if (selectedA.length < numA) {
-//       const needed = numA - selectedA.length;
-//       const notTodayA = CycleCount.sortItems(itemsByGrade["A"].filter(i => !(i.updatedAt >= today && i.updatedAt < tomorrow) && !selectedA.some(a => a._id.equals(i._id))));
-//       selectedA = [...selectedA, ...notTodayA.slice(0, needed)];
-//     }
-//     if (selectedB.length < numB) {
-//       const needed = numB - selectedB.length;
-//       const notTodayB = CycleCount.sortItems(itemsByGrade["B"].filter(i => !(i.updatedAt >= today && i.updatedAt < tomorrow) && !selectedB.some(b => b._id.equals(i._id))));
-//       selectedB = [...selectedB, ...notTodayB.slice(0, needed)];
-//     }
-//     if (selectedC.length < numC) {
-//       const needed = numC - selectedC.length;
-//       const notTodayC = CycleCount.sortItems(itemsByGrade["C"].filter(i => !(i.updatedAt >= today && i.updatedAt < tomorrow) && !selectedC.some(c => c._id.equals(i._id))));
-//       selectedC = [...selectedC, ...notTodayC.slice(0, needed)];
-//     }
-
-//     // Fetch flagged items for the site
-//     const flaggedItemsRaw = await CycleCount.find({ site: site.toString().trim(), flagged: true });
-//     const flaggedItems = CycleCount.sortItems(flaggedItemsRaw).slice(0, 5);
-
-//     const flaggedCount = flaggedItems.length;
-//     const dailyCount = Math.max(chunk - flaggedCount, 0);
-
-//     const result = [...selectedA, ...selectedB, ...selectedC];
- 
-
-//     res.json({
-//       flaggedItems,
-//       items: result
-//     });
-//   } catch (err) {
-//     console.error(err);
-//     res.status(500).json({ message: "Failed to get daily items" });
-//   }
-// });
-
 router.post('/save-counts', async (req, res) => {
   try {
     const { items } = req.body;
@@ -314,6 +234,14 @@ router.get('/daily-counts', async (req, res) => {
     console.error(err);
     res.status(500).json({ message: "Failed to get daily counts." });
   }
+});
+
+router.get('/lookup', async (req, res) => {
+  const { upc_barcode, site } = req.query;
+  if (!upc_barcode || !site) return res.status(400).json({ error: "UPC barcode and site required" });
+  const item = await CycleCount.findOne({ upc_barcode, site });
+  if (!item) return res.status(404).json({ error: "Not found" });
+  res.json(item);
 });
 
 module.exports = router;

@@ -14,6 +14,8 @@ import {
 import {
   type ChartConfig,
   ChartContainer,
+  ChartLegend,
+  ChartLegendContent,
   ChartTooltip,
   ChartTooltipContent,
 } from "@/components/ui/chart";
@@ -49,10 +51,11 @@ const chartConfig = {
 } satisfies ChartConfig;
 
 const salesChartConfig = {
-  sales: {
-    label: "Total Sales",
-    color: "var(--chart-2)",
-  },
+  FN: { label: "FN", color: "var(--chart-1)" },
+  Quota: { label: "Quota", color: "var(--chart-2)" },
+  Cannabis: { label: "Cannabis", color: "var(--chart-3)" },
+  GRE: { label: "GRE", color: "var(--chart-4)" },
+  Convenience: { label: "Convenience", color: "var(--chart-5)" },
 } satisfies ChartConfig;
 
 function RouteComponent() {
@@ -73,12 +76,6 @@ function RouteComponent() {
     from: sevenDaysAgo,
     to: today,
   });
-  // const [startDate, setStartDate] = useState("2025-09-21");
-  // const [endDate, setEndDate] = useState("2025-09-27");
-  // const [date, setDate] = useState<DateRange | undefined>({
-  //   from: new Date(startDate),
-  //   to: new Date(endDate),
-  // });
 
   useEffect(() => {
     if (date?.from && date?.to) {
@@ -148,9 +145,13 @@ function RouteComponent() {
   }));
 
   // Prepare sales chart data
-  const salesChartData = salesData.map((entry: { Date: string, "Total Sales": number }) => ({
-    day: entry.Date.slice(5, 10), // e.g. "09-21"
-    sales: entry["Total Sales"],
+  const salesChartData = salesData.map((entry) => ({
+    day: entry.Date.slice(5, 10),
+    FN: entry.FN ?? 0,
+    Quota: entry.Quota ?? 0,
+    Cannabis: entry.Cannabis ?? 0,
+    GRE: entry.GRE ?? 0,
+    Convenience: entry.Convenience ?? 0,
   }));
 
   return (
@@ -243,10 +244,8 @@ function RouteComponent() {
 
               <Card className="w-1/2 mt-8">
                 <CardHeader>
-                  <CardTitle>Sales</CardTitle>
-                  <CardDescription>
-                    Daily total sales for {site}
-                  </CardDescription>
+                  <CardTitle>Sales by Category (Stacked)</CardTitle>
+                  <CardDescription>Daily sales by category</CardDescription>
                 </CardHeader>
                 <CardContent>
                   <ChartContainer config={salesChartConfig}>
@@ -257,19 +256,21 @@ function RouteComponent() {
                         tickLine={false}
                         tickMargin={10}
                         axisLine={false}
-                        tickFormatter={(value) => value}
+                        tickFormatter={(value) => value.slice(0, 5)}
                       />
-                      <ChartTooltip
-                        cursor={false}
-                        content={<ChartTooltipContent hideLabel />}
-                      />
-                      <Bar dataKey="sales" fill="var(--color-sales)" radius={8} />
+                      <ChartTooltip content={<ChartTooltipContent hideLabel />} />
+                      <ChartLegend content={<ChartLegendContent />} />
+                      <Bar dataKey="FN" stackId="a" fill="var(--chart-1)" />
+                      <Bar dataKey="Quota" stackId="a" fill="var(--chart-2)" />
+                      <Bar dataKey="Cannabis" stackId="a" fill="var(--chart-3)" />
+                      <Bar dataKey="GRE" stackId="a" fill="var(--chart-4)" />
+                      <Bar dataKey="Convenience" stackId="a" fill="var(--chart-5)" />
                     </BarChart>
                   </ChartContainer>
                 </CardContent>
                 <CardFooter className="flex-col items-start gap-2 text-sm">
                   <div className="text-muted-foreground leading-none">
-                    Showing total sales per day for the selected range
+                    Showing categorized sales per day
                   </div>
                 </CardFooter>
               </Card>
