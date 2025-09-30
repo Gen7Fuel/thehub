@@ -12,7 +12,7 @@ function RouteComponent() {
   // const isListActive = matchRoute({ to: '/cycle-count/list' });
   const isInputActive = matchRoute({ to: '/cycle-count' });
   const isCountActive = matchRoute({ to: '/cycle-count/count' });
-  const isDashboardActive = matchRoute({ to: '/cycle-count/dashboard' });
+  const isConsoleActive = matchRoute({ to: '/cycle-count/console' });
 
   return (
     <div className="pt-16 flex flex-col items-center">
@@ -33,12 +33,12 @@ function RouteComponent() {
             Count
           </Button>
         </Link>
-        <Link to="/cycle-count/dashboard" activeOptions={{ exact: true }}>
+        <Link to="/cycle-count/console" activeOptions={{ exact: true }}>
           <Button
-            {...(!isDashboardActive && { variant: 'outline' } as object)}
+            {...(!isConsoleActive && { variant: 'outline' } as object)}
             className="rounded-l-none"
           >
-            Dashboard
+            Console
           </Button>
         </Link>
       </div>
