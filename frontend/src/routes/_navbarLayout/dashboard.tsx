@@ -22,7 +22,6 @@ import {
 
 import { DatePickerWithRange } from '@/components/custom/datePickerWithRange'
 import type { DateRange } from "react-day-picker"
-import { TrendingUp } from 'lucide-react';
 
 export const Route = createFileRoute('/_navbarLayout/dashboard')({
   component: RouteComponent,
