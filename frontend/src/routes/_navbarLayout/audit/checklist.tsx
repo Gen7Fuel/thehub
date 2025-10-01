@@ -70,11 +70,20 @@
 
 
 // Temporary patch with location picker
-import { createFileRoute, Link, Outlet, useMatchRoute, useNavigate } from '@tanstack/react-router'
+import { createFileRoute, Link, Outlet, useMatchRoute } from '@tanstack/react-router'
 import { useEffect, useState } from "react"
 import { Button } from '@/components/ui/button'
 import axios from "axios"
 import { LocationPicker } from "@/components/custom/locationPicker";
+import { createContext } from "react";
+
+export const RouteContext = createContext<{
+  stationName: string;
+  setStationName: (value: string) => void;
+}>({
+  stationName: "",
+  setStationName: () => {},
+});
 
 export const Route = createFileRoute('/_navbarLayout/audit/checklist')({
   component: RouteComponent,
@@ -88,7 +97,7 @@ interface AuditTemplate {
 
 function RouteComponent() {
   const matchRoute = useMatchRoute()
-  const navigate = useNavigate()
+  // const navigate = useNavigate()
   const [templates, setTemplates] = useState<AuditTemplate[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
@@ -100,7 +109,7 @@ function RouteComponent() {
     setStationName(newStation);
 
     // navigate back to checklist root
-    navigate({ to: "/audit/checklist" });
+    // navigate({ to: "/audit/checklist"});
   };
 
   // 🔹 refetch audits whenever stationName changes
@@ -133,56 +142,61 @@ function RouteComponent() {
   const access = JSON.parse(localStorage.getItem('access') || '{}') 
 
   return (
-    <div className="flex flex-col items-center">
-      {/* 🔹 Location Picker temporary patch */}
-      <div className="mb-6">
-        <LocationPicker
-          setStationName={(value) => {
-            // if it's a function (prev => new), resolve it
-            const newValue = typeof value === "function" ? value(stationName) : value;
-            updateStation(newValue);
-          }}
-          value="stationName"
-          {...(!access.component_station_audit_checklist_location_filter ? { disabled: true } : {})}
-          defaultValue={stationName}
-        />
+    <RouteContext.Provider value={{ stationName, setStationName }}>
+      <div className="flex flex-col items-center">
+        {/* 🔹 Location Picker temporary patch */}
+        <div className="mb-6">
+          <LocationPicker
+            value="stationName" // mode
+            defaultValue={stationName} // the actual current station from parent state
+            setStationName={(value) => {
+              const newValue =
+                typeof value === "function" ? value(stationName) : value;
 
-      </div>
+              // 🔹 Just update React state
+              updateStation(newValue);
+            }}
+            disabled={!access.component_station_audit_checklist_location_filter}
+          />
 
-      {/* 🔹 Template buttons */}
-      <div className="flex mb-4">
-        {templates.map((template, idx) => {
-          const isActive = matchRoute({
-            to: "/audit/checklist/$id",
-            params: { id: template._id },
-            fuzzy: true,
-          });
 
-          return (
-            <Link
-              to="/audit/checklist/$id"
-              params={{ id: template._id }}
-              key={template._id}
-            >
-              <Button
-                {...(isActive ? {} : { variant: "outline" } as object)}
-                className={
-                  idx === 0
-                    ? "rounded-r-none"
-                    : idx === templates.length - 1
-                    ? "rounded-l-none"
-                    : "rounded-none"
-                }
+        </div>
+
+        {/* 🔹 Template buttons */}
+        <div className="flex mb-4">
+          {templates.map((template, idx) => {
+            const isActive = matchRoute({
+              to: "/audit/checklist/$id",
+              params: { id: template._id },
+              fuzzy: true,
+            });
+
+            return (
+              <Link
+                to="/audit/checklist/$id"
+                params={{ id: template._id }}
+                key={template._id}
               >
-                {template.name}
-              </Button>
-            </Link>
-          );
-        })}
-      </div>
+                <Button
+                  {...(isActive ? {} : { variant: "outline" } as object)}
+                  className={
+                    idx === 0
+                      ? "rounded-r-none"
+                      : idx === templates.length - 1
+                      ? "rounded-l-none"
+                      : "rounded-none"
+                  }
+                >
+                  {template.name}
+                </Button>
+              </Link>
+            );
+          })}
+        </div>
 
-      <Outlet />
-    </div>
+        <Outlet />
+      </div>
+    </RouteContext.Provider>
   );
 }
 
