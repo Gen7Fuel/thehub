@@ -121,7 +121,7 @@ function RouteComponent() {
         setTemplates(filtered);
 
         // keep latest location in localStorage so it persists
-        localStorage.setItem("location", stationName);
+        // localStorage.setItem("location", stationName);
       })
       .catch(() => setError("Failed to load audit templates"))
       .finally(() => setLoading(false));
@@ -130,7 +130,7 @@ function RouteComponent() {
   if (loading) return <div className="text-center mt-8">Loading...</div>;
   if (error) return <div className="text-red-600 text-center mt-8">{error}</div>;
   
-  const access = JSON.parse(localStorage.getItem('access') || '{}')
+  const access = JSON.parse(localStorage.getItem('access') || '{}') 
 
   return (
     <div className="flex flex-col items-center">
