@@ -206,8 +206,14 @@ router.get('/:id', async (req, res) => {
   try {
     const { id } = req.params;
     const { site } = req.query;
+    if (!site) return res.status(400).json({ error: "Site is required" });
 
-    const template = await AuditTemplate.findById(id).lean();
+    // Find template by ID AND check if site exists in template.sites
+    const template = await AuditTemplate.findOne({
+      _id: id,
+      sites: site // only return if site is in the sites array
+    }).lean();
+    
     if (!template) return res.status(404).json({ error: "Template not found" });
 
     const items = template.items.map(i => {

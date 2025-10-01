@@ -2,6 +2,8 @@ import { createFileRoute, useParams } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
 import { ChecklistItemCard } from "@/components/custom/ChecklistItem";
 import { Button } from "@/components/ui/button";
+import { useContext } from "react";
+import { RouteContext } from "../checklist";
 
 interface SelectOption {
   text: string;
@@ -98,7 +100,13 @@ const CATEGORY_COLOR_CLASSES = [
 
 function RouteComponent() {
   const { id } = useParams({ from: "/_navbarLayout/audit/checklist/$id" });
-  const site = localStorage.getItem("location") || "";
+
+  // Temporary patch for location picker getting state from ther parent
+  const { stationName } = useContext(RouteContext);
+  const site = stationName || localStorage.getItem("location") || "";
+  
+  // const site = localStorage.getItem("location") || ""; //Original file
+  console.log("stationnane:",stationName)
   const [items, setItems] = useState<AuditItem[]>([]); // editable list
   // const [displayItems, setDisplayItems] = useState<AuditItem[]>([]); // sorted for initial display / after save
   const [selectTemplates, setSelectTemplates] = useState<SelectTemplate[]>([]);
@@ -194,6 +202,7 @@ function RouteComponent() {
         } 
         // fallback → template items
           const templateRes = await fetch(`/api/audit/${id}?frequency=${frequency}&site=${encodeURIComponent(site)}`, { headers: { Authorization: `Bearer ${token}` } });
+          console.log('site:',site)
           if (templateRes.ok) {
             const templateData = await templateRes.json();
           setItems(sortItems(
