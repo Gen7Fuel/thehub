@@ -72,7 +72,7 @@ function RouteComponent() {
         headers: { Authorization: `Bearer ${localStorage.getItem("token")}` },
       })
       .then(res => {
-        setName(res.data.name || "");
+        setName(res.data.templateName || "");
         setDescription(res.data.description || "");
         setItems(
           res.data.items && res.data.items.length > 0
@@ -156,7 +156,7 @@ function RouteComponent() {
       setSaving(false);
     }
   };
-
+  console.log(selectedSites)
   return (
     <div className="max-w-5xl mx-auto mt-8 p-4 border rounded">
       <h2 className="text-xl font-bold mb-4">Edit Audit Checklist Template</h2>

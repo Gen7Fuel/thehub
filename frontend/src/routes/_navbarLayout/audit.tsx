@@ -12,18 +12,22 @@ function RouteComponent() {
   // const isListActive = matchRoute({ to: '/audit/list' })
   const isChecklistActive = matchRoute({ to: '/audit/checklist', fuzzy: true })
 
+  const access = JSON.parse(localStorage.getItem('access') || '{}')
+
   return (
     <div className="pt-16 flex flex-col items-center">
       {/* Grouped buttons */}
       <div className="flex mb-4">
-        <Link to="/audit/templates">
-          <Button
-            {...(isCreateActive ? {} : { variant: 'outline' } as object)}
-            className="rounded-r-none"
-          >
-            Templates
-          </Button>
-        </Link>
+        {access.component_station_audit_template && (
+          <Link to="/audit/templates">
+            <Button
+              {...(isCreateActive ? {} : { variant: 'outline' } as object)}
+              className="rounded-r-none"
+            >
+              Templates
+            </Button>
+          </Link>
+        )}
         {/* <Link to="/audit/list">
           <Button
             {...(!isListActive && { variant: 'outline' } as object)}

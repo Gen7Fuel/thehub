@@ -12,8 +12,6 @@ const AuditItemSchema = new mongoose.Schema({
   checked: { type: Boolean, default: false },
   photos: [{ type: String }],
   comment: { type: String },
-
-  lastChecked: { type: Date, default: null },
   frequency: { 
     type: String, 
     enum: ["daily", "weekly", "monthly"], 

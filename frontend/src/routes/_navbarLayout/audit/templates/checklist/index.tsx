@@ -86,6 +86,11 @@ function RouteComponent() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+
+    if (selectedSites.length === 0) {
+      setError("Please select at least one site");
+      return;
+    }
     setError("");
     setSaving(true);
     const payload = {
@@ -95,6 +100,7 @@ function RouteComponent() {
         sites: selectedSites,
         // createdBy will be set in backend
     };
+    console.log("payload items:", items)
     console.log("Submitting checklist template:", payload);
     try {
         await axios.post(
@@ -148,6 +154,7 @@ function RouteComponent() {
                     type="checkbox"
                     checked={selectedSites.includes(site.stationName)}
                     onChange={() => handleSiteToggle(site.stationName)}
+                    // required
                     />
                     {site.stationName}
                 </label>

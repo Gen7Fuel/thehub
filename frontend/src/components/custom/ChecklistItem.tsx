@@ -34,7 +34,8 @@ interface ChecklistItemCardProps {
   onPhotos: (photos: string[]) => void;
   onFieldChange?: (field: "status" | "followUp" | "assignedTo", value: string) => void;
   selectTemplates?: SelectTemplate[];
-  catColor: string;
+  borderColor: string;
+  lastChecked?: string;
 }
 
 export function ChecklistItemCard({
@@ -44,7 +45,8 @@ export function ChecklistItemCard({
   onPhotos,
   onFieldChange,
   selectTemplates = [],
-  catColor,
+  borderColor,
+  lastChecked,
 }: ChecklistItemCardProps) {
   const [commentOpen, setCommentOpen] = useState(false);
   const [commentValue, setCommentValue] = useState(item.comment || "");
@@ -109,9 +111,9 @@ export function ChecklistItemCard({
   //       </Label>
   //     </div>
     <div
-      className={`border-2 rounded-2xl p-4 mb-3 flex flex-col gap-2 w-100 transition-colors
+      className={`border-2 rounded-2xl p-4 mb-3 flex flex-col gap-2 w-130 transition-colors
         ${item.checked ? "bg-green-100" : "bg-gray-50"}
-        ${catColor || "border-gray-300"}  border-t-5`}
+        ${borderColor || "border-gray-300"}  border-t-5`}
     >
 
       <div className="flex items-center w-full">
@@ -176,18 +178,89 @@ export function ChecklistItemCard({
         </div>
       </div>
 
-      {/* Category */}
-      {item.category && (
-        <div>
-          <span className="font-medium">Category:</span> {item.category}
+      {/* LAst Checked */}
+      {lastChecked ? (
+        <div className="text-sm text-gray-500">
+          Last checked: {new Date(lastChecked).toLocaleString()}
+        </div>
+      ) : (
+        <div className="text-sm text-gray-400 italic">
+          Last checked: Date not available
         </div>
       )}
-      <div className="flex gap-4">
-        <div className="flex-1">
+
+
+      <div className="flex gap-4 items-center">
+        {/* Status */}
+        <div className="flex-1 flex flex-col">
+          <label className="mb-1 font-medium text-sm">Status</label>
+          <Select
+            value={item.status || ""}
+            onValueChange={(val) => onFieldChange?.("status", val)}
+          >
+            <SelectTrigger className="w-[100px] bg-gray-100 border-gray-300 focus:ring-2 focus:ring-green-500">
+              <SelectValue placeholder="Status" />
+            </SelectTrigger>
+            <SelectContent>
+              {getOptions("Status").map((opt) => (
+                <SelectItem key={opt._id} value={opt.text}>
+                  {opt.text}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+
+        {/* Follow Up */}
+        <div className="flex-1 flex flex-col">
+          <label className="mb-1 font-medium text-sm">Follow Up</label>
+          <Select
+            value={item.followUp || ""}
+            onValueChange={(val) => onFieldChange?.("followUp", val)}
+          >
+            <SelectTrigger className="w-[100px] bg-gray-100 border-gray-300 focus:ring-2 focus:ring-green-500">
+              <SelectValue placeholder="Follow Up" />
+            </SelectTrigger>
+            <SelectContent>
+              {getOptions("Follow Up").map((opt) => (
+                <SelectItem key={opt._id} value={opt.text}>
+                  {opt.text}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+
+        {/* Assigned To */}
+        <div className="flex-1 flex flex-col">
+          <label className="mb-1 font-medium text-sm">Assigned To</label>
+          <Select
+            value={item.assignedTo || ""}
+            onValueChange={(val) => onFieldChange?.("assignedTo", val)}
+          >
+            <SelectTrigger className="w-[100px] bg-gray-100 border-gray-300 focus:ring-2 focus:ring-green-500">
+              <SelectValue placeholder="Assigned To" />
+            </SelectTrigger>
+            <SelectContent>
+              {getOptions("Assigned To").map((opt) => (
+                <SelectItem key={opt._id} value={opt.text}>
+                  {opt.text}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+      </div>
+
+
+
+
+      {/* <div className="flex gap-4">
+        <div className="flex-1"> */}
           {/* Status Dropdown */}
-          <div>
+          {/* <div> */}
             {/* <label className="block font-medium mb-1">Status</label> */}
-            <Select
+            {/* <Select
               value={item.status || ""}
               onValueChange={val => onFieldChange?.("status", val)}
             >
@@ -204,11 +277,11 @@ export function ChecklistItemCard({
             </Select>
           </div>
         </div>
-        <div className="flex-1">
+        <div className="flex-1"> */}
           {/* Follow Up Dropdown */}
-          <div>
+          {/* <div> */}
             {/* <label className="block font-medium mb-1">Follow Up</label> */}
-            <Select
+            {/* <Select
               value={item.followUp || ""}
               onValueChange={val => onFieldChange?.("followUp", val)}
             >
@@ -224,12 +297,12 @@ export function ChecklistItemCard({
               </SelectContent>
             </Select>
           </div>
-        </div>
-        <div className="flex-1">
+        </div> */}
+        {/* <div className="flex-1"> */}
           {/* Assigned To Dropdown */}
-          <div>
+          {/* <div> */}
             {/* <label className="block font-medium mb-1">Assigned To</label> */}
-            <Select
+            {/* <Select
               value={item.assignedTo || ""}
               onValueChange={val => onFieldChange?.("assignedTo", val)}
             >
@@ -246,7 +319,7 @@ export function ChecklistItemCard({
             </Select>
           </div>
         </div>
-      </div>
+      </div> */}
       {/* Comment and Photos */}
       {/* <div className="flex gap-2 mt-2">
 

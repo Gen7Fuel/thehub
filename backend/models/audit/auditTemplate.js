@@ -14,7 +14,11 @@ const AuditTemplateSchema = new mongoose.Schema({
         type: String, 
         enum: ["daily", "weekly", "monthly"], 
         default: "daily" 
-      }
+      },
+      lastCheckedHistory:[{
+        site: { type: String, required: true },
+        timestamp: { type: Date, default: null } // <-- default is empty
+      }]
     }
   ],
   sites: [{ type: String }],
