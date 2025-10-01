@@ -354,3 +354,20 @@ export async function getCsoCodeByStationName(stationName: string): Promise<stri
     return null;
   }
 }
+
+export const getOrderRecStatusColor = (status?: string) => {
+  switch (status) {
+    case "Created":
+      return "#fef3c7"; // light yellow
+    case "Placed":
+      return "#bfdbfe"; // light blue
+    case "Completed":
+      return "#fcd34d"; // light orange/golden
+    case "Delivered":
+      return "#bbf7d0"; // light green
+    case "Invoice Received":
+      return "#e0e7ff"; // light purple/indigo
+    default:
+      return "#f3f4f6"; // default light grey
+  }
+};
