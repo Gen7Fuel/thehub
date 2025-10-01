@@ -1,9 +1,7 @@
-import { createFileRoute } from '@tanstack/react-router'
+import { createFileRoute, redirect } from '@tanstack/react-router'
 
 export const Route = createFileRoute('/_navbarLayout/audit/')({
-  component: RouteComponent,
+  beforeLoad: () => {
+    throw redirect({ to: '/audit/checklist' })
+  },
 })
-
-function RouteComponent() {
-  return <div>Hello "/_navbarLayout/audit/"!</div>
-}
