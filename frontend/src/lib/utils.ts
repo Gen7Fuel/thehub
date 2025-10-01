@@ -320,3 +320,37 @@ export function isTokenExpired(token: string | null): boolean {
     return true;
   }
 }
+
+/**
+ * Fetches vendor name by vendor ID.
+ * @param {string} vendorId - The vendor's MongoDB ObjectId.
+ * @returns {Promise<string | null>} - The vendor name, or null if not found.
+ */
+export async function getVendorNameById(vendorId: string): Promise<string | null> {
+  try {
+    const response = await axios.get(`/api/vendors/${vendorId}`, {
+      headers: {
+        Authorization: `Bearer ${localStorage.getItem('token')}`
+      }
+    });
+    return response.data?.name ?? null;
+  } catch (error) {
+    console.error('Error fetching vendor name:', error);
+    return null;
+  }
+}
+
+// get csoCode by station name
+export async function getCsoCodeByStationName(stationName: string): Promise<string | null> {
+  try {
+    const response = await axios.get(`/api/locations/name/${encodeURIComponent(stationName)}`, {
+      headers: {
+        Authorization: `Bearer ${localStorage.getItem('token')}`
+      }
+    });
+    return response.data?.csoCode ?? null;
+  } catch (error) {
+    console.error('Error fetching CSO code:', error);
+    return null;
+  }
+}

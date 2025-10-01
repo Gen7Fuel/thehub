@@ -2,6 +2,7 @@ import { createFileRoute } from '@tanstack/react-router'
 import { useEffect, useState } from "react";
 import { LocationPicker } from "@/components/custom/locationPicker";
 import TableWithInputs from "@/components/custom/TableWithInputs";
+import { DateTime } from 'luxon';
 
 export const Route = createFileRoute('/_navbarLayout/cycle-count/count')({
   component: RouteComponent,
@@ -23,7 +24,7 @@ function RouteComponent() {
     if (!stationName) return;
     setLoading(true);
     setError("");
-    fetch(`/api/cycle-count/daily-items?site=${encodeURIComponent(stationName)}&chunkSize=20`, {
+    fetch(`/api/cycle-count/daily-items?site=${encodeURIComponent(stationName)}&chunkSize=20&timezone=${encodeURIComponent(Intl.DateTimeFormat().resolvedOptions().timeZone)}`, {
       headers: {
         Authorization: `Bearer ${localStorage.getItem("token") || ""}`,
       },
@@ -36,14 +37,37 @@ function RouteComponent() {
         // Initialize counts state for each item (flagged + daily)
         const initialCounts: { [id: string]: { foh: string; boh: string } } = {};
         const allItems = [...(data.flaggedItems || []), ...(data.items || [])];
-        const today = new Date();
-        today.setHours(0, 0, 0, 0);
+        // const today = new Date();
+        // today.setHours(0, 0, 0, 0);
+        // allItems.forEach((item: any) => {
+        //   const updatedAt = item.updatedAt ? new Date(item.updatedAt) : null;
+        //   const isToday =
+        //     updatedAt &&
+        //     updatedAt >= today &&
+        //     updatedAt < new Date(today.getTime() + 24 * 60 * 60 * 1000);
+
+        //   initialCounts[item._id] = {
+        //     foh:
+        //       isToday && item.foh != null && item.foh !== 0
+        //         ? String(item.foh)
+        //         : "",
+        //     boh:
+        //       isToday && item.boh != null && item.boh !== 0
+        //         ? String(item.boh)
+        //         : ""
+        //   };
+        // });
+        const timezone = Intl.DateTimeFormat().resolvedOptions().timeZone;
+        const now = DateTime.now().setZone(timezone);
+        const todayStart = now.startOf('day');
+        const tomorrowStart = todayStart.plus({ days: 1 });
+
         allItems.forEach((item: any) => {
-          const updatedAt = item.updatedAt ? new Date(item.updatedAt) : null;
+          const updatedAt = item.updatedAt ? DateTime.fromISO(item.updatedAt).setZone(timezone) : null;
           const isToday =
             updatedAt &&
-            updatedAt >= today &&
-            updatedAt < new Date(today.getTime() + 24 * 60 * 60 * 1000);
+            updatedAt >= todayStart &&
+            updatedAt < tomorrowStart;
 
           initialCounts[item._id] = {
             foh:
@@ -117,14 +141,37 @@ function RouteComponent() {
           // Re-initialize counts for the new items
           const initialCounts: { [id: string]: { foh: string; boh: string } } = {};
           const allItems = [...(data.flaggedItems || []), ...(data.items || [])];
-          const today = new Date();
-          today.setHours(0, 0, 0, 0);
+          // const today = new Date();
+          // today.setHours(0, 0, 0, 0);
+          // allItems.forEach((item: any) => {
+          //   const updatedAt = item.updatedAt ? new Date(item.updatedAt) : null;
+          //   const isToday =
+          //     updatedAt &&
+          //     updatedAt >= today &&
+          //     updatedAt < new Date(today.getTime() + 24 * 60 * 60 * 1000);
+
+          //   initialCounts[item._id] = {
+          //     foh:
+          //       isToday && item.foh != null && item.foh !== 0
+          //         ? String(item.foh)
+          //         : "",
+          //     boh:
+          //       isToday && item.boh != null && item.boh !== 0
+          //         ? String(item.boh)
+          //         : ""
+          //   };
+          // });
+          const timezone = Intl.DateTimeFormat().resolvedOptions().timeZone;
+          const now = DateTime.now().setZone(timezone);
+          const todayStart = now.startOf('day');
+          const tomorrowStart = todayStart.plus({ days: 1 });
+
           allItems.forEach((item: any) => {
-            const updatedAt = item.updatedAt ? new Date(item.updatedAt) : null;
+            const updatedAt = item.updatedAt ? DateTime.fromISO(item.updatedAt).setZone(timezone) : null;
             const isToday =
               updatedAt &&
-              updatedAt >= today &&
-              updatedAt < new Date(today.getTime() + 24 * 60 * 60 * 1000);
+              updatedAt >= todayStart &&
+              updatedAt < tomorrowStart;
 
             initialCounts[item._id] = {
               foh:

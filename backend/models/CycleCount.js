@@ -17,12 +17,14 @@ const CycleCountItemSchema = new mongoose.Schema({
 // Static method to sort by category, name, updatedAt
 CycleCountItemSchema.statics.sortItems = function(items) {
   return items.sort((a, b) => {
-    // category
-    if (a.category !== b.category) return (a.category || '').localeCompare(b.category || '');
-    // name
-    if (a.name !== b.name) return a.name.localeCompare(b.name);
-    // updatedAt
-    return new Date(a.updatedAt) - new Date(b.updatedAt);
+    // First, by updatedAt (oldest first)
+    const dateDiff = new Date(a.updatedAt) - new Date(b.updatedAt);
+    if (dateDiff !== 0) return dateDiff;
+    // Then by category
+    const catDiff = (a.category || '').localeCompare(b.category || '');
+    if (catDiff !== 0) return catDiff;
+    // Then by name
+    return (a.name || '').localeCompare(b.name || '');
   });
 };
 

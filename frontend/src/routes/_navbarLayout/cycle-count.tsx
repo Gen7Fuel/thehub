@@ -12,26 +12,13 @@ function RouteComponent() {
   // const isListActive = matchRoute({ to: '/cycle-count/list' });
   const isInputActive = matchRoute({ to: '/cycle-count' });
   const isCountActive = matchRoute({ to: '/cycle-count/count' });
+  const isConsoleActive = matchRoute({ to: '/cycle-count/console' });
+
+  const access = JSON.parse(localStorage.getItem("access") || "{}");
 
   return (
     <div className="pt-16 flex flex-col items-center">
       <div className="flex mb-4">
-        {/* <Link to="/cycle-count" activeOptions={{ exact: true }}>
-          <Button
-            {...(isUploadActive ? {} : { variant: 'outline' } as object)}
-            className="rounded-r-none"
-          >
-            Upload
-          </Button>
-        </Link>
-        <Link to="/cycle-count/list" activeOptions={{ exact: true }}>
-          <Button
-            {...(!isListActive && { variant: 'outline' } as object)}
-            className="rounded-l-none"
-          >
-            List
-          </Button>
-        </Link> */}
         <Link to="/cycle-count" activeOptions={{ exact: true }}>
           <Button
             {...(!isInputActive && { variant: 'outline' } as object)}
@@ -43,11 +30,22 @@ function RouteComponent() {
         <Link to="/cycle-count/count" activeOptions={{ exact: true }}>
           <Button
             {...(!isCountActive && { variant: 'outline' } as object)}
-            className="rounded-l-none"
+            className={access.component_cycle_count_console ? 'rounded-none' : 'rounded-l-none'}
           >
             Count
           </Button>
         </Link>
+
+        {access.component_cycle_count_console && (
+        <Link to="/cycle-count/console" activeOptions={{ exact: true }}>
+          <Button
+            {...(!isConsoleActive && { variant: 'outline' } as object)}
+            className="rounded-l-none"
+          >
+            Console
+          </Button>
+        </Link>
+        )}
       </div>
       <Outlet />
     </div>

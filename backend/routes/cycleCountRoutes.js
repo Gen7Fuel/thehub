@@ -2,6 +2,7 @@ const express = require('express');
 const router = express.Router();
 const multer = require('multer');
 const XLSX = require('xlsx');
+const { DateTime } = require('luxon');
 const CycleCount = require('../models/CycleCount');
 
 const upload = multer({ storage: multer.memoryStorage() });
@@ -49,12 +50,17 @@ router.post('/upload-excel', upload.single('file'), async (req, res) => {
 // GET /api/cycle-count/daily-items?site=SiteName&chunkSize=20
 router.get('/daily-items', async (req, res) => {
   try {
-    const { site, chunkSize = 20 } = req.query;
+    const { site, chunkSize = 20, timezone = 'UTC' } = req.query;
     if (!site) return res.status(400).json({ message: "site is required" });
 
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
-    const tomorrow = new Date(today.getTime() + 24 * 60 * 60 * 1000);
+    // const today = new Date();
+    // today.setHours(0, 0, 0, 0);
+    // const tomorrow = new Date(today.getTime() + 24 * 60 * 60 * 1000);
+
+    // Get the start and end of today in the user's timezone, then convert to UTC
+    const now = DateTime.now().setZone(timezone);
+    const todayStart = now.startOf('day').toUTC();
+    const tomorrowStart = todayStart.plus({ days: 1 });
 
     // 1. Fetch flagged items (top)
     const flaggedItemsRaw = await CycleCount.find({ site: site.toString().trim(), flagged: true });
@@ -62,16 +68,21 @@ router.get('/daily-items', async (req, res) => {
     const flaggedCount = flaggedItems.length;
 
     const chunk = parseInt(chunkSize, 10);
-    const dailyCount = Math.max(chunk - flaggedCount, 0);
+    const dailyCount = Math.max(chunk - flaggedCount, 0); // number of items on today's list
 
     // 2. Fetch all unflagged items for the site
-    const allUnflagged = await CycleCount.find({
+    let allUnflagged = await CycleCount.find({
       site: site.toString().trim(),
       flagged: false
     });
+    allUnflagged = CycleCount.sortItems(allUnflagged);
 
     // 3. All unflagged items counted today (priority)
-    const todayItems = allUnflagged.filter(i => i.updatedAt >= today && i.updatedAt < tomorrow);
+    // const todayItems = allUnflagged.filter(i => i.updatedAt >= today && i.updatedAt < tomorrow); // NEED TO CHECK UTC
+    const todayItems = allUnflagged.filter(i =>
+      DateTime.fromJSDate(i.updatedAt).toUTC() >= todayStart &&
+      DateTime.fromJSDate(i.updatedAt).toUTC() < tomorrowStart
+    );
 
     // 4. Calculate how many more items are needed
     const todayCount = todayItems.length;
@@ -89,9 +100,16 @@ router.get('/daily-items', async (req, res) => {
 
     // Exclude today's items from the pool
     const notTodayByGrade = {};
+    // grades.forEach(grade => {
+    //   notTodayByGrade[grade] = allUnflagged
+    //     .filter(i => i.grade === grade && !(i.updatedAt >= today && i.updatedAt < tomorrow));
+    // });
     grades.forEach(grade => {
       notTodayByGrade[grade] = allUnflagged
-        .filter(i => i.grade === grade && !(i.updatedAt >= today && i.updatedAt < tomorrow));
+        .filter(i => i.grade === grade && !(
+          DateTime.fromJSDate(i.updatedAt).toUTC() >= todayStart &&
+          DateTime.fromJSDate(i.updatedAt).toUTC() < tomorrowStart
+        ));
     });
 
     let selectedA = CycleCount.sortItems(notTodayByGrade["A"]).slice(0, numA);
@@ -115,86 +133,6 @@ router.get('/daily-items', async (req, res) => {
     res.status(500).json({ message: "Failed to get daily items" });
   }
 });
-
-// router.get('/daily-items', async (req, res) => {
-//   try {
-//     const { site, chunkSize = 20 } = req.query;
-//     if (!site) return res.status(400).json({ message: "site is required" });
-
-//     const today = new Date();
-//     today.setHours(0, 0, 0, 0);
-//     const tomorrow = new Date(today.getTime() + 24 * 60 * 60 * 1000);
-
-//     // Get all unflagged items for the site
-//     const allItems = await CycleCount.find({
-//       site: site.toString().trim(),
-//       flagged: false
-//     });
-
-//     // Split by grade
-//     const grades = ["A", "B", "C"];
-//     const itemsByGrade = {};
-//     grades.forEach(grade => {
-//       itemsByGrade[grade] = allItems.filter(i => i.grade === grade);
-//     });
-
-//     // Get today's items by grade
-//     const todayItemsByGrade = {};
-//     grades.forEach(grade => {
-//       todayItemsByGrade[grade] = itemsByGrade[grade].filter(i => i.updatedAt >= today && i.updatedAt < tomorrow);
-//     });
-
-//     // Calculate how many of each grade are needed
-//     const groupSize = 6;
-//     const chunk = parseInt(chunkSize, 10);
-//     const groups = Math.floor(chunk / groupSize);
-//     const remainder = chunk % groupSize;
-
-//     const numA = 3 * groups + remainder;
-//     const numB = 2 * groups;
-//     const numC = 1 * groups;
-
-//     // Start with today's items
-//     let selectedA = CycleCount.sortItems(todayItemsByGrade["A"]).slice(0, numA);
-//     let selectedB = CycleCount.sortItems(todayItemsByGrade["B"]).slice(0, numB);
-//     let selectedC = CycleCount.sortItems(todayItemsByGrade["C"]).slice(0, numC);
-
-//     // Fill up with oldest items if not enough for today
-//     if (selectedA.length < numA) {
-//       const needed = numA - selectedA.length;
-//       const notTodayA = CycleCount.sortItems(itemsByGrade["A"].filter(i => !(i.updatedAt >= today && i.updatedAt < tomorrow) && !selectedA.some(a => a._id.equals(i._id))));
-//       selectedA = [...selectedA, ...notTodayA.slice(0, needed)];
-//     }
-//     if (selectedB.length < numB) {
-//       const needed = numB - selectedB.length;
-//       const notTodayB = CycleCount.sortItems(itemsByGrade["B"].filter(i => !(i.updatedAt >= today && i.updatedAt < tomorrow) && !selectedB.some(b => b._id.equals(i._id))));
-//       selectedB = [...selectedB, ...notTodayB.slice(0, needed)];
-//     }
-//     if (selectedC.length < numC) {
-//       const needed = numC - selectedC.length;
-//       const notTodayC = CycleCount.sortItems(itemsByGrade["C"].filter(i => !(i.updatedAt >= today && i.updatedAt < tomorrow) && !selectedC.some(c => c._id.equals(i._id))));
-//       selectedC = [...selectedC, ...notTodayC.slice(0, needed)];
-//     }
-
-//     // Fetch flagged items for the site
-//     const flaggedItemsRaw = await CycleCount.find({ site: site.toString().trim(), flagged: true });
-//     const flaggedItems = CycleCount.sortItems(flaggedItemsRaw).slice(0, 5);
-
-//     const flaggedCount = flaggedItems.length;
-//     const dailyCount = Math.max(chunk - flaggedCount, 0);
-
-//     const result = [...selectedA, ...selectedB, ...selectedC];
- 
-
-//     res.json({
-//       flaggedItems,
-//       items: result
-//     });
-//   } catch (err) {
-//     console.error(err);
-//     res.status(500).json({ message: "Failed to get daily items" });
-//   }
-// });
 
 router.post('/save-counts', async (req, res) => {
   try {
@@ -248,6 +186,62 @@ router.get('/counted-today', async (req, res) => {
     console.error(err);
     res.status(500).json({ message: "Failed to get today's count." });
   }
+});
+
+router.get('/daily-counts', async (req, res) => {
+  try {
+    const { site, startDate, endDate, timezone = 'UTC' } = req.query;
+    if (!site || !startDate || !endDate) {
+      return res.status(400).json({ message: "site, startDate, and endDate are required" });
+    }
+
+    const start = DateTime.fromISO(startDate, { zone: timezone }).startOf('day');
+    const end = DateTime.fromISO(endDate, { zone: timezone }).endOf('day');
+
+    // Get all entries in the date range
+    const entries = await CycleCount.find({
+      site: site.toString().trim(),
+      updatedAt: {
+        $gte: start.toJSDate(),
+        $lte: end.toJSDate()
+      }
+    });
+
+    // Count per day
+    const counts = {};
+    let cursor = start;
+    while (cursor <= end) {
+      const dayStart = cursor;
+      const dayEnd = cursor.plus({ days: 1 });
+      const dayKey = dayStart.toISODate();
+
+      counts[dayKey] = entries.filter(e => {
+        const updated = DateTime.fromJSDate(e.updatedAt).setZone(timezone);
+        return updated >= dayStart && updated < dayEnd;
+      }).length;
+
+      cursor = dayEnd;
+    }
+
+    // Convert counts to array for chart compatibility
+    const data = Object.entries(counts).map(([date, count]) => ({
+      date,
+      count
+    }));
+
+    res.json({ site, data });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ message: "Failed to get daily counts." });
+  }
+});
+
+router.get('/lookup', async (req, res) => {
+  const { upc_barcode, site } = req.query;
+  if (!upc_barcode || !site) return res.status(400).json({ error: "UPC barcode and site required" });
+  const item = await CycleCount.findOne({ upc_barcode, site });
+  if (!item) return res.status(404).json({ error: "Not found" });
+  res.json(item);
 });
 
 module.exports = router;

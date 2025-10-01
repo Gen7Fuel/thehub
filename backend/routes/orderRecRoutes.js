@@ -48,6 +48,68 @@ router.get('/', async (req, res) => {
   }
 });
 
+// Get all with optional startDate and endDate filtering
+router.get('/range', async (req, res) => {
+  try {
+    const { site, vendor, startDate, endDate } = req.query;
+    const query = {};
+
+    if (site) query.site = site;
+    if (vendor) query.vendor = vendor;
+
+    if (startDate || endDate) {
+      query.createdAt = {};
+      if (startDate) {
+        const start = new Date(startDate);
+        start.setHours(0, 0, 0, 0);
+        query.createdAt.$gte = start;
+      }
+      if (endDate) {
+        const end = new Date(endDate);
+        end.setHours(23, 59, 59, 999);
+        query.createdAt.$lte = end;
+      }
+    }
+
+    const orderRecs = await OrderRec.find(query).sort({ createdAt: -1 });
+
+    // Status keys and their matching values
+    const statusKeys = {
+      created: "Created",
+      completed: "Completed",
+      placed: "Placed",
+      delivered: "Delivered",
+      invoice_received: "Invoice Received"
+    };
+
+    // Initialize result object
+    const categorized = {
+      created: [],
+      completed: [],
+      placed: [],
+      delivered: [],
+      invoice_received: []
+    };
+
+    orderRecs.forEach(rec => {
+      // Find the key that matches the currentStatus
+      const key = Object.keys(statusKeys).find(
+        k => (rec.currentStatus || "").toLowerCase() === statusKeys[k].toLowerCase()
+      );
+      if (key) {
+        categorized[key].push(rec);
+      } else {
+        // If currentStatus doesn't match, default to "created"
+        categorized.created.push(rec);
+      }
+    });
+
+    res.json(categorized);
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+});
+
 // Get one
 router.get('/:id', async (req, res) => {
   try {
@@ -58,6 +120,8 @@ router.get('/:id', async (req, res) => {
     res.status(500).json({ message: err.message });
   }
 });
+
+
 
 // Update item completion
 router.put('/:id/item/:catIdx/:itemIdx', async (req, res) => {
@@ -116,58 +180,58 @@ router.put('/:id/item/:catIdx/:itemIdx', async (req, res) => {
     }
 
     const site = orderRec.site;
+    if (category.name !== "Station Supplies"){
+      if (item.completed){
+        // Updating Cycle Count Flag and creating new entry (if dosen't exists)
+        if (isChanged && item.gtin) {
+          const existing = await CycleCount.findOne({ site, gtin: item.gtin });
 
-    if (item.completed){
-      // Updating Cycle Count Flag and creating new entry (if dosen't exists)
-      if (isChanged && item.gtin) {
-        const existing = await CycleCount.findOne({ site, gtin: item.gtin });
-
-        if (existing) {
-          // Update existing entry
-          existing.flagged = true;
-          await existing.save();
-          console.log("Updated existing CycleCount:", existing.upc);
-        } 
-        else {
-          const existing_site = await CycleCount.find({ gtin: item.gtin }).limit(1);
-          
-          if (existing_site){
-            // Push new entry using existing information from other sites
-            const newCycleCount = new CycleCount({
-              site,
-              upc: existing_site[0].upc,
-              name: item.itemName || "", // product name from categories.items
-              category: category.name,
-              grade: "C",
-              foh: 0,
-              boh: 0,
-              flagged: true,
-              gtin: existing_site[0].gtin,
-              upc_barcode: existing_site[0].upc_barcode,
-              updatedAt: new Date(), // store UTC
-            });
-            await newCycleCount.save();
-            console.log("Created existing new CycleCount:", newCycleCount.upc);
-          } else {
-            // Push new entry with no upc and upc_barcode just gtin from the existing items
-            const newCycleCount = new CycleCount({
-              site,
-              upc: "",
-              name: item.itemName || "", // product name from categories.items
-              category: category.name,
-              grade: "C",
-              foh: 0,
-              boh: 0,
-              flagged: true,
-              gtin: item.gtin,
-              upc_barcode: "",
-              updatedAt: new Date(), // store UTC
-            });
-            await newCycleCount.save();
-            console.log("Created brand new CycleCount:", newCycleCount.upc);
+          if (existing) {
+            // Update existing entry
+            existing.flagged = true;
+            await existing.save();
+            console.log("Updated existing CycleCount:", existing.upc);
+          } 
+          else {
+            const existing_site = await CycleCount.find({ gtin: item.gtin }).limit(1);
+            
+            if (existing_site.length === 1){
+              // Push new entry using existing information from other sites
+              const newCycleCount = new CycleCount({
+                site,
+                upc: existing_site[0].upc,
+                name: item.itemName || "", // product name from categories.items
+                category: category.name,
+                grade: "C",
+                foh: 0,
+                boh: 0,
+                flagged: true,
+                gtin: existing_site[0].gtin,
+                upc_barcode: existing_site[0].upc_barcode,
+                updatedAt: new Date(), // store UTC
+              });
+              await newCycleCount.save();
+              console.log("Created existing new CycleCount:", newCycleCount.upc);
+            } else {
+              // Push new entry with no upc and upc_barcode just gtin from the existing items
+              const newCycleCount = new CycleCount({
+                site,
+                upc: "",
+                name: item.itemName || "", // product name from categories.items
+                category: category.name,
+                grade: "C",
+                foh: 0,
+                boh: 0,
+                flagged: true,
+                gtin: item.gtin,
+                upc_barcode: "",
+                updatedAt: new Date(), // store UTC
+              });
+              await newCycleCount.save();
+              console.log("Created brand new CycleCount:", newCycleCount.upc);
+            }
           }
-        }
-      } else { // if it is not changed then update it to false and if not existing then create a new entry
+        } else { // if it is not changed then update it to false and if not existing then create a new entry
           const existing = await CycleCount.findOne({ site, gtin: item.gtin });
 
           if (existing) {
@@ -178,8 +242,8 @@ router.put('/:id/item/:catIdx/:itemIdx', async (req, res) => {
           } 
           else {
             const existing_site = await CycleCount.find({ gtin: item.gtin }).limit(1);
-            
-            if (existing_site){
+              
+            if (existing_site.length === 1){
               // Push new entry using existing information from other sites
               const newCycleCount = new CycleCount({
                 site,
@@ -215,6 +279,7 @@ router.put('/:id/item/:catIdx/:itemIdx', async (req, res) => {
               console.log("Created brand new CycleCount with false:", newCycleCount.upc);
             }
           }
+        }
       }
     } 
 

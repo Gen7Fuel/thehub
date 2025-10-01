@@ -56,8 +56,8 @@ import { Route as NavbarLayoutKardpollListRouteImport } from './routes/_navbarLa
 import { Route as NavbarLayoutFleetListRouteImport } from './routes/_navbarLayout/fleet/list'
 import { Route as NavbarLayoutDailyReportsShiftWorksheetRouteImport } from './routes/_navbarLayout/daily-reports/shift-worksheet'
 import { Route as NavbarLayoutDailyReportsCashSummaryRouteImport } from './routes/_navbarLayout/daily-reports/cash-summary'
+import { Route as NavbarLayoutCycleCountDashboardRouteImport } from './routes/_navbarLayout/cycle-count/dashboard'
 import { Route as NavbarLayoutCycleCountCountRouteImport } from './routes/_navbarLayout/cycle-count/count'
-import { Route as NavbarLayoutCycleCountConsoleRouteImport } from './routes/_navbarLayout/cycle-count/console'
 import { Route as NavbarLayoutAuditTemplatesRouteImport } from './routes/_navbarLayout/audit/templates'
 import { Route as NavbarLayoutAuditChecklistRouteImport } from './routes/_navbarLayout/audit/checklist'
 import { Route as NavbarLayoutSettingsUsersIndexRouteImport } from './routes/_navbarLayout/settings/users/index'
@@ -335,16 +335,16 @@ const NavbarLayoutDailyReportsCashSummaryRoute =
     path: '/cash-summary',
     getParentRoute: () => NavbarLayoutDailyReportsRoute,
   } as any)
+const NavbarLayoutCycleCountDashboardRoute =
+  NavbarLayoutCycleCountDashboardRouteImport.update({
+    id: '/dashboard',
+    path: '/dashboard',
+    getParentRoute: () => NavbarLayoutCycleCountRoute,
+  } as any)
 const NavbarLayoutCycleCountCountRoute =
   NavbarLayoutCycleCountCountRouteImport.update({
     id: '/count',
     path: '/count',
-    getParentRoute: () => NavbarLayoutCycleCountRoute,
-  } as any)
-const NavbarLayoutCycleCountConsoleRoute =
-  NavbarLayoutCycleCountConsoleRouteImport.update({
-    id: '/console',
-    path: '/console',
     getParentRoute: () => NavbarLayoutCycleCountRoute,
   } as any)
 const NavbarLayoutAuditTemplatesRoute =
@@ -505,8 +505,8 @@ export interface FileRoutesByFullPath {
   '/': typeof NavbarLayoutIndexRoute
   '/audit/checklist': typeof NavbarLayoutAuditChecklistRouteWithChildren
   '/audit/templates': typeof NavbarLayoutAuditTemplatesRouteWithChildren
-  '/cycle-count/console': typeof NavbarLayoutCycleCountConsoleRoute
   '/cycle-count/count': typeof NavbarLayoutCycleCountCountRoute
+  '/cycle-count/dashboard': typeof NavbarLayoutCycleCountDashboardRoute
   '/daily-reports/cash-summary': typeof NavbarLayoutDailyReportsCashSummaryRoute
   '/daily-reports/shift-worksheet': typeof NavbarLayoutDailyReportsShiftWorksheetRouteWithChildren
   '/fleet/list': typeof NavbarLayoutFleetListRoute
@@ -567,8 +567,8 @@ export interface FileRoutesByTo {
   '/reports': typeof NavbarLayoutReportsRouteWithChildren
   '/': typeof NavbarLayoutIndexRoute
   '/audit/templates': typeof NavbarLayoutAuditTemplatesRouteWithChildren
-  '/cycle-count/console': typeof NavbarLayoutCycleCountConsoleRoute
   '/cycle-count/count': typeof NavbarLayoutCycleCountCountRoute
+  '/cycle-count/dashboard': typeof NavbarLayoutCycleCountDashboardRoute
   '/daily-reports/cash-summary': typeof NavbarLayoutDailyReportsCashSummaryRoute
   '/fleet/list': typeof NavbarLayoutFleetListRoute
   '/kardpoll/list': typeof NavbarLayoutKardpollListRoute
@@ -636,8 +636,8 @@ export interface FileRoutesById {
   '/_navbarLayout/': typeof NavbarLayoutIndexRoute
   '/_navbarLayout/audit/checklist': typeof NavbarLayoutAuditChecklistRouteWithChildren
   '/_navbarLayout/audit/templates': typeof NavbarLayoutAuditTemplatesRouteWithChildren
-  '/_navbarLayout/cycle-count/console': typeof NavbarLayoutCycleCountConsoleRoute
   '/_navbarLayout/cycle-count/count': typeof NavbarLayoutCycleCountCountRoute
+  '/_navbarLayout/cycle-count/dashboard': typeof NavbarLayoutCycleCountDashboardRoute
   '/_navbarLayout/daily-reports/cash-summary': typeof NavbarLayoutDailyReportsCashSummaryRoute
   '/_navbarLayout/daily-reports/shift-worksheet': typeof NavbarLayoutDailyReportsShiftWorksheetRouteWithChildren
   '/_navbarLayout/fleet/list': typeof NavbarLayoutFleetListRoute
@@ -711,8 +711,8 @@ export interface FileRouteTypes {
     | '/'
     | '/audit/checklist'
     | '/audit/templates'
-    | '/cycle-count/console'
     | '/cycle-count/count'
+    | '/cycle-count/dashboard'
     | '/daily-reports/cash-summary'
     | '/daily-reports/shift-worksheet'
     | '/fleet/list'
@@ -773,8 +773,8 @@ export interface FileRouteTypes {
     | '/reports'
     | '/'
     | '/audit/templates'
-    | '/cycle-count/console'
     | '/cycle-count/count'
+    | '/cycle-count/dashboard'
     | '/daily-reports/cash-summary'
     | '/fleet/list'
     | '/kardpoll/list'
@@ -841,8 +841,8 @@ export interface FileRouteTypes {
     | '/_navbarLayout/'
     | '/_navbarLayout/audit/checklist'
     | '/_navbarLayout/audit/templates'
-    | '/_navbarLayout/cycle-count/console'
     | '/_navbarLayout/cycle-count/count'
+    | '/_navbarLayout/cycle-count/dashboard'
     | '/_navbarLayout/daily-reports/cash-summary'
     | '/_navbarLayout/daily-reports/shift-worksheet'
     | '/_navbarLayout/fleet/list'
@@ -1233,18 +1233,18 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof NavbarLayoutDailyReportsCashSummaryRouteImport
       parentRoute: typeof NavbarLayoutDailyReportsRoute
     }
+    '/_navbarLayout/cycle-count/dashboard': {
+      id: '/_navbarLayout/cycle-count/dashboard'
+      path: '/dashboard'
+      fullPath: '/cycle-count/dashboard'
+      preLoaderRoute: typeof NavbarLayoutCycleCountDashboardRouteImport
+      parentRoute: typeof NavbarLayoutCycleCountRoute
+    }
     '/_navbarLayout/cycle-count/count': {
       id: '/_navbarLayout/cycle-count/count'
       path: '/count'
       fullPath: '/cycle-count/count'
       preLoaderRoute: typeof NavbarLayoutCycleCountCountRouteImport
-      parentRoute: typeof NavbarLayoutCycleCountRoute
-    }
-    '/_navbarLayout/cycle-count/console': {
-      id: '/_navbarLayout/cycle-count/console'
-      path: '/console'
-      fullPath: '/cycle-count/console'
-      preLoaderRoute: typeof NavbarLayoutCycleCountConsoleRouteImport
       parentRoute: typeof NavbarLayoutCycleCountRoute
     }
     '/_navbarLayout/audit/templates': {
@@ -1503,15 +1503,15 @@ const NavbarLayoutAuditRouteWithChildren =
   NavbarLayoutAuditRoute._addFileChildren(NavbarLayoutAuditRouteChildren)
 
 interface NavbarLayoutCycleCountRouteChildren {
-  NavbarLayoutCycleCountConsoleRoute: typeof NavbarLayoutCycleCountConsoleRoute
   NavbarLayoutCycleCountCountRoute: typeof NavbarLayoutCycleCountCountRoute
+  NavbarLayoutCycleCountDashboardRoute: typeof NavbarLayoutCycleCountDashboardRoute
   NavbarLayoutCycleCountIndexRoute: typeof NavbarLayoutCycleCountIndexRoute
 }
 
 const NavbarLayoutCycleCountRouteChildren: NavbarLayoutCycleCountRouteChildren =
   {
-    NavbarLayoutCycleCountConsoleRoute: NavbarLayoutCycleCountConsoleRoute,
     NavbarLayoutCycleCountCountRoute: NavbarLayoutCycleCountCountRoute,
+    NavbarLayoutCycleCountDashboardRoute: NavbarLayoutCycleCountDashboardRoute,
     NavbarLayoutCycleCountIndexRoute: NavbarLayoutCycleCountIndexRoute,
   }
 
