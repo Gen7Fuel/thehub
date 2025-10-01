@@ -37,13 +37,13 @@ const STATUS_KEYS = [
   "invoice_received"
 ];
 
-const STATUS_LABELS: Record<string, string> = {
-  created: "Created",
-  completed: "Completed",
-  placed: "Placed",
-  delivered: "Delivered",
-  invoice_received: "Invoice Received"
-};
+// const STATUS_LABELS: Record<string, string> = {
+//   created: "Created",
+//   completed: "Completed",
+//   placed: "Placed",
+//   delivered: "Delivered",
+//   invoice_received: "Invoice Received"
+// };
 
 const chartConfig = {
   count: {
@@ -62,11 +62,11 @@ const salesChartConfig = {
 
 function RouteComponent() {
   const [site, setSite] = useState(localStorage.getItem("location") || "Rankin");
-  const [orderRecs, setOrderRecs] = useState<Record<string, any[]>>({});
-  const [vendorNames, setVendorNames] = useState<Record<string, string>>({});
+  const [, setOrderRecs] = useState<Record<string, any[]>>({});
+  const [, setVendorNames] = useState<Record<string, string>>({});
   const [dailyCounts, setDailyCounts] = useState<{ date: string, count: number }[]>([]);
   const [salesData, setSalesData] = useState<any[]>([]);
-  const [vendors, setVendors] = useState<any[]>([]);
+  const [, setVendors] = useState<any[]>([]);
   const [vendorStatus, setVendorStatus] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
 
