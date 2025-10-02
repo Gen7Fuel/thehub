@@ -43,9 +43,9 @@ const TableWithInputs: React.FC<TableWithInputsProps> = ({
                 <td className="border px-2 py-1">{item.name}</td>
                 <td
                   className="border px-2 py-1 text-blue-600 cursor-pointer underline"
-                  onClick={() => setBarcodeValue(item.upc_barcode || item.gtin)}
+                  onClick={() => setBarcodeValue(item.upc_barcode)}
                 >
-                  {item.upc_barcode}
+                  {item.upc_barcode || item.gtin}
                 </td>
                 {/* <td className="border px-2 py-1">{item.category}</td> */}
                 {/* <td className="border px-2 py-1">{item.grade}</td> */}
