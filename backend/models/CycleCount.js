@@ -11,7 +11,8 @@ const CycleCountItemSchema = new mongoose.Schema({
   foh: { type: Number, default: 0 }, // Front on hand
   boh: { type: Number, default: 0 }, // Back on hand
   updatedAt: { type: Date, default: Date.now },
-  flagged: { type: Boolean, default: false }
+  flagged: { type: Boolean, default: false },
+  flaggedAt: { type: Date, default: Date.now }
 });
 
 // Static method to sort by category, name, updatedAt
