@@ -90,7 +90,7 @@ function parseOrderRecCSV(csvContent: string): CategoryData[] {
           const gtin = firstColumn;
           // Search for 'CRT' in column D in the following rows
           let crtRow = null;
-          for (let searchIdx = i + 1; searchIdx < dataLines.length; searchIdx++) {
+          for (let searchIdx = i; searchIdx < dataLines.length; searchIdx++) {
             const searchColumns = Papa.parse(dataLines[searchIdx], { skipEmptyLines: true }).data[0] as string[];
             if (searchColumns && searchColumns[3] && /CRT/i.test(searchColumns[3])) {
               crtRow = searchColumns;
