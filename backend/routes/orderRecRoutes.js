@@ -3,6 +3,7 @@ const router = express.Router();
 const OrderRec = require('../models/OrderRec');
 const Vendor = require('../models/Vendor');
 const CycleCount = require('../models/CycleCount');
+const { getUPC_barcode } = require('../services/sqlService');
 
 // Get all
 router.get('/', async (req, res) => {
@@ -22,27 +23,7 @@ router.get('/', async (req, res) => {
     }
 
     const orderRecs = await OrderRec.find(query).sort({ createdAt: -1 });
-    res.json( orderRecs
-      // orderRecs.map(r => {
-      //   const obj = r.toObject();
-      //   if (!Array.isArray(obj.statusHistory) || obj.statusHistory.length === 0) {
-      //     obj.statusHistory = [
-      //       { status: obj.currentStatus || "Created", timestamp: obj.createdAt  }
-      //     ];
-      //   } else {
-      //     // If the very first status is "Created" but its timestamp is missing or looks wrong
-      //     const first = obj.statusHistory[0];
-      //     if (
-      //       first.status === "Created" &&
-      //       (!first.timestamp || new Date(first.timestamp).getTime() > Date.now())
-      //     ) {
-      //       first.timestamp = obj.createdAt; // fallback to createdAt
-      //     }
-      //   }
-
-      //   return obj;
-      // })
-    );
+    res.json( orderRecs);
   } catch (err) {
     res.status(500).json({ message: err.message });
   }
@@ -209,14 +190,23 @@ router.put('/:id/item/:catIdx/:itemIdx', async (req, res) => {
                 gtin: existing_site[0].gtin,
                 upc_barcode: existing_site[0].upc_barcode,
                 updatedAt: new Date(), // store UTC
+                flaggedAt: new Date(),
               });
               await newCycleCount.save();
               console.log("Created existing new CycleCount:", newCycleCount.upc);
             } else {
-              // Push new entry with no upc and upc_barcode just gtin from the existing items
+              // Push new entry by Checking from the sql server if the item is listed there, if not then keep upc_barcode and upc empty
+              let itembook_upc_barcode = ""
+              let itembook_upc = ""
+              const itembook = await getUPC_barcode(item.gtin)
+              if (itembook.length > 0) {
+                itembook_upc = itembook[0].UPC;
+                itembook_upc_barcode = itembook[0].UPC_A_12_digits;
+              } 
+              console.log('upc_barcode',itembook_upc_barcode)
               const newCycleCount = new CycleCount({
                 site,
-                upc: "",
+                upc: itembook_upc,
                 name: item.itemName || "", // product name from categories.items
                 category: category.name,
                 grade: "C",
@@ -224,8 +214,9 @@ router.put('/:id/item/:catIdx/:itemIdx', async (req, res) => {
                 boh: 0,
                 flagged: true,
                 gtin: item.gtin,
-                upc_barcode: "",
+                upc_barcode: itembook_upc_barcode,
                 updatedAt: new Date(), // store UTC
+                flaggedAt: new Date(),
               });
               await newCycleCount.save();
               console.log("Created brand new CycleCount:", newCycleCount.upc);
@@ -261,10 +252,19 @@ router.put('/:id/item/:catIdx/:itemIdx', async (req, res) => {
               await newCycleCount.save();
               console.log("Created existing new CycleCount with false:", newCycleCount.upc);
             } else {
-              // Push new entry with no upc and upc_barcode just gtin from the existing items
+              // Push new entry by Checking from the sql server if the item is listed there, if not then keep upc_barcode and upc empty
+              const itembook_upc_barcode = ""
+              const itembook_upc = ""
+              const itembook = await getUPC_barcode(item.gtin)
+              if (itembook.length > 0) {
+                itembook_upc = itembook[0].UPC;
+                itembook_upc_barcode = itembook[0].UPC_A_12_digits;
+              } 
+
+            
               const newCycleCount = new CycleCount({
                 site,
-                upc: "",
+                upc: itembook_upc,
                 name: item.itemName || "", // product name from categories.items
                 category: category.name,
                 grade: "C",
@@ -272,7 +272,7 @@ router.put('/:id/item/:catIdx/:itemIdx', async (req, res) => {
                 boh: 0,
                 flagged: false,
                 gtin: item.gtin,
-                upc_barcode: "",
+                upc_barcode: itembook_upc_barcode,
                 updatedAt: new Date(), // store UTC
               });
               await newCycleCount.save();
