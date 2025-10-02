@@ -2,7 +2,7 @@ import { createFileRoute, Link } from '@tanstack/react-router'
 import { useEffect, useState } from "react";
 import { LocationPicker } from "@/components/custom/locationPicker";
 import { getCsoCodeByStationName, getVendorNameById } from '@/lib/utils';
-import { Bar, BarChart, CartesianGrid, XAxis } from "recharts";
+import { Bar, BarChart, CartesianGrid, XAxis, LabelList } from "recharts";
 import {
   Card,
   CardContent,
@@ -278,7 +278,14 @@ function RouteComponent() {
                           cursor={false}
                           content={<ChartTooltipContent hideLabel />}
                         />
-                        <Bar dataKey="count" fill="var(--color-count)" radius={8} />
+                        <Bar dataKey="count" fill="var(--color-count)" radius={8}>
+                          <LabelList
+                            position="top"
+                            offset={12}
+                            className="fill-foreground"
+                            fontSize={12}
+                          />
+                        </Bar>
                       </BarChart>
                     </ChartContainer>
                   </CardContent>
