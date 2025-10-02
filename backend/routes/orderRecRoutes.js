@@ -189,7 +189,7 @@ router.put('/:id/item/:catIdx/:itemIdx', async (req, res) => {
                 flagged: true,
                 gtin: existing_site[0].gtin,
                 upc_barcode: existing_site[0].upc_barcode,
-                updatedAt: new Date(), // store UTC
+                updatedAt: new Date("2025-09-18T00:00:00Z"), // store UTC
                 flaggedAt: new Date(),
               });
               await newCycleCount.save();
@@ -215,7 +215,7 @@ router.put('/:id/item/:catIdx/:itemIdx', async (req, res) => {
                 flagged: true,
                 gtin: item.gtin,
                 upc_barcode: itembook_upc_barcode,
-                updatedAt: new Date(), // store UTC
+                updatedAt: new Date("2025-09-18T00:00:00Z"), // store UTC
                 flaggedAt: new Date(),
               });
               await newCycleCount.save();
@@ -247,7 +247,7 @@ router.put('/:id/item/:catIdx/:itemIdx', async (req, res) => {
                 flagged: false,
                 gtin: existing_site[0].gtin,
                 upc_barcode: existing_site[0].upc_barcode,
-                updatedAt: new Date(), // store UTC
+                updatedAt: new Date("2025-09-18T00:00:00Z"), // store UTC
               });
               await newCycleCount.save();
               console.log("Created existing new CycleCount with false:", newCycleCount.upc);
@@ -273,7 +273,7 @@ router.put('/:id/item/:catIdx/:itemIdx', async (req, res) => {
                 flagged: false,
                 gtin: item.gtin,
                 upc_barcode: itembook_upc_barcode,
-                updatedAt: new Date(), // store UTC
+                updatedAt: new Date("2025-09-18T00:00:00Z"), // store UTC
               });
               await newCycleCount.save();
               console.log("Created brand new CycleCount with false:", newCycleCount.upc);
