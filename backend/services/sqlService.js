@@ -104,4 +104,19 @@ async function getCategorizedSalesData(csoCode, startDate, endDate) {
   }
 }
 
-module.exports = { sqlConfig, getSalesData, getCategorizedSalesData };
+// Function to get UPC and UPC_barcode from CSO.Itembook table
+async function getUPC_barcode(gtin) {
+  try {
+    await sql.connect(sqlConfig);
+    const result = await sql.query(`SELECT [UPC_A_12_digits], [UPC] FROM [CSO].[ItemBookCSO] where [GTIN] = '${gtin}'`);
+    await sql.close();
+    return result.recordset;
+  } catch (err) {
+    console.error('SQL error:', err);
+    return [];
+  }
+}
+
+
+
+module.exports = { sqlConfig, getSalesData, getCategorizedSalesData, getUPC_barcode };

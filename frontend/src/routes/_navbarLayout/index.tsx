@@ -11,10 +11,10 @@ function App() {
   return (
     <div className="flex items-center justify-center min-h-screen bg-gray-50">
       <div className="flex flex-col gap-8 w-full max-w-3xl px-4 pt-16 pb-8">
-        {access.module_audit && (
+        {access.module_station_audit && (
           <Section title="Audits">
             <div className="flex flex-wrap gap-4">
-              {access.module_audit && (
+              {access.module_station_audit && (
                 <Link to="/audit">
                   <Button className="w-32 h-32 flex items-center justify-center break-words whitespace-normal text-center">
                     Station Audits

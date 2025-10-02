@@ -1,19 +1,28 @@
 const mongoose = require('mongoose');
 
 const AuditTemplateSchema = new mongoose.Schema({
-  name: { type: String, required: true }, // Name of the template
-  description: { type: String }, // Optional description
+  name: { type: String, required: true },
+  description: { type: String },
   items: [
     {
-      category: { type: String },         // Category or section of the audit
-      item: { type: String, required: true }, // The audit question or checklist entry
-      status: { type: String },               // Status value or reference
-      followUp: { type: String },             // Follow-up text or reference
-      assignedTo: { type: String },           // Assigned to department or user
+      category: { type: String },
+      item: { type: String, required: true },
+      status: { type: String },
+      followUp: { type: String },
+      assignedTo: { type: String },
+      frequency: { 
+        type: String, 
+        enum: ["daily", "weekly", "monthly"], 
+        default: "daily" 
+      },
+      lastCheckedHistory:[{
+        site: { type: String, required: true },
+        timestamp: { type: Date, default: null } // <-- default is empty
+      }]
     }
   ],
   sites: [{ type: String }],
-  createdBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User' }, // Optional: who created it
+  createdBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
   createdAt: { type: Date, default: Date.now }
 });
 
