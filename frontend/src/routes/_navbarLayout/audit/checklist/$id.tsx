@@ -284,10 +284,12 @@ function RouteComponent() {
 
   const handleFieldChange = (
     idx: number,
-    field: "status" | "followUp" | "assignedTo",
-    value: string
+    field: "status" | "followUp" | "assignedTo" | "issueRaised",
+    value: string | boolean
   ) =>
-    setItems((prev) => prev.map((item, i) => (i === idx ? { ...item, [field]: value } : item)));
+    setItems((prev) =>
+      prev.map((item, i) => (i === idx ? { ...item, [field]: value } : item))
+    );
 
   const handlePhotos = (idx: number, photos: string[]) =>
     setItems((prev) => prev.map((item, i) => (i === idx ? { ...item, photos } : item)));
@@ -419,6 +421,7 @@ function RouteComponent() {
                 selectTemplates={selectTemplates}
                 borderColor={categoryColorMap[item.category || ""].border}
                 lastChecked={item.lastChecked}
+                onIssueToggle={(raised) => handleFieldChange(idx, "issueRaised", raised)}
               />
             ))}
           </div>

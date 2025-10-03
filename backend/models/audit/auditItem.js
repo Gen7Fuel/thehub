@@ -16,7 +16,12 @@ const AuditItemSchema = new mongoose.Schema({
     type: String, 
     enum: ["daily", "weekly", "monthly"], 
     required: true 
-  }
+  },
+  issueRaised: { type: String },
+  issueStatus: [{
+    status: { type: String },
+    timestamp: { type: Date, default: null},
+  }]
 });
 
 module.exports = mongoose.model('AuditItem', AuditItemSchema);

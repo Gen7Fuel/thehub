@@ -18,7 +18,16 @@ const AuditTemplateSchema = new mongoose.Schema({
       lastCheckedHistory:[{
         site: { type: String, required: true },
         timestamp: { type: Date, default: null } // <-- default is empty
-      }]
+      }],
+      assignedSites:[{
+        site: { type: String, required: true },
+        assigned: { type: Boolean },
+        issueRaised: { type: Boolean, default: false},
+        issueStatus: [{
+          status: { type: String },
+          timestamp: { type: Date, default: null},
+        }]
+      }],
     }
   ],
   sites: [{ type: String }],

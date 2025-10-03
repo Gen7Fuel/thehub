@@ -4,6 +4,7 @@ import axios from "axios";
 import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from "@/components/ui/select";
 import { Button } from "@/components/ui/button";
 import { useNavigate, useParams } from "@tanstack/react-router";
+import { MultiSelect } from '@/components/custom/multiSelect';
 
 export const Route = createFileRoute(
   '/_navbarLayout/audit/templates/checklist/$id',
@@ -27,6 +28,7 @@ interface ChecklistItem {
   followUp: string;
   assignedTo: string;
   frequency?: "daily" | "weekly" | "monthly" | "";
+  assignedSites?: { site: string; assigned: boolean }[];
 }
 
 function RouteComponent() {
@@ -83,8 +85,17 @@ function RouteComponent() {
                 followUp: item.followUp || "",
                 assignedTo: item.assignedTo || "",
                 frequency: item.frequency || "",
+                assignedSites: item.assignedSites || (res.data.sites || []).map((s: string) => ({
+                  site: s,
+                  assigned: false,
+                })),
               }))
-            : [{ category: "", item: "", status: "", followUp: "", assignedTo: "",  frequency: ""}]
+            : [{ category: "", item: "", status: "", followUp: "", assignedTo: "",  frequency: "", 
+                  assignedSites: (res.data.sites || []).map((s: string) => ({
+                    site: s,
+                    assigned: false,
+                  })),
+              }]
         );
         setSelectedSites(res.data.sites || []);
       })
@@ -111,7 +122,7 @@ function RouteComponent() {
   // const addRow = () =>
   //   setItems([...items, { category: "", item: "", status: "", followUp: "Follow Up", assignedTo: "Assigned To" }]);
   const addRow = () =>
-    setItems([...items, { category: "", item: "", status: "", followUp: "Follow Up", assignedTo: "Assigned To", frequency: "" }]);
+    setItems([...items, { category: "", item: "", status: "", followUp: "Follow Up", assignedTo: "Assigned To", frequency: "", assignedSites: selectedSites.map(site => ({ site, assigned: false })), }]);
 
   const removeRow = (idx: number) =>
     setItems(items => items.length > 1 ? items.filter((_, i) => i !== idx) : items);
@@ -128,7 +139,8 @@ function RouteComponent() {
       status: row.status,
       followUp: row.followUp,
       assignedTo: row.assignedTo,
-      frequency: row.frequency, // NEW
+      frequency: row.frequency, 
+      assignedSites: row.assignedSites || [],
     }));
 
 
@@ -156,7 +168,7 @@ function RouteComponent() {
       setSaving(false);
     }
   };
-  console.log(selectedSites)
+
   return (
     <div className="max-w-5xl mx-auto mt-8 p-4 border rounded">
       <h2 className="text-xl font-bold mb-4">Edit Audit Checklist Template</h2>
@@ -205,6 +217,7 @@ function RouteComponent() {
                 <th className="border px-2 py-1">Follow Up</th>
                 <th className="border px-2 py-1">Assigned To</th>
                 <th className="border px-2 py-1">Frequency</th>
+                <th className="border px-2 py-1">Assigned Sites</th>
                 <th className="border px-2 py-1"></th>
               </tr>
             </thead>
@@ -275,13 +288,13 @@ function RouteComponent() {
                       value={row.assignedTo}
                       onValueChange={val => handleItemChange(idx, "assignedTo", val)}
                     >
-                      <SelectTrigger>
+                      <SelectTrigger className="w-[100px]">
                         <SelectValue placeholder="Select" />
                       </SelectTrigger>
                       <SelectContent>
-                        {selectTemplates.map((opt, i) => (
-                          <SelectItem key={i} value={opt.name}>
-                            {opt.name}
+                        {getOptionsByName("Assigned To").map((opt, i) => (
+                          <SelectItem key={i} value={opt.text}>
+                            {opt.text} 
                           </SelectItem>
                         ))}
                       </SelectContent>
@@ -302,6 +315,27 @@ function RouteComponent() {
                       </SelectContent>
                     </Select>
                   </td>
+                 <td className="border px-2 py-1">
+                  <MultiSelect
+                    options={selectedSites}
+                    selected={row.assignedSites?.filter(s => s.assigned).map(s => s.site) || []}
+                    onChange={(newSelected) => {
+                      setItems(prev =>
+                        prev.map((r, i) =>
+                          i === idx
+                            ? {
+                                ...r,
+                                assignedSites: selectedSites.map(site => ({
+                                  site,
+                                  assigned: newSelected.includes(site),
+                                })),
+                              }
+                            : r
+                        )
+                      );
+                    }}
+                  />
+                </td>
                   <td className="border px-2 py-1 text-center">
                     <button
                       type="button"
