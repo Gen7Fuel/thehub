@@ -60,11 +60,13 @@ router.get('/daily-items', async (req, res) => {
     // Get the start and end of today in the user's timezone, then convert to UTC
     const now = DateTime.now().setZone(timezone);
     const todayStart = now.startOf('day').toUTC();
+    console.log("TODAY START (UTC):", todayStart.toISO());
     const tomorrowStart = todayStart.plus({ days: 1 });
+    console.log("TOMORROW START (UTC):", tomorrowStart.toISO());
 
     // 1. Fetch flagged items (top)
     const flaggedItemsRaw = await CycleCount.find({ site: site.toString().trim(), flagged: true });
-    const flaggedItems = CycleCount.sortItems(flaggedItemsRaw).slice(0, 5);
+    const flaggedItems = CycleCount.sortFlaggedItems(flaggedItemsRaw).slice(0, 5);
     const flaggedCount = flaggedItems.length;
 
     const chunk = parseInt(chunkSize, 10);
@@ -175,6 +177,8 @@ router.get('/counted-today', async (req, res) => {
     const today = new Date();
     today.setHours(0, 0, 0, 0);
     const tomorrow = new Date(today.getTime() + 24 * 60 * 60 * 1000);
+
+    console.log("CYCLE COUNT RANGE", today, "-->", tomorrow);
 
     const count = await CycleCount.countDocuments({
       site: site.toString().trim(),
