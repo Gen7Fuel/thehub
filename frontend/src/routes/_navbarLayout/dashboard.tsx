@@ -25,10 +25,12 @@ import type { DateRange } from "react-day-picker"
 
 import { getOrderRecStatusColor } from '@/lib/utils';
 
+// Define the dashboard route using TanStack Router
 export const Route = createFileRoute('/_navbarLayout/dashboard')({
   component: RouteComponent,
 })
 
+// Status keys for order reconciliation
 const STATUS_KEYS = [
   "created",
   "completed",
@@ -37,14 +39,7 @@ const STATUS_KEYS = [
   "invoice_received"
 ];
 
-// const STATUS_LABELS: Record<string, string> = {
-//   created: "Created",
-//   completed: "Completed",
-//   placed: "Placed",
-//   delivered: "Delivered",
-//   invoice_received: "Invoice Received"
-// };
-
+// Chart configuration for cycle counts
 const chartConfig = {
   count: {
     label: "Cycle Counts",
@@ -52,6 +47,7 @@ const chartConfig = {
   },
 } satisfies ChartConfig;
 
+// Chart configuration for sales by category
 const salesChartConfig = {
   FN: { label: "FN", color: "var(--chart-1)" },
   Quota: { label: "Quota", color: "var(--chart-2)" },
@@ -60,6 +56,14 @@ const salesChartConfig = {
   Convenience: { label: "Convenience", color: "var(--chart-5)" },
 } satisfies ChartConfig;
 
+/**
+ * RouteComponent
+ * Main dashboard component that displays:
+ * - Vendor status for the current week
+ * - Cycle count chart
+ * - Sales by category chart
+ * - Location and date pickers
+ */
 function RouteComponent() {
   const [site, setSite] = useState(localStorage.getItem("location") || "Rankin");
   const [, setOrderRecs] = useState<Record<string, any[]>>({});
@@ -70,6 +74,7 @@ function RouteComponent() {
   const [vendorStatus, setVendorStatus] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
 
+  // Date range state for filtering data
   const today = new Date();
   const sevenDaysAgo = new Date();
   sevenDaysAgo.setDate(today.getDate() - 7);
@@ -81,6 +86,7 @@ function RouteComponent() {
     to: today,
   });
 
+  // Update start and end date when date range changes
   useEffect(() => {
     if (date?.from && date?.to) {
       setStartDate(date.from.toISOString().slice(0, 10));
@@ -88,6 +94,7 @@ function RouteComponent() {
     }
   }, [date]);
 
+  // Fetch all dashboard data when site or date range changes
   useEffect(() => {
     setLoading(true);
 
@@ -98,7 +105,7 @@ function RouteComponent() {
         endDate,
       });
 
-      // Fetch order recs by status
+      // Fetch order recs by status for the selected date range
       const orderRecsRes = await fetch(`/api/order-rec/range?${params}`, {
         headers: {
           Authorization: `Bearer ${localStorage.getItem("token")}`,
@@ -113,7 +120,7 @@ function RouteComponent() {
       const csoCode = await getCsoCodeByStationName(site);
       const salesDataRes = await fetchSalesData(csoCode ?? "", startDate, endDate);
 
-      // Collect all vendor IDs from all statuses
+      // Collect all vendor IDs from all statuses for name lookup
       const vendorIds: string[] = [
         ...new Set(
           STATUS_KEYS.flatMap(key => (orderRecsRes[key] ?? []).map((rec: any) => String(rec.vendor)))
@@ -129,7 +136,7 @@ function RouteComponent() {
       );
 
       // --- Vendor tracking logic integration ---
-      // Get current week range
+      // Get current week range for vendor status
       const { startDate: weekStart, endDate: weekEnd } = getCurrentWeekRange();
 
       // Fetch all vendors for the site
@@ -182,16 +189,13 @@ function RouteComponent() {
     fetchAllData();
   }, [site, startDate, endDate]);
 
-  // Find the max number of vendors in any status for row count
-  // const maxRows = Math.max(...STATUS_KEYS.map(key => orderRecs[key]?.length ?? 0));
-
-  // Prepare chart data from dailyCounts
+  // Prepare chart data from dailyCounts for the cycle count chart
   const chartData = dailyCounts.map((entry: { date: string, count: number }) => ({
     day: entry.date.slice(5), // e.g. "09-28"
     count: entry.count,
   }));
 
-  // Prepare sales chart data
+  // Prepare sales chart data for the sales by category chart
   const salesChartData = salesData.map((entry) => ({
     day: entry.Date.slice(5, 10),
     FN: entry.FN ?? 0,
@@ -201,10 +205,9 @@ function RouteComponent() {
     Convenience: entry.Convenience ?? 0,
   }));
 
-  // ...existing imports and code...
-
   return (
     <div className="pt-16 flex flex-col items-center">
+      {/* Location and date pickers */}
       <div className="flex gap-4">
         <LocationPicker
           setStationName={setSite}
@@ -337,6 +340,9 @@ function RouteComponent() {
   );
 }
 
+/**
+ * Fetches daily cycle count data for a site and date range.
+ */
 const fetchDailyCounts = async (site: string, startDate: string, endDate: string, timezone: string) => {
   const params = new URLSearchParams({
     site,
@@ -352,6 +358,9 @@ const fetchDailyCounts = async (site: string, startDate: string, endDate: string
   }).then(res => res.json());
 };
 
+/**
+ * Fetches categorized sales data for a CSO code and date range.
+ */
 const fetchSalesData = async (csoCode: string, startDate: string, endDate: string) => {
   return fetch(`/api/sql/sales?csoCode=${csoCode}&startDate=${startDate}&endDate=${endDate}`, {
     headers: {
@@ -360,6 +369,10 @@ const fetchSalesData = async (csoCode: string, startDate: string, endDate: strin
   }).then(res => res.json());
 };
 
+/**
+ * Returns the start and end date for the current week (Monday to Sunday).
+ * If today is Monday, startDate is today; endDate is the coming Sunday.
+ */
 const getCurrentWeekRange = () => {
   const today = new Date();
   const day = today.getDay(); // 0 (Sun) - 6 (Sat)
@@ -379,6 +392,9 @@ const getCurrentWeekRange = () => {
   };
 }
 
+/**
+ * Fetches all vendors for a given site.
+ */
 const fetchVendors = async (site: string) => {
   const params = new URLSearchParams({ location: site });
   return fetch(`/api/vendors?${params}`, {
@@ -388,6 +404,9 @@ const fetchVendors = async (site: string) => {
   }).then(res => res.json());
 };
 
+/**
+ * Fetches all order recs for a given site and date range.
+ */
 const fetchOrderRecs = async (site: string, startDate: string, endDate: string) => {
   const params = new URLSearchParams({ site, startDate, endDate });
   return fetch(`/api/order-rec?${params}`, {
@@ -396,4 +415,3 @@ const fetchOrderRecs = async (site: string, startDate: string, endDate: string) 
     },
   }).then(res => res.json());
 };
-
