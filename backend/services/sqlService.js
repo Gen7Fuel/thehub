@@ -60,7 +60,7 @@ async function getCategorizedSalesData(csoCode, startDate, endDate) {
           CASE 
             WHEN i.[Category] IN (
               'Cannabis Vapes', 'Cannabis Flower', 'Cannabis Pre Rolls', 
-              'Cannabis Concentrates', 'Cannabis Others'
+              'Cannabis Concentrates', 'Cannabis Others', 'Cannabis Edibles'
             ) 
             THEN s.[Total Sales] 
             ELSE 0 
