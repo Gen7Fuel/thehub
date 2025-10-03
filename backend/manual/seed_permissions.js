@@ -1,7 +1,7 @@
 const mongoose = require("mongoose");
 const dotenv = require("dotenv");
-const Permission = require("./models/Permission");
-const connectDB = require("./config/db");
+const Permission = require("../models/Permission");
+const connectDB = require("../config/db");
 
 dotenv.config();
 

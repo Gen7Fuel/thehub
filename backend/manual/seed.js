@@ -1,9 +1,9 @@
 const mongoose = require("mongoose");
 const dotenv = require("dotenv");
-const Product = require("./models/Product");
-const Location = require("./models/Location");
-const FleetCustomer = require("./models/FleetCustomer");
-const connectDB = require("./config/db");
+const Product = require("../models/Product");
+const Location = require("../models/Location");
+const FleetCustomer = require("../models/FleetCustomer");
+const connectDB = require("../config/db");
 
 dotenv.config();
 

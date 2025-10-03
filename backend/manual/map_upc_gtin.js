@@ -1,8 +1,8 @@
 const mongoose = require("mongoose");
 const dotenv = require("dotenv");
-const CycleCount = require("./models/CycleCount");
-const { getUPC_barcode } = require("./services/sqlService");
-const connectDB = require("./config/db");
+const CycleCount = require("../models/CycleCount");
+const { getUPC_barcode } = require("../services/sqlService");
+const connectDB = require("../config/db");
 
 dotenv.config();
 
