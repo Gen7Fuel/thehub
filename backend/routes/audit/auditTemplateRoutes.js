@@ -43,11 +43,13 @@ router.get('/category-options', async (req, res) => {
 //   }
 // });
 
+// ---ADDING/CREATING NEW TEMPLATE ----
 router.post('/', async (req, res) => {
   try {
     const userId = req.user._id;
     const { name, description, items = [], sites = [] } = req.body;
-    // Initialize lastCheckedHistory for each item
+
+    // Initialize items
     const processedItems = items.map(item => ({
       category: item.category || "",
       item: item.item || "Untitled",
@@ -55,18 +57,19 @@ router.post('/', async (req, res) => {
       followUp: item.followUp || "",
       assignedTo: item.assignedTo || "",
       frequency: item.frequency || "daily",
-      lastCheckedHistory: sites.map(site => ({
-        site,
-        timestamp: null // or new Date(0) if you prefer
-      })),
       assignedSites: item.assignedSites && item.assignedSites.length > 0
-      ? item.assignedSites
-      : sites.map(site => ({
-          site,
-          assigned: false,
-          issueRaised: false,
-          issueStatus: []
-        }))
+        ? item.assignedSites.map(siteEntry => ({
+            site: siteEntry.site,
+            assigned: siteEntry.assigned || false,
+            issueRaised: siteEntry.issueRaised || false,
+            lastChecked: siteEntry.lastChecked || null
+          }))
+        : sites.map(site => ({
+            site,
+            assigned: false,
+            issueRaised: false,
+            lastChecked: null   // <-- replaces lastCheckedHistory
+          }))
     }));
 
     const auditTemplate = new AuditTemplate({
@@ -80,9 +83,11 @@ router.post('/', async (req, res) => {
     await auditTemplate.save();
     res.status(201).json(auditTemplate);
   } catch (err) {
+    console.error(err);
     res.status(400).json({ message: err.message });
   }
 });
+
 
 
 // Get all templates
@@ -132,12 +137,16 @@ const getPeriodKey = (frequency, date) => {
 router.get('/instance', async (req, res) => {
   try {
     const { template, site, frequency, periodKey, date } = req.query;
+    console.log(template);
+    console.log(frequency);
+    console.log(periodKey);
     if (!template || !site || !frequency) return res.status(400).json({ error: 'Missing params' });
 
     let key = periodKey;
     if (!key && date) key = getPeriodKey(frequency, date);
 
     const instance = await AuditInstance.findOne({ template, site, frequency, periodKey: key }).lean();
+    console.log(instance);
     res.json(instance || null);
   } catch (err) {
     console.error(err);
@@ -152,33 +161,84 @@ router.get('/items', async (req, res) => {
     if (!instanceId) return res.status(400).json({ error: 'Missing instanceId' });
     if (!site || !templateId) return res.status(400).json({ error: 'Missing site or templateId' });
 
+    // Fetch all items for the given instance
     const items = await AuditItem.find({ instance: instanceId }).lean();
+    // Fetch the template for site info and assignedSites
     const templateDoc = await AuditTemplate.findById(templateId).lean();
     if (!templateDoc) return res.status(404).json({ error: 'Template not found' });
 
-        const itemsWithLastChecked = (items || []).map(item => {
+    const itemsWithLastChecked = (items || []).map(item => {
       const templateItem = templateDoc.items.find(i => i.item === item.item);
       let lastChecked = null;
 
-      if (templateItem?.lastCheckedHistory?.length) {
-        const entry = templateItem.lastCheckedHistory.find(lch => lch.site === site);
-        lastChecked = entry ? (entry.timestamp || entry.date) : null;
+      // Updated: get lastChecked from assignedSites for the current site
+      const assignedSite = templateItem?.assignedSites?.find(s => s.site === site);
+      if (assignedSite) {
+        lastChecked = assignedSite.lastChecked || null;
       }
 
       return {
         ...item,
-        lastChecked, // null if not found
+        lastChecked, // now taken from assignedSites
+        assignedSite, // pass the assignedSite info if needed on frontend
       };
     });
     res.json(itemsWithLastChecked);
   } catch (err) {
-    console.error(err);
+    console.error("Error fetching items:", err);
     res.status(500).json({ error: err.message });
   }
 });
 
 
+// -- GET ITEMS WHICH HAVE ISSUE RAISED--
+router.get('/open-issues', async (req, res) => {
+  try {
+    const { site } = req.query;
+    if (!site) return res.status(400).json({ error: "Missing site" });
 
+    // 1️⃣ Find all instances for the site
+    const instances = await AuditInstance.find({ site }).select('_id').lean();
+    const instanceIds = instances.map(inst => inst._id);
+
+    if (!instanceIds.length) {
+      return res.json({ items: [] }); // No instances, return empty array
+    }
+
+    // 2️⃣ Find all AuditItems for these instances with issueRaised = true
+    const items = await AuditItem.find({
+      instance: { $in: instanceIds },
+      issueRaised: true
+    }).lean();
+
+    // 3️⃣ Map items to return relevant info
+    const formattedItems = items.map(item => {
+      // Determine lastUpdated based on currentIssueStatus
+      let lastUpdated = null;
+      if (item.issueStatus && item.issueStatus.length > 0 && item.currentIssueStatus) {
+        const statusObj = item.issueStatus.find(s => s.status === item.currentIssueStatus);
+        if (statusObj) lastUpdated = statusObj.timestamp;
+      }
+
+      return {
+        item: item.item,
+        category: item.category,
+        comment: item.comment,
+        photos: item.photos,
+        currentIssueStatus: item.currentIssueStatus || "Created",
+        lastUpdated, // timestamp of current status
+        instance: item.instance,
+        frequency: item.frequency,
+        assignedTo: item.assignedTo,
+      };
+    });
+
+    res.json({ items: formattedItems });
+  } catch (err) {
+    console.error("Error fetching open issues:", err);
+    res.status(500).json({ error: err.message });
+  }
+});
 
 
 // Create or update an audit instance (upsert)
@@ -264,6 +324,7 @@ router.get('/items', async (req, res) => {
 //   }
 // });
 
+// -- FETCH TEMPLATE FOR EDITING --
 router.get('/:id', async (req, res) => {
   try {
     const { id } = req.params;
@@ -277,16 +338,11 @@ router.get('/:id', async (req, res) => {
     console.log("Fetched template:", template.name);
 
     let items = template.items.map(i => {
-      let lastChecked = null;
-
-      // find lastChecked for the current site
-      if (site && i.lastCheckedHistory) {
-        const entry = i.lastCheckedHistory.find(h => h.site === site);
-        lastChecked = entry ? entry.timestamp || entry.date : null;
-      }
-
       // find assignedSite for this site
       const assignedSite = i.assignedSites?.find(s => s.site === site);
+
+      // lastChecked now comes from assignedSite.lastChecked
+      const lastChecked = assignedSite?.lastChecked || null;
 
       return {
         ...i,
@@ -297,7 +353,6 @@ router.get('/:id', async (req, res) => {
         assignedSite, // pass the assignedSite info
       };
     });
-
     if (site) {
       // Filter items: only assigned to this site and issueRaised is false
       items = items.filter(i => {
@@ -489,8 +544,6 @@ router.post('/instance', async (req, res) => {
     const completedBy = req.user._id;
     const { template, site, frequency, periodKey, date, items } = req.body;
 
-    console.log("Received items:", items);
-
     if (!template || !site || !frequency || !date || !items) {
       return res.status(400).json({ error: "Missing fields" });
     }
@@ -503,93 +556,72 @@ router.post('/instance', async (req, res) => {
 
     for (const freq of frequenciesToProcess) {
       const periodKey = getPeriodKey(freq, date);
-      console.log(`Processing frequency: ${freq}, periodKey: ${periodKey}`);
 
       let instance = await AuditInstance.findOne({ template, site, frequency: freq, periodKey });
 
       if (!instance) {
         instance = await AuditInstance.create({ template, site, frequency: freq, periodKey, completedBy, completedAt: new Date() });
-        console.log(`Created new instance: ${instance._id}`);
       } else {
         instance.completedBy = completedBy;
         instance.completedAt = new Date();
         await instance.save();
-        console.log(`Updated existing instance: ${instance._id}`);
       }
 
       const itemsForFreq = items.filter(item => item.frequency === freq);
 
       for (const item of itemsForFreq) {
-        console.log(`Processing item: ${item.item}`);
+        const existingItem = await AuditItem.findOne({ instance: instance._id, item: item.item });
 
-        const existingItem = await AuditItem.findOne({ instance: instance._id, item: item.item }).lean();
+        let updateFields = {
+          category: item.category,
+          item: item.item,
+          status: item.status,
+          followUp: item.followUp,
+          assignedTo: item.assignedTo,
+          checked: item.checked,
+          photos: item.photos,
+          comment: item.comment,
+          instance: instance._id,
+          frequency: item.frequency || freq,
+          issueRaised: item.issueRaised,
+          currentIssueStatus: item.issueRaised === true ? "Created" : undefined,
+        };
 
-        // Update AuditItem
+        // ---- Update issueStatus array in AuditItem ----
+        if (item.issueRaised === true) {
+          let issueStatus = existingItem?.issueStatus || [];
+          const createdStatus = issueStatus.find(s => s.status === "Created");
+          if (createdStatus) {
+            createdStatus.timestamp = new Date(); // update timestamp
+          } else {
+            issueStatus.push({ status: "Created", timestamp: new Date() });
+          }
+          updateFields.issueStatus = issueStatus;
+        }
+
         await AuditItem.updateOne(
           { instance: instance._id, item: item.item },
-          {
-            $set: {
-              category: item.category,
-              item: item.item,
-              status: item.status,
-              followUp: item.followUp,
-              assignedTo: item.assignedTo,
-              checked: item.checked,
-              photos: item.photos,
-              comment: item.comment,
-              lastChecked: item.lastChecked,
-              instance: instance._id,
-              frequency: item.frequency || freq,
-              issueRaised: item.issueRaised,
-            },
-          },
+          { $set: updateFields },
           { upsert: true }
         );
-        console.log(`AuditItem updated: ${item.item}`);
+        console.log(`AuditItem updated: ${item.item}, issueRaised=${item.issueRaised}`);
 
-        // Update lastCheckedHistory in template if newly checked
+
+        // Update lastChecked in template if newly checked
         if (!existingItem?.checked && item.checked) {
           await AuditTemplate.updateOne(
             { _id: template, "items.item": item.item },
-            { $set: { "items.$[itemElem].lastCheckedHistory.$[siteElem].timestamp": new Date() } },
+            { $set: { "items.$[itemElem].assignedSites.$[siteElem].lastChecked": new Date() } },
             { arrayFilters: [{ "itemElem.item": item.item }, { "siteElem.site": site }] }
           );
-          console.log(`lastCheckedHistory updated for item: ${item.item}`);
         }
 
-        // ----- TEMPLATE ISSUE UPDATE (single update per item) -----
-        if (item.issueRaised === true) {
-          const templateDoc = await AuditTemplate.findOne({ _id: template });
-          if (templateDoc) {
-            const itemElem = templateDoc.items.find(i => i.item === item.item);
-            if (itemElem) {
-              const siteElem = itemElem.assignedSites.find(s => s.site === site);
-              if (siteElem) {
-                siteElem.issueRaised = true;
-
-                const createdStatus = siteElem.issueStatus.find(s => s.status === "Created");
-                if (createdStatus) {
-                  // Update timestamp only
-                  createdStatus.timestamp = new Date();
-                } else {
-                  // Push new created status
-                  siteElem.issueStatus.push({ status: "Created", timestamp: new Date() });
-                }
-
-                await templateDoc.save();
-                console.log(`Template issueRaised set and Created status updated for item: ${item.item}`);
-              }
-            }
-          }
-        } else if (item.issueRaised === false) {
-          await AuditTemplate.updateOne(
-            { _id: template },
-            { $set: { "items.$[itemElem].assignedSites.$[siteElem].issueRaised": false } },
-            { arrayFilters: [{ "itemElem.item": item.item }, { "siteElem.site": site }] }
-          );
-          console.log(`Reset issueRaised flag for item: ${item.item}`);
-        }
-
+        // Update issueRaised flag in template
+        await AuditTemplate.updateOne(
+          { _id: template },
+          { $set: { "items.$[itemElem].assignedSites.$[siteElem].issueRaised": !!item.issueRaised } },
+          { arrayFilters: [{ "itemElem.item": item.item }, { "siteElem.site": site }] }
+        );
 
         createdInstances.push({ frequency: freq, instanceId: instance._id });
       }
@@ -604,20 +636,20 @@ router.post('/instance', async (req, res) => {
 });
 
 
-
+// --UPDATE AN EXISTING TEMPLATE--
 router.put('/:id', async (req, res) => {
   try {
     const { name, description, items: updatedItems, sites: updatedSites } = req.body;
+
 
     const template = await AuditTemplate.findById(req.params.id);
     if (!template) return res.status(404).json({ error: 'Not found' });
 
     const existingSites = template.sites || [];
     const newSites = updatedSites.filter(site => !existingSites.includes(site));
-    const removedSites = existingSites.filter(site => !updatedSites.includes(site)); // ⬅ sites removed by user
-    console.log("newsites:",newSites)
-    console.log("removed:",removedSites)
-    
+    const removedSites = existingSites.filter(site => !updatedSites.includes(site));
+    console.log("New sites to add:", newSites);
+    console.log("Sites removed:", removedSites);
 
     // 1️⃣ Update template-level fields
     template.name = name;
@@ -628,53 +660,50 @@ router.put('/:id', async (req, res) => {
     const mergedItems = updatedItems.map(updatedItem => {
       const existingItem = template.items.find(i => i.item === updatedItem.item);
 
-      // Preserve lastCheckedHistory
-      const lastCheckedHistory = existingItem?.lastCheckedHistory || [];
-
-      // Add lastCheckedHistory for any new sites
-      newSites.forEach(site => {
-        if (!lastCheckedHistory.some(lch => lch.site === site)) {
-          lastCheckedHistory.push({ site, timestamp: null });
-        }
-      });
-
-      // Preserve or build assignedSites
       let assignedSites = existingItem?.assignedSites || [];
 
-      // Add new sites
       updatedSites.forEach(site => {
-        if (!assignedSites.some(s => s.site === site)) {
+        const existingSite = assignedSites.find(s => s.site === site);
+        const frontendSite = updatedItem.assignedSites?.find(s => s.site === site);
+
+        if (existingSite) {
+          // Update existing site with frontend values
+          existingSite.assigned = frontendSite?.assigned ?? existingSite.assigned;
+          existingSite.lastChecked = frontendSite?.lastChecked ?? existingSite.lastChecked;
+          existingSite.issueRaised = frontendSite?.issueRaised ?? existingSite.issueRaised;
+        } else {
+          // Add new site
           assignedSites.push({
             site,
-            assigned: false,
-            issueRaised: false, // default for new site
-            issueStatus: []     // default for new site
+            assigned: frontendSite?.assigned ?? false,
+            issueRaised: frontendSite?.issueRaised ?? false,
+            lastChecked: frontendSite?.lastChecked ?? null
           });
         }
       });
 
-      // Remove sites that no longer exist in updatedSites
+      // Remove sites no longer in updatedSites
       if (removedSites.length > 0) {
         assignedSites = assignedSites.filter(s => updatedSites.includes(s.site));
       }
 
+      console.log(`Merged item: ${updatedItem.item}`);
       return {
         ...updatedItem,
-        lastCheckedHistory,
-        assignedSites,
+        assignedSites, // now includes lastChecked
       };
     });
 
     template.items = mergedItems;
 
     await template.save();
+    console.log("Template updated successfully:", template._id);
     res.json(template);
   } catch (err) {
-    console.error(err);
+    console.error("Error updating template:", err);
     res.status(500).json({ error: err.message });
   }
 });
-
 
 
 

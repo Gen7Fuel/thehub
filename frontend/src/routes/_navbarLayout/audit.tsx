@@ -12,6 +12,7 @@ function RouteComponent() {
   // const isListActive = matchRoute({ to: '/audit/list' })
   const isChecklistActive = matchRoute({ to: '/audit/checklist', fuzzy: true })
 
+  const isInterfaceActive = matchRoute({ to: '/audit/interface', fuzzy: true })
   const access = JSON.parse(localStorage.getItem('access') || '{}')
 
   return (
@@ -39,9 +40,17 @@ function RouteComponent() {
         <Link to="/audit/checklist">
           <Button
             {...(!isChecklistActive && { variant: 'outline' } as object)}
-            className="rounded-l-none"
+            className="rounded-none"
           >
             Checklist
+          </Button>
+        </Link>
+        <Link to="/audit/interface">
+          <Button
+            {...(!isInterfaceActive && { variant: 'outline' } as object)}
+            className="rounded-l-none"
+          >
+            Interface
           </Button>
         </Link>
       </div>

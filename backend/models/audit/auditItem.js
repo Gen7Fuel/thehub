@@ -17,6 +17,7 @@ const AuditItemSchema = new mongoose.Schema({
     enum: ["daily", "weekly", "monthly"], 
     required: true 
   },
+  currentIssueStatus: { type: String },
   issueRaised: { type: String },
   issueStatus: [{
     status: { type: String },

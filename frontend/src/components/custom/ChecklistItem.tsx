@@ -172,7 +172,7 @@ export function ChecklistItemCard({
               variant="outline"
               type="button"
               size="sm"
-              onClick={() => {if (!handleDisabledClick()) setViewImagesOpen(true);}}
+              onClick={() => setViewImagesOpen(true)}
               className="bg-sky-100 border-gray-300"
             >
               <ImageIcon size={16} className="text-gray-600" />
@@ -330,11 +330,6 @@ export function ChecklistItemCard({
             />
           )}
         </div>
-
-
-
-
-
       </div>
 
       
