@@ -3,6 +3,7 @@ import { useEffect, useState } from "react";
 import { LocationPicker } from "@/components/custom/locationPicker";
 import TableWithInputs from "@/components/custom/TableWithInputs";
 import { DateTime } from 'luxon';
+import { socket } from "@/lib/websocket";
 
 export const Route = createFileRoute('/_navbarLayout/cycle-count/count')({
   component: RouteComponent,
@@ -19,6 +20,44 @@ function RouteComponent() {
 
   // Track FOH and BOH values for each item
   const [counts, setCounts] = useState<{ [id: string]: { foh: string; boh: string } }>({});
+
+  const handleInputBlur = (id: string, field: "foh" | "boh", value: string) => {
+    // Save to backend
+    fetch("/api/cycle-count/save-item", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${localStorage.getItem("token") || ""}`,
+      },
+      body: JSON.stringify({ _id: id, field, value }),
+    });
+
+    // Emit websocket event for real-time update
+    socket.emit("cycle-count-field-updated", { itemId: id, field, value });
+  };
+
+  interface CycleCountFieldUpdate {
+    itemId: string;
+    field: "foh" | "boh";
+    value: string;
+  }
+
+  // Listen for updates from other clients
+  useEffect(() => {
+    function updateField({ itemId, field, value }: CycleCountFieldUpdate) {
+      setCounts(prev => ({
+        ...prev,
+        [itemId]: {
+          ...prev[itemId],
+          [field]: value
+        }
+      }));
+    }
+    socket.on("cycle-count-field-updated", updateField);
+    return () => {
+      socket.off("cycle-count-field-updated", updateField);
+    };
+  }, []);
 
   useEffect(() => {
     if (!stationName) return;
@@ -222,6 +261,7 @@ function RouteComponent() {
             items={flaggedItems}
             counts={counts}
             onInputChange={handleInputChange}
+            onInputBlur={handleInputBlur}
             tableClassName=""
             headerClassName="bg-red-100"
             rowClassName="bg-red-50"
@@ -237,6 +277,7 @@ function RouteComponent() {
             items={items}
             counts={counts}
             onInputChange={handleInputChange}
+            onInputBlur={handleInputBlur}
             tableClassName=""
             headerClassName="bg-gray-100"
             rowClassName=""

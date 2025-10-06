@@ -134,6 +134,34 @@ router.get('/daily-items', async (req, res) => {
   }
 });
 
+router.post('/save-item', async (req, res) => {
+  try {
+    const { _id, field, value } = req.body;
+    if (!_id || !field || value === undefined) {
+      return res.status(400).json({ message: "Item ID, field, and value are required." });
+    }
+    if (!['foh', 'boh'].includes(field)) {
+      return res.status(400).json({ message: "Field must be 'foh' or 'boh'." });
+    }
+
+    await CycleCount.findByIdAndUpdate(
+      _id,
+      {
+        $set: {
+          [field]: value === "" || value == null ? 0 : Number(value),
+          flagged: false,
+          updatedAt: new Date()
+        }
+      }
+    );
+
+    res.json({ message: "Item field saved successfully." });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ message: "Failed to save item field." });
+  }
+});
+
 router.post('/save-counts', async (req, res) => {
   try {
     const { items } = req.body;

@@ -6,6 +6,7 @@ interface TableWithInputsProps {
   items: any[];
   counts: { [id: string]: { foh: string; boh: string } };
   onInputChange: (id: string, field: "foh" | "boh", value: string) => void;
+  onInputBlur: (id: string, field: "foh" | "boh", value: string) => void; // <-- Add this line
   tableClassName?: string;
   headerClassName?: string;
   rowClassName?: string;
@@ -15,6 +16,7 @@ const TableWithInputs: React.FC<TableWithInputsProps> = ({
   items,
   counts,
   onInputChange,
+  onInputBlur,
   tableClassName = "",
   headerClassName = "",
   rowClassName = "",
@@ -58,6 +60,7 @@ const TableWithInputs: React.FC<TableWithInputsProps> = ({
                     }`}
                     value={counts[item._id]?.boh ?? ""}
                     onChange={e => onInputChange(item._id, "boh", e.target.value)}
+                    onBlur={e => onInputBlur(item._id, "boh", e.target.value)}
                   />
                 </td>
                 <td className="border px-2 py-1">
@@ -69,6 +72,7 @@ const TableWithInputs: React.FC<TableWithInputsProps> = ({
                     }`}
                     value={counts[item._id]?.foh ?? ""}
                     onChange={e => onInputChange(item._id, "foh", e.target.value)}
+                    onBlur={e => onInputBlur(item._id, "foh", e.target.value)}
                   />
                 </td>
                 {/* <td className="border px-2 py-1">
