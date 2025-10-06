@@ -16,7 +16,9 @@ const CycleCountItemSchema = new mongoose.Schema({
   boh: { type: Number, default: 0 },              // Back on hand quantity
   updatedAt: { type: Date, default: Date.now },   // Last update timestamp
   flagged: { type: Boolean, default: false },     // Flagged status for review
-  flaggedAt: { type: Date }                       // When the item was flagged
+  flaggedAt: { type: Date },                      // When the item was flagged
+  displayDate: { type: String },                  // Format: 'YYYY-MM-DD'
+  flaggedDisplayDate: { type: String },           // Format: 'YYYY-MM-DD'
 });
 
 /**
