@@ -1,23 +1,32 @@
 import { createFileRoute, Link, Outlet, useMatchRoute } from '@tanstack/react-router'
 import { Button } from '@/components/ui/button'
 
+// Define the route for the audit section using TanStack Router
 export const Route = createFileRoute('/_navbarLayout/audit')({
   component: RouteComponent,
 })
 
+/**
+ * RouteComponent
+ * Renders the audit section with navigation buttons for Templates and Checklist.
+ * Buttons are conditionally styled and rendered based on user access permissions.
+ */
 function RouteComponent() {
+  // Hook to match the current route for button highlighting
   const matchRoute = useMatchRoute()
 
+  // Determine if the Templates or Checklist tab is active
   const isCreateActive = matchRoute({ to: '/audit/templates', fuzzy: true })
-  // const isListActive = matchRoute({ to: '/audit/list' })
   const isChecklistActive = matchRoute({ to: '/audit/checklist', fuzzy: true })
 
+  // Retrieve access permissions from localStorage
   const access = JSON.parse(localStorage.getItem('access') || '{}')
 
   return (
     <div className="pt-16 flex flex-col items-center">
-      {/* Grouped buttons */}
+      {/* Grouped navigation buttons for audit sections */}
       <div className="flex mb-4">
+        {/* Show Templates button if user has access */}
         {access.component_station_audit_template && (
           <Link to="/audit/templates">
             <Button
@@ -28,14 +37,7 @@ function RouteComponent() {
             </Button>
           </Link>
         )}
-        {/* <Link to="/audit/list">
-          <Button
-            {...(!isListActive && { variant: 'outline' } as object)}
-            className="rounded-none"
-          >
-            List
-          </Button>
-        </Link> */}
+        {/* Checklist button is always shown */}
         <Link to="/audit/checklist">
           <Button
             {...(!isChecklistActive && { variant: 'outline' } as object)}
@@ -45,6 +47,7 @@ function RouteComponent() {
           </Button>
         </Link>
       </div>
+      {/* Render the nested route content */}
       <Outlet />
     </div>
   )
