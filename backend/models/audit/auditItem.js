@@ -10,6 +10,7 @@ const AuditItemSchema = new mongoose.Schema({
   assignedTo: { type: String },
 
   checked: { type: Boolean, default: false },
+  checkedAt: { type: Date, default: null},
   photos: [{ type: String }],
   comment: { type: String },
   frequency: { 

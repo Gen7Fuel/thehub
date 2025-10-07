@@ -414,6 +414,7 @@ function RouteComponent() {
               <ChecklistItemCard
                 key={item._id || idx}
                 item={item}
+                mode="station"
                 onCheck={(checked) => handleCheck(idx, checked)}
                 onComment={(comment) => handleComment(idx, comment)}
                 onPhotos={(photos) => handlePhotos(idx, photos)}

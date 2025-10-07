@@ -4,16 +4,16 @@ import { RouteContext } from "../checklist";
 import { OpenIssueCard } from "@/components/custom/OpenIssueCard";
 
 interface OpenIssue {
-  _id?: string;
+  _id: string;
   item: string;
   category?: string;
   checked?: boolean;
   issueRaised?: boolean;
   currentIssueStatus?: string;
-  timestamp?: string;
+  lastUpdated?: string;  
   assignedTo?: string;
-  comments?: string;
-  images?: string[];
+  comment?: string;       
+  photos?: string[];     
 }
 
 
@@ -33,7 +33,7 @@ export function OpenIssuesPage() {
 
     setLoading(true);
 
-    fetch(`/api/audit/open-issues?site=${encodeURIComponent(site)}`, {
+    fetch(`/api/audit/open-issues?mode=station&site=${encodeURIComponent(site)}`, {
       headers: { Authorization: `Bearer ${localStorage.getItem("token")}` },
     })
       .then((res) => res.json())

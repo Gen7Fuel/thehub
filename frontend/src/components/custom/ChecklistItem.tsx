@@ -1,5 +1,4 @@
 import { useState } from "react";
-// import { Checkbox } from "@/components/ui/checkbox";
 import { Edit, MessageSquareText, ImagePlus, Image as ImageIcon } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
@@ -11,11 +10,13 @@ interface SelectOption {
   text: string;
   _id: string;
 }
+
 interface SelectTemplate {
   _id: string;
   name: string;
   options: SelectOption[];
 }
+
 interface ChecklistItemCardProps {
   item: {
     item: string;
@@ -23,32 +24,34 @@ interface ChecklistItemCardProps {
     checked?: boolean;
     comment?: string;
     photos?: string[];
-    // New fields:
     category?: string;
     status?: string;
     followUp?: string;
     assignedTo?: string;
     issueRaised?: boolean;
+    checkedAt?: string;
   };
-  onCheck: (checked: boolean) => void;
-  onComment: (comment: string) => void;
-  onPhotos: (photos: string[]) => void;
+  onCheck?: (checked: boolean) => void;
+  onComment?: (comment: string) => void;
+  onPhotos?: (photos: string[]) => void;
   onFieldChange?: (field: "status" | "followUp" | "assignedTo" | "issueRaised", value: string | boolean) => void;
   selectTemplates?: SelectTemplate[];
-  borderColor: string;
+  borderColor?: string;
   lastChecked?: string;
-  onIssueToggle: (raised: boolean) => void;
+  onIssueToggle?: (raised: boolean) => void;
+  mode?: "station" | "interface"; // New prop
 }
 
 export function ChecklistItemCard({
   item,
-  onCheck,
-  onComment,
-  onPhotos,
-  onFieldChange,
+  onCheck = () => {},
+  onComment = () => {},
+  onPhotos = () => {},
+  onFieldChange = () => {},
   selectTemplates = [],
-  borderColor,
+  borderColor = "border-gray-300",
   lastChecked,
+  mode = "station",
 }: ChecklistItemCardProps) {
   const [commentOpen, setCommentOpen] = useState(false);
   const [commentValue, setCommentValue] = useState(item.comment || "");
@@ -58,13 +61,14 @@ export function ChecklistItemCard({
   const [imageModalOpen, setImageModalOpen] = useState(false);
   const [modalImage, setModalImage] = useState<string | null>(null);
   const [viewImagesOpen, setViewImagesOpen] = useState(false);
-  const disabledControls = item.checked;
 
-  // Helper to get options for a select template by name
+  const disabledControls = mode === "interface" || item.checked;
+
   const getOptions = (name: string) =>
     selectTemplates.find(t => t.name === name)?.options || [];
 
   const handlePhotoChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (mode === "interface") return; // read-only
     const files = Array.from(e.target.files || []);
     if (files.length === 0) return;
     const uploadedFilenames: string[] = [];
@@ -80,7 +84,7 @@ export function ChecklistItemCard({
           const data = await res.json();
           uploadedFilenames.push(data.filename);
         }
-      } catch (err) {}
+      } catch {}
     }
     const newPhotos = [...(item.photos || []), ...uploadedFilenames];
     setPhotoPreviews(newPhotos.map(name => `/cdn/download/${name}`));
@@ -97,80 +101,69 @@ export function ChecklistItemCard({
     setImageModalOpen(true);
   };
 
-  // Example for dropdown / buttons
   const handleDisabledClick = () => {
-    if (item.checked) {
-      alert("Uncheck first to edit this item.");
-      return true; // stop propagation
-    }
+    if (disabledControls) return true;
     return false;
   };
 
   return (
-  //   <div className="border rounded p-4 mb-3 flex flex-col gap-2 bg-muted/50 w-150">
-  //     <div className="flex items-center gap-3">
-  //       <Checkbox
-  //         id={`checklist-item-${(item.item || "item").replace(/\s+/g, "-")}`}
-  //         checked={!!item.checked}
-  //         onCheckedChange={onCheck}
-  //       />
-  //       <Label
-  //         htmlFor={`checklist-item-${(item.item || "item").replace(/\s+/g, "-")}`}
-  //         className="font-medium cursor-pointer"
-  //       >
-  //         {item.item}
-  //       </Label>
-  //     </div>
     <div
       className={`border-2 rounded-2xl p-4 mb-3 flex flex-col gap-2 w-130 transition-colors
         ${item.issueRaised ? "bg-red-300" : item.checked ? "bg-green-100" : "bg-gray-50"}
-        ${borderColor || "border-gray-300"} border-t-5`}
+        ${borderColor} border-t-5`}
     >
       <div className="flex items-center w-full">
-        {/* Label on the left */}
-        <Label className="font-medium text-lg cursor-pointer">
-          {item.item}
-        </Label>
+        <Label className="font-medium text-lg cursor-pointer">{item.item}</Label>
 
-        {/* Buttons container pushed to the right */}
         <div className="flex items-center ml-auto gap-2">
-          {/* Comment button */}
-          <Button
-            variant="outline"
-            type="button"
-            size="sm"
-            onClick={() => {if (!handleDisabledClick()) setCommentOpen(true);}}
-            className="bg-sky-100 border-gray-300"
-          >
-            {item.comment ? (
-              <Edit className="w-6 h-6 cursor-pointer text-gray-700" />
-            ) : (
-              <MessageSquareText className="w-6 h-6 cursor-pointer text-gray-700" />
-            )}
-          </Button>
-
-          {/* Attach photo */}
-          <label>
-            <Button variant="outline" type="button" size="sm" className="bg-sky-100 border-gray-300" disabled={disabledControls} asChild>
-              <span>
-                <ImagePlus className="w-6 h-6 cursor-pointer text-gray-700" />
-              </span>
+          {/* Comment button – only show in station mode */}
+          {mode === "station" && (
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={() => !handleDisabledClick() && setCommentOpen(true)}
+              className="bg-sky-100 border-gray-300"
+            >
+              {item.comment ? (
+                <Edit className="w-6 h-6 text-gray-700" />
+              ) : (
+                <MessageSquareText className="w-6 h-6 text-gray-700" />
+              )}
             </Button>
-            <input
-              type="file"
-              accept="image/*"
-              multiple
-              className="hidden"
-              onChange={handlePhotoChange}
-              disabled={disabledControls}
-            />
-          </label>
+          )}
 
-          {/* View images */}
+          {/* Attach Photo – only in station mode */}
+          {mode === "station" && (
+            <label>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                className="bg-sky-100 border-gray-300"
+                disabled={disabledControls}
+                asChild
+              >
+                <span>
+                  <ImagePlus className="w-6 h-6 text-gray-700" />
+                </span>
+              </Button>
+              <input
+                type="file"
+                accept="image/*"
+                multiple
+                className="hidden"
+                onChange={handlePhotoChange}
+                disabled={disabledControls}
+              />
+            </label>
+          )}
+
+          {/* View images – always visible if photos exist */}
           {photoPreviews.length > 0 && (
             <Button
-              variant="outline"
               type="button"
+              variant="outline"
               size="sm"
               onClick={() => setViewImagesOpen(true)}
               className="bg-sky-100 border-gray-300"
@@ -178,8 +171,9 @@ export function ChecklistItemCard({
               <ImageIcon size={16} className="text-gray-600" />
             </Button>
           )}
-          <span onClick={() => onCheck(!item.checked)}>
-            {/* Check toggle */}
+
+          {/* Checkbox – only clickable in station mode */}
+          <span onClick={() => mode === "station" && onCheck(!item.checked)}>
             {item.checked ? (
               <CheckSquare size={28} className="text-green-600" />
             ) : (
@@ -188,197 +182,100 @@ export function ChecklistItemCard({
           </span>
         </div>
       </div>
-
-      {/* LAst Checked */}
-      {lastChecked ? (
-        <div className="text-sm text-gray-500">
-          Last checked: {new Date(lastChecked).toLocaleString()}
-        </div>
-      ) : (
-        <div className="text-sm text-gray-400 italic">
-          Last checked: Date not available
+      {/* CheckedAt display in interface mode */}
+      {mode === "interface" && (
+        <div className={`text-sm ${item.checkedAt ? "text-gray-500" : "text-gray-400 italic"}`}>
+          Completed at: {item.checkedAt ? new Date(item.checkedAt).toLocaleString() : "Not Checked Yet"}
         </div>
       )}
 
+      {/* Last Checked */}
+      <div className={`text-sm ${lastChecked ? "text-gray-500" : "text-gray-400 italic"}`}>
+        Last checked: {lastChecked ? new Date(lastChecked).toLocaleString() : "Date not available"}
+      </div>
 
-      <div className="flex gap-4 items-center">
-        {/* Status */}
-        <div className="flex-1 flex flex-col">
-          <label className="mb-1 font-medium text-sm">Status</label>
-          <Select
-            value={item.status || ""}
-            onValueChange={(val) => {if (!handleDisabledClick()) onFieldChange?.("status", val);}}
-          >
-            <SelectTrigger className="w-[100px] bg-gray-100 border-gray-300 focus:ring-2 focus:ring-green-500"
-              onClick={(e) => {
-                if (item.checked) {
-                  e.preventDefault(); // stops dropdown from opening
-                  alert("Uncheck first to edit this item.");
-                }
-              }}
+      {/* Fields */}
+      <div className="flex gap-4 items-center mt-2">
+        {["status", "followUp"].map((field) => (
+          <div key={field} className="flex-1 flex flex-col">
+            <label className="mb-1 font-medium text-sm">{field === "status" ? "Status" : "Follow Up"}</label>
+            <Select
+              value={item[field as "status" | "followUp"] || ""}
+              onValueChange={(val) => !handleDisabledClick() && onFieldChange(field as any, val)}
             >
-              <SelectValue placeholder="Status" />
-            </SelectTrigger>
-            <SelectContent>
-              {getOptions("Status").map((opt) => (
-                <SelectItem key={opt._id} value={opt.text}>
-                  {opt.text}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        </div>
+              <SelectTrigger className="w-[100px] bg-gray-100 border-gray-300 focus:ring-2 focus:ring-green-500">
+                <SelectValue placeholder={field === "status" ? "Status" : "Follow Up"} />
+              </SelectTrigger>
+              <SelectContent>
+                {getOptions(field === "status" ? "Status" : "Follow Up").map(opt => (
+                  <SelectItem key={opt._id} value={opt.text}>{opt.text}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+        ))}
 
-        {/* Follow Up */}
-        <div className="flex-1 flex flex-col">
-          <label className="mb-1 font-medium text-sm">Follow Up</label>
-          <Select
-            value={item.followUp || ""}
-            onValueChange={(val) => {if (!handleDisabledClick()) onFieldChange?.("followUp", val);}}
-            // disabled={disabledControls}
-          >
-            <SelectTrigger className="w-[100px] bg-gray-100 border-gray-300 focus:ring-2 focus:ring-green-500"
-              onClick={(e) => {
-                if (item.checked) {
-                  e.preventDefault(); // stops dropdown from opening
-                  alert("Uncheck first to edit this item.");
-                }
-              }}
-            >
-              <SelectValue placeholder="Follow Up" />
-            </SelectTrigger>
-            <SelectContent>
-              {getOptions("Follow Up").map((opt) => (
-                <SelectItem key={opt._id} value={opt.text}>
-                  {opt.text}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        </div>
-        {/* <div className="flex justify-end mt-2">
-          <label className="flex items-center gap-1 cursor-pointer">
-            {/* <span className="text-sm font-medium">Raise Issue</span>
-            <input
-              type="checkbox"
-              checked={item.issueRaised}
-              onChange={(e) => {if (!handleDisabledClick()) onFieldChange?.("issueRaised", e.target.checked);}}
-              onClick={(e) => {
-                if (item.checked) {
-                  e.preventDefault(); // stops dropdown from opening
-                  alert("Uncheck first to edit this item.");
-                }
-              }}
-              className="w-5 h-5 accent-red-600 rounded"
-            /> */}
-            {/*<Button
-              type="button"
-              onClick={(e) => {
-                if (item.checked) {
-                  e.preventDefault();
-                  alert("Uncheck first to edit this item.");
-                  return;
-                }
-                onFieldChange?.("issueRaised", !item.issueRaised);
-              }}
-              className={`w-6 h-6 flex items-center justify-center rounded border 
-                ${item.issueRaised ? "bg-red-100 border-red-400" : "bg-gray-100 border-gray-300"}
-              `}
-            >
-              {item.issueRaised ? (
-                <AlertCircle className="h-4 w-4 text-red-600" />
-              ) : (
-                <Check className="h-4 w-4 text-green-600" />
-              )}
-              {item.issueRaised ? "Issue Raised" : "Raise Issue"}
-            </Button>
-          </label>
-        </div> */}
+        {/* Raise Issue */}
         <div className="flex justify-end mt-2">
           <span className="text-sm font-medium mr-2">Raise Issue</span>
-
           {item.issueRaised ? (
-            // ⚠️ Show alert symbol if raised
             <button
               type="button"
-              onClick={(e) => {
-                if (item.checked) {
-                  e.preventDefault();
-                  alert("Uncheck first to edit this item.");
-                  return;
-                }
-                onFieldChange?.("issueRaised", false);
-              }}
+              onClick={() => mode === "station" && onFieldChange("issueRaised", false)}
               className="w-6 h-6 flex items-center justify-center rounded border bg-red-100 border-red-400"
             >
               <AlertCircle className="h-4 w-4 text-red-600" />
             </button>
           ) : (
-            // ☐ Show normal checkbox if not raised
             <input
               type="checkbox"
               checked={false}
-              onChange={(e) => {
-                if (item.checked) {
-                  e.preventDefault();
-                  alert("Uncheck first to edit this item.");
-                  return;
-                }
-                onFieldChange?.("issueRaised", true);
-              }}
+              onChange={() => mode === "station" && onFieldChange("issueRaised", true)}
               className="w-5 h-5 accent-gray-600 rounded cursor-pointer"
+              disabled={disabledControls}
             />
           )}
         </div>
       </div>
 
-      
+      {/* Dialogs */}
       <Dialog open={imageModalOpen} onOpenChange={setImageModalOpen}>
         <DialogContent className="w-[80vh] h-[80vh] max-w-none flex items-center justify-center p-2">
-          {modalImage && (
-            <img src={modalImage} alt="Full" className="w-full h-full object-contain rounded" />
-          )}
+          {modalImage && <img src={modalImage} alt="Full" className="w-full h-full object-contain rounded" />}
         </DialogContent>
       </Dialog>
       <Dialog open={viewImagesOpen} onOpenChange={setViewImagesOpen}>
         <DialogContent className="max-w-3xl">
-          <DialogHeader>
-            <DialogTitle>Attached Images</DialogTitle>
-          </DialogHeader>
+          <DialogHeader><DialogTitle>Attached Images</DialogTitle></DialogHeader>
           <div className="grid grid-cols-2 md:grid-cols-3 gap-3 mt-2">
             {photoPreviews.map((src, idx) => (
-              <img
-                key={idx}
-                src={src}
-                alt={`photo-${idx}`}
-                className="w-full h-40 object-cover rounded border cursor-pointer"
-                onClick={() => handleThumbnailClick(src)} // optional: open in new tab
-              />
+              <img key={idx} src={src} alt={`photo-${idx}`} className="w-full h-40 object-cover rounded border cursor-pointer" onClick={() => handleThumbnailClick(src)} />
             ))}
           </div>
         </DialogContent>
       </Dialog>
-      <Dialog open={commentOpen} onOpenChange={setCommentOpen}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>Add Comment</DialogTitle>
-          </DialogHeader>
-          <textarea
-            className="border rounded w-full p-2 mt-2"
-            rows={3}
-            value={commentValue}
-            onChange={e => setCommentValue(e.target.value)}
-          />
-          <div className="flex justify-end mt-2">
-            <Button size="sm" onClick={handleCommentSave}>Add</Button>
-          </div>
-        </DialogContent>
-      </Dialog>
+      {mode === "station" && (
+        <Dialog open={commentOpen} onOpenChange={setCommentOpen}>
+          <DialogContent>
+            <DialogHeader>
+              <DialogTitle>Add Comment</DialogTitle>
+            </DialogHeader>
+            <textarea
+              className="border rounded w-full p-2 mt-2"
+              rows={3}
+              value={commentValue}
+              onChange={(e) => setCommentValue(e.target.value)}
+            />
+            <div className="flex justify-end mt-2">
+              <Button size="sm" onClick={handleCommentSave}>Add</Button>
+            </div>
+          </DialogContent>
+        </Dialog>
+      )}
+
       {item.comment && (
         <div className="mt-2 p-2 rounded bg-amber-200">
-          <div className="text-sm text-gray-800">
-            <strong>Comment:</strong> {item.comment}
-          </div>
+          <div className="text-sm text-gray-800"><strong>Comment:</strong> {item.comment}</div>
         </div>
       )}
     </div>
