@@ -6,21 +6,14 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Card } from "@/components/ui/card"
-// import { io, Socket } from "socket.io-client"
-import { socket } from "@/lib/websocket"
 import { useNavigate } from '@tanstack/react-router'
+import { getSocket } from "@/lib/websocket";
+
+const socket = getSocket();
 
 export const Route = createFileRoute("/_navbarLayout/order-rec/workflow")({
   component: RouteComponent,
 })
-
-// const socketUrl = "http://localhost:5000" ; // container networking
-
-// export const socket: Socket = io(socketUrl, {
-//   auth: { token: localStorage.getItem("token") },
-//   transports: ["websocket"],
-//   autoConnect: true,
-// });
 
 type Vendor = {
   _id: string;
