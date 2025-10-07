@@ -1,8 +1,8 @@
 // scripts/fixStatusHistory.js
 const mongoose = require("mongoose");
 const dotenv = require("dotenv");
-const OrderRec = require("./models/OrderRec"); // adjust path to your model
-const connectDB = require("./config/db");
+const OrderRec = require("../models/OrderRec"); // adjust path to your model
+const connectDB = require("../config/db");
 
 dotenv.config();
 

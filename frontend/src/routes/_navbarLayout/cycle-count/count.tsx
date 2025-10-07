@@ -3,6 +3,9 @@ import { useEffect, useState } from "react";
 import { LocationPicker } from "@/components/custom/locationPicker";
 import TableWithInputs from "@/components/custom/TableWithInputs";
 import { DateTime } from 'luxon';
+// import { socket } from "@/lib/websocket";
+import { useRef } from "react";
+import { socket } from "@/lib/websocket";
 
 export const Route = createFileRoute('/_navbarLayout/cycle-count/count')({
   component: RouteComponent,
@@ -19,6 +22,123 @@ function RouteComponent() {
 
   // Track FOH and BOH values for each item
   const [counts, setCounts] = useState<{ [id: string]: { foh: string; boh: string } }>({});
+
+  const midnightTimeout = useRef<NodeJS.Timeout | null>(null);
+
+  useEffect(() => {
+    // Clear any previous timeout
+    if (midnightTimeout.current) clearTimeout(midnightTimeout.current);
+
+    // Calculate ms until next local midnight
+    const now = new Date();
+    const nextMidnight = new Date(now);
+    nextMidnight.setHours(24, 0, 0, 0);
+    const msUntilMidnight = nextMidnight.getTime() - now.getTime();
+
+    // Set timeout to refresh at local midnight
+    midnightTimeout.current = setTimeout(() => {
+      // Re-fetch items (or reload page if you prefer)
+      window.location.reload(); // or call your fetch logic directly
+    }, msUntilMidnight);
+
+    // Cleanup on unmount
+    return () => {
+      if (midnightTimeout.current) clearTimeout(midnightTimeout.current);
+    };
+  }, [stationName]);
+
+  // useEffect(() => {
+  //   // Handler for real-time updates
+  //   const handleUpdate = (data: { site: string }) => {
+  //     if (!data.site || data.site === stationName) {
+  //       // Re-fetch items for this station
+  //       setLoading(true);
+  //       setError("");
+  //       fetch(`/api/cycle-count/daily-items?site=${encodeURIComponent(stationName)}&chunkSize=20&timezone=${encodeURIComponent(Intl.DateTimeFormat().resolvedOptions().timeZone)}`, {
+  //         headers: {
+  //           Authorization: `Bearer ${localStorage.getItem("token") || ""}`,
+  //         },
+  //       })
+  //         .then(res => res.json())
+  //         .then(data => {
+  //           setItems(data.items || []);
+  //           setFlaggedItems(data.flaggedItems || []);
+  //           // ...re-initialize counts as in your existing code...
+  //           const initialCounts: { [id: string]: { foh: string; boh: string } } = {};
+  //           const allItems = [...(data.flaggedItems || []), ...(data.items || [])];
+  //           const timezone = Intl.DateTimeFormat().resolvedOptions().timeZone;
+  //           const now = DateTime.now().setZone(timezone);
+  //           const todayStart = now.startOf('day');
+  //           const tomorrowStart = todayStart.plus({ days: 1 });
+
+  //           allItems.forEach((item: any) => {
+  //             const updatedAt = item.updatedAt ? DateTime.fromISO(item.updatedAt).setZone(timezone) : null;
+  //             const isToday =
+  //               updatedAt &&
+  //               updatedAt >= todayStart &&
+  //               updatedAt < tomorrowStart;
+
+  //             initialCounts[item._id] = {
+  //               foh:
+  //                 isToday && item.foh != null
+  //                   ? String(item.foh)
+  //                   : "",
+  //               boh:
+  //                 isToday && item.boh != null
+  //                   ? String(item.boh)
+  //                   : ""
+  //             };
+  //           });
+  //           setCounts(initialCounts);
+  //         })
+  //         .catch(() => setError("Failed to fetch items"))
+  //         .finally(() => setLoading(false));
+  //     }
+  //   };
+
+  //   socket.on("cycle-count-updated", handleUpdate);
+  //   return () => {
+  //     socket.off("cycle-count-updated", handleUpdate);
+  //   };
+  // }, [stationName]);
+
+  const handleInputBlur = (id: string, field: "foh" | "boh", value: string) => {
+    // Save to backend
+    fetch("/api/cycle-count/save-item", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${localStorage.getItem("token") || ""}`,
+      },
+      body: JSON.stringify({ _id: id, field, value }),
+    });
+
+    // Emit websocket event for real-time update
+    socket.emit("cycle-count-field-updated", { itemId: id, field, value });
+  };
+
+  interface CycleCountFieldUpdate {
+    itemId: string;
+    field: "foh" | "boh";
+    value: string;
+  }
+
+  // Listen for updates from other clients
+  useEffect(() => {
+    function updateField({ itemId, field, value }: CycleCountFieldUpdate) {
+      setCounts(prev => ({
+        ...prev,
+        [itemId]: {
+          ...prev[itemId],
+          [field]: value
+        }
+      }));
+    }
+    socket.on("cycle-count-field-updated", updateField);
+    return () => {
+      socket.off("cycle-count-field-updated", updateField);
+    };
+  }, []);
 
   useEffect(() => {
     if (!stationName) return;
@@ -71,11 +191,11 @@ function RouteComponent() {
 
           initialCounts[item._id] = {
             foh:
-              isToday && item.foh != null && item.foh !== 0
+              isToday && item.foh != null
                 ? String(item.foh)
                 : "",
             boh:
-              isToday && item.boh != null && item.boh !== 0
+              isToday && item.boh != null
                 ? String(item.boh)
                 : ""
           };
@@ -175,11 +295,11 @@ function RouteComponent() {
 
             initialCounts[item._id] = {
               foh:
-                isToday && item.foh != null && item.foh !== 0
+                isToday && item.foh != null
                   ? String(item.foh)
                   : "",
               boh:
-                isToday && item.boh != null && item.boh !== 0
+                isToday && item.boh != null
                   ? String(item.boh)
                   : ""
             };
@@ -222,6 +342,7 @@ function RouteComponent() {
             items={flaggedItems}
             counts={counts}
             onInputChange={handleInputChange}
+            onInputBlur={handleInputBlur}
             tableClassName=""
             headerClassName="bg-red-100"
             rowClassName="bg-red-50"
@@ -237,6 +358,7 @@ function RouteComponent() {
             items={items}
             counts={counts}
             onInputChange={handleInputChange}
+            onInputBlur={handleInputBlur}
             tableClassName=""
             headerClassName="bg-gray-100"
             rowClassName=""

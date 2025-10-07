@@ -53,42 +53,65 @@ router.get('/daily-items', async (req, res) => {
     const { site, chunkSize = 20, timezone = 'UTC' } = req.query;
     if (!site) return res.status(400).json({ message: "site is required" });
 
-    // const today = new Date();
-    // today.setHours(0, 0, 0, 0);
-    // const tomorrow = new Date(today.getTime() + 24 * 60 * 60 * 1000);
+    // Get today's date string in user's timezone
+    const todayDate = DateTime.now().setZone(timezone).toISODate(); // 'YYYY-MM-DD'
+
+    // --- 1. Try to find today's items (fixed for the day) ---
+    // Flagged items: those with both displayDate and flaggedDisplayDate set to today
+    const flaggedItems = await CycleCount.find({
+      site: site.toString().trim(),
+      displayDate: todayDate,
+      flaggedDisplayDate: todayDate
+    }).lean();
+
+    // Regular items: those with displayDate set to today, but NOT flaggedDisplayDate
+    const items = await CycleCount.find({
+      site: site.toString().trim(),
+      displayDate: todayDate,
+      $or: [
+        { flaggedDisplayDate: { $ne: todayDate } },
+        { flaggedDisplayDate: { $exists: false } }
+      ]
+    }).lean();
+
+    // If we have a full set for today, return them
+    if (flaggedItems.length + items.length === parseInt(chunkSize, 10)) {
+      return res.json({ flaggedItems, items });
+    }
+
+    // --- 2. If not, run the selection algorithm to pick today's items ---
 
     // Get the start and end of today in the user's timezone, then convert to UTC
     const now = DateTime.now().setZone(timezone);
     const todayStart = now.startOf('day').toUTC();
     const tomorrowStart = todayStart.plus({ days: 1 });
 
-    // 1. Fetch flagged items (top)
+    // Fetch flagged items (top candidates)
     const flaggedItemsRaw = await CycleCount.find({ site: site.toString().trim(), flagged: true });
-    const flaggedItems = CycleCount.sortItems(flaggedItemsRaw).slice(0, 5);
-    const flaggedCount = flaggedItems.length;
+    const flaggedSelected = CycleCount.sortFlaggedItems(flaggedItemsRaw).slice(0, 5);
+    const flaggedCount = flaggedSelected.length;
 
     const chunk = parseInt(chunkSize, 10);
     const dailyCount = Math.max(chunk - flaggedCount, 0); // number of items on today's list
 
-    // 2. Fetch all unflagged items for the site
+    // Fetch all unflagged items for the site
     let allUnflagged = await CycleCount.find({
       site: site.toString().trim(),
       flagged: false
     });
     allUnflagged = CycleCount.sortItems(allUnflagged);
 
-    // 3. All unflagged items counted today (priority)
-    // const todayItems = allUnflagged.filter(i => i.updatedAt >= today && i.updatedAt < tomorrow); // NEED TO CHECK UTC
-    const todayItems = allUnflagged.filter(i =>
+    // All unflagged items counted today (priority)
+    const todayItemsUnflagged = allUnflagged.filter(i =>
       DateTime.fromJSDate(i.updatedAt).toUTC() >= todayStart &&
       DateTime.fromJSDate(i.updatedAt).toUTC() < tomorrowStart
     );
 
-    // 4. Calculate how many more items are needed
-    const todayCount = todayItems.length;
+    // Calculate how many more items are needed
+    const todayCount = todayItemsUnflagged.length;
     const moreNeeded = Math.max(dailyCount - todayCount, 0);
 
-    // 5. For the remainder, use the A/B/C algorithm, EXCLUDING today's items
+    // For the remainder, use the A/B/C algorithm, EXCLUDING today's items
     const grades = ["A", "B", "C"];
     const groupSize = 6;
     const groups = Math.floor(moreNeeded / groupSize);
@@ -100,10 +123,6 @@ router.get('/daily-items', async (req, res) => {
 
     // Exclude today's items from the pool
     const notTodayByGrade = {};
-    // grades.forEach(grade => {
-    //   notTodayByGrade[grade] = allUnflagged
-    //     .filter(i => i.grade === grade && !(i.updatedAt >= today && i.updatedAt < tomorrow));
-    // });
     grades.forEach(grade => {
       notTodayByGrade[grade] = allUnflagged
         .filter(i => i.grade === grade && !(
@@ -116,21 +135,160 @@ router.get('/daily-items', async (req, res) => {
     let selectedB = CycleCount.sortItems(notTodayByGrade["B"]).slice(0, numB);
     let selectedC = CycleCount.sortItems(notTodayByGrade["C"]).slice(0, numC);
 
-    // 6. Combine today's items (all grades) and the A/B/C breakdown for the rest
-    const result = [
-      ...CycleCount.sortItems(todayItems), // all today's unflagged items first
+    // Combine today's items (all grades) and the A/B/C breakdown for the rest
+    const regularSelected = [
+      ...CycleCount.sortItems(todayItemsUnflagged), // all today's unflagged items first
       ...selectedA,
       ...selectedB,
       ...selectedC
     ].slice(0, dailyCount); // ensure we don't exceed dailyCount
 
-    res.json({
-      flaggedItems,
-      items: result
-    });
+    // --- 3. Assign displayDate to all selected items, and flaggedDisplayDate to flagged items ---
+    const flaggedIds = flaggedSelected.map(i => i._id);
+    const regularIds = regularSelected.map(i => i._id);
+
+    // Set displayDate for all, flaggedDisplayDate for flagged only
+    await CycleCount.updateMany(
+      { _id: { $in: flaggedIds } },
+      { $set: { displayDate: todayDate, flaggedDisplayDate: todayDate } }
+    );
+    await CycleCount.updateMany(
+      { _id: { $in: regularIds } },
+      { $set: { displayDate: todayDate }, $unset: { flaggedDisplayDate: "" } }
+    );
+
+    // --- 4. Re-fetch today's items for response ---
+    const flaggedItemsFinal = await CycleCount.find({
+      site: site.toString().trim(),
+      displayDate: todayDate,
+      flaggedDisplayDate: todayDate
+    }).lean();
+
+    const itemsFinal = await CycleCount.find({
+      site: site.toString().trim(),
+      displayDate: todayDate,
+      $or: [
+        { flaggedDisplayDate: { $ne: todayDate } },
+        { flaggedDisplayDate: { $exists: false } }
+      ]
+    }).lean();
+
+    return res.json({ flaggedItems: flaggedItemsFinal, items: itemsFinal });
   } catch (err) {
     console.error(err);
     res.status(500).json({ message: "Failed to get daily items" });
+  }
+});
+// router.get('/daily-items', async (req, res) => {
+//   try {
+//     const { site, chunkSize = 20, timezone = 'UTC' } = req.query;
+//     if (!site) return res.status(400).json({ message: "site is required" });
+
+
+//     // Get the start and end of today in the user's timezone, then convert to UTC
+//     const now = DateTime.now().setZone(timezone);
+//     const todayStart = now.startOf('day').toUTC();
+//     console.log("TODAY START (UTC):", todayStart.toISO());
+//     const tomorrowStart = todayStart.plus({ days: 1 });
+//     console.log("TOMORROW START (UTC):", tomorrowStart.toISO());
+
+//     // 1. Fetch flagged items (top)
+//     const flaggedItemsRaw = await CycleCount.find({ site: site.toString().trim(), flagged: true });
+//     const flaggedItems = CycleCount.sortFlaggedItems(flaggedItemsRaw).slice(0, 5);
+//     const flaggedCount = flaggedItems.length;
+
+//     const chunk = parseInt(chunkSize, 10);
+//     const dailyCount = Math.max(chunk - flaggedCount, 0); // number of items on today's list
+
+//     // 2. Fetch all unflagged items for the site
+//     let allUnflagged = await CycleCount.find({
+//       site: site.toString().trim(),
+//       flagged: false
+//     });
+//     allUnflagged = CycleCount.sortItems(allUnflagged);
+
+//     // 3. All unflagged items counted today (priority)
+//     // const todayItems = allUnflagged.filter(i => i.updatedAt >= today && i.updatedAt < tomorrow); // NEED TO CHECK UTC
+//     const todayItems = allUnflagged.filter(i =>
+//       DateTime.fromJSDate(i.updatedAt).toUTC() >= todayStart &&
+//       DateTime.fromJSDate(i.updatedAt).toUTC() < tomorrowStart
+//     );
+
+//     // 4. Calculate how many more items are needed
+//     const todayCount = todayItems.length;
+//     const moreNeeded = Math.max(dailyCount - todayCount, 0);
+
+//     // 5. For the remainder, use the A/B/C algorithm, EXCLUDING today's items
+//     const grades = ["A", "B", "C"];
+//     const groupSize = 6;
+//     const groups = Math.floor(moreNeeded / groupSize);
+//     const remainder = moreNeeded % groupSize;
+
+//     const numA = 3 * groups + remainder;
+//     const numB = 2 * groups;
+//     const numC = 1 * groups;
+
+//     // Exclude today's items from the pool
+//     const notTodayByGrade = {};
+//     // grades.forEach(grade => {
+//     //   notTodayByGrade[grade] = allUnflagged
+//     //     .filter(i => i.grade === grade && !(i.updatedAt >= today && i.updatedAt < tomorrow));
+//     // });
+//     grades.forEach(grade => {
+//       notTodayByGrade[grade] = allUnflagged
+//         .filter(i => i.grade === grade && !(
+//           DateTime.fromJSDate(i.updatedAt).toUTC() >= todayStart &&
+//           DateTime.fromJSDate(i.updatedAt).toUTC() < tomorrowStart
+//         ));
+//     });
+
+//     let selectedA = CycleCount.sortItems(notTodayByGrade["A"]).slice(0, numA);
+//     let selectedB = CycleCount.sortItems(notTodayByGrade["B"]).slice(0, numB);
+//     let selectedC = CycleCount.sortItems(notTodayByGrade["C"]).slice(0, numC);
+
+//     // 6. Combine today's items (all grades) and the A/B/C breakdown for the rest
+//     const result = [
+//       ...CycleCount.sortItems(todayItems), // all today's unflagged items first
+//       ...selectedA,
+//       ...selectedB,
+//       ...selectedC
+//     ].slice(0, dailyCount); // ensure we don't exceed dailyCount
+
+//     res.json({
+//       flaggedItems,
+//       items: result
+//     });
+//   } catch (err) {
+//     console.error(err);
+//     res.status(500).json({ message: "Failed to get daily items" });
+//   }
+// });
+
+router.post('/save-item', async (req, res) => {
+  try {
+    const { _id, field, value } = req.body;
+    if (!_id || !field || value === undefined) {
+      return res.status(400).json({ message: "Item ID, field, and value are required." });
+    }
+    if (!['foh', 'boh'].includes(field)) {
+      return res.status(400).json({ message: "Field must be 'foh' or 'boh'." });
+    }
+
+    await CycleCount.findByIdAndUpdate(
+      _id,
+      {
+        $set: {
+          [field]: value === "" || value == null ? 0 : Number(value),
+          flagged: false,
+          updatedAt: new Date()
+        }
+      }
+    );
+
+    res.json({ message: "Item field saved successfully." });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ message: "Failed to save item field." });
   }
 });
 
@@ -160,6 +318,8 @@ router.post('/save-counts', async (req, res) => {
       );
     }
 
+    req.app.get("io").emit("cycle-count-updated", { site: req.body.site });
+
     res.json({ message: "Counts saved successfully." });
   } catch (err) {
     console.error(err);
@@ -175,6 +335,8 @@ router.get('/counted-today', async (req, res) => {
     const today = new Date();
     today.setHours(0, 0, 0, 0);
     const tomorrow = new Date(today.getTime() + 24 * 60 * 60 * 1000);
+
+    console.log("CYCLE COUNT RANGE", today, "-->", tomorrow);
 
     const count = await CycleCount.countDocuments({
       site: site.toString().trim(),

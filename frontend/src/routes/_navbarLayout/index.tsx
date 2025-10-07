@@ -1,16 +1,24 @@
 import { createFileRoute, Link } from '@tanstack/react-router'
 import { Button } from '@/components/ui/button'
 
+// Define the root route for the navbar layout using TanStack Router
 export const Route = createFileRoute('/_navbarLayout/')({
   component: App,
 })
 
+/**
+ * App
+ * Main landing page for the navbar layout.
+ * Renders sections and navigation buttons based on user access permissions.
+ */
 function App() {
+  // Retrieve access permissions from localStorage
   const access = JSON.parse(localStorage.getItem('access') || '{}')
 
   return (
     <div className="flex items-center justify-center min-h-screen bg-gray-50">
       <div className="flex flex-col gap-8 w-full max-w-3xl px-4 pt-16 pb-8">
+        {/* Audits Section */}
         {access.module_station_audit && (
           <Section title="Audits">
             <div className="flex flex-wrap gap-4">
@@ -24,10 +32,12 @@ function App() {
             </div>
           </Section>
         )}
-        {/* Inventory */}
+
+        {/* Inventory Section */}
         {(access.module_order_rec || access.module_cycle_count) && (
           <Section title="Inventory">
             <div className="flex flex-wrap gap-4">
+              {/* Order Rec button: goes to upload or list based on access */}
               {access.module_order_rec && (
                 access.component_order_rec_upload ? (
                   <Link to="/order-rec">
@@ -43,6 +53,7 @@ function App() {
                   </Link>
                 )
               )}
+              {/* Cycle Count button */}
               {access.module_cycle_count && (
                 <Link to="/cycle-count">
                   <Button className="w-32 h-32 flex items-center justify-center break-words whitespace-normal text-center">
@@ -50,6 +61,7 @@ function App() {
                   </Button>
                 </Link>
               )}
+              {/* Vendor Management button */}
               {access.module_vendor && (
                 <Link to="/vendor">
                   <Button className="w-32 h-32 flex items-center justify-center break-words whitespace-normal text-center">
@@ -61,10 +73,11 @@ function App() {
           </Section>
         )}
 
-        {/* Accounts Receivable */}
+        {/* Accounts Receivable Section */}
         {(access.module_fleet_card_assignment || access.module_po || access.module_kardpoll) && (
           <Section title="Accounts Receivable">
             <div className="flex flex-wrap gap-4">
+              {/* Fleet Card Assignment button */}
               {access.module_fleet_card_assignment && (
                 <Link to="/fleet">
                   <Button className="w-32 h-32 flex items-center justify-center break-words whitespace-normal text-center">
@@ -72,6 +85,7 @@ function App() {
                   </Button>
                 </Link>
               )}
+              {/* Purchase Orders button */}
               {access.module_po && (
                 <Link to="/po">
                   <Button className="w-32 h-32 flex items-center justify-center break-words whitespace-normal text-center">
@@ -79,6 +93,7 @@ function App() {
                   </Button>
                 </Link>
               )}
+              {/* Kardpoll button */}
               {access.module_kardpoll && (
                 <Link to="/kardpoll">
                   <Button className="w-32 h-32 flex items-center justify-center break-words whitespace-normal text-center">
@@ -90,7 +105,7 @@ function App() {
           </Section>
         )}
 
-        {/* Accounts Payable */}
+        {/* Accounts Payable Section */}
         {access.module_payables && (
           <Section title="Accounts Payable">
             <div className="flex flex-wrap gap-4">
@@ -103,10 +118,11 @@ function App() {
           </Section>
         )}
 
-        {/* Reports */}
+        {/* Reports Section */}
         {(access.module_daily_reports || access.module_reports) && (
           <Section title="Reports">
             <div className="flex flex-wrap gap-4">
+              {/* Daily Reports button */}
               {access.module_daily_reports && (
                 <Link to="/daily-reports">
                   <Button className="w-32 h-32 flex items-center justify-center break-words whitespace-normal text-center">
@@ -114,6 +130,7 @@ function App() {
                   </Button>
                 </Link>
               )}
+              {/* Reports button */}
               {access.module_reports && (
                 <Link to="/reports">
                   <Button className="w-32 h-32 flex items-center justify-center break-words whitespace-normal text-center">
@@ -125,7 +142,7 @@ function App() {
           </Section>
         )}
 
-        {/* Sales */}
+        {/* Sales Section */}
         {access.module_status && (
           <Section title="Sales">
             <div className="flex flex-wrap gap-4">
@@ -142,7 +159,10 @@ function App() {
   )
 }
 
-// Helper Section component for headings and spacing
+/**
+ * Section
+ * Helper component for rendering section headings and content with spacing.
+ */
 function Section({ title, children }: { title: string; children: React.ReactNode }) {
   return (
     <section>

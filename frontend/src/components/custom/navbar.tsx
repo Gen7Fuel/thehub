@@ -3,14 +3,17 @@ import { Button } from '../ui/button'
 import { useEffect } from 'react'
 import { isTokenExpired } from '../../lib/utils'
 
+// Navbar component for the application
 export default function Navbar() {
-  const navigate = useNavigate() // Initialize the navigate function
-  const matchRoute = useMatchRoute() // Initialize the matchRoute function
+  // Initialize navigation and route matching hooks
+  const navigate = useNavigate()
+  const matchRoute = useMatchRoute()
 
+  // Effect: Check token expiration on mount and redirect to login if expired
   useEffect(() => {
     const token = localStorage.getItem('token');
     if (isTokenExpired(token)) {
-      // Clear storage and redirect to login
+      // Clear sensitive data and redirect to login
       localStorage.removeItem('token');
       localStorage.removeItem('email');
       localStorage.removeItem('location');
@@ -19,6 +22,7 @@ export default function Navbar() {
     }
   }, [navigate]);
 
+  // Route matchers for header text and navigation highlighting
   const isHome = matchRoute({ to: '/' })
   const isCashSummary = matchRoute({ to: '/daily-reports/cash-summary', fuzzy: true })
   const isShiftWorksheet = matchRoute({ to: '/daily-reports/shift-worksheet', fuzzy: true })
@@ -33,6 +37,7 @@ export default function Navbar() {
   const isAudit = matchRoute({ to: '/audit', fuzzy: true })
   const isDashboard = matchRoute({ to: '/dashboard', fuzzy: true })
 
+  // Returns the header text based on the current route
   const headerText = () => {
     if (isHome) return 'Home'
     if (isCashSummary) return 'Cash Summary'
@@ -50,51 +55,50 @@ export default function Navbar() {
     return ''
   }
 
+  // Handles user logout: clears storage and redirects to login
   const handleLogout = () => {
-    // Clear localStorage
     localStorage.removeItem('token')
     localStorage.removeItem('email')
     localStorage.removeItem('location')
     localStorage.removeItem('access')
-
-    // Redirect to the login page
     navigate({ to: '/login' })
   }
 
+  // Handles navigation to the settings page
   const handleSettings = () => {
-    // Redirect to the settings page
     navigate({ to: '/settings' })
   }
 
+  // Get access permissions from localStorage
   const access = JSON.parse(localStorage.getItem('access') || '{}')
 
   return (
+    // Navbar container
     <div className="absolute top-0 left-0 w-full bg-white border-b border-dashed border-gray-300 z-10">
       <div className="max-w-7xl mx-auto flex justify-between items-center p-2 relative">
+        {/* Logo/Home link */}
         <Link to="/">
           <span className="text-xl font-bold">The Hub</span>
         </Link>
 
-        {/* Centered Header */}
+        {/* Centered dynamic header */}
         <h1 className="absolute left-1/2 transform -translate-x-1/2 text-lg font-bold">
           {headerText()}
         </h1>
 
+        {/* Right-side navigation buttons */}
         <span className="flex gap-4">
-          <span id="name" className="text-sm font-bold text-gray-600 flex items-center">
-            {localStorage.getItem('name')}
-          </span>
+          {/* Dashboard button, shown if user has access */}
           {access.module_dashboard && (
             <Button variant="ghost" onClick={() => navigate({ to: '/dashboard' })}>
               <Link to="/dashboard">Dashboard</Link>
             </Button>
           )}
-          {/* <Button variant="ghost" onClick={() => navigate({ to: '/dashboard' })}>
-            <Link to="/dashboard">Dashboard</Link>
-          </Button> */}
+          {/* Settings button, shown if user has access */}
           {access.component_settings && (
             <Button variant="outline" onClick={handleSettings}>Settings</Button>
           )}
+          {/* Logout button */}
           <Button onClick={handleLogout}>Logout</Button>
         </span>
       </div>

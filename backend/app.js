@@ -26,7 +26,7 @@ const vendorRoutes = require("./routes/vendorRoutes");
 const auditRoutes = require("./routes/audit/auditTemplateRoutes");
 // const cycleCountRoutes = require("./routes/cycleCountRoutes");
 // const CycleCountNewRoutes = require("./routes/cycleCountNewRoutes");
-const cycleCountRoutes = require('./routes/cycleCount2Routes');
+// const cycleCountRoutes = require('./routes/cycleCount2Routes');
 const { auth, authSocket } = require("./middleware/authMiddleware");
 const cycleCountNewRoutes = require('./routes/cycleCountRoutes');
 // const auth = require("./middleware/authMiddleware");
@@ -65,7 +65,7 @@ app.use("/api/fleet", fleetRoutes);
 app.use("/api/fleet-customers", fleetCustomers);
 app.use("/api/order-rec", orderRecRoutes);
 app.use("/api/vendors", vendorRoutes);
-app.use("/api/cycle-counts", cycleCountRoutes);
+// app.use("/api/cycle-counts", cycleCountRoutes);
 app.use("/api/cycle-count", cycleCountNewRoutes);
 // app.use("/api/cycle-count-new", CycleCountNewRoutes);
 app.use("/api/audit/select-templates", selectTemplateRoutes);
@@ -90,6 +90,13 @@ const io = new Server(server, {
 });
 
 io.use(authSocket)
+
+io.on("connection", (socket) => {
+  socket.on("cycle-count-field-updated", ({ itemId, field, value }) => {
+    // Broadcast to all other clients except sender
+    socket.broadcast.emit("cycle-count-field-updated", { itemId, field, value });
+  });
+});
 
 app.set("io", io);
 
