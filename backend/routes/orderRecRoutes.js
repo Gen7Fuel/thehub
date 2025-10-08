@@ -161,127 +161,200 @@ router.put('/:id/item/:catIdx/:itemIdx', async (req, res) => {
     }
 
     const site = orderRec.site;
-    if (category.name !== "Station Supplies"){
-      if (item.completed){
-        // Updating Cycle Count Flag and creating new entry (if dosen't exists)
-        if (isChanged && item.gtin) {
-          const existing = await CycleCount.findOne({ site, gtin: item.gtin });
+    // if (category.name !== "Station Supplies"){
+    //   if (item.completed){
+    //     // Updating Cycle Count Flag and creating new entry (if dosen't exists)
+    //     if (isChanged && item.gtin) {
+    //       const existing = await CycleCount.findOne({ site, gtin: item.gtin });
 
-          if (existing) {
-            // Update existing entry
-            existing.flagged = true;
-            await existing.save();
-            console.log("Updated existing CycleCount:", existing.upc);
-          } 
-          else {
-            const existing_site = await CycleCount.find({ gtin: item.gtin }).limit(1);
+    //       if (existing) {
+    //         // Update existing entry
+    //         existing.flagged = true;
+    //         await existing.save();
+    //         console.log("Updated existing CycleCount:", existing.upc);
+    //       } 
+    //       else {
+    //         const existing_site = await CycleCount.find({ gtin: item.gtin }).limit(1);
             
-            if (existing_site.length === 1){
-              // Push new entry using existing information from other sites
-              const newCycleCount = new CycleCount({
-                site,
-                upc: existing_site[0].upc,
-                name: item.itemName || "", // product name from categories.items
-                category: category.name,
-                grade: "C",
-                foh: 0,
-                boh: 0,
-                flagged: true,
-                gtin: existing_site[0].gtin,
-                upc_barcode: existing_site[0].upc_barcode,
-                updatedAt: new Date("2025-09-18T00:00:00Z"), // store UTC
-                flaggedAt: new Date(),
-              });
-              await newCycleCount.save();
-              console.log("Created existing new CycleCount:", newCycleCount.upc);
-            } else {
-              // Push new entry by Checking from the sql server if the item is listed there, if not then keep upc_barcode and upc empty
-              let itembook_upc_barcode = ""
-              let itembook_upc = ""
-              const itembook = await getUPC_barcode(item.gtin)
-              if (itembook.length > 0) {
-                itembook_upc = itembook[0].UPC;
-                itembook_upc_barcode = itembook[0].UPC_A_12_digits;
-              } 
-              console.log('upc_barcode',itembook_upc_barcode)
-              const newCycleCount = new CycleCount({
-                site,
-                upc: itembook_upc,
-                name: item.itemName || "", // product name from categories.items
-                category: category.name,
-                grade: "C",
-                foh: 0,
-                boh: 0,
-                flagged: true,
-                gtin: item.gtin,
-                upc_barcode: itembook_upc_barcode,
-                updatedAt: new Date("2025-09-18T00:00:00Z"), // store UTC
-                flaggedAt: new Date(),
-              });
-              await newCycleCount.save();
-              console.log("Created brand new CycleCount:", newCycleCount.upc);
-            }
-          }
-        } else { // if it is not changed then update it to false and if not existing then create a new entry
-          const existing = await CycleCount.findOne({ site, gtin: item.gtin });
+    //         if (existing_site.length === 1){
+    //           // Push new entry using existing information from other sites
+    //           const newCycleCount = new CycleCount({
+    //             site,
+    //             upc: existing_site[0].upc,
+    //             name: item.itemName || "", // product name from categories.items
+    //             category: category.name,
+    //             grade: "C",
+    //             foh: 0,
+    //             boh: 0,
+    //             flagged: true,
+    //             gtin: existing_site[0].gtin,
+    //             upc_barcode: existing_site[0].upc_barcode,
+    //             updatedAt: new Date("2025-09-18T00:00:00Z"), // store UTC
+    //             flaggedAt: new Date(),
+    //           });
+    //           await newCycleCount.save();
+    //           console.log("Created existing new CycleCount:", newCycleCount.upc);
+    //         } else {
+    //           // Push new entry by Checking from the sql server if the item is listed there, if not then keep upc_barcode and upc empty
+    //           let itembook_upc_barcode = ""
+    //           let itembook_upc = ""
+    //           const itembook = await getUPC_barcode(item.gtin)
+    //           if (itembook.length > 0) {
+    //             itembook_upc = itembook[0].UPC;
+    //             itembook_upc_barcode = itembook[0].UPC_A_12_digits;
+    //           } 
+    //           console.log('upc_barcode',itembook_upc_barcode)
+    //           const newCycleCount = new CycleCount({
+    //             site,
+    //             upc: itembook_upc,
+    //             name: item.itemName || "", // product name from categories.items
+    //             category: category.name,
+    //             grade: "C",
+    //             foh: 0,
+    //             boh: 0,
+    //             flagged: true,
+    //             gtin: item.gtin,
+    //             upc_barcode: itembook_upc_barcode,
+    //             updatedAt: new Date("2025-09-18T00:00:00Z"), // store UTC
+    //             flaggedAt: new Date(),
+    //           });
+    //           await newCycleCount.save();
+    //           console.log("Created brand new CycleCount:", newCycleCount.upc);
+    //         }
+    //       }
+    //     } else { // if it is not changed then update it to false and if not existing then create a new entry
+    //       const existing = await CycleCount.findOne({ site, gtin: item.gtin });
 
-          if (existing) {
-            // Update existing entry
-            existing.flagged = false;
-            await existing.save();
-            console.log("Updated existing CycleCount with false:", existing.upc);
-          } 
-          else {
-            const existing_site = await CycleCount.find({ gtin: item.gtin }).limit(1);
+    //       if (existing) {
+    //         // Update existing entry
+    //         existing.flagged = false;
+    //         await existing.save();
+    //         console.log("Updated existing CycleCount with false:", existing.upc);
+    //       } 
+    //       else {
+    //         const existing_site = await CycleCount.find({ gtin: item.gtin }).limit(1);
               
-            if (existing_site.length === 1){
-              // Push new entry using existing information from other sites
-              const newCycleCount = new CycleCount({
-                site,
-                upc: existing_site[0].upc,
-                name: item.itemName || "", // product name from categories.items
-                category: category.name,
-                grade: "C",
-                foh: 0,
-                boh: 0,
-                flagged: false,
-                gtin: existing_site[0].gtin,
-                upc_barcode: existing_site[0].upc_barcode,
-                updatedAt: new Date("2025-09-18T00:00:00Z"), // store UTC
-              });
-              await newCycleCount.save();
-              console.log("Created existing new CycleCount with false:", newCycleCount.upc);
-            } else {
-              // Push new entry by Checking from the sql server if the item is listed there, if not then keep upc_barcode and upc empty
-              const itembook_upc_barcode = ""
-              const itembook_upc = ""
-              const itembook = await getUPC_barcode(item.gtin)
-              if (itembook.length > 0) {
-                itembook_upc = itembook[0].UPC;
-                itembook_upc_barcode = itembook[0].UPC_A_12_digits;
-              } 
+    //         if (existing_site.length === 1){
+    //           // Push new entry using existing information from other sites
+    //           const newCycleCount = new CycleCount({
+    //             site,
+    //             upc: existing_site[0].upc,
+    //             name: item.itemName || "", // product name from categories.items
+    //             category: category.name,
+    //             grade: "C",
+    //             foh: 0,
+    //             boh: 0,
+    //             flagged: false,
+    //             gtin: existing_site[0].gtin,
+    //             upc_barcode: existing_site[0].upc_barcode,
+    //             updatedAt: new Date("2025-09-18T00:00:00Z"), // store UTC
+    //           });
+    //           await newCycleCount.save();
+    //           console.log("Created existing new CycleCount with false:", newCycleCount.upc);
+    //         } else {
+    //           // Push new entry by Checking from the sql server if the item is listed there, if not then keep upc_barcode and upc empty
+    //           const itembook_upc_barcode = ""
+    //           const itembook_upc = ""
+    //           const itembook = await getUPC_barcode(item.gtin)
+    //           if (itembook.length > 0) {
+    //             itembook_upc = itembook[0].UPC;
+    //             itembook_upc_barcode = itembook[0].UPC_A_12_digits;
+    //           } 
 
             
-              const newCycleCount = new CycleCount({
-                site,
-                upc: itembook_upc,
-                name: item.itemName || "", // product name from categories.items
-                category: category.name,
-                grade: "C",
-                foh: 0,
-                boh: 0,
-                flagged: false,
-                gtin: item.gtin,
-                upc_barcode: itembook_upc_barcode,
-                updatedAt: new Date("2025-09-18T00:00:00Z"), // store UTC
-              });
-              await newCycleCount.save();
-              console.log("Created brand new CycleCount with false:", newCycleCount.upc);
+    //           const newCycleCount = new CycleCount({
+    //             site,
+    //             upc: itembook_upc,
+    //             name: item.itemName || "", // product name from categories.items
+    //             category: category.name,
+    //             grade: "C",
+    //             foh: 0,
+    //             boh: 0,
+    //             flagged: false,
+    //             gtin: item.gtin,
+    //             upc_barcode: itembook_upc_barcode,
+    //             updatedAt: new Date("2025-09-18T00:00:00Z"), // store UTC
+    //           });
+    //           await newCycleCount.save();
+    //           console.log("Created brand new CycleCount with false:", newCycleCount.upc);
+    //         }
+    //       }
+    //     }
+    //   }
+    // } 
+    if (category.name !== "Station Supplies" && item.completed) {
+      if (item.gtin) {
+        let cycleCount = null;
+        let isNew = false;
+
+        // Try to find existing for this site
+        const existing = await CycleCount.findOne({ site, gtin: item.gtin });
+
+        if (existing) {
+          cycleCount = existing;
+        } else {
+          // No site match → try find any site with same gtin
+          const existing_site = await CycleCount.find({ gtin: item.gtin }).limit(1);
+
+          if (existing_site.length === 1) {
+            cycleCount = new CycleCount({
+              site,
+              upc: existing_site[0].upc,
+              name: item.itemName || "",
+              category: category.name,
+              grade: "C",
+              foh: 0,
+              boh: 0,
+              gtin: existing_site[0].gtin,
+              upc_barcode: existing_site[0].upc_barcode,
+              updatedAt: new Date("2025-09-18T00:00:00Z"),
+            });
+            isNew = true;
+          } else {
+            // Brand new → lookup from SQL
+            let itembook_upc = "";
+            let itembook_upc_barcode = "";
+            const itembook = await getUPC_barcode(item.gtin);
+            if (itembook.length > 0) {
+              itembook_upc = itembook[0].UPC;
+              itembook_upc_barcode = itembook[0].UPC_A_12_digits;
             }
+
+            cycleCount = new CycleCount({
+              site,
+              upc: itembook_upc,
+              name: item.itemName || "",
+              category: category.name,
+              grade: "C",
+              foh: 0,
+              boh: 0,
+              gtin: item.gtin,
+              upc_barcode: itembook_upc_barcode,
+              updatedAt: new Date("2025-09-18T00:00:00Z"),
+            });
+            isNew = true;
           }
         }
+
+        // Set flag depending on isChanged
+        cycleCount.flagged = !!isChanged;
+
+        if (isChanged) {
+          cycleCount.flaggedAt = new Date();
+        }
+
+        // Save only once
+        await cycleCount.save();
+
+        // Emit once when the item is flagged
+        // req.app.get("io").emit("cycle-count-updated", { site: req.body.site });
+
+        console.log(
+          `${isNew ? "Created" : "Updated"} CycleCount (${cycleCount.flagged ? "flagged=true" : "flagged=false"}):`,
+          cycleCount.upc
+        );
       }
-    } 
+    }
 
     res.json(orderRec);
   } catch (err) {
@@ -505,6 +578,10 @@ router.put('/:id/status', async (req, res) => {
     }
 
     await orderRec.save();
+    const io = req.app.get("io");
+    if (io){
+      io.emit("orderUpdated", orderRec);
+    }
 
     res.json(orderRec);
   } catch (err) {

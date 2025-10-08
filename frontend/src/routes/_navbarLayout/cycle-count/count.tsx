@@ -3,9 +3,10 @@ import { useEffect, useState } from "react";
 import { LocationPicker } from "@/components/custom/locationPicker";
 import TableWithInputs from "@/components/custom/TableWithInputs";
 import { DateTime } from 'luxon';
-// import { socket } from "@/lib/websocket";
 import { useRef } from "react";
-import { socket } from "@/lib/websocket";
+import { getSocket } from "@/lib/websocket";
+
+const socket = getSocket();
 
 export const Route = createFileRoute('/_navbarLayout/cycle-count/count')({
   component: RouteComponent,
