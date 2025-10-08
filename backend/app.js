@@ -89,8 +89,6 @@ const io = new Server(server, {
   },
 });
 
-io.use(authSocket)
-
 io.on("connection", (socket) => {
   socket.on("cycle-count-field-updated", ({ itemId, field, value }) => {
     // Broadcast to all other clients except sender

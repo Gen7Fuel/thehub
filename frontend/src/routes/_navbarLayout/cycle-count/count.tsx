@@ -3,7 +3,6 @@ import { useEffect, useState } from "react";
 import { LocationPicker } from "@/components/custom/locationPicker";
 import TableWithInputs from "@/components/custom/TableWithInputs";
 import { DateTime } from 'luxon';
-// import { socket } from "@/lib/websocket";
 import { useRef } from "react";
 import { socket } from "@/lib/websocket";
 
