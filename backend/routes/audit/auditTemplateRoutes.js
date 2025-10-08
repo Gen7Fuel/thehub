@@ -241,87 +241,63 @@ router.get('/items', async (req, res) => {
 // });
 // -- GET OPEN ISSUES --
 // Supports both station (site-based) and interface (assignedTo filtering)
-router.get('/open-issues', async (req, res) => {
+// GET /api/audit/open-issues?site=...&assignedTo=...
+router.get("/open-issues", async (req, res) => {
   try {
-    const { site, mode = "station", assignedTo } = req.query;
+    const { site, assignedTo } = req.query;
 
-    if (mode === "station") {
-      if (!site) return res.status(400).json({ error: "Missing site" });
-
-      // 1️⃣ Find all instances for the site
-      const instances = await AuditInstance.find({ site }).select('_id').lean();
-      const instanceIds = instances.map(inst => inst._id);
-
-      if (!instanceIds.length) {
-        return res.json({ items: [] });
-      }
-
-      // 2️⃣ Get raised issues for those instances
-      const items = await AuditItem.find({
-        instance: { $in: instanceIds },
-        issueRaised: true
-      }).lean();
-
-      // 3️⃣ Format
-      const formattedItems = items.map(item => {
-        let lastUpdated = null;
-        if (item.issueStatus && item.issueStatus.length > 0 && item.currentIssueStatus) {
-          const statusObj = item.issueStatus.find(s => s.status === item.currentIssueStatus);
-          if (statusObj) lastUpdated = statusObj.timestamp;
-        }
-
-        return {
-          _id: item._id,
-          item: item.item,
-          category: item.category,
-          comment: item.comment,
-          photos: item.photos,
-          currentIssueStatus: item.currentIssueStatus || "Created",
-          lastUpdated,
-          instance: item.instance,
-          frequency: item.frequency,
-          assignedTo: item.assignedTo,
-        };
-      });
-
-      return res.json({ items: formattedItems });
+    if (!site) {
+      return res.status(400).json({ error: "Missing site" });
     }
 
-    if (mode === "interface") {
-      // 1️⃣ Fetch all items with raised issues
-      const query = { issueRaised: true };
-      if (assignedTo && assignedTo !== "all") {
-        query.assignedTo = assignedTo;
-      }
+    // 1️⃣ Find all instances for the site
+    const instances = await AuditInstance.find({ site }).select("_id").lean();
+    const instanceIds = instances.map((inst) => inst._id);
 
-      const items = await AuditItem.find(query).lean();
-
-      // 2️⃣ Format
-      const formattedItems = items.map(item => {
-        let lastUpdated = null;
-        if (item.issueStatus && item.issueStatus.length > 0 && item.currentIssueStatus) {
-          const statusObj = item.issueStatus.find(s => s.status === item.currentIssueStatus);
-          if (statusObj) lastUpdated = statusObj.timestamp;
-        }
-
-        return {
-          _id: item._id,
-          item: item.item,
-          category: item.category,
-          comment: item.comment,
-          photos: item.photos,
-          currentIssueStatus: item.currentIssueStatus || "Created",
-          lastUpdated,
-          instance: item.instance,
-          frequency: item.frequency,
-          assignedTo: item.assignedTo,
-        };
-      });
-
-      return res.json({ items: formattedItems });
+    if (!instanceIds.length) {
+      return res.json({ items: [] }); // No instances, return empty array
     }
 
-    res.status(400).json({ error: "Invalid mode. Use mode=station or mode=interface" });
+    // 2️⃣ Build base query
+    const query = {
+      instance: { $in: instanceIds },
+      issueRaised: true,
+      currentIssueStatus: { $ne: "Resolved" },
+    };
+
+    // Add department filter if provided
+    if (assignedTo && assignedTo !== "All") {
+      query.assignedTo = assignedTo;
+    }
+
+    // 3️⃣ Find AuditItems
+    const items = await AuditItem.find(query).lean();
+
+    // 4️⃣ Map items to clean response
+    const formattedItems = items.map((item) => {
+      let lastUpdated = null;
+      if (item.issueStatus && item.issueStatus.length > 0 && item.currentIssueStatus) {
+        const statusObj = item.issueStatus.find(
+          (s) => s.status === item.currentIssueStatus
+        );
+        if (statusObj) lastUpdated = statusObj.timestamp;
+      }
+
+      return {
+        _id: item._id,
+        item: item.item,
+        category: item.category,
+        comment: item.comment,
+        photos: item.photos,
+        currentIssueStatus: item.currentIssueStatus || "Created",
+        lastUpdated,
+        instance: item.instance,
+        frequency: item.frequency,
+        assignedTo: item.assignedTo,
+      };
+    });
+
+    res.json({ items: formattedItems });
   } catch (err) {
     console.error("Error fetching open issues:", err);
     res.status(500).json({ error: err.message });
@@ -334,6 +310,7 @@ router.put('/issues/:id/status', async (req, res) => {
   try {
     const { id } = req.params;
     const { status } = req.body;
+
     if (!["Created", "In Progress", "Resolved"].includes(status)) {
       return res.status(400).json({ error: "Invalid status" });
     }
@@ -353,13 +330,44 @@ router.put('/issues/:id/status', async (req, res) => {
     }
     item.issueStatus = issueStatus;
 
+    // 🔹 if resolved, mark issueRaised false in audit template 
+    // Not marking issue resolved in Audit Item to store history of items when they were marked as an issue.
+    if (status === "Resolved") {
+      // item.issueRaised = false;
+
+      // Fetch AuditInstance to get template ID
+      if (item.instance) {
+        const instance = await AuditInstance.findById(item.instance).lean();
+        console.log('instance:',item.instance);
+        console.log('template:',instance.template);
+        if (instance?.template) {
+          await AuditTemplate.updateOne(
+            { _id: instance.template },
+            {
+              $set: {
+                "items.$[itemElem].assignedSites.$[siteElem].issueRaised": false,
+              },
+            },
+            {
+              arrayFilters: [
+                { "itemElem.item": item.item },
+                { "siteElem.site": instance.site },
+              ],
+            }
+          );
+        }
+      }
+    }
+
     await item.save();
+
     res.json({ message: "Status updated", item });
   } catch (err) {
     console.error("Error updating issue status:", err);
     res.status(500).json({ error: err.message });
   }
 });
+
 
 
 
@@ -749,9 +757,14 @@ router.post('/instance', async (req, res) => {
         // Update issueRaised flag in template
         await AuditTemplate.updateOne(
           { _id: template },
-          { $set: { "items.$[itemElem].assignedSites.$[siteElem].issueRaised": !!item.issueRaised } },
+          {
+            $set: {
+              "items.$[itemElem].assignedSites.$[siteElem].issueRaised": item.issueRaised === true
+            }
+          },
           { arrayFilters: [{ "itemElem.item": item.item }, { "siteElem.site": site }] }
         );
+
 
         createdInstances.push({ frequency: freq, instanceId: instance._id });
       }

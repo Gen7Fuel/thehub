@@ -39,7 +39,7 @@ interface ChecklistItemCardProps {
   borderColor?: string;
   lastChecked?: string;
   onIssueToggle?: (raised: boolean) => void;
-  mode?: "station" | "interface"; // New prop
+  mode?: "station" | "interface"; // New prop  
 }
 
 export function ChecklistItemCard({
@@ -102,7 +102,10 @@ export function ChecklistItemCard({
   };
 
   const handleDisabledClick = () => {
-    if (disabledControls) return true;
+    if (item.checked) {
+      alert("Uncheck to edit this item.");
+      return true;
+    }
     return false;
   };
 
@@ -221,7 +224,11 @@ export function ChecklistItemCard({
           {item.issueRaised ? (
             <button
               type="button"
-              onClick={() => mode === "station" && onFieldChange("issueRaised", false)}
+              onClick={() => {
+                if (!handleDisabledClick() && mode === "station") {
+                  onFieldChange("issueRaised", !item.issueRaised);
+                }
+              }}
               className="w-6 h-6 flex items-center justify-center rounded border bg-red-100 border-red-400"
             >
               <AlertCircle className="h-4 w-4 text-red-600" />
@@ -229,13 +236,18 @@ export function ChecklistItemCard({
           ) : (
             <input
               type="checkbox"
-              checked={false}
-              onChange={() => mode === "station" && onFieldChange("issueRaised", true)}
+              checked={item.issueRaised || false}
+              onChange={() => {
+                if (!handleDisabledClick() && mode === "station") {
+                  onFieldChange("issueRaised", !item.issueRaised);
+                }
+              }}
               className="w-5 h-5 accent-gray-600 rounded cursor-pointer"
-              disabled={disabledControls}
             />
           )}
         </div>
+
+
       </div>
 
       {/* Dialogs */}

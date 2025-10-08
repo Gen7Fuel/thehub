@@ -76,6 +76,7 @@ import { Route as NavbarLayoutDailyReportsShiftWorksheetCreateRouteImport } from
 import { Route as NavbarLayoutDailyReportsShiftWorksheetWorksheetRouteImport } from './routes/_navbarLayout/daily-reports/shift-worksheet/$worksheet'
 import { Route as NavbarLayoutAuditTemplatesSelectRouteImport } from './routes/_navbarLayout/audit/templates/select'
 import { Route as NavbarLayoutAuditTemplatesChecklistRouteImport } from './routes/_navbarLayout/audit/templates/checklist'
+import { Route as NavbarLayoutAuditInterfaceOpenIssuesRouteImport } from './routes/_navbarLayout/audit/interface/open-issues'
 import { Route as NavbarLayoutAuditInterfaceIdRouteImport } from './routes/_navbarLayout/audit/interface/$id'
 import { Route as NavbarLayoutAuditChecklistOpenIssuesRouteImport } from './routes/_navbarLayout/audit/checklist/open-issues'
 import { Route as NavbarLayoutAuditChecklistIdRouteImport } from './routes/_navbarLayout/audit/checklist/$id'
@@ -459,6 +460,12 @@ const NavbarLayoutAuditTemplatesChecklistRoute =
     path: '/checklist',
     getParentRoute: () => NavbarLayoutAuditTemplatesRoute,
   } as any)
+const NavbarLayoutAuditInterfaceOpenIssuesRoute =
+  NavbarLayoutAuditInterfaceOpenIssuesRouteImport.update({
+    id: '/open-issues',
+    path: '/open-issues',
+    getParentRoute: () => NavbarLayoutAuditInterfaceRoute,
+  } as any)
 const NavbarLayoutAuditInterfaceIdRoute =
   NavbarLayoutAuditInterfaceIdRouteImport.update({
     id: '/$id',
@@ -569,6 +576,7 @@ export interface FileRoutesByFullPath {
   '/audit/checklist/$id': typeof NavbarLayoutAuditChecklistIdRoute
   '/audit/checklist/open-issues': typeof NavbarLayoutAuditChecklistOpenIssuesRoute
   '/audit/interface/$id': typeof NavbarLayoutAuditInterfaceIdRoute
+  '/audit/interface/open-issues': typeof NavbarLayoutAuditInterfaceOpenIssuesRoute
   '/audit/templates/checklist': typeof NavbarLayoutAuditTemplatesChecklistRouteWithChildren
   '/audit/templates/select': typeof NavbarLayoutAuditTemplatesSelectRouteWithChildren
   '/daily-reports/shift-worksheet/$worksheet': typeof NavbarLayoutDailyReportsShiftWorksheetWorksheetRoute
@@ -630,6 +638,7 @@ export interface FileRoutesByTo {
   '/audit/checklist/$id': typeof NavbarLayoutAuditChecklistIdRoute
   '/audit/checklist/open-issues': typeof NavbarLayoutAuditChecklistOpenIssuesRoute
   '/audit/interface/$id': typeof NavbarLayoutAuditInterfaceIdRoute
+  '/audit/interface/open-issues': typeof NavbarLayoutAuditInterfaceOpenIssuesRoute
   '/daily-reports/shift-worksheet/$worksheet': typeof NavbarLayoutDailyReportsShiftWorksheetWorksheetRoute
   '/daily-reports/shift-worksheet/create': typeof NavbarLayoutDailyReportsShiftWorksheetCreateRoute
   '/reports/sales-summary/upload': typeof NavbarLayoutReportsSalesSummaryUploadRoute
@@ -707,6 +716,7 @@ export interface FileRoutesById {
   '/_navbarLayout/audit/checklist/$id': typeof NavbarLayoutAuditChecklistIdRoute
   '/_navbarLayout/audit/checklist/open-issues': typeof NavbarLayoutAuditChecklistOpenIssuesRoute
   '/_navbarLayout/audit/interface/$id': typeof NavbarLayoutAuditInterfaceIdRoute
+  '/_navbarLayout/audit/interface/open-issues': typeof NavbarLayoutAuditInterfaceOpenIssuesRoute
   '/_navbarLayout/audit/templates/checklist': typeof NavbarLayoutAuditTemplatesChecklistRouteWithChildren
   '/_navbarLayout/audit/templates/select': typeof NavbarLayoutAuditTemplatesSelectRouteWithChildren
   '/_navbarLayout/daily-reports/shift-worksheet/$worksheet': typeof NavbarLayoutDailyReportsShiftWorksheetWorksheetRoute
@@ -786,6 +796,7 @@ export interface FileRouteTypes {
     | '/audit/checklist/$id'
     | '/audit/checklist/open-issues'
     | '/audit/interface/$id'
+    | '/audit/interface/open-issues'
     | '/audit/templates/checklist'
     | '/audit/templates/select'
     | '/daily-reports/shift-worksheet/$worksheet'
@@ -847,6 +858,7 @@ export interface FileRouteTypes {
     | '/audit/checklist/$id'
     | '/audit/checklist/open-issues'
     | '/audit/interface/$id'
+    | '/audit/interface/open-issues'
     | '/daily-reports/shift-worksheet/$worksheet'
     | '/daily-reports/shift-worksheet/create'
     | '/reports/sales-summary/upload'
@@ -923,6 +935,7 @@ export interface FileRouteTypes {
     | '/_navbarLayout/audit/checklist/$id'
     | '/_navbarLayout/audit/checklist/open-issues'
     | '/_navbarLayout/audit/interface/$id'
+    | '/_navbarLayout/audit/interface/open-issues'
     | '/_navbarLayout/audit/templates/checklist'
     | '/_navbarLayout/audit/templates/select'
     | '/_navbarLayout/daily-reports/shift-worksheet/$worksheet'
@@ -1423,6 +1436,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof NavbarLayoutAuditTemplatesChecklistRouteImport
       parentRoute: typeof NavbarLayoutAuditTemplatesRoute
     }
+    '/_navbarLayout/audit/interface/open-issues': {
+      id: '/_navbarLayout/audit/interface/open-issues'
+      path: '/open-issues'
+      fullPath: '/audit/interface/open-issues'
+      preLoaderRoute: typeof NavbarLayoutAuditInterfaceOpenIssuesRouteImport
+      parentRoute: typeof NavbarLayoutAuditInterfaceRoute
+    }
     '/_navbarLayout/audit/interface/$id': {
       id: '/_navbarLayout/audit/interface/$id'
       path: '/$id'
@@ -1510,12 +1530,15 @@ const NavbarLayoutAuditChecklistRouteWithChildren =
 
 interface NavbarLayoutAuditInterfaceRouteChildren {
   NavbarLayoutAuditInterfaceIdRoute: typeof NavbarLayoutAuditInterfaceIdRoute
+  NavbarLayoutAuditInterfaceOpenIssuesRoute: typeof NavbarLayoutAuditInterfaceOpenIssuesRoute
   NavbarLayoutAuditInterfaceIndexRoute: typeof NavbarLayoutAuditInterfaceIndexRoute
 }
 
 const NavbarLayoutAuditInterfaceRouteChildren: NavbarLayoutAuditInterfaceRouteChildren =
   {
     NavbarLayoutAuditInterfaceIdRoute: NavbarLayoutAuditInterfaceIdRoute,
+    NavbarLayoutAuditInterfaceOpenIssuesRoute:
+      NavbarLayoutAuditInterfaceOpenIssuesRoute,
     NavbarLayoutAuditInterfaceIndexRoute: NavbarLayoutAuditInterfaceIndexRoute,
   }
 

@@ -92,6 +92,7 @@ export function OpenIssuesPage() {
           <OpenIssueCard
             key={idx}
             issue={issue}
+            mode="station"
             borderColor={categoryColorMap[issue.category || ""]?.border} // pass the string
           />
         ))}
