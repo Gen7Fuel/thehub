@@ -1,20 +1,54 @@
-:80 {
-  root * /usr/share/caddy
-  file_server
+app.gen7fuel.com {
+    root * /usr/share/caddy
+    file_server
 
-  handle /api/* {
-    reverse_proxy http://backend:5000
-  }
+    # Backend API
+    handle /api/* {
+        reverse_proxy backend:5000
+    }
 
-  handle /socket.io/* {
-    reverse_proxy http://backend:5000
-  }
+    # WebSocket connections
+    handle /socket.io/* {
+        reverse_proxy backend:5000
+    }
 
-  handle /cdn/* {
-    reverse_proxy http://cdn:5001
-  }
+    # CDN
+    handle /cdn/* {
+        reverse_proxy cdn:5001
+    }
 
-  handle {
-    try_files {path} /index.html
-  }
+    # Frontend routing for SPA
+    handle {
+        try_files {path} /index.html
+    }
+
+    # Cache headers
+    header {
+        Cache-Control "no-store, no-cache, must-revalidate, proxy-revalidate, max-age=0"
+        Pragma "no-cache"
+        Expires "0"
+    }
+
+    encode gzip
 }
+
+# :80 {
+#   root * /usr/share/caddy
+#   file_server
+
+#   handle /api/* {
+#     reverse_proxy http://backend:5000
+#   }
+
+#   handle /socket.io/* {
+#     reverse_proxy http://backend:5000
+#   }
+
+#   handle /cdn/* {
+#     reverse_proxy http://cdn:5001
+#   }
+
+#   handle {
+#     try_files {path} /index.html
+#   }
+# }
