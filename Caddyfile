@@ -1,8 +1,12 @@
-:3000 {
+:80 {
   root * /usr/share/caddy
   file_server
 
   handle /api/* {
+    reverse_proxy http://backend:5000
+  }
+
+  handle /socket.io/* {
     reverse_proxy http://backend:5000
   }
 
