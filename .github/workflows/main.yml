@@ -28,15 +28,22 @@ jobs:
           key: ${{ secrets.SERVER_SSH_KEY }}
           script: |
             echo "Starting deployment..."
-            echo "Current directory: $(pwd)"
-            ls -la
-
             cd /home/gen7fuel/thehub || { echo "Directory not found"; exit 1; }
 
-            git remote -v
+            echo "Pulling latest changes..."
             git fetch origin
             git reset --hard origin/main
             git clean -fd
+
+            echo "Exporting environment variables..."
+            export MONGO_URI="${MONGO_URI}"
+            export JWT_SECRET="${JWT_SECRET}"
+            export SQL_SERVER="${SQL_SERVER}"
+            export SQL_DB="${SQL_DB}"
+            export SQL_USER="${SQL_USER}"
+            export SQL_PASSWORD="${SQL_PASSWORD}"
+
+            echo "Environment variables exported."
 
             # Choose correct Docker command
             if command -v docker-compose >/dev/null 2>&1; then
@@ -47,22 +54,21 @@ jobs:
 
             echo "Using Docker command: $DOCKER_CMD"
 
+            # Stop old containers and rebuild
             $DOCKER_CMD down
             $DOCKER_CMD volume rm thehub_dist || true
             $DOCKER_CMD up --build -d
 
             echo "Checking container status..."
-            # Wait a few seconds for containers to start
             sleep 5
-            # Replace 'thehub_app_1' with your actual container name if different
-            if $DOCKER_CMD ps | grep thehub_app_1 >/dev/null 2>&1; then
-              echo "Container is running."
+            if $DOCKER_CMD ps | grep -q backend; then
+              echo "Backend container is running."
             else
-              echo "Error: container is not running!"
+              echo "Error: backend container is not running!"
               exit 1
             fi
 
-            # Optional: quick HTTP health check (adjust port and path)
+            echo "Running health check..."
             if curl -sSf http://localhost:5000/api/health >/dev/null 2>&1; then
               echo "Backend responded successfully."
             else
