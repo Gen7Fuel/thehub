@@ -1,9 +1,6 @@
 import { io, Socket } from "socket.io-client";
 
-const socketUrl = 
-  window.location.hostname === "localhost" 
-    ? "http://localhost:5000"
-    : "https://app.gen7fuel.com:5000";
+const socketUrl = "/socket.io";
 
 let socket: Socket | null = null;
 let currentUrl: string | null = null;
