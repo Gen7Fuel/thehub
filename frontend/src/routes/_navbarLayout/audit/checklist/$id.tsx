@@ -30,6 +30,7 @@ interface AuditItem {
   assignedTo?: string;
   frequency?: "daily" | "weekly" | "monthly";
   lastChecked?: string;
+  issueRaised?: boolean;
 }
 
 export const Route = createFileRoute("/_navbarLayout/audit/checklist/$id")({
@@ -107,7 +108,7 @@ function RouteComponent() {
   
   // const site = localStorage.getItem("location") || ""; //Original file
   console.log("stationnane:",stationName)
-  const [items, setItems] = useState<AuditItem[]>([]); // editable list
+  const [items, setItems] = useState<AuditItem[]>([]);
   // const [displayItems, setDisplayItems] = useState<AuditItem[]>([]); // sorted for initial display / after save
   const [selectTemplates, setSelectTemplates] = useState<SelectTemplate[]>([]);
   const [loading, setLoading] = useState(false);
@@ -284,16 +285,30 @@ function RouteComponent() {
 
   const handleFieldChange = (
     idx: number,
-    field: "status" | "followUp" | "assignedTo",
-    value: string
+    field: "status" | "followUp" | "assignedTo" | "issueRaised",
+    value: string | boolean
   ) =>
-    setItems((prev) => prev.map((item, i) => (i === idx ? { ...item, [field]: value } : item)));
+    setItems((prev) =>
+      prev.map((item, i) => (i === idx ? { ...item, [field]: value } : item))
+    );
 
   const handlePhotos = (idx: number, photos: string[]) =>
     setItems((prev) => prev.map((item, i) => (i === idx ? { ...item, photos } : item)));
 
   const handleSave = async () => {
     setSaving(true);
+
+    // 1️⃣ Check for raised-but-unchecked items
+    const raisedButUnchecked = items.filter(item => item.issueRaised && !item.checked);
+    if (raisedButUnchecked.length > 0) {
+      alert(
+        `Please check all items that have "Raise Issue" enabled before saving.\n` +
+        `Items: ${raisedButUnchecked.map(i => i.item).join(", ")}`
+      );
+      setSaving(false);
+      return; // stop the save
+    }
+
     const token = localStorage.getItem("token");
     const periodKey = getPeriodKey(frequency as any, currentDate);
 
@@ -325,7 +340,8 @@ function RouteComponent() {
       alert("Error saving checklist.");
     } finally {
       setSaving(false);
-      // sort after save
+
+      // Sort after save
       const sorted = [...items].sort((a, b) => {
         if (a.checked !== b.checked) return a.checked ? 1 : -1;
         const aFreq = frequencyOrder[a.frequency || "daily"];
@@ -333,7 +349,6 @@ function RouteComponent() {
         return aFreq - bFreq;
       });
       setItems(sorted); // update editable list with sorted order
-      // setCompletedFrequencies(getCompletedFrequencies(items));
     }
   };
 
@@ -409,17 +424,19 @@ function RouteComponent() {
         >
           <div className="flex flex-col gap-4 mb-4">
             {items.map((item, idx) => (
-              <ChecklistItemCard
-                key={item._id || idx}
-                item={item}
-                onCheck={(checked) => handleCheck(idx, checked)}
-                onComment={(comment) => handleComment(idx, comment)}
-                onPhotos={(photos) => handlePhotos(idx, photos)}
-                onFieldChange={(field, value) => handleFieldChange(idx, field, value)}
-                selectTemplates={selectTemplates}
-                borderColor={categoryColorMap[item.category || ""].border}
-                lastChecked={item.lastChecked}
-              />
+            <ChecklistItemCard
+              key={item._id || idx}
+              item={item}
+              mode="station"
+              onCheck={(checked) => handleCheck(idx, checked)}
+              onComment={(comment) => handleComment(idx, comment)}
+              onPhotos={(photos) => handlePhotos(idx, photos)}
+              onFieldChange={(field, value) => handleFieldChange(idx, field, value)}
+              selectTemplates={selectTemplates}
+              borderColor={categoryColorMap[item.category || ""].border}
+              lastChecked={item.lastChecked}
+              // onIssueToggle={(raised) => handleFieldChange(idx, "issueRaised", raised)}
+            />
             ))}
           </div>
           <Button type="submit" disabled={saving}>

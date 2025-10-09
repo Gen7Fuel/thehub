@@ -1,75 +1,3 @@
-// import { createFileRoute, Link, Outlet, useMatchRoute } from '@tanstack/react-router'
-// import { useEffect, useState } from "react"
-// import { Button } from '@/components/ui/button'
-// import axios from "axios"
-
-// export const Route = createFileRoute('/_navbarLayout/audit/checklist')({
-//   component: RouteComponent,
-// })
-
-// interface AuditTemplate {
-//   _id: string;
-//   name: string;
-//   sites?: string[];
-// }
-
-// function RouteComponent() {
-//   const matchRoute = useMatchRoute()
-//   const [templates, setTemplates] = useState<AuditTemplate[]>([]);
-//   const [loading, setLoading] = useState(true);
-//   const [error, setError] = useState("");
-
-//   useEffect(() => {
-//     const location = localStorage.getItem("location");
-
-//     axios
-//       .get("/api/audit", {
-//         headers: { Authorization: `Bearer ${localStorage.getItem("token")}` },
-//       })
-//       .then(res => {
-//         // Only show templates assigned to this location
-//         const filtered = res.data.filter(
-//           (t: AuditTemplate) => t.sites && location && t.sites.includes(location)
-//         );
-//         setTemplates(filtered);
-//       })
-//       .catch(() => setError("Failed to load audit templates"))
-//       .finally(() => setLoading(false));
-//   }, []);
-
-//   if (loading) return <div className="text-center mt-8">Loading...</div>;
-//   if (error) return <div className="text-red-600 text-center mt-8">{error}</div>;
-
-//   return (
-//     <div className="flex flex-col items-center">
-//       <div className="flex mb-4">
-//         {templates.map((template, idx) => {
-//           const isActive = matchRoute({ to: "/audit/checklist/$id", params: { id: template._id }, fuzzy: true });
-//           return (
-//             <Link to="/audit/checklist/$id" params={{ id: template._id }} key={template._id}>
-//               <Button
-//                 {...(isActive ? {} : { variant: 'outline' } as object)}
-//                 className={
-//                   idx === 0
-//                     ? "rounded-r-none"
-//                     : idx === templates.length - 1
-//                     ? "rounded-l-none"
-//                     : "rounded-none"
-//                 }
-//               >
-//                 {template.name}
-//               </Button>
-//             </Link>
-//           );
-//         })}
-//       </div>
-//       <Outlet />
-//     </div>
-//   )
-// }
-
-
-// Temporary patch with location picker
 import { createFileRoute, Link, Outlet, useMatchRoute } from '@tanstack/react-router'
 import { useEffect, useState } from "react"
 import { Button } from '@/components/ui/button'
@@ -85,7 +13,7 @@ export const RouteContext = createContext<{
   setStationName: () => {},
 });
 
-export const Route = createFileRoute('/_navbarLayout/audit/checklist')({
+export const Route = createFileRoute('/_navbarLayout/audit/interface')({
   component: RouteComponent,
 })
 
@@ -160,7 +88,7 @@ function RouteComponent() {
   if (loading) return <div className="text-center mt-8">Loading...</div>;
   if (error) return <div className="text-red-600 text-center mt-8">{error}</div>;
 
-  const access = JSON.parse(localStorage.getItem('access') || '{}') 
+ // const access = JSON.parse(localStorage.getItem('access') || '{}') 
 
   return (
     <RouteContext.Provider value={{ stationName, setStationName }}>
@@ -177,7 +105,7 @@ function RouteComponent() {
               // 🔹 Just update React state
               updateStation(newValue);
             }}
-            disabled={!access.component_station_audit_checklist_location_filter}
+            // disabled={!access.component_station_audit_checklist_location_filter}
           />
 
 
@@ -187,14 +115,14 @@ function RouteComponent() {
         <div className="flex mb-4">
           {templates.map((template, idx) => {
             const isActive = matchRoute({
-              to: "/audit/checklist/$id",
+              to: "/audit/interface/$id",
               params: { id: template._id },
               fuzzy: true,
             });
 
             return (
               <Link
-                to="/audit/checklist/$id"
+                to="/audit/interface/$id"
                 params={{ id: template._id }}
                 key={template._id}
               >
@@ -217,9 +145,9 @@ function RouteComponent() {
           })}
             {/* 🔹 Open Issues tab in same row */}
           {openIssues.length > 0 && (
-            <Link to="/audit/checklist/open-issues">
+            <Link to="/audit/interface/open-issues">
               <Button
-                {...(matchRoute({ to: "/audit/checklist/open-issues", fuzzy: true }) ? {} : { variant: "outline" } as object)}
+                {...(matchRoute({ to: "/audit/interface/open-issues", fuzzy: true }) ? {} : { variant: "outline" } as object)}
                 className="rounded-l-none"
               >
                 Open Issues ({openIssues.length})
