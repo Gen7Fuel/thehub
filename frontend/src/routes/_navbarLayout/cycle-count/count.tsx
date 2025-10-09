@@ -23,7 +23,6 @@ function RouteComponent() {
   // Track FOH and BOH values for each item
   const [counts, setCounts] = useState<{ [id: string]: { foh: string; boh: string } }>({});
 
-  const socket = getSocket();
 
   const midnightTimeout = useRef<NodeJS.Timeout | null>(null);
 
@@ -105,6 +104,7 @@ function RouteComponent() {
   // }, [stationName]);
 
   const handleInputBlur = (id: string, field: "foh" | "boh", value: string) => {
+    const socket = getSocket();
     // Save to backend
     fetch("/api/cycle-count/save-item", {
       method: "POST",
@@ -127,6 +127,7 @@ function RouteComponent() {
 
   // Listen for updates from other clients
   useEffect(() => {
+    const socket = getSocket();
     function updateField({ itemId, field, value }: CycleCountFieldUpdate) {
       setCounts(prev => ({
         ...prev,
