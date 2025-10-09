@@ -246,8 +246,6 @@ export function ChecklistItemCard({
             />
           )}
         </div>
-
-
       </div>
 
       {/* Dialogs */}

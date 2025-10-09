@@ -47,14 +47,16 @@ function RouteComponent() {
             Checklist
           </Button>
         </Link>
-        <Link to="/audit/interface">
-          <Button
-            {...(!isInterfaceActive && { variant: 'outline' } as object)}
-            className="rounded-l-none"
-          >
-            Interface
-          </Button>
-        </Link>
+        {access.component_station_audit_interface && (
+          <Link to="/audit/interface">
+            <Button
+              {...(!isInterfaceActive && { variant: 'outline' } as object)}
+              className="rounded-l-none"
+            >
+              Interface
+            </Button>
+          </Link>
+        )}
       </div>
       {/* Render the nested route content */}
       <Outlet />

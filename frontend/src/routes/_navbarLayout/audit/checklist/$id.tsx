@@ -435,7 +435,7 @@ function RouteComponent() {
               selectTemplates={selectTemplates}
               borderColor={categoryColorMap[item.category || ""].border}
               lastChecked={item.lastChecked}
-              onIssueToggle={(raised) => handleFieldChange(idx, "issueRaised", raised)}
+              // onIssueToggle={(raised) => handleFieldChange(idx, "issueRaised", raised)}
             />
             ))}
           </div>

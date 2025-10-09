@@ -180,7 +180,7 @@ router.get('/items', async (req, res) => {
       return {
         ...item,
         lastChecked, // now taken from assignedSites
-        assignedSite, // pass the assignedSite info if needed on frontend
+        assignedSite, // pass the assignedSite info 
       };
     });
     res.json(itemsWithLastChecked);

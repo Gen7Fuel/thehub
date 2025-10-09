@@ -19,7 +19,7 @@ const AuditItemSchema = new mongoose.Schema({
     required: true 
   },
   currentIssueStatus: { type: String },
-  issueRaised: { type: String },
+  issueRaised: { type: Boolean },
   issueStatus: [{
     status: { type: String },
     timestamp: { type: Date, default: null},
