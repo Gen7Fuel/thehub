@@ -37,26 +37,10 @@ app.gen7fuel.com {
         Expires "0"
     }
 
+    # Temporary staging CA (use real one after Oct 10)
+    tls {
+        ca https://acme-staging-v02.api.letsencrypt.org/directory
+    }
+
     encode gzip
 }
-
-# :80 {
-#   root * /usr/share/caddy
-#   file_server
-
-#   handle /api/* {
-#     reverse_proxy http://backend:5000
-#   }
-
-#   handle /socket.io/* {
-#     reverse_proxy http://backend:5000
-#   }
-
-#   handle /cdn/* {
-#     reverse_proxy http://cdn:5001
-#   }
-
-#   handle {
-#     try_files {path} /index.html
-#   }
-# }

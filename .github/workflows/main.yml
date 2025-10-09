@@ -34,5 +34,5 @@ jobs:
 
             git pull origin main
             docker compose down
-            docker volume rm gen7hub_dist || true
+            docker volume rm thehub_dist || true
             docker compose up --build -d
