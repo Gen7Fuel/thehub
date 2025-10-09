@@ -1,6 +1,5 @@
 name: Deploy to Server
 
-# Trigger on pushes to the main branch
 on:
   push:
     branches:
@@ -11,28 +10,103 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      # Step 1: Checkout repo (optional, mainly for GitHub Actions context)
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      # Step 2: SSH to server and run deployment commands
       - name: Deploy via SSH
-        uses: appleboy/ssh-action@v0.1.7
+        uses: appleboy/ssh-action@v0.1.9
+        env:
+          MONGO_URI: ${{ secrets.MONGO_URI }}
+          JWT_SECRET: ${{ secrets.JWT_SECRET }}
+          SQL_SERVER: ${{ secrets.SQL_SERVER }}
+          SQL_DB: ${{ secrets.SQL_DB }}
+          SQL_USER: ${{ secrets.SQL_USER }}
+          SQL_PASSWORD: ${{ secrets.SQL_PASSWORD }}
         with:
-          host: ${{ secrets.SERVER_HOST }}       # Server IP or hostname
-          username: ${{ secrets.SERVER_USER }}   # SSH username
-          key: ${{ secrets.SERVER_SSH_KEY }}     # Private SSH key from GitHub Secrets
+          host: ${{ secrets.SERVER_HOST }}
+          username: ${{ secrets.SERVER_USER }}
+          key: ${{ secrets.SERVER_SSH_KEY }}
           script: |
-            cd /home/gen7fuel/thehub
+            echo "Starting deployment..."
+            echo "Current directory: $(pwd)"
+            ls -la
 
-            export MONGO_URI=${{ secrets.MONGO_URI }}
-            export JWT_SECRET=${{ secrets.JWT_SECRET }}
-            export SQL_SERVER=${{ secrets.SQL_SERVER }}
-            export SQL_DB=${{ secrets.SQL_DB }}
-            export SQL_USER=${{ secrets.SQL_USER }}
-            export SQL_PASSWORD=${{ secrets.SQL_PASSWORD }}
+            cd /home/gen7fuel/thehub || { echo "Directory not found"; exit 1; }
 
-            git pull origin main
-            docker compose down
-            docker volume rm thehub_dist || true
-            docker compose up --build -d
+            git remote -v
+            git fetch origin
+            git reset --hard origin/main
+            git clean -fd
+
+            # Choose correct Docker command
+            if command -v docker-compose >/dev/null 2>&1; then
+              DOCKER_CMD="docker-compose"
+            else
+              DOCKER_CMD="docker compose"
+            fi
+
+            echo "Using Docker command: $DOCKER_CMD"
+
+            $DOCKER_CMD down
+            $DOCKER_CMD volume rm thehub_dist || true
+            $DOCKER_CMD up --build -d
+
+            echo "Checking container status..."
+            # Wait a few seconds for containers to start
+            sleep 5
+            # Replace 'thehub_app_1' with your actual container name if different
+            if $DOCKER_CMD ps | grep thehub_app_1 >/dev/null 2>&1; then
+              echo "Container is running."
+            else
+              echo "Error: container is not running!"
+              exit 1
+            fi
+
+            # Optional: quick HTTP health check (adjust port and path)
+            if curl -sSf http://localhost:5000/api/health >/dev/null 2>&1; then
+              echo "Backend responded successfully."
+            else
+              echo "Error: backend is not responding!"
+              exit 1
+            fi
+
+            echo "Deployment finished successfully."
+
+# name: Deploy to Server
+
+# # Trigger on pushes to the main branch
+# on:
+#   push:
+#     branches:
+#       - main
+
+# jobs:
+#   deploy:
+#     runs-on: ubuntu-latest
+
+#     steps:
+#       # Step 1: Checkout repo (optional, mainly for GitHub Actions context)
+#       - name: Checkout repository
+#         uses: actions/checkout@v4
+
+#       # Step 2: SSH to server and run deployment commands
+#       - name: Deploy via SSH
+#         uses: appleboy/ssh-action@v0.1.7
+#         with:
+#           host: ${{ secrets.SERVER_HOST }}       # Server IP or hostname
+#           username: ${{ secrets.SERVER_USER }}   # SSH username
+#           key: ${{ secrets.SERVER_SSH_KEY }}     # Private SSH key from GitHub Secrets
+#           script: |
+#             cd /home/gen7fuel/thehub
+
+#             export MONGO_URI=${{ secrets.MONGO_URI }}
+#             export JWT_SECRET=${{ secrets.JWT_SECRET }}
+#             export SQL_SERVER=${{ secrets.SQL_SERVER }}
+#             export SQL_DB=${{ secrets.SQL_DB }}
+#             export SQL_USER=${{ secrets.SQL_USER }}
+#             export SQL_PASSWORD=${{ secrets.SQL_PASSWORD }}
+
+#             git pull origin main
+#             docker compose down
+#             docker volume rm thehub_dist || true
+#             docker compose up --build -d
