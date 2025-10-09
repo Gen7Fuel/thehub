@@ -10,6 +10,24 @@ const sqlConfig = {
   options: { encrypt: true }
 };
 
+// const sqlConfig = {
+//   user: process.env.SQL_USER,
+//   password: process.env.SQL_PASSWORD,
+//   database: process.env.SQL_DATABASE,
+//   server: process.env.SQL_SERVER,
+  // pool: {
+  //   max: 10,
+  //   min: 0,
+  //   idleTimeoutMillis: 30000
+  // },
+  // options: {
+  //   encrypt: true, // required for Azure
+  //   trustServerCertificate: false
+  // },
+  // connectionTimeout: 30000, // 30s connect timeout
+  // requestTimeout: 30000     // 30s query timeout
+// };
+
 // Function to get sales data from CSO.Sales table
 async function getSalesData(csoCode, startDate, endDate) {
   try {
@@ -117,6 +135,45 @@ async function getUPC_barcode(gtin) {
   }
 }
 
+// Singleton pool
+// let poolPromise;
+// function getPool() {
+//   if (!poolPromise) {
+//     poolPromise = sql.connect(sqlConfig);
+//   }
+//   return poolPromise;
+// }
 
+// async function getUPC_barcode(gtin) {
+//   try {
+//     const pool = await getPool();
+//     const result = await pool.request()
+//       .input("gtin", sql.VarChar, gtin)
+//       .query("SELECT [UPC_A_12_digits], [UPC] FROM [CSO].[ItemBookCSO] WHERE [GTIN] = @gtin");
+    
+//     return result.recordset;
+//   } catch (err) {
+//     console.error("SQL error:", err);
+//     return [];
+//   }
+// }
+
+//catch and retry twice
+// async function getUPC_barcode(gtin, retries = 2) {
+//   try {
+//     const pool = await getPool();
+//     const result = await pool.request()
+//       .input("gtin", sql.VarChar, gtin)
+//       .query("SELECT [UPC_A_12_digits], [UPC] FROM [CSO].[ItemBookCSO] WHERE [GTIN] = @gtin");
+//     return result.recordset;
+//   } catch (err) {
+//     if (err.code === "ETIMEOUT" && retries > 0) {
+//       console.warn("Retrying SQL call due to timeout...");
+//       return getUPC_barcode(gtin, retries - 1);
+//     }
+//     console.error("SQL error:", err);
+//     return [];
+//   }
+// }
 
 module.exports = { sqlConfig, getSalesData, getCategorizedSalesData, getUPC_barcode };

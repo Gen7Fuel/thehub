@@ -21,6 +21,9 @@ const CycleCountItemSchema = new mongoose.Schema({
   flaggedDisplayDate: { type: String },           // Format: 'YYYY-MM-DD'
 });
 
+// Ensure uniqueness on site + gtin combination
+CycleCountItemSchema.index({ site: 1, gtin: 1 }, { unique: true });
+
 /**
  * Static method to sort items by updatedAt (oldest first), then by category, then by name.
  * @param {Array} items - Array of cycle count items to sort.
