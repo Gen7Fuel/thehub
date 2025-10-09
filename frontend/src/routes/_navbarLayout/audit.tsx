@@ -19,6 +19,7 @@ function RouteComponent() {
   const isCreateActive = matchRoute({ to: '/audit/templates', fuzzy: true })
   const isChecklistActive = matchRoute({ to: '/audit/checklist', fuzzy: true })
 
+  const isInterfaceActive = matchRoute({ to: '/audit/interface', fuzzy: true })
   // Retrieve access permissions from localStorage
   const access = JSON.parse(localStorage.getItem('access') || '{}')
 
@@ -41,11 +42,21 @@ function RouteComponent() {
         <Link to="/audit/checklist">
           <Button
             {...(!isChecklistActive && { variant: 'outline' } as object)}
-            className="rounded-l-none"
+            className="rounded-none"
           >
             Checklist
           </Button>
         </Link>
+        {access.component_station_audit_interface && (
+          <Link to="/audit/interface">
+            <Button
+              {...(!isInterfaceActive && { variant: 'outline' } as object)}
+              className="rounded-l-none"
+            >
+              Interface
+            </Button>
+          </Link>
+        )}
       </div>
       {/* Render the nested route content */}
       <Outlet />

@@ -3,6 +3,7 @@ import { useEffect, useState } from "react";
 import axios from "axios";
 import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from "@/components/ui/select";
 import { Button } from "@/components/ui/button";
+import { MultiSelect } from '@/components/custom/multiSelect';
 
 export const Route = createFileRoute(
   '/_navbarLayout/audit/templates/checklist/',
@@ -26,6 +27,7 @@ interface ChecklistItem {
   followUp: string;
   assignedTo: string;
   frequency?: "daily" | "weekly" | "monthly" | "";
+  assignedSites?: { site: string; assigned: boolean }[];
 }
 
 function RouteComponent() {
@@ -79,7 +81,7 @@ function RouteComponent() {
   };
 
   const addRow = () =>
-    setItems([...items, { category: "", item: "", status: "", followUp: "Follow Up", assignedTo: "Assigned To", frequency: "" }]);
+    setItems([...items, { category: "", item: "", status: "", followUp: "Follow Up", assignedTo: "Assigned To", frequency: "", assignedSites: selectedSites.map(site => ({ site, assigned: false })), }]);
 
   const removeRow = (idx: number) =>
     setItems(items => items.length > 1 ? items.filter((_, i) => i !== idx) : items);
@@ -171,6 +173,7 @@ function RouteComponent() {
                 <th className="border px-2 py-1">Follow Up</th>
                 <th className="border px-2 py-1">Assigned To</th>
                 <th className="border px-2 py-1">Frequency</th>
+                <th className="border px-2 py-1">Assigned Sites</th>
                 <th className="border px-2 py-1"></th>
               </tr>
             </thead>
@@ -236,7 +239,7 @@ function RouteComponent() {
                       </SelectContent>
                     </Select>
                   </td>
-                  <td className="border px-2 py-1">
+                  {/* <td className="border px-2 py-1">
                     <Select
                       value={row.assignedTo}
                       onValueChange={val => handleItemChange(idx, "assignedTo", val)}
@@ -248,6 +251,23 @@ function RouteComponent() {
                         {selectTemplates.map((opt, i) => (
                           <SelectItem key={i} value={opt.name}>
                             {opt.name}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </td> */}
+                  <td className="border px-2 py-1">
+                    <Select
+                      value={row.assignedTo}
+                      onValueChange={val => handleItemChange(idx, "assignedTo", val)}
+                    >
+                      <SelectTrigger className="w-[100px]">
+                        <SelectValue placeholder="Select" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {getOptionsByName("Assigned To").map((opt, i) => (
+                          <SelectItem key={i} value={opt.text}>
+                            {opt.text}
                           </SelectItem>
                         ))}
                       </SelectContent>
@@ -268,6 +288,27 @@ function RouteComponent() {
                       </SelectContent>
                     </Select>
                   </td>
+                  <td className="border px-2 py-1">
+                  <MultiSelect
+                    options={selectedSites}
+                    selected={row.assignedSites?.filter(s => s.assigned).map(s => s.site) || []}
+                    onChange={(newSelected) => {
+                      setItems(prev =>
+                        prev.map((r, i) =>
+                          i === idx
+                            ? {
+                                ...r,
+                                assignedSites: selectedSites.map(site => ({
+                                  site,
+                                  assigned: newSelected.includes(site),
+                                })),
+                              }
+                            : r
+                        )
+                      );
+                    }}
+                  />
+                </td>
                   <td className="border px-2 py-1 text-center">
                     <button
                       type="button"

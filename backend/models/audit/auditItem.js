@@ -10,13 +10,20 @@ const AuditItemSchema = new mongoose.Schema({
   assignedTo: { type: String },
 
   checked: { type: Boolean, default: false },
+  checkedAt: { type: Date, default: null},
   photos: [{ type: String }],
   comment: { type: String },
   frequency: { 
     type: String, 
     enum: ["daily", "weekly", "monthly"], 
     required: true 
-  }
+  },
+  currentIssueStatus: { type: String },
+  issueRaised: { type: Boolean },
+  issueStatus: [{
+    status: { type: String },
+    timestamp: { type: Date, default: null},
+  }]
 });
 
 module.exports = mongoose.model('AuditItem', AuditItemSchema);
