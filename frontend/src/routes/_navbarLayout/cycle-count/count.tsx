@@ -3,9 +3,9 @@ import { useEffect, useState } from "react";
 import { LocationPicker } from "@/components/custom/locationPicker";
 import TableWithInputs from "@/components/custom/TableWithInputs";
 import { DateTime } from 'luxon';
-// import { socket } from "@/lib/websocket";
 import { useRef } from "react";
-import { socket } from "@/lib/websocket";
+import { getSocket } from "@/lib/websocket";
+
 
 export const Route = createFileRoute('/_navbarLayout/cycle-count/count')({
   component: RouteComponent,
@@ -22,6 +22,7 @@ function RouteComponent() {
 
   // Track FOH and BOH values for each item
   const [counts, setCounts] = useState<{ [id: string]: { foh: string; boh: string } }>({});
+
 
   const midnightTimeout = useRef<NodeJS.Timeout | null>(null);
 
@@ -103,6 +104,7 @@ function RouteComponent() {
   // }, [stationName]);
 
   const handleInputBlur = (id: string, field: "foh" | "boh", value: string) => {
+    const socket = getSocket();
     // Save to backend
     fetch("/api/cycle-count/save-item", {
       method: "POST",
@@ -125,6 +127,7 @@ function RouteComponent() {
 
   // Listen for updates from other clients
   useEffect(() => {
+    const socket = getSocket();
     function updateField({ itemId, field, value }: CycleCountFieldUpdate) {
       setCounts(prev => ({
         ...prev,

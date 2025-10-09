@@ -23,7 +23,7 @@ jobs:
           username: ${{ secrets.SERVER_USER }}   # SSH username
           key: ${{ secrets.SERVER_SSH_KEY }}     # Private SSH key from GitHub Secrets
           script: |
-            cd /home/gen7fuel/gen7hub
+            cd /home/gen7fuel/thehub
 
             export MONGO_URI=${{ secrets.MONGO_URI }}
             export JWT_SECRET=${{ secrets.JWT_SECRET }}

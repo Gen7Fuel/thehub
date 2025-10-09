@@ -1,7 +1,7 @@
 services:
   mongo:
     container_name: mongo
-    image: mongo:4.4
+    image: mongo:8
     volumes:
       - mongodb_data:/data/db
     ports:
@@ -48,8 +48,8 @@ services:
     container_name: webserver
     image: caddy:latest
     ports:
-      - "3000:3000"
-      # - "443:443"
+      - "80:80"
+      - "443:443"
     volumes:
       - ./Caddyfile:/etc/caddy/Caddyfile
       - dist:/usr/share/caddy

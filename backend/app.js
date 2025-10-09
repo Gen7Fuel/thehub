@@ -84,21 +84,25 @@ app.use('/api', emailRoutes);
 // Setup Socket.IO with CORS so frontend can connect
 const io = new Server(server, {
   cors: {
-    origin: "http://localhost:5173", // your frontend dev server
+    origin: "https://app.gen7fuel.com",
     methods: ["GET", "POST"],
   },
 });
 
-io.use(authSocket)
+app.set("io", io);
 
 io.on("connection", (socket) => {
   socket.on("cycle-count-field-updated", ({ itemId, field, value }) => {
     // Broadcast to all other clients except sender
     socket.broadcast.emit("cycle-count-field-updated", { itemId, field, value });
   });
+
+  socket.on("disconnect", () => {
+    console.log("Client disconnected:", socket.id);
+  });
 });
 
-app.set("io", io);
+
 
 // Listen for connections
 // io.on("connection", (socket) => {
