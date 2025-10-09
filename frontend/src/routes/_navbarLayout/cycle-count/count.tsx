@@ -23,6 +23,8 @@ function RouteComponent() {
   // Track FOH and BOH values for each item
   const [counts, setCounts] = useState<{ [id: string]: { foh: string; boh: string } }>({});
 
+  const socket = getSocket();
+
   const midnightTimeout = useRef<NodeJS.Timeout | null>(null);
 
   useEffect(() => {
@@ -113,7 +115,6 @@ function RouteComponent() {
       body: JSON.stringify({ _id: id, field, value }),
     });
 
-    const socket = getSocket();
     // Emit websocket event for real-time update
     socket.emit("cycle-count-field-updated", { itemId: id, field, value });
   };
