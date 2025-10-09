@@ -102,24 +102,6 @@ io.on("connection", (socket) => {
   });
 });
 
-
-
-// Listen for connections
-// io.on("connection", (socket) => {
-//   console.log("New client connected:", socket.id);
-
-//   // Example: listen for events from frontend
-//   socket.on("ping", (msg) => {
-//     console.log("Got ping:", msg);
-//     socket.emit("pong", "Hello from server!");
-//   });
-
-//   socket.on("disconnect", () => {
-//     console.log("Client disconnected:", socket.id);
-//   });
-// });
-
-// Replace app.listen with server.listen
 const PORT = process.env.PORT || 5000;
 server.listen(PORT);
 
