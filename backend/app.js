@@ -27,7 +27,7 @@ const auditRoutes = require("./routes/audit/auditTemplateRoutes");
 // const cycleCountRoutes = require("./routes/cycleCountRoutes");
 // const CycleCountNewRoutes = require("./routes/cycleCountNewRoutes");
 // const cycleCountRoutes = require('./routes/cycleCount2Routes');
-const { auth, authSocket } = require("./middleware/authMiddleware");
+const { auth } = require("./middleware/authMiddleware");
 const cycleCountNewRoutes = require('./routes/cycleCountRoutes');
 // const auth = require("./middleware/authMiddleware");
 const permissionRoutes = require("./routes/permissionRoutes");
@@ -104,5 +104,3 @@ io.on("connection", (socket) => {
 
 const PORT = process.env.PORT || 5000;
 server.listen(PORT);
-
-// app.listen(PORT, () => console.log(`Server running on port ${PORT}`));
