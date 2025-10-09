@@ -6,7 +6,6 @@ import { DateTime } from 'luxon';
 import { useRef } from "react";
 import { getSocket } from "@/lib/websocket";
 
-const socket = getSocket();
 
 export const Route = createFileRoute('/_navbarLayout/cycle-count/count')({
   component: RouteComponent,
@@ -114,6 +113,7 @@ function RouteComponent() {
       body: JSON.stringify({ _id: id, field, value }),
     });
 
+    const socket = getSocket();
     // Emit websocket event for real-time update
     socket.emit("cycle-count-field-updated", { itemId: id, field, value });
   };

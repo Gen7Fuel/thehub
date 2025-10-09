@@ -84,10 +84,12 @@ app.use('/api', emailRoutes);
 // Setup Socket.IO with CORS so frontend can connect
 const io = new Server(server, {
   cors: {
-    origin: "http://app.gen7fuel.com",
+    origin: "https://app.gen7fuel.com",
     methods: ["GET", "POST"],
   },
 });
+
+app.set("io", io);
 
 io.on("connection", (socket) => {
   socket.on("cycle-count-field-updated", ({ itemId, field, value }) => {
@@ -100,7 +102,7 @@ io.on("connection", (socket) => {
   });
 });
 
-app.set("io", io);
+
 
 // Listen for connections
 // io.on("connection", (socket) => {
