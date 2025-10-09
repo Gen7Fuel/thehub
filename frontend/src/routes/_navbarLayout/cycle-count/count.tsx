@@ -6,7 +6,6 @@ import { DateTime } from 'luxon';
 import { useRef } from "react";
 import { getSocket } from "@/lib/websocket";
 
-const socket = getSocket();
 
 export const Route = createFileRoute('/_navbarLayout/cycle-count/count')({
   component: RouteComponent,
@@ -23,6 +22,8 @@ function RouteComponent() {
 
   // Track FOH and BOH values for each item
   const [counts, setCounts] = useState<{ [id: string]: { foh: string; boh: string } }>({});
+
+  const socket = getSocket();
 
   const midnightTimeout = useRef<NodeJS.Timeout | null>(null);
 
