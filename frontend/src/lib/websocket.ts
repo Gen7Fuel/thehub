@@ -13,6 +13,7 @@ export function getSocket(): Socket {
     }
     
     socket = io(socketUrl, {
+      path: "/socket.io",
       auth: { token: localStorage.getItem("token") },
       transports: ["websocket", "polling"],
       autoConnect: true,
