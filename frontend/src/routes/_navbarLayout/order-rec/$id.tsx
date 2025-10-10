@@ -598,7 +598,7 @@ function RouteComponent() {
                           <span>{item.itemName}</span>
                         </td>
                         <td className="px-4 py-3 text-center">{item.size}</td>
-                        <td className="px-4 py-3 text-center">
+                        <td className="px-4 py-3 text-center bg-cyan-100">
                           {item.onHandQtyOld !== undefined && item.onHandQty !== item.onHandQtyOld ? (
                             <TooltipProvider>
                               <Tooltip>
@@ -618,9 +618,9 @@ function RouteComponent() {
                         </td>
                         <td className="px-4 py-3 text-center">{item.forecast}</td>
                         <td className="px-4 py-3 text-center">{item.minStock}</td>
-                        <td className="px-4 py-3 text-center">{item.itemsToOrder}</td>
+                        <td className="px-4 py-3 text-center bg-cyan-100">{item.itemsToOrder}</td>
                         <td className="px-4 py-3 text-center">{item.unitInCase}</td>
-                        <td className="px-4 py-3 text-center"> 
+                        <td className="px-4 py-3 text-center bg-cyan-100"> 
                           {item.casesToOrderOld !== undefined && item.casesToOrder !== item.casesToOrderOld ? (
                             <TooltipProvider>
                               <Tooltip>
