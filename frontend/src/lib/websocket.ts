@@ -14,7 +14,7 @@ export function getSocket(): Socket {
     
     socket = io(socketUrl, {
       path: "/socket.io",
-      auth: { token: localStorage.getItem("token") },
+      // auth: { token: localStorage.getItem("token") },
       transports: ["websocket"],
       autoConnect: true,
     });
