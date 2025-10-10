@@ -20,6 +20,11 @@ export function getSocket(): Socket {
     });
     
     currentUrl = socketUrl;
+
+    // Debug logging
+    socket.on("connect", () => console.log("Socket connected:", socket ? socket.id : "unknown"));
+    socket.on("disconnect", () => console.log("Socket disconnected"));
+    socket.on("connect_error", (err) => console.error("Socket connection error:", err));
   }
   
   return socket;
