@@ -282,75 +282,109 @@ router.put('/:id/item/:catIdx/:itemIdx', async (req, res) => {
     //     }
     //   }
     // } 
-    if (category.name !== "Station Supplies" && item.completed) {
-      if (item.gtin) {
-        let cycleCount = null;
-        let isNew = false;
+    if (category.name !== "Station Supplies" && item.completed && item.gtin) {
+      let cycleCount = await CycleCount.findOne({ site, gtin: item.gtin });
 
-        // Try to find existing for this site
-        const existing = await CycleCount.findOne({ site, gtin: item.gtin });
+      // 🔧 Helper: get UPC/barcode from SQL
+      async function fetchFromSQL(gtin) {
+        let upc = "";
+        let upc_barcode = "";
+        try {
+          const itembook = await getUPC_barcode(gtin);
+          if (itembook.length > 0) {
+            upc = itembook[0].UPC || "";
+            upc_barcode = itembook[0].UPC_A_12_digits || "";
+          }
+        } catch (err) {
+          console.error("SQL lookup failed for gtin:", gtin, err);
+        }
+        return { upc, upc_barcode };
+      }
 
-        if (existing) {
-          cycleCount = existing;
-        } else {
-          // No site match → try find any site with same gtin
-          const existing_site = await CycleCount.find({ gtin: item.gtin }).limit(1);
-
-          if (existing_site.length === 1) {
-            cycleCount = new CycleCount({
-              site,
-              upc: existing_site[0].upc,
-              name: item.itemName || "",
-              category: category.name,
-              grade: "C",
-              foh: 0,
-              boh: 0,
-              gtin: existing_site[0].gtin,
-              upc_barcode: existing_site[0].upc_barcode,
-              updatedAt: new Date("2025-09-18T00:00:00Z"),
-            });
-            isNew = true;
-          } else {
-            // Brand new → lookup from SQL
-            let itembook_upc = "";
-            let itembook_upc_barcode = "";
-            const itembook = await getUPC_barcode(item.gtin);
-            if (itembook.length > 0) {
-              itembook_upc = itembook[0].UPC;
-              itembook_upc_barcode = itembook[0].UPC_A_12_digits;
-            }
-
-            cycleCount = new CycleCount({
-              site,
-              upc: itembook_upc,
-              name: item.itemName || "",
-              category: category.name,
-              grade: "C",
-              foh: 0,
-              boh: 0,
-              gtin: item.gtin,
-              upc_barcode: itembook_upc_barcode,
-              updatedAt: new Date("2025-09-18T00:00:00Z"),
-            });
-            isNew = true;
+      if (cycleCount) {
+        // ✅ Case 1: Existing site+gtin → update flagged + maybe backfill UPC/barcode
+        if (!cycleCount.upc || !cycleCount.upc_barcode) {
+          const { upc, upc_barcode } = await fetchFromSQL(item.gtin);
+          if (upc || upc_barcode) {
+            cycleCount.upc = cycleCount.upc || upc;
+            cycleCount.upc_barcode = cycleCount.upc_barcode || upc_barcode;
           }
         }
 
-        // Set flag depending on isChanged
         cycleCount.flagged = !!isChanged;
-
         if (isChanged) {
           cycleCount.flaggedAt = new Date();
         }
-
-        // Save only once
         await cycleCount.save();
 
-        // Emit once when the item is flagged
-        // req.app.get("io").emit("cycle-count-updated", { site: req.body.site });
+        console.log(
+          `Updated CycleCount (${cycleCount.flagged ? "flagged=true" : "flagged=false"}):`,
+          cycleCount.upc
+        );
+      } else {
+        // 🚀 Case 2: No site+gtin entry → need to create new
+        let baseData = null;
+
+        const otherSite = await CycleCount.findOne({ gtin: item.gtin }).lean();
+
+        if (otherSite) {
+          // 🟢 Use other site's UPC/barcode, but backfill if missing
+          let { upc, upc_barcode } = {
+            upc: otherSite.upc,
+            upc_barcode: otherSite.upc_barcode,
+          };
+
+          if (!upc || !upc_barcode) {
+            const sqlData = await fetchFromSQL(item.gtin);
+            upc = upc || sqlData.upc;
+            upc_barcode = upc_barcode || sqlData.upc_barcode;
+          }
+
+          baseData = {
+            site,
+            upc,
+            upc_barcode,
+            name: item.itemName || "",
+            category: category.name,
+            grade: "C",
+            foh: 0,
+            boh: 0,
+            gtin: otherSite.gtin,
+            updatedAt: new Date("2025-09-18T00:00:00Z"),
+          };
+        } else {
+          // 🟡 Case 3: No other site → SQL fallback directly
+          const { upc, upc_barcode } = await fetchFromSQL(item.gtin);
+
+          baseData = {
+            site,
+            upc,
+            upc_barcode,
+            name: item.itemName || "",
+            category: category.name,
+            grade: "C",
+            foh: 0,
+            boh: 0,
+            gtin: item.gtin,
+            updatedAt: new Date("2025-09-18T00:00:00Z"),
+          };
+        }
+
+        // Add flagged fields
+        baseData.flagged = !!isChanged;
+        if (isChanged) {
+          baseData.flaggedAt = new Date();
+        }
+
+        // Insert new doc (safe due to unique index on site+gtin)
+        cycleCount = await CycleCount.findOneAndUpdate(
+          { site, gtin: item.gtin },
+          { $setOnInsert: baseData },
+          { new: true, upsert: true }
+        );
 
         console.log(
-          `${isNew ? "Created" : "Updated"} CycleCount (${cycleCount.flagged ? "flagged=true" : "flagged=false"}):`,
+          `Created CycleCount (${cycleCount.flagged ? "flagged=true" : "flagged=false"}):`,
           cycleCount.upc
         );
       }
