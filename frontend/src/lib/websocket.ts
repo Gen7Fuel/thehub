@@ -1,6 +1,6 @@
 import { io, Socket } from "socket.io-client";
 
-const socketUrl = "/socket.io";
+const socketUrl = "/"; // Adjust if needed
 
 let socket: Socket | null = null;
 let currentUrl: string | null = null;
@@ -14,7 +14,7 @@ export function getSocket(): Socket {
     
     socket = io(socketUrl, {
       auth: { token: localStorage.getItem("token") },
-      transports: ["websocket"],
+      transports: ["websocket", "polling"],
       autoConnect: true,
     });
     
