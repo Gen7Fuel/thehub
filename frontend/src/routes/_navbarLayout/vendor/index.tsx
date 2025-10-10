@@ -2,7 +2,8 @@ import { createFileRoute } from '@tanstack/react-router'
 import React, { useEffect, useState } from "react"
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { LocationPicker } from "@/components/custom/locationPicker";
+// import { LocationPicker } from "@/components/custom/locationPicker";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import CreatableSelect from 'react-select/creatable';
 
 interface SupplyItem {
@@ -18,7 +19,7 @@ export const Route = createFileRoute('/_navbarLayout/vendor/')({
 
 function RouteComponent() {
   const [name, setName] = useState("");
-  const [location, setLocation] = useState(localStorage.getItem("location") || "");
+  // const [location, setLocation] = useState(localStorage.getItem("location") || "");
   const [stationSupplies, setStationSupplies] = useState<SupplyItem[]>([]);
   const [emailOrder, setEmailOrder] = useState(false);
   const [email, setEmail] = useState("");
@@ -28,6 +29,28 @@ function RouteComponent() {
   const [category, setCategory] = useState("");
   const [uniqueVendors, setUniqueVendors] = useState<string[]>([]);
   const [uniqueCategories, setUniqueCategories] = useState<string[]>([]);
+  const [sites, setSites] = useState<{ _id: string; stationName: string }[]>([]);
+  const [selectedSites, setSelectedSites] = useState<string[]>([]);
+  const [siteDialogOpen, setSiteDialogOpen] = useState(false);
+
+  useEffect(() => {
+    const fetchSites = async () => {
+      try {
+        const token = localStorage.getItem("token");
+        const res = await fetch("/api/locations", {
+          headers: { Authorization: `Bearer ${token}` },
+        });
+        if (!res.ok) throw new Error(`HTTP error! status: ${res.status}`);
+        const data = await res.json();
+        setSites(data);
+      } catch (err) {
+        console.error("Failed to fetch sites:", err);
+      }
+    };
+    fetchSites();
+  }, []);
+
+
 
   const handleSupplyChange = (idx: number, field: keyof SupplyItem, value: string) => {
     setStationSupplies(supplies =>
@@ -58,7 +81,7 @@ function RouteComponent() {
         },
         body: JSON.stringify({
           name,
-          location,
+          sites: selectedSites,
           category,
           station_supplies: stationSupplies.filter(
             s => s.name && s.upc && s.size
@@ -72,7 +95,6 @@ function RouteComponent() {
       if (res.ok) {
         alert("New vendor has been added successfully!");
         setName("");
-        setLocation("");
         setStationSupplies([]);
         setEmailOrder(false);
         setEmail("");
@@ -120,7 +142,7 @@ const customSelectStyles = {
   control: (provided: any, state: any) => ({
     ...provided,
     width: '100%',
-    maxWidth: '400px',           // same width as LocationPicker
+    maxWidth: '250px',           // same width as LocationPicker
     minHeight: '40px',           // match LocationPicker height
     borderRadius: '0.75rem',     // rounded-xl
     border: '1px solid #d1d5db', // gray-300
@@ -189,12 +211,14 @@ const customSelectStyles = {
               styles={customSelectStyles}
             />
             <div>
-              <label className="block font-medium mb-1">Location</label>
-              <LocationPicker
-                value="stationName"
-                setStationName={setLocation}
-              />
+              <label className="block font-medium mb-1">Assign to Sites</label>
+              <Button type="button" variant="outline" onClick={() => setSiteDialogOpen(true)}>
+                {selectedSites.length > 0
+                  ? `Selected ${selectedSites.length} site(s)`
+                  : "Select Sites"}
+              </Button>
             </div>
+
             {/* <div>
               <label className="block font-medium mb-1">Category</label>
               <select
@@ -319,6 +343,46 @@ const customSelectStyles = {
           </form>
         </CardContent>
       </Card>
+      <Dialog open={siteDialogOpen} onOpenChange={setSiteDialogOpen}>
+        <DialogContent className="max-w-lg">
+          <DialogHeader>
+            <DialogTitle>Select Sites</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-2 max-h-80 overflow-y-auto">
+            <label className="flex items-center gap-2 font-medium">
+              <input
+                type="checkbox"
+                checked={selectedSites.length === sites.length}
+                onChange={e =>
+                  setSelectedSites(
+                    e.target.checked ? sites.map(s => s.stationName) : []
+                  )
+                }
+              />
+              Select All
+            </label>
+            {sites.map(site => (
+              <label key={site._id} className="flex items-center gap-2">
+                <input
+                  type="checkbox"
+                  checked={selectedSites.includes(site.stationName)}
+                  onChange={() => {
+                    setSelectedSites(prev =>
+                      prev.includes(site.stationName)
+                        ? prev.filter(s => s !== site.stationName)
+                        : [...prev, site.stationName]
+                    );
+                  }}
+                />
+                {site.stationName}
+              </label>
+            ))}
+          </div>
+          <DialogFooter>
+            <Button onClick={() => setSiteDialogOpen(false)}>Done</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
