@@ -85,7 +85,7 @@ app.use('/api', emailRoutes);
 const io = new Server(server, {
   path: "/socket.io",
   cors: {
-    origin: ["https://app.gen7fuel.com", "http://localhost:5173", "http://localhost:8080"],
+    origin: ["https://app.gen7fuel.com", "http://localhost:5173"],
     methods: ["GET", "POST"],
     credentials: true,
   },
