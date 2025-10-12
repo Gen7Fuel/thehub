@@ -83,7 +83,7 @@ app.use('/api', emailRoutes);
 
 // Setup Socket.IO with CORS so frontend can connect
 const io = new Server(server, {
-  path: "/socket.io",
+  path: "/socket.io/",
   transports: ["websocket", "polling"],
   cors: {
     origin: ["https://app.gen7fuel.com", "http://localhost:5173"],
