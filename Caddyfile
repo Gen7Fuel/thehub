@@ -11,22 +11,22 @@
     # === WebSocket routes (Socket.IO) ===
     handle /socket.io/* {
         reverse_proxy backend:5000 {
-            header_up Upgrade {>Upgrade}
-            header_up Connection {>Connection}
-            header_up Host {>Host}
-            header_up X-Real-IP {>X-Real-IP}
-            header_up X-Forwarded-For {>X-Forwarded-For}
-            header_up X-Forwarded-Proto {>X-Forwarded-Proto}
+            header_up Host {host}
+            header_up X-Real-IP {remote_host}
+            header_up X-Forwarded-For {remote_host}
+            header_up X-Forwarded-Proto {scheme}
+            header_up X-Forwarded-Host {host}
         }
     }
 
     # === API routes ===
     handle /api/* {
         reverse_proxy backend:5000 {
-            header_up Host {>Host}
-            header_up X-Real-IP {>X-Real-IP}
-            header_up X-Forwarded-For {>X-Forwarded-For}
-            header_up X-Forwarded-Proto {>X-Forwarded-Proto}
+            header_up Host {host}
+            header_up X-Real-IP {remote_host}
+            header_up X-Forwarded-For {remote_host}
+            header_up X-Forwarded-Proto {scheme}
+            header_up X-Forwarded-Host {host}
         }
     }
 
