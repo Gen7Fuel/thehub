@@ -104,7 +104,14 @@ function RouteComponent() {
   // }, [stationName]);
 
   const handleInputBlur = (id: string, field: "foh" | "boh", value: string) => {
+    console.log("📤 SENDING cycle-count-field-updated:");
+    console.log("  - Item ID:", id);
+    console.log("  - Field:", field);
+    console.log("  - Value:", value);
+    
     const socket = getSocket();
+    console.log("📤 Using socket:", socket.id || "not connected");
+    
     // Save to backend
     fetch("/api/cycle-count/save-item", {
       method: "POST",
@@ -117,7 +124,24 @@ function RouteComponent() {
 
     // Emit websocket event for real-time update
     socket.emit("cycle-count-field-updated", { itemId: id, field, value });
+    console.log("📤 Event emitted via WebSocket");
   };
+
+  // const handleInputBlur = (id: string, field: "foh" | "boh", value: string) => {
+  //   const socket = getSocket();
+  //   // Save to backend
+  //   fetch("/api/cycle-count/save-item", {
+  //     method: "POST",
+  //     headers: {
+  //       "Content-Type": "application/json",
+  //       Authorization: `Bearer ${localStorage.getItem("token") || ""}`,
+  //     },
+  //     body: JSON.stringify({ _id: id, field, value }),
+  //   });
+
+  //   // Emit websocket event for real-time update
+  //   socket.emit("cycle-count-field-updated", { itemId: id, field, value });
+  // };
 
   interface CycleCountFieldUpdate {
     itemId: string;
@@ -127,8 +151,17 @@ function RouteComponent() {
 
   // Listen for updates from other clients
   useEffect(() => {
+    console.log("🔌 Setting up WebSocket listeners in count component");
+    
     const socket = getSocket();
+    console.log("🔌 Got socket in count component:", socket.id || "not connected");
+    
     function updateField({ itemId, field, value }: CycleCountFieldUpdate) {
+      console.log("📨 RECEIVED cycle-count-field-updated:");
+      console.log("  - Item ID:", itemId);
+      console.log("  - Field:", field);
+      console.log("  - Value:", value);
+      
       setCounts(prev => ({
         ...prev,
         [itemId]: {
@@ -136,12 +169,33 @@ function RouteComponent() {
           [field]: value
         }
       }));
+      console.log("📨 Updated local state");
     }
+    
     socket.on("cycle-count-field-updated", updateField);
+    console.log("🔌 Listener registered for cycle-count-field-updated");
+    
     return () => {
+      console.log("🔌 Cleaning up WebSocket listeners");
       socket.off("cycle-count-field-updated", updateField);
     };
   }, []);
+  // useEffect(() => {
+  //   const socket = getSocket();
+  //   function updateField({ itemId, field, value }: CycleCountFieldUpdate) {
+  //     setCounts(prev => ({
+  //       ...prev,
+  //       [itemId]: {
+  //         ...prev[itemId],
+  //         [field]: value
+  //       }
+  //     }));
+  //   }
+  //   socket.on("cycle-count-field-updated", updateField);
+  //   return () => {
+  //     socket.off("cycle-count-field-updated", updateField);
+  //   };
+  // }, []);
 
   useEffect(() => {
     if (!stationName) return;
