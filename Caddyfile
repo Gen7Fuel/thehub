@@ -1,21 +1,22 @@
-:80 {
+:3000 {
     root * /usr/share/caddy
     file_server
+
+    # === WebSocket routes (Socket.IO) ===
+    handle /socket.io/* {
+        reverse_proxy backend:5000 {
+            header_up Upgrade {>Upgrade}
+            header_up Connection {>Connection}
+            header_up Host {>Host}
+            header_up X-Real-IP {>X-Real-IP}
+            header_up X-Forwarded-For {>X-Forwarded-For}
+            header_up X-Forwarded-Proto {>X-Forwarded-Proto}
+        }
+    }
 
     # === API routes ===
     handle /api/* {
         reverse_proxy backend:5000
-    }
-
-    # === WebSocket routes (Socket.IO) ===
-    handle_path /socket.io/* {
-        reverse_proxy backend:5000 {
-            header_up Host {host}
-            header_up X-Forwarded-For {remote_host}
-            header_up X-Forwarded-Proto {scheme}
-            header_up Upgrade {>Upgrade}
-            header_up Connection {>Connection}
-        }
     }
 
     # === CDN routes ===
@@ -27,13 +28,4 @@
     handle {
         try_files {path} /index.html
     }
-
-    # === Disable caching for dynamic pages ===
-    header {
-        Cache-Control "no-store, no-cache, must-revalidate, proxy-revalidate, max-age=0"
-        Pragma "no-cache"
-        Expires "0"
-    }
-
-    encode gzip
 }
