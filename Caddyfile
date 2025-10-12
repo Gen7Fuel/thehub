@@ -2,37 +2,33 @@
     root * /usr/share/caddy
     file_server
 
-    # Backend API
+    # === API routes ===
     handle /api/* {
-        reverse_proxy backend:5000 {
-            header_up X-Forwarded-Proto {scheme}
-            header_up X-Forwarded-Host {host}
-            header_up X-Forwarded-For {remote_host}
-        }
+        reverse_proxy backend:5000
     }
 
-    # WebSocket connections
-    handle /socket.io/* {
+    # === WebSocket routes (Socket.IO) ===
+    handle_path /socket.io/* {
         reverse_proxy backend:5000 {
-            header_up X-Forwarded-Proto {scheme}
-            header_up X-Forwarded-Host {host}
+            header_up Host {host}
             header_up X-Forwarded-For {remote_host}
+            header_up X-Forwarded-Proto {scheme}
             header_up Upgrade {>Upgrade}
             header_up Connection {>Connection}
         }
     }
 
-    # CDN
+    # === CDN routes ===
     handle /cdn/* {
         reverse_proxy cdn:5001
     }
 
-    # Frontend routing for SPA
+    # === Frontend routing (React SPA) ===
     handle {
         try_files {path} /index.html
     }
 
-    # Cache headers
+    # === Disable caching for dynamic pages ===
     header {
         Cache-Control "no-store, no-cache, must-revalidate, proxy-revalidate, max-age=0"
         Pragma "no-cache"
