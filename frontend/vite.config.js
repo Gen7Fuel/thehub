@@ -33,13 +33,23 @@ export default defineConfig({
       usePolling: true,
     },
     proxy: isDocker 
-    ? {
-        '/api': 'http://backend:5000',
-        '/cdn': 'http://cdn:5001',
-      }
-    : {
-        '/api': 'http://localhost:5000',
-        '/cdn': 'http://localhost:5001',
-      }
+  ? {
+      '/api': 'http://backend:5000',
+      '/socket.io': {
+        target: 'http://backend:5000',
+        ws: true,  // Add WebSocket support
+        changeOrigin: true
+      },
+      '/cdn': 'http://cdn:5001',
+    }
+  : {
+      '/api': 'http://localhost:5000',
+      '/socket.io': {
+        target: 'http://localhost:5000',
+        ws: true,  // Add WebSocket support
+        changeOrigin: true
+      },
+      '/cdn': 'http://localhost:5001',
+    }
   }
 });

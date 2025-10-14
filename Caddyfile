@@ -1,41 +1,30 @@
-:80 {
+:3000 {
+    log {
+        output stdout
+        format console
+        level DEBUG
+    }
+    
     root * /usr/share/caddy
     file_server
 
-    # Backend API
-    handle /api/* {
-        reverse_proxy backend:5000 {
-            header_up X-Forwarded-Proto {scheme}
-            header_up X-Forwarded-Host {host}
-            header_up X-Forwarded-For {remote_host}
-        }
-    }
-
-    # WebSocket connections
+    # === WebSocket routes (Socket.IO) ===
     handle /socket.io/* {
-        reverse_proxy backend:5000 {
-            header_up X-Forwarded-Proto {scheme}
-            header_up X-Forwarded-Host {host}
-            header_up X-Forwarded-For {remote_host}
-        }
+        reverse_proxy backend:5000
     }
 
-    # CDN
+    # === API routes ===
+    handle /api/* {
+        reverse_proxy backend:5000
+    }
+
+    # === CDN routes ===
     handle /cdn/* {
         reverse_proxy cdn:5001
     }
 
-    # Frontend routing for SPA
+    # === Frontend routing (React SPA) ===
     handle {
         try_files {path} /index.html
     }
-
-    # Cache headers
-    header {
-        Cache-Control "no-store, no-cache, must-revalidate, proxy-revalidate, max-age=0"
-        Pragma "no-cache"
-        Expires "0"
-    }
-
-    encode gzip
 }
