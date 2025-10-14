@@ -57,6 +57,7 @@ router.post('/', async (req, res) => {
       followUp: item.followUp || "",
       assignedTo: item.assignedTo || "",
       frequency: item.frequency || "daily",
+      suppliesVendor: item.vendor,
       assignedSites: item.assignedSites && item.assignedSites.length > 0
         ? item.assignedSites.map(siteEntry => ({
             site: siteEntry.site,
@@ -714,6 +715,7 @@ router.post('/instance', async (req, res) => {
           instance: instance._id,
           frequency: item.frequency || freq,
           issueRaised: item.issueRaised,
+          requestOrder: item.requestOrder,
           currentIssueStatus: item.issueRaised === true ? "Created" : undefined,
         };
 
@@ -767,8 +769,13 @@ router.post('/instance', async (req, res) => {
 
 
         createdInstances.push({ frequency: freq, instanceId: instance._id });
+        // Handle requestOrder logic
+        if (item.requestOrder === true) {
+          // TODO: Add your request order handling logic here later
+        }
       }
     }
+
 
     res.json({ message: "Audit saved successfully", instances: createdInstances });
 

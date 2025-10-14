@@ -84,8 +84,13 @@ function RouteComponent() {
         if (!res.ok) throw new Error(`HTTP error! status: ${res.status}`);
         const data = (await res.json()) as { name: string; category: string }[];
 
+        // Filter only vendors with category = "Station Supplies"
+        const stationVendors = data.filter(
+          (v) => v.category?.trim() === "Station Supplies"
+        );
+
         // Extract unique vendor names
-        const vendors = Array.from(new Set(data.map((v: any) => v.name).filter(Boolean)));
+        const vendors = Array.from(new Set(stationVendors.map((v) => v.name).filter(Boolean)));
         setUniqueVendors(vendors);
 
       } catch (err) {
@@ -129,8 +134,6 @@ function RouteComponent() {
         sites: selectedSites,
         // createdBy will be set in backend
     };
-    console.log("payload items:", items)
-    console.log("Submitting checklist template:", payload);
     try {
         await axios.post(
         "/api/audit/",

@@ -23,7 +23,9 @@ const AuditItemSchema = new mongoose.Schema({
   issueStatus: [{
     status: { type: String },
     timestamp: { type: Date, default: null},
-  }]
+  }],
+  requestOrder: { type: Boolean },
+  suppliesVendor: { type: String }
 });
 
 module.exports = mongoose.model('AuditItem', AuditItemSchema);

@@ -31,6 +31,7 @@ interface AuditItem {
   frequency?: "daily" | "weekly" | "monthly";
   lastChecked?: string;
   issueRaised?: boolean;
+  requestOrder?: boolean;
 }
 
 export const Route = createFileRoute("/_navbarLayout/audit/checklist/$id")({
@@ -67,38 +68,6 @@ const CATEGORY_COLOR_CLASSES = [
   { border: "border-cyan-200", bg: "bg-cyan-200" },
 ];
 
-// function isFrequencyComplete(freq: "all" | "daily" | "weekly" | "monthly", items: AuditItem[]) {
-//   if (freq === "all") {
-//     return items.length > 0 && items.every(item => item.checked);
-//   }
-//   const freqItems = items.filter(item => item.frequency === freq);
-//   return freqItems.length > 0 && freqItems.every(item => item.checked);
-// }
-
-// function getCompletedFrequencies(items: AuditItem[]) {
-//   const completed: string[] = [];
-
-//   if (items.length > 0 && items.every(item => item.checked)) {
-//     completed.push("all");
-//   }
-//   if (items.some(item => item.frequency === "daily")) {
-//     const daily = items.filter(i => i.frequency === "daily");
-//     if (daily.length > 0 && daily.every(i => i.checked)) completed.push("daily");
-//   }
-//   if (items.some(item => item.frequency === "weekly")) {
-//     const weekly = items.filter(i => i.frequency === "weekly");
-//     if (weekly.length > 0 && weekly.every(i => i.checked)) completed.push("weekly");
-//   }
-//   if (items.some(item => item.frequency === "monthly")) {
-//     const monthly = items.filter(i => i.frequency === "monthly");
-//     if (monthly.length > 0 && monthly.every(i => i.checked)) completed.push("monthly");
-//   }
-
-//   return completed;
-// }
-
-
-
 function RouteComponent() {
   const { id } = useParams({ from: "/_navbarLayout/audit/checklist/$id" });
 
@@ -116,6 +85,7 @@ function RouteComponent() {
 
   const [frequency, setFrequency] = useState<"daily" | "weekly" | "monthly" | "all">("all");
   const [currentDate] = useState(new Date());
+  const [templateName, setTemplateName] = useState("");
   // Extract unique categories
   const categories = [...new Set(items.map(item => item.category).filter(Boolean))];
 
@@ -126,11 +96,7 @@ function RouteComponent() {
     categoryColorMap[key] = CATEGORY_COLOR_CLASSES[idx % CATEGORY_COLOR_CLASSES.length];
   });
 
-  // const [completedFrequencies, setCompletedFrequencies] = useState<string[]>([]);
-
-
-
-  const sortItems = (list: AuditItem[]) => {
+const sortItems = (list: AuditItem[]) => {
     return [...list].sort((a, b) => {
       // unchecked first
       if (a.checked !== b.checked) return a.checked ? 1 : -1;
@@ -154,19 +120,6 @@ function RouteComponent() {
       .then(setSelectTemplates)
       .catch(() => setSelectTemplates([]));
   }, []);
-
-  // useEffect(() => {
-  //   if (items.length > 0) {
-  //     const sorted = [...items].sort((a, b) => {
-  //       if (a.checked !== b.checked) return a.checked ? 1 : -1;
-  //       const aFreq = frequencyOrder[a.frequency || "daily"];
-  //       const bFreq = frequencyOrder[b.frequency || "daily"];
-  //       return aFreq - bFreq;
-  //     });
-  //     // setDisplayItems(sorted);
-  //   }
-  // }, [items]); // only when items load
-
 
   // Fetch checklist
   const fetchChecklist = async () => {
@@ -199,14 +152,16 @@ function RouteComponent() {
               setLoading(false);
               return;
             }
+            setTemplateName("");
           }
         } 
         // fallback → template items
           const templateRes = await fetch(`/api/audit/${id}?frequency=${frequency}&site=${encodeURIComponent(site)}`, { headers: { Authorization: `Bearer ${token}` } });
-          console.log('site:',site)
+          // console.log('site:',site)
           if (templateRes.ok) {
             const templateData = await templateRes.json();
-          setItems(sortItems(
+            setTemplateName(templateData.templateName || "");
+            setItems(sortItems(
               (templateData.items || []).filter((item: AuditItem) => item.frequency === frequency).map((item: AuditItem) => ({
                 ...item,
                 checked: false,
@@ -245,21 +200,23 @@ function RouteComponent() {
               if (itemsRes.ok) {
                 const instanceItems = await itemsRes.json();
                 allItems.push(...instanceItems);
+                setTemplateName("");
                 continue; // skip template fallback
               }
             }
           } 
-            // fallback to template for this frequency
-            const freqTemplateItems = templateItems
-              .filter((item: AuditItem) => item.frequency === freq)
-              .map((item: AuditItem) => ({
-                ...item,
-                checked: false,
-                comment: "",
-                photos: [],
-              }));
+          // fallback to template for this frequency
+          const freqTemplateItems = templateItems
+            .filter((item: AuditItem) => item.frequency === freq)
+            .map((item: AuditItem) => ({
+              ...item,
+              checked: false,
+              comment: "",
+              photos: [],
+            }));
+            setTemplateName(templateData.templateName || "");
 
-            allItems.push(...freqTemplateItems);
+          allItems.push(...freqTemplateItems);
         }
 
         setItems(sortItems(allItems));
@@ -285,7 +242,7 @@ function RouteComponent() {
 
   const handleFieldChange = (
     idx: number,
-    field: "status" | "followUp" | "assignedTo" | "issueRaised",
+    field: "status" | "followUp" | "assignedTo" | "issueRaised" | "requestOrder",
     value: string | boolean
   ) =>
     setItems((prev) =>
@@ -311,6 +268,16 @@ function RouteComponent() {
 
     const token = localStorage.getItem("token");
     const periodKey = getPeriodKey(frequency as any, currentDate);
+
+    // 2️Check for Request Order items
+    const requestOrders = items.filter(item => item.requestOrder);
+    if (requestOrders.length > 0) {
+      // console.log("Items requesting order:", requestOrders.map(i => i.item));
+      // Optional: alert or process separately
+      // Example alert:
+      alert(`Items requesting orders: ${requestOrders.map(i => i.item).join(", ")}`);
+    }
+
 
     try {
       const res = await fetch("/api/audit/instance", {
@@ -367,33 +334,7 @@ function RouteComponent() {
         ))}
       </div>
 
-      {/* <div className="flex gap-4 mb-4">
-        {["all", "daily", "weekly", "monthly"].map((f) => {
-          const isSelected = frequency === f;
-          const isCompleted = completedFrequencies.includes(f);
-
-          return (
-            <Button
-              key={f}
-              onClick={() => setFrequency(f as any)}
-              className={
-                isCompleted
-                  ? "bg-green-500 text-white hover:bg-green-600"
-                  : isSelected
-                    ? "bg-blue-100 text-blue-700 border border-blue-300"
-                    : "border border-gray-300 text-gray-700 hover:bg-gray-100"
-              }
-            >
-              {f.charAt(0).toUpperCase() + f.slice(1)}
-            </Button>
-          );
-        })}
-      </div>
- */}
-
-
-
-      {/* Catgroies Legend */}
+      {/* Categroies Legend */}
       <div className="flex gap-4 mb-4 flex-wrap">
         {categories.filter((cat): cat is string => !!cat).map((cat) => {
           const { border, bg } = categoryColorMap[cat];
@@ -428,6 +369,7 @@ function RouteComponent() {
               key={item._id || idx}
               item={item}
               mode="station"
+              templateName={templateName}
               onCheck={(checked) => handleCheck(idx, checked)}
               onComment={(comment) => handleComment(idx, comment)}
               onPhotos={(photos) => handlePhotos(idx, photos)}
@@ -435,7 +377,6 @@ function RouteComponent() {
               selectTemplates={selectTemplates}
               borderColor={categoryColorMap[item.category || ""].border}
               lastChecked={item.lastChecked}
-              // onIssueToggle={(raised) => handleFieldChange(idx, "issueRaised", raised)}
             />
             ))}
           </div>
