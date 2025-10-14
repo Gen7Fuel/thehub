@@ -151,46 +151,6 @@ router.get('/by-name/:id', async (req, res) => {
 
 
 // Update a vendor by ID
-// router.put('/:id', async (req, res) => {
-//   try {
-//     const {
-//       name,
-//       location,
-//       station_supplies,
-//       email_order,
-//       email,
-//       order_placement_method,
-//       vendor_order_frequency,
-//       last_order_date,
-//       category,
-//     } = req.body;
-//     if (!name || !location || !Array.isArray(station_supplies)) {
-//       return res.status(400).json({ error: 'Missing required fields.' });
-//     }
-//     const vendor = await Vendor.findByIdAndUpdate(
-//       req.params.id,
-//       {
-//         name,
-//         location,
-//         station_supplies,
-//         email_order,
-//         email,
-//         order_placement_method,
-//         vendor_order_frequency,
-//         last_order_date,
-//         category,
-//       },
-//       { new: true }
-//     );
-//     if (!vendor) {
-//       return res.status(404).json({ error: 'Vendor not found.' });
-//     }
-//     res.json(vendor);
-//   } catch (err) {
-//     res.status(500).json({ error: 'Failed to update vendor.' });
-//   }
-// });
-
 router.put('/:id', async (req, res) => {
   try {
     const { name: newName, station_supplies, email_order, email, order_placement_method, category, sites } = req.body;
@@ -205,24 +165,33 @@ router.put('/:id', async (req, res) => {
 
     const oldName = vendorDoc.name;
 
-    // Fetch all documents for this vendor name
+    // Fetch all docs with old name
     const allVendorDocs = await Vendor.find({ name: oldName });
 
     for (const site of sites) {
-      const existingDoc = allVendorDocs.find(v => v.location === site.site);
+      const existingOldDoc = allVendorDocs.find(v => v.location === site.site);
 
-      if (existingDoc) {
+      // Check if a doc with the new name and same site already exists
+      const existingNewDoc = await Vendor.findOne({ name: newName, location: site.site });
+
+      if (existingOldDoc) {
+        // If it already exists under the new name → delete the old one to avoid duplicates
+        if (existingNewDoc && existingNewDoc._id.toString() !== existingOldDoc._id.toString()) {
+          await Vendor.findByIdAndDelete(existingOldDoc._id);
+          continue;
+        }
+
         // Update existing document
-        existingDoc.name = newName; // update name
-        existingDoc.vendor_order_frequency = site.frequency ?? existingDoc.vendor_order_frequency;
-        existingDoc.station_supplies = station_supplies || existingDoc.station_supplies;
-        existingDoc.email_order = email_order;
-        existingDoc.email = email;
-        existingDoc.order_placement_method = order_placement_method;
-        existingDoc.category = category;
-        await existingDoc.save();
-      } else {
-        // Create new document for new location
+        existingOldDoc.name = newName;
+        existingOldDoc.vendor_order_frequency = site.frequency ?? existingOldDoc.vendor_order_frequency;
+        existingOldDoc.station_supplies = station_supplies || existingOldDoc.station_supplies;
+        existingOldDoc.email_order = email_order;
+        existingOldDoc.email = email;
+        existingOldDoc.order_placement_method = order_placement_method;
+        existingOldDoc.category = category;
+        await existingOldDoc.save();
+      } else if (!existingNewDoc) {
+        // Create new document for a new location (if not already existing)
         await Vendor.create({
           name: newName,
           location: site.site,
@@ -238,9 +207,10 @@ router.put('/:id', async (req, res) => {
 
     res.json({ message: 'Vendor updated successfully.' });
   } catch (err) {
-    console.error(err);
+    console.error("Vendor update error:", err);
     res.status(500).json({ error: 'Failed to update vendor.' });
   }
 });
+
 
 module.exports = router
