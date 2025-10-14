@@ -21,8 +21,8 @@ const VendorSchema = new mongoose.Schema({
   name: { type: String, required: true },   // Vendor name
   category: {
     type: String,
-    enum: ['Cannabis', 'Vape', 'Convenience', 'Tobacco', 'Native Crafts', 'Other'], // Allowed categories
-    required: true
+    // enum: ['Cannabis', 'Vape', 'Convenience', 'Tobacco', 'Native Crafts', 'Other'], // Allowed categories
+    // required: true
   },
   location: { type: String, required: true }, // Associated station/location
   station_supplies: [StationSupplySchema],    // Supplies this vendor provides to stations
@@ -37,6 +37,10 @@ const VendorSchema = new mongoose.Schema({
   lastPlacedOrder: { type: Date },                // Date of the last order placed
 }, { timestamps: true });                         // Adds createdAt and updatedAt fields
 
+VendorSchema.index(
+  { name: 1, location: 1 }, 
+  { unique: true }
+);
 // Create and export the Vendor model
 const Vendor = mongoose.model('Vendor', VendorSchema);
 

@@ -1,104 +1,108 @@
-import { createFileRoute, useParams, useNavigate } from '@tanstack/react-router'
+import { createFileRoute, useParams, useNavigate } from '@tanstack/react-router';
 import { useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { LocationPicker } from "@/components/custom/locationPicker";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import CreatableSelect from 'react-select/creatable';
 
-interface SupplyItem {
-  name: string;
-  upc: string;
-  vin: string;
-  size: string;
-}
-
-interface Vendor {
-  _id: string;
-  name: string;
-  location: string;
-  category: string;
-  station_supplies: SupplyItem[];
-  email_order?: boolean;
-  email?: string;
-  order_placement_method?: string;
-  vendor_order_frequency?: number;
-  last_order_date?: string;
-}
+interface SupplyItem { name: string; vin: string; upc: string; size: string; }
+interface VendorSite { site: string; frequency: number | ''; }
 
 export const Route = createFileRoute('/_navbarLayout/vendor/edit/$id')({
   component: RouteComponent,
-})
+});
 
 function RouteComponent() {
   const { id } = useParams({ from: '/_navbarLayout/vendor/edit/$id' });
   const navigate = useNavigate();
+
   const [name, setName] = useState("");
-  const [location, setLocation] = useState("");
-  const [stationSupplies, setStationSupplies] = useState<SupplyItem[]>([{ name: "", vin: "", upc: "", size: "" }]);
+  const [stationSupplies, setStationSupplies] = useState<SupplyItem[]>([]);
   const [emailOrder, setEmailOrder] = useState(false);
   const [email, setEmail] = useState("");
   const [orderPlacementMethod, setOrderPlacementMethod] = useState("Email");
-  const [vendorOrderFrequency, setVendorOrderFrequency] = useState("");
-  const [lastOrderDate, setLastOrderDate] = useState("");
-  const [loading, setLoading] = useState(true);
-  const [saving, setSaving] = useState(false);
   const [category, setCategory] = useState("");
-  const [uniqueVendors, setUniqueVendors] = useState<string[]>([]);
+  const [vendorSites, setVendorSites] = useState<VendorSite[]>([]);
+  const [allSites, setAllSites] = useState<string[]>([]);
+  const [newSitesDialogOpen, setNewSitesDialogOpen] = useState(false);
+  const [selectedNewSites, setSelectedNewSites] = useState<string[]>([]);
+  const [saving, setSaving] = useState(false);
+  const [loading, setLoading] = useState(true);
   const [uniqueCategories, setUniqueCategories] = useState<string[]>([]);
 
+  // Fetch vendor data
   useEffect(() => {
     const fetchVendor = async () => {
       setLoading(true);
       try {
         const token = localStorage.getItem("token");
-        const res = await fetch(`/api/vendors/${id}`, {
-          headers: { Authorization: `Bearer ${token}` },
-        });
-        if (res.ok) {
-          const data: Vendor = await res.json();
-          setName(data.name);
-          setLocation(data.location);
-          setStationSupplies(
-            data.station_supplies.length > 0
-              ? data.station_supplies
-              : [{ name: "", vin: "", upc: "", size: "" }]
-          );
-          setEmailOrder(!!data.email_order);
-          setEmail(data.email || "");
-          setOrderPlacementMethod(data.order_placement_method || "Email");
-          setVendorOrderFrequency(
-            data.vendor_order_frequency !== undefined && data.vendor_order_frequency !== null
-              ? String(data.vendor_order_frequency)
-              : ""
-          );
-          setLastOrderDate(
-            data.last_order_date
-              ? new Date(data.last_order_date).toISOString().slice(0, 10)
-              : ""
-          );
-          setCategory(data.category || "");
-        }
-      } finally {
-        setLoading(false);
-      }
+        const res = await fetch(`/api/vendors/by-name/${id}`, { headers: { Authorization: `Bearer ${token}` } });
+        if (!res.ok) return;
+        const data = await res.json();
+        setName(data.name);
+        setStationSupplies(data.station_supplies || []);
+        setEmailOrder(!!data.email_order);
+        setEmail(data.email || "");
+        setOrderPlacementMethod(data.order_placement_method || "Email");
+        setCategory(data.category || "");
+
+        // vendorSites array: [{ site, frequency }]
+        setVendorSites(data.sites || []);
+      } finally { setLoading(false); }
     };
     fetchVendor();
   }, [id]);
 
+  // Fetch all sites
+  useEffect(() => {
+    const fetchSites = async () => {
+      try {
+        const token = localStorage.getItem("token");
+        const res = await fetch("/api/locations", { headers: { Authorization: `Bearer ${token}` } });
+        if (!res.ok) throw new Error("Failed to fetch sites");
+        const data = await res.json();
+        setAllSites(data.map((s: any) => s.stationName));
+      } catch (err) { console.error(err); }
+    };
+    fetchSites();
+  }, []);
+
+  //Fetch categories
+  useEffect(() => {
+    const fetchCategories = async () => {
+      try {
+        const token = localStorage.getItem("token");
+        const res = await fetch("/api/vendors", {
+          headers: { Authorization: `Bearer ${token}` },
+        });
+        if (!res.ok) throw new Error(`HTTP error! status: ${res.status}`);
+        const data = (await res.json()) as { name: string; category: string }[];
+  
+        // Extract unique categories
+        const categories = Array.from(new Set(data.map((v: any) => v.category).filter(Boolean)));
+        setUniqueCategories(categories);
+  
+        console.log("Unique categories:", categories);
+      } catch (err) {
+        console.error("Failed to fetch vendors:", err);
+      }
+    };
+  
+    fetchCategories();
+  }, []);
+
   const handleSupplyChange = (idx: number, field: keyof SupplyItem, value: string) => {
     setStationSupplies(supplies =>
-      supplies.map((item, i) =>
-        i === idx ? { ...item, [field]: value } : item
-      )
+      supplies.map((item, i) => i === idx ? { ...item, [field]: value } : item)
     );
   };
+  const addSupply = () => setStationSupplies([...stationSupplies, { name: "", vin: "", upc: "", size: "" }]);
+  const removeSupply = (idx: number) => setStationSupplies(stationSupplies.filter((_, i) => i !== idx));
 
-  const addSupply = () => {
-    setStationSupplies([...stationSupplies, { name: "", vin: "", upc: "", size: "" }]);
-  };
-
-  const removeSupply = (idx: number) => {
-    setStationSupplies(supplies => supplies.filter((_, i) => i !== idx));
+  const handleFrequencyChange = (site: string, value: string) => {
+    setVendorSites(prev => prev.map(vs =>
+      vs.site === site ? { ...vs, frequency: value ? parseFloat(value) : '' } : vs
+    ));
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -108,67 +112,27 @@ function RouteComponent() {
       const token = localStorage.getItem("token");
       const res = await fetch(`/api/vendors/${id}`, {
         method: "PUT",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${token}`,
-        },
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
         body: JSON.stringify({
           name,
-          location,
-          category,
-          station_supplies: stationSupplies.filter(
-            s => s.name && s.upc && s.size
-          ),
+          station_supplies: stationSupplies.filter(s => s.name && s.upc && s.size),
           email_order: emailOrder,
           email,
           order_placement_method: orderPlacementMethod,
-          vendor_order_frequency: vendorOrderFrequency ? parseFloat(vendorOrderFrequency) : undefined,
+          category,
+          sites: vendorSites.concat(selectedNewSites.map(s => ({ site: s, frequency: '' }))),
         }),
       });
-      if (res.ok) {
-        navigate({ to: "/vendor/list" });
-      } else {
-        // Optionally handle error
-      }
-    } finally {
-      setSaving(false);
-    }
+      if (res.ok) navigate({ to: "/vendor/list" });
+      else alert("Failed to update vendor");
+    } finally { setSaving(false); }
   };
 
-  useEffect(() => {
-      const fetchVendors = async () => {
-        try {
-          const token = localStorage.getItem("token");
-          const res = await fetch("/api/vendors", {
-            headers: { Authorization: `Bearer ${token}` },
-          });
-          if (!res.ok) throw new Error(`HTTP error! status: ${res.status}`);
-          const data = (await res.json()) as { name: string; category: string }[];
-  
-          // Extract unique vendor names
-          const vendors = Array.from(new Set(data.map((v: any) => v.name).filter(Boolean)));
-          setUniqueVendors(vendors);
-  
-          // Extract unique categories
-          const categories = Array.from(new Set(data.map((v: any) => v.category).filter(Boolean)));
-          setUniqueCategories(categories);
-  
-          console.log("Unique vendors:", vendors);
-          console.log("Unique categories:", categories);
-        } catch (err) {
-          console.error("Failed to fetch vendors:", err);
-        }
-      };
-  
-      fetchVendors();
-    }, []);
-  
-    // Custom styles to match LocationPicker for creatable select
   const customSelectStyles = {
     control: (provided: any, state: any) => ({
       ...provided,
       width: '100%',
-      maxWidth: '400px',           // same width as LocationPicker
+      maxWidth: '250px',           // same width as LocationPicker
       minHeight: '40px',           // match LocationPicker height
       borderRadius: '0.75rem',     // rounded-xl
       border: '1px solid #d1d5db', // gray-300
@@ -208,188 +172,160 @@ function RouteComponent() {
       color: 'black',
     }),
   }
-
-  if (loading) {
-    return (
-      <div className="max-w-2xl mx-auto p-6">
-        <Card>
-          <CardContent className="py-12 text-center">Loading...</CardContent>
-        </Card>
-      </div>
-    );
-  }
+  
+  if (loading) return <div className="max-w-2xl mx-auto p-6"><Card><CardContent className="py-12 text-center">Loading...</CardContent></Card></div>;
 
   return (
     <div className="max-w-2xl mx-auto p-6">
       <Card>
-        <CardHeader>
-          <CardTitle>Edit Vendor</CardTitle>
-        </CardHeader>
+        <CardHeader><CardTitle>Edit Vendor</CardTitle></CardHeader>
         <CardContent>
           <form onSubmit={handleSubmit} className="space-y-6">
             <div>
-              {/* <label className="block font-medium mb-1">Vendor Name</label>
+              <label className="block font-medium mb-1">Vendor Name</label>
               <input
-                className="border rounded px-3 py-2 w-full"
+                type="text"
                 value={name}
                 onChange={e => setName(e.target.value)}
+                className="border rounded px-3 py-2 w-full"
+                placeholder="Enter vendor name"
                 required
-              /> */}
-              <label className="block font-medium mb-1">Vendor Name</label>
+              />
+            </div>
+            
+            <div>
+              <label className="block font-medium mb-1">Category</label>
               <CreatableSelect
                 isClearable
-                options={uniqueVendors.map(v => ({ value: v, label: v }))}
-                onChange={opt => setName(opt?.value || '')}
-                onCreateOption={val => setName(val)}
-                value={name ? { value: name, label: name } : null}
-                placeholder="Select or add new vendor"
+                options={uniqueCategories.map(c => ({ value: c, label: c }))}
+                value={category ? { value: category, label: category } : null}
+                onChange={opt => setCategory(opt?.value || '')}
+                onCreateOption={val => setCategory(val)}
                 styles={customSelectStyles}
               />
             </div>
-            <div>
-              <label className="block font-medium mb-1">Location</label>
-              <LocationPicker
-                value="stationName"
-                setStationName={setLocation}
-                defaultValue={location}
-              />
-            </div>
-            <div>
-              {/* <label className="block font-medium mb-1">Category</label>
-              <select
-                className="border rounded px-3 py-2 w-full"
-                value={category}
-                onChange={e => setCategory(e.target.value)}
-                required
-              >
-                <option value="">Select category</option>
-                <option value="Cannabis">Cannabis</option>
-                <option value="Vape">Vape</option>
-                <option value="Convenience">Convenience</option>
-                <option value="Tobacco">Tobacco</option>
-                <option value="Native Crafts">Native Crafts</option>
-                <option value="Other">Other</option>
-              </select> */}
 
-            <label className="block font-medium mb-1">Category</label>
-            <CreatableSelect
-              isClearable
-              options={uniqueCategories.map(c => ({ value: c, label: c }))}
-              value={category ? { value: category, label: category } : null}
-              onChange={opt => setCategory(opt?.value || '')}
-              onCreateOption={val => setCategory(val)}
-              placeholder="Select or add new category"
-              styles={customSelectStyles}
-            />
+            <div>
+              <label className="block font-medium mb-1">Assigned Sites</label>
+              <table className="w-full border">
+                <thead>
+                  <tr className="bg-gray-100">
+                    <th className="border px-2 py-1">Site</th>
+                    <th className="border px-2 py-1">Vendor Frequency (weeks)</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {vendorSites.map(vs => (
+                    <tr key={vs.site}>
+                      <td className="border px-2 py-1">{vs.site}</td>
+                      <td className="border px-2 py-1">
+                        <input
+                          type="number"
+                          min="0"
+                          step="0.5"
+                          className="border rounded px-2 py-1 w-full"
+                          value={vs.frequency}
+                          onChange={e => handleFrequencyChange(vs.site, e.target.value)}
+                          required
+                        />
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+              <Button type="button" variant="outline" onClick={() => setNewSitesDialogOpen(true)}>
+                Add New Sites
+              </Button>
             </div>
+
             <div>
               <label className="block font-medium mb-2">Station Supplies</label>
               {stationSupplies.map((item, idx) => (
                 <div key={idx} className="flex gap-2 mb-2">
-                  <input
-                    className="border rounded px-2 py-1 flex-1"
-                    placeholder="Item Name"
-                    value={item.name}
-                    onChange={e => handleSupplyChange(idx, "name", e.target.value)}
-                    required
-                  />
-                   <input
-                    className="border rounded px-2 py-1 w-32"
-                    placeholder="VIN"
-                    value={item.vin}
-                    onChange={e => handleSupplyChange(idx, "vin", e.target.value)}
-                    required
-                  />
-                  <input
-                    className="border rounded px-2 py-1 w-32"
-                    placeholder="UPC"
-                    value={item.upc}
-                    onChange={e => handleSupplyChange(idx, "upc", e.target.value)}
-                    required
-                  />
-                  <input
-                    className="border rounded px-2 py-1 w-24"
-                    placeholder="Size"
-                    value={item.size}
-                    onChange={e => handleSupplyChange(idx, "size", e.target.value)}
-                    required
-                  />
-                  <Button
-                    type="button"
-                    variant="destructive"
-                    onClick={() => removeSupply(idx)}
-                  >
-                    Remove
-                  </Button>
+                  <input placeholder="Item Name" value={item.name} onChange={e => handleSupplyChange(idx, "name", e.target.value)} required className="border rounded px-2 py-1 flex-1"/>
+                  <input placeholder="VIN" value={item.vin} onChange={e => handleSupplyChange(idx, "vin", e.target.value)} required className="border rounded px-2 py-1 w-32"/>
+                  <input placeholder="UPC" value={item.upc} onChange={e => handleSupplyChange(idx, "upc", e.target.value)} required className="border rounded px-2 py-1 w-32"/>
+                  <input placeholder="Size" value={item.size} onChange={e => handleSupplyChange(idx, "size", e.target.value)} required className="border rounded px-2 py-1 w-24"/>
+                  <Button type="button" variant="destructive" onClick={() => removeSupply(idx)}>Remove</Button>
                 </div>
               ))}
-              <Button type="button" variant="outline" onClick={addSupply}>
-                Add Supply
-              </Button>
+              <Button type="button" variant="outline" onClick={addSupply}>Add Supply</Button>
             </div>
+
             <div>
               <label className="block font-medium mb-1">Email Order</label>
-              <input
-                type="checkbox"
-                checked={emailOrder}
-                onChange={e => setEmailOrder(e.target.checked)}
-                className="mr-2"
-              />
+              <input type="checkbox" checked={emailOrder} onChange={e => setEmailOrder(e.target.checked)} className="mr-2"/>
               <span>Should orders be sent by email?</span>
             </div>
+
             <div>
               <label className="block font-medium mb-1">Email</label>
-              <input
-                type="email"
-                className="border rounded px-3 py-2 w-full"
-                value={email}
-                onChange={e => setEmail(e.target.value)}
-                placeholder="vendor@email.com"
-              />
+              <input type="email" value={email} onChange={e => setEmail(e.target.value)} className="border rounded px-3 py-2 w-full" placeholder="vendor@email.com"/>
             </div>
+
             <div>
               <label className="block font-medium mb-1">Order Placement Method</label>
-              <select
-                className="border rounded px-3 py-2 w-full"
-                value={orderPlacementMethod}
-                onChange={e => setOrderPlacementMethod(e.target.value)}
-              >
+              <select value={orderPlacementMethod} onChange={e => setOrderPlacementMethod(e.target.value)} className="border rounded px-3 py-2 w-full">
                 <option value="Email">Email</option>
                 <option value="Template">Template</option>
                 <option value="Web Portal">Web Portal</option>
                 <option value="Telephone">Telephone</option>
               </select>
             </div>
-            <div>
-              <label className="block font-medium mb-1">Vendor Order Frequency (weeks)</label>
-              <input
-                type="number"
-                min="0"
-                step="0.01"
-                className="border rounded px-3 py-2 w-full"
-                value={vendorOrderFrequency}
-                onChange={e => setVendorOrderFrequency(e.target.value)}
-                placeholder="e.g. 1.5"
-                required
-              />
-            </div>
-            <div>
-              <label className="block font-medium mb-1">Last Order Date</label>
-              <input
-                type="date"
-                className="border rounded px-3 py-2 w-full"
-                value={lastOrderDate}
-                disabled
-                readOnly
-                onChange={e => setLastOrderDate(e.target.value)}
-              />
-            </div>
-            <Button type="submit" disabled={saving}>
-              {saving ? "Saving..." : "Save Changes"}
-            </Button>
+
+            <Button type="submit" disabled={saving}>{saving ? "Saving..." : "Save Changes"}</Button>
           </form>
         </CardContent>
       </Card>
+
+      <Dialog open={newSitesDialogOpen} onOpenChange={setNewSitesDialogOpen}>
+        <DialogContent className="max-w-lg">
+          <DialogHeader><DialogTitle>Add New Sites</DialogTitle></DialogHeader>
+
+          <div className="space-y-2 max-h-80 overflow-y-auto">
+            {allSites
+              // show only sites that are not existing in vendorSites OR already selectedNewSites
+              .filter(s => !vendorSites.find(vs => vs.site === s) || selectedNewSites.includes(s))
+              .map(site => (
+                <label key={site} className="flex items-center gap-2">
+                  <input
+                    type="checkbox"
+                    checked={selectedNewSites.includes(site)}
+                    onChange={() => {
+                      setSelectedNewSites(prev =>
+                        prev.includes(site)
+                          ? prev.filter(s => s !== site)   // uncheck
+                          : [...prev, site]               // check
+                      );
+
+                      // if unchecked, remove from vendorSites
+                      if (selectedNewSites.includes(site)) {
+                        setVendorSites(prev => prev.filter(vs => vs.site !== site));
+                      }
+                    }}
+                  />
+                  {site}
+                </label>
+              ))}
+          </div>
+
+          <DialogFooter>
+            <Button onClick={() => {
+              // add all newly selected sites to vendorSites if not already present
+              setVendorSites(prev => [
+                ...prev,
+                ...selectedNewSites
+                  .filter(site => !prev.find(vs => vs.site === site))
+                  .map(site => ({ site, frequency: '' as '' }))
+              ]);
+              setNewSitesDialogOpen(false);
+            }}>
+              Done
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
     </div>
   );
 }
