@@ -5,6 +5,7 @@ import TableWithInputs from "@/components/custom/TableWithInputs";
 import { DateTime } from 'luxon';
 import { useRef } from "react";
 import { getSocket } from "@/lib/websocket";
+import { Button } from "@/components/ui/button";
 
 
 export const Route = createFileRoute('/_navbarLayout/cycle-count/count')({
@@ -273,104 +274,112 @@ function RouteComponent() {
     }));
   };
 
-  const handleSave = async () => {
+  // const handleSave = async () => {
+  //   setSaving(true);
+  //   setError("");
+  //   try {
+  //     const allItems = [...flaggedItems, ...items];
+  //     const payload = allItems
+  //       .map(item => ({
+  //         _id: item._id,
+  //         foh: counts[item._id]?.foh ?? "",
+  //         boh: counts[item._id]?.boh ?? ""
+  //       }))
+  //       .filter(entry => entry.foh !== "" || entry.boh !== "");
+
+  //     if (payload.length === 0) {
+  //       setSaving(false);
+  //       alert("No counts to save.");
+  //       return;
+  //     }
+
+  //     const res = await fetch("/api/cycle-count/save-counts", {
+  //       method: "POST",
+  //       headers: {
+  //         "Content-Type": "application/json",
+  //         Authorization: `Bearer ${localStorage.getItem("token") || ""}`,
+  //       },
+  //       body: JSON.stringify({ items: payload }),
+  //     });
+  //     const data = await res.json();
+  //     if (!res.ok) throw new Error(data.message || "Failed to save counts");
+  //     alert("Counts saved!");
+
+  //     // Re-fetch the latest flagged and daily items from the backend
+  //     setLoading(true);
+  //     fetch(`/api/cycle-count/daily-items?site=${encodeURIComponent(stationName)}&chunkSize=20`, {
+  //       headers: {
+  //         Authorization: `Bearer ${localStorage.getItem("token") || ""}`,
+  //       },
+  //     })
+  //       .then(res => res.json())
+  //       .then(data => {
+  //         setItems(data.items || []);
+  //         setFlaggedItems(data.flaggedItems || []);
+  //         // Re-initialize counts for the new items
+  //         const initialCounts: { [id: string]: { foh: string; boh: string } } = {};
+  //         const allItems = [...(data.flaggedItems || []), ...(data.items || [])];
+  //         // const today = new Date();
+  //         // today.setHours(0, 0, 0, 0);
+  //         // allItems.forEach((item: any) => {
+  //         //   const updatedAt = item.updatedAt ? new Date(item.updatedAt) : null;
+  //         //   const isToday =
+  //         //     updatedAt &&
+  //         //     updatedAt >= today &&
+  //         //     updatedAt < new Date(today.getTime() + 24 * 60 * 60 * 1000);
+
+  //         //   initialCounts[item._id] = {
+  //         //     foh:
+  //         //       isToday && item.foh != null && item.foh !== 0
+  //         //         ? String(item.foh)
+  //         //         : "",
+  //         //     boh:
+  //         //       isToday && item.boh != null && item.boh !== 0
+  //         //         ? String(item.boh)
+  //         //         : ""
+  //         //   };
+  //         // });
+  //         const timezone = Intl.DateTimeFormat().resolvedOptions().timeZone;
+  //         const now = DateTime.now().setZone(timezone);
+  //         const todayStart = now.startOf('day');
+  //         const tomorrowStart = todayStart.plus({ days: 1 });
+
+  //         allItems.forEach((item: any) => {
+  //           const updatedAt = item.updatedAt ? DateTime.fromISO(item.updatedAt).setZone(timezone) : null;
+  //           const isToday =
+  //             updatedAt &&
+  //             updatedAt >= todayStart &&
+  //             updatedAt < tomorrowStart;
+
+  //           initialCounts[item._id] = {
+  //             foh:
+  //               isToday && item.foh != null
+  //                 ? String(item.foh)
+  //                 : "",
+  //             boh:
+  //               isToday && item.boh != null
+  //                 ? String(item.boh)
+  //                 : ""
+  //           };
+  //         });
+  //         setCounts(initialCounts);
+  //       })
+  //       .catch(() => setError("Failed to fetch items"))
+  //       .finally(() => setLoading(false));
+
+  //   } catch (err: any) {
+  //     setError(err.message || "Failed to save counts");
+  //     setSaving(false);
+  //   }
+  //   setSaving(false);
+  // };
+
+  // create a fakeSave function that changes saving to true, waits 1 second, then changes saving to false
+  const fakeSave = () => {
     setSaving(true);
-    setError("");
-    try {
-      const allItems = [...flaggedItems, ...items];
-      const payload = allItems
-        .map(item => ({
-          _id: item._id,
-          foh: counts[item._id]?.foh ?? "",
-          boh: counts[item._id]?.boh ?? ""
-        }))
-        .filter(entry => entry.foh !== "" || entry.boh !== "");
-
-      if (payload.length === 0) {
-        setSaving(false);
-        alert("No counts to save.");
-        return;
-      }
-
-      const res = await fetch("/api/cycle-count/save-counts", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${localStorage.getItem("token") || ""}`,
-        },
-        body: JSON.stringify({ items: payload }),
-      });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.message || "Failed to save counts");
-      alert("Counts saved!");
-
-      // Re-fetch the latest flagged and daily items from the backend
-      setLoading(true);
-      fetch(`/api/cycle-count/daily-items?site=${encodeURIComponent(stationName)}&chunkSize=20`, {
-        headers: {
-          Authorization: `Bearer ${localStorage.getItem("token") || ""}`,
-        },
-      })
-        .then(res => res.json())
-        .then(data => {
-          setItems(data.items || []);
-          setFlaggedItems(data.flaggedItems || []);
-          // Re-initialize counts for the new items
-          const initialCounts: { [id: string]: { foh: string; boh: string } } = {};
-          const allItems = [...(data.flaggedItems || []), ...(data.items || [])];
-          // const today = new Date();
-          // today.setHours(0, 0, 0, 0);
-          // allItems.forEach((item: any) => {
-          //   const updatedAt = item.updatedAt ? new Date(item.updatedAt) : null;
-          //   const isToday =
-          //     updatedAt &&
-          //     updatedAt >= today &&
-          //     updatedAt < new Date(today.getTime() + 24 * 60 * 60 * 1000);
-
-          //   initialCounts[item._id] = {
-          //     foh:
-          //       isToday && item.foh != null && item.foh !== 0
-          //         ? String(item.foh)
-          //         : "",
-          //     boh:
-          //       isToday && item.boh != null && item.boh !== 0
-          //         ? String(item.boh)
-          //         : ""
-          //   };
-          // });
-          const timezone = Intl.DateTimeFormat().resolvedOptions().timeZone;
-          const now = DateTime.now().setZone(timezone);
-          const todayStart = now.startOf('day');
-          const tomorrowStart = todayStart.plus({ days: 1 });
-
-          allItems.forEach((item: any) => {
-            const updatedAt = item.updatedAt ? DateTime.fromISO(item.updatedAt).setZone(timezone) : null;
-            const isToday =
-              updatedAt &&
-              updatedAt >= todayStart &&
-              updatedAt < tomorrowStart;
-
-            initialCounts[item._id] = {
-              foh:
-                isToday && item.foh != null
-                  ? String(item.foh)
-                  : "",
-              boh:
-                isToday && item.boh != null
-                  ? String(item.boh)
-                  : ""
-            };
-          });
-          setCounts(initialCounts);
-        })
-        .catch(() => setError("Failed to fetch items"))
-        .finally(() => setLoading(false));
-
-    } catch (err: any) {
-      setError(err.message || "Failed to save counts");
+    setTimeout(() => {
       setSaving(false);
-    }
-    setSaving(false);
+    }, 1000);
   };
 
   const access = JSON.parse(localStorage.getItem('access') || '{}')
@@ -385,13 +394,19 @@ function RouteComponent() {
           defaultValue={location}
         />
       </div>
-      <button
+      {/* <button
         className="mb-4 px-4 py-2 bg-blue-600 text-white rounded"
         onClick={handleSave}
         disabled={saving}
       >
         {saving ? "Saving..." : "Save Count"}
-      </button>
+      </button> */}
+      <Button
+        onClick={fakeSave}
+        disabled={saving}
+      >
+        {saving ? "Saving..." : "Save Count"}
+      </Button>
       {flaggedItems.length > 0 && (
         <div className="mb-8">
           <h2 className="text-lg font-bold mb-2 text-red-700">Flagged Items</h2>
@@ -420,13 +435,13 @@ function RouteComponent() {
             headerClassName="bg-gray-100"
             rowClassName=""
           />
-          <button
+          {/* <button
             className="mt-4 px-4 py-2 bg-blue-600 text-white rounded"
             onClick={handleSave}
             disabled={saving}
           >
             {saving ? "Saving..." : "Save Count"}
-          </button>
+          </button> */}
         </>
       )}
       {!loading && !error && items.length === 0 && (
