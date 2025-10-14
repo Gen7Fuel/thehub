@@ -113,7 +113,7 @@ function RouteComponent() {
       }).then(res => res.json());
 
       // Fetch daily cycle count data
-      const timezone = Intl.DateTimeFormat().resolvedOptions().timeZone;
+      const timezone = await fetchLocation(site).then(loc => loc.timezone || "UTC");
       const dailyCountsRes = await fetchDailyCounts(site, startDate, endDate, timezone);
 
       // Fetch sales data
@@ -348,7 +348,7 @@ const fetchDailyCounts = async (site: string, startDate: string, endDate: string
     site,
     startDate,
     endDate,
-    timezone,
+    timezone
   });
 
   return fetch(`/api/cycle-count/daily-counts?${params}`, {
@@ -414,4 +414,8 @@ const fetchOrderRecs = async (site: string, startDate: string, endDate: string) 
       Authorization: `Bearer ${localStorage.getItem("token")}`,
     },
   }).then(res => res.json());
+};
+
+const fetchLocation = async (stationName: string) => {
+  return fetch(`/api/locations/name/${encodeURIComponent(stationName)}`).then(res => res.json());
 };
