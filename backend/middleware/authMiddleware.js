@@ -43,30 +43,29 @@ const auth = async (req, res, next) => {
  * - Calls next() with an error if authentication fails.
  */
 const authSocket = async (socket, next) => {
-  next(); // Temporarily bypassing auth for testing
-  // try {
-  //   // Get token from socket handshake auth
-  //   const token = socket.handshake.auth?.token || null;
-  //   if (!token) {
-  //     return next(new Error("No token, authorization denied"));
-  //   }
+  try {
+    // Get token from socket handshake auth
+    const token = socket.handshake.auth?.token || null;
+    if (!token) {
+      return next(new Error("No token, authorization denied"));
+    }
 
-  //   // Verify the JWT token
-  //   const decoded = jwt.verify(token, process.env.JWT_SECRET);
+    // Verify the JWT token
+    const decoded = jwt.verify(token, process.env.JWT_SECRET);
 
-  //   // Find the user by decoded id, excluding password
-  //   const user = await User.findById(decoded.id).select("-password");
-  //   if (!user) {
-  //     return next(new Error("User not found"));
-  //   }
+    // Find the user by decoded id, excluding password
+    const user = await User.findById(decoded.id).select("-password");
+    if (!user) {
+      return next(new Error("User not found"));
+    }
 
-  //   // Attach user to socket object for downstream use
-  //   socket.user = user;
-  //   next();
-  // } catch (err) {
-  //   console.error("Socket auth error:", err);
-  //   next(new Error("Token is not valid"));
-  // }
+    // Attach user to socket object for downstream use
+    socket.user = user;
+    next();
+  } catch (err) {
+    console.error("Socket auth error:", err);
+    next(new Error("Token is not valid"));
+  }
 };
 
 // To use with Socket.IO: io.use(authSocket);

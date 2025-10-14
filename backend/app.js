@@ -24,15 +24,12 @@ const emailRoutes = require("./routes/emailRoutes");
 const orderRecRoutes = require("./routes/orderRecRoutes");
 const vendorRoutes = require("./routes/vendorRoutes");
 const auditRoutes = require("./routes/audit/auditTemplateRoutes");
-// const cycleCountRoutes = require("./routes/cycleCountRoutes");
-// const CycleCountNewRoutes = require("./routes/cycleCountNewRoutes");
-// const cycleCountRoutes = require('./routes/cycleCount2Routes');
+
 const { auth } = require("./middleware/authMiddleware");
+const { authSocket } = require("./middleware/authMiddleware");
 const cycleCountNewRoutes = require('./routes/cycleCountRoutes');
-// const auth = require("./middleware/authMiddleware");
 const permissionRoutes = require("./routes/permissionRoutes");
 const selectTemplateRoutes = require("./routes/audit/selectTemplateRoutes");
-// const feedbackTemplateRoutes = require("./routes/audit/feedbackTemplateRoutes");
 
 dotenv.config();
 connectDB();
@@ -91,6 +88,17 @@ const io = new Server(server, {
     credentials: true,
   },
 });
+
+// Debugging the auth flow
+io.use((socket, next) => {
+  console.log("🔐 Socket auth attempt:", {
+    token: socket.handshake.auth?.token ? "present" : "missing",
+    origin: socket.handshake.headers.origin
+  });
+  next();
+});
+
+io.use(authSocket);
 
 app.set("io", io);
 
@@ -167,17 +175,6 @@ io.on("connection", (socket) => {
 io.on("connect_error", (error) => {
   console.error("🚨 SERVER connect_error:", error);
 });
-
-// io.on("connection", (socket) => {
-//   socket.on("cycle-count-field-updated", ({ itemId, field, value }) => {
-//     // Broadcast to all other clients except sender
-//     socket.broadcast.emit("cycle-count-field-updated", { itemId, field, value });
-//   });
-
-//   socket.on("disconnect", () => {
-//     console.log("Client disconnected:", socket.id);
-//   });
-// });
 
 const PORT = process.env.PORT || 5000;
 server.listen(PORT, "0.0.0.0", () => console.log(`Server running on port ${PORT}`));
