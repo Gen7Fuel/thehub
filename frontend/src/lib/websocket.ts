@@ -21,8 +21,13 @@ export function getSocket(): Socket {
     console.log("🚀 Creating new socket connection to:", socketUrl);
     console.log("🌐 Full URL will be:", window.location.origin + socketUrl);
     
+    // Get token from localStorage
+    const token = localStorage.getItem("token");
+    console.log("🔑 Using auth token:", token ? "present" : "missing");
+
     socket = io(socketUrl, {
       path: "/socket.io",
+      auth: { token },
       transports: ["websocket", "polling"], // Add polling as fallback
       autoConnect: true,
       timeout: 20000,
