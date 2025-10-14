@@ -202,7 +202,7 @@ function RouteComponent() {
     if (!stationName) return;
     setLoading(true);
     setError("");
-    fetch(`/api/cycle-count/daily-items?site=${encodeURIComponent(stationName)}&chunkSize=20&timezone=${encodeURIComponent(Intl.DateTimeFormat().resolvedOptions().timeZone)}`, {
+    fetch(`/api/cycle-count/daily-items?site=${encodeURIComponent(stationName)}&chunkSize=20&userTimezone=${encodeURIComponent(Intl.DateTimeFormat().resolvedOptions().timeZone)}`, {
       headers: {
         Authorization: `Bearer ${localStorage.getItem("token") || ""}`,
       },
