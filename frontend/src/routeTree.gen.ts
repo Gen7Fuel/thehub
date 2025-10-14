@@ -12,6 +12,7 @@ import { Route as rootRouteImport } from './routes/__root'
 import { Route as NavbarLayoutRouteImport } from './routes/_navbarLayout'
 import { Route as NavbarLayoutIndexRouteImport } from './routes/_navbarLayout/index'
 import { Route as NavbarLayoutVendorRouteImport } from './routes/_navbarLayout/vendor'
+import { Route as NavbarLayoutSupportRouteImport } from './routes/_navbarLayout/support'
 import { Route as NavbarLayoutStatusRouteImport } from './routes/_navbarLayout/status'
 import { Route as NavbarLayoutSettingsRouteImport } from './routes/_navbarLayout/settings'
 import { Route as NavbarLayoutReportsRouteImport } from './routes/_navbarLayout/reports'
@@ -99,6 +100,11 @@ const NavbarLayoutIndexRoute = NavbarLayoutIndexRouteImport.update({
 const NavbarLayoutVendorRoute = NavbarLayoutVendorRouteImport.update({
   id: '/vendor',
   path: '/vendor',
+  getParentRoute: () => NavbarLayoutRoute,
+} as any)
+const NavbarLayoutSupportRoute = NavbarLayoutSupportRouteImport.update({
+  id: '/support',
+  path: '/support',
   getParentRoute: () => NavbarLayoutRoute,
 } as any)
 const NavbarLayoutStatusRoute = NavbarLayoutStatusRouteImport.update({
@@ -536,6 +542,7 @@ export interface FileRoutesByFullPath {
   '/reports': typeof NavbarLayoutReportsRouteWithChildren
   '/settings': typeof NavbarLayoutSettingsRouteWithChildren
   '/status': typeof NavbarLayoutStatusRouteWithChildren
+  '/support': typeof NavbarLayoutSupportRoute
   '/vendor': typeof NavbarLayoutVendorRouteWithChildren
   '/': typeof NavbarLayoutIndexRoute
   '/audit/checklist': typeof NavbarLayoutAuditChecklistRouteWithChildren
@@ -605,6 +612,7 @@ export interface FileRoutesByTo {
   '/daily-reports': typeof NavbarLayoutDailyReportsRouteWithChildren
   '/dashboard': typeof NavbarLayoutDashboardRoute
   '/reports': typeof NavbarLayoutReportsRouteWithChildren
+  '/support': typeof NavbarLayoutSupportRoute
   '/': typeof NavbarLayoutIndexRoute
   '/audit/templates': typeof NavbarLayoutAuditTemplatesRouteWithChildren
   '/cycle-count/console': typeof NavbarLayoutCycleCountConsoleRoute
@@ -676,6 +684,7 @@ export interface FileRoutesById {
   '/_navbarLayout/reports': typeof NavbarLayoutReportsRouteWithChildren
   '/_navbarLayout/settings': typeof NavbarLayoutSettingsRouteWithChildren
   '/_navbarLayout/status': typeof NavbarLayoutStatusRouteWithChildren
+  '/_navbarLayout/support': typeof NavbarLayoutSupportRoute
   '/_navbarLayout/vendor': typeof NavbarLayoutVendorRouteWithChildren
   '/_navbarLayout/': typeof NavbarLayoutIndexRoute
   '/_navbarLayout/audit/checklist': typeof NavbarLayoutAuditChecklistRouteWithChildren
@@ -756,6 +765,7 @@ export interface FileRouteTypes {
     | '/reports'
     | '/settings'
     | '/status'
+    | '/support'
     | '/vendor'
     | '/'
     | '/audit/checklist'
@@ -825,6 +835,7 @@ export interface FileRouteTypes {
     | '/daily-reports'
     | '/dashboard'
     | '/reports'
+    | '/support'
     | '/'
     | '/audit/templates'
     | '/cycle-count/console'
@@ -895,6 +906,7 @@ export interface FileRouteTypes {
     | '/_navbarLayout/reports'
     | '/_navbarLayout/settings'
     | '/_navbarLayout/status'
+    | '/_navbarLayout/support'
     | '/_navbarLayout/vendor'
     | '/_navbarLayout/'
     | '/_navbarLayout/audit/checklist'
@@ -986,6 +998,13 @@ declare module '@tanstack/react-router' {
       path: '/vendor'
       fullPath: '/vendor'
       preLoaderRoute: typeof NavbarLayoutVendorRouteImport
+      parentRoute: typeof NavbarLayoutRoute
+    }
+    '/_navbarLayout/support': {
+      id: '/_navbarLayout/support'
+      path: '/support'
+      fullPath: '/support'
+      preLoaderRoute: typeof NavbarLayoutSupportRouteImport
       parentRoute: typeof NavbarLayoutRoute
     }
     '/_navbarLayout/status': {
@@ -1888,6 +1907,7 @@ interface NavbarLayoutRouteChildren {
   NavbarLayoutReportsRoute: typeof NavbarLayoutReportsRouteWithChildren
   NavbarLayoutSettingsRoute: typeof NavbarLayoutSettingsRouteWithChildren
   NavbarLayoutStatusRoute: typeof NavbarLayoutStatusRouteWithChildren
+  NavbarLayoutSupportRoute: typeof NavbarLayoutSupportRoute
   NavbarLayoutVendorRoute: typeof NavbarLayoutVendorRouteWithChildren
   NavbarLayoutIndexRoute: typeof NavbarLayoutIndexRoute
 }
@@ -1905,6 +1925,7 @@ const NavbarLayoutRouteChildren: NavbarLayoutRouteChildren = {
   NavbarLayoutReportsRoute: NavbarLayoutReportsRouteWithChildren,
   NavbarLayoutSettingsRoute: NavbarLayoutSettingsRouteWithChildren,
   NavbarLayoutStatusRoute: NavbarLayoutStatusRouteWithChildren,
+  NavbarLayoutSupportRoute: NavbarLayoutSupportRoute,
   NavbarLayoutVendorRoute: NavbarLayoutVendorRouteWithChildren,
   NavbarLayoutIndexRoute: NavbarLayoutIndexRoute,
 }
