@@ -2,7 +2,8 @@ import { createFileRoute } from '@tanstack/react-router'
 import React, { useEffect, useState } from "react"
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { LocationPicker } from "@/components/custom/locationPicker";
+// import { LocationPicker } from "@/components/custom/locationPicker";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import CreatableSelect from 'react-select/creatable';
 
 interface SupplyItem {
@@ -18,7 +19,7 @@ export const Route = createFileRoute('/_navbarLayout/vendor/')({
 
 function RouteComponent() {
   const [name, setName] = useState("");
-  const [location, setLocation] = useState(localStorage.getItem("location") || "");
+  // const [location, setLocation] = useState(localStorage.getItem("location") || "");
   const [stationSupplies, setStationSupplies] = useState<SupplyItem[]>([]);
   const [emailOrder, setEmailOrder] = useState(false);
   const [email, setEmail] = useState("");
@@ -28,6 +29,31 @@ function RouteComponent() {
   const [category, setCategory] = useState("");
   const [uniqueVendors, setUniqueVendors] = useState<string[]>([]);
   const [uniqueCategories, setUniqueCategories] = useState<string[]>([]);
+  const [sites, setSites] = useState<{ _id: string; stationName: string }[]>([]);
+  // const [selectedSites, setSelectedSites] = useState<string[]>([]);
+  const [siteDialogOpen, setSiteDialogOpen] = useState(false);
+  const [vendorSites, setVendorSites] = useState<{ site: string; frequency: string }[]>([]);
+  // const [selectedNewSites, setSelectedNewSites] = useState<string[]>([]);
+
+
+  useEffect(() => {
+    const fetchSites = async () => {
+      try {
+        const token = localStorage.getItem("token");
+        const res = await fetch("/api/locations", {
+          headers: { Authorization: `Bearer ${token}` },
+        });
+        if (!res.ok) throw new Error(`HTTP error! status: ${res.status}`);
+        const data = await res.json();
+        setSites(data);
+      } catch (err) {
+        console.error("Failed to fetch sites:", err);
+      }
+    };
+    fetchSites();
+  }, []);
+
+
 
   const handleSupplyChange = (idx: number, field: keyof SupplyItem, value: string) => {
     setStationSupplies(supplies =>
@@ -58,11 +84,9 @@ function RouteComponent() {
         },
         body: JSON.stringify({
           name,
-          location,
+          sites: vendorSites, // send site + frequency info
           category,
-          station_supplies: stationSupplies.filter(
-            s => s.name && s.upc && s.size
-          ),
+          station_supplies: stationSupplies.filter(s => s.name && s.upc && s.size),
           email_order: emailOrder,
           email,
           order_placement_method: orderPlacementMethod,
@@ -72,21 +96,28 @@ function RouteComponent() {
       if (res.ok) {
         alert("New vendor has been added successfully!");
         setName("");
-        setLocation("");
         setStationSupplies([]);
         setEmailOrder(false);
         setEmail("");
         setOrderPlacementMethod("Email");
         setVendorOrderFrequency("");
         setCategory("Other");
+      } else if (res.status === 409) {
+        // Handle duplicate vendor (name + location)
+        const data = await res.json();
+        alert(data.error || "Vendor with this name and location already exists. Try editing it instead.");
       } else {
-        alert("Failed to add vendor. Please try again.");
+        const data = await res.json();
+        alert(data.error || "Failed to add vendor. Please try again.");
       }
+    } catch (err) {
+      console.error("Error submitting vendor:", err);
+      alert("An unexpected error occurred while adding vendor.");
     } finally {
       setSaving(false);
     }
   };
-  
+
   useEffect(() => {
     const fetchVendors = async () => {
       try {
@@ -120,7 +151,7 @@ const customSelectStyles = {
   control: (provided: any, state: any) => ({
     ...provided,
     width: '100%',
-    maxWidth: '400px',           // same width as LocationPicker
+    maxWidth: '250px',           // same width as LocationPicker
     minHeight: '40px',           // match LocationPicker height
     borderRadius: '0.75rem',     // rounded-xl
     border: '1px solid #d1d5db', // gray-300
@@ -188,13 +219,66 @@ const customSelectStyles = {
               placeholder="Select or add new vendor"
               styles={customSelectStyles}
             />
+            <label className="block font-medium mb-1">Category</label>
+            <CreatableSelect
+              isClearable
+              options={uniqueCategories.map(c => ({ value: c, label: c }))}
+              value={category ? { value: category, label: category } : null}
+              onChange={opt => setCategory(opt?.value || '')}
+              onCreateOption={val => setCategory(val)}
+              placeholder="Select or add new category"
+              styles={customSelectStyles}
+            />
             <div>
-              <label className="block font-medium mb-1">Location</label>
-              <LocationPicker
-                value="stationName"
-                setStationName={setLocation}
-              />
+              <label className="block font-medium mb-1">Assign to Sites</label>
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => setSiteDialogOpen(true)}
+              >
+                {vendorSites.length > 0
+                  ? `Selected ${vendorSites.length} site${vendorSites.length > 1 ? 's' : ''}`
+                  : "Select Sites"}
+              </Button>
             </div>
+            {vendorSites.length > 0 && (
+              <div className="mt-6">
+                <h3 className="font-medium mb-2">Order Frequency</h3>
+                <table className="w-full border-collapse">
+                  <thead>
+                    <tr>
+                      <th className="border px-2 py-1 text-left">Site</th>
+                      <th className="border px-2 py-1 text-left">Frequency (weeks)</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {vendorSites.map((vs, idx) => (
+                      <tr key={idx}>
+                        <td className="border px-2 py-1">{vs.site}</td>
+                        <td className="border px-2 py-1">
+                          <input
+                            type="number"
+                            min="0"
+                            step="0.5"
+                            className="border rounded px-2 py-1 w-24"
+                            value={vs.frequency}
+                            onChange={e =>
+                              setVendorSites(prev =>
+                                prev.map((v, i) =>
+                                  i === idx ? { ...v, frequency: e.target.value } : v
+                                )
+                              )
+                            }
+                            required
+                          />
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+
             {/* <div>
               <label className="block font-medium mb-1">Category</label>
               <select
@@ -212,16 +296,6 @@ const customSelectStyles = {
                 <option value="Other">Other</option>
               </select>
             </div> */}
-            <label className="block font-medium mb-1">Category</label>
-            <CreatableSelect
-              isClearable
-              options={uniqueCategories.map(c => ({ value: c, label: c }))}
-              value={category ? { value: category, label: category } : null}
-              onChange={opt => setCategory(opt?.value || '')}
-              onCreateOption={val => setCategory(val)}
-              placeholder="Select or add new category"
-              styles={customSelectStyles}
-            />
             <div>
               <label className="block font-medium mb-2">Station Supplies</label>
               {stationSupplies.map((item, idx) => (
@@ -300,7 +374,7 @@ const customSelectStyles = {
                 <option value="Telephone">Telephone</option>
               </select>
             </div>
-            <div>
+            {/* <div>
               <label className="block font-medium mb-1">Vendor Order Frequency (weeks)</label>
               <input
                 type="number"
@@ -312,13 +386,66 @@ const customSelectStyles = {
                 placeholder="e.g. 1.5"
                 required
               />
-            </div>
+            </div> */}
             <Button type="submit" disabled={saving}>
               {saving ? "Saving..." : "Create Vendor"}
             </Button>
           </form>
         </CardContent>
       </Card>
+      <Dialog open={siteDialogOpen} onOpenChange={setSiteDialogOpen}>
+        <DialogContent className="max-w-lg">
+          <DialogHeader>
+            <DialogTitle>Select Sites</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-2 max-h-80 overflow-y-auto">
+            <label className="flex items-center gap-2 font-medium">
+              <input
+                type="checkbox"
+                checked={vendorSites.length === sites.length}
+                onChange={e => {
+                  if (e.target.checked) {
+                    setVendorSites(sites.map(s => ({ site: s.stationName, frequency: "" as "" })));
+                  } else {
+                    setVendorSites([]);
+                  }
+                }}
+              />
+              Select All
+            </label>
+
+            {sites.map(site => {
+              const isChecked = vendorSites.find(vs => vs.site === site.stationName);
+
+              return (
+                <label key={site._id} className="flex items-center gap-2">
+                  <input
+                    type="checkbox"
+                    checked={!!isChecked}
+                    onChange={() => {
+                      setVendorSites(prev => {
+                        if (prev.find(vs => vs.site === site.stationName)) {
+                          // remove if unchecked
+                          return prev.filter(vs => vs.site !== site.stationName);
+                        } else {
+                          // add if checked
+                          return [...prev, { site: site.stationName, frequency: "" as "" }];
+                        }
+                      });
+                    }}
+                  />
+                  {site.stationName}
+                </label>
+              );
+            })}
+          </div>
+
+          <DialogFooter>
+            <Button onClick={() => setSiteDialogOpen(false)}>Done</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
     </div>
   );
 }

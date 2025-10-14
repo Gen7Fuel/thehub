@@ -28,7 +28,9 @@ interface ChecklistItem {
   assignedTo: string;
   frequency?: "daily" | "weekly" | "monthly" | "";
   assignedSites?: { site: string; assigned: boolean }[];
+  vendor?: string;  // vendor field only for template name "Orders"
 }
+
 
 function RouteComponent() {
   const [selectTemplates, setSelectTemplates] = useState<SelectTemplate[]>([]);
@@ -42,6 +44,8 @@ function RouteComponent() {
 
   const [sites, setSites] = useState<{ _id: string; stationName: string }[]>([]);
   const [selectedSites, setSelectedSites] = useState<string[]>([]);
+
+  const [uniqueVendors, setUniqueVendors] = useState<string[]>([]);
 
   useEffect(() => {
     axios
@@ -69,6 +73,29 @@ function RouteComponent() {
       .then(res => setSelectTemplates(res.data))
       .catch(() => setSelectTemplates([]));
   }, []);
+
+  useEffect(() => {
+    const fetchVendors = async () => {
+      try {
+        const token = localStorage.getItem("token");
+        const res = await fetch("/api/vendors", {
+          headers: { Authorization: `Bearer ${token}` },
+        });
+        if (!res.ok) throw new Error(`HTTP error! status: ${res.status}`);
+        const data = (await res.json()) as { name: string; category: string }[];
+
+        // Extract unique vendor names
+        const vendors = Array.from(new Set(data.map((v: any) => v.name).filter(Boolean)));
+        setUniqueVendors(vendors);
+
+      } catch (err) {
+        console.error("Failed to fetch vendors:", err);
+      }
+    };
+
+    fetchVendors();
+  }, []);
+
 
   // Helper to get select options for a template name
   const getOptionsByName = (name: string) =>
@@ -173,6 +200,7 @@ function RouteComponent() {
                 <th className="border px-2 py-1">Follow Up</th>
                 <th className="border px-2 py-1">Assigned To</th>
                 <th className="border px-2 py-1">Frequency</th>
+                { name === "Orders" && <th className="border px-2 py-1">Vendor</th> }
                 <th className="border px-2 py-1">Assigned Sites</th>
                 <th className="border px-2 py-1"></th>
               </tr>
@@ -288,6 +316,25 @@ function RouteComponent() {
                       </SelectContent>
                     </Select>
                   </td>
+                  { name === "Orders" && (
+                    <td className="border px-2 py-1">
+                      <Select
+                        value={row.vendor || ""}
+                        onValueChange={val => handleItemChange(idx, "vendor", val)}
+                      >
+                        <SelectTrigger>
+                          <SelectValue placeholder="Select Vendor" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {uniqueVendors.map((v, i) => (
+                            <SelectItem key={i} value={v}>
+                              {v}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </td>
+                  )}
                   <td className="border px-2 py-1">
                   <MultiSelect
                     options={selectedSites}
