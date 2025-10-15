@@ -3,6 +3,8 @@ const router = express.Router();
 const AuditTemplate = require('../../models/audit/auditTemplate');
 const AuditInstance = require('../../models/audit/auditInstance');
 const AuditItem = require('../../models/audit/auditItem');
+const OrderRec = require('../../models/OrderRec');
+const Vendor = require('../../models/Vendor');
 
 // GET /api/audit/category-options
 router.get('/category-options', async (req, res) => {
@@ -716,6 +718,7 @@ router.post('/instance', async (req, res) => {
           frequency: item.frequency || freq,
           issueRaised: item.issueRaised,
           requestOrder: item.requestOrder,
+          suppliesVendor: item.suppliesVendor,
           currentIssueStatus: item.issueRaised === true ? "Created" : undefined,
         };
 
@@ -769,10 +772,92 @@ router.post('/instance', async (req, res) => {
 
 
         createdInstances.push({ frequency: freq, instanceId: instance._id });
-        // Handle requestOrder logic
-        if (item.requestOrder === true) {
-          // TODO: Add your request order handling logic here later
+        
+        // // Handle requestOrder logic
+        // if (item.requestOrder === true) {
+        //   const vendorDoc = await Vendor.findOne({ name: item.suppliesVendor, location: site });
+
+        //   if (vendorDoc && vendorDoc.station_supplies && vendorDoc.station_supplies.length > 0) {
+        //     // Build the order categories array (only Station Supplies)
+        //     const categories = [
+        //       {
+        //         number: "5001",
+        //         name: "Station Supplies",
+        //         items: vendorDoc.station_supplies.map(supply => ({
+        //           gtin: supply.upc,
+        //           vin: supply.vin,
+        //           itemName: supply.name,
+        //           size: supply.size,
+        //           onHandQty: 0,
+        //           casesToOrderOld: 0,
+        //           completed: false,
+        //         })),
+        //         completed: false,
+        //       },
+        //     ];
+
+        //     // Create and save new OrderReconciliation record
+        //     const orderRec = new OrderRec({
+        //       categories,
+        //       site,
+        //       vendor: vendorDoc._id,
+        //       email: "julie@gen7fuel.com", // Person handling the station supplies orders
+        //       currentStatus: "Created",
+        //       statusHistory: [{ status: "Created", timestamp: new Date() }],
+        //       comments: [],
+        //     });
+
+        //     await orderRec.save();
+        // ----------------- Handle requestOrder logic -----------------
+        if (item.requestOrder === true && !existingItem?.orderCreated) {
+          const vendorDoc = await Vendor.findOne({ name: item.suppliesVendor, location: site });
+
+          if (vendorDoc && vendorDoc.station_supplies && vendorDoc.station_supplies.length > 0) {
+            const categories = [
+              {
+                number: "5001",
+                name: "Station Supplies",
+                items: vendorDoc.station_supplies.map(supply => ({
+                  gtin: supply.upc,
+                  vin: supply.vin,
+                  itemName: supply.name,
+                  size: supply.size,
+                  onHandQty: 0,
+                  casesToOrderOld: 0,
+                  completed: false,
+                })),
+                completed: false,
+              },
+            ];
+
+            const orderRec = new OrderRec({
+              categories,
+              site,
+              vendor: vendorDoc._id,
+              email: "julie@gen7fuel.com",
+              currentStatus: "Created",
+              statusHistory: [{ status: "Created", timestamp: new Date() }],
+              comments: [],
+            });
+
+            await orderRec.save();
+
+            // Update the audit item to mark order as created
+            await AuditItem.updateOne(
+              { instance: instance._id, item: item.item },
+              { $set: { orderCreated: true } }
+            );
+
+            // Optional: emit a socket event if you’re using real-time updates
+            const io = req.app.get("io");
+            if (io) io.emit("orderCreated", orderRec);
+
+            console.log(`✅ Order created for vendor ${vendorDoc.name} at site ${site}:`, orderRec._id);
+          } else {
+            console.log(`⚠️ No station_supplies found for vendor ${item.suppliesVendor} at site ${site}`);
+          }
         }
+
       }
     }
 
@@ -839,10 +924,12 @@ router.put('/:id', async (req, res) => {
 
       console.log(`Merged item: ${updatedItem.item}`);
       return {
-        ...updatedItem,
-        assignedSites, // now includes lastChecked
+        ...updatedItem,                // override with new values (including vendor)
+        suppliesVendor: updatedItem.vendor ?? existingItem?.suppliesVendor ?? "", // ensure vendor is saved
+        assignedSites,
       };
     });
+
 
     template.items = mergedItems;
 

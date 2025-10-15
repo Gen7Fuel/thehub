@@ -32,6 +32,7 @@ interface AuditItem {
   lastChecked?: string;
   issueRaised?: boolean;
   requestOrder?: boolean;
+  orderCreated?: boolean;
 }
 
 export const Route = createFileRoute("/_navbarLayout/audit/checklist/$id")({
@@ -270,12 +271,9 @@ const sortItems = (list: AuditItem[]) => {
     const periodKey = getPeriodKey(frequency as any, currentDate);
 
     // 2️Check for Request Order items
-    const requestOrders = items.filter(item => item.requestOrder);
-    if (requestOrders.length > 0) {
-      // console.log("Items requesting order:", requestOrders.map(i => i.item));
-      // Optional: alert or process separately
-      // Example alert:
-      alert(`Items requesting orders: ${requestOrders.map(i => i.item).join(", ")}`);
+    const newlyRequestedOrders = items.filter(item => item.requestOrder && !item.orderCreated);
+    if (newlyRequestedOrders.length > 0) {
+      alert(`Items requesting orders: ${newlyRequestedOrders.map(i => i.item).join(", ")}`);
     }
 
 

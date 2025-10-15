@@ -29,6 +29,7 @@ interface ChecklistItem {
   assignedTo: string;
   frequency?: "daily" | "weekly" | "monthly" | "";
   assignedSites?: { site: string; assigned: boolean }[];
+  vendor?: string;
 }
 
 function RouteComponent() {
@@ -44,6 +45,8 @@ function RouteComponent() {
 
   const [sites, setSites] = useState<{ _id: string; stationName: string }[]>([]);
   const [selectedSites, setSelectedSites] = useState<string[]>([]);
+  
+  const [uniqueVendors, setUniqueVendors] = useState<string[]>([]);
 
   const navigate = useNavigate();
 
@@ -85,12 +88,13 @@ function RouteComponent() {
                 followUp: item.followUp || "",
                 assignedTo: item.assignedTo || "",
                 frequency: item.frequency || "",
+                vendor: item.suppliesVendor || "",
                 assignedSites: item.assignedSites || (res.data.sites || []).map((s: string) => ({
                   site: s,
                   assigned: false,
                 })),
               }))
-            : [{ category: "", item: "", status: "", followUp: "", assignedTo: "",  frequency: "", 
+            : [{ category: "", item: "", status: "", followUp: "", assignedTo: "",  frequency: "", vendor: "",
                   assignedSites: (res.data.sites || []).map((s: string) => ({
                     site: s,
                     assigned: false,
@@ -101,6 +105,33 @@ function RouteComponent() {
       })
       .catch(() => setError("Failed to load audit template"));
   }, [id]);
+
+  useEffect(() => {
+      const fetchVendors = async () => {
+        try {
+          const token = localStorage.getItem("token");
+          const res = await fetch("/api/vendors", {
+            headers: { Authorization: `Bearer ${token}` },
+          });
+          if (!res.ok) throw new Error(`HTTP error! status: ${res.status}`);
+          const data = (await res.json()) as { name: string; category: string }[];
+  
+          // Filter only vendors with category = "Station Supplies"
+          const stationVendors = data.filter(
+            (v) => v.category?.trim() === "Station Supplies"
+          );
+  
+          // Extract unique vendor names
+          const vendors = Array.from(new Set(stationVendors.map((v) => v.name).filter(Boolean)));
+          setUniqueVendors(vendors);
+  
+        } catch (err) {
+          console.error("Failed to fetch vendors:", err);
+        }
+      };
+  
+      fetchVendors();
+    }, []);
 
   const handleSiteToggle = (site: string) => {
     setSelectedSites(selected =>
@@ -140,6 +171,7 @@ function RouteComponent() {
       followUp: row.followUp,
       assignedTo: row.assignedTo,
       frequency: row.frequency, 
+      vendor: row.vendor || "",
       assignedSites: row.assignedSites || [],
     }));
 
@@ -315,27 +347,46 @@ function RouteComponent() {
                       </SelectContent>
                     </Select>
                   </td>
-                 <td className="border px-2 py-1">
-                  <MultiSelect
-                    options={selectedSites}
-                    selected={row.assignedSites?.filter(s => s.assigned).map(s => s.site) || []}
-                    onChange={(newSelected) => {
-                      setItems(prev =>
-                        prev.map((r, i) =>
-                          i === idx
-                            ? {
-                                ...r,
-                                assignedSites: selectedSites.map(site => ({
-                                  site,
-                                  assigned: newSelected.includes(site),
-                                })),
-                              }
-                            : r
-                        )
-                      );
-                    }}
-                  />
-                </td>
+                  { name === "Orders" && (
+                    <td className="border px-2 py-1">
+                      <Select
+                        value={row.vendor || ""}
+                        onValueChange={val => handleItemChange(idx, "vendor", val)}
+                      >
+                        <SelectTrigger>
+                          <SelectValue placeholder="Select Vendor" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {uniqueVendors.map((v, i) => (
+                            <SelectItem key={i} value={v}>
+                              {v}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </td>
+                  )}
+                  <td className="border px-2 py-1">
+                    <MultiSelect
+                      options={selectedSites}
+                      selected={row.assignedSites?.filter(s => s.assigned).map(s => s.site) || []}
+                      onChange={(newSelected) => {
+                        setItems(prev =>
+                          prev.map((r, i) =>
+                            i === idx
+                              ? {
+                                  ...r,
+                                  assignedSites: selectedSites.map(site => ({
+                                    site,
+                                    assigned: newSelected.includes(site),
+                                  })),
+                                }
+                              : r
+                          )
+                        );
+                      }}
+                    />
+                  </td>
                   <td className="border px-2 py-1 text-center">
                     <button
                       type="button"

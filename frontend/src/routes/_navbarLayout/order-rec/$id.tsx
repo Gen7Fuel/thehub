@@ -544,10 +544,14 @@ function RouteComponent() {
                       <th className="sticky top-0 bg-white z-10 px-4 py-3">Item</th>
                       <th className="sticky top-0 bg-white z-10 px-4 py-3">Size</th>
                       <th className="sticky top-0 bg-white z-10 px-4 py-3">On Hand Qty</th>
-                      <th className="sticky top-0 bg-white z-10 px-4 py-3">Forecast</th>
-                      <th className="sticky top-0 bg-white z-10 px-4 py-3">Min Stock</th>
-                      <th className="sticky top-0 bg-white z-10 px-4 py-3">Items To Order</th>
-                      <th className="sticky top-0 bg-white z-10 px-4 py-3">Unit In Case</th>
+                      {cat.name !== "Station Supplies" && (
+                        <>
+                          <th className="sticky top-0 bg-white z-10 px-4 py-3">Forecast</th>
+                          <th className="sticky top-0 bg-white z-10 px-4 py-3">Min Stock</th>
+                          <th className="sticky top-0 bg-white z-10 px-4 py-3">Items To Order</th>
+                          <th className="sticky top-0 bg-white z-10 px-4 py-3">Unit In Case</th>
+                        </>
+                      )}
                       <th className="sticky top-0 bg-white z-10 px-4 py-3">Cases To Order</th>
                       <th className="sticky top-0 bg-white z-10 px-4 py-3 text-center">
                         <span
@@ -616,10 +620,14 @@ function RouteComponent() {
                             item.onHandQty
                           )}
                         </td>
-                        <td className="px-4 py-3 text-center">{item.forecast}</td>
-                        <td className="px-4 py-3 text-center">{item.minStock}</td>
-                        <td className="px-4 py-3 text-center bg-cyan-100">{item.itemsToOrder}</td>
-                        <td className="px-4 py-3 text-center">{item.unitInCase}</td>
+                        {cat.name !== "Station Supplies" && (
+                          <>
+                            <td className="px-4 py-3 text-center">{item.forecast}</td>
+                            <td className="px-4 py-3 text-center">{item.minStock}</td>
+                            <td className="px-4 py-3 text-center bg-cyan-100">{item.itemsToOrder}</td>
+                            <td className="px-4 py-3 text-center">{item.unitInCase}</td>
+                         </>
+                        )}
                         <td className="px-4 py-3 text-center bg-cyan-100"> 
                           {item.casesToOrderOld !== undefined && item.casesToOrder !== item.casesToOrderOld ? (
                             <TooltipProvider>
@@ -667,7 +675,7 @@ function RouteComponent() {
       </Accordion>
 
       {/* Modal for editing item */}
-      <Dialog open={!!editItem} onOpenChange={(open:boolean) => !open && setEditItem(null)}>
+      {/* <Dialog open={!!editItem} onOpenChange={(open:boolean) => !open && setEditItem(null)}>
         <DialogContent>
           <DialogHeader>
             <DialogTitle className="text-center">
@@ -778,7 +786,127 @@ function RouteComponent() {
             )
           })()}
         </DialogContent>
+      </Dialog> */}
+      {/* Modal for editing item */}
+      <Dialog open={!!editItem} onOpenChange={(open: boolean) => !open && setEditItem(null)}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle className="text-center">
+              {editItem
+                ? orderRec.categories[editItem.catIdx].items[editItem.itemIdx].itemName
+                : 'Edit Item'}
+            </DialogTitle>
+          </DialogHeader>
+
+          {editItem && (() => {
+            const { catIdx, itemIdx } = editItem
+            const item = orderRec.categories[catIdx].items[itemIdx]
+            const category = orderRec.categories[catIdx] // ✅ get current category
+            const isFirst = itemIdx === 0
+            const isLast = itemIdx === orderRec.categories[catIdx].items.length - 1
+
+            // ✅ Hide specific fields only if category.name is "Station Supplies"
+            const visibleFields =
+              category.name === "Station Supplies"
+                ? ['onHandQty', 'casesToOrder']
+                : ['onHandQty', 'forecast', 'minStock', 'itemsToOrder', 'unitInCase', 'casesToOrder']
+
+            return (
+              <form
+                onSubmit={async e => {
+                  e.preventDefault()
+                  try {
+                    await axios.put(`/api/order-rec/${id}`, {
+                      categories: orderRec.categories
+                    }, {
+                      headers: {
+                        Authorization: `Bearer ${localStorage.getItem('token')}`
+                      }
+                    })
+                    setEditItem(null)
+                  } catch (err) {
+                    setError('Failed to save changes')
+                  }
+                }}
+                className="space-y-4"
+              >
+                {visibleFields.map(field => (
+                  <div key={field} className="flex flex-col items-center gap-1">
+                    <label className="block text-sm font-medium text-center">{camelCaseToTitleCase(field)}</label>
+                    {['onHandQty', 'casesToOrder'].includes(field) ? (
+                      <div className="flex items-center gap-2 justify-center">
+                        <Button
+                          type="button"
+                          size="icon"
+                          variant="ghost"
+                          className="h-8 w-8"
+                          tabIndex={-1}
+                          onClick={() => handleChange(catIdx, itemIdx, field, Number(item[field]) - 1)}
+                        >
+                          <Minus size={16} />
+                        </Button>
+                        <Input
+                          type="number"
+                          value={item[field]}
+                          onChange={e => handleChange(catIdx, itemIdx, field, Number(e.target.value))}
+                          onFocus={e => e.target.select()}
+                          className="w-24 text-center text-gray-900 font-semibold disabled:text-gray-900"
+                        />
+                        <Button
+                          type="button"
+                          size="icon"
+                          variant="ghost"
+                          className="h-8 w-8"
+                          tabIndex={-1}
+                          onClick={() => handleChange(catIdx, itemIdx, field, Number(item[field]) + 1)}
+                        >
+                          <Plus size={16} />
+                        </Button>
+                      </div>
+                    ) : (
+                      <div className="flex items-center justify-center">
+                        <Input
+                          type="number"
+                          value={item[field]}
+                          onChange={e => handleChange(catIdx, itemIdx, field, Number(e.target.value))}
+                          onFocus={e => e.target.select()}
+                          className="w-24 text-center text-gray-900 font-semibold disabled:text-gray-900"
+                          disabled
+                        />
+                      </div>
+                    )}
+                  </div>
+                ))}
+
+                <div className="flex justify-between gap-2 pt-4">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    disabled={isFirst}
+                    onClick={() => {
+                      if (!isFirst) setEditItem({ catIdx, itemIdx: itemIdx - 1 })
+                    }}
+                  >
+                    Back
+                  </Button>
+                  <Button type="submit">Save</Button>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    disabled={isLast}
+                    onClick={() => {
+                      if (!isLast) setEditItem({ catIdx, itemIdx: itemIdx + 1 })
+                    }}
+                  >
+                    Next
+                  </Button>
+                </div>
+              </form>
+            )
+          })()}
+        </DialogContent>
       </Dialog>
+
     </div>
   )
 }
