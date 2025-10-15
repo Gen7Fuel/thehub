@@ -847,23 +847,50 @@ router.post('/instance', async (req, res) => {
               { instance: instance._id, item: item.item },
               { $set: { orderCreated: true } }
             );
+            item.orderCreated = true;
+
 
             // Optional: emit a socket event if you’re using real-time updates
             const io = req.app.get("io");
             if (io) io.emit("orderCreated", orderRec);
+            // if (io) io.emit("orderCreated", { item: item.item, template, site });
 
-            console.log(`✅ Order created for vendor ${vendorDoc.name} at site ${site}:`, orderRec._id);
+            console.log(`Order created for vendor ${vendorDoc.name} at site ${site}:`, orderRec._id);
           } else {
-            console.log(`⚠️ No station_supplies found for vendor ${item.suppliesVendor} at site ${site}`);
+            console.log(`No station_supplies found for vendor ${item.suppliesVendor} at site ${site}`);
           }
         }
 
       }
     }
-
-
-    res.json({ message: "Audit saved successfully", instances: createdInstances });
-
+    const io = req.app.get("io");
+    if (io) {
+      io.emit("auditUpdated", {
+        template,
+        site,
+        frequencies: frequenciesToProcess,
+        updatedItems: items.map(i => ({
+          item: i.item,
+          checked: i.checked,
+          comment: i.comment,
+          issueRaised: i.issueRaised,
+          requestOrder: i.requestOrder,
+          assignedTo: i.assignedTo,
+          followUp: i.followUp,
+          status: i.status,
+          photos: i.photos,
+          frequency: i.frequency,
+          orderCreated: i.orderCreated,
+        })),
+        updatedAt: new Date(),
+      });
+    }
+    // res.json({ message: "Audit saved successfully", instances: createdInstances });
+    res.json({ 
+      message: "Audit saved successfully", 
+      instances: createdInstances,
+      updatedItems: await AuditItem.find({ instance: { $in: createdInstances.map(i => i.instanceId) } }) // fetch updated items
+    });
   } catch (err) {
     console.error("Error saving audit instance:", err);
     res.status(500).json({ error: err.message });

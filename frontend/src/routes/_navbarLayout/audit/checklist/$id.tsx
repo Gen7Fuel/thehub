@@ -4,6 +4,10 @@ import { ChecklistItemCard } from "@/components/custom/ChecklistItem";
 import { Button } from "@/components/ui/button";
 import { useContext } from "react";
 import { RouteContext } from "../checklist";
+import { getSocket } from "@/lib/websocket";
+
+const socket = getSocket();
+
 
 interface SelectOption {
   text: string;
@@ -34,6 +38,15 @@ interface AuditItem {
   requestOrder?: boolean;
   orderCreated?: boolean;
 }
+
+interface AuditUpdatePayload {
+  template: string;
+  site: string;
+  frequencies: string[];
+  updatedItems: Partial<AuditItem>[]; // <-- Partial here
+  updatedAt: string;
+}
+
 
 export const Route = createFileRoute("/_navbarLayout/audit/checklist/$id")({
   component: RouteComponent,
@@ -234,6 +247,31 @@ const sortItems = (list: AuditItem[]) => {
     if (id && site) fetchChecklist();
   }, [id, site, frequency]);
 
+  useEffect(() => {
+    if (!socket) return;
+
+    socket.on("auditUpdated", (payload: AuditUpdatePayload) => {
+      console.log("📡 Real-time audit update received:", payload);
+
+      if (payload.template !== id || payload.site !== site) return;
+
+      setItems((prev) => {
+        const updatedMap = new Map(payload.updatedItems.map((i) => [i.item, i]));
+
+        return prev.map((item) => {
+          const update = updatedMap.get(item.item);
+
+          // Merge the partial update into existing item and assert type
+          return update ? ({ ...item, ...update } as AuditItem) : item;
+        });
+      });
+    });
+
+    return () => {
+      socket.off("auditUpdated");
+    };
+  }, [socket, id, site]);
+
   // Handlers
   const handleCheck = (idx: number, checked: boolean) =>
     setItems((prev) => prev.map((item, i) => (i === idx ? { ...item, checked } : item)));
@@ -264,18 +302,17 @@ const sortItems = (list: AuditItem[]) => {
         `Items: ${raisedButUnchecked.map(i => i.item).join(", ")}`
       );
       setSaving(false);
-      return; // stop the save
+      return;
     }
 
     const token = localStorage.getItem("token");
     const periodKey = getPeriodKey(frequency as any, currentDate);
 
-    // 2️Check for Request Order items
+    // 2️⃣ Check for Request Order items
     const newlyRequestedOrders = items.filter(item => item.requestOrder && !item.orderCreated);
     if (newlyRequestedOrders.length > 0) {
       alert(`Items requesting orders: ${newlyRequestedOrders.map(i => i.item).join(", ")}`);
     }
-
 
     try {
       const res = await fetch("/api/audit/instance", {
@@ -294,120 +331,38 @@ const sortItems = (list: AuditItem[]) => {
         }),
       });
 
+      const data = await res.json(); // parse JSON once
+
       if (!res.ok) {
-        const err = await res.json();
-        alert(err.error || "Failed to save checklist.");
+        alert(data.error || "Failed to save checklist.");
       } else {
         alert("Checklist saved!");
       }
-    } catch (err) {
-      console.error("Failed to save checklist:", err);
-      alert("Error saving checklist.");
-    } finally {
-      setSaving(false);
 
-      // Sort after save
-      const sorted = [...items].sort((a, b) => {
+      // Use updated items from backend if available, otherwise fallback
+      const updatedItems = data.updatedItems || items;
+
+      const sorted = [...updatedItems].sort((a, b) => {
         if (a.checked !== b.checked) return a.checked ? 1 : -1;
         const aFreq = frequencyOrder[a.frequency || "daily"];
         const bFreq = frequencyOrder[b.frequency || "daily"];
         return aFreq - bFreq;
       });
-      setItems(sorted); // update editable list with sorted order
+
+      setItems(sorted);
+
+    } catch (err) {
+      console.error("Failed to save checklist:", err);
+      alert("Error saving checklist.");
+    } finally {
+      setSaving(false);
     }
   };
+
 
   const totalItems = items.length;
   const checkedItems = items.filter(item => item.checked).length;
 
-  // return (
-  //   <>
-  //     {/* Frequency filter */}
-  //     <div className="flex gap-4 mb-4">
-  //       {["all", "daily", "weekly", "monthly"].map((f) => (
-  //         <Button
-  //           key={f}
-  //           variant={frequency === f ? "default" : "outline"}
-  //           onClick={() => setFrequency(f as any)}
-  //         >
-  //           {f.charAt(0).toUpperCase() + f.slice(1)}
-  //         </Button>
-  //       ))}
-  //     </div>
-
-  //     {/* Categroies Legend */}
-  //     <div className="flex gap-4 mb-4 flex-wrap">
-  //       {categories.filter((cat): cat is string => !!cat).map((cat) => {
-  //         const { border, bg } = categoryColorMap[cat];
-  //         return (
-  //           <div
-  //             key={cat}
-  //             className={`flex items-center gap-1 px-2 py-1 rounded border ${border}`}
-  //           >
-  //             <div className={`w-4 h-4 ${bg} rounded-sm`}></div>
-  //             <span className="text-sm">{cat}</span>
-  //           </div>
-  //         );
-  //       })}
-  //     </div>
-
-
-  //     {/* Checklist form */}
-  //     {loading ? (
-  //       <div>Loading...</div>
-  //     ) : !items.length ? (
-  //       <div>No checklist items for this template.</div>
-  //     ) : (
-  //       <>
-  //         {/* Top bar: Save button on left, summary on right */}
-  //         <div className="flex items-center justify-between mb-4 px-2">
-  //           {/* Save Checklist button on the left */}
-  //           <Button
-  //             type="button"
-  //             onClick={handleSave}
-  //             disabled={saving}
-  //             className="mr-4" // adds some gap between button and cards
-  //           >
-  //             {saving ? "Saving..." : "Save Checklist"}
-  //           </Button>
-
-  //           {/* Summary text on the right */}
-  //           <div className="text-gray-500 text-medium">
-  //             Items checked {checkedItems} of total {totalItems} items
-  //           </div>
-  //         </div>
-
-  //         <form
-  //           onSubmit={(e) => {
-  //             e.preventDefault();
-  //             handleSave();
-  //           }}
-  //         >
-  //           <div className="flex flex-col gap-4 mb-4">
-  //             {items.map((item, idx) => (
-  //             <ChecklistItemCard
-  //               key={item._id || idx}
-  //               item={item}
-  //               mode="station"
-  //               templateName={templateName}
-  //               onCheck={(checked) => handleCheck(idx, checked)}
-  //               onComment={(comment) => handleComment(idx, comment)}
-  //               onPhotos={(photos) => handlePhotos(idx, photos)}
-  //               onFieldChange={(field, value) => handleFieldChange(idx, field, value)}
-  //               selectTemplates={selectTemplates}
-  //               borderColor={categoryColorMap[item.category || ""].border}
-  //               lastChecked={item.lastChecked}
-  //             />
-  //             ))}
-  //           </div>
-  //           <Button type="submit" disabled={saving}>
-  //             {saving ? "Saving..." : "Save Checklist"}
-  //           </Button>
-  //         </form>
-  //       </>
-  //     )}
-  //   </>
-  // );
   return (
     <>
       {/* Frequency filter */}
