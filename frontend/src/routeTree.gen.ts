@@ -50,7 +50,7 @@ import { Route as NavbarLayoutPayablesReviewRouteImport } from './routes/_navbar
 import { Route as NavbarLayoutPayablesListRouteImport } from './routes/_navbarLayout/payables/list'
 import { Route as NavbarLayoutPayablesImagesRouteImport } from './routes/_navbarLayout/payables/images'
 import { Route as NavbarLayoutOrderRecWorkflowRouteImport } from './routes/_navbarLayout/order-rec/workflow'
-import { Route as NavbarLayoutOrderRecListnewRouteImport } from './routes/_navbarLayout/order-rec/listnew'
+import { Route as NavbarLayoutOrderRecListoldRouteImport } from './routes/_navbarLayout/order-rec/listold'
 import { Route as NavbarLayoutOrderRecListRouteImport } from './routes/_navbarLayout/order-rec/list'
 import { Route as NavbarLayoutOrderRecDashboardcopyRouteImport } from './routes/_navbarLayout/order-rec/dashboard copy'
 import { Route as NavbarLayoutOrderRecIdRouteImport } from './routes/_navbarLayout/order-rec/$id'
@@ -307,10 +307,10 @@ const NavbarLayoutOrderRecWorkflowRoute =
     path: '/workflow',
     getParentRoute: () => NavbarLayoutOrderRecRoute,
   } as any)
-const NavbarLayoutOrderRecListnewRoute =
-  NavbarLayoutOrderRecListnewRouteImport.update({
-    id: '/listnew',
-    path: '/listnew',
+const NavbarLayoutOrderRecListoldRoute =
+  NavbarLayoutOrderRecListoldRouteImport.update({
+    id: '/listold',
+    path: '/listold',
     getParentRoute: () => NavbarLayoutOrderRecRoute,
   } as any)
 const NavbarLayoutOrderRecListRoute =
@@ -564,7 +564,7 @@ export interface FileRoutesByFullPath {
   '/order-rec/$id': typeof NavbarLayoutOrderRecIdRoute
   '/order-rec/dashboard copy': typeof NavbarLayoutOrderRecDashboardcopyRoute
   '/order-rec/list': typeof NavbarLayoutOrderRecListRoute
-  '/order-rec/listnew': typeof NavbarLayoutOrderRecListnewRoute
+  '/order-rec/listold': typeof NavbarLayoutOrderRecListoldRoute
   '/order-rec/workflow': typeof NavbarLayoutOrderRecWorkflowRoute
   '/payables/images': typeof NavbarLayoutPayablesImagesRoute
   '/payables/list': typeof NavbarLayoutPayablesListRoute
@@ -631,7 +631,7 @@ export interface FileRoutesByTo {
   '/order-rec/$id': typeof NavbarLayoutOrderRecIdRoute
   '/order-rec/dashboard copy': typeof NavbarLayoutOrderRecDashboardcopyRoute
   '/order-rec/list': typeof NavbarLayoutOrderRecListRoute
-  '/order-rec/listnew': typeof NavbarLayoutOrderRecListnewRoute
+  '/order-rec/listold': typeof NavbarLayoutOrderRecListoldRoute
   '/order-rec/workflow': typeof NavbarLayoutOrderRecWorkflowRoute
   '/payables/images': typeof NavbarLayoutPayablesImagesRoute
   '/payables/list': typeof NavbarLayoutPayablesListRoute
@@ -708,7 +708,7 @@ export interface FileRoutesById {
   '/_navbarLayout/order-rec/$id': typeof NavbarLayoutOrderRecIdRoute
   '/_navbarLayout/order-rec/dashboard copy': typeof NavbarLayoutOrderRecDashboardcopyRoute
   '/_navbarLayout/order-rec/list': typeof NavbarLayoutOrderRecListRoute
-  '/_navbarLayout/order-rec/listnew': typeof NavbarLayoutOrderRecListnewRoute
+  '/_navbarLayout/order-rec/listold': typeof NavbarLayoutOrderRecListoldRoute
   '/_navbarLayout/order-rec/workflow': typeof NavbarLayoutOrderRecWorkflowRoute
   '/_navbarLayout/payables/images': typeof NavbarLayoutPayablesImagesRoute
   '/_navbarLayout/payables/list': typeof NavbarLayoutPayablesListRoute
@@ -790,7 +790,7 @@ export interface FileRouteTypes {
     | '/order-rec/$id'
     | '/order-rec/dashboard copy'
     | '/order-rec/list'
-    | '/order-rec/listnew'
+    | '/order-rec/listold'
     | '/order-rec/workflow'
     | '/payables/images'
     | '/payables/list'
@@ -857,7 +857,7 @@ export interface FileRouteTypes {
     | '/order-rec/$id'
     | '/order-rec/dashboard copy'
     | '/order-rec/list'
-    | '/order-rec/listnew'
+    | '/order-rec/listold'
     | '/order-rec/workflow'
     | '/payables/images'
     | '/payables/list'
@@ -933,7 +933,7 @@ export interface FileRouteTypes {
     | '/_navbarLayout/order-rec/$id'
     | '/_navbarLayout/order-rec/dashboard copy'
     | '/_navbarLayout/order-rec/list'
-    | '/_navbarLayout/order-rec/listnew'
+    | '/_navbarLayout/order-rec/listold'
     | '/_navbarLayout/order-rec/workflow'
     | '/_navbarLayout/payables/images'
     | '/_navbarLayout/payables/list'
@@ -1279,11 +1279,11 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof NavbarLayoutOrderRecWorkflowRouteImport
       parentRoute: typeof NavbarLayoutOrderRecRoute
     }
-    '/_navbarLayout/order-rec/listnew': {
-      id: '/_navbarLayout/order-rec/listnew'
-      path: '/listnew'
-      fullPath: '/order-rec/listnew'
-      preLoaderRoute: typeof NavbarLayoutOrderRecListnewRouteImport
+    '/_navbarLayout/order-rec/listold': {
+      id: '/_navbarLayout/order-rec/listold'
+      path: '/listold'
+      fullPath: '/order-rec/listold'
+      preLoaderRoute: typeof NavbarLayoutOrderRecListoldRouteImport
       parentRoute: typeof NavbarLayoutOrderRecRoute
     }
     '/_navbarLayout/order-rec/list': {
@@ -1750,7 +1750,7 @@ interface NavbarLayoutOrderRecRouteChildren {
   NavbarLayoutOrderRecIdRoute: typeof NavbarLayoutOrderRecIdRoute
   NavbarLayoutOrderRecDashboardcopyRoute: typeof NavbarLayoutOrderRecDashboardcopyRoute
   NavbarLayoutOrderRecListRoute: typeof NavbarLayoutOrderRecListRoute
-  NavbarLayoutOrderRecListnewRoute: typeof NavbarLayoutOrderRecListnewRoute
+  NavbarLayoutOrderRecListoldRoute: typeof NavbarLayoutOrderRecListoldRoute
   NavbarLayoutOrderRecWorkflowRoute: typeof NavbarLayoutOrderRecWorkflowRoute
   NavbarLayoutOrderRecIndexRoute: typeof NavbarLayoutOrderRecIndexRoute
 }
@@ -1760,7 +1760,7 @@ const NavbarLayoutOrderRecRouteChildren: NavbarLayoutOrderRecRouteChildren = {
   NavbarLayoutOrderRecDashboardcopyRoute:
     NavbarLayoutOrderRecDashboardcopyRoute,
   NavbarLayoutOrderRecListRoute: NavbarLayoutOrderRecListRoute,
-  NavbarLayoutOrderRecListnewRoute: NavbarLayoutOrderRecListnewRoute,
+  NavbarLayoutOrderRecListoldRoute: NavbarLayoutOrderRecListoldRoute,
   NavbarLayoutOrderRecWorkflowRoute: NavbarLayoutOrderRecWorkflowRoute,
   NavbarLayoutOrderRecIndexRoute: NavbarLayoutOrderRecIndexRoute,
 }
