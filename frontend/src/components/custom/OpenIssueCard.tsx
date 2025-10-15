@@ -98,15 +98,22 @@ export function OpenIssueCard({ issue, borderColor, mode = "station", onUpdateCl
       )}
 
       {/* Update Status button (interface mode only) */}
-      {mode === "interface" && onUpdateClick && (
-        <Button
-          onClick={() => onUpdateClick(issue._id, issue.currentIssueStatus || "Created")}
-          variant="secondary"
-          className="mt-2 w-fit"
-        >
-          Update Status
-        </Button>
+      {onUpdateClick && (
+        ((mode === "interface") ||
+          (mode === "station" && issue.assignedTo?.trim() === "Station Manager")) && (
+          <Button
+            onClick={() =>
+              onUpdateClick(issue._id, issue.currentIssueStatus || "Created")
+            }
+            variant="secondary"
+            className="mt-2 w-fit"
+          >
+            Update Status
+          </Button>
+        )
       )}
+
+
 
       {/* Images dialog */}
       <Dialog open={viewImagesOpen} onOpenChange={setViewImagesOpen}>
