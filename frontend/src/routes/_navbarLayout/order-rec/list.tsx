@@ -1,121 +1,71 @@
-import { createFileRoute, Link } from '@tanstack/react-router'
-import { useEffect, useState } from 'react'
-import axios from 'axios'
-import { DatePicker } from '@/components/custom/datePicker'
-import { LocationPicker } from '@/components/custom/locationPicker'
-import { VendorPicker } from '@/components/custom/vendorPicker'
-import { Button } from '@/components/ui/button'
-import { toUTC } from '@/lib/utils'
+import { SitePicker } from '@/components/custom/sitePicker'
+import { createFileRoute, useNavigate } from '@tanstack/react-router'
 
 export const Route = createFileRoute('/_navbarLayout/order-rec/list')({
   component: RouteComponent,
+  validateSearch: (search: { site: string }) => ({
+    site: search.site ?? localStorage.getItem('location'),
+  }),
+  loaderDeps: ({ search: { site }}) => ({ site }),
+  loader: ({ deps: { site } }) => fetchOrderRecs(site),
 })
 
-async function fetchOrderRecs(location: string, vendor: string, date: Date | undefined, setOrderRecs: (data: any[]) => void, setError: (msg: string) => void, setLoading: (loading: boolean) => void) {
-  setLoading(true)
-  try {
-    const params: any = { site: location }
-    if (vendor) params.vendor = vendor
-    if (date) params.date = toUTC(date).toISOString().split('T')[0]
-    // add authorization header with bearer token
-    const token = localStorage.getItem('token')
-    const res = await axios.get('/api/order-rec', {
-      params,
-      headers: {
-      Authorization: token ? `Bearer ${token}` : undefined,
-      },
-    })
-    setOrderRecs(res.data)
-  } catch (err) {
-    setError('Failed to fetch order recs')
-  } finally {
-    setLoading(false)
-  }
-}
-
 function RouteComponent() {
-  const [orderRecs, setOrderRecs] = useState<any[]>([])
-  const [loading, setLoading] = useState(true)
-  const [error, setError] = useState<string | null>(null)
-  const [date, setDate] = useState<Date | undefined>(new Date());
-  const [location, setLocation] = useState<string>(localStorage.getItem('location') || '')
-  const [vendor, setVendor] = useState<string>('')
-  const [showAdvanced, setShowAdvanced] = useState(false)
+  const { site } = Route.useSearch()
+  const navigate = useNavigate({ from: Route.fullPath })
+  const data = Route.useLoaderData()
 
-  useEffect(() => {
-    if (location) {
-      fetchOrderRecs(location, showAdvanced ? vendor : '', showAdvanced ? date : undefined, setOrderRecs, setError, setLoading)
-    }
-  }, [date, location, vendor, showAdvanced])
-
-  if (loading) return <div>Loading...</div>
-  if (error) return <div>{error}</div>
+  const updateSite = (newSite: string) => {
+    navigate({ search: { site: newSite } })
+  }
 
   return (
+    <>
+    <SitePicker value={site} onValueChange={updateSite} />
+    
     <div className="container mx-auto p-6 max-w-2xl">
-      <div className="flex items-center justify-between mb-4">
-        <h1 className="text-2xl font-bold">Order Reconciliation Files</h1>
-        <Button
-          variant={showAdvanced ? "default" : "outline"}
-          onClick={() => setShowAdvanced(v => !v)}
-        >
-          {showAdvanced ? "Hide Advanced Filter" : "Advanced Filter"}
-        </Button>
-      </div>
-      <div className="mb-4 flex gap-4 flex-wrap">
-        <div>
-          <label className="block text-sm font-medium mb-1">Site</label>
-          <LocationPicker value='stationName' setStationName={setLocation} />
-        </div>
-        {showAdvanced && (
-          <>
-            <div>
-              <label className="block text-sm font-medium mb-1">Date</label>
-              <DatePicker date={date} setDate={setDate} />
-            </div>
-            <div>
-              <label className="block text-sm font-medium mb-1">Vendor</label>
-              <VendorPicker value={vendor} setVendor={setVendor} />
-            </div>
-          </>
-        )}
-      </div>
-      {orderRecs.length === 0 ? (
-        <div>No order reconciliation files found.</div>
+      <h1 className="text-2xl font-bold mb-4">Order Recommendations</h1>
+
+      {data.length === 0 ? (
+        <div>No order reconciliation files found for the selected site.</div>
       ) : (
         <ul className="space-y-4">
-          {orderRecs.map(rec => (
-            <li key={rec._id} className="border rounded p-0 hover:bg-gray-50 transition cursor-pointer flex items-center justify-between">
-              <Link
-                to="/order-rec/$id"
-                params={{ id: rec._id }}
-                className="block p-4 flex-1"
-                style={{ textDecoration: 'none' }}
-              >
-                <div className="flex items-center justify-between">
-                  <div className="font-semibold">{rec.filename}</div>
-                  <span
-                    className={`ml-2 px-2 py-1 rounded text-xs font-semibold
-                      ${rec.completed
-                        ? 'bg-green-100 text-green-700'
-                        : 'bg-gray-200 text-gray-700'}
-                    `}
-                  >
-                    {rec.completed ? 'Completed' : 'Incomplete'}
-                  </span>
+          {data.map((rec: any) => (
+            <li
+              key={rec._id}
+              className="border rounded p-4 hover:bg-gray-50 transition cursor-pointer"
+              onClick={() => navigate({ to: `/order-rec/$id`, params: { id: rec._id } })}
+            >
+              <div className="flex justify-between items-center">
+                <div>
+                  <h2 className="text-lg font-semibold">{rec.filename}</h2>
+                  <p className="text-sm text-gray-600">Uploaded: {new Date(rec.createdAt).toLocaleString()}</p>
+                  <p className="text-sm text-gray-600">Uploaded By: {rec.email}</p>
                 </div>
-                <div className="text-sm text-muted-foreground">
-                  Uploaded: {new Date(rec.createdAt).toLocaleString()}
+                <div className="text-right">
+                  <p className="text-sm">
+                    Status: <span>{rec.currentStatus}</span>
+                  </p>
+                  <p className="text-sm">Categories: {rec.categories.length}</p>
                 </div>
-                <div className="text-sm text-muted-foreground">
-                  Uploaded by: {rec.email || "Unknown"}
-                </div>
-                <div className="text-sm">Categories: {rec.categories.length}</div>
-              </Link>
+              </div>
             </li>
           ))}
         </ul>
       )}
     </div>
+    </>
   )
+}
+
+
+
+async function fetchOrderRecs(site: string) {
+  const response = await fetch(`/api/order-rec?site=${site}`, {
+    headers: {
+      Authorization: `Bearer ${localStorage.getItem('token') || ''}`,
+    },
+  })
+  const data = await response.json()
+  return data
 }
