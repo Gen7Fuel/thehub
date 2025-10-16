@@ -366,7 +366,7 @@ export const getOrderRecStatusColor = (status?: string) => {
     case "Delivered":
       return "#bbf7d0"; // light green
     case "Invoice Received":
-      return "#e0e7ff"; // light purple/indigo
+      return "#fbcfe8"; // light rose pink
     default:
       return "#f3f4f6"; // default light grey
   }

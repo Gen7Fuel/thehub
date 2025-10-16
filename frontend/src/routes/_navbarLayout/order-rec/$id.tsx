@@ -11,6 +11,7 @@ import { Input } from '@/components/ui/input'
 import { Textarea } from '@/components/ui/textarea'
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip'
 import { Trash2 } from 'lucide-react'
+import { getOrderRecStatusColor } from "@/lib/utils"
 // import { Switch } from "@/components/ui/switch";
 
 export const Route = createFileRoute('/_navbarLayout/order-rec/$id')({
@@ -442,18 +443,15 @@ function RouteComponent() {
       {/* Current Status */}
       <div className="flex items-center gap-2">
         <span className="font-medium">Current Status:</span>
-        <span
-          className={`
-            px-3 py-1 rounded-full text-white text-sm
-            ${orderRec?.currentStatus === "Created" ? "bg-yellow-100 text-yellow-800" : ""}
-            ${orderRec?.currentStatus === "Completed" ? "bg-yellow-300 text-yellow-900" : ""}
-            ${orderRec?.currentStatus === "Placed" ? "bg-blue-200 text-blue-800" : ""}
-            ${orderRec?.currentStatus === "Delivered" ? "bg-green-200 text-green-800" : ""}
-            ${orderRec?.currentStatus === "Invoice Received" ? "bg-indigo-200 text-indigo-800" : ""}
-          `}
-        >
-          {orderRec?.currentStatus || "N/A"}
-        </span>
+          <span
+            className="px-3 py-1 rounded-full text-sm font-medium text-gray-800"
+            style={{
+              backgroundColor: getOrderRecStatusColor(orderRec?.currentStatus),
+            }}
+          >
+            {orderRec?.currentStatus || "N/A"}
+          </span>
+
       </div>
 
       {/* Last Updated */}

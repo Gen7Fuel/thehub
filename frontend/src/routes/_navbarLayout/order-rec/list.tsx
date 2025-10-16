@@ -1,5 +1,6 @@
 import { SitePicker } from '@/components/custom/sitePicker'
 import { createFileRoute, useNavigate } from '@tanstack/react-router'
+import { getOrderRecStatusColor } from "@/lib/utils"
 
 export const Route = createFileRoute('/_navbarLayout/order-rec/list')({
   component: RouteComponent,
@@ -33,23 +34,44 @@ function RouteComponent() {
           {data.map((rec: any) => (
             <li
               key={rec._id}
-              className="border rounded p-4 hover:bg-gray-50 transition cursor-pointer"
+              className="border rounded p-4 hover:bg-gray-50 transition cursor-pointer flex flex-col gap-2"
               onClick={() => navigate({ to: `/order-rec/$id`, params: { id: rec._id } })}
             >
+              {/* Header Row */}
               <div className="flex justify-between items-center">
-                <div>
-                  <h2 className="text-lg font-semibold">{rec.filename}</h2>
-                  <p className="text-sm text-gray-600">Uploaded: {new Date(rec.createdAt).toLocaleString()}</p>
-                  <p className="text-sm text-gray-600">Uploaded By: {rec.email}</p>
-                </div>
-                <div className="text-right">
-                  <p className="text-sm">
-                    Status: <span>{rec.currentStatus}</span>
-                  </p>
-                  <p className="text-sm">Categories: {rec.categories.length}</p>
+                <div className="font-semibold text-base leading-snug line-clamp-2">{rec.filename}</div>
+
+                <div className="flex items-center gap-2 flex-shrink-0">
+                  <span
+                    className="px-3 py-1 rounded-full text-sm font-medium text-gray-800"
+                    style={{
+                      backgroundColor: getOrderRecStatusColor(rec?.currentStatus),
+                    }}
+                  >
+                    {rec?.currentStatus || "N/A"}
+                  </span>
+                  <span
+                    className={`px-2 py-1 rounded text-xs font-semibold whitespace-nowrap
+                      ${rec.completed
+                        ? "bg-green-100 text-green-700"
+                        : "bg-gray-200 text-gray-700"}
+                    `}
+                  >
+                    {rec.completed ? "Completed" : "Incomplete"}
+                  </span>
                 </div>
               </div>
+
+              {/* Meta info */}
+              <div className="text-sm text-muted-foreground">
+                Uploaded: {new Date(rec.createdAt).toLocaleString()}
+              </div>
+              <div className="text-sm text-muted-foreground">
+                Uploaded by: {rec.email || "Unknown"}
+              </div>
+              <div className="text-sm">Categories: {rec.categories.length}</div>
             </li>
+
           ))}
         </ul>
       )}
