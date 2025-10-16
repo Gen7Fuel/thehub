@@ -136,112 +136,139 @@ const sortItems = (list: AuditItem[]) => {
   }, []);
 
   // Fetch checklist
+//   const fetchChecklist = async () => {
+//     setLoading(true);
+//     const token = localStorage.getItem("token");
+
+//     try {
+//       if (frequency !== "all") {
+//         // single frequency (daily/weekly/monthly)
+//         const periodKey = getPeriodKey(frequency, currentDate);
+
+//         const instanceRes = await fetch(
+//           `/api/audit/instance?template=${id}&site=${encodeURIComponent(
+//             site
+//           )}&frequency=${frequency}&periodKey=${periodKey}`,
+//           { headers: { Authorization: `Bearer ${token}` } }
+//         );
+
+//         if (instanceRes.ok) {
+//           const instanceData = await instanceRes.json();
+//           if (instanceData?._id) {
+//             const itemsRes = await fetch(`/api/audit/items?instanceId=${instanceData._id}&templateId=${id}&site=${encodeURIComponent(
+//             site)}`, 
+//             {
+//               headers: { Authorization: `Bearer ${token}` },
+//             });
+//             if (itemsRes.ok) {
+//               const itemsData = await itemsRes.json();
+//               setItems(sortItems(itemsData));
+//               setLoading(false);
+//               return;
+//             }
+//             setTemplateName("");
+//           }
+//         } 
+//         // fallback → template items
+//           const templateRes = await fetch(`/api/audit/${id}?frequency=${frequency}&site=${encodeURIComponent(site)}`, { headers: { Authorization: `Bearer ${token}` } });
+//           // console.log('site:',site)
+//           if (templateRes.ok) {
+//             const templateData = await templateRes.json();
+//             setTemplateName(templateData.templateName || "");
+//             setItems(sortItems(
+//               (templateData.items || []).filter((item: AuditItem) => item.frequency === frequency).map((item: AuditItem) => ({
+//                 ...item,
+//                 checked: false,
+//                 comment: "",
+//                 photos: [],
+//               }))
+//             ));
+//           }
+        
+//       } else {
+//         // "all" → merge daily, weekly, monthly
+//         const frequencies: ("daily" | "weekly" | "monthly")[] = ["daily", "weekly", "monthly"];
+//         const allItems: AuditItem[] = [];
+
+//         // fetch template once
+//         const templateRes = await fetch(`/api/audit/${id}?frequency=${frequency}&site=${encodeURIComponent(site)}`, { headers: { Authorization: `Bearer ${token}` } });
+//         const templateData = templateRes.ok ? await templateRes.json() : { items: [] };
+//         const templateItems: AuditItem[] = templateData.items || [];
+
+//         for (const freq of frequencies) {
+//           const periodKey = getPeriodKey(freq, currentDate);
+
+//           // check if instance exists
+//           const instanceRes = await fetch(
+//             `/api/audit/instance?template=${id}&site=${encodeURIComponent(site)}&frequency=${freq}&periodKey=${periodKey}`,
+//             { headers: { Authorization: `Bearer ${token}` } }
+//           );
+
+//           if (instanceRes.ok) {
+//             const instanceData = await instanceRes.json();
+//             if (instanceData?._id) {
+//               const itemsRes = await fetch(`/api/audit/items?instanceId=${instanceData._id}&templateId=${id}&site=${encodeURIComponent(
+//             site)}`,  {
+//                 headers: { Authorization: `Bearer ${token}` },
+//               });
+//               if (itemsRes.ok) {
+//                 const instanceItems = await itemsRes.json();
+//                 allItems.push(...instanceItems);
+//                 setTemplateName("");
+//                 continue; // skip template fallback
+//               }
+//             }
+//           } 
+//           // fallback to template for this frequency
+//           const freqTemplateItems = templateItems
+//             .filter((item: AuditItem) => item.frequency === freq)
+//             .map((item: AuditItem) => ({
+//               ...item,
+//               checked: false,
+//               comment: "",
+//               photos: [],
+//             }));
+//             setTemplateName(templateData.templateName || "");
+
+//           allItems.push(...freqTemplateItems);
+//         }
+
+//         setItems(sortItems(allItems));
+//       }
+//     } catch (err) {
+//       console.error("Failed to fetch checklist:", err);
+//       setItems([]);
+//     } finally {
+//     setLoading(false);
+//   }
+// };
   const fetchChecklist = async () => {
     setLoading(true);
     const token = localStorage.getItem("token");
 
     try {
-      if (frequency !== "all") {
-        // single frequency (daily/weekly/monthly)
-        const periodKey = getPeriodKey(frequency, currentDate);
-
-        const instanceRes = await fetch(
-          `/api/audit/instance?template=${id}&site=${encodeURIComponent(
-            site
-          )}&frequency=${frequency}&periodKey=${periodKey}`,
-          { headers: { Authorization: `Bearer ${token}` } }
-        );
-
-        if (instanceRes.ok) {
-          const instanceData = await instanceRes.json();
-          if (instanceData?._id) {
-            const itemsRes = await fetch(`/api/audit/items?instanceId=${instanceData._id}&templateId=${id}&site=${encodeURIComponent(
-            site)}`, 
-            {
-              headers: { Authorization: `Bearer ${token}` },
-            });
-            if (itemsRes.ok) {
-              const itemsData = await itemsRes.json();
-              setItems(sortItems(itemsData));
-              setLoading(false);
-              return;
-            }
-            setTemplateName("");
-          }
-        } 
-        // fallback → template items
-          const templateRes = await fetch(`/api/audit/${id}?frequency=${frequency}&site=${encodeURIComponent(site)}`, { headers: { Authorization: `Bearer ${token}` } });
-          // console.log('site:',site)
-          if (templateRes.ok) {
-            const templateData = await templateRes.json();
-            setTemplateName(templateData.templateName || "");
-            setItems(sortItems(
-              (templateData.items || []).filter((item: AuditItem) => item.frequency === frequency).map((item: AuditItem) => ({
-                ...item,
-                checked: false,
-                comment: "",
-                photos: [],
-              }))
-            ));
-          }
-        
-      } else {
-        // "all" → merge daily, weekly, monthly
-        const frequencies: ("daily" | "weekly" | "monthly")[] = ["daily", "weekly", "monthly"];
-        const allItems: AuditItem[] = [];
-
-        // fetch template once
-        const templateRes = await fetch(`/api/audit/${id}?frequency=${frequency}&site=${encodeURIComponent(site)}`, { headers: { Authorization: `Bearer ${token}` } });
-        const templateData = templateRes.ok ? await templateRes.json() : { items: [] };
-        const templateItems: AuditItem[] = templateData.items || [];
-
-        for (const freq of frequencies) {
-          const periodKey = getPeriodKey(freq, currentDate);
-
-          // check if instance exists
-          const instanceRes = await fetch(
-            `/api/audit/instance?template=${id}&site=${encodeURIComponent(site)}&frequency=${freq}&periodKey=${periodKey}`,
-            { headers: { Authorization: `Bearer ${token}` } }
-          );
-
-          if (instanceRes.ok) {
-            const instanceData = await instanceRes.json();
-            if (instanceData?._id) {
-              const itemsRes = await fetch(`/api/audit/items?instanceId=${instanceData._id}&templateId=${id}&site=${encodeURIComponent(
-            site)}`,  {
-                headers: { Authorization: `Bearer ${token}` },
-              });
-              if (itemsRes.ok) {
-                const instanceItems = await itemsRes.json();
-                allItems.push(...instanceItems);
-                setTemplateName("");
-                continue; // skip template fallback
-              }
-            }
-          } 
-          // fallback to template for this frequency
-          const freqTemplateItems = templateItems
-            .filter((item: AuditItem) => item.frequency === freq)
-            .map((item: AuditItem) => ({
-              ...item,
-              checked: false,
-              comment: "",
-              photos: [],
-            }));
-            setTemplateName(templateData.templateName || "");
-
-          allItems.push(...freqTemplateItems);
+      const res = await fetch(
+        `/api/audit/items-full?templateId=${id}&site=${encodeURIComponent(
+          site
+        )}&date=${currentDate.toISOString()}&frequency=${frequency}`,
+        {
+          headers: { Authorization: `Bearer ${token}` },
         }
+      );
 
-        setItems(sortItems(allItems));
-      }
+      if (!res.ok) throw new Error("Failed to fetch checklist");
+
+      const data = await res.json();
+
+      setTemplateName(data.templateName || "");
+      setItems(sortItems(data.items)); // optional: can skip if backend already sorts
     } catch (err) {
       console.error("Failed to fetch checklist:", err);
       setItems([]);
     } finally {
-    setLoading(false);
-  }
-};
+      setLoading(false);
+    }
+  };
 
   useEffect(() => {
     if (id && site) fetchChecklist();
