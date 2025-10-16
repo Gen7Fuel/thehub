@@ -193,6 +193,95 @@ router.get('/items', async (req, res) => {
   }
 });
 
+//--GET ALL THE ITEMS--
+router.get("/items-full", async (req, res) => {
+  try {
+    const { templateId, site, date, frequency } = req.query;
+    if (!templateId || !site || !frequency || !date)
+      return res.status(400).json({ error: "Missing required params" });
+
+    const templateDoc = await AuditTemplate.findById(templateId).lean();
+    if (!templateDoc) return res.status(404).json({ error: "Template not found" });
+
+    const frequencies =
+      frequency === "all" ? ["daily", "weekly", "monthly"] : [frequency];
+
+    const freqOrder = { daily: 1, weekly: 2, monthly: 3 };
+
+    // fetch items for all frequencies in parallel
+    const itemsPerFrequency = await Promise.all(
+      frequencies.map(async (freq) => {
+        const periodKey = getPeriodKey(freq, new Date(date));
+
+        // 1️⃣ try fetch instance
+        const instance = await AuditInstance.findOne({
+          template: templateId,
+          site,
+          frequency: freq,
+          periodKey,
+        }).lean();
+
+        let items = [];
+
+        if (instance) {
+          // 1a️⃣ fetch items from instance
+          const instanceItems = await AuditItem.find({ instance: instance._id }).lean();
+
+          items = instanceItems.map((item) => {
+            const templateItem = templateDoc.items.find((i) => i.item === item.item);
+            const assignedSite = templateItem?.assignedSites?.find((s) => s.site === site);
+            return {
+              ...item,
+              lastChecked: assignedSite?.lastChecked || null,
+              assignedSite,
+              frequency: freq,
+            };
+          });
+        } else {
+          // 1b️⃣ fallback to template items
+          const templateItems = templateDoc.items
+            .filter((i) => i.frequency === freq)
+            .map((i) => ({
+              ...i,
+              checked: false,
+              comment: "",
+              photos: [],
+              assignedSite: i.assignedSites?.find((s) => s.site === site),
+              lastChecked: i.assignedSites?.find((s) => s.site === site)?.lastChecked || null,
+              frequency: freq,
+            }));
+
+          // filter same way as your template GET route
+          items = site
+            ? templateItems.filter((i) => i.assignedSite?.assigned && !i.assignedSite?.issueRaised)
+            : templateItems;
+        }
+
+        return items;
+      })
+    );
+
+    // merge all frequencies
+    const allItems = itemsPerFrequency.flat();
+
+    // sort like in your frontend
+    const sortedItems = allItems.sort((a, b) => {
+      if (a.checked !== b.checked) return a.checked ? 1 : -1;
+      return freqOrder[a.frequency] - freqOrder[b.frequency];
+    });
+
+    res.json({
+      items: sortedItems,
+      templateName: templateDoc.templateName,
+      sites: templateDoc.sites,
+      description: templateDoc.description,
+    });
+  } catch (err) {
+    console.error("Error fetching items-full:", err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
 
 // -- GET ITEMS WHICH HAVE ISSUE RAISED--
 // router.get('/open-issues', async (req, res) => {
