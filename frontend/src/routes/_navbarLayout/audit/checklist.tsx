@@ -76,6 +76,10 @@ import { Button } from '@/components/ui/button'
 import axios from "axios"
 import { LocationPicker } from "@/components/custom/locationPicker";
 import { createContext } from "react";
+import { getSocket } from "@/lib/websocket";
+
+
+const socket = getSocket();
 
 export const RouteContext = createContext<{
   stationName: string;
@@ -123,6 +127,43 @@ function RouteComponent() {
     // navigate back to checklist root
     // navigate({ to: "/audit/checklist"});
   };
+
+  useEffect(() => {
+  if (!socket || !stationName) return;
+
+  // 🔹 Listen for issue changes
+  socket.on("issueUpdated", (payload) => {
+    console.log("📡 Real-time issue update:", payload);
+
+    // Only handle updates for the active site
+    if (payload.site !== stationName) return;
+
+    // 🔸 Case 1: New issue created → add to open issues
+    if (payload.action === "created") {
+      setOpenIssues((prev) => {
+        const exists = prev.some(
+          (i) => i.item === payload.item && i.templateId === payload.template
+        );
+        if (exists) return prev;
+        return [...prev, { item: payload.item, templateId: payload.template, category: payload.category }];
+      });
+    }
+
+    // 🔸 Case 2: Issue resolved → remove from open issues
+    if (payload.action === "resolved") {
+      setOpenIssues((prev) =>
+        prev.filter(
+          (i) => !(i.item === payload.item && i.templateId === payload.template)
+        )
+      );
+    }
+  });
+
+  return () => {
+    socket.off("issueUpdated");
+  };
+}, [socket, stationName]);
+
 
   // 🔹 refetch audits whenever stationName changes
   useEffect(() => {

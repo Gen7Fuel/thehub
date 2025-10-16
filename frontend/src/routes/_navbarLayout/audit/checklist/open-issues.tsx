@@ -2,6 +2,9 @@ import { createFileRoute } from "@tanstack/react-router";
 import { useContext, useEffect, useState } from "react";
 import { RouteContext } from "../checklist";
 import { OpenIssueCard } from "@/components/custom/OpenIssueCard";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
+import { Button } from "@/components/ui/button";
+
 
 interface OpenIssue {
   _id: string;
@@ -26,6 +29,11 @@ export function OpenIssuesPage() {
   const site = stationName || localStorage.getItem("location") || "";
 
   const [openIssues, setOpenIssues] = useState<OpenIssue[]>([]);
+  
+  const [statusDialogOpen, setStatusDialogOpen] = useState(false);
+  const [selectedIssueId, setSelectedIssueId] = useState<string | null>(null);
+  const [newStatus, setNewStatus] = useState("Created");
+  
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -68,6 +76,55 @@ export function OpenIssuesPage() {
       categoryColorMap[key] = CATEGORY_COLOR_CLASSES[idx % CATEGORY_COLOR_CLASSES.length];
   });
 
+  // Trigger dialog for selected issue
+  const handleStatusUpdateClick = (id: string, currentStatus?: string) => {
+    setSelectedIssueId(id);
+    setNewStatus(currentStatus || "Created");
+    setStatusDialogOpen(true);
+  };
+
+  // Save status
+  const handleSaveStatus = async () => {
+    if (!selectedIssueId) return;
+    try {
+      const res = await fetch(`/api/audit/issues/${selectedIssueId}/status`, {
+        method: "PUT",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${localStorage.getItem("token")}`,
+        },
+        body: JSON.stringify({ status: newStatus }),
+      });
+
+      if (!res.ok) throw new Error("Failed to update status");
+      const data = await res.json();
+
+      // Update locally
+      setOpenIssues((prev) =>
+        prev.map((it) =>
+          it._id === selectedIssueId
+            ? {
+                ...it,
+                currentIssueStatus: data.item.currentIssueStatus,
+                lastUpdated: new Date().toISOString(),
+                issueRaised: data.item.issueRaised,
+              }
+            : it
+        )
+      );
+      setStatusDialogOpen(false);
+      setSelectedIssueId(null);
+    } catch (err) {
+      console.error("Error updating status:", err);
+    }
+  };
+
+  const statusFlow: Record<string, string | null> = {
+    Created: "In Progress",
+    "In Progress": "Resolved",
+    Resolved: null,
+  };
+
 
   if (loading) return <div className="text-center mt-8">Loading...</div>;
   if (!openIssues.length) return <div className="text-center mt-8">No open issues found.</div>;
@@ -93,10 +150,43 @@ export function OpenIssuesPage() {
             key={idx}
             issue={issue}
             mode="station"
+            onUpdateClick={handleStatusUpdateClick}
             borderColor={categoryColorMap[issue.category || ""]?.border} // pass the string
           />
         ))}
       </div>
+      
+      {/* Status update dialog */}
+      <Dialog open={statusDialogOpen} onOpenChange={setStatusDialogOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Update Issue Status</DialogTitle>
+          </DialogHeader>
+          <div className="mt-3">
+            {selectedIssueId && (
+              <select
+                value={newStatus}
+                onChange={(e) => setNewStatus(e.target.value)}
+                className="border rounded px-2 py-1 w-full"
+              >
+                {/* Always include the current status */}
+                <option value={newStatus}>{newStatus}</option>
+      
+                  {/* Show only the next step if it exists */}
+                  {statusFlow[newStatus] && (
+                    <option value={statusFlow[newStatus]!}>{statusFlow[newStatus]}</option>
+                  )}
+              </select>
+            )}
+          </div>
+          <DialogFooter>
+            <Button onClick={() => setStatusDialogOpen(false)} variant="outline">
+                Cancel
+            </Button>
+            <Button onClick={handleSaveStatus}>Save</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

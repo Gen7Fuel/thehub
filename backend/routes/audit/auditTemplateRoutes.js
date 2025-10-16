@@ -3,6 +3,8 @@ const router = express.Router();
 const AuditTemplate = require('../../models/audit/auditTemplate');
 const AuditInstance = require('../../models/audit/auditInstance');
 const AuditItem = require('../../models/audit/auditItem');
+const OrderRec = require('../../models/OrderRec');
+const Vendor = require('../../models/Vendor');
 
 // GET /api/audit/category-options
 router.get('/category-options', async (req, res) => {
@@ -57,6 +59,7 @@ router.post('/', async (req, res) => {
       followUp: item.followUp || "",
       assignedTo: item.assignedTo || "",
       frequency: item.frequency || "daily",
+      suppliesVendor: item.vendor,
       assignedSites: item.assignedSites && item.assignedSites.length > 0
         ? item.assignedSites.map(siteEntry => ({
             site: siteEntry.site,
@@ -669,11 +672,240 @@ router.get('/:id', async (req, res) => {
 // });
 
 // Updates the instance and items with the latest data from the station end
+// router.post('/instance', async (req, res) => {
+//   try {
+//     const completedBy = req.user._id;
+//     const { template, site, frequency, periodKey, date, items } = req.body;
+
+//     if (!template || !site || !frequency || !date || !items) {
+//       return res.status(400).json({ error: "Missing fields" });
+//     }
+
+//     const frequenciesToProcess = frequency === "all"
+//       ? Array.from(new Set(items.map(item => item.frequency)))
+//       : [frequency];
+
+//     const createdInstances = [];
+
+//     for (const freq of frequenciesToProcess) {
+//       const periodKey = getPeriodKey(freq, date);
+
+//       let instance = await AuditInstance.findOne({ template, site, frequency: freq, periodKey });
+
+//       if (!instance) {
+//         instance = await AuditInstance.create({ template, site, frequency: freq, periodKey, completedBy, completedAt: new Date() });
+//       } else {
+//         instance.completedBy = completedBy;
+//         instance.completedAt = new Date();
+//         await instance.save();
+//       }
+
+//       const itemsForFreq = items.filter(item => item.frequency === freq);
+
+//       for (const item of itemsForFreq) {
+//         const existingItem = await AuditItem.findOne({ instance: instance._id, item: item.item });
+
+//         let updateFields = {
+//           category: item.category,
+//           item: item.item,
+//           status: item.status,
+//           followUp: item.followUp,
+//           assignedTo: item.assignedTo,
+//           checked: item.checked,
+//           photos: item.photos,
+//           comment: item.comment,
+//           instance: instance._id,
+//           frequency: item.frequency || freq,
+//           issueRaised: item.issueRaised,
+//           requestOrder: item.requestOrder,
+//           suppliesVendor: item.suppliesVendor,
+//           currentIssueStatus: item.issueRaised === true ? "Created" : undefined,
+//         };
+
+//         // Only set checkedAt when it goes from unchecked → checked
+//         if (item.checked && !existingItem?.checked) {
+//           updateFields.checkedAt = new Date();
+//         } else if (existingItem?.checkedAt) {
+//           // keep the previous checkedAt if it already existed
+//           updateFields.checkedAt = existingItem.checkedAt;
+//         }
+
+//         // ---- Update issueStatus array in AuditItem ----
+//         if (item.issueRaised === true) {
+//           let issueStatus = existingItem?.issueStatus || [];
+//           const createdStatus = issueStatus.find(s => s.status === "Created");
+//           if (createdStatus) {
+//             createdStatus.timestamp = new Date(); // update timestamp
+//           } else {
+//             issueStatus.push({ status: "Created", timestamp: new Date() });
+//           }
+//           updateFields.issueStatus = issueStatus;
+//         }
+
+//         await AuditItem.updateOne(
+//           { instance: instance._id, item: item.item },
+//           { $set: updateFields },
+//           { upsert: true }
+//         );
+//         console.log(`AuditItem updated: ${item.item}, issueRaised=${item.issueRaised}`);
+
+
+//         // Update lastChecked in template if newly checked
+//         let lastchecked = "";
+//         if (!existingItem?.checked && item.checked) {
+//           await AuditTemplate.updateOne(
+//             { _id: template, "items.item": item.item },
+//             { $set: { "items.$[itemElem].assignedSites.$[siteElem].lastChecked": new Date() } },
+//             { arrayFilters: [{ "itemElem.item": item.item }, { "siteElem.site": site }] }
+//           );
+//           lastchecked = new Date();
+//         }
+
+//         // Update issueRaised flag in template
+//         await AuditTemplate.updateOne(
+//           { _id: template },
+//           {
+//             $set: {
+//               "items.$[itemElem].assignedSites.$[siteElem].issueRaised": item.issueRaised === true
+//             }
+//           },
+//           { arrayFilters: [{ "itemElem.item": item.item }, { "siteElem.site": site }] }
+//         );
+
+
+//         createdInstances.push({ frequency: freq, instanceId: instance._id });
+        
+//         // // Handle requestOrder logic
+//         // if (item.requestOrder === true) {
+//         //   const vendorDoc = await Vendor.findOne({ name: item.suppliesVendor, location: site });
+
+//         //   if (vendorDoc && vendorDoc.station_supplies && vendorDoc.station_supplies.length > 0) {
+//         //     // Build the order categories array (only Station Supplies)
+//         //     const categories = [
+//         //       {
+//         //         number: "5001",
+//         //         name: "Station Supplies",
+//         //         items: vendorDoc.station_supplies.map(supply => ({
+//         //           gtin: supply.upc,
+//         //           vin: supply.vin,
+//         //           itemName: supply.name,
+//         //           size: supply.size,
+//         //           onHandQty: 0,
+//         //           casesToOrderOld: 0,
+//         //           completed: false,
+//         //         })),
+//         //         completed: false,
+//         //       },
+//         //     ];
+
+//         //     // Create and save new OrderReconciliation record
+//         //     const orderRec = new OrderRec({
+//         //       categories,
+//         //       site,
+//         //       vendor: vendorDoc._id,
+//         //       email: "julie@gen7fuel.com", // Person handling the station supplies orders
+//         //       currentStatus: "Created",
+//         //       statusHistory: [{ status: "Created", timestamp: new Date() }],
+//         //       comments: [],
+//         //     });
+
+//         //     await orderRec.save();
+//         // ----------------- Handle requestOrder logic -----------------
+//         if (item.requestOrder === true && !existingItem?.orderCreated) {
+//           const vendorDoc = await Vendor.findOne({ name: item.suppliesVendor, location: site });
+
+//           if (vendorDoc && vendorDoc.station_supplies && vendorDoc.station_supplies.length > 0) {
+//             const categories = [
+//               {
+//                 number: "5001",
+//                 name: "Station Supplies",
+//                 items: vendorDoc.station_supplies.map(supply => ({
+//                   gtin: supply.upc,
+//                   vin: supply.vin,
+//                   itemName: supply.name,
+//                   size: supply.size,
+//                   onHandQty: 0,
+//                   casesToOrderOld: 0,
+//                   completed: false,
+//                 })),
+//                 completed: false,
+//               },
+//             ];
+
+//             const orderRec = new OrderRec({
+//               categories,
+//               site,
+//               vendor: vendorDoc._id,
+//               email: "julie@gen7fuel.com",
+//               currentStatus: "Created",
+//               statusHistory: [{ status: "Created", timestamp: new Date() }],
+//               comments: [],
+//             });
+
+//             await orderRec.save();
+
+//             // Update the audit item to mark order as created
+//             await AuditItem.updateOne(
+//               { instance: instance._id, item: item.item },
+//               { $set: { orderCreated: true } }
+//             );
+//             item.orderCreated = true;
+
+
+//             // Optional: emit a socket event if you’re using real-time updates
+//             const io = req.app.get("io");
+//             if (io) io.emit("orderCreated", orderRec);
+//             // if (io) io.emit("orderCreated", { item: item.item, template, site });
+
+//             console.log(`Order created for vendor ${vendorDoc.name} at site ${site}:`, orderRec._id);
+//           } else {
+//             console.log(`No station_supplies found for vendor ${item.suppliesVendor} at site ${site}`);
+//           }
+//         }
+
+//       }
+//     }
+//     const io = req.app.get("io");
+//     if (io) {
+//       io.emit("auditUpdated", {
+//         template,
+//         site,
+//         frequencies: frequenciesToProcess,
+//         updatedItems: items.map(i => ({
+//           item: i.item,
+//           checked: i.checked,
+//           comment: i.comment,
+//           issueRaised: i.issueRaised,
+//           requestOrder: i.requestOrder,
+//           assignedTo: i.assignedTo,
+//           followUp: i.followUp,
+//           status: i.status,
+//           photos: i.photos,
+//           frequency: i.frequency,
+//           orderCreated: i.orderCreated,
+//           lastChecked: lastchecked
+//         })),
+//         updatedAt: new Date(),
+//       });
+//     }
+//     // res.json({ message: "Audit saved successfully", instances: createdInstances });
+//     res.json({ 
+//       message: "Audit saved successfully", 
+//       instances: createdInstances,
+//       updatedItems: await AuditItem.find({ instance: { $in: createdInstances.map(i => i.instanceId) } }) // fetch updated items
+//     });
+//   } catch (err) {
+//     console.error("Error saving audit instance:", err);
+//     res.status(500).json({ error: err.message });
+//   }
+// });
+
+// Updates the instance and items with the latest data from the station end
 router.post('/instance', async (req, res) => {
   try {
     const completedBy = req.user._id;
     const { template, site, frequency, periodKey, date, items } = req.body;
-
+    const io = req.app.get("io");
     if (!template || !site || !frequency || !date || !items) {
       return res.status(400).json({ error: "Missing fields" });
     }
@@ -683,6 +915,7 @@ router.post('/instance', async (req, res) => {
       : [frequency];
 
     const createdInstances = [];
+    const allUpdatedItems = []; // 🔹 collect updated items for response & socket emit
 
     for (const freq of frequenciesToProcess) {
       const periodKey = getPeriodKey(freq, date);
@@ -714,6 +947,8 @@ router.post('/instance', async (req, res) => {
           instance: instance._id,
           frequency: item.frequency || freq,
           issueRaised: item.issueRaised,
+          requestOrder: item.requestOrder,
+          suppliesVendor: item.suppliesVendor,
           currentIssueStatus: item.issueRaised === true ? "Created" : undefined,
         };
 
@@ -721,7 +956,6 @@ router.post('/instance', async (req, res) => {
         if (item.checked && !existingItem?.checked) {
           updateFields.checkedAt = new Date();
         } else if (existingItem?.checkedAt) {
-          // keep the previous checkedAt if it already existed
           updateFields.checkedAt = existingItem.checkedAt;
         }
 
@@ -730,11 +964,21 @@ router.post('/instance', async (req, res) => {
           let issueStatus = existingItem?.issueStatus || [];
           const createdStatus = issueStatus.find(s => s.status === "Created");
           if (createdStatus) {
-            createdStatus.timestamp = new Date(); // update timestamp
+            createdStatus.timestamp = new Date();
           } else {
             issueStatus.push({ status: "Created", timestamp: new Date() });
           }
           updateFields.issueStatus = issueStatus;
+          if (io && item.issueRaised !== existingItem?.issueRaised) {
+            io.emit("issueUpdated", {
+              template,
+              site,
+              item: item.item,
+              category: item.category,
+              action: item.issueRaised ? "created" : "resolved",
+              updatedAt: new Date(),
+            });
+          }
         }
 
         await AuditItem.updateOne(
@@ -744,12 +988,16 @@ router.post('/instance', async (req, res) => {
         );
         console.log(`AuditItem updated: ${item.item}, issueRaised=${item.issueRaised}`);
 
+        // Track lastChecked per item
+        let lastCheckedValue = null;
 
         // Update lastChecked in template if newly checked
         if (!existingItem?.checked && item.checked) {
+          lastCheckedValue = new Date();
+
           await AuditTemplate.updateOne(
             { _id: template, "items.item": item.item },
-            { $set: { "items.$[itemElem].assignedSites.$[siteElem].lastChecked": new Date() } },
+            { $set: { "items.$[itemElem].assignedSites.$[siteElem].lastChecked": lastCheckedValue } },
             { arrayFilters: [{ "itemElem.item": item.item }, { "siteElem.site": site }] }
           );
         }
@@ -765,13 +1013,76 @@ router.post('/instance', async (req, res) => {
           { arrayFilters: [{ "itemElem.item": item.item }, { "siteElem.site": site }] }
         );
 
+        // Handle requestOrder logic
+        if (item.requestOrder === true && !existingItem?.orderCreated) {
+          const vendorDoc = await Vendor.findOne({ name: item.suppliesVendor, location: site });
+
+          if (vendorDoc && vendorDoc.station_supplies?.length > 0) {
+            const categories = [
+              {
+                number: "5001",
+                name: "Station Supplies",
+                items: vendorDoc.station_supplies.map(supply => ({
+                  gtin: supply.upc,
+                  vin: supply.vin,
+                  itemName: supply.name,
+                  size: supply.size,
+                  onHandQty: 0,
+                  casesToOrderOld: 0,
+                  completed: false,
+                })),
+                completed: false,
+              },
+            ];
+
+            const orderRec = new OrderRec({
+              categories,
+              site,
+              vendor: vendorDoc._id,
+              email: "julie@gen7fuel.com",
+              currentStatus: "Created",
+              statusHistory: [{ status: "Created", timestamp: new Date() }],
+              comments: [],
+            });
+
+            await orderRec.save();
+            if (io) io.emit("orderCreated", orderRec);
+
+            await AuditItem.updateOne(
+              { instance: instance._id, item: item.item },
+              { $set: { orderCreated: true } }
+            );
+
+            item.orderCreated = true;
+            console.log(`✅ Order created for vendor ${vendorDoc.name} at site ${site}`);
+          }
+        }
 
         createdInstances.push({ frequency: freq, instanceId: instance._id });
+
+        // 🔹 Add this item (with lastChecked + orderCreated) to payload
+        allUpdatedItems.push({
+          ...item,
+          lastChecked: lastCheckedValue,
+          orderCreated: item.orderCreated || false,
+        });
       }
     }
+    if (io) {
+      io.emit("auditUpdated", {
+        template,
+        site,
+        frequencies: frequenciesToProcess,
+        updatedItems: allUpdatedItems,
+        updatedAt: new Date(),
+      });
+    }
 
-    res.json({ message: "Audit saved successfully", instances: createdInstances });
-
+    res.json({
+      message: "Audit saved successfully",
+      instances: createdInstances,
+      updatedItems: allUpdatedItems,
+    });
   } catch (err) {
     console.error("Error saving audit instance:", err);
     res.status(500).json({ error: err.message });
@@ -832,10 +1143,12 @@ router.put('/:id', async (req, res) => {
 
       console.log(`Merged item: ${updatedItem.item}`);
       return {
-        ...updatedItem,
-        assignedSites, // now includes lastChecked
+        ...updatedItem,                // override with new values (including vendor)
+        suppliesVendor: updatedItem.vendor ?? existingItem?.suppliesVendor ?? "", // ensure vendor is saved
+        assignedSites,
       };
     });
+
 
     template.items = mergedItems;
 

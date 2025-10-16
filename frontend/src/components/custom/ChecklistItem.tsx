@@ -29,7 +29,9 @@ interface ChecklistItemCardProps {
     followUp?: string;
     assignedTo?: string;
     issueRaised?: boolean;
-    checkedAt?: string;
+    checkedAt?: string; 
+    requestOrder?: boolean; 
+    orderCreated?: boolean;
   };
   onCheck?: (checked: boolean) => void;
   onComment?: (comment: string) => void;
@@ -40,6 +42,7 @@ interface ChecklistItemCardProps {
   lastChecked?: string;
   onIssueToggle?: (raised: boolean) => void;
   mode?: "station" | "interface"; // New prop  
+  templateName?: string;
 }
 
 export function ChecklistItemCard({
@@ -52,6 +55,7 @@ export function ChecklistItemCard({
   borderColor = "border-gray-300",
   lastChecked,
   mode = "station",
+  templateName,
 }: ChecklistItemCardProps) {
   const [commentOpen, setCommentOpen] = useState(false);
   const [commentValue, setCommentValue] = useState(item.comment || "");
@@ -218,34 +222,59 @@ export function ChecklistItemCard({
           </div>
         ))}
 
-        {/* Raise Issue */}
+        {/* Request Order / Raise Issue / Order Created */}
         <div className="flex justify-end mt-2">
-          <span className="text-sm font-medium mr-2">Raise Issue</span>
-          {item.issueRaised ? (
-            <button
-              type="button"
-              onClick={() => {
-                if (!handleDisabledClick() && mode === "station") {
-                  onFieldChange("issueRaised", !item.issueRaised);
-                }
-              }}
-              className="w-6 h-6 flex items-center justify-center rounded border bg-red-100 border-red-400"
-            >
-              <AlertCircle className="h-4 w-4 text-red-600" />
-            </button>
+          {item.orderCreated !== true ? (
+            templateName === "Orders" ? (
+              <>
+                <span className="text-sm font-medium mr-2">Request Order</span>
+                <input
+                  type="checkbox"
+                  checked={item.requestOrder || false}
+                  onChange={() => {
+                    if (!handleDisabledClick() && mode === "station") {
+                      onFieldChange("requestOrder" as any, !item.requestOrder);
+                    }
+                  }}
+                  className="w-5 h-5 accent-gray-600 rounded cursor-pointer"
+                />
+              </>
+            ) : (
+              <>
+                <span className="text-sm font-medium mr-2">Raise Issue</span>
+                {item.issueRaised ? (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      if (!handleDisabledClick() && mode === "station") {
+                        onFieldChange("issueRaised", !item.issueRaised);
+                      }
+                    }}
+                    className="w-6 h-6 flex items-center justify-center rounded border bg-red-100 border-red-400"
+                  >
+                    <AlertCircle className="h-4 w-4 text-red-600" />
+                  </button>
+                ) : (
+                  <input
+                    type="checkbox"
+                    checked={item.issueRaised || false}
+                    onChange={() => {
+                      if (!handleDisabledClick() && mode === "station") {
+                        onFieldChange("issueRaised", !item.issueRaised);
+                      }
+                    }}
+                    className="w-5 h-5 accent-gray-600 rounded cursor-pointer"
+                  />
+                )}
+              </>
+            )
           ) : (
-            <input
-              type="checkbox"
-              checked={item.issueRaised || false}
-              onChange={() => {
-                if (!handleDisabledClick() && mode === "station") {
-                  onFieldChange("issueRaised", !item.issueRaised);
-                }
-              }}
-              className="w-5 h-5 accent-gray-600 rounded cursor-pointer"
-            />
+            <span className="px-3 py-1 rounded-full text-black text-sm bg-green-500 text-black">
+              Order Created
+            </span>
           )}
         </div>
+
       </div>
 
       {/* Dialogs */}

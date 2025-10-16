@@ -7,7 +7,8 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Card } from "@/components/ui/card"
 import { useNavigate } from '@tanstack/react-router'
-import { getSocket } from "@/lib/websocket";
+import { getSocket } from "@/lib/websocket"
+import { getOrderRecStatusColor } from "@/lib/utils"
 
 const socket = getSocket();
 
@@ -165,23 +166,6 @@ function RouteComponent() {
     // Case 2: percentile-based red
     const intensity = Math.floor((percentile / 100) * 255);
     return `rgb(255, ${255 - intensity}, ${255 - intensity})`; // red gradient
-  };
-
-  const getStatusColor = (status?: string) => {
-    switch (status) {
-      case "Created":
-        return "#fef3c7"; // light yellow
-      case "Placed":
-        return "#bfdbfe"; // light blue
-      case "Completed":
-        return "#fcd34d"; // light orange/golden
-      case "Delivered":
-        return "#bbf7d0"; // light green
-      case "Invoice Received":
-        return "#e0e7ff"; // light purple/indigo
-      default:
-        return "#f3f4f6"; // default light grey
-    }
   };
 
   const formatVendorName = (name: string) => {
@@ -397,7 +381,7 @@ function RouteComponent() {
             <div key={status} className="flex items-center space-x-1">
               <div
                 className="w-4 h-4 rounded-sm"
-                style={{ backgroundColor: getStatusColor(status) }}
+                style={{ backgroundColor: getOrderRecStatusColor(status) }}
               ></div>
               <span className="text-xs text-gray-700">{status}</span>
             </div>
@@ -515,7 +499,7 @@ function RouteComponent() {
                                 comments={rec.comments}
                                 getPercentile={getPercentile}
                                 getRedColor={getRedColor}
-                                getStatusColor={getStatusColor}
+                                getStatusColor={getOrderRecStatusColor}
                                 onUpdateStatus={() => {
                                   setUpdateStatusOrderId(rec._id);
                                   setNewStatus(rec.currentStatus);

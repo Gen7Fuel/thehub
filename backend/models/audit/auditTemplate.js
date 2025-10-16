@@ -10,6 +10,7 @@ const AuditTemplateSchema = new mongoose.Schema({
       status: { type: String },
       followUp: { type: String },
       assignedTo: { type: String },
+      suppliesVendor: { type: String },
       frequency: { 
         type: String, 
         enum: ["daily", "weekly", "monthly"], 

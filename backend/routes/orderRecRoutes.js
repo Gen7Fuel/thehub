@@ -453,7 +453,7 @@ router.post('/', async (req, res) => {
       const vendorDoc = await Vendor.findOne({ _id: vendor, location: site });
       if (vendorDoc && vendorDoc.station_supplies && vendorDoc.station_supplies.length > 0) {
         categories.push({
-          number: (categories.length + 1).toString(),
+          number: "5001",
           name: 'Station Supplies',
           items: vendorDoc.station_supplies.map(supply => ({
             gtin: supply.upc,
