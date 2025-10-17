@@ -8,7 +8,8 @@ const AuditItemSchema = new mongoose.Schema({
   status: { type: String },
   followUp: { type: String },
   assignedTo: { type: String },
-
+  statusTemplate: {type: String},
+  followUpTemplate:{type:String},
   checked: { type: Boolean, default: false },
   checkedAt: { type: Date, default: null},
   photos: [{ type: String }],

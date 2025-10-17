@@ -24,8 +24,8 @@ interface SelectTemplate {
 interface ChecklistItem {
   category: string;
   item: string;
-  status: string;
-  followUp: string;
+  statusTemplate: string;
+  followUpTemplate: string;
   assignedTo: string;
   frequency?: "daily" | "weekly" | "monthly" | "";
   assignedSites?: { site: string; assigned: boolean }[];
@@ -36,7 +36,7 @@ function RouteComponent() {
   const { id } = useParams({ from: '/_navbarLayout/audit/templates/checklist/$id' });
   const [selectTemplates, setSelectTemplates] = useState<SelectTemplate[]>([]);
   const [items, setItems] = useState<ChecklistItem[]>([
-    { category: "", item: "", status: "", followUp: "Follow Up", assignedTo: "Assigned To", frequency: "daily" },
+    { category: "", item: "", statusTemplate: "", followUpTemplate: "Follow Up", assignedTo: "Assigned To", frequency: "daily" },
   ]);
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
@@ -84,8 +84,8 @@ function RouteComponent() {
             ? res.data.items.map((item: any) => ({
                 category: item.category || "",
                 item: item.item || "",
-                status: item.status || "",
-                followUp: item.followUp || "",
+                statusTemplate: item.statusTemplate || "",
+                followUpTemplate: item.followUpTemplate || "",
                 assignedTo: item.assignedTo || "",
                 frequency: item.frequency || "",
                 vendor: item.suppliesVendor || "",
@@ -94,7 +94,7 @@ function RouteComponent() {
                   assigned: false,
                 })),
               }))
-            : [{ category: "", item: "", status: "", followUp: "", assignedTo: "",  frequency: "", vendor: "",
+            : [{ category: "", item: "", statusTemplate: "", followUpTemplate: "", assignedTo: "",  frequency: "", vendor: "",
                   assignedSites: (res.data.sites || []).map((s: string) => ({
                     site: s,
                     assigned: false,
@@ -153,7 +153,7 @@ function RouteComponent() {
   // const addRow = () =>
   //   setItems([...items, { category: "", item: "", status: "", followUp: "Follow Up", assignedTo: "Assigned To" }]);
   const addRow = () =>
-    setItems([...items, { category: "", item: "", status: "", followUp: "Follow Up", assignedTo: "Assigned To", frequency: "", assignedSites: selectedSites.map(site => ({ site, assigned: false })), }]);
+    setItems([...items, { category: "", item: "", statusTemplate: "", followUpTemplate: "Follow Up", assignedTo: "Assigned To", frequency: "", assignedSites: selectedSites.map(site => ({ site, assigned: false })), }]);
 
   const removeRow = (idx: number) =>
     setItems(items => items.length > 1 ? items.filter((_, i) => i !== idx) : items);
@@ -167,8 +167,8 @@ function RouteComponent() {
     const mappedItems = items.map(row => ({
       item: row.item,
       category: row.category,
-      status: row.status,
-      followUp: row.followUp,
+      statusTemplate: row.statusTemplate,
+      followUpTemplate: row.followUpTemplate,
       assignedTo: row.assignedTo,
       frequency: row.frequency, 
       vendor: row.vendor || "",
@@ -283,8 +283,8 @@ function RouteComponent() {
                   </td>
                   <td className="border px-2 py-1">
                     <Select
-                      value={row.status}
-                      onValueChange={val => handleItemChange(idx, "status", val)}
+                      value={row.statusTemplate}
+                      onValueChange={val => handleItemChange(idx, "statusTemplate", val)}
                     >
                       <SelectTrigger>
                         <SelectValue placeholder="Select" />
@@ -300,8 +300,8 @@ function RouteComponent() {
                   </td>
                   <td className="border px-2 py-1">
                     <Select
-                      value={row.followUp}
-                      onValueChange={val => handleItemChange(idx, "followUp", val)}
+                      value={row.followUpTemplate}
+                      onValueChange={val => handleItemChange(idx, "followUpTemplate", val)}
                     >
                       <SelectTrigger>
                         <SelectValue placeholder="Select" />

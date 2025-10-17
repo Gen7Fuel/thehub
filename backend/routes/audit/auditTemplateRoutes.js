@@ -55,8 +55,8 @@ router.post('/', async (req, res) => {
     const processedItems = items.map(item => ({
       category: item.category || "",
       item: item.item || "Untitled",
-      status: item.status || "",
-      followUp: item.followUp || "",
+      statusTemplate: item.status || "",
+      followUpTemplate: item.followUp || "",
       assignedTo: item.assignedTo || "",
       frequency: item.frequency || "daily",
       suppliesVendor: item.vendor,
@@ -994,6 +994,7 @@ router.post('/instance', async (req, res) => {
   try {
     const completedBy = req.user._id;
     const { template, site, frequency, periodKey, date, items } = req.body;
+    console.log("Items to be updated:", items);
     const io = req.app.get("io");
     if (!template || !site || !frequency || !date || !items) {
       return res.status(400).json({ error: "Missing fields" });
@@ -1029,6 +1030,8 @@ router.post('/instance', async (req, res) => {
           item: item.item,
           status: item.status,
           followUp: item.followUp,
+          statusTemplate: item.statusTemplate,
+          followUpTemplate: item.followUpTemplate,
           assignedTo: item.assignedTo,
           checked: item.checked,
           photos: item.photos,
