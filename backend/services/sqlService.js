@@ -208,35 +208,94 @@ async function getCategorizedSalesData(csoCode, startDate, endDate) {
 
 let pool;
 
+// async function getPool() {
+//   if (!pool) {
+//     pool = await sql.connect({
+//       server: process.env.SQL_SERVER,
+//       database: process.env.SQL_DB,
+//       user: process.env.SQL_USER,
+//       password: process.env.SQL_PASSWORD,
+//       pool: {
+//         max: 10,
+//         min: 0,
+//         idleTimeoutMillis: 30000,
+//       },
+//       options: {
+//         encrypt: true,              // Required for Azure
+//         trustServerCertificate: false
+//       }
+//     });
+//   }
+//   return pool;
+// }
+
 async function getPool() {
-  if (!pool) {
-    pool = await sql.connect({
-      server: process.env.SQL_SERVER,
-      database: process.env.SQL_DB,
-      user: process.env.SQL_USER,
-      password: process.env.SQL_PASSWORD,
-      pool: {
-        max: 10,
-        min: 0,
-        idleTimeoutMillis: 30000,
-      },
-      options: {
-        encrypt: true,              // Required for Azure
-        trustServerCertificate: false
-      }
-    });
+  try {
+    if (!pool) {
+      console.log("🔌 Creating new SQL connection pool...");
+      pool = await sql.connect({
+        server: process.env.SQL_SERVER,
+        database: process.env.SQL_DB,
+        user: process.env.SQL_USER,
+        password: process.env.SQL_PASSWORD,
+        pool: {
+          max: 10,
+          min: 0,
+          idleTimeoutMillis: 30000,
+        },
+        options: {
+          encrypt: true,
+          trustServerCertificate: false,
+        },
+      });
+
+      // Optional: log when pool is closed
+      pool.on('error', err => {
+        console.error("SQL Pool Error:", err);
+        pool = null; // force reconnect next time
+      });
+    }
+
+    // 🔍 Check if pool is still healthy
+    if (!pool.connected) {
+      console.warn("SQL pool was disconnected — reconnecting...");
+      pool = await sql.connect(pool.config);
+    }
+
+    return pool;
+  } catch (err) {
+    console.error("Failed to get SQL pool:", err);
+    pool = null;
+    throw err;
   }
-  return pool;
 }
 
 // Function to get UPC and UPC_barcode from CSO.Itembook table with pooling
+// async function getUPC_barcode(gtin) {
+//   try {
+//     const pool = await getPool();
+//     const result = await pool.request()
+//       .input("gtin", sql.VarChar, gtin)
+//       .query("SELECT [UPC_A_12_digits], [UPC] FROM [CSO].[ItemBookCSO] WHERE [GTIN] = @gtin");
+    
+//     return result.recordset;
+//   } catch (err) {
+//     console.error("SQL error for",gtin,":", err);
+//     return [];
+//   }
+// }
+
 async function getUPC_barcode(gtin) {
   try {
     const pool = await getPool();
-    const result = await pool.request()
-      .input("gtin", sql.VarChar, gtin)
-      .query("SELECT [UPC_A_12_digits], [UPC] FROM [CSO].[ItemBookCSO] WHERE [GTIN] = @gtin");
-    
+    const request = pool.request();
+    request.input("gtin", sql.VarChar, gtin);
+
+    // ⏱ Timeout ensures long-running queries don't hang forever
+    const result = await request.query(
+      "SELECT [UPC_A_12_digits], [UPC] FROM [CSO].[ItemBookCSO] WHERE [GTIN] = @gtin",
+      { timeout: 30000 } // 30 seconds
+    );
     return result.recordset;
   } catch (err) {
     console.error("SQL error for",gtin,":", err);
