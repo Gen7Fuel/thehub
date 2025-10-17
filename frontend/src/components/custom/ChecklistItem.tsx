@@ -203,24 +203,32 @@ export function ChecklistItemCard({
 
       {/* Fields */}
       <div className="flex gap-4 items-center mt-2">
-        {["status", "followUp"].map((field) => (
-          <div key={field} className="flex-1 flex flex-col">
-            <label className="mb-1 font-medium text-sm">{field === "status" ? "Status" : "Follow Up"}</label>
-            <Select
-              value={item[field as "status" | "followUp"] || ""}
-              onValueChange={(val) => !handleDisabledClick() && onFieldChange(field as any, val)}
-            >
-              <SelectTrigger className="w-[100px] bg-gray-100 border-gray-300 focus:ring-2 focus:ring-green-500">
-                <SelectValue placeholder={field === "status" ? "Status" : "Follow Up"} />
-              </SelectTrigger>
-              <SelectContent>
-                {getOptions(field === "status" ? "Status" : "Follow Up").map(opt => (
-                  <SelectItem key={opt._id} value={opt.text}>{opt.text}</SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
-        ))}
+        {["status", "followUp"].map((field) => {
+          // Get the current value of the field in the item
+          const currentValue = item[field as "status" | "followUp"] || "";
+
+          return (
+            <div key={field} className="flex-1 flex flex-col">
+              <label className="mb-1 font-medium text-sm">{field === "status" ? "Status" : "Follow Up"}</label>
+              <Select
+                value={currentValue}
+                onValueChange={(val) => !handleDisabledClick() && onFieldChange(field as any, val)}
+              >
+                <SelectTrigger className="w-[100px] bg-gray-100 border-gray-300 focus:ring-2 focus:ring-green-500">
+                  <SelectValue placeholder={currentValue || (field === "status" ? "Status" : "Follow Up")} />
+                </SelectTrigger>
+                <SelectContent>
+                  {getOptions(currentValue).map(opt => (
+                    <SelectItem key={opt._id} value={opt.text}>
+                      {opt.text}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          );
+        })}
+
 
         {/* Request Order / Raise Issue / Order Created */}
         <div className="flex justify-end mt-2">
