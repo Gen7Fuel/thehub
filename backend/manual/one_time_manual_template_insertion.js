@@ -34,8 +34,8 @@ dotenv.config();
 
     // Common defaults
     const defaults = {
-      status: "Status",
-      followUp: "Follow Up",
+      statusTemplate: "Status",
+      followUpTemplate: "Follow Up",
       suppliesVendor: "",
     };
 

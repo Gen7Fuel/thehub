@@ -32,6 +32,8 @@ interface AuditItem {
   frequency?: "daily" | "weekly" | "monthly";
   lastChecked?: string;
   checkedAt?: string;
+  statusTemplate: string;
+  followUpTemplate: string;
 }
 
 export const Route = createFileRoute("/_navbarLayout/audit/interface/$id")({

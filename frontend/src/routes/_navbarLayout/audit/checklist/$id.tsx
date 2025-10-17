@@ -31,6 +31,8 @@ interface AuditItem {
   category?: string;
   status?: string;
   followUp?: string;
+  statusTemplate: string;
+  followUpTemplate: string;
   assignedTo?: string;
   frequency?: "daily" | "weekly" | "monthly";
   lastChecked?: string;
@@ -134,7 +136,7 @@ const sortItems = (list: AuditItem[]) => {
       .then(setSelectTemplates)
       .catch(() => setSelectTemplates([]));
   }, []);
-
+  console.log("Select-Template:",selectTemplates)
   // Fetch checklist
 //   const fetchChecklist = async () => {
 //     setLoading(true);

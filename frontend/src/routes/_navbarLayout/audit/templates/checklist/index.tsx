@@ -23,8 +23,8 @@ interface SelectTemplate {
 interface ChecklistItem {
   category: string;
   item: string;
-  status: string;
-  followUp: string;
+  statusTemplate: string;
+  followUpTemplate: string;
   assignedTo: string;
   frequency?: "daily" | "weekly" | "monthly" | "";
   assignedSites?: { site: string; assigned: boolean }[];
@@ -35,7 +35,7 @@ interface ChecklistItem {
 function RouteComponent() {
   const [selectTemplates, setSelectTemplates] = useState<SelectTemplate[]>([]);
   const [items, setItems] = useState<ChecklistItem[]>([
-    { category: "", item: "", status: "", followUp: "Follow Up", assignedTo: "Assigned To", frequency: "daily" },
+    { category: "", item: "", statusTemplate: "", followUpTemplate: "Follow Up", assignedTo: "Assigned To", frequency: "daily" },
   ]);
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
@@ -113,7 +113,7 @@ function RouteComponent() {
   };
 
   const addRow = () =>
-    setItems([...items, { category: "", item: "", status: "", followUp: "Follow Up", assignedTo: "Assigned To", frequency: "", assignedSites: selectedSites.map(site => ({ site, assigned: false })), }]);
+    setItems([...items, { category: "", item: "", statusTemplate: "", followUpTemplate: "Follow Up", assignedTo: "Assigned To", frequency: "", assignedSites: selectedSites.map(site => ({ site, assigned: false })), }]);
 
   const removeRow = (idx: number) =>
     setItems(items => items.length > 1 ? items.filter((_, i) => i !== idx) : items);
@@ -146,7 +146,7 @@ function RouteComponent() {
         setName("");
         setDescription("");
         setSelectedSites([]);
-        setItems([{ category: "", item: "", status: "", followUp: "", assignedTo: "" }]);
+        setItems([{ category: "", item: "", statusTemplate: "", followUpTemplate: "", assignedTo: "" }]);
     } catch (err: any) {
         setError(err?.response?.data?.message || "Failed to save checklist template");
     } finally {
@@ -238,8 +238,8 @@ function RouteComponent() {
                   </td>
                   <td className="border px-2 py-1">
                     <Select
-                      value={row.status}
-                      onValueChange={val => handleItemChange(idx, "status", val)}
+                      value={row.statusTemplate}
+                      onValueChange={val => handleItemChange(idx, "statusTemplate", val)}
                     >
                       <SelectTrigger>
                         <SelectValue placeholder="Select" />
@@ -255,8 +255,8 @@ function RouteComponent() {
                   </td>
                   <td className="border px-2 py-1">
                     <Select
-                      value={row.followUp}
-                      onValueChange={val => handleItemChange(idx, "followUp", val)}
+                      value={row.followUpTemplate}
+                      onValueChange={val => handleItemChange(idx, "followUpTemplate", val)}
                     >
                       <SelectTrigger>
                         <SelectValue placeholder="Select" />

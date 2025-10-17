@@ -32,6 +32,8 @@ interface ChecklistItemCardProps {
     checkedAt?: string; 
     requestOrder?: boolean; 
     orderCreated?: boolean;
+    statusTemplate: string;
+    followUpTemplate: string;
   };
   onCheck?: (checked: boolean) => void;
   onComment?: (comment: string) => void;
@@ -67,9 +69,20 @@ export function ChecklistItemCard({
   const [viewImagesOpen, setViewImagesOpen] = useState(false);
 
   const disabledControls = mode === "interface" || item.checked;
+  // const FIELD_TO_TEMPLATE: Record<string, string> = {
+  //   status: "Status",    // the template name in selectTemplates
+  //   followUp: "Follow Up",
+  // };
+
 
   const getOptions = (name: string) =>
     selectTemplates.find(t => t.name === name)?.options || [];
+  // const getOptionsForField = (field: "status" | "followUp") => {
+  //   const temp = FIELD_TO_TEMPLATE[field];
+  //   console.log(temp)
+  //   return selectTemplates.find(t => t.name === temp)?.options || [];
+  // };
+
 
   const handlePhotoChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     if (mode === "interface") return; // read-only
@@ -112,7 +125,7 @@ export function ChecklistItemCard({
     }
     return false;
   };
-
+  console.log(getOptions("Temp status"))
   return (
     <div
       className={`border-2 rounded-2xl p-4 mb-3 flex flex-col gap-2 w-130 transition-colors
@@ -203,33 +216,43 @@ export function ChecklistItemCard({
 
       {/* Fields */}
       <div className="flex gap-4 items-center mt-2">
-        {["status", "followUp"].map((field) => {
-          // Get the current value of the field in the item
-          const currentValue = item[field as "status" | "followUp"] || "";
+        {/* --- STATUS DROPDOWN --- */}
+        <div className="flex-1 flex flex-col">
+          <Select
+            value={item.status || undefined}
+            onValueChange={(val) => !handleDisabledClick() && onFieldChange("status", val)}
+          >
+            <SelectTrigger className="w-[150px] bg-gray-100 border-gray-300 focus:ring-2 focus:ring-green-500">
+              <SelectValue placeholder="Status" />
+            </SelectTrigger>
+            <SelectContent>
+              {getOptions(item.statusTemplate).map((opt) => (
+                <SelectItem key={opt._id} value={opt.text}>
+                  {opt.text}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
 
-          return (
-            <div key={field} className="flex-1 flex flex-col">
-              <label className="mb-1 font-medium text-sm">{field === "status" ? "Status" : "Follow Up"}</label>
-              <Select
-                value={currentValue}
-                onValueChange={(val) => !handleDisabledClick() && onFieldChange(field as any, val)}
-              >
-                <SelectTrigger className="w-[100px] bg-gray-100 border-gray-300 focus:ring-2 focus:ring-green-500">
-                  <SelectValue placeholder={currentValue || (field === "status" ? "Status" : "Follow Up")} />
-                </SelectTrigger>
-                <SelectContent>
-                  {getOptions(currentValue).map(opt => (
-                    <SelectItem key={opt._id} value={opt.text}>
-                      {opt.text}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-          );
-        })}
-
-
+        {/* --- FOLLOW UP DROPDOWN --- */}
+        <div className="flex-1 flex flex-col">
+          <Select
+            value={item.followUp || undefined}
+            onValueChange={(val) => !handleDisabledClick() && onFieldChange("followUp", val)}
+          >
+            <SelectTrigger className="w-[150px] bg-gray-100 border-gray-300 focus:ring-2 focus:ring-green-500">
+              <SelectValue placeholder="Follow Up" />
+            </SelectTrigger>
+            <SelectContent>
+              {getOptions(item.followUpTemplate).map((opt) => (
+                <SelectItem key={opt._id} value={opt.text}>
+                  {opt.text}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
         {/* Request Order / Raise Issue / Order Created */}
         <div className="flex justify-end mt-2">
           {item.orderCreated !== true ? (

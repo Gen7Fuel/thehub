@@ -7,8 +7,8 @@ const AuditTemplateSchema = new mongoose.Schema({
     {
       category: { type: String },
       item: { type: String, required: true },
-      status: { type: String },
-      followUp: { type: String },
+      statusTemplate: { type: String },
+      followUpTemplate: { type: String },
       assignedTo: { type: String },
       suppliesVendor: { type: String },
       frequency: { 
