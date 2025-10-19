@@ -4,6 +4,7 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import axios from 'axios'
 import { domain } from '@/lib/constants'
+import { useSocket } from '@/context/SignalContext'
 
 export const Route = createFileRoute('/(auth)/login')({
   loader: () => {
@@ -22,6 +23,8 @@ function RouteComponent() {
   const [error, setError] = useState<string | null>(null)
   const navigate = useNavigate()
 
+  const { reconnect } = useSocket();
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     setError(null)
@@ -39,7 +42,12 @@ function RouteComponent() {
       localStorage.setItem('access', access)
       localStorage.setItem('timezone', timezone)
 
+      console.log(`User ${userEmail} logged in, will join room automatically via SignalContext`)
+
       navigate({ to: '/' })
+
+      reconnect();
+
     } catch (err) {
       setError('Invalid email or password. Please try again.')
     }

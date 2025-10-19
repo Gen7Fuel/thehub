@@ -37,6 +37,15 @@ services:
       - mongo
     restart: always
 
+  signaling:
+    container_name: signaling
+    build:
+      context: ./signaling
+      dockerfile: Dockerfile.dev
+    ports:
+      - "5002:5002"
+    restart: always
+
   frontend:
     container_name: frontend
     build:
@@ -52,7 +61,7 @@ services:
     depends_on:
       - backend
       - cdn
-    restart: no
+    restart: on-failure:3
 
 volumes:
   dist:

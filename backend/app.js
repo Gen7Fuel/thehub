@@ -27,9 +27,12 @@ const auditRoutes = require("./routes/audit/auditTemplateRoutes");
 
 const { auth } = require("./middleware/authMiddleware");
 const { authSocket } = require("./middleware/authMiddleware");
+const setupSupportSocket = require('./socket/supportSocket');
+
 const cycleCountNewRoutes = require('./routes/cycleCountRoutes');
 const permissionRoutes = require("./routes/permissionRoutes");
 const selectTemplateRoutes = require("./routes/audit/selectTemplateRoutes");
+const supportRoutes = require('./routes/supportRoutes');
 
 dotenv.config();
 connectDB();
@@ -75,6 +78,8 @@ app.use("/api/sales-summary", salesSummaryRoutes);
 app.use("/api/status-sales", statusSalesRoutes);
 app.use('/api/sql', require('./routes/salesRoutes'));
 
+app.use('/api/support', supportRoutes);
+
 // Misc
 app.use('/api', emailRoutes);
 
@@ -99,6 +104,9 @@ io.use((socket, next) => {
 });
 
 io.use(authSocket);
+
+// Setup support socket namespace
+setupSupportSocket(io);
 
 app.set("io", io);
 

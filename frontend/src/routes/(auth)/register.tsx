@@ -167,7 +167,7 @@ function RouteComponent() {
                     </SelectItem>
                   ))
                 ) : (
-                  <SelectItem value={''} disabled>No locations available</SelectItem>
+                  <SelectItem value={""} disabled>No locations available</SelectItem>
                 )}
               </SelectContent>
             </Select>
