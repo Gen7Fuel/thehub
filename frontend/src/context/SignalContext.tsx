@@ -271,7 +271,8 @@ export const SocketProvider = ({ children }: { children: ReactNode }) => {
 
     console.log('🔌 Connecting socket for:', user.email);
 
-    const socket = io("https://app.gen7fuel.com:5002/signaling", {
+    const socket = io("https://app.gen7fuel.com", {
+      path: "/signaling/socket.io",
       query: { username: user.email.split("@")[0] },
       transports: ["websocket", "polling"],
       reconnection: true,
