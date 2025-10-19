@@ -22,7 +22,7 @@ interface User {
 function RouteComponent() {
   const { socketRef, peerConnectionRef, localStreamRef, isCallActive } = useSocket()
   const currentUser = getUserFromToken()
-  const [currentCallUser, setCurrentCallUser] = useState<User | null>(null)
+  const [_, setCurrentCallUser] = useState<User | null>(null)
 
   const { data: users, isLoading, error } = useQuery({
     queryKey: ['users'],
