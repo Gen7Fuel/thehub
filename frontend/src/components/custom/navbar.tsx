@@ -2,12 +2,14 @@ import { Link, useMatchRoute, useNavigate } from '@tanstack/react-router'
 import { Button } from '../ui/button'
 import { useEffect } from 'react'
 import { isTokenExpired } from '../../lib/utils'
+import { getUserFromToken, useSocket } from '@/context/SignalContext'
 
 // Navbar component for the application
 export default function Navbar() {
   // Initialize navigation and route matching hooks
   const navigate = useNavigate()
   const matchRoute = useMatchRoute()
+  const { socketRef } = useSocket()
 
   // Effect: Check token expiration on mount and redirect to login if expired
   useEffect(() => {
@@ -55,12 +57,29 @@ export default function Navbar() {
     return ''
   }
 
-  // Handles user logout: clears storage and redirects to login
+  // Handles user logout: disconnects from socket, clears storage and redirects to login
   const handleLogout = () => {
+    // Disconnect from socket and leave room
+    if (socketRef.current?.connected) {
+      const user = getUserFromToken();
+      if (user) {
+        const room = `${user.email.split("@")[0]}'s room`;
+        socketRef.current.emit('leave-room', room);
+        console.log('🚪 Left room:', room);
+      }
+      socketRef.current.disconnect();
+      console.log('🔌 Socket disconnected');
+    } else {
+      console.log('⚠️ No socket to disconnect');
+    }
+    
+    // Clear all stored data
     localStorage.removeItem('token')
     localStorage.removeItem('email')
     localStorage.removeItem('location')
     localStorage.removeItem('access')
+    
+    // Navigate to login
     navigate({ to: '/login' })
   }
 

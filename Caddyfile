@@ -13,6 +13,11 @@
         reverse_proxy backend:5000
     }
 
+    # === WebRTC Signaling WebSocket ===
+    handle /signaling/* {
+        reverse_proxy signaling:5002
+    }
+
     # === API routes ===
     handle /api/* {
         reverse_proxy backend:5000

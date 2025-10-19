@@ -41,6 +41,11 @@ export default defineConfig({
         changeOrigin: true
       },
       '/cdn': 'http://cdn:5001',
+      '/signaling': {
+        target: 'http://signaling:5002',
+        ws: true,
+        changeOrigin: true
+      }
     }
   : {
       '/api': 'http://localhost:5000',
@@ -50,6 +55,11 @@ export default defineConfig({
         changeOrigin: true
       },
       '/cdn': 'http://localhost:5001',
+      '/signaling': {
+        target: 'http://localhost:5002',
+        ws: true,
+        changeOrigin: true
+      }
     }
   }
 });
