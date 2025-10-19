@@ -2,7 +2,7 @@
 import { useState, useEffect } from 'react'
 import { Card } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
-import { Phone, PhoneOff, Mic, MicOff } from 'lucide-react'
+import { Phone, PhoneOff  } from 'lucide-react'
 
 interface ActiveAudioCallProps {
   callerName?: string
