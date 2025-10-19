@@ -99,11 +99,11 @@ export const SocketProvider = ({ children }: { children: ReactNode }) => {
       console.log("🖥️ Requesting screen share...");
       const screenStream = await navigator.mediaDevices.getDisplayMedia({
         video: {
-          cursor: "always",
+          cursor: "always" as any,
           displaySurface: "monitor"  // ✅ Prefer full screen
         },
         audio: true  // ✅ Try to capture system audio too
-      });
+      } as DisplayMediaStreamOptions);
       console.log("✅ Got screen share:", screenStream);
       console.log("   Video tracks:", screenStream.getVideoTracks());
       console.log("   Audio tracks:", screenStream.getAudioTracks());
@@ -161,7 +161,7 @@ export const SocketProvider = ({ children }: { children: ReactNode }) => {
 
     } catch (error) {
       console.error("❌ Error accepting call:", error);
-      alert(`Error: ${error.message}`);
+      alert(`Error: ${error instanceof Error ? error.message : 'Unknown error'}`);
       setIncomingCall(null);
     }
   };
@@ -271,7 +271,7 @@ export const SocketProvider = ({ children }: { children: ReactNode }) => {
 
     console.log('🔌 Connecting socket for:', user.email);
 
-    const socket = io("http://192.168.40.5:5002", {
+    const socket = io("https://app.gen7fuel.com/signaling", {
       query: { username: user.email.split("@")[0] },
       transports: ["websocket", "polling"],
       reconnection: true,
