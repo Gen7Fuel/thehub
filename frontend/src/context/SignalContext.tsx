@@ -1,6 +1,7 @@
 import { createContext, useRef, useEffect, useContext, type ReactNode, type MutableRefObject, useState } from 'react'
 import { io, Socket } from "socket.io-client"
 import { IncomingCallModal } from '@/components/custom/IncomingCallModal'
+import { ActiveAudioCall } from '@/components/custom/ActiveAudioCall'
 
 export interface User {
   id: string
@@ -31,7 +32,8 @@ interface SocketContextType {
   peerConnectionRef: MutableRefObject<RTCPeerConnection | null>
   localStreamRef: MutableRefObject<MediaStream | null>
   remoteStreamRef: MutableRefObject<MediaStream | null>
-  screenStreamRef: MutableRefObject<MediaStream | null>
+  isCallActive: boolean
+  endCall: () => void
 }
 
 const SocketContext = createContext<SocketContextType | undefined>(undefined)
@@ -41,15 +43,44 @@ export const SocketProvider = ({ children }: { children: ReactNode }) => {
   const peerConnectionRef = useRef<RTCPeerConnection | null>(null);
   const localStreamRef = useRef<MediaStream | null>(null);
   const remoteStreamRef = useRef<MediaStream | null>(null);
-  const screenStreamRef = useRef<MediaStream | null>(null);
   
   const [incomingCall, setIncomingCall] = useState<{ senderId: string, offer: RTCSessionDescriptionInit, callerName?: string } | null>(null);
+  const [isCallActive, setIsCallActive] = useState(false);
+  const [otherUserName, setOtherUserName] = useState<string>('');
+
+  const endCall = () => {
+    console.log("📞 Ending call...");
+    
+    // Notify other user
+    if (socketRef.current && incomingCall?.senderId) {
+      socketRef.current.emit('call-ended', { target: incomingCall.senderId });
+    }
+    
+    // Clean up peer connection
+    if (peerConnectionRef.current) {
+      peerConnectionRef.current.close();
+      peerConnectionRef.current = null;
+    }
+    
+    // Stop all tracks
+    localStreamRef.current?.getTracks().forEach(track => track.stop());
+    remoteStreamRef.current?.getTracks().forEach(track => track.stop());
+    localStreamRef.current = null;
+    remoteStreamRef.current = null;
+    
+    // Reset state
+    setIsCallActive(false);
+    setIncomingCall(null);
+    setOtherUserName('');
+    
+    console.log("✅ Call ended");
+  };
 
   const handleAcceptCall = async () => {
     if (!incomingCall || !socketRef.current) return;
 
     try {
-      console.log("✅ Call accepted, setting up connection...");
+      console.log("✅ Call accepted, setting up audio connection...");
 
       // Create peer connection
       const configuration = { iceServers: [{ urls: 'stun:stun.l.google.com:19302' }] };
@@ -57,19 +88,18 @@ export const SocketProvider = ({ children }: { children: ReactNode }) => {
 
       // Handle incoming tracks (caller's audio)
       peerConnectionRef.current.ontrack = (event) => {
-        console.log("🎥 Received remote track:", event.track.kind);
-        console.log("   Track state:", event.track.readyState);
-        console.log("   Track muted:", event.track.muted);
+        console.log("🎥 Received remote audio track");
         remoteStreamRef.current = event.streams[0];
-        window.dispatchEvent(new CustomEvent('remote-stream', { 
-          detail: { stream: event.streams[0] } 
-        }));
+        
+        // Play audio automatically
+        const audio = new Audio();
+        audio.srcObject = event.streams[0];
+        audio.play().catch(e => console.error("Error playing audio:", e));
       };
 
       // Handle ICE candidates
       peerConnectionRef.current.onicecandidate = (event) => {
         if (event.candidate) {
-          console.log("🧊 Sending ICE candidate");
           socketRef.current!.emit('ice-candidate', { 
             candidate: event.candidate, 
             target: incomingCall.senderId 
@@ -80,76 +110,35 @@ export const SocketProvider = ({ children }: { children: ReactNode }) => {
       // Monitor connection state
       peerConnectionRef.current.onconnectionstatechange = () => {
         console.log("🔄 Connection state:", peerConnectionRef.current?.connectionState);
+        if (peerConnectionRef.current?.connectionState === 'connected') {
+          setIsCallActive(true);
+        }
       };
 
-      peerConnectionRef.current.oniceconnectionstatechange = () => {
-        console.log("🧊 ICE connection state:", peerConnectionRef.current?.iceConnectionState);
-      };
-
-      // Get audio (microphone)
+      // Get audio only (microphone)
       console.log("🎤 Requesting audio...");
       const audioStream = await navigator.mediaDevices.getUserMedia({ 
         audio: true,
         video: false 
       });
-      console.log("✅ Got audio stream:", audioStream);
-      console.log("   Audio tracks:", audioStream.getAudioTracks());
+      console.log("✅ Got audio stream");
 
-      // Get screen share
-      console.log("🖥️ Requesting screen share...");
-      const screenStream = await navigator.mediaDevices.getDisplayMedia({
-        video: {
-          cursor: "always" as any,
-          displaySurface: "monitor"  // ✅ Prefer full screen
-        },
-        audio: true  // ✅ Try to capture system audio too
-      } as DisplayMediaStreamOptions);
-      console.log("✅ Got screen share:", screenStream);
-      console.log("   Video tracks:", screenStream.getVideoTracks());
-      console.log("   Audio tracks:", screenStream.getAudioTracks());
-
-      screenStreamRef.current = screenStream;
-
-      // Add audio track from microphone
+      // Add audio track
       audioStream.getAudioTracks().forEach(track => {
         console.log("➕ Adding audio track:", track.label);
         peerConnectionRef.current!.addTrack(track, audioStream);
       });
 
-      // Add screen video track
-      screenStream.getVideoTracks().forEach(track => {
-        console.log("➕ Adding video track:", track.label);
-        peerConnectionRef.current!.addTrack(track, screenStream);
-      });
-
-      // Add screen audio track if available
-      screenStream.getAudioTracks().forEach(track => {
-        console.log("➕ Adding screen audio track:", track.label);
-        peerConnectionRef.current!.addTrack(track, screenStream);
-      });
-
       localStreamRef.current = audioStream;
 
-      // Dispatch event for UI
-      window.dispatchEvent(new CustomEvent('local-stream', { 
-        detail: { stream: audioStream } 
-      }));
-      window.dispatchEvent(new CustomEvent('screen-stream', { 
-        detail: { stream: screenStream } 
-      }));
-
       // Set remote description (the offer)
-      console.log("📝 Setting remote description...");
       await peerConnectionRef.current.setRemoteDescription(
         new RTCSessionDescription(incomingCall.offer)
       );
-      console.log("✅ Remote description set");
 
       // Create and send answer
-      console.log("📤 Creating answer...");
       const answer = await peerConnectionRef.current.createAnswer();
       await peerConnectionRef.current.setLocalDescription(answer);
-      console.log("✅ Answer created");
 
       socketRef.current.emit('answer', { 
         answer, 
@@ -157,104 +146,14 @@ export const SocketProvider = ({ children }: { children: ReactNode }) => {
       });
       console.log("📤 Sent answer to:", incomingCall.senderId);
 
-      setIncomingCall(null);
-
+      setOtherUserName(incomingCall.callerName || 'Support Team');
+      
     } catch (error) {
       console.error("❌ Error accepting call:", error);
       alert(`Error: ${error instanceof Error ? error.message : 'Unknown error'}`);
       setIncomingCall(null);
     }
   };
-
-  // const handleAcceptCall = async () => {
-  //   if (!incomingCall || !socketRef.current) return;
-
-  //   try {
-  //     console.log("✅ Call accepted, setting up connection...");
-
-  //     // Create peer connection
-  //     const configuration = { iceServers: [{ urls: 'stun:stun.l.google.com:19302' }] };
-  //     peerConnectionRef.current = new RTCPeerConnection(configuration);
-
-  //     // Handle incoming tracks (caller's audio)
-  //     peerConnectionRef.current.ontrack = (event) => {
-  //       console.log("🎥 Received remote track:", event.track.kind);
-  //       remoteStreamRef.current = event.streams[0];
-  //       window.dispatchEvent(new CustomEvent('remote-stream', { 
-  //         detail: { stream: event.streams[0] } 
-  //       }));
-  //     };
-
-  //     // Handle ICE candidates
-  //     peerConnectionRef.current.onicecandidate = (event) => {
-  //       if (event.candidate) {
-  //         socketRef.current!.emit('ice-candidate', { 
-  //           candidate: event.candidate, 
-  //           target: incomingCall.senderId 
-  //         });
-  //       }
-  //     };
-
-  //     // Get audio (microphone)
-  //     const audioStream = await navigator.mediaDevices.getUserMedia({ 
-  //       audio: true,
-  //       video: false 
-  //     });
-  //     console.log("🎤 Got audio stream");
-
-  //     // Get screen share
-  //     const screenStream = await navigator.mediaDevices.getDisplayMedia({
-  //       video: {
-  //         cursor: "always"
-  //       } as any,
-  //       audio: false
-  //     });
-  //     console.log("🖥️ Got screen share");
-
-  //     screenStreamRef.current = screenStream;
-
-  //     // Add audio track
-  //     audioStream.getAudioTracks().forEach(track => {
-  //       peerConnectionRef.current!.addTrack(track, audioStream);
-  //     });
-
-  //     // Add screen video track
-  //     screenStream.getVideoTracks().forEach(track => {
-  //       peerConnectionRef.current!.addTrack(track, screenStream);
-  //     });
-
-  //     localStreamRef.current = audioStream;
-
-  //     // Dispatch event for UI
-  //     window.dispatchEvent(new CustomEvent('local-stream', { 
-  //       detail: { stream: audioStream } 
-  //     }));
-  //     window.dispatchEvent(new CustomEvent('screen-stream', { 
-  //       detail: { stream: screenStream } 
-  //     }));
-
-  //     // Set remote description (the offer)
-  //     await peerConnectionRef.current.setRemoteDescription(
-  //       new RTCSessionDescription(incomingCall.offer)
-  //     );
-
-  //     // Create and send answer
-  //     const answer = await peerConnectionRef.current.createAnswer();
-  //     await peerConnectionRef.current.setLocalDescription(answer);
-
-  //     socketRef.current.emit('answer', { 
-  //       answer, 
-  //       target: incomingCall.senderId 
-  //     });
-  //     console.log("📤 Sent answer to:", incomingCall.senderId);
-
-  //     setIncomingCall(null);
-
-  //   } catch (error) {
-  //     console.error("❌ Error accepting call:", error);
-  //     setIncomingCall(null);
-  //   }
-  // };
 
   const handleRejectCall = () => {
     if (!incomingCall || !socketRef.current) return;
@@ -289,19 +188,9 @@ export const SocketProvider = ({ children }: { children: ReactNode }) => {
       console.log("❌ Disconnected");
     });
 
-    socket.on("user-connected", (socketId: string) => {
-      console.log("👤 User connected to room:", socketId);
-    });
-
-    socket.on("user-disconnected", (socketId: string) => {
-      console.log("👋 User disconnected from room:", socketId);
-    });
-
-    // Handle incoming call offers - show modal instead of auto-accepting
     socket.on("offer", async (message: { offer: RTCSessionDescriptionInit, sender: string }) => {
       console.log("📞 Incoming call from:", message.sender);
       
-      // Show incoming call modal
       setIncomingCall({
         senderId: message.sender,
         offer: message.offer,
@@ -309,7 +198,6 @@ export const SocketProvider = ({ children }: { children: ReactNode }) => {
       });
     });
 
-    // Handle incoming answers (when you made the call)
     socket.on("answer", async (message: { answer: RTCSessionDescriptionInit, sender: string }) => {
       console.log("📥 Received answer from:", message.sender);
       
@@ -325,7 +213,6 @@ export const SocketProvider = ({ children }: { children: ReactNode }) => {
       }
     });
 
-    // Handle ICE candidates
     socket.on("ice-candidate", async (message: { candidate: RTCIceCandidateInit, sender: string }) => {
       console.log("🧊 Received ICE candidate from:", message.sender);
       
@@ -340,18 +227,15 @@ export const SocketProvider = ({ children }: { children: ReactNode }) => {
       }
     });
 
-    // Handle call rejection
     socket.on("call-rejected", () => {
       console.log("❌ Call was rejected by user");
       alert("The user rejected your call");
-      
-      // Clean up
-      if (peerConnectionRef.current) {
-        peerConnectionRef.current.close();
-        peerConnectionRef.current = null;
-      }
-      localStreamRef.current?.getTracks().forEach(track => track.stop());
-      localStreamRef.current = null;
+      endCall();
+    });
+
+    socket.on("call-ended", () => {
+      console.log("📞 Call ended by other user");
+      endCall();
     });
 
     socketRef.current = socket;
@@ -376,13 +260,7 @@ export const SocketProvider = ({ children }: { children: ReactNode }) => {
 
     return () => {
       window.removeEventListener("user-logged-in", handleUserLoggedIn);
-      
-      if (peerConnectionRef.current) {
-        peerConnectionRef.current.close();
-      }
-      
-      localStreamRef.current?.getTracks().forEach(track => track.stop());
-      screenStreamRef.current?.getTracks().forEach(track => track.stop());
+      endCall();
       
       if (socketRef.current?.connected) {
         socketRef.current.disconnect();
@@ -397,7 +275,8 @@ export const SocketProvider = ({ children }: { children: ReactNode }) => {
       peerConnectionRef,
       localStreamRef,
       remoteStreamRef,
-      screenStreamRef
+      isCallActive,
+      endCall
     }}>
       {children}
       <IncomingCallModal 
@@ -405,6 +284,12 @@ export const SocketProvider = ({ children }: { children: ReactNode }) => {
         onAccept={handleAcceptCall}
         onReject={handleRejectCall}
       />
+      {isCallActive && (
+        <ActiveAudioCall 
+          callerName={otherUserName}
+          onEndCall={endCall}
+        />
+      )}
     </SocketContext.Provider>
   );
 };
