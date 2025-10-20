@@ -79,6 +79,18 @@ io.on('connection', (socket) => {
     io.to(data.target).emit('call-rejected');
   });
 
+  socket.on('call-ended', (data) => {
+    console.log(`\n📞 CALL ENDED EVENT`);
+    console.log(`   Sender: ${socket.id}`);
+    console.log(`   Target: "${data.target}"`);
+    
+    // Try to send to room (for caller ending) or socket ID (for receiver ending)
+    socket.to(data.target).emit('call-ended');
+    io.to(data.target).emit('call-ended');
+    
+    console.log(`   ✅ Call-ended event sent to ${data.target}`);
+  });
+
   socket.on('leave-room', (roomId) => {
     socket.leave(roomId);
     socket.to(roomId).emit('user-disconnected', socket.id);

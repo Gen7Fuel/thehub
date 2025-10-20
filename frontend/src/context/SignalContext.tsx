@@ -81,33 +81,6 @@ export const SocketProvider = ({ children }: { children: ReactNode }) => {
     
     console.log("✅ Call ended");
   };
-  // const endCall = () => {
-  //   console.log("📞 Ending call...");
-    
-  //   // Notify other user
-  //   if (socketRef.current && incomingCall?.senderId) {
-  //     socketRef.current.emit('call-ended', { target: incomingCall.senderId });
-  //   }
-    
-  //   // Clean up peer connection
-  //   if (peerConnectionRef.current) {
-  //     peerConnectionRef.current.close();
-  //     peerConnectionRef.current = null;
-  //   }
-    
-  //   // Stop all tracks
-  //   localStreamRef.current?.getTracks().forEach(track => track.stop());
-  //   remoteStreamRef.current?.getTracks().forEach(track => track.stop());
-  //   localStreamRef.current = null;
-  //   remoteStreamRef.current = null;
-    
-  //   // Reset state
-  //   setIsCallActive(false);
-  //   setIncomingCall(null);
-  //   setOtherUserName('');
-    
-  //   console.log("✅ Call ended");
-  // };
 
   const handleAcceptCall = async () => {
     if (!incomingCall || !socketRef.current) return;
@@ -180,6 +153,7 @@ export const SocketProvider = ({ children }: { children: ReactNode }) => {
       console.log("📤 Sent answer to:", incomingCall.senderId);
 
       setOtherUserName(incomingCall.callerName || 'Support Team');
+      setOtherUserRoom(incomingCall.senderId);  // ✅ ADD THIS - Store sender socket ID
       
     } catch (error) {
       console.error("❌ Error accepting call:", error);
@@ -187,6 +161,84 @@ export const SocketProvider = ({ children }: { children: ReactNode }) => {
       setIncomingCall(null);
     }
   };
+  // const handleAcceptCall = async () => {
+  //   if (!incomingCall || !socketRef.current) return;
+
+  //   try {
+  //     console.log("✅ Call accepted, setting up audio connection...");
+
+  //     // Create peer connection
+  //     const configuration = { iceServers: [{ urls: 'stun:stun.l.google.com:19302' }] };
+  //     peerConnectionRef.current = new RTCPeerConnection(configuration);
+
+  //     // Handle incoming tracks (caller's audio)
+  //     peerConnectionRef.current.ontrack = (event) => {
+  //       console.log("🎥 Received remote audio track");
+  //       remoteStreamRef.current = event.streams[0];
+        
+  //       // Play audio automatically
+  //       const audio = new Audio();
+  //       audio.srcObject = event.streams[0];
+  //       audio.play().catch(e => console.error("Error playing audio:", e));
+  //     };
+
+  //     // Handle ICE candidates
+  //     peerConnectionRef.current.onicecandidate = (event) => {
+  //       if (event.candidate) {
+  //         socketRef.current!.emit('ice-candidate', { 
+  //           candidate: event.candidate, 
+  //           target: incomingCall.senderId 
+  //         });
+  //       }
+  //     };
+
+  //     // Monitor connection state
+  //     peerConnectionRef.current.onconnectionstatechange = () => {
+  //       console.log("🔄 Connection state:", peerConnectionRef.current?.connectionState);
+  //       if (peerConnectionRef.current?.connectionState === 'connected') {
+  //         setIsCallActive(true);
+  //       }
+  //     };
+
+  //     // Get audio only (microphone)
+  //     console.log("🎤 Requesting audio...");
+  //     const audioStream = await navigator.mediaDevices.getUserMedia({ 
+  //       audio: true,
+  //       video: false 
+  //     });
+  //     console.log("✅ Got audio stream");
+
+  //     // Add audio track
+  //     audioStream.getAudioTracks().forEach(track => {
+  //       console.log("➕ Adding audio track:", track.label);
+  //       peerConnectionRef.current!.addTrack(track, audioStream);
+  //     });
+
+  //     localStreamRef.current = audioStream;
+
+  //     // Set remote description (the offer)
+  //     await peerConnectionRef.current.setRemoteDescription(
+  //       new RTCSessionDescription(incomingCall.offer)
+  //     );
+
+  //     // Create and send answer
+  //     const answer = await peerConnectionRef.current.createAnswer();
+  //     await peerConnectionRef.current.setLocalDescription(answer);
+
+  //     socketRef.current.emit('answer', { 
+  //       answer, 
+  //       target: incomingCall.senderId 
+  //     });
+  //     console.log("📤 Sent answer to:", incomingCall.senderId);
+
+  //     setOtherUserName(incomingCall.callerName || 'Support Team');
+      
+  //   } catch (error) {
+  //     console.error("❌ Error accepting call:", error);
+  //     alert(`Error: ${error instanceof Error ? error.message : 'Unknown error'}`);
+  //     setIncomingCall(null);
+  //   }
+  // };
 
   const handleRejectCall = () => {
     if (!incomingCall || !socketRef.current) return;
