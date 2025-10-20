@@ -1,6 +1,7 @@
 import { clsx, type ClassValue } from "clsx"
 import { twMerge } from "tailwind-merge"
-import { domain } from "@/lib/constants";
+import { domain } from "@/lib/constants"
+import { jwtDecode } from "jwt-decode"
 import axios from "axios"
 
 export function cn(...inputs: ClassValue[]) {
@@ -371,3 +372,39 @@ export const getOrderRecStatusColor = (status?: string) => {
       return "#f3f4f6"; // default light grey
   }
 };
+
+//Decoding jwt token helper function
+/**
+ * Decode JWT token stored in localStorage
+//  *  Decoded payload or null if no token
+//  */
+// export const getDecodedToken = () => {
+//   const token = localStorage.getItem("token");
+//   if (!token) return null;
+
+//   try {
+//     return jwtDecode(token);
+//   } catch (err) {
+//     console.error("Failed to decode token:", err);
+//     return null;
+//   }
+// };
+
+// src/lib/utils.ts
+// import { jwtDecode } from "jwt-decode";
+
+
+
+export const getDecodedToken = () => {
+  const token = localStorage.getItem("token");
+  if (!token) return null;
+
+  try {
+    return jwtDecode(token);
+  } catch (err) {
+    console.error("Failed to decode token:", err);
+    return null;
+  }
+};
+
+
