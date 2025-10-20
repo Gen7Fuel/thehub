@@ -5,3 +5,4 @@ dist-ssr
 *.local
 *.pem
 .tanstack/tmp/
+src/routeTree.gen.ts
