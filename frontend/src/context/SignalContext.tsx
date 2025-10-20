@@ -306,20 +306,6 @@ export const SocketProvider = ({ children }: { children: ReactNode }) => {
       console.log('✅ Call connected event received from caller');
       setIsCallActive(true);
       setOtherUserName(event.detail.userName || 'User');
-    };
-
-    window.addEventListener('call-connected', handleCallConnected as EventListener);
-
-    return () => {
-      window.removeEventListener('call-connected', handleCallConnected as EventListener);
-    };
-  }, []);
-
-  useEffect(() => {
-    const handleCallConnected = (event: CustomEvent) => {
-      console.log('✅ Call connected event received from caller');
-      setIsCallActive(true);
-      setOtherUserName(event.detail.userName || 'User');
       setOtherUserRoom(event.detail.targetRoom || '');  // ✅ Store target room
     };
 
