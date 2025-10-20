@@ -24,10 +24,6 @@ function RouteComponent() {
   const navigate = useNavigate()
 
   const { reconnect } = useSocket();
-  // const token = localStorage.getItem('token')
-  // if (token) {
-  //   throw redirect({ to: '/' }) // Redirect to home page if token exists
-  // }
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()

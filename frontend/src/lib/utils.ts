@@ -374,37 +374,25 @@ export const getOrderRecStatusColor = (status?: string) => {
 };
 
 //Decoding jwt token helper function
-/**
- * Decode JWT token stored in localStorage
-//  *  Decoded payload or null if no token
-//  */
-// export const getDecodedToken = () => {
-//   const token = localStorage.getItem("token");
-//   if (!token) return null;
+interface User {
+  id?: string;
+  email?: string;
+  location?: string;
+  initials?: string;
+  name?: string;
+  timezone?: string;
+  access?: any;
+}
 
-//   try {
-//     return jwtDecode(token);
-//   } catch (err) {
-//     console.error("Failed to decode token:", err);
-//     return null;
-//   }
-// };
-
-// src/lib/utils.ts
-// import { jwtDecode } from "jwt-decode";
-
-
-
-export const getDecodedToken = () => {
+export const getDecodedToken = (): User | null => {
   const token = localStorage.getItem("token");
   if (!token) return null;
 
   try {
-    return jwtDecode(token);
+    return jwtDecode<User>(token);
   } catch (err) {
     console.error("Failed to decode token:", err);
     return null;
   }
 };
-
 

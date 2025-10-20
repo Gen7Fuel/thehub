@@ -1,13 +1,14 @@
-// // src/context/AuthContext.tsx
 import { createContext, useContext, useState, useEffect } from "react";
-import type { ReactNode } from "react";
-import { getDecodedToken } from "../lib/utils";
+import { jwtDecode } from "jwt-decode";
 
 interface User {
   id?: string;
+  email?: string;
+  location?: string;
+  initials?: string;
   name?: string;
-  role?: string;
-  [key: string]: any; // other fields from token
+  timezone?: string;
+  access?: any;
 }
 
 interface AuthContextType {
@@ -17,16 +18,30 @@ interface AuthContextType {
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
-interface AuthProviderProps {
-  children: ReactNode;
-}
-
-export const AuthProvider = ({ children }: AuthProviderProps) => {
+export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
   const [user, setUser] = useState<User | null>(null);
 
   useEffect(() => {
-    const decoded = getDecodedToken();
-    setUser(decoded);
+    const token = localStorage.getItem("token");
+    if (!token) return;
+
+    try {
+      const decoded: any = jwtDecode(token);
+
+      // 👇 handle access being a stringified JSON
+      if (decoded.access && typeof decoded.access === "string") {
+        try {
+          decoded.access = JSON.parse(decoded.access);
+        } catch {
+          console.warn("Failed to parse access JSON");
+        }
+      }
+
+      setUser(decoded);
+    } catch (err) {
+      console.error("Failed to decode token:", err);
+      setUser(null);
+    }
   }, []);
 
   return (
@@ -36,7 +51,7 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
   );
 };
 
-export const useAuth = (): AuthContextType => {
+export const useAuth = () => {
   const context = useContext(AuthContext);
   if (!context) throw new Error("useAuth must be used within an AuthProvider");
   return context;

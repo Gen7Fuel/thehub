@@ -28,6 +28,12 @@ interface Permission {
   name: string;
 }
 
+export const hasAccess = (access: any, key: string): boolean => {
+  if (!access || typeof access !== "object") return false;
+  return Boolean(access[key]);
+};
+
+
 function RouteComponent() {
   const { permissions } = Route.useLoaderData() as {
     permissions: Permission[];
@@ -35,7 +41,9 @@ function RouteComponent() {
   const { user } = useAuth();
 
   if (user) {
-    console.log("email:", user.access[0]?.module_station_audit);
+    const o = user.access.component_settings
+    console.log("email:", o);
+
   } else {
     console.log("No user logged in");
   }
