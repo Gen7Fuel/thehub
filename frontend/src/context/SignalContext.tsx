@@ -47,13 +47,18 @@ export const SocketProvider = ({ children }: { children: ReactNode }) => {
   const [incomingCall, setIncomingCall] = useState<{ senderId: string, offer: RTCSessionDescriptionInit, callerName?: string } | null>(null);
   const [isCallActive, setIsCallActive] = useState(false);
   const [otherUserName, setOtherUserName] = useState<string>('');
+  const [otherUserRoom, setOtherUserRoom] = useState<string>('');
 
   const endCall = () => {
     console.log("📞 Ending call...");
     
-    // Notify other user
-    if (socketRef.current && incomingCall?.senderId) {
-      socketRef.current.emit('call-ended', { target: incomingCall.senderId });
+    // Notify other user - use room OR socket ID
+    if (socketRef.current) {
+      const target = otherUserRoom || incomingCall?.senderId;  // ✅ FIXED
+      if (target) {
+        socketRef.current.emit('call-ended', { target });
+        console.log(`📤 Sent call-ended to: ${target}`);
+      }
     }
     
     // Clean up peer connection
@@ -72,9 +77,37 @@ export const SocketProvider = ({ children }: { children: ReactNode }) => {
     setIsCallActive(false);
     setIncomingCall(null);
     setOtherUserName('');
+    setOtherUserRoom('');  // ✅ Clear room
     
     console.log("✅ Call ended");
   };
+  // const endCall = () => {
+  //   console.log("📞 Ending call...");
+    
+  //   // Notify other user
+  //   if (socketRef.current && incomingCall?.senderId) {
+  //     socketRef.current.emit('call-ended', { target: incomingCall.senderId });
+  //   }
+    
+  //   // Clean up peer connection
+  //   if (peerConnectionRef.current) {
+  //     peerConnectionRef.current.close();
+  //     peerConnectionRef.current = null;
+  //   }
+    
+  //   // Stop all tracks
+  //   localStreamRef.current?.getTracks().forEach(track => track.stop());
+  //   remoteStreamRef.current?.getTracks().forEach(track => track.stop());
+  //   localStreamRef.current = null;
+  //   remoteStreamRef.current = null;
+    
+  //   // Reset state
+  //   setIsCallActive(false);
+  //   setIncomingCall(null);
+  //   setOtherUserName('');
+    
+  //   console.log("✅ Call ended");
+  // };
 
   const handleAcceptCall = async () => {
     if (!incomingCall || !socketRef.current) return;
@@ -265,6 +298,35 @@ export const SocketProvider = ({ children }: { children: ReactNode }) => {
       if (socketRef.current?.connected) {
         socketRef.current.disconnect();
       }
+    };
+  }, []);
+
+  useEffect(() => {
+    const handleCallConnected = (event: CustomEvent) => {
+      console.log('✅ Call connected event received from caller');
+      setIsCallActive(true);
+      setOtherUserName(event.detail.userName || 'User');
+    };
+
+    window.addEventListener('call-connected', handleCallConnected as EventListener);
+
+    return () => {
+      window.removeEventListener('call-connected', handleCallConnected as EventListener);
+    };
+  }, []);
+
+  useEffect(() => {
+    const handleCallConnected = (event: CustomEvent) => {
+      console.log('✅ Call connected event received from caller');
+      setIsCallActive(true);
+      setOtherUserName(event.detail.userName || 'User');
+      setOtherUserRoom(event.detail.targetRoom || '');  // ✅ Store target room
+    };
+
+    window.addEventListener('call-connected', handleCallConnected as EventListener);
+
+    return () => {
+      window.removeEventListener('call-connected', handleCallConnected as EventListener);
     };
   }, []);
 

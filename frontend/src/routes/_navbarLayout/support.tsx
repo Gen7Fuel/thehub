@@ -38,71 +38,154 @@ function RouteComponent() {
   const otherUsers = users?.filter(user => user.email !== currentUser?.email) || []
 
   async function makeCall(targetUser: User) {
-    if (!socketRef.current) {
-      console.error('Socket not connected')
-      return
-    }
-
-    console.log('📞 Making audio call to:', targetUser.email)
-    setCurrentCallUser(targetUser)
-
-    try {
-      // Get audio only
-      if (!localStreamRef.current) {
-        const stream = await navigator.mediaDevices.getUserMedia({ 
-          audio: true,
-          video: false
-        })
-        localStreamRef.current = stream
-        console.log('✅ Got audio stream')
-      }
-
-      // Create peer connection
-      if (!peerConnectionRef.current) {
-        const configuration = { iceServers: [{ urls: 'stun:stun.l.google.com:19302' }] }
-        peerConnectionRef.current = new RTCPeerConnection(configuration)
-
-        // Handle remote audio tracks
-        peerConnectionRef.current.ontrack = (event) => {
-          console.log('🎥 Received remote audio track')
-          
-          // Play audio automatically
-          const audio = new Audio()
-          audio.srcObject = event.streams[0]
-          audio.play().catch(e => console.error("Error playing audio:", e))
-        }
-
-        // Handle ICE candidates
-        peerConnectionRef.current.onicecandidate = (event) => {
-          if (event.candidate) {
-            const targetRoom = `${targetUser.email.split('@')[0]}'s room`
-            socketRef.current!.emit('ice-candidate', { 
-              candidate: event.candidate, 
-              target: targetRoom 
-            })
-          }
-        }
-
-        // Add audio track
-        localStreamRef.current!.getAudioTracks().forEach(track => {
-          peerConnectionRef.current!.addTrack(track, localStreamRef.current!)
-        })
-        console.log('✅ Added audio track to peer connection')
-      }
-
-      // Create and send offer
-      const offer = await peerConnectionRef.current.createOffer()
-      await peerConnectionRef.current.setLocalDescription(offer)
-
-      const targetRoom = `${targetUser.email.split('@')[0]}'s room`
-      console.log('📤 Sending offer to:', targetRoom)
-      socketRef.current.emit('offer', { offer: offer, target: targetRoom })
-      
-    } catch (error) {
-      console.error('❌ Error making call:', error)
-      setCurrentCallUser(null)
-    }
+  if (!socketRef.current) {
+    console.error('Socket not connected')
+    return
   }
+
+  console.log('📞 Making audio call to:', targetUser.email)
+  setCurrentCallUser(targetUser)
+
+  try {
+    // Get audio only
+    if (!localStreamRef.current) {
+      const stream = await navigator.mediaDevices.getUserMedia({ 
+        audio: true,
+        video: false
+      })
+      localStreamRef.current = stream
+      console.log('✅ Got audio stream')
+    }
+
+    // Create peer connection
+    if (!peerConnectionRef.current) {
+      const configuration = { iceServers: [{ urls: 'stun:stun.l.google.com:19302' }] }
+      peerConnectionRef.current = new RTCPeerConnection(configuration)
+
+      // ✅ ADD: Monitor connection state to show component
+      peerConnectionRef.current.onconnectionstatechange = () => {
+        console.log('🔄 Caller connection state:', peerConnectionRef.current?.connectionState);
+        if (peerConnectionRef.current?.connectionState === 'connected') {
+          console.log('✅ Call connected! Showing active call component');
+          const targetRoom = `${targetUser.email.split('@')[0]}'s room`;
+          
+          // Dispatch event to show ActiveAudioCall component
+          window.dispatchEvent(new CustomEvent('call-connected', { 
+            detail: { 
+              userName: targetUser.name,
+              targetRoom: targetRoom
+            } 
+          }));
+        }
+      };
+
+      // Handle remote audio tracks
+      peerConnectionRef.current.ontrack = (event) => {
+        console.log('🎥 Received remote audio track')
+        
+        // Play audio automatically
+        const audio = new Audio()
+        audio.srcObject = event.streams[0]
+        audio.play().catch(e => console.error("Error playing audio:", e))
+      }
+
+      // Handle ICE candidates
+      peerConnectionRef.current.onicecandidate = (event) => {
+        if (event.candidate) {
+          const targetRoom = `${targetUser.email.split('@')[0]}'s room`
+          socketRef.current!.emit('ice-candidate', { 
+            candidate: event.candidate, 
+            target: targetRoom 
+          })
+        }
+      }
+
+      // Add audio track
+      localStreamRef.current!.getAudioTracks().forEach(track => {
+        peerConnectionRef.current!.addTrack(track, localStreamRef.current!)
+      })
+      console.log('✅ Added audio track to peer connection')
+    }
+
+    // Create and send offer
+    const offer = await peerConnectionRef.current.createOffer()
+    await peerConnectionRef.current.setLocalDescription(offer)
+
+    const targetRoom = `${targetUser.email.split('@')[0]}'s room`
+    console.log('📤 Sending offer to:', targetRoom)
+    socketRef.current.emit('offer', { offer: offer, target: targetRoom })
+    
+  } catch (error) {
+    console.error('❌ Error making call:', error)
+    setCurrentCallUser(null)
+  }
+}
+  // async function makeCall(targetUser: User) {
+  //   if (!socketRef.current) {
+  //     console.error('Socket not connected')
+  //     return
+  //   }
+
+  //   console.log('📞 Making audio call to:', targetUser.email)
+  //   setCurrentCallUser(targetUser)
+
+  //   try {
+  //     // Get audio only
+  //     if (!localStreamRef.current) {
+  //       const stream = await navigator.mediaDevices.getUserMedia({ 
+  //         audio: true,
+  //         video: false
+  //       })
+  //       localStreamRef.current = stream
+  //       console.log('✅ Got audio stream')
+  //     }
+
+  //     // Create peer connection
+  //     if (!peerConnectionRef.current) {
+  //       const configuration = { iceServers: [{ urls: 'stun:stun.l.google.com:19302' }] }
+  //       peerConnectionRef.current = new RTCPeerConnection(configuration)
+
+  //       // Handle remote audio tracks
+  //       peerConnectionRef.current.ontrack = (event) => {
+  //         console.log('🎥 Received remote audio track')
+          
+  //         // Play audio automatically
+  //         const audio = new Audio()
+  //         audio.srcObject = event.streams[0]
+  //         audio.play().catch(e => console.error("Error playing audio:", e))
+  //       }
+
+  //       // Handle ICE candidates
+  //       peerConnectionRef.current.onicecandidate = (event) => {
+  //         if (event.candidate) {
+  //           const targetRoom = `${targetUser.email.split('@')[0]}'s room`
+  //           socketRef.current!.emit('ice-candidate', { 
+  //             candidate: event.candidate, 
+  //             target: targetRoom 
+  //           })
+  //         }
+  //       }
+
+  //       // Add audio track
+  //       localStreamRef.current!.getAudioTracks().forEach(track => {
+  //         peerConnectionRef.current!.addTrack(track, localStreamRef.current!)
+  //       })
+  //       console.log('✅ Added audio track to peer connection')
+  //     }
+
+  //     // Create and send offer
+  //     const offer = await peerConnectionRef.current.createOffer()
+  //     await peerConnectionRef.current.setLocalDescription(offer)
+
+  //     const targetRoom = `${targetUser.email.split('@')[0]}'s room`
+  //     console.log('📤 Sending offer to:', targetRoom)
+  //     socketRef.current.emit('offer', { offer: offer, target: targetRoom })
+      
+  //   } catch (error) {
+  //     console.error('❌ Error making call:', error)
+  //     setCurrentCallUser(null)
+  //   }
+  // }
 
   if (isLoading) {
     return (
