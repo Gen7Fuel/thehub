@@ -272,7 +272,7 @@ router.get("/items-full", async (req, res) => {
 
     res.json({
       items: sortedItems,
-      templateName: templateDoc.templateName,
+      templateName: templateDoc.name,
       sites: templateDoc.sites,
       description: templateDoc.description,
     });
