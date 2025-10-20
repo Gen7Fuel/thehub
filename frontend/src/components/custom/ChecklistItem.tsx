@@ -125,7 +125,6 @@ export function ChecklistItemCard({
     }
     return false;
   };
-  console.log(getOptions("Temp status"))
   return (
     <div
       className={`border-2 rounded-2xl p-4 mb-3 flex flex-col gap-2 w-130 transition-colors

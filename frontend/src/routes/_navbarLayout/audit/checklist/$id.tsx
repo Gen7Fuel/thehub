@@ -136,7 +136,6 @@ const sortItems = (list: AuditItem[]) => {
       .then(setSelectTemplates)
       .catch(() => setSelectTemplates([]));
   }, []);
-  console.log("Select-Template:",selectTemplates)
   // Fetch checklist
 //   const fetchChecklist = async () => {
 //     setLoading(true);
