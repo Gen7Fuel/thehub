@@ -5,12 +5,14 @@ import { Button } from '@/components/ui/button';
 import { InputOTP, InputOTPSlot, InputOTPGroup, InputOTPSeparator } from '@/components/ui/input-otp';
 import { ProductPicker } from '@/components/custom/productPicker';
 import axios from "axios"
+import { useAuth } from "@/context/AuthContext";
 
 export const Route = createFileRoute('/_navbarLayout/status/')({
   component: RouteComponent,
 });
 
 function RouteComponent() {
+  const { user } = useAuth()
   const [statusCard, setStatusCard] = useState('');
   const [name, setName] = useState('');
   const [phone, setPhone] = useState('');
@@ -36,7 +38,7 @@ function RouteComponent() {
       amount,
       total,
       notes,
-      stationName: localStorage.getItem('location'),
+      stationName: user?.location,
     };
 
     try {

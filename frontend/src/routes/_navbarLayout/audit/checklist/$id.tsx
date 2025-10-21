@@ -5,6 +5,8 @@ import { Button } from "@/components/ui/button";
 import { useContext } from "react";
 import { RouteContext } from "../checklist";
 import { getSocket } from "@/lib/websocket";
+import { useAuth } from "@/context/AuthContext";
+
 
 const socket = getSocket();
 
@@ -89,7 +91,8 @@ function RouteComponent() {
 
   // Temporary patch for location picker getting state from ther parent
   const { stationName } = useContext(RouteContext);
-  const site = stationName || localStorage.getItem("location") || "";
+  const { user } = useAuth();
+  const site = stationName || user?.location || "";
   
   // const site = localStorage.getItem("location") || ""; //Original file
   console.log("stationnane:",stationName)

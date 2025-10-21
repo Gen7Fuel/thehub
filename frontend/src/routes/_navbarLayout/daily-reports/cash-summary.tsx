@@ -8,6 +8,7 @@ import { Button } from '@/components/ui/button'
 import { pdf } from '@react-pdf/renderer';
 import { CashSummaryPDF } from '@/components/custom/CashSummaryPDF'; // Adjust path as needed
 import axios from "axios"
+import { useAuth } from "@/context/AuthContext";
 
 export const Route = createFileRoute(
   '/_navbarLayout/daily-reports/cash-summary',
@@ -104,7 +105,8 @@ function RouteComponent() {
     purchase_orders: [],
     payables: [],
   });
-  const [location, setLocation] = useState<string>(localStorage.getItem('location') || '')
+  const { user } = useAuth()
+  const [location, setLocation] = useState<string>(user?.location || '')
   const [totals, setTotals] = useState({
     totalShiftReportCash: 0,
     totalCalculatedCash: 0,
@@ -184,7 +186,7 @@ function RouteComponent() {
   const createCashSummary = async () => {
     try {
       await axios.post('/api/cash-summary', {
-        name: localStorage.getItem('name'),
+        name: user?.name,
         location,
         date: date?.toISOString(),
       }, {
@@ -237,7 +239,7 @@ function RouteComponent() {
     },
   })
 
-  const access = JSON.parse(localStorage.getItem('access') || '{}')
+  const access = user?.access || '{}'
 
   // Calculate totals for purchase orders and payables
   const purchaseOrderTotal = data.purchase_orders?.reduce((sum, po) => sum + po.amount, 0) || 0

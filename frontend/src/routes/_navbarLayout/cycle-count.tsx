@@ -1,5 +1,7 @@
 import { createFileRoute, Link, Outlet, useMatchRoute } from '@tanstack/react-router'
 import { Button } from '@/components/ui/button'
+import { useAuth } from "@/context/AuthContext";
+
 
 // Define the route for the cycle count section using TanStack Router
 export const Route = createFileRoute('/_navbarLayout/cycle-count')({
@@ -19,9 +21,11 @@ function RouteComponent() {
   const isInputActive = matchRoute({ to: '/cycle-count' });
   const isCountActive = matchRoute({ to: '/cycle-count/count' });
   const isConsoleActive = matchRoute({ to: '/cycle-count/console' });
+  
+  const { user } = useAuth();
 
-  // Retrieve access permissions from localStorage
-  const access = JSON.parse(localStorage.getItem("access") || "{}");
+  // Retrieve access permissions from Auth provider
+  const access = user?.access || "{}"
 
   return (
     <div className="pt-16 flex flex-col items-center">

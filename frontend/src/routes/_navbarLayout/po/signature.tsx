@@ -8,12 +8,14 @@ import SignatureCanvas from 'react-signature-canvas';
 import { domain } from '@/lib/constants';
 import { Loader2 } from 'lucide-react';
 import axios from "axios"
+import { useAuth } from "@/context/AuthContext";
 
 export const Route = createFileRoute('/_navbarLayout/po/signature')({
   component: RouteComponent,
 })
 
 function RouteComponent() {
+  const { user } = useAuth()
   const navigate = useNavigate();
   const signature = useFormStore((state) => state.signature);
   const setSignature = useFormStore((state) => state.setSignature);
@@ -90,7 +92,7 @@ function RouteComponent() {
       }
 
       // Step 3: Create the PO entry in the Transaction model
-      const stationName = localStorage.getItem('location') || 'Rankin';
+      const stationName = user?.location || 'Rankin';
       const today = new Date();
 
       // add authorization header with bearer token

@@ -9,6 +9,7 @@ import { getStartAndEndOfToday, toUTC } from '@/lib/utils'
 import { domain } from '@/lib/constants'
 import { Eye, Trash2, ChevronLeft, ChevronRight, ExternalLink } from 'lucide-react'
 import axios from "axios"
+import { useAuth } from "@/context/AuthContext";
 
 interface Payable {
   _id: string
@@ -35,9 +36,10 @@ function RouteComponent() {
     from: start,
     to: end,
   })
+  const { user } = useAuth()
   
-  const [location, setLocation] = useState<string>(localStorage.getItem("location") || "")
-  const [timezone, setTimezone] = useState<string>(localStorage.getItem("timezone") || "America/Toronto")
+  const [location, setLocation] = useState<string>(user?.location || "")
+  const [timezone, setTimezone] = useState<string>(user?.timezone || "America/Toronto")
   const [payables, setPayables] = useState<Payable[]>([])
   const [loading, setLoading] = useState(false)
 

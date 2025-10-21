@@ -1,6 +1,6 @@
 import { createFileRoute, Link } from '@tanstack/react-router'
 import { Button } from '@/components/ui/button'
-
+import { useAuth } from "@/context/AuthContext";
 // Define the root route for the navbar layout using TanStack Router
 export const Route = createFileRoute('/_navbarLayout/')({
   component: App,
@@ -12,8 +12,9 @@ export const Route = createFileRoute('/_navbarLayout/')({
  * Renders sections and navigation buttons based on user access permissions.
  */
 function App() {
-  // Retrieve access permissions from localStorage
-  const access = JSON.parse(localStorage.getItem('access') || '{}')
+  const { user } = useAuth();
+  // Retrieve access permissions from auth provider
+  const access = user?.access || '{}'
 
   return (
     <div className="flex items-center justify-center min-h-screen bg-gray-50">
