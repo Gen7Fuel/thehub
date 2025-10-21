@@ -3,6 +3,7 @@ import { Button } from '../ui/button'
 import { useEffect } from 'react'
 import { isTokenExpired } from '../../lib/utils'
 import { getUserFromToken, useSocket } from '@/context/SignalContext'
+import { useAuth } from "@/context/AuthContext";
 
 // Navbar component for the application
 export default function Navbar() {
@@ -89,7 +90,10 @@ export default function Navbar() {
   }
 
   // Get access permissions from localStorage
-  const access = JSON.parse(localStorage.getItem('access') || '{}')
+
+  const { user } = useAuth();
+  console.log("Users access from navbar:", user?.access)
+  const access = user?.access || '{}'
 
   return (
     // Navbar container

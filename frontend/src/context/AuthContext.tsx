@@ -28,14 +28,14 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
     try {
       const decoded: any = jwtDecode(token);
 
-      // 👇 handle access being a stringified JSON
-      if (decoded.access && typeof decoded.access === "string") {
-        try {
-          decoded.access = JSON.parse(decoded.access);
-        } catch {
-          console.warn("Failed to parse access JSON");
-        }
-      }
+      // handle access being a stringified JSON
+      // if (decoded.access && typeof decoded.access === "string") {
+      //   try {
+      //     decoded.access = JSON.parse(decoded.access);
+      //   } catch {
+      //     console.warn("Failed to parse access JSON");
+      //   }
+      // }
 
       setUser(decoded);
     } catch (err) {

@@ -9,6 +9,7 @@ import {
   SelectValue,
 } from "@/components/ui/select"
 import axios from "axios"
+import { useAuth } from "@/context/AuthContext";
 
 interface Location {
   _id: string,
@@ -41,16 +42,18 @@ export function LocationPicker({ setStationName, setTimezone, value, disabled, d
       }
     }
   }
-
+  console.log('defult from location:',defaultValue)
+  const { user } = useAuth()
   // Use passed defaultValue, else fallback to localStorage
   const selectDefaultValue = defaultValue !== undefined
     ? defaultValue
-    : (localStorage.getItem('location') || '');
+    : user?.location;
 
   return (
     <Select
       onValueChange={handleValueChange}
       defaultValue={selectDefaultValue}
+      // value={defaultValue || ""}
       {...(disabled ? { disabled } : {})}
     >
       <SelectTrigger className="w-[180px]">

@@ -39,11 +39,11 @@ if (rootElement && !rootElement.innerHTML) {
   root.render(
     <StrictMode>
       <QueryClientProvider client={queryClient}>
-        <SocketProvider>
+        {/* <SocketProvider> */}
           <AuthProvider>
             <RouterProvider router={router} />
           </AuthProvider>
-        </SocketProvider>
+        {/* </SocketProvider> */}
       </QueryClientProvider>
     </StrictMode>,
   )

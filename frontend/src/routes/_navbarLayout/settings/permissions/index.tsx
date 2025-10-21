@@ -38,12 +38,10 @@ function RouteComponent() {
   const { permissions } = Route.useLoaderData() as {
     permissions: Permission[];
   };
+  
   const { user } = useAuth();
-
   if (user) {
-    const o = user.access.component_settings
-    console.log("email:", o);
-
+    console.log("email:", user.access);
   } else {
     console.log("No user logged in");
   }
