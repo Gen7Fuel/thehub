@@ -64,6 +64,8 @@ function RouteComponent() {
   const queryClient = useQueryClient()
   const { site, category } = Route.useSearch()
 
+  const access = JSON.parse(localStorage.getItem('access') || '')
+
   // ✅ Query for first 300 rows (available immediately from prefetch)
   const partialQuery = useQuery(inventoryQueries.partial(site))
 
@@ -176,6 +178,7 @@ function RouteComponent() {
               
               {/* Site Picker */}
               <SitePicker 
+                disabled={!access.component_cycle_count_inventory_site_picker}
                 value={site}
                 onValueChange={handleSiteChange}
                 placeholder="Select a site"
