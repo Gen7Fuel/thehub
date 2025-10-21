@@ -201,7 +201,7 @@ function RouteComponent() {
           <div className="flex items-center justify-between">
             <div>
               <CardTitle className="flex items-center gap-2">
-                Current Inventory
+                Current Inventory (as of end of shift report)
                 {/* ✅ Subtle indicator when loading full data */}
                 {isLoadingFull && (
                   <span className="text-xs text-muted-foreground font-normal">
