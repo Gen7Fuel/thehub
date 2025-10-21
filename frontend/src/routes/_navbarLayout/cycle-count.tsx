@@ -18,6 +18,7 @@ function RouteComponent() {
   // Determine if each tab is active
   const isInputActive = matchRoute({ to: '/cycle-count' });
   const isCountActive = matchRoute({ to: '/cycle-count/count' });
+  const isInventoryActive = matchRoute({ to: '/cycle-count/inventory' });
   const isConsoleActive = matchRoute({ to: '/cycle-count/console' });
 
   // Retrieve access permissions from localStorage
@@ -40,11 +41,25 @@ function RouteComponent() {
         <Link to="/cycle-count/count" activeOptions={{ exact: true }}>
           <Button
             {...(!isCountActive && { variant: 'outline' } as object)}
-            className={access.component_cycle_count_console ? 'rounded-none' : 'rounded-l-none'}
+            className="rounded-none"
           >
             Count
           </Button>
         </Link>
+
+        <Link 
+          to="/cycle-count/inventory" 
+          activeOptions={{ exact: true }}
+          search={{ site: localStorage.getItem('location') || '', category: '' }}
+        >
+          <Button
+            {...(!isInventoryActive && { variant: 'outline' } as object)}
+            className={access.component_cycle_count_console ? 'rounded-none' : 'rounded-l-none'}
+          >
+            Inventory
+          </Button>
+        </Link>
+
         {/* Console tab button, shown only if user has access */}
         {access.component_cycle_count_console && (
           <Link to="/cycle-count/console" activeOptions={{ exact: true }}>
