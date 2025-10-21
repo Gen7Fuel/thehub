@@ -47,7 +47,11 @@ function RouteComponent() {
           </Button>
         </Link>
 
-        <Link to="/cycle-count/inventory" activeOptions={{ exact: true }}>
+        <Link 
+          to="/cycle-count/inventory" 
+          activeOptions={{ exact: true }}
+          search={{ site: localStorage.getItem('location') || '', category: '' }}
+        >
           <Button
             {...(!isInventoryActive && { variant: 'outline' } as object)}
             className={access.component_cycle_count_console ? 'rounded-none' : 'rounded-l-none'}

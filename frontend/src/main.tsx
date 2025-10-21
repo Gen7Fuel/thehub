@@ -1,6 +1,7 @@
 import { StrictMode } from 'react'
 import ReactDOM from 'react-dom/client'
 import { RouterProvider, createRouter } from '@tanstack/react-router'
+import './types/router'
 
 // Import the generated route tree
 import { routeTree } from './routeTree.gen'
@@ -9,7 +10,6 @@ import './styles.css'
 import reportWebVitals from './reportWebVitals.ts'
 
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
-import type { QueryClient as QueryClientType } from '@tanstack/react-query'  // ✅ Import type
 import { SocketProvider } from './context/SignalContext.tsx'
 
 const queryClient = new QueryClient({
@@ -20,15 +20,6 @@ const queryClient = new QueryClient({
     } 
   },
 })
-
-declare module '@tanstack/react-router' {
-  interface Register {
-    router: typeof router
-  }
-  interface RouterContext {
-    queryClient: QueryClientType  // ✅ Use the imported type
-  }
-}
 
 // ✅ Create router with queryClient in context
 const router = createRouter({
