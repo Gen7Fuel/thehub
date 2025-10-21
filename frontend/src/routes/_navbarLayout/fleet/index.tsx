@@ -48,7 +48,7 @@ function RouteComponent() {
   const [isSubmitting, setIsSubmitting] = useState(false)
 
   // Get selected customer details
-  const selectedCustomerData = data.customers.find(c => c._id === selectedCustomer)
+  const selectedCustomerData = data.customers.find((c: { _id: string }) => c._id === selectedCustomer)
 
   const handleSignatureEnd = () => {
     if (signatureRef.current) {
