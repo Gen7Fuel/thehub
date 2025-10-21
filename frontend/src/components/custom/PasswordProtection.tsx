@@ -50,14 +50,16 @@ export function PasswordProtection({ isOpen, onSuccess, onCancel }: PasswordProt
             Please enter the password to access the Inventory page.
           </DialogDescription>
         </DialogHeader>
-        <form onSubmit={handleSubmit}>
+        <form onSubmit={handleSubmit} autoComplete='off'>
           <div className="grid gap-4 py-4">
             <Input
               type="password"
+              name="access-password"
               placeholder="Enter password"
               value={password}
               onChange={(e) => setPassword(e.target.value)}
               autoFocus
+              autoComplete="new-password"
             />
             {error && <p className="text-sm text-red-500">{error}</p>}
           </div>
