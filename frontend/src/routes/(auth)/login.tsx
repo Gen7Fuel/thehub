@@ -33,7 +33,7 @@ function RouteComponent() {
 
     try {
       const response = await axios.post(`${domain}/api/auth/login`, { email, password })
-      const { token, email: userEmail, location, name, initials, access, timezone } = response.data
+      const { token, email: userEmail } = response.data
 
       // Save data to localStorage
       localStorage.setItem('token', token)
