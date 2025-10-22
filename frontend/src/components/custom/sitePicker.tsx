@@ -8,6 +8,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select"
+import { useAuth } from "@/context/AuthContext"
 
 interface Location {
   _id: string
@@ -19,7 +20,7 @@ interface SitePickerProps {
   onValueChange: (value: string) => void
   placeholder?: string
   label?: string
-  disabled?: boolean
+  // disabled?: boolean
   className?: string
 }
 
@@ -28,12 +29,15 @@ export function SitePicker({
   onValueChange, 
   placeholder = "Select a site",
   label = "Sites",
-  disabled = false,
+  // disabled = false,
   className = "w-[180px]"
 }: SitePickerProps) {
   const [locations, setLocations] = useState<Location[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+  // Grabing user from context
+  const { user } = useAuth();
+  const access = user?.access || '{}'
 
   useEffect(() => {
     const fetchLocations = async () => {
@@ -81,7 +85,7 @@ export function SitePicker({
   }
 
   return (
-    <Select value={value} onValueChange={onValueChange} disabled={disabled}>
+    <Select value={value} onValueChange={onValueChange} disabled={!access.component_order_rec_list_location_filter}>
       <SelectTrigger className={className}>
         <SelectValue placeholder={placeholder} />
       </SelectTrigger>

@@ -107,13 +107,13 @@ function App() {
                 </Link>
               )}
               {/* Kardpoll button */}
-              {access.module_kardpoll && (
+              {/* {access.module_kardpoll && (
                 <Link to="/kardpoll">
                   <Button className="w-32 h-32 flex items-center justify-center break-words whitespace-normal text-center">
                     Kardpoll
                   </Button>
                 </Link>
-              )}
+              )} */}
             </div>
           </Section>
         )}
@@ -132,19 +132,19 @@ function App() {
         )}
 
         {/* Reports Section */}
-        {(access.module_daily_reports || access.module_reports) && (
+        {/* {(access.module_daily_reports || access.module_reports) && (
           <Section title="Reports">
             <div className="flex flex-wrap gap-4">
               {/* Daily Reports button */}
-              {access.module_daily_reports && (
+              {/* {access.module_daily_reports && (
                 <Link to="/daily-reports">
                   <Button className="w-32 h-32 flex items-center justify-center break-words whitespace-normal text-center">
                     Daily Reports
                   </Button>
                 </Link>
-              )}
+              )} */}
               {/* Reports button */}
-              {access.module_reports && (
+              {/* {access.module_reports && (
                 <Link to="/reports">
                   <Button className="w-32 h-32 flex items-center justify-center break-words whitespace-normal text-center">
                     Reports
@@ -153,7 +153,7 @@ function App() {
               )}
             </div>
           </Section>
-        )}
+        )} */} 
 
         {/* Sales Section */}
         {access.module_status && (
