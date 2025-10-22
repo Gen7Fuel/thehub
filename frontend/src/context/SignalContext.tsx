@@ -376,7 +376,7 @@ export const SocketProvider = ({ children }: { children: ReactNode }) => {
       localStreamRef,
       remoteStreamRef,
       isCallActive,
-      endCall
+      endCall,
     }}>
       {children}
       <IncomingCallModal 
