@@ -8,6 +8,7 @@ import { useEffect, useState } from 'react';
 import { calculateData } from '@/lib/utils';
 import axios from "axios"
 import { toast } from "sonner"
+import { useAuth } from "@/context/AuthContext";
 
 export const Route = createFileRoute(
   '/_navbarLayout/daily-reports/shift-worksheet/$worksheet',
@@ -35,6 +36,7 @@ interface ShiftWorksheetData {
 
 function RouteComponent() {
   const [data, setData] = useState<ShiftWorksheetData | null>(null)
+  const { user } = useAuth()
 
   // Extract the worksheet value from the URL
   const worksheet = window.location.pathname.split('/').pop() || ''
@@ -112,7 +114,7 @@ function RouteComponent() {
     e.preventDefault();
 
     if (data) {
-      const newDrop = { time: new Date().toLocaleTimeString(), amount: Number(e.target.dropAmount.value), initials: localStorage.getItem('initials') || '' }
+      const newDrop = { time: new Date().toLocaleTimeString(), amount: Number(e.target.dropAmount.value), initials: user?.initials || '' }
       const updatedDrops = [...data.drops, newDrop]
       // console.log(updatedDrops)
       setData({ ...data, drops: updatedDrops })

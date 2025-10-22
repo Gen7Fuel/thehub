@@ -1,5 +1,7 @@
 import { createFileRoute, Link, Outlet, useMatchRoute } from '@tanstack/react-router'
 import { Button } from '@/components/ui/button'
+import { useAuth } from "@/context/AuthContext"
+
 
 // Define the route for the audit section using TanStack Router
 export const Route = createFileRoute('/_navbarLayout/audit')({
@@ -20,8 +22,10 @@ function RouteComponent() {
   const isChecklistActive = matchRoute({ to: '/audit/checklist', fuzzy: true })
 
   const isInterfaceActive = matchRoute({ to: '/audit/interface', fuzzy: true })
-  // Retrieve access permissions from localStorage
-  const access = JSON.parse(localStorage.getItem('access') || '{}')
+  
+  const { user } = useAuth();
+  // Retrieve access permissions from decoded token
+  const access = user?.access || '{}'
 
   return (
     <div className="pt-16 flex flex-col items-center">

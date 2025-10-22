@@ -28,7 +28,7 @@ export function SitePicker({
   onValueChange, 
   placeholder = "Select a site",
   label = "Sites",
-  disabled = false,
+  disabled,
   className = "w-[180px]"
 }: SitePickerProps) {
   const [locations, setLocations] = useState<Location[]>([])

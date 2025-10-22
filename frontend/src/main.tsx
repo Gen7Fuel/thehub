@@ -1,6 +1,7 @@
 import { StrictMode } from 'react'
 import ReactDOM from 'react-dom/client'
 import { RouterProvider, createRouter } from '@tanstack/react-router'
+import { AuthProvider } from '@/context/AuthContext'
 
 // Import the generated route tree
 import { routeTree } from './routeTree.gen'
@@ -41,7 +42,9 @@ if (rootElement && !rootElement.innerHTML) {
     <StrictMode>
       <QueryClientProvider client={queryClient}>
         <SocketProvider>
-          <RouterProvider router={router} />
+          <AuthProvider>
+            <RouterProvider router={router} />
+          </AuthProvider>
         </SocketProvider>
       </QueryClientProvider>
     </StrictMode>,

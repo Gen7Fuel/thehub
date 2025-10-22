@@ -21,11 +21,12 @@ import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { useEffect, useMemo, useState } from 'react'
 import { inventoryQueries } from '@/queries/inventory'
 import { PasswordProtection } from '@/components/custom/PasswordProtection'
+import { useAuth } from "@/context/AuthContext";
 
 export const Route = createFileRoute('/_navbarLayout/cycle-count/inventory')({
   component: RouteComponent,
   validateSearch: (search: Record<string, unknown>) => ({
-    site: (search.site as string) ?? localStorage.getItem('location') ?? '',
+    site: (search.site as string) ?? '',
     category: (search.category as string) ?? '',
   }),
   loaderDeps: ({ search: { site }}) => ({ site }),
@@ -68,11 +69,18 @@ interface Category {
 }
 
 function RouteComponent() {
+  const { user } = useAuth()
   const navigate = useNavigate({ from: Route.fullPath })
   const queryClient = useQueryClient()
   const { site, category } = Route.useSearch()
 
-  const access = JSON.parse(localStorage.getItem('access') || '{}')
+  useEffect(() => {
+    if (!site && user?.location) {
+      navigate({ search: { site: user.location, category: '' } });
+    }
+  }, [site, user?.location, category, navigate]);
+
+  const access = user?.access || '{}'
 
   // ✅ Password protection state
   const [showPasswordDialog, setShowPasswordDialog] = useState(false)

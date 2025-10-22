@@ -6,6 +6,7 @@ import { LocationPicker } from '@/components/custom/locationPicker'
 import { VendorPicker } from '@/components/custom/vendorPicker'
 import { Button } from '@/components/ui/button'
 import { toUTC } from '@/lib/utils'
+import { useAuth } from "@/context/AuthContext";
 
 export const Route = createFileRoute('/_navbarLayout/order-rec/listold')({
   component: RouteComponent,
@@ -34,11 +35,12 @@ async function fetchOrderRecs(location: string, vendor: string, date: Date | und
 }
 
 function RouteComponent() {
+  const { user } = useAuth()
   const [orderRecs, setOrderRecs] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [date, setDate] = useState<Date | undefined>(new Date());
-  const [location, setLocation] = useState<string>(localStorage.getItem('location') || '')
+  const [location, setLocation] = useState<string>(user?.location || '')
   const [vendor, setVendor] = useState<string>('')
   const [showAdvanced, setShowAdvanced] = useState(false)
 

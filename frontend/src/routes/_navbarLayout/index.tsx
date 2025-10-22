@@ -1,6 +1,6 @@
 import { createFileRoute, Link } from '@tanstack/react-router'
 import { Button } from '@/components/ui/button'
-
+import { useAuth } from "@/context/AuthContext";
 // Define the root route for the navbar layout using TanStack Router
 export const Route = createFileRoute('/_navbarLayout/')({
   component: App,
@@ -12,8 +12,10 @@ export const Route = createFileRoute('/_navbarLayout/')({
  * Renders sections and navigation buttons based on user access permissions.
  */
 function App() {
-  // Retrieve access permissions from localStorage
-  const access = JSON.parse(localStorage.getItem('access') || '{}')
+  const { user } = useAuth();
+  // Retrieve access permissions from auth provider
+  const access = user?.access || '{}'
+  console.log("Access:",access)
 
   return (
     <div className="flex items-center justify-center min-h-screen bg-gray-50">
@@ -58,7 +60,7 @@ function App() {
                     </Button>
                   </Link>
                 ) : (
-                  <Link to="/order-rec/list" search={{ site: localStorage.getItem('location') || '' }}>
+                  <Link to="/order-rec/list" search={{ site: user?.location || '' }}>
                     <Button className="w-32 h-32 flex items-center justify-center break-words whitespace-normal text-center">
                       Order Rec
                     </Button>
@@ -106,13 +108,13 @@ function App() {
                 </Link>
               )}
               {/* Kardpoll button */}
-              {access.module_kardpoll && (
+              {/* {access.module_kardpoll && (
                 <Link to="/kardpoll">
                   <Button className="w-32 h-32 flex items-center justify-center break-words whitespace-normal text-center">
                     Kardpoll
                   </Button>
                 </Link>
-              )}
+              )} */}
             </div>
           </Section>
         )}
@@ -131,19 +133,19 @@ function App() {
         )}
 
         {/* Reports Section */}
-        {(access.module_daily_reports || access.module_reports) && (
+        {/* {(access.module_daily_reports || access.module_reports) && (
           <Section title="Reports">
             <div className="flex flex-wrap gap-4">
               {/* Daily Reports button */}
-              {access.module_daily_reports && (
+              {/* {access.module_daily_reports && (
                 <Link to="/daily-reports">
                   <Button className="w-32 h-32 flex items-center justify-center break-words whitespace-normal text-center">
                     Daily Reports
                   </Button>
                 </Link>
-              )}
+              )} */}
               {/* Reports button */}
-              {access.module_reports && (
+              {/* {access.module_reports && (
                 <Link to="/reports">
                   <Button className="w-32 h-32 flex items-center justify-center break-words whitespace-normal text-center">
                     Reports
@@ -152,7 +154,7 @@ function App() {
               )}
             </div>
           </Section>
-        )}
+        )} */} 
 
         {/* Sales Section */}
         {access.module_status && (
