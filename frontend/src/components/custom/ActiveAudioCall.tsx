@@ -3,6 +3,7 @@ import { useState, useEffect } from 'react'
 import { Card } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Phone, PhoneOff  } from 'lucide-react'
+import { useSocket } from '@/context/SignalContext'
 
 interface ActiveAudioCallProps {
   callerName?: string
@@ -11,6 +12,7 @@ interface ActiveAudioCallProps {
 
 export function ActiveAudioCall({ callerName, onEndCall }: ActiveAudioCallProps) {
   const [duration, setDuration] = useState(0)
+  const { startScreenShare, stopScreenShare, isSharingScreen } = useSocket();
 
   useEffect(() => {
     const interval = setInterval(() => {
@@ -38,6 +40,10 @@ export function ActiveAudioCall({ callerName, onEndCall }: ActiveAudioCallProps)
           <p className="text-xs text-gray-600">{callerName || 'Support Team'}</p>
           <p className="text-xs text-gray-500 font-mono">{formatDuration(duration)}</p>
         </div>
+
+        <Button onClick={isSharingScreen ? stopScreenShare : startScreenShare}>
+          {isSharingScreen ? '🛑 Stop Sharing' : '🖥️ Share Screen'}
+        </Button>
 
         <Button
           variant="destructive"
