@@ -34,9 +34,6 @@ interface SocketContextType {
   remoteStreamRef: MutableRefObject<MediaStream | null>
   isCallActive: boolean
   endCall: () => void
-  startScreenShare: () => Promise<void>  // ✅ Add
-  stopScreenShare: () => void             // ✅ Add
-  isSharingScreen: boolean                // ✅ Add
 }
 
 const SocketContext = createContext<SocketContextType | undefined>(undefined)
@@ -51,59 +48,6 @@ export const SocketProvider = ({ children }: { children: ReactNode }) => {
   const [isCallActive, setIsCallActive] = useState(false);
   const [otherUserName, setOtherUserName] = useState<string>('');
   const [otherUserRoom, setOtherUserRoom] = useState<string>('');
-
-  const [isSharingScreen, setIsSharingScreen] = useState(false);
-  const screenStreamRef = useRef<MediaStream | null>(null);
-
-  const startScreenShare = async () => {
-    try {
-      console.log("🖥️ Requesting screen share...");
-      const screenStream = await navigator.mediaDevices.getDisplayMedia({ 
-        video: true,
-        audio: false 
-      });
-      
-      console.log("✅ Got screen stream");
-      screenStreamRef.current = screenStream;
-      
-      // Get video track first
-      const videoTrack = screenStream.getVideoTracks()[0];
-
-      // Replace video track in peer connection
-      if (peerConnectionRef.current) {
-        const sender = peerConnectionRef.current
-          .getSenders()
-          .find(s => s.track?.kind === 'video');
-        
-        if (sender) {
-          sender.replaceTrack(videoTrack);
-          console.log("🔄 Replaced video track with screen share");
-        } else {
-          peerConnectionRef.current.addTrack(videoTrack, screenStream);
-          console.log("➕ Added screen share track");
-        }
-      }
-      
-      // Handle when user stops sharing via browser UI
-      videoTrack.onended = () => {
-        console.log("🛑 Screen sharing stopped");
-        stopScreenShare();
-      };
-      
-      setIsSharingScreen(true);
-    } catch (error) {
-      console.error("❌ Error starting screen share:", error);
-    }
-  };
-
-  const stopScreenShare = () => {
-    if (screenStreamRef.current) {
-      screenStreamRef.current.getTracks().forEach(track => track.stop());
-      screenStreamRef.current = null;
-    }
-    setIsSharingScreen(false);
-    console.log("✅ Screen sharing stopped");
-  };
 
   const endCall = () => {
     console.log("📞 Ending call...");
@@ -433,9 +377,6 @@ export const SocketProvider = ({ children }: { children: ReactNode }) => {
       remoteStreamRef,
       isCallActive,
       endCall,
-      startScreenShare,  // ✅ Add
-      stopScreenShare,   // ✅ Add
-      isSharingScreen    // ✅ Add
     }}>
       {children}
       <IncomingCallModal 
