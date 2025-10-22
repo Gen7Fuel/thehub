@@ -3,23 +3,23 @@ const Location = require("../models/Location");
 const router = express.Router();
 
 // Create a new location
-router.post("/", async (req, res) => {
-  try {
-    const { stationName, legalName, INDNumber } = req.body;
+// router.post("/", async (req, res) => {
+//   try {
+//     const { stationName, legalName, INDNumber } = req.body;
 
-    if (!stationName || !legalName || !INDNumber) {
-      return res.status(400).json({ message: "All fields are required." });
-    }
+//     if (!stationName || !legalName || !INDNumber) {
+//       return res.status(400).json({ message: "All fields are required." });
+//     }
 
-    const newLocation = new Location({ stationName, legalName, INDNumber });
-    const savedLocation = await newLocation.save();
+//     const newLocation = new Location({ stationName, legalName, INDNumber });
+//     const savedLocation = await newLocation.save();
 
-    res.status(201).json(savedLocation);
-  } catch (err) {
-    console.error(err);
-    res.status(500).json({ message: "Failed to create location." });
-  }
-});
+//     res.status(201).json(savedLocation);
+//   } catch (err) {
+//     console.error(err);
+//     res.status(500).json({ message: "Failed to create location." });
+//   }
+// });
 
 // Get locations
 router.get("/", async (req, res) => {
@@ -45,19 +45,67 @@ router.get("/", async (req, res) => {
   }
 });
 
+//--GET LOCATION BY ID--
 router.get("/:id", async (req, res) => {
   const { id } = req.params;
 
   try {
     const location = await Location.findById(id);
     if (location) {
-      res.status(200).json({ stationName: location.stationName });
+      res.status(200).json({location});
     } else {
       res.status(404).json({ message: "Location not found." });
     }
   } catch (err) {
     console.error(err);
     res.status(500).json({ message: "Failed to fetch location." });
+  }
+});
+
+// UPDATE LOCATION
+router.put("/:id", async (req, res) => {
+  const { id } = req.params;
+  const updateData = req.body;
+
+  try {
+    const location = await Location.findByIdAndUpdate(id, updateData, { new: true });
+    if (!location) {
+      return res.status(404).json({ message: "Location not found." });
+    }
+    res.status(200).json({ message: "Location updated successfully.", location });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ message: "Failed to update location." });
+  }
+});
+
+//--ADD NEW LOCATION--
+// POST /api/locations
+router.post("/", async (req, res) => {
+  try {
+    const { type, stationName, legalName, INDNumber, kardpollCode, csoCode, timezone, email } = req.body;
+
+    // Simple validation
+    if (!type || !stationName || !legalName || !INDNumber || !csoCode || !timezone || !email) {
+      return res.status(400).json({ message: "Missing required fields." });
+    }
+
+    const location = new Location({
+      type,
+      stationName,
+      legalName,
+      INDNumber,
+      kardpollCode,
+      csoCode,
+      timezone,
+      email,
+    });
+
+    await location.save();
+    res.status(201).json(location);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ message: "Failed to create location." });
   }
 });
 

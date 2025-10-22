@@ -11,6 +11,7 @@ const PermissionSchema = new mongoose.Schema({
     required: true, 
     unique: true // Ensures each permission name is unique
   },
+  sites: [{ type: String }], // store site names
 });
 
 // This will use the "permissions" collection automatically
