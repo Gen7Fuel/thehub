@@ -80,7 +80,7 @@ function RouteComponent() {
     }
   }, [site, user?.location, category, navigate]);
 
-  const access = JSON.parse(localStorage.getItem('access') || '{}')
+  const access = user?.access || '{}'
 
   // ✅ Password protection state
   const [showPasswordDialog, setShowPasswordDialog] = useState(false)

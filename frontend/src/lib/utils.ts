@@ -3,6 +3,7 @@ import { twMerge } from "tailwind-merge"
 import { domain } from "@/lib/constants"
 import { jwtDecode } from "jwt-decode"
 import axios from "axios"
+// import { useAuth } from "@/context/AuthContext";
 
 export function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs))
@@ -271,13 +272,14 @@ export async function sendBulkEmail({
   }
 }
 
+const user = localStorage.getItem('TimeZone')
 /**
  * Converts a date string from the user's timezone to UTC.
  * @param {string} dateString - The date string to convert (e.g., "2025-07-25T10:00:00")
  * @returns {string} - The UTC date string in ISO format
  */
 export function toUTCstring(dateString: string): string {
-  const timezone = localStorage.getItem('timezone') || 'UTC';
+  const timezone = user || 'UTC';
   
   // Create a date object treating the input as being in the user's timezone
   const date = new Date(dateString);
@@ -298,7 +300,7 @@ export function toUTCstring(dateString: string): string {
  * @returns {Date} - The UTC date.
  */
 export function toUTC(date: Date): Date {
-  const timezone = localStorage.getItem('timezone') || 'UTC';
+  const timezone = user || 'UTC';
   const utcTime = new Date(date.toLocaleString('en-US', { timeZone: 'UTC' }));
   const localTime = new Date(date.toLocaleString('en-US', { timeZone: timezone }));
   const offset = utcTime.getTime() - localTime.getTime();

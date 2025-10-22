@@ -14,6 +14,7 @@ interface User {
 interface AuthContextType {
   user: User | null;
   setUser: React.Dispatch<React.SetStateAction<User | null>>;
+  refreshAuth: () => void; // new method
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -21,31 +22,28 @@ const AuthContext = createContext<AuthContextType | undefined>(undefined);
 export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
   const [user, setUser] = useState<User | null>(null);
 
-  useEffect(() => {
+  const refreshAuth = () => {
     const token = localStorage.getItem("token");
-    if (!token) return;
+    if (!token) {
+      setUser(null);
+      return;
+    }
 
     try {
       const decoded: any = jwtDecode(token);
-
-      // handle access being a stringified JSON
-      // if (decoded.access && typeof decoded.access === "string") {
-      //   try {
-      //     decoded.access = JSON.parse(decoded.access);
-      //   } catch {
-      //     console.warn("Failed to parse access JSON");
-      //   }
-      // }
-
       setUser(decoded);
     } catch (err) {
       console.error("Failed to decode token:", err);
       setUser(null);
     }
+  };
+
+  useEffect(() => {
+    refreshAuth(); // Load user on first mount
   }, []);
 
   return (
-    <AuthContext.Provider value={{ user, setUser }}>
+    <AuthContext.Provider value={{ user, setUser, refreshAuth }}>
       {children}
     </AuthContext.Provider>
   );
