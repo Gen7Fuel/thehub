@@ -54,7 +54,7 @@ function RouteComponent() {
         <Link 
           to="/cycle-count/inventory" 
           activeOptions={{ exact: true }}
-          search={{ site: localStorage.getItem('location') || '', category: '' }}
+          search={{ site: user?.location || '', category: '' }}
         >
           <Button
             {...(!isInventoryActive && { variant: 'outline' } as object)}

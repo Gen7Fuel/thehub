@@ -59,7 +59,7 @@ function App() {
                     </Button>
                   </Link>
                 ) : (
-                  <Link to="/order-rec/list" search={{ site: localStorage.getItem('location') || '' }}>
+                  <Link to="/order-rec/list" search={{ site: user?.location || '' }}>
                     <Button className="w-32 h-32 flex items-center justify-center break-words whitespace-normal text-center">
                       Order Rec
                     </Button>
