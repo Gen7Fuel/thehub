@@ -1,5 +1,6 @@
 import { createFileRoute, Link, Outlet, useMatchRoute } from '@tanstack/react-router'
 import { Button } from '@/components/ui/button'
+import { useAuth } from "@/context/AuthContext";
 
 // Define the route for the Order Rec section using TanStack Router
 export const Route = createFileRoute('/_navbarLayout/order-rec')({
@@ -19,9 +20,9 @@ function RouteComponent() {
   const isUploadActive = matchRoute({ to: '/order-rec' })
   const isListActive = matchRoute({ to: '/order-rec/list' })
   const isDashboardActive = matchRoute({ to: '/order-rec/workflow' })
-
-  // Retrieve access permissions from localStorage
-  const access = JSON.parse(localStorage.getItem('access') || '{}')
+  const { user } = useAuth();
+  // Retrieve access permissions from auth provider
+  const access = user?.access || '{}'
 
   return (
     <div className="pt-16 flex flex-col items-center">
@@ -40,7 +41,7 @@ function RouteComponent() {
         )}
 
         {/* List tab button, always shown */}
-        <Link to="/order-rec/list" search={{ site: localStorage.getItem('location') || '' }}>
+        <Link to="/order-rec/list" search={{ site: user?.location || '' }}>
           <Button
             {...(isListActive ? {} : { variant: 'outline' } as object)}
             className={`${access.component_order_rec_upload ? 'rounded-l-none rounded-r-none' : ''}`}

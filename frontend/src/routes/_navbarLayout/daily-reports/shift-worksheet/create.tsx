@@ -3,37 +3,62 @@ import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Select, SelectContent, SelectGroup, SelectItem, SelectLabel, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Switch } from '@/components/ui/switch';
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
+import { useAuth } from "@/context/AuthContext";
 import axios from "axios"
 
 export const Route = createFileRoute(
   '/_navbarLayout/daily-reports/shift-worksheet/create',
 )({
   component: RouteComponent,
-  loader: async () => {
-    const location = localStorage.getItem('location');
-    if (!location) {
-      console.error('Location not found in localStorage');
-      return { paypoints: [] };
-    }
+  // loader: async () => {
+  //   const { user } = useAuth() 
+  //   const location = user?.location;
+  //   if (!location) {
+  //     console.error('Location not found in localStorage');
+  //     return { paypoints: [] };
+  //   }
 
-    try {
-      const response = await axios.get(`/api/paypoints/${location}`, {
-        headers: {
-          Authorization: `Bearer ${localStorage.getItem('token')}`
-        }
-      });
-      const data = response.data;
-      return { paypoints: Array.isArray(data) ? data : [] }; // Ensure data is an array
-    } catch (error) {
-      console.error('Error fetching paypoints:', error);
-      return { paypoints: [] }; // Fallback to an empty array on error
-    }
-  },
+  //   try {
+  //     const response = await axios.get(`/api/paypoints/${location}`, {
+  //       headers: {
+  //         Authorization: `Bearer ${localStorage.getItem('token')}`
+  //       }
+  //     });
+  //     const data = response.data;
+  //     return { paypoints: Array.isArray(data) ? data : [] }; // Ensure data is an array
+  //   } catch (error) {
+  //     console.error('Error fetching paypoints:', error);
+  //     return { paypoints: [] }; // Fallback to an empty array on error
+  //   }
+  // },
 });
 
 function RouteComponent() {
-  const { paypoints } = Route.useLoaderData() as { paypoints: { _id: string; label: string }[] };
+  const { user } = useAuth();
+  const location = user?.location;
+  const [paypoints, setPaypoints] = useState<any[]>([]);
+
+  useEffect(() => {
+    if (!location) return;
+
+    const fetchPaypoints = async () => {
+      try {
+        const response = await axios.get(`/api/paypoints/${location}`, {
+          headers: {
+            Authorization: `Bearer ${localStorage.getItem("token")}`,
+          },
+        });
+        setPaypoints(Array.isArray(response.data) ? response.data : []);
+      } catch (err) {
+        console.error("Error fetching paypoints:", err);
+        setPaypoints([]);
+      }
+    };
+
+    fetchPaypoints();
+  }, [location]);
+
   const [shiftReportNumber, setShiftReportNumber] = useState('');
   const [isPM, setIsPM] = useState(false); // Default to AM (false)
   const [tillLocation, setTillLocation] = useState('');
@@ -49,11 +74,11 @@ function RouteComponent() {
         report_number: shiftReportNumber,
         shift,
         till_location: tillLocation,
-        location: localStorage.getItem('location'),
+        location: location,
       }, {
         headers: {
           'Content-Type': 'application/json',
-          'x-user-email': localStorage.getItem('email') || '',
+          'x-user-email': user?.email || '',
           'Authorization': `Bearer ${localStorage.getItem('token')}`
         }
       });

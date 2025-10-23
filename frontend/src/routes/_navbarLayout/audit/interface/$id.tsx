@@ -4,6 +4,7 @@ import { Button } from "@/components/ui/button";
 import { ChecklistItemCard } from "@/components/custom/ChecklistItem";
 import { useContext } from "react";
 import { RouteContext } from "../interface";
+import { useAuth } from "@/context/AuthContext";
 
 
 interface SelectOption {
@@ -69,7 +70,8 @@ function RouteComponent() {
   
   const token = localStorage.getItem("token");
   const { stationName } = useContext(RouteContext);
-  const site = stationName || localStorage.getItem("location") || "";
+  const { user } = useAuth()
+  const site = stationName || user?.location || "";
     
 
   const shiftDate = (direction: number) => {

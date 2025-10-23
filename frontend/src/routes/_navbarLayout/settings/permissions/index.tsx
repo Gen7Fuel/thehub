@@ -2,6 +2,7 @@ import { createFileRoute, Outlet } from "@tanstack/react-router";
 import axios from "axios";
 import { useState } from "react";
 import { Pencil } from "lucide-react";
+import { useAuth } from "@/context/AuthContext";
 
 
 export const Route = createFileRoute("/_navbarLayout/settings/permissions/")({
@@ -13,7 +14,7 @@ export const Route = createFileRoute("/_navbarLayout/settings/permissions/")({
           Authorization: `Bearer ${localStorage.getItem("token")}`,
         },
       });
-      console.log("Permissions response:", response.data); 
+      // console.log("Permissions response:", response.data); 
       return { permissions: response.data };
     } catch (error) {
       console.error("Error fetching permissions:", error);
@@ -27,10 +28,23 @@ interface Permission {
   name: string;
 }
 
+export const hasAccess = (access: any, key: string): boolean => {
+  if (!access || typeof access !== "object") return false;
+  return Boolean(access[key]);
+};
+
+
 function RouteComponent() {
   const { permissions } = Route.useLoaderData() as {
     permissions: Permission[];
   };
+  
+  const { user } = useAuth();
+  if (user) {
+    console.log("email:", user.access);
+  } else {
+    console.log("No user logged in");
+  }
 
   const [newPermission, setNewPermission] = useState("");
   const [status, setStatus] = useState<string | null>(null);

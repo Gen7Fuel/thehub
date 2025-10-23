@@ -6,6 +6,7 @@ import { OpenIssueCard } from "@/components/custom/OpenIssueCard";
 import {Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
+import { useAuth } from "@/context/AuthContext";
 
 interface OpenIssue {
   _id: string;
@@ -37,7 +38,8 @@ export const Route = createFileRoute("/_navbarLayout/audit/interface/open-issues
 
 export function OpenIssuesPage() {
   const { stationName } = useContext(RouteContext);
-  const site = stationName || localStorage.getItem("location") || "";
+  const { user } = useAuth()
+  const site = stationName || user?.location || "";
 
   const [openIssues, setOpenIssues] = useState<OpenIssue[]>([]);
   const [loading, setLoading] = useState(false);

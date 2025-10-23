@@ -4,6 +4,7 @@ import { DatePicker } from '@/components/custom/datePicker';
 import { LocationPicker } from '@/components/custom/locationPicker';
 import axios from "axios"
 import { toUTCstring } from '@/lib/utils';
+import { useAuth } from "@/context/AuthContext";
 
 export const Route = createFileRoute(
   '/_navbarLayout/daily-reports/shift-worksheet/',
@@ -12,8 +13,9 @@ export const Route = createFileRoute(
 });
 
 function RouteComponent() {
+  const { user } = useAuth()
   const [date, setDate] = useState<Date | undefined>(new Date());
-  const [location, setLocation] = useState<string>(localStorage.getItem('location') || '');
+  const [location, setLocation] = useState<string>(user?.location || '');
   const [worksheets, setWorksheets] = useState<{ _id: string; report_number: number; shift: string; till_location: string }[]>([]);
   const [loading, setLoading] = useState<boolean>(false);
 
@@ -50,7 +52,7 @@ function RouteComponent() {
     fetchWorksheets();
   }, [date, location]);
 
-  const access = JSON.parse(localStorage.getItem('access') || '{}')
+  const access = user?.access || '{}'
 
   return (
     <div>

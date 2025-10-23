@@ -12,7 +12,7 @@ import { calculateData } from '@/lib/utils';
 const formatDate = (dateStr: string | Date) => {
   const d = typeof dateStr === 'string' ? new Date(dateStr) : dateStr;
   return d ? d.toLocaleDateString('en-CA', {
-    timeZone: localStorage.getItem('timezone') || 'America/New_York',
+    timeZone: localStorage.getItem('timezone') || 'America/Toronto',
   }) : '';
 };
 

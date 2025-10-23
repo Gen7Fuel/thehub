@@ -1,6 +1,7 @@
 import { createFileRoute } from '@tanstack/react-router'
 import { useState } from "react";
 import { LocationPicker } from "@/components/custom/locationPicker";
+import { useAuth } from "@/context/AuthContext";
 
 export const Route = createFileRoute('/_navbarLayout/cycle-count/console')({
   component: RouteComponent,
@@ -8,7 +9,8 @@ export const Route = createFileRoute('/_navbarLayout/cycle-count/console')({
 
 function RouteComponent() {
   const [upc, setUpc] = useState("");
-  const [site, setSite] = useState(localStorage.getItem("location") || "");
+  const { user } = useAuth()
+  const [site, setSite] = useState(user?.location || "");
   const [result, setResult] = useState<any>(null);
   const [loading, setLoading] = useState(false);
 

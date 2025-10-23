@@ -62,13 +62,14 @@ router.post("/login", async (req, res) => {
       location: user.stationName,
       name: `${user.firstName} ${user.lastName}`,
       initials: `${getInitials(user.firstName, user.lastName)}`,
-      access: JSON.stringify(user.access),
+      // access: JSON.stringify(user.access),
+      access: user.access,
       timezone
      }, process.env.JWT_SECRET, { expiresIn: "1d" });
     res.json({
       token,
       email: user.email,
-      location: user.stationName,
+      // location: user.stationName,
       name: `${user.firstName} ${user.lastName}`,
       initials: `${getInitials(user.firstName, user.lastName)}`,
       access: JSON.stringify(user.access),

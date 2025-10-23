@@ -1,28 +1,40 @@
 import { SitePicker } from '@/components/custom/sitePicker'
 import { createFileRoute, useNavigate } from '@tanstack/react-router'
 import { getOrderRecStatusColor } from "@/lib/utils"
+import { useEffect } from 'react'
+import { useAuth } from "@/context/AuthContext";
 
 export const Route = createFileRoute('/_navbarLayout/order-rec/list')({
   component: RouteComponent,
   validateSearch: (search: { site: string }) => ({
-    site: search.site ?? localStorage.getItem('location'),
+    site: search.site,
   }),
   loaderDeps: ({ search: { site }}) => ({ site }),
   loader: ({ deps: { site } }) => fetchOrderRecs(site),
 })
 
-function RouteComponent() {
+function RouteComponent() {3
+  const { user } = useAuth()
   const { site } = Route.useSearch()
   const navigate = useNavigate({ from: Route.fullPath })
   const data = Route.useLoaderData()
+  
+  useEffect(() => {
+    if (!site && user?.location) {
+      navigate({ search: { site: user.location } });
+    }
+  }, [site, user?.location, navigate]);
+
 
   const updateSite = (newSite: string) => {
     navigate({ search: { site: newSite } })
   }
 
+  const access = user?.access || '{}'
+
   return (
     <>
-    <SitePicker value={site} onValueChange={updateSite} />
+    <SitePicker value={site} onValueChange={updateSite} disabled={!access.component_order_rec_list_location_filter}/>
     
     <div className="container mx-auto p-6 max-w-2xl">
       <h1 className="text-2xl font-bold mb-4">Order Recommendations</h1>
