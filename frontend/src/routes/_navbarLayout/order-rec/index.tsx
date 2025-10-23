@@ -9,6 +9,7 @@ import axios from 'axios'
 import { Toaster, toast } from 'sonner'
 import { LocationPicker } from '@/components/custom/locationPicker'
 import { VendorPicker } from '@/components/custom/vendorPicker'
+import { useAuth } from "@/context/AuthContext";
 
 export const Route = createFileRoute('/_navbarLayout/order-rec/')({
   component: RouteComponent,
@@ -134,10 +135,11 @@ function parseOrderRecCSV(csvContent: string): CategoryData[] {
 }
 
 function RouteComponent() {
+  const { user } = useAuth()
   const [uploadedFile, setUploadedFile] = useState<File | null>(null)
   const [isProcessing, setIsProcessing] = useState(false)
   const [error, setError] = useState<string | null>(null)
-  const [site, setSite] = useState<string>(localStorage.getItem('location') || '')
+  const [site, setSite] = useState<string>(user?.location || '')
   const [vendor, setVendor] = useState<string>('')
   const [includeStationSupplies, setIncludeStationSupplies] = useState(false);
 
@@ -204,7 +206,7 @@ function RouteComponent() {
           categories: filteredCategories,
           site,
           vendor,
-          email: localStorage.getItem('email'),
+          email: user?.email,
           includeStationSupplies
         },
         {

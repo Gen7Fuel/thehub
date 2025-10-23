@@ -11,12 +11,14 @@ import { Button } from '@/components/ui/button'
 import { getStartAndEndOfToday } from '@/lib/utils'
 import { toZonedTime } from 'date-fns-tz'
 import axios from "axios"
+import { useAuth } from "@/context/AuthContext";
 
 export const Route = createFileRoute('/_navbarLayout/po/list')({
   component: RouteComponent,
 })
 
 function RouteComponent() {
+  const { user } = useAuth()
   const resetForm = useFormStore((state) => state.resetForm);
   const { start, end } = getStartAndEndOfToday();
   const [date, setDate] = React.useState<DateRange | undefined>({
@@ -26,8 +28,8 @@ function RouteComponent() {
   
   // const poData = Route.useLoaderData() as any;
 
-  const [stationName, setStationName] = React.useState<string>(localStorage.getItem("location") || "");
-  const [timezone, setTimezone] = React.useState<string>(localStorage.getItem("timezone") || "America/Toronto");
+  const [stationName, setStationName] = React.useState<string>(user?.location || "");
+  const [timezone, setTimezone] = React.useState<string>(user?.timezone || "America/Toronto");
   const [purchaseOrders, setPurchaseOrders] = React.useState<
     {
     date: string;
@@ -114,7 +116,7 @@ function RouteComponent() {
     fetchPurchaseOrders();
   }, [date, stationName]);
 
-  const access = JSON.parse(localStorage.getItem('access') || '{}')
+  const access = user?.access || '{}'
 
   return (
     <div className="p-4 border border-dashed border-gray-300 rounded-md">
@@ -127,7 +129,7 @@ function RouteComponent() {
           setStationName={setStationName}
           setTimezone={setTimezone}
           value="stationName"
-          {...(!access.component_po_location_filter ? { disabled: true } : {})}
+          // {...(!access.component_po_location_filter ? { disabled: true } : {})}
         />
       </div>
 

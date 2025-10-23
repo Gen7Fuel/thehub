@@ -7,17 +7,19 @@ import { formatPhoneNumber } from '@/lib/utils';
 import { pdf } from '@react-pdf/renderer'
 import StatusSalesPDF from '@/components/custom/statusSalesForm';
 import axios from "axios"
+import { useAuth } from "@/context/AuthContext";
 
 export const Route = createFileRoute('/_navbarLayout/status/list')({
   component: RouteComponent,
 });
 
 function RouteComponent() {
+  const { user } = useAuth()
   const [date, setDate] = React.useState<Date | undefined>(new Date());
   if (date)
     console.log('Selected date:', new Date(date.setHours(0, 0, 0, 0)).toISOString());
 
-  const [stationName, setStationName] = React.useState<string>(localStorage.getItem('location') || '');
+  const [stationName, setStationName] = React.useState<string>(user?.location || '');
   const [statusSales, setStatusSales] = React.useState<
     {
       createdAt: string;
@@ -96,7 +98,7 @@ function RouteComponent() {
     }
   };
 
-  const access = JSON.parse(localStorage.getItem('access') || '{}');
+  const access = user?.access || '{}';
 
   return (
     <div className="p-4 border border-dashed border-gray-300 rounded-md">
@@ -115,7 +117,7 @@ function RouteComponent() {
         <LocationPicker
           setStationName={setStationName}
           value="stationName"
-          {...(!access.component_po_location_filter ? { disabled: true } : {})}
+          // {...(!access.component_po_location_filter ? { disabled: true } : {})}
         />
       </div>
 

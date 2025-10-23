@@ -9,6 +9,7 @@ import { Card } from "@/components/ui/card"
 import { useNavigate } from '@tanstack/react-router'
 import { getSocket } from "@/lib/websocket"
 import { getOrderRecStatusColor } from "@/lib/utils"
+import { useAuth } from "@/context/AuthContext";
 
 const socket = getSocket();
 
@@ -28,6 +29,7 @@ type Vendor = {
 function RouteComponent() {
   const [orderRecs, setOrderRecs] = useState<any[]>([])
   const navigate = useNavigate()
+  const { user } = useAuth()
   // const [vendors, setVendors] = useState<any[]>([])
   const [stores, setStores] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
@@ -90,7 +92,7 @@ function RouteComponent() {
         },
         body: JSON.stringify({
           text,
-          author: localStorage.getItem("initials"),
+          author: user?.initials,
         }),
       })
 

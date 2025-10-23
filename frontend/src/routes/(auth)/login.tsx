@@ -5,6 +5,7 @@ import { Input } from '@/components/ui/input'
 import axios from 'axios'
 import { domain } from '@/lib/constants'
 import { useSocket } from '@/context/SignalContext'
+import { useAuth } from '@/context/AuthContext'
 
 export const Route = createFileRoute('/(auth)/login')({
   loader: () => {
@@ -22,6 +23,7 @@ function RouteComponent() {
   const [password, setPassword] = useState('')
   const [error, setError] = useState<string | null>(null)
   const navigate = useNavigate()
+  const { refreshAuth } = useAuth();
 
   const { reconnect } = useSocket();
 
@@ -31,16 +33,25 @@ function RouteComponent() {
 
     try {
       const response = await axios.post(`${domain}/api/auth/login`, { email, password })
-      const { token, email: userEmail, location, name, initials, access, timezone } = response.data
+      const { token, email: userEmail } = response.data
 
       // Save data to localStorage
       localStorage.setItem('token', token)
-      localStorage.setItem('email', userEmail)
-      localStorage.setItem('location', location)
-      localStorage.setItem('name', name)
-      localStorage.setItem('initials', initials)
-      localStorage.setItem('access', access)
-      localStorage.setItem('timezone', timezone)
+      // localStorage.setItem('email', userEmail)
+      // localStorage.setItem('location', location)
+      // localStorage.setItem('name', name)
+      // localStorage.setItem('initials', initials)
+      // localStorage.setItem('access', access)
+      // localStorage.setItem('timezone', timezone)
+      
+      localStorage.removeItem('email')
+      localStorage.removeItem('location')
+      localStorage.removeItem('access')
+      localStorage.removeItem('timezone')
+      localStorage.removeItem('initials')
+      localStorage.removeItem('name')
+    
+      refreshAuth()
 
       console.log(`User ${userEmail} logged in, will join room automatically via SignalContext`)
 

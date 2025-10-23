@@ -1,5 +1,7 @@
 import { createFileRoute, Link, Outlet, useMatchRoute } from '@tanstack/react-router'
 import { Button } from '@/components/ui/button'
+import { useAuth } from "@/context/AuthContext";
+
 
 // Define the route for the cycle count section using TanStack Router
 export const Route = createFileRoute('/_navbarLayout/cycle-count')({
@@ -18,10 +20,13 @@ function RouteComponent() {
   // Determine if each tab is active
   const isInputActive = matchRoute({ to: '/cycle-count' });
   const isCountActive = matchRoute({ to: '/cycle-count/count' });
+  const isInventoryActive = matchRoute({ to: '/cycle-count/inventory' });
   const isConsoleActive = matchRoute({ to: '/cycle-count/console' });
+  
+  const { user } = useAuth();
 
-  // Retrieve access permissions from localStorage
-  const access = JSON.parse(localStorage.getItem("access") || "{}");
+  // Retrieve access permissions from Auth provider
+  const access = user?.access || "{}"
 
   return (
     <div className="pt-16 flex flex-col items-center">
@@ -40,11 +45,25 @@ function RouteComponent() {
         <Link to="/cycle-count/count" activeOptions={{ exact: true }}>
           <Button
             {...(!isCountActive && { variant: 'outline' } as object)}
-            className={access.component_cycle_count_console ? 'rounded-none' : 'rounded-l-none'}
+            className="rounded-none"
           >
             Count
           </Button>
         </Link>
+
+        <Link 
+          to="/cycle-count/inventory" 
+          activeOptions={{ exact: true }}
+          search={{ site: user?.location || '', category: '' }}
+        >
+          <Button
+            {...(!isInventoryActive && { variant: 'outline' } as object)}
+            className={access.component_cycle_count_console ? 'rounded-none' : 'rounded-l-none'}
+          >
+            Inventory
+          </Button>
+        </Link>
+
         {/* Console tab button, shown only if user has access */}
         {access.component_cycle_count_console && (
           <Link to="/cycle-count/console" activeOptions={{ exact: true }}>

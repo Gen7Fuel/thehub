@@ -3,6 +3,7 @@ import { Button } from '../ui/button'
 import { useEffect } from 'react'
 import { isTokenExpired } from '../../lib/utils'
 import { getUserFromToken, useSocket } from '@/context/SignalContext'
+import { useAuth } from "@/context/AuthContext";
 
 // Navbar component for the application
 export default function Navbar() {
@@ -17,9 +18,9 @@ export default function Navbar() {
     if (isTokenExpired(token)) {
       // Clear sensitive data and redirect to login
       localStorage.removeItem('token');
-      localStorage.removeItem('email');
-      localStorage.removeItem('location');
-      localStorage.removeItem('access');
+      // localStorage.removeItem('email');
+      // localStorage.removeItem('location');
+      // localStorage.removeItem('access');
       navigate({ to: '/login' });
     }
   }, [navigate]);
@@ -75,10 +76,6 @@ export default function Navbar() {
     
     // Clear all stored data
     localStorage.removeItem('token')
-    localStorage.removeItem('email')
-    localStorage.removeItem('location')
-    localStorage.removeItem('access')
-    
     // Navigate to login
     navigate({ to: '/login' })
   }
@@ -89,7 +86,10 @@ export default function Navbar() {
   }
 
   // Get access permissions from localStorage
-  const access = JSON.parse(localStorage.getItem('access') || '{}')
+
+  const { user } = useAuth();
+  console.log("Users access from navbar:", user?.access)
+  const access = user?.access || '{}'
 
   return (
     // Navbar container

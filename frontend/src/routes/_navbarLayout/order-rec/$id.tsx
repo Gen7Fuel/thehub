@@ -12,6 +12,7 @@ import { Textarea } from '@/components/ui/textarea'
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip'
 import { Trash2 } from 'lucide-react'
 import { getOrderRecStatusColor } from "@/lib/utils"
+import { useAuth } from "@/context/AuthContext";
 // import { Switch } from "@/components/ui/switch";
 
 export const Route = createFileRoute('/_navbarLayout/order-rec/$id')({
@@ -28,7 +29,7 @@ interface Item {
 
 function RouteComponent() {
   const { id } = Route.useParams()
-
+  const { user } = useAuth()
   const [orderRec, setOrderRec] = useState<any>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -129,7 +130,7 @@ function RouteComponent() {
   //   }
   // }
   const handleNotify = async () => {
-    const userEmail = localStorage.getItem('email');
+    const userEmail = user?.email;
     // If the uploader is the current user, notify the store only (do NOT mark as completed)
     if (userEmail === orderRec.email) {
       const confirmed = window.confirm(
@@ -395,7 +396,7 @@ function RouteComponent() {
     URL.revokeObjectURL(url);
   }
 
-  const access = JSON.parse(localStorage.getItem('access') || '{}')
+  const access = user?.access || '{}'
 
   return (
     <div className="container mx-auto p-6 max-w-6xl">
@@ -425,7 +426,7 @@ function RouteComponent() {
         )}
           <Button
             variant="outline"
-            disabled={ notifying || (!orderRec.completed && localStorage.getItem('email') !== orderRec.email)}
+            disabled={ notifying || (!orderRec.completed && user?.email !== orderRec.email)}
             onClick={handleNotify}
           >
             {notifying ? 'Notifying...' : 'Notify'}

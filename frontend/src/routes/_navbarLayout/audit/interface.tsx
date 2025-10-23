@@ -4,6 +4,7 @@ import { Button } from '@/components/ui/button'
 import axios from "axios"
 import { LocationPicker } from "@/components/custom/locationPicker";
 import { createContext } from "react";
+import { useAuth } from "@/context/AuthContext";
 
 export const RouteContext = createContext<{
   stationName: string;
@@ -42,7 +43,8 @@ function RouteComponent() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
 
-  const [stationName, setStationName] = useState(localStorage.getItem("location") || "");
+  const { user } = useAuth();
+  const [stationName, setStationName] = useState(user?.location || "");
 
   // temporary central patch function
   const updateStation = (newStation: string) => {

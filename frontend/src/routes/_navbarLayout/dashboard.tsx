@@ -22,6 +22,7 @@ import {
 
 import { DatePickerWithRange } from '@/components/custom/datePickerWithRange'
 import type { DateRange } from "react-day-picker"
+import { useAuth } from "@/context/AuthContext";
 
 import { getOrderRecStatusColor } from '@/lib/utils';
 
@@ -65,7 +66,9 @@ const salesChartConfig = {
  * - Location and date pickers
  */
 function RouteComponent() {
-  const [site, setSite] = useState(localStorage.getItem("location") || "Rankin");
+  
+  const { user } = useAuth();
+  const [site, setSite] = useState(user?.location || "Rankin");
   const [, setOrderRecs] = useState<Record<string, any[]>>({});
   const [, setVendorNames] = useState<Record<string, string>>({});
   const [dailyCounts, setDailyCounts] = useState<{ date: string, count: number }[]>([]);

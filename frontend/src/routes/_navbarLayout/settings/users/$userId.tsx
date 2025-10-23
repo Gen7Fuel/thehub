@@ -48,11 +48,12 @@ function RouteComponent() {
 
   const params = Route.useParams() as { userId: string };
   const { user } = Route.useLoaderData() as {
-    user: { firstName: string; lastName: string; access: Record<string, boolean> } | null;
+    user: { firstName: string; lastName: string; access: Record<string, any>; is_admin: boolean; is_inOffice: boolean; } | null;
   };
 
-  const [access, setAccess] = useState<Record<string, boolean>>(user?.access || {});
-
+  const [access, setAccess] = useState<Record<string, any>>(user?.access || {});
+  const [isAdmin, setIsAdmin] = useState(user?.is_admin || false);
+  const [isInOffice, setIsInOffice] = useState(user?.is_inOffice || false);
   if (!user) {
     return <div>User not found</div>;
   }
@@ -64,10 +65,25 @@ function RouteComponent() {
     }));
   };
 
+  // Example for handling site_access toggles
+  const handleSiteToggle = (site: string) => {
+    setAccess((prev) => ({
+      ...prev,
+      site_access: {
+        ...prev.site_access,
+        [site]: !prev.site_access?.[site],
+      },
+    }));
+  };
+
   const handleUpdate = async () => {
     try {
       // add authorization header with bearer token
-      await axios.put(`/api/users/${params.userId}`, { access }, {
+      await axios.put(`/api/users/${params.userId}`, { 
+          access,
+          is_admin: isAdmin,
+          is_inOffice: isInOffice,
+      }, {
         headers: {
           Authorization: `Bearer ${localStorage.getItem('token')}`
         }
@@ -80,7 +96,11 @@ function RouteComponent() {
   };
 
   useEffect(() => {
-    setAccess(user?.access || {});
+    if (user) {
+      setAccess(user.access || {});
+      setIsAdmin(user.is_admin || false);
+      setIsInOffice(user.is_inOffice || false);
+    }
   }, [user]);
 
   return (
@@ -109,7 +129,7 @@ function RouteComponent() {
         )}
       </div>
 
-      <h2 className="text-lg font-bold mb-4">Access Permissions</h2>
+      {/* <h2 className="text-lg font-bold mb-4">Access Permissions</h2>
       <form className="space-y-2">
         {Object.entries(access).map(([key, value]) => (
           <div key={key} className="flex items-center space-x-4">
@@ -123,7 +143,62 @@ function RouteComponent() {
             </label>
           </div>
         ))}
+      </form> */}
+      <h2 className="text-lg font-bold mb-4">Access Permissions</h2>
+
+      {/* Admin / InOffice Toggles */}
+      <div className="flex items-center gap-4 mb-2">
+        <Switch checked={isAdmin} onCheckedChange={setIsAdmin} id="isAdmin" />
+        <label htmlFor="isAdmin">Admin</label>
+
+        <Switch checked={isInOffice} onCheckedChange={setIsInOffice} id="isInOffice" />
+        <label htmlFor="isInOffice">In Office</label>
+      </div>
+
+        {/* Permissions */}
+      <form className="space-y-2">
+        {/* 3️⃣ Site Access toggles */}
+        {access.site_access && typeof access.site_access === "object" && (
+          <div className="mb-2">
+            <div className="flex items-center space-x-4 font-medium text-gray-700">
+              <span>Site Access</span>
+            </div>
+            <div className="ml-6 mt-1 space-y-1">
+              {Object.entries(access.site_access as Record<string, boolean>).map(
+                ([site, val]) => (
+                  <div key={site} className="flex items-center space-x-2">
+                    <Switch
+                      checked={Boolean(val)}
+                      onCheckedChange={() => handleSiteToggle(site)}
+                      id={site}
+                    />
+                    <label htmlFor={site} className="text-sm text-gray-700">
+                      {site}
+                    </label>
+                  </div>
+                )
+              )}
+            </div>
+          </div>
+        )}
+
+        {/* 4️⃣ Other permissions (excluding site_access) */}
+        {Object.entries(access)
+          .filter(([key]) => key !== "site_access")
+          .map(([key, value]) => (
+            <div key={key} className="flex items-center space-x-4">
+              <Switch
+                checked={Boolean(value)}
+                onCheckedChange={() => handleCheckboxChange(key)}
+                id={key}
+              />
+              <label htmlFor={key} className="text-sm text-gray-700">
+                {key}
+              </label>
+            </div>
+          ))}
       </form>
+
 
       <button
         onClick={handleUpdate}

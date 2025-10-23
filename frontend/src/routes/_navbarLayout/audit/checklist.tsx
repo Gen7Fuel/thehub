@@ -77,6 +77,7 @@ import axios from "axios"
 import { LocationPicker } from "@/components/custom/locationPicker";
 import { createContext } from "react";
 import { getSocket } from "@/lib/websocket";
+import { useAuth } from "@/context/AuthContext";
 
 
 const socket = getSocket();
@@ -117,8 +118,8 @@ function RouteComponent() {
   const [openIssues, setOpenIssues] = useState<OpenIssueItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
-
-  const [stationName, setStationName] = useState(localStorage.getItem("location") || "");
+  const { user } = useAuth();
+  const [stationName, setStationName] = useState(user?.location || "");
 
   // temporary central patch function
   const updateStation = (newStation: string) => {
@@ -201,7 +202,7 @@ function RouteComponent() {
   if (loading) return <div className="text-center mt-8">Loading...</div>;
   if (error) return <div className="text-red-600 text-center mt-8">{error}</div>;
 
-  const access = JSON.parse(localStorage.getItem('access') || '{}') 
+  // const access = user?.access || '{}'
 
   return (
     <RouteContext.Provider value={{ stationName, setStationName }}>
@@ -218,7 +219,7 @@ function RouteComponent() {
               // 🔹 Just update React state
               updateStation(newValue);
             }}
-            disabled={!access.component_station_audit_checklist_location_filter}
+            // disabled={!access.component_station_audit_checklist_location_filter}
           />
 
 
