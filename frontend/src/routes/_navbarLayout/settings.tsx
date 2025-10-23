@@ -22,6 +22,7 @@ function RouteComponent() {
     { to: '/settings/paypoints', label: 'Pay Points' },
     { to: '/settings/users', label: 'Users' },
     { to: '/settings/permissions', label: 'Permissions' },
+    { to: '/settings/permissions-new', label: 'Permissions New' },
     { to: '/settings/sites', label: 'Sites' }
   ]
 
