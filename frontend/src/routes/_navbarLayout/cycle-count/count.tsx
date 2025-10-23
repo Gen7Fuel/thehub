@@ -384,7 +384,7 @@ function RouteComponent() {
     }, 1000);
   };
 
-  const access = user?.access || '{}'
+  // const access = user?.access || '{}'
 
   return (
     <div className="max-w-3xl mx-auto mt-12">
@@ -392,7 +392,7 @@ function RouteComponent() {
         <LocationPicker
           setStationName={setStationName}
           value="stationName"
-          {...(!access.component_cycle_count_count_location_filter ? { disabled: true } : {})}
+          // {...(!access.component_cycle_count_count_location_filter ? { disabled: true } : {})}
           defaultValue={location}
         />
       </div>

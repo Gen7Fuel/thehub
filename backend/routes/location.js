@@ -1,5 +1,6 @@
 const express = require("express");
 const Location = require("../models/Location");
+const Permission = require("../models/Permission");
 const router = express.Router();
 
 // Create a new location
@@ -81,15 +82,53 @@ router.put("/:id", async (req, res) => {
 
 //--ADD NEW LOCATION--
 // POST /api/locations
+// router.post("/", async (req, res) => {
+//   try {
+//     const { type, stationName, legalName, INDNumber, kardpollCode, csoCode, timezone, email } = req.body;
+
+//     // Simple validation
+//     if (!type || !stationName || !legalName || !INDNumber || !csoCode || !timezone || !email) {
+//       return res.status(400).json({ message: "Missing required fields." });
+//     }
+
+//     const location = new Location({
+//       type,
+//       stationName,
+//       legalName,
+//       INDNumber,
+//       kardpollCode,
+//       csoCode,
+//       timezone,
+//       email,
+//     });
+
+//     await location.save();
+//     res.status(201).json(location);
+//   } catch (err) {
+//     console.error(err);
+//     res.status(500).json({ message: "Failed to create location." });
+//   }
+// });
+
 router.post("/", async (req, res) => {
   try {
-    const { type, stationName, legalName, INDNumber, kardpollCode, csoCode, timezone, email } = req.body;
+    const { 
+      type, 
+      stationName, 
+      legalName, 
+      INDNumber, 
+      kardpollCode, 
+      csoCode, 
+      timezone, 
+      email 
+    } = req.body;
 
-    // Simple validation
+    // Basic validation
     if (!type || !stationName || !legalName || !INDNumber || !csoCode || !timezone || !email) {
       return res.status(400).json({ message: "Missing required fields." });
     }
 
+    // Create new location
     const location = new Location({
       type,
       stationName,
@@ -102,9 +141,17 @@ router.post("/", async (req, res) => {
     });
 
     await location.save();
+
+    // 🔹 Update Permission: add this new station to `site_access.sites`
+    await Permission.updateOne(
+      { name: "site_access" },
+      { $addToSet: { sites: stationName } }, // prevents duplicates
+      { upsert: true } // creates it if it doesn’t exist
+    );
+
     res.status(201).json(location);
   } catch (err) {
-    console.error(err);
+    console.error("Error creating location:", err);
     res.status(500).json({ message: "Failed to create location." });
   }
 });

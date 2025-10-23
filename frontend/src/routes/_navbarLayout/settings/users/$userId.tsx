@@ -96,7 +96,11 @@ function RouteComponent() {
   };
 
   useEffect(() => {
-    setAccess(user?.access || {});
+    if (user) {
+      setAccess(user.access || {});
+      setIsAdmin(user.is_admin || false);
+      setIsInOffice(user.is_inOffice || false);
+    }
   }, [user]);
 
   return (

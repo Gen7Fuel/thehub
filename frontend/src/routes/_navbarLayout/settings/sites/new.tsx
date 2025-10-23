@@ -111,6 +111,7 @@ function NewSiteRouteComponent() {
             <option value="America/Chicago">America/Chicago</option>
             <option value="America/Denver">America/Denver</option>
             <option value="America/Los_Angeles">America/Los_Angeles</option>
+            <option value="America/Vancouver">America/Vancouver</option>
           </select>
         </div>
 

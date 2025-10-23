@@ -7,7 +7,7 @@ import type { DateRange } from 'react-day-picker';
 import { LocationPicker } from '@/components/custom/locationPicker';
 import axios from "axios"
 import { toUTC } from '@/lib/utils';
-import { useAuth } from "@/context/AuthContext"
+// import { useAuth } from "@/context/AuthContext"
 
 export const Route = createFileRoute('/_navbarLayout/kardpoll/list')({
   component: RouteComponent,
@@ -34,8 +34,8 @@ function RouteComponent() {
     from: new Date(),
     to: addDays(new Date(), 0),
   });
-  const { user } = useAuth()
-  const access = user?.access || '{}'
+  // const { user } = useAuth()
+  // const access = user?.access || '{}'
   const [stationName, setStationName] = React.useState<string>('');
   const [transactions, setTransactions] = React.useState<
     {
@@ -90,7 +90,7 @@ function RouteComponent() {
         <LocationPicker
           setStationName={setStationName}
           value='stationName'
-          disabled={!access.component_kardpoll_list_location_filter}
+          // disabled={!access.component_kardpoll_list_location_filter}
         />
       </div>
 

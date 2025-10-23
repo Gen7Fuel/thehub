@@ -15,7 +15,7 @@ export const Route = createFileRoute('/_navbarLayout/payables/')({
 function RouteComponent() {
   // Get individual payable variables from store
   const { user } = useAuth()
-  const access = user?.access || '{}'
+  // const access = user?.access || '{}'
   const payableVendorName = useFormStore((state) => state.payableVendorName)
   const setPayableVendorName = useFormStore((state) => state.setPayableVendorName)
   
@@ -70,7 +70,7 @@ function RouteComponent() {
           <LocationPicker
             setStationName={setPayableLocation as React.Dispatch<React.SetStateAction<string>>}
             value="stationName"
-            disabled={!access.component_payables_create_location_filter}
+            // disabled={!access.component_payables_create_location_filter}
           />
         </div>
 

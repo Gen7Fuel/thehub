@@ -43,7 +43,14 @@ function RouteComponent() {
       // localStorage.setItem('initials', initials)
       // localStorage.setItem('access', access)
       // localStorage.setItem('timezone', timezone)
-
+      
+      localStorage.removeItem('email')
+      localStorage.removeItem('location')
+      localStorage.removeItem('access')
+      localStorage.removeItem('timezone')
+      localStorage.removeItem('initials')
+      localStorage.removeItem('name')
+    
       refreshAuth()
 
       console.log(`User ${userEmail} logged in, will join room automatically via SignalContext`)

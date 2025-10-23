@@ -76,10 +76,6 @@ export default function Navbar() {
     
     // Clear all stored data
     localStorage.removeItem('token')
-    // localStorage.removeItem('email')
-    // localStorage.removeItem('location')
-    // localStorage.removeItem('access')
-    
     // Navigate to login
     navigate({ to: '/login' })
   }

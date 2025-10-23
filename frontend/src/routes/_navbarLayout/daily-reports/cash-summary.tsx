@@ -239,7 +239,7 @@ function RouteComponent() {
     },
   })
 
-  const access = user?.access || '{}'
+  // const access = user?.access || '{}'
 
   // Calculate totals for purchase orders and payables
   const purchaseOrderTotal = data.purchase_orders?.reduce((sum, po) => sum + po.amount, 0) || 0
@@ -276,7 +276,7 @@ function RouteComponent() {
         <LocationPicker
           setStationName={setLocation}
           value="stationName"
-          {...(!access.component_po_location_filter ? { disabled: true } : {})}
+          // {...(!access.component_po_location_filter ? { disabled: true } : {})}
         />
       </div>
 

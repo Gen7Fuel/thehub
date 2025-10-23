@@ -129,7 +129,7 @@ function RouteComponent() {
           setStationName={setStationName}
           setTimezone={setTimezone}
           value="stationName"
-          {...(!access.component_po_location_filter ? { disabled: true } : {})}
+          // {...(!access.component_po_location_filter ? { disabled: true } : {})}
         />
       </div>
 

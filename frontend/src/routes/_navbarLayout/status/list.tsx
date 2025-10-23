@@ -117,7 +117,7 @@ function RouteComponent() {
         <LocationPicker
           setStationName={setStationName}
           value="stationName"
-          {...(!access.component_po_location_filter ? { disabled: true } : {})}
+          // {...(!access.component_po_location_filter ? { disabled: true } : {})}
         />
       </div>
 

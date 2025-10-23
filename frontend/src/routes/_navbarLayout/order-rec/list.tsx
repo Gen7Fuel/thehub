@@ -30,11 +30,11 @@ function RouteComponent() {3
     navigate({ search: { site: newSite } })
   }
 
-  const access = user?.access || '{}'
+  // const access = user?.access || '{}'
 
   return (
     <>
-    <SitePicker value={site} onValueChange={updateSite} disabled={!access.component_order_rec_list_location_filter}/>
+    <SitePicker value={site} onValueChange={updateSite} />
     
     <div className="container mx-auto p-6 max-w-2xl">
       <h1 className="text-2xl font-bold mb-4">Order Recommendations</h1>
