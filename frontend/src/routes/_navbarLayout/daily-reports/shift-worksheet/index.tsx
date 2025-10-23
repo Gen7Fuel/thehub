@@ -52,7 +52,7 @@ function RouteComponent() {
     fetchWorksheets();
   }, [date, location]);
 
-  const access = user?.access || '{}'
+  // const access = user?.access || '{}'
 
   return (
     <div>
@@ -62,7 +62,7 @@ function RouteComponent() {
         <LocationPicker
           setStationName={setLocation}
           value="stationName"
-          {...(!access.component_po_location_filter ? { disabled: true } : {})}
+          // {...(!access.component_po_location_filter ? { disabled: true } : {})}
         />
       </div>
 

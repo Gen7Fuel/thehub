@@ -29,6 +29,11 @@ const userSchema = new mongoose.Schema({
     required: true, 
     default: true // Whether the user account is active
   },
+  is_inOffice: { 
+    type: Boolean, 
+    required: true, 
+    default: false // Whether the user account is active
+  },
   is_admin: { 
     type: Boolean, 
     required: true, 

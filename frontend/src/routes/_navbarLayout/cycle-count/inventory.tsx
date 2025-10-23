@@ -80,7 +80,7 @@ function RouteComponent() {
     }
   }, [site, user?.location, category, navigate]);
 
-  const access = user?.access || '{}'
+  // const access = user?.access || '{}'
 
   // ✅ Password protection state
   const [showPasswordDialog, setShowPasswordDialog] = useState(false)
@@ -239,7 +239,7 @@ function RouteComponent() {
               
               {/* Site Picker */}
               <SitePicker 
-                disabled={!access.component_cycle_count_inventory_site_picker}
+                // disabled={!access.component_cycle_count_inventory_site_picker}
                 value={site}
                 onValueChange={handleSiteChange}
                 placeholder="Select a site"

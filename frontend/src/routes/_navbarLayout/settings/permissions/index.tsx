@@ -3,6 +3,8 @@ import axios from "axios";
 import { useState } from "react";
 import { Pencil } from "lucide-react";
 import { useAuth } from "@/context/AuthContext";
+import {Dialog,DialogContent,DialogHeader,DialogTitle,DialogTrigger,} from "@/components/ui/dialog";
+import { Button } from "@/components/ui/button";
 
 
 export const Route = createFileRoute("/_navbarLayout/settings/permissions/")({
@@ -26,6 +28,7 @@ export const Route = createFileRoute("/_navbarLayout/settings/permissions/")({
 interface Permission {
   _id: string;
   name: string;
+  sites?: string[];
 }
 
 export const hasAccess = (access: any, key: string): boolean => {
@@ -132,65 +135,196 @@ const handleEdit = async (id: string, currentName: string) => {
   }
 };
 
-  return (
-    <div className="flex">
-      {/* Main content */}
-      <main className="w-3/4 p-4">
-        <h2 className="text-lg font-bold mb-2">Permissions</h2>
+const [showSitesDialog, setShowSitesDialog] = useState(false);
+const [availableSites, setAvailableSites] = useState<string[]>([]);
 
-        {/* Add new permission */}
-        <form onSubmit={handleAdd} className="flex gap-2 mb-4">
-          <input
-            type="text"
-            className="border rounded px-3 py-2 flex-1"
-            placeholder="New permission"
-            value={newPermission}
-            onChange={(e) => setNewPermission(e.target.value)}
-            required
-          />
-          <button
-            type="submit"
-            className="px-4 py-2 bg-blue-500 text-white rounded hover:bg-blue-600"
-          >
-            Add
-          </button>
-          <button
-            type="button"
-            onClick={handleSync}
-            className="px-4 py-2 bg-green-500 text-white rounded hover:bg-green-600"
-          >
-            Sync
-          </button>
-        </form>
+// const handleOpenSitesDialog = async () => {
+//   try {
+//     const response = await axios.get("/api/locations", {
+//       headers: {
+//         Authorization: `Bearer ${localStorage.getItem("token")}`,
+//       },
+//     });
+//     setAvailableSites(response.data.map((site: any) => site.stationName));
+//     setShowSitesDialog(true);
+//   } catch (err) {
+//     console.error("Failed to fetch locations:", err);
+//     alert("Failed to load sites");
+//   }
+const handleOpenSitesDialog = () => {
+  // Find the site_access permission in the loaded permissions
+  const siteAccessPerm = permissions.find((p) => p.name === "site_access");
+  if (!siteAccessPerm) {
+    alert("Site access permission not found.");
+    return;
+  }
 
-        {/* List all permissions */}
-        <ul className="space-y-2">
-          {permissions.map((perm) => (
-            <li
-              key={perm._id}
-              className="flex justify-between items-center border px-3 py-2 rounded"
+  // Set the sites array to display in dialog
+  setAvailableSites(siteAccessPerm.sites || []);
+  setShowSitesDialog(true);
+};
+
+
+  // return (
+  //   <div className="flex">
+  //     {/* Main content */}
+  //     <main className="w-3/4 p-4">
+  //       <h2 className="text-lg font-bold mb-2">Permissions</h2>
+
+  //       {/* Add new permission */}
+  //       <form onSubmit={handleAdd} className="flex gap-2 mb-4">
+  //         <input
+  //           type="text"
+  //           className="border rounded px-3 py-2 flex-1"
+  //           placeholder="New permission"
+  //           value={newPermission}
+  //           onChange={(e) => setNewPermission(e.target.value)}
+  //           required
+  //         />
+  //         <button
+  //           type="submit"
+  //           className="px-4 py-2 bg-blue-500 text-white rounded hover:bg-blue-600"
+  //         >
+  //           Add
+  //         </button>
+  //         <button
+  //           type="button"
+  //           onClick={handleSync}
+  //           className="px-4 py-2 bg-green-500 text-white rounded hover:bg-green-600"
+  //         >
+  //           Sync
+  //         </button>
+  //       </form>
+
+  //       {/* List all permissions */}
+  //       <ul className="space-y-2">
+  //         {permissions.map((perm) => (
+  //           <li
+  //             key={perm._id}
+  //             className="flex justify-between items-center border px-3 py-2 rounded"
+  //           >
+  //             <span>{perm.name}</span>
+  //             <div className="flex gap-2">
+  //               <button
+  //                 onClick={() => handleEdit(perm._id, perm.name)}
+  //                 className="text-blue-500 hover:text-blue-700"
+  //               >
+  //                 <Pencil className="h-4 w-4" />
+  //               </button>
+  //               <button
+  //                 onClick={() => handleDelete(perm._id)}
+  //                 className="px-4 py-2 bg-red-400 text-white rounded hover:bg-red-600"
+  //               >
+  //                 Delete
+  //               </button>
+  //             </div>
+  //           </li>
+  //         ))}
+  //       </ul>
+  //       {status && <div className="mt-2 text-sm">{status}</div>}
+  //       <Outlet />
+  //     </main>
+  //   </div>
+  // );
+    return (
+      <div className="flex">
+        {/* Main content */}
+        <main className="w-3/4 p-4">
+          <h2 className="text-lg font-bold mb-2">Permissions</h2>
+
+          {/* Add new permission */}
+          <form onSubmit={handleAdd} className="flex gap-2 mb-4">
+            <input
+              type="text"
+              className="border rounded px-3 py-2 flex-1"
+              placeholder="New permission"
+              value={newPermission}
+              onChange={(e) => setNewPermission(e.target.value)}
+              required
+            />
+            <button
+              type="submit"
+              className="px-4 py-2 bg-blue-500 text-white rounded hover:bg-blue-600"
             >
-              <span>{perm.name}</span>
-              <div className="flex gap-2">
-                <button
-                  onClick={() => handleEdit(perm._id, perm.name)}
-                  className="text-blue-500 hover:text-blue-700"
-                >
-                  <Pencil className="h-4 w-4" />
-                </button>
-                <button
-                  onClick={() => handleDelete(perm._id)}
-                  className="px-4 py-2 bg-red-400 text-white rounded hover:bg-red-600"
-                >
-                  Delete
-                </button>
-              </div>
-            </li>
-          ))}
-        </ul>
-        {status && <div className="mt-2 text-sm">{status}</div>}
-        <Outlet />
-      </main>
-    </div>
-  );
+              Add
+            </button>
+            <button
+              type="button"
+              onClick={handleSync}
+              className="px-4 py-2 bg-green-500 text-white rounded hover:bg-green-600"
+            >
+              Sync
+            </button>
+          </form>
+
+          {/* List all permissions */}
+          <ul className="space-y-2">
+            {permissions.map((perm) => (
+              <li
+                key={perm._id}
+                className="flex justify-between items-center border px-3 py-2 rounded"
+              >
+                <span>{perm.name}</span>
+
+                <div className="flex gap-2">
+                  {perm.name === "site_access" ? (
+                    <Dialog open={showSitesDialog} onOpenChange={setShowSitesDialog}>
+                      <DialogTrigger asChild>
+                        <Button
+                          onClick={handleOpenSitesDialog}
+                          className="bg-purple-500 hover:bg-purple-600 text-white"
+                        >
+                          Available Sites
+                        </Button>
+                      </DialogTrigger>
+
+                      <DialogContent className="max-w-md">
+                        <DialogHeader>
+                          <DialogTitle>Available Sites</DialogTitle>
+                        </DialogHeader>
+                        {/* <ul className="mt-2 space-y-1 max-h-64 overflow-y-auto"> */}
+                        <ul className="list-disc list-inside mt-2 space-y-1">
+                          {availableSites.length > 0 ? (
+                            availableSites.map((site, idx) => (
+                              <li
+                                key={idx}
+                                className="px-2 py-1 text-sm"
+                              >
+                                {site}
+                              </li>
+                            ))
+                          ) : (
+                            <p className="text-sm text-gray-500">
+                              No sites available.
+                            </p>
+                          )}
+                        </ul>
+                      </DialogContent>
+                    </Dialog>
+                  ) : (
+                    <>
+                      <button
+                        onClick={() => handleEdit(perm._id, perm.name)}
+                        className="text-blue-500 hover:text-blue-700"
+                      >
+                        <Pencil className="h-4 w-4" />
+                      </button>
+                      <button
+                        onClick={() => handleDelete(perm._id)}
+                        className="px-4 py-2 bg-red-400 text-white rounded hover:bg-red-600"
+                      >
+                        Delete
+                      </button>
+                    </>
+                  )}
+                </div>
+              </li>
+            ))}
+          </ul>
+
+          {status && <div className="mt-2 text-sm">{status}</div>}
+          <Outlet />
+        </main>
+      </div>
+    );
 }

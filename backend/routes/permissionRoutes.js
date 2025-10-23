@@ -52,22 +52,60 @@ router.delete("/:id", async (req, res) => {
 });
 
 // Sync permissions with all users (add missing, remove old)
+// router.post("/sync", async (req, res) => {
+//   try {
+//     const permissions = await Permission.find().lean();
+//     const permissionNames = permissions.map(p => p.name);
+
+//     const users = await User.find();
+
+//     for (const user of users) {
+//       let updatedAccess = {};
+
+//       // Add missing permissions, preserve old values
+//       permissionNames.forEach(perm => {
+//         updatedAccess[perm] = user.access?.[perm] ?? false;
+//       });
+
+//       // Assign cleaned object back
+//       user.access = updatedAccess;
+//       await user.save();
+//     }
+
+//     res.json({ success: true, message: "Permissions synced for all users." });
+//   } catch (error) {
+//     console.error("Error syncing permissions:", error);
+//     res.status(500).json({ error: "Failed to sync permissions" });
+//   }
+// });
 router.post("/sync", async (req, res) => {
   try {
     const permissions = await Permission.find().lean();
-    const permissionNames = permissions.map(p => p.name);
+    const permissionNames = permissions.map((p) => p.name);
 
     const users = await User.find();
 
     for (const user of users) {
       let updatedAccess = {};
 
-      // Add missing permissions, preserve old values
-      permissionNames.forEach(perm => {
-        updatedAccess[perm] = user.access?.[perm] ?? false;
-      });
-
-      // Assign cleaned object back
+      for (const perm of permissions) {
+        if (perm.name === "site_access" && Array.isArray(perm.sites)) {
+          // For site_access, handle sites array
+          const sitesAccess = {};
+          perm.sites.forEach((site) => {
+            sitesAccess[site] = !!user.is_inOffice; // true if in office, else false
+          });
+          updatedAccess[perm.name] = sitesAccess;
+        } else {
+          // For new permissions, set true if user is admin
+          if (!(perm.name in (user.access || {})) && user.is_admin) {
+            updatedAccess[perm.name] = true;
+          } else {
+            // Preserve existing value or default to false
+            updatedAccess[perm.name] = user.access?.[perm.name] ?? false;
+          }
+        }
+      }
       user.access = updatedAccess;
       await user.save();
     }
