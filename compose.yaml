@@ -7,6 +7,14 @@ services:
     ports:
       - "27018:27017"
     restart: always
+  redis:
+    container_name: redis
+    image: redis:7
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    restart: always
   backend:
     container_name: backend
     build: ./backend
@@ -20,8 +28,10 @@ services:
       - SQL_USER=${SQL_USER}
       - SQL_PASSWORD=${SQL_PASSWORD}
       - UPLOAD_SERVICE_URL=http://cdn:5001
+      - REDIS_URL=${REDIS_URL}
     depends_on:
       - mongo
+      - redis
     restart: always
   cdn:
     container_name: cdn
@@ -69,3 +79,4 @@ volumes:
   dist:
   uploads:
   mongodb_data:
+  redis_data:

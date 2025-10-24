@@ -5,6 +5,9 @@ const connectDB = require("./config/db");
 const http = require("http");
 const { Server } = require("socket.io");
 
+//BullMQ for background email processing running
+require("./queues/emailQueue"); // Just runs the worker
+
 // Route imports
 const authRoutes = require("./routes/auth");
 const userRoutes = require("./routes/userRoutes");
