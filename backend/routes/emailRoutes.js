@@ -1,6 +1,7 @@
 const express = require('express');
 const router = express.Router();
-const { sendEmail, sendBulkEmail } = require('../utils/emailService');
+const { emailQueue } = require('../queues/emailQueue');
+// const { sendEmail, sendBulkEmail } = require('../utils/emailService');
 
 // Send single email
 router.post('/send-email', async (req, res) => {
@@ -11,8 +12,15 @@ router.post('/send-email', async (req, res) => {
       return res.status(400).json({ error: 'Recipient and subject are required' });
     }
 
-    const result = await sendEmail({ to, subject, text, html, cc });
-    res.json(result);
+    // const result = await sendEmail({ to, subject, text, html, cc });
+    // res.json(result);
+    const job = await emailQueue.add("sendOrderrecEmail", { to, subject, text, html, cc });
+
+    res.json({
+      message: "Email queued successfully",
+      jobId: job.id,
+      jobName: "sendOrderrecEmail"
+    });
   } catch (error) {
     console.error('Error in send-email route:', error);
     res.status(500).json({ error: error.message });
