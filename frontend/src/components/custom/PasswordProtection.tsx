@@ -108,7 +108,7 @@ export function PasswordProtection({
     e.preventDefault();
 
     if (otp === "1911") {
-      sessionStorage.setItem("inventory_access", "true");
+      // sessionStorage.setItem("inventory_access", "true");
       sessionStorage.setItem("dashboard_access", "true");
       setOtp("");
       setError("");
