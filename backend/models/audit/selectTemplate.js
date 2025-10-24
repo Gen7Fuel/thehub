@@ -6,6 +6,7 @@ const SelectTemplateSchema = new mongoose.Schema({
   options: [
     {
       text: { type: String, required: true },
+      email: { type: String },
     }
   ],
   createdBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User' }, // Optional: who created it

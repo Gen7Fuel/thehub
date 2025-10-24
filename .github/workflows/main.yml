@@ -31,6 +31,7 @@ jobs:
             export SQL_DB=${{ secrets.SQL_DB }}
             export SQL_USER=${{ secrets.SQL_USER }}
             export SQL_PASSWORD=${{ secrets.SQL_PASSWORD }}
+            export REDIS_URL=${{ secrets.REDIS_URL }}
 
             git pull origin main
             docker compose down
