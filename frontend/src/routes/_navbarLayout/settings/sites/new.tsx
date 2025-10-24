@@ -4,6 +4,11 @@ import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import {
+  InputOTP,
+  InputOTPGroup,
+  InputOTPSlot,
+} from "@/components/ui/input-otp";
 
 export const Route = createFileRoute('/_navbarLayout/settings/sites/new')({
   component: NewSiteRouteComponent,
@@ -20,6 +25,7 @@ function NewSiteRouteComponent() {
         timezone: "America/Toronto", // default timezone
         email: "",
     });
+    const [managerCode, setManagerCode] = useState("");
     const [loading, setLoading] = useState(false);
     const navigate = useNavigate();
     const router = useRouter(); // ✅ get router instance here
@@ -33,9 +39,12 @@ function NewSiteRouteComponent() {
         e.preventDefault();
         setLoading(true);
         try {
-            const response = await axios.post("/api/locations", formData, {
-            headers: { Authorization: `Bearer ${localStorage.getItem('token')}` },
-            });
+                const response = await axios.post("/api/locations", {
+                  ...formData,
+                  managerCode, // include OTP value
+                }, {
+                  headers: { Authorization: `Bearer ${localStorage.getItem('token')}` },
+                });
 
             const createdLocation = response.data; // this will have the _id
             alert(`Location: ${createdLocation.stationName} has been created successfully!`);
@@ -119,6 +128,20 @@ function NewSiteRouteComponent() {
           <Label>Email</Label>
           <Input type="email" name="email" value={formData.email} onChange={handleChange} required />
         </div>
+        <div>
+          <Label className="block font-medium mb-1">Manager Code</Label>
+          <div className="flex justify-center">
+            <InputOTP maxLength={4} value={managerCode} onChange={setManagerCode}>
+              <InputOTPGroup>
+                <InputOTPSlot index={0} />
+                <InputOTPSlot index={1} />
+                <InputOTPSlot index={2} />
+                <InputOTPSlot index={3} />
+              </InputOTPGroup>
+            </InputOTP>
+          </div>
+        </div>
+
 
         <Button type="submit" disabled={loading}>
           {loading ? "Creating..." : "Create Site"}

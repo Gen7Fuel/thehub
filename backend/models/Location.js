@@ -13,7 +13,8 @@ const locationSchema = new mongoose.Schema({
   kardpollCode: { type: String, required: false },    // Kardpoll system code (optional)
   csoCode: { type: String, required: true, unique: true },   // Unique CSO code for the location
   timezone: { type: String, required: true },         // Timezone of the location
-  email: { type: String, required: true }             // Contact email for the location
+  email: { type: String, required: true },          // Contact email for the location
+  managerCode: { type: Number, required: true }
 });
 
 // Export the Location model based on the schema

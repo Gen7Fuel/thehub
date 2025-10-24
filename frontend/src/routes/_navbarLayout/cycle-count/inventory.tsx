@@ -33,7 +33,8 @@ export const Route = createFileRoute('/_navbarLayout/cycle-count/inventory')({
   
   // ✅ beforeLoad: Check password and prefetch if authorized
   beforeLoad: async ({ context, search }) => {
-    const hasAccess = sessionStorage.getItem('inventory_access') === 'true'
+    // const hasAccess = sessionStorage.getItem('inventory_access') === 'true'
+    const hasAccess = false
     
     if (!hasAccess) {
       // Don't prefetch - component will show password dialog
@@ -172,6 +173,7 @@ function RouteComponent() {
         isOpen={showPasswordDialog}
         onSuccess={handlePasswordSuccess}
         onCancel={handlePasswordCancel}
+        userLocation={user?.location || "Rankin"}
       />
     )
   }

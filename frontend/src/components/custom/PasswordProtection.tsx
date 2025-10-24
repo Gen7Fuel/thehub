@@ -1,6 +1,5 @@
-import { useState } from 'react'
-import { Button } from '@/components/ui/button'
-import { Input } from '@/components/ui/input'
+import { useState } from "react";
+import { Button } from "@/components/ui/button";
 import {
   Dialog,
   DialogContent,
@@ -8,38 +7,64 @@ import {
   DialogFooter,
   DialogHeader,
   DialogTitle,
-} from '@/components/ui/dialog'
+} from "@/components/ui/dialog";
+import {
+  InputOTP,
+  InputOTPGroup,
+  InputOTPSlot,
+} from "@/components/ui/input-otp";
 
 interface PasswordProtectionProps {
-  isOpen: boolean
-  onSuccess: () => void
-  onCancel: () => void
+  isOpen: boolean;
+  onSuccess: () => void;
+  onCancel: () => void;
+  userLocation: string; // new prop
 }
 
-export function PasswordProtection({ isOpen, onSuccess, onCancel }: PasswordProtectionProps) {
-  const [password, setPassword] = useState('')
-  const [error, setError] = useState('')
+export function PasswordProtection({
+  isOpen,
+  onSuccess,
+  onCancel,
+  userLocation,
+}: PasswordProtectionProps) {
+  const [otp, setOtp] = useState("");
+  const [error, setError] = useState("");
+  const [loading, setLoading] = useState(false);
 
-  const handleSubmit = (e: React.FormEvent) => {
-    e.preventDefault()
-    
-    if (password === '1911') {
-      // Store password verification in sessionStorage (clears on browser close)
-      sessionStorage.setItem('inventory_access', 'true')
-      setError('')
-      setPassword('')
-      onSuccess()
-    } else {
-      setError('Incorrect password')
-      setPassword('')
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setLoading(true);
+    setError("");
+
+    try {
+      const res = await fetch("/api/locations/check-code", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ location: userLocation, code: otp }),
+      });
+
+      const data = await res.json();
+
+      if (res.ok && data.success) {
+        setOtp("");
+        onSuccess();
+      } else {
+        setError(data.error || "Incorrect code");
+        setOtp("");
+      }
+    } catch (err) {
+      console.error("Error verifying code:", err);
+      setError("Server error. Please try again.");
+    } finally {
+      setLoading(false);
     }
-  }
+  };
 
   const handleCancel = () => {
-    setPassword('')
-    setError('')
-    onCancel()
-  }
+    setOtp("");
+    setError("");
+    onCancel();
+  };
 
   return (
     <Dialog open={isOpen} onOpenChange={handleCancel}>
@@ -47,30 +72,33 @@ export function PasswordProtection({ isOpen, onSuccess, onCancel }: PasswordProt
         <DialogHeader>
           <DialogTitle>Access Required</DialogTitle>
           <DialogDescription>
-            Please enter the password to access the Inventory page.
+            Please enter the 4-digit manager code for your site.
           </DialogDescription>
         </DialogHeader>
-        <form onSubmit={handleSubmit} autoComplete='off'>
+        <form onSubmit={handleSubmit} autoComplete="off">
           <div className="grid gap-4 py-4">
-            <Input
-              type="password"
-              name="access-password"
-              placeholder="Enter password"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              autoFocus
-              autoComplete="new-password"
-            />
-            {error && <p className="text-sm text-red-500">{error}</p>}
+            <div className="flex justify-center">
+              <InputOTP maxLength={4} value={otp} onChange={setOtp}>
+                <InputOTPGroup>
+                  <InputOTPSlot index={0} />
+                  <InputOTPSlot index={1} />
+                  <InputOTPSlot index={2} />
+                  <InputOTPSlot index={3} />
+                </InputOTPGroup>
+              </InputOTP>
+            </div>
+            {error && <p className="text-sm text-red-500 text-center">{error}</p>}
           </div>
           <DialogFooter>
-            <Button type="button" variant="outline" onClick={handleCancel}>
+            <Button type="button" variant="outline" onClick={handleCancel} disabled={loading}>
               Cancel
             </Button>
-            <Button type="submit">Submit</Button>
+            <Button type="submit" disabled={loading || otp.length !== 4}>
+              {loading ? "Verifying..." : "Submit"}
+            </Button>
           </DialogFooter>
         </form>
       </DialogContent>
     </Dialog>
-  )
+  );
 }
