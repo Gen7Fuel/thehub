@@ -6,6 +6,11 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Label } from "@/components/ui/label";
 import { Select, SelectTrigger, SelectContent, SelectItem, SelectValue } from "@/components/ui/select";
 // import { toast } from "sonner";
+import {
+  InputOTP,
+  InputOTPGroup,
+  InputOTPSlot,
+} from "@/components/ui/input-otp";
 
 export const Route = createFileRoute('/_navbarLayout/settings/sites/$id')({
   loader: async ({ params }) => {
@@ -38,8 +43,10 @@ function RouteComponent() {
       csoCode: string;
       timezone: string;
       email: string;
+      managerCode: number;
     } | null;
   };
+  const [otp, setOtp] = useState(""); // controlled OTP string
 
   interface LocationForm {
     type: string;
@@ -88,7 +95,7 @@ function RouteComponent() {
   }, []);
 
   useEffect(() => {
-    if (location) {
+    if (location && timezones.length > 0) {
       setFormData({
         type: location.type || "",
         stationName: location.stationName || "",
@@ -96,17 +103,22 @@ function RouteComponent() {
         INDNumber: location.INDNumber || "",
         kardpollCode: location.kardpollCode || "",
         csoCode: location.csoCode || "",
-        timezone: location.timezone || "",
         email: location.email || "",
+        timezone: location.timezone || timezones[0], // default if missing
       });
+      setOtp(location.managerCode?.toString() || "");
     }
-  }, [location]);
+  }, [location, timezones]);
+
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
     try {
-      await axios.put(`/api/locations/${id}`, formData, {
+      await axios.put(`/api/locations/${id}`, {
+        ...formData,
+        managerCode: otp, // send OTP as managerCode
+      }, {
         headers: {
           Authorization: `Bearer ${localStorage.getItem('token')}`,
         },
@@ -198,7 +210,19 @@ function RouteComponent() {
                 </SelectContent>
               </Select>
             </div>
-
+            <div>
+              <Label className="block font-medium mb-1">Manager Code</Label>
+              <div className="flex justify-center">
+                <InputOTP maxLength={4} value={otp} onChange={setOtp}>
+                  <InputOTPGroup>
+                    <InputOTPSlot index={0} />
+                    <InputOTPSlot index={1} />
+                    <InputOTPSlot index={2} />
+                    <InputOTPSlot index={3} />
+                  </InputOTPGroup>
+                </InputOTP>
+              </div>
+            </div>
             <Button type="submit" disabled={loading} className="w-full">
               {loading ? "Saving..." : "Save Changes"}
             </Button>

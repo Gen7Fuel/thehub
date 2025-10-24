@@ -361,11 +361,11 @@ export async function getCsoCodeByStationName(stationName: string): Promise<stri
 export const getOrderRecStatusColor = (status?: string) => {
   switch (status) {
     case "Created":
-      return "#fef3c7"; // light yellow
+      return "#fde68a"; // light yellow
     case "Placed":
       return "#bfdbfe"; // light blue
     case "Completed":
-      return "#fcd34d"; // light orange/golden
+      return "#fdba74"; // light orange/golden
     case "Delivered":
       return "#bbf7d0"; // light green
     case "Invoice Received":
