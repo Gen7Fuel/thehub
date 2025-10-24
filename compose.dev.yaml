@@ -7,6 +7,12 @@ services:
     ports:
       - "27018:27017"
     restart: always
+  redis:
+    container_name: redis
+    image: redis:7
+    ports:
+      - "6379:6379"
+    restart: always
 
   backend:
     container_name: backend
@@ -22,8 +28,10 @@ services:
       - ./backend/.env
     environment:
       - UPLOAD_SERVICE_URL=http://cdn:5001
+      - REDIS_URL=redis://redis:6379
     depends_on:
       - mongo
+      - redis
     restart: always
 
   cdn:
