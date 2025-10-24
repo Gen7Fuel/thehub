@@ -82,34 +82,6 @@ router.put("/:id", async (req, res) => {
 
 //--ADD NEW LOCATION--
 // POST /api/locations
-// router.post("/", async (req, res) => {
-//   try {
-//     const { type, stationName, legalName, INDNumber, kardpollCode, csoCode, timezone, email } = req.body;
-
-//     // Simple validation
-//     if (!type || !stationName || !legalName || !INDNumber || !csoCode || !timezone || !email) {
-//       return res.status(400).json({ message: "Missing required fields." });
-//     }
-
-//     const location = new Location({
-//       type,
-//       stationName,
-//       legalName,
-//       INDNumber,
-//       kardpollCode,
-//       csoCode,
-//       timezone,
-//       email,
-//     });
-
-//     await location.save();
-//     res.status(201).json(location);
-//   } catch (err) {
-//     console.error(err);
-//     res.status(500).json({ message: "Failed to create location." });
-//   }
-// });
-
 router.post("/", async (req, res) => {
   try {
     const { 
@@ -120,11 +92,12 @@ router.post("/", async (req, res) => {
       kardpollCode, 
       csoCode, 
       timezone, 
-      email 
+      email,
+      managerCode
     } = req.body;
 
     // Basic validation
-    if (!type || !stationName || !legalName || !INDNumber || !csoCode || !timezone || !email) {
+    if (!type || !stationName || !legalName || !INDNumber || !csoCode || !timezone || !email || !managerCode) {
       return res.status(400).json({ message: "Missing required fields." });
     }
 
@@ -138,6 +111,7 @@ router.post("/", async (req, res) => {
       csoCode,
       timezone,
       email,
+      managerCode,
     });
 
     await location.save();
@@ -171,6 +145,34 @@ router.get("/name/:stationName", async (req, res) => {
   } catch (err) {
     console.error(err);
     res.status(500).json({ message: "Failed to fetch location." });
+  }
+});
+
+// Check station manager code
+// POST /api/locations/check-code
+router.post("/check-code", async (req, res) => {
+  try {
+    const { location, code } = req.body;
+
+    if (!location || !code) {
+      return res.status(400).json({ error: "Missing location or code" });
+    }
+
+    const locationDoc = await Location.findOne({ stationName: location }).lean();
+
+    if (!locationDoc) {
+      return res.status(404).json({ error: "Location not found" });
+    }
+
+    // Compare numeric managerCode
+    if (Number(locationDoc.managerCode) === Number(code)) {
+      return res.json({ success: true });
+    } else {
+      return res.status(401).json({ success: false, error: "Incorrect code" });
+    }
+  } catch (err) {
+    console.error("Error checking code:", err);
+    res.status(500).json({ error: "Server error" });
   }
 });
 

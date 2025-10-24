@@ -178,7 +178,8 @@ function ChartTooltipContent({
       {!nestLabel ? tooltipLabel : null}
       <div className="grid gap-1.5">
         {payload
-          .filter((item) => item.type !== "none")
+          // Hide tooltip entries with 0 value
+          .filter((item) => item.type !== "none" && item.value !== 0)
           .map((item, index) => {
             const key = `${nameKey || item.name || item.dataKey || "value"}`
             const itemConfig = getPayloadConfigFromPayload(config, item, key)
@@ -255,53 +256,72 @@ function ChartLegendContent({
   hideIcon = false,
   payload,
   verticalAlign = "bottom",
-  nameKey,
+  data = [],
 }: React.ComponentProps<"div"> &
   Pick<RechartsPrimitive.LegendProps, "payload" | "verticalAlign"> & {
     hideIcon?: boolean
-    nameKey?: string
+    data?: Record<string, any>[] 
   }) {
   const { config } = useChart()
 
-  if (!payload?.length) {
-    return null
-  }
+  if (!payload?.length || !Array.isArray(data)) return null
+
+  // Find which keys have at least one non-zero value
+  const nonZeroKeys = new Set<string>()
+
+  payload.forEach((item) => {
+    const key = typeof item.dataKey === "string" ? item.dataKey : String(item.dataKey)
+    if (!key) return
+
+    const hasNonZero = data.some(
+      (d) => typeof d[key] === "number" && d[key] !== 0
+    )
+    if (hasNonZero) nonZeroKeys.add(key)
+  })
+
+  // Filter payload to show only non-zero keys
+  const filteredPayload = payload.filter((item) => {
+    const key = typeof item.dataKey === "string" ? item.dataKey : String(item.dataKey)
+    return nonZeroKeys.has(key)
+  })
+
+  if (!filteredPayload.length) return null
 
   return (
     <div
       className={cn(
-        "flex items-center justify-center gap-4",
+        "flex flex-wrap items-center justify-center gap-4",
         verticalAlign === "top" ? "pb-3" : "pt-3",
         className
       )}
     >
-      {payload
-        .filter((item) => item.type !== "none")
-        .map((item) => {
-          const key = `${nameKey || item.dataKey || "value"}`
-          const itemConfig = getPayloadConfigFromPayload(config, item, key)
+      {filteredPayload.map((item) => {
+        const key = typeof item.dataKey === "string" ? item.dataKey : String(item.dataKey)
+        const itemConfig = getPayloadConfigFromPayload(config, item, key)
 
-          return (
-            <div
-              key={item.value}
-              className={cn(
-                "[&>svg]:text-muted-foreground flex items-center gap-1.5 [&>svg]:h-3 [&>svg]:w-3"
-              )}
-            >
-              {itemConfig?.icon && !hideIcon ? (
-                <itemConfig.icon />
-              ) : (
-                <div
-                  className="h-2 w-2 shrink-0 rounded-[2px]"
-                  style={{
-                    backgroundColor: item.color,
-                  }}
-                />
-              )}
+        return (
+          <div
+            key={key}
+            className={cn(
+              "[&>svg]:text-muted-foreground flex items-center gap-1.5 [&>svg]:h-3 [&>svg]:w-3"
+            )}
+          >
+            {itemConfig?.icon && !hideIcon ? (
+              <itemConfig.icon />
+            ) : (
+              <div
+                className="h-2 w-2 shrink-0 rounded-[2px]"
+                style={{
+                  backgroundColor: item.color,
+                }}
+              />
+            )}
+            <span className="text-sm font-medium text-black">
               {itemConfig?.label}
-            </div>
-          )
-        })}
+            </span>
+          </div>
+        )
+      })}
     </div>
   )
 }
