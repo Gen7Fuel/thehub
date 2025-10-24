@@ -28,7 +28,7 @@ services:
       - SQL_USER=${SQL_USER}
       - SQL_PASSWORD=${SQL_PASSWORD}
       - UPLOAD_SERVICE_URL=http://cdn:5001
-      - REDIS_URL=redis://redis:6379
+      - REDIS_URL=$(REDIS_URL)
     depends_on:
       - mongo
       - redis
