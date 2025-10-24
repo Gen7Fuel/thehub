@@ -475,7 +475,6 @@ router.post('/instance', async (req, res) => {
   try {
     const completedBy = req.user._id;
     const { template, site, frequency, periodKey, date, items } = req.body;
-    console.log("Items to be updated:", items);
     const io = req.app.get("io");
     if (!template || !site || !frequency || !date || !items) {
       return res.status(400).json({ error: "Missing fields" });
