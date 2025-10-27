@@ -394,13 +394,16 @@ function RouteComponent() {
       <div className="relative max-h-[80vh]">
         <div className="overflow-x-auto overflow-y-auto max-h-[80vh] max-w-[calc(100vw-100px)] border rounded-lg">
           <table className="border-collapse w-full">
-            <thead>
+            <thead className="sticky top-0 z-20 bg-gray-100">
               <tr>
                 <th className="border border-gray-300 px-2 py-1 bg-gray-100 text-left w-64 sticky left-0 top-0 z-30">
                   Store \ Vendor
                 </th>
                 {allVendors.map(vendorName => (
-                  <th key={vendorName} className="border ...">
+                  <th
+                    key={vendorName}
+                    className="border border-gray-300 px-2 py-1 bg-gray-100 text-left sticky top-0 z-20"
+                  >
                     {formatVendorName(vendorName)}
                   </th>
                 ))}
@@ -487,8 +490,7 @@ function RouteComponent() {
                           <div className="w-full h-full flex items-center justify-center p-2">
                             {allOrders.length === 0 ? (
                               // Case 1: no orders at all
-                              (<div className="w-80 h-40 flex items-center justify-center rounded-2xl bg-gray-100 text-gray-500 text-sm">Vendor Not Associated
-                                                              </div>)
+                              (<div className="w-80 h-40 flex items-center justify-center rounded-2xl bg-gray-100 text-gray-500 text-sm">No Past Orders</div>)
                             ) : rec ? (
                               // Case 2: order exists this week → render normal card
                               (<OrderCard

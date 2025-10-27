@@ -14,7 +14,7 @@ const locationSchema = new mongoose.Schema({
   csoCode: { type: String, required: true, unique: true },   // Unique CSO code for the location
   timezone: { type: String, required: true },         // Timezone of the location
   email: { type: String, required: true },          // Contact email for the location
-  managerCode: { type: Number, required: true }
+  managerCode: { type: Number, required: true }     // Four digit code for manager's dashboard
 });
 
 // Export the Location model based on the schema
