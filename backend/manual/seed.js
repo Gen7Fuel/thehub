@@ -8,14 +8,14 @@ const connectDB = require("../config/db");
 dotenv.config();
 
 const locations = [
-  { type: "store", stationName: "Rankin", legalName: "Freddies", INDNumber: "560", kardpollCode: "RANKINGEN7", csoCode: "30900", timezone: "America/Toronto", email: "rankin@gen7fuel.com" },
-  { type: "store", stationName: "Couchiching", legalName: "Ft Frances", INDNumber: "731", kardpollCode: "COUCHICING", csoCode: "61327", timezone: "America/Chicago", email: "office.fortfrances@gen7fuel.com" },
-  { type: "store", stationName: "Jocko Point", legalName: "Nipissing", INDNumber: "519", kardpollCode: "JOCKOPOINT", csoCode: "30901", timezone: "America/Toronto", email: "office.jockopoint@gen7fuel.com" },
-  { type: "store", stationName: "Sarnia", legalName: "Smokeys", INDNumber: "461", kardpollCode: "GEN7SARNIA", csoCode: "30904", timezone: "America/Toronto", email: "smokeysoffice@gen7fuel.com" },
-  { type: "store", stationName: "Silver Grizzly", legalName: "Penticton", INDNumber: "744/757", kardpollCode: "PENTICTON", csoCode: "62182", timezone: "America/Vancouver", email: "office.silvergrizzly@gen7fuel.com" },
-  { type: "store", stationName: "Walpole", legalName: "Bkejwanong", INDNumber: "454", kardpollCode: "GEN7WALPOLE", csoCode: "30903", timezone: "America/Toronto", email: "office.walpole@gen7fuel.com" },
-  { type: "store", stationName: "Oliver", legalName: "Oliver", INDNumber: "808", kardpollCode: "GEN7OLIVER", csoCode: "68906", timezone: "America/Vancouver", email: "office.oliver@gen7fuel.com" },
-  { type: "store", stationName: "Osoyoos", legalName: "Osoyoos", INDNumber: "809", kardpollCode: "GEN7OSOYOOS", csoCode: "68908", timezone: "America/Vancouver", email: "office.osoyoos@gen7fuel.com" },
+  { type: "store", stationName: "Rankin", legalName: "Freddies", INDNumber: "560", kardpollCode: "RANKINGEN7", csoCode: "30900", timezone: "America/Toronto", email: "rankin@gen7fuel.com", managerCode: 1911 },
+  { type: "store", stationName: "Couchiching", legalName: "Ft Frances", INDNumber: "731", kardpollCode: "COUCHICING", csoCode: "61327", timezone: "America/Chicago", email: "office.fortfrances@gen7fuel.com", managerCode: 1911 },
+  { type: "store", stationName: "Jocko Point", legalName: "Nipissing", INDNumber: "519", kardpollCode: "JOCKOPOINT", csoCode: "30901", timezone: "America/Toronto", email: "office.jockopoint@gen7fuel.com", managerCode: 1911 },
+  { type: "store", stationName: "Sarnia", legalName: "Smokeys", INDNumber: "461", kardpollCode: "GEN7SARNIA", csoCode: "30904", timezone: "America/Toronto", email: "smokeysoffice@gen7fuel.com", managerCode: 1911 },
+  { type: "store", stationName: "Silver Grizzly", legalName: "Penticton", INDNumber: "744/757", kardpollCode: "PENTICTON", csoCode: "62182", timezone: "America/Vancouver", email: "office.silvergrizzly@gen7fuel.com", managerCode: 1911 },
+  { type: "store", stationName: "Walpole", legalName: "Bkejwanong", INDNumber: "454", kardpollCode: "GEN7WALPOLE", csoCode: "30903", timezone: "America/Toronto", email: "office.walpole@gen7fuel.com", managerCode: 1911 },
+  { type: "store", stationName: "Oliver", legalName: "Oliver", INDNumber: "808", kardpollCode: "GEN7OLIVER", csoCode: "68906", timezone: "America/Vancouver", email: "office.oliver@gen7fuel.com", managerCode: 1911 },
+  { type: "store", stationName: "Osoyoos", legalName: "Osoyoos", INDNumber: "809", kardpollCode: "GEN7OSOYOOS", csoCode: "68908", timezone: "America/Vancouver", email: "office.osoyoos@gen7fuel.com", managerCode: 1911 },
 ];
 
 const products = [
