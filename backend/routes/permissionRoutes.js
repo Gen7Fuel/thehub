@@ -90,11 +90,19 @@ router.post("/sync", async (req, res) => {
 
       for (const perm of permissions) {
         if (perm.name === "site_access" && Array.isArray(perm.sites)) {
-          // For site_access, handle sites array
           const sitesAccess = {};
-          perm.sites.forEach((site) => {
-            sitesAccess[site] = !!user.is_inOffice; // true if in office, else false
-          });
+          const existingSitesAccess = user.access?.site_access || {};
+          if (user.is_inOffice) {
+            // User is in office → full access to all sites
+            perm.sites.forEach((site) => {
+              sitesAccess[site] = true;
+            });
+          } else {
+            // Not in office → preserve existing permissions
+            perm.sites.forEach((site) => {
+              sitesAccess[site] = existingSitesAccess[site] ?? false;
+            });
+          }
           updatedAccess[perm.name] = sitesAccess;
         } else {
           // For new permissions, set true if user is admin
