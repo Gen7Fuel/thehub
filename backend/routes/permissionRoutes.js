@@ -25,6 +25,18 @@ router.get("/", async (req, res) => {
   }
 });
 
+// get permission (new model) by id
+router.get("/:id", async (req, res) => {
+  try {
+    const permission = await Permission.findById(req.params.id);
+    if (!permission) return res.status(404).json({ message: "Permission not found" });
+    res.status(200).json(permission);
+  } catch (error) {
+    console.error("Error fetching permission:", error);
+    res.status(500).json({ message: "Server error" });
+  }
+});
+
 // Add new permission
 router.post("/", async (req, res) => {
   const { name } = req.body;
@@ -138,40 +150,60 @@ router.post("/sync", async (req, res) => {
 
 
 // Edit (rename) a permission
+// router.put("/:id", async (req, res) => {
+//   const { id } = req.params;
+//   const { newName } = req.body;
+
+//   try {
+//     const permission = await Permission.findById(id);
+//     if (!permission) return res.status(404).json({ error: "Permission not found" });
+
+//     const oldName = permission.name;
+
+//     // Check duplicate
+//     const exists = await Permission.findOne({ name: newName });
+//     if (exists) {
+//       return res.status(400).json({ error: "Permission with this name already exists" });
+//     }
+
+//     // Update permission name in collection
+//     permission.name = newName;
+//     await permission.save();
+
+//     // Rename field in all users
+//     await User.updateMany(
+//       { [`access.${oldName}`]: { $exists: true } },
+//       {
+//         $rename: {
+//           [`access.${oldName}`]: `access.${newName}`
+//         }
+//       }
+//     );
+
+//     res.json({ message: "Permission renamed successfully" });
+//   } catch (err) {
+//     console.error("Error renaming permission:", err);
+//     res.status(500).json({ error: "Failed to rename permission" });
+//   }
+// });
+
+
+//update a permission (new model)
 router.put("/:id", async (req, res) => {
-  const { id } = req.params;
-  const { newName } = req.body;
-
   try {
-    const permission = await Permission.findById(id);
-    if (!permission) return res.status(404).json({ error: "Permission not found" });
-
-    const oldName = permission.name;
-
-    // Check duplicate
-    const exists = await Permission.findOne({ name: newName });
-    if (exists) {
-      return res.status(400).json({ error: "Permission with this name already exists" });
-    }
-
-    // Update permission name in collection
-    permission.name = newName;
-    await permission.save();
-
-    // Rename field in all users
-    await User.updateMany(
-      { [`access.${oldName}`]: { $exists: true } },
+    const updated = await Permission.findByIdAndUpdate(
+      req.params.id,
       {
-        $rename: {
-          [`access.${oldName}`]: `access.${newName}`
-        }
-      }
+        module_name: req.body.module_name,
+        components: req.body.components,
+      },
+      { new: true }
     );
-
-    res.json({ message: "Permission renamed successfully" });
-  } catch (err) {
-    console.error("Error renaming permission:", err);
-    res.status(500).json({ error: "Failed to rename permission" });
+    if (!updated) return res.status(404).json({ message: "Permission not found" });
+    res.status(200).json(updated);
+  } catch (error) {
+    console.error("Error updating permission:", error);
+    res.status(500).json({ message: "Server error updating permission" });
   }
 });
 
