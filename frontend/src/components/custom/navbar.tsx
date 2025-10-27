@@ -2,7 +2,7 @@ import { Link, useMatchRoute, useNavigate } from '@tanstack/react-router'
 import { Button } from '../ui/button'
 import { useEffect, useState } from 'react'
 import { isTokenExpired } from '../../lib/utils'
-import { getUserFromToken, useSocket } from '@/context/SignalContext'
+// import { getUserFromToken, useSocket } from '@/context/SignalContext'
 import { useAuth } from "@/context/AuthContext";
 import { HelpCircle } from 'lucide-react'
 import {
@@ -17,8 +17,8 @@ export default function Navbar() {
   // Initialize navigation and route matching hooks
   const navigate = useNavigate()
   const matchRoute = useMatchRoute()
-  const { socketRef } = useSocket()
   const [isHelpOpen, setIsHelpOpen] = useState(false)
+  // const { socketRef } = useSocket()
 
   // Effect: Check token expiration on mount and redirect to login if expired
   useEffect(() => {
@@ -69,18 +69,18 @@ export default function Navbar() {
   // Handles user logout: disconnects from socket, clears storage and redirects to login
   const handleLogout = () => {
     // Disconnect from socket and leave room
-    if (socketRef.current?.connected) {
-      const user = getUserFromToken();
-      if (user) {
-        const room = `${user.email.split("@")[0]}'s room`;
-        socketRef.current.emit('leave-room', room);
-        console.log('🚪 Left room:', room);
-      }
-      socketRef.current.disconnect();
-      console.log('🔌 Socket disconnected');
-    } else {
-      console.log('⚠️ No socket to disconnect');
-    }
+    // if (socketRef.current?.connected) {
+    //   const user = getUserFromToken();
+    //   if (user) {
+    //     const room = `${user.email.split("@")[0]}'s room`;
+    //     socketRef.current.emit('leave-room', room);
+    //     console.log('🚪 Left room:', room);
+    //   }
+    //   socketRef.current.disconnect();
+    //   console.log('🔌 Socket disconnected');
+    // } else {
+    //   console.log('⚠️ No socket to disconnect');
+    // }
     
     // Clear all stored data
     localStorage.removeItem('token')
