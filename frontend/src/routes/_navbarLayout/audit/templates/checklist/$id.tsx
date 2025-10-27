@@ -47,41 +47,133 @@ function RouteComponent() {
   const [selectedSites, setSelectedSites] = useState<string[]>([]);
   
   const [uniqueVendors, setUniqueVendors] = useState<string[]>([]);
+  const [loading, setLoading] = useState(true);
 
   const navigate = useNavigate();
 
   // Fetch locations
-  useEffect(() => {
-    axios
-      .get("/api/locations", {
-        headers: { Authorization: `Bearer ${localStorage.getItem("token")}` },
-      })
-      .then(res => setSites(res.data))
-      .catch(() => setSites([]));
-  }, []);
+  // useEffect(() => {
+  //   axios
+  //     .get("/api/locations", {
+  //       headers: { Authorization: `Bearer ${localStorage.getItem("token")}` },
+  //     })
+  //     .then(res => setSites(res.data))
+  //     .catch(() => setSites([]));
+  // }, []);
 
   // Fetch select templates
-  useEffect(() => {
-    axios
-      .get("/api/audit/select-templates", {
-        headers: { Authorization: `Bearer ${localStorage.getItem("token")}` },
-      })
-      .then(res => setSelectTemplates(res.data))
-      .catch(() => setSelectTemplates([]));
-  }, []);
+  // useEffect(() => {
+  //   axios
+  //     .get("/api/audit/select-templates", {
+  //       headers: { Authorization: `Bearer ${localStorage.getItem("token")}` },
+  //     })
+  //     .then(res => setSelectTemplates(res.data))
+  //     .catch(() => setSelectTemplates([]));
+  // }, []);
 
-  // Fetch audit template data
+  // // Fetch audit template data
+  // useEffect(() => {
+  //   axios
+  //     .get(`/api/audit/${id}`, {
+  //       headers: { Authorization: `Bearer ${localStorage.getItem("token")}` },
+  //     })
+  //     .then(res => {
+  //       setName(res.data.templateName || "");
+  //       setDescription(res.data.description || "");
+  //       setItems(
+  //         res.data.items && res.data.items.length > 0
+  //           ? res.data.items.map((item: any) => ({
+  //               category: item.category || "",
+  //               item: item.item || "",
+  //               statusTemplate: item.statusTemplate || "",
+  //               followUpTemplate: item.followUpTemplate || "",
+  //               assignedTo: item.assignedTo || "",
+  //               frequency: item.frequency || "",
+  //               vendor: item.suppliesVendor || "",
+  //               assignedSites: item.assignedSites || (res.data.sites || []).map((s: string) => ({
+  //                 site: s,
+  //                 assigned: false,
+  //               })),
+  //             }))
+  //           : [{ category: "", item: "", statusTemplate: "", followUpTemplate: "", assignedTo: "",  frequency: "", vendor: "",
+  //                 assignedSites: (res.data.sites || []).map((s: string) => ({
+  //                   site: s,
+  //                   assigned: false,
+  //                 })),
+  //             }]
+  //       );
+  //       setSelectedSites(res.data.sites || []);
+  //     })
+  //     .catch(() => setError("Failed to load audit template"));
+  // }, [id]);
+
+  // useEffect(() => {
+  //     const fetchVendors = async () => {
+  //       try {
+  //         const token = localStorage.getItem("token");
+  //         const res = await fetch("/api/vendors", {
+  //           headers: { Authorization: `Bearer ${token}` },
+  //         });
+  //         if (!res.ok) throw new Error(`HTTP error! status: ${res.status}`);
+  //         const data = (await res.json()) as { name: string; category: string }[];
+  
+  //         // Filter only vendors with category = "Station Supplies"
+  //         const stationVendors = data.filter(
+  //           (v) => v.category?.trim() === "Station Supplies"
+  //         );
+  
+  //         // Extract unique vendor names
+  //         const vendors = Array.from(new Set(stationVendors.map((v) => v.name).filter(Boolean)));
+  //         setUniqueVendors(vendors);
+  
+  //       } catch (err) {
+  //         console.error("Failed to fetch vendors:", err);
+  //       }
+  //     };
+  
+  //     fetchVendors();
+  //   }, []);
+
   useEffect(() => {
-    axios
-      .get(`/api/audit/${id}`, {
-        headers: { Authorization: `Bearer ${localStorage.getItem("token")}` },
-      })
-      .then(res => {
-        setName(res.data.templateName || "");
-        setDescription(res.data.description || "");
+    const fetchAllData = async () => {
+      try {
+        setLoading(true); // start loading
+        const token = localStorage.getItem("token");
+        const headers = { Authorization: `Bearer ${token}` };
+
+        // Fetch all necessary data in parallel
+        const [auditRes, selectRes, vendorRes, sitesRes] = await Promise.all([
+          axios.get(`/api/audit/${id}`, { headers }),
+          axios.get("/api/audit/select-templates", { headers }),
+          axios.get("/api/vendors", { headers }),
+          axios.get("/api/locations", { headers }),
+        ]);
+
+        // --- handle select templates
+        setSelectTemplates(selectRes.data);
+
+        // --- handle vendors
+        const vendorData = vendorRes.data as { name: string; category: string }[];
+        const stationVendors = vendorData.filter(
+          (v) => v.category?.trim() === "Station Supplies"
+        );
+        const vendors = Array.from(
+          new Set(stationVendors.map((v) => v.name).filter(Boolean))
+        );
+        setUniqueVendors(vendors);
+
+        // --- handle sites
+        setSites(sitesRes.data);
+
+        // --- handle audit template
+        const audit = auditRes.data;
+        setName(audit.templateName || "");
+        setDescription(audit.description || "");
+        setSelectedSites(audit.sites || []);
+
         setItems(
-          res.data.items && res.data.items.length > 0
-            ? res.data.items.map((item: any) => ({
+          audit.items && audit.items.length > 0
+            ? audit.items.map((item: any) => ({
                 category: item.category || "",
                 item: item.item || "",
                 statusTemplate: item.statusTemplate || "",
@@ -89,49 +181,39 @@ function RouteComponent() {
                 assignedTo: item.assignedTo || "",
                 frequency: item.frequency || "",
                 vendor: item.suppliesVendor || "",
-                assignedSites: item.assignedSites || (res.data.sites || []).map((s: string) => ({
-                  site: s,
-                  assigned: false,
-                })),
-              }))
-            : [{ category: "", item: "", statusTemplate: "", followUpTemplate: "", assignedTo: "",  frequency: "", vendor: "",
-                  assignedSites: (res.data.sites || []).map((s: string) => ({
+                assignedSites:
+                  item.assignedSites ||
+                  (audit.sites || []).map((s: string) => ({
                     site: s,
                     assigned: false,
                   })),
-              }]
+              }))
+            : [
+                {
+                  category: "",
+                  item: "",
+                  statusTemplate: "",
+                  followUpTemplate: "",
+                  assignedTo: "",
+                  frequency: "",
+                  vendor: "",
+                  assignedSites: (audit.sites || []).map((s: string) => ({
+                    site: s,
+                    assigned: false,
+                  })),
+                },
+              ]
         );
-        setSelectedSites(res.data.sites || []);
-      })
-      .catch(() => setError("Failed to load audit template"));
-  }, [id]);
+      } catch (err) {
+        console.error("Failed to load audit template data:", err);
+        setError("Failed to load audit template data");
+      } finally {
+        setLoading(false); // done loading
+      }
+    };
 
-  useEffect(() => {
-      const fetchVendors = async () => {
-        try {
-          const token = localStorage.getItem("token");
-          const res = await fetch("/api/vendors", {
-            headers: { Authorization: `Bearer ${token}` },
-          });
-          if (!res.ok) throw new Error(`HTTP error! status: ${res.status}`);
-          const data = (await res.json()) as { name: string; category: string }[];
-  
-          // Filter only vendors with category = "Station Supplies"
-          const stationVendors = data.filter(
-            (v) => v.category?.trim() === "Station Supplies"
-          );
-  
-          // Extract unique vendor names
-          const vendors = Array.from(new Set(stationVendors.map((v) => v.name).filter(Boolean)));
-          setUniqueVendors(vendors);
-  
-        } catch (err) {
-          console.error("Failed to fetch vendors:", err);
-        }
-      };
-  
-      fetchVendors();
-    }, []);
+    fetchAllData();
+  }, [id]);
 
   const handleSiteToggle = (site: string) => {
     setSelectedSites(selected =>
@@ -200,6 +282,13 @@ function RouteComponent() {
       setSaving(false);
     }
   };
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center h-screen text-gray-600 text-lg">
+        Loading checklist template...
+      </div>
+    );
+  }
 
   return (
     <div className="max-w-5xl mx-auto mt-8 p-4 border rounded">
@@ -249,6 +338,9 @@ function RouteComponent() {
                 <th className="border px-2 py-1">Follow Up</th>
                 <th className="border px-2 py-1">Assigned To</th>
                 <th className="border px-2 py-1">Frequency</th>
+                { name === "Orders" && (
+                  <th className="border px-2 py-1">Vendor</th>
+                )}
                 <th className="border px-2 py-1">Assigned Sites</th>
                 <th className="border px-2 py-1"></th>
               </tr>
