@@ -17,12 +17,8 @@ export default function Navbar() {
   // Initialize navigation and route matching hooks
   const navigate = useNavigate()
   const matchRoute = useMatchRoute()
-<<<<<<< Updated upstream
-  const { socketRef } = useSocket()
   const [isHelpOpen, setIsHelpOpen] = useState(false)
-=======
   // const { socketRef } = useSocket()
->>>>>>> Stashed changes
 
   // Effect: Check token expiration on mount and redirect to login if expired
   useEffect(() => {
