@@ -169,7 +169,10 @@ export default function Navbar() {
         </Link>
 
         {/* Centered dynamic header */}
-        <h1 className="absolute left-1/2 transform -translate-x-1/2 text-lg font-bold">
+        {/* <h1 className="absolute left-1/2 transform -translate-x-1/2 text-lg font-bold">
+          {headerText()}
+        </h1> */}
+        <h1 className="hidden md:block absolute left-1/2 transform -translate-x-1/2 text-lg font-bold">
           {headerText()}
         </h1>
 
