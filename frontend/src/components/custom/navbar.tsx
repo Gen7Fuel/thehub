@@ -1,9 +1,16 @@
 import { Link, useMatchRoute, useNavigate } from '@tanstack/react-router'
 import { Button } from '../ui/button'
-import { useEffect } from 'react'
+import { useEffect, useState } from 'react'
 import { isTokenExpired } from '../../lib/utils'
 import { getUserFromToken, useSocket } from '@/context/SignalContext'
 import { useAuth } from "@/context/AuthContext";
+import { HelpCircle } from 'lucide-react'
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog"
 
 // Navbar component for the application
 export default function Navbar() {
@@ -11,6 +18,7 @@ export default function Navbar() {
   const navigate = useNavigate()
   const matchRoute = useMatchRoute()
   const { socketRef } = useSocket()
+  const [isHelpOpen, setIsHelpOpen] = useState(false)
 
   // Effect: Check token expiration on mount and redirect to login if expired
   useEffect(() => {
@@ -91,6 +99,66 @@ export default function Navbar() {
   console.log("Users access from navbar:", user?.access)
   const access = user?.access || '{}'
 
+  let module_slug = window.location.href.split('/')[3]
+
+  let help
+
+  // Generate help text based on module_slug
+  switch (module_slug) {
+    case 'cycle-count':
+      help = (
+        <div className="space-y-3">
+          <p className="text-sm text-gray-700">
+            Enter your count directly in the Cycle Count form.
+          </p>
+          <div className="space-y-2 text-sm text-gray-700">
+            <div className="flex gap-2">
+              <span className="text-blue-600 font-semibold">•</span>
+              <span>Updates sync in real time for all users working on the same count.</span>
+            </div>
+            <div className="flex gap-2">
+              <span className="text-blue-600 font-semibold">•</span>
+              <span>When finished, click <strong>Save</strong> to record your entries.</span>
+            </div>
+          </div>
+        </div>
+      )
+      break
+    case 'order-rec':
+      help = (
+        <div className="space-y-3">
+          <p className="text-sm text-gray-700">
+            View all Order Recs with file name, upload date, uploader, item categories, and status.
+          </p>
+          <div className="space-y-2 text-sm text-gray-700">
+            <div className="flex gap-2">
+              <span className="text-blue-600 font-semibold">•</span>
+              <span>Click an Order Rec to open its details. Categories are collapsed — tap to expand.</span>
+            </div>
+            <div className="flex gap-2">
+              <span className="text-blue-600 font-semibold">•</span>
+              <span>Click an item row to edit <strong>On Hand Qty</strong> or <strong>Cases to Order</strong>, then Save.</span>
+            </div>
+            <div className="flex gap-2">
+              <span className="text-blue-600 font-semibold">•</span>
+              <span>Check items as done — when all items in a category are checked, it's marked complete.</span>
+            </div>
+            <div className="flex gap-2">
+              <span className="text-blue-600 font-semibold">•</span>
+              <span>Add notes in the text box at the top and Save to store them.</span>
+            </div>
+            <div className="flex gap-2">
+              <span className="text-blue-600 font-semibold">•</span>
+              <span>When all categories are done, click <strong>Notify</strong> to alert the back office.</span>
+            </div>
+          </div>
+        </div>
+      )
+      break
+    default:
+      help = 'No help available for this page.'
+  }
+
   return (
     // Navbar container
     <div className="absolute top-0 left-0 w-full bg-white border-b border-dashed border-gray-300 z-10">
@@ -107,6 +175,9 @@ export default function Navbar() {
 
         {/* Right-side navigation buttons */}
         <span className="flex gap-4">
+          <Button variant="outline" size="icon" onClick={() => setIsHelpOpen(true)}>
+            <HelpCircle className="h-5 w-5" />
+          </Button>
           {/* Dashboard button, shown if user has access */}
           {access.module_dashboard && (
             <Button variant="ghost" onClick={() => navigate({ to: '/dashboard' })}>
@@ -121,6 +192,22 @@ export default function Navbar() {
           <Button onClick={handleLogout}>Logout</Button>
         </span>
       </div>
+
+      {/* Help Modal */}
+      <Dialog open={isHelpOpen} onOpenChange={setIsHelpOpen}>
+        <DialogContent className="sm:max-w-lg">
+          <DialogHeader>
+            <DialogTitle>Help</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div>
+              <p className="text-sm text-gray-700 whitespace-pre-line">
+                {help}
+              </p>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
