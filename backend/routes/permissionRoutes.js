@@ -4,13 +4,24 @@ const Permission = require("../models/Permission");
 const User = require('../models/User');
 
 // Get all permissions
+// router.get("/", async (req, res) => {
+//   try {
+//     const permissions = await Permission.find();
+//     res.status(200).json(permissions);
+//   } catch (err) {
+//     console.error("Error fetching permissions:", err);
+//     res.status(500).json({ error: "Internal server error" });
+//   }
+// });
+
+// New Permissions Get Route
 router.get("/", async (req, res) => {
   try {
-    const permissions = await Permission.find();
+    const permissions = await Permission.find().sort({ module_name: 1 }); // sort alphabetically
     res.status(200).json(permissions);
-  } catch (err) {
-    console.error("Error fetching permissions:", err);
-    res.status(500).json({ error: "Internal server error" });
+  } catch (error) {
+    console.error("Error fetching permissions:", error);
+    res.status(500).json({ message: "Server error fetching permissions" });
   }
 });
 
