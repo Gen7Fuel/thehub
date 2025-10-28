@@ -21,31 +21,44 @@
 
 const mongoose = require("mongoose");
 
-/**
- * Permission Schema
- * Defines available modules, components, and actions (children)
- * Example:
- * {
- *   module_name: "inventory",
- *   components: [
- *     { name: "products", children: ["view", "edit", "delete"] },
- *     { name: "suppliers", children: ["view"] }
- *   ]
- * }
- */
+//Eg. Document - how this structure would look like
+// {
+//   "module_name": "audits",
+//   "structure": [
+//     {
+//       "name": "template",
+//       "children": [
+//         {
+//           "name": "view",
+//           "children": [
+//             { "name": "columns", "children": [] },
+//             { "name": "filters", "children": [] }
+//           ]
+//         },
+//         { "name": "edit", "children": [] }
+//       ]
+//     },
+//     {
+//       "name": "dashboard",
+//       "children": [
+//         { "name": "view", "children": [] }
+//       ]
+//     }
+//   ]
+// }
+
+
+const permissionNodeSchema = new mongoose.Schema({
+  name: { type: String, required: true, unique: true }, // e.g., "view", "template"
+  children: { type: [this], default: [] }, // recursive children
+}, { _id: false }); // _id: false for inline sub-docs
 
 const permissionSchema = new mongoose.Schema({
-  module_name: {
-    type: String,
+  module_name: { type: String, required: true, unique: true },
+  structure: {
+    type: [permissionNodeSchema], // array of root-level components
     required: true,
-    unique: true, // Each module name must be unique
   },
-  components: [
-    {
-      name: { type: String, required: true }, // e.g. "products"
-      children: [{ type: String }], // e.g. ["view", "edit", "delete"]
-    },
-  ],
 }, { timestamps: true });
 
 module.exports = mongoose.model("Permission", permissionSchema);

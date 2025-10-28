@@ -69,6 +69,11 @@ const bcrypt = require("bcryptjs");
  * User Schema
  * Includes authentication, role association, and fine-grained access permissions.
  */
+const permissionNodeSchema = new mongoose.Schema({
+  name: { type: String, required: true },
+  children: { type: [this], default: [] },
+}, { _id: false });
+
 const userSchema = new mongoose.Schema({
   email: { type: String, required: true, unique: true },
   password: { type: String, required: true },
@@ -84,21 +89,14 @@ const userSchema = new mongoose.Schema({
     type: mongoose.Schema.Types.ObjectId,
     ref: "Role",
   },
-
-  // Individual access overrides (same structure as Role.permissions)
-  access: {
-    type: [
-      {
-        module_name: { type: String },
-        components: [
-          {
-            name: { type: String },
-            children: [{ type: String }],
-          },
-        ],
-      },
-    ],
-    default: [],
+  // Temoparily keeping name permissions after frontend update change to access
+  permissions: {
+      type: [permissionNodeSchema],
+      default: [],
+  },
+  access: { 
+    type: Object, 
+    default: { "news": true } // Access permissions object (feature flags)
   },
 }, { timestamps: true });
 

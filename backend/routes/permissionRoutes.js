@@ -3,6 +3,16 @@ const router = express.Router();
 const Permission = require("../models/Permission");
 const User = require('../models/User');
 
+// For normalising permission names and structure
+const normalizeStructure = (nodes = []) => {
+  return nodes.map(node => ({
+    ...node,
+    name: node.name.trim().toLowerCase().replace(/\s+/g, "-"),
+    children: normalizeStructure(node.children),
+  }));
+};
+
+
 // Get all permissions
 // router.get("/", async (req, res) => {
 //   try {
@@ -38,25 +48,47 @@ router.get("/:id", async (req, res) => {
 });
 
 // Add new permission
-router.post("/", async (req, res) => {
-  const { name } = req.body;
-  if (!name) return res.status(400).json({ error: "Permission name required" });
+// router.post("/", async (req, res) => {
+//   const { name } = req.body;
+//   if (!name) return res.status(400).json({ error: "Permission name required" });
 
+//   try {
+//     // 1. Add new permission to collection
+//     const newPermission = new Permission({ name });
+//     await newPermission.save();
+
+//     res.status(201).json({
+//       success: true,
+//       message: `Permission '${name}' added.`,
+//     });
+//   } catch (err) {
+//     console.error("Error adding permission:", err);
+//     res.status(500).json({
+//       error: "Failed to add permission",
+//       details: err.message,
+//     });
+//   }
+// });
+router.post("/", async (req, res) => {
   try {
-    // 1. Add new permission to collection
-    const newPermission = new Permission({ name });
+    const { module_name, structure } = req.body;
+
+    // Ensure consistent format
+    module_name = module_name.trim().toLowerCase().replace(/\s+/g, "-");
+    structure = normalizeStructure(structure);
+
+    const exists = await Permission.findOne({ module_name });
+    if (exists) {
+      return res.status(400).json({ message: "Module name already exists" });
+    }
+
+    const newPermission = new Permission({ module_name, structure });
     await newPermission.save();
 
-    res.status(201).json({
-      success: true,
-      message: `Permission '${name}' added.`,
-    });
-  } catch (err) {
-    console.error("Error adding permission:", err);
-    res.status(500).json({
-      error: "Failed to add permission",
-      details: err.message,
-    });
+    res.status(201).json(newPermission);
+  } catch (error) {
+    console.error("Error creating permission:", error);
+    res.status(500).json({ message: "Server error creating permission" });
   }
 });
 
@@ -188,18 +220,19 @@ router.post("/sync", async (req, res) => {
 // });
 
 
-//update a permission (new model)
+// routes/permissions.js
 router.put("/:id", async (req, res) => {
   try {
+    let { module_name, structure } = req.body;
+    module_name = module_name.trim().toLowerCase().replace(/\s+/g, "-");
+    structure = normalizeStructure(structure);
     const updated = await Permission.findByIdAndUpdate(
       req.params.id,
-      {
-        module_name: req.body.module_name,
-        components: req.body.components,
-      },
+      { module_name, structure },
       { new: true }
     );
     if (!updated) return res.status(404).json({ message: "Permission not found" });
+
     res.status(200).json(updated);
   } catch (error) {
     console.error("Error updating permission:", error);

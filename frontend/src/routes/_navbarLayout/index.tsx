@@ -15,7 +15,7 @@ function App() {
   const { user } = useAuth();
   // Retrieve access permissions from auth provider
   const access = user?.access || '{}'
-  console.log("Access:",access)
+  console.log("Access:",access.component_order_rec_upload)
 
   return (
     <div className="flex items-center justify-center min-h-screen bg-gray-50">

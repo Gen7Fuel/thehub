@@ -1,4 +1,4 @@
-import { createContext, useContext, useState, useEffect } from "react";
+import { createContext, useContext, useState, useEffect, useRef } from "react";
 import { jwtDecode } from "jwt-decode";
 
 interface User {
@@ -22,24 +22,50 @@ const AuthContext = createContext<AuthContextType | undefined>(undefined);
 export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
   const [user, setUser] = useState<User | null>(null);
 
+  // const refreshAuth = () => {
+  //   const token = localStorage.getItem("token");
+  //   if (!token) {
+  //     setUser(null);
+  //     return;
+  //   }
+
+  //   try {
+  //     const decoded: any = jwtDecode(token);
+  //     setUser(decoded);
+  //   } catch (err) {
+  //     console.error("Failed to decode token:", err);
+  //     setUser(null);
+  //   }
+  // };
+
+  // useEffect(() => {
+  //   refreshAuth(); // Load user on first mount
+  // }, []);
+
+  const didMount = useRef(false);
+
   const refreshAuth = () => {
     const token = localStorage.getItem("token");
     if (!token) {
-      setUser(null);
+      if (user !== null) setUser(null);
       return;
     }
 
     try {
       const decoded: any = jwtDecode(token);
-      setUser(decoded);
+      if (JSON.stringify(decoded) !== JSON.stringify(user)) {
+        setUser(decoded);
+      }
     } catch (err) {
-      console.error("Failed to decode token:", err);
-      setUser(null);
+      console.error(err);
+      if (user !== null) setUser(null);
     }
   };
 
   useEffect(() => {
-    refreshAuth(); // Load user on first mount
+    if (didMount.current) return;
+    refreshAuth();
+    didMount.current = true;
   }, []);
 
   return (

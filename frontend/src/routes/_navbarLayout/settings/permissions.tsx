@@ -34,6 +34,18 @@ function RouteComponent() {
   const activeProps = {
     className: 'bg-gray-100 rounded-md',
   };
+  
+  // captalise the first letter for easy reading only for diaplay
+  const capitalize = (str: string) => {
+    if (!str) return "";
+    return str
+      .replace(/-/g, " ") // only convert hyphens from backend to spaces
+      .split(" ")
+      .map(word =>
+        word ? word.charAt(0).toUpperCase() + word.slice(1).toLowerCase() : ""
+      )
+      .join(" ");
+  };
 
   return (
     <div className="flex">
@@ -47,7 +59,7 @@ function RouteComponent() {
             params={{ id: permission._id }}
             activeProps={activeProps}
           >
-            {permission.module_name}
+            {capitalize(permission.module_name)}
           </Link>
         ))}
 
