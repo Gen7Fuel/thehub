@@ -21,17 +21,17 @@ const mongoose = require("mongoose");
 //     }
 //   ]
 // }
-
 const permissionNodeSchema = new mongoose.Schema({
   name: { type: String, required: true },
-  children: { type: [this], default: [] }, // recursive children
+  value: { type: Boolean, default: false }, // new flag for enable/disable
+  children: { type: [this], default: [] },
 }, { _id: false });
 
 const roleSchema = new mongoose.Schema({
   role_name: { type: String, required: true, unique: true },
   description: { type: String },
   permissions: {
-    type: [permissionNodeSchema], // tree-like structure
+    type: [permissionNodeSchema],
     default: [],
   },
 }, { timestamps: true });

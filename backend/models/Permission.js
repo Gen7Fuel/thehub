@@ -49,7 +49,7 @@ const mongoose = require("mongoose");
 
 
 const permissionNodeSchema = new mongoose.Schema({
-  name: { type: String, required: true, unique: true }, // e.g., "view", "template"
+  name: { type: String, required: true}, // e.g., "view", "template"
   children: { type: [this], default: [] }, // recursive children
 }, { _id: false }); // _id: false for inline sub-docs
 

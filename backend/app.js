@@ -27,6 +27,8 @@ const emailRoutes = require("./routes/emailRoutes");
 const orderRecRoutes = require("./routes/orderRecRoutes");
 const vendorRoutes = require("./routes/vendorRoutes");
 const auditRoutes = require("./routes/audit/auditTemplateRoutes");
+const roleRoutes = require("./routes/roleRoutes");
+
 
 const { auth } = require("./middleware/authMiddleware");
 const { authSocket } = require("./middleware/authMiddleware");
@@ -75,6 +77,7 @@ app.use("/api/audit/select-templates", selectTemplateRoutes);
 // app.use("/api/audit/follow-up-templates", followUpTemplateRoutes);
 app.use("/api/audit", auditRoutes);
 app.use("/api/permissions", permissionRoutes);
+app.use("/api/roles", roleRoutes);
 
 // Reporting
 app.use("/api/sales-summary", salesSummaryRoutes);

@@ -1,11 +1,11 @@
 import { createFileRoute } from '@tanstack/react-router'
 
 export const Route = createFileRoute(
-  '/_navbarLayout/settings/permissions-new/',
+  '/_navbarLayout/settings/roles/',
 )({
   component: RouteComponent,
 })
 
 function RouteComponent() {
-  return <div>Hello "/_navbarLayout/settings/permissions-new/"!</div>
+  return <div className='pl-4'>Select a Role from the Left</div>
 }

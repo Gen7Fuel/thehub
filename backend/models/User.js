@@ -65,12 +65,9 @@
 const mongoose = require("mongoose");
 const bcrypt = require("bcryptjs");
 
-/**
- * User Schema
- * Includes authentication, role association, and fine-grained access permissions.
- */
 const permissionNodeSchema = new mongoose.Schema({
   name: { type: String, required: true },
+  value: { type: Boolean, default: false },
   children: { type: [this], default: [] },
 }, { _id: false });
 
@@ -79,28 +76,27 @@ const userSchema = new mongoose.Schema({
   password: { type: String, required: true },
   firstName: { type: String, required: true },
   lastName: { type: String, required: true },
-  is_active: { type: Boolean, default: true, required: true },
-  is_inOffice: { type: Boolean, default: false, required: true },
-  is_admin: { type: Boolean, default: false, required: true },
+  is_active: { type: Boolean, default: true },
+  is_inOffice: { type: Boolean, default: false },
+  is_admin: { type: Boolean, default: false },
   stationName: { type: String, required: true },
 
-  // Reference to assigned role
   role: {
     type: mongoose.Schema.Types.ObjectId,
     ref: "Role",
   },
-  // Temoparily keeping name permissions after frontend update change to access
-  permissions: {
-      type: [permissionNodeSchema],
-      default: [],
+
+  custom_permissions: {
+    type: [permissionNodeSchema],
+    default: [],
   },
-  access: { 
-    type: Object, 
-    default: { "news": true } // Access permissions object (feature flags)
+
+  access: {
+    type: Object,
+    default: { news: true },
   },
 }, { timestamps: true });
 
-// Hash password before saving
 userSchema.pre("save", async function (next) {
   if (!this.isModified("password")) return next();
   const salt = await bcrypt.genSalt(10);

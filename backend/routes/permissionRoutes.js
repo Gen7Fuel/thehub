@@ -2,6 +2,7 @@ const express = require("express");
 const router = express.Router();
 const Permission = require("../models/Permission");
 const User = require('../models/User');
+const Role = require("../models/Role");
 
 // For normalising permission names and structure
 const normalizeStructure = (nodes = []) => {
@@ -11,6 +12,34 @@ const normalizeStructure = (nodes = []) => {
     children: normalizeStructure(node.children),
   }));
 };
+
+// recursively merge template nodes into role nodes
+const mergePermissions = (templateNodes, roleNodes = []) => {
+  const merged = [];
+
+  for (const tmplNode of templateNodes) {
+    // find corresponding node in role
+    const existing = roleNodes.find(r => r.name === tmplNode.name);
+
+    if (existing) {
+      // preserve value, merge children recursively
+      merged.push({
+        name: tmplNode.name,
+        value: existing.value ?? false,
+        children: mergePermissions(tmplNode.children || [], existing.children || [])
+      });
+    } else {
+      // add new node with value false (default)
+      merged.push({
+        name: tmplNode.name,
+        value: false,
+        children: mergePermissions(tmplNode.children || [], [])
+      });
+    }
+  }
+
+  return merged;
+}
 
 
 // Get all permissions
@@ -71,9 +100,7 @@ router.get("/:id", async (req, res) => {
 // });
 router.post("/", async (req, res) => {
   try {
-    const { module_name, structure } = req.body;
-
-    // Ensure consistent format
+    let { module_name, structure } = req.body;
     module_name = module_name.trim().toLowerCase().replace(/\s+/g, "-");
     structure = normalizeStructure(structure);
 
@@ -84,6 +111,27 @@ router.post("/", async (req, res) => {
 
     const newPermission = new Permission({ module_name, structure });
     await newPermission.save();
+
+    // ---- Merge into all existing roles ----
+    const allRoles = await Role.find({});
+    for (const role of allRoles) {
+      // find existing module node
+      const existingModule = role.permissions.find(p => p.name === module_name);
+
+      if (existingModule) {
+        // merge structure preserving values
+        existingModule.children = mergePermissions(structure, existingModule.children || []);
+      } else {
+        // new module entirely
+        role.permissions.push({
+          name: module_name,
+          value: false,
+          children: mergePermissions(structure, [])
+        });
+      }
+
+      await role.save();
+    }
 
     res.status(201).json(newPermission);
   } catch (error) {
@@ -226,12 +274,31 @@ router.put("/:id", async (req, res) => {
     let { module_name, structure } = req.body;
     module_name = module_name.trim().toLowerCase().replace(/\s+/g, "-");
     structure = normalizeStructure(structure);
+
     const updated = await Permission.findByIdAndUpdate(
       req.params.id,
       { module_name, structure },
       { new: true }
     );
     if (!updated) return res.status(404).json({ message: "Permission not found" });
+
+    // ---- Merge into all roles ----
+    const allRoles = await Role.find({});
+    for (const role of allRoles) {
+      const existingModule = role.permissions.find(p => p.name === module_name);
+
+      if (existingModule) {
+        existingModule.children = mergePermissions(structure, existingModule.children || []);
+      } else {
+        role.permissions.push({
+          name: module_name,
+          value: false,
+          children: mergePermissions(structure, [])
+        });
+      }
+
+      await role.save();
+    }
 
     res.status(200).json(updated);
   } catch (error) {
