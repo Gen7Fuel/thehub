@@ -5,6 +5,7 @@ const User = require("../models/User");
 const Permission = require("../models/Permission");
 const Location = require("../models/Location"); // Add this at the top with other requires
 const router = express.Router();
+const Role = require("../models/Role");
 
 // router.post("/register", async (req, res) => {
 //   const { email, password, firstName, lastName, stationName } = req.body;
@@ -146,6 +147,41 @@ router.post('/reset-password', async (req, res) => {
   const user = await User.findByIdAndUpdate(userId, { password: hashed });
   if (!user) return res.status(404).json({ error: 'User not found.' });
   res.json({ success: true });
+});
+
+// Verify Password against all users with Admin role
+router.post("/verify-password", async (req, res) => {
+  const { password } = req.body;
+
+  try {
+    // Find the Admin role
+    const adminRole = await Role.findOne({ role_name: "Admin" });
+    if (!adminRole) return res.status(404).json({ error: "Admin role not found" });
+
+    // Get all users who have the Admin role
+    const adminUsers = await User.find({ role: adminRole._id });
+    if (!adminUsers || adminUsers.length === 0)
+      return res.status(404).json({ error: "No users with Admin role found" });
+
+    // Check password against all admin users
+    let verified = false;
+    for (const user of adminUsers) {
+      const isMatch = await bcrypt.compare(password, user.password);
+      console.log(user.firstName);
+      if (isMatch) {
+        console.log("Match");
+        verified = true;
+        break;
+      }
+    }
+
+    if (!verified) return res.status(400).json({ error: "Invalid password" });
+
+    res.json({ success: true });
+  } catch (err) {
+    console.error("Error verifying password:", err);
+    res.status(500).json({ error: "Internal server error" });
+  }
 });
 
 module.exports = router;

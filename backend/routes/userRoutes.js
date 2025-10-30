@@ -1,6 +1,70 @@
 const express = require('express');
 const router = express.Router();
+const bcrypt = require("bcryptjs");
 const User = require('../models/User');
+const _ = require("lodash");
+const Role = require("../models/Role");
+
+async function getMergedPermissions(user) {
+  if (!user.role) return user.custom_permissions;
+
+  const role = await Role.findById(user.role);
+  if (!role) return user.custom_permissions;
+
+  // Custom merge function that merges permission trees
+  const mergePermissionNodes = (roleNodes = [], userNodes = []) => {
+    const roleMap = _.keyBy(roleNodes, "name");
+    const userMap = _.keyBy(userNodes, "name");
+
+    return _.map(roleMap, (rNode) => {
+      const uNode = userMap[rNode.name];
+
+      const merged = _.mergeWith(_.cloneDeep(rNode), uNode, (objValue, srcValue, key) => {
+        if (key === "value") return _.isBoolean(srcValue) ? srcValue : objValue;
+        if (key === "children") return mergePermissionNodes(objValue || [], srcValue || []);
+        return undefined;
+      });
+
+      return merged;
+    });
+  };
+  return mergePermissionNodes(role.permissions || [], user.custom_permissions || [])
+}
+
+// Compare mergedPermissions with role.permissions to find overrides
+const getOverrides = (roleNodes = [], userNodes = []) => {
+  const roleMap = _.keyBy(roleNodes, "name");
+  const userMap = _.keyBy(userNodes, "name");
+
+  return _.compact(
+    _.map(userMap, (uNode, key) => {
+      const rNode = roleMap[key];
+      if (!rNode) return uNode; // new permission branch
+
+        let hasOverride = false;
+
+        // Check if value differs
+        if (_.isBoolean(uNode.value) && uNode.value !== rNode.value) hasOverride = true;
+
+        // Recursively check children
+        let childrenOverrides = [];
+        if (uNode.children && uNode.children.length > 0) {
+          childrenOverrides = getOverrides(rNode.children || [], uNode.children);
+          if (childrenOverrides.length > 0) hasOverride = true;
+        }
+
+        if (hasOverride) {
+          return {
+            name: uNode.name,
+            value: uNode.value,
+            ...(childrenOverrides.length > 0 ? { children: childrenOverrides } : {}),
+          };
+        }
+
+        return null; // no override, skip
+      })
+    );
+  };
 
 // GET route to fetch all users
 router.get('/', async (req, res) => {
@@ -14,20 +78,64 @@ router.get('/', async (req, res) => {
 });
 
 // GET route to fetch a single user by userId
-router.get('/:userId', async (req, res) => {
+// router.get('/:userId', async (req, res) => {
+//   const { userId } = req.params;
+
+//   try {
+//     const user = await User.findById(userId); // Find user by ID
+//     if (!user) {
+//       return res.status(404).json({ error: 'User not found' }); // Return 404 if user doesn't exist
+//     }
+//     res.status(200).json(user); // Send the user as a JSON response
+//   } catch (error) {
+//     console.error('Error fetching user:', error);
+//     res.status(500).json({ error: 'Internal server error' });
+//   }
+// });
+router.get("/:userId", async (req, res) => {
   const { userId } = req.params;
 
   try {
-    const user = await User.findById(userId); // Find user by ID
-    if (!user) {
-      return res.status(404).json({ error: 'User not found' }); // Return 404 if user doesn't exist
-    }
-    res.status(200).json(user); // Send the user as a JSON response
+    const user = await User.findById(userId).lean();
+    if (!user) return res.status(404).json({ error: "User not found" });
+
+    // Get role details
+    const role = user.role ? await Role.findById(user.role).lean() : null;
+    const roleData = role ? { _id: role._id, role_name: role.role_name } : null;
+
+    // Merge role + custom permissions
+    const mergedPermissions = await getMergedPermissions(user);
+
+    res.status(200).json({
+      ...user,
+      role: roleData,
+      merged_permissions: mergedPermissions,
+    });
   } catch (error) {
-    console.error('Error fetching user:', error);
-    res.status(500).json({ error: 'Internal server error' });
+    console.error("Error fetching user with merged permissions:", error);
+    res.status(500).json({ error: "Internal server error" });
   }
 });
+
+// Update a user role
+router.put("/:userId/role", async (req, res) => {
+  const { userId } = req.params;
+  const { roleId } = req.body;
+
+  try {
+    const user = await User.findById(userId);
+    if (!user) return res.status(404).json({ error: "User not found" });
+
+    user.role = roleId;
+    await user.save();
+
+    res.json({ success: true, message: "User role updated successfully" });
+  } catch (err) {
+    console.error("Error updating role:", err);
+    res.status(500).json({ error: "Internal server error" });
+  }
+});
+
 
 // PUT route to update the 'access' attribute of a user by _id
 // router.put('/:userId', async (req, res) => {
@@ -56,29 +164,56 @@ router.get('/:userId', async (req, res) => {
 //   }
 // });
 
-router.put('/:userId', async (req, res) => {
+// router.put('/:userId', async (req, res) => {
+//   const { userId } = req.params;
+//   const { access, is_admin, is_inOffice } = req.body;
+
+//   try {
+//     const updatedUser = await User.findByIdAndUpdate(
+//       userId,
+//       {
+//         $set: {
+//           access: access || {},
+//           is_admin: is_admin ?? false,
+//           is_inOffice: is_inOffice ?? false,
+//         },
+//       },
+//       { new: true }
+//     );
+
+//     if (!updatedUser) return res.status(404).json({ error: 'User not found' });
+
+//     res.status(200).json(updatedUser);
+//   } catch (err) {
+//     console.error('Error updating user:', err);
+//     res.status(500).json({ error: 'Internal server error' });
+//   }
+// });
+router.put("/:userId/permissions", async (req, res) => {
   const { userId } = req.params;
-  const { access, is_admin, is_inOffice } = req.body;
+  const { mergedPermissions, roleId } = req.body;
+
+  if (!mergedPermissions || !roleId) {
+    return res.status(400).json({ error: "Missing permissions or role ID" });
+  }
 
   try {
-    const updatedUser = await User.findByIdAndUpdate(
-      userId,
-      {
-        $set: {
-          access: access || {},
-          is_admin: is_admin ?? false,
-          is_inOffice: is_inOffice ?? false,
-        },
-      },
-      { new: true }
-    );
+    const user = await User.findById(userId);
+    if (!user) return res.status(404).json({ error: "User not found" });
 
-    if (!updatedUser) return res.status(404).json({ error: 'User not found' });
+    const role = await Role.findById(roleId);
+    if (!role) return res.status(404).json({ error: "Role not found" });
 
-    res.status(200).json(updatedUser);
+    const customPermissions = getOverrides(role.permissions, mergedPermissions);
+
+    // Update user
+    user.custom_permissions = customPermissions;
+    await user.save();
+
+    res.json({ success: true, custom_permissions: customPermissions });
   } catch (err) {
-    console.error('Error updating user:', err);
-    res.status(500).json({ error: 'Internal server error' });
+    console.error("Error updating custom permissions:", err);
+    res.status(500).json({ error: "Internal server error" });
   }
 });
 

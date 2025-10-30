@@ -286,7 +286,7 @@ export function RouteComponent() {
         { userIds: selectedUsers }, 
         { headers: { Authorization: `Bearer ${localStorage.getItem('token')}` } }
       );
-      alert("Users assigned successfully!");
+      alert("User role updated successfully!");
       setDialogOpen(false);
     } catch (err) {
       console.error(err);
