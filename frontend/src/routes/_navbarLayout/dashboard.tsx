@@ -43,6 +43,8 @@ const salesChartConfig = {
   Cannabis: { label: "Cannabis", color: "var(--chart-3)" },
   GRE: { label: "GRE", color: "var(--chart-4)" },
   Convenience: { label: "Convenience", color: "var(--chart-5)" },
+  Vapes: { label: "Vapes", color: "var(--chart-6)" },
+  "Native Gifts": { label: "Native Gifts", color: "var(--chart-7)" },
 } satisfies ChartConfig;
 
 function RouteComponent() {
@@ -165,12 +167,14 @@ function RouteComponent() {
   // ----------------------------
   const chartData = dailyCounts.map(({ date, count }) => ({ day: date.slice(5), count }));
   const salesChartData = salesData.map(entry => ({
-    day: entry.Date.slice(5, 10),
+    day: entry.Date_SK.slice(5, 10),
     FN: entry.FN ?? 0,
     Quota: entry.Quota ?? 0,
     Cannabis: entry.Cannabis ?? 0,
     GRE: entry.GRE ?? 0,
     Convenience: entry.Convenience ?? 0,
+    Vapes: entry.Vapes ?? 0,
+    "Native Gifts": entry['Native Gifts'] ?? 0,
   }));
   // ----------------------------
   // Render dashboard
@@ -319,6 +323,8 @@ function RouteComponent() {
                           <Bar dataKey="Cannabis" stackId="a" fill="var(--chart-3)" />
                           <Bar dataKey="GRE" stackId="a" fill="var(--chart-4)" />
                           <Bar dataKey="Convenience" stackId="a" fill="var(--chart-5)" />
+                          <Bar dataKey="Vapes" stackId="a" fill="var(--chart-6)" />
+                          <Bar dataKey="Native Gifts" stackId="a" fill="var(--chart-7)" />
                         </BarChart>
                       </ChartContainer>
                     </CardContent>
