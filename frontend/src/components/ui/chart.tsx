@@ -260,32 +260,29 @@ function ChartLegendContent({
 }: React.ComponentProps<"div"> &
   Pick<RechartsPrimitive.LegendProps, "payload" | "verticalAlign"> & {
     hideIcon?: boolean
-    data?: Record<string, any>[] 
+    data?: Record<string, any>[]
   }) {
-  const { config } = useChart()
+  const { config } = useChart();
 
-  if (!payload?.length || !Array.isArray(data)) return null
+  if (!payload?.length || !Array.isArray(data)) return null;
 
-  // Find which keys have at least one non-zero value
-  const nonZeroKeys = new Set<string>()
+  // Determine which categories have at least one non-zero value across all days
+  const nonZeroKeys = new Set<string>();
+  payload.forEach(item => {
+    const key = typeof item.dataKey === "string" ? item.dataKey : String(item.dataKey);
+    if (!key) return;
 
-  payload.forEach((item) => {
-    const key = typeof item.dataKey === "string" ? item.dataKey : String(item.dataKey)
-    if (!key) return
+    const hasNonZero = data.some(d => typeof d[key] === "number" && d[key] !== 0);
+    if (hasNonZero) nonZeroKeys.add(key);
+  });
 
-    const hasNonZero = data.some(
-      (d) => typeof d[key] === "number" && d[key] !== 0
-    )
-    if (hasNonZero) nonZeroKeys.add(key)
-  })
+  // Only show legend items that actually have non-zero values somewhere
+  const filteredPayload = payload.filter(item => {
+    const key = typeof item.dataKey === "string" ? item.dataKey : String(item.dataKey);
+    return nonZeroKeys.has(key);
+  });
 
-  // Filter payload to show only non-zero keys
-  const filteredPayload = payload.filter((item) => {
-    const key = typeof item.dataKey === "string" ? item.dataKey : String(item.dataKey)
-    return nonZeroKeys.has(key)
-  })
-
-  if (!filteredPayload.length) return null
+  if (!filteredPayload.length) return null;
 
   return (
     <div
@@ -295,9 +292,9 @@ function ChartLegendContent({
         className
       )}
     >
-      {filteredPayload.map((item) => {
-        const key = typeof item.dataKey === "string" ? item.dataKey : String(item.dataKey)
-        const itemConfig = getPayloadConfigFromPayload(config, item, key)
+      {filteredPayload.map(item => {
+        const key = typeof item.dataKey === "string" ? item.dataKey : String(item.dataKey);
+        const itemConfig = getPayloadConfigFromPayload(config, item, key);
 
         return (
           <div
@@ -306,25 +303,24 @@ function ChartLegendContent({
               "[&>svg]:text-muted-foreground flex items-center gap-1.5 [&>svg]:h-3 [&>svg]:w-3"
             )}
           >
-            {itemConfig?.icon && !hideIcon ? (
+            {!hideIcon && (itemConfig?.icon ? (
               <itemConfig.icon />
             ) : (
               <div
                 className="h-2 w-2 shrink-0 rounded-[2px]"
-                style={{
-                  backgroundColor: item.color,
-                }}
+                style={{ backgroundColor: item.color }}
               />
-            )}
+            ))}
             <span className="text-sm font-medium text-black">
-              {itemConfig?.label}
+              {itemConfig?.label || key}
             </span>
           </div>
-        )
+        );
       })}
     </div>
-  )
+  );
 }
+
 
 // Helper to extract item config from a payload.
 function getPayloadConfigFromPayload(
