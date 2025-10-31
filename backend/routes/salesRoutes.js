@@ -6,6 +6,7 @@ router.get('/sales', async (req, res) => {
   // const limit = parseInt(req.query.limit, 10) || 10;
   const { csoCode, startDate, endDate } = req.query;
   const data = await getCategorizedSalesData(csoCode, startDate, endDate);
+  console.log(data);
   res.json(data);
 });
 

@@ -17,66 +17,86 @@ const sqlConfig = {
  * @param {string} endDate - 'YYYY-MM-DD'
  * @returns {Promise<Array>} Array of daily categorized sales
  */
+// async function getCategorizedSalesData(csoCode, startDate, endDate) {
+//   try {
+//     await sql.connect(sqlConfig);
+//     // const result = await sql.query(`SELECT TOP (10) * from [CSO].[Sales]`);
+//     const result = await sql.query(`
+//       SELECT
+//         s.[Date],
+//         SUM(
+//           CASE 
+//             WHEN i.[Category] IN ('Chew FN', 'Cigarettes FN', 'Cigars FN') 
+//             THEN s.[Total Sales] 
+//             ELSE 0 
+//           END
+//         ) AS [FN],
+//         SUM(
+//           CASE 
+//             WHEN i.[Category] IN ('Chew Quota', 'Cigarettes Quota', 'Cigars Quota') 
+//             THEN s.[Total Sales] 
+//             ELSE 0 
+//           END
+//         ) AS [Quota],
+//         SUM(
+//           CASE 
+//             WHEN i.[Category] IN (
+//               'Cannabis Vapes', 'Cannabis Flower', 'Cannabis Pre Rolls', 
+//               'Cannabis Concentrates', 'Cannabis Others', 'Cannabis Edibles'
+//             ) 
+//             THEN s.[Total Sales] 
+//             ELSE 0 
+//           END
+//         ) AS [Cannabis],
+//         SUM(
+//           CASE 
+//             WHEN i.[Category] = 'Cigarettes GRE'
+//             THEN s.[Total Sales]
+//             ELSE 0
+//           END
+//         ) AS [GRE],
+//         SUM(
+//           CASE 
+//             WHEN i.[Category] NOT IN (
+//               'Chew FN', 'Cigarettes FN', 'Cigars FN',
+//               'Chew Quota', 'Cigarettes Quota', 'Cigars Quota',
+//               'Cannabis Vapes', 'Cannabis Flower', 'Cannabis Pre Rolls', 
+//               'Cannabis Concentrates', 'Cannabis Others',
+//               'Cigarettes GRE'
+//             ) OR i.[Category] IS NULL
+//             THEN s.[Total Sales]
+//             ELSE 0
+//           END
+//         ) AS [Convenience],
+//         SUM(s.[Total Sales]) AS [Total_Sales]
+//       FROM [CSO].[Sales] s
+//       LEFT JOIN [CSO].[ItemBookCSO] i
+//         ON s.[UPC] = i.[UPC]
+//       WHERE
+//         s.[Station_Code] = ${csoCode}
+//         AND s.[Date] BETWEEN '${startDate}' AND '${endDate}'
+//       GROUP BY s.[Date]
+//       ORDER BY s.[Date]
+//     `);
+//     await sql.close();
+//     return result.recordset;
+//   } catch (err) {
+//     console.error('SQL error:', err);
+//     return [];
+//   }
+// }
 async function getCategorizedSalesData(csoCode, startDate, endDate) {
   try {
     await sql.connect(sqlConfig);
     // const result = await sql.query(`SELECT TOP (10) * from [CSO].[Sales]`);
     const result = await sql.query(`
       SELECT
-        s.[Date],
-        SUM(
-          CASE 
-            WHEN i.[Category] IN ('Chew FN', 'Cigarettes FN', 'Cigars FN') 
-            THEN s.[Total Sales] 
-            ELSE 0 
-          END
-        ) AS [FN],
-        SUM(
-          CASE 
-            WHEN i.[Category] IN ('Chew Quota', 'Cigarettes Quota', 'Cigars Quota') 
-            THEN s.[Total Sales] 
-            ELSE 0 
-          END
-        ) AS [Quota],
-        SUM(
-          CASE 
-            WHEN i.[Category] IN (
-              'Cannabis Vapes', 'Cannabis Flower', 'Cannabis Pre Rolls', 
-              'Cannabis Concentrates', 'Cannabis Others', 'Cannabis Edibles'
-            ) 
-            THEN s.[Total Sales] 
-            ELSE 0 
-          END
-        ) AS [Cannabis],
-        SUM(
-          CASE 
-            WHEN i.[Category] = 'Cigarettes GRE'
-            THEN s.[Total Sales]
-            ELSE 0
-          END
-        ) AS [GRE],
-        SUM(
-          CASE 
-            WHEN i.[Category] NOT IN (
-              'Chew FN', 'Cigarettes FN', 'Cigars FN',
-              'Chew Quota', 'Cigarettes Quota', 'Cigars Quota',
-              'Cannabis Vapes', 'Cannabis Flower', 'Cannabis Pre Rolls', 
-              'Cannabis Concentrates', 'Cannabis Others',
-              'Cigarettes GRE'
-            ) OR i.[Category] IS NULL
-            THEN s.[Total Sales]
-            ELSE 0
-          END
-        ) AS [Convenience],
-        SUM(s.[Total Sales]) AS [Total_Sales]
-      FROM [CSO].[Sales] s
-      LEFT JOIN [CSO].[ItemBookCSO] i
-        ON s.[UPC] = i.[UPC]
+        s.[Date_SK],s.[FN],s.[Quota],s.[Cannabis],s.[GRE],s.[Vapes],s.[Native Gifts],s.[Convenience],s.[Total_Sales]
+      FROM [CSO].[TotalSales] s
       WHERE
-        s.[Station_Code] = ${csoCode}
-        AND s.[Date] BETWEEN '${startDate}' AND '${endDate}'
-      GROUP BY s.[Date]
-      ORDER BY s.[Date]
+        s.[Station_SK] = ${csoCode}
+        AND s.[Date_SK] BETWEEN '${startDate}' AND '${endDate}'
+      ORDER BY s.[Date_SK]
     `);
     await sql.close();
     return result.recordset;
