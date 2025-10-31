@@ -1,177 +1,117 @@
 const express = require('express');
 const router = express.Router();
-const Conversation = require('../models/Support');
+const SupportTicket = require('../models/Support');
 
-// @route   GET /api/support/conversations
-// @desc    Get all support conversations (for support staff)
-// @access  Private
-router.get('/conversations', async (req, res) => {
+// POST /api/support/tickets - Create a new support ticket
+router.post('/tickets', async (req, res) => {
   try {
-    // Check if user is support staff
-    const supportEmail = 'mohammad@gen7fuel.com';
-    if (req.user.email !== supportEmail) {
-      return res.status(403).json({ message: 'Access denied. Support staff only.' });
-    }
-
-    const conversations = await Conversation.find()
-      .populate('userId', 'name email')
-      .populate('messages.senderId', 'name email')
-      .sort({ updatedAt: -1 });
-
-    res.json(conversations);
-  } catch (error) {
-    console.error('Error fetching conversations:', error);
-    res.status(500).json({ message: 'Server error' });
-  }
-});
-
-// @route   GET /api/support/my-conversation
-// @desc    Get current user's support conversation
-// @access  Private
-router.get('/my-conversation', async (req, res) => {
-  try {
-    let conversation = await Conversation.findOne({ userId: req.user.id })
-      .populate('userId', 'name email')
-      .populate('messages.senderId', 'name email');
-
-    // If no conversation exists, create one
-    if (!conversation) {
-      conversation = new Conversation({
-        userId: req.user.id,
-        messages: []
-      });
-      await conversation.save();
-      
-      // Populate the newly created conversation
-      conversation = await Conversation.findById(conversation._id)
-        .populate('userId', 'name email')
-        .populate('messages.senderId', 'name email');
-    }
-
-    res.json(conversation);
-  } catch (error) {
-    console.error('Error fetching user conversation:', error);
-    res.status(500).json({ message: 'Server error' });
-  }
-});
-
-// @route   POST /api/support/conversations/:id/messages
-// @desc    Send a message to a conversation
-// @access  Private
-router.post('/conversations/:id/messages', async (req, res) => {
-  try {
-    const { text } = req.body;
-    const conversationId = req.params.id;
+    const { text, priority, site } = req.body;
 
     if (!text || !text.trim()) {
-      return res.status(400).json({ message: 'Message text is required' });
+      return res.status(400).json({ success: false, message: 'Ticket message is required.' });
+    }
+    if (!priority) {
+      return res.status(400).json({ success: false, message: 'Priority is required.' });
+    }
+    if (!site || !site.trim()) {
+      return res.status(400).json({ success: false, message: 'Site is required.' });
     }
 
-    // Find the conversation
-    const conversation = await Conversation.findById(conversationId)
-      .populate('userId', 'name email');
-    
-    if (!conversation) {
-      return res.status(404).json({ message: 'Conversation not found' });
-    }
-
-    const supportEmail = 'mohammad@gen7fuel.com';
-    const isSupport = req.user.email === supportEmail;
-    const isOwner = conversation.userId._id.toString() === req.user.id;
-
-    // Check permissions
-    if (!isSupport && !isOwner) {
-      return res.status(403).json({ message: 'Access denied' });
-    }
-
-    // Add new message to the conversation
-    const newMessage = {
-      senderId: req.user.id,
+    // First message is the ticket text
+    const ticket = new SupportTicket({
+      userId: req.user.id,
       text: text.trim(),
-      isRead: false
-    };
-
-    conversation.messages.push(newMessage);
-    await conversation.save();
-
-    // Populate the updated conversation
-    const updatedConversation = await Conversation.findById(conversationId)
-      .populate('userId', 'name email')
-      .populate('messages.senderId', 'name email');
-
-    res.json(updatedConversation);
-  } catch (error) {
-    console.error('Error sending message:', error);
-    res.status(500).json({ message: 'Server error' });
-  }
-});
-
-// @route   POST /api/support/conversations/:id/read
-// @desc    Mark messages as read
-// @access  Private
-router.post('/conversations/:id/read', async (req, res) => {
-  try {
-    const conversationId = req.params.id;
-
-    // Find the conversation
-    const conversation = await Conversation.findById(conversationId);
-    if (!conversation) {
-      return res.status(404).json({ message: 'Conversation not found' });
-    }
-
-    const supportEmail = 'mohammad@gen7fuel.com';
-    const isSupport = req.user.email === supportEmail;
-    const isOwner = conversation.userId.toString() === req.user.id;
-
-    // Check permissions
-    if (!isSupport && !isOwner) {
-      return res.status(403).json({ message: 'Access denied' });
-    }
-
-    // Mark messages as read (only messages not sent by current user)
-    conversation.messages.forEach(message => {
-      if (message.senderId.toString() !== req.user.id && !message.isRead) {
-        message.isRead = true;
-      }
+      priority,
+      site: site.trim(),
+      messages: [{
+        sender: req.user.id,
+        text: text.trim(),
+        createdAt: new Date()
+      }]
     });
 
-    await conversation.save();
+    await ticket.save();
 
-    res.json({ message: 'Messages marked as read' });
+    res.status(201).json({ success: true, message: 'Ticket created successfully.', data: ticket });
   } catch (error) {
-    console.error('Error marking messages as read:', error);
-    res.status(500).json({ message: 'Server error' });
+    console.error('Error creating ticket:', error);
+    res.status(500).json({ success: false, message: 'Failed to create ticket.', error: error.message });
   }
 });
 
-// @route   GET /api/support/conversations/:id
-// @desc    Get a specific conversation
-// @access  Private
-router.get('/conversations/:id', async (req, res) => {
+// GET /api/support/tickets - Get all tickets, optionally filtered by site
+router.get('/tickets', async (req, res) => {
   try {
-    const conversationId = req.params.id;
+    const { site } = req.query;
 
-    const conversation = await Conversation.findById(conversationId)
-      .populate('userId', 'name email')
-      .populate('messages.senderId', 'name email');
-    
-    if (!conversation) {
-      return res.status(404).json({ message: 'Conversation not found' });
+    // If site is provided, filter by site, otherwise show user's own tickets
+    let filter = {};
+    if (site) {
+      filter.site = site;
+    } else if (req.user && req.user.id) {
+      filter.userId = req.user.id;
     }
 
-    const supportEmail = 'mohammad@gen7fuel.com';
-    const isSupport = req.user.email === supportEmail;
-    const isOwner = conversation.userId._id.toString() === req.user.id;
+    const tickets = await SupportTicket.find(filter)
+      .populate('userId', 'name email isSupport')
+      .populate('messages.sender', 'name email isSupport')
+      .sort({ createdAt: -1 });
 
-    // Check permissions
-    if (!isSupport && !isOwner) {
-      return res.status(403).json({ message: 'Access denied' });
-    }
-
-    res.json(conversation);
+    res.json({
+      success: true,
+      data: {
+        tickets
+      }
+    });
   } catch (error) {
-    console.error('Error fetching conversation:', error);
-    res.status(500).json({ message: 'Server error' });
+    console.error('Error fetching support tickets:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to fetch support tickets',
+      error: error.message
+    });
+  }
+});
+
+// GET /api/support/tickets/:id - Get a ticket and its messages
+router.get('/tickets/:id', async (req, res) => {
+  try {
+    const ticket = await SupportTicket.findById(req.params.id)
+      .populate('userId', 'name email isSupport')
+      .populate('messages.sender', 'name email isSupport');
+    if (!ticket) {
+      return res.status(404).json({ success: false, message: 'Ticket not found.' });
+    }
+    res.json({ success: true, data: ticket });
+  } catch (error) {
+    res.status(500).json({ success: false, message: 'Failed to fetch ticket.', error: error.message });
+  }
+});
+
+// POST /api/support/tickets/:id/messages - Add a message to the ticket
+router.post('/tickets/:id/messages', async (req, res) => {
+  try {
+    const { text } = req.body;
+    if (!text || !text.trim()) {
+      return res.status(400).json({ success: false, message: 'Message text is required.' });
+    }
+    const ticket = await SupportTicket.findById(req.params.id);
+    if (!ticket) {
+      return res.status(404).json({ success: false, message: 'Ticket not found.' });
+    }
+    if (ticket.status === 'closed' || ticket.status === 'resolved') {
+      return res.status(403).json({ success: false, message: 'Ticket is closed.' });
+    }
+    ticket.messages.push({
+      sender: req.user.id,
+      text: text.trim(),
+      createdAt: new Date()
+    });
+    await ticket.save();
+    await ticket.populate('messages.sender', 'name email isSupport');
+    res.json({ success: true, data: ticket });
+  } catch (error) {
+    res.status(500).json({ success: false, message: 'Failed to add message.', error: error.message });
   }
 });
 

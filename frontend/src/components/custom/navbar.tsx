@@ -47,6 +47,7 @@ export default function Navbar() {
   const isVendor = matchRoute({ to: '/vendor', fuzzy: true })
   const isAudit = matchRoute({ to: '/audit', fuzzy: true })
   const isDashboard = matchRoute({ to: '/dashboard', fuzzy: true })
+  const isSupport = matchRoute({ to: '/support', fuzzy: true })
 
   // Returns the header text based on the current route
   const headerText = () => {
@@ -63,6 +64,7 @@ export default function Navbar() {
     if (isVendor) return 'Vendor Management'
     if (isAudit) return 'Station Audits'
     if (isDashboard) return 'Dashboard'
+    if (isSupport) return 'Support'
     return ''
   }
 
