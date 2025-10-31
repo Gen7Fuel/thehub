@@ -4,7 +4,7 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import axios from 'axios'
 import { domain } from '@/lib/constants'
-import { useSocket } from '@/context/SignalContext'
+// import { useSocket } from '@/context/SignalContext'
 import { useAuth } from '@/context/AuthContext'
 
 export const Route = createFileRoute('/(auth)/login')({
@@ -25,7 +25,7 @@ function RouteComponent() {
   const navigate = useNavigate()
   const { refreshAuth } = useAuth();
 
-  const { reconnect } = useSocket();
+  // const { reconnect } = useSocket();
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -57,7 +57,7 @@ function RouteComponent() {
 
       navigate({ to: '/' })
 
-      reconnect();
+      // reconnect();
 
     } catch (err) {
       setError('Invalid email or password. Please try again.')

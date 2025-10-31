@@ -10,7 +10,7 @@ import './styles.css'
 import reportWebVitals from './reportWebVitals.ts'
 
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
-import { SocketProvider } from './context/SignalContext.tsx'
+// import { SocketProvider } from './context/SignalContext.tsx'
 
 const queryClient = new QueryClient({
   defaultOptions: { 
@@ -41,11 +41,11 @@ if (rootElement && !rootElement.innerHTML) {
   root.render(
     <StrictMode>
       <QueryClientProvider client={queryClient}>
-        <SocketProvider>
+        {/* <SocketProvider> */}
           <AuthProvider>
             <RouterProvider router={router} />
           </AuthProvider>
-        </SocketProvider>
+        {/* </SocketProvider> */}
       </QueryClientProvider>
     </StrictMode>,
   )
