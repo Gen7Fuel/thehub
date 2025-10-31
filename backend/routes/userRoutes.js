@@ -111,6 +111,25 @@ router.put("/:userId/role", async (req, res) => {
   }
 });
 
+// update the site access for a user
+router.put("/:userId/site-access", async (req, res) => {
+  try {
+    const { userId } = req.params;
+    const { siteAccess } = req.body;
+
+    if (!siteAccess || typeof siteAccess !== "object") {
+      return res.status(400).json({ message: "Invalid site access data" });
+    }
+
+    await User.findByIdAndUpdate(userId, { site_access: siteAccess });
+    res.json({ success: true, message: "Site access updated successfully" });
+  } catch (err) {
+    console.error("Error updating site access:", err);
+    res.status(500).json({ message: "Failed to update site access" });
+  }
+});
+
+
 
 // PUT route to update the 'access' attribute of a user by _id
 // router.put('/:userId', async (req, res) => {

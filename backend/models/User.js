@@ -95,6 +95,17 @@ const userSchema = new mongoose.Schema({
     type: Object,
     default: { news: true },
   },
+
+  /* site_access{
+       Rankin: true,
+       Couchiching: true 
+     }
+  */
+  site_access: {
+    type: Map,       // Using Map to store dynamic keys (site names)
+    of: Boolean,     // All values are boolean
+    default: {},    
+  },
 }, { timestamps: true });
 
 userSchema.pre("save", async function (next) {

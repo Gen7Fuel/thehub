@@ -32,19 +32,28 @@ export function RolePermissionEditor({
 }: Props) {
   const [permissions, setPermissions] = useState<PermissionNode[]>([]);
 
-  // Initialize collapsed state for first load
+  // Initialize collapsed state
   const initializeCollapsed = (nodes: PermissionNode[]): PermissionNode[] =>
     nodes.map((n) => ({
       ...n,
-      collapsed: true, // all collapsed by default
+      collapsed: true,
       children: n.children ? initializeCollapsed(n.children) : [],
     }));
+  // Recursive sort helper
+  const sortPermissionsRecursively = (nodes: PermissionNode[]): PermissionNode[] => {
+    return [...nodes]
+      .sort((a, b) => a.name.localeCompare(b.name))
+      .map((n) => ({
+        ...n,
+        children: n.children ? sortPermissionsRecursively(n.children) : [],
+      }));
+  };
 
   // Load role.permissions into state while preserving collapsed state
   useEffect(() => {
     setPermissions((prev) => {
-      const newPermissions = _.cloneDeep(role.permissions || []);
-
+      const unsorted_permissions = _.cloneDeep(role.permissions || []);
+      const newPermissions = sortPermissionsRecursively(unsorted_permissions);
       const applyCollapseState = (
         newNodes: PermissionNode[],
         oldNodes: PermissionNode[]
@@ -85,32 +94,25 @@ export function RolePermissionEditor({
   const hasAnyTrueChild = (node: PermissionNode): boolean =>
     node.value || (node.children ? node.children.some(hasAnyTrueChild) : false);
 
-  const isPartiallyEnabled = (node: PermissionNode): boolean => {
-    if (!node.children || node.children.length === 0) return false;
-    const total = node.children.length;
-    const onCount = node.children.filter((c) => c.value || hasAnyTrueChild(c)).length;
-    return onCount > 0 && onCount < total;
-  };
-
+  // This updates a node's value and propagates true upwards
   const setPermissionValue = (path: string[], value: boolean) => {
     const update = (nodes: PermissionNode[], path: string[]): PermissionNode[] =>
       nodes.map((node) => {
         if (node.name === path[0]) {
           if (path.length === 1) {
+            // Toggle node itself
             return {
               ...node,
               value,
-              children: value
-                ? node.children
-                : node.children
-                ? toggleAll(node.children, false)
-                : [],
+              children: node.children ? (value ? node.children : toggleAll(node.children, false)) : [],
             };
           } else if (node.children) {
+            // Recurse into child
             const updatedChildren = update(node.children, path.slice(1));
+            const anyChildTrue = updatedChildren.some((c) => c.value || hasAnyTrueChild(c));
             return {
               ...node,
-              value: node.value, // parent only changes if toggled directly
+              value: node.value || anyChildTrue, // propagate true upwards
               children: updatedChildren,
             };
           }
@@ -148,13 +150,16 @@ export function RolePermissionEditor({
         const anyChildTrue = node.children ? node.children.some(hasAnyTrueChild) : false;
         const allChildrenTrue = node.children ? node.children.every((c) => c.value) : false;
 
-        const isPartial = !nodeValue && anyChildTrue;
+        // Partial font logic
+        const isPartial = nodeValue && !allChildrenTrue;
 
         const bgClass = nodeValue
           ? "bg-green-100 border-green-400"
-          : isPartial
+          : anyChildTrue
           ? "bg-blue-50 border-blue-300 opacity-80"
           : "bg-gray-50 border-gray-300 opacity-60";
+
+        const fontClass = isPartial ? "text-blue-700 font-semibold" : "text-gray-900 font-medium";
 
         return (
           <li key={fullPath.join(".")}>
@@ -169,7 +174,7 @@ export function RolePermissionEditor({
                 <div className="w-4" />
               )}
 
-              <span className="flex-1 font-medium">{capitalize(node.name)}</span>
+              <span className={`flex-1 ${fontClass}`}>{capitalize(node.name)}</span>
 
               <div className="flex items-center space-x-2">
                 <Button
