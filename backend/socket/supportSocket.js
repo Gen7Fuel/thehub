@@ -1,4 +1,4 @@
-const SupportConversation = require('../models/Support');
+const SupportTicket = require('../models/Support');
 
 const setupSupportSocket = (io) => {
   // Create support namespace
@@ -8,81 +8,70 @@ const setupSupportSocket = (io) => {
   const { authSocket } = require('../middleware/authMiddleware');
   supportNamespace.use(authSocket);
 
-  // Support chat handlers
   supportNamespace.on('connection', (socket) => {
-    console.log(`Support user connected: ${socket.user.name} (${socket.user.email})`);
-    
-    const supportEmail = 'mohammad@gen7fuel.com';
-    const isSupport = socket.user.email === supportEmail;
-    
+    console.log(`Support user connected: ${socket.user?.name} (${socket.user?.email})`);
+
+    const supportEmail = 'b@z.com';
+    const isSupport = socket.user?.email === supportEmail;
+
+    // Support staff joins support-staff room, users join their own room
     if (isSupport) {
-      // Support staff joins all conversation rooms
       socket.join('support-staff');
       console.log('Support staff joined support-staff room');
     } else {
-      // Regular users join their own conversation room
       socket.join(`user-${socket.user.id}`);
-      console.log(`User ${socket.user.name} joined room: user-${socket.user.id}`);
+      console.log(`User ${socket.user?.name} joined room: user-${socket.user.id}`);
     }
 
-    // Handle new message
-    socket.on('send-message', async (data) => {
+    // Join a ticket/conversation room for real-time updates
+    socket.on('join-room', (conversationId) => {
+      socket.join(conversationId);
+      console.log(`User ${socket.user?.id} joined room: ${conversationId}`);
+    });
+
+    // Handle sending a new message
+    socket.on('send-message', async ({ conversationId, text }) => {
       try {
-        const { conversationId, text } = data;
-        
         if (!text || !text.trim()) {
           socket.emit('error', { message: 'Message text is required' });
           return;
         }
 
-        // Find conversation and verify permissions
-        const conversation = await SupportConversation.findById(conversationId)
+        // Find the ticket and check permissions
+        const ticket = await SupportTicket.findById(conversationId)
           .populate('userId', 'name email');
-        
-        if (!conversation) {
-          socket.emit('error', { message: 'Conversation not found' });
+
+        if (!ticket) {
+          socket.emit('error', { message: 'Ticket not found' });
           return;
         }
 
-        const isOwner = conversation.userId._id.toString() === socket.user.id;
-        
+        const isOwner = ticket.userId._id.toString() === socket.user.id;
+
         if (!isSupport && !isOwner) {
           socket.emit('error', { message: 'Access denied' });
           return;
         }
 
-        // Add message to conversation
+        // Add message to ticket
         const newMessage = {
-          senderId: socket.user.id,
+          sender: socket.user.id,
           text: text.trim(),
-          isRead: false
+          createdAt: new Date()
         };
 
-        conversation.messages.push(newMessage);
-        await conversation.save();
+        ticket.messages.push(newMessage);
+        await ticket.save();
 
-        // Get the populated conversation
-        const updatedConversation = await SupportConversation.findById(conversationId)
-          .populate('userId', 'name email')
-          .populate('messages.senderId', 'name email');
+        // Populate sender info for the new message
+        await ticket.populate('messages.sender', 'name email isSupport');
+        const lastMsg = ticket.messages[ticket.messages.length - 1];
 
-        const messageData = {
-          conversationId,
-          message: updatedConversation.messages[updatedConversation.messages.length - 1],
-          conversation: updatedConversation
-        };
+        // Emit to all clients in the ticket room with populated sender info
+        supportNamespace.to(conversationId).emit('new-message', lastMsg);
 
-        if (isSupport) {
-          // Support sent message - notify the user and update support staff
-          socket.to(`user-${conversation.userId._id}`).emit('new-message', messageData);
-          socket.to('support-staff').emit('conversation-updated', updatedConversation);
-          socket.emit('message-sent', messageData);
-        } else {
-          // User sent message - notify support staff
-          socket.to('support-staff').emit('new-message', messageData);
-          socket.to('support-staff').emit('conversation-updated', updatedConversation);
-          socket.emit('message-sent', messageData);
-        }
+        // Optionally, confirm to sender
+        socket.emit('message-sent', lastMsg);
 
       } catch (error) {
         console.error('Error sending message:', error);
@@ -91,39 +80,33 @@ const setupSupportSocket = (io) => {
     });
 
     // Handle marking messages as read
-    socket.on('mark-as-read', async (data) => {
+    socket.on('mark-as-read', async ({ conversationId }) => {
       try {
-        const { conversationId } = data;
-        
-        const conversation = await SupportConversation.findById(conversationId);
-        
-        if (!conversation) {
-          socket.emit('error', { message: 'Conversation not found' });
+        const ticket = await SupportTicket.findById(conversationId);
+
+        if (!ticket) {
+          socket.emit('error', { message: 'Ticket not found' });
           return;
         }
 
-        const isOwner = conversation.userId.toString() === socket.user.id;
-        
+        const isOwner = ticket.userId.toString() === socket.user.id;
+
         if (!isSupport && !isOwner) {
           socket.emit('error', { message: 'Access denied' });
           return;
         }
 
         // Mark messages as read
-        conversation.messages.forEach(message => {
-          if (message.senderId.toString() !== socket.user.id && !message.isRead) {
+        ticket.messages.forEach(message => {
+          if (message.sender.toString() !== socket.user.id && !message.isRead) {
             message.isRead = true;
           }
         });
 
-        await conversation.save();
+        await ticket.save();
 
         // Notify other participants
-        if (isSupport) {
-          socket.to(`user-${conversation.userId}`).emit('messages-read', { conversationId });
-        } else {
-          socket.to('support-staff').emit('messages-read', { conversationId });
-        }
+        supportNamespace.to(conversationId).emit('messages-read', { conversationId });
 
       } catch (error) {
         console.error('Error marking as read:', error);
@@ -131,28 +114,18 @@ const setupSupportSocket = (io) => {
       }
     });
 
-    // Handle user typing
-    socket.on('typing', (data) => {
-      const { conversationId, isTyping } = data;
-      
-      if (isSupport) {
-        socket.to(`user-${conversationId}`).emit('user-typing', {
-          conversationId,
-          isTyping,
-          userType: 'support'
-        });
-      } else {
-        socket.to('support-staff').emit('user-typing', {
-          conversationId,
-          isTyping,
-          userType: 'user',
-          userName: socket.user.name
-        });
-      }
+    // Handle typing indicator
+    socket.on('typing', ({ conversationId, isTyping }) => {
+      supportNamespace.to(conversationId).emit('user-typing', {
+        conversationId,
+        isTyping,
+        userType: isSupport ? 'support' : 'user',
+        userName: socket.user?.name
+      });
     });
 
     socket.on('disconnect', () => {
-      console.log(`Support user disconnected: ${socket.user.name}`);
+      console.log(`Support user disconnected: ${socket.user?.name}`);
     });
   });
 };

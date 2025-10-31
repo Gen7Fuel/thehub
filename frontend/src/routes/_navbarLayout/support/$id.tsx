@@ -3,7 +3,7 @@ import { useEffect, useState, useRef } from 'react'
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
 import { Button } from '@/components/ui/button'
-import { toast } from 'sonner'
+// import { toast } from 'sonner'
 // import { useAuth } from '@/context/AuthContext'
 import { io } from 'socket.io-client'
 
@@ -33,9 +33,9 @@ function RouteComponent() {
 
   useEffect(() => {
     socket.connect()
-    // socket.emit('join-room', id) // Join the ticket room
+    socket.emit('join-room', id) // Join the ticket room
 
-    socket.on('new-message', (msg) => {
+    socket.on('new-message', (msg: any) => {
       setTicket((prev: any) => ({
         ...prev,
         messages: [...(prev?.messages || []), msg]
@@ -75,7 +75,7 @@ function RouteComponent() {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
   }, [ticket])
 
-  const handleSend = async (e: React.FormEvent) => {
+  const handleSend = (e: React.FormEvent) => {
     e.preventDefault()
     if (!message.trim()) return
     setSending(true)
@@ -83,31 +83,11 @@ function RouteComponent() {
       conversationId: id,
       text: message.trim()
     })
-    try {
-      const response = await fetch(`/api/support/tickets/${id}/messages`, {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${localStorage.getItem('token')}`,
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({ text: message.trim() })
-      })
-      const data = await response.json()
-      if (data.success) {
-        setTicket(data.data)
-        setMessage('')
-        toast.success('Message sent')
-      } else {
-        toast.error(data.message || 'Failed to send message')
-      }
-    } catch {
-      toast.error('Failed to send message')
-    } finally {
-      setSending(false)
-    }
+    setMessage('')
+    setSending(false)
   }
 
-  // const handleSend = (e: React.FormEvent) => {
+  // const handleSend = async (e: React.FormEvent) => {
   //   e.preventDefault()
   //   if (!message.trim()) return
   //   setSending(true)
@@ -115,9 +95,30 @@ function RouteComponent() {
   //     conversationId: id,
   //     text: message.trim()
   //   })
-  //   setMessage('')
-  //   setSending(false)
+  //   try {
+  //     const response = await fetch(`/api/support/tickets/${id}/messages`, {
+  //       method: 'POST',
+  //       headers: {
+  //         'Authorization': `Bearer ${localStorage.getItem('token')}`,
+  //         'Content-Type': 'application/json'
+  //       },
+  //       body: JSON.stringify({ text: message.trim() })
+  //     })
+  //     const data = await response.json()
+  //     if (data.success) {
+  //       setTicket(data.data)
+  //       setMessage('')
+  //       toast.success('Message sent')
+  //     } else {
+  //       toast.error(data.message || 'Failed to send message')
+  //     }
+  //   } catch {
+  //     toast.error('Failed to send message')
+  //   } finally {
+  //     setSending(false)
+  //   }
   // }
+
 
   return (
     <div className="w-full max-w-2xl mx-auto p-6">

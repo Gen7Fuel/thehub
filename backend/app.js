@@ -29,8 +29,8 @@ const vendorRoutes = require("./routes/vendorRoutes");
 const auditRoutes = require("./routes/audit/auditTemplateRoutes");
 
 const { auth } = require("./middleware/authMiddleware");
-const { authSocket } = require("./middleware/authMiddleware");
-const setupSupportSocket = require('./socket/supportSocket');
+// const { authSocket } = require("./middleware/authMiddleware");
+// const setupSupportSocket = require('./socket/supportSocket');
 
 const cycleCountNewRoutes = require('./routes/cycleCountRoutes');
 const permissionRoutes = require("./routes/permissionRoutes");
