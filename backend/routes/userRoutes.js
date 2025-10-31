@@ -4,34 +4,9 @@ const bcrypt = require("bcryptjs");
 const User = require('../models/User');
 const _ = require("lodash");
 const Role = require("../models/Role");
+const getMergedPermissions =  require("../utils/mergePermissionObjects")
 
-async function getMergedPermissions(user) {
-  if (!user.role) return user.custom_permissions;
-
-  const role = await Role.findById(user.role);
-  if (!role) return user.custom_permissions;
-
-  // Custom merge function that merges permission trees
-  const mergePermissionNodes = (roleNodes = [], userNodes = []) => {
-    const roleMap = _.keyBy(roleNodes, "name");
-    const userMap = _.keyBy(userNodes, "name");
-
-    return _.map(roleMap, (rNode) => {
-      const uNode = userMap[rNode.name];
-
-      const merged = _.mergeWith(_.cloneDeep(rNode), uNode, (objValue, srcValue, key) => {
-        if (key === "value") return _.isBoolean(srcValue) ? srcValue : objValue;
-        if (key === "children") return mergePermissionNodes(objValue || [], srcValue || []);
-        return undefined;
-      });
-
-      return merged;
-    });
-  };
-  return mergePermissionNodes(role.permissions || [], user.custom_permissions || [])
-}
-
-// Compare mergedPermissions with role.permissions to find overrides
+// Compare frontend permissions with role.permissions to find overrides for saving them as custom permissions in users
 const getOverrides = (roleNodes = [], userNodes = []) => {
   const roleMap = _.keyBy(roleNodes, "name");
   const userMap = _.keyBy(userNodes, "name");

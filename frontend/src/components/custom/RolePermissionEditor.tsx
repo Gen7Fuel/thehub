@@ -1,12 +1,13 @@
 import { useState, useEffect } from "react";
-import { Switch } from "@/components/ui/switch";
 import { Button } from "@/components/ui/button";
+import { Check, X, ChevronDown, ChevronRight } from "lucide-react";
 import _ from "lodash";
 
 interface PermissionNode {
   name: string;
   value?: boolean;
   children?: PermissionNode[];
+  collapsed?: boolean;
 }
 
 interface Role {
@@ -20,106 +21,186 @@ interface Props {
   role: Role;
   onSave?: (updatedPermissions: PermissionNode[]) => void;
   onChange?: (updatedPermissions: PermissionNode[]) => void;
+  fromUserPage?: boolean;
 }
 
-export function RolePermissionEditor({ role, onSave, onChange }: Props) {
+export function RolePermissionEditor({
+  role,
+  onSave,
+  onChange,
+  fromUserPage,
+}: Props) {
   const [permissions, setPermissions] = useState<PermissionNode[]>([]);
 
-  // Initialize from role only once or when it actually changes
+  // Initialize collapsed state for first load
+  const initializeCollapsed = (nodes: PermissionNode[]): PermissionNode[] =>
+    nodes.map((n) => ({
+      ...n,
+      collapsed: true, // all collapsed by default
+      children: n.children ? initializeCollapsed(n.children) : [],
+    }));
+
+  // Load role.permissions into state while preserving collapsed state
   useEffect(() => {
-    setPermissions(_.cloneDeep(role.permissions || []));
-  }, [role._id, role.role_name]); // ✅ avoids looping when permission changes
+    setPermissions((prev) => {
+      const newPermissions = _.cloneDeep(role.permissions || []);
+
+      const applyCollapseState = (
+        newNodes: PermissionNode[],
+        oldNodes: PermissionNode[]
+      ): PermissionNode[] => {
+        return newNodes.map((n) => {
+          const oldMatch = oldNodes.find((o) => o.name === n.name);
+          return {
+            ...n,
+            collapsed: oldMatch?.collapsed ?? true,
+            children: n.children
+              ? applyCollapseState(n.children, oldMatch?.children || [])
+              : [],
+          };
+        });
+      };
+
+      return prev.length === 0
+        ? initializeCollapsed(newPermissions)
+        : applyCollapseState(newPermissions, prev);
+    });
+  }, [role._id, role.role_name, role.permissions]);
 
   const capitalize = (str: string) =>
     str
       .replace(/-/g, " ")
       .split(" ")
-      .map(
-        (word) => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase()
-      )
+      .map((word) => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase())
       .join(" ");
 
-  const toggleValue = (nodes: PermissionNode[], path: string[]): PermissionNode[] => {
-    return nodes.map((node) => {
-      if (node.name === path[0]) {
-        if (path.length === 1) {
-          const newValue = !node.value;
-          const updatedNode = {
-            ...node,
-            value: newValue,
-            children: newValue
-              ? node.children
-                ? _.cloneDeep(node.children)
-                : []
-              : node.children
-              ? toggleAll(node.children, false)
-              : [],
-          };
-          return updatedNode;
-        } else if (node.children) {
-          const updatedChildren = toggleValue(node.children, path.slice(1));
-          const anyChildTrue = updatedChildren.some(
-            (child) => child.value || hasAnyTrueChild(child)
-          );
-          return {
-            ...node,
-            value: anyChildTrue || node.value,
-            children: updatedChildren,
-          };
-        }
-      }
-      return node;
-    });
-  };
-
+  // --- Permission Logic ---
   const toggleAll = (nodes: PermissionNode[], value: boolean): PermissionNode[] =>
-    nodes.map((node) => ({
-      ...node,
+    nodes.map((n) => ({
+      ...n,
       value,
-      children: node.children ? toggleAll(node.children, value) : [],
+      children: n.children ? toggleAll(n.children, value) : [],
     }));
 
-  const hasAnyTrueChild = (node: PermissionNode): boolean => {
-    if (node.value) return true;
-    return node.children ? node.children.some(hasAnyTrueChild) : false;
-  };
+  const hasAnyTrueChild = (node: PermissionNode): boolean =>
+    node.value || (node.children ? node.children.some(hasAnyTrueChild) : false);
 
   const isPartiallyEnabled = (node: PermissionNode): boolean => {
     if (!node.children || node.children.length === 0) return false;
-    const onCount = node.children.filter((child) => child.value).length;
-    return onCount > 0 && onCount < node.children.length;
+    const total = node.children.length;
+    const onCount = node.children.filter((c) => c.value || hasAnyTrueChild(c)).length;
+    return onCount > 0 && onCount < total;
   };
 
-  // 🔹 Handle toggle
-  const handleToggle = (path: string[]) => {
+  const setPermissionValue = (path: string[], value: boolean) => {
+    const update = (nodes: PermissionNode[], path: string[]): PermissionNode[] =>
+      nodes.map((node) => {
+        if (node.name === path[0]) {
+          if (path.length === 1) {
+            return {
+              ...node,
+              value,
+              children: value
+                ? node.children
+                : node.children
+                ? toggleAll(node.children, false)
+                : [],
+            };
+          } else if (node.children) {
+            const updatedChildren = update(node.children, path.slice(1));
+            return {
+              ...node,
+              value: node.value, // parent only changes if toggled directly
+              children: updatedChildren,
+            };
+          }
+        }
+        return node;
+      });
+
     setPermissions((prev) => {
-      const updated = toggleValue(prev, path);
-      if (onChange) onChange(updated); // 🔥 trigger only on toggle
+      const updated = update(prev, path);
+      if (onChange) onChange(updated);
       return updated;
     });
   };
 
+  const toggleCollapse = (path: string[]) => {
+    const update = (nodes: PermissionNode[], path: string[]): PermissionNode[] =>
+      nodes.map((n) => {
+        if (n.name === path[0]) {
+          if (path.length === 1) return { ...n, collapsed: !n.collapsed };
+          else if (n.children) return { ...n, children: update(n.children, path.slice(1)) };
+        }
+        return n;
+      });
+    setPermissions((prev) => update(prev, path));
+  };
+
+  // --- Render ---
   const renderTree = (nodes: PermissionNode[], parentPath: string[] = []) => (
-    <ul className="ml-6 space-y-1">
+    <ul className="space-y-2 ml-4">
       {nodes.map((node) => {
         const fullPath = [...parentPath, node.name];
-        const partial = isPartiallyEnabled(node);
+        const hasChildren = node.children && node.children.length > 0;
+
+        const nodeValue = node.value ?? false;
+        const anyChildTrue = node.children ? node.children.some(hasAnyTrueChild) : false;
+        const allChildrenTrue = node.children ? node.children.every((c) => c.value) : false;
+
+        const isPartial = !nodeValue && anyChildTrue;
+
+        const bgClass = nodeValue
+          ? "bg-green-100 border-green-400"
+          : isPartial
+          ? "bg-blue-50 border-blue-300 opacity-80"
+          : "bg-gray-50 border-gray-300 opacity-60";
+
         return (
           <li key={fullPath.join(".")}>
-            <div className="flex items-center space-x-2">
-              <Switch
-                checked={!!node.value}
-                onCheckedChange={() => handleToggle(fullPath)}
-              />
-              <span
-                className={`${
-                  partial ? "font-bold text-blue-800" : "font-medium"
-                }`}
-              >
-                {capitalize(node.name)}
-              </span>
+            <div
+              className={`flex items-center p-2 border rounded-md shadow-sm space-x-2 transition-colors ${bgClass}`}
+            >
+              {hasChildren ? (
+                <button onClick={() => toggleCollapse(fullPath)}>
+                  {node.collapsed ? <ChevronRight size={16} /> : <ChevronDown size={16} />}
+                </button>
+              ) : (
+                <div className="w-4" />
+              )}
+
+              <span className="flex-1 font-medium">{capitalize(node.name)}</span>
+
+              <div className="flex items-center space-x-2">
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  className={`${
+                    nodeValue
+                      ? "bg-green-500 text-white"
+                      : "text-green-600 border border-green-500"
+                  }`}
+                  onClick={() => setPermissionValue(fullPath, true)}
+                >
+                  <Check size={14} />
+                </Button>
+
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  className={`${
+                    !nodeValue
+                      ? "bg-red-500 text-white"
+                      : "text-red-600 border border-red-500"
+                  }`}
+                  onClick={() => setPermissionValue(fullPath, false)}
+                >
+                  <X size={14} />
+                </Button>
+              </div>
             </div>
-            {node.children && node.children.length > 0 && renderTree(node.children, fullPath)}
+
+            {!node.collapsed && hasChildren && renderTree(node.children || [], fullPath)}
           </li>
         );
       })}
@@ -127,19 +208,22 @@ export function RolePermissionEditor({ role, onSave, onChange }: Props) {
   );
 
   return (
-    <div className="space-y-6">
-      <h2 className="text-xl font-semibold">
-        Edit Permissions for {role.role_name}
-      </h2>
+    <div className="p-6 space-y-4 max-w-3xl mx-auto bg-gray-50 rounded-lg shadow-sm">
+      {!fromUserPage && (
+        <h2 className="text-2xl font-semibold">Edit Permissions for {role.role_name}</h2>
+      )}
+
       {renderTree(permissions)}
 
       {onSave && (
-        <Button
-          className="bg-blue-600 text-white hover:bg-blue-500"
-          onClick={() => onSave(permissions)}
-        >
-          Save Permissions
-        </Button>
+        <div className="pt-6">
+          <Button
+            onClick={() => onSave(permissions)}
+            className="bg-blue-600 text-white hover:bg-blue-500"
+          >
+            Save Permissions
+          </Button>
+        </div>
       )}
     </div>
   );

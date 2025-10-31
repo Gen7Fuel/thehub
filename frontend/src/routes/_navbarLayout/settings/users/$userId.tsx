@@ -2,10 +2,10 @@ import { useEffect, useState } from "react";
 import axios from "axios";
 import { createFileRoute } from "@tanstack/react-router";
 import { Button } from "@/components/ui/button";
-import { Switch } from "@/components/ui/switch";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Input } from "@/components/ui/input";
+import { RolePermissionEditor } from "@/components/custom/RolePermissionEditor"; // ✅ import editor
 
 export const Route = createFileRoute("/_navbarLayout/settings/users/$userId")({
   component: RouteComponent,
@@ -23,7 +23,7 @@ export const Route = createFileRoute("/_navbarLayout/settings/users/$userId")({
   },
 });
 
-// Interfaces
+// --- Interfaces ---
 export interface PermissionNode {
   name: string;
   value?: boolean;
@@ -37,7 +37,7 @@ export interface Role {
   permissions: PermissionNode[];
 }
 
-function RouteComponent() {
+export function RouteComponent() {
   const params = Route.useParams() as { userId: string };
   const { user } = Route.useLoaderData() as {
     user: {
@@ -58,17 +58,15 @@ function RouteComponent() {
   const [showPasswordDialog, setShowPasswordDialog] = useState(false);
   const [showConfirmDialog, setShowConfirmDialog] = useState(false);
   const [password, setPassword] = useState("");
-
   const [newPassword, setNewPassword] = useState("");
   const [resetStatus, setResetStatus] = useState<null | string>(null);
 
-  // Use merged_permissions for frontend display
   const [mergedPermissions, setMergedPermissions] = useState<PermissionNode[]>([]);
 
+  // Load user's permissions
   useEffect(() => {
     setMergedPermissions(user?.merged_permissions || []);
-  }, [user?._id]);
-
+  }, [user?._id, user?.merged_permissions]);
 
   // Fetch roles
   useEffect(() => {
@@ -104,7 +102,7 @@ function RouteComponent() {
     }
   };
 
-  // --- ROLE CHANGE HANDLERS ---
+  // --- ROLE CHANGE ---
   const verifyPassword = async () => {
     try {
       const token = localStorage.getItem("token");
@@ -137,64 +135,21 @@ function RouteComponent() {
     }
   };
 
-  // --- PERMISSIONS TOGGLES ---
-  const togglePermission = (path: string[]) => {
-    const toggleNode = (nodes: PermissionNode[], path: string[]): PermissionNode[] =>
-      nodes.map((n) => {
-        if (n.name === path[0]) {
-          if (path.length === 1) {
-            return { ...n, value: !n.value };
-          } else if (n.children) {
-            return { ...n, children: toggleNode(n.children, path.slice(1)) };
-          }
-        }
-        return n;
-      });
-    setMergedPermissions((prev) => toggleNode(prev, path));
-  };
-
-  const capitalize = (str: string) =>
-    str
-      .replace(/-/g, " ")
-      .split(" ")
-      .map(word => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase())
-      .join(" ");
-
-  const renderPermissionTree = (nodes: PermissionNode[], path: string[] = []) => {
-    return nodes.map((node) => (
-      <div key={[...path, node.name].join(".")} className="ml-4 my-1">
-        <div className="flex items-center space-x-2">
-          <Switch
-            checked={Boolean(node.value)}
-            onCheckedChange={() => togglePermission([...path, node.name])}
-            id={[...path, node.name].join(".")}
-          />
-          <label htmlFor={[...path, node.name].join(".")} className="text-sm text-gray-700">
-            {capitalize(node.name)}
-          </label>
-        </div>
-        {node.children && renderPermissionTree(node.children, [...path, node.name])}
-      </div>
-    ));
-  };
-
+  // --- SAVE PERMISSIONS ---
   const handleSavePermissions = async () => {
-  try {
-    const token = localStorage.getItem("token");
-
-    // Send mergedPermissions to backend for comparison
-    await axios.put(`/api/users/${params.userId}/permissions`, 
-      { mergedPermissions, roleId: user?.role?._id }, 
-      { headers: { Authorization: `Bearer ${token}` } }
-    );
-
-    alert("Custom permissions updated!");
-  } catch (err) {
-    console.error(err);
-    alert("Failed to save permissions");
-  }
-};
-
+    try {
+      const token = localStorage.getItem("token");
+      await axios.put(
+        `/api/users/${params.userId}/permissions`,
+        { mergedPermissions, roleId: user?.role?._id },
+        { headers: { Authorization: `Bearer ${token}` } }
+      );
+      alert("Custom permissions updated!");
+    } catch (err) {
+      console.error(err);
+      alert("Failed to save permissions");
+    }
+  };
 
   if (!user) return <div>User not found</div>;
 
@@ -229,26 +184,26 @@ function RouteComponent() {
         </div>
       </div>
 
-      {/* MERGED PERMISSIONS */}
+      {/* MERGED PERMISSIONS EDITOR */}
       <div>
         <h2 className="text-lg font-bold mb-4">Permissions</h2>
-        {mergedPermissions.length > 0 ? (
-          renderPermissionTree(mergedPermissions)
-        ) : (
-          <p className="text-gray-500">No permissions assigned.</p>
-        )}
+        <RolePermissionEditor
+          role={{ _id: user._id, role_name: user.role?.role_name || "", permissions: mergedPermissions }}
+          onChange={setMergedPermissions}
+          onSave={handleSavePermissions}
+          fromUserPage={true}
+        />
       </div>
 
-      {/* Save Permission */}
+      {/* SAVE PERMISSIONS
       <Button
         className="bg-blue-600 text-white hover:bg-blue-500"
         onClick={handleSavePermissions}
       >
         Save Permissions
-      </Button>
+      </Button> */}
 
-
-      {/* Role Dialog */}
+      {/* Dialogs */}
       <Dialog open={showRoleDialog} onOpenChange={setShowRoleDialog}>
         <DialogContent>
           <DialogHeader>
@@ -275,7 +230,6 @@ function RouteComponent() {
         </DialogContent>
       </Dialog>
 
-      {/* Verify Password */}
       <Dialog open={showPasswordDialog} onOpenChange={setShowPasswordDialog}>
         <DialogContent>
           <DialogHeader>
@@ -293,7 +247,6 @@ function RouteComponent() {
         </DialogContent>
       </Dialog>
 
-      {/* Confirm Role Change */}
       <Dialog open={showConfirmDialog} onOpenChange={setShowConfirmDialog}>
         <DialogContent>
           <DialogHeader>
@@ -311,6 +264,323 @@ function RouteComponent() {
     </div>
   );
 }
+
+
+
+// import { useEffect, useState } from "react";
+// import axios from "axios";
+// import { createFileRoute } from "@tanstack/react-router";
+// import { Button } from "@/components/ui/button";
+// import { Switch } from "@/components/ui/switch";
+// import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
+// import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
+// import { Input } from "@/components/ui/input";
+
+// export const Route = createFileRoute("/_navbarLayout/settings/users/$userId")({
+//   component: RouteComponent,
+//   loader: async ({ params }) => {
+//     try {
+//       const token = localStorage.getItem("token");
+//       const response = await axios.get(`/api/users/${params.userId}`, {
+//         headers: { Authorization: `Bearer ${token}` },
+//       });
+//       return { user: response.data };
+//     } catch (error) {
+//       console.error("Error fetching user:", error);
+//       return { user: null };
+//     }
+//   },
+// });
+
+// // Interfaces
+// export interface PermissionNode {
+//   name: string;
+//   value?: boolean;
+//   children?: PermissionNode[];
+// }
+
+// export interface Role {
+//   _id: string;
+//   role_name: string;
+//   description?: string;
+//   permissions: PermissionNode[];
+// }
+
+// function RouteComponent() {
+//   const params = Route.useParams() as { userId: string };
+//   const { user } = Route.useLoaderData() as {
+//     user: {
+//       _id: string;
+//       firstName: string;
+//       lastName: string;
+//       access: Record<string, any>;
+//       is_admin: boolean;
+//       is_inOffice: boolean;
+//       role?: { _id: string; role_name: string };
+//       merged_permissions?: PermissionNode[];
+//     } | null;
+//   };
+
+//   const [roles, setRoles] = useState<Role[]>([]);
+//   const [selectedRole, setSelectedRole] = useState(user?.role?._id || "");
+//   const [showRoleDialog, setShowRoleDialog] = useState(false);
+//   const [showPasswordDialog, setShowPasswordDialog] = useState(false);
+//   const [showConfirmDialog, setShowConfirmDialog] = useState(false);
+//   const [password, setPassword] = useState("");
+
+//   const [newPassword, setNewPassword] = useState("");
+//   const [resetStatus, setResetStatus] = useState<null | string>(null);
+
+//   // Use merged_permissions for frontend display
+//   const [mergedPermissions, setMergedPermissions] = useState<PermissionNode[]>([]);
+
+//   useEffect(() => {
+//     setMergedPermissions(user?.merged_permissions || []);
+//   }, [user?._id]);
+
+
+//   // Fetch roles
+//   useEffect(() => {
+//     const fetchRoles = async () => {
+//       try {
+//         const token = localStorage.getItem("token");
+//         const res = await axios.get("/api/roles", {
+//           headers: { Authorization: `Bearer ${token}` },
+//         });
+//         setRoles(res.data);
+//       } catch (error) {
+//         console.error("Failed to load roles:", error);
+//       }
+//     };
+//     fetchRoles();
+//   }, []);
+
+//   // --- PASSWORD RESET ---
+//   const handlePasswordReset = async (e: React.FormEvent) => {
+//     e.preventDefault();
+//     setResetStatus(null);
+//     try {
+//       const token = localStorage.getItem("token");
+//       await axios.post(
+//         "/api/auth/reset-password",
+//         { userId: params.userId, newPassword },
+//         { headers: { Authorization: `Bearer ${token}` } }
+//       );
+//       setResetStatus("Password reset successfully!");
+//       setNewPassword("");
+//     } catch {
+//       setResetStatus("Failed to reset password.");
+//     }
+//   };
+
+//   // --- ROLE CHANGE HANDLERS ---
+//   const verifyPassword = async () => {
+//     try {
+//       const token = localStorage.getItem("token");
+//       await axios.post(
+//         "/api/auth/verify-password",
+//         { password },
+//         { headers: { Authorization: `Bearer ${token}` } }
+//       );
+//       setShowPasswordDialog(false);
+//       setShowConfirmDialog(true);
+//     } catch {
+//       alert("Invalid password!");
+//     }
+//   };
+
+//   const handleRoleChange = async () => {
+//     try {
+//       const token = localStorage.getItem("token");
+//       await axios.put(
+//         `/api/users/${params.userId}/role`,
+//         { roleId: selectedRole },
+//         { headers: { Authorization: `Bearer ${token}` } }
+//       );
+//       alert("User role updated!");
+//       setShowConfirmDialog(false);
+//       window.location.reload();
+//     } catch (err) {
+//       console.error(err);
+//       alert("Failed to update role");
+//     }
+//   };
+
+//   // --- PERMISSIONS TOGGLES ---
+//   const togglePermission = (path: string[]) => {
+//     const toggleNode = (nodes: PermissionNode[], path: string[]): PermissionNode[] =>
+//       nodes.map((n) => {
+//         if (n.name === path[0]) {
+//           if (path.length === 1) {
+//             return { ...n, value: !n.value };
+//           } else if (n.children) {
+//             return { ...n, children: toggleNode(n.children, path.slice(1)) };
+//           }
+//         }
+//         return n;
+//       });
+//     setMergedPermissions((prev) => toggleNode(prev, path));
+//   };
+
+//   const capitalize = (str: string) =>
+//     str
+//       .replace(/-/g, " ")
+//       .split(" ")
+//       .map(word => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase())
+//       .join(" ");
+
+//   const renderPermissionTree = (nodes: PermissionNode[], path: string[] = []) => {
+//     return nodes.map((node) => (
+//       <div key={[...path, node.name].join(".")} className="ml-4 my-1">
+//         <div className="flex items-center space-x-2">
+//           <Switch
+//             checked={Boolean(node.value)}
+//             onCheckedChange={() => togglePermission([...path, node.name])}
+//             id={[...path, node.name].join(".")}
+//           />
+//           <label htmlFor={[...path, node.name].join(".")} className="text-sm text-gray-700">
+//             {capitalize(node.name)}
+//           </label>
+//         </div>
+//         {node.children && renderPermissionTree(node.children, [...path, node.name])}
+//       </div>
+//     ));
+//   };
+
+//   const handleSavePermissions = async () => {
+//   try {
+//     const token = localStorage.getItem("token");
+
+//     // Send mergedPermissions to backend for comparison
+//     await axios.put(`/api/users/${params.userId}/permissions`, 
+//       { mergedPermissions, roleId: user?.role?._id }, 
+//       { headers: { Authorization: `Bearer ${token}` } }
+//     );
+
+//     alert("Custom permissions updated!");
+//   } catch (err) {
+//     console.error(err);
+//     alert("Failed to save permissions");
+//   }
+// };
+
+
+//   if (!user) return <div>User not found</div>;
+
+//   return (
+//     <div className="p-6 space-y-8">
+//       {/* PASSWORD RESET */}
+//       <div>
+//         <h2 className="text-lg font-bold mb-2">Reset User Password</h2>
+//         <form onSubmit={handlePasswordReset} className="flex items-center gap-2">
+//           <Input
+//             type="password"
+//             placeholder="New password"
+//             value={newPassword}
+//             onChange={(e) => setNewPassword(e.target.value)}
+//             required
+//           />
+//           <Button type="submit" className="bg-red-600 text-white hover:bg-red-500">
+//             Reset Password
+//           </Button>
+//         </form>
+//         {resetStatus && <p className="mt-2 text-sm text-gray-700">{resetStatus}</p>}
+//       </div>
+
+//       {/* ROLE CHANGE */}
+//       <div>
+//         <h2 className="text-lg font-bold mb-4">User Role</h2>
+//         <div className="flex items-center justify-between">
+//           <p className="text-gray-700">
+//             Current Role: <span className="font-semibold">{user.role?.role_name || "None"}</span>
+//           </p>
+//           <Button onClick={() => setShowRoleDialog(true)}>Change Role</Button>
+//         </div>
+//       </div>
+
+//       {/* MERGED PERMISSIONS */}
+//       <div>
+//         <h2 className="text-lg font-bold mb-4">Permissions</h2>
+//         {mergedPermissions.length > 0 ? (
+//           renderPermissionTree(mergedPermissions)
+//         ) : (
+//           <p className="text-gray-500">No permissions assigned.</p>
+//         )}
+//       </div>
+
+//       {/* Save Permission */}
+//       <Button
+//         className="bg-blue-600 text-white hover:bg-blue-500"
+//         onClick={handleSavePermissions}
+//       >
+//         Save Permissions
+//       </Button>
+
+
+//       {/* Role Dialog */}
+//       <Dialog open={showRoleDialog} onOpenChange={setShowRoleDialog}>
+//         <DialogContent>
+//           <DialogHeader>
+//             <DialogTitle>Select New Role</DialogTitle>
+//           </DialogHeader>
+//           <RadioGroup value={selectedRole} onValueChange={setSelectedRole}>
+//             {roles.map((r) => (
+//               <div key={r._id} className="flex items-center space-x-2">
+//                 <RadioGroupItem value={r._id || ""} id={r._id || ""} />
+//                 <label htmlFor={r._id}>{r.role_name}</label>
+//               </div>
+//             ))}
+//           </RadioGroup>
+//           <DialogFooter>
+//             <Button
+//               onClick={() => {
+//                 setShowRoleDialog(false);
+//                 setShowPasswordDialog(true);
+//               }}
+//             >
+//               Next
+//             </Button>
+//           </DialogFooter>
+//         </DialogContent>
+//       </Dialog>
+
+//       {/* Verify Password */}
+//       <Dialog open={showPasswordDialog} onOpenChange={setShowPasswordDialog}>
+//         <DialogContent>
+//           <DialogHeader>
+//             <DialogTitle>Verify Password</DialogTitle>
+//           </DialogHeader>
+//           <Input
+//             type="password"
+//             placeholder="Enter your password"
+//             value={password}
+//             onChange={(e) => setPassword(e.target.value)}
+//           />
+//           <DialogFooter>
+//             <Button onClick={verifyPassword}>Verify</Button>
+//           </DialogFooter>
+//         </DialogContent>
+//       </Dialog>
+
+//       {/* Confirm Role Change */}
+//       <Dialog open={showConfirmDialog} onOpenChange={setShowConfirmDialog}>
+//         <DialogContent>
+//           <DialogHeader>
+//             <DialogTitle>Confirm Role Change</DialogTitle>
+//           </DialogHeader>
+//           <p>Are you sure you want to change this user's role?</p>
+//           <DialogFooter>
+//             <Button variant="outline" onClick={() => setShowConfirmDialog(false)}>
+//               Cancel
+//             </Button>
+//             <Button onClick={handleRoleChange}>Yes, Change Role</Button>
+//           </DialogFooter>
+//         </DialogContent>
+//       </Dialog>
+//     </div>
+//   );
+// }
+
 // import axios from "axios";
 // import { createFileRoute } from '@tanstack/react-router';
 // import { useState, useEffect } from 'react';

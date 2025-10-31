@@ -1,7 +1,6 @@
 const express = require("express");
 const router = express.Router();
 const Role = require("../models/Role");
-const mergeRolePermissions = require("../utils/mergePermissionObjects");
 const Permission = require("../models/Permission");
 const _ = require('lodash'); 
 const User = require('../models/User');

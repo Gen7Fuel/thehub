@@ -3,25 +3,23 @@ import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { RolePermissionEditor } from "@/components/custom/RolePermissionEditor";
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
+import { Select, SelectTrigger, SelectContent, SelectItem, SelectValue } from "@/components/ui/select";
 import axios from "axios";
 
-// Permission node inside a role
 export interface PermissionNode {
   name: string;
   value?: boolean;
   children?: PermissionNode[];
 }
 
-// Permission template from collection
 export interface PermissionTemplate {
   _id: string;
   module_name: string;
   structure: PermissionNode[];
 }
 
-// Role type
 export interface Role {
-  _id?: string; // optional for new roles
+  _id?: string;
   role_name: string;
   description?: string;
   permissions: PermissionNode[];
@@ -38,46 +36,87 @@ export function RouteComponent() {
     description: "",
     permissions: [],
   });
-  const [loading, setLoading] = useState(true);
 
-  // Convert PermissionNode[] from Permission collection to Role's PermissionNode[] with `value`
-  const mapPermissionNodes = (nodes: any[]): PermissionNode[] => {
-    return nodes.map(node => ({
+  const [loading, setLoading] = useState(true);
+  const [permissionTemplates, setPermissionTemplates] = useState<PermissionTemplate[]>([]);
+  const [allRoles, setAllRoles] = useState<Role[]>([]);
+  const [selectedTemplate, setSelectedTemplate] = useState<string>("none");
+
+  // Map helper
+  const mapPermissionNodes = (nodes: any[]): PermissionNode[] =>
+    nodes.map((node) => ({
       name: node.name,
-      value: false, // default for new role
+      value: node.value ?? false,
       children: node.children ? mapPermissionNodes(node.children) : [],
     }));
-  };
 
-  // Convert PermissionTemplate[] from API to Role permissions
-  const mapPermissionsToRole = (permissions: PermissionTemplate[]): PermissionNode[] => {
-    return permissions.map(module => ({
-      name: module.module_name,  // keep module_name as top-level
+  const mapPermissionsToRole = (permissions: PermissionTemplate[]): PermissionNode[] =>
+    permissions.map((module) => ({
+      name: module.module_name,
       value: false,
       children: mapPermissionNodes(module.structure),
     }));
-  };
 
-  // Fetch permissions from the collection
+  // Fetch both: base permission templates and roles
   useEffect(() => {
-    const fetchPermissions = async () => {
+    const fetchData = async () => {
       try {
         const token = localStorage.getItem("token");
-        const res = await axios.get<PermissionTemplate[]>("/api/permissions", {
-          headers: { Authorization: `Bearer ${token}` },
-        });
+        const [permRes, roleRes] = await Promise.all([
+          axios.get<PermissionTemplate[]>("/api/permissions", {
+            headers: { Authorization: `Bearer ${token}` },
+          }),
+          axios.get<Role[]>("/api/roles", {
+            headers: { Authorization: `Bearer ${token}` },
+          }),
+        ]);
 
-        const mappedPermissions = mapPermissionsToRole(res.data);
-        setRole(prev => ({ ...prev, permissions: mappedPermissions }));
-        setLoading(false);
+        setPermissionTemplates(permRes.data);
+        setAllRoles(roleRes.data);
+
+        // Default: show base permissions (no template)
+        const mappedPermissions = mapPermissionsToRole(permRes.data);
+        setRole((prev) => ({ ...prev, permissions: mappedPermissions }));
       } catch (err) {
-        console.error(err);
+        console.error("Error loading templates or roles:", err);
+      } finally {
         setLoading(false);
       }
     };
-
-    fetchPermissions();
+    fetchData();
   }, []);
+
+  // Handle template selection
+const handleTemplateSelect = (templateId: string) => {
+  setSelectedTemplate(templateId);
+
+  if (templateId === "none") {
+    // Reset to base permissions
+    const mapped = mapPermissionsToRole(permissionTemplates);
+    setRole((prev) => ({
+      ...prev,
+      permissions: mapped,
+    }));
+    console.log("Template cleared → using base permissions:", mapped);
+  } else {
+    const selectedRole = allRoles.find((r) => r._id === templateId);
+    if (selectedRole && selectedRole.permissions) {
+      const clonedPermissions = JSON.parse(
+        JSON.stringify(selectedRole.permissions)
+      );
+
+      console.log("Applying permissions from template:", selectedRole.role_name);
+
+      // Update permissions in role state
+      setRole((prev) => ({
+        ...prev,
+        permissions: clonedPermissions,
+      }));
+    } else {
+      console.warn("Selected role has no permissions or was not found.");
+    }
+  }
+};
 
   // Create new role
   const handleCreate = async () => {
@@ -100,6 +139,7 @@ export function RouteComponent() {
   };
 
   if (loading) return <div>Loading...</div>;
+  console.log(role)
 
   return (
     <div className="p-6 space-y-6 max-w-4xl mx-auto">
@@ -123,14 +163,31 @@ export function RouteComponent() {
         </div>
       </div>
 
-      {/* RolePermissionEditor without onSave → hides the save button */}
+      {/* --- TEMPLATE DROPDOWN --- */}
+      <div>
+        <label>Use Existing Role as Template</label>
+        <Select value={selectedTemplate} onValueChange={handleTemplateSelect}>
+          <SelectTrigger className="w-full mt-1">
+            <SelectValue placeholder="Select a role template..." />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="none">No Template Selected (Start Fresh)</SelectItem>
+            {allRoles.map((r) => (
+              <SelectItem key={r._id} value={r._id!}>
+                {r.role_name}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+      </div>
+
+      {/* --- PERMISSIONS EDITOR --- */}
       <RolePermissionEditor
         role={role}
         onChange={(updatedPermissions) =>
-            setRole({ ...role, permissions: updatedPermissions })
+          setRole({ ...role, permissions: updatedPermissions })
         }
       />
-
 
       <Button
         onClick={handleCreate}
