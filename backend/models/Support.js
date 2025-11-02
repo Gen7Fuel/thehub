@@ -43,12 +43,15 @@ const supportTicketSchema = new mongoose.Schema(
       required: true,
       trim: true,
     },
+    images: [{
+      type: String, // Store CDN filenames like "uuid-123.jpg"
+    }],
     status: {
       type: String,
       enum: ['open', 'resolved', 'closed'],
       default: 'open',
     },
-    messages: [messageSchema], // Chat messages
+    messages: [messageSchema],
     createdAt: {
       type: Date,
       default: Date.now,

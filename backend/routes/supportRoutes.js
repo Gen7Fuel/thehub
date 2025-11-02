@@ -5,7 +5,7 @@ const SupportTicket = require('../models/Support');
 // POST /api/support/tickets - Create a new support ticket
 router.post('/tickets', async (req, res) => {
   try {
-    const { text, priority, site } = req.body;
+    const { text, priority, site, images } = req.body;
 
     if (!text || !text.trim()) {
       return res.status(400).json({ success: false, message: 'Ticket message is required.' });
@@ -23,6 +23,7 @@ router.post('/tickets', async (req, res) => {
       text: text.trim(),
       priority,
       site: site.trim(),
+      images: images || [], // Array of CDN filenames
       messages: [{
         sender: req.user.id,
         text: text.trim(),

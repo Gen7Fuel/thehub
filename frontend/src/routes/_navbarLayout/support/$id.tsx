@@ -141,6 +141,24 @@ function RouteComponent() {
                 </div>
               </div>
               <div className="border rounded p-3 mb-4 bg-muted/50 max-h-80 overflow-y-auto">
+                {/* Display ticket images at the top */}
+                {ticket.images && ticket.images.length > 0 && (
+                  <div className="mb-4 p-2 bg-blue-50 rounded">
+                    <div className="text-xs text-muted-foreground mb-2">Attached Images:</div>
+                    <div className="flex flex-wrap gap-2">
+                      {ticket.images.map((filename: string, idx: number) => (
+                        <img
+                          key={idx}
+                          src={`/cdn/download/${filename}`}
+                          alt={`Attachment ${idx + 1}`}
+                          className="max-w-32 max-h-32 rounded border cursor-pointer"
+                          onClick={() => window.open(`/cdn/download/${filename}`, '_blank')}
+                        />
+                      ))}
+                    </div>
+                  </div>
+                )}
+
                 {ticket.messages.map((msg: any, idx: number) => (
                   <div key={idx} className="mb-2">
                     <div className="text-sm">

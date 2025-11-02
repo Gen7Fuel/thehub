@@ -11,7 +11,7 @@ const setupSupportSocket = (io) => {
   supportNamespace.on('connection', (socket) => {
     console.log(`Support user connected: ${socket.user?.name} (${socket.user?.email})`);
 
-    const supportEmail = 'b@z.com';
+    const supportEmail = 'mohammad@gen7fuel.com' || 'daksh@gen7fuel.com' || 'b@z.com';
     const isSupport = socket.user?.email === supportEmail;
 
     // Support staff joins support-staff room, users join their own room
@@ -80,49 +80,49 @@ const setupSupportSocket = (io) => {
     });
 
     // Handle marking messages as read
-    socket.on('mark-as-read', async ({ conversationId }) => {
-      try {
-        const ticket = await SupportTicket.findById(conversationId);
+    // socket.on('mark-as-read', async ({ conversationId }) => {
+    //   try {
+    //     const ticket = await SupportTicket.findById(conversationId);
 
-        if (!ticket) {
-          socket.emit('error', { message: 'Ticket not found' });
-          return;
-        }
+    //     if (!ticket) {
+    //       socket.emit('error', { message: 'Ticket not found' });
+    //       return;
+    //     }
 
-        const isOwner = ticket.userId.toString() === socket.user.id;
+    //     const isOwner = ticket.userId.toString() === socket.user.id;
 
-        if (!isSupport && !isOwner) {
-          socket.emit('error', { message: 'Access denied' });
-          return;
-        }
+    //     if (!isSupport && !isOwner) {
+    //       socket.emit('error', { message: 'Access denied' });
+    //       return;
+    //     }
 
-        // Mark messages as read
-        ticket.messages.forEach(message => {
-          if (message.sender.toString() !== socket.user.id && !message.isRead) {
-            message.isRead = true;
-          }
-        });
+    //     // Mark messages as read
+    //     ticket.messages.forEach(message => {
+    //       if (message.sender.toString() !== socket.user.id && !message.isRead) {
+    //         message.isRead = true;
+    //       }
+    //     });
 
-        await ticket.save();
+    //     await ticket.save();
 
-        // Notify other participants
-        supportNamespace.to(conversationId).emit('messages-read', { conversationId });
+    //     // Notify other participants
+    //     supportNamespace.to(conversationId).emit('messages-read', { conversationId });
 
-      } catch (error) {
-        console.error('Error marking as read:', error);
-        socket.emit('error', { message: 'Failed to mark as read' });
-      }
-    });
+    //   } catch (error) {
+    //     console.error('Error marking as read:', error);
+    //     socket.emit('error', { message: 'Failed to mark as read' });
+    //   }
+    // });
 
     // Handle typing indicator
-    socket.on('typing', ({ conversationId, isTyping }) => {
-      supportNamespace.to(conversationId).emit('user-typing', {
-        conversationId,
-        isTyping,
-        userType: isSupport ? 'support' : 'user',
-        userName: socket.user?.name
-      });
-    });
+    // socket.on('typing', ({ conversationId, isTyping }) => {
+    //   supportNamespace.to(conversationId).emit('user-typing', {
+    //     conversationId,
+    //     isTyping,
+    //     userType: isSupport ? 'support' : 'user',
+    //     userName: socket.user?.name
+    //   });
+    // });
 
     socket.on('disconnect', () => {
       console.log(`Support user disconnected: ${socket.user?.name}`);
