@@ -36,15 +36,12 @@ function RouteComponent() {
   };
   
   // captalise the first letter for easy reading only for diaplay
-  const capitalize = (str: string) => {
+  const fromCamelCase = (str: string) => {
     if (!str) return "";
     return str
-      .replace(/-/g, " ") // only convert hyphens from backend to spaces
-      .split(" ")
-      .map(word =>
-        word ? word.charAt(0).toUpperCase() + word.slice(1).toLowerCase() : ""
-      )
-      .join(" ");
+      .replace(/([A-Z])/g, " $1")
+      .replace(/^./, (s) => s.toUpperCase())
+      .trim();
   };
 
   return (
@@ -59,7 +56,7 @@ function RouteComponent() {
             params={{ id: permission._id }}
             activeProps={activeProps}
           >
-            {capitalize(permission.module_name)}
+            {fromCamelCase(permission.module_name)}
           </Link>
         ))}
 

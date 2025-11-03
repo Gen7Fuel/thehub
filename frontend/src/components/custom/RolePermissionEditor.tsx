@@ -1,6 +1,7 @@
 import { useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { Check, X, ChevronDown, ChevronRight } from "lucide-react";
+import { camelCaseToCapitalized } from "@/lib/utils";
 import _ from "lodash";
 
 interface PermissionNode {
@@ -75,13 +76,6 @@ export function RolePermissionEditor({
         : applyCollapseState(newPermissions, prev);
     });
   }, [role._id, role.role_name, role.permissions]);
-
-  const capitalize = (str: string) =>
-    str
-      .replace(/-/g, " ")
-      .split(" ")
-      .map((word) => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase())
-      .join(" ");
 
   // --- Permission Logic ---
   const toggleAll = (nodes: PermissionNode[], value: boolean): PermissionNode[] =>
@@ -174,7 +168,7 @@ export function RolePermissionEditor({
                 <div className="w-4" />
               )}
 
-              <span className={`flex-1 ${fontClass}`}>{capitalize(node.name)}</span>
+              <span className={`flex-1 ${fontClass}`}>{camelCaseToCapitalized(node.name)}</span>
 
               <div className="flex items-center space-x-2">
                 <Button

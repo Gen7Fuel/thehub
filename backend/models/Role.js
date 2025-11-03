@@ -9,14 +9,16 @@ const mongoose = require("mongoose");
 //   "permissions": [
 //     {
 //       "name": "audits",
+//       "value": true, 
 //       "children": [
 //         {
 //           "name": "template",
+//           "value": true, 
 //           "children": [
-//             { "name": "view", "children": [] }
+//             { "name": "view", "value": true, "children": [] }
 //           ]
 //         },
-//         { "name": "dashboard", "children": [] }
+//         { "name": "dashboard", "value": true, "children": [] }
 //       ]
 //     }
 //   ]

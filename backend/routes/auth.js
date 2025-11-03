@@ -6,6 +6,7 @@ const Permission = require("../models/Permission");
 const Location = require("../models/Location"); // Add this at the top with other requires
 const router = express.Router();
 const Role = require("../models/Role");
+const getMergedPermissions = require("../utils/mergePermissionObjects");
 
 // router.post("/register", async (req, res) => {
 //   const { email, password, firstName, lastName, stationName } = req.body;
@@ -91,6 +92,7 @@ router.post("/register", async (req, res) => {
   }
 });
 
+// Old Permissions login route
 router.post("/login", async (req, res) => {
   const { email, password } = req.body;
   try {
@@ -131,11 +133,58 @@ router.post("/login", async (req, res) => {
   }
 });
 
-function getInitials(firstName, lastName) {
-  const firstInitial = firstName?.trim()?.[0]?.toUpperCase() || '';
-  const lastInitial = lastName?.trim()?.[0]?.toUpperCase() || '';
-  return firstInitial + lastInitial;
-}
+// Route with new permissions
+// router.post("/login", async (req, res) => {
+//   const { email, password } = req.body;
+
+//   try {
+//     const user = await User.findOne({ email });
+//     if (!user) return res.status(400).json({ message: "Invalid credentials" });
+
+//     const isMatch = await bcrypt.compare(password, user.password);
+//     if (!isMatch) return res.status(400).json({ message: "Invalid credentials" });
+
+//     // Get merged permissions (role + custom)
+//     const mergedPermissions = await getMergedPermissions(user);
+
+//     // Fetch location & timezone
+//     let timezone = null;
+//     if (user.stationName) {
+//       const location = await Location.findOne({ stationName: user.stationName });
+//       timezone = location?.timezone || null;
+//     }
+
+//     // Create JWT payload
+//     const payload = {
+//       id: user._id,
+//       email: user.email,
+//       location: user.stationName,
+//       name: `${user.firstName} ${user.lastName}`,
+//       initials: getInitials(user.firstName, user.lastName),
+//       permissions: mergedPermissions,
+//       site_access: user.site_access,
+//       access: user.access, // merged permissions instead of user.access
+//       timezone,
+//     };
+//     // Sign JWT
+//     const token = jwt.sign(payload, process.env.JWT_SECRET, { expiresIn: "1d" });
+
+//     // Send response
+//     res.json({
+//       token
+//     });
+
+//   } catch (err) {
+//     console.error("Login error:", err);
+//     res.status(500).json({ message: err.message });
+//   }
+// });
+
+// function getInitials(firstName, lastName) {
+//   const firstInitial = firstName?.trim()?.[0]?.toUpperCase() || '';
+//   const lastInitial = lastName?.trim()?.[0]?.toUpperCase() || '';
+//   return firstInitial + lastInitial;
+// }
 
 router.post('/reset-password', async (req, res) => {
   const { userId, newPassword } = req.body;

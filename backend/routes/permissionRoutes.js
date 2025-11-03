@@ -5,13 +5,13 @@ const User = require('../models/User');
 const Role = require("../models/Role");
 
 // For normalising permission names and structure
-const normalizeStructure = (nodes = []) => {
-  return nodes.map(node => ({
-    ...node,
-    name: node.name.trim().toLowerCase().replace(/\s+/g, "-"),
-    children: normalizeStructure(node.children),
-  }));
-};
+// const normalizeStructure = (nodes = []) => {
+//   return nodes.map(node => ({
+//     ...node,
+//     name: node.name.trim().toLowerCase().replace(/\s+/g, "-"),
+//     children: normalizeStructure(node.children),
+//   }));
+// };
 
 // recursively merge template nodes into role nodes
 const mergePermissions = (templateNodes, roleNodes = []) => {
@@ -101,8 +101,8 @@ router.get("/:id", async (req, res) => {
 router.post("/", async (req, res) => {
   try {
     let { module_name, structure } = req.body;
-    module_name = module_name.trim().toLowerCase().replace(/\s+/g, "-");
-    structure = normalizeStructure(structure);
+    // module_name = module_name.trim().toLowerCase().replace(/\s+/g, "-");
+    // structure = normalizeStructure(structure);
 
     const exists = await Permission.findOne({ module_name });
     if (exists) {
@@ -269,12 +269,48 @@ router.post("/sync", async (req, res) => {
 
 
 // routes/permissions.js
+// router.put("/:id", async (req, res) => {
+//   try {
+//     let { module_name, structure } = req.body;
+//     // module_name = module_name.trim().toLowerCase().replace(/\s+/g, "-");
+//     // structure = normalizeStructure(structure);
+
+//     const updated = await Permission.findByIdAndUpdate(
+//       req.params.id,
+//       { module_name, structure },
+//       { new: true }
+//     );
+//     if (!updated) return res.status(404).json({ message: "Permission not found" });
+
+//     // ---- Merge into all roles ----
+//     const allRoles = await Role.find({});
+//     for (const role of allRoles) {
+//       const existingModule = role.permissions.find(p => p.name === module_name);
+
+//       if (existingModule) {
+//         existingModule.children = mergePermissions(structure, existingModule.children || []);
+//       } else {
+//         role.permissions.push({
+//           name: module_name,
+//           value: false,
+//           children: mergePermissions(structure, [])
+//         });
+//       }
+
+//       await role.save();
+//     }
+
+//     res.status(200).json(updated);
+//   } catch (error) {
+//     console.error("Error updating permission:", error);
+//     res.status(500).json({ message: "Server error updating permission" });
+//   }
+// });
 router.put("/:id", async (req, res) => {
   try {
-    let { module_name, structure } = req.body;
-    module_name = module_name.trim().toLowerCase().replace(/\s+/g, "-");
-    structure = normalizeStructure(structure);
+    const { module_name, old_module_name, structure } = req.body;
 
+    // Update the permission document
     const updated = await Permission.findByIdAndUpdate(
       req.params.id,
       { module_name, structure },
@@ -282,22 +318,19 @@ router.put("/:id", async (req, res) => {
     );
     if (!updated) return res.status(404).json({ message: "Permission not found" });
 
-    // ---- Merge into all roles ----
+    // ---- Update existing modules in all roles ----
     const allRoles = await Role.find({});
     for (const role of allRoles) {
-      const existingModule = role.permissions.find(p => p.name === module_name);
+      // Find the module by old name
+      const existingModule = role.permissions.find(p => p.name === old_module_name);
 
       if (existingModule) {
+        // Update name and children
+        existingModule.name = module_name; 
         existingModule.children = mergePermissions(structure, existingModule.children || []);
-      } else {
-        role.permissions.push({
-          name: module_name,
-          value: false,
-          children: mergePermissions(structure, [])
-        });
+        await role.save();
       }
-
-      await role.save();
+      // No need to add new module here; POST route handles that
     }
 
     res.status(200).json(updated);
@@ -306,5 +339,6 @@ router.put("/:id", async (req, res) => {
     res.status(500).json({ message: "Server error updating permission" });
   }
 });
+
 
 module.exports = router;
