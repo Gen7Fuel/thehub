@@ -1,9 +1,8 @@
 const mongoose = require('mongoose');
 
-// Subschema for individual messages
 const messageSchema = new mongoose.Schema(
   {
-    senderId: {
+    sender: {
       type: mongoose.Schema.Types.ObjectId,
       ref: "User",
       required: true,
@@ -13,26 +12,52 @@ const messageSchema = new mongoose.Schema(
       required: true,
       trim: true,
     },
-    isRead: {
-      type: Boolean,
-      default: false,
-    },
+    createdAt: {
+      type: Date,
+      default: Date.now,
+    }
   },
-  { timestamps: true } // adds createdAt & updatedAt
+  { _id: false }
 );
 
-// Main conversation schema (1 per user)
-const conversationSchema = new mongoose.Schema(
+const supportTicketSchema = new mongoose.Schema(
   {
     userId: {
       type: mongoose.Schema.Types.ObjectId,
       ref: "User",
       required: true,
-      unique: true, // one support chat per user
     },
-    messages: [messageSchema], // embedded array of messages
+    text: {
+      type: String,
+      required: true,
+      trim: true,
+    },
+    priority: {
+      type: String,
+      enum: ['low', 'medium', 'high', 'urgent'],
+      default: 'medium',
+      required: true,
+    },
+    site: {
+      type: String,
+      required: true,
+      trim: true,
+    },
+    images: [{
+      type: String, // Store CDN filenames like "uuid-123.jpg"
+    }],
+    status: {
+      type: String,
+      enum: ['open', 'resolved', 'closed'],
+      default: 'open',
+    },
+    messages: [messageSchema],
+    createdAt: {
+      type: Date,
+      default: Date.now,
+    }
   },
   { timestamps: true }
 );
 
-module.exports = mongoose.model("Conversation", conversationSchema);
+module.exports = mongoose.model("SupportTicket", supportTicketSchema);
