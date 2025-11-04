@@ -180,11 +180,11 @@ router.post("/login", async (req, res) => {
 //   }
 // });
 
-// function getInitials(firstName, lastName) {
-//   const firstInitial = firstName?.trim()?.[0]?.toUpperCase() || '';
-//   const lastInitial = lastName?.trim()?.[0]?.toUpperCase() || '';
-//   return firstInitial + lastInitial;
-// }
+function getInitials(firstName, lastName) {
+  const firstInitial = firstName?.trim()?.[0]?.toUpperCase() || '';
+  const lastInitial = lastName?.trim()?.[0]?.toUpperCase() || '';
+  return firstInitial + lastInitial;
+}
 
 router.post('/reset-password', async (req, res) => {
   const { userId, newPassword } = req.body;
