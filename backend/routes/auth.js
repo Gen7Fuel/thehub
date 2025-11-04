@@ -8,6 +8,54 @@ const router = express.Router();
 const Role = require("../models/Role");
 const getMergedPermissions = require("../utils/mergePermissionObjects");
 
+// router.post("/register", async (req, res) => {
+//   const { email, password, firstName, lastName, stationName } = req.body;
+
+//   try {
+//     // Check if user already exists
+//     const userExists = await User.findOne({ email });
+//     if (userExists)
+//       return res.status(400).json({ message: "User already exists" });
+
+//     // Fetch all permissions from DB
+//     const permissions = await Permission.find();
+
+//     // Build dynamic access map
+//     const access = {};
+
+//     for (const perm of permissions) {
+//       if (perm.name === "site_access") {
+//         access.site_access = {};
+
+//         if (Array.isArray(perm.sites)) {
+//           perm.sites.forEach((site) => {
+//             // auto-true for the user's own station
+//             access.site_access[site] = site === stationName;
+//           });
+//         }
+//       } else {
+//         // Regular permissions default to false
+//         access[perm.name] = false;
+//       }
+//     }
+
+//     // Create the user
+//     const user = await User.create({
+//       email,
+//       password,
+//       firstName,
+//       lastName,
+//       stationName,
+//       location: stationName, // store as default location
+//       access,
+//     });
+
+//     res.status(201).json(user);
+//   } catch (err) {
+//     console.error("Error in register:", err);
+//     res.status(500).json({ message: err.message });
+//   }
+// });
 router.post("/register", async (req, res) => {
   const { email, password, firstName, lastName, stationName } = req.body;
 
@@ -17,27 +65,14 @@ router.post("/register", async (req, res) => {
     if (userExists)
       return res.status(400).json({ message: "User already exists" });
 
-    // Fetch all permissions from DB
-    const permissions = await Permission.find();
+    // Fetch only store-type locations
+    const storeLocations = await Location.find({ type: "store" });
 
-    // Build dynamic access map
-    const access = {};
-
-    for (const perm of permissions) {
-      if (perm.name === "site_access") {
-        access.site_access = {};
-
-        if (Array.isArray(perm.sites)) {
-          perm.sites.forEach((site) => {
-            // auto-true for the user's own station
-            access.site_access[site] = site === stationName;
-          });
-        }
-      } else {
-        // Regular permissions default to false
-        access[perm.name] = false;
-      }
-    }
+    // Build site_access map: all stores false except user's own
+    const site_access = {};
+    storeLocations.forEach((loc) => {
+      site_access[loc.stationName] = loc.stationName === stationName;
+    });
 
     // Create the user
     const user = await User.create({
@@ -46,11 +81,16 @@ router.post("/register", async (req, res) => {
       firstName,
       lastName,
       stationName,
-      location: stationName, // store as default location
-      access,
+      site_access,
+      custom_permissions: [], // empty by default
+      role: null,             // no role assigned yet
+      is_active: true,        // active by default
     });
 
-    res.status(201).json(user);
+    res.status(201).json({
+      message: "User registered successfully",
+      user,
+    });
   } catch (err) {
     console.error("Error in register:", err);
     res.status(500).json({ message: err.message });
@@ -58,50 +98,8 @@ router.post("/register", async (req, res) => {
 });
 
 // Old Permissions login route
-router.post("/login", async (req, res) => {
-  const { email, password } = req.body;
-  try {
-    const user = await User.findOne({ email });
-    if (!user) return res.status(400).json({ message: "Invalid credentials" });
-
-    const isMatch = await bcrypt.compare(password, user.password);
-    if (!isMatch) return res.status(400).json({ message: "Invalid credentials" });
-
-    // Fetch location and timezone
-    let timezone = null;
-    if (user.stationName) {
-      const location = await Location.findOne({ stationName: user.stationName });
-      timezone = location?.timezone || null;
-    }
-
-    const token = jwt.sign({
-      id: user._id,
-      email: user.email,
-      isSupport: user.isSupport,
-      location: user.stationName,
-      name: `${user.firstName} ${user.lastName}`,
-      initials: `${getInitials(user.firstName, user.lastName)}`,
-      access: user.access,
-      timezone
-     }, process.env.JWT_SECRET, { expiresIn: "1d" });
-    res.json({
-      token,
-      email: user.email,
-      isSupport: user.isSupport,
-      name: `${user.firstName} ${user.lastName}`,
-      initials: `${getInitials(user.firstName, user.lastName)}`,
-      access: JSON.stringify(user.access),
-      timezone
-    });
-  } catch (err) {
-    res.status(500).json({ message: err.message });
-  }
-});
-
-// Route with new permissions
 // router.post("/login", async (req, res) => {
 //   const { email, password } = req.body;
-
 //   try {
 //     const user = await User.findOne({ email });
 //     if (!user) return res.status(400).json({ message: "Invalid credentials" });
@@ -109,41 +107,87 @@ router.post("/login", async (req, res) => {
 //     const isMatch = await bcrypt.compare(password, user.password);
 //     if (!isMatch) return res.status(400).json({ message: "Invalid credentials" });
 
-//     // Get merged permissions (role + custom)
-//     const mergedPermissions = await getMergedPermissions(user);
-
-//     // Fetch location & timezone
+//     // Fetch location and timezone
 //     let timezone = null;
 //     if (user.stationName) {
 //       const location = await Location.findOne({ stationName: user.stationName });
 //       timezone = location?.timezone || null;
 //     }
 
-//     // Create JWT payload
-//     const payload = {
+//     const token = jwt.sign({
 //       id: user._id,
 //       email: user.email,
+//       isSupport: user.isSupport,
 //       location: user.stationName,
 //       name: `${user.firstName} ${user.lastName}`,
-//       initials: getInitials(user.firstName, user.lastName),
-//       permissions: mergedPermissions,
-//       site_access: user.site_access,
-//       access: user.access, // merged permissions instead of user.access
-//       timezone,
-//     };
-//     // Sign JWT
-//     const token = jwt.sign(payload, process.env.JWT_SECRET, { expiresIn: "1d" });
-
-//     // Send response
+//       initials: `${getInitials(user.firstName, user.lastName)}`,
+//       access: user.access,
+//       timezone
+//      }, process.env.JWT_SECRET, { expiresIn: "1d" });
 //     res.json({
-//       token
+//       token,
+//       email: user.email,
+//       isSupport: user.isSupport,
+//       name: `${user.firstName} ${user.lastName}`,
+//       initials: `${getInitials(user.firstName, user.lastName)}`,
+//       access: JSON.stringify(user.access),
+//       timezone
 //     });
-
 //   } catch (err) {
-//     console.error("Login error:", err);
 //     res.status(500).json({ message: err.message });
 //   }
 // });
+
+// Route with new permissions
+router.post("/login", async (req, res) => {
+  const { email, password } = req.body;
+
+  try {
+    const user = await User.findOne({ email });
+    if (!user) return res.status(400).json({ message: "Invalid credentials" });
+
+    // Check if user is inactive
+    if (!user.is_active) {
+      return res.status(403).json({ message: "Access Denied. Contact Admin." });
+    }
+
+    const isMatch = await bcrypt.compare(password, user.password);
+    if (!isMatch) return res.status(400).json({ message: "Invalid credentials" });
+
+    // Get merged permissions (role + custom)
+    const mergedPermissions = await getMergedPermissions(user);
+
+    // Fetch location & timezone
+    let timezone = null;
+    if (user.stationName) {
+      const location = await Location.findOne({ stationName: user.stationName });
+      timezone = location?.timezone || null;
+    }
+
+    // Create JWT payload
+    const payload = {
+      id: user._id,
+      email: user.email,
+      location: user.stationName,
+      isSupport: user.isSupport,
+      name: `${user.firstName} ${user.lastName}`,
+      initials: getInitials(user.firstName, user.lastName),
+      permissions: mergedPermissions,
+      site_access: user.site_access,
+      access: user.access,
+      timezone,
+    };
+
+    // Sign JWT
+    const token = jwt.sign(payload, process.env.JWT_SECRET, { expiresIn: "1d" });
+
+    // Send response
+    res.json({ token });
+  } catch (err) {
+    console.error("Login error:", err);
+    res.status(500).json({ message: err.message });
+  }
+});
 
 function getInitials(firstName, lastName) {
   const firstInitial = firstName?.trim()?.[0]?.toUpperCase() || '';

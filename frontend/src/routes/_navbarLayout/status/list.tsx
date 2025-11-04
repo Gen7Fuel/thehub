@@ -98,15 +98,15 @@ function RouteComponent() {
     }
   };
 
-  const access = user?.access || '{}'; //markpoint
-  // const access = user?.access || {};
+  // const access = user?.access || '{}'; //markpoint
+  const access = user?.access || {};
 
   return (
     <div className="p-4 border border-dashed border-gray-300 rounded-md">
       <span className='flex justify-between'>
       <h2 className="text-lg font-bold mb-2">Status Sales List</h2>
-      { access.component_status_pdf && //markpoint
-      // { access.status.pdf &&
+      {/* { access.component_status_pdf && //markpoint */}
+      { access.status.pdf &&
         <Button onClick={() => generatePDF(statusSales)} className="mb-4">
           PDF
         </Button>

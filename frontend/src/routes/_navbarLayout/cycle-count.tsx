@@ -26,8 +26,8 @@ function RouteComponent() {
   const { user } = useAuth();
 
   // Retrieve access permissions from Auth provider
-  const access = user?.access || "{}" //markpoint
-  // const access = user?.access || {}
+  // const access = user?.access || "{}" //markpoint
+  const access = user?.access || {}
 
   return (
     <div className="pt-16 flex flex-col items-center">
@@ -59,16 +59,16 @@ function RouteComponent() {
         >
           <Button
             {...(!isInventoryActive && { variant: 'outline' } as object)}
-            className={access.component_cycle_count_console ? 'rounded-none' : 'rounded-l-none'} //markpoint
-            // className={access.cycleCount.console ? 'rounded-none' : 'rounded-l-none'}
+            // className={access.component_cycle_count_console ? 'rounded-none' : 'rounded-l-none'} //markpoint
+            className={access.cycleCount.console ? 'rounded-none' : 'rounded-l-none'}
           >
             Inventory
           </Button>
         </Link>
 
         {/* Console tab button, shown only if user has access */}
-        {access.component_cycle_count_console && ( //markpoint
-        // {access.cycleCount.console && (
+        {/* {access.component_cycle_count_console && ( //markpoint */}
+        {access.cycleCount.console && (
           <Link to="/cycle-count/console" activeOptions={{ exact: true }}>
             <Button
               {...(!isConsoleActive && { variant: 'outline' } as object)}

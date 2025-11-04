@@ -116,8 +116,8 @@ function RouteComponent() {
     fetchPurchaseOrders();
   }, [date, stationName]);
 
-  const access = user?.access || '{}' //markpoint
-  // const access = user?.access || {}
+  // const access = user?.access || '{}' //markpoint
+  const access = user?.access || {}
 
   return (
     <div className="p-4 border border-dashed border-gray-300 rounded-md">
@@ -158,8 +158,8 @@ function RouteComponent() {
                 <td className="border-dashed border-t border-gray-300 px-4 py-2">{order.amount.toFixed(2)}</td>
                 <td className="border-dashed border-t border-gray-300 px-4 py-2">
                   {
-                    access.component_po_pdf && //markpoint
-                    // access.po.pdf && 
+                    // access.component_po_pdf && //markpoint
+                    access.po.pdf && 
                     <Button onClick={() => generatePDF(order)}>PDF</Button>
                   }
                 </td>

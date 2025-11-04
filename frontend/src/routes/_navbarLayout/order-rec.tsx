@@ -22,16 +22,16 @@ function RouteComponent() {
   const isDashboardActive = matchRoute({ to: '/order-rec/workflow' })
   const { user } = useAuth();
   // Retrieve access permissions from auth provider
-  const access = user?.access || '{}' //markpoint
-  // const access = user?.access || {}
+  // const access = user?.access || '{}' //markpoint
+  const access = user?.access || {}
 
   return (
     <div className="pt-16 flex flex-col items-center">
       {/* Grouped navigation buttons for Order Rec sections */}
       <div className="flex mb-4">
         {/* Upload tab button, shown only if user has upload access */}
-        {access.component_order_rec_upload && ( //markpoint
-        // {access.orderRec.upload && (
+        {/* {access.component_order_rec_upload && ( //markpoint */}
+        {access.orderRec.upload && (
           <Link to="/order-rec" activeOptions={{ exact: true }}>
             <Button
               {...(isUploadActive ? {} : { variant: 'outline' } as object)}
@@ -46,21 +46,21 @@ function RouteComponent() {
         <Link to="/order-rec/list" search={{ site: user?.location || '' }}>
           <Button
             {...(isListActive ? {} : { variant: 'outline' } as object)}
-            className={`${access.component_order_rec_upload ? 'rounded-l-none rounded-r-none' : ''}`} //markpoint
-            // className={`${access.orderRec.upload ? 'rounded-l-none rounded-r-none' : ''}`}
+            // className={`${access.component_order_rec_upload ? 'rounded-l-none rounded-r-none' : ''}`} //markpoint
+            className={`${access.orderRec.upload ? 'rounded-l-none rounded-r-none' : ''}`}
           >
             List
           </Button>
         </Link>
 
         {/* Workflow tab button, shown only if user has workflow access */}
-        {access.component_order_rec_workflow && ( //markpoint
-        // {access.orderRec.workflow && (
+        {/* {access.component_order_rec_workflow && ( //markpoint */}
+        {access.orderRec.workflow && (
           <Link to="/order-rec/workflow">
             <Button
               {...(isDashboardActive ? {} : { variant: 'outline' } as object)}
-              className={`${access.component_order_rec_upload ? 'rounded-l-none' : ''}`} //markpoint
-              // className={`${access.orderRec.upload ? 'rounded-l-none' : ''}`}
+              // className={`${access.component_order_rec_upload ? 'rounded-l-none' : ''}`} //markpoint
+              className={`${access.orderRec.upload ? 'rounded-l-none' : ''}`}
             >
               Workflow
             </Button>

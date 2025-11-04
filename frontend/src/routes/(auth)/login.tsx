@@ -34,35 +34,19 @@ function RouteComponent() {
     try {
       const response = await axios.post(`${domain}/api/auth/login`, { email, password })
       const { token, email: userEmail } = response.data
-
-      // Save data to localStorage
+      // Save token to localStorage
       localStorage.setItem('token', token)
-      // localStorage.setItem('email', userEmail)
-      // localStorage.setItem('location', location)
-      // localStorage.setItem('name', name)
-      // localStorage.setItem('initials', initials)
-      // localStorage.setItem('access', access)
-      // localStorage.setItem('timezone', timezone)
-      
-      // localStorage.removeItem('email')
-      // localStorage.removeItem('location')
-      // localStorage.removeItem('access')
-      // localStorage.removeItem('timezone')
-      // localStorage.removeItem('initials')
-      // localStorage.removeItem('name')
-    
       refreshAuth()
-
       console.log(`User ${userEmail} logged in, will join room automatically via SignalContext`)
-
       navigate({ to: '/' })
-
-      // reconnect();
-
-    } catch (err) {
-      setError('Invalid email or password. Please try again.')
-    }
+    } catch (err: any) {
+      if (err.response && err.response.data && err.response.data.message) {
+        setError(err.response.data.message);
+      } else {
+        setError('Something went wrong. Please try again.');
+      }
   }
+};
 
   return (
     <div className="flex items-center justify-center h-screen">
