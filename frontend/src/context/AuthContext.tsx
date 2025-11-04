@@ -233,41 +233,25 @@ import { jwtDecode } from "jwt-decode";
 const flattenPermissions = (permissionTree: any[] = []) => {
   const result: Record<string, any> = {};
 
-  const traverse = (nodes: any[], prefix = "") => {
+  const traverse = (nodes: any[], target: Record<string, any>) => {
     for (const node of nodes) {
-      const key = prefix ? `${prefix}.${node.name}` : node.name;
+      const hasChildren = node.children && node.children.length > 0;
 
-      // flat key for quick access
-      result[key] = !!node.value;
-
-      // build nested structure safely
-      const parts = key.split(".");
-      let current = result;
-      for (let i = 0; i < parts.length; i++) {
-        const part = parts[i];
-
-        if (i === parts.length - 1) {
-          if (typeof current[part] === "object" && current[part] !== null) {
-            current[part].value = !!node.value;
-          } else {
-            current[part] = !!node.value;
-          }
-        } else {
-          if (!current[part] || typeof current[part] !== "object") {
-            current[part] = {};
-          }
-          current = current[part];
-        }
-      }
-
-      // recurse on children
-      if (node.children && node.children.length > 0) {
-        traverse(node.children, key);
+      if (hasChildren) {
+        // create nested object for children
+        target[node.name] = target[node.name] || {};
+        // assign root boolean
+        target[node.name].value = !!node.value;
+        // recursively attach children directly at this level
+        traverse(node.children, target[node.name]);
+      } else {
+        // leaf node → assign boolean
+        target[node.name] = !!node.value;
       }
     }
   };
 
-  traverse(permissionTree);
+  traverse(permissionTree, result);
   return result;
 };
 
