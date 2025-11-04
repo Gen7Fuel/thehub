@@ -44,12 +44,12 @@ function RouteComponent() {
       // localStorage.setItem('access', access)
       // localStorage.setItem('timezone', timezone)
       
-      localStorage.removeItem('email')
-      localStorage.removeItem('location')
-      localStorage.removeItem('access')
-      localStorage.removeItem('timezone')
-      localStorage.removeItem('initials')
-      localStorage.removeItem('name')
+      // localStorage.removeItem('email')
+      // localStorage.removeItem('location')
+      // localStorage.removeItem('access')
+      // localStorage.removeItem('timezone')
+      // localStorage.removeItem('initials')
+      // localStorage.removeItem('name')
     
       refreshAuth()
 

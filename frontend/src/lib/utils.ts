@@ -398,3 +398,10 @@ export const getDecodedToken = (): User | null => {
   }
 };
 
+export function camelCaseToCapitalized(text: String) {
+  return text
+    .replace(/([a-z])([A-Z])/g, '$1 $2') // Insert space before each uppercase letter
+    .split(' ')
+    .map(word => word.charAt(0).toUpperCase() + word.slice(1)) // Capitalize first letter
+    .join(' ');
+}

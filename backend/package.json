@@ -12,6 +12,7 @@
     "express": "^4.21.2",
     "ioredis": "^5.8.2",
     "jsonwebtoken": "^9.0.2",
+    "lodash": "^4.17.21",
     "luxon": "^3.7.2",
     "mongoose": "^8.9.3",
     "mssql": "^11.0.1",
