@@ -14,15 +14,15 @@ export const Route = createFileRoute('/_navbarLayout/')({
 function App() {
   const { user } = useAuth();
   // Retrieve access permissions from auth provider
-  const access = user?.access || '{}' //markpoint
-  // const access = user?.access || {}
+  // const access = user?.access || '{}' //markpoint
+  const access = user?.access || {}
 
   return (
     <div className="flex items-center justify-center min-h-screen bg-gray-50">
       <div className="flex flex-col gap-8 w-full max-w-3xl px-4 pt-16 pb-8">
         {/* Support Section */}
-        {access.module_support && ( //markpoint
-        // {access.support && (
+        {/* {access.module_support && ( //markpoint */}
+        {access.support && (
           <Section title="Support">
             <div className="flex flex-wrap gap-4">
               <Link to="/support">
@@ -34,12 +34,12 @@ function App() {
           </Section>
         )}
         {/* Audits Section */}
-        {access.module_station_audit && ( //markpoint
-        // {access.stationAudit && (
+        {/* {access.module_station_audit && ( //markpoint */}
+        {access.stationAudit && (
           <Section title="Audits">
             <div className="flex flex-wrap gap-4">
-              {access.module_station_audit && ( //markpoint
-              // {access.stationAudit && (
+              {/* {access.module_station_audit && ( //markpoint */}
+              {access.stationAudit && (
                 <Link to="/audit">
                   <Button className="w-32 h-32 flex items-center justify-center break-words whitespace-normal text-center">
                     Station Audits
@@ -51,15 +51,15 @@ function App() {
         )}
 
         {/* Inventory Section */}
-        {(access.module_order_rec || access.module_cycle_count) && ( //markpoint
-        // {(access.orderRec || access.cycleCount) && (
+        {/* {(access.module_order_rec || access.module_cycle_count) && ( //markpoint */}
+        {(access.orderRec || access.cycleCount) && (
           <Section title="Inventory">
             <div className="flex flex-wrap gap-4">
               {/* Order Rec button: goes to upload or list based on access */}
-              {access.module_order_rec && ( //markpoint
-                access.component_order_rec_upload ? (
-              // {access.orderRec && (
-              //   access.orderRec.upload ? (
+              {/* {access.module_order_rec && ( //markpoint
+                access.component_order_rec_upload ? ( */}
+              {access.orderRec && (
+                access.orderRec.upload ? (
                   <Link to="/order-rec">
                     <Button className="w-32 h-32 flex items-center justify-center break-words whitespace-normal text-center">
                       Order Rec
@@ -74,8 +74,8 @@ function App() {
                 )
               )}
               {/* Cycle Count button */}
-              {access.module_cycle_count && ( //markpoint
-              // {access.cycleCount && (
+              {/* {access.module_cycle_count && ( //markpoint */}
+              {access.cycleCount && (
                 <Link to="/cycle-count">
                   <Button className="w-32 h-32 flex items-center justify-center break-words whitespace-normal text-center">
                     Cycle Count
@@ -83,8 +83,8 @@ function App() {
                 </Link>
               )}
               {/* Vendor Management button */}
-              {access.module_vendor && ( //markpoint
-              // {access.vendor && (
+              {/* {access.module_vendor && ( //markpoint */}
+              {access.vendor && (
                 <Link to="/vendor">
                   <Button className="w-32 h-32 flex items-center justify-center break-words whitespace-normal text-center">
                     Vendor Management
@@ -96,13 +96,13 @@ function App() {
         )}
 
         {/* Accounts Receivable Section */}
-        {(access.module_fleet_card_assignment || access.module_po || access.module_kardpoll) && ( //markpoint
-        // {(access.fleetCardAssignment || access.po || access.kardpoll) && (
+        {/* {(access.module_fleet_card_assignment || access.module_po || access.module_kardpoll) && ( //markpoint */}
+        {(access.fleetCardAssignment || access.po || access.kardpoll) && (
           <Section title="Accounts Receivable">
             <div className="flex flex-wrap gap-4">
               {/* Fleet Card Assignment button */}
-              {access.module_fleet_card_assignment && ( //markpoint
-              // {access.fleetCardAssignment && (
+              {/* {access.module_fleet_card_assignment && ( //markpoint */}
+              {access.fleetCardAssignment && (
                 <Link to="/fleet">
                   <Button className="w-32 h-32 flex items-center justify-center break-words whitespace-normal text-center">
                     Fleet Card Assignment
@@ -110,8 +110,8 @@ function App() {
                 </Link>
               )}
               {/* Purchase Orders button */}
-              {access.module_po && ( //markpoint
-              // {access.po && (
+              {/* {access.module_po && ( //markpoint */}
+              {access.po && (
                 <Link to="/po">
                   <Button className="w-32 h-32 flex items-center justify-center break-words whitespace-normal text-center">
                     Purchase Orders
@@ -132,8 +132,8 @@ function App() {
         )}
 
         {/* Accounts Payable Section */}
-        {access.module_payables && ( //markpoint
-        // {access.payables && (
+        {/* {access.module_payables && ( //markpoint */}
+        {access.payables && (
           <Section title="Accounts Payable">
             <div className="flex flex-wrap gap-4">
               <Link to="/payables">
@@ -173,8 +173,8 @@ function App() {
         )} */} 
 
         {/* Sales Section */}
-        {access.module_status && ( //markpoint
-        // {access.status && (
+        {/* {access.module_status && ( //markpoint */}
+        {access.status && (
           <Section title="Sales">
             <div className="flex flex-wrap gap-4">
               <Link to="/status">

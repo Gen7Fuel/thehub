@@ -211,4 +211,39 @@ router.put("/:userId/permissions", async (req, res) => {
   }
 });
 
+// PATCH /api/users/:id/active 
+// handles users active and inactive status
+// PATCH /api/users/:id/active
+router.patch("/:id/active", async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { is_active } = req.body;
+
+    const user = await User.findById(id);
+    if (!user) return res.status(404).json({ message: "User not found" });
+
+    user.is_active = is_active;
+
+    // If user is being deactivated, clear sensitive fields
+    if (is_active === false) {
+      user.role = null;
+      user.custom_permissions = [];
+
+      // Set all site_access values to false
+      if (user.site_access && user.site_access.size > 0) {
+        for (const key of user.site_access.keys()) {
+          user.site_access.set(key, false);
+        }
+      }
+    }
+
+    await user.save();
+
+    res.json({ message: "User status updated", user });
+  } catch (error) {
+    console.error("Error updating user active status:", error);
+    res.status(500).json({ message: "Server error" });
+  }
+});
+
 module.exports = router;

@@ -566,8 +566,8 @@ function RouteComponent() {
     URL.revokeObjectURL(url);
   }
 
-  const access = user?.access || '{}' //markpoint
-  // const access = user?.access || {}
+  // const access = user?.access || '{}' //markpoint
+  const access = user?.access || {}
 
   return (
     <div className="container mx-auto p-6 max-w-6xl">
@@ -578,8 +578,8 @@ function RouteComponent() {
         </span>
         <div className="flex gap-2">
         {/* If the order rec vendor is 'CoreMark' then show another button here called 'Template' */}
-        {access.component_order_rec_id_delete_button && ( //markpoint
-        // {access.orderRec.id.deleteButton && (
+        {/* {access.component_order_rec_id_delete_button && ( //markpoint */}
+        {access.orderRec.id.deleteButton && (
         <Button
           variant="destructive"
           onClick={handleDelete}
