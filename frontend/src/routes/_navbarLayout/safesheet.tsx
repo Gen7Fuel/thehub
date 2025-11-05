@@ -50,7 +50,7 @@ function RouteComponent() {
   // const [entryType, setEntryType] = useState<'cashIn' | 'cashExpenseOut' | 'cashDepositBank'>('cashIn')
 
   // selection of dashed cells (only active when shouldHighlight returns true)
-  const [selectedCells, setSelectedCells] = useState<Set<string>>(new Set())
+  // const [selectedCells, setSelectedCells] = useState<Set<string>>(new Set())
 
   // refs for inline editable last-row TDs (use HTMLTableCellElement since cells are contentEditable)
   const descRef = useRef<HTMLTableCellElement | null>(null)
@@ -215,7 +215,7 @@ function RouteComponent() {
       if (cashInRef.current) cashInRef.current.innerText = ''
       if (cashExpenseRef.current) cashExpenseRef.current.innerText = ''
       if (cashDepositRef.current) cashDepositRef.current.innerText = ''
-      setSelectedCells(new Set())
+      // setSelectedCells(new Set())
       setError(null)
     } catch (err: any) {
       console.error('addEntry error', err)
