@@ -16,14 +16,13 @@ function App() {
   // Retrieve access permissions from auth provider
   // const access = user?.access || '{}' //markpoint
   const access = user?.access || {}
-  console.log("acces from index:", access)
 
   return (
     <div className="flex items-center justify-center min-h-screen bg-gray-50">
       <div className="flex flex-col gap-8 w-full max-w-3xl px-4 pt-16 pb-8">
         {/* Support Section */}
         {/* {access.module_support && ( //markpoint */}
-        {access.support.value && (
+        {access.support && (
           <Section title="Support">
             <div className="flex flex-wrap gap-4">
               <Link to="/support">
