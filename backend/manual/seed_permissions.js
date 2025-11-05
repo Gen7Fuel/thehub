@@ -6,37 +6,93 @@ const connectDB = require("../config/db");
 dotenv.config();
 
 const allPermissions = [
-    { name:"component_settings" },
-    { name:"component_po_location_filter" },
-    { name:"component_po_pdf" },
-    { name:"component_po_edit" },
-    { name:"component_daily_reports_location_filter" },
-    { name:"component_status_pdf" },
-    { name:"component_order_rec_upload" },
-    { name:"module_po" },
-    { name:"module_kardpoll" },
-    { name:"module_reports" },
-    { name:"module_status" },
-    { name:"module_status_location_filter" },
-    { name:"module_daily_reports" },
-    { name:"module_order_rec" },
-    { name:"module_payables" },
-    { name:"module_fleet_card_assignment" },
-    { name:"module_cycle_count" },
-    { name:"module_vendor" },
-    { name:"module_audit" }
-]
+  {
+    module_name: "dashboard",
+    structure: [],
+  },
+  {
+    module_name: "settings",
+    structure: [],
+  },
+  {
+    module_name: "stationAudit",
+    structure: [
+      { name: "template", children: [] },
+      { name: "interface", children: [] },
+    ],
+  },
+  {
+    module_name: "cycleCount",
+    structure: [
+      { name: "console", children: [] },
+    ],
+  },
+  {
+    module_name: "support",
+    structure: [],
+  },
+  {
+    module_name: "orderRec",
+    structure: [
+      { name: "upload", children: [] },
+      {
+        name: "id",
+        children: [
+          { name: "deleteButton", children: [] },
+        ],
+      },
+      { name: "workflow", children: [] },
+    ],
+  },
+  {
+    module_name: "fleetCardAssignment",
+    structure: [],
+  },
+  {
+    module_name: "po",
+    structure: [
+      { name: "pdf", children: [] },
+    ],
+  },
+  {
+    module_name: "kardpoll",
+    structure: [],
+  },
+  {
+    module_name: "payables",
+    structure: [],
+  },
+  {
+    module_name: "dailyReports",
+    structure: [],
+  },
+  {
+    module_name: "reports",
+    structure: [],
+  },
+  {
+    module_name: "status",
+    structure: [
+      { name: "pdf", children: [] },
+    ],
+  },
+];
 
 const seedPermissionsDB = async () => {
+  try {
     await connectDB();
 
     await Permission.deleteMany({});
     await Permission.insertMany(allPermissions);
 
-    console.log("Permissions seeded!");
-    console.log(`Seeded ${allPermissions.length} permissions`);
-    
+    console.log("Permissions seeded successfully!");
+    console.log(`Total modules inserted: ${allPermissions.length}`);
+
     mongoose.connection.close();
-  };
-  
-  seedPermissionsDB();
+  } catch (error) {
+    console.error("Error seeding permissions:", error);
+    mongoose.connection.close();
+  }
+};
+
+seedPermissionsDB();

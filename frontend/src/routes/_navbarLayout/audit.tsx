@@ -25,14 +25,16 @@ function RouteComponent() {
   
   const { user } = useAuth();
   // Retrieve access permissions from decoded token
-  const access = user?.access || '{}'
+  // const access = user?.access || '{}' //markpoint
+  const access = user?.access || {}
 
   return (
     <div className="pt-16 flex flex-col items-center">
       {/* Grouped navigation buttons for audit sections */}
       <div className="flex mb-4">
         {/* Show Templates button if user has access */}
-        {access.component_station_audit_template && (
+        {/* {access.component_station_audit_template && ( //markpoint */}
+        {access.stationAudit.template && (
           <Link to="/audit/templates">
             <Button
               {...(isCreateActive ? {} : { variant: 'outline' } as object)}
@@ -51,7 +53,8 @@ function RouteComponent() {
             Checklist
           </Button>
         </Link>
-        {access.component_station_audit_interface && (
+        {/* {access.component_station_audit_interface && ( //markpoint */}
+        {access.stationAudit.interface && (
           <Link to="/audit/interface">
             <Button
               {...(!isInterfaceActive && { variant: 'outline' } as object)}

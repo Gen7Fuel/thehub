@@ -29,7 +29,11 @@ export default defineConfig({
     },
   },
   server: {
-    watch: {
+    watch: isDocker ? {
+      usePolling: true,
+      interval: 1000,
+      ignored: ['**/node_modules/**', '**/public/**'],
+    } : {
       usePolling: true,
     },
     proxy: isDocker 
