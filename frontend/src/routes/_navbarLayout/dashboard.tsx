@@ -258,7 +258,9 @@ function RouteComponent() {
                       </ul>
                     </CardContent>
                   </Card>
+                  <CashOnHandDisplay site={site} />
                 </div>
+
                 {/* Charts Column */}
                 <div className="w-full md:w-1/2 flex flex-col gap-8">
                   {/* Cycle Counts */}
@@ -342,6 +344,86 @@ function RouteComponent() {
       )}
     </>
   );
+}
+
+function CashOnHandDisplay({ site }: { site: string }) {
+  const [value, setValue] = useState<number | null>(null);
+  const [loadingCash, setLoadingCash] = useState(false);
+  const [errorCash, setErrorCash] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!site) {
+      setValue(null);
+      setErrorCash(null);
+      return;
+    }
+    let mounted = true;
+
+    const fetchCurrent = async () => {
+      setLoadingCash(true);
+      setErrorCash(null);
+      console.log('[CashOnHand] fetching for site:', site);
+      try {
+        const res = await fetch(`/api/safesheets/site/${encodeURIComponent(site)}/current`, {
+          headers: { Authorization: `Bearer ${localStorage.getItem("token")}` },
+        });
+        console.log('[CashOnHand] raw response', res);
+        const body = await res.json().catch(() => null);
+        console.log('[CashOnHand] response body', body);
+        if (!res.ok) throw new Error(body?.error || 'Failed to fetch cash on hand');
+        if (mounted) setValue(Number(body?.cashOnHandSafe ?? null));
+      } catch (err: any) {
+        console.error('[CashOnHand] fetch error', err);
+        if (mounted) setErrorCash(err.message || 'Unknown error');
+      } finally {
+        if (mounted) setLoadingCash(false);
+      }
+    };
+
+    fetchCurrent();
+    const interval = setInterval(fetchCurrent, 60_000); // refresh every 60s
+    return () => {
+      mounted = false;
+      clearInterval(interval);
+    };
+  }, [site]);
+
+  if (!site) return <div className="text-sm text-muted-foreground">No site selected</div>;
+  if (loadingCash) return <div className="text-sm">Loading cash on hand...</div>;
+  if (errorCash) return <div className="text-sm text-red-600">Error: {errorCash}</div>;
+  return (
+    <Card className="w-[260px] mt-6">
+      <CardHeader className="pb-2">
+        <CardTitle>Cash on hand (safe)</CardTitle>
+      </CardHeader>
+
+      <CardContent className="flex flex-col gap-2">
+        {loadingCash ? (
+          <div className="text-sm">Loading...</div>
+        ) : errorCash ? (
+          <div className="text-sm text-red-600">Error: {errorCash}</div>
+        ) : (
+          <div className="text-2xl font-semibold">
+            ${value !== null ? value.toFixed(2) : '—'}
+          </div>
+        )}
+
+        <div className="text-xs text-muted-foreground">
+          {site ? `Site: ${site}` : 'No site selected'}
+        </div>
+      </CardContent>
+
+      <CardFooter className="text-xs text-muted-foreground">
+        {/* optional: last updated timestamp could go here */}
+        Updated periodically
+      </CardFooter>
+    </Card>
+  )
+  // return (
+  //   <div className="">
+  //     Cash on hand (safe): <span className="font-semibold">${value !== null ? value.toFixed(2) : '—'}</span>
+  //   </div>
+  // );
 }
 
 // ----------------------------
