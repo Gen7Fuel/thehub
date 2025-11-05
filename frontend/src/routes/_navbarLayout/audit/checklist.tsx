@@ -175,7 +175,8 @@ function RouteComponent() {
 
     axios
       .get("/api/audit", {
-        headers: { Authorization: `Bearer ${localStorage.getItem("token")}` },
+        headers: { Authorization: `Bearer ${localStorage.getItem("token")}`,
+        "X-Required-Permission": "stationAudit", },
       })
       .then(res => {
         const filtered = res.data.filter(
@@ -192,7 +193,7 @@ function RouteComponent() {
     // fetch open issues
     axios
       .get<OpenIssueResponse>(`/api/audit/open-issues?site=${stationName}`, {
-        headers: { Authorization: `Bearer ${localStorage.getItem("token")}` },
+        headers: { Authorization: `Bearer ${localStorage.getItem("token")}`, },
       })
       .then(res => setOpenIssues(res.data.items || [])) // only keep the array
       .catch(() => console.warn("Failed to load open issues"));

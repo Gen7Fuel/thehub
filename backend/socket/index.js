@@ -35,6 +35,16 @@ function setupSocket(server) {
   io.on("connection", (socket) => {
     console.log("✅ New connection:", socket.id);
 
+  // After authSocket middleware has verified the user
+  const userId = socket.user?.firstName?.toString(); // or socket.user.id depending on your schema
+
+  if (userId) {
+    socket.join(`${userId}'s room`);
+    console.log(`👥 User ${userId} joined room with socket ${socket.id}`);
+  } else {
+    console.log("⚠️ No user ID found on socket, cannot join room.");
+  }
+
     // Register per-socket modules
     setupCycleCountSocket(io, socket);
 

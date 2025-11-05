@@ -179,7 +179,9 @@ router.post("/login", async (req, res) => {
     };
 
     // Sign JWT
-    const token = jwt.sign(payload, process.env.JWT_SECRET, { expiresIn: "1d" });
+    const expiresInSeconds = getSecondsUntilNext9AMUTC();
+
+    const token = jwt.sign(payload, process.env.JWT_SECRET, {expiresIn: expiresInSeconds});
 
     // Send response
     res.json({ token });
@@ -188,6 +190,27 @@ router.post("/login", async (req, res) => {
     res.status(500).json({ message: err.message });
   }
 });
+
+function getSecondsUntilNext9AMUTC() {
+  const now = new Date();
+
+  // Create a new Date set to today's 9 AM UTC
+  const next9AM = new Date(Date.UTC(
+    now.getUTCFullYear(),
+    now.getUTCMonth(),
+    now.getUTCDate(),
+    9, 0, 0, 0
+  ));
+
+  // If it's already past 9 AM UTC today, go to tomorrow
+  if (now >= next9AM) {
+    next9AM.setUTCDate(next9AM.getUTCDate() + 1);
+  }
+
+  const diffMs = next9AM - now;
+  const diffSeconds = Math.floor(diffMs / 1000);
+  return diffSeconds;
+}
 
 function getInitials(firstName, lastName) {
   const firstInitial = firstName?.trim()?.[0]?.toUpperCase() || '';
@@ -238,6 +261,41 @@ router.post("/verify-password", async (req, res) => {
   } catch (err) {
     console.error("Error verifying password:", err);
     res.status(500).json({ error: "Internal server error" });
+  }
+});
+
+router.post("/refresh-token", async (req, res) => {
+  try {
+    const authHeader = req.header("Authorization");
+    if (!authHeader?.startsWith("Bearer ")) {
+      return res.status(401).json({ message: "No token, authorization denied" });
+    }
+    
+    const token = authHeader.replace("Bearer ", "").trim();
+    const decoded = jwt.verify(token, process.env.JWT_SECRET);
+
+    const user = await User.findById(decoded.id);
+    if (!user) return res.status(404).json({ message: "User not found" });
+
+    // Issue a new token
+    const payload = {
+      id: user._id,
+      email: user.email,
+      location: user.stationName,
+      isSupport: user.isSupport,
+      name: `${user.firstName} ${user.lastName}`,
+      initials: getInitials(user.firstName, user.lastName),
+      permissions: mergedPermissions,
+      site_access: user.site_access,
+      access: user.access,
+      timezone,
+    };
+    const newToken = jwt.sign(payload, process.env.JWT_SECRET, {expiresIn: expiresInSeconds});
+
+    res.json({ token: newToken });
+  } catch (err) {
+    console.error("Error refreshing token:", err);
+    res.status(401).json({ message: "Failed to refresh token" });
   }
 });
 
