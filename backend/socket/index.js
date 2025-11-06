@@ -36,14 +36,14 @@ function setupSocket(server) {
     console.log("✅ New connection:", socket.id);
 
   // After authSocket middleware has verified the user
-  const userId = socket.user?.firstName?.toString(); // or socket.user.id depending on your schema
+  const userId = socket.user?._id.toString(); // or socket.user.id depending on your schema
 
-  if (userId) {
-    socket.join(`${userId}'s room`);
-    console.log(`👥 User ${userId} joined room with socket ${socket.id}`);
-  } else {
-    console.log("⚠️ No user ID found on socket, cannot join room.");
-  }
+  socket.on("join-room", (userId) => {
+    if (userId) {
+      socket.join(userId);
+      console.log(`📦 ${socket.id} joined room: ${userId}`);
+    }
+  });
 
     // Register per-socket modules
     setupCycleCountSocket(io, socket);

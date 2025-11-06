@@ -2,6 +2,7 @@ import { Link, useMatchRoute, useNavigate } from '@tanstack/react-router'
 import { Button } from '../ui/button'
 import { useEffect, useState } from 'react'
 import { isTokenExpired } from '../../lib/utils'
+import { getSocket } from "@/lib/websocket";
 // import { getUserFromToken, useSocket } from '@/context/SignalContext'
 import { useAuth } from "@/context/AuthContext";
 import { HelpCircle } from 'lucide-react'
@@ -97,9 +98,33 @@ export default function Navbar() {
 
   // Get access permissions from localStorage
 
-  const { user } = useAuth();
-  // const access = user?.access || '{}' //markpoint
-  const access = user?.access || {}
+  const { user, refreshTokenFromBackend  } = useAuth();
+    // Retrieve access permissions from auth provider
+    // const access = user?.access || '{}' //markpoint
+    const access = user?.access || {}
+    const handlePermissionsUpdated = async () => {
+      // console.log("Permissions update received via socket");
+      // console.log("Before update:",localStorage.getItem('token'));
+      await refreshTokenFromBackend();
+      // console.log("After update:",localStorage.getItem('token'));
+  };
+  useEffect(() => {
+    const socket = getSocket();
+    
+    socket.on("connect", () => {
+      if(user?.id){
+        socket.emit("join-room", user?.id);
+      }
+      // console.log("socket from auth ", socket.id);
+    });
+    // console.log("Listeners now:", socket.listeners("permissions-updated"));
+      
+    socket.on("permissions-updated", handlePermissionsUpdated);
+  
+    return () => {
+      socket.off("permissions-updated", handlePermissionsUpdated);
+    };
+  },[user])
 
   let module_slug = window.location.href.split('/')[3]
 

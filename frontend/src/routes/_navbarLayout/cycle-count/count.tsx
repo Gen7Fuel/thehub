@@ -1,4 +1,4 @@
-import { createFileRoute } from '@tanstack/react-router'
+import { createFileRoute, useNavigate } from '@tanstack/react-router'
 import { useEffect, useState } from "react";
 import { LocationPicker } from "@/components/custom/locationPicker";
 import TableWithInputs from "@/components/custom/TableWithInputs";
@@ -22,6 +22,7 @@ function RouteComponent() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [saving, setSaving] = useState(false);
+  const navigate = useNavigate()
 
   // Track FOH and BOH values for each item
   const [counts, setCounts] = useState<{ [id: string]: { foh: string; boh: string } }>({});
@@ -105,25 +106,39 @@ function RouteComponent() {
   //     socket.off("cycle-count-updated", handleUpdate);
   //   };
   // }, [stationName]);
-
-  const handleInputBlur = (id: string, field: "foh" | "boh", value: string) => {
+  const handleInputBlur = async (
+    id: string,
+    field: "foh" | "boh",
+    value: string
+  ) => {
     console.log("📤 SENDING cycle-count-field-updated:");
     console.log("  - Item ID:", id);
     console.log("  - Field:", field);
     console.log("  - Value:", value);
-    
+
     const socket = getSocket();
     console.log("📤 Using socket:", socket.id || "not connected");
-    
-    // Save to backend
-    fetch("/api/cycle-count/save-item", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${localStorage.getItem("token") || ""}`,
-      },
-      body: JSON.stringify({ _id: id, field, value }),
-    });
+
+    try {
+      const res = await fetch("/api/cycle-count/save-item", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${localStorage.getItem("token") || ""}`,
+          "X-Required-Permission": "cycleCount",
+        },
+        body: JSON.stringify({ _id: id, field, value }),
+      });
+
+      if (res.status === 403) {
+        navigate({ to: "/no-access" });
+        return;
+      }
+
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    } catch (err) {
+      console.error("Error saving cycle count item:", err);
+    }
 
     // Emit websocket event for real-time update
     socket.emit("cycle-count-field-updated", { itemId: id, field, value });
@@ -204,67 +219,63 @@ function RouteComponent() {
     if (!stationName) return;
     setLoading(true);
     setError("");
-    fetch(`/api/cycle-count/daily-items?site=${encodeURIComponent(stationName)}&chunkSize=20&userTimezone=${encodeURIComponent(Intl.DateTimeFormat().resolvedOptions().timeZone)}`, {
-      headers: {
-        Authorization: `Bearer ${localStorage.getItem("token") || ""}`,
-      },
-    })
-      .then(res => res.json())
-      .then(data => {
+
+    const timezone = Intl.DateTimeFormat().resolvedOptions().timeZone;
+
+    fetch(
+      `/api/cycle-count/daily-items?site=${encodeURIComponent(
+        stationName
+      )}&chunkSize=20&userTimezone=${encodeURIComponent(timezone)}`,
+      {
+        headers: {
+          Authorization: `Bearer ${localStorage.getItem("token") || ""}`,
+          "X-Required-Permission": "cycleCount",
+        },
+      }
+    )
+      .then(async (res) => {
+        if (res.status === 403) {
+          navigate({ to: "/no-access" });
+          return null;
+        }
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        return res.json();
+      })
+      .then((data) => {
+        if (!data) return;
+
         setItems(data.items || []);
         setFlaggedItems(data.flaggedItems || []);
+
         if (!data.items) setError(data.message || "Failed to fetch items");
-        // Initialize counts state for each item (flagged + daily)
+
         const initialCounts: { [id: string]: { foh: string; boh: string } } = {};
         const allItems = [...(data.flaggedItems || []), ...(data.items || [])];
-        // const today = new Date();
-        // today.setHours(0, 0, 0, 0);
-        // allItems.forEach((item: any) => {
-        //   const updatedAt = item.updatedAt ? new Date(item.updatedAt) : null;
-        //   const isToday =
-        //     updatedAt &&
-        //     updatedAt >= today &&
-        //     updatedAt < new Date(today.getTime() + 24 * 60 * 60 * 1000);
 
-        //   initialCounts[item._id] = {
-        //     foh:
-        //       isToday && item.foh != null && item.foh !== 0
-        //         ? String(item.foh)
-        //         : "",
-        //     boh:
-        //       isToday && item.boh != null && item.boh !== 0
-        //         ? String(item.boh)
-        //         : ""
-        //   };
-        // });
-        const timezone = Intl.DateTimeFormat().resolvedOptions().timeZone;
         const now = DateTime.now().setZone(timezone);
-        const todayStart = now.startOf('day');
+        const todayStart = now.startOf("day");
         const tomorrowStart = todayStart.plus({ days: 1 });
 
         allItems.forEach((item: any) => {
-          const updatedAt = item.updatedAt ? DateTime.fromISO(item.updatedAt).setZone(timezone) : null;
-          const isToday =
-            updatedAt &&
-            updatedAt >= todayStart &&
-            updatedAt < tomorrowStart;
+          const updatedAt = item.updatedAt
+            ? DateTime.fromISO(item.updatedAt).setZone(timezone)
+            : null;
+          const isToday = updatedAt && updatedAt >= todayStart && updatedAt < tomorrowStart;
 
           initialCounts[item._id] = {
-            foh:
-              isToday && item.foh != null
-                ? String(item.foh)
-                : "",
-            boh:
-              isToday && item.boh != null
-                ? String(item.boh)
-                : ""
+            foh: isToday && item.foh != null ? String(item.foh) : "",
+            boh: isToday && item.boh != null ? String(item.boh) : "",
           };
         });
+
         setCounts(initialCounts);
       })
-      .catch(() => setError("Failed to fetch items"))
+      .catch((err) => {
+        console.error("Failed to fetch items:", err);
+        setError("Failed to fetch items");
+      })
       .finally(() => setLoading(false));
-  }, [stationName]);
+  }, [stationName, navigate]);
 
   const handleInputChange = (id: string, field: "foh" | "boh", value: string) => {
     setCounts(prev => ({

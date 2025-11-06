@@ -350,8 +350,9 @@
 // };
 import { createContext, useContext, useState, useEffect, useRef } from "react";
 import { jwtDecode } from "jwt-decode";
-import { getSocket } from "@/lib/websocket";
+// import { getSocket } from "@/lib/websocket";
 import axios from "axios";
+import { domain } from '@/lib/constants'
 
 /* -----------------------------------------------------
    Flatten Permissions (underscore + nested)
@@ -394,6 +395,7 @@ interface AuthContextType {
   user: User | null;
   setUser: React.Dispatch<React.SetStateAction<User | null>>;
   refreshAuth: () => void;
+  refreshTokenFromBackend: () => void;
 }
 
 /* -----------------------------------------------------
@@ -447,13 +449,36 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
   /* -----------------------------------------------------
      Fetch fresh JWT from backend
   ----------------------------------------------------- */
+  // const refreshTokenFromBackend = async () => {
+  //   try {
+  //     const response = await axios.post(
+  //       `${domain}/api/auth/refresh-token`,
+  //     );
+  //     const newToken = response.data.token;
+  //     if (newToken) {
+  //       localStorage.setItem("token", newToken);
+  //       refreshAuth();
+  //     }
+  //   } catch (err) {
+  //     console.error("Failed to refresh token from backend:", err);
+  //   }
+  // };
   const refreshTokenFromBackend = async () => {
     try {
-      const response = await axios.post("/api/auth/refresh-token",
-        {
-          headers: { Authorization: `Bearer ${localStorage.getItem("token")}`}
-        }
-      ); // adjust endpoint
+      const token = localStorage.getItem("token");
+      if (!token) throw new Error("No token found in localStorage");
+
+      // Decode the user ID from token (optional, or get from your auth context)
+      const decoded: any = jwtDecode(token);
+      const userId = decoded?.id;
+
+      if (!userId) throw new Error("User ID missing in token");
+
+      const response = await axios.post(
+        `${domain}/api/auth/refresh-token`,
+        { userId } // 🔥 send userId explicitly in body
+      );
+
       const newToken = response.data.token;
       if (newToken) {
         localStorage.setItem("token", newToken);
@@ -472,26 +497,11 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
     refreshAuth();
     didMount.current = true;
 
-    const socket = getSocket();
 
-    const handlePermissionsUpdated = async () => {
-      console.log("Permissions update received via socket");
-      await refreshTokenFromBackend();
-    };
-    socket.on("connect", () => {
-      console.log("socket from auth ", socket.id);
-    });
-    console.log("Listeners now:", socket.listeners("permissions-updated"));
-
-    socket.on("permissions-updated", handlePermissionsUpdated);
-
-    return () => {
-      socket.off("permissions-updated", handlePermissionsUpdated);
-    };
   }, []);
 
   return (
-    <AuthContext.Provider value={{ user, setUser, refreshAuth }}>
+    <AuthContext.Provider value={{ user, setUser, refreshAuth, refreshTokenFromBackend }}>
       {children}
     </AuthContext.Provider>
   );

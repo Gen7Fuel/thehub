@@ -84,13 +84,10 @@ const auth = async (req, res, next) => {
     if (!user) return res.status(401).json({ message: "User not found" });
 
     req.user = user;
-    console.log("perm header:",req.header("X-Required-Permission"));
     // Check for permission from header
     const requiredPermission = req.header("X-Required-Permission");
     if (requiredPermission) {
-      console.log("access form user:", decoded.permissions);
       const hasPermission = checkPermission(decoded.permissions, requiredPermission);
-      console.log('check perm:',hasPermission);
       if (!hasPermission) {
         return res
           .status(403)

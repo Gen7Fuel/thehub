@@ -27,21 +27,38 @@ function RouteComponent() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError("");
+
     try {
-      await axios.post("/api/audit/select-templates", {
-        name,
-        description,
-        options: options.filter(s => s.text.trim() !== ""),
-      }, {
-        headers: {
-            Authorization: `Bearer ${localStorage.getItem(`token`)}`
+      const res = await axios.post(
+        "/api/audit/select-templates",
+        {
+          name,
+          description,
+          options: options.filter(s => s.text.trim() !== ""),
+        },
+        {
+          headers: {
+            Authorization: `Bearer ${localStorage.getItem("token")}`,
+            "X-Required-Permission": "stationAudit.template",
+          },
         }
-      });
+      );
+
+      if (res.status === 403) {
+        navigate({ to: "/no-access" });
+        return;
+      }
+
       navigate({ to: "/audit/templates/select/list" });
     } catch (err: any) {
-      setError(err?.response?.data?.message || "Failed to create template");
+      if (err.response?.status === 403) {
+        navigate({ to: "/no-access" });
+      } else {
+        setError(err?.response?.data?.message || "Failed to create template");
+      }
     }
   };
+
 
   return (
     <div className="max-w-lg mx-auto mt-8 p-4 border rounded">

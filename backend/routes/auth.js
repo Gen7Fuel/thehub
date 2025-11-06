@@ -266,18 +266,20 @@ router.post("/verify-password", async (req, res) => {
 
 router.post("/refresh-token", async (req, res) => {
   try {
-    const authHeader = req.header("Authorization");
-    if (!authHeader?.startsWith("Bearer ")) {
-      return res.status(401).json({ message: "No token, authorization denied" });
+    const { userId } = req.body;
+    if (!userId) {
+      return res.status(400).json({ message: "Missing userId in request body" });
     }
-    
-    const token = authHeader.replace("Bearer ", "").trim();
-    const decoded = jwt.verify(token, process.env.JWT_SECRET);
 
-    const user = await User.findById(decoded.id);
+    // Fetch the user from DB
+    const user = await User.findById(userId);
     if (!user) return res.status(404).json({ message: "User not found" });
 
-    // Issue a new token
+    // Rebuild permissions / timezone / access if needed
+    const mergedPermissions = await getMergedPermissions(user);
+    const timezone = user.timezone || "America/Toronto";
+
+    // Prepare new token payload
     const payload = {
       id: user._id,
       email: user.email,
@@ -290,12 +292,17 @@ router.post("/refresh-token", async (req, res) => {
       access: user.access,
       timezone,
     };
-    const newToken = jwt.sign(payload, process.env.JWT_SECRET, {expiresIn: expiresInSeconds});
+
+    // Generate new token
+    const expiresInSeconds = getSecondsUntilNext9AMUTC();
+    const newToken = jwt.sign(payload, process.env.JWT_SECRET, {
+      expiresIn: expiresInSeconds,
+    });
 
     res.json({ token: newToken });
   } catch (err) {
     console.error("Error refreshing token:", err);
-    res.status(401).json({ message: "Failed to refresh token" });
+    res.status(500).json({ message: "Failed to refresh token" });
   }
 });
 

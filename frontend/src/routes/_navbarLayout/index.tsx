@@ -12,11 +12,31 @@ export const Route = createFileRoute('/_navbarLayout/')({
  * Renders sections and navigation buttons based on user access permissions.
  */
 function App() {
-  const { user } = useAuth();
+  const { user  } = useAuth();
   // Retrieve access permissions from auth provider
   // const access = user?.access || '{}' //markpoint
   const access = user?.access || {}
-  console.log('perm from index:',access)
+  // const handlePermissionsUpdated = async () => {
+  //   console.log("Permissions update received via socket");
+  //   console.log("Before update:",localStorage.getItem('token'));
+  //   await refreshTokenFromBackend();
+  //   console.log("After update:",localStorage.getItem('token'));
+  // };
+  // useEffect(() => {
+  //   const socket = getSocket();
+  
+  //   socket.on("connect", () => {
+  //     socket.emit("join-room", user?.id);
+  //     console.log("socket from auth ", socket.id);
+  //   });
+  //   console.log("Listeners now:", socket.listeners("permissions-updated"));
+    
+  //   socket.on("permissions-updated", handlePermissionsUpdated);
+
+  //   return () => {
+  //     socket.off("permissions-updated", handlePermissionsUpdated);
+  //   };
+  // },[user])
 
   return (
     <div className="flex items-center justify-center min-h-screen bg-gray-50">
@@ -36,11 +56,11 @@ function App() {
         )}
         {/* Audits Section */}
         {/* {access.module_station_audit && ( //markpoint */}
-        {access.stationAudit.value && (
+        {access?.stationAudit?.value && (
           <Section title="Audits">
             <div className="flex flex-wrap gap-4">
               {/* {access.module_station_audit && ( //markpoint */}
-              {access.stationAudit.value && (
+              {access?.stationAudit?.value && (
                 <Link to="/audit">
                   <Button className="w-32 h-32 flex items-center justify-center break-words whitespace-normal text-center">
                     Station Audits
@@ -53,14 +73,14 @@ function App() {
 
         {/* Inventory Section */}
         {/* {(access.module_order_rec || access.module_cycle_count) && ( //markpoint */}
-        {(access.orderRec.value || access.cycleCount.value) && (
+        {(access?.orderRec?.value || access?.cycleCount?.value) && (
           <Section title="Inventory">
             <div className="flex flex-wrap gap-4">
               {/* Order Rec button: goes to upload or list based on access */}
               {/* {access.module_order_rec && ( //markpoint
                 access.component_order_rec_upload ? ( */}
-              {access.orderRec.value && (
-                access.orderRec.upload ? (
+              {access?.orderRec?.value && (
+                access?.orderRec?.upload ? (
                   <Link to="/order-rec">
                     <Button className="w-32 h-32 flex items-center justify-center break-words whitespace-normal text-center">
                       Order Rec
@@ -76,7 +96,7 @@ function App() {
               )}
               {/* Cycle Count button */}
               {/* {access.module_cycle_count && ( //markpoint */}
-              {access.cycleCount.value && (
+              {access?.cycleCount?.value && (
                 <Link to="/cycle-count">
                   <Button className="w-32 h-32 flex items-center justify-center break-words whitespace-normal text-center">
                     Cycle Count
@@ -85,7 +105,7 @@ function App() {
               )}
               {/* Vendor Management button */}
               {/* {access.module_vendor && ( //markpoint */}
-              {access.vendor && (
+              {access?.vendor && (
                 <Link to="/vendor">
                   <Button className="w-32 h-32 flex items-center justify-center break-words whitespace-normal text-center">
                     Vendor Management
@@ -98,7 +118,7 @@ function App() {
 
         {/* Accounts Receivable Section */}
         {/* {(access.module_fleet_card_assignment || access.module_po || access.module_kardpoll) && ( //markpoint */}
-        {(access.fleetCardAssignment || access.po.value || access.kardpoll) && (
+        {(access.fleetCardAssignment || access?.po?.value || access.kardpoll) && (
           <Section title="Accounts Receivable">
             <div className="flex flex-wrap gap-4">
               {/* Fleet Card Assignment button */}
@@ -112,7 +132,7 @@ function App() {
               )}
               {/* Purchase Orders button */}
               {/* {access.module_po && ( //markpoint */}
-              {access.po.value && (
+              {access?.po?.value && (
                 <Link to="/po">
                   <Button className="w-32 h-32 flex items-center justify-center break-words whitespace-normal text-center">
                     Purchase Orders
@@ -120,14 +140,14 @@ function App() {
                 </Link>
               )}
               {/* Kardpoll button */}
-              {/* {access.module_kardpoll && ( //markpoint
-              {/* {access.kardpoll && (
+              {/* {access.module_kardpoll && ( //markpoint */}
+              {access.kardpoll && (
                 <Link to="/kardpoll">
                   <Button className="w-32 h-32 flex items-center justify-center break-words whitespace-normal text-center">
                     Kardpoll
                   </Button>
                 </Link>
-              )} */}
+              )}
             </div>
           </Section>
         )}
@@ -147,22 +167,22 @@ function App() {
         )}
 
         {/* Reports Section */}
-        {/* {(access.module_daily_reports || access.module_reports) && ( //markpoint
-        // {/* {(access.dailyReports || access.reports) && (
+        {/* {(access.module_daily_reports || access.module_reports) && ( //markpoint */}
+        {(access.dailyReports || access.reports) && (
           <Section title="Reports">
             <div className="flex flex-wrap gap-4">
               {/* Daily Reports button */}
-              {/* {access.module_daily_reports && ( //markpoint
-              // {/* {access.dailyReports && (
+               {/* {access.module_daily_reports && ( //markpoint */}
+              {access.dailyReports && (
                 <Link to="/daily-reports">
                   <Button className="w-32 h-32 flex items-center justify-center break-words whitespace-normal text-center">
                     Daily Reports
                   </Button>
                 </Link>
-              )} */}
+              )} 
               {/* Reports button */}
-              {/* {access.module_reports && ( //markpoint
-              // {/* {access.reports && (
+               {/* {access.module_reports && ( //markpoint */}
+              {access.reports && (
                 <Link to="/reports">
                   <Button className="w-32 h-32 flex items-center justify-center break-words whitespace-normal text-center">
                     Reports
@@ -171,11 +191,11 @@ function App() {
               )}
             </div>
           </Section>
-        )} */} 
+        )} 
 
         {/* Sales Section */}
         {/* {access.module_status && ( //markpoint */}
-        {access.status.value && (
+        {access?.status?.value && (
           <Section title="Sales">
             <div className="flex flex-wrap gap-4">
               <Link to="/status">

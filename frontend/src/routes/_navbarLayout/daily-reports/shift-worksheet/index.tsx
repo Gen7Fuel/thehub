@@ -1,4 +1,4 @@
-import { createFileRoute, Link, Outlet } from '@tanstack/react-router';
+import { createFileRoute, Link, Outlet, useNavigate } from '@tanstack/react-router';
 import { useState, useEffect } from 'react';
 import { DatePicker } from '@/components/custom/datePicker';
 import { LocationPicker } from '@/components/custom/locationPicker';
@@ -18,6 +18,7 @@ function RouteComponent() {
   const [location, setLocation] = useState<string>(user?.location || '');
   const [worksheets, setWorksheets] = useState<{ _id: string; report_number: number; shift: string; till_location: string }[]>([]);
   const [loading, setLoading] = useState<boolean>(false);
+  const navigate = useNavigate()
 
   const fetchWorksheets = async () => {
     if (!date || !location) {
@@ -34,12 +35,23 @@ function RouteComponent() {
           location,
         },
         headers: {
-          Authorization: `Bearer ${localStorage.getItem('token')}`
+          Authorization: `Bearer ${localStorage.getItem('token')}`,
+          "X-Required-Permission": "dailyReports",
         }
       });
+
+      if (response.status === 403) {
+        navigate({ to: "/no-access" });
+        return;
+      }
+
       const data = response.data;
       setWorksheets(Array.isArray(data) ? data : []);
-    } catch (error) {
+    } catch (error: any) {
+      if (axios.isAxiosError(error) && error.response?.status === 403) {
+        navigate({ to: "/no-access" });
+        return;
+      }
       console.error('Error fetching shift worksheets:', error);
       setWorksheets([]);
     } finally {
@@ -51,6 +63,7 @@ function RouteComponent() {
   useEffect(() => {
     fetchWorksheets();
   }, [date, location]);
+
 
   // const access = user?.access || '{}'
 

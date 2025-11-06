@@ -1,4 +1,4 @@
-import { createFileRoute } from "@tanstack/react-router";
+import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useContext, useEffect, useState } from "react";
 import { RouteContext } from "../checklist";
 import { OpenIssueCard } from "@/components/custom/OpenIssueCard";
@@ -29,6 +29,7 @@ export function OpenIssuesPage() {
   const { stationName } = useContext(RouteContext);
   const { user } = useAuth()
   const site = stationName || user?.location || "";
+  const navigate = useNavigate()
 
   const [openIssues, setOpenIssues] = useState<OpenIssue[]>([]);
   
@@ -44,21 +45,33 @@ export function OpenIssuesPage() {
     setLoading(true);
 
     fetch(`/api/audit/open-issues?mode=station&site=${encodeURIComponent(site)}`, {
-      headers: { Authorization: `Bearer ${localStorage.getItem("token")}` },
+      headers: {
+        Authorization: `Bearer ${localStorage.getItem("token")}`,
+        "X-Required-Permission": "stationAudit",
+      },
     })
-      .then((res) => res.json())
-      .then((data) => {
-        if (Array.isArray(data)) {
-            setOpenIssues(data);
-        } else if (data?.items && Array.isArray(data.items)) {
-            setOpenIssues(data.items);
-        } else {
-            setOpenIssues([]);
+      .then((res) => {
+        if (res.status === 403) {
+          navigate({ to: "/no-access" });
+          return null;
         }
-        })
+        return res.json();
+      })
+      .then((data) => {
+        if (!data) return; // 403 redirect already handled
+
+        if (Array.isArray(data)) {
+          setOpenIssues(data);
+        } else if (data?.items && Array.isArray(data.items)) {
+          setOpenIssues(data.items);
+        } else {
+          setOpenIssues([]);
+        }
+      })
       .catch(console.error)
       .finally(() => setLoading(false));
   }, [site]);
+
 
   const categories = [...new Set(openIssues.map(issue => issue.category).filter(Boolean))];
 
@@ -88,17 +101,25 @@ export function OpenIssuesPage() {
   // Save status
   const handleSaveStatus = async () => {
     if (!selectedIssueId) return;
+
     try {
       const res = await fetch(`/api/audit/issues/${selectedIssueId}/status`, {
         method: "PUT",
         headers: {
           "Content-Type": "application/json",
           Authorization: `Bearer ${localStorage.getItem("token")}`,
+          "X-Required-Permission": "stationAudit",
         },
         body: JSON.stringify({ status: newStatus }),
       });
 
+      if (res.status === 403) {
+        navigate({ to: "/no-access" });
+        return;
+      }
+
       if (!res.ok) throw new Error("Failed to update status");
+
       const data = await res.json();
 
       // Update locally
@@ -114,12 +135,14 @@ export function OpenIssuesPage() {
             : it
         )
       );
+
       setStatusDialogOpen(false);
       setSelectedIssueId(null);
     } catch (err) {
       console.error("Error updating status:", err);
     }
-  };
+};
+
 
   const statusFlow: Record<string, string | null> = {
     Created: "In Progress",

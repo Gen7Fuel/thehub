@@ -33,11 +33,10 @@ function RouteComponent() {
 
     try {
       const response = await axios.post(`${domain}/api/auth/login`, { email, password })
-      const { token, email: userEmail } = response.data
+      const { token } = response.data
       // Save token to localStorage
       localStorage.setItem('token', token)
       refreshAuth()
-      console.log(`User ${userEmail} logged in, will join room automatically via SignalContext`)
       navigate({ to: '/' })
     } catch (err: any) {
       if (err.response && err.response.data && err.response.data.message) {

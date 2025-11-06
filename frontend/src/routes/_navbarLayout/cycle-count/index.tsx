@@ -1,5 +1,5 @@
-import { useState, useRef } from "react";
-import { createFileRoute } from '@tanstack/react-router'
+import { useState, useRef, useEffect } from "react";
+import { createFileRoute, useNavigate } from '@tanstack/react-router'
 
 export const Route = createFileRoute('/_navbarLayout/cycle-count/')({
   component: RouteComponent,
@@ -10,6 +10,15 @@ function RouteComponent() {
   const [uploading, setUploading] = useState(false);
   const [message, setMessage] = useState("");
   const inputRef = useRef<HTMLInputElement>(null);
+  const navigate = useNavigate();
+
+  // Redirect to /cycle-count/count on mount
+  useEffect(() => {
+    navigate({ to: "/cycle-count/count" });
+  }, [navigate]);
+
+  // The rest of the component is not needed
+  return null;
 
   const handleDrag = (e: React.DragEvent<HTMLDivElement>) => {
     e.preventDefault();

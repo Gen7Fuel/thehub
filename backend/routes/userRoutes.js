@@ -213,10 +213,7 @@ router.put("/:userId/permissions", async (req, res) => {
     await user.save();
     const io = req.app.get("io");
     if (io) {
-      console.log("User joined rooms snapshot:", [...io.sockets.adapter.rooms.keys()]);
-      console.log("Emitting to room:", `${user.firstName}'s room`);
-      console.log("Room exists?", io.sockets.adapter.rooms.has(`${user.firstName}'s room`));
-      io.to(`${user.firstName}'s room`).emit("permissions-updated");
+     io.to(userId).emit("permissions-updated");
     }
 
     res.json({ success: true, custom_permissions: customPermissions });

@@ -1,4 +1,4 @@
-import { createFileRoute } from '@tanstack/react-router';
+import { createFileRoute, useNavigate } from '@tanstack/react-router';
 
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
@@ -41,15 +41,37 @@ function RouteComponent() {
   // Extract the worksheet value from the URL
   const worksheet = window.location.pathname.split('/').pop() || ''
 
+  const navigate = useNavigate();
+
   useEffect(() => {
-    axios.get(`/api/shift-worksheet/${worksheet}`, {
-        headers: {
-          Authorization: `Bearer ${localStorage.getItem('token')}`
+    const fetchData = async () => {
+      try {
+        const response = await axios.get(`/api/shift-worksheet/${worksheet}`, {
+          headers: {
+            Authorization: `Bearer ${localStorage.getItem('token')}`,
+            "X-Required-Permission": "dailyReports",
+          },
+        });
+
+        if (response.status === 403) {
+          navigate({ to: "/no-access" });
+          return;
         }
-      })
-      .then((response) => setData(response.data))
-      .catch((error) => console.error('Error fetching data:', error))
-  }, [worksheet])
+
+        setData(response.data);
+      } catch (error: any) {
+        if (axios.isAxiosError(error) && error.response?.status === 403) {
+          navigate({ to: "/no-access" });
+          return;
+        }
+        console.error('Error fetching data:', error);
+      }
+    };
+
+    if (worksheet) {
+      fetchData();
+    }
+  }, [worksheet, navigate]);
 
   // Functions to handle updates to the data
   const handleUpdate = (field: keyof ShiftWorksheetData, value: any) => {
@@ -126,23 +148,36 @@ function RouteComponent() {
   }
 
   const handleSave = () => {
-    if (data) {
-      axios.put(`/api/shift-worksheet/${data._id}`, data, {
-        headers: {
-          Authorization: `Bearer ${localStorage.getItem('token')}`
-        }
-      })
-        .then((response) => {
-          if (response.status === 200) {
-            console.log('Data saved successfully')
-            toast("Data saved!")
-          } else {
-            console.error('Error saving data')
-          }
-        })
-        .catch((error) => console.error('Error saving data:', error))
-    }
-  }
+    if (!data) return;
+
+    axios.put(`/api/shift-worksheet/${data._id}`, data, {
+      headers: {
+        Authorization: `Bearer ${localStorage.getItem('token')}`,
+        "X-Required-Permission": "dailyReports",
+      }
+    })
+    .then((response) => {
+      if (response.status === 403) {
+        navigate({ to: "/no-access" });
+        return;
+      }
+
+      if (response.status === 200) {
+        console.log('Data saved successfully');
+        toast("Data saved!");
+      } else {
+        console.error('Error saving data');
+      }
+    })
+    .catch((error: any) => {
+      if (axios.isAxiosError(error) && error.response?.status === 403) {
+        navigate({ to: "/no-access" });
+        return;
+      }
+      console.error('Error saving data:', error);
+    });
+  };
+
 
   const r = data ? calculateData(data) : {
     totalClosingFloatBill: 0,

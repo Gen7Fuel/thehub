@@ -1,4 +1,4 @@
-import { createFileRoute } from '@tanstack/react-router'
+import { createFileRoute, useNavigate } from '@tanstack/react-router'
 import { useEffect, useState } from "react";
 import axios from "axios";
 import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from "@/components/ui/select";
@@ -47,59 +47,89 @@ function RouteComponent() {
 
   const [uniqueVendors, setUniqueVendors] = useState<string[]>([]);
 
+  const navigate = useNavigate();
+
+  // --- Fetch locations
   useEffect(() => {
     axios
-    .get("/api/locations", {
-      headers: { Authorization: `Bearer ${localStorage.getItem("token")}` },
-    })
-    .then(res => setSites(res.data))
-    .catch(() => setSites([]));
-  }, []);
+      .get("/api/locations", {
+        headers: {
+          Authorization: `Bearer ${localStorage.getItem("token")}`,
+          "X-Required-Permission": "stationAudit.template",
+        },
+      })
+      .then((res) => setSites(res.data))
+      .catch((err) => {
+        if (err.response?.status === 403) {
+          navigate({ to: "/no-access" });
+        } else {
+          setSites([]);
+        }
+      });
+  }, [navigate]);
 
   const handleSiteToggle = (site: string) => {
-    setSelectedSites(selected =>
-        selected.includes(site)
-        ? selected.filter(s => s !== site)
+    setSelectedSites((selected) =>
+      selected.includes(site)
+        ? selected.filter((s) => s !== site)
         : [...selected, site]
     );
   };
 
-  // Fetch category options and all select templates
+  // --- Fetch select templates
   useEffect(() => {
     axios
       .get("/api/audit/select-templates", {
-        headers: { Authorization: `Bearer ${localStorage.getItem("token")}` },
+        headers: {
+          Authorization: `Bearer ${localStorage.getItem("token")}`,
+          "X-Required-Permission": "stationAudit.template",
+        },
       })
-      .then(res => setSelectTemplates(res.data))
-      .catch(() => setSelectTemplates([]));
-  }, []);
+      .then((res) => setSelectTemplates(res.data))
+      .catch((err) => {
+        if (err.response?.status === 403) {
+          navigate({ to: "/no-access" });
+        } else {
+          setSelectTemplates([]);
+        }
+      });
+  }, [navigate]);
 
+  // --- Fetch vendors
   useEffect(() => {
     const fetchVendors = async () => {
       try {
         const token = localStorage.getItem("token");
         const res = await fetch("/api/vendors", {
-          headers: { Authorization: `Bearer ${token}` },
+          headers: {
+            Authorization: `Bearer ${token}`,
+            "X-Required-Permission": "stationAudit.template",
+          },
         });
+
+        if (res.status === 403) {
+          navigate({ to: "/no-access" });
+          return;
+        }
+
         if (!res.ok) throw new Error(`HTTP error! status: ${res.status}`);
         const data = (await res.json()) as { name: string; category: string }[];
 
-        // Filter only vendors with category = "Station Supplies"
         const stationVendors = data.filter(
           (v) => v.category?.trim() === "Station Supplies"
         );
 
-        // Extract unique vendor names
-        const vendors = Array.from(new Set(stationVendors.map((v) => v.name).filter(Boolean)));
+        const vendors = Array.from(
+          new Set(stationVendors.map((v) => v.name).filter(Boolean))
+        );
         setUniqueVendors(vendors);
-
       } catch (err) {
         console.error("Failed to fetch vendors:", err);
       }
     };
 
     fetchVendors();
-  }, []);
+  }, [navigate]);
 
 
   // Helper to get select options for a template name
@@ -135,13 +165,18 @@ function RouteComponent() {
         // createdBy will be set in backend
     };
     try {
-        await axios.post(
+        const res = await axios.post(
         "/api/audit/",
         payload,
         {
-            headers: { Authorization: `Bearer ${localStorage.getItem("token")}` },
+            headers: { Authorization: `Bearer ${localStorage.getItem("token")}`, "X-Required-Permission": "stationAudit.template" },
         }
         );
+        if (res.status === 403) {
+          navigate({ to: "/no-access" });
+          return;
+        }
+
         // Optionally reset or redirect
         setName("");
         setDescription("");
