@@ -1,11 +1,20 @@
-import axios from 'axios'
-export const isActuallyOnline = async () => {
+export const isActuallyOnline = async (): Promise<boolean> => {
   if (!navigator.onLine) return false;
 
   try {
-    const res = await axios.get('/api/health', { timeout: 3000 });
-    return res.status === 200;
-  } catch {
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 3000); // 3s timeout
+
+    const res = await fetch('/api/health', {
+      cache: 'no-cache',
+      signal: controller.signal,
+    });
+
+    clearTimeout(timeoutId);
+
+    return res.ok;
+  } catch (err) {
+    console.warn('⚠️ Online check failed:', err);
     return false;
   }
 };

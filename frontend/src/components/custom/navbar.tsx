@@ -36,27 +36,32 @@ export default function Navbar() {
   }, [navigate]);
 
   useEffect(() => {
-    // 1️⃣ Sync when back online
-    const handleOnline = () => {
+  const handleOnline = async () => {
+    const online = await isActuallyOnline();
+    if (online) {
       console.log("🌐 Online — attempting background sync...");
       syncPendingActions();
-    };
+    } else {
+      console.warn("⚠️ Still offline, skipping sync");
+    }
+  };
 
-    window.addEventListener("online", handleOnline);
+  window.addEventListener("online", handleOnline);
 
-    // 2️⃣ Also sync every 2 minutes if online
-    const interval = setInterval(() => {
-      if (navigator.onLine) {
-        syncPendingActions();
-      }
-    }, 2 * 60 * 1000); // 2 minutes
+  const interval = setInterval(async () => {
+    const online = await isActuallyOnline();
+    if (online) {
+      syncPendingActions();
+    } else {
+      console.warn("⚠️ Offline during periodic check, skipping sync");
+    }
+  }, 2 * 60 * 1000);
 
-    return () => {
-      window.removeEventListener("online", handleOnline);
-      clearInterval(interval);
-    };
-  }, []);
-
+  return () => {
+    window.removeEventListener("online", handleOnline);
+    clearInterval(interval);
+  };
+}, []);
 
   // Route matchers for header text and navigation highlighting
   const isHome = matchRoute({ to: '/' })
@@ -188,33 +193,39 @@ export default function Navbar() {
       help = 'No help available for this page.'
   }
   async function syncPendingActions() {
-    const online = await isActuallyOnline();
-    if (!online) {
-      console.warn("🚫 Not truly online — skipping sync.");
-      return;
-    }
-
     const db = await getDB();
     const tx = db.transaction("pendingActions", "readonly");
     const actions = await tx.store.getAll();
 
-    if (!actions.length) return;
-
+    if (!actions.length) return; // nothing to sync
     console.log(`🛰️ Syncing ${actions.length} pending actions...`);
 
     for (const action of actions) {
       try {
-        if (action.type === "TOGGLE_ITEM") {
-          await axios.put(
-            `/api/order-rec/${action.orderId}/item/${action.catIdx}/${action.itemIdx}`,
-            { completed: action.completed, isChanged: action.isChanged },
-            { headers: { Authorization: `Bearer ${localStorage.getItem("token")}` } }
-          );
+        switch (action.type) {
+          case "TOGGLE_ITEM":
+            await axios.put(
+              `/api/order-rec/${action.orderId}/item/${action.catIdx}/${action.itemIdx}`,
+              { completed: action.completed, isChanged: action.isChanged },
+              { headers: { Authorization: `Bearer ${localStorage.getItem("token")}` } }
+            );
+            break;
+
+          case "UPDATE_ORDER_REC":
+            await axios.put(
+              `/api/order-rec/${action.id}`,
+              action.payload,
+              { headers: { Authorization: `Bearer ${localStorage.getItem("token")}` } }
+            );
+            break;
+
+          default:
+            console.warn("⚠️ Unknown action type:", action.type);
+            break;
         }
-        // Add other cases (NOTES, SAVE_ITEM, etc.)
       } catch (err) {
         console.error("⚠️ Sync failed for action:", action, err);
-        return; // stop and retry later
+        return; // stop on first failure, will retry later
       }
     }
 
