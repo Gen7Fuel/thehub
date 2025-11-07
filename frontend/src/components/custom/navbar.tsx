@@ -37,25 +37,34 @@ export default function Navbar() {
 
   useEffect(() => {
     // 1️⃣ Sync when back online
-    const handleOnline = () => {
-      console.log("🌐 Online — attempting background sync...");
-      syncPendingActions();
+    const handleOnline = async () => {
+      const online = await isActuallyOnline();
+      if (online) {
+        console.log("🌐 Online — attempting background sync...");
+        syncPendingActions();
+      } else {
+        console.warn("⚠️ Still offline — skipping sync");
+      }
     };
 
     window.addEventListener("online", handleOnline);
 
-    // 2️⃣ Also sync every 2 minutes if online
-    const interval = setInterval(() => {
-      if (navigator.onLine) {
+    // 2️⃣ Also sync every 2 minutes if actually online
+    const interval = setInterval(async () => {
+      const online = await isActuallyOnline();
+      if (online) {
         syncPendingActions();
+      } else {
+        console.warn("⚠️ Offline during periodic check — skipping sync");
       }
-    }, 2 * 60 * 1000); // 2 minutes
+    }, 30 * 1000); // 30s
 
     return () => {
       window.removeEventListener("online", handleOnline);
       clearInterval(interval);
     };
   }, []);
+
 
 
   // Route matchers for header text and navigation highlighting

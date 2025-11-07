@@ -461,19 +461,40 @@ function RouteComponent() {
   //     alert('Failed to update completion status.');
   //   }
   // };
-  const handleToggleItemCompleted = async (catIdx: number, itemIdx: number, completed: boolean, isChanged: boolean) => {
-    setOrderRec((prev: any) => {
-      const updated = { ...prev };
-      updated.categories[catIdx].items[itemIdx].completed = completed;
-      return updated;
-    });
+  const handleToggleItemCompleted = async (
+    catIdx: number,
+    itemIdx: number,
+    completed: boolean,
+    isChanged: boolean
+  ) => {
+    if (!orderRec) return;
 
-    // Always save locally
-    await saveOrderRec(orderRec);
+    const orderId = orderRec.id || orderRec._id; // <- fallback to _id
+    if (!orderId) {
+      console.error("❌ No orderId available!");
+      return;
+    }
+
+    const updatedOrderRec = {
+      ...orderRec,
+      categories: orderRec.categories.map((cat: any, cIdx: any) =>
+        cIdx === catIdx
+          ? {
+              ...cat,
+              items: cat.items.map((item: any, iIdx: any) =>
+                iIdx === itemIdx ? { ...item, completed } : item
+              ),
+            }
+          : cat
+      ),
+    };
+
+    setOrderRec(updatedOrderRec);
+    await saveOrderRec(updatedOrderRec);
 
     const action = {
       type: 'TOGGLE_ITEM',
-      orderId: id,
+      orderId,      // ✅ ensure it's always defined
       catIdx,
       itemIdx,
       completed,
@@ -481,22 +502,28 @@ function RouteComponent() {
       timestamp: Date.now(),
     };
 
-    if (await isActuallyOnline()) {
-      try {
-        const res = await axios.put(`/api/order-rec/${id}/item/${catIdx}/${itemIdx}`, 
+    try {
+      const online = await isActuallyOnline();
+      if (online) {
+        const res = await axios.put(
+          `/api/order-rec/${orderId}/item/${catIdx}/${itemIdx}`,
           { completed, isChanged },
-          { headers: { Authorization: `Bearer ${localStorage.getItem('token')}` } }
+          { headers: { Authorization: `Bearer ${localStorage.getItem("token")}` } }
         );
-        await saveOrderRec(res.data); // update cache
-      } catch (err) {
-        console.error('Online update failed, saving action offline');
+
+        const orderToSave = { ...res.data, id: res.data._id || res.data.id };
+        await saveOrderRec(orderToSave);
+        setOrderRec(orderToSave);
+      } else {
+        console.warn('Offline — saving toggle action for later');
         await savePendingAction(action);
       }
-    } else {
-      console.warn('Offline — saving toggle action for later');
+    } catch (err: unknown) {
+      console.error('Online update failed, saving action offline', err);
       await savePendingAction(action);
     }
-  };
+};
+
 
 
   const handleExport = async () => {
@@ -963,24 +990,79 @@ function RouteComponent() {
                 : ['onHandQty', 'forecast', 'minStock', 'itemsToOrder', 'unitInCase', 'casesToOrder']
 
             return (
+              // <form
+              //   onSubmit={async e => {
+              //     e.preventDefault()
+              //     try {
+              //       await axios.put(`/api/order-rec/${id}`, {
+              //         categories: orderRec.categories
+              //       }, {
+              //         headers: {
+              //           Authorization: `Bearer ${localStorage.getItem('token')}`
+              //         }
+              //       })
+              //       setEditItem(null)
+              //     } catch (err) {
+              //       setError('Failed to save changes')
+              //     }
+              //   }}
+              //   className="space-y-4"
+              // >
               <form
-                onSubmit={async e => {
-                  e.preventDefault()
+                onSubmit={async (e) => {
+                  e.preventDefault();
+                  if (!orderRec) return;
+
+                  const orderId = orderRec.id || orderRec._id; // fallback to _id
+                  if (!orderId) {
+                    console.error("❌ No order ID available for saving!");
+                    setError("Cannot save — missing order ID");
+                    return;
+                  }
+
+                  const updatedRec = { ...orderRec }; // full record
+                  const action = {
+                    type: "UPDATE_ORDER_REC",
+                    id: orderId,
+                    payload: { categories: updatedRec.categories },
+                    timestamp: Date.now(),
+                  };
+
                   try {
-                    await axios.put(`/api/order-rec/${id}`, {
-                      categories: orderRec.categories
-                    }, {
-                      headers: {
-                        Authorization: `Bearer ${localStorage.getItem('token')}`
-                      }
-                    })
-                    setEditItem(null)
+                    const online = await isActuallyOnline();
+
+                    if (online) {
+                      // Online: send update to backend
+                      const res = await axios.put(
+                        `/api/order-rec/${orderId}`,
+                        { categories: updatedRec.categories },
+                        {
+                          headers: {
+                            Authorization: `Bearer ${localStorage.getItem("token")}`,
+                          },
+                        }
+                      );
+
+                      // Update local cache
+                      const orderToSave = { ...res.data, id: res.data._id || res.data.id };
+                      await saveOrderRec(orderToSave);
+                      setOrderRec(orderToSave);
+                    } else {
+                      // Offline: queue action for later
+                      await savePendingAction(action);
+                      await saveOrderRec({ ...updatedRec, id: orderId });
+                      console.warn("⚠️ Offline — changes saved locally and will sync later");
+                    }
+
+                    setEditItem(null);
                   } catch (err) {
-                    setError('Failed to save changes')
+                    console.error("Failed to save changes:", err);
+                    setError("Failed to save changes");
                   }
                 }}
                 className="space-y-4"
               >
+
                 {visibleFields.map(field => (
                   <div key={field} className="flex flex-col items-center gap-1">
                     <label className="block text-sm font-medium text-center">{camelCaseToTitleCase(field)}</label>
