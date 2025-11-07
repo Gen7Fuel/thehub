@@ -47,6 +47,8 @@ export default function Navbar() {
   const isVendor = matchRoute({ to: '/vendor', fuzzy: true })
   const isAudit = matchRoute({ to: '/audit', fuzzy: true })
   const isDashboard = matchRoute({ to: '/dashboard', fuzzy: true })
+  const isSupport = matchRoute({ to: '/support', fuzzy: true })
+  const isSafesheet = matchRoute({ to: '/safesheet', fuzzy: true })
 
   // Returns the header text based on the current route
   const headerText = () => {
@@ -63,6 +65,8 @@ export default function Navbar() {
     if (isVendor) return 'Vendor Management'
     if (isAudit) return 'Station Audits'
     if (isDashboard) return 'Dashboard'
+    if (isSupport) return 'Support'
+    if (isSafesheet) return 'Safe Sheet'
     return ''
   }
 
@@ -96,8 +100,8 @@ export default function Navbar() {
   // Get access permissions from localStorage
 
   const { user } = useAuth();
-  console.log("Users access from navbar:", user?.access)
-  const access = user?.access || '{}'
+  // const access = user?.access || '{}' //markpoint
+  const access = user?.access || {}
 
   let module_slug = window.location.href.split('/')[3]
 
@@ -182,13 +186,15 @@ export default function Navbar() {
             <HelpCircle className="h-5 w-5" />
           </Button>
           {/* Dashboard button, shown if user has access */}
-          {access.module_dashboard && (
+          {/* {access.module_dashboard && ( //markpoint */}
+          {access.dashboard && (
             <Button variant="ghost" onClick={() => navigate({ to: '/dashboard' })}>
               <Link to="/dashboard">Dashboard</Link>
             </Button>
           )}
           {/* Settings button, shown if user has access */}
-          {access.component_settings && (
+          {/* {access.component_settings && ( //markpoint */}
+          {access.settings && ( 
             <Button variant="outline" onClick={handleSettings}>Settings</Button>
           )}
           {/* Logout button */}

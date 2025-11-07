@@ -34,6 +34,15 @@ function RouteComponent() {
   const activeProps = {
     className: 'bg-gray-100 rounded-md',
   };
+  
+  // captalise the first letter for easy reading only for diaplay
+  const fromCamelCase = (str: string) => {
+    if (!str) return "";
+    return str
+      .replace(/([A-Z])/g, " $1")
+      .replace(/^./, (s) => s.toUpperCase())
+      .trim();
+  };
 
   return (
     <div className="flex">
@@ -47,7 +56,7 @@ function RouteComponent() {
             params={{ id: permission._id }}
             activeProps={activeProps}
           >
-            {permission.module_name}
+            {fromCamelCase(permission.module_name)}
           </Link>
         ))}
 

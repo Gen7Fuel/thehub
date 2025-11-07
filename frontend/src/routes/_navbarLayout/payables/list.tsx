@@ -37,7 +37,7 @@ function RouteComponent() {
     to: end,
   })
   const { user } = useAuth()
-  // const access = user?.access || '{}'
+  // const access = user?.access || {}
   
   const [location, setLocation] = useState<string>(user?.location || "")
   const [timezone, setTimezone] = useState<string>(user?.timezone || "America/Toronto")

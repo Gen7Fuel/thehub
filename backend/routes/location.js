@@ -1,6 +1,8 @@
 const express = require("express");
 const Location = require("../models/Location");
 const Permission = require("../models/Permission");
+const Role = require("../models/Role");
+const User = require('../models/User');
 const router = express.Router();
 
 // Create a new location
@@ -84,17 +86,7 @@ router.put("/:id", async (req, res) => {
 // POST /api/locations
 router.post("/", async (req, res) => {
   try {
-    const { 
-      type, 
-      stationName, 
-      legalName, 
-      INDNumber, 
-      kardpollCode, 
-      csoCode, 
-      timezone, 
-      email,
-      managerCode
-    } = req.body;
+    const { type, stationName,  legalName, INDNumber, kardpollCode,   csoCode,  timezone,  email, managerCode } = req.body;
 
     // Basic validation
     if (!type || !stationName || !legalName || !INDNumber || !csoCode || !timezone || !email || !managerCode) {
@@ -102,26 +94,37 @@ router.post("/", async (req, res) => {
     }
 
     // Create new location
-    const location = new Location({
-      type,
-      stationName,
-      legalName,
-      INDNumber,
-      kardpollCode,
-      csoCode,
-      timezone,
-      email,
-      managerCode,
-    });
+    const location = new Location({ type,stationName,legalName,INDNumber,kardpollCode,csoCode,timezone,email, managerCode,});
 
     await location.save();
 
-    // 🔹 Update Permission: add this new station to `site_access.sites`
-    await Permission.updateOne(
-      { name: "site_access" },
-      { $addToSet: { sites: stationName } }, // prevents duplicates
-      { upsert: true } // creates it if it doesn’t exist
-    );
+    // Admin-like roles which will be given the permission for the site
+    const ADMIN_ROLE_NAMES = ["Admin"];
+
+    //Fetch all roles that match these names
+    const adminRoles = await Role.find({
+      role_name: { $in: ADMIN_ROLE_NAMES },
+    }).select("_id role_name");
+
+    const adminRoleIds = adminRoles.map((role) => String(role._id));
+
+    // Get all users (only _id and role)
+    const users = await User.find({}, "_id role");
+
+    // Build bulk operations
+    const bulkOps = users.map((user) => {
+      const isAdmin = adminRoleIds.includes(String(user.role));
+      return {
+        updateOne: {
+          filter: { _id: user._id },
+          update: { $set: { [`site_access.${stationName}`]: isAdmin } },
+        },
+      };
+    });
+
+    if (bulkOps.length > 0) {
+      await User.bulkWrite(bulkOps);
+    }
 
     res.status(201).json(location);
   } catch (err) {
