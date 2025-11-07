@@ -613,32 +613,32 @@ function RouteComponent() {
       </div>
 
       <div className="flex items-center gap-6 my-4 text-base">
-      {/* Current Status */}
-      <div className="flex items-center gap-2">
-        <span className="font-medium">Current Status:</span>
-          <span
-            className="px-3 py-1 rounded-full text-sm font-medium text-gray-800"
-            style={{
-              backgroundColor: getOrderRecStatusColor(orderRec?.currentStatus),
-            }}
-          >
-            {orderRec?.currentStatus || "N/A"}
+        {/* Current Status */}
+        <div className="flex items-center gap-2">
+          <span className="font-medium">Current Status:</span>
+            <span
+              className="px-3 py-1 rounded-full text-sm font-medium text-gray-800"
+              style={{
+                backgroundColor: getOrderRecStatusColor(orderRec?.currentStatus),
+              }}
+            >
+              {orderRec?.currentStatus || "N/A"}
+            </span>
+
+        </div>
+
+        {/* Last Updated */}
+        <div className="flex items-center gap-2 text-gray-600">
+          <span className="font-medium">Last Updated:</span>
+          <span>
+            {orderRec?.statusHistory?.length
+              ? new Date(
+                  orderRec.statusHistory[orderRec.statusHistory.length - 1].timestamp
+                ).toLocaleString()
+              : "N/A"}
           </span>
-
+        </div>
       </div>
-
-      {/* Last Updated */}
-      <div className="flex items-center gap-2 text-gray-600">
-        <span className="font-medium">Last Updated:</span>
-        <span>
-          {orderRec?.statusHistory?.length
-            ? new Date(
-                orderRec.statusHistory[orderRec.statusHistory.length - 1].timestamp
-              ).toLocaleString()
-            : "N/A"}
-        </span>
-      </div>
-    </div>
 
 
       <div className="mb-8 max-w-2xl mx-auto">
