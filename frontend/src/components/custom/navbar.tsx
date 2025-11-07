@@ -2,7 +2,9 @@ import { Link, useMatchRoute, useNavigate } from '@tanstack/react-router'
 import { Button } from '../ui/button'
 import { useEffect, useState } from 'react'
 import { isTokenExpired } from '../../lib/utils'
-// import { getUserFromToken, useSocket } from '@/context/SignalContext'
+import { getDB, clearPendingActions } from "@/lib/indexedDB"
+import { isActuallyOnline } from "@/lib/network";
+import axios from "axios";
 import { useAuth } from "@/context/AuthContext";
 import { HelpCircle } from 'lucide-react'
 import {
@@ -32,6 +34,29 @@ export default function Navbar() {
       navigate({ to: '/login' });
     }
   }, [navigate]);
+
+  useEffect(() => {
+    // 1️⃣ Sync when back online
+    const handleOnline = () => {
+      console.log("🌐 Online — attempting background sync...");
+      syncPendingActions();
+    };
+
+    window.addEventListener("online", handleOnline);
+
+    // 2️⃣ Also sync every 2 minutes if online
+    const interval = setInterval(() => {
+      if (navigator.onLine) {
+        syncPendingActions();
+      }
+    }, 2 * 60 * 1000); // 2 minutes
+
+    return () => {
+      window.removeEventListener("online", handleOnline);
+      clearInterval(interval);
+    };
+  }, []);
+
 
   // Route matchers for header text and navigation highlighting
   const isHome = matchRoute({ to: '/' })
@@ -162,6 +187,42 @@ export default function Navbar() {
     default:
       help = 'No help available for this page.'
   }
+  async function syncPendingActions() {
+    const online = await isActuallyOnline();
+    if (!online) {
+      console.warn("🚫 Not truly online — skipping sync.");
+      return;
+    }
+
+    const db = await getDB();
+    const tx = db.transaction("pendingActions", "readonly");
+    const actions = await tx.store.getAll();
+
+    if (!actions.length) return;
+
+    console.log(`🛰️ Syncing ${actions.length} pending actions...`);
+
+    for (const action of actions) {
+      try {
+        if (action.type === "TOGGLE_ITEM") {
+          await axios.put(
+            `/api/order-rec/${action.orderId}/item/${action.catIdx}/${action.itemIdx}`,
+            { completed: action.completed, isChanged: action.isChanged },
+            { headers: { Authorization: `Bearer ${localStorage.getItem("token")}` } }
+          );
+        }
+        // Add other cases (NOTES, SAVE_ITEM, etc.)
+      } catch (err) {
+        console.error("⚠️ Sync failed for action:", action, err);
+        return; // stop and retry later
+      }
+    }
+
+    await clearPendingActions();
+    console.log("✅ Sync complete — all pending actions cleared");
+  }
+
+
 
   return (
     // Navbar container
