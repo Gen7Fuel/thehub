@@ -2,9 +2,9 @@ import { Link, useMatchRoute, useNavigate } from '@tanstack/react-router'
 import { Button } from '../ui/button'
 import { useEffect, useState } from 'react'
 import { isTokenExpired } from '../../lib/utils'
-import { getDB, clearPendingActions } from "@/lib/indexedDB"
-import { isActuallyOnline } from "@/lib/network";
-import axios from "axios";
+// import { getDB, clearPendingActions } from "@/lib/indexedDB"
+// import { isActuallyOnline } from "@/lib/network";
+// import axios from "axios";
 import { useAuth } from "@/context/AuthContext";
 import { HelpCircle } from 'lucide-react'
 import {
@@ -35,33 +35,33 @@ export default function Navbar() {
     }
   }, [navigate]);
 
-  useEffect(() => {
-  const handleOnline = async () => {
-    const online = await isActuallyOnline();
-    if (online) {
-      console.log("🌐 Online — attempting background sync...");
-      syncPendingActions();
-    } else {
-      console.warn("⚠️ Still offline, skipping sync");
-    }
-  };
+//   useEffect(() => {
+//   const handleOnline = async () => {
+//     const online = await isActuallyOnline();
+//     if (online) {
+//       console.log("🌐 Online — attempting background sync...");
+//       syncPendingActions();
+//     } else {
+//       console.warn("⚠️ Still offline, skipping sync");
+//     }
+//   };
 
-  window.addEventListener("online", handleOnline);
+//   window.addEventListener("online", handleOnline);
 
-  const interval = setInterval(async () => {
-    const online = await isActuallyOnline();
-    if (online) {
-      syncPendingActions();
-    } else {
-      console.warn("⚠️ Offline during periodic check, skipping sync");
-    }
-  }, 2 * 60 * 1000);
+//   const interval = setInterval(async () => {
+//     const online = await isActuallyOnline();
+//     if (online) {
+//       syncPendingActions();
+//     } else {
+//       console.warn("⚠️ Offline during periodic check, skipping sync");
+//     }
+//   }, 1000);
 
-  return () => {
-    window.removeEventListener("online", handleOnline);
-    clearInterval(interval);
-  };
-}, []);
+//   return () => {
+//     window.removeEventListener("online", handleOnline);
+//     clearInterval(interval);
+//   };
+// }, []);
 
   // Route matchers for header text and navigation highlighting
   const isHome = matchRoute({ to: '/' })
@@ -192,46 +192,46 @@ export default function Navbar() {
     default:
       help = 'No help available for this page.'
   }
-  async function syncPendingActions() {
-    const db = await getDB();
-    const tx = db.transaction("pendingActions", "readonly");
-    const actions = await tx.store.getAll();
+  // async function syncPendingActions() {
+  //   const db = await getDB();
+  //   const tx = db.transaction("pendingActions", "readonly");
+  //   const actions = await tx.store.getAll();
 
-    if (!actions.length) return; // nothing to sync
-    console.log(`🛰️ Syncing ${actions.length} pending actions...`);
+  //   if (!actions.length) return; // nothing to sync
+  //   console.log(`🛰️ Syncing ${actions.length} pending actions...`);
 
-    for (const action of actions) {
-      try {
-        switch (action.type) {
-          case "TOGGLE_ITEM":
-            await axios.put(
-              `/api/order-rec/${action.orderId}/item/${action.catIdx}/${action.itemIdx}`,
-              { completed: action.completed, isChanged: action.isChanged },
-              { headers: { Authorization: `Bearer ${localStorage.getItem("token")}` } }
-            );
-            break;
+  //   for (const action of actions) {
+  //     try {
+  //       switch (action.type) {
+  //         case "TOGGLE_ITEM":
+  //           await axios.put(
+  //             `/api/order-rec/${action.orderId}/item/${action.catIdx}/${action.itemIdx}`,
+  //             { completed: action.completed, isChanged: action.isChanged },
+  //             { headers: { Authorization: `Bearer ${localStorage.getItem("token")}` } }
+  //           );
+  //           break;
 
-          case "UPDATE_ORDER_REC":
-            await axios.put(
-              `/api/order-rec/${action.id}`,
-              action.payload,
-              { headers: { Authorization: `Bearer ${localStorage.getItem("token")}` } }
-            );
-            break;
+  //         case "UPDATE_ORDER_REC":
+  //           await axios.put(
+  //             `/api/order-rec/${action.id}`,
+  //             action.payload,
+  //             { headers: { Authorization: `Bearer ${localStorage.getItem("token")}` } }
+  //           );
+  //           break;
 
-          default:
-            console.warn("⚠️ Unknown action type:", action.type);
-            break;
-        }
-      } catch (err) {
-        console.error("⚠️ Sync failed for action:", action, err);
-        return; // stop on first failure, will retry later
-      }
-    }
+  //         default:
+  //           console.warn("⚠️ Unknown action type:", action.type);
+  //           break;
+  //       }
+  //     } catch (err) {
+  //       console.error("⚠️ Sync failed for action:", action, err);
+  //       return; // stop on first failure, will retry later
+  //     }
+  //   }
 
-    await clearPendingActions();
-    console.log("✅ Sync complete — all pending actions cleared");
-  }
+  //   await clearPendingActions();
+  //   console.log("✅ Sync complete — all pending actions cleared");
+  // }
 
 
 

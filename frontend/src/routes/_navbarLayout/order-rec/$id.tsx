@@ -12,9 +12,9 @@ import { Textarea } from '@/components/ui/textarea'
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip'
 import { Trash2 } from 'lucide-react'
 import { getOrderRecStatusColor } from "@/lib/utils"
-import { getOrderRecById, saveOrderRec, savePendingAction } from "@/lib/indexedDB"
+// import { getOrderRecById, saveOrderRec, savePendingAction } from "@/lib/indexedDB"
 import { useAuth } from "@/context/AuthContext";
-import { isActuallyOnline } from "@/lib/network";
+// import { isActuallyOnline } from "@/lib/network";
 // import { Switch } from "@/components/ui/switch";
 
 export const Route = createFileRoute('/_navbarLayout/order-rec/$id')({
@@ -49,70 +49,70 @@ function RouteComponent() {
     setExtraNote(orderRec?.extraItemsNote || '');
   }, [orderRec]);
 
-  // useEffect(() => {
-  //   const fetchOrderRec = async () => {
-  //     try {
-  //       const res = await axios.get(`/api/order-rec/${id}`, {
-  //         headers: {
-  //           Authorization: `Bearer ${localStorage.getItem('token')}`
-  //         }
-  //       })
-  //       setOrderRec(res.data)
-  //     } catch (err) {
-  //       setError('Failed to fetch order rec')
-  //     } finally {
-  //       setLoading(false)
-  //     }
-  //   }
-  //   fetchOrderRec()
-  // }, [id])
   useEffect(() => {
     const fetchOrderRec = async () => {
       try {
-        // 1️⃣ Load cached data first
-        const cached = await getOrderRecById(id);
-        if (cached) {
-          console.log('Using cached order rec');
-          setOrderRec(cached);
-        }
-
-        // 2️⃣ Check network connectivity
-        let online = navigator.onLine;
-        if (online) {
-          try {
-            const res = await axios.get('/api/health'); // quick ping
-            online = res.status === 200;
-          } catch {
-            online = false;
+        const res = await axios.get(`/api/order-rec/${id}`, {
+          headers: {
+            Authorization: `Bearer ${localStorage.getItem('token')}`
           }
-        }
-
-        console.log('Online status:', online);
-
-        // 3️⃣ Fetch only if online
-        if (online) {
-          const res = await axios.get(`/api/order-rec/${id}`, {
-            headers: { Authorization: `Bearer ${localStorage.getItem('token')}` },
-          });
-
-          const orderRecToSave = { ...res.data, id: res.data.id || res.data._id };
-          setOrderRec(orderRecToSave);
-          await saveOrderRec(orderRecToSave);
-        } else if (!cached) {
-          console.warn('Offline and no cache available');
-          setError('Offline and no cached data available');
-        }
-
+        })
+        setOrderRec(res.data)
       } catch (err) {
-        console.error('Failed to fetch order rec', err);
-        if (!orderRec) setError('Failed to fetch order rec');
+        setError('Failed to fetch order rec')
       } finally {
-        setLoading(false);
+        setLoading(false)
       }
-    };
+    }
+    fetchOrderRec()
+  }, [id])
+  // useEffect(() => {
+  //   const fetchOrderRec = async () => {
+  //     try {
+  //       // 1️⃣ Load cached data first
+  //       const cached = await getOrderRecById(id);
+  //       if (cached) {
+  //         console.log('Using cached order rec');
+  //         setOrderRec(cached);
+  //       }
 
-    fetchOrderRec();
-  }, [id]);
+  //       // 2️⃣ Check network connectivity
+  //       let online = navigator.onLine;
+  //       if (online) {
+  //         try {
+  //           const res = await axios.get('/api/health'); // quick ping
+  //           online = res.status === 200;
+  //         } catch {
+  //           online = false;
+  //         }
+  //       }
+
+  //       console.log('Online status:', online);
+
+  //       // 3️⃣ Fetch only if online
+  //       if (online) {
+  //         const res = await axios.get(`/api/order-rec/${id}`, {
+  //           headers: { Authorization: `Bearer ${localStorage.getItem('token')}` },
+  //         });
+
+  //         const orderRecToSave = { ...res.data, id: res.data.id || res.data._id };
+  //         setOrderRec(orderRecToSave);
+  //         await saveOrderRec(orderRecToSave);
+  //       } else if (!cached) {
+  //         console.warn('Offline and no cache available');
+  //         setError('Offline and no cached data available');
+  //       }
+
+  //     } catch (err) {
+  //       console.error('Failed to fetch order rec', err);
+  //       if (!orderRec) setError('Failed to fetch order rec');
+  //     } finally {
+  //       setLoading(false);
+  //     }
+  //   };
+
+  //   fetchOrderRec();
+  // }, [id]);
 
 
   // const handleSwitchChange = async (field: "orderPlaced" | "delivered", value: boolean) => {
@@ -446,88 +446,88 @@ function RouteComponent() {
   }
 
   // Toggle item completion
-  // const handleToggleItemCompleted = async (catIdx: number, itemIdx: number, completed: boolean, isChanged: boolean) => {
-  //   try {
-  //     console.log(`Toggling completion for item at catIdx ${catIdx}, itemIdx ${itemIdx} to ${completed}`);
-  //     // add authorization header with bearer token
-  //     const res = await axios.put(`/api/order-rec/${id}/item/${catIdx}/${itemIdx}`, { completed, isChanged },  {
-  //       headers: {
-  //         Authorization: `Bearer ${localStorage.getItem('token')}`
-  //       }
-  //     });
-  //     console.log('Update response:', res.data);
-  //     setOrderRec(res.data);
-  //   } catch (err) {
-  //     alert('Failed to update completion status.');
-  //   }
-  // };
-  const handleToggleItemCompleted = async (
-    catIdx: number,
-    itemIdx: number,
-    completed: boolean,
-    isChanged: boolean
-  ) => {
-    if (!orderRec) return;
-
-    // 1️⃣ Create updated copy of orderRec
-    const updatedOrderRec = {
-      ...orderRec,
-      categories: orderRec.categories.map((cat: any, cIdx: any) =>
-        cIdx === catIdx
-          ? {
-              ...cat,
-              items: cat.items.map((item: any, iIdx: any) =>
-                iIdx === itemIdx ? { ...item, completed } : item
-              ),
-            }
-          : cat
-      ),
-    };
-
-    // 2️⃣ Update React state
-    setOrderRec(updatedOrderRec);
-
-    // 3️⃣ Always save locally first
+  const handleToggleItemCompleted = async (catIdx: number, itemIdx: number, completed: boolean, isChanged: boolean) => {
     try {
-      await saveOrderRec(updatedOrderRec);
+      console.log(`Toggling completion for item at catIdx ${catIdx}, itemIdx ${itemIdx} to ${completed}`);
+      // add authorization header with bearer token
+      const res = await axios.put(`/api/order-rec/${id}/item/${catIdx}/${itemIdx}`, { completed, isChanged },  {
+        headers: {
+          Authorization: `Bearer ${localStorage.getItem('token')}`
+        }
+      });
+      console.log('Update response:', res.data);
+      setOrderRec(res.data);
     } catch (err) {
-      console.error('Failed to save locally:', err);
-    }
-
-    // 4️⃣ Prepare offline action
-    const action = {
-      type: 'TOGGLE_ITEM',
-      orderId: updatedOrderRec.id,
-      catIdx,
-      itemIdx,
-      completed,
-      isChanged,
-      timestamp: Date.now(),
-    };
-
-    // 5️⃣ Attempt online update
-    try {
-      const online = await isActuallyOnline();
-      if (online) {
-        const res = await axios.put(
-          `/api/order-rec/${updatedOrderRec.id}/item/${catIdx}/${itemIdx}`,
-          { completed, isChanged },
-          { headers: { Authorization: `Bearer ${localStorage.getItem('token')}` } }
-        );
-
-        // Update cache after successful online update
-        const orderToSave = { ...res.data, id: res.data._id };
-        await saveOrderRec(orderToSave);
-        setOrderRec(res.data);
-      } else {
-        console.warn('Offline — saving toggle action for later');
-        await savePendingAction(action);
-      }
-    } catch (err: unknown) {
-      console.error('Online update failed, saving action offline', err);
-      await savePendingAction(action);
+      alert('Failed to update completion status.');
     }
   };
+  // const handleToggleItemCompleted = async (
+  //   catIdx: number,
+  //   itemIdx: number,
+  //   completed: boolean,
+  //   isChanged: boolean
+  // ) => {
+  //   if (!orderRec) return;
+
+  //   // 1️⃣ Create updated copy of orderRec
+  //   const updatedOrderRec = {
+  //     ...orderRec,
+  //     categories: orderRec.categories.map((cat: any, cIdx: any) =>
+  //       cIdx === catIdx
+  //         ? {
+  //             ...cat,
+  //             items: cat.items.map((item: any, iIdx: any) =>
+  //               iIdx === itemIdx ? { ...item, completed } : item
+  //             ),
+  //           }
+  //         : cat
+  //     ),
+  //   };
+
+  //   // 2️⃣ Update React state
+  //   setOrderRec(updatedOrderRec);
+
+  //   // 3️⃣ Always save locally first
+  //   try {
+  //     await saveOrderRec(updatedOrderRec);
+  //   } catch (err) {
+  //     console.error('Failed to save locally:', err);
+  //   }
+
+  //   // 4️⃣ Prepare offline action
+  //   const action = {
+  //     type: 'TOGGLE_ITEM',
+  //     orderId: updatedOrderRec.id,
+  //     catIdx,
+  //     itemIdx,
+  //     completed,
+  //     isChanged,
+  //     timestamp: Date.now(),
+  //   };
+
+  //   // 5️⃣ Attempt online update
+  //   try {
+  //     const online = await isActuallyOnline();
+  //     if (online) {
+  //       const res = await axios.put(
+  //         `/api/order-rec/${updatedOrderRec.id}/item/${catIdx}/${itemIdx}`,
+  //         { completed, isChanged },
+  //         { headers: { Authorization: `Bearer ${localStorage.getItem('token')}` } }
+  //       );
+
+  //       // Update cache after successful online update
+  //       const orderToSave = { ...res.data, id: res.data._id };
+  //       await saveOrderRec(orderToSave);
+  //       setOrderRec(res.data);
+  //     } else {
+  //       console.warn('Offline — saving toggle action for later');
+  //       await savePendingAction(action);
+  //     }
+  //   } catch (err: unknown) {
+  //     console.error('Online update failed, saving action offline', err);
+  //     await savePendingAction(action);
+  //   }
+  // };
 
 
   const handleExport = async () => {
@@ -994,65 +994,65 @@ function RouteComponent() {
                 : ['onHandQty', 'forecast', 'minStock', 'itemsToOrder', 'unitInCase', 'casesToOrder']
 
             return (
-              // <form
-              //   onSubmit={async e => {
-              //     e.preventDefault()
-              //     try {
-              //       await axios.put(`/api/order-rec/${id}`, {
-              //         categories: orderRec.categories
-              //       }, {
-              //         headers: {
-              //           Authorization: `Bearer ${localStorage.getItem('token')}`
-              //         }
-              //       })
-              //       setEditItem(null)
-              //     } catch (err) {
-              //       setError('Failed to save changes')
-              //     }
-              //   }}
-              //   className="space-y-4"
-              // >
               <form
                 onSubmit={async e => {
-                  e.preventDefault();
-                  if (!orderRec) return;
-
-                  const updatedRec = { ...orderRec }; // keep the full record
-                  const action = {
-                    type: "UPDATE_ORDER_REC",
-                    id: orderRec._id, // backend id
-                    payload: { categories: updatedRec.categories },
-                    timestamp: Date.now(),
-                  };
-
+                  e.preventDefault()
                   try {
-                    if (await isActuallyOnline()) {
-                      // Online: update backend
-                      await axios.put(`/api/order-rec/${orderRec._id}`, {
-                        categories: updatedRec.categories,
-                      }, {
-                        headers: { Authorization: `Bearer ${localStorage.getItem("token")}` },
-                      });
-
-                      // Update IndexedDB copy
-                      await saveOrderRec({ ...updatedRec, id: updatedRec._id });
-                    } else {
-                      // Offline: queue action
-                      await savePendingAction(action);
-
-                      // Optimistically update IndexedDB copy
-                      await saveOrderRec({ ...updatedRec, id: updatedRec._id });
-                      console.warn("Offline — changes saved locally and will sync later");
-                    }
-
-                    setEditItem(null);
+                    await axios.put(`/api/order-rec/${id}`, {
+                      categories: orderRec.categories
+                    }, {
+                      headers: {
+                        Authorization: `Bearer ${localStorage.getItem('token')}`
+                      }
+                    })
+                    setEditItem(null)
                   } catch (err) {
-                    console.error("Failed to save changes:", err);
-                    setError("Failed to save changes");
+                    setError('Failed to save changes')
                   }
                 }}
                 className="space-y-4"
               >
+              {/* // <form
+              //   onSubmit={async e => {
+              //     e.preventDefault();
+              //     if (!orderRec) return;
+
+              //     const updatedRec = { ...orderRec }; // keep the full record
+              //     const action = {
+              //       type: "UPDATE_ORDER_REC",
+              //       id: orderRec._id, // backend id
+              //       payload: { categories: updatedRec.categories },
+              //       timestamp: Date.now(),
+              //     };
+
+              //     try {
+              //       if (await isActuallyOnline()) {
+              //         // Online: update backend
+              //         await axios.put(`/api/order-rec/${orderRec._id}`, {
+              //           categories: updatedRec.categories,
+              //         }, {
+              //           headers: { Authorization: `Bearer ${localStorage.getItem("token")}` },
+              //         });
+
+              //         // Update IndexedDB copy
+              //         await saveOrderRec({ ...updatedRec, id: updatedRec._id });
+              //       } else {
+              //         // Offline: queue action
+              //         await savePendingAction(action);
+
+              //         // Optimistically update IndexedDB copy
+              //         await saveOrderRec({ ...updatedRec, id: updatedRec._id });
+              //         console.warn("Offline — changes saved locally and will sync later");
+              //       }
+
+              //       setEditItem(null);
+              //     } catch (err) {
+              //       console.error("Failed to save changes:", err);
+              //       setError("Failed to save changes");
+              //     }
+              //   }}
+              //   className="space-y-4"
+              // > */}
                 {visibleFields.map(field => (
                   <div key={field} className="flex flex-col items-center gap-1">
                     <label className="block text-sm font-medium text-center">{camelCaseToTitleCase(field)}</label>
