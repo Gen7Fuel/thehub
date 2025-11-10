@@ -2,9 +2,8 @@ import { Link, useMatchRoute, useNavigate } from '@tanstack/react-router'
 import { Button } from '../ui/button'
 import { useEffect, useState } from 'react'
 import { isTokenExpired } from '../../lib/utils'
-import { getDB, clearPendingActions, saveOrderRec } from "@/lib/indexedDB"
+import { syncPendingActions } from "@/lib/utils"
 import { isActuallyOnline } from "@/lib/network";
-import axios from "axios";
 import { useAuth } from "@/context/AuthContext";
 import { HelpCircle } from 'lucide-react'
 import {
@@ -20,7 +19,6 @@ export default function Navbar() {
   const navigate = useNavigate()
   const matchRoute = useMatchRoute()
   const [isHelpOpen, setIsHelpOpen] = useState(false)
-  // const { socketRef } = useSocket()
 
   // Effect: Check token expiration on mount and redirect to login if expired
   useEffect(() => {
@@ -28,13 +26,11 @@ export default function Navbar() {
     if (isTokenExpired(token)) {
       // Clear sensitive data and redirect to login
       localStorage.removeItem('token');
-      // localStorage.removeItem('email');
-      // localStorage.removeItem('location');
-      // localStorage.removeItem('access');
       navigate({ to: '/login' });
     }
   }, [navigate]);
 
+  // checking for api health and syncing db once in online mode every 1 mins
   useEffect(() => {
     // 1️⃣ Sync when back online
     const handleOnline = async () => {
@@ -108,20 +104,6 @@ export default function Navbar() {
 
   // Handles user logout: disconnects from socket, clears storage and redirects to login
   const handleLogout = () => {
-    // Disconnect from socket and leave room
-    // if (socketRef.current?.connected) {
-    //   const user = getUserFromToken();
-    //   if (user) {
-    //     const room = `${user.email.split("@")[0]}'s room`;
-    //     socketRef.current.emit('leave-room', room);
-    //     console.log('🚪 Left room:', room);
-    //   }
-    //   socketRef.current.disconnect();
-    //   console.log('🔌 Socket disconnected');
-    // } else {
-    //   console.log('⚠️ No socket to disconnect');
-    // }
-    
     // Clear all stored data
     localStorage.removeItem('token')
     // Navigate to login
@@ -198,148 +180,6 @@ export default function Navbar() {
     default:
       help = 'No help available for this page.'
   }
-  // async function syncPendingActions() {
-  //   // const online = await isActuallyOnline();
-  //   // if (!online) {
-  //   //   console.warn("🚫 Not truly online — skipping sync.");
-  //   //   return;
-  //   // }
-
-  //   const db = await getDB();
-  //   const tx = db.transaction("pendingActions", "readonly");
-  //   const actions = await tx.store.getAll();
-
-  //   if (!actions.length) return;
-
-  //   console.log(`🛰️ Syncing ${actions.length} pending actions...`);
-
-  //   for (const action of actions) {
-  //     try {
-  //       if (action.type === "TOGGLE_ITEM") {
-  //         await axios.put(
-  //           `/api/order-rec/${action.orderId}/item/${action.catIdx}/${action.itemIdx}`,
-  //           { completed: action.completed, isChanged: action.isChanged },
-  //           { headers: { Authorization: `Bearer ${localStorage.getItem("token")}` } }
-  //         );
-  //       }
-
-  //       // 🆕 Handle full order update (from your form)
-  //       else if (action.type === "UPDATE_ORDER_REC") {
-  //         const orderId = action.id;
-  //         if (!orderId) {
-  //           console.error("❌ Missing order ID for UPDATE_ORDER_REC");
-  //           continue;
-  //         }
-
-  //         const res = await axios.put(
-  //           `/api/order-rec/${orderId}`,
-  //           { categories: action.payload.categories },
-  //           { headers: { Authorization: `Bearer ${localStorage.getItem("token")}` } }
-  //         );
-
-  //         // Optional: also update local IndexedDB cache with latest synced record
-  //         const orderToSave = { ...res.data, id: res.data._id || res.data.id };
-  //         await saveOrderRec(orderToSave);
-  //       }
-
-  //       // Add other cases (NOTES, SAVE_ITEM, etc.)
-
-  //     } catch (err) {
-  //       console.error("⚠️ Sync failed for action:", action, err);
-  //       return; // stop and retry later (same behavior)
-  //     }
-  //   }
-
-  //   await clearPendingActions();
-  //   console.log("✅ Sync complete — all pending actions cleared");
-  // }
-  async function syncPendingActions() {
-    let pending;
-
-    do {
-      await new Promise(res => setTimeout(res, 300));
-
-      const db = await getDB();
-      const tx = db.transaction("pendingActions", "readonly");
-      pending = await tx.store.getAll();
-
-      if (!pending.length) break;
-
-      console.log(`🛰️ Syncing ${pending.length} pending actions...`);
-      const failed: any[] = [];
-
-      for (const action of pending) {
-        try {
-          if (action.type === "TOGGLE_ITEM") {
-            // 🔹 Perform backend update
-            await axios.put(
-              `/api/order-rec/${action.orderId}/item/${action.catIdx}/${action.itemIdx}`,
-              { completed: action.completed, isChanged: action.isChanged },
-              { headers: { Authorization: `Bearer ${localStorage.getItem("token")}` } }
-            );
-
-            // 🔹 Fetch the latest record from backend and cache it
-            const res = await axios.get(`/api/order-rec/${action.orderId}`, {
-              headers: { Authorization: `Bearer ${localStorage.getItem("token")}` },
-            });
-            const latest = { ...res.data, id: res.data._id || res.data.id };
-            await saveOrderRec(latest);
-
-            console.log("✅ Synced and refreshed order record:", latest.id);
-          }
-
-          else if (action.type === "UPDATE_ORDER_REC") {
-            const orderId = action.id;
-            const res = await axios.put(
-              `/api/order-rec/${orderId}`,
-              { categories: action.payload.categories },
-              { headers: { Authorization: `Bearer ${localStorage.getItem("token")}` } }
-            );
-
-            const latest = { ...res.data, id: res.data._id || res.data.id };
-            await saveOrderRec(latest);
-          }
-
-          else if (action.type === "SAVE_EXTRA_NOTE") {
-            // 🔹 Perform backend update
-            await axios.patch(
-              `/api/order-rec/${action.orderId}`,
-              { extraItemsNote: action.note },
-              { headers: { Authorization: `Bearer ${localStorage.getItem("token")}` } }
-            );
-
-            // 🔹 Fetch latest record from backend and cache it
-            const res = await axios.get(`/api/order-rec/${action.orderId}`, {
-              headers: { Authorization: `Bearer ${localStorage.getItem("token")}` },
-            });
-            const latest = { ...res.data, id: res.data._id || res.data.id };
-            await saveOrderRec(latest);
-          }
-
-        } catch (err) {
-          console.error("⚠️ Failed syncing", action, err);
-          failed.push(action);
-        }
-      }
-
-      // ✅ Clear successful ones
-      await clearPendingActions();
-
-      // 🔁 Requeue failed ones
-      if (failed.length) {
-        const dbw = await getDB();
-        const txw = dbw.transaction("pendingActions", "readwrite");
-        for (const f of failed) await txw.store.add(f);
-        await txw.done;
-        console.warn(`🔁 ${failed.length} actions retained for retry`);
-        break;
-      }
-    } while (pending.length > 0);
-
-    console.log("✅ Pending sync done");
-  }
-
-
 
   return (
     // Navbar container
