@@ -41,9 +41,21 @@ function App() {
   return (
     <div className="flex items-center justify-center min-h-screen bg-gray-50">
       <div className="flex flex-col gap-8 w-full max-w-3xl px-4 pt-16 pb-8">
+        {access?.safesheet && (
+          <Section title="Safesheet">
+            <div className="flex flex-wrap gap-4">
+              <Link to="/safesheet" search={{ site: user?.location }}>
+                <Button className="w-32 h-32 flex items-center justify-center break-words whitespace-normal text-center">
+                  Safesheet
+                </Button>
+              </Link>
+            </div>
+          </Section>
+        )}
+
         {/* Support Section */}
         {/* {access.module_support && ( //markpoint */}
-        {access.support && (
+        {access?.support && (
           <Section title="Support">
             <div className="flex flex-wrap gap-4">
               <Link to="/support">
@@ -123,7 +135,7 @@ function App() {
             <div className="flex flex-wrap gap-4">
               {/* Fleet Card Assignment button */}
               {/* {access.module_fleet_card_assignment && ( //markpoint */}
-              {access.fleetCardAssignment && (
+              {access?.fleetCardAssignment && (
                 <Link to="/fleet">
                   <Button className="w-32 h-32 flex items-center justify-center break-words whitespace-normal text-center">
                     Fleet Card Assignment
@@ -132,7 +144,7 @@ function App() {
               )}
               {/* Purchase Orders button */}
               {/* {access.module_po && ( //markpoint */}
-              {access?.po?.value && (
+              {access??.po??.value && (
                 <Link to="/po">
                   <Button className="w-32 h-32 flex items-center justify-center break-words whitespace-normal text-center">
                     Purchase Orders
@@ -154,7 +166,7 @@ function App() {
 
         {/* Accounts Payable Section */}
         {/* {access.module_payables && ( //markpoint */}
-        {access.payables && (
+        {access?.payables && (
           <Section title="Accounts Payable">
             <div className="flex flex-wrap gap-4">
               <Link to="/payables">

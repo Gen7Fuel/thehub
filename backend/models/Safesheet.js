@@ -1,0 +1,103 @@
+const mongoose = require('mongoose');
+const { Schema } = mongoose;
+
+/**
+ * Entry subdocument - represents a single row in the safe/cash sheet.
+ */
+const EntrySchema = new Schema({
+  date: { type: Date, required: true },
+  description: { type: String, default: '' },
+  cashIn: { type: Number, default: 0 },
+  cashExpenseOut: { type: Number, default: 0 },
+  cashDepositBank: { type: Number, default: 0 },
+}, { timestamps: true });
+
+/**
+ * Safesheet document - holds metadata and an array of entries.
+ * The running balance (cashOnHandSafe) is not stored; it's computed on demand.
+ */
+const SafesheetSchema = new Schema({
+  site: { type: String, required: true, index: true, unique: true }, // unique site identifier
+  initialBalance: { type: Number, default: 0 }, // starting safe balance before entries
+  entries: { type: [EntrySchema], default: [] },
+}, { timestamps: true });
+
+/**
+ * Instance method:
+ * Returns the entries sorted by date (then by createdAt) with a computed running balance
+ * for each row named `cashOnHandSafe`.
+ */
+SafesheetSchema.methods.getEntriesWithRunningBalance = function () {
+  // clone and sort entries to avoid mutating the document in memory
+  const sorted = [...this.entries].sort((a, b) => {
+    const da = +new Date(a.date);
+    const db = +new Date(b.date);
+    if (da !== db) return da - db;
+    // tie-breaker by creation time (timestamps) or _id
+    if (a.createdAt && b.createdAt) return a.createdAt - b.createdAt;
+    return String(a._id).localeCompare(String(b._id));
+  });
+
+  let running = Number(this.initialBalance || 0);
+  return sorted.map(e => {
+    // Increment/Decrement rules:
+    // - cashIn increases safe
+    // - cashExpenseOut decreases safe
+    // - cashDepositBank decreases safe (money deposited to bank)
+    const cashIn = Number(e.cashIn || 0);
+    const expense = Number(e.cashExpenseOut || 0);
+    const deposit = Number(e.cashDepositBank || 0);
+
+    running = running + cashIn - expense - deposit;
+
+    return {
+      _id: e._id,
+      date: e.date,
+      description: e.description,
+      cashIn,
+      cashExpenseOut: expense,
+      cashDepositBank: deposit,
+      cashOnHandSafe: Number(running.toFixed(2)),
+      createdAt: e.createdAt,
+      updatedAt: e.updatedAt,
+    };
+  });
+};
+
+/**
+ * Convenience static to add an entry and return entries with running balances.
+ * Usage: Safesheet.addEntry(sheetId, entryData)
+ */
+SafesheetSchema.statics.addEntry = async function (sheetId, entryData) {
+  const sheet = await this.findById(sheetId);
+  if (!sheet) throw new Error('Safesheet not found');
+
+  sheet.entries.push(entryData);
+  await sheet.save();
+  return sheet.getEntriesWithRunningBalance();
+};
+
+/**
+ * Optional: compute running balances for a list of safesheets or raw entries array
+ * Static helper for re-use (pure function).
+ */
+SafesheetSchema.statics.computeRunning = function (entries, initialBalance = 0) {
+  const sorted = [...entries].sort((a, b) => {
+    const da = +new Date(a.date);
+    const db = +new Date(b.date);
+    if (da !== db) return da - db;
+    if (a.createdAt && b.createdAt) return a.createdAt - b.createdAt;
+    return String(a._id || '').localeCompare(String(b._id || ''));
+  });
+
+  let running = Number(initialBalance || 0);
+  return sorted.map(e => {
+    const cashIn = Number(e.cashIn || 0);
+    const expense = Number(e.cashExpenseOut || 0);
+    const deposit = Number(e.cashDepositBank || 0);
+    running = running + cashIn - expense - deposit;
+    return { ...e, cashOnHandSafe: Number(running.toFixed(2)) };
+  });
+};
+
+module.exports = mongoose.model('Safesheet', SafesheetSchema);

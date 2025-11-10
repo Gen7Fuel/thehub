@@ -3,7 +3,8 @@ import { Button } from '../ui/button'
 import { useEffect, useState } from 'react'
 import { isTokenExpired } from '../../lib/utils'
 import { getSocket } from "@/lib/websocket";
-// import { getUserFromToken, useSocket } from '@/context/SignalContext'
+import { syncPendingActions } from "@/lib/utils"
+import { isActuallyOnline } from "@/lib/network";
 import { useAuth } from "@/context/AuthContext";
 import { HelpCircle } from 'lucide-react'
 import {
@@ -19,7 +20,6 @@ export default function Navbar() {
   const navigate = useNavigate()
   const matchRoute = useMatchRoute()
   const [isHelpOpen, setIsHelpOpen] = useState(false)
-  // const { socketRef } = useSocket()
 
   // Effect: Check token expiration on mount and redirect to login if expired
   useEffect(() => {
@@ -27,12 +27,44 @@ export default function Navbar() {
     if (isTokenExpired(token)) {
       // Clear sensitive data and redirect to login
       localStorage.removeItem('token');
-      // localStorage.removeItem('email');
-      // localStorage.removeItem('location');
-      // localStorage.removeItem('access');
       navigate({ to: '/login' });
     }
   }, [navigate]);
+
+  // checking for api health and syncing db once in online mode every 1 mins
+  useEffect(() => {
+    // 1️⃣ Sync when back online
+    const handleOnline = async () => {
+      const online = await isActuallyOnline();
+      if (online) {
+        console.log("🌐 Online — attempting background sync...");
+        syncPendingActions();
+      } else {
+        console.warn("⚠️ Still offline — skipping sync");
+      }
+    };
+
+    window.addEventListener("online", handleOnline);
+
+    // Also sync every 1 minute if actually online
+    const interval = setInterval(async () => {
+      const online = await isActuallyOnline();
+      console.log("checking for backend connectivity:",online)
+      if (online) {
+        console.log("Running updates")
+        syncPendingActions();
+      } else {
+        console.warn("⚠️ Offline during periodic check — skipping sync");
+      }
+    }, 60 * 1000); // 1 min
+
+    return () => {
+      window.removeEventListener("online", handleOnline);
+      clearInterval(interval);
+    };
+  }, []);
+
+
 
   // Route matchers for header text and navigation highlighting
   const isHome = matchRoute({ to: '/' })
@@ -49,6 +81,7 @@ export default function Navbar() {
   const isAudit = matchRoute({ to: '/audit', fuzzy: true })
   const isDashboard = matchRoute({ to: '/dashboard', fuzzy: true })
   const isSupport = matchRoute({ to: '/support', fuzzy: true })
+  const isSafesheet = matchRoute({ to: '/safesheet', fuzzy: true })
 
   // Returns the header text based on the current route
   const headerText = () => {
@@ -66,25 +99,12 @@ export default function Navbar() {
     if (isAudit) return 'Station Audits'
     if (isDashboard) return 'Dashboard'
     if (isSupport) return 'Support'
+    if (isSafesheet) return 'Safe Sheet'
     return ''
   }
 
   // Handles user logout: disconnects from socket, clears storage and redirects to login
   const handleLogout = () => {
-    // Disconnect from socket and leave room
-    // if (socketRef.current?.connected) {
-    //   const user = getUserFromToken();
-    //   if (user) {
-    //     const room = `${user.email.split("@")[0]}'s room`;
-    //     socketRef.current.emit('leave-room', room);
-    //     console.log('🚪 Left room:', room);
-    //   }
-    //   socketRef.current.disconnect();
-    //   console.log('🔌 Socket disconnected');
-    // } else {
-    //   console.log('⚠️ No socket to disconnect');
-    // }
-    
     // Clear all stored data
     localStorage.removeItem('token')
     // Navigate to login

@@ -12,7 +12,9 @@ import { Textarea } from '@/components/ui/textarea'
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip'
 import { Trash2 } from 'lucide-react'
 import { getOrderRecStatusColor } from "@/lib/utils"
+import { getOrderRecById, saveOrderRec, savePendingAction } from "@/lib/indexedDB"
 import { useAuth } from "@/context/AuthContext";
+import { isActuallyOnline } from "@/lib/network";
 // import { Switch } from "@/components/ui/switch";
 
 export const Route = createFileRoute('/_navbarLayout/order-rec/$id')({
@@ -47,23 +49,130 @@ function RouteComponent() {
     setExtraNote(orderRec?.extraItemsNote || '');
   }, [orderRec]);
 
+  // useEffect(() => {
+  //   const fetchOrderRec = async () => {
+  //     try {
+  //       const res = await axios.get(`/api/order-rec/${id}`, {
+  //         headers: {
+  //           Authorization: `Bearer ${localStorage.getItem('token')}`
+  //         }
+  //       })
+  //       setOrderRec(res.data)
+  //     } catch (err) {
+  //       setError('Failed to fetch order rec')
+  //     } finally {
+  //       setLoading(false)
+  //     }
+  //   }
+  //   fetchOrderRec()
+  // }, [id])
+
+  // useEffect(() => {
+  //   const fetchOrderRec = async () => {
+  //     try {
+  //       const res = await axios.get(`/api/order-rec/${id}`, {
+  //         headers: {
+  //           Authorization: `Bearer ${localStorage.getItem('token')}`
+  //         }
+  //       })
+  //       setOrderRec(res.data)
+  //     } catch (err) {
+  //       setError('Failed to fetch order rec')
+  //     } finally {
+  //       setLoading(false)
+  //     }
+  //   }
+  //   fetchOrderRec()
+  // }, [id])
   useEffect(() => {
     const fetchOrderRec = async () => {
       try {
-        const res = await axios.get(`/api/order-rec/${id}`, {
-          headers: {
-            Authorization: `Bearer ${localStorage.getItem('token')}`
+        // 1️⃣ Load cached data first
+        const cached = await getOrderRecById(id);
+        if (cached) {
+          console.log('Using cached order rec');
+          setOrderRec(cached);
+        } else {
+          // 2️⃣ Check network connectivity
+          const online = await isActuallyOnline();
+
+          // 3️⃣ Fetch only if online
+          if (online) {
+            const res = await axios.get(`/api/order-rec/${id}`, {
+              headers: { Authorization: `Bearer ${localStorage.getItem('token')}` },
+            });
+
+            const orderRecToSave = { ...res.data, id: res.data._id, _id: res.data._id };
+            setOrderRec(orderRecToSave);
+            await saveOrderRec(orderRecToSave);
+          } else if (!cached) {
+            console.warn('Offline and no cache available');
+            setError('Offline and no cached data available');
           }
-        })
-        setOrderRec(res.data)
+        }
+
       } catch (err) {
-        setError('Failed to fetch order rec')
+        console.error('Failed to fetch order rec', err);
+        if (!orderRec) setError('Failed to fetch order rec');
       } finally {
-        setLoading(false)
+        setLoading(false);
       }
-    }
-    fetchOrderRec()
-  }, [id])
+    };
+
+    fetchOrderRec();
+  }, [id]);
+
+  // useEffect(() => {
+  //   let interval: NodeJS.Timeout | null = null;
+
+  //   const fetchOrderRec = async () => {
+  //   try {
+  //     const online = await isActuallyOnline();
+
+  //     if (online) {
+  //       const res = await axios.get(`/api/order-rec/${id}`, {
+  //         headers: { Authorization: `Bearer ${localStorage.getItem('token')}` },
+  //       });
+  //       const orderRecToSave = { ...res.data, id: res.data._id || res.data.id };
+
+  //       setOrderRec(orderRecToSave);
+  //       await saveOrderRec(orderRecToSave);
+  //     } else {
+  //       // Only load cached data if offline
+  //       const cached = await getOrderRecById(id);
+  //       if (cached) setOrderRec(cached);
+  //       else setError('Offline and no cached data available');
+  //     }
+  //   } catch (err) {
+  //     console.error('Failed to fetch order rec', err);
+  //     // Optional: fallback to cache
+  //     const cached = await getOrderRecById(id);
+  //     if (cached) setOrderRec(cached);
+  //     else setError('Failed to fetch order rec');
+  //   } finally {
+  //     setLoading(false);
+  //   }
+  // };
+
+  //   // 🟢 Initial fetch
+  //   fetchOrderRec();
+
+  //   // 🔁 Periodic backend refresh (every minute)
+  //   interval = setInterval(async () => {
+  //     const online = await isActuallyOnline();
+  //     if (online) {
+  //       await fetchOrderRec(); // skip cache, force backend fetch
+  //     } else {
+  //       console.warn('⚠️ Skipping refresh — still offline');
+  //     }
+  //   }, 60 * 1000);
+
+  //   return () => {
+  //     if (interval) clearInterval(interval);
+  //   };
+  // }, [id]);
+
+
 
   // const handleSwitchChange = async (field: "orderPlaced" | "delivered", value: boolean) => {
   //   setSwitchLoading(true);
@@ -132,12 +241,12 @@ function RouteComponent() {
   const handleNotify = async () => {
     const userEmail = user?.email;
     // Get the site value from the order rec
-    const site = orderRec.site;
+    const site = orderRec?.site;
     interface Vendor {
       name: string;
     }
     // make a call to /api/vendors/:id to get the vendor name
-    const response = await axios.get(`/api/vendors/${orderRec.vendor}`, {
+    const response = await axios.get(`/api/vendors/${orderRec?.vendor}`, {
       headers: {
         Authorization: `Bearer ${localStorage.getItem('token')}`
       }
@@ -146,7 +255,7 @@ function RouteComponent() {
     const vendor: Vendor = response.data;
     const vendorName = vendor.name || 'Unknown';
     // If the uploader is the current user, notify the store only (do NOT mark as completed)
-    if (userEmail === orderRec.email) {
+    if (userEmail === orderRec?.email) {
       const confirmed = window.confirm(
         "Are you sure you want to notify the store that a new order rec has been uploaded?"
       );
@@ -169,9 +278,9 @@ function RouteComponent() {
         const subjectCreated = `📦 New Order Recommendation for Site ${site}`;
         const textCreated = `A new order recommendation has been uploaded for site ${site}.
         Vendor: ${vendorName}
-        File: ${orderRec.filename}
+        File: ${orderRec?.filename}
 
-        Please review it in The Hub: https://app.gen7fuel.com/order-rec/${orderRec._id}`;
+        Please review it in The Hub: https://app.gen7fuel.com/order-rec/${orderRec?._id}`;
 
         const htmlCreated = `
         <div style="
@@ -396,20 +505,177 @@ function RouteComponent() {
   }
 
   // Toggle item completion
-  const handleToggleItemCompleted = async (catIdx: number, itemIdx: number, completed: boolean, isChanged: boolean) => {
-    try {
-      console.log(`Toggling completion for item at catIdx ${catIdx}, itemIdx ${itemIdx} to ${completed}`);
-      // add authorization header with bearer token
-      const res = await axios.put(`/api/order-rec/${id}/item/${catIdx}/${itemIdx}`, { completed, isChanged },  {
-        headers: {
-          Authorization: `Bearer ${localStorage.getItem('token')}`
-        }
+  // const handleToggleItemCompleted = async (catIdx: number, itemIdx: number, completed: boolean, isChanged: boolean) => {
+  //   try {
+  //     console.log(`Toggling completion for item at catIdx ${catIdx}, itemIdx ${itemIdx} to ${completed}`);
+  //     // add authorization header with bearer token
+  //     const res = await axios.put(`/api/order-rec/${id}/item/${catIdx}/${itemIdx}`, { completed, isChanged },  {
+  //       headers: {
+  //         Authorization: `Bearer ${localStorage.getItem('token')}`
+  //       }
+  //     });
+  //     console.log('Update response:', res.data);
+  //     setOrderRec(res.data);
+  //   } catch (err) {
+  //     alert('Failed to update completion status.');
+  //   }
+  // };
+  // const handleToggleItemCompleted = async (
+  //   catIdx: number,
+  //   itemIdx: number,
+  //   completed: boolean,
+  //   isChanged: boolean
+  // ) => {
+  //   if (!orderRec) return;
+
+  //   // 1️⃣ Create updated copy of orderRec
+  //   const updatedOrderRec = {
+  //     ...orderRec,
+  //     categories: orderRec.categories.map((cat: any, cIdx: any) =>
+  //       cIdx === catIdx
+  //         ? {
+  //             ...cat,
+  //             items: cat.items.map((item: any, iIdx: any) =>
+  //               iIdx === itemIdx ? { ...item, completed } : item
+  //             ),
+  //           }
+  //         : cat
+  //     ),
+  //   };
+
+  //   // 2️⃣ Update React state
+  //   setOrderRec(updatedOrderRec);
+
+  //   // 3️⃣ Always save locally first
+  //   try {
+  //     await saveOrderRec(updatedOrderRec);
+  //   } catch (err) {
+  //     console.error('Failed to save locally:', err);
+  //   }
+  // };
+//   const handleToggleItemCompleted = async (
+//     catIdx: number,
+//     itemIdx: number,
+//     completed: boolean,
+//     isChanged: boolean
+//   ) => {
+//     if (!orderRec) return;
+
+//     const orderId = orderRec.id || orderRec._id; // <- fallback to _id
+//     if (!orderId) {
+//       console.error("❌ No orderId available!");
+//       return;
+//     }
+
+//     const updatedOrderRec = {
+//       ...orderRec,
+//       categories: orderRec.categories.map((cat: any, cIdx: any) =>
+//         cIdx === catIdx
+//           ? {
+//               ...cat,
+//               items: cat.items.map((item: any, iIdx: any) =>
+//                 iIdx === itemIdx ? { ...item, completed } : item
+//               ),
+//             }
+//           : cat
+//       ),
+//     };
+
+//     setOrderRec(updatedOrderRec);
+//     await saveOrderRec(updatedOrderRec);
+
+//     const action = {
+//       type: 'TOGGLE_ITEM',
+//       orderId,      // ✅ ensure it's always defined
+//       catIdx,
+//       itemIdx,
+//       completed,
+//       isChanged,
+//       timestamp: Date.now(),
+//     };
+
+//     try {
+//       const online = await isActuallyOnline();
+//       if (online) {
+//         const res = await axios.put(
+//           `/api/order-rec/${orderId}/item/${catIdx}/${itemIdx}`,
+//           { completed, isChanged },
+//           { headers: { Authorization: `Bearer ${localStorage.getItem("token")}` } }
+//         );
+
+//         const orderToSave = { ...res.data, id: res.data._id || res.data.id };
+//         await saveOrderRec(orderToSave);
+//         setOrderRec(orderToSave);
+//       } else {
+//         console.warn('Offline — saving toggle action for later');
+//         await savePendingAction(action);
+//       }
+//     } catch (err: unknown) {
+//       console.error('Online update failed, saving action offline', err);
+//       await savePendingAction(action);
+//     }
+// };
+
+  let saveTimer: NodeJS.Timeout | null = null;
+
+  const debouncedSaveOrderRec = async (orderRec: any) => {
+    if (saveTimer) clearTimeout(saveTimer);
+    saveTimer = setTimeout(async () => {
+      await saveOrderRec(orderRec); // always save locally
+    }, 200);
+  };
+
+  const handleToggleItemCompleted = async (
+    catIdx: number,
+    itemIdx: number,
+    completed: boolean,
+    isChanged: boolean
+  ) => {
+    if (!orderRec) return;
+
+    const orderId = orderRec.id;
+    if (!orderId) return console.error("❌ No orderId available!");
+
+    // 1️⃣ Update UI immediately
+    setOrderRec((prev: any) => {
+      if (!prev) return prev;
+
+      const updatedCategories = prev.categories.map((cat: any, cIdx: number) => {
+        if (cIdx !== catIdx) return cat;
+        const updatedItems = cat.items.map((item: any, iIdx: number) =>
+          iIdx === itemIdx ? { ...item, completed } : item
+        );
+        return {
+          ...cat,
+          items: updatedItems,
+          completed: updatedItems.every((i: any) => i.completed),
+        };
       });
-      console.log('Update response:', res.data);
-      setOrderRec(res.data);
-    } catch (err) {
-      alert('Failed to update completion status.');
-    }
+
+      const allCompleted = updatedCategories.every((cat: any) => cat.completed);
+      const nextOrderRec = {
+        ...prev,
+        categories: updatedCategories,
+        currentStatus: allCompleted ? "Completed" : "Created",
+        completed: allCompleted ? "Complete" : "Incomplete",
+      };
+
+      debouncedSaveOrderRec(nextOrderRec); // save locally
+      return nextOrderRec;
+    });
+
+    // 2️⃣ Queue action for sync
+    const action = {
+      type: "TOGGLE_ITEM",
+      orderId,
+      catIdx,
+      itemIdx,
+      completed,
+      isChanged,
+      timestamp: Date.now(),
+    };
+
+    await savePendingAction(action); // always save in IndexedDB
   };
 
   const handleExport = async () => {
@@ -567,15 +833,15 @@ function RouteComponent() {
   }
 
   // const access = user?.access || '{}' //markpoint
-  const access = user?.access || {}
+  const access = user?.access || {};
 
   return (
     <div className="container mx-auto p-6 max-w-6xl">
       <div className="flex items-center justify-between mb-4">
         <h1 className="text-2xl font-bold">{orderRec.filename}</h1>
-        <span className={`px-3 py-1 rounded ${orderRec.completed ? 'bg-green-100 text-green-700' : 'bg-gray-200 text-gray-700'}`}>
+        {/* <span className={`px-3 py-1 rounded ${orderRec.completed ? 'bg-green-100 text-green-700' : 'bg-gray-200 text-gray-700'}`}>
           {orderRec.completed ? 'Completed' : 'Incomplete'}
-        </span>
+        </span> */}
         <div className="flex gap-2">
         {/* If the order rec vendor is 'CoreMark' then show another button here called 'Template' */}
         {/* {access.component_order_rec_id_delete_button && ( //markpoint */}
@@ -613,22 +879,29 @@ function RouteComponent() {
       </div>
 
       <div className="flex items-center gap-6 my-4 text-base">
-        {/* Current Status */}
-        <div className="flex items-center gap-2">
-          <span className="font-medium">Current Status:</span>
+            <div className="flex items-center gap-2">
+          <span className="font-medium">Site:</span>
             <span
-              className="px-3 py-1 rounded-full text-sm font-medium text-gray-800"
-              style={{
-                backgroundColor: getOrderRecStatusColor(orderRec?.currentStatus),
-              }}
+              className="text-medium font-large text-gray-800"
             >
-              {orderRec?.currentStatus || "N/A"}
+              {orderRec?.site}
             </span>
-
         </div>
+        {/* Current Status */}
+          <div className="flex items-center gap-2">
+            <span className="font-medium">Current Status:</span>
+              <span
+                className="px-3 py-1 rounded-full text-sm font-medium text-gray-800"
+                style={{
+                  backgroundColor: getOrderRecStatusColor(orderRec?.currentStatus),
+                }}
+              >
+                {orderRec?.currentStatus || "N/A"}
+              </span>
+          </div>
 
         {/* Last Updated */}
-        <div className="flex items-center gap-2 text-gray-600">
+        {/* <div className="flex items-center gap-2 text-gray-600">
           <span className="font-medium">Last Updated:</span>
           <span>
             {orderRec?.statusHistory?.length
@@ -637,12 +910,12 @@ function RouteComponent() {
                 ).toLocaleString()
               : "N/A"}
           </span>
-        </div>
-      </div>
+        </div> */}
+    </div>
 
 
       <div className="mb-8 max-w-2xl mx-auto">
-        <form
+        {/* <form
           onSubmit={async e => {
             e.preventDefault();
             setSavingNote(true);
@@ -659,6 +932,37 @@ function RouteComponent() {
               setOrderRec((prev: any) => ({ ...prev, extraItemsNote: extraNote }));
             } catch (err) {
               setNoteError('Failed to save.');
+            } finally {
+              setSavingNote(false);
+            }
+          }}
+          className="space-y-2"
+        > */}
+
+        <form
+          onSubmit={async e => {
+            e.preventDefault();
+            setSavingNote(true);
+            setNoteSuccess(null);
+            setNoteError(null);
+
+            try {
+              // 1️⃣ Update UI immediately
+              setOrderRec((prev: any) => ({ ...prev, extraItemsNote: extraNote }));
+
+              // 2️⃣ Create new pending action
+              const action = {
+                type: "SAVE_EXTRA_NOTE",
+                orderId: orderRec.id || orderRec._id,
+                note: extraNote,
+                timestamp: Date.now(),
+              };
+
+              // 3️⃣ Save action to IndexedDB
+              await savePendingAction(action);
+            } catch (err) {
+              console.error("⚠️ Failed to save note", err);
+              setNoteError('Failed to save note.');
             } finally {
               setSavingNote(false);
             }
@@ -844,120 +1148,6 @@ function RouteComponent() {
           </AccordionItem>
         ))}
       </Accordion>
-
-      {/* Modal for editing item */}
-      {/* <Dialog open={!!editItem} onOpenChange={(open:boolean) => !open && setEditItem(null)}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle className="text-center">
-              {editItem
-                ? orderRec.categories[editItem.catIdx].items[editItem.itemIdx].itemName
-                : 'Edit Item'}
-            </DialogTitle>
-          </DialogHeader>
-          {editItem && (() => {
-            const { catIdx, itemIdx } = editItem
-            const item = orderRec.categories[catIdx].items[itemIdx]
-            const isFirst = itemIdx === 0
-            const isLast = itemIdx === orderRec.categories[catIdx].items.length - 1
-
-            return (
-              <form
-                onSubmit={async e => {
-                  e.preventDefault()
-                  try {
-                    // add authorization header with bearer token
-                    await axios.put(`/api/order-rec/${id}`, {
-                      categories: orderRec.categories
-                    }, {
-                      headers: {
-                        Authorization: `Bearer ${localStorage.getItem('token')}`
-                      }
-                    })
-                    setEditItem(null)
-                  } catch (err) {
-                    setError('Failed to save changes')
-                  }
-                }}
-                className="space-y-4"
-              >
-                {['onHandQty', 'forecast', 'minStock', 'itemsToOrder', 'unitInCase', 'casesToOrder'].map(field => (
-                  <div key={field} className="flex flex-col items-center gap-1">
-                    <label className="block text-sm font-medium text-center">{camelCaseToTitleCase(field)}</label>
-                    {['onHandQty', 'casesToOrder'].includes(field) ? (
-                      <div className="flex items-center gap-2 justify-center">
-                        <Button
-                          type="button"
-                          size="icon"
-                          variant="ghost"
-                          className="h-8 w-8"
-                          tabIndex={-1}
-                          onClick={() => handleChange(catIdx, itemIdx, field, Number(item[field]) - 1)}
-                        >
-                          <Minus size={16} />
-                        </Button>
-                        <Input
-                          type="number"
-                          value={item[field]}
-                          onChange={e => handleChange(catIdx, itemIdx, field, Number(e.target.value))}
-                          onFocus={e => e.target.select()}
-                          className="w-24 text-center text-gray-900 font-semibold disabled:text-gray-900"
-                        />
-                        <Button
-                          type="button"
-                          size="icon"
-                          variant="ghost"
-                          className="h-8 w-8"
-                          tabIndex={-1}
-                          onClick={() => handleChange(catIdx, itemIdx, field, Number(item[field]) + 1)}
-                        >
-                          <Plus size={16} />
-                        </Button>
-                      </div>
-                    ) : (
-                      <div className="flex items-center justify-center">
-                        <Input
-                          type="number"
-                          value={item[field]}
-                          onChange={e => handleChange(catIdx, itemIdx, field, Number(e.target.value))}
-                          onFocus={e => e.target.select()}
-                          className="w-24 text-center text-gray-900 font-semibold disabled:text-gray-900"
-                          disabled
-                        />
-                      </div>
-                    )}
-                  </div>
-                ))}
-                <div className="flex justify-between gap-2 pt-4">
-                  <Button
-                    type="button"
-                    variant="outline"
-                    disabled={isFirst}
-                    onClick={() => {
-                      if (!isFirst) setEditItem({ catIdx, itemIdx: itemIdx - 1 })
-                    }}
-                  >
-                    Back
-                  </Button>
-                  <Button type="submit">
-                    Save
-                  </Button>
-                  <Button
-                    type="button"
-                    variant="outline"
-                    disabled={isLast}
-                    onClick={() => {
-                      if (!isLast) setEditItem({ catIdx, itemIdx: itemIdx + 1 })
-                    }}
-                  >
-                    Next
-                  </Button>
-                </div>
-              </form>
-            )
-          })()}
-        </DialogContent>
-      </Dialog> */}
       {/* Modal for editing item */}
       <Dialog open={!!editItem} onOpenChange={(open: boolean) => !open && setEditItem(null)}>
         <DialogContent>
@@ -983,21 +1173,52 @@ function RouteComponent() {
                 : ['onHandQty', 'forecast', 'minStock', 'itemsToOrder', 'unitInCase', 'casesToOrder']
 
             return (
+              // <form
+              //   onSubmit={async e => {
+              //     e.preventDefault()
+              //     try {
+              //       await axios.put(`/api/order-rec/${id}`, {
+              //         categories: orderRec.categories
+              //       }, {
+              //         headers: {
+              //           Authorization: `Bearer ${localStorage.getItem('token')}`
+              //         }
+              //       })
+              //       setEditItem(null)
+              //     } catch (err) {
+              //       setError('Failed to save changes')
+              //     }
+              //   }}
+              //   className="space-y-4"
+              // >
               <form
-                onSubmit={async e => {
-                  e.preventDefault()
-                  try {
-                    await axios.put(`/api/order-rec/${id}`, {
-                      categories: orderRec.categories
-                    }, {
-                      headers: {
-                        Authorization: `Bearer ${localStorage.getItem('token')}`
-                      }
-                    })
-                    setEditItem(null)
-                  } catch (err) {
-                    setError('Failed to save changes')
+                onSubmit={async (e: React.FormEvent) => {
+                  e.preventDefault();
+                  if (!orderRec) return;
+
+                  const orderId = orderRec.id || orderRec._id;
+                  if (!orderId) {
+                    setError("Cannot save — missing order ID");
+                    return;
                   }
+
+                  const updatedRec = { ...orderRec };
+                  const action = {
+                    type: "UPDATE_ORDER_REC",
+                    id: orderId,
+                    payload: { categories: updatedRec.categories },
+                    timestamp: Date.now(),
+                  };
+
+                  // 1️⃣ Update UI immediately
+                  setEditItem(null);
+                  setOrderRec(updatedRec);
+
+                  // 2️⃣ Save locally
+                  await saveOrderRec(updatedRec);
+
+                  // 3️⃣ Queue action for sync
+                  await savePendingAction(action);
                 }}
                 className="space-y-4"
               >
