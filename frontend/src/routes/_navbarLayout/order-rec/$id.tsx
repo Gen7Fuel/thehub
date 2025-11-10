@@ -102,7 +102,7 @@ function RouteComponent() {
               headers: { Authorization: `Bearer ${localStorage.getItem('token')}` },
             });
 
-            const orderRecToSave = { ...res.data, id: res.data.id || res.data._id };
+            const orderRecToSave = { ...res.data, id: res.data._id, _id: res.data._id };
             setOrderRec(orderRecToSave);
             await saveOrderRec(orderRecToSave);
           } else if (!cached) {
@@ -633,7 +633,7 @@ function RouteComponent() {
   ) => {
     if (!orderRec) return;
 
-    const orderId = orderRec.id || orderRec._id;
+    const orderId = orderRec.id;
     if (!orderId) return console.error("❌ No orderId available!");
 
     // 1️⃣ Update UI immediately
@@ -953,7 +953,7 @@ function RouteComponent() {
               // 2️⃣ Create new pending action
               const action = {
                 type: "SAVE_EXTRA_NOTE",
-                orderId: id,
+                orderId: orderRec.id || orderRec._id,
                 note: extraNote,
                 timestamp: Date.now(),
               };
