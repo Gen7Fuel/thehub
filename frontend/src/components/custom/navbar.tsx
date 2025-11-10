@@ -300,6 +300,22 @@ export default function Navbar() {
             await saveOrderRec(latest);
           }
 
+          else if (action.type === "SAVE_EXTRA_NOTE") {
+            // 🔹 Perform backend update
+            await axios.patch(
+              `/api/order-rec/${action.orderId}`,
+              { extraItemsNote: action.note },
+              { headers: { Authorization: `Bearer ${localStorage.getItem("token")}` } }
+            );
+
+            // 🔹 Fetch latest record from backend and cache it
+            const res = await axios.get(`/api/order-rec/${action.orderId}`, {
+              headers: { Authorization: `Bearer ${localStorage.getItem("token")}` },
+            });
+            const latest = { ...res.data, id: res.data._id || res.data.id };
+            await saveOrderRec(latest);
+          }
+
         } catch (err) {
           console.error("⚠️ Failed syncing", action, err);
           failed.push(action);
