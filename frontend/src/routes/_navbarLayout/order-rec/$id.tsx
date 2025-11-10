@@ -92,23 +92,23 @@ function RouteComponent() {
         if (cached) {
           console.log('Using cached order rec');
           setOrderRec(cached);
-        }
+        } else {
+          // 2️⃣ Check network connectivity
+          const online = await isActuallyOnline();
 
-        // 2️⃣ Check network connectivity
-        const online = await isActuallyOnline();
+          // 3️⃣ Fetch only if online
+          if (online) {
+            const res = await axios.get(`/api/order-rec/${id}`, {
+              headers: { Authorization: `Bearer ${localStorage.getItem('token')}` },
+            });
 
-        // 3️⃣ Fetch only if online
-        if (online) {
-          const res = await axios.get(`/api/order-rec/${id}`, {
-            headers: { Authorization: `Bearer ${localStorage.getItem('token')}` },
-          });
-
-          const orderRecToSave = { ...res.data, id: res.data.id || res.data._id };
-          setOrderRec(orderRecToSave);
-          await saveOrderRec(orderRecToSave);
-        } else if (!cached) {
-          console.warn('Offline and no cache available');
-          setError('Offline and no cached data available');
+            const orderRecToSave = { ...res.data, id: res.data.id || res.data._id };
+            setOrderRec(orderRecToSave);
+            await saveOrderRec(orderRecToSave);
+          } else if (!cached) {
+            console.warn('Offline and no cache available');
+            setError('Offline and no cached data available');
+          }
         }
 
       } catch (err) {
@@ -621,8 +621,8 @@ function RouteComponent() {
   const debouncedSaveOrderRec = async (orderRec: any) => {
     if (saveTimer) clearTimeout(saveTimer);
     saveTimer = setTimeout(async () => {
-      await saveOrderRec(orderRec);
-    }, 200); // small delay batches multiple quick toggles
+      await saveOrderRec(orderRec); // always save locally
+    }, 200);
   };
 
   const handleToggleItemCompleted = async (
@@ -636,7 +636,7 @@ function RouteComponent() {
     const orderId = orderRec.id || orderRec._id;
     if (!orderId) return console.error("❌ No orderId available!");
 
-    // 🧠 Local fast update — no async here!
+    // 1️⃣ Update UI immediately
     setOrderRec((prev: any) => {
       if (!prev) return prev;
 
@@ -653,24 +653,18 @@ function RouteComponent() {
       });
 
       const allCompleted = updatedCategories.every((cat: any) => cat.completed);
-      const updatedStatus = allCompleted ? "Completed" : "Created";
-      const completedStatus = allCompleted ? "Complete" : "Incomplete";
-
       const nextOrderRec = {
         ...prev,
         categories: updatedCategories,
-        currentStatus: updatedStatus,
-        completed: completedStatus,
+        currentStatus: allCompleted ? "Completed" : "Created",
+        completed: allCompleted ? "Complete" : "Incomplete",
       };
 
-      // 🔹 Save debounced (non-blocking)
-      debouncedSaveOrderRec(nextOrderRec);
-
-      // 🔹 Return new state instantly
+      debouncedSaveOrderRec(nextOrderRec); // save locally
       return nextOrderRec;
     });
 
-    // 🧾 Action for offline/online sync
+    // 2️⃣ Queue action for sync
     const action = {
       type: "TOGGLE_ITEM",
       orderId,
@@ -681,33 +675,8 @@ function RouteComponent() {
       timestamp: Date.now(),
     };
 
-    try {
-      const online = await isActuallyOnline();
-      if (online) {
-        const res = await axios.put(
-          `/api/order-rec/${orderId}/item/${catIdx}/${itemIdx}`,
-          { completed, isChanged },
-          { headers: { Authorization: `Bearer ${localStorage.getItem("token")}` } }
-        );
-
-        // ✅ Backend might have updated status, notes, etc.
-        const updatedFromServer = { ...res.data, id: res.data._id || res.data.id };
-
-        // ✅ Save locally (debounced to avoid heavy writes)
-        debouncedSaveOrderRec(updatedFromServer);
-
-        // ✅ Update UI state immediately (no lag)
-        setOrderRec(updatedFromServer);
-      } else {
-        await savePendingAction(action);
-      }
-    } catch (err) {
-      console.error("⚠️ Online update failed, saving action offline", err);
-      await savePendingAction(action);
-    }
+    await savePendingAction(action); // always save in IndexedDB
   };
-
-
 
   const handleExport = async () => {
     if (!orderRec) return;
@@ -946,7 +915,7 @@ function RouteComponent() {
 
 
       <div className="mb-8 max-w-2xl mx-auto">
-        <form
+        {/* <form
           onSubmit={async e => {
             e.preventDefault();
             setSavingNote(true);
@@ -963,6 +932,37 @@ function RouteComponent() {
               setOrderRec((prev: any) => ({ ...prev, extraItemsNote: extraNote }));
             } catch (err) {
               setNoteError('Failed to save.');
+            } finally {
+              setSavingNote(false);
+            }
+          }}
+          className="space-y-2"
+        > */}
+
+        <form
+          onSubmit={async e => {
+            e.preventDefault();
+            setSavingNote(true);
+            setNoteSuccess(null);
+            setNoteError(null);
+
+            try {
+              // 1️⃣ Update UI immediately
+              setOrderRec((prev: any) => ({ ...prev, extraItemsNote: extraNote }));
+
+              // 2️⃣ Create new pending action
+              const action = {
+                type: "SAVE_EXTRA_NOTE",
+                orderId: id,
+                note: extraNote,
+                timestamp: Date.now(),
+              };
+
+              // 3️⃣ Save action to IndexedDB
+              await savePendingAction(action);
+            } catch (err) {
+              console.error("⚠️ Failed to save note", err);
+              setNoteError('Failed to save note.');
             } finally {
               setSavingNote(false);
             }
@@ -1210,39 +1210,18 @@ function RouteComponent() {
                     timestamp: Date.now(),
                   };
 
-                  // ✅ Pre-check online status once
-                  const online = navigator.onLine; // instant check first
-                  const verifiedOnline = online ? await Promise.race([
-                    isActuallyOnline(),
-                    new Promise((resolve) => setTimeout(() => resolve(true), 300)), // fast fallback
-                  ]) : false;
-
-                  // ✅ Instant UI update
+                  // 1️⃣ Update UI immediately
                   setEditItem(null);
-                  saveOrderRec(updatedRec); // async fire-and-forget
+                  setOrderRec(updatedRec);
 
-                  if (verifiedOnline) {
-                    try {
-                      const res = await axios.put(
-                        `/api/order-rec/${orderId}`,
-                        { categories: updatedRec.categories },
-                        { headers: { Authorization: `Bearer ${localStorage.getItem("token")}` } }
-                      );
-                      const orderToSave = { ...res.data, id: res.data._id || res.data.id };
-                      await saveOrderRec(orderToSave);
-                      setOrderRec(orderToSave);
-                    } catch (err) {
-                      console.error("❌ Online save failed, queued offline:", err);
-                      await savePendingAction(action);
-                    }
-                  } else {
-                    await savePendingAction(action);
-                    console.warn("⚠️ Offline — saved locally, will sync later");
-                  }
+                  // 2️⃣ Save locally
+                  await saveOrderRec(updatedRec);
+
+                  // 3️⃣ Queue action for sync
+                  await savePendingAction(action);
                 }}
                 className="space-y-4"
               >
-
                 {visibleFields.map(field => (
                   <div key={field} className="flex flex-col items-center gap-1">
                     <label className="block text-sm font-medium text-center">{camelCaseToTitleCase(field)}</label>
