@@ -67,6 +67,23 @@ function RouteComponent() {
   //   fetchOrderRec()
   // }, [id])
 
+  // useEffect(() => {
+  //   const fetchOrderRec = async () => {
+  //     try {
+  //       const res = await axios.get(`/api/order-rec/${id}`, {
+  //         headers: {
+  //           Authorization: `Bearer ${localStorage.getItem('token')}`
+  //         }
+  //       })
+  //       setOrderRec(res.data)
+  //     } catch (err) {
+  //       setError('Failed to fetch order rec')
+  //     } finally {
+  //       setLoading(false)
+  //     }
+  //   }
+  //   fetchOrderRec()
+  // }, [id])
   useEffect(() => {
     const fetchOrderRec = async () => {
       try {
@@ -501,6 +518,39 @@ function RouteComponent() {
   //     setOrderRec(res.data);
   //   } catch (err) {
   //     alert('Failed to update completion status.');
+  //   }
+  // };
+  // const handleToggleItemCompleted = async (
+  //   catIdx: number,
+  //   itemIdx: number,
+  //   completed: boolean,
+  //   isChanged: boolean
+  // ) => {
+  //   if (!orderRec) return;
+
+  //   // 1️⃣ Create updated copy of orderRec
+  //   const updatedOrderRec = {
+  //     ...orderRec,
+  //     categories: orderRec.categories.map((cat: any, cIdx: any) =>
+  //       cIdx === catIdx
+  //         ? {
+  //             ...cat,
+  //             items: cat.items.map((item: any, iIdx: any) =>
+  //               iIdx === itemIdx ? { ...item, completed } : item
+  //             ),
+  //           }
+  //         : cat
+  //     ),
+  //   };
+
+  //   // 2️⃣ Update React state
+  //   setOrderRec(updatedOrderRec);
+
+  //   // 3️⃣ Always save locally first
+  //   try {
+  //     await saveOrderRec(updatedOrderRec);
+  //   } catch (err) {
+  //     console.error('Failed to save locally:', err);
   //   }
   // };
 //   const handleToggleItemCompleted = async (
