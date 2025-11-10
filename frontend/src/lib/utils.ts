@@ -3,6 +3,7 @@ import { twMerge } from "tailwind-merge"
 import { domain } from "@/lib/constants"
 import { jwtDecode } from "jwt-decode"
 import axios from "axios"
+import { getDB, clearPendingActions, saveOrderRec } from "@/lib/indexedDB"
 // import { useAuth } from "@/context/AuthContext";
 
 export function cn(...inputs: ClassValue[]) {
@@ -358,6 +359,7 @@ export async function getCsoCodeByStationName(stationName: string): Promise<stri
   }
 }
 
+// get status color for order rec status
 export const getOrderRecStatusColor = (status?: string) => {
   switch (status) {
     case "Created":
@@ -398,6 +400,7 @@ export const getDecodedToken = (): User | null => {
   }
 };
 
+//function for converting cameltext case of permissions to normal capitalize text
 export function camelCaseToCapitalized(text: String) {
   return text
     .replace(/([a-z])([A-Z])/g, '$1 $2') // Insert space before each uppercase letter
@@ -405,3 +408,90 @@ export function camelCaseToCapitalized(text: String) {
     .map(word => word.charAt(0).toUpperCase() + word.slice(1)) // Capitalize first letter
     .join(' ');
 }
+
+//function for syncing order rec with the mongo db
+export async function syncPendingActions() {
+    let pending;
+
+    do {
+      await new Promise(res => setTimeout(res, 300));
+
+      const db = await getDB();
+      const tx = db.transaction("pendingActions", "readonly");
+      pending = await tx.store.getAll();
+
+      if (!pending.length) break;
+
+      console.log(`🛰️ Syncing ${pending.length} pending actions...`);
+      const failed: any[] = [];
+
+      for (const action of pending) {
+        try {
+          if (action.type === "TOGGLE_ITEM") {
+            // 🔹 Perform backend update
+            await axios.put(
+              `/api/order-rec/${action.orderId}/item/${action.catIdx}/${action.itemIdx}`,
+              { completed: action.completed, isChanged: action.isChanged },
+              { headers: { Authorization: `Bearer ${localStorage.getItem("token")}` } }
+            );
+
+            // 🔹 Fetch the latest record from backend and cache it
+            const res = await axios.get(`/api/order-rec/${action.orderId}`, {
+              headers: { Authorization: `Bearer ${localStorage.getItem("token")}` },
+            });
+            const latest = { ...res.data, id: res.data._id || res.data.id };
+            await saveOrderRec(latest);
+
+            console.log("✅ Synced and refreshed order record:", latest.id);
+          }
+
+          else if (action.type === "UPDATE_ORDER_REC") {
+            const orderId = action.id;
+            const res = await axios.put(
+              `/api/order-rec/${orderId}`,
+              { categories: action.payload.categories },
+              { headers: { Authorization: `Bearer ${localStorage.getItem("token")}` } }
+            );
+
+            const latest = { ...res.data, id: res.data._id || res.data.id };
+            await saveOrderRec(latest);
+          }
+
+          else if (action.type === "SAVE_EXTRA_NOTE") {
+            // 🔹 Perform backend update
+            await axios.patch(
+              `/api/order-rec/${action.orderId}`,
+              { extraItemsNote: action.note },
+              { headers: { Authorization: `Bearer ${localStorage.getItem("token")}` } }
+            );
+
+            // 🔹 Fetch latest record from backend and cache it
+            const res = await axios.get(`/api/order-rec/${action.orderId}`, {
+              headers: { Authorization: `Bearer ${localStorage.getItem("token")}` },
+            });
+            const latest = { ...res.data, id: res.data._id || res.data.id };
+            await saveOrderRec(latest);
+          }
+
+        } catch (err) {
+          console.error("⚠️ Failed syncing", action, err);
+          failed.push(action);
+        }
+      }
+
+      // ✅ Clear successful ones
+      await clearPendingActions();
+
+      // 🔁 Requeue failed ones
+      if (failed.length) {
+        const dbw = await getDB();
+        const txw = dbw.transaction("pendingActions", "readwrite");
+        for (const f of failed) await txw.store.add(f);
+        await txw.done;
+        console.warn(`🔁 ${failed.length} actions retained for retry`);
+        break;
+      }
+    } while (pending.length > 0);
+
+    console.log("✅ Pending sync done");
+  }
