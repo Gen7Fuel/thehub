@@ -54,3 +54,22 @@ export const clearPendingActions = async () => {
   await tx.store.clear();
   await tx.done;
 };
+
+// check for pending actions if any
+export const hasPendingActions = async (): Promise<boolean> => {
+  const db = await getDB();
+  const tx = db.transaction("pendingActions", "readonly");
+  const count = await tx.store.count();
+  return count > 0;
+};
+
+// clear index db
+export const clearLocalDB = async () => {
+  try {
+    await indexedDB.deleteDatabase(DB_NAME);
+    console.log("🧹 IndexedDB cleared on logout");
+  } catch (err) {
+    console.error("❌ Failed to clear IndexedDB:", err);
+  }
+};
+

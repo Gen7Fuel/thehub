@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { createFileRoute } from '@tanstack/react-router'
+import { createFileRoute, useNavigate } from '@tanstack/react-router'
 import { DatePickerWithRange } from '@/components/custom/datePickerWithRange'
 import type { DateRange } from "react-day-picker"
 import { LocationPicker } from '@/components/custom/locationPicker'
@@ -38,7 +38,7 @@ function RouteComponent() {
   })
   const { user } = useAuth()
   // const access = user?.access || {}
-  
+  const navigate = useNavigate()
   const [location, setLocation] = useState<string>(user?.location || "")
   const [timezone, setTimezone] = useState<string>(user?.timezone || "America/Toronto")
   const [payables, setPayables] = useState<Payable[]>([])
@@ -90,9 +90,14 @@ function RouteComponent() {
       // add authorization header with bearer token
       const response = await axios.get(`${domain}/api/payables?${queryParams}`, {
         headers: {
-          Authorization: `Bearer ${token}`
+          Authorization: `Bearer ${token}`,
+          "X-Required-Permission": "payables"
         }
       })
+      if (response.status == 403){
+        navigate({to:"/no-access"});
+        return;
+      }
       const data = response.data
 
       console.log('API response:', data)
@@ -119,10 +124,14 @@ function RouteComponent() {
       const token = localStorage.getItem('token')
       const response = await axios.delete(`${domain}/api/payables/${id}`, {
         headers: {
-          Authorization: `Bearer ${token}`
+          Authorization: `Bearer ${token}`,
+          "X-Required-Permission": "payables"
         }
       })
-      if (response.status === 200) {
+      if (response.status == 403){
+        navigate({to:"/no-access"})
+        return;
+      } else if (response.status === 200) {
         setPayables(payables.filter(p => p._id !== id))
       } else {
         alert('Error deleting payable')

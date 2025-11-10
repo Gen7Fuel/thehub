@@ -7,6 +7,7 @@ import { syncPendingActions } from "@/lib/utils"
 import { isActuallyOnline } from "@/lib/network";
 import { useAuth } from "@/context/AuthContext";
 import { HelpCircle } from 'lucide-react'
+import { clearLocalDB } from "@/lib/indexedDB";
 import {
   Dialog,
   DialogContent,
@@ -107,6 +108,8 @@ export default function Navbar() {
   const handleLogout = () => {
     // Clear all stored data
     localStorage.removeItem('token')
+    //clear index db 
+    clearLocalDB();
     // Navigate to login
     navigate({ to: '/login' })
   }

@@ -1,4 +1,4 @@
-import { createFileRoute } from '@tanstack/react-router'
+import { createFileRoute, useNavigate } from '@tanstack/react-router'
 import { Accordion, AccordionItem, AccordionTrigger, AccordionContent } from '@/components/ui/accordion'
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { useEffect, useState } from 'react'
@@ -12,7 +12,7 @@ import { Textarea } from '@/components/ui/textarea'
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip'
 import { Trash2 } from 'lucide-react'
 import { getOrderRecStatusColor } from "@/lib/utils"
-import { getOrderRecById, saveOrderRec, savePendingAction } from "@/lib/indexedDB"
+import { getOrderRecById, saveOrderRec, savePendingAction, hasPendingActions } from "@/lib/indexedDB"
 import { useAuth } from "@/context/AuthContext";
 import { isActuallyOnline } from "@/lib/network";
 // import { Switch } from "@/components/ui/switch";
@@ -42,6 +42,7 @@ function RouteComponent() {
   const [savingNote, setSavingNote] = useState(false);
   const [noteSuccess, setNoteSuccess] = useState<string | null>(null);
   const [noteError, setNoteError] = useState<string | null>(null);
+  const navigate = useNavigate()
   // const [switchLoading, setSwitchLoading] = useState(false);
 
   // Keep textarea in sync if orderRec changes
@@ -87,40 +88,54 @@ function RouteComponent() {
   useEffect(() => {
     const fetchOrderRec = async () => {
       try {
-        // 1️⃣ Load cached data first
+        // 1️⃣ Load cached data for instant UI
         const cached = await getOrderRecById(id);
         if (cached) {
-          console.log('Using cached order rec');
+          console.log("📦 Using cached order rec");
           setOrderRec(cached);
-        } else {
-          // 2️⃣ Check network connectivity
-          const online = await isActuallyOnline();
-
-          // 3️⃣ Fetch only if online
-          if (online) {
-            const res = await axios.get(`/api/order-rec/${id}`, {
-              headers: { Authorization: `Bearer ${localStorage.getItem('token')}` },
-            });
-
-            const orderRecToSave = { ...res.data, id: res.data._id, _id: res.data._id };
-            setOrderRec(orderRecToSave);
-            await saveOrderRec(orderRecToSave);
-          } else if (!cached) {
-            console.warn('Offline and no cache available');
-            setError('Offline and no cached data available');
-          }
         }
 
+        // 2️⃣ Check if we can safely refresh
+        const pendingExists = await hasPendingActions();
+        if (pendingExists) {
+          console.log("⏸️ Skipping backend fetch — pending actions exist");
+          return; // prevent overwrite until sync completes
+        }
+
+        // 3️⃣ Safe to refresh from backend
+        const online = await isActuallyOnline();
+        if (online) {
+          const res = await axios.get(`/api/order-rec/${id}`, {
+            headers: { Authorization: `Bearer ${localStorage.getItem("token")}`, "X-Required-Permission": "orderRec.id" },
+          });
+
+          if (res.status === 403) {
+            navigate({ to: "/no-access" });
+            return;
+          }
+          const orderRecToSave = { ...res.data, id: res.data._id, _id: res.data._id };
+
+          console.log("🌐 Refreshed from backend");
+          setOrderRec(orderRecToSave);
+          await saveOrderRec(orderRecToSave);
+        } else if (!cached) {
+          console.warn("⚠️ Offline and no cache available");
+          setError("Offline and no cached data available");
+        }
       } catch (err) {
-        console.error('Failed to fetch order rec', err);
-        if (!orderRec) setError('Failed to fetch order rec');
+        console.error("❌ Failed to fetch order rec", err);
+        if (!orderRec) setError("Failed to fetch order rec");
       } finally {
         setLoading(false);
       }
     };
-
-    fetchOrderRec();
+    if (user?.access?.orderRec?.id){
+      fetchOrderRec();
+    } else {
+      navigate({ to: "/no-access" });
+    }
   }, [id]);
+
 
   // useEffect(() => {
   //   let interval: NodeJS.Timeout | null = null;
@@ -193,18 +208,35 @@ function RouteComponent() {
   const handleDelete = async () => {
     const confirmed = window.confirm("Are you sure you want to delete this order rec? This action cannot be undone.");
     if (!confirmed) return;
+
     try {
-      await axios.delete(`/api/order-rec/${id}`, {
+      const response = await axios.delete(`/api/order-rec/${id}`, {
         headers: {
-          Authorization: `Bearer ${localStorage.getItem('token')}`
-        }
+          Authorization: `Bearer ${localStorage.getItem('token')}`,
+          "X-Required-Permission": "orderRec.id.deleteButton",
+        },
       });
-      // Redirect to the list page after deletion
-      window.location.href = "/order-rec/list";
-    } catch (err) {
+
+      // ✅ Handle 403 Forbidden
+      if (response.status === 403) {
+        navigate({ to: "/no-access" });
+        return;
+      }
+
+      // ✅ Redirect to list after successful delete
+      navigate({ to: "/order-rec/list" });
+
+    } catch (err: any) {
+      if (axios.isAxiosError(err) && err.response?.status === 403) {
+        navigate({ to: "/no-access" });
+        return;
+      }
+
+      console.error("Delete order rec error:", err);
       alert("Failed to delete order rec.");
     }
   };
+
 
   const handleChange = (catIdx: number, itemIdx: number, field: string, value: number) => {
     setOrderRec((prev: any) => {

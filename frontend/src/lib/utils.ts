@@ -439,10 +439,10 @@ export async function syncPendingActions() {
             const res = await axios.get(`/api/order-rec/${action.orderId}`, {
               headers: { Authorization: `Bearer ${localStorage.getItem("token")}` },
             });
-            const latest = { ...res.data, id: res.data._id || res.data.id };
+            const latest = { ...res.data, id: res.data._id, _id: res.data._id };
             await saveOrderRec(latest);
 
-            console.log("✅ Synced and refreshed order record:", latest.id);
+            console.log("✅ Synced and refreshed TOGEL_ITEM order record:", latest.id);
           }
 
           else if (action.type === "UPDATE_ORDER_REC") {
@@ -453,24 +453,26 @@ export async function syncPendingActions() {
               { headers: { Authorization: `Bearer ${localStorage.getItem("token")}` } }
             );
 
-            const latest = { ...res.data, id: res.data._id || res.data.id };
+            const latest = { ...res.data, id: res.data._id, _id: res.data._id  };
             await saveOrderRec(latest);
+            console.log("✅ Synced and refreshed UPDATE_ORDER_REC order record:", latest.id);
           }
 
           else if (action.type === "SAVE_EXTRA_NOTE") {
             // 🔹 Perform backend update
-            await axios.patch(
+            const res = await axios.patch(
               `/api/order-rec/${action.orderId}`,
               { extraItemsNote: action.note },
               { headers: { Authorization: `Bearer ${localStorage.getItem("token")}` } }
             );
 
             // 🔹 Fetch latest record from backend and cache it
-            const res = await axios.get(`/api/order-rec/${action.orderId}`, {
-              headers: { Authorization: `Bearer ${localStorage.getItem("token")}` },
-            });
-            const latest = { ...res.data, id: res.data._id || res.data.id };
+            // const res = await axios.get(`/api/order-rec/${action.orderId}`, {
+            //   headers: { Authorization: `Bearer ${localStorage.getItem("token")}` },
+            // });
+            const latest = { ...res.data, id: res.data._id, _id: res.data._id };
             await saveOrderRec(latest);
+            console.log("✅ Synced and refreshed SAVE_EXTRA_NOTE order record:", latest.id);
           }
 
         } catch (err) {

@@ -144,7 +144,7 @@ function App() {
               )}
               {/* Purchase Orders button */}
               {/* {access.module_po && ( //markpoint */}
-              {access??.po??.value && (
+              {access?.po?.value && (
                 <Link to="/po">
                   <Button className="w-32 h-32 flex items-center justify-center break-words whitespace-normal text-center">
                     Purchase Orders
