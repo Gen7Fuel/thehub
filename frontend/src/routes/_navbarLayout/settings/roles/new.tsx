@@ -64,10 +64,10 @@ export function RouteComponent() {
         const token = localStorage.getItem("token");
         const [permRes, roleRes] = await Promise.all([
           axios.get<PermissionTemplate[]>("/api/permissions", {
-            headers: { Authorization: `Bearer ${token}` },
+            headers: { Authorization: `Bearer ${token}`,"X-Required-Permission": "settings" },
           }),
           axios.get<Role[]>("/api/roles", {
-            headers: { Authorization: `Bearer ${token}` },
+            headers: { Authorization: `Bearer ${token}`,"X-Required-Permission": "settings" },
           }),
         ]);
 
@@ -79,6 +79,10 @@ export function RouteComponent() {
         setRole((prev) => ({ ...prev, permissions: mappedPermissions }));
       } catch (err) {
         console.error("Error loading templates or roles:", err);
+        // Handle 403 specifically
+        if (axios.isAxiosError(err) && err.response?.status === 403) {
+          navigate({to:"/no-access"});
+        }
       } finally {
         setLoading(false);
       }
@@ -128,13 +132,18 @@ const handleTemplateSelect = (templateId: string) => {
     try {
       const token = localStorage.getItem("token");
       await axios.post("/api/roles", role, {
-        headers: { Authorization: `Bearer ${token}` },
+        headers: { Authorization: `Bearer ${token}`,"X-Required-Permission": "settings" },
       });
       alert("Role created successfully!");
       navigate({ to: "/settings/roles/" });
-    } catch (err) {
-      console.error(err);
-      alert("Failed to create role");
+    } catch (err: any) {
+      if (err.response?.status === 403) {
+        // Redirect to no-access page
+        navigate({ to: "/no-access" });
+      } else {
+        console.error(err);
+        alert("Failed to create role");
+      }
     }
   };
 

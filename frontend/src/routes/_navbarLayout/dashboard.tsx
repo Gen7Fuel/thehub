@@ -107,9 +107,35 @@ function RouteComponent() {
         const params = new URLSearchParams({ site, startDate, endDate });
 
         // Order recs
-        const orderRecsRes = await fetch(`/api/order-rec/range?${params}`, {
-          headers: { Authorization: `Bearer ${localStorage.getItem("token")}` },
-        }).then(res => res.json());
+        // const orderRecsRes = await fetch(`/api/order-rec/range?${params}`, {
+        //   headers: { Authorization: `Bearer ${localStorage.getItem("token")}`, "X-Required-Permission": "dashboard" },
+        // }).then(res => res.json());
+        let orderRecsRes: any = []
+        try {
+          const res = await fetch(`/api/order-rec/range?${params}`, {
+            headers: {
+              Authorization: `Bearer ${localStorage.getItem("token")}`,
+              "X-Required-Permission": "dashboard",
+            },
+          });
+
+          if (res.status === 403) {
+            // Redirect to no-access page
+            navigate({ to: "/no-access" });
+            return;
+          }
+
+          if (!res.ok) {
+            throw new Error(`Failed to fetch order records: ${res.statusText}`);
+          }
+
+          orderRecsRes = await res.json();
+          // Use orderRecsRes as needed
+        } catch (error: any) {
+          console.error("Error fetching order records:", error);
+          // Optionally handle other errors here
+        }
+
 
         // Cycle counts
         const timezone = await fetchLocation(site).then(loc => loc.timezone || "UTC");

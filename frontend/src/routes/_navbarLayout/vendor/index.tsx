@@ -1,4 +1,4 @@
-import { createFileRoute } from '@tanstack/react-router'
+import { createFileRoute, useNavigate } from '@tanstack/react-router'
 import React, { useEffect, useState } from "react"
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -20,6 +20,7 @@ export const Route = createFileRoute('/_navbarLayout/vendor/')({
 function RouteComponent() {
   const [name, setName] = useState("");
   // const [location, setLocation] = useState(localStorage.getItem("location") || "");
+  const navigate = useNavigate()
   const [stationSupplies, setStationSupplies] = useState<SupplyItem[]>([]);
   const [emailOrder, setEmailOrder] = useState(false);
   const [email, setEmail] = useState("");
@@ -81,6 +82,7 @@ function RouteComponent() {
         headers: {
           "Content-Type": "application/json",
           Authorization: `Bearer ${token}`,
+          "X-Required-Permission": "vendor",
         },
         body: JSON.stringify({
           name,
@@ -106,6 +108,9 @@ function RouteComponent() {
         // Handle duplicate vendor (name + location)
         const data = await res.json();
         alert(data.error || "Vendor with this name and location already exists. Try editing it instead.");
+      } else if (res.status === 403) {
+        navigate({to:"/no-access"});
+        return;
       } else {
         const data = await res.json();
         alert(data.error || "Failed to add vendor. Please try again.");
@@ -123,8 +128,12 @@ function RouteComponent() {
       try {
         const token = localStorage.getItem("token");
         const res = await fetch("/api/vendors", {
-          headers: { Authorization: `Bearer ${token}` },
+          headers: { Authorization: `Bearer ${token}`,
+          "X-Required-Permission": "vendor" },
         });
+        if (res.status == 403){
+          navigate({to:"/no-access"})
+        }
         if (!res.ok) throw new Error(`HTTP error! status: ${res.status}`);
         const data = (await res.json()) as { name: string; category: string }[];
 

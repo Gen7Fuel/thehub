@@ -17,7 +17,16 @@ function RouteComponent() {3
   const { user } = useAuth()
   const { site } = Route.useSearch()
   const navigate = useNavigate({ from: Route.fullPath })
-  const data = Route.useLoaderData()
+  // const data = Route.useLoaderData()
+  const loaderData = Route.useLoaderData() as { data: any[], accessDenied: boolean };
+  const { data, accessDenied } = loaderData;
+
+  // Redirect if 403
+  useEffect(() => {
+    if (accessDenied) {
+      navigate({ to: "/no-access" });
+    }
+  }, [accessDenied, navigate]);
   
   useEffect(() => {
     if (!site && user?.location) {
@@ -94,12 +103,39 @@ function RouteComponent() {3
 
 
 
+// async function fetchOrderRecs(site: string) {
+//   const response = await fetch(`/api/order-rec?site=${site}`, {
+//     headers: {
+//       Authorization: `Bearer ${localStorage.getItem('token') || ''}`,
+//       "X-Required-Permission": "orderRec"
+//     },
+//   })
+//   if(response.status == 403) {
+//       navigate({ to: "/no-access" });
+//       return;
+//   }
+//   const data = await response.json()
+//   return data
+// }
+// Loader fetch function
 async function fetchOrderRecs(site: string) {
-  const response = await fetch(`/api/order-rec?site=${site}`, {
-    headers: {
-      Authorization: `Bearer ${localStorage.getItem('token') || ''}`,
-    },
-  })
-  const data = await response.json()
-  return data
+  try {
+    const response = await fetch(`/api/order-rec?site=${site}`, {
+      headers: {
+        Authorization: `Bearer ${localStorage.getItem('token') || ''}`,
+        "X-Required-Permission": "orderRec",
+      },
+    });
+
+    if (response.status === 403) {
+      // Return a special flag instead of navigating
+      return { data: [], accessDenied: true };
+    }
+
+    const data = await response.json();
+    return { data, accessDenied: false };
+  } catch (err) {
+    console.error(err);
+    return { data: [], accessDenied: false };
+  }
 }

@@ -22,13 +22,19 @@ function RouteComponent() {
         module_name: moduleName,
         structure,
       }, {
-        headers: { Authorization: `Bearer ${localStorage.getItem('token')}` },
+        headers: { Authorization: `Bearer ${localStorage.getItem('token')}`,
+          "X-Required-Permission": "settings", },
       });
       alert("Permission created successfully!");
       navigate({ to: "/settings/permissions" });
-    } catch (error) {
-      console.error(error);
-      alert("Failed to create permission.");
+    } catch (error: any) {
+      if (error.response?.status === 403) {
+        // Redirect to no-access page
+        navigate({ to: "/no-access" });
+      } else {
+        console.error(error);
+        alert("Failed to create permission.");
+      }
     }
   };
 

@@ -1,10 +1,11 @@
-import { createFileRoute } from '@tanstack/react-router';
+import { createFileRoute, useNavigate } from '@tanstack/react-router';
 import axios from "axios";
 import { useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Label } from "@/components/ui/label";
 import { Select, SelectTrigger, SelectContent, SelectItem, SelectValue } from "@/components/ui/select";
+import { useAuth } from '@/context/AuthContext';
 // import { toast } from "sonner";
 import {
   InputOTP,
@@ -12,40 +13,80 @@ import {
   InputOTPSlot,
 } from "@/components/ui/input-otp";
 
+// export const Route = createFileRoute('/_navbarLayout/settings/sites/$id')({
+//   loader: async ({ params }) => {
+//     const { id } = params;
+//     try {
+//       const response = await axios.get(`/api/locations/${id}`, {
+//         headers: {
+//           Authorization: `Bearer ${localStorage.getItem('token')}`,
+//           "X-Required-Permission": "settings",
+//         },
+//       });
+//       return { location: response.data.location, noAccess: false };
+//     } catch (error: any) {
+//       console.error('Error fetching location:', error);
+
+//       // If 403, set noAccess flag
+//       const noAccess = axios.isAxiosError(error) && error.response?.status === 403;
+//       return { location: null, noAccess };
+//     }
+//   },
+//   component: RouteComponent,
+// });
+
 export const Route = createFileRoute('/_navbarLayout/settings/sites/$id')({
-  loader: async ({ params }) => {
-    const { id } = params;
-    try {
-      const response = await axios.get(`/api/locations/${id}`, {
-        headers: {
-          Authorization: `Bearer ${localStorage.getItem('token')}`,
-        },
-      });
-      return { location: response.data.location };
-    } catch (error) {
-      console.error('Error fetching location:', error);
-      return { location: null };
-    }
-  },
   component: RouteComponent,
 });
 
 function RouteComponent() {
   const { id } = Route.useParams();
-  const { location } = Route.useLoaderData() as {
-    location: {
-      _id: string;
-      type: string;
-      stationName: string;
-      legalName: string;
-      INDNumber: string;
-      kardpollCode: string;
-      csoCode: string;
-      timezone: string;
-      email: string;
-      managerCode: number;
-    } | null;
-  };
+  const navigate = useNavigate();
+  const { user  } = useAuth();
+  const access = user?.access || {};
+  const [location, setLocation] = useState<{
+    _id: string;
+    type: string;
+    stationName: string;
+    legalName: string;
+    INDNumber: string;
+    kardpollCode: string;
+    csoCode: string;
+    timezone: string;
+    email: string;
+    managerCode: number;
+  } | null>(null);
+
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    const fetchLocation = async () => {
+      // Check frontend permission first
+      if (!access?.settings) {
+        setLocation(null); // clear location
+        navigate({ to: '/no-access' });
+        return;
+      }
+
+      try {
+        const token = localStorage.getItem('token');
+        const response = await axios.get(`/api/locations/${id}`, {
+          headers: {
+            Authorization: `Bearer ${token}`,
+          },
+        });
+        setLocation(response.data.location || null);
+      } catch (error) {
+        console.error('Error fetching location:', error);
+        setLocation(null);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchLocation();
+  }, [id, access?.settings, navigate]);
+
   const [otp, setOtp] = useState(""); // controlled OTP string
 
   interface LocationForm {
@@ -71,7 +112,6 @@ function RouteComponent() {
   });
 
   const [timezones, setTimezones] = useState<string[]>([]);
-  const [loading, setLoading] = useState(false);
   // const navigate = useNavigate();
 
   useEffect(() => {

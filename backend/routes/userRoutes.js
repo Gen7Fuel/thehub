@@ -103,6 +103,10 @@ router.put("/:userId/role", async (req, res) => {
 
     user.role = roleId;
     await user.save();
+    const io = req.app.get("io");
+    if (io){
+      io.to(userId).emit("permissions-updated");
+    }
 
     res.json({ success: true, message: "User role updated successfully" });
   } catch (err) {
@@ -122,6 +126,10 @@ router.put("/:userId/site-access", async (req, res) => {
     }
 
     await User.findByIdAndUpdate(userId, { site_access: siteAccess });
+    const io = req.app.get("io");
+    if (io){
+      io.to(userId).emit("permissions-updated");
+    }
     res.json({ success: true, message: "Site access updated successfully" });
   } catch (err) {
     console.error("Error updating site access:", err);
@@ -203,6 +211,10 @@ router.put("/:userId/permissions", async (req, res) => {
     // Update user
     user.custom_permissions = customPermissions;
     await user.save();
+    const io = req.app.get("io");
+    if (io) {
+     io.to(userId).emit("permissions-updated");
+    }
 
     res.json({ success: true, custom_permissions: customPermissions });
   } catch (err) {

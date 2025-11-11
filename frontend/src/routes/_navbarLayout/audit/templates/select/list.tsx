@@ -1,4 +1,4 @@
-import { createFileRoute } from '@tanstack/react-router'
+import { createFileRoute, useNavigate } from '@tanstack/react-router'
 import { useEffect, useState } from "react";
 import axios from "axios";
 import { Pencil, Trash2 } from "lucide-react";
@@ -21,17 +21,26 @@ function RouteComponent() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
 
+  const navigate = useNavigate();
+
   useEffect(() => {
     axios
       .get("/api/audit/select-templates", {
         headers: {
           Authorization: `Bearer ${localStorage.getItem("token")}`,
+          "X-Required-Permission": "stationAudit.template",
         },
       })
       .then(res => setTemplates(res.data))
-      .catch(() => setError("Failed to load select templates"))
+      .catch(err => {
+        if (err.response?.status === 403) {
+          navigate({ to: "/no-access" });
+        } else {
+          setError("Failed to load select templates");
+        }
+      })
       .finally(() => setLoading(false));
-  }, []);
+  }, [navigate]);
 
   const handleDelete = async (id: string) => {
     if (!window.confirm("Are you sure you want to delete this template?")) return;
@@ -39,16 +48,21 @@ function RouteComponent() {
       await axios.delete(`/api/audit/select-templates/${id}`, {
         headers: {
           Authorization: `Bearer ${localStorage.getItem("token")}`,
+          "X-Required-Permission": "stationAudit.template",
         },
       });
       setTemplates(templates => templates.filter(t => t._id !== id));
-    } catch {
-      alert("Failed to delete template.");
+    } catch (err: any) {
+      if (err.response?.status === 403) {
+        navigate({ to: "/no-access" });
+      } else {
+        alert("Failed to delete template.");
+      }
     }
   };
 
   const handleEdit = (id: string) => {
-    window.location.href = `/audit/templates/select/${id}`;
+    navigate({ to: `/audit/templates/select/${id}` });
   };
 
   if (loading) return <div className="text-center mt-8">Loading...</div>;

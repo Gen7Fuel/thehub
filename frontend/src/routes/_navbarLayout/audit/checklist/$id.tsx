@@ -1,4 +1,4 @@
-import { createFileRoute, useParams } from "@tanstack/react-router";
+import { createFileRoute, useParams, useNavigate } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
 import { ChecklistItemCard } from "@/components/custom/ChecklistItem";
 import { Button } from "@/components/ui/button";
@@ -93,9 +93,9 @@ function RouteComponent() {
   const { stationName } = useContext(RouteContext);
   const { user } = useAuth();
   const site = stationName || user?.location || "";
+  const navigate = useNavigate()
   
   // const site = localStorage.getItem("location") || ""; //Original file
-  console.log("stationnane:",stationName)
   const [items, setItems] = useState<AuditItem[]>([]);
   // const [displayItems, setDisplayItems] = useState<AuditItem[]>([]); // sorted for initial display / after save
   const [selectTemplates, setSelectTemplates] = useState<SelectTemplate[]>([]);
@@ -256,9 +256,16 @@ const sortItems = (list: AuditItem[]) => {
           site
         )}&date=${currentDate.toISOString()}&frequency=${frequency}`,
         {
-          headers: { Authorization: `Bearer ${token}` },
+          headers: { Authorization: `Bearer ${token}`,
+          "X-Required-Permission": "stationAudit" },
         }
       );
+
+      if (res.status === 403) {
+        // Redirect to no-access page
+        navigate({ to: "/no-access" });
+        return;
+      }
 
       if (!res.ok) throw new Error("Failed to fetch checklist");
 
@@ -272,7 +279,8 @@ const sortItems = (list: AuditItem[]) => {
     } finally {
       setLoading(false);
     }
-  };
+  }
+
 
   useEffect(() => {
     if (id && site) fetchChecklist();
@@ -351,6 +359,7 @@ const sortItems = (list: AuditItem[]) => {
         headers: {
           "Content-Type": "application/json",
           Authorization: `Bearer ${token}`,
+          "X-Required-Permission": "stationAudit",
         },
         body: JSON.stringify({
           template: id,
@@ -361,6 +370,12 @@ const sortItems = (list: AuditItem[]) => {
           date: new Date().toISOString(),
         }),
       });
+
+      if (res.status === 403) {
+        // Redirect to no-access page
+        navigate({ to: "/no-access" });
+        return;
+      }
 
       const data = await res.json(); // parse JSON once
 
@@ -388,9 +403,7 @@ const sortItems = (list: AuditItem[]) => {
     } finally {
       setSaving(false);
     }
-  };
-
-
+  }
   const totalItems = items.length;
   const checkedItems = items.filter(item => item.checked).length;
 

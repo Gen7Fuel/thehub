@@ -62,7 +62,7 @@ export function SitePicker({
   const filteredLocations = useMemo(() => {
     if (!user || !user.access) return locations
 
-    const siteAccess = user.access.site_access || {}
+    const siteAccess = user?.access?.site_access || {}
 
     // force-include user's own site
     const permittedSites = [

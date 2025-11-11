@@ -1,5 +1,5 @@
 import React, { useEffect } from 'react';
-import { createFileRoute } from '@tanstack/react-router';
+import { createFileRoute, useNavigate } from '@tanstack/react-router';
 import { useFormStore } from '@/store';
 import { DatePickerWithRange } from '@/components/custom/datePickerWithRange';
 import { addDays } from 'date-fns';
@@ -11,25 +11,11 @@ import { toUTC } from '@/lib/utils';
 
 export const Route = createFileRoute('/_navbarLayout/kardpoll/list')({
   component: RouteComponent,
-  loader: async () => {
-    try {
-      // add authorization header with bearer token
-      const response = await axios.get('/api/locations', {
-        headers: {
-          Authorization: `Bearer ${localStorage.getItem('token')}`
-        }
-      });
-      const locations = response.data;
-      return { locations };
-    } catch (error) {
-      console.error('Error loading locations:', error);
-      return { locations: [] };
-    }
-  },
 });
 
 function RouteComponent() {
   const resetForm = useFormStore((state) => state.resetForm);
+  const navigate = useNavigate()
   const [date, setDate] = React.useState<DateRange | undefined>({
     from: new Date(),
     to: addDays(new Date(), 0),
@@ -47,28 +33,34 @@ function RouteComponent() {
     }[]
   >([]);
 
-  const fetchTransactions = async () => {
-    if (!date?.from || !date?.to || !stationName) return;
+const fetchTransactions = async () => {
+  if (!date?.from || !date?.to || !stationName) return;
 
-    try {
-      const response = await axios.get(
-        `/api/kardpoll-transactions`, {
-          params: {
-            startDate: toUTC(date.from).toISOString(),
-            endDate: toUTC(date.to).toISOString(),
-            stationName
-          },
-          headers: {
-            Authorization: `Bearer ${localStorage.getItem('token')}`
-          }
-        }
-      );
-      setTransactions(response.data);
-    } catch (error) {
-      console.error('Error fetching transactions:', error);
-      setTransactions([]);
+  try {
+    const response = await axios.get(`/api/kardpoll-transactions`, {
+      params: {
+        startDate: toUTC(date.from).toISOString(),
+        endDate: toUTC(date.to).toISOString(),
+        stationName,
+      },
+      headers: {
+        Authorization: `Bearer ${localStorage.getItem('token')}`,
+        "X-Required-Permission": "kardpoll",
+      },
+    });
+
+    setTransactions(response.data);
+  } catch (error: any) {
+    if (axios.isAxiosError(error) && error.response?.status === 403) {
+      navigate({ to: "/no-access" }); // SPA-friendly redirect
+      return;
     }
-  };
+
+    console.error("Error fetching transactions:", error);
+    setTransactions([]);
+  }
+};
+
 
   // const data = Route.useLoaderData() as { locations: { _id: string; stationName: string }[] };
 

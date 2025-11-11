@@ -1,57 +1,101 @@
 import axios from "axios";
 import { slugToString } from '@/lib/utils';
 import { createFileRoute, useNavigate } from '@tanstack/react-router';
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 
 export const Route = createFileRoute('/_navbarLayout/settings/paypoints/$site')({
   component: RouteComponent,
   loader: async ({ params }) => {
     const { site } = params;
     try {
-      // add authorization header with bearer token
       const response = await axios.get(`/api/paypoints/${site}`, {
         headers: {
-          Authorization: `Bearer ${localStorage.getItem('token')}`
-        }
+          Authorization: `Bearer ${localStorage.getItem('token')}`,
+          "X-Required-Permission": "settings",
+        },
       });
+
+      if (response.status === 403) {
+        return { paypoints: [], accessDenied: true };
+      }
+
       const data = response.data;
-      return { paypoints: Array.isArray(data) ? data : [] }; // Ensure data is an array
-    } catch (error) {
+      return { paypoints: Array.isArray(data) ? data : [], accessDenied: false };
+    } catch (error: any) {
       console.error('Error fetching paypoints:', error);
-      return { paypoints: [] }; // Fallback to an empty array on error
+
+      if (axios.isAxiosError(error) && error.response?.status === 403) {
+        return { paypoints: [], accessDenied: true };
+      }
+
+      return { paypoints: [], accessDenied: false };
     }
   },
 });
 
 function RouteComponent() {
+  const navigate = useNavigate();
   const { site } = Route.useParams() as { site: string };
-  const { paypoints } = Route.useLoaderData() as { paypoints: { _id: string; label: string }[] };
+  const { paypoints, accessDenied } = Route.useLoaderData() as {
+    paypoints: { _id: string; label: string }[];
+    accessDenied: boolean;
+  };
+
+  // 🚦 Redirect to /no-access if permission revoked
+  useEffect(() => {
+    if (accessDenied) {
+      navigate({ to: '/no-access' });
+    }
+  }, [accessDenied, navigate]);
+
+  if (accessDenied) return null; 
   const [newPaypoint, setNewPaypoint] = useState('');
   const [loading, setLoading] = useState(false);
-
-  const navigate = useNavigate();
 
   const handleAddPaypoint = async () => {
     if (!newPaypoint.trim()) return;
 
     setLoading(true);
     try {
-      // add authorization header with bearer token
-      await axios.post(`/api/paypoints/${site}`, { name: newPaypoint }, {
-        headers: {
-          Authorization: `Bearer ${localStorage.getItem('token')}`
+      const response = await axios.post(
+        `/api/paypoints/${site}`,
+        { name: newPaypoint },
+        {
+          headers: {
+            Authorization: `Bearer ${localStorage.getItem('token')}`,
+            "X-Required-Permission": "settings",
+          },
+          validateStatus: () => true, // prevents Axios from throwing automatically
         }
-      });
+      );
+
+      if (response.status === 403) {
+        navigate({ to: '/no-access' });
+        return;
+      }
+
+      if (response.status !== 200 && response.status !== 201) {
+        console.error('Unexpected response while adding paypoint:', response);
+        alert('Failed to add paypoint.');
+        return;
+      }
 
       setNewPaypoint('');
-      // Refresh the page to reload data from the loader
+      // ✅ Refresh the route to reload data
       navigate({ to: `/settings/paypoints/${site}`, replace: true });
-    } catch (error) {
+
+    } catch (error: any) {
       console.error('Error adding paypoint:', error);
+      if (axios.isAxiosError(error) && error.response?.status === 403) {
+        navigate({ to: '/no-access' });
+      } else {
+        alert('Error adding paypoint. Please try again.');
+      }
     } finally {
       setLoading(false);
     }
   };
+
 
   return (
     <div className="p-4">

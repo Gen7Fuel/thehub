@@ -59,9 +59,9 @@
 //     </div>
 //   );
 // }
-import { createFileRoute, Link, Outlet } from '@tanstack/react-router';
+import { createFileRoute, Link, Outlet, useNavigate } from '@tanstack/react-router';
 import axios from "axios";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Switch } from "@/components/ui/switch"; // assuming you use shadcn/ui Switch
 
 export const Route = createFileRoute('/_navbarLayout/settings/users')({
@@ -71,12 +71,23 @@ export const Route = createFileRoute('/_navbarLayout/settings/users')({
       const response = await axios.get('/api/users', {
         headers: {
           Authorization: `Bearer ${localStorage.getItem('token')}`,
+          "X-Required-Permission": "settings",
         },
       });
-      return { users: response.data };
-    } catch (error) {
+
+      if (response.status === 403) {
+        return { users: [], accessDenied: true };
+      }
+
+      return { users: response.data, accessDenied: false };
+    } catch (error: any) {
       console.error('Error fetching users:', error);
-      return { users: [] };
+
+      if (axios.isAxiosError(error) && error.response?.status === 403) {
+        return { users: [], accessDenied: true };
+      }
+
+      return { users: [], accessDenied: false };
     }
   },
 });
@@ -90,8 +101,22 @@ interface User {
 }
 
 function RouteComponent() {
-  const { users: initialUsers } = Route.useLoaderData() as { users: User[] };
+  const navigate = useNavigate();
+  const { users: initialUsers, accessDenied } = Route.useLoaderData() as {
+    users: User[];
+    accessDenied: boolean;
+  };
+
   const [users, setUsers] = useState<User[]>(initialUsers);
+
+  // 🚦 Redirect when permission is revoked
+  useEffect(() => {
+    if (accessDenied) {
+      navigate({ to: '/no-access' });
+    }
+  }, [accessDenied, navigate]);
+
+  if (accessDenied) return null; // avoid flicker before redirect
 
   const activeProps = {
     className: 'bg-gray-100 rounded-md',
@@ -112,17 +137,23 @@ function RouteComponent() {
         {
           headers: {
             Authorization: `Bearer ${localStorage.getItem('token')}`,
+            "X-Required-Permission": "settings",
           },
         }
       );
-    } catch (error) {
-      console.error("Failed to update user status:", error);
+    } catch (error: any) {
       // Revert state if API fails
       setUsers(prev =>
         prev.map(user =>
           user._id === userId ? { ...user, is_active: !user.is_active } : user
         )
       );
+      if (error.response?.status === 403) {
+          // Redirect to no-access page
+        navigate({ to: "/no-access" });
+      } else {
+        console.error("Failed to update user status:", error);
+      }
     }
   };
 

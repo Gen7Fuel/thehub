@@ -1,4 +1,4 @@
-import { createFileRoute, Link, Outlet, useMatchRoute } from '@tanstack/react-router'
+import { createFileRoute, Link, Outlet, useMatchRoute, useNavigate } from '@tanstack/react-router'
 import { useEffect, useState } from "react"
 import { Button } from '@/components/ui/button'
 import axios from "axios"
@@ -37,7 +37,7 @@ interface OpenIssueResponse {
 
 function RouteComponent() {
   const matchRoute = useMatchRoute()
-  // const navigate = useNavigate()
+  const navigate = useNavigate()
   const [templates, setTemplates] = useState<AuditTemplate[]>([]);
   const [openIssues, setOpenIssues] = useState<OpenIssueItem[]>([]);
   const [loading, setLoading] = useState(true);
@@ -63,7 +63,8 @@ function RouteComponent() {
 
     axios
       .get("/api/audit", {
-        headers: { Authorization: `Bearer ${localStorage.getItem("token")}` },
+        headers: { Authorization: `Bearer ${localStorage.getItem("token")}`,
+        "X-Required-Permission": "stationAudit.interface" },
       })
       .then(res => {
         const filtered = res.data.filter(
@@ -74,18 +75,33 @@ function RouteComponent() {
         // keep latest location in localStorage so it persists
         // localStorage.setItem("location", stationName);
       })
-      .catch(() => setError("Failed to load audit templates"))
+      .catch((err) => {
+        if (err.response?.status === 403) {
+          // Redirect to no-access page
+          navigate({ to: "/no-access" });
+        } else {
+          setError("Failed to load audit templates");
+        }
+      })
       .finally(() => setLoading(false));
-
     // fetch open issues
     axios
       .get<OpenIssueResponse>(`/api/audit/open-issues?site=${stationName}`, {
-        headers: { Authorization: `Bearer ${localStorage.getItem("token")}` },
+        headers: { Authorization: `Bearer ${localStorage.getItem("token")}`, 
+        "X-Required-Permission": "stationAudit.interface" },
       })
       .then(res => setOpenIssues(res.data.items || [])) // only keep the array
-      .catch(() => console.warn("Failed to load open issues"));
+      .catch((err) => {
+        if (err.response?.status === 403) {
+          // Redirect to no-access page
+          navigate({ to: "/no-access" });
+        } else {
+          console.warn("Failed to load open issues");
+        }
+      }) 
 
-  }, [stationName]);
+  }, [stationName, navigate]);
+
 
   if (loading) return <div className="text-center mt-8">Loading...</div>;
   if (error) return <div className="text-red-600 text-center mt-8">{error}</div>;

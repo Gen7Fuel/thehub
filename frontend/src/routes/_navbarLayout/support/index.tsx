@@ -92,11 +92,15 @@ function RouteComponent() {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'Authorization': `Bearer ${localStorage.getItem('token')}`
+          'Authorization': `Bearer ${localStorage.getItem('token')}`,
+          "X-Required-Permission": "support"
         },
         body: JSON.stringify(ticketData)
       })
-      
+      if (response.status == 403){
+        navigate({to:"/no-access"});
+        return;
+      }
       const data = await response.json()
       if (data.success) {
         toast.success('Ticket submitted successfully!')

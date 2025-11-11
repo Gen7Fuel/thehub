@@ -31,7 +31,7 @@ function RouteComponent() {
       <div className="flex mb-4">
         {/* Upload tab button, shown only if user has upload access */}
         {/* {access.component_order_rec_upload && ( //markpoint */}
-        {access.orderRec.upload && (
+        {access?.orderRec?.upload && (
           <Link to="/order-rec" activeOptions={{ exact: true }}>
             <Button
               {...(isUploadActive ? {} : { variant: 'outline' } as object)}
@@ -47,7 +47,7 @@ function RouteComponent() {
           <Button
             {...(isListActive ? {} : { variant: 'outline' } as object)}
             // className={`${access.component_order_rec_upload ? 'rounded-l-none rounded-r-none' : ''}`} //markpoint
-            className={`${access.orderRec.upload ? 'rounded-l-none rounded-r-none' : ''}`}
+            className={`${access?.orderRec?.upload ? 'rounded-l-none rounded-r-none' : ''}`}
           >
             List
           </Button>
@@ -55,12 +55,12 @@ function RouteComponent() {
 
         {/* Workflow tab button, shown only if user has workflow access */}
         {/* {access.component_order_rec_workflow && ( //markpoint */}
-        {access.orderRec.workflow && (
+        {access?.orderRec?.workflow && (
           <Link to="/order-rec/workflow">
             <Button
               {...(isDashboardActive ? {} : { variant: 'outline' } as object)}
               // className={`${access.component_order_rec_upload ? 'rounded-l-none' : ''}`} //markpoint
-              className={`${access.orderRec.upload ? 'rounded-l-none' : ''}`}
+              className={`${access?.orderRec?.upload ? 'rounded-l-none' : ''}`}
             >
               Workflow
             </Button>

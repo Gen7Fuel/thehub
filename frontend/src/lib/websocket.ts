@@ -29,7 +29,7 @@ export function getSocket(): Socket {
       transports: ["websocket", "polling"],
       autoConnect: true,
       timeout: 20000,
-      forceNew: true
+      // forceNew: true
     });
     
     currentUrl = socketUrl;

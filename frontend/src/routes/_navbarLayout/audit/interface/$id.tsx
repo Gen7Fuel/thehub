@@ -1,4 +1,4 @@
-import { createFileRoute, useParams } from "@tanstack/react-router";
+import { createFileRoute, useParams, useNavigate } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { ChecklistItemCard } from "@/components/custom/ChecklistItem";
@@ -58,6 +58,7 @@ function getPeriodKey(frequency: "daily" | "weekly" | "monthly", date: Date) {
 function RouteComponent() {
   const { id } = useParams({ from: "/_navbarLayout/audit/interface/$id" });
   const [frequency, setFrequency] = useState<"daily" | "weekly" | "monthly">("daily");
+  const navigate = useNavigate()
   const [currentDate, setCurrentDate] = useState(() => {
     const d = new Date();
     d.setHours(0, 0, 0, 0);
@@ -87,13 +88,26 @@ function RouteComponent() {
   const fetchItemsForInstance = async () => {
     if (!id || !currentDate) return;
     setLoading(true);
+
     try {
       const periodKey = getPeriodKey(frequency, currentDate);
 
+      // Fetch instance
       const instanceRes = await fetch(
         `/api/audit/instance?template=${id}&site=${encodeURIComponent(site)}&frequency=${frequency}&periodKey=${periodKey}`,
-        { headers: { Authorization: `Bearer ${token}` } }
+        {
+          headers: {
+            Authorization: `Bearer ${token}`,
+            "X-Required-Permission": "stationAudit.interface",
+          },
+        }
       );
+
+      if (instanceRes.status === 403) {
+        navigate({ to: "/no-access" });
+        return;
+      }
+
       if (!instanceRes.ok) throw new Error("Failed to fetch instance");
 
       const instanceData = await instanceRes.json();
@@ -102,10 +116,22 @@ function RouteComponent() {
         return;
       }
 
+      // Fetch items
       const itemsRes = await fetch(
         `/api/audit/items?instanceId=${instanceData._id}&templateId=${id}&site=${encodeURIComponent(site)}`,
-        { headers: { Authorization: `Bearer ${token}` } }
+        {
+          headers: {
+            Authorization: `Bearer ${token}`,
+            "X-Required-Permission": "stationAudit.interface",
+          },
+        }
       );
+
+      if (itemsRes.status === 403) {
+        navigate({ to: "/no-access" });
+        return;
+      }
+
       if (!itemsRes.ok) throw new Error("Failed to fetch items");
 
       const itemsData = await itemsRes.json();

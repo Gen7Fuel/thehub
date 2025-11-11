@@ -1,4 +1,4 @@
-import { createFileRoute } from '@tanstack/react-router'
+import { createFileRoute, useNavigate } from '@tanstack/react-router'
 import { useState } from 'react'
 import { DatePicker } from '@/components/custom/datePicker';
 import { Button } from '@/components/ui/button';
@@ -93,6 +93,7 @@ function RouteComponent() {
   const [data, setData] = useState<SalesSummaryData | null>(null);
   const [date, setDate] = useState<Date | undefined>(undefined);
   const [stationNumber, setStationNumber] = useState<string>('');
+  const navigate = useNavigate()
 
   const fetchReport = async () => {
     if (!date || !stationNumber) return;
@@ -101,13 +102,19 @@ function RouteComponent() {
       // add authorization header with bearer token
       const response = await axios.get(`/api/sales-summary/${date.toISOString().split('T')[0]}/${stationNumber}`, {
         headers: {
-          Authorization: `Bearer ${localStorage.getItem('token')}`
+          Authorization: `Bearer ${localStorage.getItem('token')}`,
+          "X-Required-Permission": "reports"
         }
       });
       setData(response.data);
       console.log('Sales Summary Data:', response.data);
-    } catch (error) {
-      console.error('Error fetching sales summary:', error);
+    } catch (error: any) {
+      if (error.response?.status === 403) {
+          // Redirect to no-access page
+          navigate({ to: "/no-access" });
+      } else {
+        console.error('Error fetching sales summary:', error);
+      } 
     }
   }
 

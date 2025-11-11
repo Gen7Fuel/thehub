@@ -79,9 +79,15 @@ function RouteComponent() {
         headers: {
           'Content-Type': 'application/json',
           'x-user-email': user?.email || '',
-          'Authorization': `Bearer ${localStorage.getItem('token')}`
+          'Authorization': `Bearer ${localStorage.getItem('token')}`,
+          "X-Required-Permission": "dailyReports",
         }
       });
+
+      if (response.status === 403) {
+        navigate({ to: "/no-access" });
+        return;
+      }
 
       if (response.status === 200 || response.status === 201) {
         const data = response.data;
@@ -94,10 +100,15 @@ function RouteComponent() {
         alert(`Error: ${errorData.error || 'Failed to create Shift Worksheet'}`);
       }
     } catch (error: any) {
+      if (axios.isAxiosError(error) && error.response?.status === 403) {
+        navigate({ to: "/no-access" });
+        return;
+      }
       console.error('Error creating Shift Worksheet:', error);
       alert('An unexpected error occurred. Please try again.');
     }
   };
+
 
   return (
     <div className="flex items-center justify-center p-8">

@@ -139,7 +139,10 @@ function RouteComponent() {
       try {
         setLoading(true); // start loading
         const token = localStorage.getItem("token");
-        const headers = { Authorization: `Bearer ${token}` };
+        const headers = {
+          Authorization: `Bearer ${token}`,
+          "X-Required-Permission": "stationAudit.template",
+        };
 
         // Fetch all necessary data in parallel
         const [auditRes, selectRes, vendorRes, sitesRes] = await Promise.all([
@@ -148,6 +151,17 @@ function RouteComponent() {
           axios.get("/api/vendors", { headers }),
           axios.get("/api/locations", { headers }),
         ]);
+
+        // ✅ Check if any of the responses returned 403
+        if (
+          auditRes.status === 403 ||
+          selectRes.status === 403 ||
+          vendorRes.status === 403 ||
+          sitesRes.status === 403
+        ) {
+          navigate({ to: "/no-access" });
+          return;
+        }
 
         // --- handle select templates
         setSelectTemplates(selectRes.data);
@@ -268,19 +282,33 @@ function RouteComponent() {
     console.log("Submitting checklist template:", payload);
 
     try {
-      await axios.put(
+      const res = await axios.put(
         `/api/audit/${id}`,
         payload,
         {
-          headers: { Authorization: `Bearer ${localStorage.getItem("token")}` },
+          headers: {
+            Authorization: `Bearer ${localStorage.getItem("token")}`,
+            "X-Required-Permission": "stationAudit.template",
+          },
         }
       );
+
+      if (res.status === 403) {
+        navigate({ to: "/no-access" });
+        return;
+      }
+
       navigate({ to: "/audit/templates/checklist/list" });
     } catch (err: any) {
-      setError(err?.response?.data?.message || "Failed to update checklist template");
+      if (err.response?.status === 403) {
+        navigate({ to: "/no-access" });
+      } else {
+        setError(err?.response?.data?.message || "Failed to update checklist template");
+      }
     } finally {
       setSaving(false);
     }
+
   };
   if (loading) {
     return (

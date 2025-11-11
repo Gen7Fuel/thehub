@@ -2,8 +2,8 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { InputOTP, InputOTPGroup, InputOTPSeparator, InputOTPSlot } from '@/components/ui/input-otp'
 import { Select, SelectContent, SelectGroup, SelectItem, SelectLabel, SelectTrigger, SelectValue } from '@/components/ui/select'
-import { createFileRoute } from '@tanstack/react-router'
-import { useRef, useState } from 'react'
+import { createFileRoute, useNavigate } from '@tanstack/react-router'
+import { useRef, useState, useEffect } from 'react'
 import SignatureCanvas from 'react-signature-canvas'
 import axios from 'axios'
 import { domain } from '@/lib/constants'
@@ -19,16 +19,23 @@ async function loader() {
   try {
     const response = await axios.get(`${domain}/api/fleet-customers`, {
       headers: {
-        Authorization: `Bearer ${localStorage.getItem('token')}`
-      }
-    })
-    const customers: FleetCustomer[] = response.data
+        Authorization: `Bearer ${localStorage.getItem('token')}`,
+        "X-Required-Permission": "fleetCardAssignment",
+      },
+    });
 
-    return { customers }
-  } catch (error) {
-    return { customers: [] }
+    return { 
+      customers: response.data, 
+      accessDenied: false 
+    };
+  } catch (error: any) {
+    if (axios.isAxiosError(error) && error.response?.status === 403) {
+      return { customers: [], accessDenied: true };
+    }
+    return { customers: [], accessDenied: false };
   }
 }
+
 
 export const Route = createFileRoute('/_navbarLayout/fleet/')({
   loader,
@@ -38,6 +45,14 @@ export const Route = createFileRoute('/_navbarLayout/fleet/')({
 function RouteComponent() {
   const signatureRef = useRef<SignatureCanvas>(null)
   const data = Route.useLoaderData()
+  const { accessDenied } = Route.useLoaderData()
+  const navigate = useNavigate()
+
+  useEffect(() => {
+    if (accessDenied) {
+      navigate({ to: "/no-access" })
+    }
+  }, [accessDenied, navigate])
 
   // Form state
   const [fleetCardNumber, setFleetCardNumber] = useState('777689000000')
@@ -75,48 +90,74 @@ function RouteComponent() {
       // Step 1: Check if fleet card already exists
       let fleetData = null
       try {
-        const existingFleetResponse = await axios.get(`${domain}/api/fleet/getByCardNumber/${fleetCardNumber}`, {
-          headers: {
-            Authorization: `Bearer ${localStorage.getItem('token')}`
+            const existingFleetResponse = await axios.get(
+              `${domain}/api/fleet/getByCardNumber/${fleetCardNumber}`,
+              {
+                headers: {
+                  Authorization: `Bearer ${localStorage.getItem('token')}`,
+                  "X-Required-Permission": "fleetCardAssignment",
+                },
+              }
+            );
+            fleetData = existingFleetResponse.data;
+          } catch (err: any) {
+            if (axios.isAxiosError(err)) {
+              if (err.response?.status === 403) {
+                navigate({ to: "/no-access" });
+                return;
+              }
+              if (err.response?.status !== 404) throw err;
+            } else throw err;
           }
-        })
-        fleetData = existingFleetResponse.data
-      } catch (err: any) {
-        // If not found, fleetData stays null
-        if (err.response && err.response.status !== 404) throw err
-      }
 
       // Step 2: Create or update fleet entry with signature
       if (fleetData && !fleetData.message) {
         // Update existing fleet entry
-        await axios.put(`${domain}/api/fleet/updateByCardNumber/${fleetCardNumber}`, {
-          customerName: selectedCustomerData?.name,
-          customerEmail: selectedCustomerData?.email,
-          driverName,
-          vehicleMakeModel,
-          customerId: selectedCustomer,
-          signature: signature, // Save base64 signature directly
-        }, {
-          headers: {
-            Authorization: `Bearer ${localStorage.getItem('token')}`
+        try {
+          await axios.put(`${domain}/api/fleet/updateByCardNumber/${fleetCardNumber}`, {
+            customerName: selectedCustomerData?.name,
+            customerEmail: selectedCustomerData?.email,
+            driverName,
+            vehicleMakeModel,
+            customerId: selectedCustomer,
+            signature: signature, // Save base64 signature directly
+          }, {
+            headers: {
+              Authorization: `Bearer ${localStorage.getItem('token')}`,
+              "X-Required-Permission": "fleetCardAssignment",
+            }
+          })
+        } catch (err: any) {
+          if (axios.isAxiosError(err) && err.response?.status === 403) {
+            navigate({ to: "/no-access" });
+            return;
           }
-        })
+          throw err;
+        }
       } else {
         // Create new fleet entry
-
-        await axios.post(`${domain}/api/fleet/create`, {
-          fleetCardNumber,
-          customerName: selectedCustomerData?.name,
-          customerEmail: selectedCustomerData?.email,
-          driverName,
-          vehicleMakeModel,
-          customerId: selectedCustomer,
-          signature: signature, // Save base64 signature directly
-        }, {
-          headers: {
-            Authorization: `Bearer ${localStorage.getItem('token')}`
+        try {
+          await axios.post(`${domain}/api/fleet/create`, {
+            fleetCardNumber,
+            customerName: selectedCustomerData?.name,
+            customerEmail: selectedCustomerData?.email,
+            driverName,
+            vehicleMakeModel,
+            customerId: selectedCustomer,
+            signature: signature, // Save base64 signature directly
+          }, {
+            headers: {
+              Authorization: `Bearer ${localStorage.getItem('token')}`,
+              "X-Required-Permission": "fleetCardAssignment",
+            }
+          })
+        } catch (err: any) {
+          if (axios.isAxiosError(err) && err.response?.status === 403) {
+            navigate({ to: "/no-access" });
+            return;
           }
-        })
+          throw err;
+        }
       }
 
       // Step 3: Send confirmation email to customer

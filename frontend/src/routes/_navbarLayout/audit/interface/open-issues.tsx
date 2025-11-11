@@ -1,4 +1,4 @@
-import { createFileRoute } from "@tanstack/react-router";
+import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useContext, useEffect, useState } from "react";
 import axios from "axios";
 import { RouteContext } from "../interface";
@@ -40,6 +40,7 @@ export function OpenIssuesPage() {
   const { stationName } = useContext(RouteContext);
   const { user } = useAuth()
   const site = stationName || user?.location || "";
+  const navigate = useNavigate()
 
   const [openIssues, setOpenIssues] = useState<OpenIssue[]>([]);
   const [loading, setLoading] = useState(false);
@@ -54,13 +55,24 @@ export function OpenIssuesPage() {
   // Load select templates (Assigned To options)
   useEffect(() => {
     const token = localStorage.getItem("token");
+
     axios
       .get("/api/audit/select-templates", {
-        headers: { Authorization: `Bearer ${token}` },
+        headers: {
+          Authorization: `Bearer ${token}`,
+          "X-Required-Permission": "stationAudit.interface",
+        },
       })
       .then((res) => setSelectTemplates(res.data || []))
-      .catch(() => setSelectTemplates([]));
+      .catch((err) => {
+        if (err.response?.status === 403) {
+          navigate({ to: "/no-access" });
+        } else {
+          setSelectTemplates([]);
+        }
+      });
   }, []);
+
 
   const getOptionsByName = (name: string) =>
     selectTemplates.find((t) => t.name === name)?.options || [];
@@ -74,10 +86,20 @@ export function OpenIssuesPage() {
     if (department && department !== "All") params.append("assignedTo", department);
 
     fetch(`/api/audit/open-issues?${params.toString()}`, {
-      headers: { Authorization: `Bearer ${localStorage.getItem("token")}` },
+      headers: {
+        Authorization: `Bearer ${localStorage.getItem("token")}`,
+        "X-Required-Permission": "stationAudit.interface",
+      },
     })
-      .then((res) => res.json())
+      .then((res) => {
+        if (res.status === 403) {
+          navigate({ to: "/no-access" });
+          return null; // stop further processing
+        }
+        return res.json();
+      })
       .then((data) => {
+        if (!data) return; // 403 handled above
         if (Array.isArray(data)) setOpenIssues(data);
         else if (data?.items && Array.isArray(data.items)) setOpenIssues(data.items);
         else setOpenIssues([]);
@@ -88,6 +110,7 @@ export function OpenIssuesPage() {
       })
       .finally(() => setLoading(false));
   }, [site, department]);
+
 
   // Category legend
   const categories = [...new Set(openIssues.map((i) => i.category).filter(Boolean))];
@@ -116,17 +139,25 @@ export function OpenIssuesPage() {
   // Save status
   const handleSaveStatus = async () => {
     if (!selectedIssueId) return;
+
     try {
       const res = await fetch(`/api/audit/issues/${selectedIssueId}/status`, {
         method: "PUT",
         headers: {
           "Content-Type": "application/json",
           Authorization: `Bearer ${localStorage.getItem("token")}`,
+          "X-Required-Permission": "stationAudit.interface",
         },
         body: JSON.stringify({ status: newStatus }),
       });
 
+      if (res.status === 403) {
+        navigate({ to: "/no-access" });
+        return;
+      }
+
       if (!res.ok) throw new Error("Failed to update status");
+
       const data = await res.json();
 
       // Update locally
@@ -142,6 +173,7 @@ export function OpenIssuesPage() {
             : it
         )
       );
+
       setStatusDialogOpen(false);
       setSelectedIssueId(null);
     } catch (err) {

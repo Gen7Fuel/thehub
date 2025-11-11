@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import axios from "axios";
-import { createFileRoute } from "@tanstack/react-router";
+import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
@@ -14,12 +14,19 @@ export const Route = createFileRoute("/_navbarLayout/settings/users/$userId")({
     try {
       const token = localStorage.getItem("token");
       const response = await axios.get(`/api/users/${params.userId}`, {
-        headers: { Authorization: `Bearer ${token}` },
+        headers: { 
+          Authorization: `Bearer ${token}`,
+          "X-Required-Permission": "settings" 
+        },
       });
-      return { user: response.data };
-    } catch (error) {
+
+      return { user: response.data, noAccess: false };
+    } catch (error: any) {
       console.error("Error fetching user:", error);
-      return { user: null };
+
+      // Check for 403 and set noAccess flag
+      const noAccess = axios.isAxiosError(error) && error.response?.status === 403;
+      return { user: null, noAccess };
     }
   },
 });
@@ -39,7 +46,8 @@ export interface Role {
 
 export function RouteComponent() {
   const params = Route.useParams() as { userId: string };
-  const { user } = Route.useLoaderData() as {
+    const navigate = useNavigate();
+  const { user, noAccess } = Route.useLoaderData() as {
     user: {
       _id: string;
       firstName: string;
@@ -51,7 +59,13 @@ export function RouteComponent() {
       merged_permissions?: PermissionNode[];
       site_access: Record<string, boolean>;
     } | null;
+    noAccess: boolean;
   };
+
+  // Redirect if loader flagged no access
+  useEffect(() => {
+    if (noAccess) navigate({ to: '/no-access' });
+  }, [noAccess, navigate]);
 
   const [roles, setRoles] = useState<Role[]>([]);
   const [selectedRole, setSelectedRole] = useState(user?.role?._id || "");
@@ -99,12 +113,17 @@ export function RouteComponent() {
       await axios.put(
         `/api/users/${params.userId}/site-access`,
         { siteAccess },
-        { headers: { Authorization: `Bearer ${token}` } }
+        { headers: { Authorization: `Bearer ${token}`,"X-Required-Permission": "settings"  } }
       );
       alert("Site access updated!");
-    } catch (err) {
-      console.error("Error saving site access:", err);
-      alert("Failed to update site access.");
+    } catch (err: any) {
+      if (err.response?.status === 403) {
+          // Redirect to no-access page
+          navigate({ to: "/no-access" });
+        } else {
+        console.error("Error saving site access:", err);
+        alert("Failed to update site access.");
+        }
     } finally {
       setSavingAccess(false);
     }
@@ -119,11 +138,16 @@ export function RouteComponent() {
       try {
         const token = localStorage.getItem("token");
         const res = await axios.get("/api/roles", {
-          headers: { Authorization: `Bearer ${token}` },
+          headers: { Authorization: `Bearer ${token}`,"X-Required-Permission": "settings"  },
         });
         setRoles(res.data);
-      } catch (error) {
-        console.error("Failed to load roles:", error);
+      } catch (error: any) {
+        if (error.response?.status === 403) {
+          // Redirect to no-access page
+          navigate({ to: "/no-access" });
+        } else {
+          console.error("Failed to load roles:", error);
+        }
       }
     };
     fetchRoles();
@@ -137,11 +161,15 @@ export function RouteComponent() {
       await axios.post(
         "/api/auth/reset-password",
         { userId: params.userId, newPassword },
-        { headers: { Authorization: `Bearer ${token}` } }
+        { headers: { Authorization: `Bearer ${token}`,"X-Required-Permission": "settings"  } }
       );
       setResetStatus("Password reset successfully!");
       setNewPassword("");
-    } catch {
+    } catch (error: any) {
+      if (error.response?.status === 403) {
+          // Redirect to no-access page
+         navigate({ to: "/no-access" });
+      }
       setResetStatus("Failed to reset password.");
     }
   };
@@ -167,14 +195,19 @@ export function RouteComponent() {
       await axios.put(
         `/api/users/${params.userId}/role`,
         { roleId: selectedRole },
-        { headers: { Authorization: `Bearer ${token}` } }
+        { headers: { Authorization: `Bearer ${token}`,"X-Required-Permission": "settings"  } }
       );
       alert("User role updated!");
       setShowConfirmDialog(false);
       window.location.reload();
-    } catch (err) {
-      console.error(err);
-      alert("Failed to update role");
+    } catch (err: any) {
+      if (err.response?.status === 403) {
+        // Redirect to no-access page
+        navigate({ to: "/no-access" });
+      } else {
+        console.error(err);
+        alert("Failed to update role");
+      }
     }
   };
 
@@ -184,12 +217,17 @@ export function RouteComponent() {
       await axios.put(
         `/api/users/${params.userId}/permissions`,
         { mergedPermissions, roleId: user?.role?._id },
-        { headers: { Authorization: `Bearer ${token}` } }
+        { headers: { Authorization: `Bearer ${token}`,"X-Required-Permission": "settings"  } }
       );
-      alert("Custom permissions updated!");
-    } catch (err) {
-      console.error(err);
-      alert("Failed to save permissions");
+      alert("Permissions updated!");
+    } catch (err: any) {
+      if (err.response?.status === 403) {
+        // Redirect to no-access page
+        navigate({ to: "/no-access" });
+      } else {
+        console.error(err);
+        alert("Failed to save permissions");
+      }
     }
   };
 

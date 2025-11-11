@@ -1,4 +1,4 @@
-import { createFileRoute } from '@tanstack/react-router';
+import { createFileRoute, useNavigate } from '@tanstack/react-router';
 import { useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -16,6 +16,7 @@ function RouteComponent() {
   const [file, setFile] = useState<File | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
+  const navigate = useNavigate()
   interface FuelSales {
     [key: string]: { [key: string]: any };
   }
@@ -516,7 +517,8 @@ function RouteComponent() {
               // add authorization header with bearer token
               axios.post('/api/sales-summary', outputData, {
                 headers: {
-                  Authorization: `Bearer ${localStorage.getItem('token')}`
+                  Authorization: `Bearer ${localStorage.getItem('token')}`,
+                  "X-Required-Permission": "reports"
                 }
               })
                 .then(response => {
@@ -524,8 +526,13 @@ function RouteComponent() {
                   console.log('Success:', response.data);
                   setSuccessMessage("File uploaded successfully!");
                 })
-                .catch((error) => {
-                  console.error('Error:', error);
+                .catch((error: any) => {
+                  if (error.response?.status === 403) {
+                    // Redirect to no-access page
+                    navigate({ to: "/no-access" });
+                  } else {
+                    console.error('Error:', error);
+                  }
                 });
 
             } else {
