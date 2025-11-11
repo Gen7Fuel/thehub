@@ -1,4 +1,4 @@
-import { createFileRoute } from '@tanstack/react-router'
+import { createFileRoute, useNavigate } from '@tanstack/react-router'
 import { useState, useCallback } from 'react'
 import { useDropzone } from 'react-dropzone'
 import { Button } from '@/components/ui/button'
@@ -142,6 +142,7 @@ function RouteComponent() {
   const [site, setSite] = useState<string>(user?.location || '')
   const [vendor, setVendor] = useState<string>('')
   const [includeStationSupplies, setIncludeStationSupplies] = useState(false);
+  const navigate = useNavigate()
 
   const onDrop = useCallback(async (acceptedFiles: File[]) => {
     const file = acceptedFiles[0]
@@ -200,7 +201,7 @@ function RouteComponent() {
       const categories = parseOrderRecCSV(csvContent);
       const filteredCategories = categories.filter(cat => cat.items.length > 0);
 
-      await axios.post(
+      const response = await axios.post(
         '/api/order-rec',
         {
           categories: filteredCategories,
@@ -211,19 +212,32 @@ function RouteComponent() {
         },
         {
           headers: {
-            Authorization: `Bearer ${localStorage.getItem('token')}`
+            Authorization: `Bearer ${localStorage.getItem('token')}`,
+            "X-Required-Permission": "orderRec.upload"
           }
         }
       );
 
+      // Handle 403 explicitly
+      if (response.status === 403) {
+        navigate({ to: "/no-access" });
+        return;
+      }
+
       toast.success('File uploaded and order recommendation submitted!');
       setUploadedFile(null);
       setIsProcessing(false);
-    } catch (err) {
+    } catch (err: any) {
+      if (axios.isAxiosError(err) && err.response?.status === 403) {
+        window.location.href = "/no-access";
+        return;
+      }
+
       setError('Failed to submit data to backend.');
       setIsProcessing(false);
       console.error(err);
     }
+
   };
 
   const handleRemoveFile = () => {

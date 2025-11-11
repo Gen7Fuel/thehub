@@ -18,7 +18,7 @@ function RouteComponent() {
   const matchRoute = useMatchRoute();
 
   // Determine if each tab is active
-  const isInputActive = matchRoute({ to: '/cycle-count' });
+  // const isInputActive = matchRoute({ to: '/cycle-count' });
   const isCountActive = matchRoute({ to: '/cycle-count/count' });
   const isInventoryActive = matchRoute({ to: '/cycle-count/inventory' });
   const isConsoleActive = matchRoute({ to: '/cycle-count/console' });
@@ -34,19 +34,19 @@ function RouteComponent() {
       {/* Navigation buttons for cycle count sections */}
       <div className="flex mb-4">
         {/* Input tab button */}
-        <Link to="/cycle-count" activeOptions={{ exact: true }}>
+        {/* <Link to="/cycle-count" activeOptions={{ exact: true }}>
           <Button
             {...(!isInputActive && { variant: 'outline' } as object)}
             className="rounded-r-none"
           >
             Input
           </Button>
-        </Link>
+        </Link> */}
         {/* Count tab button */}
         <Link to="/cycle-count/count" activeOptions={{ exact: true }}>
           <Button
             {...(!isCountActive && { variant: 'outline' } as object)}
-            className="rounded-none"
+            className="rounded-r-none"
           >
             Count
           </Button>
@@ -60,7 +60,7 @@ function RouteComponent() {
           <Button
             {...(!isInventoryActive && { variant: 'outline' } as object)}
             // className={access.component_cycle_count_console ? 'rounded-none' : 'rounded-l-none'} //markpoint
-            className={access.cycleCount.console ? 'rounded-none' : 'rounded-l-none'}
+            className={access?.cycleCount?.console ? 'rounded-none' : 'rounded-l-none'}
           >
             Inventory
           </Button>
@@ -68,7 +68,7 @@ function RouteComponent() {
 
         {/* Console tab button, shown only if user has access */}
         {/* {access.component_cycle_count_console && ( //markpoint */}
-        {access.cycleCount.console && (
+        {access?.cycleCount?.console && (
           <Link to="/cycle-count/console" activeOptions={{ exact: true }}>
             <Button
               {...(!isConsoleActive && { variant: 'outline' } as object)}

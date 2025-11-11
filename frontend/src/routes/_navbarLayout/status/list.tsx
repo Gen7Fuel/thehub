@@ -1,5 +1,5 @@
 import React, { useEffect } from 'react';
-import { createFileRoute } from '@tanstack/react-router';
+import { createFileRoute, useNavigate } from '@tanstack/react-router';
 import { DatePicker } from '@/components/custom/datePicker';
 import { LocationPicker } from '@/components/custom/locationPicker';
 import { Button } from '@/components/ui/button';
@@ -15,6 +15,7 @@ export const Route = createFileRoute('/_navbarLayout/status/list')({
 
 function RouteComponent() {
   const { user } = useAuth()
+  const navigate = useNavigate()
   const [date, setDate] = React.useState<Date | undefined>(new Date());
   if (date)
     console.log('Selected date:', new Date(date.setHours(0, 0, 0, 0)).toISOString());
@@ -40,23 +41,28 @@ function RouteComponent() {
     if (!date || !stationName) return;
 
     try {
-      // add authorization header with bearer token
+      // Add authorization header with bearer token
       const response = await axios.get('/api/status-sales', {
         params: {
-          // startDate: toUTC(date).toISOString().split('T')[0],
-          // endDate: toUTC(date).toISOString().split('T')[0],
           startDate: new Date(date.setHours(0, 0, 0, 0)).toISOString(),
           endDate: new Date(date.setHours(23, 59, 59, 999)).toISOString(),
           stationName,
         },
         headers: {
-          Authorization: `Bearer ${localStorage.getItem('token')}`
-        }
+          Authorization: `Bearer ${localStorage.getItem('token')}`,
+          "X-Required-Permission": "status",
+        },
       });
+
       setStatusSales(response.data);
-    } catch (error) {
-      console.error('Error fetching status sales:', error);
-      setStatusSales([]);
+    } catch (error: any) {
+      if (error.response?.status === 403) {
+        // Redirect to no-access page
+        navigate({ to: '/no-access' });
+      } else {
+        console.error('Error fetching status sales:', error);
+        setStatusSales([]);
+      }
     }
   };
 
@@ -106,7 +112,7 @@ function RouteComponent() {
       <span className='flex justify-between'>
       <h2 className="text-lg font-bold mb-2">Status Sales List</h2>
       {/* { access.component_status_pdf && //markpoint */}
-      { access.status.pdf &&
+      { access?.status?.pdf &&
         <Button onClick={() => generatePDF(statusSales)} className="mb-4">
           PDF
         </Button>

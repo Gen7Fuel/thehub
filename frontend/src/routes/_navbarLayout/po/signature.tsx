@@ -45,73 +45,72 @@ function RouteComponent() {
   // Submit mutation using TanStack Query
   const submitMutation = useMutation({
     mutationFn: async () => {
-      // Step 1: Upload the receipt image
+      if (!receipt) throw new Error("Please upload a receipt before submitting.");
+
       const { filename } = await uploadBase64Image(receipt, "receipt.jpg");
 
-      // Step 2: Get fleet entry by card number
+      const authHeaders = {
+        Authorization: `Bearer ${localStorage.getItem('token')}`,
+        "X-Required-Permission": "po"
+      };
+
+      const authAxios = async (fn: () => Promise<any>) => {
+        try {
+          return await fn();
+        } catch (err: any) {
+          if (axios.isAxiosError(err) && err.response?.status === 403) {
+            navigate({ to: "/no-access" });
+          }
+          throw err;
+        }
+      };
+
       let fleetData = null;
       try {
-        // add authorization header with bearer token
-        const fleetResponse = await axios.get(`${domain}/api/fleet/getByCardNumber/${fleetCardNumber}`, {
-          headers: {
-            Authorization: `Bearer ${localStorage.getItem('token')}`
-          }
-        });
+        const fleetResponse = await authAxios(() =>
+          axios.get(`${domain}/api/fleet/getByCardNumber/${fleetCardNumber}`, { headers: authHeaders })
+        );
         fleetData = fleetResponse.data;
       } catch (err: any) {
-        if (err.response && err.response.status !== 404) throw err;
+        if (axios.isAxiosError(err) && err.response?.status !== 404) throw err;
       }
 
       if (fleetData && !fleetData.message) {
-        // Update fleet entry if it exists
-
-        // add authorization header with bearer token
-        await axios.put(`${domain}/api/fleet/updateByCardNumber/${fleetCardNumber}`, {
-          customerName,
-          driverName,
-          vehicleMakeModel: vehicleInfo,
-        }, {
-          headers: {
-            Authorization: `Bearer ${localStorage.getItem('token')}`
-          }
-        });
+        await authAxios(() =>
+          axios.put(`${domain}/api/fleet/updateByCardNumber/${fleetCardNumber}`, {
+            customerName,
+            driverName,
+            vehicleMakeModel: vehicleInfo,
+          }, { headers: authHeaders })
+        );
       } else {
-        // Create fleet entry if it doesn't exist
-
-        // add authorization header with bearer token
-        await axios.post(`${domain}/api/fleet/create`, {
-          fleetCardNumber,
-          customerName,
-          driverName,
-          vehicleMakeModel: vehicleInfo,
-        }, {
-          headers: {
-            Authorization: `Bearer ${localStorage.getItem('token')}`
-          }
-        });
+        await authAxios(() =>
+          axios.post(`${domain}/api/fleet/create`, {
+            fleetCardNumber,
+            customerName,
+            driverName,
+            vehicleMakeModel: vehicleInfo,
+          }, { headers: authHeaders })
+        );
       }
 
-      // Step 3: Create the PO entry in the Transaction model
       const stationName = user?.location || 'Rankin';
       const today = new Date();
 
-      // add authorization header with bearer token
-      const poResponse = await axios.post(`${domain}/api/purchase-orders`, {
-        source: 'PO',
-        date: today,
-        stationName,
-        fleetCardNumber,
-        quantity,
-        amount,
-        productCode: fuelType,
-        trx: '',
-        signature,
-        receipt: filename,
-      }, {
-        headers: {
-          Authorization: `Bearer ${localStorage.getItem('token')}`
-        }
-      });
+      const poResponse = await authAxios(() =>
+        axios.post(`${domain}/api/purchase-orders`, {
+          source: 'PO',
+          date: today,
+          stationName,
+          fleetCardNumber,
+          quantity,
+          amount,
+          productCode: fuelType,
+          trx: '',
+          signature,
+          receipt: filename,
+        }, { headers: authHeaders })
+      );
 
       if (poResponse.status !== 200 && poResponse.status !== 201) {
         throw new Error('Failed to create purchase order');

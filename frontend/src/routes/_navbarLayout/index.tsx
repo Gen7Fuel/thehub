@@ -12,10 +12,31 @@ export const Route = createFileRoute('/_navbarLayout/')({
  * Renders sections and navigation buttons based on user access permissions.
  */
 function App() {
-  const { user } = useAuth();
+  const { user  } = useAuth();
   // Retrieve access permissions from auth provider
   // const access = user?.access || '{}' //markpoint
   const access = user?.access || {}
+  // const handlePermissionsUpdated = async () => {
+  //   console.log("Permissions update received via socket");
+  //   console.log("Before update:",localStorage.getItem('token'));
+  //   await refreshTokenFromBackend();
+  //   console.log("After update:",localStorage.getItem('token'));
+  // };
+  // useEffect(() => {
+  //   const socket = getSocket();
+  
+  //   socket.on("connect", () => {
+  //     socket.emit("join-room", user?.id);
+  //     console.log("socket from auth ", socket.id);
+  //   });
+  //   console.log("Listeners now:", socket.listeners("permissions-updated"));
+    
+  //   socket.on("permissions-updated", handlePermissionsUpdated);
+
+  //   return () => {
+  //     socket.off("permissions-updated", handlePermissionsUpdated);
+  //   };
+  // },[user])
 
   return (
     <div className="flex items-center justify-center min-h-screen bg-gray-50">
@@ -90,7 +111,7 @@ function App() {
               {/* {access.module_order_rec && ( //markpoint
                 access.component_order_rec_upload ? ( */}
               {access?.orderRec?.value && (
-                access?.orderRec.upload ? (
+                access?.orderRec?.upload ? (
                   <Link to="/order-rec">
                     <Button className="w-32 h-32 flex items-center justify-center break-words whitespace-normal text-center">
                       Order Rec
@@ -150,14 +171,14 @@ function App() {
                 </Link>
               )}
               {/* Kardpoll button */}
-              {/* {access.module_kardpoll && ( //markpoint
-              {/* {access.kardpoll && (
+              {/* {access.module_kardpoll && ( //markpoint */}
+              {access?.kardpoll && (
                 <Link to="/kardpoll">
                   <Button className="w-32 h-32 flex items-center justify-center break-words whitespace-normal text-center">
                     Kardpoll
                   </Button>
                 </Link>
-              )} */}
+              )}
             </div>
           </Section>
         )}
@@ -177,22 +198,22 @@ function App() {
         )}
 
         {/* Reports Section */}
-        {/* {(access.module_daily_reports || access.module_reports) && ( //markpoint
-        // {/* {(access.dailyReports || access.reports) && (
+        {/* {(access.module_daily_reports || access.module_reports) && ( //markpoint */}
+        {(access?.dailyReports || access?.reports) && (
           <Section title="Reports">
             <div className="flex flex-wrap gap-4">
               {/* Daily Reports button */}
-              {/* {access.module_daily_reports && ( //markpoint
-              // {/* {access.dailyReports && (
+               {/* {access.module_daily_reports && ( //markpoint */}
+              {access?.dailyReports && (
                 <Link to="/daily-reports">
                   <Button className="w-32 h-32 flex items-center justify-center break-words whitespace-normal text-center">
                     Daily Reports
                   </Button>
                 </Link>
-              )} */}
+              )} 
               {/* Reports button */}
-              {/* {access.module_reports && ( //markpoint
-              // {/* {access.reports && (
+               {/* {access.module_reports && ( //markpoint */}
+              {access?.reports && (
                 <Link to="/reports">
                   <Button className="w-32 h-32 flex items-center justify-center break-words whitespace-normal text-center">
                     Reports
@@ -201,7 +222,7 @@ function App() {
               )}
             </div>
           </Section>
-        )} */} 
+        )} 
 
         {/* Sales Section */}
         {/* {access.module_status && ( //markpoint */}

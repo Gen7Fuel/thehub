@@ -1,6 +1,6 @@
 import { DatePicker } from '@/components/custom/datePicker'
 import { LocationPicker } from '@/components/custom/locationPicker'
-import { createFileRoute } from '@tanstack/react-router'
+import { createFileRoute, useNavigate } from '@tanstack/react-router'
 import { useEffect, useState } from 'react'
 import { calculateData, toUTCstring } from '@/lib/utils'
 import EditableCell from '@/components/custom/editableCell'
@@ -113,92 +113,113 @@ function RouteComponent() {
     totalOverShort: 0,
   })
 
+  const navigate = useNavigate();
+
   const fetchCashSummary = async () => {
     if (!date || !location) {
-      alert('Please select both date and location.')
-      return
+      alert("Please select both date and location.");
+      return;
     }
 
     try {
       const response = await axios.get(`/api/cash-summary`, {
         params: {
-          startDate: toUTCstring(date.toISOString().split('T')[0] + 'T00:00:00.000Z'),
-          endDate: toUTCstring(date.toISOString().split('T')[0] + 'T23:59:59.999Z'),
+          startDate: toUTCstring(date.toISOString().split("T")[0] + "T00:00:00.000Z"),
+          endDate: toUTCstring(date.toISOString().split("T")[0] + "T23:59:59.999Z"),
           location,
         },
         headers: {
-          Authorization: `Bearer ${localStorage.getItem('token')}`
-        }
-      })
-      const result = response.data
+          Authorization: `Bearer ${localStorage.getItem("token")}`,
+          "X-Required-Permission": "dailyReports",
+        },
+      });
 
-      // Ensure cash_summary has default values if null
+      if (response.status === 403) {
+        navigate({ to: "/no-access" });
+        return;
+      }
+
+      const result = response.data;
+
       const processedResult = {
         ...result,
         cash_summary: result.cash_summary || {
           hand_held_debit: 0,
-          name: '',
-          managers_notes: '',
-        }
+          name: "",
+          managers_notes: "",
+        },
       };
 
-      setData(processedResult)
+      setData(processedResult);
 
-      // Calculate totals
-      let totalShiftReportCash = 0
-      let totalCalculatedCash = 0
-      let totalOverShort = 0
+      let totalShiftReportCash = 0;
+      let totalCalculatedCash = 0;
+      let totalOverShort = 0;
 
       result.worksheets.forEach((item: any) => {
-        const calculated = calculateData(item)
-        totalShiftReportCash += item.shift_report_cash
-        totalCalculatedCash += calculated.totalCash
-        totalOverShort += calculated.isShort
-          ? -calculated.overShortAmount
-          : calculated.overShortAmount
-      })
+        const calculated = calculateData(item);
+        totalShiftReportCash += item.shift_report_cash;
+        totalCalculatedCash += calculated.totalCash;
+        totalOverShort += calculated.isShort ? -calculated.overShortAmount : calculated.overShortAmount;
+      });
 
       setTotals({
         totalShiftReportCash,
         totalCalculatedCash,
         totalOverShort,
-      })
-    } catch (error) {
-      console.error('Error fetching cash summary:', error)
+      });
+    } catch (error: any) {
+      if (axios.isAxiosError(error) && error.response?.status === 403) {
+        navigate({ to: "/no-access" });
+        return;
+      }
+      console.error("Error fetching cash summary:", error);
       setData({
         cash_summary: {
           hand_held_debit: 0,
-          name: '',
-          managers_notes: '',
+          name: "",
+          managers_notes: "",
         },
         worksheets: [],
         purchase_orders: [],
         payables: [],
-      })
+      });
       setTotals({
         totalShiftReportCash: 0,
         totalCalculatedCash: 0,
         totalOverShort: 0,
-      })
+      });
     }
-  }
+  };
 
   const createCashSummary = async () => {
     try {
-      await axios.post('/api/cash-summary', {
-        name: user?.name,
-        location,
-        date: date?.toISOString(),
-      }, {
-        headers: {
-          Authorization: `Bearer ${localStorage.getItem('token')}`
+      const response = await axios.post(
+        "/api/cash-summary",
+        {
+          name: user?.name,
+          location,
+          date: date?.toISOString(),
+        },
+        {
+          headers: {
+            Authorization: `Bearer ${localStorage.getItem("token")}`,
+            "X-Required-Permission": "dailyReports",
+          },
         }
-      })
-    } catch (error) {
-      console.error('Error creating cash summary:', error)
-      // alert('Failed to create cash summary');
+      );
+
+      if (response.status === 403) {
+        navigate({ to: "/no-access" });
+      }
+    } catch (error: any) {
+      if (axios.isAxiosError(error) && error.response?.status === 403) {
+        navigate({ to: "/no-access" });
+        return;
+      }
+      console.error("Error creating cash summary:", error);
     }
-  }
+  };
 
   useEffect(() => {
     createCashSummary()
@@ -211,24 +232,38 @@ function RouteComponent() {
 
   const handleSave = async () => {
     try {
-      await axios.put('/api/cash-summary', {
-        startDate: toUTCstring(date?.toISOString().split('T')[0] + 'T00:00:00.000Z'),
-        endDate: toUTCstring(date?.toISOString().split('T')[0] + 'T23:59:59.999Z'),
-        // date: date ? date.toISOString().split('T')[0] : '',
-        location,
-        hand_held_debit: data.cash_summary?.hand_held_debit || 0,
-        managers_notes: data.cash_summary?.managers_notes || '',
-      }, {
-        headers: {
-          Authorization: `Bearer ${localStorage.getItem('token')}`
+      const response = await axios.put(
+        '/api/cash-summary',
+        {
+          startDate: toUTCstring(date?.toISOString().split('T')[0] + 'T00:00:00.000Z'),
+          endDate: toUTCstring(date?.toISOString().split('T')[0] + 'T23:59:59.999Z'),
+          location,
+          hand_held_debit: data.cash_summary?.hand_held_debit || 0,
+          managers_notes: data.cash_summary?.managers_notes || '',
+        },
+        {
+          headers: {
+            Authorization: `Bearer ${localStorage.getItem('token')}`,
+            "X-Required-Permission": "dailyReports",
+          },
         }
-      })
-      alert('Cash summary saved successfully!')
-    } catch (error) {
-      console.error('Error saving cash summary:', error)
-      alert('Failed to save cash summary')
+      );
+
+      if (response.status === 403) {
+        navigate({ to: "/no-access" });
+        return;
+      }
+
+      alert('Cash summary saved successfully!');
+    } catch (error: any) {
+      if (axios.isAxiosError(error) && error.response?.status === 403) {
+        navigate({ to: "/no-access" });
+        return;
+      }
+      console.error('Error saving cash summary:', error);
+      alert('Failed to save cash summary');
     }
-  }
+  };
 
   console.log('Data:', {
     ...data,

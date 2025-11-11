@@ -1,4 +1,4 @@
-import { createFileRoute } from '@tanstack/react-router'
+import { createFileRoute, useNavigate } from '@tanstack/react-router'
 import { useState } from "react";
 import { LocationPicker } from "@/components/custom/locationPicker";
 import { useAuth } from "@/context/AuthContext";
@@ -14,6 +14,8 @@ function RouteComponent() {
   const [result, setResult] = useState<any>(null);
   const [loading, setLoading] = useState(false);
 
+  const navigate = useNavigate();
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
@@ -24,16 +26,27 @@ function RouteComponent() {
       const res = await fetch(`/api/cycle-count/lookup?${params}`, {
         headers: {
           Authorization: `Bearer ${localStorage.getItem("token")}`,
+          "X-Required-Permission": "cycleCount.console",
         },
       });
+
+      if (res.status === 403) {
+        navigate({ to: "/no-access" });
+        return;
+      }
+
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+
       const data = await res.json();
       setResult(data);
     } catch (err) {
+      console.error("Error fetching cycle count lookup:", err);
       setResult({ error: "Failed to fetch data." });
     } finally {
       setLoading(false);
     }
   };
+
 
   return (
     <div className="max-w-md mx-auto my-8 p-4 border rounded">

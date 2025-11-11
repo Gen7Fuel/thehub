@@ -44,7 +44,8 @@ function RouteComponent() {
     try {
       const response = await axios.post('/api/status-sales', payload, {
         headers: {
-          Authorization: `Bearer ${localStorage.getItem('token')}`
+          Authorization: `Bearer ${localStorage.getItem('token')}`,
+          "X-Required-Permission": "status"
         }
       });
 
@@ -59,8 +60,12 @@ function RouteComponent() {
         alert(`Error: ${errorData.error || 'Failed to create status sale'}`);
       }
     } catch (error: any) {
-      console.error('Error creating status sale:', error);
-      alert('An unexpected error occurred. Please try again.');
+      if (error.response?.status === 403) {
+        navigate({ to: '/no-access' });
+      } else {
+        console.error('Error creating status sale:', error);
+        alert('An unexpected error occurred. Please try again.');
+      }
     } finally {
       setSubmitting(false); // Re-enable button
     }
@@ -70,12 +75,14 @@ function RouteComponent() {
     // Automatically populate Name and Phone based on Status Card
     if (statusCard.length === 10) {
       try {
-        // add authorization header with bearer token
+        // Add authorization header with bearer token
         const response = await axios.get(`/api/status-sales/${statusCard}`, {
           headers: {
-            Authorization: `Bearer ${localStorage.getItem('token')}`
-          }
+            Authorization: `Bearer ${localStorage.getItem('token')}`,
+            "X-Required-Permission": "status",
+          },
         });
+
         if (response.status === 200) {
           const userData = response.data;
           setName(userData.name || '');
@@ -84,16 +91,21 @@ function RouteComponent() {
           setName('');
           setPhone('');
         }
-      } catch (error) {
-        setName('');
-        setPhone('');
+      } catch (err: any) {
+        if (err.response?.status === 403) {
+          // Redirect to no-access page
+          navigate({ to: "/no-access" });
+        } else {
+          setName('');
+          setPhone('');
+        }
       }
     } else {
       // Clear Name and Phone if Status Card is not valid
       setName('');
       setPhone('');
     }
-  };
+  }
 
   return (
     <div className="flex items-center justify-center">

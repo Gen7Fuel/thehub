@@ -72,7 +72,8 @@ function RouteComponent() {
         images: imageFilenames
       }, {
         headers: {
-          Authorization: `Bearer ${token}`
+          Authorization: `Bearer ${token}`,
+          "X-Required-Permission": "payables",
         }
       })
 
@@ -86,6 +87,10 @@ function RouteComponent() {
         alert('Error creating payable: ' + error.error)
       }
     } catch (error: any) {
+      if (error.response?.status === 403) {
+        navigate({ to: "/no-access" });
+        return;
+      }
       console.error('Error submitting payable:', error)
       alert('Error submitting payable')
     } finally {

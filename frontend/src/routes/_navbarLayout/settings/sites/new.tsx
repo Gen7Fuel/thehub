@@ -9,12 +9,20 @@ import {
   InputOTPGroup,
   InputOTPSlot,
 } from "@/components/ui/input-otp";
+import { useAuth } from "@/context/AuthContext"
 
 export const Route = createFileRoute('/_navbarLayout/settings/sites/new')({
   component: NewSiteRouteComponent,
 });
 
 function NewSiteRouteComponent() {
+    const { user } = useAuth();
+    const navigate = useNavigate();
+    const access = user?.access || {}
+    if(!access?.settings){
+      navigate({to:"/no-access"});
+      return;
+    }
     const [formData, setFormData] = useState({
         type: "store", // default type
         stationName: "",
@@ -27,7 +35,6 @@ function NewSiteRouteComponent() {
     });
     const [managerCode, setManagerCode] = useState("");
     const [loading, setLoading] = useState(false);
-    const navigate = useNavigate();
     const router = useRouter(); // ✅ get router instance here
 
 

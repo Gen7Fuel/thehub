@@ -1,4 +1,4 @@
-import { createFileRoute } from '@tanstack/react-router'
+import { createFileRoute, useNavigate } from '@tanstack/react-router'
 import { useState } from 'react'
 import { Button } from '@/components/ui/button'
 import axios from 'axios'
@@ -10,6 +10,7 @@ export const Route = createFileRoute('/_navbarLayout/kardpoll/')({
 
 function RouteComponent() {
   const [file, setFile] = useState<File | null>(null)
+  const navigate = useNavigate()
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files && e.target.files.length > 0) {
@@ -62,21 +63,28 @@ function RouteComponent() {
       console.log('Transactions', transactions);
 
       try {
-        const response = await axios.post(`${domain}/api/kardpoll-transactions/upload`, transactions, {
-          headers: {
-            Authorization: `Bearer ${localStorage.getItem('token')}`
+          const response = await axios.post(`${domain}/api/kardpoll-transactions/upload`, transactions, {
+            headers: {
+              Authorization: `Bearer ${localStorage.getItem('token')}`,
+              "X-Required-Permission": "kardpoll",
+            },
+          });
+
+          if (response.status === 200) {
+            alert("Records uploaded successfully.");
+          } else {
+            alert("Failed to upload records.");
           }
-        });
-        if (response.status === 200) {
-          alert("Records uploaded successfully.");
-        } else {
-          alert("Failed to upload records.");
+        } catch (error: any) {
+          if (axios.isAxiosError(error) && error.response?.status === 403) {
+            navigate({ to: "/no-access" }); // SPA-friendly redirect
+            return;
+          }
+
+          console.error("Error uploading records:", error);
+          alert("Error uploading records.");
         }
-      } catch (error) {
-        console.error("Error uploading records:", error);
-        alert("Error uploading records.");
-      }
-    };
+          };
 
     reader.readAsText(file);
   };

@@ -1,4 +1,4 @@
-import { createFileRoute } from '@tanstack/react-router'
+import { createFileRoute, useNavigate } from '@tanstack/react-router'
 import { useEffect, useState, useRef } from 'react'
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
@@ -21,6 +21,7 @@ function RouteComponent() {
   const messagesEndRef = useRef<HTMLDivElement>(null)
 
   const socketRef = useRef<any>(null)
+  const navigate = useNavigate()
 
   if (!socketRef.current) {
     socketRef.current = io('/support', {
@@ -55,9 +56,14 @@ function RouteComponent() {
         const response = await fetch(`/api/support/tickets/${id}`, {
           headers: {
             'Authorization': `Bearer ${localStorage.getItem('token')}`,
-            'Content-Type': 'application/json'
+            'Content-Type': 'application/json',
+            "X-Required-Permission": "support"
           }
         })
+        if (response.status == 403){
+          navigate({to:"/no-access"});
+          return;
+        }
         const data = await response.json()
         if (data.success) {
           setTicket(data.data)

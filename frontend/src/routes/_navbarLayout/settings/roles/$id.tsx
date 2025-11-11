@@ -189,31 +189,43 @@ export function RouteComponent() {
       try {
         const token = localStorage.getItem("token");
 
-        // Fetch both role and all users in parallel
+        // Fetch role and users in parallel
         const [roleRes, usersRes] = await Promise.all([
           axios.get<Role>(`/api/roles/${id}`, {
-            headers: { Authorization: `Bearer ${token}` },
+            headers: {
+              Authorization: `Bearer ${token}`,
+              "X-Required-Permission": "settings",
+            },
           }),
           axios.get<User[]>("/api/users", {
-            headers: { Authorization: `Bearer ${token}` },
+            headers: {
+              Authorization: `Bearer ${token}`,
+              "X-Required-Permission": "settings",
+            },
           }),
         ]);
 
         setRole(roleRes.data);
         setUsers(usersRes.data);
 
-        // Compute assigned users right here
+        // Compute assigned users
         const assignedIds = usersRes.data
           .filter((u) => u.role?._id === id)
           .map((u) => u._id);
         setSelectedUsers(assignedIds);
 
         setLoading(false);
-      } catch (err) {
+      } catch (err: any) {
         console.error(err);
         setLoading(false);
+
+        // Handle 403 specifically
+        if (axios.isAxiosError(err) && err.response?.status === 403) {
+          navigate({to:"/no-access"});
+        }
       }
     };
+
     fetchData();
   }, [id]);
 
@@ -225,12 +237,17 @@ export function RouteComponent() {
       await axios.put(
         `/api/roles/${id}`,
         { ...role, permissions: updatedPermissions },
-        { headers: { Authorization: `Bearer ${localStorage.getItem('token')}` } }
+        { headers: { Authorization: `Bearer ${localStorage.getItem('token')}`,"X-Required-Permission": "settings", } }
       );
       alert("Role updated successfully!");
-    } catch (err) {
-      console.error(err);
-      alert("Failed to update role");
+    } catch (err: any) {
+      if (err.response?.status === 403) {
+          // Redirect to no-access page
+          navigate({ to: "/no-access" });
+      } else {
+        console.error(err);
+        alert("Failed to update role");
+      }
     }
   };
 
@@ -240,13 +257,18 @@ export function RouteComponent() {
     if (!confirm("Are you sure you want to delete this role?")) return;
     try {
       await axios.delete(`/api/roles/${id}`, {
-        headers: { Authorization: `Bearer ${localStorage.getItem('token')}` },
+        headers: { Authorization: `Bearer ${localStorage.getItem('token')}`,"X-Required-Permission": "settings" },
       });
       alert("Role deleted successfully!");
       navigate({ to: "/settings/roles/" });
-    } catch (err) {
-      console.error(err);
-      alert("Failed to delete role");
+    } catch (err: any) {
+      if (err.response?.status === 403) {
+          // Redirect to no-access page
+          navigate({ to: "/no-access" });
+      } else {
+        console.error(err);
+        alert("Failed to delete role");
+      }
     }
   };
 
@@ -255,7 +277,7 @@ export function RouteComponent() {
     setDialogOpen(true);
     try {
       const res = await axios.get<User[]>("/api/users", {
-        headers: { Authorization: `Bearer ${localStorage.getItem('token')}` }
+        headers: { Authorization: `Bearer ${localStorage.getItem('token')}`,"X-Required-Permission": "settings", }
       });
       
       setUsers(res.data); // update state for rendering
@@ -266,8 +288,13 @@ export function RouteComponent() {
         .map(u => u._id);
       setSelectedUsers(assignedIds);
 
-    } catch (err) {
-      console.error(err);
+    } catch (err: any) {
+      if (err.response?.status === 403) {
+          // Redirect to no-access page
+          navigate({ to: "/no-access" });
+      } else {
+        console.error(err);
+      }
     }
   };
 
@@ -284,13 +311,18 @@ export function RouteComponent() {
     try {
       await axios.put(`/api/roles/${id}/assign-users`, 
         { userIds: selectedUsers }, 
-        { headers: { Authorization: `Bearer ${localStorage.getItem('token')}` } }
+        { headers: { Authorization: `Bearer ${localStorage.getItem('token')}`,"X-Required-Permission": "settings", } }
       );
       alert("User role updated successfully!");
       setDialogOpen(false);
-    } catch (err) {
-      console.error(err);
-      alert("Failed to assign users");
+    } catch (err: any) {
+      if (err.response?.status === 403) {
+          // Redirect to no-access page
+          navigate({ to: "/no-access" });
+      } else {
+        console.error(err);
+        alert("Failed to assign user role");
+      }
     }
   };
 

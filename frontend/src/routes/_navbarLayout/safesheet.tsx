@@ -104,30 +104,44 @@ function RouteComponent() {
 
     let mounted = true
     const fetchSheet = async () => {
-      setLoading(true)
-      setError(null)
+      setLoading(true);
+      setError(null);
+
       try {
-        console.log('fetch safesheet start', site)
+        console.log('fetch safesheet start', site);
+
         const res = await fetch(`/api/safesheets/site/${encodeURIComponent(site)}`, {
           headers: {
-            'Authorization': `Bearer ${localStorage.getItem('token')}`
-          }
-        })
-        console.log('fetch safesheet response', res)
-        if (!res.ok) {
-          const body = await res.json().catch(() => ({}))
-          throw new Error(body?.error || `Failed to fetch safesheet for ${site}`)
+            'Authorization': `Bearer ${localStorage.getItem('token')}`,
+            "X-Required-Permission": "safesheet",
+          },
+        });
+
+        console.log('fetch safesheet response', res);
+
+        if (res.status === 403) {
+          // Redirect to no-access page (SPA-style)
+          navigate({ to: "/no-access" });
+          return;
         }
-        const data: SafeSheet = await res.json()
-        console.log('fetch safesheet body', data)
-        if (mounted) setSheet(data)
+
+        if (!res.ok) {
+          const body = await res.json().catch(() => ({}));
+          throw new Error(body?.error || `Failed to fetch safesheet for ${site}`);
+        }
+
+        const data: SafeSheet = await res.json();
+        console.log('fetch safesheet body', data);
+
+        if (mounted) setSheet(data);
+
       } catch (err: any) {
-        console.error('fetchSheet error', err)
-        if (mounted) setError(err.message || 'Unknown error')
+        console.error('fetchSheet error', err);
+        if (mounted) setError(err.message || 'Unknown error');
       } finally {
-        if (mounted) setLoading(false)
+        if (mounted) setLoading(false);
       }
-    }
+    };
 
     fetchSheet()
     return () => { mounted = false }
@@ -195,11 +209,17 @@ function RouteComponent() {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'Authorization': `Bearer ${localStorage.getItem('token')}`
+          'Authorization': `Bearer ${localStorage.getItem('token')}`,
+          "X-Required-Permission": "safesheet",
         },
         body: JSON.stringify(entryBody)
       })
       console.log('post entry response', res)
+      // ✅ Handle 403 before doing anything else
+      if (res.status === 403) {
+        navigate({ to: "/no-access" });
+        return;
+      }
       const body = await res.json().catch(() => null)
       console.log('post entry body', body)
       if (!res.ok) {

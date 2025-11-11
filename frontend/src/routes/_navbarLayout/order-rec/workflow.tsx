@@ -89,12 +89,17 @@ function RouteComponent() {
         headers: {
           "Content-Type": "application/json",
           Authorization: `Bearer ${localStorage.getItem(`token`)}`,
+          "X-Required-Permission": "orderRec.workflow"
         },
         body: JSON.stringify({
           text,
           author: user?.initials,
         }),
       })
+      if(res.status==403){
+        navigate({to:"/no-access"})
+        return;
+      }
 
       if (!res.ok) throw new Error("Failed to add comment")
       const updated = await res.json()
@@ -112,14 +117,20 @@ function RouteComponent() {
         headers: {
           "Content-Type": "application/json",
           Authorization: `Bearer ${localStorage.getItem(`token`)}`,
+          "X-Required-Permission": "orderRec.workflow"
         },
         body: JSON.stringify({ status: newStatus }),
       });
+      if(res.status==403){
+        navigate({to:"/no-access"})
+        return;
+      }
       if (!res.ok) throw new Error("Failed to update status");
       const updated = await res.json();
       setOrderRecs((prev) => prev.map((r) => (r._id === updated._id ? updated : r)));
+
       const vendorsRes = await fetch("/api/vendors", {
-      headers: { Authorization: `Bearer ${localStorage.getItem(`token`)}` },
+        headers: { Authorization: `Bearer ${localStorage.getItem(`token`)}` },
       });
       if (vendorsRes.ok) {
         const vendorsData: Vendor[] = await vendorsRes.json();
@@ -182,10 +193,16 @@ function RouteComponent() {
     const fetchData = async () => {
       setLoading(true)
       const [recsRes, vendorsRes, storesRes] = await Promise.all([
-        fetch("/api/order-rec", { headers: { Authorization: `Bearer ${localStorage.getItem("token")}` } }),
-        fetch("/api/vendors", { headers: { Authorization: `Bearer ${localStorage.getItem("token")}` } }),
-        fetch("/api/locations", { headers: { Authorization: `Bearer ${localStorage.getItem("token")}` } }),
+        fetch("/api/order-rec", { headers: { Authorization: `Bearer ${localStorage.getItem("token")}`, "X-Required-Permission": "orderRec.workflow" } }),
+        fetch("/api/vendors", { headers: { Authorization: `Bearer ${localStorage.getItem("token")}`, "X-Required-Permission": "orderRec.workflow" } }),
+        fetch("/api/locations", { headers: { Authorization: `Bearer ${localStorage.getItem("token")}`, "X-Required-Permission": "orderRec.workflow" } }),
       ])
+
+      if ([recsRes, vendorsRes, storesRes].some(r => r.status === 403)) {
+        navigate({to:"/no-access"});
+        return;
+      }
+
       if (recsRes.ok && vendorsRes.ok && storesRes.ok) {
         const recsData = await recsRes.json()
         const vendorsData = await vendorsRes.json()

@@ -34,7 +34,7 @@ function RouteComponent() {
       <div className="flex mb-4">
         {/* Show Templates button if user has access */}
         {/* {access.component_station_audit_template && ( //markpoint */}
-        {access.stationAudit.template && (
+        {access?.stationAudit?.template && (
           <Link to="/audit/templates">
             <Button
               {...(isCreateActive ? {} : { variant: 'outline' } as object)}
@@ -54,7 +54,7 @@ function RouteComponent() {
           </Button>
         </Link>
         {/* {access.component_station_audit_interface && ( //markpoint */}
-        {access.stationAudit.interface && (
+        {access?.stationAudit?.interface && (
           <Link to="/audit/interface">
             <Button
               {...(!isInterfaceActive && { variant: 'outline' } as object)}

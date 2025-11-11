@@ -155,7 +155,8 @@ function RouteComponent() {
     axios
       .get(`/api/audit/select-templates/${id}`, {
         headers: {
-          Authorization: `Bearer ${localStorage.getItem(`token`)}`,
+          Authorization: `Bearer ${localStorage.getItem("token")}`,
+          "X-Required-Permission": "stationAudit.template",
         },
       })
       .then(res => {
@@ -170,9 +171,16 @@ function RouteComponent() {
             : [{ text: "", email: "" }]
         );
       })
-      .catch(() => setError("Failed to load template"))
+      .catch(err => {
+        if (err.response?.status === 403) {
+          navigate({ to: "/no-access" });
+        } else {
+          setError("Failed to load template");
+        }
+      })
       .finally(() => setLoading(false));
-  }, [id]);
+  }, [id, navigate]);
+
 
   const handleOptionChange = (idx: number, field: "text" | "email", value: string) => {
     setOptions(prev =>
@@ -194,11 +202,10 @@ function RouteComponent() {
         .filter(o => o.text.trim() !== "")
         .map(o => ({
           text: o.text.trim(),
-          // Include email only if Assigned To
           ...(name === "Assigned To" ? { email: o.email?.trim() || "" } : {}),
         }));
 
-      await axios.put(
+      const res = await axios.put(
         `/api/audit/select-templates/${id}`,
         {
           name,
@@ -207,14 +214,26 @@ function RouteComponent() {
         },
         {
           headers: {
-            Authorization: `Bearer ${localStorage.getItem(`token`)}`,
+            Authorization: `Bearer ${localStorage.getItem("token")}`,
+            "X-Required-Permission": "stationAudit.template",
           },
         }
       );
+
+      if (res.status === 403) {
+        navigate({ to: "/no-access" });
+        return;
+      }
+
       navigate({ to: "/audit/templates/select/list" });
     } catch (err: any) {
-      setError(err?.response?.data?.message || "Failed to update template");
+      if (err.response?.status === 403) {
+        navigate({ to: "/no-access" });
+      } else {
+        setError(err?.response?.data?.message || "Failed to update template");
+      }
     }
+
   };
 
   if (loading) return <div className="text-center mt-8">Loading...</div>;

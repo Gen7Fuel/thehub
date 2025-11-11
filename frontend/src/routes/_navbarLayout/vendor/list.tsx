@@ -1,4 +1,4 @@
-import { createFileRoute } from '@tanstack/react-router'
+import { createFileRoute, useNavigate } from '@tanstack/react-router'
 import { useEffect, useState } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -29,7 +29,8 @@ export const Route = createFileRoute('/_navbarLayout/vendor/list')({
 });
 
 function RouteComponent() {
-  // const [vendors, setVendors] = useState<Vendor[]>([]);
+  // const [vendors, setVendors] = useState<Vendor[]>([]);3
+  const navigate = useNavigate()
   const [loading, setLoading] = useState(true);
   const [vendors, setVendors] = useState<GroupedVendor[]>([]); // ← use GroupedVendor
   const [selectedVendor, setSelectedVendor] = useState<{
@@ -43,7 +44,7 @@ function RouteComponent() {
       try {
         const token = localStorage.getItem("token");
         const res = await fetch(`/api/vendors`, {
-          headers: { Authorization: `Bearer ${token}` },
+          headers: { Authorization: `Bearer ${token}`,"X-Required-Permission": "vendor" },
         });
         if (res.ok) {
           const data: Vendor[] = await res.json();
@@ -70,9 +71,10 @@ function RouteComponent() {
               return acc;
             }, {})
           );
-
-
           setVendors(grouped);
+        } else if(res.status == 403) {
+          navigate({to:"/no-access"})
+          return;
         } else {
           setVendors([]);
         }
