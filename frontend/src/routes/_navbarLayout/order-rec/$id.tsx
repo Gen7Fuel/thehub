@@ -877,7 +877,7 @@ function RouteComponent() {
         <div className="flex gap-2">
         {/* If the order rec vendor is 'CoreMark' then show another button here called 'Template' */}
         {/* {access.component_order_rec_id_delete_button && ( //markpoint */}
-        {access.orderRec.id.deleteButton && (
+        {access?.orderRec?.id?.deleteButton && (
         <Button
           variant="destructive"
           onClick={handleDelete}

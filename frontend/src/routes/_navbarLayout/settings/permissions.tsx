@@ -1,4 +1,5 @@
-import { createFileRoute, Link, Outlet } from '@tanstack/react-router';
+import { createFileRoute, Link, Outlet, useNavigate } from '@tanstack/react-router';
+import { useEffect } from 'react';
 import axios from "axios";
 
 export const Route = createFileRoute('/_navbarLayout/settings/permissions')({
@@ -9,12 +10,25 @@ export const Route = createFileRoute('/_navbarLayout/settings/permissions')({
       const response = await axios.get('/api/permissions', {
         headers: {
           Authorization: `Bearer ${localStorage.getItem('token')}`,
+          "X-Required-Permission": "settings",
         },
       });
-      return { permissions: response.data };
-    } catch (error) {
+
+      if (response.status === 403) {
+        // explicitly catch 403s even if backend responds oddly
+        return { permissions: [], accessDenied: true };
+      }
+
+      return { permissions: response.data, accessDenied: false };
+    } catch (error: any) {
       console.error('Error fetching permissions:', error);
-      return { permissions: [] };
+
+      // detect 403 inside error block
+      if (axios.isAxiosError(error) && error.response?.status === 403) {
+        return { permissions: [], accessDenied: true };
+      }
+
+      return { permissions: [], accessDenied: false };
     }
   },
 });
@@ -29,7 +43,20 @@ interface Permission {
 }
 
 function RouteComponent() {
-  const { permissions } = Route.useLoaderData() as { permissions: Permission[] };
+  const navigate = useNavigate();
+  const { permissions, accessDenied } = Route.useLoaderData() as {
+    permissions: Permission[];
+    accessDenied: boolean;
+  };
+
+  // 🚦 Redirect when access is denied
+  useEffect(() => {
+    if (accessDenied) {
+      navigate({ to: '/no-access' });
+    }
+  }, [accessDenied, navigate]);
+
+  if (accessDenied) return null; // avoid flicker before redirect
 
   const activeProps = {
     className: 'bg-gray-100 rounded-md',

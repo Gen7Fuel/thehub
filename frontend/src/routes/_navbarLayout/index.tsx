@@ -130,7 +130,7 @@ function App() {
 
         {/* Accounts Receivable Section */}
         {/* {(access.module_fleet_card_assignment || access.module_po || access.module_kardpoll) && ( //markpoint */}
-        {(access.fleetCardAssignment || access?.po?.value || access.kardpoll) && (
+        {(access?.fleetCardAssignment || access?.po?.value || access?.kardpoll) && (
           <Section title="Accounts Receivable">
             <div className="flex flex-wrap gap-4">
               {/* Fleet Card Assignment button */}
@@ -153,7 +153,7 @@ function App() {
               )}
               {/* Kardpoll button */}
               {/* {access.module_kardpoll && ( //markpoint */}
-              {access.kardpoll && (
+              {access?.kardpoll && (
                 <Link to="/kardpoll">
                   <Button className="w-32 h-32 flex items-center justify-center break-words whitespace-normal text-center">
                     Kardpoll
@@ -180,12 +180,12 @@ function App() {
 
         {/* Reports Section */}
         {/* {(access.module_daily_reports || access.module_reports) && ( //markpoint */}
-        {(access.dailyReports || access.reports) && (
+        {(access?.dailyReports || access?.reports) && (
           <Section title="Reports">
             <div className="flex flex-wrap gap-4">
               {/* Daily Reports button */}
                {/* {access.module_daily_reports && ( //markpoint */}
-              {access.dailyReports && (
+              {access?.dailyReports && (
                 <Link to="/daily-reports">
                   <Button className="w-32 h-32 flex items-center justify-center break-words whitespace-normal text-center">
                     Daily Reports
@@ -194,7 +194,7 @@ function App() {
               )} 
               {/* Reports button */}
                {/* {access.module_reports && ( //markpoint */}
-              {access.reports && (
+              {access?.reports && (
                 <Link to="/reports">
                   <Button className="w-32 h-32 flex items-center justify-center break-words whitespace-normal text-center">
                     Reports

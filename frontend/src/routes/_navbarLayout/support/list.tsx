@@ -69,6 +69,7 @@ async function fetchTickets(site: string) {
   const response = await fetch(`/api/support/tickets?site=${site}`, {
     headers: {
       Authorization: `Bearer ${localStorage.getItem('token')}`,
+      "X-Required-Permission": "support"
     },
   })
 

@@ -112,7 +112,7 @@ function RouteComponent() {
       <span className='flex justify-between'>
       <h2 className="text-lg font-bold mb-2">Status Sales List</h2>
       {/* { access.component_status_pdf && //markpoint */}
-      { access.status.pdf &&
+      { access?.status?.pdf &&
         <Button onClick={() => generatePDF(statusSales)} className="mb-4">
           PDF
         </Button>

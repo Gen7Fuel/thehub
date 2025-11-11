@@ -233,14 +233,14 @@ export default function Navbar() {
           </Button>
           {/* Dashboard button, shown if user has access */}
           {/* {access.module_dashboard && ( //markpoint */}
-          {access.dashboard && (
+          {access?.dashboard && (
             <Button variant="ghost" onClick={() => navigate({ to: '/dashboard' })}>
               <Link to="/dashboard">Dashboard</Link>
             </Button>
           )}
           {/* Settings button, shown if user has access */}
           {/* {access.component_settings && ( //markpoint */}
-          {access.settings && ( 
+          {access?.settings && ( 
             <Button variant="outline" onClick={handleSettings}>Settings</Button>
           )}
           {/* Logout button */}

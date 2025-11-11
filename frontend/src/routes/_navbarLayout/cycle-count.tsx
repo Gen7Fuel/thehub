@@ -60,7 +60,7 @@ function RouteComponent() {
           <Button
             {...(!isInventoryActive && { variant: 'outline' } as object)}
             // className={access.component_cycle_count_console ? 'rounded-none' : 'rounded-l-none'} //markpoint
-            className={access.cycleCount.console ? 'rounded-none' : 'rounded-l-none'}
+            className={access?.cycleCount?.console ? 'rounded-none' : 'rounded-l-none'}
           >
             Inventory
           </Button>
@@ -68,7 +68,7 @@ function RouteComponent() {
 
         {/* Console tab button, shown only if user has access */}
         {/* {access.component_cycle_count_console && ( //markpoint */}
-        {access.cycleCount.console && (
+        {access?.cycleCount?.console && (
           <Link to="/cycle-count/console" activeOptions={{ exact: true }}>
             <Button
               {...(!isConsoleActive && { variant: 'outline' } as object)}

@@ -36,7 +36,11 @@ function RouteComponent() {
       setLoading(true);
       try {
         const token = localStorage.getItem("token");
-        const res = await fetch(`/api/vendors/by-name/${id}`, { headers: { Authorization: `Bearer ${token}` } });
+        const res = await fetch(`/api/vendors/by-name/${id}`, { headers: { Authorization: `Bearer ${token}`,"X-Required-Permission": "vendor"  } });
+        if(res.status == 403) {
+          navigate({to:"/no-access"})
+          return;
+        }
         if (!res.ok) return;
         const data = await res.json();
         setName(data.name);
@@ -112,7 +116,7 @@ function RouteComponent() {
       const token = localStorage.getItem("token");
       const res = await fetch(`/api/vendors/${id}`, {
         method: "PUT",
-        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}`,"X-Required-Permission": "vendor"  },
         body: JSON.stringify({
           name,
           station_supplies: stationSupplies.filter(s => s.name && s.upc && s.size),
@@ -123,6 +127,9 @@ function RouteComponent() {
           sites: vendorSites.concat(selectedNewSites.map(s => ({ site: s, frequency: '' }))),
         }),
       });
+      if(res.status == 403) {
+          navigate({to:"/no-access"})
+      }
       if (res.ok) navigate({ to: "/vendor/list" });
       else alert("Failed to update vendor");
     } finally { setSaving(false); }

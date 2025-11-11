@@ -94,10 +94,6 @@ function RouteComponent() {
           "X-Required-Permission": "payables"
         }
       })
-      if (response.status == 403){
-        navigate({to:"/no-access"});
-        return;
-      }
       const data = response.data
 
       console.log('API response:', data)
@@ -108,39 +104,46 @@ function RouteComponent() {
         console.error('API returned non-array data:', data)
         setPayables([])
       }
-    } catch (error) {
-      console.error("Error fetching payables:", error)
-      setPayables([])
+    } catch (error: any) {
+      if (error.response?.status === 403) {
+        navigate({ to: "/no-access" });
+        return;
+      }
+      console.error("Error fetching payables:", error);
+      setPayables([]);
     } finally {
       setLoading(false)
     }
   }
 
   const deletePayable = async (id: string) => {
-    if (!confirm('Are you sure you want to delete this payable?')) return
+    if (!confirm('Are you sure you want to delete this payable?')) return;
 
     try {
-      // add authorization header with bearer token
-      const token = localStorage.getItem('token')
+      const token = localStorage.getItem('token');
       const response = await axios.delete(`${domain}/api/payables/${id}`, {
         headers: {
           Authorization: `Bearer ${token}`,
-          "X-Required-Permission": "payables"
-        }
-      })
-      if (response.status == 403){
-        navigate({to:"/no-access"})
-        return;
-      } else if (response.status === 200) {
-        setPayables(payables.filter(p => p._id !== id))
+          "X-Required-Permission": "payables",
+        },
+      });
+
+      if (response.status === 200) {
+        setPayables(payables.filter(p => p._id !== id));
       } else {
-        alert('Error deleting payable')
+        alert('Error deleting payable');
       }
-    } catch (error) {
-      console.error("Error deleting payable:", error)
-      alert('Error deleting payable')
+    } catch (error: any) {
+      if (error.response?.status === 403) {
+        navigate({ to: "/no-access" });
+        return;
+      }
+
+      console.error("Error deleting payable:", error);
+      alert('Error deleting payable');
     }
-  }
+  };
+
 
   const viewImages = (images: string[]) => {
     if (images.length === 0) {

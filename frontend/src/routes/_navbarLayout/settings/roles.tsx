@@ -1,4 +1,5 @@
-import { createFileRoute, Link, Outlet } from '@tanstack/react-router';
+import { createFileRoute, Link, Outlet, useNavigate } from '@tanstack/react-router';
+import { useEffect } from 'react';
 import axios from "axios";
 
 export const Route = createFileRoute('/_navbarLayout/settings/roles')({
@@ -9,12 +10,21 @@ export const Route = createFileRoute('/_navbarLayout/settings/roles')({
       const response = await axios.get('/api/roles', {
         headers: {
           Authorization: `Bearer ${localStorage.getItem('token')}`,
+          "X-Required-Permission": "settings",
         },
       });
-      return { roles: response.data };
+      if (response.status === 403) {
+        // explicitly catch 403s even if backend responds oddly
+        return { roles: [], accessDenied: true };
+      }
+      return { roles: response.data, accessDenied: false };
     } catch (error) {
       console.error('Error fetching roles:', error);
-      return { roles: [] };
+      if (axios.isAxiosError(error) && error.response?.status === 403) {
+        return { roles: [], accessDenied: true };
+      }
+      
+      return { roles: [], accessDenied: false };
     }
   },
 });
@@ -29,7 +39,20 @@ interface Role {
 }
 
 function RouteComponent() {
-  const { roles } = Route.useLoaderData() as { roles: Role[] };
+  const navigate = useNavigate();
+  const { roles, accessDenied } = Route.useLoaderData() as {
+    roles: Role[];
+    accessDenied: boolean;
+  };
+  
+    // 🚦 Redirect when access is denied
+  useEffect(() => {
+    if (accessDenied) {
+      navigate({ to: '/no-access' });
+    }
+  }, [accessDenied, navigate]);
+  
+  if (accessDenied) return null; // avoid flicker before redirect
 
   const activeProps = {
     className: 'bg-gray-100 rounded-md',

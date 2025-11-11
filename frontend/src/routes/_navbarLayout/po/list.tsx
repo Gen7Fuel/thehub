@@ -1,5 +1,5 @@
 import React, { useEffect } from 'react'
-import { createFileRoute } from '@tanstack/react-router'
+import { createFileRoute, useNavigate } from '@tanstack/react-router'
 import { useFormStore } from '@/store'
 import { DatePickerWithRange } from '@/components/custom/datePickerWithRange'
 // import { addDays } from "date-fns"
@@ -19,6 +19,7 @@ export const Route = createFileRoute('/_navbarLayout/po/list')({
 
 function RouteComponent() {
   const { user } = useAuth()
+  const navigate = useNavigate()
   const resetForm = useFormStore((state) => state.resetForm);
   const { start, end } = getStartAndEndOfToday();
   const [date, setDate] = React.useState<DateRange | undefined>({
@@ -63,14 +64,19 @@ function RouteComponent() {
             stationName
           },
           headers: {
-            Authorization: `Bearer ${localStorage.getItem('token')}`
+            Authorization: `Bearer ${localStorage.getItem('token')}`,
+            "X-Required-Permission": "po"
           }
         }
       );
       const data = response.data;
       console.log('Fetched purchase orders:', data);
       setPurchaseOrders(data);
-    } catch (error) {
+    } catch (error: any) {
+      if (error.response?.status === 403) {
+          // Redirect to no-access page
+        navigate({ to: "/no-access" });
+      }
       console.error("Error fetching purchase orders:", error);
       setPurchaseOrders([]);
     }
@@ -143,7 +149,11 @@ function RouteComponent() {
             <th className="border-dashed border-b border-gray-300 px-4 py-2">Driver Name</th>
             <th className="border-dashed border-b border-gray-300 px-4 py-2">Quantity</th>
             <th className="border-dashed border-b border-gray-300 px-4 py-2">Amount</th>
-            <th className="border-dashed border-b border-gray-300 px-4 py-2">Actions</th>
+            {
+              // access.component_po_pdf && //markpoint
+              access?.po?.pdf && (
+              <th className="border-dashed border-b border-gray-300 px-4 py-2">Actions</th>
+              )}
           </tr>
         </thead>
         <tbody>
@@ -156,13 +166,13 @@ function RouteComponent() {
                 <td className="border-dashed border-t border-gray-300 px-4 py-2">{order.driverName}</td>
                 <td className="border-dashed border-t border-gray-300 px-4 py-2">{order.quantity}</td>
                 <td className="border-dashed border-t border-gray-300 px-4 py-2">{order.amount.toFixed(2)}</td>
-                <td className="border-dashed border-t border-gray-300 px-4 py-2">
                   {
                     // access.component_po_pdf && //markpoint
-                    access.po.pdf && 
-                    <Button onClick={() => generatePDF(order)}>PDF</Button>
-                  }
-                </td>
+                    access?.po?.pdf && (
+                    <td className="border-dashed border-t border-gray-300 px-4 py-2">
+                      <Button onClick={() => generatePDF(order)}>PDF</Button> 
+                    </td>
+                  )}
               </tr>
             ))
           ) : (
