@@ -20,6 +20,25 @@ function App() {
   return (
     <div className="flex items-center justify-center min-h-screen bg-gray-50">
       <div className="flex flex-col gap-8 w-full max-w-3xl px-4 pt-16 pb-8">
+        <Section title="Accounting">
+          <div className="flex flex-wrap gap-4">
+            <Link to="/cash-summary" search={{ site: user?.location }}>
+              <Button className="w-32 h-32 flex items-center justify-center break-words whitespace-normal text-center">
+                Cash Summary
+              </Button>
+            </Link>
+            <Link to="/cash-rec" search={{ site: user?.location }}>
+              <Button className="w-32 h-32 flex items-center justify-center break-words whitespace-normal text-center">
+                Cash Rec
+              </Button>
+            </Link>
+            <Link to="/fuel-rec" search={{ site: user?.location }}>
+              <Button className="w-32 h-32 flex items-center justify-center break-words whitespace-normal text-center">
+                Fuel Rec
+              </Button>
+            </Link>
+          </div>
+        </Section>
         {access?.safesheet && (
           <Section title="Safesheet">
             <div className="flex flex-wrap gap-4">

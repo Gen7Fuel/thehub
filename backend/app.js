@@ -16,7 +16,8 @@ const locationRoutes = require("./routes/location");
 const purchaseOrderRoutes = require("./routes/purchaseOrder");
 const payablesRoutes = require("./routes/payablesRoute");
 const shiftWorksheetRoutes = require("./routes/shiftWorksheetRoutes");
-const cashSummaryRoutes = require("./routes/cashSummaryRoutes");
+// const cashSummaryRoutes = require("./routes/cashSummaryRoutes");
+const cashSummaryRoutes = require("./routes/cashSummaryNewRoutes");
 const payPointRoutes = require("./routes/payPointRoutes");
 const kardpollTransactionsRoutes = require("./routes/kardpollTransactions");
 const fleetRoutes = require("./routes/fleetRoutes");
@@ -29,6 +30,7 @@ const vendorRoutes = require("./routes/vendorRoutes");
 const auditRoutes = require("./routes/audit/auditTemplateRoutes");
 const safesheetRoutes = require("./routes/safesheetRoutes");
 const roleRoutes = require("./routes/roleRoutes");
+const cashRecRoutes = require("./routes/cashRecRoutes");
 
 
 const { auth } = require("./middleware/authMiddleware");
@@ -88,6 +90,7 @@ app.use('/api/sql', require('./routes/salesRoutes'));
 
 app.use('/api/support', supportRoutes);
 app.use('/api/safesheets', safesheetRoutes);
+app.use('/api/cash-rec', cashRecRoutes);
 
 // Misc
 app.use('/api', emailRoutes);
