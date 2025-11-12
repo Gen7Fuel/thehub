@@ -2,6 +2,20 @@ const express = require('express');
 const router = express.Router();
 const Safesheet = require('../models/Safesheet');
 
+
+/**
+ * check for a existing safesheet for a site
+ * GET /api/safesheets/:site (here :site is site name)
+ */
+router.get('/:site', async (req, res) => {
+  try {
+    const { site } = req.params;
+    const sheet = await Safesheet.findOne({ site });
+    return res.status(200).json({ exists: !!sheet });
+  } catch (err) {
+    return res.status(500).json({ error: err.message });
+  }
+});
 /**
  * Create a new safesheet (site)
  * POST /api/safesheets
@@ -82,6 +96,34 @@ router.get('/site/:site/current', async (req, res) => {
     }
 
     return res.json({ site: sheet.site, cashOnHandSafe: Number(current.toFixed(2)) });
+  } catch (err) {
+    return res.status(500).json({ error: err.message });
+  }
+});
+
+/**
+ * Update a specific entry by its _id
+ * PUT /api/safesheets/site/:site/entries/:entryId
+ * body: { description?, cashIn?, cashExpenseOut?, cashDepositBank? }
+ */
+router.put('/site/:site/entries/:entryId', async (req, res) => {
+  try {
+    const { site, entryId } = req.params;
+    const updates = req.body;
+
+    const sheet = await Safesheet.findOne({ site });
+    if (!sheet) return res.status(404).json({ error: 'Safesheet not found for site' });
+
+    const entryIndex = sheet.entries.findIndex(e => e._id.toString() === entryId);
+    if (entryIndex === -1) return res.status(404).json({ error: 'Entry not found' });
+
+    // Update the entry
+    sheet.entries[entryIndex] = { ...sheet.entries[entryIndex].toObject(), ...updates, updatedAt: new Date() };
+
+    await sheet.save();
+
+    const entriesWithRunning = sheet.getEntriesWithRunningBalance();
+    return res.json({ entries: entriesWithRunning });
   } catch (err) {
     return res.status(500).json({ error: err.message });
   }
