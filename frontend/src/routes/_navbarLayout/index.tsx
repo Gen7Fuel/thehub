@@ -18,7 +18,7 @@ function App() {
   return (
     <div className="flex items-center justify-center min-h-screen bg-gray-50">
       <div className="flex flex-col gap-8 w-full max-w-3xl px-4 pt-16 pb-8">
-        {access?.accounting && (
+        {access?.accounting?.value && (
           <Section title="Accounting">
             <div className="flex flex-wrap gap-4">
               {access?.accounting.cashSummary && (
