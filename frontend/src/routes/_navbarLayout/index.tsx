@@ -1,7 +1,7 @@
 import { createFileRoute, Link } from '@tanstack/react-router'
 import { Button } from '@/components/ui/button'
 import { useAuth } from "@/context/AuthContext";
-// Define the root route for the navbar layout using TanStack Router
+
 export const Route = createFileRoute('/_navbarLayout/')({
   component: App,
 })
@@ -13,34 +13,39 @@ export const Route = createFileRoute('/_navbarLayout/')({
  */
 function App() {
   const { user  } = useAuth();
-  // Retrieve access permissions from auth provider
-  // const access = user?.access || '{}' //markpoint
-  const access = user?.access || {}
-  // const handlePermissionsUpdated = async () => {
-  //   console.log("Permissions update received via socket");
-  //   console.log("Before update:",localStorage.getItem('token'));
-  //   await refreshTokenFromBackend();
-  //   console.log("After update:",localStorage.getItem('token'));
-  // };
-  // useEffect(() => {
-  //   const socket = getSocket();
-  
-  //   socket.on("connect", () => {
-  //     socket.emit("join-room", user?.id);
-  //     console.log("socket from auth ", socket.id);
-  //   });
-  //   console.log("Listeners now:", socket.listeners("permissions-updated"));
-    
-  //   socket.on("permissions-updated", handlePermissionsUpdated);
 
-  //   return () => {
-  //     socket.off("permissions-updated", handlePermissionsUpdated);
-  //   };
-  // },[user])
+  const access = user?.access || {}
 
   return (
     <div className="flex items-center justify-center min-h-screen bg-gray-50">
       <div className="flex flex-col gap-8 w-full max-w-3xl px-4 pt-16 pb-8">
+        {access?.accounting && (
+          <Section title="Accounting">
+            <div className="flex flex-wrap gap-4">
+              {access?.accounting.cashSummary && (
+                <Link to="/cash-summary" search={{ site: user?.location }}>
+                  <Button className="w-32 h-32 flex items-center justify-center break-words whitespace-normal text-center">
+                    Cash Summary
+                  </Button>
+                </Link>
+              )}
+              {access?.accounting.sftp && (
+                <Link to="/sftp" search={{ site: user?.location }}>
+                  <Button className="w-32 h-32 flex items-center justify-center break-words whitespace-normal text-center">
+                    SFTP
+                  </Button>
+                </Link>
+              )}
+              {access?.accounting.fuelRec && (
+                <Link to="/fuel-rec" search={{ site: user?.location }}>
+                <Button className="w-32 h-32 flex items-center justify-center break-words whitespace-normal text-center">
+                  Fuel Rec
+                </Button>
+              </Link>
+              )}
+            </div>
+          </Section>
+        )}
         {access?.safesheet && (
           <Section title="Safesheet">
             <div className="flex flex-wrap gap-4">
