@@ -32,6 +32,24 @@ jobs:
             export SQL_USER=${{ secrets.SQL_USER }}
             export SQL_PASSWORD=${{ secrets.SQL_PASSWORD }}
             export REDIS_URL=${{ secrets.REDIS_URL }}
+            export SFTP_HOST=${{ secrets.SFTP_HOST }}
+            export SFTP_PORT=${{ secrets.SFTP_PORT }}
+            export SFTP_COUCHICHING_USER=${{ secrets.SFTP_COUCHICHING_USER }}
+            export SFTP_COUCHICHING_PASS=${{ secrets.SFTP_COUCHICHING_PASS }}
+            export SFTP_RANKIN_USER=${{ secrets.SFTP_RANKIN_USER }}
+            export SFTP_RANKIN_PASS=${{ secrets.SFTP_RANKIN_PASS }}
+            export SFTP_JOCKO_POINT_USER=${{ secrets.SFTP_JOCKO_POINT_USER }}
+            export SFTP_JOCKO_POINT_PASS=${{ secrets.SFTP_JOCKO_POINT_PASS }}
+            export SFTP_WALPOLE_USER=${{ secrets.SFTP_WALPOLE_USER }}
+            export SFTP_WALPOLE_PASS=${{ secrets.SFTP_WALPOLE_PASS }}
+            export SFTP_SARNIA_USER=${{ secrets.SFTP_SARNIA_USER }}
+            export SFTP_SARNIA_PASS=${{ secrets.SFTP_SARNIA_PASS }}
+            export SFTP_SILVER_GRIZZLY_USER=${{ secrets.SFTP_SILVER_GRIZZLY_USER }}
+            export SFTP_SILVER_GRIZZLY_PASS=${{ secrets.SFTP_SILVER_GRIZZLY_PASS }}
+            export SFTP_OLIVER_USER=${{ secrets.SFTP_OLIVER_USER }}
+            export SFTP_OLIVER_PASS=${{ secrets.SFTP_OLIVER_PASS }}
+            export SFTP_OSOYOOS_USER=${{ secrets.SFTP_OSOYOOS_USER }}
+            export SFTP_OSOYOOS_PASS=${{ secrets.SFTP_OSOYOOS_PASS }}
 
             git pull origin main
             docker compose down
