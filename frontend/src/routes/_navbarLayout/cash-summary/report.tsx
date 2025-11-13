@@ -70,10 +70,28 @@ function RouteComponent() {
   const navigate = useNavigate({ from: Route.fullPath })
   const [submitState, setSubmitState] = useState<'idle' | 'submitting' | 'submitted'>('idle')
 
-  const onSubmitClick = () => {
-    if (submitState !== 'idle') return
-    setSubmitState('submitting')
-    setTimeout(() => setSubmitState('submitted'), 1000)
+  const onSubmitClick = async () => {
+    if (submitState !== 'idle' || !site || !date) return
+    try {
+      setSubmitState('submitting')
+      const r = await fetch('/api/cash-summary/submit/to/safesheet', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${localStorage.getItem('token') || ''}`,
+        },
+        body: JSON.stringify({ site, date }),
+      })
+      if (!r.ok) {
+        const msg = await r.text().catch(() => 'Submit failed')
+        throw new Error(msg || 'Submit failed')
+      }
+      setSubmitState('submitted')
+    } catch (e) {
+      console.error(e)
+      alert('Failed to submit.')
+      setSubmitState('idle')
+    }
   }
 
   const submitDisabled = submitState !== 'idle'
