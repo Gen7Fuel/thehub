@@ -76,7 +76,7 @@ function RouteComponent() {
 
 
   return (
-    <div className="p-4 border border-dashed border-gray-300 rounded-md space-y-6">
+    <div className="p-4 border border-dashed border-gray-300 rounded-md space-y-6 w-full">
       {/* Image Capture Section */}
       <div className="space-y-2">
         <h2 className="text-lg font-bold">Invoice/Receipt Images</h2>
@@ -85,24 +85,22 @@ function RouteComponent() {
         <div className="space-y-4">
           {isCapturing && (
             <>
-              {/* <Webcam
-                ref={webcamRef}
-                screenshotFormat="image/jpeg"
-                videoConstraints={videoConstraints}
-                className="border border-dashed border-gray-300 rounded-md w-full"
-              /> */}
-              <Webcam
-                ref={webcamRef}
-                audio={false}
-                screenshotFormat="image/jpeg"
-                screenshotQuality={1}            // max quality JPEG
-                videoConstraints={videoConstraints}
-                className="border border-dashed border-gray-300 rounded-md w-full"
-              />
-              <Button onClick={capture} variant="destructive" className="w-full">
-                <Camera className="mr-2 h-4 w-4" />
-                Capture Image
-              </Button>
+              <div className="relative w-full h-[60vh] max-h-[70vh] border border-dashed border-gray-300 rounded-md overflow-hidden">
+                <Webcam
+                  ref={webcamRef}
+                  audio={false}
+                  screenshotFormat="image/jpeg"
+                  screenshotQuality={1}            // max JPEG quality
+                  videoConstraints={videoConstraints} // still requests 1920x1080 stream
+                  className="absolute inset-0 w-full h-full object-contain bg-black"
+                />
+                <div className="absolute bottom-3 left-3 right-3">
+                  <Button onClick={capture} variant="destructive" className="w-full shadow">
+                    <Camera className="mr-2 h-4 w-4" />
+                    Capture Image
+                  </Button>
+                </div>
+              </div>
             </>
           )}
 
