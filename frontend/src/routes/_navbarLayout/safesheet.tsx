@@ -237,12 +237,12 @@ export default function RouteComponent() {
               <table className="min-w-full text-sm border-collapse table-fixed">
                 <thead className="bg-slate-100 text-slate-700 sticky top-0 z-10">
                   <tr>
-                    <th className="px-2 py-1 text-left font-medium border-b border-slate-300">Date</th>
-                    <th className="px-2 py-1 text-left font-medium border-b border-slate-300">Description</th>
-                    <th className="px-2 py-1 text-right font-medium border-b border-slate-300">Cash In</th>
-                    <th className="px-2 py-1 text-right font-medium border-b border-slate-300">Cash Expense Out</th>
-                    <th className="px-2 py-1 text-right font-medium border-b border-slate-300">Cash Deposit Bank</th>
-                    <th className="px-2 py-1 text-right font-medium border-b border-slate-300">Cash On Hand</th>
+                    <th className="px-2 py-1 text-left font-medium border-b border-slate-300 w-24">Date</th>
+                    <th className="px-2 py-1 text-left font-medium border-b border-slate-300 w-64">Description</th>
+                    <th className="px-2 py-1 text-right font-medium border-b border-slate-300 w-32">Cash In</th>
+                    <th className="px-2 py-1 text-right font-medium border-b border-slate-300 w-32">Cash Expense Out</th>
+                    <th className="px-2 py-1 text-right font-medium border-b border-slate-300 w-32">Cash Deposit Bank</th>
+                    <th className="px-2 py-1 text-right font-medium border-b border-slate-300 w-32">Cash On Hand</th>
                   </tr>
                 </thead>
 
