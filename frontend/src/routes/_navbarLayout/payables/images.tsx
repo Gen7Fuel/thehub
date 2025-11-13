@@ -105,17 +105,17 @@ function RouteComponent() {
           )}
 
           {currentCapture && (
-            <div className="space-y-2">
-              <img 
-                src={currentCapture} 
-                alt="Captured" 
-                className="border border-dashed border-gray-300 rounded-md w-full" 
+            <div className="relative w-full h-[60vh] max-h-[70vh] border border-dashed border-gray-300 rounded-md overflow-hidden">
+              <img
+                src={currentCapture}
+                alt="Captured"
+                className="absolute inset-0 w-full h-full object-contain bg-black"
               />
-              <div className="flex gap-2">
-                <Button onClick={saveImage} className="flex-1">
+              <div className="absolute bottom-3 left-3 right-3 flex gap-2">
+                <Button onClick={saveImage} className="flex-1 shadow">
                   Save Image
                 </Button>
-                <Button onClick={retryCapture} variant="secondary" className="flex-1">
+                <Button onClick={retryCapture} variant="secondary" className="flex-1 shadow">
                   Retry
                 </Button>
               </div>
