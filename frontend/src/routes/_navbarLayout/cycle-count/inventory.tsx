@@ -64,6 +64,7 @@ interface InventoryItem {
   Category: string
   'On Hand Qty': number
   updatedAt?: string
+  cycleCount?: number
 }
 
 interface Category {
@@ -270,7 +271,7 @@ function RouteComponent() {
             </div>
           </div>
         </CardHeader>
-        <CardContent>
+        <CardContent className="w-full table-auto">
           {!site ? (
             <p className="text-muted-foreground text-center py-8">
               Please select a site to view inventory
@@ -292,23 +293,25 @@ function RouteComponent() {
                   </span>
                 )}
               </div>
-              <Table>
+              <Table className="w-full table-auto">
                 <TableHeader>
                   <TableRow>
                     <TableHead>Item Name</TableHead>
                     <TableHead>UPC</TableHead>
                     <TableHead>Category</TableHead>
                     <TableHead>Last Counted At</TableHead>
+                    <TableHead className="text-right">Last Hub Inventory</TableHead>
                     <TableHead className="text-right">On Hand Qty</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
                   {filteredInventory.map((item: InventoryItem, idx: number) => (
                     <TableRow key={`${item.UPC}-${idx}`}>
-                      <TableCell className="font-medium">{item.Item_Name}</TableCell>
+                      <TableCell className="font-medium truncate max-w-xs">{item.Item_Name}</TableCell>
                       <TableCell>{item.UPC}</TableCell>
                       <TableCell>{item.Category}</TableCell>
-                      <TableCell className="text-center">{formatDateTime(item.updatedAt)}</TableCell>
+                      <TableCell className="text-center">{formatDateTime(item.updatedAt)}
+                      </TableCell><TableCell className="text-right">{item.cycleCount === null || item.cycleCount === undefined ? '-' : item.cycleCount}</TableCell>
                       <TableCell className="text-right">{item['On Hand Qty']}</TableCell>
                     </TableRow>
                   ))}

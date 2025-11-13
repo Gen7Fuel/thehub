@@ -394,19 +394,23 @@ router.get('/current-inventory', async (req, res) => {
     const cycleCounts = await CycleCount.find({
       site,
       upc_barcode: { $in: upcs }
-    }).select({ upc_barcode: 1, updatedAt: 1 }).lean();
+    }).select({ upc_barcode: 1, updatedAt: 1, foh: 1, boh: 1 }).lean();
 
     // 4️⃣ Create a map for fast lookup
     const cycleMap = new Map();
     cycleCounts.forEach(c => {
-      cycleMap.set(c.upc_barcode, c.updatedAt);
+      cycleMap.set(c.upc_barcode, { updatedAt: c.updatedAt, foh: c.foh || 0, boh: c.boh || 0 });
     });
 
-    // 5️⃣ Merge updatedAt into inventory
-    const enrichedInventory = inventory.map(item => ({
-      ...item,
-      updatedAt: cycleMap.get(item.UPC) || null
-    }));
+    // 5️⃣ Merge updatedAt and cycleCount into inventory
+    const enrichedInventory = inventory.map(item => {
+      const cycle = cycleMap.get(item.UPC);
+      return {
+        ...item,
+        updatedAt: cycle?.updatedAt || null,
+        cycleCount: cycle ? (cycle.foh + cycle.boh) : null
+      };
+    });
 
     res.json({ site, inventory: enrichedInventory });
 
