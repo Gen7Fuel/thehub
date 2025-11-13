@@ -28,41 +28,83 @@ const SafesheetSchema = new Schema({
  * for each row named `cashOnHandSafe`.
  */
 SafesheetSchema.methods.getEntriesWithRunningBalance = function () {
-  // clone and sort entries to avoid mutating the document in memory
-  const sorted = [...this.entries].sort((a, b) => {
-    const da = +new Date(a.date);
-    const db = +new Date(b.date);
-    if (da !== db) return da - db;
-    // tie-breaker by creation time (timestamps) or _id
-    if (a.createdAt && b.createdAt) return a.createdAt - b.createdAt;
-    return String(a._id).localeCompare(String(b._id));
-  });
+  const rows = (this.entries || []).map((e, i) => ({ i, ...(e.toObject?.() ?? e) }))
 
-  let running = Number(this.initialBalance || 0);
-  return sorted.map(e => {
-    // Increment/Decrement rules:
-    // - cashIn increases safe
-    // - cashExpenseOut decreases safe
-    // - cashDepositBank decreases safe (money deposited to bank)
-    const cashIn = Number(e.cashIn || 0);
-    const expense = Number(e.cashExpenseOut || 0);
-    const deposit = Number(e.cashDepositBank || 0);
+  const ymdLocal = (d) => {
+    const x = new Date(d)
+    const y = x.getFullYear()
+    const m = String(x.getMonth() + 1).padStart(2, '0')
+    const day = String(x.getDate()).padStart(2, '0')
+    return `${y}-${m}-${day}`
+  }
 
-    running = running + cashIn - expense - deposit;
+  const typeRank = (e) => {
+    const ci = Number(e.cashIn || 0)
+    const ce = Number(e.cashExpenseOut || 0)
+    const cb = Number(e.cashDepositBank || 0)
+    if (ci > 0) return 0           // cashIn first
+    if (ce > 0) return 1           // expenses next
+    if (cb > 0) return 2           // bank deposit last
+    return 3
+  }
 
-    return {
-      _id: e._id,
-      date: e.date,
-      description: e.description,
-      cashIn,
-      cashExpenseOut: expense,
-      cashDepositBank: deposit,
-      cashOnHandSafe: Number(running.toFixed(2)),
-      createdAt: e.createdAt,
-      updatedAt: e.updatedAt,
-    };
-  });
-};
+  // Sort by calendar day (local) ASC, then by type rank, then stable by original index
+  rows.sort((a, b) => {
+    const da = ymdLocal(a.date)
+    const db = ymdLocal(b.date)
+    if (da !== db) return da.localeCompare(db)
+    const ra = typeRank(a)
+    const rb = typeRank(b)
+    if (ra !== rb) return ra - rb
+    return a.i - b.i
+  })
+
+  // Recompute running balance in the sorted order
+  let running = Number(this.initialBalance || 0)
+  return rows.map((e) => {
+    const ci = Number(e.cashIn || 0)
+    const ce = Number(e.cashExpenseOut || 0)
+    const cb = Number(e.cashDepositBank || 0)
+    running = Number((running + ci - ce - cb).toFixed(2))
+    return { ...e, cashOnHandSafe: running }
+  })
+}
+// SafesheetSchema.methods.getEntriesWithRunningBalance = function () {
+//   // clone and sort entries to avoid mutating the document in memory
+//   const sorted = [...this.entries].sort((a, b) => {
+//     const da = +new Date(a.date);
+//     const db = +new Date(b.date);
+//     if (da !== db) return da - db;
+//     // tie-breaker by creation time (timestamps) or _id
+//     if (a.createdAt && b.createdAt) return a.createdAt - b.createdAt;
+//     return String(a._id).localeCompare(String(b._id));
+//   });
+
+//   let running = Number(this.initialBalance || 0);
+//   return sorted.map(e => {
+//     // Increment/Decrement rules:
+//     // - cashIn increases safe
+//     // - cashExpenseOut decreases safe
+//     // - cashDepositBank decreases safe (money deposited to bank)
+//     const cashIn = Number(e.cashIn || 0);
+//     const expense = Number(e.cashExpenseOut || 0);
+//     const deposit = Number(e.cashDepositBank || 0);
+
+//     running = running + cashIn - expense - deposit;
+
+//     return {
+//       _id: e._id,
+//       date: e.date,
+//       description: e.description,
+//       cashIn,
+//       cashExpenseOut: expense,
+//       cashDepositBank: deposit,
+//       cashOnHandSafe: Number(running.toFixed(2)),
+//       createdAt: e.createdAt,
+//       updatedAt: e.updatedAt,
+//     };
+//   });
+// };
 
 /**
  * Convenience static to add an entry and return entries with running balances.

@@ -1,8 +1,10 @@
 const express = require('express')
 const CashSummary = require('../models/CashSummaryNew')
+const Safesheet = require('../models/Safesheet')
 const { withSftp } = require('../utils/sftp')
 const { getSftpConfig } = require('../config/sftpConfig')
 const { parseSftReport } = require('../utils/parseSftReport')
+const { dateFromYMDLocal } = require('../utils/dateUtils')
 
 const router = express.Router()
 
@@ -111,6 +113,70 @@ router.get('/', async (req, res) => {
   } catch (err) {
     console.error('CashSummary list error:', err)
     res.status(500).json({ error: 'Failed to fetch CashSummary list' })
+  }
+})
+
+router.post('/submit/to/safesheet', async (req, res) => {
+  try {
+    const { site, date } = req.body || {}
+    if (!site) return res.status(400).json({ error: 'site is required' })
+    if (!date || !/^\d{4}-\d{2}-\d{2}$/.test(String(date))) {
+      return res.status(400).json({ error: 'date (YYYY-MM-DD) is required' })
+    }
+
+    const [yy, mm, dd] = String(date).split('-').map(Number)
+    const start = new Date(yy, mm - 1, dd, 0, 0, 0, 0)
+    const end = new Date(yy, mm - 1, dd + 1, 0, 0, 0, 0)
+
+    // Aggregate total canadian_cash_collected for the site/day
+    const agg = await CashSummary.aggregate([
+      { $match: { site, date: { $gte: start, $lt: end } } },
+      { $group: { _id: null, total: { $sum: { $ifNull: ['$canadian_cash_collected', 0] } } } },
+    ])
+    const totalCanadianCashCollected = Number(agg[0]?.total || 0)
+
+    // Mark summaries as submitted (optional; remove if not needed)
+    await CashSummary.updateMany(
+      { site, date: { $gte: start, $lt: end } },
+      { $set: { submitted: true } }
+    )
+
+    // Find or create Safesheet for site
+    let sheet = await Safesheet.findOne({ site })
+    if (!sheet) {
+      sheet = await Safesheet.create({ site, initialBalance: 0, entries: [] })
+    }
+
+    // Upsert a single entry for that calendar day
+    const sameDay = (d) => d >= start && d < end
+    const idx = sheet.entries.findIndex(e => sameDay(new Date(e.date)))
+
+    const entryDate = dateFromYMDLocal(date)
+
+    if (idx >= 0) {
+      sheet.entries[idx].date = entryDate
+      sheet.entries[idx].description = 'Daily Deposit'
+      sheet.entries[idx].cashIn = totalCanadianCashCollected
+      sheet.entries[idx].updatedAt = new Date()
+    } else {
+      sheet.entries.push({
+        date: entryDate,
+        description: 'Daily Deposit',
+        cashIn: totalCanadianCashCollected,
+      })
+    }
+
+    await sheet.save()
+
+    return res.json({
+      site,
+      date,
+      cashIn: totalCanadianCashCollected,
+      entryId: (idx >= 0 ? sheet.entries[idx]._id : sheet.entries[sheet.entries.length - 1]._id),
+    })
+  } catch (err) {
+    console.error('CashSummary submit error:', err)
+    return res.status(500).json({ error: 'Failed to submit' })
   }
 })
 

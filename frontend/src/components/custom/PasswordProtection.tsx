@@ -11,8 +11,8 @@ import {
 import {
   InputOTP,
   InputOTPGroup,
-  InputOTPSlot,
-} from "@/components/ui/input-otp";
+  InputOTPHiddenSlot,
+} from "@/components/custom/input-otp-masked";
 
 interface PasswordProtectionProps {
   isOpen: boolean;
@@ -80,10 +80,10 @@ export function PasswordProtection({
             <div className="flex justify-center">
               <InputOTP maxLength={4} value={otp} onChange={setOtp}>
                 <InputOTPGroup>
-                  <InputOTPSlot index={0} />
-                  <InputOTPSlot index={1} />
-                  <InputOTPSlot index={2} />
-                  <InputOTPSlot index={3} />
+                  <InputOTPHiddenSlot index={0} />
+                  <InputOTPHiddenSlot index={1} />
+                  <InputOTPHiddenSlot index={2} />
+                  <InputOTPHiddenSlot index={3} />
                 </InputOTPGroup>
               </InputOTP>
             </div>
