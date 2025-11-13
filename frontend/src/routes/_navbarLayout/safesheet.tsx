@@ -30,7 +30,7 @@ export const Route = createFileRoute('/_navbarLayout/safesheet')({
     search as {
       site: string
     },
-  loaderDeps: ({ search: { site }}) => ({ site })
+  loaderDeps: ({ search: { site } }) => ({ site })
 })
 
 export default function RouteComponent() {
@@ -195,6 +195,22 @@ export default function RouteComponent() {
     }
   }
 
+  //handle enter key
+  const handleKeyDown = (ev: React.KeyboardEvent<HTMLTableCellElement>) => {
+    if (ev.key === 'Enter') {
+      ev.preventDefault();
+      let nextCell = ev.currentTarget.nextElementSibling as HTMLElement | null;
+
+      if (!nextCell) {
+        // move to first cell of next row
+        const nextRow = ev.currentTarget.parentElement?.nextElementSibling;
+        if (nextRow) nextCell = nextRow.querySelector('td[contenteditable]') as HTMLElement;
+      }
+
+      if (nextCell) nextCell.focus();
+    }
+  };
+
   // Memoized entries for display
   const formattedEntries = useMemo(() => {
     if (!sheet) return []
@@ -241,12 +257,12 @@ export default function RouteComponent() {
               <table className="min-w-full text-sm border-collapse table-fixed">
                 <thead className="bg-slate-100 text-slate-700 sticky top-0 z-10">
                   <tr>
-                    <th className="px-2 py-1 text-left font-medium border-b border-slate-300">Date</th>
-                    <th className="px-2 py-1 text-left font-medium border-b border-slate-300">Description</th>
-                    <th className="px-2 py-1 text-right font-medium border-b border-slate-300">Cash In</th>
-                    <th className="px-2 py-1 text-right font-medium border-b border-slate-300">Cash Expense Out</th>
-                    <th className="px-2 py-1 text-right font-medium border-b border-slate-300">Cash Deposit Bank</th>
-                    <th className="px-2 py-1 text-right font-medium border-b border-slate-300">Cash On Hand</th>
+                    <th className="px-2 py-1 text-left font-medium border-b border-slate-300 w-24">Date</th>
+                    <th className="px-2 py-1 text-left font-medium border-b border-slate-300 w-64">Description</th>
+                    <th className="px-2 py-1 text-right font-medium border-b border-slate-300 w-32">Cash In</th>
+                    <th className="px-2 py-1 text-right font-medium border-b border-slate-300 w-32">Cash Expense Out</th>
+                    <th className="px-2 py-1 text-right font-medium border-b border-slate-300 w-32">Cash Deposit Bank</th>
+                    <th className="px-2 py-1 text-right font-medium border-b border-slate-300 w-32">Cash On Hand</th>
                   </tr>
                 </thead>
 
@@ -256,8 +272,8 @@ export default function RouteComponent() {
                       const entry = new Date(e.date)
                       const now = new Date()
                       return entry.getUTCFullYear() === now.getUTCFullYear() &&
-                            entry.getUTCMonth() === now.getUTCMonth() &&
-                            entry.getUTCDate() === now.getUTCDate()
+                        entry.getUTCMonth() === now.getUTCMonth() &&
+                        entry.getUTCDate() === now.getUTCDate()
                     })()
 
 
@@ -307,22 +323,26 @@ export default function RouteComponent() {
                         <td className="px-3 py-1.5 border-b border-slate-200 whitespace-nowrap text-gray-700">{e.dateDisplay}</td>
                         <td className="px-3 py-1.5 border-b border-slate-200 text-gray-700"
                           onDoubleClick={handleCellDoubleClick}
+                          onKeyDown={handleKeyDown}
                           onBlur={handleCellBlur('description')}>
                           {e.description || ''}
                         </td>
                         <td className="px-3 py-1.5 border-b border-slate-200 text-right text-gray-700"
                           onDoubleClick={handleCellDoubleClick}
+                          onKeyDown={handleKeyDown}
                           onBlur={handleCellBlur('cashIn')}>
                           {e.cashInDisplay}
                         </td>
                         <td className="px-3 py-1.5 border-b border-slate-200 text-right text-gray-700"
                           onDoubleClick={handleCellDoubleClick}
+                          onKeyDown={handleKeyDown}
                           onBlur={handleCellBlur('cashExpenseOut')}>
                           {e.cashExpenseOutDisplay}
                         </td>
                         <td className="px-3 py-1.5 border-b border-slate-200 text-right text-gray-700"
                           onClick={() => e.cashDepositBankDisplay && showButtons(e._id)}
                           onDoubleClick={handleCellDoubleClick}
+                          onKeyDown={handleKeyDown}
                           onBlur={handleCellBlur('cashDepositBank')}>
                           {e.cashDepositBankDisplay}
                         </td>
@@ -336,13 +356,13 @@ export default function RouteComponent() {
                     <td className="px-3 py-2 text-gray-400 border-t border-slate-300 text-sm whitespace-nowrap">
                       {new Date().toLocaleDateString()}
                     </td>
-                    <td ref={descRef} contentEditable suppressContentEditableWarning data-placeholder="Description"
+                    <td ref={descRef} onKeyDown={handleKeyDown} contentEditable suppressContentEditableWarning data-placeholder="Description"
                       className="px-3 py-2 border-t border-slate-300 text-sm text-slate-800 bg-white min-w-[120px] focus:outline-none focus:ring-1 focus:ring-blue-400 rounded-sm" />
-                    <td ref={cashInRef} contentEditable suppressContentEditableWarning data-placeholder="0.00"
+                    <td ref={cashInRef} onKeyDown={handleKeyDown} contentEditable suppressContentEditableWarning data-placeholder="0.00"
                       className="px-3 py-2 border-t border-slate-300 text-right text-sm bg-white focus:outline-none focus:ring-1 focus:ring-blue-400 rounded-sm" />
-                    <td ref={cashExpenseRef} contentEditable suppressContentEditableWarning data-placeholder="0.00"
+                    <td ref={cashExpenseRef} onKeyDown={handleKeyDown} contentEditable suppressContentEditableWarning data-placeholder="0.00"
                       className="px-3 py-2 border-t border-slate-300 text-right text-sm bg-white focus:outline-none focus:ring-1 focus:ring-blue-400 rounded-sm" />
-                    <td ref={cashDepositRef} contentEditable suppressContentEditableWarning data-placeholder="0.00"
+                    <td ref={cashDepositRef} onKeyDown={handleKeyDown} contentEditable suppressContentEditableWarning data-placeholder="0.00"
                       className="px-3 py-2 border-t border-slate-300 text-right text-sm bg-white focus:outline-none focus:ring-1 focus:ring-blue-400 rounded-sm" />
                     <td className="px-3 py-2 border-t border-slate-300 text-right">
                       <Button size="sm" onClick={handleAddEntry} className="text-sm h-8 px-3">Add</Button>
