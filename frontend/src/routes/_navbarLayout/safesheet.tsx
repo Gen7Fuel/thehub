@@ -225,6 +225,10 @@ export default function RouteComponent() {
     }))
   }, [sheet])
 
+  const showButtons = (id: string) => {
+    console.log("Show buttons for entry id:", id);
+  }
+
   return (
     <div className="pt-14 flex flex-col items-center">
       <div className="my-4 flex flex-col items-center gap-4">
@@ -336,6 +340,7 @@ export default function RouteComponent() {
                           {e.cashExpenseOutDisplay}
                         </td>
                         <td className="px-3 py-1.5 border-b border-slate-200 text-right text-gray-700"
+                          onClick={() => e.cashDepositBankDisplay && showButtons(e._id)}
                           onDoubleClick={handleCellDoubleClick}
                           onKeyDown={handleKeyDown}
                           onBlur={handleCellBlur('cashDepositBank')}>

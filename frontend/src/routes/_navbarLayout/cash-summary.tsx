@@ -23,7 +23,10 @@ function RouteComponent() {
         {/* Keep existing site if present; else use user?.location */}
         <Link
           to="/cash-summary"
-          search={(prev: any) => ({ ...prev, site: prev?.site ?? fallbackSite })}
+          search={(prev: any) => {
+            const { id, date, ...rest } = prev || {}
+            return { ...rest, site: rest?.site ?? fallbackSite }
+          }}
           activeOptions={{ exact: true }}
         >
           <Button
@@ -36,7 +39,10 @@ function RouteComponent() {
 
         <Link
           to="/cash-summary/list"
-          search={(prev: any) => ({ ...prev, site: prev?.site ?? fallbackSite })}
+          search={(prev: any) => {
+            const { id, date, ...rest } = prev || {}
+            return { ...rest, site: rest?.site ?? fallbackSite }
+          }}
           activeOptions={{ exact: true }}
         >
           <Button
@@ -49,7 +55,10 @@ function RouteComponent() {
 
         <Link
           to="/cash-summary/report"
-          search={(prev: any) => ({ ...prev, site: prev?.site ?? fallbackSite })}
+          search={(prev: any) => {
+            const { id, ...rest } = prev || {}
+            return { ...rest, site: rest?.site ?? fallbackSite }
+          }}
           activeOptions={{ exact: true }}
         >
           <Button
