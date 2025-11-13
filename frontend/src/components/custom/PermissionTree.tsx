@@ -444,7 +444,7 @@ export function PermissionTree({
             variant="outline"
             onClick={() => setStructure([...structure, { name: "", children: [], collapsed: false }])}
           >
-            <Plus size={14} /> Add Root Node
+            <Plus size={14} /> Add Node
           </Button>
         </div>
         {renderTree(structure)}

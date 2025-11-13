@@ -2,7 +2,6 @@ import { createFileRoute, useNavigate } from '@tanstack/react-router'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { SitePicker } from '@/components/custom/sitePicker'
 import { Button } from '@/components/ui/button'
-// import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from '@/components/ui/select'
 
 type Entry = {
   _id: string
@@ -34,7 +33,7 @@ export const Route = createFileRoute('/_navbarLayout/safesheet')({
   loaderDeps: ({ search: { site }}) => ({ site })
 })
 
-function RouteComponent() {
+export default function RouteComponent() {
   const { site } = Route.useSearch() as { site?: string }
   const navigate = useNavigate({ from: Route.fullPath })
 
@@ -46,224 +45,172 @@ function RouteComponent() {
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
-  // which column we're adding to when Add Entry is clicked
-  // const [entryType, setEntryType] = useState<'cashIn' | 'cashExpenseOut' | 'cashDepositBank'>('cashIn')
-
-  // selection of dashed cells (only active when shouldHighlight returns true)
-  // const [selectedCells, setSelectedCells] = useState<Set<string>>(new Set())
-
-  // refs for inline editable last-row TDs (use HTMLTableCellElement since cells are contentEditable)
   const descRef = useRef<HTMLTableCellElement | null>(null)
   const cashInRef = useRef<HTMLTableCellElement | null>(null)
   const cashExpenseRef = useRef<HTMLTableCellElement | null>(null)
   const cashDepositRef = useRef<HTMLTableCellElement | null>(null)
 
-  // Decide when a cell in the table should show dashed outline (and be selectable)
-  // const shouldHighlight = (v?: number | null) =>
-  //   entryType === 'cashDepositBank' && v !== undefined && v !== null && v !== 0
+  // Format numbers
+  const fmtNumber = (v?: number | null) => {
+    if (v === null || v === undefined || v === 0) return ''
+    return new Intl.NumberFormat(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(v)
+  }
 
-  // // Clear selections when entryType changes; also clear inline fields
-  // useEffect(() => {
-  //   setSelectedCells(new Set())
-  //   // clear inline numeric fields when switching type
-  //   if (cashInRef.current) cashInRef.current.innerText = ''
-  //   if (cashExpenseRef.current) cashExpenseRef.current.innerText = ''
-  //   if (cashDepositRef.current) cashDepositRef.current.innerText = ''
-  // }, [entryType])
-
-  // When selectedCells change, compute sum and populate the inline editable cell for the current entryType
-  // useEffect(() => {
-  //   if (!sheet) return
-  //   let sum = 0
-  //   for (const key of Array.from(selectedCells)) {
-  //     const [entryId, field] = key.split(':')
-  //     const entry = sheet.entries.find(e => e._id === entryId)
-  //     if (!entry) continue
-  //     const val = (field === 'cashOnHandSafe') ? (entry.cashOnHandSafe ?? 0) : (entry as any)[field] ?? 0
-  //     sum += Number(val || 0)
-  //   }
-
-  //   const display = sum === 0 ? '' : String(sum)
-
-  //   if (entryType === 'cashIn') {
-  //     if (cashInRef.current) cashInRef.current.innerText = display
-  //   } else if (entryType === 'cashExpenseOut') {
-  //     if (cashExpenseRef.current) cashExpenseRef.current.innerText = display
-  //   } else if (entryType === 'cashDepositBank') {
-  //     if (cashDepositRef.current) cashDepositRef.current.innerText = display
-  //   }
-  // }, [selectedCells, sheet, entryType])
-
-  // fetch safesheet for selected site
+  // Fetch sheet
   useEffect(() => {
     if (!site) {
       setSheet(null)
       setError(null)
       return
     }
-
     let mounted = true
     const fetchSheet = async () => {
-      setLoading(true);
-      setError(null);
-
+      setLoading(true)
+      setError(null)
       try {
-        console.log('fetch safesheet start', site);
-
         const res = await fetch(`/api/safesheets/site/${encodeURIComponent(site)}`, {
           headers: {
-            'Authorization': `Bearer ${localStorage.getItem('token')}`,
+            Authorization: `Bearer ${localStorage.getItem('token')}`,
             "X-Required-Permission": "safesheet",
           },
-        });
-
-        console.log('fetch safesheet response', res);
-
+        })
         if (res.status === 403) {
-          // Redirect to no-access page (SPA-style)
-          navigate({ to: "/no-access" });
-          return;
+          navigate({ to: '/no-access' })
+          return
         }
-
         if (!res.ok) {
-          const body = await res.json().catch(() => ({}));
-          throw new Error(body?.error || `Failed to fetch safesheet for ${site}`);
+          const body = await res.json().catch(() => ({}))
+          throw new Error(body?.error || 'Failed to fetch safesheet')
         }
-
-        const data: SafeSheet = await res.json();
-        console.log('fetch safesheet body', data);
-
-        if (mounted) setSheet(data);
-
+        const data: SafeSheet = await res.json()
+        if (mounted) setSheet(data)
       } catch (err: any) {
-        console.error('fetchSheet error', err);
-        if (mounted) setError(err.message || 'Unknown error');
+        console.error(err)
+        if (mounted) setError(err.message || 'Unknown error')
       } finally {
-        if (mounted) setLoading(false);
+        if (mounted) setLoading(false)
       }
-    };
-
+    }
     fetchSheet()
     return () => { mounted = false }
   }, [site])
 
-  // Toggle selection for a table cell (only if shouldHighlight allows)
-  // const toggleCell = (entryId: string, field: string, value?: number | null) => {
-  //   if (!shouldHighlight(value)) return
-  //   const key = `${entryId}:${field}`
-  //   setSelectedCells(prev => {
-  //     const next = new Set(prev)
-  //     if (next.has(key)) next.delete(key)
-  //     else next.add(key)
-  //     return next
-  //   })
-  // }
-
-  // const isCellSelected = (entryId: string, field: string) => selectedCells.has(`${entryId}:${field}`)
-
-  // read numeric from a contentEditable TD
+  // Read numeric value from editable TD
   const readEditableNumber = (el?: HTMLTableCellElement | null) => {
     if (!el) return 0
     const txt = el.innerText.replace(/,/g, '').trim()
-    if (txt === '') return 0
     const n = Number(txt)
     return isNaN(n) ? 0 : n
   }
 
-  // Add entry: read inline editable cells (or use selection-sum which was already written into inline cell)
+  // Recompute running balance
+  const recomputeCashOnHand = (entries: Entry[], initialBalance: number) => {
+    let balance = initialBalance
+    return entries.map((entry) => {
+      balance = balance + entry.cashIn - entry.cashExpenseOut - entry.cashDepositBank
+      return { ...entry, cashOnHandSafe: balance }
+    })
+  }
+
+  // Add entry
   const handleAddEntry = async () => {
-    if (!site) {
-      console.warn('No site selected')
-      return
-    }
+    if (!site || !sheet) return
 
-    const desc = descRef.current?.innerText?.trim() || ''
-    const inlineCashIn = readEditableNumber(cashInRef.current)
-    const inlineExpense = readEditableNumber(cashExpenseRef.current)
-    const inlineDeposit = readEditableNumber(cashDepositRef.current)
-
-    // Build entry body
-    const entryBody: Record<string, any> = {
+    const entryBody = {
       date: new Date().toISOString(),
-      description: desc,
-      cashIn: 0,
-      cashExpenseOut: 0,
-      cashDepositBank: 0,
+      description: descRef.current?.innerText.trim() || '',
+      cashIn: readEditableNumber(cashInRef.current),
+      cashExpenseOut: readEditableNumber(cashExpenseRef.current),
+      cashDepositBank: readEditableNumber(cashDepositRef.current),
     }
 
-    // Use inline values for all three fields (user may have populated multiple)
-    entryBody.cashIn = inlineCashIn
-    entryBody.cashExpenseOut = inlineExpense
-    entryBody.cashDepositBank = inlineDeposit
-
-    // if everything zero, reject
     if (!entryBody.cashIn && !entryBody.cashExpenseOut && !entryBody.cashDepositBank) {
       setError('Please enter an amount in one of the fields')
       return
     }
-
-    console.log('posting entry (inline row)', { site, entryBody })
 
     try {
       const res = await fetch(`/api/safesheets/site/${encodeURIComponent(site)}/entries`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'Authorization': `Bearer ${localStorage.getItem('token')}`,
+          Authorization: `Bearer ${localStorage.getItem('token')}`,
           "X-Required-Permission": "safesheet",
         },
         body: JSON.stringify(entryBody)
       })
-      console.log('post entry response', res)
-      // ✅ Handle 403 before doing anything else
+
       if (res.status === 403) {
-        navigate({ to: "/no-access" });
-        return;
+        navigate({ to: '/no-access' })
+        return
       }
+
       const body = await res.json().catch(() => null)
-      console.log('post entry body', body)
-      if (!res.ok) {
-        throw new Error(body?.error || 'Failed to add entry')
-      }
+      if (!res.ok) throw new Error(body?.error || 'Failed to add entry')
 
       if (body?.entries) {
-        setSheet(prev => prev ? { ...prev, entries: body.entries } : prev)
+        const updated = recomputeCashOnHand(body.entries, sheet.initialBalance)
+        setSheet(prev => prev ? { ...prev, entries: updated } : prev)
       }
 
-      // clear inline row and selection
+      // Clear inline row
       if (descRef.current) descRef.current.innerText = ''
       if (cashInRef.current) cashInRef.current.innerText = ''
       if (cashExpenseRef.current) cashExpenseRef.current.innerText = ''
       if (cashDepositRef.current) cashDepositRef.current.innerText = ''
-      // setSelectedCells(new Set())
       setError(null)
     } catch (err: any) {
-      console.error('addEntry error', err)
+      console.error(err)
       setError(err.message || 'Add entry failed')
     }
   }
 
+  // Update a single entry and recompute balances
+  const updateEntry = async (entryId: string, field: string, value: any) => {
+    if (!site || !sheet) return
+    try {
+      const res = await fetch(`/api/safesheets/site/${encodeURIComponent(site)}/entries/${entryId}`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${localStorage.getItem('token')}`,
+          "X-Required-Permission": "safesheet",
+        },
+        body: JSON.stringify({ [field]: value }),
+      })
+      if (res.status === 403) {
+        navigate({ to: '/no-access' })
+        return
+      }
+      const body = await res.json().catch(() => null)
+      if (!res.ok) throw new Error(body?.error || 'Failed to update entry')
+
+      if (body?.entries) {
+        const updated = recomputeCashOnHand(body.entries, sheet.initialBalance)
+        setSheet(prev => prev ? { ...prev, entries: updated } : prev)
+      }
+    } catch (err: any) {
+      console.error(err)
+      setError(err.message || 'Update failed')
+    }
+  }
+
+  // Memoized entries for display
   const formattedEntries = useMemo(() => {
     if (!sheet) return []
-    const fmt = new Intl.NumberFormat(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })
-    const fmtOrBlank = (v?: number | null) => {
-      if (v === null || v === undefined) return ''
-      if (v === 0) return '' // show blank instead of 0
-      return fmt.format(v)
-    }
-
     return sheet.entries.map(e => ({
       ...e,
+      // dateDisplay: new Date(e.date).toLocaleDateString(),
       dateDisplay: new Date(e.date).toLocaleDateString(),
-      cashInDisplay: fmtOrBlank(e.cashIn),
-      cashExpenseOutDisplay: fmtOrBlank(e.cashExpenseOut),
-      cashDepositBankDisplay: fmtOrBlank(e.cashDepositBank),
-      cashOnHandSafeDisplay: fmtOrBlank(e.cashOnHandSafe ?? null)
+      cashInDisplay: fmtNumber(e.cashIn),
+      cashExpenseOutDisplay: fmtNumber(e.cashExpenseOut),
+      cashDepositBankDisplay: fmtNumber(e.cashDepositBank),
+      cashOnHandSafeDisplay: fmtNumber(e.cashOnHandSafe ?? null)
     }))
   }, [sheet])
 
   return (
-    <div className="pt-14">
+    <div className="pt-14 flex flex-col items-center">
       <div className="my-4 flex flex-col items-center gap-4">
         <SitePicker
           value={site}
@@ -275,119 +222,125 @@ function RouteComponent() {
       </div>
 
       {!site && (
-        <p className="text-sm text-muted-foreground">Please select a site to view the safesheet.</p>
+        <p className="text-sm text-muted-foreground text-center">
+          Please select a site to view the safesheet.
+        </p>
       )}
 
       {site && (
-        <div>
-          {loading && <p>Loading...</p>}
-          {error && <p className="text-red-600">{error}</p>}
+        <div className="w-full max-w-5xl px-2 sm:px-4">
+          {loading && <p className="text-center">Loading...</p>}
+          {error && <p className="text-red-600 text-center">{error}</p>}
 
           {!loading && !error && sheet && (
-            <div className="overflow-x-auto mt-4">
-              <table className="min-w-full table-auto border-collapse">
-                <thead>
-                  <tr className="bg-gray-100">
-                    <th className="px-3 py-2 text-left text-sm">Date</th>
-                    <th className="px-3 py-2 text-left text-sm">Description</th>
-                    <th className="px-3 py-2 text-right text-sm">Cash In</th>
-                    <th className="px-3 py-2 text-right text-sm">Cash Expense Out</th>
-                    <th className="px-3 py-2 text-right text-sm">Cash Deposit Bank</th>
-                    <th className="px-3 py-2 text-right text-sm">Cash On Hand (Safe)</th>
+            <div className="overflow-x-auto border border-slate-300 rounded-lg shadow-sm bg-white">
+              <table className="min-w-full text-sm border-collapse table-fixed">
+                <thead className="bg-slate-100 text-slate-700 sticky top-0 z-10">
+                  <tr>
+                    <th className="px-2 py-1 text-left font-medium border-b border-slate-300">Date</th>
+                    <th className="px-2 py-1 text-left font-medium border-b border-slate-300">Description</th>
+                    <th className="px-2 py-1 text-right font-medium border-b border-slate-300">Cash In</th>
+                    <th className="px-2 py-1 text-right font-medium border-b border-slate-300">Cash Expense Out</th>
+                    <th className="px-2 py-1 text-right font-medium border-b border-slate-300">Cash Deposit Bank</th>
+                    <th className="px-2 py-1 text-right font-medium border-b border-slate-300">Cash On Hand</th>
                   </tr>
                 </thead>
+
                 <tbody>
-                  {formattedEntries.map((e) => (
-                    <tr key={e._id} className="odd:bg-white even:bg-gray-50">
-                      <td className="px-3 py-2 text-sm">{e.dateDisplay}</td>
+                  {formattedEntries.map((e) => {
+                    const isToday = (() => {
+                      const entry = new Date(e.date)
+                      const now = new Date()
+                      return entry.getUTCFullYear() === now.getUTCFullYear() &&
+                            entry.getUTCMonth() === now.getUTCMonth() &&
+                            entry.getUTCDate() === now.getUTCDate()
+                    })()
 
-                      <td className="px-3 py-2 text-sm">
-                        {e.description}
-                      </td>
 
-                      {/* Cash In cell */}
-                      <td className="px-3 py-2 text-sm text-right">
-                        <div
-                          role="button"
-                          // onClick={() => toggleCell(e._id, 'cashIn', e.cashIn)}
-                          className='border-2 border-transparent px-1 py-0.5 rounded inline-block'
-                        >
+                    // const isTodayUTC = (dateStr: string) => {
+                    //   const entryDate = new Date(dateStr)
+                    //   const today = new Date()
+                    //   return entryDate.getUTCFullYear() === today.getUTCFullYear() &&
+                    //         entryDate.getUTCMonth() === today.getUTCMonth() &&
+                    //         entryDate.getUTCDate() === today.getUTCDate()
+                    // }
+
+                    // const isToday = isTodayUTC(e.date)
+
+
+
+                    const handleCellBlur = (field: 'description' | 'cashIn' | 'cashExpenseOut' | 'cashDepositBank') =>
+                      async (ev: React.FocusEvent<HTMLTableCellElement>) => {
+                        ev.currentTarget.contentEditable = 'false'
+                        if (!isToday) return
+
+                        let value: string | number = ev.currentTarget.innerText.trim()
+                        if (field !== 'description') value = Number(value.replace(/,/g, '')) || 0
+
+                        // Update local state immediately
+                        setSheet(prev => {
+                          if (!prev) return prev
+                          const updatedEntries = prev.entries.map(entry =>
+                            entry._id === e._id ? { ...entry, [field]: value } : entry
+                          )
+                          const recomputed = recomputeCashOnHand(updatedEntries, prev.initialBalance)
+                          return { ...prev, entries: recomputed }
+                        })
+
+                        // Update backend
+                        await updateEntry(e._id, field, value)
+                      }
+
+                    const handleCellDoubleClick = (ev: React.MouseEvent<HTMLTableCellElement>) => {
+                      if (isToday) {
+                        ev.currentTarget.contentEditable = 'true'
+                        ev.currentTarget.focus()
+                      }
+                    }
+
+                    return (
+                      <tr key={e._id} className="odd:bg-white even:bg-slate-50 hover:bg-blue-50 transition-colors">
+                        <td className="px-3 py-1.5 border-b border-slate-200 whitespace-nowrap text-gray-700">{e.dateDisplay}</td>
+                        <td className="px-3 py-1.5 border-b border-slate-200 text-gray-700"
+                          onDoubleClick={handleCellDoubleClick}
+                          onBlur={handleCellBlur('description')}>
+                          {e.description || ''}
+                        </td>
+                        <td className="px-3 py-1.5 border-b border-slate-200 text-right text-gray-700"
+                          onDoubleClick={handleCellDoubleClick}
+                          onBlur={handleCellBlur('cashIn')}>
                           {e.cashInDisplay}
-                        </div>
-                      </td>
-
-                      {/* Cash Expense Out cell */}
-                      <td className="px-3 py-2 text-sm text-right">
-                        <div
-                          role="button"
-                          // onClick={() => toggleCell(e._id, 'cashExpenseOut', e.cashExpenseOut)}
-                          className='border-2 border-transparent px-1 py-0.5 rounded inline-block'
-                        >
+                        </td>
+                        <td className="px-3 py-1.5 border-b border-slate-200 text-right text-gray-700"
+                          onDoubleClick={handleCellDoubleClick}
+                          onBlur={handleCellBlur('cashExpenseOut')}>
                           {e.cashExpenseOutDisplay}
-                        </div>
-                      </td>
-
-                      {/* Cash Deposit Bank cell */}
-                      <td className="px-3 py-2 text-sm text-right">
-                        <div
-                          role="button"
-                          // onClick={() => toggleCell(e._id, 'cashDepositBank', e.cashDepositBank)}
-                          className='border-2 border-transparent px-1 py-0.5 rounded inline-block'
-                        >
+                        </td>
+                        <td className="px-3 py-1.5 border-b border-slate-200 text-right text-gray-700"
+                          onDoubleClick={handleCellDoubleClick}
+                          onBlur={handleCellBlur('cashDepositBank')}>
                           {e.cashDepositBankDisplay}
-                        </div>
-                      </td>
+                        </td>
+                        <td className="px-3 py-1.5 border-b border-slate-200 text-right font-medium text-gray-800">{e.cashOnHandSafeDisplay}</td>
+                      </tr>
+                    )
+                  })}
 
-                      {/* Cash On Hand (Safe) cell */}
-                      <td className="px-3 py-2 text-sm text-right font-medium">
-                        <div className='border-2 border-transparent px-1 py-0.5 rounded inline-block'>
-                          {e.cashOnHandSafeDisplay}
-                        </div>
-                      </td>
-                    </tr>
-                  ))}
-
-                  {/* Inline input row - today's date (greyed), contentEditable TDs, Add button */}
-                  <tr className="bg-white">
-                    <td className="px-3 py-2 text-sm text-gray-400 border-r border-slate-500 rounded-l-md">
+                  {/* Inline add row */}
+                  <tr className="bg-slate-50">
+                    <td className="px-3 py-2 text-gray-400 border-t border-slate-300 text-sm whitespace-nowrap">
                       {new Date().toLocaleDateString()}
                     </td>
-
-                    <td
-                      className="px-3 py-2 text-sm border border-slate-500"
-                      contentEditable={true}
-                      ref={descRef}
-                      suppressContentEditableWarning
-                    />
-
-                    <td
-                      className="px-3 py-2 text-sm text-right border border-slate-500"
-                      contentEditable={true}
-                      ref={cashInRef}
-                      suppressContentEditableWarning
-                      aria-label="cash-in-input"
-                    />
-
-                    <td
-                      className="px-3 py-2 text-sm text-right border border-slate-500"
-                      contentEditable={true}
-                      ref={cashExpenseRef}
-                      suppressContentEditableWarning
-                      aria-label="cash-expense-input"
-                    />
-
-                    <td
-                      className="px-3 py-2 text-sm text-right border border-slate-500"
-                      contentEditable={true}
-                      ref={cashDepositRef}
-                      suppressContentEditableWarning
-                      aria-label="cash-deposit-input"
-                    />
-
-                    <td className="px-3 py-2 text-sm text-right rounded-r-md">
-                      <div className="flex items-center gap-2 justify-end">
-                        <Button onClick={handleAddEntry}>Add Entry</Button>
-                      </div>
+                    <td ref={descRef} contentEditable suppressContentEditableWarning data-placeholder="Description"
+                      className="px-3 py-2 border-t border-slate-300 text-sm text-slate-800 bg-white min-w-[120px] focus:outline-none focus:ring-1 focus:ring-blue-400 rounded-sm" />
+                    <td ref={cashInRef} contentEditable suppressContentEditableWarning data-placeholder="0.00"
+                      className="px-3 py-2 border-t border-slate-300 text-right text-sm bg-white focus:outline-none focus:ring-1 focus:ring-blue-400 rounded-sm" />
+                    <td ref={cashExpenseRef} contentEditable suppressContentEditableWarning data-placeholder="0.00"
+                      className="px-3 py-2 border-t border-slate-300 text-right text-sm bg-white focus:outline-none focus:ring-1 focus:ring-blue-400 rounded-sm" />
+                    <td ref={cashDepositRef} contentEditable suppressContentEditableWarning data-placeholder="0.00"
+                      className="px-3 py-2 border-t border-slate-300 text-right text-sm bg-white focus:outline-none focus:ring-1 focus:ring-blue-400 rounded-sm" />
+                    <td className="px-3 py-2 border-t border-slate-300 text-right">
+                      <Button size="sm" onClick={handleAddEntry} className="text-sm h-8 px-3">Add</Button>
                     </td>
                   </tr>
                 </tbody>
@@ -396,7 +349,9 @@ function RouteComponent() {
           )}
 
           {!loading && !error && sheet && sheet.entries.length === 0 && (
-            <p className="text-sm text-muted-foreground mt-4">No entries found for this site.</p>
+            <p className="text-sm text-muted-foreground mt-4 text-center">
+              No entries found for this site.
+            </p>
           )}
         </div>
       )}
