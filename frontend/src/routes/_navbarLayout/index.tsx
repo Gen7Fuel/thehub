@@ -7,7 +7,6 @@ export const Route = createFileRoute('/_navbarLayout/')({
 })
 
 /**
- * App
  * Main landing page for the navbar layout.
  * Renders sections and navigation buttons based on user access permissions.
  */
