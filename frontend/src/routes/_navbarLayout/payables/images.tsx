@@ -62,10 +62,18 @@ function RouteComponent() {
     setIsCapturing(true)
   }
 
+  // const videoConstraints = {
+  //   height: 640,
+  //   facingMode: "environment"
+  // }
   const videoConstraints = {
-    height: 640,
-    facingMode: "environment"
+    // Request rear camera and higher resolution; browser will pick closest supported
+    facingMode: 'environment',
+    width: 1920, // try 2560/3264 if devices support it
+    height: 1080,
+    aspectRatio: 16 / 9,
   }
+
 
   return (
     <div className="p-4 border border-dashed border-gray-300 rounded-md space-y-6">
@@ -77,9 +85,17 @@ function RouteComponent() {
         <div className="space-y-4">
           {isCapturing && (
             <>
-              <Webcam
+              {/* <Webcam
                 ref={webcamRef}
                 screenshotFormat="image/jpeg"
+                videoConstraints={videoConstraints}
+                className="border border-dashed border-gray-300 rounded-md w-full"
+              /> */}
+              <Webcam
+                ref={webcamRef}
+                audio={false}
+                screenshotFormat="image/jpeg"
+                screenshotQuality={1}            // max quality JPEG
                 videoConstraints={videoConstraints}
                 className="border border-dashed border-gray-300 rounded-md w-full"
               />

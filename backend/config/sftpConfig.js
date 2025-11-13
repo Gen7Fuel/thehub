@@ -3,7 +3,7 @@ const normalizeSiteKey = (s) => String(s || '').trim().toUpperCase().replace(/\s
 // Per-site only. If a site is not configured, return null.
 function getSftpConfig(site) {
   if (!site) return null
-  const key = normalizeSiteKey(site) // e.g., "Couchiching" -> "COUCHICHING", "Rankin" -> "RANKIN"
+  const key = normalizeSiteKey(site)
 
   const host = process.env[`SFTP_HOST`]
   const portRaw = process.env[`SFTP_PORT`]

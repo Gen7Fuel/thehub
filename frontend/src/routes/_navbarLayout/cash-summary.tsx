@@ -56,7 +56,7 @@ function RouteComponent() {
             {...(!isSummaryActive && { variant: 'outline' } as object)}
             className="rounded-l-none"
           >
-            Cash Summary
+            Report
           </Button>
         </Link>
       </div>

@@ -1,6 +1,7 @@
 import { createFileRoute, useNavigate } from '@tanstack/react-router'
-import { useMemo } from 'react'
+import { useMemo, useState } from 'react'
 import { SitePicker } from '@/components/custom/sitePicker'
+import { Button } from '@/components/ui/button';
 
 type Search = { site: string; date: string }
 
@@ -67,6 +68,17 @@ function RouteComponent() {
   const { site, date } = Route.useSearch()
   const { report, error } = Route.useLoaderData() as { report: ReportData | null; error: string | null }
   const navigate = useNavigate({ from: Route.fullPath })
+  const [submitState, setSubmitState] = useState<'idle' | 'submitting' | 'submitted'>('idle')
+
+  const onSubmitClick = () => {
+    if (submitState !== 'idle') return
+    setSubmitState('submitting')
+    setTimeout(() => setSubmitState('submitted'), 1000)
+  }
+
+  const submitDisabled = submitState !== 'idle'
+  const submitLabel =
+    submitState === 'idle' ? 'Submit' : submitState === 'submitting' ? 'Submitting...' : 'Submitted'
 
   const updateSite = (newSite: string) =>
     navigate({ search: (prev: Search) => ({ ...prev, site: newSite }) })
@@ -95,7 +107,16 @@ function RouteComponent() {
   )
 
   return (
-    <div className="pt-16 w-full flex flex-col items-center">
+    <div className="pt-2 w-full flex flex-col items-center">
+      {/* Print-only CSS: hide everything except #print-area */}
+      <style>{`
+        @media print {
+          body * { visibility: hidden !important; }
+          #print-area, #print-area * { visibility: visible !important; }
+          #print-area { position: absolute; inset: 0; width: 100%; }
+        }
+      `}</style>
+
       <div className="w-full max-w-7xl px-4 space-y-6">
         <div className="flex items-end gap-4">
           <SitePicker
@@ -114,18 +135,17 @@ function RouteComponent() {
               className="border rounded px-3 py-2"
             />
           </div>
-          <div className="ml-auto">
-            <button
-              type="button"
-              onClick={() => window.print()}
-              className="px-3 py-2 border rounded hover:bg-muted"
-            >
+          <div className="ml-auto flex flex-row gap-2">
+            <Button type="button" onClick={onSubmitClick} disabled={submitDisabled}>
+              {submitLabel}
+            </Button>
+            <Button type="button" variant="outline" onClick={() => window.print()}>
               Export PDF
-            </button>
+            </Button>
           </div>
         </div>
 
-        <div className="border rounded-md overflow-hidden">
+        <div className="border rounded-md overflow-hidden" id="print-area">
           <div className="px-4 py-3 border-b flex items-center justify-between bg-muted/40">
             <h2 className="text-sm font-semibold">
               Cash Summary – {site || '—'} – {date || '—'}

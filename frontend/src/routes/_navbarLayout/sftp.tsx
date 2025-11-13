@@ -1,13 +1,15 @@
-import { SitePicker } from '@/components/custom/sitePicker'
+// ...existing imports...
 import { createFileRoute, useNavigate, Link } from '@tanstack/react-router'
 import { useEffect, useState } from 'react'
+import { SitePicker } from '@/components/custom/sitePicker'
 
-type CashRecSearch = {
+type sftpSearch = {
   site: string
   shift?: string
+  type?: 'sft' | 'br'
 }
 
-type CashRecFile = {
+type sftpFile = {
   name: string
   size: number
   modifyTime: number
@@ -16,7 +18,7 @@ type CashRecFile = {
   path: string
 }
 
-type CashRecMetrics = {
+type sftpMetrics = {
   fuelSales: number | null
   dealGroupCplDiscounts: number | null
   fuelPriceOverrides: number | null
@@ -39,17 +41,18 @@ type CashRecMetrics = {
   safedrops: { count: number | null; amount: number | null }
 }
 
-export const Route = createFileRoute('/_navbarLayout/cash-rec')({
+export const Route = createFileRoute('/_navbarLayout/sftp')({
   component: RouteComponent,
-  validateSearch: (search: Record<string, unknown>): CashRecSearch => ({
+  validateSearch: (search: Record<string, unknown>): sftpSearch => ({
     site: (search.site as string) || '',
-    shift: typeof search.shift === 'string' ? search.shift.replace(/^"(.*)"$/, '$1') : undefined,
+    shift: typeof search.shift === 'string' ? search.shift.replace(/^'(.*)'$/, '$1') : undefined,
+    type: (search.type as 'sft' | 'br') || 'sft',
   }),
-  loaderDeps: ({ search: { site } }) => ({ site }),
-  loader: async ({ deps: { site } }) => {
-    if (!site) return { files: [] as CashRecFile[] } // no site yet
-    const res = await fetch(`/api/cash-rec/receive?site=${encodeURIComponent(site)}`, {
-      headers: { Authorization: `Bearer ${localStorage.getItem('token') || ''}` },
+  loaderDeps: ({ search: { site, type } }) => ({ site, type }),
+  loader: async ({ deps: { site, type } }) => {
+    if (!site) return { files: [] as sftpFile[] } // no site yet
+    const res = await fetch(`/api/sftp/receive?site=${encodeURIComponent(site)}&type=${type}`, {
+      headers: { Authorization: `Bearer ${localStorage.getItem(`token`) || ``}` },
     })
     if (!res.ok) throw new Error(await res.text().catch(() => 'Failed to load files'))
     const { files } = await res.json()
@@ -58,12 +61,12 @@ export const Route = createFileRoute('/_navbarLayout/cash-rec')({
 })
 
 function RouteComponent() {
-  const { files } = Route.useLoaderData() as { files: CashRecFile[] }
+  const { files } = Route.useLoaderData() as { files: sftpFile[] }
   const [content, setContent] = useState<string | null>(null)
-  const [metrics, setMetrics] = useState<CashRecMetrics | null>(null)
+  const [metrics, setMetrics] = useState<sftpMetrics| null>(null)
   const [loadingContent, setLoadingContent] = useState(false)
   const [_, setContentError] = useState<string | null>(null)
-  const { site, shift } = Route.useSearch()
+  const { site, shift, type = 'sft' } = Route.useSearch()
   const navigate = useNavigate({ from: Route.fullPath })
 
   useEffect(() => {
@@ -83,8 +86,9 @@ function RouteComponent() {
       for (let i = 0; i < attempts; i++) {
         try {
           const r = await fetch(
-            `/api/cash-rec/receive/${shift}?site=${encodeURIComponent(site)}`, {
-              headers: { Authorization: `Bearer ${localStorage.getItem('token') || ''}` },
+            `/api/sftp/receive/${shift}?site=${encodeURIComponent(site)}&type=${type}`,
+            {
+              headers: { Authorization: `Bearer ${localStorage.getItem(`token`) || ``}` },
               signal: controller.signal,
             }
           )
@@ -92,7 +96,8 @@ function RouteComponent() {
           const d = await r.json()
           if (!alive) return
           setContent(d.content ?? '')
-          setMetrics(d.metrics ?? null)
+          // Only SFT has metrics for now
+          setMetrics(type === 'sft' ? (d.metrics ?? null) : null)
           setLoadingContent(false)
           return
         } catch (e) {
@@ -111,14 +116,21 @@ function RouteComponent() {
       alive = false
       controller.abort()
     }
-  }, [shift])
+  }, [shift, type, site])
 
   const updateSite = (newSite: string) => {
-    navigate({ search: (prev: CashRecSearch) => ({ ...prev, site: newSite }) })
+    navigate({ search: (prev: sftpSearch) => ({ ...prev, site: newSite }) })
   }
 
+  const updateType = (newType: 'sft' | 'br') => {
+    // Reset selected shift when switching file types
+    navigate({ search: (prev: sftpSearch) => ({ ...prev, type: newType, shift: undefined }) })
+  }
+
+  const currentExt = type === 'br' ? 'br' : 'sft'
+
   const extractShift = (filename: string): string | null => {
-    const match = filename.match(/(\d+)\.sft$/i)
+    const match = filename.match(new RegExp(`(\\d+)\\.${currentExt}$`, `i`))
     return match?.[1] ?? null
   }
 
@@ -134,37 +146,48 @@ function RouteComponent() {
     return new Date(y, mo, d, h, mi)
   }
 
-  const formatDateTime = (d: Date | null) =>
-    d ? d.toLocaleString() : '—'
+  const formatDateTime = (d: Date | null) => (d ? d.toLocaleString() : '—')
 
-  // Sort by full file name (desc = newest first since timestamp is in the name)
+  // Sort by full file name (desc = newest first)
   const sortedFiles = [...files].sort((a, b) =>
     b.name.localeCompare(a.name, undefined, { numeric: true, sensitivity: 'base' })
   )
 
   const items = sortedFiles
     .map(f => ({ file: f, shift: extractShift(f.name) }))
-    .filter(x => x.shift) as { file: CashRecFile; shift: string }[]
+    .filter(x => x.shift) as { file: sftpFile; shift: string }[]
 
   return (
     <div className="container mx-auto pt-16 p-6 max-w-7xl space-y-6">
-      <SitePicker
-        value={site}
-        onValueChange={updateSite}
-        placeholder="Pick a site"
-        label="Site"
-        className="w-[220px]"
-      />
-
+      <div className="flex items-end gap-4">
+        <SitePicker
+          value={site}
+          onValueChange={updateSite}
+          placeholder="Pick a site"
+          label="Site"
+          className="w-[220px]"
+        />
+        <div>
+          <label className="block text-sm mb-1">File Type</label>
+          <select
+            value={type}
+            onChange={(e) => updateType(e.target.value as 'sft' | 'br')}
+            className="border rounded px-3 py-2"
+          >
+            <option value="sft">SFT files</option>
+            <option value="br">BR files</option>
+          </select>
+        </div>
+      </div>
       <div className="flex gap-6">
         {/* Sidebar */}
         <aside className="w-60 shrink-0 border rounded-md bg-card">
           <div className="p-3 border-b">
-            <h2 className="text-sm font-semibold">Received Shifts</h2>
+            <h2 className="text-sm font-semibold">Received {type.toUpperCase()} Files</h2>
           </div>
           <ul className="p-2 space-y-1 max-h-[600px] overflow-y-auto">
             {items.length === 0 && (
-              <li className="text-xs text-muted-foreground px-2 py-1">No .sft files</li>
+              <li className="text-xs text-muted-foreground px-2 py-1">No .{currentExt} files</li>
             )}
             {items.map(({ file, shift: s }) => {
               const dt = extractDateFromName(file.name) ?? new Date(file.modifyTime)
@@ -172,7 +195,7 @@ function RouteComponent() {
                 <li key={file.path}>
                   <Link
                     to={Route.fullPath}
-                    search={(prev: CashRecSearch) => ({ ...prev, shift: s })}
+                    search={(prev: sftpSearch) => ({ ...prev, shift: s })}
                     preload={false}
                     className={`block px-3 py-2 rounded text-sm transition ${
                       shift === s ? 'bg-primary text-primary-foreground' : 'hover:bg-muted'
@@ -195,20 +218,16 @@ function RouteComponent() {
         <main className="flex-1 border rounded-md bg-card flex flex-col">
           <div className="p-4 border-b flex items-center justify-between">
             <h3 className="font-semibold text-sm">
-              {shift ? `Shift ${shift}` : 'Select a shift'}
+              {shift ? `Shift ${shift}` : `Select a shift`}
             </h3>
           </div>
           <div className="p-4 overflow-auto space-y-6">
-            {!shift && <div className="text-muted-foreground">Choose a shift from the sidebar.</div>}
-            {shift && loadingContent && (
-              <div className="text-muted-foreground">
-                Loading...
-              </div>
-            )}
+            {!shift && <div className="text-muted-foreground">Choose a file from the sidebar.</div>}
+            {shift && loadingContent && <div className="text-muted-foreground">Loading...</div>}
 
-            {metrics && !loadingContent && (
+            {metrics && !loadingContent && type === 'sft' && (
               <div>
-                <h4 className="font-medium mb-2 text-sm">Parsed Metrics</h4>
+                <h4 className="font-medium mb-2 text-sm">Parsed Metrics (SFT)</h4>
                 {(() => {
                   const { safedrops, ...numeric } = metrics
                   return (

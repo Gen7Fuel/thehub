@@ -69,7 +69,7 @@ export default function Navbar() {
 
   // Route matchers for header text and navigation highlighting
   const isHome = matchRoute({ to: '/' })
-  const isCashSummary = matchRoute({ to: '/daily-reports/cash-summary', fuzzy: true })
+  const isCashSummary = matchRoute({ to: '/cash-summary', fuzzy: true })
   const isShiftWorksheet = matchRoute({ to: '/daily-reports/shift-worksheet', fuzzy: true })
   const isPurchaseOrder = matchRoute({ to: '/po', fuzzy: true })
   const isKardpoll = matchRoute({ to: '/kardpoll', fuzzy: true })
