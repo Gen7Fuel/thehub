@@ -63,6 +63,7 @@ interface InventoryItem {
   UPC: string
   Category: string
   'On Hand Qty': number
+  updatedAt?: string
 }
 
 interface Category {
@@ -204,6 +205,26 @@ function RouteComponent() {
     )
   }
 
+  const formatDateTime = (isoDate?: string) => {
+    if (!isoDate) return '-'
+    const date = new Date(isoDate)
+
+    const day = String(date.getDate()).padStart(2, '0')
+    const month = date.toLocaleString('default', { month: 'short' }) // "Nov"
+    const year = date.getFullYear()
+
+    const hours = String(date.getHours()).padStart(2, '0')
+    const minutes = String(date.getMinutes()).padStart(2, '0')
+
+    const formatted = `${day}-${month}-${year} ${hours}:${minutes}`
+
+    // if it's exactly 17-Sep-2025 20:00, return empty because all the items which were newly created are being falling back on that perttiuclar date
+    if (formatted === '17-Sep-2025 20:00') return '-'
+
+    return formatted
+  }
+
+
   return (
     <div className="container mx-auto p-6 mt-12">
       <Card>
@@ -277,6 +298,7 @@ function RouteComponent() {
                     <TableHead>Item Name</TableHead>
                     <TableHead>UPC</TableHead>
                     <TableHead>Category</TableHead>
+                    <TableHead>Last Counted At</TableHead>
                     <TableHead className="text-right">On Hand Qty</TableHead>
                   </TableRow>
                 </TableHeader>
@@ -286,6 +308,7 @@ function RouteComponent() {
                       <TableCell className="font-medium">{item.Item_Name}</TableCell>
                       <TableCell>{item.UPC}</TableCell>
                       <TableCell>{item.Category}</TableCell>
+                      <TableCell className="text-center">{formatDateTime(item.updatedAt)}</TableCell>
                       <TableCell className="text-right">{item['On Hand Qty']}</TableCell>
                     </TableRow>
                   ))}

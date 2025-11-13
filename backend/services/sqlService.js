@@ -112,7 +112,7 @@ async function getCurrentInventory(site, limit = null) {
     
     let query = `
       SELECT ${limit ? `TOP ${limit}` : ''} [Item_Name]
-            ,[UPC]
+            ,[UPC_A_12_digits] AS 'UPC'
             ,[Category]
             ,[On Hand Qty]
       FROM [CSO].[Current_Inventory]

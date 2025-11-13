@@ -363,19 +363,59 @@ router.get('/lookup', async (req, res) => {
   res.json(item);
 });
 
+// router.get('/current-inventory', async (req, res) => {
+//   try {
+//     const { site, limit } = req.query;  // ✅ Accept limit parameter
+//     if (!site) return res.status(400).json({ message: "site is required" });
+
+//     const limitNum = limit ? parseInt(limit, 10) : null;
+//     const inventory = await getCurrentInventory(site, limitNum);  // ✅ Pass limit
+//     res.json({ site, inventory });
+//   } catch (err) {
+//     console.error(err);
+//     res.status(500).json({ message: "Failed to get current inventory." });
+//   }
+// });
 router.get('/current-inventory', async (req, res) => {
   try {
-    const { site, limit } = req.query;  // ✅ Accept limit parameter
+    const { site, limit } = req.query;
     if (!site) return res.status(400).json({ message: "site is required" });
 
     const limitNum = limit ? parseInt(limit, 10) : null;
-    const inventory = await getCurrentInventory(site, limitNum);  // ✅ Pass limit
-    res.json({ site, inventory });
+    
+    // 1️⃣ Get inventory from SQL
+    const inventory = await getCurrentInventory(site, limitNum); // inventory is array of objects with UPC
+
+    // 2️⃣ Extract all UPCs from SQL inventory
+    const upcs = inventory.map(item => item.UPC);
+
+    // 3️⃣ Query MongoDB for cycle-counts matching these UPCs + site
+    // Assuming you have a Mongo collection called "CycleCount"
+    const cycleCounts = await CycleCount.find({
+      site,
+      upc_barcode: { $in: upcs }
+    }).select({ upc_barcode: 1, updatedAt: 1 }).lean();
+
+    // 4️⃣ Create a map for fast lookup
+    const cycleMap = new Map();
+    cycleCounts.forEach(c => {
+      cycleMap.set(c.upc_barcode, c.updatedAt);
+    });
+
+    // 5️⃣ Merge updatedAt into inventory
+    const enrichedInventory = inventory.map(item => ({
+      ...item,
+      updatedAt: cycleMap.get(item.UPC) || null
+    }));
+
+    res.json({ site, inventory: enrichedInventory });
+
   } catch (err) {
     console.error(err);
     res.status(500).json({ message: "Failed to get current inventory." });
   }
 });
+
 
 router.get('/inventory-categories', async (req, res) => {
   try {
