@@ -1,12 +1,25 @@
 const express = require('express')
 const CashSummary = require('../models/CashSummaryNew')
 const Safesheet = require('../models/Safesheet')
-const { withSftp } = require('../utils/sftp')
-const { getSftpConfig } = require('../config/sftpConfig')
+// const { withSftp } = require('../utils/sftp')
+// const { getSftpConfig } = require('../config/sftpConfig')
 const { parseSftReport } = require('../utils/parseSftReport')
 const { dateFromYMDLocal } = require('../utils/dateUtils')
 
 const router = express.Router()
+
+const OFFICE_SFTP_API_BASE = 'http://24.50.55.130:5000'
+
+async function fetchWithTimeout(url, opts = {}, ms = 15000) {
+  const controller = new AbortController()
+  const t = setTimeout(() => controller.abort(), ms)
+  try {
+    const _fetch = typeof fetch !== 'undefined' ? fetch : (await import('node-fetch')).default
+    return await _fetch(url, { ...opts, signal: controller.signal })
+  } finally {
+    clearTimeout(t)
+  }
+}
 
 router.post('/', async (req, res) => {
   try {
@@ -34,39 +47,35 @@ router.post('/', async (req, res) => {
       report_canadian_cash: undefined,
     }
 
-    // Enrich from SFTP if the selected site has credentials configured
-    if (site && getSftpConfig(site)) {
+    // Enrich from Office SFTP API (HTTP proxy) instead of direct SFTP
+    if (site) {
       try {
-        const { parsed } = await withSftp(site, async (sftp) => {
-          const remoteDir = '/receive'
-          const list = await sftp.list(remoteDir)
-          const target = list.find(
-            (f) =>
-              typeof f.name === 'string' &&
-              f.name.toLowerCase().endsWith('.sft') &&
-              new RegExp(`\\b${shift_number}\\.sft$`).test(f.name)
-          )
-          if (!target) return { parsed: null }
+        const url = new URL(`/api/sftp/receive/${encodeURIComponent(shift_number)}`, OFFICE_SFTP_API_BASE)
+        url.searchParams.set('site', site)
+        url.searchParams.set('type', 'sft')
 
-          const remotePath = `${remoteDir}/${target.name}`
-          const buf = await sftp.get(remotePath)
-          const content = buf.toString('utf8').replace(/^\uFEFF/, '')
-          const metrics = parseSftReport(content)
-          return { parsed: metrics }
-        })
+        const resp = await fetchWithTimeout(url.toString())
+        if (resp.ok) {
+          const data = await resp.json()
+          const content = String(data?.content || '').replace(/^\uFEFF/, '')
+          const parsed = parseSftReport(content)
 
-        if (parsed) {
-          values = {
-            canadian_cash_collected: values.canadian_cash_collected, // do NOT overwrite user counted
-            item_sales: parsed.itemSales ?? values.item_sales,
-            cash_back: parsed.cashBack ?? values.cash_back,
-            loyalty: parsed.couponsAccepted ?? values.loyalty,
-            cpl_bulloch: parsed.fuelPriceOverrides ?? values.cpl_bulloch,
-            report_canadian_cash: parsed.canadianCash ?? values.report_canadian_cash,
+          if (parsed) {
+            values = {
+              canadian_cash_collected: values.canadian_cash_collected, // keep user counted
+              item_sales: parsed.itemSales ?? values.item_sales,
+              cash_back: parsed.cashBack ?? values.cash_back,
+              loyalty: parsed.couponsAccepted ?? values.loyalty,
+              cpl_bulloch: parsed.fuelPriceOverrides ?? values.cpl_bulloch,
+              report_canadian_cash: parsed.canadianCash ?? values.report_canadian_cash,
+            }
           }
+        } else {
+          const msg = await resp.text().catch(() => `HTTP ${resp.status}`)
+          console.warn(`Office SFTP API returned ${resp.status}: ${msg}`)
         }
       } catch (e) {
-        console.warn(`SFTP enrichment skipped for site ${site}:`, e?.message || e)
+        console.warn(`Office SFTP enrichment failed for site ${site}:`, e?.message || e)
       }
     }
 
@@ -90,6 +99,88 @@ router.post('/', async (req, res) => {
     res.status(500).json({ error: 'Failed to save CashSummary' })
   }
 })
+// router.post('/', async (req, res) => {
+//   try {
+//     const {
+//       site,
+//       shift_number,
+//       date,
+//       canadian_cash_collected,
+//       item_sales,
+//       cash_back,
+//       loyalty,
+//       cpl_bulloch,
+//       exempted_tax,
+//     } = req.body || {}
+
+//     if (!shift_number) return res.status(400).json({ error: 'shift_number is required' })
+//     if (!date) return res.status(400).json({ error: 'date is required' })
+
+//     let values = {
+//       canadian_cash_collected: norm(canadian_cash_collected),
+//       item_sales: norm(item_sales),
+//       cash_back: norm(cash_back),
+//       loyalty: norm(loyalty),
+//       cpl_bulloch: norm(cpl_bulloch),
+//       report_canadian_cash: undefined,
+//     }
+
+//     // Enrich from SFTP if the selected site has credentials configured
+//     if (site && getSftpConfig(site)) {
+//       try {
+//         const { parsed } = await withSftp(site, async (sftp) => {
+//           const remoteDir = '/receive'
+//           const list = await sftp.list(remoteDir)
+//           const target = list.find(
+//             (f) =>
+//               typeof f.name === 'string' &&
+//               f.name.toLowerCase().endsWith('.sft') &&
+//               new RegExp(`\\b${shift_number}\\.sft$`).test(f.name)
+//           )
+//           if (!target) return { parsed: null }
+
+//           const remotePath = `${remoteDir}/${target.name}`
+//           const buf = await sftp.get(remotePath)
+//           const content = buf.toString('utf8').replace(/^\uFEFF/, '')
+//           const metrics = parseSftReport(content)
+//           return { parsed: metrics }
+//         })
+
+//         if (parsed) {
+//           values = {
+//             canadian_cash_collected: values.canadian_cash_collected, // do NOT overwrite user counted
+//             item_sales: parsed.itemSales ?? values.item_sales,
+//             cash_back: parsed.cashBack ?? values.cash_back,
+//             loyalty: parsed.couponsAccepted ?? values.loyalty,
+//             cpl_bulloch: parsed.fuelPriceOverrides ?? values.cpl_bulloch,
+//             report_canadian_cash: parsed.canadianCash ?? values.report_canadian_cash,
+//           }
+//         }
+//       } catch (e) {
+//         console.warn(`SFTP enrichment skipped for site ${site}:`, e?.message || e)
+//       }
+//     }
+
+//     const doc = new CashSummary({
+//       site,
+//       shift_number: String(shift_number),
+//       date: new Date(date),
+//       canadian_cash_collected: values.canadian_cash_collected,
+//       item_sales: values.item_sales,
+//       cash_back: values.cash_back,
+//       loyalty: values.loyalty,
+//       cpl_bulloch: values.cpl_bulloch,
+//       report_canadian_cash: values.report_canadian_cash,
+//       exempted_tax: norm(exempted_tax),
+//     })
+
+//     const saved = await doc.save()
+//     res.status(201).json(saved)
+//   } catch (err) {
+//     console.error('CashSummary create error:', err)
+//     res.status(500).json({ error: 'Failed to save CashSummary' })
+//   }
+// })
 
 function norm(v) {
   if (v === '' || v == null) return undefined
