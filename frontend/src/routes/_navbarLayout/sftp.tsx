@@ -52,7 +52,10 @@ export const Route = createFileRoute('/_navbarLayout/sftp')({
   loader: async ({ deps: { site, type } }) => {
     if (!site) return { files: [] as sftpFile[] }
     const res = await fetch(
-      `/api/sftp/receive?site=${encodeURIComponent(site)}&type=${type}`
+      `/api/sftp/receive?site=${encodeURIComponent(site)}&type=${type}`,
+      {
+        headers: { Authorization: `Bearer ${localStorage.getItem(`token`) || ``}` },
+      },
     )
     if (!res.ok) throw new Error(await res.text().catch(() => 'Failed to load files'))
     const { files } = await res.json()
@@ -87,7 +90,9 @@ function RouteComponent() {
         try {
           const r = await fetch(
             `/api/sftp/receive/${shift}?site=${encodeURIComponent(site)}&type=${type}`,
-            { signal: controller.signal }
+            { signal: controller.signal,
+              headers: { Authorization: `Bearer ${localStorage.getItem(`token`) || ``}` },
+            }
           )
           // const r = await fetch(
           //   `https://bridge.gen7fuel.com/api/sftp/receive/${shift}?site=${encodeURIComponent(site)}&type=${type}`,
