@@ -10,6 +10,7 @@ const EntrySchema = new Schema({
   cashIn: { type: Number, default: 0 },
   cashExpenseOut: { type: Number, default: 0 },
   cashDepositBank: { type: Number, default: 0 },
+  photo: { type: String, default: '' },
 }, { timestamps: true });
 
 /**
