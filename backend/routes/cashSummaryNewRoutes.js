@@ -348,6 +348,48 @@ router.get('/:id', async (req, res) => {
   }
 })
 
+// router.put('/:id', async (req, res) => {
+//   try {
+//     const {
+//       site,
+//       shift_number,
+//       date,
+//       canadian_cash_collected,
+//       item_sales,
+//       cash_back,
+//       loyalty,
+//       cpl_bulloch,
+//       exempted_tax,
+//       report_canadian_cash,
+//     } = req.body || {}
+
+//     if (!shift_number) return res.status(400).json({ error: 'shift_number is required' })
+//     if (!date) return res.status(400).json({ error: 'date is required' })
+
+//     const updated = await CashSummary.findByIdAndUpdate(
+//       req.params.id,
+//       {
+//         site,
+//         shift_number: String(shift_number),
+//         date: new Date(date),
+//         canadian_cash_collected: norm(canadian_cash_collected),
+//         item_sales: norm(item_sales),
+//         cash_back: norm(cash_back),
+//         loyalty: norm(loyalty),
+//         cpl_bulloch: norm(cpl_bulloch),
+//         exempted_tax: norm(exempted_tax),
+//         report_canadian_cash: norm(report_canadian_cash),
+//       },
+//       { new: true, runValidators: true }
+//     ).lean()
+
+//     if (!updated) return res.status(404).json({ error: 'Not found' })
+//     res.json(updated)
+//   } catch (err) {
+//     console.error('CashSummary update error:', err)
+//     res.status(500).json({ error: 'Failed to update CashSummary' })
+//   }
+// })
 router.put('/:id', async (req, res) => {
   try {
     const {
@@ -366,24 +408,74 @@ router.put('/:id', async (req, res) => {
     if (!shift_number) return res.status(400).json({ error: 'shift_number is required' })
     if (!date) return res.status(400).json({ error: 'date is required' })
 
+    // 1️⃣ Load existing document
+    const existing = await CashSummary.findById(req.params.id).lean()
+    if (!existing) return res.status(404).json({ error: 'Not found' })
+
+    // 2️⃣ Determine if all five fields are missing (key does not exist)
+    const allMissing = !('report_canadian_cash' in existing) &&
+                       !('item_sales' in existing) &&
+                       !('cash_back' in existing) &&
+                       !('loyalty' in existing) &&
+                       !('cpl_bulloch' in existing)
+
+    let enrichedValues = {}
+
+    // 3️⃣ Call Office API only if all fields are missing
+    if (site && allMissing) {
+      try {
+        const url = new URL(`/api/sftp/receive/${encodeURIComponent(shift_number)}`, OFFICE_SFTP_API_BASE)
+        url.searchParams.set('site', site)
+        url.searchParams.set('type', 'sft')
+
+        const resp = await fetchWithTimeout(url.toString())
+        if (resp.ok) {
+          const data = await resp.json()
+          const content = String(data?.content || '').replace(/^\uFEFF/, '')
+          const parsed = parseSftReport(content)
+
+          if (parsed) {
+            enrichedValues = {
+              item_sales: parsed.itemSales,
+              cash_back: parsed.cashBack,
+              loyalty: parsed.couponsAccepted,
+              cpl_bulloch: parsed.fuelPriceOverrides,
+              report_canadian_cash: parsed.canadianCash,
+            }
+          }
+        } else {
+          const msg = await resp.text().catch(() => `HTTP ${resp.status}`)
+          console.warn(`Office SFTP API returned ${resp.status}: ${msg}`)
+        }
+      } catch (e) {
+        console.warn(`Office SFTP enrichment failed for site ${site}:`, e?.message || e)
+      }
+    }
+
+    // 4️⃣ Merge final values
+    const finalValues = {
+      site,
+      shift_number: String(shift_number),
+      date: new Date(date),
+
+      canadian_cash_collected: norm(canadian_cash_collected),
+
+      item_sales: norm(item_sales ?? enrichedValues.item_sales ?? existing.item_sales),
+      cash_back: norm(cash_back ?? enrichedValues.cash_back ?? existing.cash_back),
+      loyalty: norm(loyalty ?? enrichedValues.loyalty ?? existing.loyalty),
+      cpl_bulloch: norm(cpl_bulloch ?? enrichedValues.cpl_bulloch ?? existing.cpl_bulloch),
+      report_canadian_cash: norm(report_canadian_cash ?? enrichedValues.report_canadian_cash ?? existing.report_canadian_cash),
+
+      exempted_tax: norm(exempted_tax),
+    }
+
+    // 5️⃣ Update and return
     const updated = await CashSummary.findByIdAndUpdate(
       req.params.id,
-      {
-        site,
-        shift_number: String(shift_number),
-        date: new Date(date),
-        canadian_cash_collected: norm(canadian_cash_collected),
-        item_sales: norm(item_sales),
-        cash_back: norm(cash_back),
-        loyalty: norm(loyalty),
-        cpl_bulloch: norm(cpl_bulloch),
-        exempted_tax: norm(exempted_tax),
-        report_canadian_cash: norm(report_canadian_cash),
-      },
+      finalValues,
       { new: true, runValidators: true }
     ).lean()
 
-    if (!updated) return res.status(404).json({ error: 'Not found' })
     res.json(updated)
   } catch (err) {
     console.error('CashSummary update error:', err)
