@@ -22,6 +22,8 @@ import { useEffect, useMemo, useState } from 'react'
 import { inventoryQueries } from '@/queries/inventory'
 import { PasswordProtection } from '@/components/custom/PasswordProtection'
 import { useAuth } from "@/context/AuthContext";
+import * as XLSX from "xlsx";
+import { FileSpreadsheet } from "lucide-react"
 
 export const Route = createFileRoute('/_navbarLayout/cycle-count/inventory')({
   component: RouteComponent,
@@ -54,7 +56,7 @@ export const Route = createFileRoute('/_navbarLayout/cycle-count/inventory')({
     ])
   },
 
-  // ✅ loader: Return empty object (data comes from React Query)
+  // loader: Return empty object (data comes from React Query)
   loader: () => ({}),
 })
 
@@ -110,6 +112,7 @@ function RouteComponent() {
     ...inventoryQueries.full(site),
     enabled: false,
   })
+
 
   // ✅ Query for categories
   const categoriesQuery = useQuery({
@@ -225,6 +228,37 @@ function RouteComponent() {
     return formatted
   }
 
+  const exportToExcel = () => {
+    if (!filteredInventory.length) return;
+
+    // Convert table to exportable rows
+    const data = filteredInventory.map(item => ({
+      "Item Name": item.Item_Name,
+      UPC: item.UPC,
+      Category: item.Category,
+      "Last Counted At": formatDateTime(item.updatedAt),
+      "Last Hub Inventory": item.cycleCount === null || item.cycleCount === undefined ? '-' : item.cycleCount,
+      "On Hand Qty": item["On Hand Qty"],
+      "Change(%)": calcChangePercent(item.cycleCount, item["On Hand Qty"]),
+    }));
+
+    const worksheet = XLSX.utils.json_to_sheet(data);
+    const workbook = XLSX.utils.book_new();
+
+    XLSX.utils.book_append_sheet(workbook, worksheet, "Inventory");
+
+    const fileName = `Inventory_${site}_${selectedCategory}_${Date.now()}.xlsx`;
+    XLSX.writeFile(workbook, fileName);
+  };
+
+  const calcChangePercent = (cycleCount?: number | null, onHand?: number) => {
+    if (cycleCount === null || cycleCount === undefined || onHand === null || onHand === undefined) return '-'
+    if (cycleCount === 0) return '-' // cannot calculate %
+    const diff = onHand - cycleCount
+    const percent = (diff / cycleCount) * 100
+    return `${percent.toFixed(1)}%`
+  }  
+
 
   return (
     <div className="container mx-auto p-6 mt-12">
@@ -268,6 +302,19 @@ function RouteComponent() {
                 onValueChange={handleSiteChange}
                 placeholder="Select a site"
               />
+
+              {/* Excel Export Button */}
+              <button
+                onClick={exportToExcel}
+                className="
+                  flex items-center gap-2 px-4 py-2  bg-emerald-600 hover:bg-emerald-700 
+                  text-white rounded-md text-sm  shadow-sm border border-emerald-700/20
+                  transition-all
+                "
+              >
+                <FileSpreadsheet className="h-4 w-4" />
+                Export Excel
+              </button>
             </div>
           </div>
         </CardHeader>
@@ -302,6 +349,7 @@ function RouteComponent() {
                     <TableHead>Last Counted At</TableHead>
                     <TableHead className="text-right">Last Hub Inventory</TableHead>
                     <TableHead className="text-right">On Hand Qty</TableHead>
+                    <TableHead className="text-right">Change %</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -313,6 +361,7 @@ function RouteComponent() {
                       <TableCell className="text-center">{formatDateTime(item.updatedAt)}
                       </TableCell><TableCell className="text-right">{item.cycleCount === null || item.cycleCount === undefined ? '-' : item.cycleCount}</TableCell>
                       <TableCell className="text-right">{item['On Hand Qty']}</TableCell>
+                      <TableCell className="text-right">{calcChangePercent(item.cycleCount, item["On Hand Qty"])}</TableCell>
                     </TableRow>
                   ))}
                 </TableBody>
