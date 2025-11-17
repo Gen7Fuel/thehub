@@ -1,14 +1,19 @@
 const express = require('express')
 const CashSummary = require('../models/CashSummaryNew')
 const Safesheet = require('../models/Safesheet')
-// const { withSftp } = require('../utils/sftp')
-// const { getSftpConfig } = require('../config/sftpConfig')
 const { parseSftReport } = require('../utils/parseSftReport')
 const { dateFromYMDLocal } = require('../utils/dateUtils')
+const { sendEmail } = require('../utils/emailService')
+const { generateCashSummaryPdf } = require('../utils/cashSummaryPdf')
 
 const router = express.Router()
 
 const OFFICE_SFTP_API_BASE = 'http://24.50.55.130:5000'
+const APP_BASE_URL = process.env.PUBLIC_APP_BASE_URL || 'https://app.gen7fuel.com'
+const CASH_SUMMARY_EMAILS = (process.env.CASH_SUMMARY_EMAILS || 'mohammad@gen7fuel.com')
+  .split(',')
+  .map(e => e.trim())
+  .filter(Boolean)
 
 async function fetchWithTimeout(url, opts = {}, ms = 15000) {
   const controller = new AbortController()
@@ -99,88 +104,6 @@ router.post('/', async (req, res) => {
     res.status(500).json({ error: 'Failed to save CashSummary' })
   }
 })
-// router.post('/', async (req, res) => {
-//   try {
-//     const {
-//       site,
-//       shift_number,
-//       date,
-//       canadian_cash_collected,
-//       item_sales,
-//       cash_back,
-//       loyalty,
-//       cpl_bulloch,
-//       exempted_tax,
-//     } = req.body || {}
-
-//     if (!shift_number) return res.status(400).json({ error: 'shift_number is required' })
-//     if (!date) return res.status(400).json({ error: 'date is required' })
-
-//     let values = {
-//       canadian_cash_collected: norm(canadian_cash_collected),
-//       item_sales: norm(item_sales),
-//       cash_back: norm(cash_back),
-//       loyalty: norm(loyalty),
-//       cpl_bulloch: norm(cpl_bulloch),
-//       report_canadian_cash: undefined,
-//     }
-
-//     // Enrich from SFTP if the selected site has credentials configured
-//     if (site && getSftpConfig(site)) {
-//       try {
-//         const { parsed } = await withSftp(site, async (sftp) => {
-//           const remoteDir = '/receive'
-//           const list = await sftp.list(remoteDir)
-//           const target = list.find(
-//             (f) =>
-//               typeof f.name === 'string' &&
-//               f.name.toLowerCase().endsWith('.sft') &&
-//               new RegExp(`\\b${shift_number}\\.sft$`).test(f.name)
-//           )
-//           if (!target) return { parsed: null }
-
-//           const remotePath = `${remoteDir}/${target.name}`
-//           const buf = await sftp.get(remotePath)
-//           const content = buf.toString('utf8').replace(/^\uFEFF/, '')
-//           const metrics = parseSftReport(content)
-//           return { parsed: metrics }
-//         })
-
-//         if (parsed) {
-//           values = {
-//             canadian_cash_collected: values.canadian_cash_collected, // do NOT overwrite user counted
-//             item_sales: parsed.itemSales ?? values.item_sales,
-//             cash_back: parsed.cashBack ?? values.cash_back,
-//             loyalty: parsed.couponsAccepted ?? values.loyalty,
-//             cpl_bulloch: parsed.fuelPriceOverrides ?? values.cpl_bulloch,
-//             report_canadian_cash: parsed.canadianCash ?? values.report_canadian_cash,
-//           }
-//         }
-//       } catch (e) {
-//         console.warn(`SFTP enrichment skipped for site ${site}:`, e?.message || e)
-//       }
-//     }
-
-//     const doc = new CashSummary({
-//       site,
-//       shift_number: String(shift_number),
-//       date: new Date(date),
-//       canadian_cash_collected: values.canadian_cash_collected,
-//       item_sales: values.item_sales,
-//       cash_back: values.cash_back,
-//       loyalty: values.loyalty,
-//       cpl_bulloch: values.cpl_bulloch,
-//       report_canadian_cash: values.report_canadian_cash,
-//       exempted_tax: norm(exempted_tax),
-//     })
-
-//     const saved = await doc.save()
-//     res.status(201).json(saved)
-//   } catch (err) {
-//     console.error('CashSummary create error:', err)
-//     res.status(500).json({ error: 'Failed to save CashSummary' })
-//   }
-// })
 
 function norm(v) {
   if (v === '' || v == null) return undefined
@@ -226,7 +149,7 @@ router.post('/submit/to/safesheet', async (req, res) => {
     ])
     const totalCanadianCashCollected = Number(agg[0]?.total || 0)
 
-    // Mark summaries as submitted (optional; remove if not needed)
+    // Mark summaries as submitted (optional; keep if desired)
     await CashSummary.updateMany(
       { site, date: { $gte: start, $lt: end } },
       { $set: { submitted: true } }
@@ -259,17 +182,99 @@ router.post('/submit/to/safesheet', async (req, res) => {
 
     await sheet.save()
 
-    return res.json({
-      site,
-      date,
-      cashIn: totalCanadianCashCollected,
-      entryId: (idx >= 0 ? sheet.entries[idx]._id : sheet.entries[sheet.entries.length - 1]._id),
-    })
+    // Respond to client first
+    const entryId = (idx >= 0 ? sheet.entries[idx]._id : sheet.entries[sheet.entries.length - 1]._id)
+    res.json({ site, date, cashIn: totalCanadianCashCollected, entryId })
+
+    // Background: generate PDF and email it (React-PDF version, no Chrome deps)
+    ;(async () => {
+      try {
+        // If you switched to the React-PDF util, ensure:
+        // const { generateCashSummaryPdf } = require('../utils/cashSummaryPdfReact')
+        const pdfBuffer = await generateCashSummaryPdf({ site, date })
+
+        await sendEmail({
+          to: CASH_SUMMARY_EMAILS.join(','),
+          subject: `Cash Summary Report – ${site} – ${date}`,
+          text: `Attached is the Cash Summary Report for ${site} on ${date}.`,
+          attachments: [
+            { filename: `Cash-Summary-${site}-${date}.pdf`, content: pdfBuffer },
+          ],
+        })
+        console.log('Cash Summary email sent:', site, date)
+      } catch (e) {
+        console.error('Cash Summary email/PDF failed:', e?.message || e)
+      }
+    })()
   } catch (err) {
     console.error('CashSummary submit error:', err)
     return res.status(500).json({ error: 'Failed to submit' })
   }
 })
+
+// router.post('/submit/to/safesheet', async (req, res) => {
+//   try {
+//     const { site, date } = req.body || {}
+//     if (!site) return res.status(400).json({ error: 'site is required' })
+//     if (!date || !/^\d{4}-\d{2}-\d{2}$/.test(String(date))) {
+//       return res.status(400).json({ error: 'date (YYYY-MM-DD) is required' })
+//     }
+
+//     const [yy, mm, dd] = String(date).split('-').map(Number)
+//     const start = new Date(yy, mm - 1, dd, 0, 0, 0, 0)
+//     const end = new Date(yy, mm - 1, dd + 1, 0, 0, 0, 0)
+
+//     // Aggregate total canadian_cash_collected for the site/day
+//     const agg = await CashSummary.aggregate([
+//       { $match: { site, date: { $gte: start, $lt: end } } },
+//       { $group: { _id: null, total: { $sum: { $ifNull: ['$canadian_cash_collected', 0] } } } },
+//     ])
+//     const totalCanadianCashCollected = Number(agg[0]?.total || 0)
+
+//     // Mark summaries as submitted (optional; remove if not needed)
+//     await CashSummary.updateMany(
+//       { site, date: { $gte: start, $lt: end } },
+//       { $set: { submitted: true } }
+//     )
+
+//     // Find or create Safesheet for site
+//     let sheet = await Safesheet.findOne({ site })
+//     if (!sheet) {
+//       sheet = await Safesheet.create({ site, initialBalance: 0, entries: [] })
+//     }
+
+//     // Upsert a single entry for that calendar day
+//     const sameDay = (d) => d >= start && d < end
+//     const idx = sheet.entries.findIndex(e => sameDay(new Date(e.date)))
+
+//     const entryDate = dateFromYMDLocal(date)
+
+//     if (idx >= 0) {
+//       sheet.entries[idx].date = entryDate
+//       sheet.entries[idx].description = 'Daily Deposit'
+//       sheet.entries[idx].cashIn = totalCanadianCashCollected
+//       sheet.entries[idx].updatedAt = new Date()
+//     } else {
+//       sheet.entries.push({
+//         date: entryDate,
+//         description: 'Daily Deposit',
+//         cashIn: totalCanadianCashCollected,
+//       })
+//     }
+
+//     await sheet.save()
+
+//     return res.json({
+//       site,
+//       date,
+//       cashIn: totalCanadianCashCollected,
+//       entryId: (idx >= 0 ? sheet.entries[idx]._id : sheet.entries[sheet.entries.length - 1]._id),
+//     })
+//   } catch (err) {
+//     console.error('CashSummary submit error:', err)
+//     return res.status(500).json({ error: 'Failed to submit' })
+//   }
+// })
 
 router.get('/report', async (req, res) => {
   try {
