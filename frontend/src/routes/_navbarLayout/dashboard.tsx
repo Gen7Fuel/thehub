@@ -54,7 +54,7 @@ function RouteComponent() {
   const [_vendorNames, setVendorNames] = useState<Record<string, string>>({});
   const [_vendors, setVendors] = useState<any[]>([]);
   const [dailyCounts, setDailyCounts] = useState<{ date: string, count: number }[]>([]);
-  const [salesData, setSalesData] = useState<any[]>([]);
+  const [salesData, setSalesData] = useState<{ daily: any[]; weekly: any[] }>({ daily: [], weekly: [] })
   const [vendorStatus, setVendorStatus] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
 
@@ -143,7 +143,7 @@ function RouteComponent() {
 
         // Sales data
         const csoCode = await getCsoCodeByStationName(site);
-        const salesDataRes = await fetchSalesData(csoCode ?? "", startDate, endDate);
+        const salesDataRes = await fetchSalesData(csoCode ?? "");
 
         // Vendor names
         const vendorIds = [...new Set(STATUS_KEYS.flatMap(key => (orderRecsRes[key] ?? []).map((r: any) => String(r.vendor))))];
@@ -192,8 +192,22 @@ function RouteComponent() {
   // Prepare chart data
   // ----------------------------
   const chartData = dailyCounts.map(({ date, count }) => ({ day: date.slice(5), count }));
-  const salesChartData = salesData.map(entry => ({
-    day: entry.Date_SK.slice(5, 10),
+
+  // Use daily (last 7 days) for the existing stacked chart
+  const salesChartData = salesData.daily.map((entry) => ({
+    day: entry.day, // 'MM-DD'
+    FN: entry.FN ?? 0,
+    Quota: entry.Quota ?? 0,
+    Cannabis: entry.Cannabis ?? 0,
+    GRE: entry.GRE ?? 0,
+    Convenience: entry.Convenience ?? 0,
+    Vapes: entry.Vapes ?? 0,
+    "Native Gifts": entry["Native Gifts"] ?? 0,
+  }))
+
+  // Weekly aggregated (last 5 weeks)
+  const weeklySalesChartData = salesData.weekly.map(entry => ({
+    week: entry.week,            // e.g., 'Wk of MM-DD'
     FN: entry.FN ?? 0,
     Quota: entry.Quota ?? 0,
     Cannabis: entry.Cannabis ?? 0,
@@ -201,7 +215,7 @@ function RouteComponent() {
     Convenience: entry.Convenience ?? 0,
     Vapes: entry.Vapes ?? 0,
     "Native Gifts": entry['Native Gifts'] ?? 0,
-  }));
+  }))
   // ----------------------------
   // Render dashboard
   // ----------------------------
@@ -327,11 +341,11 @@ function RouteComponent() {
                       </div>
                     </CardFooter>
                   </Card>
-                  {/* Sales by Category */}
+                  {/* Sales by Category (Daily, last 7 days) */}
                   <Card className="w-full">
                     <CardHeader>
-                      <CardTitle>Sales by Category (Stacked)</CardTitle>
-                      <CardDescription>Daily sales by category</CardDescription>
+                      <CardTitle>Sales by Category (Daily)</CardTitle>
+                      <CardDescription>Last 7 days (stacked)</CardDescription>
                     </CardHeader>
                     <CardContent>
                       <ChartContainer config={salesChartConfig}>
@@ -342,7 +356,7 @@ function RouteComponent() {
                             tickLine={false}
                             tickMargin={10}
                             axisLine={false}
-                            tickFormatter={(value) => value.slice(0, 5)}
+                            tickFormatter={(value) => value} // MM-DD
                           />
                           <ChartTooltip content={<ChartTooltipContent hideLabel />} />
                           <ChartLegend content={<ChartLegendContent data={salesChartData} />} />
@@ -358,7 +372,43 @@ function RouteComponent() {
                     </CardContent>
                     <CardFooter className="flex-col items-start gap-2 text-sm">
                       <div className="text-muted-foreground leading-none">
-                        Showing categorized sales per day
+                        Last 7 days ending yesterday
+                      </div>
+                    </CardFooter>
+                  </Card>
+
+                  {/* Sales by Category (Weekly, last 5 weeks) */}
+                  <Card className="w-full">
+                    <CardHeader>
+                      <CardTitle>Sales by Category (Weekly)</CardTitle>
+                      <CardDescription>Last 5 weeks aggregated (stacked)</CardDescription>
+                    </CardHeader>
+                    <CardContent>
+                      <ChartContainer config={salesChartConfig}>
+                        <BarChart accessibilityLayer data={weeklySalesChartData}>
+                          <CartesianGrid vertical={false} />
+                          <XAxis
+                            dataKey="week"
+                            tickLine={false}
+                            tickMargin={10}
+                            axisLine={false}
+                            tickFormatter={(value) => value} // e.g., Wk of MM-DD
+                          />
+                          <ChartTooltip content={<ChartTooltipContent hideLabel />} />
+                          <ChartLegend content={<ChartLegendContent data={weeklySalesChartData} />} />
+                          <Bar dataKey="FN" stackId="a" fill="var(--chart-1)" />
+                          <Bar dataKey="Quota" stackId="a" fill="var(--chart-2)" />
+                          <Bar dataKey="Cannabis" stackId="a" fill="var(--chart-3)" />
+                          <Bar dataKey="GRE" stackId="a" fill="var(--chart-4)" />
+                          <Bar dataKey="Convenience" stackId="a" fill="var(--chart-5)" />
+                          <Bar dataKey="Vapes" stackId="a" fill="var(--chart-6)" />
+                          <Bar dataKey="Native Gifts" stackId="a" fill="var(--chart-7)" />
+                        </BarChart>
+                      </ChartContainer>
+                    </CardContent>
+                    <CardFooter className="flex-col items-start gap-2 text-sm">
+                      <div className="text-muted-foreground leading-none">
+                        Weeks end on Sunday; bars labeled by week start (Mon)
                       </div>
                     </CardFooter>
                   </Card>
@@ -462,11 +512,93 @@ const fetchDailyCounts = async (site: string, startDate: string, endDate: string
   }).then(res => res.json());
 };
 
-const fetchSalesData = async (csoCode: string, startDate: string, endDate: string) => {
-  return fetch(`/api/sql/sales?csoCode=${csoCode}&startDate=${startDate}&endDate=${endDate}`, {
+// const fetchSalesData = async (csoCode: string, startDate: string, endDate: string) => {
+//   return fetch(`/api/sql/sales?csoCode=${csoCode}&startDate=${startDate}&endDate=${endDate}`, {
+//     headers: { Authorization: `Bearer ${localStorage.getItem("token")}` },
+//   }).then(res => res.json());
+// };
+const fetchSalesData = async (csoCode: string) => {
+  // Categories used across charts
+  const CATS = ['FN', 'Quota', 'Cannabis', 'GRE', 'Convenience', 'Vapes', 'Native Gifts'] as const
+
+  // Compute date window: last 5 weeks ending yesterday
+  const end = new Date()
+  end.setDate(end.getDate() - 1)           // yesterday
+  end.setHours(23, 59, 59, 999)
+
+  const start = new Date(end)
+  start.setDate(start.getDate() - (7 * 5 - 1)) // 35 days window
+  start.setHours(0, 0, 0, 0)
+
+  const fmt = (d: Date) => d.toISOString().slice(0, 10)
+  const startDate = fmt(start)
+  const endDate = fmt(end)
+
+  // Fetch raw rows
+  const rows = await fetch(`/api/sql/sales?csoCode=${encodeURIComponent(csoCode)}&startDate=${startDate}&endDate=${endDate}`, {
     headers: { Authorization: `Bearer ${localStorage.getItem("token")}` },
-  }).then(res => res.json());
-};
+  }).then(res => res.json())
+
+  // Build date-indexed map with sums
+  const byDate: Record<string, Record<string, number>> = {}
+
+  for (const r of Array.isArray(rows) ? rows : []) {
+    const dateKey = String(r.Date_SK || r.date || '').slice(0, 10) // 'YYYY-MM-DD'
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(dateKey)) continue
+    byDate[dateKey] = byDate[dateKey] || Object.fromEntries(CATS.map(c => [c, 0]))
+    for (const c of CATS) {
+      const v = Number(r[c] ?? 0)
+      if (!Number.isNaN(v)) byDate[dateKey][c] += v
+    }
+  }
+
+  // Helpers for week calc (Mon-Sun weeks)
+  const startOfWeek = (d: Date) => {
+    const x = new Date(d)
+    const day = x.getDay() // 0 Sun .. 6 Sat
+    const diffToMon = day === 0 ? -6 : 1 - day
+    x.setDate(x.getDate() + diffToMon)
+    x.setHours(0, 0, 0, 0)
+    return x
+  }
+  const addDays = (d: Date, n: number) => {
+    const x = new Date(d); x.setDate(x.getDate() + n); return x
+  }
+
+  // Build daily (last 7 days ending yesterday), ascending by date
+  const daily: any[] = []
+  for (let i = 6; i >= 0; i--) {
+    const d = new Date(end)
+    d.setDate(end.getDate() - i)
+    d.setHours(0, 0, 0, 0)
+    const k = fmt(d)
+    const sums = byDate[k] || Object.fromEntries(CATS.map(c => [c, 0]))
+    daily.push({ day: k.slice(5), ...sums }) // day: 'MM-DD'
+  }
+
+  // Build weekly (last 5 full weeks, ending with the week containing 'end')
+  const weeks: { start: Date; end: Date }[] = []
+  let wkStart = startOfWeek(end)
+  for (let i = 4; i >= 0; i--) {
+    const ws = new Date(wkStart); ws.setDate(wkStart.getDate() - i * 7)
+    const we = addDays(ws, 6)
+    weeks.push({ start: ws, end: we })
+  }
+
+  const weekly: any[] = weeks.map(({ start: ws, end: we }) => {
+    const sums: Record<string, number> = Object.fromEntries(CATS.map(c => [c, 0]))
+    for (let d = new Date(ws); d <= we; d = addDays(d, 1)) {
+      const k = fmt(d)
+      const daySums = byDate[k]
+      if (!daySums) continue
+      for (const c of CATS) sums[c] += Number(daySums[c] || 0)
+    }
+    const label = `Wk of ${fmt(ws).slice(5)}` // 'Wk of MM-DD'
+    return { week: label, ...sums }
+  })
+
+  return { daily, weekly }
+}
 
 const fetchVendors = async (site: string) => {
   const params = new URLSearchParams({ location: site });
