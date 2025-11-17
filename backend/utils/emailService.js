@@ -22,7 +22,7 @@ const transporter = nodemailer.createTransport({
  * @param {string} html - HTML content (optional)
  * @returns {Promise} - Promise resolving to email info
  */
-async function sendEmail({ to, subject, text = '', html = '', cc = [] }) {
+async function sendEmail({ to, subject, text = '', html = '', cc = [], attachments = [] }) {
   try {
     // Verify connection configuration
     await transporter.verify();
@@ -34,7 +34,8 @@ async function sendEmail({ to, subject, text = '', html = '', cc = [] }) {
       subject: subject, // Subject line
       text: text, // plain text body
       html: html, // html body
-      cc: Array.isArray(cc) ? cc.join(', ') : cc // CC recipients
+      cc: Array.isArray(cc) ? cc.join(', ') : cc, // CC recipients
+      attachments,
     };
 
     // Send mail with defined transport object
