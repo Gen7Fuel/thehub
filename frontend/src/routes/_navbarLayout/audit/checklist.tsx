@@ -87,7 +87,7 @@ export const RouteContext = createContext<{
   setStationName: (value: string) => void;
 }>({
   stationName: "",
-  setStationName: () => {},
+  setStationName: () => { },
 });
 
 export const Route = createFileRoute('/_navbarLayout/audit/checklist')({
@@ -130,40 +130,40 @@ function RouteComponent() {
   };
 
   useEffect(() => {
-  if (!socket || !stationName) return;
+    if (!socket || !stationName) return;
 
-  // 🔹 Listen for issue changes
-  socket.on("issueUpdated", (payload) => {
-    console.log("📡 Real-time issue update:", payload);
+    // 🔹 Listen for issue changes
+    socket.on("issueUpdated", (payload) => {
+      console.log("📡 Real-time issue update:", payload);
 
-    // Only handle updates for the active site
-    if (payload.site !== stationName) return;
+      // Only handle updates for the active site
+      if (payload.site !== stationName) return;
 
-    // 🔸 Case 1: New issue created → add to open issues
-    if (payload.action === "created") {
-      setOpenIssues((prev) => {
-        const exists = prev.some(
-          (i) => i.item === payload.item && i.templateId === payload.template
+      // 🔸 Case 1: New issue created → add to open issues
+      if (payload.action === "created") {
+        setOpenIssues((prev) => {
+          const exists = prev.some(
+            (i) => i.item === payload.item && i.templateId === payload.template
+          );
+          if (exists) return prev;
+          return [...prev, { item: payload.item, templateId: payload.template, category: payload.category }];
+        });
+      }
+
+      // 🔸 Case 2: Issue resolved → remove from open issues
+      if (payload.action === "resolved") {
+        setOpenIssues((prev) =>
+          prev.filter(
+            (i) => !(i.item === payload.item && i.templateId === payload.template)
+          )
         );
-        if (exists) return prev;
-        return [...prev, { item: payload.item, templateId: payload.template, category: payload.category }];
-      });
-    }
+      }
+    });
 
-    // 🔸 Case 2: Issue resolved → remove from open issues
-    if (payload.action === "resolved") {
-      setOpenIssues((prev) =>
-        prev.filter(
-          (i) => !(i.item === payload.item && i.templateId === payload.template)
-        )
-      );
-    }
-  });
-
-  return () => {
-    socket.off("issueUpdated");
-  };
-}, [socket, stationName]);
+    return () => {
+      socket.off("issueUpdated");
+    };
+  }, [socket, stationName]);
 
 
   // 🔹 refetch audits whenever stationName changes
@@ -175,8 +175,10 @@ function RouteComponent() {
 
     axios
       .get("/api/audit", {
-        headers: { Authorization: `Bearer ${localStorage.getItem("token")}`,
-        "X-Required-Permission": "stationAudit" },
+        headers: {
+          Authorization: `Bearer ${localStorage.getItem("token")}`,
+          "X-Required-Permission": "stationAudit"
+        },
       })
       .then(res => {
         const filtered = res.data.filter(
@@ -199,8 +201,10 @@ function RouteComponent() {
     // fetch open issues
     axios
       .get<OpenIssueResponse>(`/api/audit/open-issues?site=${stationName}`, {
-        headers: { Authorization: `Bearer ${localStorage.getItem("token")}`, 
-        "X-Required-Permission": "stationAudit" },
+        headers: {
+          Authorization: `Bearer ${localStorage.getItem("token")}`,
+          "X-Required-Permission": "stationAudit"
+        },
       })
       .then(res => setOpenIssues(res.data.items || [])) // only keep the array
       .catch((err) => {
@@ -210,7 +214,7 @@ function RouteComponent() {
         } else {
           console.warn("Failed to load open issues");
         }
-      }) 
+      })
 
   }, [stationName, navigate]);
 
@@ -271,8 +275,8 @@ function RouteComponent() {
               </Link>
             );
           })} */}
-            {/* 🔹 Open Issues tab in same row */}
-          {/* {openIssues.length > 0 && (
+        {/* 🔹 Open Issues tab in same row */}
+        {/* {openIssues.length > 0 && (
             <Link to="/audit/checklist/open-issues">
               <Button
                 {...(matchRoute({ to: "/audit/checklist/open-issues", fuzzy: true }) ? {} : { variant: "outline" } as object)}
@@ -284,103 +288,102 @@ function RouteComponent() {
           )}
         </div> */}
         {/* ▲ Row: Location Picker + Checklist Selector + Open Issues */}
-<div className="flex items-center gap-4 mb-6">
+        <div className="flex items-center gap-4 mb-6">
 
-  {/* ◼ Location Picker (left) */}
-  <LocationPicker
-    value="stationName"
-    defaultValue={stationName}
-    setStationName={(value) => {
-      const newValue =
-        typeof value === "function" ? value(stationName) : value;
-      updateStation(newValue);
-    }}
-  />
+          {/* ◼ Location Picker (left) */}
+          <LocationPicker
+            value="stationName"
+            defaultValue={stationName}
+            setStationName={(value) => {
+              const newValue =
+                typeof value === "function" ? value(stationName) : value;
+              updateStation(newValue);
+            }}
+          />
 
-  {/* ◼ Checklist Carousel (center) */}
-  {/* ◼ Checklist Carousel (center) */}
-<div className="flex items-center h-10 border rounded-md bg-white px-2 text-sm w-[200px] justify-between shadow-sm">
+          {/* ◼ Checklist Carousel (center) */}
+          <div className="flex items-center h-10 border rounded-md bg-white px-2 text-sm w-[200px] justify-between shadow-sm">
 
-  {/* ◀ Left arrow */}
-  <button
-    disabled={templates.length <= 1}
-    className="px-2 text-lg select-none disabled:opacity-30"
-    onClick={() => {
-      const currentIndex = templates.findIndex(
-        t =>
-          matchRoute({
-            to: "/audit/checklist/$id",
-            params: { id: t._id },
-            fuzzy: true
-          })
-      );
-      const prevIndex =
-        (currentIndex - 1 + templates.length) % templates.length;
-      navigate({
-        to: "/audit/checklist/$id",
-        params: { id: templates[prevIndex]._id }
-      });
-    }}
-  >
-    ◀
-  </button>
+            {/* ◀ Left arrow */}
+            <button
+              disabled={templates.length <= 1}
+              className="px-2 text-lg select-none disabled:opacity-30"
+              onClick={() => {
+                const currentIndex = templates.findIndex(
+                  t =>
+                    matchRoute({
+                      to: "/audit/checklist/$id",
+                      params: { id: t._id },
+                      fuzzy: true
+                    })
+                );
+                const prevIndex =
+                  (currentIndex - 1 + templates.length) % templates.length;
+                navigate({
+                  to: "/audit/checklist/$id",
+                  params: { id: templates[prevIndex]._id }
+                });
+              }}
+            >
+              ◀
+            </button>
 
-  {/* Checklist title */}
-  <div className="flex-1 text-center px-1 font-normal text-sm">
-    {(() => {
-      const active = templates.find(t =>
-        matchRoute({
-          to: "/audit/checklist/$id",
-          params: { id: t._id },
-          fuzzy: true
-        })
-      );
-      return active ? active.name : "Select Checklist";
-    })()}
-  </div>
+            {/* Checklist title */}
+            <div className="flex-1 text-center px-1 font-normal text-sm">
+              {(() => {
+                const active = templates.find(t =>
+                  matchRoute({
+                    to: "/audit/checklist/$id",
+                    params: { id: t._id },
+                    fuzzy: true
+                  })
+                );
+                return active ? active.name : "Select Checklist";
+              })()}
+            </div>
 
-  {/* ▶ Right arrow */}
-  <button
-    disabled={templates.length <= 1}
-    className="px-2 text-lg select-none disabled:opacity-30"
-    onClick={() => {
-      const currentIndex = templates.findIndex(
-        t =>
-          matchRoute({
-            to: "/audit/checklist/$id",
-            params: { id: t._id },
-            fuzzy: true
-          })
-      );
-      const nextIndex = (currentIndex + 1) % templates.length;
-      navigate({
-        to: "/audit/checklist/$id",
-        params: { id: templates[nextIndex]._id }
-      });
-    }}
-  >
-    ▶
-  </button>
+            {/* ▶ Right arrow */}
+            <button
+              disabled={templates.length <= 1}
+              className="px-2 text-lg select-none disabled:opacity-30"
+              onClick={() => {
+                const currentIndex = templates.findIndex(
+                  t =>
+                    matchRoute({
+                      to: "/audit/checklist/$id",
+                      params: { id: t._id },
+                      fuzzy: true
+                    })
+                );
+                const nextIndex = (currentIndex + 1) % templates.length;
+                navigate({
+                  to: "/audit/checklist/$id",
+                  params: { id: templates[nextIndex]._id }
+                });
+              }}
+            >
+              ▶
+            </button>
 
-</div>
+          </div>
 
-  {/* ◼ Open Issues (right) */}
-  {openIssues.length > 0 && (
-    <Link to="/audit/checklist/open-issues">
-      <Button
-        {...(matchRoute({
-          to: "/audit/checklist/open-issues",
-          fuzzy: true
-        })
-          ? {}
-          : { variant: "outline" } as object)}
-        className="px-4"
-      >
-        Open Issues ({openIssues.length})
-      </Button>
-    </Link>
-  )}
-</div>
+          {/* ◼ Open Issues (right) */}
+          {openIssues.length > 0 && (
+            <Link to="/audit/checklist/open-issues">
+              <Button
+                {...(matchRoute({
+                  to: "/audit/checklist/open-issues",
+                  fuzzy: true
+                })
+                  ? {}
+                  : { variant: "outline" } as object)}
+                className="px-4"
+              >
+                Open Issues ({openIssues.length})
+              </Button>
+            </Link>
+          )}
+        </div>
 
 
 
