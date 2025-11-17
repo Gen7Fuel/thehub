@@ -106,6 +106,26 @@ async function getCategorizedSalesData(csoCode, startDate, endDate) {
   }
 }
 
+async function getGradeVolumeFuelData(csoCode, startDate, endDate) {
+  try {
+    await sql.connect(sqlConfig);
+    // const result = await sql.query(`SELECT TOP (10) * from [CSO].[Sales]`);
+    const result = await sql.query(`
+      SELECT s.[Station_SK], s.[businessDate], s.[fuelGradeID], s.[fuelGradeSalesVolume], s.[fuelGradeDescription]
+      FROM [CSO].[Fuel] s
+      WHERE
+        s.[Station_SK] = ${csoCode}
+        AND s.[businessDate] BETWEEN '${startDate}' AND '${endDate}'
+      ORDER BY s.[businessDate]
+    `);
+    await sql.close();
+    return result.recordset;
+  } catch (err) {
+    console.error('SQL error:', err);
+    return [];
+  }
+}
+
 async function getCurrentInventory(site, limit = null) {
   try {
     await sql.connect(sqlConfig);
@@ -212,5 +232,6 @@ module.exports = {
   getCategorizedSalesData, 
   getUPC_barcode, 
   getCurrentInventory,
-  getInventoryCategories
+  getInventoryCategories,
+  getGradeVolumeFuelData
 };
