@@ -83,34 +83,36 @@ router.post('/', async (req, res) => {
     const populatedPayable = await Payable.findById(savedPayable._id)
       .populate('location', 'stationName csoCode');
     
-    try {
-      const siteName = populatedPayable?.location?.stationName
-      if (siteName) {
-        // derive local YYYY-MM-DD from createdAt
-        const created = new Date(populatedPayable.createdAt)
-        const y = created.getFullYear()
-        const m = String(created.getMonth() + 1).padStart(2, '0')
-        const d = String(created.getDate()).padStart(2, '0')
-        const ymd = `${y}-${m}-${d}`
-        const entryDate = dateFromYMDLocal(ymd) // 23:59:59.999 local
+    if (paymentMethod == 'till' || paymentMethod == 'safe') {
+      try {
+        const siteName = populatedPayable?.location?.stationName
+        if (siteName) {
+          // derive local YYYY-MM-DD from createdAt
+          const created = new Date(populatedPayable.createdAt)
+          const y = created.getFullYear()
+          const m = String(created.getMonth() + 1).padStart(2, '0')
+          const d = String(created.getDate()).padStart(2, '0')
+          const ymd = `${y}-${m}-${d}`
+          const entryDate = dateFromYMDLocal(ymd) // 23:59:59.999 local
 
-        let sheet = await Safesheet.findOne({ site: siteName })
-        if (!sheet) {
-          sheet = await Safesheet.create({ site: siteName, initialBalance: 0, entries: [] })
+          let sheet = await Safesheet.findOne({ site: siteName })
+          if (!sheet) {
+            sheet = await Safesheet.create({ site: siteName, initialBalance: 0, entries: [] })
+          }
+
+          sheet.entries.push({
+            date: entryDate,
+            description: `Payable - ${vendorName}`,
+            cashExpenseOut: Number(populatedPayable.amount || 0),
+          })
+          console.log('Entering into safesheet');
+          await sheet.save()
+        } else {
+          console.warn('Safesheet entry skipped: missing stationName on payable.location')
         }
-
-        sheet.entries.push({
-          date: entryDate,
-          description: `Payable - ${vendorName}`,
-          cashExpenseOut: Number(populatedPayable.amount || 0),
-        })
-
-        await sheet.save()
-      } else {
-        console.warn('Safesheet entry skipped: missing stationName on payable.location')
+      } catch (e) {
+        console.warn('Safesheet payable entry failed:', e?.message || e)
       }
-    } catch (e) {
-      console.warn('Safesheet payable entry failed:', e?.message || e)
     }
     
     res.status(201).json(populatedPayable);
