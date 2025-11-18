@@ -20,7 +20,7 @@ import {
   ChartTooltipContent,
 } from "@/components/ui/chart";
 
-import { DatePickerWithRange } from '@/components/custom/datePickerWithRange';
+// import { DatePickerWithRange } from '@/components/custom/datePickerWithRange';
 import type { DateRange } from "react-day-picker";
 import { useAuth } from "@/context/AuthContext";
 import { getOrderRecStatusColor } from '@/lib/utils';
@@ -64,7 +64,7 @@ function RouteComponent() {
 
   const [startDate, setStartDate] = useState(sevenDaysAgo.toISOString().slice(0, 10));
   const [endDate, setEndDate] = useState(today.toISOString().slice(0, 10));
-  const [date, setDate] = useState<DateRange | undefined>({ from: sevenDaysAgo, to: today });
+  const [date, _] = useState<DateRange | undefined>({ from: sevenDaysAgo, to: today });
   
   const [showPasswordDialog, setShowPasswordDialog] = useState(false);
   const [hasAccess, setHasAccess] = useState(false);
@@ -233,7 +233,7 @@ function RouteComponent() {
         <div className="pt-16 flex flex-col items-center">
           <div className="flex gap-4">
             <LocationPicker setStationName={setSite} value="stationName" defaultValue={site} />
-            <DatePickerWithRange date={date} setDate={setDate} />
+            {/* <DatePickerWithRange date={date} setDate={setDate} /> */}
           </div>
 
           <div className="mt-8 w-full max-w-6xl">
