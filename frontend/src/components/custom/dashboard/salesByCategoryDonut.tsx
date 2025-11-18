@@ -56,8 +56,8 @@ export function DonutSalesChart({ data, config }: DonutSalesProps) {
         data={filteredData}
         dataKey="total"
         nameKey="category"
-        innerRadius="50%"
-        outerRadius="95%"
+        innerRadius="40%"
+        outerRadius="75%"
         paddingAngle={2}
         strokeWidth={1}
         activeIndex={activeIndex ?? undefined}
@@ -75,7 +75,7 @@ export function DonutSalesChart({ data, config }: DonutSalesProps) {
           />
         ))}
       </Pie>
-      <Text x="50%" y="48%" textAnchor="middle" dominantBaseline="middle" fontSize={16} fontWeight={700}>
+      <Text x="20%" y="18%" textAnchor="middle" dominantBaseline="middle" fontSize={16} fontWeight={700}>
         {(active ? active.total : totalAll).toLocaleString()}
       </Text>
       <Text x="50%" y="58%" textAnchor="middle" dominantBaseline="middle" fontSize={10} fill="#666">

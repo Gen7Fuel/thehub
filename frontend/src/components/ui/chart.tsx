@@ -1,5 +1,7 @@
 import * as React from "react"
 import * as RechartsPrimitive from "recharts"
+import type { TooltipProps } from "recharts";
+// import { ValueType, NameType } from 'recharts/types/component/DefaultTooltipContent';
 
 import { cn } from "@/lib/utils"
 
@@ -84,13 +86,13 @@ const ChartStyle = ({ id, config }: { id: string; config: ChartConfig }) => {
             ([theme, prefix]) => `
 ${prefix} [data-chart=${id}] {
 ${colorConfig
-  .map(([key, itemConfig]) => {
-    const color =
-      itemConfig.theme?.[theme as keyof typeof itemConfig.theme] ||
-      itemConfig.color
-    return color ? `  --color-${key}: ${color};` : null
-  })
-  .join("\n")}
+                .map(([key, itemConfig]) => {
+                  const color =
+                    itemConfig.theme?.[theme as keyof typeof itemConfig.theme] ||
+                    itemConfig.color
+                  return color ? `  --color-${key}: ${color};` : null
+                })
+                .join("\n")}
 }
 `
           )
@@ -334,8 +336,8 @@ function getPayloadConfigFromPayload(
 
   const payloadPayload =
     "payload" in payload &&
-    typeof payload.payload === "object" &&
-    payload.payload !== null
+      typeof payload.payload === "object" &&
+      payload.payload !== null
       ? payload.payload
       : undefined
 
@@ -361,6 +363,114 @@ function getPayloadConfigFromPayload(
     : config[key as keyof typeof config]
 }
 
+interface ChartTooltipContentProps extends TooltipProps<number, string> {
+  config: Record<string, { label: string; color: string }>;
+  hideIndicator?: boolean;
+}
+
+export function FuelChartTooltip({
+  active,
+  payload,
+  label,
+  config,
+  hideIndicator = false,
+}: ChartTooltipContentProps) {
+  if (!active || !payload || !payload.length) return null;
+
+  return (
+    <div
+      className={cn(
+        "border-border/50 bg-background grid min-w-[8rem] items-start gap-1.5 rounded-lg border px-2.5 py-1.5 text-xs shadow-xl"
+      )}
+    >
+      <div className="text-sm font-medium">{label}</div>
+
+      <div className="grid gap-1.5">
+        {payload
+          .filter((item: any) => item.type !== "none" && item.value !== 0)
+          .map((item: any) => {
+            const key = String(item.dataKey);
+            const itemConfig = config[key];
+            const color = itemConfig?.color || item.color;
+
+            return (
+              <div
+                key={item.dataKey}
+                className="flex w-full flex-wrap items-center gap-2 [&>svg]:h-2.5 [&>svg]:w-2.5"
+              >
+                {!hideIndicator && (
+                  <div
+                    className="h-2.5 w-2.5 shrink-0 rounded-[2px]"
+                    style={{ backgroundColor: color }}
+                  />
+                )}
+                <div className="flex flex-1 justify-between">
+                  <span className="text-muted-foreground">
+                    {itemConfig?.label || key}
+                  </span>
+                  <span className="text-foreground font-mono font-medium tabular-nums">
+                    {item.value?.toLocaleString()}
+                  </span>
+                </div>
+              </div>
+            );
+          })}
+      </div>
+    </div>
+  );
+}
+
+// Define type for each item in your cycle count
+interface CycleCountItem {
+  name: string;
+  upc_barcode: string;
+  totalQty: number;
+}
+
+// Define the shape of your data per day
+interface CycleCountDayData {
+  day: string;
+  count: number;
+  items: CycleCountItem[];
+}
+
+// Tooltip props
+type CycleCountTooltipProps = TooltipProps<number, string> & {
+  payload?: { payload: CycleCountDayData }[];
+  label?: string;
+};
+
+
+const CycleCountTooltip: React.FC<CycleCountTooltipProps> = ({ active, payload, label }) => {
+  if (!active || !payload || !payload.length) return null;
+
+  const dayData = payload[0]?.payload as CycleCountDayData | undefined;
+  if (!dayData) return null;
+
+  const items = dayData.items ?? [];
+
+  return (
+    <div className="bg-white border rounded p-2 shadow-lg text-sm">
+      <div className="font-semibold mb-1">{`Date: ${label}`}</div>
+      <div className="mb-1">{`Total Count: ${dayData.count}`}</div>
+      <div>
+        <div className="font-semibold">Items:</div>
+        {items.length === 0 ? (
+          <div className="text-muted-foreground">No items</div>
+        ) : (
+          <ul className="list-disc list-inside max-h-40 overflow-y-auto">
+            {items.map((item: CycleCountItem, idx: number) => (
+              <li key={idx}>
+                {item.name} ({item.upc_barcode}): {item.totalQty}
+              </li>
+            ))}
+          </ul>
+        )}
+      </div>
+    </div>
+  );
+};
+
 export {
   ChartContainer,
   ChartTooltip,
@@ -368,4 +478,5 @@ export {
   ChartLegend,
   ChartLegendContent,
   ChartStyle,
+  CycleCountTooltip,
 }

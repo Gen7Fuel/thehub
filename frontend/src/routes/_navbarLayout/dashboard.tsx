@@ -3,7 +3,10 @@ import { useEffect, useState, useMemo } from "react";
 import { LocationPicker } from "@/components/custom/locationPicker";
 import { getCsoCodeByStationName, getVendorNameById } from '@/lib/utils';
 import { DonutSalesChart } from "@/components/custom/dashboard/salesByCategoryDonut";
-import { Bar, BarChart, CartesianGrid, XAxis, LabelList } from "recharts";
+import {
+  Bar, BarChart, CartesianGrid, XAxis, LabelList,
+  Line, YAxis
+} from "recharts";
 import {
   Card,
   CardContent,
@@ -19,8 +22,10 @@ import {
   ChartLegendContent,
   ChartTooltip,
   ChartTooltipContent,
+  // CycleCountTooltip,
 } from "@/components/ui/chart";
-
+import { FuelMixAreaChart } from "@/components/custom/dashboard/fuelMixAreaChart";
+import { FuelSparkline } from "@/components/custom/dashboard/fuelSparkLine";
 import { DatePickerWithRange } from '@/components/custom/datePickerWithRange';
 import type { DateRange } from "react-day-picker";
 import { useAuth } from "@/context/AuthContext";
@@ -48,14 +53,102 @@ const salesChartConfig = {
   "Native Gifts": { label: "Native Gifts", color: "var(--chart-7)" },
 } satisfies ChartConfig;
 
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+} from "@/components/ui/dialog";
+
+interface CycleCountItem {
+  name: string;
+  upc_barcode: string;
+  totalQty: number;
+}
+
+interface CycleCountDayData {
+  day: string;
+  count: number;
+  items: CycleCountItem[];
+}
+
+interface ChartBarModalProps {
+  data: CycleCountDayData | null;
+  isOpen: boolean;
+  onClose: () => void;
+}
+
+export const ChartBarModal: React.FC<ChartBarModalProps> = ({ data, isOpen, onClose }) => {
+  if (!data) return null;
+
+  return (
+    <Dialog open={isOpen} onOpenChange={onClose}>
+      <DialogContent className="bg-white max-w-3xl w-full rounded-lg shadow-lg">
+        <DialogHeader>
+          <DialogTitle>{`Date: ${data.day}`}</DialogTitle>
+          <DialogDescription>{`Total Count: ${data.count}`}</DialogDescription>
+        </DialogHeader>
+
+        {data.items.length === 0 ? (
+          <div className="text-muted-foreground mt-4">No items</div>
+        ) : (
+          <div className="mt-4 max-h-80 overflow-y-auto w-full">
+            <table className="min-w-full table-fixed border border-slate-200 divide-y divide-slate-200 text-sm">
+              <thead className="bg-slate-50 sticky top-0 z-10">
+                <tr>
+                  <th className="px-3 py-2 text-left font-medium w-1/2 max-w-[250px] truncate">
+                    Name
+                  </th>
+                  <th className="px-3 py-2 text-left font-medium w-1/4 max-w-[120px]">
+                    UPC
+                  </th>
+                  <th className="px-3 py-2 text-right font-medium w-1/4 max-w-[80px]">
+                    Qty
+                  </th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-200">
+                {data.items.map((item, idx) => (
+                  <tr key={idx}>
+                    <td className="px-3 py-2 truncate max-w-[250px]">{item.name}</td>
+                    <td className="px-3 py-2 max-w-[120px]">{item.upc_barcode}</td>
+                    <td className="px-3 py-2 text-right max-w-[80px]">{item.totalQty}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </DialogContent>
+    </Dialog>
+  );
+};
+
+interface SalesCards {
+  month: { current: number; previous: number; changePct: string };
+  week: { current: number; previous: number; changePct: string };
+}
+
+interface SalesData {
+  daily: any[];
+  weekly: any[];
+  cards: SalesCards;
+}
+
 function RouteComponent() {
   const { user } = useAuth();
   const [site, setSite] = useState(user?.location || "Rankin");
   const [_orderRecs, setOrderRecs] = useState<Record<string, any[]>>({});
   const [_vendorNames, setVendorNames] = useState<Record<string, string>>({});
   const [_vendors, setVendors] = useState<any[]>([]);
-  const [dailyCounts, setDailyCounts] = useState<{ date: string, count: number }[]>([]);
-  const [salesData, setSalesData] = useState<{ daily: any[]; weekly: any[] }>({ daily: [], weekly: [] })
+  const [dailyCounts, setDailyCounts] = useState<{ date: string, count: number, items: any }[]>([]);
+  const [selectedDay, setSelectedDay] = useState<CycleCountDayData | null>(null);
+  const [isModalOpen, setIsModalOpen] = useState(false);
+  const [selectedGrade, setSelectedGrade] = useState<string | null>(null);
+
+
+  const [salesData, setSalesData] = useState<SalesData | null>(null);
   const [vendorStatus, setVendorStatus] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
 
@@ -66,7 +159,7 @@ function RouteComponent() {
   const [startDate, setStartDate] = useState(sevenDaysAgo.toISOString().slice(0, 10));
   const [endDate, setEndDate] = useState(today.toISOString().slice(0, 10));
   const [date, setDate] = useState<DateRange | undefined>({ from: sevenDaysAgo, to: today });
-  
+
   const [showPasswordDialog, setShowPasswordDialog] = useState(false);
   const [hasAccess, setHasAccess] = useState(false);
   const navigate = useNavigate({ from: Route.fullPath })
@@ -108,9 +201,6 @@ function RouteComponent() {
         const params = new URLSearchParams({ site, startDate, endDate });
 
         // Order recs
-        // const orderRecsRes = await fetch(`/api/order-rec/range?${params}`, {
-        //   headers: { Authorization: `Bearer ${localStorage.getItem("token")}`, "X-Required-Permission": "dashboard" },
-        // }).then(res => res.json());
         let orderRecsRes: any = []
         try {
           const res = await fetch(`/api/order-rec/range?${params}`, {
@@ -140,6 +230,7 @@ function RouteComponent() {
 
         // Cycle counts
         const timezone = await fetchLocation(site).then(loc => loc.timezone || "UTC");
+        // const dailyCountsRes = await fetchDailyCounts(site, sevenDaysAgo.toISOString().slice(0, 10), today.toISOString().slice(0, 10), timezone);
         const dailyCountsRes = await fetchDailyCounts(site, startDate, endDate, timezone);
 
         // Sales data
@@ -188,31 +279,56 @@ function RouteComponent() {
 
     fetchAllData();
   }, [site, startDate, endDate]);
+
   const [fuelData, setFuelData] = useState<any[]>([]);
 
   useEffect(() => {
     const fetchFuelData = async () => {
       try {
         const csoCode = await getCsoCodeByStationName(site);
+
         const today = new Date();
         const end = new Date(today);
         end.setDate(today.getDate() - 1); // yesterday
+
         const start = new Date(end);
-        start.setDate(end.getDate() - 6); // last 7 days
+        start.setDate(end.getDate() - 35); // last 35 days
 
         const params = new URLSearchParams({
           csoCode: csoCode ?? "",
           startDate: start.toISOString().slice(0, 10),
-          endDate: end.toISOString().slice(0, 10)
+          endDate: end.toISOString().slice(0, 10),
         });
 
         const res = await fetch(`/api/sql/fuelsales?${params}`, {
-          headers: { Authorization: `Bearer ${localStorage.getItem("token")}` }
+          headers: { Authorization: `Bearer ${localStorage.getItem("token")}` },
         });
 
-        const data = await res.json();
-        console.log("fuel data:",data)
-        setFuelData(data ?? []);
+        let rows = await res.json();
+        rows = rows ?? [];
+
+        // 1️⃣ Remove Mix&Match rows
+        rows = rows.filter((r: any) => r.fuelGradeDescription !== "Mix&Match");
+
+        // 2️⃣ Group by grade
+        const grouped = rows.reduce((acc: Record<string, any[]>, row: any) => {
+          const grade = row.fuelGradeDescription;
+          if (!acc[grade]) acc[grade] = [];
+          acc[grade].push(row);
+          return acc;
+        }, {});
+
+        // 3️⃣ Remove grades where *all* values are zero
+        const cleaned = Object.values(grouped)
+          .filter((gradeRows) => {
+            const rowsArray = gradeRows as any[]; // assert type here
+            return !rowsArray.every(r => Number(r.value) === 0);
+          })
+          .flat();
+        // console.log('fueldata:',cleaned)
+        setFuelData(cleaned);
+
+
       } catch (err) {
         console.error("Error fetching fuel data:", err);
         setFuelData([]);
@@ -222,58 +338,168 @@ function RouteComponent() {
     fetchFuelData();
   }, [site]);
 
-  // Helper to format Date as MM-DD
-// const formatDay = (d: Date) => {
-//   const mm = String(d.getMonth() + 1).padStart(2, "0");
-//   const dd = String(d.getDate()).padStart(2, "0");
-//   return `${mm}-${dd}`;
-// };
 
-const fuelChartData = useMemo(() => {
-  if (!fuelData?.length) return [];
 
-  const grades = Array.from(new Set(fuelData.map(d => d.fuelGradeDescription)));
+  const fuelChartData = useMemo(() => {
+    if (!fuelData?.length) return [];
 
-  // Build a map of date → grade → volume
-  const byDate: Record<string, Record<string, number>> = {};
-  fuelData.forEach(d => {
-    const day = d.businessDate.slice(5, 10); // MM-DD
-    if (!byDate[day]) byDate[day] = {};
-    byDate[day][d.fuelGradeDescription] = Number(d.fuelGradeSalesVolume ?? 0);
-  });
+    // Get unique last 7 days from the data
+    const allDates = Array.from(new Set(fuelData.map(d => d.businessDate.slice(0, 10)))).sort();
+    const last7Dates = allDates.slice(-7); // last 7 days
 
-  // Sort unique dates from the API
-  const days = Array.from(new Set(fuelData.map(d => d.businessDate.slice(5, 10)))).sort();
+    const grades = Array.from(new Set(fuelData.map(d => d.fuelGradeDescription)));
 
-  // Build chart rows
-  return days.map(day => {
-    const volumes = byDate[day] || {};
-    const row: Record<string, any> = { day };
-    grades.forEach(g => (row[g] = volumes[g] ?? 0));
-    return row;
-  });
-}, [fuelData]);
+    // Build map: day -> grade -> volume
+    const byDate: Record<string, Record<string, number>> = {};
+    fuelData.forEach(d => {
+      const day = d.businessDate.slice(0, 10);
+      if (!last7Dates.includes(day)) return; // only keep last 7 days
+      if (!byDate[day]) byDate[day] = {};
+      byDate[day][d.fuelGradeDescription] = Number(d.fuelGradeSalesVolume ?? 0);
+    });
 
-// Chart config with colors
-const fuelChartConfig: ChartConfig = useMemo(() => {
-  if (!fuelData?.length) return {};
-  const grades = Array.from(new Set(fuelData.map(d => d.fuelGradeDescription)));
-  return Object.fromEntries(
-    grades.map((g, idx) => [g, { label: g, color: `var(--chart-${(idx % 10) + 1})` }])
+    // Build chart rows
+    return last7Dates.map(day => {
+      const row: Record<string, any> = { day: day.slice(5, 10) }; // MM-DD for x-axis
+      grades.forEach(g => (row[g] = byDate[day]?.[g] ?? 0));
+      return row;
+    });
+  }, [fuelData]);
+
+  // Step 1: Get all unique grades from the fuel data
+  const allGrades = useMemo(() => {
+    if (!fuelData?.length) return [];
+    return Array.from(new Set(fuelData.map(d => d.fuelGradeDescription)));
+  }, [fuelData]);
+
+  // Step 2: Assign colors to grades (same color for same grade)
+  const gradeColors: Record<string, string> = useMemo(() => {
+    const colors = [
+      "#FF7F50", // Coral
+      "#6495ED", // Cornflower Blue
+      "#FFD700", // Gold
+      "#40E0D0", // Turquoise
+      "#FF69B4", // Hot Pink
+      "#7CFC00", // Lawn Green
+    ];
+
+    return Object.fromEntries(
+      allGrades.map((grade, idx) => [grade, colors[idx % colors.length]])
+    );
+  }, [allGrades]);
+
+  // Step 3: Build chart configs using the same color mapping
+  const fuelChartConfig: ChartConfig = useMemo(() => {
+    return Object.fromEntries(
+      allGrades.map(grade => [grade, { label: grade, color: gradeColors[grade] }])
+    );
+  }, [allGrades, gradeColors]);
+
+  // Use the same config for 90-day chart
+
+
+  const fuelChartConfig90: ChartConfig = fuelChartConfig; // reuse the same
+
+  // 1️⃣ Compute daily total volumes and SMA
+  const fuelChartDataWithSMA = useMemo(() => {
+    if (!fuelChartData.length) return [];
+
+    const totalPerDay = fuelChartData.map(row => {
+      const total = Object.keys(row)
+        .filter(k => k !== "day")
+        .reduce((acc, grade) => acc + (row[grade] ?? 0), 0);
+      return { ...row, total };
+    });
+
+    // 7-day moving average of total
+    return totalPerDay.map((row, idx, arr) => {
+      const slice = arr.slice(Math.max(0, idx - 6), idx + 1);
+      const sma = slice.reduce((acc, r) => acc + r.total, 0) / slice.length;
+      return { ...row, sma };
+    });
+  }, [fuelChartData]);
+
+
+  const normalizedFuelChartConfig90 = Object.fromEntries(
+    Object.entries(fuelChartConfig90).map(([key, val]) => [
+      key,
+      {
+        label: val.label ? String(val.label) : key,
+        color: val.color ?? "#f10f0fff", // fallback if no color
+      },
+    ])
   );
-}, [fuelData]);
+
+  // Build 90-day % mix chart data
+  const fuelMix90 = useMemo(() => {
+    if (!fuelData?.length) return [];
+
+    const grades = Array.from(new Set(fuelData.map(d => d.fuelGradeDescription)));
+
+    // group by date
+    const byDate: Record<string, Record<string, number>> = {};
+    fuelData.forEach(d => {
+      const day = d.businessDate.slice(5, 10);
+      if (!byDate[day]) byDate[day] = {};
+      byDate[day][d.fuelGradeDescription] = Number(d.fuelGradeSalesVolume ?? 0);
+    });
+
+    const days = Object.keys(byDate).sort();
+
+    // convert daily volumes -> percent mix
+    return days.map(day => {
+      const row = byDate[day];
+      // const total = Object.values(row).reduce((s, n) => s + n, 0);
+
+      const out: Record<string, any> = { day };
+
+      grades.forEach(g => {
+        // const v = row[g] ?? 0;
+        // out[g] = total ? Number(((v / total) * 100).toFixed(2)) : 0;
+        // out[g] = Math.pow((v / total), 0.5) * 100; // square-root scaling
+
+        out[g] = row[g] ?? 0;
+      });
+
+      return out;
+    });
+  }, [fuelData]);
 
 
+  // Mini sparkline datasets per grade
+  const fuelSparklines = useMemo(() => {
+    if (!fuelData?.length) return {};
 
+    const grades = Array.from(new Set(fuelData.map(d => d.fuelGradeDescription)));
 
+    const byGrade: Record<string, any[]> = {};
+
+    grades.forEach(g => {
+      byGrade[g] = fuelData
+        .filter(d => d.fuelGradeDescription === g)
+        .map(d => ({
+          day: d.businessDate.slice(5, 10),
+          value: Number(d.fuelGradeSalesVolume ?? 0)
+        }))
+        .sort((a, b) => a.day.localeCompare(b.day));
+    });
+
+    return byGrade;
+  }, [fuelData]);
 
   // ----------------------------
   // Prepare chart data
   // ----------------------------
-  const chartData = dailyCounts.map(({ date, count }) => ({ day: date.slice(5), count }));
+  // const chartData = dailyCounts.map(({ date, count }) => ({ day: date.slice(5), count }));
+  const chartData = dailyCounts.map(({ date, count, items }) => ({
+    day: date.slice(5), // or whatever format you like
+    count,
+    items: items ?? [], // default to empty array if missing
+  }));
+
 
   // Use daily (last 7 days) for the existing stacked chart
-  const salesChartData = salesData.daily.map((entry) => ({
+  const salesChartData = salesData?.daily.map((entry) => ({
     day: entry.day, // 'MM-DD'
     FN: entry.FN ?? 0,
     Quota: entry.Quota ?? 0,
@@ -285,7 +511,7 @@ const fuelChartConfig: ChartConfig = useMemo(() => {
   }))
 
   // Weekly aggregated (last 5 weeks)
-  const weeklySalesChartData = salesData.weekly.map(entry => ({
+  const weeklySalesChartData = salesData?.weekly.map(entry => ({
     week: entry.week,            // e.g., 'Wk of MM-DD'
     FN: entry.FN ?? 0,
     Quota: entry.Quota ?? 0,
@@ -310,11 +536,11 @@ const fuelChartConfig: ChartConfig = useMemo(() => {
   // Build proper data shape for DonutSalesChart
   const donutData = donutCategories.map((cat) => ({
     category: cat,
-    total: salesChartData.reduce(
-      (sum, row) => sum + Number(row[cat] || 0),
-      0
-    ),
+    total: salesChartData
+      ? salesChartData.reduce((sum, row) => sum + Number(row[cat] || 0), 0)
+      : 0, // default to 0 if salesChartData is undefined
   }));
+
 
   const donutConfig = Object.fromEntries(
     donutCategories.map((cat, idx) => [
@@ -326,286 +552,412 @@ const fuelChartConfig: ChartConfig = useMemo(() => {
     ])
   );
 
-
-
   // ----------------------------
   // Render dashboard
   // ----------------------------
-return (
-  <>
-    {!hasAccess && (
-      <PasswordProtection
-        isOpen={showPasswordDialog}
-        onSuccess={handlePasswordSuccess}
-        onCancel={handlePasswordCancel}
-        userLocation={user?.location || "Rankin"}
-      />
-    )}
+  return (
+    <>
+      {!hasAccess && (
+        <PasswordProtection
+          isOpen={showPasswordDialog}
+          onSuccess={handlePasswordSuccess}
+          onCancel={handlePasswordCancel}
+          userLocation={user?.location || "Rankin"}
+        />
+      )}
 
-    {hasAccess && (
-      <div className="pt-16 flex flex-col items-center">
-        {/* Filters */}
-        <div className="flex gap-4">
-          <LocationPicker setStationName={setSite} value="stationName" defaultValue={site} />
-          <DatePickerWithRange date={date} setDate={setDate} />
-        </div>
+      {hasAccess && (
+        <div className="pt-16 flex flex-col items-center">
+          {/* Filters */}
+          <div className="flex gap-4">
+            <LocationPicker setStationName={setSite} value="stationName" defaultValue={site} />
+            <DatePickerWithRange date={date} setDate={setDate} />
+          </div>
 
-        {/* Main container */}
-        <div className="mt-8 w-full max-w-7xl">
-          {loading ? (
-            <div className="text-center py-8">Loading...</div>
-          ) : (
-            <>
-              {/* ======================= */}
-              {/*     INVENTORY SECTION   */}
-              {/* ======================= */}
-              <section aria-labelledby="inventory-heading" className="mb-10">
-                <h2 id="inventory-heading" className="text-2xl font-bold mb-4">Inventory</h2>
+          {/* Main container */}
+          <div className="mt-8 w-full max-w-7xl">
+            {loading ? (
+              <div className="text-center py-8">Loading...</div>
+            ) : (
+              <>
+                {/* ======================= */}
+                {/*     CARD SECTION   */}
+                {/* ======================= */}
+                <section aria-labelledby="accounting-heading" className="mb-10">
+                  <h2 id="accounting-heading" className="text-2xl font-bold mb-4">Accounting</h2>
 
-                {/* Responsive grid: 1 col mobile, 2 col tablet, 3 col desktop */}
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                  {/* Vendor Status (Inventory) */}
-                  <Card className="h-[435px] flex flex-col col-span-1">
-                    <CardHeader className="flex flex-col md:flex-row md:items-start md:justify-between gap-2">
-                      <div className="flex-1">
-                        <CardTitle>Vendor Status (This Week)</CardTitle>
-                        <CardDescription>Current week's vendor order status</CardDescription>
-                      </div>
+                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
 
-                      <div className="flex-1 flex flex-wrap gap-2">
-                        {["Created", "Completed", "Placed", "Delivered", "Invoice Received"].map((status) => (
-                          <div key={status} className="flex items-center gap-1.5 [&>svg]:h-3 [&>svg]:w-3">
-                            <div
-                              className="h-2 w-2 shrink-0 rounded-[2px]"
-                              style={{ backgroundColor: getOrderRecStatusColor(status) }}
-                            />
-                            <span className="text-sm font-medium text-black">{status}</span>
-                          </div>
-                        ))}
-                      </div>
-                    </CardHeader>
+                    {/* Cash on Hand (Accounting) */}
+                    <div className="col-span-1">
+                      <CashOnHandDisplay site={site} />
+                    </div>
 
-                    <CardContent className="flex-1 overflow-y-auto">
-                      <ul className="divide-y divide-gray-200">
-                        {vendorStatus.map((vendor) => (
-                          <li
-                            key={vendor._id}
-                            className="px-2 py-1 font-medium rounded mb-1"
-                            style={{
-                              backgroundColor: vendor.orderRec
-                                ? getOrderRecStatusColor(vendor.orderRec.currentStatus)
-                                : "#F3F3F3",
-                            }}
+                    {/* Month-to-Month Sales Card */}
+                    <div className="col-span-1">
+                      <div className="bg-white rounded-xl shadow p-4 flex flex-col">
+                        <div className="text-sm text-muted-foreground">Month-to-Month Sales</div>
+                        <div className="text-2xl font-bold mt-1">
+                          C$ {salesData?.cards?.month?.current?.toLocaleString() ?? 0}
+                        </div>
+                        <div className="text-sm mt-1">
+                          <span className="text-muted-foreground">
+                            C$ {salesData?.cards?.month?.previous?.toLocaleString() ?? 0}
+                          </span>
+                          <span
+                            className={`ml-2 font-semibold ${Number(salesData?.cards?.month?.changePct) >= 0
+                                ? "text-green-600"
+                                : "text-red-600"
+                              }`}
                           >
-                            {vendor.orderRec ? (
-                              <Link
-                                to="/order-rec/$id"
-                                params={{ id: vendor.orderRec.orderRecId }}
-                                className="underline"
-                                style={{ color: "inherit" }}
-                              >
-                                {vendor.name}
-                              </Link>
-                            ) : (
-                              vendor.name
-                            )}
-                          </li>
-                        ))}
-                      </ul>
-                    </CardContent>
-                  </Card>
-
-                  {/* Cycle Counts (Inventory) */}
-                  <Card className="col-span-1">
-                    <CardHeader>
-                      <CardTitle>Cycle Counts</CardTitle>
-                      <CardDescription>Daily cycle count entries for {site}</CardDescription>
-                    </CardHeader>
-                    <CardContent>
-                      <ChartContainer config={chartConfig}>
-                        <BarChart accessibilityLayer data={chartData}>
-                          <CartesianGrid vertical={false} />
-                          <XAxis
-                            dataKey="day"
-                            tickLine={false}
-                            tickMargin={10}
-                            axisLine={false}
-                            tickFormatter={(value) => value}
-                          />
-                          <ChartTooltip cursor={false} content={<ChartTooltipContent hideLabel />} />
-                          <Bar dataKey="count" fill="var(--color-count)" radius={8}>
-                            <LabelList position="top" offset={12} className="fill-foreground" fontSize={12} />
-                          </Bar>
-                        </BarChart>
-                      </ChartContainer>
-                    </CardContent>
-                    <CardFooter className="flex-col items-start gap-2 text-sm">
-                      <div className="text-muted-foreground leading-none">
-                        Showing cycle count entries per day for the selected range
+                            ({salesData?.cards?.month?.changePct}%)
+                          </span>
+                        </div>
                       </div>
-                    </CardFooter>
-                  </Card>
+                    </div>
 
-                  {/* Empty slot / placeholder: keeps grid balanced on larger screens.
-                      Remove or replace with another inventory widget later. */}
-                  <div className="col-span-1" />
-                </div>
-              </section>
+                    {/* Week-to-Week Sales Card */}
+                    <div className="col-span-1">
+                      <div className="bg-white rounded-xl shadow p-4 flex flex-col">
+                        <div className="text-sm text-muted-foreground">Week-to-Week Sales</div>
+                        <div className="text-2xl font-bold mt-1">
+                          C$ {salesData?.cards?.week?.current?.toLocaleString() ?? 0}
+                        </div>
+                        <div className="text-sm mt-1">
+                          <span className="text-muted-foreground">
+                            C$ {salesData?.cards?.week?.previous?.toLocaleString() ?? 0}
+                          </span>
+                          <span
+                            className={`ml-2 font-semibold ${Number(salesData?.cards?.week?.changePct) >= 0
+                                ? "text-green-600"
+                                : "text-red-600"
+                              }`}
+                          >
+                            ({salesData?.cards?.week?.changePct}%)
+                          </span>
+                        </div>
+                      </div>
+                    </div>
 
-              {/* ======================= */}
-              {/*        Catgory SECTION    */}
-              {/* ======================= */}
-              <section aria-labelledby="sales-heading" className="mb-10">
-                <h2 id="sales-heading" className="text-2xl font-bold mb-4">Category</h2>
-
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                  {/* Sales by Category (Daily) */}
-                  <Card className="col-span-1">
-                    <CardHeader>
-                      <CardTitle>Sales by Category (Daily)</CardTitle>
-                      <CardDescription>Last 7 days (stacked)</CardDescription>
-                    </CardHeader>
-                    <CardContent>
-                      <ChartContainer config={salesChartConfig}>
-                        <BarChart accessibilityLayer data={salesChartData}>
-                          <CartesianGrid vertical={false} />
-                          <XAxis
-                            dataKey="day"
-                            tickLine={false}
-                            tickMargin={10}
-                            axisLine={false}
-                            tickFormatter={(value) => value}
-                          />
-                          <ChartTooltip content={<ChartTooltipContent hideLabel />} />
-                          <ChartLegend content={<ChartLegendContent data={salesChartData} />} />
-                          <Bar dataKey="FN" stackId="a" fill="var(--chart-1)" />
-                          <Bar dataKey="Quota" stackId="a" fill="var(--chart-2)" />
-                          <Bar dataKey="Cannabis" stackId="a" fill="var(--chart-3)" />
-                          <Bar dataKey="GRE" stackId="a" fill="var(--chart-4)" />
-                          <Bar dataKey="Convenience" stackId="a" fill="var(--chart-5)" />
-                          <Bar dataKey="Vapes" stackId="a" fill="var(--chart-6)" />
-                          <Bar dataKey="Native Gifts" stackId="a" fill="var(--chart-7)" />
-                        </BarChart>
-                      </ChartContainer>
-                    </CardContent>
-                    <CardFooter className="flex-col items-start gap-2 text-sm">
-                      <div className="text-muted-foreground leading-none">Last 7 days ending yesterday</div>
-                    </CardFooter>
-                  </Card>
-
-                  {/* Sales by Category (Weekly) */}
-                  <Card className="col-span-1">
-                    <CardHeader>
-                      <CardTitle>Sales by Category (Weekly)</CardTitle>
-                      <CardDescription>Last 5 weeks aggregated (stacked)</CardDescription>
-                    </CardHeader>
-                    <CardContent>
-                      <ChartContainer config={salesChartConfig}>
-                        <BarChart accessibilityLayer data={weeklySalesChartData}>
-                          <CartesianGrid vertical={false} />
-                          <XAxis
-                            dataKey="week"
-                            tickLine={false}
-                            tickMargin={10}
-                            axisLine={false}
-                            tickFormatter={(value) => value}
-                          />
-                          <ChartTooltip content={<ChartTooltipContent hideLabel />} />
-                          <ChartLegend content={<ChartLegendContent data={weeklySalesChartData} />} />
-                          <Bar dataKey="FN" stackId="a" fill="var(--chart-1)" />
-                          <Bar dataKey="Quota" stackId="a" fill="var(--chart-2)" />
-                          <Bar dataKey="Cannabis" stackId="a" fill="var(--chart-3)" />
-                          <Bar dataKey="GRE" stackId="a" fill="var(--chart-4)" />
-                          <Bar dataKey="Convenience" stackId="a" fill="var(--chart-5)" />
-                          <Bar dataKey="Vapes" stackId="a" fill="var(--chart-6)" />
-                          <Bar dataKey="Native Gifts" stackId="a" fill="var(--chart-7)" />
-                        </BarChart>
-                      </ChartContainer>
-                    </CardContent>
-                    <CardFooter className="flex-col items-start gap-2 text-sm">
-                      <div className="text-muted-foreground leading-none">Weeks end on Sunday; bars labeled by week start (Mon)</div>
-                    </CardFooter>
-                  </Card>
-
-                  {/* Sales Breakdown (7-Day Donut) */}
-                  <Card className="col-span-1">
-                    <CardHeader>
-                      <CardTitle>Sales Breakdown (7-Day)</CardTitle>
-                      <CardDescription>Category share of last 7 days</CardDescription>
-                    </CardHeader>
-
-                    <CardContent>
-                      
-                      <DonutSalesChart data={donutData} config={donutConfig} />
-                    </CardContent>
-
-                    <CardFooter className="text-sm text-muted-foreground">
-                      Last 7 days ending yesterday
-                    </CardFooter>
-                  </Card>
-
-
-                </div>
-              </section>
-
-              {/* ======================= */}
-              {/*     FUEL SECTION   */}
-              {/* ======================= */}
-              <section aria-labelledby="fuel-heading" className="mb-10">
-                <h2 id="fuel-heading" className="text-2xl font-bold mb-4">Fuel</h2>
-
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                  <Card className="col-span-1">
-                    <CardHeader>
-                      <CardTitle>Fuel Volume by Grade (Last 7 Days)</CardTitle>
-                      <CardDescription>Daily stacked volume</CardDescription>
-                    </CardHeader>
-
-                    <CardContent>
-                      <ChartContainer config={fuelChartConfig}>
-                        <BarChart data={fuelChartData}>
-                          <CartesianGrid vertical={false} />
-                          <XAxis dataKey="day" tickLine={false} axisLine={false} />
-                          <ChartTooltip content={<ChartTooltipContent hideLabel />} />
-                          <ChartLegend content={<ChartLegendContent data={fuelChartData} />} />
-                          {Object.keys(fuelChartConfig).map(grade => (
-                            <Bar key={grade} dataKey={grade} stackId="a" fill={fuelChartConfig[grade].color} />
-                          ))}
-                        </BarChart>
-                      </ChartContainer>
-                    </CardContent>
-                    <CardFooter className="text-sm text-muted-foreground">
-                      Fuel volumes for last 7 days ending yesterday
-                    </CardFooter>
-                  </Card>
-                </div>
-              </section>
-
-
-              {/* ======================= */}
-              {/*     ACCOUNTING SECTION   */}
-              {/* ======================= */}
-              <section aria-labelledby="accounting-heading" className="mb-10">
-                <h2 id="accounting-heading" className="text-2xl font-bold mb-4">Accounting</h2>
-
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                  {/* Cash on Hand (Accounting) */}
-                  <div className="col-span-1">
-                    <CashOnHandDisplay site={site} />
                   </div>
+                </section>
 
-                  {/* placeholders for future accounting widgets */}
-                  <div className="col-span-1" />
-                  <div className="col-span-1" />
-                </div>
-              </section>
-            </>
-          )}
+
+                {/* ======================= */}
+                {/*     INVENTORY SECTION   */}
+                {/* ======================= */}
+                <section aria-labelledby="inventory-heading" className="mb-10">
+                  <h2 id="inventory-heading" className="text-2xl font-bold mb-4">Inventory</h2>
+
+                  {/* Responsive grid: 1 col mobile, 2 col tablet, 3 col desktop */}
+                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                    {/* Vendor Status (Inventory) */}
+                    <Card className="min-h-[365px] flex flex-col col-span-1">
+                      <CardHeader className="flex flex-col md:flex-row md:items-start md:justify-between gap-2">
+                        <div className="flex-1">
+                          <CardTitle>Vendor Status</CardTitle>
+                          <CardDescription>Order Status (This Week)</CardDescription>
+                        </div>
+
+                        <div className="flex-1 flex flex-wrap gap-2">
+                          {["Created", "Completed", "Placed", "Delivered", "Invoice Received"].map((status) => (
+                            <div key={status} className="flex items-center gap-1.5 [&>svg]:h-3 [&>svg]:w-3">
+                              <div
+                                className="h-2 w-2 shrink-0 rounded-[2px]"
+                                style={{ backgroundColor: getOrderRecStatusColor(status) }}
+                              />
+                              <span className="text-sm font-medium text-black">{status}</span>
+                            </div>
+                          ))}
+                        </div>
+                      </CardHeader>
+
+                      <CardContent className="flex-1 overflow-y-auto max-h-60">
+                        <ul className="divide-y divide-gray-200">
+                          {vendorStatus.map((vendor) => (
+                            <li
+                              key={vendor._id}
+                              className="px-2 py-1 font-medium rounded mb-1"
+                              style={{
+                                backgroundColor: vendor.orderRec
+                                  ? getOrderRecStatusColor(vendor.orderRec.currentStatus)
+                                  : "#F3F3F3",
+                              }}
+                            >
+                              {vendor.orderRec ? (
+                                <Link
+                                  to="/order-rec/$id"
+                                  params={{ id: vendor.orderRec.orderRecId }}
+                                  className="underline"
+                                  style={{ color: "inherit" }}
+                                >
+                                  {vendor.name}
+                                </Link>
+                              ) : (
+                                vendor.name
+                              )}
+                            </li>
+                          ))}
+                        </ul>
+                      </CardContent>
+                    </Card>
+
+                    {/* Cycle Counts (Inventory) */}
+                    <Card className="col-span-1">
+                      <CardHeader>
+                        <CardTitle>Cycle Counts</CardTitle>
+                        <CardDescription>Daily cycle count entries for {site}</CardDescription>
+                      </CardHeader>
+                      <CardContent>
+                        <ChartContainer config={chartConfig}>
+                          <BarChart accessibilityLayer data={chartData}>
+                            <CartesianGrid vertical={false} />
+                            <XAxis dataKey="day" tickLine={false} axisLine={false} tickMargin={10} />
+                            <YAxis axisLine={false} tickLine={false} />
+                            {/* <Tooltip content={<CycleCountTooltip />} /> */}
+                            <Bar
+                              dataKey="count"
+                              fill="var(--color-count)"
+                              radius={8}
+                              onClick={(data) => {
+                                setSelectedDay(data.payload as CycleCountDayData);
+                                setIsModalOpen(true);
+                              }}
+                            >
+                              <LabelList position="top" offset={12} className="fill-foreground" fontSize={12} />
+                            </Bar>
+                          </BarChart>
+
+                        </ChartContainer>
+                      </CardContent>
+                      <CardFooter className="flex-col items-start gap-2 text-sm">
+                        <div className="text-muted-foreground leading-none">
+                          Showing cycle count entries per day for the selected range
+                        </div>
+                      </CardFooter>
+                    </Card>
+                    <ChartBarModal
+                      data={selectedDay}
+                      isOpen={isModalOpen}
+                      onClose={() => setIsModalOpen(false)}
+                    />
+
+                    {/* Empty slot / placeholder: keeps grid balanced on larger screens.
+                      Remove or replace with another inventory widget later. */}
+                    <div className="col-span-1" />
+                  </div>
+                </section>
+
+                {/* ======================= */}
+                {/*        Catgory SECTION    */}
+                {/* ======================= */}
+                <section aria-labelledby="sales-heading" className="mb-10">
+                  <h2 id="sales-heading" className="text-2xl font-bold mb-4">Category</h2>
+
+                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                    {/* Sales by Category (Daily) */}
+                    <Card className="col-span-1">
+                      <CardHeader>
+                        <CardTitle>Sales by Category (Daily)</CardTitle>
+                        <CardDescription>Last 7 days (stacked)</CardDescription>
+                      </CardHeader>
+                      <CardContent>
+                        <ChartContainer config={salesChartConfig}>
+                          <BarChart accessibilityLayer data={salesChartData}>
+                            <CartesianGrid vertical={false} />
+                            <XAxis
+                              dataKey="day"
+                              tickLine={false}
+                              tickMargin={10}
+                              axisLine={false}
+                              tickFormatter={(value) => value}
+                            />
+                            <YAxis
+                              axisLine={false}
+                              tickLine={false}
+                            />
+                            <ChartTooltip content={<ChartTooltipContent hideLabel />} />
+                            <ChartLegend content={<ChartLegendContent data={salesChartData} />} />
+                            <Bar dataKey="FN" stackId="a" fill="var(--chart-1)" />
+                            <Bar dataKey="Quota" stackId="a" fill="var(--chart-2)" />
+                            <Bar dataKey="Cannabis" stackId="a" fill="var(--chart-3)" />
+                            <Bar dataKey="GRE" stackId="a" fill="var(--chart-4)" />
+                            <Bar dataKey="Convenience" stackId="a" fill="var(--chart-5)" />
+                            <Bar dataKey="Vapes" stackId="a" fill="var(--chart-6)" />
+                            <Bar dataKey="Native Gifts" stackId="a" fill="var(--chart-7)" />
+                          </BarChart>
+                        </ChartContainer>
+                      </CardContent>
+                      <CardFooter className="flex-col items-start gap-2 text-sm">
+                        <div className="text-muted-foreground leading-none">Last 7 days ending yesterday</div>
+                      </CardFooter>
+                    </Card>
+
+                    {/* Sales by Category (Weekly) */}
+                    <Card className="col-span-1">
+                      <CardHeader>
+                        <CardTitle>Sales by Category (Weekly)</CardTitle>
+                        <CardDescription>Last 5 weeks aggregated (stacked)</CardDescription>
+                      </CardHeader>
+                      <CardContent>
+                        <ChartContainer config={salesChartConfig}>
+                          <BarChart accessibilityLayer data={weeklySalesChartData}>
+                            <CartesianGrid vertical={false} />
+                            <XAxis
+                              dataKey="week"
+                              tickLine={false}
+                              tickMargin={10}
+                              axisLine={false}
+                              tickFormatter={(value) => value}
+                            />
+                            <YAxis
+                              axisLine={false}
+                              tickLine={false}
+                            />
+                            <ChartTooltip content={<ChartTooltipContent hideLabel />} />
+                            <ChartLegend content={<ChartLegendContent data={weeklySalesChartData} />} />
+                            <Bar dataKey="FN" stackId="a" fill="var(--chart-1)" />
+                            <Bar dataKey="Quota" stackId="a" fill="var(--chart-2)" />
+                            <Bar dataKey="Cannabis" stackId="a" fill="var(--chart-3)" />
+                            <Bar dataKey="GRE" stackId="a" fill="var(--chart-4)" />
+                            <Bar dataKey="Convenience" stackId="a" fill="var(--chart-5)" />
+                            <Bar dataKey="Vapes" stackId="a" fill="var(--chart-6)" />
+                            <Bar dataKey="Native Gifts" stackId="a" fill="var(--chart-7)" />
+                          </BarChart>
+                        </ChartContainer>
+                      </CardContent>
+                      <CardFooter className="flex-col items-start gap-2 text-sm">
+                        <div className="text-muted-foreground leading-none">Weeks end on Sunday; bars labeled by week start (Mon)</div>
+                      </CardFooter>
+                    </Card>
+
+                    {/* Sales Breakdown (7-Day Donut) */}
+                    <Card className="col-span-1">
+                      <CardHeader>
+                        <CardTitle>Sales Breakdown (7-Day)</CardTitle>
+                        <CardDescription>Category share of last 7 days</CardDescription>
+                      </CardHeader>
+
+                      <CardContent>
+
+                        <DonutSalesChart data={donutData} config={donutConfig} />
+                      </CardContent>
+
+                      <CardFooter className="text-sm text-muted-foreground">
+                        Last 7 days ending yesterday
+                      </CardFooter>
+                    </Card>
+
+
+                  </div>
+                </section>
+
+                {/* ======================= */}
+                {/*     FUEL SECTION   */}
+                {/* ======================= */}
+                <section aria-labelledby="fuel-heading" className="mb-10">
+                  <h2 id="fuel-heading" className="text-2xl font-bold mb-4">Fuel</h2>
+
+                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+
+                    {/* 7-Day Stacked Bar with SMA */}
+                    <Card className="col-span-1">
+                      <CardHeader>
+                        <CardTitle>Fuel Volume by Grade (Daily)</CardTitle>
+                        <CardDescription>Last 7 days (Stacked)</CardDescription>
+                      </CardHeader>
+
+                      <CardContent>
+                        <ChartContainer config={fuelChartConfig}>
+                          <BarChart data={fuelChartDataWithSMA}>
+                            <CartesianGrid vertical={false} />
+                            <XAxis dataKey="day" tickLine={false} axisLine={false} />
+                            <YAxis
+                              axisLine={false}
+                              tickLine={false}
+                            />
+                            <ChartTooltip content={<ChartTooltipContent hideLabel />} />
+                            <ChartLegend content={<ChartLegendContent data={fuelChartDataWithSMA} />} />
+
+                            {/* Stacked bars */}
+                            {Object.keys(fuelChartConfig).map(grade => (
+                              <Bar key={grade} dataKey={grade} stackId="a" fill={fuelChartConfig[grade].color} />
+                            ))}
+
+                            {/* 7-day moving average line (total volume) */}
+                            <Line type="monotone" dataKey="sma" stroke="#1F2937" strokeWidth={2} dot={false} />
+                          </BarChart>
+                        </ChartContainer>
+                      </CardContent>
+
+                      <CardFooter className="text-sm text-muted-foreground">
+                        Last 7 days ending yesterday
+                      </CardFooter>
+                    </Card>
+
+                    {/* 90-Day Fuel Mix Area Chart */}
+                    {/* <FuelMixAreaChart data={fuelMix90} config={normalizedFuelChartConfig90} /> */}
+                    <FuelMixAreaChart
+                      data={fuelMix90}
+                      config={normalizedFuelChartConfig90}
+                      selectedGrade={selectedGrade}
+                    />
+                    {/* Sparklines for each grade */}
+                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 col-span-1">
+                      {Object.keys(fuelSparklines).map((grade) => (
+                        <FuelSparkline
+                          key={grade}
+                          title={grade}
+                          color={fuelChartConfig90[grade]?.color}
+                          data={fuelSparklines[grade]}
+                          onClick={() =>
+                            setSelectedGrade(prev => (prev === grade ? null : grade))
+                          }
+                        />
+                      ))}
+                    </div>
+
+                  </div>
+                </section>
+              </>
+            )}
+          </div>
         </div>
-      </div>
-    )}
-  </>
-);
+      )}
+      {/* {isDialogOpen && selectedDay && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-lg shadow-lg max-w-md w-full p-4">
+            <div className="flex justify-between items-center mb-4">
+              <h3 className="text-lg font-bold">{`Date: ${selectedDay.day}`}</h3>
+              <button
+                onClick={() => setIsDialogOpen(false)}
+                className="text-gray-500 hover:text-gray-700 font-bold"
+              >
+                ✕
+              </button>
+            </div>
+
+            <div className="mb-2">{`Total Count: ${selectedDay.count}`}</div>
+
+            <div>
+              <div className="font-semibold mb-1">Items:</div>
+              {selectedDay.items.length === 0 ? (
+                <div className="text-muted-foreground">No items</div>
+              ) : (
+                <ul className="list-disc list-inside max-h-60 overflow-y-auto">
+                  {selectedDay.items.map((item, idx) => (
+                    <li key={idx}>
+                      {item.name} ({item.upc_barcode}): {item.totalQty}
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </div>
+          </div>
+        </div>
+      )} */}
+    </>
+  );
 
 }
 
@@ -740,17 +1092,32 @@ const fetchSalesData = async (csoCode: string) => {
   }
 
   // Helpers for week calc (Mon-Sun weeks)
+  // const startOfWeek = (d: Date) => {
+  //   const x = new Date(d)
+  //   const day = x.getDay() // 0 Sun .. 6 Sat
+  //   const diffToMon = day === 0 ? -6 : 1 - day
+  //   x.setDate(x.getDate() + diffToMon)
+  //   x.setHours(0, 0, 0, 0)
+  //   return x
+  // }
+  // const addDays = (d: Date, n: number) => {
+  //   const x = new Date(d); x.setDate(x.getDate() + n); return x
+  // }
+  // --- Week-to-week ---
   const startOfWeek = (d: Date) => {
-    const x = new Date(d)
-    const day = x.getDay() // 0 Sun .. 6 Sat
-    const diffToMon = day === 0 ? -6 : 1 - day
-    x.setDate(x.getDate() + diffToMon)
-    x.setHours(0, 0, 0, 0)
-    return x
-  }
+    const day = d.getDay(); // 0=Sun, 1=Mon
+    const diffToMon = day === 0 ? -6 : 1 - day;
+    const monday = new Date(d);
+    monday.setDate(d.getDate() + diffToMon);
+    monday.setHours(0, 0, 0, 0);
+    return monday;
+  };
+
   const addDays = (d: Date, n: number) => {
-    const x = new Date(d); x.setDate(x.getDate() + n); return x
-  }
+    const newDate = new Date(d);
+    newDate.setDate(d.getDate() + n);
+    return newDate;
+  };
 
   // Build daily (last 7 days ending yesterday), ascending by date
   const daily: any[] = []
@@ -783,9 +1150,64 @@ const fetchSalesData = async (csoCode: string) => {
     const label = `Wk of ${fmt(ws).slice(5)}` // 'Wk of MM-DD'
     return { week: label, ...sums }
   })
+  // ----- Cards Calculation -----
+  const today = end; // yesterday
 
-  return { daily, weekly }
+  // Month-to-Month
+  const currentMonthStart = new Date(today.getFullYear(), today.getMonth(), 1);
+  const prevMonthStart = new Date(today.getFullYear(), today.getMonth() - 1, 1);
+  const prevMonthEnd = new Date(today.getFullYear(), today.getMonth() - 1, today.getDate());
+
+  // Helper to sum sales in a date range from byDate map
+  const sumSalesByDateRange = (start: Date, end: Date) =>
+    Object.entries(byDate)
+      .filter(([dateStr]) => {
+        const dt = new Date(dateStr);
+        return dt >= start && dt <= end;
+      })
+      .reduce(
+        (acc, [, row]) =>
+          acc +
+          Object.values(row).reduce((a, v) => a + (typeof v === "number" ? v : 0), 0),
+        0
+      );
+
+  const currentMonthSales = sumSalesByDateRange(currentMonthStart, today);
+  const prevMonthSales = sumSalesByDateRange(prevMonthStart, prevMonthEnd);
+  const monthChangePct = prevMonthSales
+    ? ((currentMonthSales - prevMonthSales) / prevMonthSales) * 100
+    : 0;
+
+  const currentWeekStart = startOfWeek(today);
+  const prevWeekStart = addDays(currentWeekStart, -7);
+  const prevWeekEnd = addDays(prevWeekStart, today.getDay() - 1); // same weekdays last week
+
+  const currentWeekSales = sumSalesByDateRange(currentWeekStart, today);
+  const prevWeekSales = sumSalesByDateRange(prevWeekStart, prevWeekEnd);
+  const weekChangePct = prevWeekSales
+    ? ((currentWeekSales - prevWeekSales) / prevWeekSales) * 100
+    : 0;
+
+  // Return updated cards
+  return {
+    daily,
+    weekly,
+    cards: {
+      month: {
+        current: currentMonthSales,
+        previous: prevMonthSales,
+        changePct: monthChangePct.toFixed(2),
+      },
+      week: {
+        current: currentWeekSales,
+        previous: prevWeekSales,
+        changePct: weekChangePct.toFixed(2),
+      },
+    },
+  };
 }
+
+
 
 const fetchVendors = async (site: string) => {
   const params = new URLSearchParams({ location: site });
