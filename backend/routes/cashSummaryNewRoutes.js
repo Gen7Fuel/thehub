@@ -6,6 +6,9 @@ const { dateFromYMDLocal } = require('../utils/dateUtils')
 const { sendEmail } = require('../utils/emailService')
 const { generateCashSummaryPdf } = require('../utils/cashSummaryPdf')
 
+const path = require('path')
+const CDN_BASE_URL = process.env.CDN_BASE_URL || process.env.PUBLIC_CDN_BASE_URL || ''
+
 const router = express.Router()
 
 const OFFICE_SFTP_API_BASE = 'http://24.50.55.130:5000'
@@ -22,6 +25,54 @@ async function fetchWithTimeout(url, opts = {}, ms = 15000) {
     return await _fetch(url, { ...opts, signal: controller.signal })
   } finally {
     clearTimeout(t)
+  }
+}
+
+async function getDepositSlipAttachment(req, site, start, end) {
+  try {
+    const sheet = await Safesheet.findOne({ site }).lean()
+    if (!sheet || !Array.isArray(sheet.entries)) return null
+
+    const sameDay = (d) => {
+      const x = new Date(d)
+      return x >= start && x < end
+    }
+
+    // Find the most recent entry on that date with a non-zero bank deposit and a photo
+    const candidate = [...sheet.entries]
+      .filter((e) => sameDay(e.date) && e.photo && Number(e.cashDepositBank || 0) > 0)
+      .sort((a, b) => +new Date(b.updatedAt || b.date) - +new Date(a.updatedAt || a.date))[0]
+
+    if (!candidate) return null
+
+    const photoName = path.basename(String(candidate.photo))
+    const origin = (CDN_BASE_URL || `${req.protocol}://${req.get('host')}`).replace(/\/$/, '')
+    const url = `${origin}/cdn/download/${encodeURIComponent(photoName)}`
+
+    const resp = await fetchWithTimeout(url, {}, 15000)
+    if (!resp.ok) return null
+
+    let buffer
+    if (typeof resp.arrayBuffer === 'function') buffer = Buffer.from(await resp.arrayBuffer())
+    else if (typeof resp.buffer === 'function') buffer = await resp.buffer()
+    else buffer = Buffer.from(await resp.text(), 'binary')
+
+    const contentType = resp.headers.get('content-type') || 'application/octet-stream'
+    let ext = path.extname(photoName)
+    if (!ext) {
+      if (contentType.includes('png')) ext = '.png'
+      else if (contentType.includes('jpeg') || contentType.includes('jpg')) ext = '.jpg'
+      else if (contentType.includes('pdf')) ext = '.pdf'
+    }
+
+    return {
+      filename: `Bank-Deposit-Slip-${site}-${start.toISOString().slice(0, 10)}${ext || ''}`,
+      content: buffer,
+      contentType,
+    }
+  } catch (e) {
+    console.warn('Deposit slip fetch failed:', e?.message || e)
+    return null
   }
 }
 
@@ -162,7 +213,7 @@ router.post('/submit/to/safesheet', async (req, res) => {
 
     // Upsert a single entry for that calendar day
     const sameDay = (d) => d >= start && d < end
-    const idx = sheet.entries.findIndex(e => sameDay(new Date(e.date)))
+    const idx = sheet.entries.findIndex((e) => sameDay(new Date(e.date)))
 
     const entryDate = dateFromYMDLocal(date)
 
@@ -182,25 +233,36 @@ router.post('/submit/to/safesheet', async (req, res) => {
     await sheet.save()
 
     // Respond to client first
-    const entryId = (idx >= 0 ? sheet.entries[idx]._id : sheet.entries[sheet.entries.length - 1]._id)
+    const entryId = idx >= 0 ? sheet.entries[idx]._id : sheet.entries[sheet.entries.length - 1]._id
     res.json({ site, date, cashIn: totalCanadianCashCollected, entryId })
 
-    // Background: generate PDF and email it (React-PDF version, no Chrome deps)
+    // Background: generate PDF and email it with optional deposit slip image
     ;(async () => {
       try {
-        // If you switched to the React-PDF util, ensure:
-        // const { generateCashSummaryPdf } = require('../utils/cashSummaryPdfReact')
+        // Generate the Cash Summary PDF via @react-pdf/renderer
         const pdfBuffer = await generateCashSummaryPdf({ site, date })
+
+        // Try to fetch the Bank Deposit Slip image for this date where cashDepositBank > 0
+        const depositSlip = await getDepositSlipAttachment(req, site, start, end)
+
+        const attachments = [
+          { filename: `Cash-Summary-${site}-${date}.pdf`, content: pdfBuffer },
+        ]
+        if (depositSlip) attachments.push(depositSlip)
 
         await sendEmail({
           to: CASH_SUMMARY_EMAILS.join(','),
           subject: `Cash Summary Report – ${site} – ${date}`,
           text: `Attached is the Cash Summary Report for ${site} on ${date}.`,
-          attachments: [
-            { filename: `Cash-Summary-${site}-${date}.pdf`, content: pdfBuffer },
-          ],
+          attachments,
         })
-        console.log('Cash Summary email sent:', site, date)
+
+        console.log(
+          'Cash Summary email sent:',
+          site,
+          date,
+          depositSlip ? '(with deposit slip)' : ''
+        )
       } catch (e) {
         console.error('Cash Summary email/PDF failed:', e?.message || e)
       }
@@ -210,70 +272,6 @@ router.post('/submit/to/safesheet', async (req, res) => {
     return res.status(500).json({ error: 'Failed to submit' })
   }
 })
-
-// router.post('/submit/to/safesheet', async (req, res) => {
-//   try {
-//     const { site, date } = req.body || {}
-//     if (!site) return res.status(400).json({ error: 'site is required' })
-//     if (!date || !/^\d{4}-\d{2}-\d{2}$/.test(String(date))) {
-//       return res.status(400).json({ error: 'date (YYYY-MM-DD) is required' })
-//     }
-
-//     const [yy, mm, dd] = String(date).split('-').map(Number)
-//     const start = new Date(yy, mm - 1, dd, 0, 0, 0, 0)
-//     const end = new Date(yy, mm - 1, dd + 1, 0, 0, 0, 0)
-
-//     // Aggregate total canadian_cash_collected for the site/day
-//     const agg = await CashSummary.aggregate([
-//       { $match: { site, date: { $gte: start, $lt: end } } },
-//       { $group: { _id: null, total: { $sum: { $ifNull: ['$canadian_cash_collected', 0] } } } },
-//     ])
-//     const totalCanadianCashCollected = Number(agg[0]?.total || 0)
-
-//     // Mark summaries as submitted (optional; remove if not needed)
-//     await CashSummary.updateMany(
-//       { site, date: { $gte: start, $lt: end } },
-//       { $set: { submitted: true } }
-//     )
-
-//     // Find or create Safesheet for site
-//     let sheet = await Safesheet.findOne({ site })
-//     if (!sheet) {
-//       sheet = await Safesheet.create({ site, initialBalance: 0, entries: [] })
-//     }
-
-//     // Upsert a single entry for that calendar day
-//     const sameDay = (d) => d >= start && d < end
-//     const idx = sheet.entries.findIndex(e => sameDay(new Date(e.date)))
-
-//     const entryDate = dateFromYMDLocal(date)
-
-//     if (idx >= 0) {
-//       sheet.entries[idx].date = entryDate
-//       sheet.entries[idx].description = 'Daily Deposit'
-//       sheet.entries[idx].cashIn = totalCanadianCashCollected
-//       sheet.entries[idx].updatedAt = new Date()
-//     } else {
-//       sheet.entries.push({
-//         date: entryDate,
-//         description: 'Daily Deposit',
-//         cashIn: totalCanadianCashCollected,
-//       })
-//     }
-
-//     await sheet.save()
-
-//     return res.json({
-//       site,
-//       date,
-//       cashIn: totalCanadianCashCollected,
-//       entryId: (idx >= 0 ? sheet.entries[idx]._id : sheet.entries[sheet.entries.length - 1]._id),
-//     })
-//   } catch (err) {
-//     console.error('CashSummary submit error:', err)
-//     return res.status(500).json({ error: 'Failed to submit' })
-//   }
-// })
 
 router.get('/report', async (req, res) => {
   try {
