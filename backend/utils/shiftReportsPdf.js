@@ -42,7 +42,7 @@ const styles = StyleSheet.create({
   page: { padding: 24, fontSize: 9, fontFamily: 'Courier' },
   header: { fontSize: 12, marginBottom: 8, fontFamily: 'Helvetica-Bold' },
   sub: { fontSize: 9, color: '#6b7280', marginBottom: 8, fontFamily: 'Helvetica' },
-  pre: { fontSize: 9, lineHeight: 1.2, whiteSpace: 'pre' }, // line breaks preserved by \n
+  pre: { fontSize: 9, lineHeight: 1.2, whiteSpace: 'pre' },
 })
 
 function ReportsDoc({ site, date, reports }) {
