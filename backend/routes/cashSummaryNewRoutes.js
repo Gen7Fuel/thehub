@@ -211,9 +211,17 @@ router.post('/submit/to/safesheet', async (req, res) => {
       sheet = await Safesheet.create({ site, initialBalance: 0, entries: [] })
     }
 
-    // Upsert a single entry for that calendar day
+    // Upsert a single entry for that calendar day, specifically "Daily Deposit"
     const sameDay = (d) => d >= start && d < end
-    const idx = sheet.entries.findIndex((e) => sameDay(new Date(e.date)))
+
+    // Prefer the most recent "Daily Deposit" on that date
+    const idx = (() => {
+      for (let j = sheet.entries.length - 1; j >= 0; j--) {
+        const e = sheet.entries[j]
+        if (sameDay(new Date(e.date)) && e.description === 'Daily Deposit') return j
+      }
+      return -1
+    })()
 
     const entryDate = dateFromYMDLocal(date)
 
@@ -223,6 +231,7 @@ router.post('/submit/to/safesheet', async (req, res) => {
       sheet.entries[idx].cashIn = totalCanadianCashCollected
       sheet.entries[idx].updatedAt = new Date()
     } else {
+      // No existing "Daily Deposit" for this date: add a new one
       sheet.entries.push({
         date: entryDate,
         description: 'Daily Deposit',
@@ -253,7 +262,7 @@ router.post('/submit/to/safesheet', async (req, res) => {
         await sendEmail({
           to: CASH_SUMMARY_EMAILS.join(','),
           subject: `Cash Summary Report – ${site} – ${date}`,
-          text: `Attached is the Cash Summary Report for ${site} on ${date}.`,
+          text: `Attached is the Cash Summary Report and deposit slip for ${site} on ${date}.`,
           attachments,
         })
 
