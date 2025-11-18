@@ -9,7 +9,6 @@ const { generateCashSummaryPdf } = require('../utils/cashSummaryPdf')
 const router = express.Router()
 
 const OFFICE_SFTP_API_BASE = 'http://24.50.55.130:5000'
-const APP_BASE_URL = process.env.PUBLIC_APP_BASE_URL || 'https://app.gen7fuel.com'
 const CASH_SUMMARY_EMAILS = (process.env.CASH_SUMMARY_EMAILS || 'mohammad@gen7fuel.com')
   .split(',')
   .map(e => e.trim())
