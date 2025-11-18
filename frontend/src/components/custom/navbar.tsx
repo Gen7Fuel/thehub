@@ -6,7 +6,7 @@ import { getSocket } from "@/lib/websocket";
 import { syncPendingActions } from "@/lib/utils"
 import { isActuallyOnline } from "@/lib/network";
 import { useAuth } from "@/context/AuthContext";
-import { HelpCircle, LogOut, Settings as SettingsIcon, LayoutDashboard } from 'lucide-react'
+import { HelpCircle, LogOut, Settings as SettingsIcon, LayoutDashboard, Home as HomeIcon } from 'lucide-react'
 import { clearLocalDB } from "@/lib/indexedDB";
 import {
   Dialog,
@@ -215,7 +215,8 @@ export default function Navbar() {
       <div className="max-w-7xl mx-auto flex justify-between items-center p-2 relative">
         {/* Logo/Home link */}
         <Link to="/">
-          <span className="text-xl font-bold">The Hub</span>
+          <HomeIcon className="h-6 w-6 md:hidden" />
+          <span className="hidden md:inline text-xl font-bold">The Hub</span>
         </Link>
 
         {/* Centered dynamic header */}
@@ -235,7 +236,8 @@ export default function Navbar() {
           {/* {access.module_dashboard && ( //markpoint */}
           {access?.dashboard && (
             <Button variant="outline" onClick={() => navigate({ to: '/dashboard' })}>
-                <LayoutDashboard className="h-5 w-5" />
+                <LayoutDashboard className="h-5 w-5 md:hidden" />
+                <span className="hidden md:inline">Dashboard</span>
             </Button>
           )}
           {/* Settings button, shown if user has access */}
