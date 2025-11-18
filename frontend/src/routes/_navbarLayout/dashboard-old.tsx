@@ -1,8 +1,7 @@
 import { createFileRoute, Link, useNavigate } from '@tanstack/react-router';
-import { useEffect, useState, useMemo } from "react";
+import { useEffect, useState } from "react";
 import { LocationPicker } from "@/components/custom/locationPicker";
 import { getCsoCodeByStationName, getVendorNameById } from '@/lib/utils';
-import { DonutSalesChart } from "@/components/custom/dashboard/salesByCategoryDonut";
 import { Bar, BarChart, CartesianGrid, XAxis, LabelList } from "recharts";
 import {
   Card,
@@ -21,14 +20,14 @@ import {
   ChartTooltipContent,
 } from "@/components/ui/chart";
 
-// import { DatePickerWithRange } from '@/components/custom/datePickerWithRange';
+import { DatePickerWithRange } from '@/components/custom/datePickerWithRange';
 import type { DateRange } from "react-day-picker";
 import { useAuth } from "@/context/AuthContext";
 import { getOrderRecStatusColor } from '@/lib/utils';
 import { PasswordProtection } from "@/components/custom/PasswordProtection";
 
 // Define the dashboard route using TanStack Router
-export const Route = createFileRoute('/_navbarLayout/dashboard')({
+export const Route = createFileRoute('/_navbarLayout/dashboard-old')({
   component: RouteComponent,
 });
 
@@ -65,7 +64,7 @@ function RouteComponent() {
 
   const [startDate, setStartDate] = useState(sevenDaysAgo.toISOString().slice(0, 10));
   const [endDate, setEndDate] = useState(today.toISOString().slice(0, 10));
-  const [date, _] = useState<DateRange | undefined>({ from: sevenDaysAgo, to: today });
+  const [date, setDate] = useState<DateRange | undefined>({ from: sevenDaysAgo, to: today });
   
   const [showPasswordDialog, setShowPasswordDialog] = useState(false);
   const [hasAccess, setHasAccess] = useState(false);
@@ -109,13 +108,13 @@ function RouteComponent() {
 
         // Order recs
         // const orderRecsRes = await fetch(`/api/order-rec/range?${params}`, {
-        //   headers: { Authorization: `Bearer ${localStorage.getItem("token")}`, "X-Required-Permission": "dashboard" },
+        //   headers: { Authorization: `Bearer ${localStorage.getItem(`token`)}`, `X-Required-Permission`: `dashboard` },
         // }).then(res => res.json());
         let orderRecsRes: any = []
         try {
           const res = await fetch(`/api/order-rec/range?${params}`, {
             headers: {
-              Authorization: `Bearer ${localStorage.getItem("token")}`,
+              Authorization: `Bearer ${localStorage.getItem(`token`)}`,
               "X-Required-Permission": "dashboard",
             },
           });
@@ -188,84 +187,6 @@ function RouteComponent() {
 
     fetchAllData();
   }, [site, startDate, endDate]);
-  const [fuelData, setFuelData] = useState<any[]>([]);
-
-  useEffect(() => {
-    const fetchFuelData = async () => {
-      try {
-        const csoCode = await getCsoCodeByStationName(site);
-        const today = new Date();
-        const end = new Date(today);
-        end.setDate(today.getDate() - 1); // yesterday
-        const start = new Date(end);
-        start.setDate(end.getDate() - 6); // last 7 days
-
-        const params = new URLSearchParams({
-          csoCode: csoCode ?? "",
-          startDate: start.toISOString().slice(0, 10),
-          endDate: end.toISOString().slice(0, 10)
-        });
-
-        const res = await fetch(`/api/sql/fuelsales?${params}`, {
-          headers: { Authorization: `Bearer ${localStorage.getItem("token")}` }
-        });
-
-        const data = await res.json();
-        console.log("fuel data:",data)
-        setFuelData(data ?? []);
-      } catch (err) {
-        console.error("Error fetching fuel data:", err);
-        setFuelData([]);
-      }
-    };
-
-    fetchFuelData();
-  }, [site]);
-
-  // Helper to format Date as MM-DD
-// const formatDay = (d: Date) => {
-//   const mm = String(d.getMonth() + 1).padStart(2, "0");
-//   const dd = String(d.getDate()).padStart(2, "0");
-//   return `${mm}-${dd}`;
-// };
-
-const fuelChartData = useMemo(() => {
-  if (!fuelData?.length) return [];
-
-  const grades = Array.from(new Set(fuelData.map(d => d.fuelGradeDescription)));
-
-  // Build a map of date → grade → volume
-  const byDate: Record<string, Record<string, number>> = {};
-  fuelData.forEach(d => {
-    const day = d.businessDate.slice(5, 10); // MM-DD
-    if (!byDate[day]) byDate[day] = {};
-    byDate[day][d.fuelGradeDescription] = Number(d.fuelGradeSalesVolume ?? 0);
-  });
-
-  // Sort unique dates from the API
-  const days = Array.from(new Set(fuelData.map(d => d.businessDate.slice(5, 10)))).sort();
-
-  // Build chart rows
-  return days.map(day => {
-    const volumes = byDate[day] || {};
-    const row: Record<string, any> = { day };
-    grades.forEach(g => (row[g] = volumes[g] ?? 0));
-    return row;
-  });
-}, [fuelData]);
-
-// Chart config with colors
-const fuelChartConfig: ChartConfig = useMemo(() => {
-  if (!fuelData?.length) return {};
-  const grades = Array.from(new Set(fuelData.map(d => d.fuelGradeDescription)));
-  return Object.fromEntries(
-    grades.map((g, idx) => [g, { label: g, color: `var(--chart-${(idx % 10) + 1})` }])
-  );
-}, [fuelData]);
-
-
-
-
 
   // ----------------------------
   // Prepare chart data
@@ -293,41 +214,8 @@ const fuelChartConfig: ChartConfig = useMemo(() => {
     GRE: entry.GRE ?? 0,
     Convenience: entry.Convenience ?? 0,
     Vapes: entry.Vapes ?? 0,
-    "Native Gifts": entry['Native Gifts'] ?? 0,
+    "Native Gifts": entry["Native Gifts"] ?? 0,
   }))
-
-  // Build 7-day totals for the donut chart
-  const donutCategories = [
-    "FN",
-    "Quota",
-    "Cannabis",
-    "GRE",
-    "Convenience",
-    "Vapes",
-    "Native Gifts",
-  ] as const;
-
-  // Build proper data shape for DonutSalesChart
-  const donutData = donutCategories.map((cat) => ({
-    category: cat,
-    total: salesChartData.reduce(
-      (sum, row) => sum + Number(row[cat] || 0),
-      0
-    ),
-  }));
-
-  const donutConfig = Object.fromEntries(
-    donutCategories.map((cat, idx) => [
-      cat,
-      {
-        label: cat,
-        color: `var(--chart-${idx + 1})`,
-      },
-    ])
-  );
-
-
-
   // ----------------------------
   // Render dashboard
   // ----------------------------
@@ -345,42 +233,40 @@ const fuelChartConfig: ChartConfig = useMemo(() => {
         <div className="pt-16 flex flex-col items-center">
           <div className="flex gap-4">
             <LocationPicker setStationName={setSite} value="stationName" defaultValue={site} />
-            {/* <DatePickerWithRange date={date} setDate={setDate} /> */}
+            <DatePickerWithRange date={date} setDate={setDate} />
           </div>
 
-        {/* Main container */}
-        <div className="mt-8 w-full max-w-7xl">
-          {loading ? (
-            <div className="text-center py-8">Loading...</div>
-          ) : (
-            <>
-              {/* ======================= */}
-              {/*     INVENTORY SECTION   */}
-              {/* ======================= */}
-              <section aria-labelledby="inventory-heading" className="mb-10">
-                <h2 id="inventory-heading" className="text-2xl font-bold mb-4">Inventory</h2>
-
-                {/* Responsive grid: 1 col mobile, 2 col tablet, 3 col desktop */}
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                  {/* Vendor Status (Inventory) */}
-                  <Card className="h-[435px] flex flex-col col-span-1">
+          <div className="mt-8 w-full max-w-6xl">
+            {loading ? (
+              <div className="text-center py-8">Loading...</div>
+            ) : (
+              <div className="flex gap-8 items-start">
+                <div className="w-full md:w-1/2">
+                  <Card className="h-[435px] flex flex-col"> {/* Match Cycle Counts chart height */}
                     <CardHeader className="flex flex-col md:flex-row md:items-start md:justify-between gap-2">
+                      {/* Left: Title and Description */}
                       <div className="flex-1">
                         <CardTitle>Vendor Status (This Week)</CardTitle>
                         <CardDescription>Current week's vendor order status</CardDescription>
                       </div>
-
+                      {/* Right: Status Legend */}
                       <div className="flex-1 flex flex-wrap gap-2">
                         {["Created", "Completed", "Placed", "Delivered", "Invoice Received"].map((status) => (
-                          <div key={status} className="flex items-center gap-1.5 [&>svg]:h-3 [&>svg]:w-3">
+                          <div
+                            key={status}
+                            className="flex items-center gap-1.5 [&>svg]:h-3 [&>svg]:w-3"
+                          >
+                            {/* Small colored square matching chart legend */}
                             <div
                               className="h-2 w-2 shrink-0 rounded-[2px]"
                               style={{ backgroundColor: getOrderRecStatusColor(status) }}
                             />
+                            {/* Text matching chart legend */}
                             <span className="text-sm font-medium text-black">{status}</span>
                           </div>
                         ))}
                       </div>
+
                     </CardHeader>
 
                     <CardContent className="flex-1 overflow-y-auto">
@@ -412,9 +298,13 @@ const fuelChartConfig: ChartConfig = useMemo(() => {
                       </ul>
                     </CardContent>
                   </Card>
+                  <CashOnHandDisplay site={site} />
+                </div>
 
-                  {/* Cycle Counts (Inventory) */}
-                  <Card className="col-span-1">
+                {/* Charts Column */}
+                <div className="w-full md:w-1/2 flex flex-col gap-8">
+                  {/* Cycle Counts */}
+                  <Card className="w-full">
                     <CardHeader>
                       <CardTitle>Cycle Counts</CardTitle>
                       <CardDescription>Daily cycle count entries for {site}</CardDescription>
@@ -430,9 +320,17 @@ const fuelChartConfig: ChartConfig = useMemo(() => {
                             axisLine={false}
                             tickFormatter={(value) => value}
                           />
-                          <ChartTooltip cursor={false} content={<ChartTooltipContent hideLabel />} />
+                          <ChartTooltip
+                            cursor={false}
+                            content={<ChartTooltipContent hideLabel />}
+                          />
                           <Bar dataKey="count" fill="var(--color-count)" radius={8}>
-                            <LabelList position="top" offset={12} className="fill-foreground" fontSize={12} />
+                            <LabelList
+                              position="top"
+                              offset={12}
+                              className="fill-foreground"
+                              fontSize={12}
+                            />
                           </Bar>
                         </BarChart>
                       </ChartContainer>
@@ -443,22 +341,8 @@ const fuelChartConfig: ChartConfig = useMemo(() => {
                       </div>
                     </CardFooter>
                   </Card>
-
-                  {/* Empty slot / placeholder: keeps grid balanced on larger screens.
-                      Remove or replace with another inventory widget later. */}
-                  <div className="col-span-1" />
-                </div>
-              </section>
-
-              {/* ======================= */}
-              {/*        Catgory SECTION    */}
-              {/* ======================= */}
-              <section aria-labelledby="sales-heading" className="mb-10">
-                <h2 id="sales-heading" className="text-2xl font-bold mb-4">Category</h2>
-
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                  {/* Sales by Category (Daily) */}
-                  <Card className="col-span-1">
+                  {/* Sales by Category (Daily, last 7 days) */}
+                  <Card className="w-full">
                     <CardHeader>
                       <CardTitle>Sales by Category (Daily)</CardTitle>
                       <CardDescription>Last 7 days (stacked)</CardDescription>
@@ -472,7 +356,7 @@ const fuelChartConfig: ChartConfig = useMemo(() => {
                             tickLine={false}
                             tickMargin={10}
                             axisLine={false}
-                            tickFormatter={(value) => value}
+                            tickFormatter={(value) => value} // MM-DD
                           />
                           <ChartTooltip content={<ChartTooltipContent hideLabel />} />
                           <ChartLegend content={<ChartLegendContent data={salesChartData} />} />
@@ -487,12 +371,14 @@ const fuelChartConfig: ChartConfig = useMemo(() => {
                       </ChartContainer>
                     </CardContent>
                     <CardFooter className="flex-col items-start gap-2 text-sm">
-                      <div className="text-muted-foreground leading-none">Last 7 days ending yesterday</div>
+                      <div className="text-muted-foreground leading-none">
+                        Last 7 days ending yesterday
+                      </div>
                     </CardFooter>
                   </Card>
 
-                  {/* Sales by Category (Weekly) */}
-                  <Card className="col-span-1">
+                  {/* Sales by Category (Weekly, last 5 weeks) */}
+                  <Card className="w-full">
                     <CardHeader>
                       <CardTitle>Sales by Category (Weekly)</CardTitle>
                       <CardDescription>Last 5 weeks aggregated (stacked)</CardDescription>
@@ -506,7 +392,7 @@ const fuelChartConfig: ChartConfig = useMemo(() => {
                             tickLine={false}
                             tickMargin={10}
                             axisLine={false}
-                            tickFormatter={(value) => value}
+                            tickFormatter={(value) => value} // e.g., Wk of MM-DD
                           />
                           <ChartTooltip content={<ChartTooltipContent hideLabel />} />
                           <ChartLegend content={<ChartLegendContent data={weeklySalesChartData} />} />
@@ -521,90 +407,19 @@ const fuelChartConfig: ChartConfig = useMemo(() => {
                       </ChartContainer>
                     </CardContent>
                     <CardFooter className="flex-col items-start gap-2 text-sm">
-                      <div className="text-muted-foreground leading-none">Weeks end on Sunday; bars labeled by week start (Mon)</div>
-                    </CardFooter>
-                  </Card>
-
-                  {/* Sales Breakdown (7-Day Donut) */}
-                  <Card className="col-span-1">
-                    <CardHeader>
-                      <CardTitle>Sales Breakdown (7-Day)</CardTitle>
-                      <CardDescription>Category share of last 7 days</CardDescription>
-                    </CardHeader>
-
-                    <CardContent>
-                      
-                      <DonutSalesChart data={donutData} config={donutConfig} />
-                    </CardContent>
-
-                    <CardFooter className="text-sm text-muted-foreground">
-                      Last 7 days ending yesterday
-                    </CardFooter>
-                  </Card>
-
-
-                </div>
-              </section>
-
-              {/* ======================= */}
-              {/*     FUEL SECTION   */}
-              {/* ======================= */}
-              <section aria-labelledby="fuel-heading" className="mb-10">
-                <h2 id="fuel-heading" className="text-2xl font-bold mb-4">Fuel</h2>
-
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                  <Card className="col-span-1">
-                    <CardHeader>
-                      <CardTitle>Fuel Volume by Grade (Last 7 Days)</CardTitle>
-                      <CardDescription>Daily stacked volume</CardDescription>
-                    </CardHeader>
-
-                    <CardContent>
-                      <ChartContainer config={fuelChartConfig}>
-                        <BarChart data={fuelChartData}>
-                          <CartesianGrid vertical={false} />
-                          <XAxis dataKey="day" tickLine={false} axisLine={false} />
-                          <ChartTooltip content={<ChartTooltipContent hideLabel />} />
-                          <ChartLegend content={<ChartLegendContent data={fuelChartData} />} />
-                          {Object.keys(fuelChartConfig).map(grade => (
-                            <Bar key={grade} dataKey={grade} stackId="a" fill={fuelChartConfig[grade].color} />
-                          ))}
-                        </BarChart>
-                      </ChartContainer>
-                    </CardContent>
-                    <CardFooter className="text-sm text-muted-foreground">
-                      Fuel volumes for last 7 days ending yesterday
+                      <div className="text-muted-foreground leading-none">
+                        Weeks end on Sunday; bars labeled by week start (Mon)
+                      </div>
                     </CardFooter>
                   </Card>
                 </div>
-              </section>
-
-
-              {/* ======================= */}
-              {/*     ACCOUNTING SECTION   */}
-              {/* ======================= */}
-              <section aria-labelledby="accounting-heading" className="mb-10">
-                <h2 id="accounting-heading" className="text-2xl font-bold mb-4">Accounting</h2>
-
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                  {/* Cash on Hand (Accounting) */}
-                  <div className="col-span-1">
-                    <CashOnHandDisplay site={site} />
-                  </div>
-
-                  {/* placeholders for future accounting widgets */}
-                  <div className="col-span-1" />
-                  <div className="col-span-1" />
-                </div>
-              </section>
-            </>
-          )}
+              </div>
+            )}
+          </div>
         </div>
-      </div>
-    )}
-  </>
-);
-
+      )}
+    </>
+  );
 }
 
 function CashOnHandDisplay({ site }: { site: string }) {
@@ -626,7 +441,7 @@ function CashOnHandDisplay({ site }: { site: string }) {
       console.log('[CashOnHand] fetching for site:', site);
       try {
         const res = await fetch(`/api/safesheets/site/${encodeURIComponent(site)}/current`, {
-          headers: { Authorization: `Bearer ${localStorage.getItem("token")}` },
+          headers: { Authorization: `Bearer ${localStorage.getItem(`token`)}` },
         });
         console.log('[CashOnHand] raw response', res);
         const body = await res.json().catch(() => null);
@@ -670,7 +485,7 @@ function CashOnHandDisplay({ site }: { site: string }) {
         )}
 
         <div className="text-xs text-muted-foreground">
-          {site ? `Site: ${site}` : 'No site selected'}
+          {site ? `Site: ${site}` : `No site selected`}
         </div>
       </CardContent>
 
@@ -682,7 +497,7 @@ function CashOnHandDisplay({ site }: { site: string }) {
   )
   // return (
   //   <div className="">
-  //     Cash on hand (safe): <span className="font-semibold">${value !== null ? value.toFixed(2) : '—'}</span>
+  //     Cash on hand (safe): <span className="font-semibold">${value !== null ? value.toFixed(2) : "—"}</span>
   //   </div>
   // );
 }
@@ -693,13 +508,13 @@ function CashOnHandDisplay({ site }: { site: string }) {
 const fetchDailyCounts = async (site: string, startDate: string, endDate: string, timezone: string) => {
   const params = new URLSearchParams({ site, startDate, endDate, timezone });
   return fetch(`/api/cycle-count/daily-counts?${params}`, {
-    headers: { Authorization: `Bearer ${localStorage.getItem("token")}` },
+    headers: { Authorization: `Bearer ${localStorage.getItem(`token`)}` },
   }).then(res => res.json());
 };
 
 // const fetchSalesData = async (csoCode: string, startDate: string, endDate: string) => {
 //   return fetch(`/api/sql/sales?csoCode=${csoCode}&startDate=${startDate}&endDate=${endDate}`, {
-//     headers: { Authorization: `Bearer ${localStorage.getItem("token")}` },
+//     headers: { Authorization: `Bearer ${localStorage.getItem(`token`)}` },
 //   }).then(res => res.json());
 // };
 const fetchSalesData = async (csoCode: string) => {
@@ -721,7 +536,7 @@ const fetchSalesData = async (csoCode: string) => {
 
   // Fetch raw rows
   const rows = await fetch(`/api/sql/sales?csoCode=${encodeURIComponent(csoCode)}&startDate=${startDate}&endDate=${endDate}`, {
-    headers: { Authorization: `Bearer ${localStorage.getItem("token")}` },
+    headers: { Authorization: `Bearer ${localStorage.getItem(`token`)}` },
   }).then(res => res.json())
 
   // Build date-indexed map with sums
@@ -778,7 +593,7 @@ const fetchSalesData = async (csoCode: string) => {
       if (!daySums) continue
       for (const c of CATS) sums[c] += Number(daySums[c] || 0)
     }
-    const label = `Wk of ${fmt(ws).slice(5)}` // 'Wk of MM-DD'
+    const label = `Wk of ${fmt(ws).slice(5)}` // `Wk of MM-DD`
     return { week: label, ...sums }
   })
 
@@ -787,12 +602,12 @@ const fetchSalesData = async (csoCode: string) => {
 
 const fetchVendors = async (site: string) => {
   const params = new URLSearchParams({ location: site });
-  return fetch(`/api/vendors?${params}`, { headers: { Authorization: `Bearer ${localStorage.getItem("token")}` } }).then(res => res.json());
+  return fetch(`/api/vendors?${params}`, { headers: { Authorization: `Bearer ${localStorage.getItem(`token`)}` } }).then(res => res.json());
 };
 
 const fetchOrderRecs = async (site: string, startDate: string, endDate: string) => {
   const params = new URLSearchParams({ site, startDate, endDate });
-  return fetch(`/api/order-rec?${params}`, { headers: { Authorization: `Bearer ${localStorage.getItem("token")}` } }).then(res => res.json());
+  return fetch(`/api/order-rec?${params}`, { headers: { Authorization: `Bearer ${localStorage.getItem(`token`)}` } }).then(res => res.json());
 };
 
 const fetchLocation = async (stationName: string) => {
