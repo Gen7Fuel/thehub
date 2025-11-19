@@ -12,6 +12,7 @@ import { getStartAndEndOfToday } from '@/lib/utils'
 import { toZonedTime } from 'date-fns-tz'
 import axios from "axios"
 import { useAuth } from "@/context/AuthContext";
+import { formatFleetCardNumber } from '@/lib/utils';
 
 export const Route = createFileRoute('/_navbarLayout/po/list')({
   component: RouteComponent,
@@ -43,6 +44,7 @@ function RouteComponent() {
     vehicleMakeModel: string;
     signature: string;
     receipt: string;
+    poNumber: string;
   }[]
   >([]);
 
@@ -85,6 +87,7 @@ function RouteComponent() {
   const generatePDF = async (order: {
     date: string;
     fleetCardNumber: string;
+    poNumber: string;
     customerName: string;
     driverName: string;
     quantity: number;
@@ -144,7 +147,7 @@ function RouteComponent() {
         <thead>
           <tr className="bg-gray-100">
             <th className="border-dashed border-b border-gray-300 px-4 py-2">Date</th>
-            <th className="border-dashed border-b border-gray-300 px-4 py-2">Fleet Card Number</th>
+            <th className="border-dashed border-b border-gray-300 px-4 py-2">Fleet Card Number/PO Number</th>
             <th className="border-dashed border-b border-gray-300 px-4 py-2">Customer Name</th>
             <th className="border-dashed border-b border-gray-300 px-4 py-2">Driver Name</th>
             <th className="border-dashed border-b border-gray-300 px-4 py-2">Quantity</th>
@@ -161,7 +164,7 @@ function RouteComponent() {
             purchaseOrders.map((order, index) => (
               <tr key={index} className="hover:bg-gray-50">
                 <td className="border-dashed border-t border-gray-300 px-4 py-2">{new Date(order.date).toLocaleDateString()}</td>
-                <td className="border-dashed border-t border-gray-300 px-4 py-2">{order.fleetCardNumber}</td>
+                <td className="border-dashed border-t border-gray-300 px-4 py-2">{formatFleetCardNumber(order.fleetCardNumber) || order.poNumber}</td>
                 <td className="border-dashed border-t border-gray-300 px-4 py-2">{order.customerName}</td>
                 <td className="border-dashed border-t border-gray-300 px-4 py-2">{order.driverName}</td>
                 <td className="border-dashed border-t border-gray-300 px-4 py-2">{order.quantity}</td>

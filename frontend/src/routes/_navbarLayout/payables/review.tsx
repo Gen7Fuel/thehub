@@ -22,16 +22,17 @@ function RouteComponent() {
   const payablePaymentMethod = useFormStore((state) => state.payablePaymentMethod)
   const payableAmount = useFormStore((state) => state.payableAmount)
   const payableImages = useFormStore((state) => state.payableImages)
+  const date = useFormStore((state) => state.date)
   const resetPayableForm = useFormStore((state) => state.resetPayableForm)
 
   useEffect(() => {
-    if (!payableVendorName || !payableLocation || !payablePaymentMethod || !payableAmount) {
+    if (!date || !payableVendorName || !payableLocation || !payablePaymentMethod || !payableAmount) {
       navigate({ to: "/payables" })
     }
-  }, [payableVendorName, payableLocation, payablePaymentMethod, payableAmount, navigate])
+  }, [date, payableVendorName, payableLocation, payablePaymentMethod, payableAmount, navigate])
 
   const handleSubmit = async () => {
-    if (!payableVendorName || !payableLocation || !payablePaymentMethod || !payableAmount) return
+    if (!date || !payableVendorName || !payableLocation || !payablePaymentMethod || !payableAmount) return
 
     setIsSubmitting(true)
     try {
@@ -69,7 +70,8 @@ function RouteComponent() {
         notes: payableNotes,
         paymentMethod: payablePaymentMethod,
         amount: payableAmount,
-        images: imageFilenames
+        images: imageFilenames,
+        date: date,
       }, {
         headers: {
           Authorization: `Bearer ${token}`,

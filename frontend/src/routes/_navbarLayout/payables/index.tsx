@@ -1,6 +1,7 @@
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { useEffect } from "react";
+import { DatePicker } from '@/components/custom/datePicker';
 import { Select, SelectContent, SelectGroup, SelectItem, SelectLabel, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { createFileRoute, Link } from '@tanstack/react-router'
 import { useFormStore } from '@/store'
@@ -18,24 +19,26 @@ function RouteComponent() {
   // const access = user?.access || '{}'
   const payableVendorName = useFormStore((state) => state.payableVendorName)
   const setPayableVendorName = useFormStore((state) => state.setPayableVendorName)
-  
+  const date = useFormStore((state) => state.date)
+  const setDate = useFormStore((state) => state.setDate)
+
   const payableLocation = useFormStore((state) => state.payableLocation)
   const setPayableLocation = useFormStore((state) => state.setPayableLocation)
-  console.log('Before:',payableLocation)
-  console.log('auth location:',user?.location)
+  console.log('Before:', payableLocation)
+  console.log('auth location:', user?.location)
   useEffect(() => {
     if (user?.location) {
       setPayableLocation(user.location);
     }
   }, [user?.location, payableLocation, setPayableLocation]);
-  console.log('After:',payableLocation)
-  
+  console.log('After:', payableLocation)
+
   const payableNotes = useFormStore((state) => state.payableNotes)
   const setPayableNotes = useFormStore((state) => state.setPayableNotes)
-  
+
   const payablePaymentMethod = useFormStore((state) => state.payablePaymentMethod)
   const setPayablePaymentMethod = useFormStore((state) => state.setPayablePaymentMethod)
-  
+
   const payableAmount = useFormStore((state) => state.payableAmount)
   const setPayableAmount = useFormStore((state) => state.setPayableAmount)
 
@@ -70,7 +73,19 @@ function RouteComponent() {
           <LocationPicker
             setStationName={setPayableLocation as React.Dispatch<React.SetStateAction<string>>}
             value="stationName"
-            // disabled={!access.component_payables_create_location_filter}
+          // disabled={!access.component_payables_create_location_filter}
+          />
+          <DatePicker
+            date={date}
+            setDate={(value) => {
+              if (typeof value === 'function') {
+                // Call the function with current date
+                const newDate = value(date);
+                if (newDate) setDate(newDate);
+              } else {
+                setDate(value);
+              }
+            }}
           />
         </div>
 
@@ -117,8 +132,8 @@ function RouteComponent() {
         {/* Navigation Section */}
         <div className="flex justify-end">
           <Link to="/payables/images">
-            <Button 
-              variant="outline" 
+            <Button
+              variant="outline"
               disabled={!isFormValid}
             >
               Next
