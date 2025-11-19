@@ -12,6 +12,7 @@ import {
 import { Card, CardHeader, CardTitle, CardContent, CardFooter } from "@/components/ui/card";
 import { FuelChartTooltip } from "@/components/ui/chart";
 import { cn } from "@/lib/utils"; // your helper for classNames
+// import { formatNumberCompact } from '@/routes/_navbarLayout/dashboard';
 
 interface Props {
   data: any[];
@@ -120,6 +121,7 @@ const yMax = Math.min(100, actualMax + zoomPadding);
               domain={[yMin, yMax]}
               tickLine={false}
               axisLine={false}
+              tickFormatter={(value) => value.toFixed(0)}
               tick={{ fontSize: 12 }}
             />
 

@@ -26,7 +26,7 @@ import {
 } from "@/components/ui/chart";
 import { FuelMixAreaChart } from "@/components/custom/dashboard/fuelMixAreaChart";
 import { FuelSparkline } from "@/components/custom/dashboard/fuelSparkLine";
-import { DatePickerWithRange } from '@/components/custom/datePickerWithRange';
+// import { DatePickerWithRange } from '@/components/custom/datePickerWithRange';
 import type { DateRange } from "react-day-picker";
 import { useAuth } from "@/context/AuthContext";
 import { getOrderRecStatusColor } from '@/lib/utils';
@@ -136,6 +136,99 @@ interface SalesData {
   cards: SalesCards;
 }
 
+export const fetchFuelMonthToMonth = async (site: string) => {
+  // --- Compute 60-day range ---
+  const csoCode = await getCsoCodeByStationName(site);
+
+  const today = new Date();
+  const end = new Date(today);
+  end.setDate(today.getDate() - 1); // yesterday
+
+  const start = new Date(end);
+  start.setDate(end.getDate() - 60); // last 35 days
+
+  const params = new URLSearchParams({
+    csoCode: csoCode ?? "",
+    startDate: start.toISOString().slice(0, 10),
+    endDate: end.toISOString().slice(0, 10),
+  });
+
+  const res = await fetch(`/api/sql/fuelsales?${params}`, {
+    headers: { Authorization: `Bearer ${localStorage.getItem("token")}` },
+  });
+
+  const data = await res.json();
+  const fuelData = data ?? [];
+  console.log('fueldata60:', fuelData)
+
+  if (!fuelData.length) return null;
+
+  const byDate: Record<string, number> = {};
+
+  fuelData.forEach((row: any) => {
+    const key = (row.businessDate || "").slice(0, 10);
+    if (!key.match(/^\d{4}-\d{2}-\d{2}$/)) return;
+    if (!byDate[key]) byDate[key] = 0;
+    byDate[key] += Number(row.fuelGradeSalesVolume || row.volume || 0) || 0;
+  });
+
+  const fmt = (d: Date) => d.toISOString().slice(0, 10);
+
+  // --- Month-to-Month calculation (1 → yesterday) ---
+  // const today = new Date();
+  today.setDate(today.getDate() - 1); // yesterday
+
+  const currentMonthStart = new Date(today.getFullYear(), today.getMonth(), 1);
+  const prevMonthStart = new Date(today.getFullYear(), today.getMonth() - 1, 1);
+  const prevMonthEnd = new Date(prevMonthStart.getFullYear(), prevMonthStart.getMonth(), today.getDate());
+
+  // --- Helper: sum volumes in a date range ---
+  const sumVolumeByDateRange = (startD: Date, endD: Date) => {
+    const startKey = fmt(startD);
+    const endKey = fmt(endD);
+
+    return Object.entries(byDate)
+      .filter(([dateStr]) => dateStr >= startKey && dateStr <= endKey)
+      .reduce((acc, [, vol]) => acc + vol, 0);
+  };
+
+  const currentMonthVolume = sumVolumeByDateRange(currentMonthStart, today);
+  const prevMonthVolume = sumVolumeByDateRange(prevMonthStart, prevMonthEnd);
+  const changePct = prevMonthVolume
+    ? ((currentMonthVolume - prevMonthVolume) / prevMonthVolume) * 100
+    : 0;
+
+  return {
+    currentMonthVolume,
+    previousMonthVolume: prevMonthVolume,
+    percent: Number(changePct.toFixed(2)),
+  };
+}
+
+/**
+ * Format large numbers into readable strings with K, M, B suffixes.
+ * Shows two decimal digits for thousands and millions.
+ * Examples:
+ *  514639 -> "514.64K"
+ *  8562123.96 -> "8.56M"
+ */
+export function formatNumberCompact(value: number | undefined | null): string {
+  if (value === null || value === undefined) return "0";
+
+  const absValue = Math.abs(value);
+
+  if (absValue >= 1_000_000_000) {
+    return (value / 1_000_000_000).toFixed(2).replace(/\.?0+$/, "") + "B";
+  } else if (absValue >= 1_000_000) {
+    return (value / 1_000_000).toFixed(2).replace(/\.?0+$/, "") + "M";
+  } else if (absValue >= 1_000) {
+    return (value / 1_000).toFixed(2).replace(/\.?0+$/, "") + "K";
+  } else {
+    return value.toString();
+  }
+}
+
+
 function RouteComponent() {
   const { user } = useAuth();
   const [site, setSite] = useState(user?.location || "Rankin");
@@ -158,7 +251,7 @@ function RouteComponent() {
 
   const [startDate, setStartDate] = useState(sevenDaysAgo.toISOString().slice(0, 10));
   const [endDate, setEndDate] = useState(today.toISOString().slice(0, 10));
-  const [date, setDate] = useState<DateRange | undefined>({ from: sevenDaysAgo, to: today });
+  const [date, _] = useState<DateRange | undefined>({ from: sevenDaysAgo, to: today });
 
   const [showPasswordDialog, setShowPasswordDialog] = useState(false);
   const [hasAccess, setHasAccess] = useState(false);
@@ -230,8 +323,8 @@ function RouteComponent() {
 
         // Cycle counts
         const timezone = await fetchLocation(site).then(loc => loc.timezone || "UTC");
-        // const dailyCountsRes = await fetchDailyCounts(site, sevenDaysAgo.toISOString().slice(0, 10), today.toISOString().slice(0, 10), timezone);
-        const dailyCountsRes = await fetchDailyCounts(site, startDate, endDate, timezone);
+        const dailyCountsRes = await fetchDailyCounts(site, sevenDaysAgo.toISOString().slice(0, 10), today.toISOString().slice(0, 10), timezone);
+        // const dailyCountsRes = await fetchDailyCounts(site, startDate, endDate, timezone);
 
         // Sales data
         const csoCode = await getCsoCodeByStationName(site);
@@ -281,6 +374,22 @@ function RouteComponent() {
   }, [site, startDate, endDate]);
 
   const [fuelData, setFuelData] = useState<any[]>([]);
+  const [fuelMonthStats, setFuelMonthStats] = useState<{
+    currentMonthVolume: number;
+    previousMonthVolume: number;
+    percent: number;
+  } | null>(null);
+
+  useEffect(() => {
+    const loadFuelMTM = async () => {
+      const stats = await fetchFuelMonthToMonth(site);
+      setFuelMonthStats(stats);
+    };
+
+    loadFuelMTM();
+  }, [site]);
+
+
 
   useEffect(() => {
     const fetchFuelData = async () => {
@@ -337,8 +446,6 @@ function RouteComponent() {
 
     fetchFuelData();
   }, [site]);
-
-
 
   const fuelChartData = useMemo(() => {
     if (!fuelData?.length) return [];
@@ -571,7 +678,7 @@ function RouteComponent() {
           {/* Filters */}
           <div className="flex gap-4">
             <LocationPicker setStationName={setSite} value="stationName" defaultValue={site} />
-            <DatePickerWithRange date={date} setDate={setDate} />
+            {/* <DatePickerWithRange date={date} setDate={setDate} /> */}
           </div>
 
           {/* Main container */}
@@ -583,31 +690,26 @@ function RouteComponent() {
                 {/* ======================= */}
                 {/*     CARD SECTION   */}
                 {/* ======================= */}
-                <section aria-labelledby="accounting-heading" className="mb-10">
-                  <h2 id="accounting-heading" className="text-2xl font-bold mb-4">Accounting</h2>
+                <section aria-labelledby="overview-heading" className="mb-10">
+                  <h2 id="overview-heading" className="text-2xl font-bold mb-4 pl-4">Overview</h2>
 
-                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-
-                    {/* Cash on Hand (Accounting) */}
-                    <div className="col-span-1">
-                      <CashOnHandDisplay site={site} />
-                    </div>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-6">
 
                     {/* Month-to-Month Sales Card */}
                     <div className="col-span-1">
                       <div className="bg-white rounded-xl shadow p-4 flex flex-col">
-                        <div className="text-sm text-muted-foreground">Month-to-Month Sales</div>
+                        <div className="text-sm text-muted-foreground">M-to-M C-Store Sales</div>
                         <div className="text-2xl font-bold mt-1">
-                          C$ {salesData?.cards?.month?.current?.toLocaleString() ?? 0}
+                          C$ {formatNumberCompact(salesData?.cards?.month?.current).toLocaleString() ?? 0}
                         </div>
                         <div className="text-sm mt-1">
                           <span className="text-muted-foreground">
-                            C$ {salesData?.cards?.month?.previous?.toLocaleString() ?? 0}
+                            C$ {formatNumberCompact(salesData?.cards?.month?.previous).toLocaleString() ?? 0}
                           </span>
                           <span
                             className={`ml-2 font-semibold ${Number(salesData?.cards?.month?.changePct) >= 0
-                                ? "text-green-600"
-                                : "text-red-600"
+                              ? "text-green-600"
+                              : "text-red-600"
                               }`}
                           >
                             ({salesData?.cards?.month?.changePct}%)
@@ -619,24 +721,52 @@ function RouteComponent() {
                     {/* Week-to-Week Sales Card */}
                     <div className="col-span-1">
                       <div className="bg-white rounded-xl shadow p-4 flex flex-col">
-                        <div className="text-sm text-muted-foreground">Week-to-Week Sales</div>
+                        <div className="text-sm text-muted-foreground">W-to-W C-Store Sales</div>
                         <div className="text-2xl font-bold mt-1">
-                          C$ {salesData?.cards?.week?.current?.toLocaleString() ?? 0}
+                          C$ {formatNumberCompact(salesData?.cards?.week?.current).toLocaleString() ?? 0}
                         </div>
                         <div className="text-sm mt-1">
                           <span className="text-muted-foreground">
-                            C$ {salesData?.cards?.week?.previous?.toLocaleString() ?? 0}
+                            C$ {formatNumberCompact(salesData?.cards?.week?.previous).toLocaleString() ?? 0}
                           </span>
                           <span
                             className={`ml-2 font-semibold ${Number(salesData?.cards?.week?.changePct) >= 0
-                                ? "text-green-600"
-                                : "text-red-600"
+                              ? "text-green-600"
+                              : "text-red-600"
                               }`}
                           >
                             ({salesData?.cards?.week?.changePct}%)
                           </span>
                         </div>
                       </div>
+                    </div>
+
+                    {/* Mont to Month Fuel Volume */}
+                    <div className="col-span-1">
+                      <div className="bg-white rounded-xl shadow p-4 flex flex-col">
+                        <div className="text-sm text-muted-foreground">M-to-M Fuel Volume</div>
+                        <div className="text-2xl font-bold mt-1">
+                          {formatNumberCompact(fuelMonthStats?.currentMonthVolume).toLocaleString() ?? 0} Ltrs
+                        </div>
+                        <div className="text-sm mt-1">
+                          <span className="text-muted-foreground">
+                            {formatNumberCompact(fuelMonthStats?.previousMonthVolume).toLocaleString() ?? 0} Ltrs
+                          </span>
+                          <span
+                            className={`ml-2 font-semibold ${Number(fuelMonthStats?.percent) >= 0
+                              ? "text-green-600"
+                              : "text-red-600"
+                              }`}
+                          >
+                            ({fuelMonthStats?.percent}%)
+                          </span>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Cash on Hand (Accounting) */}
+                    <div className="col-span-1">
+                      <CashOnHandDisplay site={site} />
                     </div>
 
                   </div>
@@ -647,7 +777,7 @@ function RouteComponent() {
                 {/*     INVENTORY SECTION   */}
                 {/* ======================= */}
                 <section aria-labelledby="inventory-heading" className="mb-10">
-                  <h2 id="inventory-heading" className="text-2xl font-bold mb-4">Inventory</h2>
+                  <h2 id="inventory-heading" className="text-2xl font-bold mb-4 pl-4">Inventory</h2>
 
                   {/* Responsive grid: 1 col mobile, 2 col tablet, 3 col desktop */}
                   <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
@@ -752,7 +882,7 @@ function RouteComponent() {
                 {/*        Catgory SECTION    */}
                 {/* ======================= */}
                 <section aria-labelledby="sales-heading" className="mb-10">
-                  <h2 id="sales-heading" className="text-2xl font-bold mb-4">Category</h2>
+                  <h2 id="sales-heading" className="text-2xl font-bold mb-4 pl-4">Category</h2>
 
                   <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
                     {/* Sales by Category (Daily) */}
@@ -856,9 +986,31 @@ function RouteComponent() {
                 {/*     FUEL SECTION   */}
                 {/* ======================= */}
                 <section aria-labelledby="fuel-heading" className="mb-10">
-                  <h2 id="fuel-heading" className="text-2xl font-bold mb-4">Fuel</h2>
+                  <h2 id="fuel-heading" className="text-2xl font-bold mb-4 pl-4">Fuel</h2>
 
                   <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+
+                    {/* 90-Day Fuel Mix Area Chart */}
+                    {/* <FuelMixAreaChart data={fuelMix90} config={normalizedFuelChartConfig90} /> */}
+                    <FuelMixAreaChart
+                      data={fuelMix90}
+                      config={normalizedFuelChartConfig90}
+                      selectedGrade={selectedGrade}
+                    />
+                    {/* Sparklines for each grade */}
+                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 col-span-1">
+                      {Object.keys(fuelSparklines).map((grade) => (
+                        <FuelSparkline
+                          key={grade}
+                          title={grade}
+                          color={fuelChartConfig90[grade]?.color}
+                          data={fuelSparklines[grade]}
+                          onClick={() =>
+                            setSelectedGrade(prev => (prev === grade ? null : grade))
+                          }
+                        />
+                      ))}
+                    </div>
 
                     {/* 7-Day Stacked Bar with SMA */}
                     <Card className="col-span-1">
@@ -895,28 +1047,6 @@ function RouteComponent() {
                       </CardFooter>
                     </Card>
 
-                    {/* 90-Day Fuel Mix Area Chart */}
-                    {/* <FuelMixAreaChart data={fuelMix90} config={normalizedFuelChartConfig90} /> */}
-                    <FuelMixAreaChart
-                      data={fuelMix90}
-                      config={normalizedFuelChartConfig90}
-                      selectedGrade={selectedGrade}
-                    />
-                    {/* Sparklines for each grade */}
-                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 col-span-1">
-                      {Object.keys(fuelSparklines).map((grade) => (
-                        <FuelSparkline
-                          key={grade}
-                          title={grade}
-                          color={fuelChartConfig90[grade]?.color}
-                          data={fuelSparklines[grade]}
-                          onClick={() =>
-                            setSelectedGrade(prev => (prev === grade ? null : grade))
-                          }
-                        />
-                      ))}
-                    </div>
-
                   </div>
                 </section>
               </>
@@ -924,38 +1054,6 @@ function RouteComponent() {
           </div>
         </div>
       )}
-      {/* {isDialogOpen && selectedDay && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-          <div className="bg-white rounded-lg shadow-lg max-w-md w-full p-4">
-            <div className="flex justify-between items-center mb-4">
-              <h3 className="text-lg font-bold">{`Date: ${selectedDay.day}`}</h3>
-              <button
-                onClick={() => setIsDialogOpen(false)}
-                className="text-gray-500 hover:text-gray-700 font-bold"
-              >
-                ✕
-              </button>
-            </div>
-
-            <div className="mb-2">{`Total Count: ${selectedDay.count}`}</div>
-
-            <div>
-              <div className="font-semibold mb-1">Items:</div>
-              {selectedDay.items.length === 0 ? (
-                <div className="text-muted-foreground">No items</div>
-              ) : (
-                <ul className="list-disc list-inside max-h-60 overflow-y-auto">
-                  {selectedDay.items.map((item, idx) => (
-                    <li key={idx}>
-                      {item.name} ({item.upc_barcode}): {item.totalQty}
-                    </li>
-                  ))}
-                </ul>
-              )}
-            </div>
-          </div>
-        </div>
-      )} */}
     </>
   );
 
@@ -963,82 +1061,80 @@ function RouteComponent() {
 
 function CashOnHandDisplay({ site }: { site: string }) {
   const [value, setValue] = useState<number | null>(null);
+  const [noSafesheet, setNoSafesheet] = useState(false);
   const [loadingCash, setLoadingCash] = useState(false);
-  const [errorCash, setErrorCash] = useState<string | null>(null);
 
   useEffect(() => {
     if (!site) {
       setValue(null);
-      setErrorCash(null);
+      setNoSafesheet(false);
       return;
     }
+
     let mounted = true;
 
     const fetchCurrent = async () => {
       setLoadingCash(true);
-      setErrorCash(null);
-      console.log('[CashOnHand] fetching for site:', site);
+      setNoSafesheet(false);
+
       try {
-        const res = await fetch(`/api/safesheets/site/${encodeURIComponent(site)}/current`, {
-          headers: { Authorization: `Bearer ${localStorage.getItem("token")}` },
-        });
-        console.log('[CashOnHand] raw response', res);
+        const res = await fetch(
+          `/api/safesheets/site/${encodeURIComponent(site)}/current`,
+          {
+            headers: { Authorization: `Bearer ${localStorage.getItem("token")}` },
+          }
+        );
+
         const body = await res.json().catch(() => null);
-        console.log('[CashOnHand] response body', body);
-        if (!res.ok) throw new Error(body?.error || 'Failed to fetch cash on hand');
+
+        if (body?.error === "No safesheet found") {
+          if (mounted) setNoSafesheet(true);
+          return;
+        }
+
+        if (!res.ok) throw new Error(body?.error || "Failed to fetch cash on hand");
+
         if (mounted) setValue(Number(body?.cashOnHandSafe ?? null));
-      } catch (err: any) {
-        console.error('[CashOnHand] fetch error', err);
-        if (mounted) setErrorCash(err.message || 'Unknown error');
       } finally {
         if (mounted) setLoadingCash(false);
       }
     };
 
     fetchCurrent();
-    const interval = setInterval(fetchCurrent, 60_000); // refresh every 60s
+    const interval = setInterval(fetchCurrent, 60000);
     return () => {
       mounted = false;
       clearInterval(interval);
     };
   }, [site]);
 
-  if (!site) return <div className="text-sm text-muted-foreground">No site selected</div>;
-  if (loadingCash) return <div className="text-sm">Loading cash on hand...</div>;
-  if (errorCash) return <div className="text-sm text-red-600">Error: {errorCash}</div>;
+  // 👉 If no safesheet: show an empty card (styled but blank)
+  if (noSafesheet) {
+    return (
+      <div className="bg-white rounded-xl shadow p-4 flex flex-col w-[260px] mt-6" />
+    );
+  }
+
+  // Normal card
   return (
-    <Card className="w-[260px] mt-6">
-      <CardHeader className="pb-2">
-        <CardTitle>Cash on hand (safe)</CardTitle>
-      </CardHeader>
-
-      <CardContent className="flex flex-col gap-2">
-        {loadingCash ? (
-          <div className="text-sm">Loading...</div>
-        ) : errorCash ? (
-          <div className="text-sm text-red-600">Error: {errorCash}</div>
-        ) : (
-          <div className="text-2xl font-semibold">
-            ${value !== null ? value.toFixed(2) : '—'}
-          </div>
-        )}
-
-        <div className="text-xs text-muted-foreground">
-          {site ? `Site: ${site}` : 'No site selected'}
+    <div className="col-span-1">
+      <div className="bg-white rounded-xl shadow p-4 flex flex-col">
+        <div className="text-sm text-muted-foreground">Cash on Hand (Safe)</div>
+        <div className="text-2xl font-bold mt-1">
+          {loadingCash ? (
+            <span className="text-sm">Loading...</span>
+          ) : (
+            <>C${value !== null ? value.toFixed(2) : " —"}</>
+          )}
         </div>
-      </CardContent>
-
-      <CardFooter className="text-xs text-muted-foreground">
-        {/* optional: last updated timestamp could go here */}
-        Updated periodically
-      </CardFooter>
-    </Card>
-  )
-  // return (
-  //   <div className="">
-  //     Cash on hand (safe): <span className="font-semibold">${value !== null ? value.toFixed(2) : '—'}</span>
-  //   </div>
-  // );
+        <div className="text-sm mt-1">
+          <span className="text-muted-foreground">
+            {site ? `Site: ${site}` : ""}
+          </span>
+        </div>
+      </div>
+    </div>
+  );
 }
 
 // ----------------------------
@@ -1056,17 +1152,168 @@ const fetchDailyCounts = async (site: string, startDate: string, endDate: string
 //     headers: { Authorization: `Bearer ${localStorage.getItem("token")}` },
 //   }).then(res => res.json());
 // };
+// const fetchSalesData = async (csoCode: string) => {
+//   // Categories used across charts
+//   const CATS = ['FN', 'Quota', 'Cannabis', 'GRE', 'Convenience', 'Vapes', 'Native Gifts'] as const
+
+//   // Compute date window: last 5 weeks ending yesterday
+//   const end = new Date()
+//   end.setDate(end.getDate() - 1)           // yesterday
+//   end.setHours(23, 59, 59, 999)
+
+//   const start = new Date(end)
+//   start.setDate(start.getDate() - (7 * 5 - 1)) // 35 days window
+//   start.setHours(0, 0, 0, 0)
+
+//   const fmt = (d: Date) => d.toISOString().slice(0, 10)
+//   const startDate = fmt(start)
+//   const endDate = fmt(end)
+
+//   // Fetch raw rows
+//   const rows = await fetch(`/api/sql/sales?csoCode=${encodeURIComponent(csoCode)}&startDate=${startDate}&endDate=${endDate}`, {
+//     headers: { Authorization: `Bearer ${localStorage.getItem("token")}` },
+//   }).then(res => res.json())
+
+//   // Build date-indexed map with sums
+//   const byDate: Record<string, Record<string, number>> = {}
+
+//   for (const r of Array.isArray(rows) ? rows : []) {
+//     const dateKey = String(r.Date_SK || r.date || '').slice(0, 10) // 'YYYY-MM-DD'
+//     if (!/^\d{4}-\d{2}-\d{2}$/.test(dateKey)) continue
+//     byDate[dateKey] = byDate[dateKey] || Object.fromEntries(CATS.map(c => [c, 0]))
+//     for (const c of CATS) {
+//       const v = Number(r[c] ?? 0)
+//       if (!Number.isNaN(v)) byDate[dateKey][c] += v
+//     }
+//   }
+
+//   // Helpers for week calc (Mon-Sun weeks)
+//   // const startOfWeek = (d: Date) => {
+//   //   const x = new Date(d)
+//   //   const day = x.getDay() // 0 Sun .. 6 Sat
+//   //   const diffToMon = day === 0 ? -6 : 1 - day
+//   //   x.setDate(x.getDate() + diffToMon)
+//   //   x.setHours(0, 0, 0, 0)
+//   //   return x
+//   // }
+//   // const addDays = (d: Date, n: number) => {
+//   //   const x = new Date(d); x.setDate(x.getDate() + n); return x
+//   // }
+//   // --- Week-to-week ---
+//   const startOfWeek = (d: Date) => {
+//     const day = d.getDay(); // 0=Sun, 1=Mon
+//     const diffToMon = day === 0 ? -6 : 1 - day;
+//     const monday = new Date(d);
+//     monday.setDate(d.getDate() + diffToMon);
+//     monday.setHours(0, 0, 0, 0);
+//     return monday;
+//   };
+
+//   const addDays = (d: Date, n: number) => {
+//     const newDate = new Date(d);
+//     newDate.setDate(d.getDate() + n);
+//     return newDate;
+//   };
+
+//   // Build daily (last 7 days ending yesterday), ascending by date
+//   const daily: any[] = []
+//   for (let i = 6; i >= 0; i--) {
+//     const d = new Date(end)
+//     d.setDate(end.getDate() - i)
+//     d.setHours(0, 0, 0, 0)
+//     const k = fmt(d)
+//     const sums = byDate[k] || Object.fromEntries(CATS.map(c => [c, 0]))
+//     daily.push({ day: k.slice(5), ...sums }) // day: 'MM-DD'
+//   }
+
+//   // Build weekly (last 5 full weeks, ending with the week containing 'end')
+//   const weeks: { start: Date; end: Date }[] = []
+//   let wkStart = startOfWeek(end)
+//   for (let i = 4; i >= 0; i--) {
+//     const ws = new Date(wkStart); ws.setDate(wkStart.getDate() - i * 7)
+//     const we = addDays(ws, 6)
+//     weeks.push({ start: ws, end: we })
+//   }
+
+//   const weekly: any[] = weeks.map(({ start: ws, end: we }) => {
+//     const sums: Record<string, number> = Object.fromEntries(CATS.map(c => [c, 0]))
+//     for (let d = new Date(ws); d <= we; d = addDays(d, 1)) {
+//       const k = fmt(d)
+//       const daySums = byDate[k]
+//       if (!daySums) continue
+//       for (const c of CATS) sums[c] += Number(daySums[c] || 0)
+//     }
+//     const label = `Wk of ${fmt(ws).slice(5)}` // 'Wk of MM-DD'
+//     return { week: label, ...sums }
+//   })
+//   // ----- Cards Calculation -----
+//   const today = end; // yesterday
+
+//   // Month-to-Month
+//   const currentMonthStart = new Date(today.getFullYear(), today.getMonth(), 1);
+//   const prevMonthStart = new Date(today.getFullYear(), today.getMonth() - 1, 1);
+//   const prevMonthEnd = new Date(today.getFullYear(), today.getMonth() - 1, today.getDate());
+
+//   // Helper to sum sales in a date range from byDate map
+//   const sumSalesByDateRange = (start: Date, end: Date) =>
+//     Object.entries(byDate)
+//       .filter(([dateStr]) => {
+//         const dt = new Date(dateStr);
+//         return dt >= start && dt <= end;
+//       })
+//       .reduce(
+//         (acc, [, row]) =>
+//           acc +
+//           Object.values(row).reduce((a, v) => a + (typeof v === "number" ? v : 0), 0),
+//         0
+//       );
+
+//   const currentMonthSales = sumSalesByDateRange(currentMonthStart, today);
+//   const prevMonthSales = sumSalesByDateRange(prevMonthStart, prevMonthEnd);
+//   const monthChangePct = prevMonthSales
+//     ? ((currentMonthSales - prevMonthSales) / prevMonthSales) * 100
+//     : 0;
+
+//   const currentWeekStart = startOfWeek(today);
+//   const prevWeekStart = addDays(currentWeekStart, -7);
+//   const prevWeekEnd = addDays(prevWeekStart, today.getDay() - 1); // same weekdays last week
+
+//   const currentWeekSales = sumSalesByDateRange(currentWeekStart, today);
+//   const prevWeekSales = sumSalesByDateRange(prevWeekStart, prevWeekEnd);
+//   const weekChangePct = prevWeekSales
+//     ? ((currentWeekSales - prevWeekSales) / prevWeekSales) * 100
+//     : 0;
+
+//   // Return updated cards
+//   return {
+//     daily,
+//     weekly,
+//     cards: {
+//       month: {
+//         current: currentMonthSales,
+//         previous: prevMonthSales,
+//         changePct: monthChangePct.toFixed(2),
+//       },
+//       week: {
+//         current: currentWeekSales,
+//         previous: prevWeekSales,
+//         changePct: weekChangePct.toFixed(2),
+//       },
+//     },
+//   };
+// }
 const fetchSalesData = async (csoCode: string) => {
   // Categories used across charts
   const CATS = ['FN', 'Quota', 'Cannabis', 'GRE', 'Convenience', 'Vapes', 'Native Gifts'] as const
 
   // Compute date window: last 5 weeks ending yesterday
   const end = new Date()
-  end.setDate(end.getDate() - 1)           // yesterday
+  end.setDate(end.getDate() - 1) // yesterday
   end.setHours(23, 59, 59, 999)
 
   const start = new Date(end)
-  start.setDate(start.getDate() - (7 * 5 - 1)) // 35 days window
+  // <-- changed to 60 days window (instead of 35)
+  start.setDate(start.getDate() - (60 - 1)) // 60 days window
   start.setHours(0, 0, 0, 0)
 
   const fmt = (d: Date) => d.toISOString().slice(0, 10)
@@ -1092,18 +1339,6 @@ const fetchSalesData = async (csoCode: string) => {
   }
 
   // Helpers for week calc (Mon-Sun weeks)
-  // const startOfWeek = (d: Date) => {
-  //   const x = new Date(d)
-  //   const day = x.getDay() // 0 Sun .. 6 Sat
-  //   const diffToMon = day === 0 ? -6 : 1 - day
-  //   x.setDate(x.getDate() + diffToMon)
-  //   x.setHours(0, 0, 0, 0)
-  //   return x
-  // }
-  // const addDays = (d: Date, n: number) => {
-  //   const x = new Date(d); x.setDate(x.getDate() + n); return x
-  // }
-  // --- Week-to-week ---
   const startOfWeek = (d: Date) => {
     const day = d.getDay(); // 0=Sun, 1=Mon
     const diffToMon = day === 0 ? -6 : 1 - day;
@@ -1130,9 +1365,11 @@ const fetchSalesData = async (csoCode: string) => {
     daily.push({ day: k.slice(5), ...sums }) // day: 'MM-DD'
   }
 
-  // Build weekly (last 5 full weeks, ending with the week containing 'end')
+  // Build weekly (past 5 full weeks, excluding the current in-progress week)
+  // We don't want to include the current week (the week that contains 'end'), so start from one week earlier.
   const weeks: { start: Date; end: Date }[] = []
-  let wkStart = startOfWeek(end)
+  // wkStart is the Monday of the week *before* the current week
+  let wkStart = startOfWeek(addDays(end, -7))
   for (let i = 4; i >= 0; i--) {
     const ws = new Date(wkStart); ws.setDate(wkStart.getDate() - i * 7)
     const we = addDays(ws, 6)
@@ -1150,27 +1387,29 @@ const fetchSalesData = async (csoCode: string) => {
     const label = `Wk of ${fmt(ws).slice(5)}` // 'Wk of MM-DD'
     return { week: label, ...sums }
   })
+
   // ----- Cards Calculation -----
   const today = end; // yesterday
 
   // Month-to-Month
   const currentMonthStart = new Date(today.getFullYear(), today.getMonth(), 1);
   const prevMonthStart = new Date(today.getFullYear(), today.getMonth() - 1, 1);
-  const prevMonthEnd = new Date(today.getFullYear(), today.getMonth() - 1, today.getDate());
+  // previous month should end on the same day-of-month as 'today' (yesterday) e.g. 1 Oct -> 18 Oct
+  const prevMonthEnd = new Date(prevMonthStart.getFullYear(), prevMonthStart.getMonth(), today.getDate());
 
-  // Helper to sum sales in a date range from byDate map
-  const sumSalesByDateRange = (start: Date, end: Date) =>
-    Object.entries(byDate)
-      .filter(([dateStr]) => {
-        const dt = new Date(dateStr);
-        return dt >= start && dt <= end;
-      })
+  // Helper to sum sales in a date range from byDate map using string-key comparisons (avoid timezone pitfalls)
+  const sumSalesByDateRange = (startD: Date, endD: Date) => {
+    const startKey = fmt(startD)
+    const endKey = fmt(endD)
+    return Object.entries(byDate)
+      .filter(([dateStr]) => dateStr >= startKey && dateStr <= endKey)
       .reduce(
         (acc, [, row]) =>
           acc +
           Object.values(row).reduce((a, v) => a + (typeof v === "number" ? v : 0), 0),
         0
       );
+  }
 
   const currentMonthSales = sumSalesByDateRange(currentMonthStart, today);
   const prevMonthSales = sumSalesByDateRange(prevMonthStart, prevMonthEnd);
@@ -1178,9 +1417,14 @@ const fetchSalesData = async (csoCode: string) => {
     ? ((currentMonthSales - prevMonthSales) / prevMonthSales) * 100
     : 0;
 
+  // Week-to-week cards: compare Monday..yesterday of current week to matching Monday..same-weekday last week
   const currentWeekStart = startOfWeek(today);
+  // number of days between currentWeekStart (Mon) and today (yesterday)
+  const msPerDay = 24 * 60 * 60 * 1000;
+  const daysCount = Math.round((today.getTime() - currentWeekStart.getTime()) / msPerDay);
+  // previous week's same weekday period:
   const prevWeekStart = addDays(currentWeekStart, -7);
-  const prevWeekEnd = addDays(prevWeekStart, today.getDay() - 1); // same weekdays last week
+  const prevWeekEnd = addDays(prevWeekStart, daysCount);
 
   const currentWeekSales = sumSalesByDateRange(currentWeekStart, today);
   const prevWeekSales = sumSalesByDateRange(prevWeekStart, prevWeekEnd);

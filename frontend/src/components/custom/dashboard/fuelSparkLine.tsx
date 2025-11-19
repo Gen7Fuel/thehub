@@ -1,6 +1,6 @@
 "use client";
 
-import { LineChart, Line } from "recharts";
+import { LineChart, Line  } from "recharts";
 import { Card, CardContent, CardFooter } from "@/components/ui/card";
 
 export function FuelSparkline({ title, color, data, onClick }: any) {
