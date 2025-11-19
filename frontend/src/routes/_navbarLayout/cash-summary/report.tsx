@@ -15,6 +15,7 @@ type Row = {
   cpl_bulloch?: number
   exempted_tax?: number
   report_canadian_cash?: number
+  payouts?: number
 }
 
 type ReportData = {
@@ -30,6 +31,7 @@ type ReportData = {
     cpl_bulloch: number
     exempted_tax: number
     report_canadian_cash: number
+    payouts: number
   }
 }
 
@@ -201,6 +203,7 @@ function RouteComponent() {
                   <Card title="Cash Back" value={fmtNum(totals?.cash_back)} />
                   <Card title="Loyalty" value={fmtNum(totals?.loyalty)} />
                   <Card title="Exempted Tax" value={fmtNum(totals?.exempted_tax)} />
+                  <Card title="Payouts" value={fmtNum(totals?.payouts)} />
                 </div>
               </div>
 
@@ -214,6 +217,7 @@ function RouteComponent() {
                       <div className="grid gap-2 text-sm">
                         <KV k="Canadian Cash Counted" v={fmtNum(r.canadian_cash_collected)} />
                         <KV k="Canadian Cash Reported" v={fmtNum(r.report_canadian_cash)} />
+                        <KV k="Payouts" v={fmtNum(r.payouts)} />
                       </div>
                     </div>
                   ))}

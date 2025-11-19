@@ -32,6 +32,7 @@ function parseSftReport(text) {
     canadianCash: pickNum(/^\s*Canadian Cash\s+([-\d.,]+)\s*$/mi, text),
     cashOnHand: pickNum(/^\s*Cash On Hand\s+([-\d.,]+)\s*$/mi, text),
     cashBack: pickNum(/^\s*Cash Back\s+([-\d.,]+)\s*$/mi, text),
+    payouts: pickNum(/^\s*Payouts\s+([-\d.,]+)\s*$/mi, text),
   }
 
   const sd = text.match(/^\s*Safedrops\s+(\d+)\s+([-\d.,]+)\s*$/mi)
