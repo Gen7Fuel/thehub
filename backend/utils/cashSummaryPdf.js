@@ -85,6 +85,7 @@ function TotalsCards({ totals }) {
     { label: 'Cash Back', value: currency(totals.cash_back) },
     { label: 'Loyalty', value: currency(totals.loyalty) },
     { label: 'Exempted Tax', value: currency(totals.exempted_tax) },
+    { label: 'Payouts', value: currency(totals.payouts) },
   ]
 
   // Render in two columns, wrapping

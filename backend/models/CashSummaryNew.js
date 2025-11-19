@@ -13,6 +13,7 @@ const CashSummarySchema = new mongoose.Schema(
     exempted_tax: { type: Number },
     // Value parsed from shift report (Canadian Cash in report) kept separate
     report_canadian_cash: { type: Number },
+    payouts: { type: Number },
   },
   { timestamps: true }
 )
