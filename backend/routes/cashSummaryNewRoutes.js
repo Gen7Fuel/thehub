@@ -177,6 +177,7 @@ router.post('/', async (req, res) => {
               loyalty: parsed.couponsAccepted ?? values.loyalty,
               cpl_bulloch: parsed.fuelPriceOverrides ?? values.cpl_bulloch,
               report_canadian_cash: parsed.canadianCash ?? values.report_canadian_cash,
+              payouts: parsed.payouts ?? values.payouts,
             }
           }
         } else {
@@ -199,6 +200,7 @@ router.post('/', async (req, res) => {
       cpl_bulloch: values.cpl_bulloch,
       report_canadian_cash: values.report_canadian_cash,
       exempted_tax: norm(exempted_tax),
+      payouts: values.payouts,
     })
 
     const saved = await doc.save()
@@ -482,6 +484,7 @@ router.get('/report', async (req, res) => {
       cpl_bulloch: sum('cpl_bulloch'),
       exempted_tax: sum('exempted_tax'),
       report_canadian_cash: sum('report_canadian_cash'),
+      payouts: rows.reduce((a,r)=> a + (r.payouts || 0), 0),
     }
 
     res.json({ site, date, rows, totals })
