@@ -4,6 +4,9 @@ type FormStore = {
     fleetCardNumber: string;
     setFleetCardNumber: (name: string) => void;
 
+    poNumber: string;
+    setPoNumber: (name: string) => void;
+
     customerName: string;
     setCustomerName: (name: string) => void;
 
@@ -49,12 +52,18 @@ type FormStore = {
     payableImages: string[];
     setPayableImages: (images: string[]) => void;
 
+date: Date | undefined;
+setDate: (date: Date | undefined) => void;
+
+
     resetPayableForm: () => void;
 }
 
 export const useFormStore = create<FormStore>((set) => ({
-    fleetCardNumber: '777689000000',
+    fleetCardNumber: '',
     setFleetCardNumber: (fleetCardNumber) => set({ fleetCardNumber }),
+    poNumber: '',
+    setPoNumber: (poNumber) => set({ poNumber }),
     customerName: '',
     setCustomerName: (customerName) => set({ customerName }),
     driverName: '',
@@ -72,7 +81,7 @@ export const useFormStore = create<FormStore>((set) => ({
     signature: null,
     setSignature: (signature) => set({ signature }),
     resetForm: () => set({
-        fleetCardNumber: '777689000000',
+        fleetCardNumber: '',
         customerName: '',
         driverName: '',
         vehicleInfo: '',
@@ -86,6 +95,9 @@ export const useFormStore = create<FormStore>((set) => ({
     // Payable form implementation with individual variables
     payableVendorName: '',
     setPayableVendorName: (payableVendorName) => set({ payableVendorName }),
+
+    date: new Date(),
+    setDate: ((date) => set({ date })),
 
     payableLocation: localStorage.getItem('location') || '',
     setPayableLocation: (payableLocation) => set({ payableLocation }),

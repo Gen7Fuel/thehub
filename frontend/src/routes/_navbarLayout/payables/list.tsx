@@ -80,10 +80,16 @@ function RouteComponent() {
         return
       }
 
+      // const queryParams = new URLSearchParams({
+      //   location: selectedLocation._id,
+      //   date: toUTC(date.from).toISOString().split('T')[0]
+      // })
       const queryParams = new URLSearchParams({
         location: selectedLocation._id,
-        date: toUTC(date.from).toISOString().split('T')[0]
+        from: toUTC(date.from).toISOString(),   // start of range
+        to: toUTC(date.to).toISOString()        // end of range
       })
+
 
       console.log('Fetching payables with params:', queryParams.toString())
 

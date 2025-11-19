@@ -63,6 +63,7 @@ interface Order {
   fleetCardNumber: string;
   driverName: string;
   description: string;
+  poNumber: string;
   quantity: number;
   amount: number;
   vehicleMakeModel: string;
@@ -86,10 +87,18 @@ const PurchaseOrderFormPDF = ({ order }: { order: Order }) => (
           <Text style={styles.cellLabel}>Customer Name</Text>
           <Text style={styles.cellValue}>{order.customerName}</Text>
         </View>
-        <View style={styles.row}>
-          <Text style={styles.cellLabel}>Fleet Card Number</Text>
-          <Text style={styles.cellValue}>{formatFleetCardNumber(order.fleetCardNumber)}</Text>
-        </View>
+        {/* Conditional Fleet Card or PO Number */}
+        {order.fleetCardNumber ? (
+          <View style={styles.row}>
+            <Text style={styles.cellLabel}>Fleet Card Number</Text>
+            <Text style={styles.cellValue}>{formatFleetCardNumber(order.fleetCardNumber)}</Text>
+          </View>
+        ) : (
+          <View style={styles.row}>
+            <Text style={styles.cellLabel}>PO Number</Text>
+            <Text style={styles.cellValue}>{order.poNumber}</Text>
+          </View>
+        )}
         <View style={styles.row}>
           <Text style={styles.cellLabel}>Driver</Text>
           <Text style={styles.cellValue}>{order.driverName}</Text>
