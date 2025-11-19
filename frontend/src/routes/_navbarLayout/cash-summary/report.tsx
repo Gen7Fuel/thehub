@@ -72,6 +72,12 @@ function RouteComponent() {
 
   const onSubmitClick = async () => {
     if (submitState !== 'idle' || !site || !date) return
+
+    const proceed = window.confirm(
+      'An email will be sent to Accounting with a copy of the Cash Summary Report.\n\nDo you want to continue?'
+    )
+    if (!proceed) return
+
     try {
       setSubmitState('submitting')
       const r = await fetch('/api/cash-summary/submit/to/safesheet', {
@@ -105,6 +111,7 @@ function RouteComponent() {
 
   const rows = report?.rows ?? []
   const totals = report?.totals
+  const hasRows = rows.length > 0
 
   const fmtNum = (n?: number) =>
     typeof n === 'number'
@@ -154,9 +161,11 @@ function RouteComponent() {
             />
           </div>
           <div className="ml-auto flex flex-row gap-2">
-            <Button type="button" onClick={onSubmitClick} disabled={submitDisabled}>
-              {submitLabel}
-            </Button>
+            {hasRows && (
+              <Button type="button" onClick={onSubmitClick} disabled={submitDisabled}>
+                {submitLabel}
+              </Button>
+            )}
             <Button type="button" variant="outline" onClick={() => window.print()}>
               Export PDF
             </Button>

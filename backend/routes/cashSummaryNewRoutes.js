@@ -5,11 +5,14 @@ const { parseSftReport } = require('../utils/parseSftReport')
 const { dateFromYMDLocal } = require('../utils/dateUtils')
 const { sendEmail } = require('../utils/emailService')
 const { generateCashSummaryPdf } = require('../utils/cashSummaryPdf')
+const { generateShiftReportsPdf } = require('../utils/shiftReportsPdf')
+
+const path = require('path')
 
 const router = express.Router()
 
+const CDN_BASE_URL = process.env.CDN_BASE_URL || process.env.PUBLIC_CDN_BASE_URL || 'http://cdn:5001'
 const OFFICE_SFTP_API_BASE = 'http://24.50.55.130:5000'
-const APP_BASE_URL = process.env.PUBLIC_APP_BASE_URL || 'https://app.gen7fuel.com'
 const CASH_SUMMARY_EMAILS = (process.env.CASH_SUMMARY_EMAILS || 'mohammad@gen7fuel.com')
   .split(',')
   .map(e => e.trim())
@@ -23,6 +26,107 @@ async function fetchWithTimeout(url, opts = {}, ms = 15000) {
     return await _fetch(url, { ...opts, signal: controller.signal })
   } finally {
     clearTimeout(t)
+  }
+}
+
+async function getDepositSlipAttachment(req, site, start, end) {
+  try {
+    const sheet = await Safesheet.findOne({ site }).lean()
+    if (!sheet || !Array.isArray(sheet.entries)) return null
+
+    const sameDay = (d) => {
+      const x = new Date(d)
+      return x >= start && x < end
+    }
+
+    // Find the most recent entry on that date with a non-zero bank deposit and a photo
+    const candidate = [...sheet.entries]
+      .filter((e) => sameDay(e.date) && e.photo && Number(e.cashDepositBank || 0) > 0)
+      .sort((a, b) => +new Date(b.updatedAt || b.date) - +new Date(a.updatedAt || a.date))[0]
+
+    if (!candidate) return null
+
+    const photoName = path.basename(String(candidate.photo))
+    const origin = (CDN_BASE_URL || `${req.protocol}://${req.get('host')}`).replace(/\/$/, '')
+    console.log('Origin',origin)
+    const url = `${origin}/cdn/download/${encodeURIComponent(photoName)}`
+
+    const resp = await fetchWithTimeout(url, {}, 15000)
+    if (!resp.ok) return null
+
+    let buffer
+    if (typeof resp.arrayBuffer === 'function') buffer = Buffer.from(await resp.arrayBuffer())
+    else if (typeof resp.buffer === 'function') buffer = await resp.buffer()
+    else buffer = Buffer.from(await resp.text(), 'binary')
+
+    const contentType = resp.headers.get('content-type') || 'application/octet-stream'
+    let ext = path.extname(photoName)
+    if (!ext) {
+      if (contentType.includes('png')) ext = '.png'
+      else if (contentType.includes('jpeg') || contentType.includes('jpg')) ext = '.jpg'
+      else if (contentType.includes('pdf')) ext = '.pdf'
+    }
+
+    return {
+      filename: `Bank-Deposit-Slip-${site}-${start.toISOString().slice(0, 10)}${ext || ''}`,
+      content: buffer,
+      contentType,
+    }
+  } catch (e) {
+    console.warn('Deposit slip fetch failed:', e?.message || e)
+    return null
+  }
+}
+
+async function upsertDailyDepositForSiteDate(site, dateInput) {
+  try {
+    if (!site || !dateInput) return null
+    const d = new Date(dateInput)
+    if (Number.isNaN(d.getTime())) return null
+
+    const y = d.getFullYear()
+    const m = d.getMonth()
+    const day = d.getDate()
+    const start = new Date(y, m, day, 0, 0, 0, 0)
+    const end = new Date(y, m, day + 1, 0, 0, 0, 0)
+
+    // Aggregate total canadian_cash_collected for the site/day
+    const agg = await CashSummary.aggregate([
+      { $match: { site, date: { $gte: start, $lt: end } } },
+      { $group: { _id: null, total: { $sum: { $ifNull: ['$canadian_cash_collected', 0] } } } },
+    ])
+    const total = Number(agg[0]?.total || 0)
+
+    // Find or create Safesheet
+    let sheet = await Safesheet.findOne({ site })
+    if (!sheet) sheet = await Safesheet.create({ site, initialBalance: 0, entries: [] })
+
+    const sameDay = (dt) => dt >= start && dt < end
+
+    // Prefer the most recent "Daily Deposit" on that date
+    let idx = -1
+    for (let j = sheet.entries.length - 1; j >= 0; j--) {
+      const e = sheet.entries[j]
+      if (sameDay(new Date(e.date)) && e.description === 'Daily Deposit') { idx = j; break }
+    }
+
+    const ymd = `${y}-${String(m + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`
+    const entryDate = dateFromYMDLocal(ymd)
+
+    if (idx >= 0) {
+      sheet.entries[idx].date = entryDate
+      sheet.entries[idx].description = 'Daily Deposit'
+      sheet.entries[idx].cashIn = total
+      sheet.entries[idx].updatedAt = new Date()
+    } else {
+      sheet.entries.push({ date: entryDate, description: 'Daily Deposit', cashIn: total })
+    }
+
+    await sheet.save()
+    return idx >= 0 ? sheet.entries[idx]._id : sheet.entries[sheet.entries.length - 1]._id
+  } catch (e) {
+    console.warn('Safesheet upsert failed:', e?.message || e)
+    return null
   }
 }
 
@@ -98,6 +202,9 @@ router.post('/', async (req, res) => {
     })
 
     const saved = await doc.save()
+
+    await upsertDailyDepositForSiteDate(site, date).catch(() => {})
+
     res.status(201).json(saved)
   } catch (err) {
     console.error('CashSummary create error:', err)
@@ -149,7 +256,7 @@ router.post('/submit/to/safesheet', async (req, res) => {
     ])
     const totalCanadianCashCollected = Number(agg[0]?.total || 0)
 
-    // Mark summaries as submitted (optional; keep if desired)
+    // Mark summaries as submitted (optional)
     await CashSummary.updateMany(
       { site, date: { $gte: start, $lt: end } },
       { $set: { submitted: true } }
@@ -161,9 +268,17 @@ router.post('/submit/to/safesheet', async (req, res) => {
       sheet = await Safesheet.create({ site, initialBalance: 0, entries: [] })
     }
 
-    // Upsert a single entry for that calendar day
+    // Upsert a single entry for that calendar day, specifically "Daily Deposit"
     const sameDay = (d) => d >= start && d < end
-    const idx = sheet.entries.findIndex(e => sameDay(new Date(e.date)))
+
+    // Prefer the most recent "Daily Deposit" on that date
+    const idx = (() => {
+      for (let j = sheet.entries.length - 1; j >= 0; j--) {
+        const e = sheet.entries[j]
+        if (sameDay(new Date(e.date)) && e.description === 'Daily Deposit') return j
+      }
+      return -1
+    })()
 
     const entryDate = dateFromYMDLocal(date)
 
@@ -183,25 +298,48 @@ router.post('/submit/to/safesheet', async (req, res) => {
     await sheet.save()
 
     // Respond to client first
-    const entryId = (idx >= 0 ? sheet.entries[idx]._id : sheet.entries[sheet.entries.length - 1]._id)
+    const entryId = idx >= 0 ? sheet.entries[idx]._id : sheet.entries[sheet.entries.length - 1]._id
     res.json({ site, date, cashIn: totalCanadianCashCollected, entryId })
 
-    // Background: generate PDF and email it (React-PDF version, no Chrome deps)
+    // Background: generate PDFs and email them with optional deposit slip image
     ;(async () => {
       try {
-        // If you switched to the React-PDF util, ensure:
-        // const { generateCashSummaryPdf } = require('../utils/cashSummaryPdfReact')
-        const pdfBuffer = await generateCashSummaryPdf({ site, date })
+        // Cash Summary PDF
+        const cashSummaryPdf = await generateCashSummaryPdf({ site, date })
+
+        // Shift Reports PDF (all shifts for the date)
+        const shiftReportsPdf = await generateShiftReportsPdf({ site, date })
+
+        // Bank Deposit Slip image (for entries on that date with photo and cashDepositBank > 0)
+        const depositSlip = await getDepositSlipAttachment(req, site, start, end)
+
+        const attachments = [
+          { filename: `Cash-Summary-${site}-${date}.pdf`, content: cashSummaryPdf, contentType: 'application/pdf' },
+        ]
+
+        if (shiftReportsPdf) {
+          attachments.push({
+            filename: `Shift-Reports-${site}-${date}.pdf`,
+            content: shiftReportsPdf,
+            contentType: 'application/pdf',
+          })
+        }
+
+        if (depositSlip) attachments.push(depositSlip)
 
         await sendEmail({
           to: CASH_SUMMARY_EMAILS.join(','),
           subject: `Cash Summary Report – ${site} – ${date}`,
-          text: `Attached is the Cash Summary Report for ${site} on ${date}.`,
-          attachments: [
-            { filename: `Cash-Summary-${site}-${date}.pdf`, content: pdfBuffer },
-          ],
+          text: `Attached are the Cash Summary${shiftReportsPdf ? ', Shift Reports' : ''}${depositSlip ? ' and Bank Deposit Slip' : ''} for ${site} on ${date}.`,
+          attachments,
         })
-        console.log('Cash Summary email sent:', site, date)
+
+        console.log(
+          'Cash Summary email sent:',
+          site,
+          date,
+          `[attachments: summary${shiftReportsPdf ? ', shifts' : ''}${depositSlip ? ', deposit-slip' : ''}]`
+        )
       } catch (e) {
         console.error('Cash Summary email/PDF failed:', e?.message || e)
       }
@@ -231,7 +369,7 @@ router.post('/submit/to/safesheet', async (req, res) => {
 //     ])
 //     const totalCanadianCashCollected = Number(agg[0]?.total || 0)
 
-//     // Mark summaries as submitted (optional; remove if not needed)
+//     // Mark summaries as submitted (optional; keep if desired)
 //     await CashSummary.updateMany(
 //       { site, date: { $gte: start, $lt: end } },
 //       { $set: { submitted: true } }
@@ -243,9 +381,17 @@ router.post('/submit/to/safesheet', async (req, res) => {
 //       sheet = await Safesheet.create({ site, initialBalance: 0, entries: [] })
 //     }
 
-//     // Upsert a single entry for that calendar day
+//     // Upsert a single entry for that calendar day, specifically "Daily Deposit"
 //     const sameDay = (d) => d >= start && d < end
-//     const idx = sheet.entries.findIndex(e => sameDay(new Date(e.date)))
+
+//     // Prefer the most recent "Daily Deposit" on that date
+//     const idx = (() => {
+//       for (let j = sheet.entries.length - 1; j >= 0; j--) {
+//         const e = sheet.entries[j]
+//         if (sameDay(new Date(e.date)) && e.description === 'Daily Deposit') return j
+//       }
+//       return -1
+//     })()
 
 //     const entryDate = dateFromYMDLocal(date)
 
@@ -255,6 +401,7 @@ router.post('/submit/to/safesheet', async (req, res) => {
 //       sheet.entries[idx].cashIn = totalCanadianCashCollected
 //       sheet.entries[idx].updatedAt = new Date()
 //     } else {
+//       // No existing "Daily Deposit" for this date: add a new one
 //       sheet.entries.push({
 //         date: entryDate,
 //         description: 'Daily Deposit',
@@ -264,12 +411,41 @@ router.post('/submit/to/safesheet', async (req, res) => {
 
 //     await sheet.save()
 
-//     return res.json({
-//       site,
-//       date,
-//       cashIn: totalCanadianCashCollected,
-//       entryId: (idx >= 0 ? sheet.entries[idx]._id : sheet.entries[sheet.entries.length - 1]._id),
-//     })
+//     // Respond to client first
+//     const entryId = idx >= 0 ? sheet.entries[idx]._id : sheet.entries[sheet.entries.length - 1]._id
+//     res.json({ site, date, cashIn: totalCanadianCashCollected, entryId })
+
+//     // Background: generate PDF and email it with optional deposit slip image
+//     ;(async () => {
+//       try {
+//         // Generate the Cash Summary PDF via @react-pdf/renderer
+//         const pdfBuffer = await generateCashSummaryPdf({ site, date })
+
+//         // Try to fetch the Bank Deposit Slip image for this date where cashDepositBank > 0
+//         const depositSlip = await getDepositSlipAttachment(req, site, start, end)
+
+//         const attachments = [
+//           { filename: `Cash-Summary-${site}-${date}.pdf`, content: pdfBuffer },
+//         ]
+//         if (depositSlip) attachments.push(depositSlip)
+
+//         await sendEmail({
+//           to: CASH_SUMMARY_EMAILS.join(','),
+//           subject: `Cash Summary Report – ${site} – ${date}`,
+//           text: `Attached is the Cash Summary Report and deposit slip for ${site} on ${date}.`,
+//           attachments,
+//         })
+
+//         console.log(
+//           'Cash Summary email sent:',
+//           site,
+//           date,
+//           depositSlip ? '(with deposit slip)' : ''
+//         )
+//       } catch (e) {
+//         console.error('Cash Summary email/PDF failed:', e?.message || e)
+//       }
+//     })()
 //   } catch (err) {
 //     console.error('CashSummary submit error:', err)
 //     return res.status(500).json({ error: 'Failed to submit' })
@@ -353,48 +529,6 @@ router.get('/:id', async (req, res) => {
   }
 })
 
-// router.put('/:id', async (req, res) => {
-//   try {
-//     const {
-//       site,
-//       shift_number,
-//       date,
-//       canadian_cash_collected,
-//       item_sales,
-//       cash_back,
-//       loyalty,
-//       cpl_bulloch,
-//       exempted_tax,
-//       report_canadian_cash,
-//     } = req.body || {}
-
-//     if (!shift_number) return res.status(400).json({ error: 'shift_number is required' })
-//     if (!date) return res.status(400).json({ error: 'date is required' })
-
-//     const updated = await CashSummary.findByIdAndUpdate(
-//       req.params.id,
-//       {
-//         site,
-//         shift_number: String(shift_number),
-//         date: new Date(date),
-//         canadian_cash_collected: norm(canadian_cash_collected),
-//         item_sales: norm(item_sales),
-//         cash_back: norm(cash_back),
-//         loyalty: norm(loyalty),
-//         cpl_bulloch: norm(cpl_bulloch),
-//         exempted_tax: norm(exempted_tax),
-//         report_canadian_cash: norm(report_canadian_cash),
-//       },
-//       { new: true, runValidators: true }
-//     ).lean()
-
-//     if (!updated) return res.status(404).json({ error: 'Not found' })
-//     res.json(updated)
-//   } catch (err) {
-//     console.error('CashSummary update error:', err)
-//     res.status(500).json({ error: 'Failed to update CashSummary' })
-//   }
-// })
 router.put('/:id', async (req, res) => {
   try {
     const {
@@ -480,6 +614,18 @@ router.put('/:id', async (req, res) => {
       finalValues,
       { new: true, runValidators: true }
     ).lean()
+
+    // Auto-update Safesheet for the new site/date
+    const newSite = finalValues.site || existing.site
+    const newDate = finalValues.date
+    await upsertDailyDepositForSiteDate(newSite, newDate).catch(() => {})
+
+    // If site or date changed, also refresh the old site/date
+    const siteChanged = String(existing.site) !== String(newSite)
+    const dateChanged = new Date(existing.date).toDateString() !== new Date(newDate).toDateString()
+    if (siteChanged || dateChanged) {
+      await upsertDailyDepositForSiteDate(existing.site, existing.date).catch(() => {})
+    }
 
     res.json(updated)
   } catch (err) {
