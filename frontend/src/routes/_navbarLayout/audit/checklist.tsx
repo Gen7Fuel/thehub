@@ -223,7 +223,7 @@ function RouteComponent() {
     <RouteContext.Provider value={{ stationName, setStationName }}>
       <div className="flex flex-col items-center">
         {/* 🔹 Location Picker temporary patch */}
-        <div className="mb-6">
+        {/* <div className="mb-6">
           <LocationPicker
             value="stationName" // mode
             defaultValue={stationName} // the actual current station from parent state
@@ -237,10 +237,10 @@ function RouteComponent() {
           />
 
 
-        </div>
+        </div> */}
 
         {/* 🔹 Template buttons */}
-        <div className="flex mb-4">
+        {/* <div className="flex mb-4">
           {templates.map((template, idx) => {
             const isActive = matchRoute({
               to: "/audit/checklist/$id",
@@ -270,9 +270,9 @@ function RouteComponent() {
                 </Button>
               </Link>
             );
-          })}
+          })} */}
             {/* 🔹 Open Issues tab in same row */}
-          {openIssues.length > 0 && (
+          {/* {openIssues.length > 0 && (
             <Link to="/audit/checklist/open-issues">
               <Button
                 {...(matchRoute({ to: "/audit/checklist/open-issues", fuzzy: true }) ? {} : { variant: "outline" } as object)}
@@ -282,7 +282,106 @@ function RouteComponent() {
               </Button>
             </Link>
           )}
-        </div>
+        </div> */}
+        {/* ▲ Row: Location Picker + Checklist Selector + Open Issues */}
+<div className="flex items-center gap-4 mb-6">
+
+  {/* ◼ Location Picker (left) */}
+  <LocationPicker
+    value="stationName"
+    defaultValue={stationName}
+    setStationName={(value) => {
+      const newValue =
+        typeof value === "function" ? value(stationName) : value;
+      updateStation(newValue);
+    }}
+  />
+
+  {/* ◼ Checklist Carousel (center) */}
+  {/* ◼ Checklist Carousel (center) */}
+<div className="flex items-center h-10 border rounded-md bg-white px-2 text-sm w-[200px] justify-between shadow-sm">
+
+  {/* ◀ Left arrow */}
+  <button
+    disabled={templates.length <= 1}
+    className="px-2 text-lg select-none disabled:opacity-30"
+    onClick={() => {
+      const currentIndex = templates.findIndex(
+        t =>
+          matchRoute({
+            to: "/audit/checklist/$id",
+            params: { id: t._id },
+            fuzzy: true
+          })
+      );
+      const prevIndex =
+        (currentIndex - 1 + templates.length) % templates.length;
+      navigate({
+        to: "/audit/checklist/$id",
+        params: { id: templates[prevIndex]._id }
+      });
+    }}
+  >
+    ◀
+  </button>
+
+  {/* Checklist title */}
+  <div className="flex-1 text-center px-1 font-normal text-sm">
+    {(() => {
+      const active = templates.find(t =>
+        matchRoute({
+          to: "/audit/checklist/$id",
+          params: { id: t._id },
+          fuzzy: true
+        })
+      );
+      return active ? active.name : "Select Checklist";
+    })()}
+  </div>
+
+  {/* ▶ Right arrow */}
+  <button
+    disabled={templates.length <= 1}
+    className="px-2 text-lg select-none disabled:opacity-30"
+    onClick={() => {
+      const currentIndex = templates.findIndex(
+        t =>
+          matchRoute({
+            to: "/audit/checklist/$id",
+            params: { id: t._id },
+            fuzzy: true
+          })
+      );
+      const nextIndex = (currentIndex + 1) % templates.length;
+      navigate({
+        to: "/audit/checklist/$id",
+        params: { id: templates[nextIndex]._id }
+      });
+    }}
+  >
+    ▶
+  </button>
+
+</div>
+
+  {/* ◼ Open Issues (right) */}
+  {openIssues.length > 0 && (
+    <Link to="/audit/checklist/open-issues">
+      <Button
+        {...(matchRoute({
+          to: "/audit/checklist/open-issues",
+          fuzzy: true
+        })
+          ? {}
+          : { variant: "outline" } as object)}
+        className="px-4"
+      >
+        Open Issues ({openIssues.length})
+      </Button>
+    </Link>
+  )}
+</div>
+
 
 
         <Outlet />
