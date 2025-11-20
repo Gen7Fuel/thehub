@@ -10,7 +10,7 @@ import {
   ResponsiveContainer
 } from "recharts";
 import { Card, CardHeader, CardTitle, CardContent, CardFooter } from "@/components/ui/card";
-import { FuelChartTooltip } from "@/components/ui/chart";
+import { MultiLineChartToolTip } from "@/components/ui/chart";
 import { cn } from "@/lib/utils"; // your helper for classNames
 // import { formatNumberCompact } from '@/routes/_navbarLayout/dashboard';
 
@@ -23,7 +23,7 @@ interface Props {
   selectedGrade?: string | null;
 }
 
-export function FuelMixAreaChart({
+export function MultiLineChart({
   data,
   config,
   hideIcon = false,
@@ -125,7 +125,7 @@ const yMax = Math.min(100, actualMax + zoomPadding);
               tick={{ fontSize: 12 }}
             />
 
-            <Tooltip content={<FuelChartTooltip config={config} />} />
+            <Tooltip content={<MultiLineChartToolTip config={config} />} />
 
             {Object.keys(config)
               .filter(key => !selectedGrade || key === selectedGrade)

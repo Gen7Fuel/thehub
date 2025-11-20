@@ -368,7 +368,7 @@ interface ChartTooltipContentProps extends TooltipProps<number, string> {
   hideIndicator?: boolean;
 }
 
-export function FuelChartTooltip({
+export function MultiLineChartToolTip({
   active,
   payload,
   label,

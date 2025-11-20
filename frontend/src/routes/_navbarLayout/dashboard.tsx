@@ -5,7 +5,7 @@ import { getCsoCodeByStationName, getVendorNameById } from '@/lib/utils';
 import { DonutSalesChart } from "@/components/custom/dashboard/salesByCategoryDonut";
 import {
   Bar, BarChart, CartesianGrid, XAxis, LabelList,
-  Line, YAxis
+  Line, YAxis, Cell
 } from "recharts";
 import {
   Card,
@@ -24,7 +24,7 @@ import {
   ChartTooltipContent,
   // CycleCountTooltip,
 } from "@/components/ui/chart";
-import { FuelMixAreaChart } from "@/components/custom/dashboard/fuelMixAreaChart";
+import { MultiLineChart } from "@/components/custom/dashboard/multiLineChart";
 import { FuelSparkline } from "@/components/custom/dashboard/fuelSparkLine";
 // import { DatePickerWithRange } from '@/components/custom/datePickerWithRange';
 import type { DateRange } from "react-day-picker";
@@ -447,6 +447,33 @@ function RouteComponent() {
     fetchFuelData();
   }, [site]);
 
+  useEffect(()=>{
+    const fetchTransactionData = async () => {
+    try {
+    const csoCode = await getCsoCodeByStationName(site);
+
+        const today = new Date();
+        const end = new Date(today);
+        end.setDate(today.getDate() - 1); // yesterday
+
+        const start = new Date(end);
+        start.setDate(end.getDate() - 35); // last 35 days
+
+        const params = new URLSearchParams({
+          csoCode: csoCode ?? "",
+          startDate: start.toISOString().slice(0, 10),
+          endDate: end.toISOString().slice(0, 10),
+        });
+
+        const res = await fetch(`/api/sql/trans-time-period?${params}`, {
+          headers: { Authorization: `Bearer ${localStorage.getItem("token")}` },
+        });
+        console.log(res)
+    } catch {}
+    }
+    fetchTransactionData();
+  }, [site]);
+
   const fuelChartData = useMemo(() => {
     if (!fuelData?.length) return [];
 
@@ -845,7 +872,7 @@ function RouteComponent() {
                             <XAxis dataKey="day" tickLine={false} axisLine={false} tickMargin={10} />
                             <YAxis axisLine={false} tickLine={false} />
                             {/* <Tooltip content={<CycleCountTooltip />} /> */}
-                            <Bar
+                            {/* <Bar
                               dataKey="count"
                               fill="var(--color-count)"
                               radius={8}
@@ -855,7 +882,30 @@ function RouteComponent() {
                               }}
                             >
                               <LabelList position="top" offset={12} className="fill-foreground" fontSize={12} />
+                            </Bar> */}
+                            <Bar
+                              dataKey="count"
+                              radius={8}
+                              onClick={(data) => {
+                                setSelectedDay(data.payload as CycleCountDayData);
+                                setIsModalOpen(true);
+                              }}
+                            >
+                              {chartData.map((entry, index) => (
+                                <Cell
+                                  key={`cell-${index}`}
+                                  fill={entry.count === 20 ? "#22c55e" : "var(--color-count)"}
+                                />
+                              ))}
+
+                              <LabelList
+                                position="top"
+                                offset={12}
+                                className="fill-foreground"
+                                fontSize={12}
+                              />
                             </Bar>
+
                           </BarChart>
 
                         </ChartContainer>
@@ -938,7 +988,7 @@ function RouteComponent() {
                               tickLine={false}
                               tickMargin={10}
                               axisLine={false}
-                              tickFormatter={(value) => value}
+                              tickFormatter={(value) => value.replace(/wk of\s*/i, "")}
                             />
                             <YAxis
                               axisLine={false}
@@ -992,7 +1042,7 @@ function RouteComponent() {
 
                     {/* 90-Day Fuel Mix Area Chart */}
                     {/* <FuelMixAreaChart data={fuelMix90} config={normalizedFuelChartConfig90} /> */}
-                    <FuelMixAreaChart
+                    <MultiLineChart
                       data={fuelMix90}
                       config={normalizedFuelChartConfig90}
                       selectedGrade={selectedGrade}

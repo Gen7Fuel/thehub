@@ -126,10 +126,29 @@ async function getGradeVolumeFuelData(csoCode, startDate, endDate) {
   }
 }
 
+async function getTransTimePeriodData(csoCode, startDate, endDate) {
+  try {
+    await sql.connect(sqlConfig);
+    // const result = await sql.query(`SELECT TOP (10) * from [CSO].[Sales]`);
+    const result = await sql.query(`
+      select a.[Station_SK], a.[Date], a.[Number of Customer Acct ID] as 'visits', 
+        a.[Number of Transaction ID] as 'transactions', b.[Avg Bucket] as 'bucket_size' 
+      from [CSO].[Daily Trans and Acct ID Traffic View] a join [CSO].[Avg Bucket] b
+      on a.[Station_SK] =  b.[Station_SK] AND a.[Date] = b.[Date] 
+      where a.[Station_SK] = ${csoCode} and a.[Date] between '${startDate}' AND '${endDate}'
+    `);
+    await sql.close();
+    return result.recordset;
+  } catch (err) {
+    console.error('SQL error:', err);
+    return [];
+  }
+}
+
 async function getCurrentInventory(site, limit = null) {
   try {
     await sql.connect(sqlConfig);
-    
+
     let query = `
       SELECT ${limit ? `TOP ${limit}` : ''} [Item_Name]
             ,[UPC]
@@ -138,7 +157,7 @@ async function getCurrentInventory(site, limit = null) {
       FROM [CSO].[Current_Inventory]
       WHERE [Station] = '${site}'
     `;
-    
+
     const result = await sql.query(query);
     await sql.close();
     return result.recordset;
@@ -222,16 +241,17 @@ async function getUPC_barcode(gtin) {
     );
     return result.recordset;
   } catch (err) {
-    console.error("SQL error for",gtin,":", err);
+    console.error("SQL error for", gtin, ":", err);
     return [];
   }
 }
 
-module.exports = { 
-  sqlConfig, 
-  getCategorizedSalesData, 
-  getUPC_barcode, 
+module.exports = {
+  sqlConfig,
+  getCategorizedSalesData,
+  getUPC_barcode,
   getCurrentInventory,
   getInventoryCategories,
-  getGradeVolumeFuelData
+  getGradeVolumeFuelData,
+  getTransTimePeriodData,
 };
