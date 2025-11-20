@@ -2,32 +2,10 @@ const express = require('express');
 const router = express.Router();
 const Payable = require('../models/Payables');
 const Safesheet = require('../models/Safesheet');
-const { dateFromYMDLocal } = require('../utils/dateUtils');
 
 // GET all payables
 router.get('/', async (req, res) => {
   try {
-    // const { location, date } = req.query;
-    // console.log('payables query:',location,date);
-    
-    // // Build filter object
-    // const filter = {};
-    
-    // if (location) filter.location = location;
-    
-    // // Single date filter
-    // if (date) {
-    //   const startOfDay = new Date(date);
-    //   startOfDay.setHours(0, 0, 0, 0);
-      
-    //   const endOfDay = new Date(date);
-    //   endOfDay.setHours(23, 59, 59, 999);
-      
-    //   filter.createdAt = {
-    //     $gte: startOfDay,
-    //     $lte: endOfDay
-    //   };
-    // }
     const { location, from, to } = req.query;
 
     const filter = {};
