@@ -3,7 +3,7 @@ import { twMerge } from "tailwind-merge"
 import { domain } from "@/lib/constants"
 import { jwtDecode } from "jwt-decode"
 import axios from "axios"
-import { getDB, clearPendingActions, saveOrderRec } from "@/lib/indexedDB"
+import { getDB, clearPendingActions, saveOrderRec } from "@/lib/orderRecIndexedDB"
 // import { useAuth } from "@/context/AuthContext";
 
 export function cn(...inputs: ClassValue[]) {

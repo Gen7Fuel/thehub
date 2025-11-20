@@ -12,7 +12,7 @@ import { Textarea } from '@/components/ui/textarea'
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip'
 import { Trash2 } from 'lucide-react'
 import { getOrderRecStatusColor } from "@/lib/utils"
-import { getOrderRecById, saveOrderRec, savePendingAction, hasPendingActions } from "@/lib/indexedDB"
+import { getOrderRecById, saveOrderRec, savePendingAction, hasPendingActions } from "@/lib/orderRecIndexedDB"
 import { useAuth } from "@/context/AuthContext";
 import { isActuallyOnline } from "@/lib/network";
 // import { Switch } from "@/components/ui/switch";
