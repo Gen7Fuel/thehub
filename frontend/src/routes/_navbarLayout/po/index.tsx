@@ -204,6 +204,7 @@ import { Select, SelectContent, SelectGroup, SelectItem, SelectLabel, SelectTrig
 import { createFileRoute, Link } from '@tanstack/react-router'
 import { useFormStore } from '@/store'
 import axios from 'axios'
+import { DatePicker } from '@/components/custom/datePicker';
 import { domain } from '@/lib/constants'
 
 interface Product {
@@ -239,6 +240,9 @@ function RouteComponent() {
 
   const fleetCardNumber = useFormStore((state) => state.fleetCardNumber)
   const setFleetCardNumber = useFormStore((state) => state.setFleetCardNumber)
+
+  const date = useFormStore((state) => state.date)
+  const setDate = useFormStore((state) => state.setDate)
 
   const poNumber = useFormStore((state) => state.poNumber) // new state for PO number
   const setPoNumber = useFormStore((state) => state.setPoNumber)
@@ -284,8 +288,8 @@ function RouteComponent() {
   }
 
   useEffect(() => {
-  console.log("PO index mounted");
-}, []);
+    console.log("PO index mounted");
+  }, []);
 
 
   return (
@@ -354,6 +358,22 @@ function RouteComponent() {
           />
         </div>
       )}
+
+      <div className="space-y-2">
+        <h2 className="text-lg font-bold">Date</h2>
+        <DatePicker
+          date={date}
+          setDate={(value) => {
+            if (typeof value === 'function') {
+              // Call the function with current date
+              const newDate = value(date);
+              if (newDate) setDate(newDate);
+            } else {
+              setDate(value);
+            }
+          }}
+        />
+      </div>
 
       {/* Customer and Driver Info */}
       <div className="space-y-2">
