@@ -16,7 +16,7 @@ router.get('/fuelsales', async (req, res) => {
   res.json(data);
 });
 
-router.get('/trans-time-period', async (req, res) => {
+router.get('/transactions-data', async (req, res) => {
   // const limit = parseInt(req.query.limit, 10) || 10;
   const { csoCode, startDate, endDate } = req.query;
   const data = await getTransTimePeriodData(csoCode, startDate, endDate);

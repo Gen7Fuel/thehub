@@ -136,28 +136,28 @@ interface SalesData {
   cards: SalesCards;
 }
 
-export const fetchFuelMonthToMonth = async (site: string) => {
+export const fetchFuelMonthToMonth = async (data: any) => {
   // --- Compute 60-day range ---
-  const csoCode = await getCsoCodeByStationName(site);
+  // const csoCode = await getCsoCodeByStationName(site);
 
   const today = new Date();
   const end = new Date(today);
   end.setDate(today.getDate() - 1); // yesterday
 
   const start = new Date(end);
-  start.setDate(end.getDate() - 60); // last 35 days
+  start.setDate(end.getDate() - 60); // last 60 days
 
-  const params = new URLSearchParams({
-    csoCode: csoCode ?? "",
-    startDate: start.toISOString().slice(0, 10),
-    endDate: end.toISOString().slice(0, 10),
-  });
+  // const params = new URLSearchParams({
+  //   csoCode: csoCode ?? "",
+  //   startDate: start.toISOString().slice(0, 10),
+  //   endDate: end.toISOString().slice(0, 10),
+  // });
 
-  const res = await fetch(`/api/sql/fuelsales?${params}`, {
-    headers: { Authorization: `Bearer ${localStorage.getItem("token")}` },
-  });
+  // const res = await fetch(`/api/sql/fuelsales?${params}`, {
+  //   headers: { Authorization: `Bearer ${localStorage.getItem("token")}` },
+  // });
 
-  const data = await res.json();
+  // const data = await res.json();
   const fuelData = data ?? [];
   console.log('fueldata60:', fuelData)
 
@@ -380,14 +380,14 @@ function RouteComponent() {
     percent: number;
   } | null>(null);
 
-  useEffect(() => {
-    const loadFuelMTM = async () => {
-      const stats = await fetchFuelMonthToMonth(site);
-      setFuelMonthStats(stats);
-    };
+  // useEffect(() => {
+  //   const loadFuelMTM = async () => {
+  //     const stats = await fetchFuelMonthToMonth(site);
+  //     setFuelMonthStats(stats);
+  //   };
 
-    loadFuelMTM();
-  }, [site]);
+  //   loadFuelMTM();
+  // }, [site]);
 
 
 
@@ -401,7 +401,7 @@ function RouteComponent() {
         end.setDate(today.getDate() - 1); // yesterday
 
         const start = new Date(end);
-        start.setDate(end.getDate() - 35); // last 35 days
+        start.setDate(end.getDate() - 60); // last 60 days
 
         const params = new URLSearchParams({
           csoCode: csoCode ?? "",
@@ -415,6 +415,13 @@ function RouteComponent() {
 
         let rows = await res.json();
         rows = rows ?? [];
+
+        const loadFuelMTM = async () => {
+        const stats = await fetchFuelMonthToMonth(rows);
+          setFuelMonthStats(stats);
+        };
+
+        loadFuelMTM();
 
         // 1️⃣ Remove Mix&Match rows
         rows = rows.filter((r: any) => r.fuelGradeDescription !== "Mix&Match");
@@ -447,32 +454,32 @@ function RouteComponent() {
     fetchFuelData();
   }, [site]);
 
-  useEffect(()=>{
-    const fetchTransactionData = async () => {
-    try {
-    const csoCode = await getCsoCodeByStationName(site);
+  // useEffect(() => {
+  //   const fetchTransactionData = async () => {
+  //     try {
+  //       const csoCode = await getCsoCodeByStationName(site);
 
-        const today = new Date();
-        const end = new Date(today);
-        end.setDate(today.getDate() - 1); // yesterday
+  //       const today = new Date();
+  //       const end = new Date(today);
+  //       end.setDate(today.getDate() - 1); // yesterday
 
-        const start = new Date(end);
-        start.setDate(end.getDate() - 35); // last 35 days
+  //       const start = new Date(end);
+  //       start.setDate(end.getDate() - 35); // last 35 days
 
-        const params = new URLSearchParams({
-          csoCode: csoCode ?? "",
-          startDate: start.toISOString().slice(0, 10),
-          endDate: end.toISOString().slice(0, 10),
-        });
+  //       const params = new URLSearchParams({
+  //         csoCode: csoCode ?? "",
+  //         startDate: start.toISOString().slice(0, 10),
+  //         endDate: end.toISOString().slice(0, 10),
+  //       });
 
-        const res = await fetch(`/api/sql/trans-time-period?${params}`, {
-          headers: { Authorization: `Bearer ${localStorage.getItem("token")}` },
-        });
-        console.log(res)
-    } catch {}
-    }
-    fetchTransactionData();
-  }, [site]);
+  //       const res = await fetch(`/api/sql/transactions-data?${params}`, {
+  //         headers: { Authorization: `Bearer ${localStorage.getItem("token")}` },
+  //       });
+  //       console.log(res)
+  //     } catch { }
+  //   }
+  //   fetchTransactionData();
+  // }, [site]);
 
   const fuelChartData = useMemo(() => {
     if (!fuelData?.length) return [];
@@ -568,34 +575,44 @@ function RouteComponent() {
   const fuelMix90 = useMemo(() => {
     if (!fuelData?.length) return [];
 
+    const allDates = Array.from(new Set(fuelData.map(d => d.businessDate.slice(5, 10)))).sort();
+    const last7Dates = allDates.slice(-35); // last 35 days
+
     const grades = Array.from(new Set(fuelData.map(d => d.fuelGradeDescription)));
 
     // group by date
     const byDate: Record<string, Record<string, number>> = {};
     fuelData.forEach(d => {
       const day = d.businessDate.slice(5, 10);
+      if (!last7Dates.includes(day)) return;
       if (!byDate[day]) byDate[day] = {};
       byDate[day][d.fuelGradeDescription] = Number(d.fuelGradeSalesVolume ?? 0);
     });
 
-    const days = Object.keys(byDate).sort();
+    // const days = Object.keys(byDate).sort();
 
     // convert daily volumes -> percent mix
-    return days.map(day => {
-      const row = byDate[day];
-      // const total = Object.values(row).reduce((s, n) => s + n, 0);
+    // return days.map(day => {
+    //   const row = byDate[day];
+    //   // const total = Object.values(row).reduce((s, n) => s + n, 0);
 
-      const out: Record<string, any> = { day };
+    //   const out: Record<string, any> = { day };
 
-      grades.forEach(g => {
-        // const v = row[g] ?? 0;
-        // out[g] = total ? Number(((v / total) * 100).toFixed(2)) : 0;
-        // out[g] = Math.pow((v / total), 0.5) * 100; // square-root scaling
+    //   grades.forEach(g => {
+    //     // const v = row[g] ?? 0;
+    //     // out[g] = total ? Number(((v / total) * 100).toFixed(2)) : 0;
+    //     // out[g] = Math.pow((v / total), 0.5) * 100; // square-root scaling
 
-        out[g] = row[g] ?? 0;
-      });
+    //     out[g] = row[g] ?? 0;
+    //   });
 
-      return out;
+    //   return out;
+    // });
+        // Build chart rows
+    return last7Dates.map(day => {
+      const row: Record<string, any> = { day: day.slice(5, 10) }; // MM-DD for x-axis
+      grades.forEach(g => (row[g] = byDate[day]?.[g] ?? 0));
+      return row;
     });
   }, [fuelData]);
 
