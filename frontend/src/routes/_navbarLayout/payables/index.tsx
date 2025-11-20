@@ -75,6 +75,10 @@ function RouteComponent() {
             value="stationName"
           // disabled={!access.component_payables_create_location_filter}
           />
+        </div>
+        
+        <div className="space-y-2">
+          <h2 className="text-lg font-bold">Date</h2>
           <DatePicker
             date={date}
             setDate={(value) => {

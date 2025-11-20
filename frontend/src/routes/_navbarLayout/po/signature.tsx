@@ -30,6 +30,7 @@ function RouteComponent() {
   const amount = useFormStore((state) => state.amount);
   const fuelType = useFormStore((state) => state.fuelType);
   const receipt = useFormStore((state) => state.receipt);
+  const date = useFormStore((state) => state.date);
 
   useEffect(() => {
     if (!receipt) {
@@ -98,12 +99,11 @@ function RouteComponent() {
       }
 
       const stationName = user?.location || 'Rankin';
-      const today = new Date();
 
       const poResponse = await authAxios(() =>
         axios.post(`${domain}/api/purchase-orders`, {
           source: 'PO',
-          date: today,
+          date,
           stationName,
           fleetCardNumber: fleetCardNumber || '', 
           poNumber: poNumber || '',

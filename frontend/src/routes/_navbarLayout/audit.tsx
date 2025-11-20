@@ -45,14 +45,16 @@ function RouteComponent() {
           </Link>
         )}
         {/* Checklist button is always shown */}
-        <Link to="/audit/checklist">
-          <Button
-            {...(!isChecklistActive && { variant: 'outline' } as object)}
-            className="rounded-none"
-          >
-            Checklist
-          </Button>
-        </Link>
+        {access?.stationAudit?.checklist && (
+          <Link to="/audit/checklist">
+            <Button
+              {...(!isChecklistActive && { variant: 'outline' } as object)}
+              className="rounded-none"
+            >
+              Checklist
+            </Button>
+          </Link>
+        )}
         {/* {access.component_station_audit_interface && ( //markpoint */}
         {access?.stationAudit?.interface && (
           <Link to="/audit/interface">
