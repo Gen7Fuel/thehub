@@ -23,13 +23,14 @@ function RouteComponent() {
   const quantity = useFormStore((state) => state.quantity)
   const amount = useFormStore((state) => state.amount)
   const fuelType = useFormStore((state) => state.fuelType)
+  const date = useFormStore((state) => state.date)
   // const [imageSize, setImageSize] = useState<number | null>(null)
 
   useEffect(() => {
-    if (!customerName || !driverName || !vehicleInfo || !fuelType || quantity === 0 || amount === 0) {
+    if (!date || !customerName || !driverName || !vehicleInfo || !fuelType || quantity === 0 || amount === 0) {
       navigate({ to: "/po" })
     }
-  }, [customerName, driverName, vehicleInfo, fuelType, quantity, amount, navigate])
+  }, [date, customerName, driverName, vehicleInfo, fuelType, quantity, amount, navigate])
 
   const capture = () => {
     if (webcamRef.current) {

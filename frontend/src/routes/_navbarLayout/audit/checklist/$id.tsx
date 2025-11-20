@@ -258,7 +258,7 @@ function RouteComponent() {
         {
           headers: {
             Authorization: `Bearer ${token}`,
-            "X-Required-Permission": "stationAudit"
+            "X-Required-Permission": "stationAudit.checklist"
           },
         }
       );
@@ -361,7 +361,7 @@ function RouteComponent() {
         headers: {
           "Content-Type": "application/json",
           Authorization: `Bearer ${token}`,
-          "X-Required-Permission": "stationAudit",
+          "X-Required-Permission": "stationAudit.checklist",
         },
         body: JSON.stringify({
           template: id,
