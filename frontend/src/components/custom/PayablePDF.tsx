@@ -1,16 +1,102 @@
 import { Document, Page, Text, View, StyleSheet, Image } from '@react-pdf/renderer'
 
 const styles = StyleSheet.create({
-  page: { padding: 28, fontSize: 11, fontFamily: 'Helvetica' },
-  title: { fontSize: 18, marginBottom: 12, fontWeight: 700 },
-  section: { marginBottom: 8 },
-  row: { marginBottom: 4 },
-  label: { fontSize: 9, color: '#555' },
-  val: { fontSize: 11 },
-  footer: { position: 'absolute', bottom: 12, left: 0, right: 0, textAlign: 'center', fontSize: 9, color: '#666' },
-  imgPage: { padding: 16 },
-  imgWrapper: { flex: 1, justifyContent: 'center', alignItems: 'center' },
-  img: { width: '100%', height: '100%', objectFit: 'contain' }
+  page: {
+    padding: 40,
+    fontFamily: 'Helvetica',
+    backgroundColor: '#fff',
+  },
+  titleBar: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 32,
+  },
+  title: {
+    fontSize: 24,
+    fontWeight: 'bold',
+    textAlign: 'left',
+    marginBottom: 0,
+    color: '#111827',
+  },
+  table: {
+    width: '100%',
+    marginBottom: 32,
+  },
+  row: {
+    flexDirection: 'row',
+    borderBottomWidth: 1,
+    borderBottomColor: '#e5e7eb',
+    borderBottomStyle: 'dashed',
+    minHeight: 36,
+    alignItems: 'center',
+  },
+  rowLast: {
+    borderBottomWidth: 0,
+    borderBottomColor: '#e5e7eb',
+    borderBottomStyle: 'dashed',
+  },
+  cellLabel: {
+    width: '25%',
+    fontSize: 12,
+    color: '#6b7280',
+    paddingVertical: 8,
+    paddingRight: 12,
+  },
+  cellValue: {
+    width: '75%',
+    fontSize: 12,
+    color: '#111827',
+    paddingVertical: 8,
+  },
+  notesBox: {
+    marginTop: 8,
+    borderWidth: 1,
+    borderColor: '#d1d5db',
+    borderStyle: 'dashed',
+    borderRadius: 8,
+    minHeight: 80,
+    padding: 12,
+  },
+  notesText: {
+    fontSize: 12,
+    color: '#111827',
+  },
+  footer: {
+    position: 'absolute',
+    bottom: 12,
+    left: 0,
+    right: 0,
+    textAlign: 'center',
+    fontSize: 10,
+    color: '#6b7280',
+  },
+  attachmentPage: {
+    padding: 40,
+    fontFamily: 'Helvetica',
+    backgroundColor: '#fff',
+  },
+  attachmentHeader: {
+    fontSize: 16,
+    marginBottom: 16,
+    textAlign: 'center',
+    color: '#111827',
+  },
+  imageWrapper: {
+    flex: 1,
+    borderWidth: 1,
+    borderColor: '#e5e7eb',
+    borderStyle: 'dashed',
+    borderRadius: 8,
+    padding: 12,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  image: {
+    width: '100%',
+    height: '100%',
+    objectFit: 'contain',
+  },
 })
 
 interface PayablePDFProps {
@@ -32,39 +118,48 @@ export default function PayablePDF({ payable, imageDataUris }: PayablePDFProps) 
   return (
     <Document>
       <Page size="A4" style={styles.page}>
-        <Text style={styles.title}>Payable Summary</Text>
-        <View style={styles.section}>
+        <View style={styles.titleBar}>
+          <Text style={styles.title}>Payable</Text>
+          <Image src="/logo.png" style={{ height: 48 }} />
+        </View>
+        <View style={styles.table}>
           <View style={styles.row}>
-            <Text style={styles.label}>Vendor</Text>
-            <Text style={styles.val}>{payable.vendorName || '-'}</Text>
+            <Text style={styles.cellLabel}>Vendor</Text>
+            <Text style={styles.cellValue}>{payable.vendorName || '-'}</Text>
           </View>
           <View style={styles.row}>
-            <Text style={styles.label}>Location</Text>
-            <Text style={styles.val}>{payable.location?.stationName || '-'}</Text>
+            <Text style={styles.cellLabel}>Location</Text>
+            <Text style={styles.cellValue}>{payable.location?.stationName || '-'}</Text>
           </View>
           <View style={styles.row}>
-            <Text style={styles.label}>Payment Method</Text>
-            <Text style={styles.val}>{payable.paymentMethod || '-'}</Text>
+            <Text style={styles.cellLabel}>Payment Method</Text>
+            <Text style={styles.cellValue}>{payable.paymentMethod || '-'}</Text>
           </View>
           <View style={styles.row}>
-            <Text style={styles.label}>Amount</Text>
-            <Text style={styles.val}>{fmtMoney(payable.amount)}</Text>
+            <Text style={styles.cellLabel}>Amount</Text>
+            <Text style={styles.cellValue}>{fmtMoney(payable.amount)}</Text>
           </View>
-          <View style={styles.row}>
-            <Text style={styles.label}>Created</Text>
-            <Text style={styles.val}>{new Date(payable.createdAt).toLocaleString()}</Text>
-          </View>
-          <View style={styles.row}>
-            <Text style={styles.label}>Notes</Text>
-            <Text style={styles.val}>{payable.notes || '-'}</Text>
+            <View style={styles.row}>
+              <Text style={styles.cellLabel}>Created</Text>
+              <Text style={styles.cellValue}>{new Date(payable.createdAt).toLocaleString()}</Text>
+            </View>
+          <View style={[styles.row, styles.rowLast]}>
+            <Text style={styles.cellLabel}>Notes</Text>
+            <Text style={styles.cellValue}>{payable.notes ? '' : '-'}</Text>
           </View>
         </View>
+        {payable.notes && (
+          <View style={styles.notesBox}>
+            <Text style={styles.notesText}>{payable.notes}</Text>
+          </View>
+        )}
         <Text style={styles.footer}>Generated by The Hub</Text>
       </Page>
       {imageDataUris.map((src, i) => (
-        <Page key={i} size="A4" style={styles.imgPage}>
-          <View style={styles.imgWrapper}>
-            {src ? <Image style={styles.img} src={src} /> : <Text>Image unavailable</Text>}
+        <Page key={i} size="A4" style={styles.attachmentPage}>
+          <Text style={styles.attachmentHeader}>Attachment {i + 1}</Text>
+          <View style={styles.imageWrapper}>
+            {src ? <Image style={styles.image} src={src} /> : <Text>No image</Text>}
           </View>
           <Text style={styles.footer}>Attachment {i + 1} of {imageDataUris.length}</Text>
         </Page>
