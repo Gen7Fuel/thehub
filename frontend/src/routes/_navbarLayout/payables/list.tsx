@@ -7,7 +7,7 @@ import { Button } from '@/components/ui/button'
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { getStartAndEndOfToday, toUTC } from '@/lib/utils'
 import { domain } from '@/lib/constants'
-import { Eye, Trash2, ChevronLeft, ChevronRight, ExternalLink } from 'lucide-react'
+import { Eye, ChevronLeft, ChevronRight, ExternalLink } from 'lucide-react'
 import axios from "axios"
 import { useAuth } from "@/context/AuthContext";
 import { FileDown } from 'lucide-react'
