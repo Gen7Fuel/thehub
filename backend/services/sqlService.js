@@ -85,11 +85,12 @@ const sqlConfig = {
 //     return [];
 //   }
 // }
-async function getCategorizedSalesData(csoCode, startDate, endDate) {
+async function getCategorizedSalesData(pool, csoCode, startDate, endDate) {
   try {
-    await sql.connect(sqlConfig);
+    // await sql.connect(sqlConfig);
     // const result = await sql.query(`SELECT TOP (10) * from [CSO].[Sales]`);
-    const result = await sql.query(`
+    // const result = await sql.query(`
+    const result = await pool.request().query(`
       SELECT
         s.[Date_SK],s.[FN],s.[Quota],s.[Cannabis],s.[GRE],s.[Vapes],s.[Native Gifts],s.[Convenience],s.[Total_Sales]
       FROM [CSO].[TotalSales] s
@@ -106,11 +107,12 @@ async function getCategorizedSalesData(csoCode, startDate, endDate) {
   }
 }
 
-async function getGradeVolumeFuelData(csoCode, startDate, endDate) {
+async function getGradeVolumeFuelData(pool, csoCode, startDate, endDate) {
   try {
-    await sql.connect(sqlConfig);
+    // await sql.connect(sqlConfig);
     // const result = await sql.query(`SELECT TOP (10) * from [CSO].[Sales]`);
-    const result = await sql.query(`
+    // const result = await sql.query(`
+    const result = await pool.request().query(`
       SELECT s.[Station_SK], s.[businessDate], s.[fuelGradeID], s.[fuelGradeSalesVolume], s.[fuelGradeDescription]
       FROM [CSO].[Fuel] s
       WHERE
@@ -126,11 +128,12 @@ async function getGradeVolumeFuelData(csoCode, startDate, endDate) {
   }
 }
 
-async function getTransTimePeriodData(csoCode, startDate, endDate) {
+async function getTransTimePeriodData(pool, csoCode, startDate, endDate) {
   try {
-    await sql.connect(sqlConfig);
-    // const result = await sql.query(`SELECT TOP (10) * from [CSO].[Sales]`);
-    const result = await sql.query(`
+    // await sql.connect(sqlConfig);
+    // // const result = await sql.query(`SELECT TOP (10) * from [CSO].[Sales]`);
+    // const result = await sql.query(`
+    const result = await pool.request().query(`
       select a.[Station_SK], a.[Date], a.[Number of Customer Acct ID] as 'visits', 
         a.[Number of Transaction ID] as 'transactions', b.[Avg Bucket] as 'bucket_size' 
       from [CSO].[Daily Trans and Acct ID Traffic View] a join [CSO].[Avg Bucket] b
@@ -246,6 +249,40 @@ async function getUPC_barcode(gtin) {
   }
 }
 
+async function retry(fn, retries = 2, delay = 250) {
+  try {
+    return await fn();
+  } catch (err) {
+    if (retries === 0) throw err;
+    await new Promise(r => setTimeout(r, delay));
+    return retry(fn, retries - 1, delay);
+  }
+}
+
+async function getAllSQLData(csoCode, dates) {
+  const pool = await getPool();
+
+  const {
+    salesStart, salesEnd,
+    fuelStart, fuelEnd,
+    transStart, transEnd,
+  } = dates;
+
+  const results = await Promise.allSettled([
+    retry(() => getCategorizedSalesData(pool, csoCode, salesStart, salesEnd)),
+    retry(() => getGradeVolumeFuelData(pool, csoCode, fuelStart, fuelEnd)),
+    retry(() => getTransTimePeriodData(pool, csoCode, transStart, transEnd)),
+  ]);
+
+  return {
+    sales:        results[0].status === "fulfilled" ? results[0].value : [],
+    fuel:         results[1].status === "fulfilled" ? results[1].value : [],
+    transactions: results[2].status === "fulfilled" ? results[2].value : [],
+  };
+}
+
+
+
 module.exports = {
   sqlConfig,
   getCategorizedSalesData,
@@ -254,4 +291,5 @@ module.exports = {
   getInventoryCategories,
   getGradeVolumeFuelData,
   getTransTimePeriodData,
+  getAllSQLData,
 };

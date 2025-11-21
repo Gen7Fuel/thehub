@@ -1,6 +1,6 @@
 const express = require('express');
 const router = express.Router();
-const { getCategorizedSalesData, getGradeVolumeFuelData, getTransTimePeriodData } = require('../services/sqlService');
+const { getCategorizedSalesData, getGradeVolumeFuelData, getTransTimePeriodData, getAllSQLData } = require('../services/sqlService');
 
 router.get('/sales', async (req, res) => {
   // const limit = parseInt(req.query.limit, 10) || 10;
@@ -22,6 +22,37 @@ router.get('/transactions-data', async (req, res) => {
   const data = await getTransTimePeriodData(csoCode, startDate, endDate);
   console.log('time period data:',data);
   res.json(data);
+});
+
+router.get('/all-data', async (req, res) => {
+  const {
+    csoCode,
+
+    salesStart,
+    salesEnd,
+
+    fuelStart,
+    fuelEnd,
+
+    transStart,
+    transEnd
+  } = req.query;
+
+  try {
+    const response = await getAllSQLData(csoCode, {
+      salesStart,
+      salesEnd,
+      fuelStart,
+      fuelEnd,
+      transStart,
+      transEnd
+    });
+
+    res.json(response);
+  } catch (err) {
+    console.error("❌ Failed to fetch combined SQL data:", err);
+    res.status(500).json({ error: "SQL fetch failed" });
+  }
 });
 
 module.exports = router;

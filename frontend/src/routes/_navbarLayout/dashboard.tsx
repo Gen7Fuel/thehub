@@ -3,6 +3,7 @@ import { useEffect, useState, useMemo } from "react";
 import { LocationPicker } from "@/components/custom/locationPicker";
 import { getCsoCodeByStationName, getVendorNameById } from '@/lib/utils';
 import { DonutSalesChart } from "@/components/custom/dashboard/salesByCategoryDonut";
+import { getDashboardData, saveDashboardData, STORES } from "@/lib/dashboardIndexedDB"
 import {
   Bar, BarChart, CartesianGrid, XAxis, LabelList,
   Line, YAxis, Cell
@@ -27,7 +28,7 @@ import {
 import { MultiLineChart } from "@/components/custom/dashboard/multiLineChart";
 import { FuelSparkline } from "@/components/custom/dashboard/fuelSparkLine";
 // import { DatePickerWithRange } from '@/components/custom/datePickerWithRange';
-import type { DateRange } from "react-day-picker";
+// import type { DateRange } from "react-day-picker";
 import { useAuth } from "@/context/AuthContext";
 import { getOrderRecStatusColor } from '@/lib/utils';
 import { PasswordProtection } from "@/components/custom/PasswordProtection";
@@ -137,9 +138,6 @@ interface SalesData {
 }
 
 export const fetchFuelMonthToMonth = async (data: any) => {
-  // --- Compute 60-day range ---
-  // const csoCode = await getCsoCodeByStationName(site);
-
   const today = new Date();
   const end = new Date(today);
   end.setDate(today.getDate() - 1); // yesterday
@@ -147,17 +145,6 @@ export const fetchFuelMonthToMonth = async (data: any) => {
   const start = new Date(end);
   start.setDate(end.getDate() - 60); // last 60 days
 
-  // const params = new URLSearchParams({
-  //   csoCode: csoCode ?? "",
-  //   startDate: start.toISOString().slice(0, 10),
-  //   endDate: end.toISOString().slice(0, 10),
-  // });
-
-  // const res = await fetch(`/api/sql/fuelsales?${params}`, {
-  //   headers: { Authorization: `Bearer ${localStorage.getItem("token")}` },
-  // });
-
-  // const data = await res.json();
   const fuelData = data ?? [];
   console.log('fueldata60:', fuelData)
 
@@ -205,13 +192,6 @@ export const fetchFuelMonthToMonth = async (data: any) => {
   };
 }
 
-/**
- * Format large numbers into readable strings with K, M, B suffixes.
- * Shows two decimal digits for thousands and millions.
- * Examples:
- *  514639 -> "514.64K"
- *  8562123.96 -> "8.56M"
- */
 export function formatNumberCompact(value: number | undefined | null): string {
   if (value === null || value === undefined) return "0";
 
@@ -249,12 +229,17 @@ function RouteComponent() {
   const sevenDaysAgo = new Date(today);
   sevenDaysAgo.setDate(today.getDate() - 7);
 
-  const [startDate, setStartDate] = useState(sevenDaysAgo.toISOString().slice(0, 10));
-  const [endDate, setEndDate] = useState(today.toISOString().slice(0, 10));
-  const [date, _] = useState<DateRange | undefined>({ from: sevenDaysAgo, to: today });
+  const [startDate,] = useState(sevenDaysAgo.toISOString().slice(0, 10));
+  const [endDate,] = useState(today.toISOString().slice(0, 10));
 
   const [showPasswordDialog, setShowPasswordDialog] = useState(false);
   const [hasAccess, setHasAccess] = useState(false);
+  const [fuelData, setFuelData] = useState<any[]>([]);
+  const [fuelMonthStats, setFuelMonthStats] = useState<{
+    currentMonthVolume: number;
+    previousMonthVolume: number;
+    percent: number;
+  } | null>(null);
   const navigate = useNavigate({ from: Route.fullPath })
 
   // Rendering passcode dialog for manager access 
@@ -272,16 +257,6 @@ function RouteComponent() {
     // Navigate back to cycle-count main page
     navigate({ to: '/' })
   }
-
-  // ----------------------------
-  // Update start/end dates when date range changes
-  // ----------------------------
-  useEffect(() => {
-    if (date?.from && date?.to) {
-      setStartDate(date.from.toISOString().slice(0, 10));
-      setEndDate(date.to.toISOString().slice(0, 10));
-    }
-  }, [date]);
 
   // ----------------------------
   // Fetch dashboard data whenever site/date changes
@@ -320,15 +295,14 @@ function RouteComponent() {
           // Optionally handle other errors here
         }
 
-
+        const today = new Date();
+        const end = new Date(today);
         // Cycle counts
         const timezone = await fetchLocation(site).then(loc => loc.timezone || "UTC");
         const dailyCountsRes = await fetchDailyCounts(site, sevenDaysAgo.toISOString().slice(0, 10), today.toISOString().slice(0, 10), timezone);
         // const dailyCountsRes = await fetchDailyCounts(site, startDate, endDate, timezone);
 
-        // Sales data
-        const csoCode = await getCsoCodeByStationName(site);
-        const salesDataRes = await fetchSalesData(csoCode ?? "");
+
 
         // Vendor names
         const vendorIds = [...new Set(STATUS_KEYS.flatMap(key => (orderRecsRes[key] ?? []).map((r: any) => String(r.vendor))))];
@@ -356,6 +330,80 @@ function RouteComponent() {
           orderRec: vendorOrderMap[vendor._id] ?? null,
         }));
 
+
+        end.setDate(today.getDate() - 1); // yesterday
+
+        const start = new Date(end);
+        start.setDate(end.getDate() - 60); // last 60 days
+
+        const fuelStartDate = start.toISOString().slice(0, 10)
+        const fuelEndDate = end.toISOString().slice(0, 10)
+
+        start.setDate(end.getDate() - 35); // last 35 days
+
+        const transStartDate = start.toISOString().slice(0, 10)
+        const transEndDate = end.toISOString().slice(0, 10)
+
+        end.setHours(23, 59, 59, 999)
+
+        start.setDate(start.getDate() - (60 - 1)) // 60 days window
+        start.setHours(0, 0, 0, 0)
+
+        const fmt = (d: Date) => d.toISOString().slice(0, 10)
+        const salesStartDate = fmt(start)
+        const salesEndDate = fmt(end)
+
+
+        // ------------------------------------------------------------
+        // 1️⃣ CHECK INDEXEDDB FIRST
+        // ------------------------------------------------------------
+        const salesCached = await getDashboardData(STORES.SALES);
+        const fuelCached = await getDashboardData(STORES.FUEL);
+        const transCached = await getDashboardData(STORES.TRANS);
+
+        let sqlSales = salesCached;
+        let sqlFuel = fuelCached;
+        let sqlTrans = transCached;
+
+        if (!salesCached || !fuelCached || !transCached) {
+
+          console.log("📡 No cache → Calling SQL backend...");
+
+          const csoCode = await getCsoCodeByStationName(site);
+
+          const data = await fetchAllSqlData(
+            csoCode ?? "",
+            salesStartDate, salesEndDate,
+            fuelStartDate, fuelEndDate,
+            transStartDate, transEndDate
+          );
+
+          sqlSales = data.sales;
+          sqlFuel = data.fuel;
+          sqlTrans = data.transactions;
+
+          // Save to IDB
+          await saveDashboardData(STORES.SALES, sqlSales);
+          await saveDashboardData(STORES.FUEL, sqlFuel);
+          await saveDashboardData(STORES.TRANS, sqlTrans);
+
+        } else {
+          console.log("Using cached dashboard SQL data");
+        }
+
+        // Fuel processing
+        const { cleaned: cleanedFuelData, fullFuelData } = await fetchFuelData(sqlFuel);
+        const stats = await fetchFuelMonthToMonth(fullFuelData);
+
+        // Sales
+        const salesDataRes = await fetchSalesData(sqlSales);
+
+        // Transactions
+        const transactions = sqlTrans;
+
+        console.log('transaction data:', transactions)
+
+
         // Set states
         setOrderRecs(orderRecsRes);
         setVendorNames(vendorNamesObj);
@@ -363,6 +411,8 @@ function RouteComponent() {
         setSalesData(salesDataRes);
         setVendors(updatedVendors);
         setVendorStatus(updatedVendors);
+        setFuelData(cleanedFuelData);
+        setFuelMonthStats(stats);
       } catch (err) {
         console.error("Error fetching dashboard data:", err);
       } finally {
@@ -373,114 +423,7 @@ function RouteComponent() {
     fetchAllData();
   }, [site, startDate, endDate]);
 
-  const [fuelData, setFuelData] = useState<any[]>([]);
-  const [fuelMonthStats, setFuelMonthStats] = useState<{
-    currentMonthVolume: number;
-    previousMonthVolume: number;
-    percent: number;
-  } | null>(null);
-
-  // useEffect(() => {
-  //   const loadFuelMTM = async () => {
-  //     const stats = await fetchFuelMonthToMonth(site);
-  //     setFuelMonthStats(stats);
-  //   };
-
-  //   loadFuelMTM();
-  // }, [site]);
-
-
-
-  useEffect(() => {
-    const fetchFuelData = async () => {
-      try {
-        const csoCode = await getCsoCodeByStationName(site);
-
-        const today = new Date();
-        const end = new Date(today);
-        end.setDate(today.getDate() - 1); // yesterday
-
-        const start = new Date(end);
-        start.setDate(end.getDate() - 60); // last 60 days
-
-        const params = new URLSearchParams({
-          csoCode: csoCode ?? "",
-          startDate: start.toISOString().slice(0, 10),
-          endDate: end.toISOString().slice(0, 10),
-        });
-
-        const res = await fetch(`/api/sql/fuelsales?${params}`, {
-          headers: { Authorization: `Bearer ${localStorage.getItem("token")}` },
-        });
-
-        let rows = await res.json();
-        rows = rows ?? [];
-
-        const loadFuelMTM = async () => {
-        const stats = await fetchFuelMonthToMonth(rows);
-          setFuelMonthStats(stats);
-        };
-
-        loadFuelMTM();
-
-        // 1️⃣ Remove Mix&Match rows
-        rows = rows.filter((r: any) => r.fuelGradeDescription !== "Mix&Match");
-
-        // 2️⃣ Group by grade
-        const grouped = rows.reduce((acc: Record<string, any[]>, row: any) => {
-          const grade = row.fuelGradeDescription;
-          if (!acc[grade]) acc[grade] = [];
-          acc[grade].push(row);
-          return acc;
-        }, {});
-
-        // 3️⃣ Remove grades where *all* values are zero
-        const cleaned = Object.values(grouped)
-          .filter((gradeRows) => {
-            const rowsArray = gradeRows as any[]; // assert type here
-            return !rowsArray.every(r => Number(r.value) === 0);
-          })
-          .flat();
-        // console.log('fueldata:',cleaned)
-        setFuelData(cleaned);
-
-
-      } catch (err) {
-        console.error("Error fetching fuel data:", err);
-        setFuelData([]);
-      }
-    };
-
-    fetchFuelData();
-  }, [site]);
-
-  // useEffect(() => {
-  //   const fetchTransactionData = async () => {
-  //     try {
-  //       const csoCode = await getCsoCodeByStationName(site);
-
-  //       const today = new Date();
-  //       const end = new Date(today);
-  //       end.setDate(today.getDate() - 1); // yesterday
-
-  //       const start = new Date(end);
-  //       start.setDate(end.getDate() - 35); // last 35 days
-
-  //       const params = new URLSearchParams({
-  //         csoCode: csoCode ?? "",
-  //         startDate: start.toISOString().slice(0, 10),
-  //         endDate: end.toISOString().slice(0, 10),
-  //       });
-
-  //       const res = await fetch(`/api/sql/transactions-data?${params}`, {
-  //         headers: { Authorization: `Bearer ${localStorage.getItem("token")}` },
-  //       });
-  //       console.log(res)
-  //     } catch { }
-  //   }
-  //   fetchTransactionData();
-  // }, [site]);
-
+  // build past 7 days fuel chart data
   const fuelChartData = useMemo(() => {
     if (!fuelData?.length) return [];
 
@@ -571,7 +514,7 @@ function RouteComponent() {
     ])
   );
 
-  // Build 90-day % mix chart data
+  // Build 35-day  fuel chart data
   const fuelMix90 = useMemo(() => {
     if (!fuelData?.length) return [];
 
@@ -589,26 +532,7 @@ function RouteComponent() {
       byDate[day][d.fuelGradeDescription] = Number(d.fuelGradeSalesVolume ?? 0);
     });
 
-    // const days = Object.keys(byDate).sort();
-
-    // convert daily volumes -> percent mix
-    // return days.map(day => {
-    //   const row = byDate[day];
-    //   // const total = Object.values(row).reduce((s, n) => s + n, 0);
-
-    //   const out: Record<string, any> = { day };
-
-    //   grades.forEach(g => {
-    //     // const v = row[g] ?? 0;
-    //     // out[g] = total ? Number(((v / total) * 100).toFixed(2)) : 0;
-    //     // out[g] = Math.pow((v / total), 0.5) * 100; // square-root scaling
-
-    //     out[g] = row[g] ?? 0;
-    //   });
-
-    //   return out;
-    // });
-        // Build chart rows
+    // Build chart rows
     return last7Dates.map(day => {
       const row: Record<string, any> = { day: day.slice(5, 10) }; // MM-DD for x-axis
       grades.forEach(g => (row[g] = byDate[day]?.[g] ?? 0));
@@ -617,7 +541,7 @@ function RouteComponent() {
   }, [fuelData]);
 
 
-  // Mini sparkline datasets per grade
+  // Mini fuel sparkline datasets per grade
   const fuelSparklines = useMemo(() => {
     if (!fuelData?.length) return {};
 
@@ -1369,7 +1293,7 @@ const fetchDailyCounts = async (site: string, startDate: string, endDate: string
 //     },
 //   };
 // }
-const fetchSalesData = async (csoCode: string) => {
+const fetchSalesData = async (rows: any) => {
   // Categories used across charts
   const CATS = ['FN', 'Quota', 'Cannabis', 'GRE', 'Convenience', 'Vapes', 'Native Gifts'] as const
 
@@ -1384,13 +1308,11 @@ const fetchSalesData = async (csoCode: string) => {
   start.setHours(0, 0, 0, 0)
 
   const fmt = (d: Date) => d.toISOString().slice(0, 10)
-  const startDate = fmt(start)
-  const endDate = fmt(end)
 
   // Fetch raw rows
-  const rows = await fetch(`/api/sql/sales?csoCode=${encodeURIComponent(csoCode)}&startDate=${startDate}&endDate=${endDate}`, {
-    headers: { Authorization: `Bearer ${localStorage.getItem("token")}` },
-  }).then(res => res.json())
+  // const rows = await fetch(`/api/sql/sales?csoCode=${encodeURIComponent(csoCode)}&startDate=${startDate}&endDate=${endDate}`, {
+  //   headers: { Authorization: `Bearer ${localStorage.getItem("token")}` },
+  // }).then(res => res.json())
 
   // Build date-indexed map with sums
   const byDate: Record<string, Record<string, number>> = {}
@@ -1518,6 +1440,101 @@ const fetchSalesData = async (csoCode: string) => {
   };
 }
 
+const fetchFuelData = async (rows: any) => {
+  // const csoCode = await getCsoCodeByStationName(site);
+
+  // const today = new Date();
+  // const end = new Date(today);
+  // end.setDate(today.getDate() - 1); // yesterday
+
+  // const start = new Date(end);
+  // start.setDate(end.getDate() - 60); // last 60 days
+
+  // const params = new URLSearchParams({
+  //   csoCode: csoCode ?? "",
+  //   startDate: start.toISOString().slice(0, 10),
+  //   endDate: end.toISOString().slice(0, 10),
+  // });
+
+  // const res = await fetch(`/api/sql/fuelsales?${params}`, {
+  //   headers: { Authorization: `Bearer ${localStorage.getItem("token")}` },
+  // });
+
+  // let rows = await res.json();
+  const fullFuelData = rows;
+  rows = rows ?? [];
+
+  // 1️⃣ Remove Mix&Match rows
+  rows = rows.filter((r: any) => r.fuelGradeDescription !== "Mix&Match");
+
+  // 2️⃣ Group by grade
+  const grouped = rows.reduce((acc: Record<string, any[]>, row: any) => {
+    const grade = row.fuelGradeDescription;
+    if (!acc[grade]) acc[grade] = [];
+    acc[grade].push(row);
+    return acc;
+  }, {});
+
+  // Remove grades where *all* values are zero
+  const cleaned = Object.values(grouped)
+    .filter((gradeRows) => {
+      const rowsArray = gradeRows as any[]; // assert type here
+      return !rowsArray.every(r => Number(r.value) === 0);
+    })
+    .flat();
+  return {
+    cleaned,
+    fullFuelData
+  };
+};
+
+// const fetchTransactionData = async (site: string) => {
+//   const csoCode = await getCsoCodeByStationName(site);
+
+//   const today = new Date();
+//   const end = new Date(today);
+//   end.setDate(today.getDate() - 1); // yesterday
+
+//   const start = new Date(end);
+//   start.setDate(end.getDate() - 35); // last 35 days
+
+//   const params = new URLSearchParams({
+//     csoCode: csoCode ?? "",
+//     startDate: start.toISOString().slice(0, 10),
+//     endDate: end.toISOString().slice(0, 10),
+//   });
+
+//   const res = await fetch(`/api/sql/transactions-data?${params}`, {
+//     headers: { Authorization: `Bearer ${localStorage.getItem("token")}` },
+//   });
+//   return res.json()
+// }
+
+const fetchAllSqlData = async (
+  csoCode: string,
+  salesStart: string, salesEnd: string,
+  fuelStart: string, fuelEnd: string,
+  transStart: string, transEnd: string
+) => {
+  const params = new URLSearchParams({
+    csoCode,
+
+    salesStart,
+    salesEnd,
+
+    fuelStart,
+    fuelEnd,
+
+    transStart,
+    transEnd
+  });
+
+  const res = await fetch(`/api/sql/all-data?${params}`, {
+    headers: { Authorization: `Bearer ${localStorage.getItem("token")}` }
+  });
+
+  return await res.json();
+};
 
 
 const fetchVendors = async (site: string) => {
