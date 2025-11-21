@@ -1,6 +1,6 @@
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
-import { useEffect } from "react";
+// import { useEffect } from "react";
 import { DatePicker } from '@/components/custom/datePicker';
 import { Select, SelectContent, SelectGroup, SelectItem, SelectLabel, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { createFileRoute, Link } from '@tanstack/react-router'
@@ -24,14 +24,14 @@ function RouteComponent() {
 
   const payableLocation = useFormStore((state) => state.payableLocation)
   const setPayableLocation = useFormStore((state) => state.setPayableLocation)
-  console.log('Before:', payableLocation)
-  console.log('auth location:', user?.location)
-  useEffect(() => {
-    if (user?.location) {
-      setPayableLocation(user.location);
-    }
-  }, [user?.location, payableLocation, setPayableLocation]);
-  console.log('After:', payableLocation)
+  // console.log('Before:', payableLocation)
+  // console.log('auth location:', user?.location)
+  // useEffect(() => {
+  //   if (user?.location) {
+  //     setPayableLocation(user.location);
+  //   }
+  // }, [user?.location, payableLocation, setPayableLocation]);
+  // console.log('After:', payableLocation)
 
   const payableNotes = useFormStore((state) => state.payableNotes)
   const setPayableNotes = useFormStore((state) => state.setPayableNotes)
@@ -73,6 +73,7 @@ function RouteComponent() {
           <LocationPicker
             setStationName={setPayableLocation as React.Dispatch<React.SetStateAction<string>>}
             value="stationName"
+            defaultValue={user?.location}
           // disabled={!access.component_payables_create_location_filter}
           />
         </div>
