@@ -7,9 +7,12 @@ import { Button } from '@/components/ui/button'
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { getStartAndEndOfToday, toUTC } from '@/lib/utils'
 import { domain } from '@/lib/constants'
-import { Eye, Trash2, ChevronLeft, ChevronRight, ExternalLink } from 'lucide-react'
+import { Eye, ChevronLeft, ChevronRight, ExternalLink } from 'lucide-react'
 import axios from "axios"
 import { useAuth } from "@/context/AuthContext";
+import { FileDown } from 'lucide-react'
+import PayablePDF from '@/components/custom/PayablePDF'
+import { pdf } from '@react-pdf/renderer'
 
 interface Payable {
   _id: string
@@ -40,7 +43,7 @@ function RouteComponent() {
   // const access = user?.access || {}
   const navigate = useNavigate()
   const [location, setLocation] = useState<string>(user?.location || "")
-  const [timezone, setTimezone] = useState<string>(user?.timezone || "America/Toronto")
+  const [_, setTimezone] = useState<string>(user?.timezone || "America/Toronto")
   const [payables, setPayables] = useState<Payable[]>([])
   const [loading, setLoading] = useState(false)
 
@@ -55,7 +58,43 @@ function RouteComponent() {
     currentIndex: 0
   })
 
-  timezone
+  async function fetchImageDataUri(filename: string): Promise<string> {
+    try {
+      const resp = await fetch(`${domain}/cdn/download/${encodeURIComponent(filename)}`)
+      if (!resp.ok) return ''
+      const blob = await resp.blob()
+      const reader = new FileReader()
+      return await new Promise<string>((resolve, reject) => {
+        reader.onerror = () => reject(reader.error)
+        reader.onload = () => resolve(String(reader.result))
+        reader.readAsDataURL(blob)
+      })
+    } catch {
+      return ''
+    }
+  }
+
+  const generatePDF = async (payable: Payable) => {
+    try {
+      // Fetch images sequentially (can parallelize if needed)
+      const imageDataUris: string[] = []
+      for (const img of payable.images) {
+        const uri = await fetchImageDataUri(img)
+        if (uri) imageDataUris.push(uri)
+      }
+
+      const doc = <PayablePDF payable={payable} imageDataUris={imageDataUris} />
+      const instance = pdf(<></>)
+      instance.updateContainer(doc)
+      const blob = await instance.toBlob()
+      const url = URL.createObjectURL(blob)
+      // Open in new tab or force download
+      window.open(url)
+    } catch (e) {
+      console.error('Payable PDF generation error', e)
+      alert('Failed to generate PDF')
+    }
+  }
 
   const fetchPayables = async () => {
     if (!date?.from || !date?.to || !location) return
@@ -122,33 +161,33 @@ function RouteComponent() {
     }
   }
 
-  const deletePayable = async (id: string) => {
-    if (!confirm('Are you sure you want to delete this payable?')) return;
+  // const deletePayable = async (id: string) => {
+  //   if (!confirm('Are you sure you want to delete this payable?')) return;
 
-    try {
-      const token = localStorage.getItem('token');
-      const response = await axios.delete(`${domain}/api/payables/${id}`, {
-        headers: {
-          Authorization: `Bearer ${token}`,
-          "X-Required-Permission": "payables",
-        },
-      });
+  //   try {
+  //     const token = localStorage.getItem('token');
+  //     const response = await axios.delete(`${domain}/api/payables/${id}`, {
+  //       headers: {
+  //         Authorization: `Bearer ${token}`,
+  //         "X-Required-Permission": "payables",
+  //       },
+  //     });
 
-      if (response.status === 200) {
-        setPayables(payables.filter(p => p._id !== id));
-      } else {
-        alert('Error deleting payable');
-      }
-    } catch (error: any) {
-      if (error.response?.status === 403) {
-        navigate({ to: "/no-access" });
-        return;
-      }
+  //     if (response.status === 200) {
+  //       setPayables(payables.filter(p => p._id !== id));
+  //     } else {
+  //       alert('Error deleting payable');
+  //     }
+  //   } catch (error: any) {
+  //     if (error.response?.status === 403) {
+  //       navigate({ to: "/no-access" });
+  //       return;
+  //     }
 
-      console.error("Error deleting payable:", error);
-      alert('Error deleting payable');
-    }
-  };
+  //     console.error("Error deleting payable:", error);
+  //     alert('Error deleting payable');
+  //   }
+  // };
 
 
   const viewImages = (images: string[]) => {
@@ -264,12 +303,20 @@ function RouteComponent() {
                       >
                         <Eye className="h-4 w-4" />
                       </Button>
-                      <Button
+                      {/* <Button
                         size="sm"
                         variant="destructive"
                         onClick={() => deletePayable(payable._id)}
                       >
                         <Trash2 className="h-4 w-4" />
+                      </Button> */}
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={() => generatePDF(payable)}
+                        title="PDF"
+                      >
+                        <FileDown className="h-4 w-4" />
                       </Button>
                     </div>
                   </td>
