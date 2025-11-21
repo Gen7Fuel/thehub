@@ -98,7 +98,7 @@ router.post('/', async (req, res) => {
 
           sheet.entries.push({
             date: entryDate,
-            description: `Payable - ${vendorName}`,
+            description: `Payout - ${vendorName}`,
             cashExpenseOut: Number(populatedPayable.amount || 0),
           })
           console.log('Entering into safesheet');

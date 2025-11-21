@@ -22,6 +22,7 @@ async function loadReportData(site, date) {
     cpl_bulloch: sum('cpl_bulloch'),
     exempted_tax: sum('exempted_tax'),
     report_canadian_cash: sum('report_canadian_cash'),
+    payouts: sum('payouts'),
   }
 
   return { rows, totals }
