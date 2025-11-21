@@ -161,33 +161,33 @@ function RouteComponent() {
     }
   }
 
-  const deletePayable = async (id: string) => {
-    if (!confirm('Are you sure you want to delete this payable?')) return;
+  // const deletePayable = async (id: string) => {
+  //   if (!confirm('Are you sure you want to delete this payable?')) return;
 
-    try {
-      const token = localStorage.getItem('token');
-      const response = await axios.delete(`${domain}/api/payables/${id}`, {
-        headers: {
-          Authorization: `Bearer ${token}`,
-          "X-Required-Permission": "payables",
-        },
-      });
+  //   try {
+  //     const token = localStorage.getItem('token');
+  //     const response = await axios.delete(`${domain}/api/payables/${id}`, {
+  //       headers: {
+  //         Authorization: `Bearer ${token}`,
+  //         "X-Required-Permission": "payables",
+  //       },
+  //     });
 
-      if (response.status === 200) {
-        setPayables(payables.filter(p => p._id !== id));
-      } else {
-        alert('Error deleting payable');
-      }
-    } catch (error: any) {
-      if (error.response?.status === 403) {
-        navigate({ to: "/no-access" });
-        return;
-      }
+  //     if (response.status === 200) {
+  //       setPayables(payables.filter(p => p._id !== id));
+  //     } else {
+  //       alert('Error deleting payable');
+  //     }
+  //   } catch (error: any) {
+  //     if (error.response?.status === 403) {
+  //       navigate({ to: "/no-access" });
+  //       return;
+  //     }
 
-      console.error("Error deleting payable:", error);
-      alert('Error deleting payable');
-    }
-  };
+  //     console.error("Error deleting payable:", error);
+  //     alert('Error deleting payable');
+  //   }
+  // };
 
 
   const viewImages = (images: string[]) => {
@@ -303,13 +303,13 @@ function RouteComponent() {
                       >
                         <Eye className="h-4 w-4" />
                       </Button>
-                      <Button
+                      {/* <Button
                         size="sm"
                         variant="destructive"
                         onClick={() => deletePayable(payable._id)}
                       >
                         <Trash2 className="h-4 w-4" />
-                      </Button>
+                      </Button> */}
                       <Button
                         size="sm"
                         variant="outline"
