@@ -364,7 +364,7 @@ function getPayloadConfigFromPayload(
 }
 
 interface ChartTooltipContentProps extends TooltipProps<number, string> {
-  config: Record<string, { label: string; color: string }>;
+  config: Record<string, { label: string; color: string; }>;
   hideIndicator?: boolean;
 }
 

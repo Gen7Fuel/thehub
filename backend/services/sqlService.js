@@ -128,25 +128,125 @@ async function getGradeVolumeFuelData(pool, csoCode, startDate, endDate) {
   }
 }
 
-async function getTransTimePeriodData(pool, csoCode, startDate, endDate) {
-  try {
-    // await sql.connect(sqlConfig);
-    // // const result = await sql.query(`SELECT TOP (10) * from [CSO].[Sales]`);
-    // const result = await sql.query(`
-    const result = await pool.request().query(`
-      select a.[Station_SK], a.[Date], a.[Number of Customer Acct ID] as 'visits', 
-        a.[Number of Transaction ID] as 'transactions', b.[Avg Bucket] as 'bucket_size' 
-      from [CSO].[Daily Trans and Acct ID Traffic View] a join [CSO].[Avg Bucket] b
-      on a.[Station_SK] =  b.[Station_SK] AND a.[Date] = b.[Date] 
-      where a.[Station_SK] = ${csoCode} and a.[Date] between '${startDate}' AND '${endDate}'
-    `);
-    await sql.close();
-    return result.recordset;
-  } catch (err) {
-    console.error('SQL error:', err);
-    return [];
-  }
-}
+// async function getTransTimePeriodData(pool, csoCode, startDate, endDate) {
+//   try {
+//     // await sql.connect(sqlConfig);
+//     // // const result = await sql.query(`SELECT TOP (10) * from [CSO].[Sales]`);
+//     // const result = await sql.query(`
+//     const result = await pool.request().query(`
+//       select a.[Station_SK], a.[Date], a.[Number of Customer Acct ID] as 'visits', 
+//         a.[Number of Transaction ID] as 'transactions', b.[Avg Bucket] as 'bucket_size' 
+//       from [CSO].[Daily Trans and Acct ID Traffic View] a join [CSO].[Avg Bucket] b
+//       on a.[Station_SK] =  b.[Station_SK] AND a.[Date] = b.[Date] 
+//       where a.[Station_SK] = ${csoCode} and a.[Date] between '${startDate}' AND '${endDate}'
+//     `);
+//     await sql.close();
+//     return result.recordset;
+//   } catch (err) {
+//     console.error('SQL error:', err);
+//     return [];
+//   }
+// }
+// async function getAllTransactionsData(csoCode, startDate, endDate) {
+//   try {
+//     const pool = await getPool(); // get healthy pool
+
+//     // 1️⃣ Transactions
+//     const transactionsResult = await retry(() => pool.request().query(`
+//       SELECT a.[Station_SK], a.[Date], a.[Number of Customer Acct ID] AS visits,
+//              a.[Number of Transaction ID] AS transactions, b.[Avg Bucket] AS bucket_size
+//       FROM [CSO].[Daily Trans and Acct ID Traffic View] a
+//       JOIN [CSO].[Avg Bucket] b
+//       ON a.[Station_SK] = b.[Station_SK] AND a.[Date] = b.[Date]
+//       WHERE a.[Station_SK] = ${csoCode} AND a.[Date] BETWEEN '${startDate}' AND '${endDate}'
+//       ORDER BY a.[Date]
+//     `));
+
+//     // 2️⃣ Time period transactions
+//     const timePeriodResult = await retry(() => pool.request().query(`
+//       SELECT a.[Station_SK], a.[Date], a.[Number of Customer Acct ID] AS visits,
+//              a.[Number of Transaction ID] AS transactions, a.[Time Period] as timePeriod 
+//       FROM [CSO].[Daily Trans by Time Period View] a
+//       WHERE a.[Station_SK] = ${csoCode} AND a.[Date] BETWEEN '${startDate}' AND '${endDate}'
+//       ORDER BY a.[Date]
+//     `));
+
+//     // 3️⃣ Tender transactions
+//     const tenderResult = await retry(() => pool.request().query(`
+//       SELECT a.[Station_SK], a.[Date], a.[Number of Customer Acct ID] AS visits,
+//              a.[Number of Transaction ID] AS transactions, a.[Tender Code] as tender
+//       FROM [CSO].[Daily Trans by Tender View] a
+//       WHERE a.[Station_SK] = ${csoCode} AND a.[Date] BETWEEN '${startDate}' AND '${endDate}'
+//       ORDER BY a.[Date]
+//     `));
+
+//     return {
+//       transactions: transactionsResult.recordset ?? [],
+//       timePeriodTransactions: timePeriodResult.recordset ?? [],
+//       tenderTransactions: tenderResult.recordset ?? [],
+//     };
+//   } catch (err) {
+//     console.error("❌ SQL error fetching transactions:", err);
+//     return {
+//       transactions: [],
+//       timePeriodTransactions: [],
+//       tenderTransactions: [],
+//     };
+//   }
+// }
+
+// 1️⃣ Original transactions
+// async function getTransactions(pool, csoCode, startDate, endDate) {
+//   try {
+//     const result = await pool.request().query(`
+//       SELECT a.[Station_SK], a.[Date], a.[Number of Customer Acct ID] AS visits,
+//              a.[Number of Transaction ID] AS transactions, b.[Avg Bucket] AS bucket_size
+//       FROM [CSO].[Daily Trans and Acct ID Traffic View] a
+//       JOIN [CSO].[Avg Bucket] b
+//       ON a.[Station_SK] = b.[Station_SK] AND a.[Date] = b.[Date]
+//       WHERE a.[Station_SK] = ${csoCode} AND a.[Date] BETWEEN '${startDate}' AND '${endDate}'
+//       ORDER BY a.[Date]
+//     `);
+//     return result.recordset ?? [];
+//   } catch (err) {
+//     console.error("❌ SQL error fetching transactions:", err);
+//     return [];
+//   }
+// }
+
+// // 2️⃣ Time period transactions
+// async function getTimePeriodTransactions(pool, csoCode, startDate, endDate) {
+//   try {
+//     const result = await pool.request().query(`
+//       SELECT a.[Station_SK], a.[Date], a.[Number of Customer Acct ID] AS visits,
+//              a.[Number of Transaction ID] AS transactions, a.[Time Period] AS timePeriod
+//       FROM [CSO].[Daily Trans by Time Period View] a
+//       WHERE a.[Station_SK] = ${csoCode} AND a.[Date] BETWEEN '${startDate}' AND '${endDate}'
+//       ORDER BY a.[Date]
+//     `);
+//     return result.recordset ?? [];
+//   } catch (err) {
+//     console.error("❌ SQL error fetching time period transactions:", err);
+//     return [];
+//   }
+// }
+
+// // 3️⃣ Tender transactions
+// async function getTenderTransactions(pool, csoCode, startDate, endDate) {
+//   try {
+//     const result = await pool.request().query(`
+//       SELECT a.[Station_SK], a.[Date], a.[Number of Customer Acct ID] AS visits,
+//              a.[Number of Transaction ID] AS transactions, a.[Tender Code] AS tender
+//       FROM [CSO].[Daily Trans by Tender View] a
+//       WHERE a.[Station_SK] = ${csoCode} AND a.[Date] BETWEEN '${startDate}' AND '${endDate}'
+//       ORDER BY a.[Date]
+//     `);
+//     return result.recordset ?? [];
+//   } catch (err) {
+//     console.error("❌ SQL error fetching tender transactions:", err);
+//     return [];
+//   }
+// }
 
 async function getCurrentInventory(site, limit = null) {
   try {
@@ -188,11 +288,59 @@ async function getInventoryCategories(site) {
   }
 }
 
-let pool;
+// let pool;
+
+// async function getPool() {
+//   try {
+//     if (!pool) {
+//       console.log("🔌 Creating new SQL connection pool...");
+//       pool = await sql.connect({
+//         server: process.env.SQL_SERVER,
+//         database: process.env.SQL_DB,
+//         user: process.env.SQL_USER,
+//         password: process.env.SQL_PASSWORD,
+//         pool: {
+//           max: 20,           // increase max connections
+//           min: 0,
+//           idleTimeoutMillis: 30000,
+//           acquireTimeoutMillis: 60000, // wait longer before abort
+//         },
+//         options: {
+//           encrypt: true,
+//           trustServerCertificate: false,
+//         },
+//       });
+
+//       // Optional: log when pool is closed
+//       pool.on('error', err => {
+//         console.error("SQL Pool Error:", err);
+//         pool = null; // force reconnect next time
+//       });
+//     }
+
+//     // 🔍 Check if pool is still healthy
+//     if (!pool.connected) {
+//       console.warn("SQL pool was disconnected — reconnecting...");
+//       pool = await sql.connect(pool.config);
+//     }
+
+//     return pool;
+//   } catch (err) {
+//     console.error("Failed to get SQL pool:", err);
+//     pool = null;
+//     throw err;
+//   }
+// }
+
+let pool = null;
 
 async function getPool() {
   try {
-    if (!pool) {
+    if (!pool || !pool.connected) {
+      if (pool) {
+        try { await pool.close(); } catch {}
+      }
+
       console.log("🔌 Creating new SQL connection pool...");
       pool = await sql.connect({
         server: process.env.SQL_SERVER,
@@ -200,9 +348,10 @@ async function getPool() {
         user: process.env.SQL_USER,
         password: process.env.SQL_PASSWORD,
         pool: {
-          max: 10,
+          max: 20,
           min: 0,
           idleTimeoutMillis: 30000,
+          acquireTimeoutMillis: 60000,
         },
         options: {
           encrypt: true,
@@ -210,17 +359,10 @@ async function getPool() {
         },
       });
 
-      // Optional: log when pool is closed
-      pool.on('error', err => {
+      pool.on("error", (err) => {
         console.error("SQL Pool Error:", err);
         pool = null; // force reconnect next time
       });
-    }
-
-    // 🔍 Check if pool is still healthy
-    if (!pool.connected) {
-      console.warn("SQL pool was disconnected — reconnecting...");
-      pool = await sql.connect(pool.config);
     }
 
     return pool;
@@ -230,6 +372,7 @@ async function getPool() {
     throw err;
   }
 }
+
 
 async function getUPC_barcode(gtin) {
   try {
@@ -259,6 +402,373 @@ async function retry(fn, retries = 2, delay = 250) {
   }
 }
 
+// async function getAllSQLData(csoCode, dates) {
+//   const pool = await getPool();
+
+//   const {
+//     salesStart, salesEnd,
+//     fuelStart, fuelEnd,
+//     transStart, transEnd,
+//   } = dates;
+
+//   const results = await Promise.allSettled([
+//     retry(() => getCategorizedSalesData(pool, csoCode, salesStart, salesEnd)),
+//     retry(() => getGradeVolumeFuelData(pool, csoCode, fuelStart, fuelEnd)),
+//     retry(() => getAllTransactionsData(pool, csoCode, transStart, transEnd)),
+//   ]);
+
+//   return {
+//     sales: results[0].status === "fulfilled" ? results[0].value : [],
+//     fuel: results[1].status === "fulfilled" ? results[1].value : [],
+//     transactions: results[2].status === "fulfilled" ? results[2].value.transactions : [],
+//     timePeriodTransactions: results[2].status === "fulfilled" ? results[2].value.timePeriodTransactions : [],
+//     tenderTransactions: results[2].status === "fulfilled" ? results[2].value.tenderTransactions : [],
+//   };
+// }
+
+// async function getAllTransactionsData(pool, csoCode, startDate, endDate) {
+//   try {
+//     const result = await pool.request()
+//       .input("csoCode", sql.Int, csoCode)
+//       .input("startDate", sql.Date, startDate)
+//       .input("endDate", sql.Date, endDate)
+//       .query(`
+//         -- Original transactions
+//         SELECT 
+//           a.[Station_SK], 
+//           a.[Date], 
+//           a.[Number of Customer Acct ID] AS visits,
+//           a.[Number of Transaction ID] AS transactions, 
+//           b.[Avg Bucket] AS bucket_size
+//         FROM [CSO].[Daily Trans and Acct ID Traffic View] a
+//         JOIN [CSO].[Avg Bucket] b
+//           ON a.[Station_SK] = b.[Station_SK] 
+//          AND a.[Date] = b.[Date]
+//         WHERE a.[Station_SK] = @csoCode
+//           AND a.[Date] BETWEEN @startDate AND @endDate
+//         ORDER BY a.[Date];
+
+//         -- Time period transactions
+//         SELECT 
+//           a.[Station_SK], 
+//           a.[Date], 
+//           a.[Number of Customer Acct ID] AS visits,
+//           a.[Number of Transaction ID] AS transactions, 
+//           a.[Time Period] AS timePeriod
+//         FROM [CSO].[Daily Trans by Time Period View] a
+//         WHERE a.[Station_SK] = @csoCode
+//           AND a.[Date] BETWEEN @startDate AND @endDate
+//         ORDER BY a.[Date];
+
+//         -- Tender transactions
+//         SELECT 
+//           a.[Station_SK], 
+//           a.[Date], 
+//           a.[Number of Customer Acct ID] AS visits,
+//           a.[Number of Transaction ID] AS transactions, 
+//           a.[Tender Code] AS tender
+//         FROM [CSO].[Daily Trans by Tender View] a
+//         WHERE a.[Station_SK] = @csoCode
+//           AND a.[Date] BETWEEN @startDate AND @endDate
+//         ORDER BY a.[Date];
+//       `);
+
+//     return {
+//       transactions: result.recordsets[0] ?? [],
+//       timePeriodTransactions: result.recordsets[1] ?? [],
+//       tenderTransactions: result.recordsets[2] ?? [],
+//     };
+
+//   } catch (err) {
+//     console.error("❌ SQL error in getAllTransactionsData:", err);
+//     return {
+//       transactions: [],
+//       timePeriodTransactions: [],
+//       tenderTransactions: [],
+//     };
+//   }
+// }
+// async function getAllTransactionsData(pool, csoCode, startDate, endDate) {
+//   try {
+//     const [transactionsResult, timePeriodResult, tenderResult] = await Promise.all([
+//       pool.request()
+//         .input("csoCode", sql.Int, csoCode)
+//         .input("startDate", sql.Date, startDate)
+//         .input("endDate", sql.Date, endDate)
+//         .query(`
+//           SELECT 
+//             a.[Station_SK], a.[Date], a.[Number of Customer Acct ID] AS visits,
+//             a.[Number of Transaction ID] AS transactions, b.[Avg Bucket] AS bucket_size
+//           FROM [CSO].[Daily Trans and Acct ID Traffic View] a
+//           LEFT JOIN [CSO].[Avg Bucket] b
+//             ON a.[Station_SK] = b.[Station_SK] AND a.[Date] = b.[Date]
+//           WHERE a.[Station_SK] = @csoCode
+//             AND a.[Date] BETWEEN @startDate AND @endDate
+//           ORDER BY a.[Date];
+//         `),
+
+//       pool.request()
+//         .input("csoCode", sql.Int, csoCode)
+//         .input("startDate", sql.Date, startDate)
+//         .input("endDate", sql.Date, endDate)
+//         .query(`
+//           SELECT 
+//             a.[Station_SK], a.[Date], a.[Number of Customer Acct ID] AS visits,
+//             a.[Number of Transaction ID] AS transactions, a.[Time Period] AS timePeriod
+//           FROM [CSO].[Daily Trans by Time Period View] a
+//           WHERE a.[Station_SK] = @csoCode
+//             AND a.[Date] BETWEEN @startDate AND @endDate
+//           ORDER BY a.[Date];
+//         `),
+
+//       pool.request()
+//         .input("csoCode", sql.Int, csoCode)
+//         .input("startDate", sql.Date, startDate)
+//         .input("endDate", sql.Date, endDate)
+//         .query(`
+//           SELECT 
+//             a.[Station_SK], a.[Date], a.[Number of Customer Acct ID] AS visits,
+//             a.[Number of Transaction ID] AS transactions, a.[Tender Code] AS tender
+//           FROM [CSO].[Daily Trans by Tender View] a
+//           WHERE a.[Station_SK] = @csoCode
+//             AND a.[Date] BETWEEN @startDate AND @endDate
+//           ORDER BY a.[Date];
+//         `),
+//     ]);
+
+//     return {
+//       transactions: transactionsResult.recordset ?? [],
+//       timePeriodTransactions: timePeriodResult.recordset ?? [],
+//       tenderTransactions: tenderResult.recordset ?? [],
+//     };
+
+//   } catch (err) {
+//     console.error("❌ SQL error in getAllTransactionsData:", err);
+//     return {
+//       transactions: [],
+//       timePeriodTransactions: [],
+//       tenderTransactions: [],
+//     };
+//   }
+// }
+async function getAllPeriodData(pool, csoCode, startDate, endDate) {
+  try {
+    // Original transactions
+    // const transactionsResult = await pool.request()
+    //   .input("csoCode", sql.Int, csoCode)
+    //   .input("startDate", sql.Date, startDate)
+    //   .input("endDate", sql.Date, endDate)
+    //   .query(`
+    //     SELECT a.[Station_SK], a.[Date], a.[Number of Customer Acct ID] AS visits,
+    //            a.[Number of Transaction ID] AS transactions, b.[Avg Bucket] AS bucket_size
+    //     FROM [CSO].[Daily Trans and Acct ID Traffic View] a
+    //     LEFT JOIN [CSO].[Avg Bucket] b
+    //       ON a.[Station_SK] = b.[Station_SK] 
+    //      AND a.[Date] = b.[Date]
+    //     WHERE a.[Station_SK] = @csoCode
+    //       AND a.[Date] BETWEEN @startDate AND @endDate
+    //     ORDER BY a.[Date];
+    //   `);
+
+    // // Time period transactions
+    const timePeriodResult = await pool.request()
+      .input("csoCode", sql.Int, csoCode)
+      .input("startDate", sql.Date, startDate)
+      .input("endDate", sql.Date, endDate)
+      .query(`
+        SELECT a.[Station_SK], a.[Date], a.[Number of Customer Acct ID] AS visits,
+               a.[Number of Transaction ID] AS transactions, a.[Time Period] AS timePeriod
+        FROM [CSO].[Daily Trans by Time Period View] a
+        WHERE a.[Station_SK] = @csoCode
+          AND a.[Date] BETWEEN @startDate AND @endDate
+        ORDER BY a.[Date];
+      `);
+
+    // // Tender transactions
+    // const tenderResult = await pool.request()
+    //   .input("csoCode", sql.Int, csoCode)
+    //   .input("startDate", sql.Date, startDate)
+    //   .input("endDate", sql.Date, endDate)
+    //   .query(`
+    //     SELECT a.[Station_SK], a.[Date], a.[Number of Customer Acct ID] AS visits,
+    //            a.[Number of Transaction ID] AS transactions, a.[Tender Code] AS tender
+    //     FROM [CSO].[Daily Trans by Tender View] a
+    //     WHERE a.[Station_SK] = @csoCode
+    //       AND a.[Date] BETWEEN @startDate AND @endDate
+    //     ORDER BY a.[Date];
+    //   `);
+
+    return {
+      // transactions: transactionsResult.recordset ?? [],
+      timePeriodTransactions: timePeriodResult.recordset ?? [],
+      // tenderTransactions: tenderResult.recordset ?? [],
+    };
+
+  } catch (err) {
+    console.error("❌ SQL error in getAllTransactionsData:", err);
+    return {
+      // transactions: [],
+      timePeriodTransactions: [],
+      // tenderTransactions: [],
+    };
+  }
+}
+async function getAllTendorData(pool, csoCode, startDate, endDate) {
+  try {
+    // Original transactions
+    // const transactionsResult = await pool.request()
+    //   .input("csoCode", sql.Int, csoCode)
+    //   .input("startDate", sql.Date, startDate)
+    //   .input("endDate", sql.Date, endDate)
+    //   .query(`
+    //     SELECT a.[Station_SK], a.[Date], a.[Number of Customer Acct ID] AS visits,
+    //            a.[Number of Transaction ID] AS transactions, b.[Avg Bucket] AS bucket_size
+    //     FROM [CSO].[Daily Trans and Acct ID Traffic View] a
+    //     LEFT JOIN [CSO].[Avg Bucket] b
+    //       ON a.[Station_SK] = b.[Station_SK] 
+    //      AND a.[Date] = b.[Date]
+    //     WHERE a.[Station_SK] = @csoCode
+    //       AND a.[Date] BETWEEN @startDate AND @endDate
+    //     ORDER BY a.[Date];
+    //   `);
+
+    // // Time period transactions
+    // const timePeriodResult = await pool.request()
+    //   .input("csoCode", sql.Int, csoCode)
+    //   .input("startDate", sql.Date, startDate)
+    //   .input("endDate", sql.Date, endDate)
+    //   .query(`
+    //     SELECT a.[Station_SK], a.[Date], a.[Number of Customer Acct ID] AS visits,
+    //            a.[Number of Transaction ID] AS transactions, a.[Time Period] AS timePeriod
+    //     FROM [CSO].[Daily Trans by Time Period View] a
+    //     WHERE a.[Station_SK] = @csoCode
+    //       AND a.[Date] BETWEEN @startDate AND @endDate
+    //     ORDER BY a.[Date];
+    //   `);
+
+    // // Tender transactions
+    const tenderResult = await pool.request()
+      .input("csoCode", sql.Int, csoCode)
+      .input("startDate", sql.Date, startDate)
+      .input("endDate", sql.Date, endDate)
+      .query(`
+        SELECT a.[Station_SK], a.[Date], a.[Number of Customer Acct ID] AS visits,
+               a.[Number of Transaction ID] AS transactions, a.[Tender Code] AS tender
+        FROM [CSO].[Daily Trans by Tender View] a
+        WHERE a.[Station_SK] = @csoCode
+          AND a.[Date] BETWEEN @startDate AND @endDate
+        ORDER BY a.[Date];
+      `);
+
+    return {
+      // transactions: transactionsResult.recordset ?? [],
+      // timePeriodTransactions: timePeriodResult.recordset ?? [],
+      tenderTransactions: tenderResult.recordset ?? [],
+    };
+
+  } catch (err) {
+    console.error("❌ SQL error in getAllTransactionsData:", err);
+    return {
+      // transactions: [],
+      // timePeriodTransactions: [],
+      tenderTransactions: [],
+    };
+  }
+}
+async function getAllTransactionsData(pool, csoCode, startDate, endDate) {
+  try {
+    // Original transactions
+    const transactionsResult = await pool.request()
+      .input("csoCode", sql.Int, csoCode)
+      .input("startDate", sql.Date, startDate)
+      .input("endDate", sql.Date, endDate)
+      .query(`
+        SELECT a.[Station_SK], a.[Date], a.[Number of Customer Acct ID] AS visits,
+               a.[Number of Transaction ID] AS transactions, b.[Avg Bucket] AS bucket_size
+        FROM [CSO].[Daily Trans and Acct ID Traffic View] a
+        LEFT JOIN [CSO].[Avg Bucket] b
+          ON a.[Station_SK] = b.[Station_SK] 
+         AND a.[Date] = b.[Date]
+        WHERE a.[Station_SK] = @csoCode
+          AND a.[Date] BETWEEN @startDate AND @endDate
+        ORDER BY a.[Date];
+      `);
+
+    // // Time period transactions
+    // const timePeriodResult = await pool.request()
+    //   .input("csoCode", sql.Int, csoCode)
+    //   .input("startDate", sql.Date, startDate)
+    //   .input("endDate", sql.Date, endDate)
+    //   .query(`
+    //     SELECT a.[Station_SK], a.[Date], a.[Number of Customer Acct ID] AS visits,
+    //            a.[Number of Transaction ID] AS transactions, a.[Time Period] AS timePeriod
+    //     FROM [CSO].[Daily Trans by Time Period View] a
+    //     WHERE a.[Station_SK] = @csoCode
+    //       AND a.[Date] BETWEEN @startDate AND @endDate
+    //     ORDER BY a.[Date];
+    //   `);
+
+    // // Tender transactions
+    // const tenderResult = await pool.request()
+    //   .input("csoCode", sql.Int, csoCode)
+    //   .input("startDate", sql.Date, startDate)
+    //   .input("endDate", sql.Date, endDate)
+    //   .query(`
+    //     SELECT a.[Station_SK], a.[Date], a.[Number of Customer Acct ID] AS visits,
+    //            a.[Number of Transaction ID] AS transactions, a.[Tender Code] AS tender
+    //     FROM [CSO].[Daily Trans by Tender View] a
+    //     WHERE a.[Station_SK] = @csoCode
+    //       AND a.[Date] BETWEEN @startDate AND @endDate
+    //     ORDER BY a.[Date];
+    //   `);
+
+    return {
+      transactions: transactionsResult.recordset ?? [],
+      // timePeriodTransactions: timePeriodResult.recordset ?? [],
+      // tenderTransactions: tenderResult.recordset ?? [],
+    };
+
+  } catch (err) {
+    console.error("❌ SQL error in getAllTransactionsData:", err);
+    return {
+      transactions: [],
+      // timePeriodTransactions: [],
+      // tenderTransactions: [],
+    };
+  }
+}
+
+// async function getAllSQLData(csoCode, dates) {
+//   const pool = await getPool();
+
+//   const {
+//     salesStart, salesEnd,
+//     fuelStart, fuelEnd,
+//     transStart, transEnd,
+//   } = dates;
+
+//   // Fetch sales and fuel in parallel (lightweight queries)
+//   const results = await Promise.allSettled([
+//     retry(() => getCategorizedSalesData(pool, csoCode, salesStart, salesEnd)),
+//     retry(() => getGradeVolumeFuelData(pool, csoCode, fuelStart, fuelEnd)),
+//     retry(() => getTransactions(pool, csoCode, transStart, transEnd)),
+//     retry(() => getTimePeriodTransactions(pool, csoCode, transStart, transEnd)),
+//     retry(() => getTenderTransactions(pool, csoCode, transStart, transEnd))
+//   ]);
+
+//   // Fetch transactions sequentially to avoid pool conflicts
+//   // const transactions = await retry(() => getTransactions(pool, csoCode, transStart, transEnd));
+//   // const timePeriodTransactions = await retry(() => getTimePeriodTransactions(pool, csoCode, transStart, transEnd));
+//   // const tenderTransactions = await retry(() => getTenderTransactions(pool, csoCode, transStart, transEnd));
+
+//   return {
+//     sales: results[0].status === "fulfilled" ? results[0].value : [],
+//     fuel: results[1].status === "fulfilled" ? results[1].value : [],
+//     transactions: results[2].status === "fulfilled" ? results[2].value : [],
+//     timePeriodTransactions: results[3].status === "fulfilled" ? results[3].value : [],
+//     tenderTransactions: results[4].status === "fulfilled" ? results[4].value : [],
+//   };
+// }
 async function getAllSQLData(csoCode, dates) {
   const pool = await getPool();
 
@@ -271,25 +781,24 @@ async function getAllSQLData(csoCode, dates) {
   const results = await Promise.allSettled([
     retry(() => getCategorizedSalesData(pool, csoCode, salesStart, salesEnd)),
     retry(() => getGradeVolumeFuelData(pool, csoCode, fuelStart, fuelEnd)),
-    retry(() => getTransTimePeriodData(pool, csoCode, transStart, transEnd)),
+    retry(() => getAllTransactionsData(pool, csoCode, transStart, transEnd)),
+    retry(() => getAllPeriodData(pool, csoCode, transStart, transEnd)), // unified
+    retry(() => getAllTendorData(pool, csoCode, transStart, transEnd)),
   ]);
 
   return {
-    sales:        results[0].status === "fulfilled" ? results[0].value : [],
-    fuel:         results[1].status === "fulfilled" ? results[1].value : [],
-    transactions: results[2].status === "fulfilled" ? results[2].value : [],
+    sales: results[0].status === "fulfilled" ? results[0].value : [],
+    fuel: results[1].status === "fulfilled" ? results[1].value : [],
+    transactions: results[2].status === "fulfilled" ? results[2].value.transactions : [],
+    timePeriodTransactions: results[3].status === "fulfilled" ? results[3].value.timePeriodTransactions : [],
+    tenderTransactions: results[4].status === "fulfilled" ? results[4].value.tenderTransactions : [],
   };
 }
 
-
-
 module.exports = {
   sqlConfig,
-  getCategorizedSalesData,
   getUPC_barcode,
   getCurrentInventory,
   getInventoryCategories,
-  getGradeVolumeFuelData,
-  getTransTimePeriodData,
   getAllSQLData,
 };

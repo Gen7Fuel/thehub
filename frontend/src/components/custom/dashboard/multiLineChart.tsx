@@ -32,23 +32,23 @@ export function MultiLineChart({
   selectedGrade,
 }: Props) {
   // Compute min & max across all grade keys
-// Compute min & max across all grade keys
-const visibleKeys = selectedGrade ? [selectedGrade] : Object.keys(config);
+  // Compute min & max across all grade keys
+  const visibleKeys = selectedGrade ? [selectedGrade] : Object.keys(config);
 
-const values = data.flatMap(d =>
-  visibleKeys.map(k => d[k])
-);
+  const values = data.flatMap(d =>
+    visibleKeys.map(k => d[k])
+  );
 
 
-const actualMin = Math.min(...values);
-const actualMax = Math.max(...values);
+  const actualMin = Math.min(...values);
+  const actualMax = Math.max(...values);
 
-// Padding for nice spacing
-const zoomPadding = 5;
+  // Padding for nice spacing
+  const zoomPadding = 5;
 
-// Clamp domain between 0 and 100
-const yMin = Math.max(0, actualMin - zoomPadding);
-const yMax = Math.min(100, actualMax + zoomPadding);
+  // Clamp domain between 0 and 100
+  const yMin = Math.max(0, actualMin - zoomPadding);
+  const yMax = Math.min(100, actualMax + zoomPadding);
 
 
   return (
@@ -63,50 +63,6 @@ const yMax = Math.min(100, actualMax + zoomPadding);
       {/* Custom Legend */}
 
       <CardContent>
-        {/* <AreaChart width={350} height={150} data={data}>
-          <defs>
-            {Object.keys(config).map((key) => (
-              <linearGradient id={`grad-${key}`} key={key} x1="0" y1="0" x2="0" y2="1">
-                <stop offset="5%" stopColor={config[key].color} stopOpacity={0.9} />
-                <stop offset="95%" stopColor={config[key].color} stopOpacity={0.25} />
-              </linearGradient>
-            ))}
-          </defs>
-
-          <CartesianGrid strokeDasharray="3 3" opacity={0.15} />
-          <XAxis
-            dataKey="day"
-            tickLine={false}
-            axisLine={false}
-            tick={{ fontSize: 12 }} // adjust font size here
-          />
-
-          <YAxis
-            unit="%"
-            domain={[yMin, yMax]}
-            axisLine={false}
-            tickLine={false}
-            tick={{ fontSize: 12 }}
-          />
-
-
-
-
-          <Tooltip content={<FuelChartTooltip config={config} />} />
-
-
-          {Object.keys(config).map((key) => (
-            <Area
-              key={key}
-              type="monotone"
-              dataKey={key}
-              stackId="1"
-              stroke={config[key].color}
-              strokeWidth={1.5}
-              fill={`url(#grad-${key})`}
-            />
-          ))}
-        </AreaChart> */}
         <ResponsiveContainer width="100%" height={150}>
           <LineChart data={data}>
             <CartesianGrid vertical={false} />
@@ -139,7 +95,7 @@ const yMax = Math.min(100, actualMax + zoomPadding);
                   dot={false}
                   activeDot={{ r: 4 }}
                 />
-            ))}
+              ))}
 
           </LineChart>
         </ResponsiveContainer>
@@ -169,8 +125,97 @@ const yMax = Math.min(100, actualMax + zoomPadding);
       </CardContent>
 
       <CardFooter className="text-sm text-muted-foreground">
-          Last 5 weeks ending yesterday
+        Last 5 weeks ending yesterday
       </CardFooter>
+    </Card>
+  );
+}
+
+
+// -------------------- TRANSACTIONS LINE CHART --------------------
+
+interface TransactionsLineChartProps {
+  data: any[];
+  config: {
+    dataKey: string;
+    label: string;
+    stroke: string;
+  }[];
+  hideIcon?: boolean;
+  className?: string;
+  verticalAlign?: "top" | "bottom";
+}
+
+export function TransactionsLineChart({
+  data,
+  config,
+  hideIcon = false,
+  className,
+  verticalAlign = "top",
+}: TransactionsLineChartProps) {
+  // Convert array → record for tooltip
+  const tooltipConfig = Object.fromEntries(
+    config.map((c) => [c.dataKey, { label: c.label, color: c.stroke }])
+  );
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle>Transactions Trend</CardTitle>
+      </CardHeader>
+
+      <CardContent>
+        <ResponsiveContainer width="100%" height={200}>
+          <LineChart data={data}>
+            <CartesianGrid vertical={false} />
+            <XAxis
+              dataKey="day"
+              tickLine={false}
+              axisLine={false}
+              tick={{ fontSize: 12 }}
+            />
+            <YAxis tickLine={false} axisLine={false} />
+
+            {config.map((c) => (
+              <Line
+                key={c.dataKey}
+                type="monotone"
+                dataKey={c.dataKey}
+                stroke={c.stroke}
+                strokeWidth={2}
+                dot={false}
+                name={c.label}
+              />
+            ))}
+
+            <Tooltip content={<MultiLineChartToolTip config={tooltipConfig} />} />
+          </LineChart>
+        </ResponsiveContainer>
+
+        {/* Legend */}
+        <div
+          className={cn(
+            "flex flex-wrap items-center justify-center gap-4",
+            verticalAlign === "top" ? "pb-3" : "pt-3",
+            className
+          )}
+        >
+          {config.map((c) => (
+            <div
+              key={c.dataKey}
+              className="flex items-center gap-1.5 [&>div]:h-2 [&>div]:w-2 [&>div]:rounded-[2px]"
+            >
+              {!hideIcon && (
+                <div
+                  className="h-2 w-2 shrink-0 rounded-[2px]"
+                  style={{ backgroundColor: c.stroke }}
+                />
+              )}
+              <span className="text-sm font-medium text-black">{c.label}</span>
+            </div>
+          ))}
+        </div>
+      </CardContent>
     </Card>
   );
 }

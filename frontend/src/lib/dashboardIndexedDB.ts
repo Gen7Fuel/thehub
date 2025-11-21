@@ -7,35 +7,35 @@ export const STORES = {
   SALES: "dashboard_sales",
   FUEL: "dashboard_fuel",
   TRANS: "dashboard_transactions",
+  TIME_PERIOD_TRANS: "dashboard_time_period_transactions",
+  TENDER_TRANS: "dashboard_tender_transactions",
 };
 
 export const getDashboardDB = async () => {
   return openDB(DB_NAME, VERSION, {
     upgrade(db) {
-      if (!db.objectStoreNames.contains(STORES.SALES)) {
-        db.createObjectStore(STORES.SALES);
-      }
-      if (!db.objectStoreNames.contains(STORES.FUEL)) {
-        db.createObjectStore(STORES.FUEL);
-      }
-      if (!db.objectStoreNames.contains(STORES.TRANS)) {
-        db.createObjectStore(STORES.TRANS);
+      for (const store of Object.values(STORES)) {
+        if (!db.objectStoreNames.contains(store)) {
+          db.createObjectStore(store);
+        }
       }
     },
   });
 };
 
-// ✅ Save data for a store (sales/fuel/trans)
-export const saveDashboardData = async (store: string, data: any) => {
+// ✅ Save data for a store and site
+export const saveDashboardData = async (store: string, site: string, data: any) => {
   const db = await getDashboardDB();
-  await db.put(store, data, "data"); // single record
+  await db.put(store, data, site); // use site as the key
 };
 
-// ✅ Fetch stored data
-export const getDashboardData = async (store: string) => {
+
+// ✅ Fetch stored data for a store and site
+export const getDashboardData = async (store: string, site: string) => {
   const db = await getDashboardDB();
-  return await db.get(store, "data");
+  return await db.get(store, site);
 };
+
 
 // ✅ Clear database on logout
 export const clearDashboardDB = async () => {

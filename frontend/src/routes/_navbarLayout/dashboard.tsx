@@ -25,7 +25,7 @@ import {
   ChartTooltipContent,
   // CycleCountTooltip,
 } from "@/components/ui/chart";
-import { MultiLineChart } from "@/components/custom/dashboard/multiLineChart";
+import { MultiLineChart, TransactionsLineChart } from "@/components/custom/dashboard/multiLineChart";
 import { FuelSparkline } from "@/components/custom/dashboard/fuelSparkLine";
 // import { DatePickerWithRange } from '@/components/custom/datePickerWithRange';
 // import type { DateRange } from "react-day-picker";
@@ -219,6 +219,7 @@ function RouteComponent() {
   const [selectedDay, setSelectedDay] = useState<CycleCountDayData | null>(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [selectedGrade, setSelectedGrade] = useState<string | null>(null);
+  const [transactionChartData, setTransactionChartData] = useState([]);
 
 
   const [salesData, setSalesData] = useState<SalesData | null>(null);
@@ -353,42 +354,56 @@ function RouteComponent() {
         const salesStartDate = fmt(start)
         const salesEndDate = fmt(end)
 
-
         // ------------------------------------------------------------
         // 1️⃣ CHECK INDEXEDDB FIRST
         // ------------------------------------------------------------
-        const salesCached = await getDashboardData(STORES.SALES);
-        const fuelCached = await getDashboardData(STORES.FUEL);
-        const transCached = await getDashboardData(STORES.TRANS);
-
+        const salesCached = await getDashboardData(STORES.SALES, site);
+        const fuelCached = await getDashboardData(STORES.FUEL, site);
+        const transCached = await getDashboardData(STORES.TRANS, site);
+        const timePeriodCached = await getDashboardData(STORES.TIME_PERIOD_TRANS, site);
+        const tenderCached = await getDashboardData(STORES.TENDER_TRANS, site);
         let sqlSales = salesCached;
         let sqlFuel = fuelCached;
         let sqlTrans = transCached;
+        let sqlTimePeriodTrans = timePeriodCached;
+        let sqlTenderTrans = tenderCached;
 
-        if (!salesCached || !fuelCached || !transCached) {
-
+        if (
+          !sqlSales?.length ||
+          !sqlFuel?.length ||
+          !sqlTrans?.length ||
+          !sqlTimePeriodTrans?.length ||
+          !sqlTenderTrans?.length
+        ) {
           console.log("📡 No cache → Calling SQL backend...");
 
           const csoCode = await getCsoCodeByStationName(site);
 
           const data = await fetchAllSqlData(
             csoCode ?? "",
-            salesStartDate, salesEndDate,
-            fuelStartDate, fuelEndDate,
-            transStartDate, transEndDate
+            salesStartDate,
+            salesEndDate,
+            fuelStartDate,
+            fuelEndDate,
+            transStartDate,
+            transEndDate
           );
 
           sqlSales = data.sales;
           sqlFuel = data.fuel;
           sqlTrans = data.transactions;
+          sqlTimePeriodTrans = data.timePeriodTransactions;
+          sqlTenderTrans = data.tenderTransactions;
 
           // Save to IDB
-          await saveDashboardData(STORES.SALES, sqlSales);
-          await saveDashboardData(STORES.FUEL, sqlFuel);
-          await saveDashboardData(STORES.TRANS, sqlTrans);
+          await saveDashboardData(STORES.SALES, site, sqlSales);
+          await saveDashboardData(STORES.FUEL, site, sqlFuel);
+          await saveDashboardData(STORES.TRANS, site, sqlTrans);
+          await saveDashboardData(STORES.TIME_PERIOD_TRANS, site, sqlTimePeriodTrans);
+          await saveDashboardData(STORES.TENDER_TRANS, site, sqlTenderTrans);
 
         } else {
-          console.log("Using cached dashboard SQL data");
+          console.log("⚡ Using cached dashboard SQL data");
         }
 
         // Fuel processing
@@ -400,8 +415,19 @@ function RouteComponent() {
 
         // Transactions
         const transactions = sqlTrans;
+        const timePeriodTransactions = sqlTimePeriodTrans;
+        const tenderTransactions = sqlTenderTrans;
 
-        console.log('transaction data:', transactions)
+        const transactionModChartData = transactions.map((t: any) => ({
+          day: t.Date.slice(5, 10),   // X-axis key
+          transactions: t.transactions,
+          visits: t.visits,
+          avgBasket: t.avgBasketSize,
+        }));
+
+        setTransactionChartData(transactionModChartData);
+        console.log('trans period data:',timePeriodTransactions)
+        console.log('trans tendor data:',tenderTransactions)
 
 
         // Set states
@@ -561,6 +587,26 @@ function RouteComponent() {
 
     return byGrade;
   }, [fuelData]);
+
+
+  //transactions and visits char config
+  const transactionChartConfig = [
+    {
+      dataKey: "transactions",
+      label: "Transactions",
+      stroke: "#2563eb", // Blue
+    },
+    {
+      dataKey: "visits",
+      label: "Visits",
+      stroke: "#16a34a", // Green
+    },
+    // {
+    //   dataKey: "avgBasket",
+    //   label: "Avg Basket Size",
+    //   stroke: "#d97706", // Amber
+    // },
+  ];
 
   // ----------------------------
   // Prepare chart data
@@ -988,6 +1034,7 @@ function RouteComponent() {
                       config={normalizedFuelChartConfig90}
                       selectedGrade={selectedGrade}
                     />
+
                     {/* Sparklines for each grade */}
                     <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 col-span-1">
                       {Object.keys(fuelSparklines).map((grade) => (
@@ -1040,6 +1087,26 @@ function RouteComponent() {
 
                   </div>
                 </section>
+
+                {/* ======================= */}
+                {/*     Store Activity Section   */}
+                {/* ======================= */}
+                <section aria-labelledby="fuel-heading" className="mb-10">
+                  <h2 id="fuel-heading" className="text-2xl font-bold mb-4 pl-4">Store Activit Trend</h2>
+
+                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                    <TransactionsLineChart
+                      data={transactionChartData}
+                      config={transactionChartConfig}
+                    />
+                    <TransactionsLineChart
+                      data={transactionChartData}
+                      config={transactionChartConfig}
+                    />
+                  </div>
+
+                </section>
+
               </>
             )}
           </div>
@@ -1138,161 +1205,6 @@ const fetchDailyCounts = async (site: string, startDate: string, endDate: string
   }).then(res => res.json());
 };
 
-// const fetchSalesData = async (csoCode: string, startDate: string, endDate: string) => {
-//   return fetch(`/api/sql/sales?csoCode=${csoCode}&startDate=${startDate}&endDate=${endDate}`, {
-//     headers: { Authorization: `Bearer ${localStorage.getItem("token")}` },
-//   }).then(res => res.json());
-// };
-// const fetchSalesData = async (csoCode: string) => {
-//   // Categories used across charts
-//   const CATS = ['FN', 'Quota', 'Cannabis', 'GRE', 'Convenience', 'Vapes', 'Native Gifts'] as const
-
-//   // Compute date window: last 5 weeks ending yesterday
-//   const end = new Date()
-//   end.setDate(end.getDate() - 1)           // yesterday
-//   end.setHours(23, 59, 59, 999)
-
-//   const start = new Date(end)
-//   start.setDate(start.getDate() - (7 * 5 - 1)) // 35 days window
-//   start.setHours(0, 0, 0, 0)
-
-//   const fmt = (d: Date) => d.toISOString().slice(0, 10)
-//   const startDate = fmt(start)
-//   const endDate = fmt(end)
-
-//   // Fetch raw rows
-//   const rows = await fetch(`/api/sql/sales?csoCode=${encodeURIComponent(csoCode)}&startDate=${startDate}&endDate=${endDate}`, {
-//     headers: { Authorization: `Bearer ${localStorage.getItem("token")}` },
-//   }).then(res => res.json())
-
-//   // Build date-indexed map with sums
-//   const byDate: Record<string, Record<string, number>> = {}
-
-//   for (const r of Array.isArray(rows) ? rows : []) {
-//     const dateKey = String(r.Date_SK || r.date || '').slice(0, 10) // 'YYYY-MM-DD'
-//     if (!/^\d{4}-\d{2}-\d{2}$/.test(dateKey)) continue
-//     byDate[dateKey] = byDate[dateKey] || Object.fromEntries(CATS.map(c => [c, 0]))
-//     for (const c of CATS) {
-//       const v = Number(r[c] ?? 0)
-//       if (!Number.isNaN(v)) byDate[dateKey][c] += v
-//     }
-//   }
-
-//   // Helpers for week calc (Mon-Sun weeks)
-//   // const startOfWeek = (d: Date) => {
-//   //   const x = new Date(d)
-//   //   const day = x.getDay() // 0 Sun .. 6 Sat
-//   //   const diffToMon = day === 0 ? -6 : 1 - day
-//   //   x.setDate(x.getDate() + diffToMon)
-//   //   x.setHours(0, 0, 0, 0)
-//   //   return x
-//   // }
-//   // const addDays = (d: Date, n: number) => {
-//   //   const x = new Date(d); x.setDate(x.getDate() + n); return x
-//   // }
-//   // --- Week-to-week ---
-//   const startOfWeek = (d: Date) => {
-//     const day = d.getDay(); // 0=Sun, 1=Mon
-//     const diffToMon = day === 0 ? -6 : 1 - day;
-//     const monday = new Date(d);
-//     monday.setDate(d.getDate() + diffToMon);
-//     monday.setHours(0, 0, 0, 0);
-//     return monday;
-//   };
-
-//   const addDays = (d: Date, n: number) => {
-//     const newDate = new Date(d);
-//     newDate.setDate(d.getDate() + n);
-//     return newDate;
-//   };
-
-//   // Build daily (last 7 days ending yesterday), ascending by date
-//   const daily: any[] = []
-//   for (let i = 6; i >= 0; i--) {
-//     const d = new Date(end)
-//     d.setDate(end.getDate() - i)
-//     d.setHours(0, 0, 0, 0)
-//     const k = fmt(d)
-//     const sums = byDate[k] || Object.fromEntries(CATS.map(c => [c, 0]))
-//     daily.push({ day: k.slice(5), ...sums }) // day: 'MM-DD'
-//   }
-
-//   // Build weekly (last 5 full weeks, ending with the week containing 'end')
-//   const weeks: { start: Date; end: Date }[] = []
-//   let wkStart = startOfWeek(end)
-//   for (let i = 4; i >= 0; i--) {
-//     const ws = new Date(wkStart); ws.setDate(wkStart.getDate() - i * 7)
-//     const we = addDays(ws, 6)
-//     weeks.push({ start: ws, end: we })
-//   }
-
-//   const weekly: any[] = weeks.map(({ start: ws, end: we }) => {
-//     const sums: Record<string, number> = Object.fromEntries(CATS.map(c => [c, 0]))
-//     for (let d = new Date(ws); d <= we; d = addDays(d, 1)) {
-//       const k = fmt(d)
-//       const daySums = byDate[k]
-//       if (!daySums) continue
-//       for (const c of CATS) sums[c] += Number(daySums[c] || 0)
-//     }
-//     const label = `Wk of ${fmt(ws).slice(5)}` // 'Wk of MM-DD'
-//     return { week: label, ...sums }
-//   })
-//   // ----- Cards Calculation -----
-//   const today = end; // yesterday
-
-//   // Month-to-Month
-//   const currentMonthStart = new Date(today.getFullYear(), today.getMonth(), 1);
-//   const prevMonthStart = new Date(today.getFullYear(), today.getMonth() - 1, 1);
-//   const prevMonthEnd = new Date(today.getFullYear(), today.getMonth() - 1, today.getDate());
-
-//   // Helper to sum sales in a date range from byDate map
-//   const sumSalesByDateRange = (start: Date, end: Date) =>
-//     Object.entries(byDate)
-//       .filter(([dateStr]) => {
-//         const dt = new Date(dateStr);
-//         return dt >= start && dt <= end;
-//       })
-//       .reduce(
-//         (acc, [, row]) =>
-//           acc +
-//           Object.values(row).reduce((a, v) => a + (typeof v === "number" ? v : 0), 0),
-//         0
-//       );
-
-//   const currentMonthSales = sumSalesByDateRange(currentMonthStart, today);
-//   const prevMonthSales = sumSalesByDateRange(prevMonthStart, prevMonthEnd);
-//   const monthChangePct = prevMonthSales
-//     ? ((currentMonthSales - prevMonthSales) / prevMonthSales) * 100
-//     : 0;
-
-//   const currentWeekStart = startOfWeek(today);
-//   const prevWeekStart = addDays(currentWeekStart, -7);
-//   const prevWeekEnd = addDays(prevWeekStart, today.getDay() - 1); // same weekdays last week
-
-//   const currentWeekSales = sumSalesByDateRange(currentWeekStart, today);
-//   const prevWeekSales = sumSalesByDateRange(prevWeekStart, prevWeekEnd);
-//   const weekChangePct = prevWeekSales
-//     ? ((currentWeekSales - prevWeekSales) / prevWeekSales) * 100
-//     : 0;
-
-//   // Return updated cards
-//   return {
-//     daily,
-//     weekly,
-//     cards: {
-//       month: {
-//         current: currentMonthSales,
-//         previous: prevMonthSales,
-//         changePct: monthChangePct.toFixed(2),
-//       },
-//       week: {
-//         current: currentWeekSales,
-//         previous: prevWeekSales,
-//         changePct: weekChangePct.toFixed(2),
-//       },
-//     },
-//   };
-// }
 const fetchSalesData = async (rows: any) => {
   // Categories used across charts
   const CATS = ['FN', 'Quota', 'Cannabis', 'GRE', 'Convenience', 'Vapes', 'Native Gifts'] as const
@@ -1308,11 +1220,6 @@ const fetchSalesData = async (rows: any) => {
   start.setHours(0, 0, 0, 0)
 
   const fmt = (d: Date) => d.toISOString().slice(0, 10)
-
-  // Fetch raw rows
-  // const rows = await fetch(`/api/sql/sales?csoCode=${encodeURIComponent(csoCode)}&startDate=${startDate}&endDate=${endDate}`, {
-  //   headers: { Authorization: `Bearer ${localStorage.getItem("token")}` },
-  // }).then(res => res.json())
 
   // Build date-indexed map with sums
   const byDate: Record<string, Record<string, number>> = {}
@@ -1441,25 +1348,6 @@ const fetchSalesData = async (rows: any) => {
 }
 
 const fetchFuelData = async (rows: any) => {
-  // const csoCode = await getCsoCodeByStationName(site);
-
-  // const today = new Date();
-  // const end = new Date(today);
-  // end.setDate(today.getDate() - 1); // yesterday
-
-  // const start = new Date(end);
-  // start.setDate(end.getDate() - 60); // last 60 days
-
-  // const params = new URLSearchParams({
-  //   csoCode: csoCode ?? "",
-  //   startDate: start.toISOString().slice(0, 10),
-  //   endDate: end.toISOString().slice(0, 10),
-  // });
-
-  // const res = await fetch(`/api/sql/fuelsales?${params}`, {
-  //   headers: { Authorization: `Bearer ${localStorage.getItem("token")}` },
-  // });
-
   // let rows = await res.json();
   const fullFuelData = rows;
   rows = rows ?? [];
@@ -1487,28 +1375,6 @@ const fetchFuelData = async (rows: any) => {
     fullFuelData
   };
 };
-
-// const fetchTransactionData = async (site: string) => {
-//   const csoCode = await getCsoCodeByStationName(site);
-
-//   const today = new Date();
-//   const end = new Date(today);
-//   end.setDate(today.getDate() - 1); // yesterday
-
-//   const start = new Date(end);
-//   start.setDate(end.getDate() - 35); // last 35 days
-
-//   const params = new URLSearchParams({
-//     csoCode: csoCode ?? "",
-//     startDate: start.toISOString().slice(0, 10),
-//     endDate: end.toISOString().slice(0, 10),
-//   });
-
-//   const res = await fetch(`/api/sql/transactions-data?${params}`, {
-//     headers: { Authorization: `Bearer ${localStorage.getItem("token")}` },
-//   });
-//   return res.json()
-// }
 
 const fetchAllSqlData = async (
   csoCode: string,
