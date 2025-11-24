@@ -2,14 +2,16 @@
 
 import {
   LineChart,
+  ComposedChart,
   Line,
   XAxis,
   YAxis,
   Tooltip,
   CartesianGrid,
-  ResponsiveContainer
+  ResponsiveContainer,
+  Bar
 } from "recharts";
-import { Card, CardHeader, CardTitle, CardContent, CardFooter } from "@/components/ui/card";
+import { Card, CardHeader, CardTitle, CardContent, CardFooter, CardDescription } from "@/components/ui/card";
 import { MultiLineChartToolTip } from "@/components/ui/chart";
 import { cn } from "@/lib/utils"; // your helper for classNames
 // import { formatNumberCompact } from '@/routes/_navbarLayout/dashboard';
@@ -158,14 +160,16 @@ export function TransactionsLineChart({
     config.map((c) => [c.dataKey, { label: c.label, color: c.stroke }])
   );
 
+
   return (
     <Card>
       <CardHeader>
-        <CardTitle>Transactions Trend</CardTitle>
-      </CardHeader>
+        <CardTitle>Store Activity Trend (Daily)</CardTitle>
+        <CardDescription>Total Transactions, Visits and Avg Basket Size by Day</CardDescription>
+      </CardHeader>                      
 
       <CardContent>
-        <ResponsiveContainer width="100%" height={200}>
+        {/* <ResponsiveContainer width="100%" height={200}>
           <LineChart data={data}>
             <CartesianGrid vertical={false} />
             <XAxis
@@ -190,7 +194,60 @@ export function TransactionsLineChart({
 
             <Tooltip content={<MultiLineChartToolTip config={tooltipConfig} />} />
           </LineChart>
+        </ResponsiveContainer> */}
+        <ResponsiveContainer width="100%" height={200}>
+          <ComposedChart data={data}>
+            <CartesianGrid vertical={false} />
+            <XAxis
+              dataKey="day"
+              tickLine={false}
+              axisLine={false}
+              tick={{ fontSize: 12 }}
+            />
+
+            {/* Left Axis for Transactions + Visits */}
+            <YAxis tickLine={false} axisLine={false} />
+
+            {/* Right Axis for Avg Basket */}
+            <YAxis
+              yAxisId="right"
+              orientation="right"
+              tickLine={false}
+              axisLine={false}
+              tickFormatter={(value) => `C$ ${value}`}
+            />
+
+            {/* Bar for Avg Basket Size */}
+            <Bar
+              yAxisId="right"
+              dataKey="avgBasket"
+              fill="#d97706"
+              fillOpacity={0.50}
+              barSize={22}
+              radius={[4, 4, 0, 0]}
+            />
+
+
+            {/* Line Charts */}
+            {config
+              .filter((c) => c.dataKey !== "avgBasket")
+              .map((c) => (
+                <Line
+                  key={c.dataKey}
+                  type="monotone"
+                  dataKey={c.dataKey}
+                  stroke={c.stroke}
+                  strokeWidth={3}
+                  dot={false}
+                  name={c.label}
+                />
+
+              ))}
+
+            <Tooltip content={<MultiLineChartToolTip config={tooltipConfig} />} />
+          </ComposedChart>
         </ResponsiveContainer>
+
 
         {/* Legend */}
         <div
@@ -216,6 +273,9 @@ export function TransactionsLineChart({
           ))}
         </div>
       </CardContent>
+      <CardFooter className="text-sm text-muted-foreground">
+        From 14th Nov till Yesterday
+      </CardFooter>
     </Card>
   );
 }

@@ -4,6 +4,7 @@ import { LocationPicker } from "@/components/custom/locationPicker";
 import { getCsoCodeByStationName, getVendorNameById } from '@/lib/utils';
 import { DonutSalesChart } from "@/components/custom/dashboard/salesByCategoryDonut";
 import { getDashboardData, saveDashboardData, STORES } from "@/lib/dashboardIndexedDB"
+import { PieTenderChart, type TenderTransaction } from "@/components/custom/dashboard/pieCharts"
 import {
   Bar, BarChart, CartesianGrid, XAxis, LabelList,
   Line, YAxis, Cell
@@ -23,6 +24,7 @@ import {
   ChartLegendContent,
   ChartTooltip,
   ChartTooltipContent,
+  MultiLineChartToolTip,
   // CycleCountTooltip,
 } from "@/components/ui/chart";
 import { MultiLineChart, TransactionsLineChart } from "@/components/custom/dashboard/multiLineChart";
@@ -79,6 +81,30 @@ interface ChartBarModalProps {
   isOpen: boolean;
   onClose: () => void;
 }
+
+interface TransactionData {
+  day: string;           // e.g., "11-14"
+  transactions: number;
+  visits: number;
+  avgBasket: number;
+}
+
+type TxType = "Fuel" | "C-Store";
+
+export interface TimePeriodTransaction {
+  Date_SK: string;
+  hours: string; // normalized hour string like "05:00"
+  transaction_type: TxType;
+  transaction_count: number;
+}
+
+export interface HourlyRecord {
+  Fuel: number;
+  "C-Store": number;
+  count: number;
+}
+
+type HourlyMap = Record<string, HourlyRecord>;
 
 export const ChartBarModal: React.FC<ChartBarModalProps> = ({ data, isOpen, onClose }) => {
   if (!data) return null;
@@ -219,12 +245,15 @@ function RouteComponent() {
   const [selectedDay, setSelectedDay] = useState<CycleCountDayData | null>(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [selectedGrade, setSelectedGrade] = useState<string | null>(null);
-  const [transactionChartData, setTransactionChartData] = useState([]);
+  const [transactionChartData, setTransactionChartData] = useState<TransactionData[]>([]);
+  const [tenderTransactions, setTenderTransactions] = useState<TenderTransaction[]>([]);
 
 
   const [salesData, setSalesData] = useState<SalesData | null>(null);
   const [vendorStatus, setVendorStatus] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
+  const [timePeriodData, setTimePeriodData] = useState<TimePeriodTransaction[]>([]);
+
 
   const today = new Date();
   const sevenDaysAgo = new Date(today);
@@ -422,12 +451,9 @@ function RouteComponent() {
           day: t.Date.slice(5, 10),   // X-axis key
           transactions: t.transactions,
           visits: t.visits,
-          avgBasket: t.avgBasketSize,
+          avgBasket: t.bucket_size,
         }));
 
-        setTransactionChartData(transactionModChartData);
-        console.log('trans period data:',timePeriodTransactions)
-        console.log('trans tendor data:',tenderTransactions)
 
 
         // Set states
@@ -439,6 +465,9 @@ function RouteComponent() {
         setVendorStatus(updatedVendors);
         setFuelData(cleanedFuelData);
         setFuelMonthStats(stats);
+        setTransactionChartData(transactionModChartData);
+        setTenderTransactions(tenderTransactions);
+        setTimePeriodData(timePeriodTransactions);
       } catch (err) {
         console.error("Error fetching dashboard data:", err);
       } finally {
@@ -560,7 +589,7 @@ function RouteComponent() {
 
     // Build chart rows
     return last7Dates.map(day => {
-      const row: Record<string, any> = { day: day.slice(5, 10) }; // MM-DD for x-axis
+      const row: Record<string, any> = { day }; // MM-DD for x-axis
       grades.forEach(g => (row[g] = byDate[day]?.[g] ?? 0));
       return row;
     });
@@ -601,12 +630,172 @@ function RouteComponent() {
       label: "Visits",
       stroke: "#16a34a", // Green
     },
-    // {
-    //   dataKey: "avgBasket",
-    //   label: "Avg Basket Size",
-    //   stroke: "#d97706", // Amber
-    // },
+    {
+      dataKey: "avgBasket",
+      label: "Basket Size",
+      stroke: "#d97706", // Amber
+    },
   ];
+
+
+  // Process tender transactions for Pie chart
+  const tenderChartData = useMemo(() => {
+    // If tenderTransactions is null, undefined, or NOT an array → return empty
+    if (!Array.isArray(tenderTransactions)) return [];
+
+    const totals: Record<string, number> = {};
+
+    tenderTransactions.forEach((t) => {
+      // skip invalid records
+      if (!t || typeof t !== "object") return;
+
+      // handle tender value safely
+      let tender = "Other";
+      if (typeof t.tender === "string" && t.tender.trim() !== "") {
+        tender = t.tender.trim();
+      }
+
+
+      // safe transaction value
+      const tx =
+        typeof t.transactions === "number"
+          ? t.transactions
+          : Number(t.transactions) || 0;
+
+      totals[tender] = (totals[tender] || 0) + tx;
+    });
+
+    return Object.entries(totals).map(([tender, transactions]) => ({
+      tender,
+      transactions,
+    }));
+  }, [tenderTransactions]);
+
+
+
+
+
+  // 2️⃣ Create config with colors
+  const DEFAULT_COLORS = [
+    "#2563eb", "#16a34a", "#d97706", "#db2777", "#4b5563",
+    "#8b5cf6", "#f59e0b", "#e11d48", "#14b8a6", "#0ea5e9",
+    "#7c3aed", "#22c55e", "#f97316", "#6366f1", "#a855f7",
+    "#ec4899", "#84cc16", "#06b6d4", "#facc15", "#e879f9",
+  ];
+
+  //config for the tendor pie chart
+  const tenderConfig = useMemo(() => {
+    const uniqueTenders = Array.from(
+      new Set(
+        tenderTransactions.map((t) => {
+          if (!t || typeof t !== "object") return "Other";
+
+          const raw = t.tender;
+
+          if (typeof raw === "string") return raw.trim();
+
+          console.warn("⚠️ Non-string tender found:", raw);
+          return "Other";
+        })
+      )
+    );
+
+    const config: Record<string, { label: string; color: string }> = {};
+
+    uniqueTenders.forEach((tender, index) => {
+      const safeTender = tender && tender !== "" ? tender : "Other";
+
+      config[safeTender] = {
+        label: safeTender,
+        color: DEFAULT_COLORS[index % DEFAULT_COLORS.length],
+      };
+    });
+
+    return config;
+  }, [tenderTransactions]);
+
+  const timePeriodChartData = useMemo(() => {
+    if (!timePeriodData || timePeriodData.length === 0) return [];
+
+    const hourlyMap: HourlyMap = {};
+
+    timePeriodData.forEach((entry) => {
+      const hour = entry.hours;                     // "15:00"
+      const type: TxType = entry.transaction_type;  // "Fuel" | "C-Store"
+      const count = entry.transaction_count;
+
+      if (!hourlyMap[hour]) {
+        hourlyMap[hour] = { Fuel: 0, "C-Store": 0, count: 0 };
+      }
+
+      hourlyMap[hour][type] += count;
+      hourlyMap[hour].count += 1;
+    });
+
+    return Object.keys(hourlyMap)
+      .sort()
+      .map((hour) => {
+        const rec = hourlyMap[hour];
+        return {
+          hour,
+          Fuel: Number((rec.Fuel / rec.count).toFixed(0)),
+          CStore: Number((rec["C-Store"] / rec.count).toFixed(0)),
+        };
+      });
+
+  }, [timePeriodData]);
+
+  const timePeriodChartConfig = useMemo(() => {
+    return {
+      Fuel: { label: "Fuel", color: "#2563eb" },
+      CStore: { label: "C-Store", color: "#16a34a" },
+    };
+  }, []);
+
+
+  // Compute current and previous 7-day average basket sizes
+  const avgBasketStats = useMemo(() => {
+    if (!transactionChartData || transactionChartData.length === 0) return { current: 0, previous: 0, changePct: 0 };
+
+    const today = new Date();
+    const yesterday = new Date(today);
+    yesterday.setDate(today.getDate() - 1);
+
+    const formatKey = (date: Date) => date.toISOString().slice(5, 10); // 'MM-DD'
+
+    const currentStart = new Date(yesterday);
+    currentStart.setDate(yesterday.getDate() - 6); // 7-day range
+    const previousStart = new Date(currentStart);
+    previousStart.setDate(currentStart.getDate() - 7); // previous 7 days
+    const previousEnd = new Date(currentStart);
+    previousEnd.setDate(currentStart.getDate() - 1);
+
+    const currentSlice = transactionChartData.filter(
+      (d: TransactionData) => d.day >= formatKey(currentStart) && d.day <= formatKey(yesterday)
+    );
+    const previousSlice = transactionChartData.filter(
+      (d: TransactionData) => d.day >= formatKey(previousStart) && d.day <= formatKey(previousEnd)
+    );
+
+    const currentAvg = currentSlice.length
+      ? currentSlice.reduce((sum, d) => sum + (d.avgBasket || 0), 0) / currentSlice.length
+      : 0;
+    const previousAvg = previousSlice.length
+      ? previousSlice.reduce((sum, d) => sum + (d.avgBasket || 0), 0) / previousSlice.length
+      : 0;
+
+    const changePct = previousAvg > 0 ? ((currentAvg - previousAvg) / previousAvg) * 100 : 0;
+
+    return {
+      current: Number(currentAvg.toFixed(2)),
+      previous: Number(previousAvg.toFixed(2)),
+      changePct: Number(changePct.toFixed(1)),
+    };
+  }, [transactionChartData]);
+
+
+
+
 
   // ----------------------------
   // Prepare chart data
@@ -779,10 +968,27 @@ function RouteComponent() {
                     </div>
 
                     {/* Cash on Hand (Accounting) */}
-                    <div className="col-span-1">
+                    {/* <div className="col-span-1">
                       <CashOnHandDisplay site={site} />
+                    </div> */}
+                    {/* Avg Basket Size Card */}
+                    <div className="col-span-1">
+                      <div className="bg-white rounded-xl shadow p-4 flex flex-col">
+                        <div className="text-sm text-muted-foreground">Avg Basket Size (Last 7 days)</div>
+                        <div className="text-2xl font-bold mt-1">
+                          C$ {avgBasketStats.current}
+                        </div>
+                        <div className="text-sm mt-1">
+                          <span className="text-muted-foreground">C$ {avgBasketStats.previous}</span>
+                          <span
+                            className={`ml-2 font-semibold ${avgBasketStats.changePct >= 0 ? "text-green-600" : "text-red-600"
+                              }`}
+                          >
+                            ({avgBasketStats.changePct}%)
+                          </span>
+                        </div>
+                      </div>
                     </div>
-
                   </div>
                 </section>
 
@@ -1092,21 +1298,56 @@ function RouteComponent() {
                 {/*     Store Activity Section   */}
                 {/* ======================= */}
                 <section aria-labelledby="fuel-heading" className="mb-10">
-                  <h2 id="fuel-heading" className="text-2xl font-bold mb-4 pl-4">Store Activit Trend</h2>
+                  <h2 id="fuel-heading" className="text-2xl font-bold mb-4 pl-4">Store Activity Trend</h2>
 
                   <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+
                     <TransactionsLineChart
                       data={transactionChartData}
                       config={transactionChartConfig}
                     />
-                    <TransactionsLineChart
-                      data={transactionChartData}
-                      config={transactionChartConfig}
-                    />
+
+                    <Card className="col-span-1">
+                      <CardHeader>
+                        <CardTitle>Avg Transactions by Hour</CardTitle>
+                        <CardDescription>Aggregated across hours by Days</CardDescription>
+                      </CardHeader>
+                      <CardContent>
+                        <ChartContainer config={timePeriodChartConfig}>
+                          <BarChart data={timePeriodChartData}>
+                            <CartesianGrid vertical={false} />
+                            <XAxis dataKey="hour" />
+                            <YAxis axisLine={false} tickLine={false} />
+                            <ChartTooltip content={<MultiLineChartToolTip config={timePeriodChartConfig} labelTypeIsHour={true} />} />
+                            <ChartLegend content={<ChartLegendContent data={timePeriodChartData} />} />
+
+                            <Bar dataKey="Fuel" stackId="a" fill={timePeriodChartConfig.Fuel.color} />
+                            <Bar dataKey="CStore" stackId="a" fill={timePeriodChartConfig.CStore.color} />
+                          </BarChart>
+                        </ChartContainer>
+                      </CardContent>
+                      <CardFooter className="text-sm text-muted-foreground">
+                        Aggregated hourly data from 14th Nov till Yesterday
+                      </CardFooter>
+                    </Card>
+
+
+                    <Card className="col-span-1">
+                      <CardHeader>
+                        <CardTitle>Tendor Breakdown (%)</CardTitle>
+                        <CardDescription>Tender share by Transactions</CardDescription>
+                      </CardHeader>
+
+                      <CardContent>
+                        <PieTenderChart data={tenderChartData} config={tenderConfig} />
+
+                      </CardContent>
+                      <CardFooter className="text-sm text-muted-foreground">
+                        Cumulative from 14th Nov till Yesterday
+                      </CardFooter>
+                    </Card>
                   </div>
-
                 </section>
-
               </>
             )}
           </div>
@@ -1117,83 +1358,83 @@ function RouteComponent() {
 
 }
 
-function CashOnHandDisplay({ site }: { site: string }) {
-  const [value, setValue] = useState<number | null>(null);
-  const [noSafesheet, setNoSafesheet] = useState(false);
-  const [loadingCash, setLoadingCash] = useState(false);
+// function CashOnHandDisplay({ site }: { site: string }) {
+//   const [value, setValue] = useState<number | null>(null);
+//   const [noSafesheet, setNoSafesheet] = useState(false);
+//   const [loadingCash, setLoadingCash] = useState(false);
 
-  useEffect(() => {
-    if (!site) {
-      setValue(null);
-      setNoSafesheet(false);
-      return;
-    }
+//   useEffect(() => {
+//     if (!site) {
+//       setValue(null);
+//       setNoSafesheet(false);
+//       return;
+//     }
 
-    let mounted = true;
+//     let mounted = true;
 
-    const fetchCurrent = async () => {
-      setLoadingCash(true);
-      setNoSafesheet(false);
+//     const fetchCurrent = async () => {
+//       setLoadingCash(true);
+//       setNoSafesheet(false);
 
-      try {
-        const res = await fetch(
-          `/api/safesheets/site/${encodeURIComponent(site)}/current`,
-          {
-            headers: { Authorization: `Bearer ${localStorage.getItem("token")}` },
-          }
-        );
+//       try {
+//         const res = await fetch(
+//           `/api/safesheets/site/${encodeURIComponent(site)}/current`,
+//           {
+//             headers: { Authorization: `Bearer ${localStorage.getItem("token")}` },
+//           }
+//         );
 
-        const body = await res.json().catch(() => null);
+//         const body = await res.json().catch(() => null);
 
-        if (body?.error === "No safesheet found") {
-          if (mounted) setNoSafesheet(true);
-          return;
-        }
+//         if (body?.error === "No safesheet found") {
+//           if (mounted) setNoSafesheet(true);
+//           return;
+//         }
 
-        if (!res.ok) throw new Error(body?.error || "Failed to fetch cash on hand");
+//         if (!res.ok) throw new Error(body?.error || "Failed to fetch cash on hand");
 
-        if (mounted) setValue(Number(body?.cashOnHandSafe ?? null));
-      } finally {
-        if (mounted) setLoadingCash(false);
-      }
-    };
+//         if (mounted) setValue(Number(body?.cashOnHandSafe ?? null));
+//       } finally {
+//         if (mounted) setLoadingCash(false);
+//       }
+//     };
 
-    fetchCurrent();
-    const interval = setInterval(fetchCurrent, 60000);
-    return () => {
-      mounted = false;
-      clearInterval(interval);
-    };
-  }, [site]);
+//     fetchCurrent();
+//     const interval = setInterval(fetchCurrent, 60000);
+//     return () => {
+//       mounted = false;
+//       clearInterval(interval);
+//     };
+//   }, [site]);
 
-  // 👉 If no safesheet: show an empty card (styled but blank)
-  if (noSafesheet) {
-    return (
-      <div className="bg-white rounded-xl shadow p-4 flex flex-col w-[260px] mt-6" />
-    );
-  }
+//   // 👉 If no safesheet: show an empty card (styled but blank)
+//   if (noSafesheet) {
+//     return (
+//       <div className="bg-white rounded-xl shadow p-4 flex flex-col w-[260px] mt-6" />
+//     );
+//   }
 
-  // Normal card
-  return (
-    <div className="col-span-1">
-      <div className="bg-white rounded-xl shadow p-4 flex flex-col">
-        <div className="text-sm text-muted-foreground">Cash on Hand (Safe)</div>
-        <div className="text-2xl font-bold mt-1">
-          {loadingCash ? (
-            <span className="text-sm">Loading...</span>
-          ) : (
-            <>C${value !== null ? value.toFixed(2) : " —"}</>
-          )}
-        </div>
-        <div className="text-sm mt-1">
-          <span className="text-muted-foreground">
-            {site ? `Site: ${site}` : ""}
-          </span>
-        </div>
-      </div>
-    </div>
-  );
-}
+//   // Normal card
+//   return (
+//     <div className="col-span-1">
+//       <div className="bg-white rounded-xl shadow p-4 flex flex-col">
+//         <div className="text-sm text-muted-foreground">Cash on Hand (Safe)</div>
+//         <div className="text-2xl font-bold mt-1">
+//           {loadingCash ? (
+//             <span className="text-sm">Loading...</span>
+//           ) : (
+//             <>C${value !== null ? value.toFixed(2) : " —"}</>
+//           )}
+//         </div>
+//         <div className="text-sm mt-1">
+//           <span className="text-muted-foreground">
+//             {site ? `Site: ${site}` : ""}
+//           </span>
+//         </div>
+//       </div>
+//     </div>
+//   );
+// }
 
 // ----------------------------
 // Helper functions

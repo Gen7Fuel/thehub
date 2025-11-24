@@ -338,7 +338,7 @@ async function getPool() {
   try {
     if (!pool || !pool.connected) {
       if (pool) {
-        try { await pool.close(); } catch {}
+        try { await pool.close(); } catch { }
       }
 
       console.log("🔌 Creating new SQL connection pool...");
@@ -553,55 +553,24 @@ async function retry(fn, retries = 2, delay = 250) {
 // }
 async function getAllPeriodData(pool, csoCode, startDate, endDate) {
   try {
-    // Original transactions
-    // const transactionsResult = await pool.request()
-    //   .input("csoCode", sql.Int, csoCode)
-    //   .input("startDate", sql.Date, startDate)
-    //   .input("endDate", sql.Date, endDate)
-    //   .query(`
-    //     SELECT a.[Station_SK], a.[Date], a.[Number of Customer Acct ID] AS visits,
-    //            a.[Number of Transaction ID] AS transactions, b.[Avg Bucket] AS bucket_size
-    //     FROM [CSO].[Daily Trans and Acct ID Traffic View] a
-    //     LEFT JOIN [CSO].[Avg Bucket] b
-    //       ON a.[Station_SK] = b.[Station_SK] 
-    //      AND a.[Date] = b.[Date]
-    //     WHERE a.[Station_SK] = @csoCode
-    //       AND a.[Date] BETWEEN @startDate AND @endDate
-    //     ORDER BY a.[Date];
-    //   `);
-
-    // // Time period transactions
+    // Time period transactions
+    const dbStartDate = formatDateForDB(startDate);
+    const dbEndDate = formatDateForDB(endDate);
     const timePeriodResult = await pool.request()
       .input("csoCode", sql.Int, csoCode)
-      .input("startDate", sql.Date, startDate)
-      .input("endDate", sql.Date, endDate)
+      .input("startDate", sql.VarChar, dbStartDate) // use converted string
+      .input("endDate", sql.VarChar, dbEndDate)
       .query(`
-        SELECT a.[Station_SK], a.[Date], a.[Number of Customer Acct ID] AS visits,
-               a.[Number of Transaction ID] AS transactions, a.[Time Period] AS timePeriod
-        FROM [CSO].[Daily Trans by Time Period View] a
+        SELECT a.[Date_SK], a.[Hour] AS hours, a.[Type] AS transaction_type, 
+          a.[Count of Transaction ID] AS transaction_count
+        FROM [CSO].[TransactionCountByHour] a
         WHERE a.[Station_SK] = @csoCode
-          AND a.[Date] BETWEEN @startDate AND @endDate
-        ORDER BY a.[Date];
+          AND a.[Date_SK] BETWEEN @startDate AND @endDate
+        ORDER BY a.[Date_SK];
       `);
-
-    // // Tender transactions
-    // const tenderResult = await pool.request()
-    //   .input("csoCode", sql.Int, csoCode)
-    //   .input("startDate", sql.Date, startDate)
-    //   .input("endDate", sql.Date, endDate)
-    //   .query(`
-    //     SELECT a.[Station_SK], a.[Date], a.[Number of Customer Acct ID] AS visits,
-    //            a.[Number of Transaction ID] AS transactions, a.[Tender Code] AS tender
-    //     FROM [CSO].[Daily Trans by Tender View] a
-    //     WHERE a.[Station_SK] = @csoCode
-    //       AND a.[Date] BETWEEN @startDate AND @endDate
-    //     ORDER BY a.[Date];
-    //   `);
-
+    const timePeriodResultTransformed = transformTimePeriodData(timePeriodResult.recordset)
     return {
-      // transactions: transactionsResult.recordset ?? [],
-      timePeriodTransactions: timePeriodResult.recordset ?? [],
-      // tenderTransactions: tenderResult.recordset ?? [],
+      timePeriodTransactions: timePeriodResultTransformed ?? [],
     };
 
   } catch (err) {
@@ -615,37 +584,6 @@ async function getAllPeriodData(pool, csoCode, startDate, endDate) {
 }
 async function getAllTendorData(pool, csoCode, startDate, endDate) {
   try {
-    // Original transactions
-    // const transactionsResult = await pool.request()
-    //   .input("csoCode", sql.Int, csoCode)
-    //   .input("startDate", sql.Date, startDate)
-    //   .input("endDate", sql.Date, endDate)
-    //   .query(`
-    //     SELECT a.[Station_SK], a.[Date], a.[Number of Customer Acct ID] AS visits,
-    //            a.[Number of Transaction ID] AS transactions, b.[Avg Bucket] AS bucket_size
-    //     FROM [CSO].[Daily Trans and Acct ID Traffic View] a
-    //     LEFT JOIN [CSO].[Avg Bucket] b
-    //       ON a.[Station_SK] = b.[Station_SK] 
-    //      AND a.[Date] = b.[Date]
-    //     WHERE a.[Station_SK] = @csoCode
-    //       AND a.[Date] BETWEEN @startDate AND @endDate
-    //     ORDER BY a.[Date];
-    //   `);
-
-    // // Time period transactions
-    // const timePeriodResult = await pool.request()
-    //   .input("csoCode", sql.Int, csoCode)
-    //   .input("startDate", sql.Date, startDate)
-    //   .input("endDate", sql.Date, endDate)
-    //   .query(`
-    //     SELECT a.[Station_SK], a.[Date], a.[Number of Customer Acct ID] AS visits,
-    //            a.[Number of Transaction ID] AS transactions, a.[Time Period] AS timePeriod
-    //     FROM [CSO].[Daily Trans by Time Period View] a
-    //     WHERE a.[Station_SK] = @csoCode
-    //       AND a.[Date] BETWEEN @startDate AND @endDate
-    //     ORDER BY a.[Date];
-    //   `);
-
     // // Tender transactions
     const tenderResult = await pool.request()
       .input("csoCode", sql.Int, csoCode)
@@ -694,34 +632,6 @@ async function getAllTransactionsData(pool, csoCode, startDate, endDate) {
         ORDER BY a.[Date];
       `);
 
-    // // Time period transactions
-    // const timePeriodResult = await pool.request()
-    //   .input("csoCode", sql.Int, csoCode)
-    //   .input("startDate", sql.Date, startDate)
-    //   .input("endDate", sql.Date, endDate)
-    //   .query(`
-    //     SELECT a.[Station_SK], a.[Date], a.[Number of Customer Acct ID] AS visits,
-    //            a.[Number of Transaction ID] AS transactions, a.[Time Period] AS timePeriod
-    //     FROM [CSO].[Daily Trans by Time Period View] a
-    //     WHERE a.[Station_SK] = @csoCode
-    //       AND a.[Date] BETWEEN @startDate AND @endDate
-    //     ORDER BY a.[Date];
-    //   `);
-
-    // // Tender transactions
-    // const tenderResult = await pool.request()
-    //   .input("csoCode", sql.Int, csoCode)
-    //   .input("startDate", sql.Date, startDate)
-    //   .input("endDate", sql.Date, endDate)
-    //   .query(`
-    //     SELECT a.[Station_SK], a.[Date], a.[Number of Customer Acct ID] AS visits,
-    //            a.[Number of Transaction ID] AS transactions, a.[Tender Code] AS tender
-    //     FROM [CSO].[Daily Trans by Tender View] a
-    //     WHERE a.[Station_SK] = @csoCode
-    //       AND a.[Date] BETWEEN @startDate AND @endDate
-    //     ORDER BY a.[Date];
-    //   `);
-
     return {
       transactions: transactionsResult.recordset ?? [],
       // timePeriodTransactions: timePeriodResult.recordset ?? [],
@@ -732,10 +642,61 @@ async function getAllTransactionsData(pool, csoCode, startDate, endDate) {
     console.error("❌ SQL error in getAllTransactionsData:", err);
     return {
       transactions: [],
-      // timePeriodTransactions: [],
-      // tenderTransactions: [],
     };
   }
+}
+
+function formatDateForDB(dateString) {
+  // input: "2025-11-14"
+  // output: "20251114"
+  return dateString.replace(/-/g, "");
+}
+
+function transformTimePeriodData(data) {
+  const normalizeHour = (hourStr) => {
+    if (hourStr.toLowerCase().includes("before")) return "05:00"
+    const match = hourStr.match(/^(\d{1,2}:\d{2})/)
+    return match ? match[1] : hourStr
+  }
+
+  const map = {} // key: `${Date_SK}-${hour}`, value: { Fuel: x, "C-Store": y }
+  const bothRows = []
+
+  data.forEach((row) => {
+    const hour = normalizeHour(row.hours)
+
+    if (row.transaction_type.toLowerCase() === "both") {
+      bothRows.push({ ...row, hours: hour })
+      return
+    }
+
+    const key = `${row.Date_SK}-${hour}`
+    if (!map[key]) map[key] = {}
+    map[key][row.transaction_type] = (map[key][row.transaction_type] || 0) + row.transaction_count
+  })
+
+  bothRows.forEach((row) => {
+    const key = `${row.Date_SK}-${row.hours}`
+    if (!map[key]) map[key] = {}
+    map[key]["Fuel"] = (map[key]["Fuel"] || 0) + row.transaction_count
+    map[key]["C-Store"] = (map[key]["C-Store"] || 0) + row.transaction_count
+  })
+
+  const result = []
+  Object.entries(map).forEach(([key, types]) => {
+    const [Date_SK, hour] = key.split("-")
+    Object.entries(types).forEach(([transaction_type, transaction_count]) => {
+      result.push({ Date_SK, hours: hour, transaction_type, transaction_count })
+    })
+  })
+
+  // Sort by date and hour
+  result.sort((a, b) => {
+    if (a.Date_SK !== b.Date_SK) return a.Date_SK.localeCompare(b.Date_SK)
+    return a.hours.localeCompare(b.hours)
+  })
+
+  return result
 }
 
 // async function getAllSQLData(csoCode, dates) {

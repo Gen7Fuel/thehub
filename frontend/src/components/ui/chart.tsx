@@ -366,6 +366,23 @@ function getPayloadConfigFromPayload(
 interface ChartTooltipContentProps extends TooltipProps<number, string> {
   config: Record<string, { label: string; color: string; }>;
   hideIndicator?: boolean;
+  labelTypeIsHour?: boolean;
+}
+
+function formatHourRangeForTooltip(label: string) {
+  if (!label) return "";
+
+  // special case
+  if (label === "5:00") return "Before 6 AM";
+
+  const [h, m] = label.split(":").map(Number);
+  if (isNaN(h) || isNaN(m)) return label;
+
+  const endHour = (h + 1) % 24;
+  const start = `${h.toString().padStart(2, "0")}:${m.toString().padStart(2, "0")}`;
+  const end = `${endHour.toString().padStart(2, "0")}:${m.toString().padStart(2, "0")}`;
+
+  return `${start} - ${end}`;
 }
 
 export function MultiLineChartToolTip({
@@ -374,6 +391,7 @@ export function MultiLineChartToolTip({
   label,
   config,
   hideIndicator = false,
+  labelTypeIsHour,
 }: ChartTooltipContentProps) {
   if (!active || !payload || !payload.length) return null;
 
@@ -383,7 +401,10 @@ export function MultiLineChartToolTip({
         "border-border/50 bg-background grid min-w-[8rem] items-start gap-1.5 rounded-lg border px-2.5 py-1.5 text-xs shadow-xl"
       )}
     >
-      <div className="text-sm font-medium">{label}</div>
+      <div className="text-sm font-medium">
+        {labelTypeIsHour ? formatHourRangeForTooltip(label) : label}
+      </div>
+
 
       <div className="grid gap-1.5">
         {payload
@@ -408,10 +429,14 @@ export function MultiLineChartToolTip({
                   <span className="text-muted-foreground">
                     {itemConfig?.label || key}
                   </span>
+
                   <span className="text-foreground font-mono font-medium tabular-nums">
-                    {item.value?.toLocaleString()}
+                    {key === "avgBasket"
+                      ? `C$ ${Number(item.value).toFixed(1)}`
+                      : item.value?.toFixed(1)}
                   </span>
                 </div>
+
               </div>
             );
           })}
