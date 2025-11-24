@@ -1,13 +1,15 @@
 import { useMemo, useState } from "react"
-import { PieChart, Pie, Cell, Sector, Text, ResponsiveContainer } from "recharts"
+import { PieChart, Pie, Cell, Sector, Tooltip, ResponsiveContainer } from "recharts"
 import { ChartContainer } from "@/components/ui/chart"
 import { cn } from "@/lib/utils"
 
-interface DonutSalesProps {
-  data: {
-    category: string
-    total: number
-  }[]
+export interface TenderTransaction {
+  tender: string
+  transactions: number
+}
+
+interface PieTenderChartProps {
+  data: TenderTransaction[]
   config: Record<
     string,
     {
@@ -18,16 +20,16 @@ interface DonutSalesProps {
   >
 }
 
-export function DonutSalesChart({ data, config }: DonutSalesProps) {
+export function PieTenderChart({ data, config }: PieTenderChartProps) {
   const [activeIndex, setActiveIndex] = useState<number | null>(null)
 
-  const filteredData = useMemo(() => data.filter(d => d.total > 0), [data])
-  const totalAll = useMemo(() => filteredData.reduce((sum, d) => sum + d.total, 0), [filteredData])
-  const active = activeIndex !== null ? filteredData[activeIndex] : null
+  const filteredData = useMemo(() => data.filter(d => d.transactions > 0), [data])
+  const totalAll = useMemo(() => filteredData.reduce((sum, d) => sum + d.transactions, 0), [filteredData])
+  // const active = activeIndex !== null ? filteredData[activeIndex] : null
 
   const renderActiveShape = (props: any) => {
     const RADIAN = Math.PI / 180
-    const { cx, cy, midAngle, innerRadius, outerRadius, startAngle, endAngle, fill } = props
+    const { cx, cy, midAngle, outerRadius, startAngle, endAngle, fill } = props
     const offset = 10
     const xOffset = offset * Math.cos(-midAngle * RADIAN)
     const yOffset = offset * Math.sin(-midAngle * RADIAN)
@@ -36,7 +38,7 @@ export function DonutSalesChart({ data, config }: DonutSalesProps) {
         <Sector
           cx={cx + xOffset}
           cy={cy + yOffset}
-          innerRadius={innerRadius}
+          innerRadius={0} // Pie chart
           outerRadius={outerRadius}
           startAngle={startAngle}
           endAngle={endAngle}
@@ -49,14 +51,14 @@ export function DonutSalesChart({ data, config }: DonutSalesProps) {
   return (
     <div className="w-full flex flex-col items-center">
       {/* Chart */}
-      <ChartContainer config={config} className="w-full h-[130px] flex justify-center">
+      <ChartContainer config={config} className="w-full h-[150px] flex justify-center">
         <ResponsiveContainer width="100%" height="100%">
           <PieChart>
             <Pie
               data={filteredData}
-              dataKey="total"
-              nameKey="category"
-              innerRadius="40%"
+              dataKey="transactions"
+              nameKey="tender"
+              innerRadius={0} // Pie chart
               outerRadius="75%"
               paddingAngle={2}
               strokeWidth={1}
@@ -64,35 +66,35 @@ export function DonutSalesChart({ data, config }: DonutSalesProps) {
               activeShape={renderActiveShape}
               onMouseEnter={(_, i) => setActiveIndex(i)}
               onMouseLeave={() => setActiveIndex(null)}
-              label={(entry) => `${((entry.total / totalAll) * 100).toFixed(1)}%`}
+              label={false} // no labels
               labelLine={false}
             >
               {filteredData.map((entry) => (
                 <Cell
-                  key={entry.category}
-                  fill={config[entry.category]?.color || "#ccc"}
+                  key={entry.tender}
+                  fill={config[entry.tender]?.color || "#ccc"}
                   style={{ cursor: "pointer", transition: "0.3s transform ease" }}
                 />
               ))}
             </Pie>
-            <Text x="20%" y="18%" textAnchor="middle" dominantBaseline="middle" fontSize={16} fontWeight={700}>
-              {(active ? active.total : totalAll).toLocaleString()}
-            </Text>
-            <Text x="50%" y="58%" textAnchor="middle" dominantBaseline="middle" fontSize={10} fill="#666">
-              {active ? active.category : "Total"}
-            </Text>
+
+            <Tooltip
+              formatter={(value: number, name: string) => [
+                `${((value / totalAll) * 100).toFixed(1)}%`, // show percentage
+                name // show tender
+              ]}
+            />
           </PieChart>
+
         </ResponsiveContainer>
       </ChartContainer>
-
-
       {/* Fixed Legend */}
       <div className="mt-4 w-full flex flex-wrap justify-center gap-4">
         {filteredData.map((d) => {
-          const itemConfig = config[d.category]
+          const itemConfig = config[d.tender]
           return (
             <div
-              key={d.category}
+              key={d.tender}
               className={cn(
                 "[&>svg]:text-muted-foreground flex items-center gap-1.5 [&>svg]:h-3 [&>svg]:w-3"
               )}
@@ -106,7 +108,7 @@ export function DonutSalesChart({ data, config }: DonutSalesProps) {
                 />
               )}
               <span className="text-sm font-medium text-black">
-                {itemConfig?.label || d.category}
+                {itemConfig?.label || d.tender}
               </span>
             </div>
           )

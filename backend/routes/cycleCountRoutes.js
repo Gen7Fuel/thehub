@@ -404,11 +404,11 @@ router.get('/daily-counts', async (req, res) => {
       count,
       items,
     }));
-    const specificDate = "2025-11-14"; // replace with your date
-    const itemsForDate = dailyData[specificDate]?.items || [];
-    itemsForDate.forEach(item => {
-      console.log(item.name, item.upc_barcode, item.totalQty);
-    });
+    // const specificDate = "2025-11-14"; // replace with your date
+    // const itemsForDate = dailyData[specificDate]?.items || [];
+    // itemsForDate.forEach(item => {
+    //   console.log(item.name, item.upc_barcode, item.totalQty);
+    // });
 
 
     res.json({ site, data });
