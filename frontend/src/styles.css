@@ -45,6 +45,12 @@ code {
   --chart-5: oklch(0.769 0.188 70.08);
   --chart-6: oklch(0.7 0.15 300);
   --chart-7: oklch(0.55 0.20 120);
+  --fuel-chart-1: #FF7F50; 
+  --fuel-chart-2: #6495ED; 
+  --fuel-chart-3: #FFD700; 
+  --fuel-chart-4: #40E0D0; 
+  --fuel-chart-5: #FF69B4; 
+  --fuel-chart-6: #7CFC00; 
   --radius: 0.625rem;
   --sidebar: oklch(0.985 0 0);
   --sidebar-foreground: oklch(0.141 0.005 285.823);
@@ -83,6 +89,12 @@ code {
   --chart-5: oklch(0.645 0.246 16.439);
   --chart-6: oklch(0.65 0.22 320);
   --chart-7: oklch(0.55 0.20 140);
+  --fuel-chart-1: #FF7F50; 
+  --fuel-chart-2: #6495ED; 
+  --fuel-chart-3: #FFD700; 
+  --fuel-chart-4: #40E0D0; 
+  --fuel-chart-5: #FF69B4; 
+  --fuel-chart-6: #7CFC00; 
   --sidebar: oklch(0.21 0.006 285.885);
   --sidebar-foreground: oklch(0.985 0 0);
   --sidebar-primary: oklch(0.488 0.243 264.376);

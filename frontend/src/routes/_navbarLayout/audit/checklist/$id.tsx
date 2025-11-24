@@ -94,7 +94,7 @@ function RouteComponent() {
   const { user } = useAuth();
   const site = stationName || user?.location || "";
   const navigate = useNavigate()
-  
+
   // const site = localStorage.getItem("location") || ""; //Original file
   const [items, setItems] = useState<AuditItem[]>([]);
   // const [displayItems, setDisplayItems] = useState<AuditItem[]>([]); // sorted for initial display / after save
@@ -115,7 +115,7 @@ function RouteComponent() {
     categoryColorMap[key] = CATEGORY_COLOR_CLASSES[idx % CATEGORY_COLOR_CLASSES.length];
   });
 
-const sortItems = (list: AuditItem[]) => {
+  const sortItems = (list: AuditItem[]) => {
     return [...list].sort((a, b) => {
       // unchecked first
       if (a.checked !== b.checked) return a.checked ? 1 : -1;
@@ -140,112 +140,112 @@ const sortItems = (list: AuditItem[]) => {
       .catch(() => setSelectTemplates([]));
   }, []);
   // Fetch checklist
-//   const fetchChecklist = async () => {
-//     setLoading(true);
-//     const token = localStorage.getItem("token");
+  //   const fetchChecklist = async () => {
+  //     setLoading(true);
+  //     const token = localStorage.getItem("token");
 
-//     try {
-//       if (frequency !== "all") {
-//         // single frequency (daily/weekly/monthly)
-//         const periodKey = getPeriodKey(frequency, currentDate);
+  //     try {
+  //       if (frequency !== "all") {
+  //         // single frequency (daily/weekly/monthly)
+  //         const periodKey = getPeriodKey(frequency, currentDate);
 
-//         const instanceRes = await fetch(
-//           `/api/audit/instance?template=${id}&site=${encodeURIComponent(
-//             site
-//           )}&frequency=${frequency}&periodKey=${periodKey}`,
-//           { headers: { Authorization: `Bearer ${token}` } }
-//         );
+  //         const instanceRes = await fetch(
+  //           `/api/audit/instance?template=${id}&site=${encodeURIComponent(
+  //             site
+  //           )}&frequency=${frequency}&periodKey=${periodKey}`,
+  //           { headers: { Authorization: `Bearer ${token}` } }
+  //         );
 
-//         if (instanceRes.ok) {
-//           const instanceData = await instanceRes.json();
-//           if (instanceData?._id) {
-//             const itemsRes = await fetch(`/api/audit/items?instanceId=${instanceData._id}&templateId=${id}&site=${encodeURIComponent(
-//             site)}`, 
-//             {
-//               headers: { Authorization: `Bearer ${token}` },
-//             });
-//             if (itemsRes.ok) {
-//               const itemsData = await itemsRes.json();
-//               setItems(sortItems(itemsData));
-//               setLoading(false);
-//               return;
-//             }
-//             setTemplateName("");
-//           }
-//         } 
-//         // fallback → template items
-//           const templateRes = await fetch(`/api/audit/${id}?frequency=${frequency}&site=${encodeURIComponent(site)}`, { headers: { Authorization: `Bearer ${token}` } });
-//           // console.log('site:',site)
-//           if (templateRes.ok) {
-//             const templateData = await templateRes.json();
-//             setTemplateName(templateData.templateName || "");
-//             setItems(sortItems(
-//               (templateData.items || []).filter((item: AuditItem) => item.frequency === frequency).map((item: AuditItem) => ({
-//                 ...item,
-//                 checked: false,
-//                 comment: "",
-//                 photos: [],
-//               }))
-//             ));
-//           }
-        
-//       } else {
-//         // "all" → merge daily, weekly, monthly
-//         const frequencies: ("daily" | "weekly" | "monthly")[] = ["daily", "weekly", "monthly"];
-//         const allItems: AuditItem[] = [];
+  //         if (instanceRes.ok) {
+  //           const instanceData = await instanceRes.json();
+  //           if (instanceData?._id) {
+  //             const itemsRes = await fetch(`/api/audit/items?instanceId=${instanceData._id}&templateId=${id}&site=${encodeURIComponent(
+  //             site)}`, 
+  //             {
+  //               headers: { Authorization: `Bearer ${token}` },
+  //             });
+  //             if (itemsRes.ok) {
+  //               const itemsData = await itemsRes.json();
+  //               setItems(sortItems(itemsData));
+  //               setLoading(false);
+  //               return;
+  //             }
+  //             setTemplateName("");
+  //           }
+  //         } 
+  //         // fallback → template items
+  //           const templateRes = await fetch(`/api/audit/${id}?frequency=${frequency}&site=${encodeURIComponent(site)}`, { headers: { Authorization: `Bearer ${token}` } });
+  //           // console.log('site:',site)
+  //           if (templateRes.ok) {
+  //             const templateData = await templateRes.json();
+  //             setTemplateName(templateData.templateName || "");
+  //             setItems(sortItems(
+  //               (templateData.items || []).filter((item: AuditItem) => item.frequency === frequency).map((item: AuditItem) => ({
+  //                 ...item,
+  //                 checked: false,
+  //                 comment: "",
+  //                 photos: [],
+  //               }))
+  //             ));
+  //           }
 
-//         // fetch template once
-//         const templateRes = await fetch(`/api/audit/${id}?frequency=${frequency}&site=${encodeURIComponent(site)}`, { headers: { Authorization: `Bearer ${token}` } });
-//         const templateData = templateRes.ok ? await templateRes.json() : { items: [] };
-//         const templateItems: AuditItem[] = templateData.items || [];
+  //       } else {
+  //         // "all" → merge daily, weekly, monthly
+  //         const frequencies: ("daily" | "weekly" | "monthly")[] = ["daily", "weekly", "monthly"];
+  //         const allItems: AuditItem[] = [];
 
-//         for (const freq of frequencies) {
-//           const periodKey = getPeriodKey(freq, currentDate);
+  //         // fetch template once
+  //         const templateRes = await fetch(`/api/audit/${id}?frequency=${frequency}&site=${encodeURIComponent(site)}`, { headers: { Authorization: `Bearer ${token}` } });
+  //         const templateData = templateRes.ok ? await templateRes.json() : { items: [] };
+  //         const templateItems: AuditItem[] = templateData.items || [];
 
-//           // check if instance exists
-//           const instanceRes = await fetch(
-//             `/api/audit/instance?template=${id}&site=${encodeURIComponent(site)}&frequency=${freq}&periodKey=${periodKey}`,
-//             { headers: { Authorization: `Bearer ${token}` } }
-//           );
+  //         for (const freq of frequencies) {
+  //           const periodKey = getPeriodKey(freq, currentDate);
 
-//           if (instanceRes.ok) {
-//             const instanceData = await instanceRes.json();
-//             if (instanceData?._id) {
-//               const itemsRes = await fetch(`/api/audit/items?instanceId=${instanceData._id}&templateId=${id}&site=${encodeURIComponent(
-//             site)}`,  {
-//                 headers: { Authorization: `Bearer ${token}` },
-//               });
-//               if (itemsRes.ok) {
-//                 const instanceItems = await itemsRes.json();
-//                 allItems.push(...instanceItems);
-//                 setTemplateName("");
-//                 continue; // skip template fallback
-//               }
-//             }
-//           } 
-//           // fallback to template for this frequency
-//           const freqTemplateItems = templateItems
-//             .filter((item: AuditItem) => item.frequency === freq)
-//             .map((item: AuditItem) => ({
-//               ...item,
-//               checked: false,
-//               comment: "",
-//               photos: [],
-//             }));
-//             setTemplateName(templateData.templateName || "");
+  //           // check if instance exists
+  //           const instanceRes = await fetch(
+  //             `/api/audit/instance?template=${id}&site=${encodeURIComponent(site)}&frequency=${freq}&periodKey=${periodKey}`,
+  //             { headers: { Authorization: `Bearer ${token}` } }
+  //           );
 
-//           allItems.push(...freqTemplateItems);
-//         }
+  //           if (instanceRes.ok) {
+  //             const instanceData = await instanceRes.json();
+  //             if (instanceData?._id) {
+  //               const itemsRes = await fetch(`/api/audit/items?instanceId=${instanceData._id}&templateId=${id}&site=${encodeURIComponent(
+  //             site)}`,  {
+  //                 headers: { Authorization: `Bearer ${token}` },
+  //               });
+  //               if (itemsRes.ok) {
+  //                 const instanceItems = await itemsRes.json();
+  //                 allItems.push(...instanceItems);
+  //                 setTemplateName("");
+  //                 continue; // skip template fallback
+  //               }
+  //             }
+  //           } 
+  //           // fallback to template for this frequency
+  //           const freqTemplateItems = templateItems
+  //             .filter((item: AuditItem) => item.frequency === freq)
+  //             .map((item: AuditItem) => ({
+  //               ...item,
+  //               checked: false,
+  //               comment: "",
+  //               photos: [],
+  //             }));
+  //             setTemplateName(templateData.templateName || "");
 
-//         setItems(sortItems(allItems));
-//       }
-//     } catch (err) {
-//       console.error("Failed to fetch checklist:", err);
-//       setItems([]);
-//     } finally {
-//     setLoading(false);
-//   }
-// };
+  //           allItems.push(...freqTemplateItems);
+  //         }
+
+  //         setItems(sortItems(allItems));
+  //       }
+  //     } catch (err) {
+  //       console.error("Failed to fetch checklist:", err);
+  //       setItems([]);
+  //     } finally {
+  //     setLoading(false);
+  //   }
+  // };
   const fetchChecklist = async () => {
     setLoading(true);
     const token = localStorage.getItem("token");
@@ -256,8 +256,10 @@ const sortItems = (list: AuditItem[]) => {
           site
         )}&date=${currentDate.toISOString()}&frequency=${frequency}`,
         {
-          headers: { Authorization: `Bearer ${token}`,
-          "X-Required-Permission": "stationAudit" },
+          headers: {
+            Authorization: `Bearer ${token}`,
+            "X-Required-Permission": "stationAudit.checklist"
+          },
         }
       );
 
@@ -359,7 +361,7 @@ const sortItems = (list: AuditItem[]) => {
         headers: {
           "Content-Type": "application/json",
           Authorization: `Bearer ${token}`,
-          "X-Required-Permission": "stationAudit",
+          "X-Required-Permission": "stationAudit.checklist",
         },
         body: JSON.stringify({
           template: id,
@@ -406,35 +408,85 @@ const sortItems = (list: AuditItem[]) => {
   }
   const totalItems = items.length;
   const checkedItems = items.filter(item => item.checked).length;
+  const frequencies = ["all", "daily", "weekly", "monthly"] as const;
+
+  type Frequency = typeof frequencies[number];
+
+  interface FrequencyPickerProps {
+    frequency: Frequency;
+    setFrequency: React.Dispatch<React.SetStateAction<Frequency>>;
+  }
+
+  function FrequencyPicker({ frequency, setFrequency }: FrequencyPickerProps) {
+    const currentIndex = frequencies.indexOf(frequency);
+    const prevIndex = (currentIndex - 1 + frequencies.length) % frequencies.length;
+    const nextIndex = (currentIndex + 1) % frequencies.length;
+
+    return (
+      <div className="flex items-center h-10 border rounded-md bg-white px-2 text-sm w-[160px] justify-between shadow-sm">
+
+        {/* Left Arrow */}
+        <button
+          className="px-2 text-lg select-none"
+          onClick={() => setFrequency(frequencies[prevIndex])}
+        >
+          ◀
+        </button>
+
+        {/* Center Value */}
+        <div className="flex-1 text-center truncate px-1 font-normal text-sm capitalize">
+          {frequency}
+        </div>
+
+        {/* Right Arrow */}
+        <button
+          className="px-2 text-lg select-none"
+          onClick={() => setFrequency(frequencies[nextIndex])}
+        >
+          ▶
+        </button>
+
+      </div>
+    );
+  }
+
 
   return (
     <>
-      {/* Frequency filter */}
-      <div className="flex gap-4 mb-4">
-        {["all", "daily", "weekly", "monthly"].map((f) => (
-          <Button
-            key={f}
-            variant={frequency === f ? "default" : "outline"}
-            onClick={() => setFrequency(f as any)}
-          >
-            {f.charAt(0).toUpperCase() + f.slice(1)}
-          </Button>
-        ))}
+      {/* HEADER BAR */}
+      <div className="flex items-center gap-6 mb-3">
+
+        <FrequencyPicker frequency={frequency} setFrequency={setFrequency} />
+
+        <div className="text-gray-600 text-sm whitespace-nowrap">
+          Items checked {checkedItems} of {totalItems}
+        </div>
+
+        <Button
+          type="button"
+          onClick={handleSave}
+          disabled={saving}
+          className="h-9 text-sm"
+        >
+          {saving ? "Saving..." : "Save Checklist"}
+        </Button>
+
       </div>
 
       {/* Categories Legend */}
-      <div className="flex gap-4 mb-4 flex-wrap">
+      <div className="flex flex-wrap gap-2 mb-3">
+
         {categories
           .filter((cat): cat is string => !!cat)
           .map((cat) => {
-            const { border, bg } = categoryColorMap[cat];
+            const { bg, border } = categoryColorMap[cat];
             return (
               <div
                 key={cat}
-                className={`flex items-center gap-1 px-2 py-1 rounded border ${border}`}
+                className={`flex items-center gap-1 px-2 py-0.5 rounded-full border ${border} bg-white shadow-sm`}
               >
-                <div className={`w-4 h-4 ${bg} rounded-sm`}></div>
-                <span className="text-sm">{cat}</span>
+                <div className={`w-2 h-2 rounded-sm ${bg}`}></div>
+                <span className="text-xs text-gray-700">{cat}</span>
               </div>
             );
           })}
@@ -447,24 +499,8 @@ const sortItems = (list: AuditItem[]) => {
         <div>No checklist items for this template.</div>
       ) : (
         <>
-          {/* Top Bar: Save button (left) + Summary (right) */}
-          <div className="flex items-center justify-between mb-3 px-2">
-            <Button
-              type="button"
-              onClick={handleSave}
-              disabled={saving}
-              className="mr-4"
-            >
-              {saving ? "Saving..." : "Save Checklist"}
-            </Button>
-
-            <div className="text-gray-500 text-medium">
-              Items checked {checkedItems} of {totalItems}
-            </div>
-          </div>
-
           {/* Scrollable Cards Section */}
-          <div className="flex flex-col gap-4 overflow-y-auto max-h-[60vh] pr-2 mb-4">
+          <div className="flex flex-col gap-4 overflow-y-auto max-h-[70vh] pr-2 mb-4">
             {items.map((item, idx) => (
               <ChecklistItemCard
                 key={item._id || idx}

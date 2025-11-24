@@ -15,20 +15,22 @@ function RouteComponent() {
   const webcamRef = useRef<Webcam>(null)
   const setReceipt = useFormStore((state) => state.setReceipt)
   const receipt = useFormStore((state) => state.receipt)
-  const fleetCardNumber = useFormStore((state) => state.fleetCardNumber)
+  // const fleetCardNumber = useFormStore((state) => state.fleetCardNumber)
+  // const poNumber = useFormStore((state) => state.poNumber)
   const customerName = useFormStore((state) => state.customerName)
   const driverName = useFormStore((state) => state.driverName)
   const vehicleInfo = useFormStore((state) => state.vehicleInfo)
   const quantity = useFormStore((state) => state.quantity)
   const amount = useFormStore((state) => state.amount)
   const fuelType = useFormStore((state) => state.fuelType)
+  const date = useFormStore((state) => state.date)
   // const [imageSize, setImageSize] = useState<number | null>(null)
 
   useEffect(() => {
-    if (!fleetCardNumber || !customerName || !driverName || !vehicleInfo || !fuelType || quantity === 0 || amount === 0) {
+    if (!date || !customerName || !driverName || !vehicleInfo || !fuelType || quantity === 0 || amount === 0) {
       navigate({ to: "/po" })
     }
-  }, [fleetCardNumber, customerName, driverName, vehicleInfo, fuelType, quantity, amount, navigate])
+  }, [date, customerName, driverName, vehicleInfo, fuelType, quantity, amount, navigate])
 
   const capture = () => {
     if (webcamRef.current) {

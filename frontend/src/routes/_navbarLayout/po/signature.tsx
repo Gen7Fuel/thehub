@@ -22,6 +22,7 @@ function RouteComponent() {
   const signatureRef = useRef<SignatureCanvas>(null);
 
   const fleetCardNumber = useFormStore((state) => state.fleetCardNumber);
+  const poNumber = useFormStore((state) => state.poNumber);
   const customerName = useFormStore((state) => state.customerName);
   const driverName = useFormStore((state) => state.driverName);
   const vehicleInfo = useFormStore((state) => state.vehicleInfo);
@@ -29,6 +30,7 @@ function RouteComponent() {
   const amount = useFormStore((state) => state.amount);
   const fuelType = useFormStore((state) => state.fuelType);
   const receipt = useFormStore((state) => state.receipt);
+  const date = useFormStore((state) => state.date);
 
   useEffect(() => {
     if (!receipt) {
@@ -65,50 +67,55 @@ function RouteComponent() {
         }
       };
 
-      let fleetData = null;
-      try {
-        const fleetResponse = await authAxios(() =>
-          axios.get(`${domain}/api/fleet/getByCardNumber/${fleetCardNumber}`, { headers: authHeaders })
-        );
-        fleetData = fleetResponse.data;
-      } catch (err: any) {
-        if (axios.isAxiosError(err) && err.response?.status !== 404) throw err;
-      }
+      if(fleetCardNumber){
+        let fleetData = null;
+        try {
+          const fleetResponse = await authAxios(() =>
+            axios.get(`${domain}/api/fleet/getByCardNumber/${fleetCardNumber}`, { headers: authHeaders })
+          );
+          fleetData = fleetResponse.data;
+        } catch (err: any) {
+          if (axios.isAxiosError(err) && err.response?.status !== 404) throw err;
+        }
 
-      if (fleetData && !fleetData.message) {
-        await authAxios(() =>
-          axios.put(`${domain}/api/fleet/updateByCardNumber/${fleetCardNumber}`, {
-            customerName,
-            driverName,
-            vehicleMakeModel: vehicleInfo,
-          }, { headers: authHeaders })
-        );
-      } else {
-        await authAxios(() =>
-          axios.post(`${domain}/api/fleet/create`, {
-            fleetCardNumber,
-            customerName,
-            driverName,
-            vehicleMakeModel: vehicleInfo,
-          }, { headers: authHeaders })
-        );
+        if (fleetData && !fleetData.message) {
+          await authAxios(() =>
+            axios.put(`${domain}/api/fleet/updateByCardNumber/${fleetCardNumber}`, {
+              customerName,
+              driverName,
+              vehicleMakeModel: vehicleInfo,
+            }, { headers: authHeaders })
+          );
+        } else {
+          await authAxios(() =>
+            axios.post(`${domain}/api/fleet/create`, {
+              fleetCardNumber,
+              customerName,
+              driverName,
+              vehicleMakeModel: vehicleInfo,
+            }, { headers: authHeaders })
+          );
+        }
       }
 
       const stationName = user?.location || 'Rankin';
-      const today = new Date();
 
       const poResponse = await authAxios(() =>
         axios.post(`${domain}/api/purchase-orders`, {
           source: 'PO',
-          date: today,
+          date,
           stationName,
-          fleetCardNumber,
+          fleetCardNumber: fleetCardNumber || '', 
+          poNumber: poNumber || '',
           quantity,
           amount,
           productCode: fuelType,
           trx: '',
           signature,
           receipt: filename,
+          customerName,
+          driverName,
+          vehicleInfo,
         }, { headers: authHeaders })
       );
 

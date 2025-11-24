@@ -6,8 +6,8 @@ import { getSocket } from "@/lib/websocket";
 import { syncPendingActions } from "@/lib/utils"
 import { isActuallyOnline } from "@/lib/network";
 import { useAuth } from "@/context/AuthContext";
-import { HelpCircle } from 'lucide-react'
-import { clearLocalDB } from "@/lib/indexedDB";
+import { HelpCircle, LogOut, Settings as SettingsIcon, LayoutDashboard, Home as HomeIcon } from 'lucide-react'
+import { clearLocalDB } from "@/lib/orderRecIndexedDB";
 import {
   Dialog,
   DialogContent,
@@ -215,7 +215,8 @@ export default function Navbar() {
       <div className="max-w-7xl mx-auto flex justify-between items-center p-2 relative">
         {/* Logo/Home link */}
         <Link to="/">
-          <span className="text-xl font-bold">The Hub</span>
+          <HomeIcon className="h-6 w-6 md:hidden" />
+          <span className="hidden md:inline text-xl font-bold">The Hub</span>
         </Link>
 
         {/* Centered dynamic header */}
@@ -234,17 +235,22 @@ export default function Navbar() {
           {/* Dashboard button, shown if user has access */}
           {/* {access.module_dashboard && ( //markpoint */}
           {access?.dashboard && (
-            <Button variant="ghost" onClick={() => navigate({ to: '/dashboard' })}>
-              <Link to="/dashboard">Dashboard</Link>
+            <Button variant="outline" onClick={() => navigate({ to: '/dashboard' })}>
+                <LayoutDashboard className="h-5 w-5 md:hidden" />
+                <span className="hidden md:inline">Dashboard</span>
             </Button>
           )}
           {/* Settings button, shown if user has access */}
           {/* {access.component_settings && ( //markpoint */}
           {access?.settings && ( 
-            <Button variant="outline" onClick={handleSettings}>Settings</Button>
+            <Button variant="outline" onClick={handleSettings}>
+              <SettingsIcon className="h-5 w-5" />
+            </Button>
           )}
           {/* Logout button */}
-          <Button onClick={handleLogout}>Logout</Button>
+          <Button onClick={handleLogout}>
+            <LogOut className="h-5 w-5" />
+          </Button>
         </span>
       </div>
 

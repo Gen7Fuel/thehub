@@ -206,7 +206,7 @@ function RouteComponent() {
               />
             </Field>
             
-            <Field label="Exempted Tax">
+            <Field label="Infonet Exempted Tax">
               <input
                 value={exemptedTax}
                 onChange={(e) => setExemptedTax(e.target.value)}

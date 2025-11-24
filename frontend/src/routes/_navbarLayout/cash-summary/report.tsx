@@ -15,6 +15,7 @@ type Row = {
   cpl_bulloch?: number
   exempted_tax?: number
   report_canadian_cash?: number
+  payouts?: number
 }
 
 type ReportData = {
@@ -30,6 +31,7 @@ type ReportData = {
     cpl_bulloch: number
     exempted_tax: number
     report_canadian_cash: number
+    payouts: number
   }
 }
 
@@ -72,6 +74,12 @@ function RouteComponent() {
 
   const onSubmitClick = async () => {
     if (submitState !== 'idle' || !site || !date) return
+
+    const proceed = window.confirm(
+      'An email will be sent to Accounting with a copy of the Cash Summary Report.\n\nDo you want to continue?'
+    )
+    if (!proceed) return
+
     try {
       setSubmitState('submitting')
       const r = await fetch('/api/cash-summary/submit/to/safesheet', {
@@ -105,6 +113,7 @@ function RouteComponent() {
 
   const rows = report?.rows ?? []
   const totals = report?.totals
+  const hasRows = rows.length > 0
 
   const fmtNum = (n?: number) =>
     typeof n === 'number'
@@ -154,9 +163,11 @@ function RouteComponent() {
             />
           </div>
           <div className="ml-auto flex flex-row gap-2">
-            <Button type="button" onClick={onSubmitClick} disabled={submitDisabled}>
-              {submitLabel}
-            </Button>
+            {hasRows && (
+              <Button type="button" onClick={onSubmitClick} disabled={submitDisabled}>
+                {submitLabel}
+              </Button>
+            )}
             <Button type="button" variant="outline" onClick={() => window.print()}>
               Export PDF
             </Button>
@@ -192,6 +203,7 @@ function RouteComponent() {
                   <Card title="Cash Back" value={fmtNum(totals?.cash_back)} />
                   <Card title="Loyalty" value={fmtNum(totals?.loyalty)} />
                   <Card title="Exempted Tax" value={fmtNum(totals?.exempted_tax)} />
+                  <Card title="Payouts" value={fmtNum(totals?.payouts)} />
                 </div>
               </div>
 
@@ -205,6 +217,7 @@ function RouteComponent() {
                       <div className="grid gap-2 text-sm">
                         <KV k="Canadian Cash Counted" v={fmtNum(r.canadian_cash_collected)} />
                         <KV k="Canadian Cash Reported" v={fmtNum(r.report_canadian_cash)} />
+                        <KV k="Payouts" v={fmtNum(r.payouts)} />
                       </div>
                     </div>
                   ))}

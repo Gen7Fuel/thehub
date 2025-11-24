@@ -24,7 +24,14 @@ const transactionSchema = new mongoose.Schema({
   },
   fleetCardNumber: { 
     type: String, 
-    required: true // Fleet card number used for the transaction
+    required: false // optional now
+  },
+  driverName: { type: String, required: false },                   // Name of the driver (optional)
+  customerName: { type: String, required: true },                   // Customer ID (optional)
+  vehicleMakeModel: { type: String, required: false },  
+  poNumber: {
+    type: String,
+    required: false // optional new field for PO
   },
   quantity: { 
     type: Number, 

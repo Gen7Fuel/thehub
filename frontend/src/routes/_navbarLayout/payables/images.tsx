@@ -21,15 +21,16 @@ function RouteComponent() {
   const payableVendorName = useFormStore((state) => state.payableVendorName)
   const payableLocation = useFormStore((state) => state.payableLocation)
   const payablePaymentMethod = useFormStore((state) => state.payablePaymentMethod)
+  const date = useFormStore((state) => state.date)
   const payableAmount = useFormStore((state) => state.payableAmount)
   const payableImages = useFormStore((state) => state.payableImages)
   const setPayableImages = useFormStore((state) => state.setPayableImages)
 
   useEffect(() => {
-    if (!payableVendorName || !payableLocation || !payablePaymentMethod || !payableAmount) {
+    if (!date || !payableVendorName || !payableLocation || !payablePaymentMethod || !payableAmount) {
       navigate({ to: "/payables" })
     }
-  }, [payableVendorName, payableLocation, payablePaymentMethod, payableAmount, navigate])
+  }, [date, payableVendorName, payableLocation, payablePaymentMethod, payableAmount, navigate])
 
   const capture = () => {
     if (webcamRef.current) {
