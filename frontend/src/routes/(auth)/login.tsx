@@ -6,7 +6,8 @@ import axios from 'axios'
 import { domain } from '@/lib/constants'
 // import { useSocket } from '@/context/SignalContext'
 import { clearLocalDB } from "@/lib/orderRecIndexedDB";
-import { useAuth } from '@/context/AuthContext'
+import { clearDashboardDB } from '@/lib/dashboardIndexedDB';
+import { useAuth } from '@/context/AuthContext';
 
 export const Route = createFileRoute('/(auth)/login')({
   loader: () => {
@@ -38,6 +39,7 @@ function RouteComponent() {
       // Save token to localStorage
       localStorage.setItem('token', token)
       clearLocalDB();
+      clearDashboardDB();
       refreshAuth()
       navigate({ to: '/' })
     } catch (err: any) {

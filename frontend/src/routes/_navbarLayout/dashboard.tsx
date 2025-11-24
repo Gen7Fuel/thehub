@@ -641,7 +641,7 @@ function RouteComponent() {
   // Process tender transactions for Pie chart
   const tenderChartData = useMemo(() => {
     // If tenderTransactions is null, undefined, or NOT an array → return empty
-    if (!Array.isArray(tenderTransactions)) return [];
+    if (!Array.isArray(tenderTransactions) || tenderTransactions.length === 0) return [];
 
     const totals: Record<string, number> = {};
 
@@ -685,6 +685,7 @@ function RouteComponent() {
 
   //config for the tendor pie chart
   const tenderConfig = useMemo(() => {
+    if (!Array.isArray(tenderTransactions) || tenderTransactions.length === 0) return {};
     const uniqueTenders = Array.from(
       new Set(
         tenderTransactions.map((t) => {
@@ -1339,8 +1340,11 @@ function RouteComponent() {
                       </CardHeader>
 
                       <CardContent>
-                        <PieTenderChart data={tenderChartData} config={tenderConfig} />
-
+                        {tenderChartData.length > 0 ? (
+                          <PieTenderChart data={tenderChartData} config={tenderConfig} />
+                        ) : (
+                          <div className="text-center text-muted-foreground py-10">Loading...</div>
+                        )}
                       </CardContent>
                       <CardFooter className="text-sm text-muted-foreground">
                         Cumulative from 14th Nov till Yesterday
