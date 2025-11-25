@@ -569,6 +569,7 @@ async function getAllPeriodData(pool, csoCode, startDate, endDate) {
         ORDER BY a.[Date_SK];
       `);
     const timePeriodResultTransformed = transformTimePeriodData(timePeriodResult.recordset)
+    // console.log(timePeriodResultTransformed)
     return {
       timePeriodTransactions: timePeriodResultTransformed ?? [],
     };
@@ -652,51 +653,77 @@ function formatDateForDB(dateString) {
   return dateString.replace(/-/g, "");
 }
 
+// function transformTimePeriodData(data) {
+//   const normalizeHour = (hourStr) => {
+//     if (hourStr.toLowerCase().includes("before")) return "05:00"
+//     const match = hourStr.match(/^(\d{1,2}:\d{2})/)
+//     return match ? match[1] : hourStr
+//   }
+
+//   const map = {} // key: `${Date_SK}-${hour}`, value: { Fuel: x, "C-Store": y }
+//   const bothRows = []
+
+//   data.forEach((row) => {
+//     const hour = normalizeHour(row.hours)
+
+//     if (row.transaction_type.toLowerCase() === "both") {
+//       bothRows.push({ ...row, hours: hour })
+//       return
+//     }
+
+//     const key = `${row.Date_SK}-${hour}`
+//     if (!map[key]) map[key] = {}
+//     map[key][row.transaction_type] = (map[key][row.transaction_type] || 0) + row.transaction_count
+//   })
+
+//   bothRows.forEach((row) => {
+//     const key = `${row.Date_SK}-${row.hours}`
+//     if (!map[key]) map[key] = {}
+//     map[key]["Fuel"] = (map[key]["Fuel"] || 0) + row.transaction_count
+//     map[key]["C-Store"] = (map[key]["C-Store"] || 0) + row.transaction_count
+//   })
+
+//   const result = []
+//   Object.entries(map).forEach(([key, types]) => {
+//     const [Date_SK, hour] = key.split("-")
+//     Object.entries(types).forEach(([transaction_type, transaction_count]) => {
+//       result.push({ Date_SK, hours: hour, transaction_type, transaction_count })
+//     })
+//   })
+
+//   // Sort by date and hour
+//   result.sort((a, b) => {
+//     if (a.Date_SK !== b.Date_SK) return a.Date_SK.localeCompare(b.Date_SK)
+//     return a.hours.localeCompare(b.hours)
+//   })
+
+//   return result
+// }
+
 function transformTimePeriodData(data) {
   const normalizeHour = (hourStr) => {
-    if (hourStr.toLowerCase().includes("before")) return "05:00"
-    const match = hourStr.match(/^(\d{1,2}:\d{2})/)
-    return match ? match[1] : hourStr
-  }
+    if (!hourStr) return hourStr;
 
-  const map = {} // key: `${Date_SK}-${hour}`, value: { Fuel: x, "C-Store": y }
-  const bothRows = []
+    if (hourStr.toLowerCase().includes("before")) return "05:00";
 
-  data.forEach((row) => {
-    const hour = normalizeHour(row.hours)
+    const match = hourStr.match(/^(\d{1,2}:\d{2})/);
+    return match ? match[1] : hourStr;
+  };
 
-    if (row.transaction_type.toLowerCase() === "both") {
-      bothRows.push({ ...row, hours: hour })
-      return
+  const transformed = data.map((row) => ({
+    ...row,
+    hours: normalizeHour(row.hours)
+  }));
+
+  // Sort by date then by hour
+  transformed.sort((a, b) => {
+    if (a.Date_SK !== b.Date_SK) {
+      return a.Date_SK.localeCompare(b.Date_SK);
     }
+    return a.hours.localeCompare(b.hours);
+  });
 
-    const key = `${row.Date_SK}-${hour}`
-    if (!map[key]) map[key] = {}
-    map[key][row.transaction_type] = (map[key][row.transaction_type] || 0) + row.transaction_count
-  })
-
-  bothRows.forEach((row) => {
-    const key = `${row.Date_SK}-${row.hours}`
-    if (!map[key]) map[key] = {}
-    map[key]["Fuel"] = (map[key]["Fuel"] || 0) + row.transaction_count
-    map[key]["C-Store"] = (map[key]["C-Store"] || 0) + row.transaction_count
-  })
-
-  const result = []
-  Object.entries(map).forEach(([key, types]) => {
-    const [Date_SK, hour] = key.split("-")
-    Object.entries(types).forEach(([transaction_type, transaction_count]) => {
-      result.push({ Date_SK, hours: hour, transaction_type, transaction_count })
-    })
-  })
-
-  // Sort by date and hour
-  result.sort((a, b) => {
-    if (a.Date_SK !== b.Date_SK) return a.Date_SK.localeCompare(b.Date_SK)
-    return a.hours.localeCompare(b.hours)
-  })
-
-  return result
+  return transformed;
 }
 
 // async function getAllSQLData(csoCode, dates) {
