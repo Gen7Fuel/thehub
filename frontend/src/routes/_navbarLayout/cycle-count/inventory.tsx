@@ -358,8 +358,8 @@ function RouteComponent() {
                       <TableCell className="font-medium truncate max-w-xs">{item.Item_Name}</TableCell>
                       <TableCell>{item.UPC}</TableCell>
                       <TableCell>{item.Category}</TableCell>
-                      <TableCell className="text-center">{formatDateTime(item.updatedAt)}
-                      </TableCell><TableCell className="text-right">{item.cycleCount === null || item.cycleCount === undefined ? '-' : item.cycleCount}</TableCell>
+                      <TableCell className="text-center">{formatDateTime(item.updatedAt)}</TableCell>
+                      <TableCell className="text-right">{item.cycleCount === null || item.cycleCount === undefined ? '-' : item.cycleCount}</TableCell>
                       <TableCell className="text-right">{item['On Hand Qty']}</TableCell>
                       <TableCell className="text-right">{calcChangePercent(item.cycleCount, item["On Hand Qty"])}</TableCell>
                     </TableRow>
