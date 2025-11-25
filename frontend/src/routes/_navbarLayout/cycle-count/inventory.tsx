@@ -237,9 +237,9 @@ function RouteComponent() {
       UPC: item.UPC,
       Category: item.Category,
       "Last Counted At": formatDateTime(item.updatedAt),
-      "Last Hub Inventory": item.cycleCount === null || item.cycleCount === undefined ? '-' : item.cycleCount,
+      // "Last Hub Inventory": item.cycleCount === null || item.cycleCount === undefined ? '-' : item.cycleCount,
       "On Hand Qty": item["On Hand Qty"],
-      "Change(%)": calcChangePercent(item.cycleCount, item["On Hand Qty"]),
+      // "Change(%)": calcChangePercent(item.cycleCount, item["On Hand Qty"]),
     }));
 
     const worksheet = XLSX.utils.json_to_sheet(data);
@@ -251,13 +251,13 @@ function RouteComponent() {
     XLSX.writeFile(workbook, fileName);
   };
 
-  const calcChangePercent = (cycleCount?: number | null, onHand?: number) => {
-    if (cycleCount === null || cycleCount === undefined || onHand === null || onHand === undefined) return '-'
-    if (cycleCount === 0) return '-' // cannot calculate %
-    const diff = onHand - cycleCount
-    const percent = (diff / cycleCount) * 100
-    return `${percent.toFixed(1)}%`
-  }  
+  // const calcChangePercent = (cycleCount?: number | null, onHand?: number) => {
+  //   if (cycleCount === null || cycleCount === undefined || onHand === null || onHand === undefined) return '-'
+  //   if (cycleCount === 0) return '-' // cannot calculate %
+  //   const diff = onHand - cycleCount
+  //   const percent = (diff / cycleCount) * 100
+  //   return `${percent.toFixed(1)}%`
+  // }  
 
 
   return (
@@ -346,10 +346,10 @@ function RouteComponent() {
                     <TableHead>Item Name</TableHead>
                     <TableHead>UPC</TableHead>
                     <TableHead>Category</TableHead>
-                    <TableHead>Last Counted At</TableHead>
-                    <TableHead className="text-right">Last Hub Inventory</TableHead>
+                    <TableHead className="text-center">Last Counted At</TableHead>
+                    {/* <TableHead className="text-right">Last Hub Inventory</TableHead> */}
                     <TableHead className="text-right">On Hand Qty</TableHead>
-                    <TableHead className="text-right">Change %</TableHead>
+                    {/* <TableHead className="text-right">Change %</TableHead> */}
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -359,9 +359,9 @@ function RouteComponent() {
                       <TableCell>{item.UPC}</TableCell>
                       <TableCell>{item.Category}</TableCell>
                       <TableCell className="text-center">{formatDateTime(item.updatedAt)}</TableCell>
-                      <TableCell className="text-right">{item.cycleCount === null || item.cycleCount === undefined ? '-' : item.cycleCount}</TableCell>
+                      {/* <TableCell className="text-right">{item.cycleCount === null || item.cycleCount === undefined ? '-' : item.cycleCount}</TableCell> */}
                       <TableCell className="text-right">{item['On Hand Qty']}</TableCell>
-                      <TableCell className="text-right">{calcChangePercent(item.cycleCount, item["On Hand Qty"])}</TableCell>
+                      {/* <TableCell className="text-right">{calcChangePercent(item.cycleCount, item["On Hand Qty"])}</TableCell> */}
                     </TableRow>
                   ))}
                 </TableBody>
