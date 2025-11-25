@@ -3,7 +3,7 @@ import { useState } from "react";
 import { LocationPicker } from "@/components/custom/locationPicker";
 import { useAuth } from "@/context/AuthContext";
 
-export const Route = createFileRoute('/_navbarLayout/cycle-count/console')({
+export const Route = createFileRoute('/_navbarLayout/cycle-count/lookup')({
   component: RouteComponent,
 })
 
@@ -25,7 +25,7 @@ function RouteComponent() {
       const params = new URLSearchParams({ upc_barcode: upc, site });
       const res = await fetch(`/api/cycle-count/lookup?${params}`, {
         headers: {
-          Authorization: `Bearer ${localStorage.getItem("token")}`,
+          Authorization: `Bearer ${localStorage.getItem(`token`)}`,
           "X-Required-Permission": "cycleCount.console",
         },
       });

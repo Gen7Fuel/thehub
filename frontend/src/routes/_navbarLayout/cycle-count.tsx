@@ -21,7 +21,7 @@ function RouteComponent() {
   // const isInputActive = matchRoute({ to: '/cycle-count' });
   const isCountActive = matchRoute({ to: '/cycle-count/count' });
   const isInventoryActive = matchRoute({ to: '/cycle-count/inventory' });
-  const isConsoleActive = matchRoute({ to: '/cycle-count/console' });
+  const isConsoleActive = matchRoute({ to: '/cycle-count/lookup' });
   
   const { user } = useAuth();
 
@@ -60,7 +60,7 @@ function RouteComponent() {
           <Button
             {...(!isInventoryActive && { variant: 'outline' } as object)}
             // className={access.component_cycle_count_console ? 'rounded-none' : 'rounded-l-none'} //markpoint
-            className={access?.cycleCount?.console ? 'rounded-none' : 'rounded-l-none'}
+            className={access?.cycleCount?.lookup ? 'rounded-none' : 'rounded-l-none'}
           >
             Inventory
           </Button>
@@ -68,13 +68,13 @@ function RouteComponent() {
 
         {/* Console tab button, shown only if user has access */}
         {/* {access.component_cycle_count_console && ( //markpoint */}
-        {access?.cycleCount?.console && (
-          <Link to="/cycle-count/console" activeOptions={{ exact: true }}>
+        {access?.cycleCount?.lookup && (
+          <Link to="/cycle-count/lookup" activeOptions={{ exact: true }}>
             <Button
               {...(!isConsoleActive && { variant: 'outline' } as object)}
               className="rounded-l-none"
             >
-              Console
+              Lookup
             </Button>
           </Link>
         )}
