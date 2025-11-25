@@ -22,6 +22,8 @@ import { useEffect, useMemo, useState } from 'react'
 import { inventoryQueries } from '@/queries/inventory'
 import { PasswordProtection } from '@/components/custom/PasswordProtection'
 import { useAuth } from "@/context/AuthContext";
+import * as XLSX from "xlsx";
+import { FileSpreadsheet } from "lucide-react"
 
 export const Route = createFileRoute('/_navbarLayout/cycle-count/inventory')({
   component: RouteComponent,
@@ -54,7 +56,7 @@ export const Route = createFileRoute('/_navbarLayout/cycle-count/inventory')({
     ])
   },
 
-  // ✅ loader: Return empty object (data comes from React Query)
+  // loader: Return empty object (data comes from React Query)
   loader: () => ({}),
 })
 
@@ -63,6 +65,8 @@ interface InventoryItem {
   UPC: string
   Category: string
   'On Hand Qty': number
+  updatedAt?: string
+  cycleCount?: number
 }
 
 interface Category {
@@ -108,6 +112,7 @@ function RouteComponent() {
     ...inventoryQueries.full(site),
     enabled: false,
   })
+
 
   // ✅ Query for categories
   const categoriesQuery = useQuery({
@@ -204,6 +209,57 @@ function RouteComponent() {
     )
   }
 
+  const formatDateTime = (isoDate?: string) => {
+    if (!isoDate) return '-'
+    const date = new Date(isoDate)
+
+    const day = String(date.getDate()).padStart(2, '0')
+    const month = date.toLocaleString('default', { month: 'short' }) // "Nov"
+    const year = date.getFullYear()
+
+    const hours = String(date.getHours()).padStart(2, '0')
+    const minutes = String(date.getMinutes()).padStart(2, '0')
+
+    const formatted = `${day}-${month}-${year} ${hours}:${minutes}`
+
+    // if it's exactly 17-Sep-2025 20:00, return empty because all the items which were newly created are being falling back on that perttiuclar date
+    if (formatted === '17-Sep-2025 20:00') return '-'
+
+    return formatted
+  }
+
+  const exportToExcel = () => {
+    if (!filteredInventory.length) return;
+
+    // Convert table to exportable rows
+    const data = filteredInventory.map(item => ({
+      "Item Name": item.Item_Name,
+      UPC: item.UPC,
+      Category: item.Category,
+      "Last Counted At": formatDateTime(item.updatedAt),
+      // "Last Hub Inventory": item.cycleCount === null || item.cycleCount === undefined ? '-' : item.cycleCount,
+      "On Hand Qty": item["On Hand Qty"],
+      // "Change(%)": calcChangePercent(item.cycleCount, item["On Hand Qty"]),
+    }));
+
+    const worksheet = XLSX.utils.json_to_sheet(data);
+    const workbook = XLSX.utils.book_new();
+
+    XLSX.utils.book_append_sheet(workbook, worksheet, "Inventory");
+
+    const fileName = `Inventory_${site}_${selectedCategory}_${Date.now()}.xlsx`;
+    XLSX.writeFile(workbook, fileName);
+  };
+
+  // const calcChangePercent = (cycleCount?: number | null, onHand?: number) => {
+  //   if (cycleCount === null || cycleCount === undefined || onHand === null || onHand === undefined) return '-'
+  //   if (cycleCount === 0) return '-' // cannot calculate %
+  //   const diff = onHand - cycleCount
+  //   const percent = (diff / cycleCount) * 100
+  //   return `${percent.toFixed(1)}%`
+  // }  
+
+
   return (
     <div className="container mx-auto p-6 mt-12">
       <Card>
@@ -246,10 +302,23 @@ function RouteComponent() {
                 onValueChange={handleSiteChange}
                 placeholder="Select a site"
               />
+
+              {/* Excel Export Button */}
+              <button
+                onClick={exportToExcel}
+                className="
+                  flex items-center gap-2 px-4 py-2  bg-emerald-600 hover:bg-emerald-700 
+                  text-white rounded-md text-sm  shadow-sm border border-emerald-700/20
+                  transition-all
+                "
+              >
+                <FileSpreadsheet className="h-4 w-4" />
+                Export Excel
+              </button>
             </div>
           </div>
         </CardHeader>
-        <CardContent>
+        <CardContent className="w-full table-auto">
           {!site ? (
             <p className="text-muted-foreground text-center py-8">
               Please select a site to view inventory
@@ -271,22 +340,28 @@ function RouteComponent() {
                   </span>
                 )}
               </div>
-              <Table>
+              <Table className="w-full table-auto">
                 <TableHeader>
                   <TableRow>
                     <TableHead>Item Name</TableHead>
                     <TableHead>UPC</TableHead>
                     <TableHead>Category</TableHead>
+                    <TableHead className="text-center">Last Counted At</TableHead>
+                    {/* <TableHead className="text-right">Last Hub Inventory</TableHead> */}
                     <TableHead className="text-right">On Hand Qty</TableHead>
+                    {/* <TableHead className="text-right">Change %</TableHead> */}
                   </TableRow>
                 </TableHeader>
                 <TableBody>
                   {filteredInventory.map((item: InventoryItem, idx: number) => (
                     <TableRow key={`${item.UPC}-${idx}`}>
-                      <TableCell className="font-medium">{item.Item_Name}</TableCell>
+                      <TableCell className="font-medium truncate max-w-xs">{item.Item_Name}</TableCell>
                       <TableCell>{item.UPC}</TableCell>
                       <TableCell>{item.Category}</TableCell>
+                      <TableCell className="text-center">{formatDateTime(item.updatedAt)}</TableCell>
+                      {/* <TableCell className="text-right">{item.cycleCount === null || item.cycleCount === undefined ? '-' : item.cycleCount}</TableCell> */}
                       <TableCell className="text-right">{item['On Hand Qty']}</TableCell>
+                      {/* <TableCell className="text-right">{calcChangePercent(item.cycleCount, item["On Hand Qty"])}</TableCell> */}
                     </TableRow>
                   ))}
                 </TableBody>

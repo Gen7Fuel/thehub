@@ -52,6 +52,9 @@ function RouteComponent() {
 
   const isFormValid = payableVendorName && payableLocation && payablePaymentMethod && payableAmount > 0
 
+  console.log('Date:',date)
+  console.log('location',payableLocation)
+
   return (
     <div className="min-w-[30%] mx-auto">
       <div className="p-4 border border-dashed border-gray-300 rounded-md space-y-6">
