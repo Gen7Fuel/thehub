@@ -89,7 +89,7 @@ interface TransactionData {
   avgBasket: number;
 }
 
-type TxType = "Fuel" | "C-Store";
+type TxType = "Fuel" | "C-Store" | "Both";
 
 export interface TimePeriodTransaction {
   Date_SK: string;
@@ -101,10 +101,11 @@ export interface TimePeriodTransaction {
 export interface HourlyRecord {
   Fuel: number;
   "C-Store": number;
+  Both: number;
   count: number;
 }
 
-type HourlyMap = Record<string, HourlyRecord>;
+// type HourlyMap = Record<string, HourlyRecord>;
 
 export const ChartBarModal: React.FC<ChartBarModalProps> = ({ data, isOpen, onClose }) => {
   if (!data) return null;
@@ -715,41 +716,92 @@ function RouteComponent() {
     return config;
   }, [tenderTransactions]);
 
+  // const timePeriodChartData = useMemo(() => {
+  //   if (!timePeriodData || timePeriodData.length === 0) return [];
+
+  //   const hourlyMap: HourlyMap = {};
+
+  //   timePeriodData.forEach((entry) => {
+  //     const hour = entry.hours;                     // "15:00"
+  //     const type: TxType = entry.transaction_type;  // "Fuel" | "C-Store"
+  //     const count = entry.transaction_count;
+
+  //     if (!hourlyMap[hour]) {
+  //       hourlyMap[hour] = { Fuel: 0, "C-Store": 0, Both: 0, count: 0 };
+  //     }
+
+  //     hourlyMap[hour][type] += count;
+  //     hourlyMap[hour].count += 1;
+  //   });
+
+  //   return Object.keys(hourlyMap)
+  //     .sort()
+  //     .map((hour) => {
+  //       const rec = hourlyMap[hour];
+  //       return {
+  //         hour,
+  //         Fuel: Number((rec.Fuel / rec.count).toFixed(0)),
+  //         CStore: Number((rec["C-Store"] / rec.count).toFixed(0)),
+  //         Both: Number((rec.Both / rec.count).toFixed(0)),
+  //       };
+  //     });
+
+  // }, [timePeriodData]);
   const timePeriodChartData = useMemo(() => {
     if (!timePeriodData || timePeriodData.length === 0) return [];
 
-    const hourlyMap: HourlyMap = {};
+    // Structure:
+    // hourlyMap[hour][type] = { total: X, dates: Set([...]) }
+    const hourlyMap: Record<
+      string,
+      Record<TxType, { total: number; dates: Set<string> }>
+    > = {};
 
     timePeriodData.forEach((entry) => {
-      const hour = entry.hours;                     // "15:00"
-      const type: TxType = entry.transaction_type;  // "Fuel" | "C-Store"
+      const hour = entry.hours;
+      const type = entry.transaction_type as TxType;
       const count = entry.transaction_count;
+      const date = entry.Date_SK;
 
       if (!hourlyMap[hour]) {
-        hourlyMap[hour] = { Fuel: 0, "C-Store": 0, count: 0 };
+        hourlyMap[hour] = {
+          Fuel: { total: 0, dates: new Set() },
+          "C-Store": { total: 0, dates: new Set() },
+          Both: { total: 0, dates: new Set() }
+        };
       }
 
-      hourlyMap[hour][type] += count;
-      hourlyMap[hour].count += 1;
+      hourlyMap[hour][type].total += count;
+      hourlyMap[hour][type].dates.add(date);
     });
 
     return Object.keys(hourlyMap)
-      .sort()
+      .sort() // sort by "05:00", "06:00", ...
       .map((hour) => {
         const rec = hourlyMap[hour];
+
+        const avgFuel =
+          rec.Fuel.total / rec.Fuel.dates.size || 0;
+        const avgCStore =
+          rec["C-Store"].total / rec["C-Store"].dates.size || 0;
+        const avgBoth =
+          rec.Both.total / rec.Both.dates.size || 0;
+
         return {
           hour,
-          Fuel: Number((rec.Fuel / rec.count).toFixed(0)),
-          CStore: Number((rec["C-Store"] / rec.count).toFixed(0)),
+          Fuel: Number(avgFuel.toFixed(0)),
+          CStore: Number(avgCStore.toFixed(0)),
+          Both: Number(avgBoth.toFixed(0))
         };
       });
-
   }, [timePeriodData]);
+
 
   const timePeriodChartConfig = useMemo(() => {
     return {
       Fuel: { label: "Fuel", color: "#2563eb" },
       CStore: { label: "C-Store", color: "#16a34a" },
+      Both: { label: "Both", color: "#d97706" },
     };
   }, []);
 
@@ -1324,6 +1376,7 @@ function RouteComponent() {
 
                             <Bar dataKey="Fuel" stackId="a" fill={timePeriodChartConfig.Fuel.color} />
                             <Bar dataKey="CStore" stackId="a" fill={timePeriodChartConfig.CStore.color} />
+                            <Bar dataKey="Both" stackId="a" fill={timePeriodChartConfig.Both.color} />
                           </BarChart>
                         </ChartContainer>
                       </CardContent>
@@ -1562,7 +1615,10 @@ const fetchSalesData = async (rows: any) => {
   const currentWeekStart = startOfWeek(today);
   // number of days between currentWeekStart (Mon) and today (yesterday)
   const msPerDay = 24 * 60 * 60 * 1000;
-  const daysCount = Math.round((today.getTime() - currentWeekStart.getTime()) / msPerDay);
+  // const daysCount = Math.round((today.getTime() - currentWeekStart.getTime()) / msPerDay);
+  const daysCount = Math.floor(
+    (today.getTime() - currentWeekStart.getTime()) / msPerDay
+  );
   // previous week's same weekday period:
   const prevWeekStart = addDays(currentWeekStart, -7);
   const prevWeekEnd = addDays(prevWeekStart, daysCount);

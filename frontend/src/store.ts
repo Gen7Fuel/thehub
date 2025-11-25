@@ -99,7 +99,7 @@ export const useFormStore = create<FormStore>((set) => ({
     date: new Date(),
     setDate: ((date) => set({ date })),
 
-    payableLocation: 'Rankin',
+    payableLocation: '',
     setPayableLocation: (payableLocation) => set({ payableLocation }),
 
     payableNotes: '',
