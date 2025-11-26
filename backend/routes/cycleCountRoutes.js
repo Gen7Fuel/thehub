@@ -5,7 +5,7 @@ const XLSX = require('xlsx');
 const { DateTime } = require('luxon');
 const CycleCount = require('../models/CycleCount');
 const Location = require('../models/Location');
-const { getCurrentInventory, getInventoryCategories } = require('../services/sqlService');
+const { getCurrentInventory, getInventoryCategories, getBulkOnHandQtyCSO } = require('../services/sqlService');
 
 
 const upload = multer({ storage: multer.memoryStorage() });
@@ -59,10 +59,10 @@ router.get('/daily-items', async (req, res) => {
     // Get location object to determine the site's timezone
     const location = await Location.findOne({ stationName: site.toString().trim() });
     const siteTimezone = location?.timezone || 'UTC';
-    
+
     // Compare user timezone with site timezone
     const shouldUpdateDisplayDate = userTimezone && userTimezone === siteTimezone;
-    
+
     console.log(`Site: ${site}, Site Timezone: ${siteTimezone}, User Timezone: ${userTimezone}, Should Update: ${shouldUpdateDisplayDate}`);
 
     // Get today's date string in site's timezone
@@ -86,6 +86,8 @@ router.get('/daily-items', async (req, res) => {
       ]
     }).lean();
 
+    console.log('flagged items len:', flaggedItems.length);
+    console.log('items len:', items.length);
     // If we have a full set for today, return them
     if (flaggedItems.length + items.length === parseInt(chunkSize, 10)) {
       return res.json({ flaggedItems, items });
@@ -155,21 +157,71 @@ router.get('/daily-items', async (req, res) => {
       ...selectedC
     ].slice(0, dailyCount); // ensure we don't exceed dailyCount
 
+    // // --- 3. Only update displayDate fields if user timezone matches site timezone ---
+    // if (shouldUpdateDisplayDate) {
+    //   console.log(`✅ Updating displayDate fields - User timezone matches site timezone (${siteTimezone})`);
+
+    //   const flaggedIds = flaggedSelected.map(i => i._id);
+    //   const regularIds = regularSelected.map(i => i._id);
+
+    //   // Set displayDate for all, flaggedDisplayDate for flagged only
+    //   if (flaggedIds.length > 0) {
+    //     await CycleCount.updateMany(
+    //       { _id: { $in: flaggedIds } },
+    //       { $set: { displayDate: todayDate, flaggedDisplayDate: todayDate } }
+    //     );
+    //   }
+
+    //   if (regularIds.length > 0) {
+    //     await CycleCount.updateMany(
+    //       { _id: { $in: regularIds } },
+    //       { $set: { displayDate: todayDate }, $unset: { flaggedDisplayDate: "" } }
+    //     );
+    //   }
+    // } else {
+    //   console.log(`⏭️ Skipping displayDate update - User timezone (${userTimezone}) does not match site timezone (${siteTimezone})`);
+    // }
+
+    // // --- 4. Re-fetch today's items for response OR return selected items ---
+    // let flaggedItemsFinal, itemsFinal;
+
+    // if (shouldUpdateDisplayDate) {
+    //   // If we updated the database, fetch the updated items
+    //   flaggedItemsFinal = await CycleCount.find({
+    //     site: site.toString().trim(),
+    //     displayDate: todayDate,
+    //     flaggedDisplayDate: todayDate
+    //   }).lean();
+
+    //   itemsFinal = await CycleCount.find({
+    //     site: site.toString().trim(),
+    //     displayDate: todayDate,
+    //     $or: [
+    //       { flaggedDisplayDate: { $ne: todayDate } },
+    //       { flaggedDisplayDate: { $exists: false } }
+    //     ]
+    //   }).lean();
+    // } else {
+    //   // If we didn't update the database, return the selected items directly
+    //   flaggedItemsFinal = flaggedSelected;
+    //   itemsFinal = regularSelected;
+    // }
     // --- 3. Only update displayDate fields if user timezone matches site timezone ---
     if (shouldUpdateDisplayDate) {
       console.log(`✅ Updating displayDate fields - User timezone matches site timezone (${siteTimezone})`);
-      
+
       const flaggedIds = flaggedSelected.map(i => i._id);
       const regularIds = regularSelected.map(i => i._id);
 
-      // Set displayDate for all, flaggedDisplayDate for flagged only
+      // Set displayDate for flagged items
       if (flaggedIds.length > 0) {
         await CycleCount.updateMany(
           { _id: { $in: flaggedIds } },
           { $set: { displayDate: todayDate, flaggedDisplayDate: todayDate } }
         );
       }
-      
+
+      // Set displayDate for regular items
       if (regularIds.length > 0) {
         await CycleCount.updateMany(
           { _id: { $in: regularIds } },
@@ -180,17 +232,58 @@ router.get('/daily-items', async (req, res) => {
       console.log(`⏭️ Skipping displayDate update - User timezone (${userTimezone}) does not match site timezone (${siteTimezone})`);
     }
 
+
+    // if (shouldUpdateDisplayDate) {
+
+    // ----------------------------------------------------
+    // SQL CSO FETCH + BULKWRITE UPDATE
+    // ----------------------------------------------------
+
+    const allUPCs = [
+      ...flaggedSelected.map(i => i.upc_barcode),
+      ...regularSelected.map(i => i.upc_barcode)
+    ];
+    const uniqueUPCs = [...new Set(allUPCs)];
+    console.log('Sending request for site:', site, 'and upcs:', uniqueUPCs);
+    const csoQtyMap = await getBulkOnHandQtyCSO(site, uniqueUPCs);
+
+    console.log('upcs updated now updating cyclecount table');
+    const bulkOps = [];
+
+    for (const item of [...flaggedSelected, ...regularSelected]) {
+      const qty = csoQtyMap[item.upc_barcode] ?? 0;
+
+      bulkOps.push({
+        updateOne: {
+          filter: { _id: item._id },
+          update: { $set: { onHandCSO: qty } }
+        }
+      });
+    }
+
+    if (bulkOps.length > 0) {
+      console.log(`⚡ Bulk updating ${bulkOps.length} CycleCount docs with onHandCSO`);
+      await CycleCount.bulkWrite(bulkOps);
+    }
+    console.log('Bulk cyclecout update done');
+
+    // } else {
+    //   console.log("⏭️ Skipping SQL & CSO updates — Already selected today.");
+    // }
+
+
     // --- 4. Re-fetch today's items for response OR return selected items ---
     let flaggedItemsFinal, itemsFinal;
-    
+
     if (shouldUpdateDisplayDate) {
-      // If we updated the database, fetch the updated items
+      // Fetch updated flagged items
       flaggedItemsFinal = await CycleCount.find({
         site: site.toString().trim(),
         displayDate: todayDate,
         flaggedDisplayDate: todayDate
       }).lean();
 
+      // Fetch updated regular items
       itemsFinal = await CycleCount.find({
         site: site.toString().trim(),
         displayDate: todayDate,
@@ -199,14 +292,15 @@ router.get('/daily-items', async (req, res) => {
           { flaggedDisplayDate: { $exists: false } }
         ]
       }).lean();
+
     } else {
-      // If we didn't update the database, return the selected items directly
+      // No displayDate update → return selected items directly
       flaggedItemsFinal = flaggedSelected;
       itemsFinal = regularSelected;
     }
 
-    return res.json({ 
-      flaggedItems: flaggedItemsFinal, 
+    return res.json({
+      flaggedItems: flaggedItemsFinal,
       items: itemsFinal,
       debug: {
         siteTimezone,
@@ -445,7 +539,7 @@ router.get('/current-inventory', async (req, res) => {
     if (!site) return res.status(400).json({ message: "site is required" });
 
     const limitNum = limit ? parseInt(limit, 10) : null;
-    
+
     // 1️⃣ Get inventory from SQL
     const inventory = await getCurrentInventory(site, limitNum); // inventory is array of objects with UPC
 

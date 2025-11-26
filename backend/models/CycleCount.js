@@ -14,6 +14,7 @@ const CycleCountItemSchema = new mongoose.Schema({
   upc_barcode: { type: String },                  // UPC barcode (optional)
   foh: { type: Number, default: 0 },              // Front on hand quantity
   boh: { type: Number, default: 0 },              // Back on hand quantity
+  onHandCSO: { type: Number, default: 0 },        // CSO On Hand quantity
   updatedAt: { type: Date, default: Date.now },   // Last update timestamp
   flagged: { type: Boolean, default: false },     // Flagged status for review
   flaggedAt: { type: Date },                      // When the item was flagged

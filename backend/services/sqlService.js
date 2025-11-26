@@ -130,8 +130,8 @@ async function getGradeVolumeFuelData(pool, csoCode, startDate, endDate) {
 
 async function getCurrentInventory(site, limit = null) {
   try {
-    await sql.connect(sqlConfig);
-
+    // await sql.connect(sqlConfig);
+    const pool = await getPool();
     let query = `
       SELECT ${limit ? `TOP ${limit}` : ''} [Item_Name]
             ,[UPC_A_12_digits] AS 'UPC'
@@ -141,8 +141,8 @@ async function getCurrentInventory(site, limit = null) {
       WHERE [Station] = '${site}'
     `;
 
-    const result = await sql.query(query);
-    await sql.close();
+    const result = await pool.request().query(query);
+    // await sql.close();
     return result.recordset;
   } catch (err) {
     console.error('SQL error:', err);
@@ -152,21 +152,52 @@ async function getCurrentInventory(site, limit = null) {
 
 async function getInventoryCategories(site) {
   try {
-    await sql.connect(sqlConfig);
-    const result = await sql.query(`
+    // await sql.connect(sqlConfig);
+    const pool = await getPool();
+    const result = await pool.request().query(`
       SELECT DISTINCT [Category]
       FROM [CSO].[Current_Inventory]
       WHERE [Station] = '${site}'
         AND [Category] IS NOT NULL
       ORDER BY [Category]
     `);
-    await sql.close();
+    // await sql.close();
     return result.recordset;
   } catch (err) {
     console.error('SQL error:', err);
     return [];
   }
 }
+
+async function getBulkOnHandQtyCSO(site, upcs = []) {
+  if (!upcs.length) return {};
+  console.log('Recevied Request for updating site:',site,'for upcs:',upcs);
+  try {
+    const pool = await getPool();
+    const list = upcs.map(u => `'${u}'`).join(",");
+
+    const query = `
+      SELECT [UPC_A_12_digits] AS UPC, [On Hand Qty] AS qty
+      FROM [CSO].[Current_Inventory]
+      WHERE [Station] = '${site}' AND [UPC_A_12_digits] IN (${list})
+    `;
+
+    const result = await pool.request().query(query);
+    console.log('Return Array:',result);
+    // Convert array → dictionary
+    const data = {};
+    for (const row of result.recordset) {
+      data[row.UPC] = row.qty;
+    }
+    console.log('Onhands for upcs:',data);
+
+    return data;
+  } catch (err) {
+    console.error("SQL error:", err);
+    return {};
+  }
+}
+
 
 // let pool;
 
@@ -436,4 +467,5 @@ module.exports = {
   getCurrentInventory,
   getInventoryCategories,
   getAllSQLData,
+  getBulkOnHandQtyCSO,
 };
