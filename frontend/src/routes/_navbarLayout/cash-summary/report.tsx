@@ -33,6 +33,7 @@ type ReportData = {
     report_canadian_cash: number
     payouts: number
   }
+  report?: { notes?: string; submitted?: boolean }
 }
 
 export const Route = createFileRoute('/_navbarLayout/cash-summary/report')({
@@ -71,6 +72,22 @@ function RouteComponent() {
   const { report, error } = Route.useLoaderData() as { report: ReportData | null; error: string | null }
   const navigate = useNavigate({ from: Route.fullPath })
   const [submitState, setSubmitState] = useState<'idle' | 'submitting' | 'submitted'>('idle')
+  const notes = report?.report?.notes ?? ''
+  const submitted = report?.report?.submitted === true
+
+  const saveNotes = async (text: string) => {
+    if (!site || !date || submitted || !text.trim()) return
+    await fetch('/api/cash-summary/report', {
+      method: 'PUT',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${localStorage.getItem('token') || ''}`,
+      },
+      body: JSON.stringify({ site, date, notes: text }),
+    }).catch(() => {})
+    // Optionally refetch route loader:
+    // navigate({ search: (prev: Search) => ({ ...prev }) })
+  }
 
   const onSubmitClick = async () => {
     if (submitState !== 'idle' || !site || !date) return
@@ -222,6 +239,22 @@ function RouteComponent() {
                     </div>
                   ))}
                 </div>
+              </div>
+
+              <div>
+                <h3 className="text-sm font-semibold mb-2">Notes</h3>
+                <textarea
+                  className="w-full min-h-[120px] border rounded px-3 py-2 text-sm"
+                  defaultValue={notes}
+                  onBlur={(e) => saveNotes(e.target.value)}
+                  placeholder="Add notes for this cash summary…"
+                  disabled={submitted}
+                />
+                {submitted && (
+                  <div className="mt-1 text-xs text-muted-foreground">
+                    Notes are locked because this report is submitted.
+                  </div>
+                )}
               </div>
             </div>
           )}

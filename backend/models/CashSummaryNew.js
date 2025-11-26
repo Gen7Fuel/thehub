@@ -1,5 +1,6 @@
 const mongoose = require('mongoose')
 
+// Shift entry (multiple per site+day)
 const CashSummarySchema = new mongoose.Schema(
   {
     site: { type: String, required: true },
@@ -18,4 +19,25 @@ const CashSummarySchema = new mongoose.Schema(
   { timestamps: true }
 )
 
-module.exports = mongoose.model('CashSummary', CashSummarySchema)
+// Single report per site+day (notes + submitted state)
+const CashSummaryReportSchema = new mongoose.Schema(
+  {
+    site: { type: String, required: true, index: true },
+    // Store normalized local start-of-day for the report date
+    date: { type: Date, required: true, index: true },
+    notes: { type: String, default: '' },
+    submitted: { type: Boolean, default: false },
+    submittedAt: { type: Date },
+  },
+  { timestamps: true }
+)
+
+// Enforce one report per site+day
+CashSummaryReportSchema.index({ site: 1, date: 1 }, { unique: true })
+
+const CashSummary = mongoose.model('CashSummary', CashSummarySchema)
+const CashSummaryReport = mongoose.model('CashSummaryReport', CashSummaryReportSchema)
+
+module.exports = CashSummary
+module.exports.CashSummary = CashSummary
+module.exports.CashSummaryReport = CashSummaryReport
