@@ -52,8 +52,8 @@ type FormStore = {
     payableImages: string[];
     setPayableImages: (images: string[]) => void;
 
-date: Date | undefined;
-setDate: (date: Date | undefined) => void;
+    date: Date | undefined;
+    setDate: (date: Date | undefined) => void;
 
 
     resetPayableForm: () => void;

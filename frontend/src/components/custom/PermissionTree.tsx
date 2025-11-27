@@ -258,6 +258,7 @@ import { camelCaseToCapitalized } from "@/lib/utils";
 
 interface PermissionNode {
   name: string;            // stored in camelCase in backend
+  oldName?: string;
   children: PermissionNode[];
   collapsed?: boolean;
 }
@@ -295,14 +296,31 @@ export function PermissionTree({
       )
       .replace(/\s+/g, "");
   };
+  // const convertTreeToCamelCase = (nodes: PermissionNode[]): PermissionNode[] => {
+  //   return nodes.map(node => ({
+  //     ...node,
+  //     name: isCamelCase(node.name) ? node.name : toCamelCase(node.name),
+  //     children: convertTreeToCamelCase(node.children),
+  //   }));
+  // };
   const convertTreeToCamelCase = (nodes: PermissionNode[]): PermissionNode[] => {
     return nodes.map(node => ({
       ...node,
       name: isCamelCase(node.name) ? node.name : toCamelCase(node.name),
+      oldName: node.oldName, // keep old name
       children: convertTreeToCamelCase(node.children),
     }));
   };
-   
+
+
+  const attachOldNames = (nodes: PermissionNode[]): PermissionNode[] => {
+    return nodes.map(n => ({
+      ...n,
+      oldName: n.name, // save original name
+      children: attachOldNames(n.children)
+    }));
+  };
+
 
 
 
@@ -313,23 +331,49 @@ export function PermissionTree({
       children: initializeCollapsed(node.children),
     }));
 
+  // useEffect(() => {
+  //   setModuleName(permission.module_name);
+  //   setStructure(initializeCollapsed(permission.structure));
+  // }, [permission]);+
   useEffect(() => {
     setModuleName(permission.module_name);
-    setStructure(initializeCollapsed(permission.structure));
+    const withOld = attachOldNames(permission.structure);
+    setStructure(initializeCollapsed(withOld));
   }, [permission]);
 
+
+  // const updateNodeName = (path: number[], value: string) => {
+  //   const updated = [...structure];
+  //   let node = updated;
+  //   path.forEach((i, idx) => {
+  //     if (idx === path.length - 1) {
+  //       node[i].name = value; // show whatever user typed in input
+  //     } else {
+  //       node = node[i].children;
+  //     }
+  //   });
+  //   setStructure(updated);
+  // };
   const updateNodeName = (path: number[], value: string) => {
     const updated = [...structure];
     let node = updated;
+
     path.forEach((i, idx) => {
       if (idx === path.length - 1) {
-        node[i].name = value; // show whatever user typed in input
+        node[i].name = value; // user typing
+
+        // Keep oldName from original so backend can map
+        if (!node[i].oldName) {
+          node[i].oldName = node[i].name;
+        }
       } else {
         node = node[i].children;
       }
     });
+
     setStructure(updated);
   };
+
 
   const toggleCollapse = (path: number[]) => {
     const updated = [...structure];
