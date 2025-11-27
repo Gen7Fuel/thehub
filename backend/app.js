@@ -31,7 +31,7 @@ const auditRoutes = require("./routes/audit/auditTemplateRoutes");
 const safesheetRoutes = require("./routes/safesheetRoutes");
 const roleRoutes = require("./routes/roleRoutes");
 const sftpRoutes = require("./routes/sftpRoutes");
-
+const cashRecRoutes = require("./routes/cashRecRoutes");
 
 const { auth } = require("./middleware/authMiddleware");
 // const { authSocket } = require("./middleware/authMiddleware");
@@ -91,6 +91,8 @@ app.use('/api/sql', require('./routes/salesRoutes'));
 app.use('/api/support', supportRoutes);
 app.use('/api/safesheets', safesheetRoutes);
 app.use('/api/sftp', sftpRoutes);
+
+app.use('/api/cash-rec', cashRecRoutes);
 
 // Misc
 app.use('/api', emailRoutes);
