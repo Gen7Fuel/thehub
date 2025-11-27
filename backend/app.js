@@ -7,6 +7,7 @@ const { Server } = require("socket.io");
 
 //BullMQ for background email processing running
 require("./queues/emailQueue"); // Just runs the worker
+require('./cron_jobs/cycleCountCron'); //cron job for getting cso on hands for cyclecount
 
 // Route imports
 const authRoutes = require("./routes/auth");

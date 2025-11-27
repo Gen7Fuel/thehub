@@ -22,7 +22,8 @@ function RouteComponent() {
   const isCountActive = matchRoute({ to: '/cycle-count/count' });
   const isInventoryActive = matchRoute({ to: '/cycle-count/inventory' });
   const isConsoleActive = matchRoute({ to: '/cycle-count/lookup' });
-  
+  const isReportActive = matchRoute({ to: '/cycle-count/report' });
+
   const { user } = useAuth();
 
   // Retrieve access permissions from Auth provider
@@ -52,17 +53,31 @@ function RouteComponent() {
           </Button>
         </Link>
 
-        <Link 
-          to="/cycle-count/inventory" 
+        <Link
+          to="/cycle-count/inventory"
           activeOptions={{ exact: true }}
           search={{ site: user?.location || '', category: '' }}
         >
           <Button
             {...(!isInventoryActive && { variant: 'outline' } as object)}
             // className={access.component_cycle_count_console ? 'rounded-none' : 'rounded-l-none'} //markpoint
-            className={access?.cycleCount?.lookup ? 'rounded-none' : 'rounded-l-none'}
+            className={access?.cycleCount?.report ? 'rounded-none' : 'rounded-l-none'}
           >
             Inventory
+          </Button>
+        </Link>
+
+        <Link
+          to="/cycle-count/report"
+          activeOptions={{ exact: true }}
+          search={{ site: user?.location || '', category: '' }}
+        >
+          <Button
+            {...(!isReportActive && { variant: 'outline' } as object)}
+            // className={access.component_cycle_count_console ? 'rounded-none' : 'rounded-l-none'} //markpoint
+            className={access?.cycleCount?.lookup ? 'rounded-none' : 'rounded-l-none'}
+          >
+            Report
           </Button>
         </Link>
 

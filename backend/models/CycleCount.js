@@ -1,6 +1,17 @@
 const mongoose = require('mongoose');
 
 /**
+ * CycleCount comments defines the structure for a cycle count comments .
+ * Each item represents one comments for one cyclee count product.
+ */
+const CommentSchema = new mongoose.Schema({
+  initials: { type: String, required: true },
+  author: { type: String, required: true },
+  text: { type: String, required: true },
+  createdAt: { type: Date, default: Date.now },
+});
+
+/**
  * CycleCountItemSchema defines the structure for a cycle count item document.
  * Each item represents an inventory count entry for a specific site and product.
  */
@@ -14,12 +25,13 @@ const CycleCountItemSchema = new mongoose.Schema({
   upc_barcode: { type: String },                  // UPC barcode (optional)
   foh: { type: Number, default: 0 },              // Front on hand quantity
   boh: { type: Number, default: 0 },              // Back on hand quantity
-  onHandCSO: { type: Number, default: 0 },        // CSO On Hand quantity
+  onHandCSO: { type: Number },        // CSO On Hand quantity
   updatedAt: { type: Date, default: Date.now },   // Last update timestamp
   flagged: { type: Boolean, default: false },     // Flagged status for review
   flaggedAt: { type: Date },                      // When the item was flagged
   displayDate: { type: String },                  // Format: 'YYYY-MM-DD'
   flaggedDisplayDate: { type: String },           // Format: 'YYYY-MM-DD'
+  comments: { type: [CommentSchema], default: [] }, // Comments Schema
 });
 
 // Ensure uniqueness on site + gtin combination

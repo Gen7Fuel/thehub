@@ -689,9 +689,9 @@ router.post('/instance', async (req, res) => {
                       </div>
                     </div>
                   `;
-                  const cc = "daksh@gen7fuel.com"; // optional
+                  const cc = "daksh@gen7fuel.com"; 
 
-                  await emailQueue.add("sendIssueEmail", { to, subject, text, html });
+                  await emailQueue.add("sendIssueEmail", { to, subject, text, html, cc });
                   console.log(`📨 Email queued for ${to}`);
                 } else {
                   console.warn(
@@ -765,7 +765,7 @@ router.post('/instance', async (req, res) => {
               categories,
               site,
               vendor: vendorDoc._id,
-              email: "julie@gen7fuel.com",
+              email: "orders@gen7fuel.com",
               currentStatus: "Created",
               statusHistory: [{ status: "Created", timestamp: new Date() }],
               comments: [],

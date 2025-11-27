@@ -6,7 +6,7 @@ const { DateTime } = require('luxon');
 const CycleCount = require('../models/CycleCount');
 const Location = require('../models/Location');
 const { getCurrentInventory, getInventoryCategories, getBulkOnHandQtyCSO } = require('../services/sqlService');
-
+const { updateCycleCountCSO } = require('../cron_jobs/cycleCountCron');
 
 const upload = multer({ storage: multer.memoryStorage() });
 
@@ -244,10 +244,8 @@ router.get('/daily-items', async (req, res) => {
       ...regularSelected.map(i => i.upc_barcode)
     ];
     const uniqueUPCs = [...new Set(allUPCs)];
-    console.log('Sending request for site:', site, 'and upcs:', uniqueUPCs);
     const csoQtyMap = await getBulkOnHandQtyCSO(site, uniqueUPCs);
 
-    console.log('upcs updated now updating cyclecount table');
     const bulkOps = [];
 
     for (const item of [...flaggedSelected, ...regularSelected]) {
@@ -262,10 +260,9 @@ router.get('/daily-items', async (req, res) => {
     }
 
     if (bulkOps.length > 0) {
-      console.log(`⚡ Bulk updating ${bulkOps.length} CycleCount docs with onHandCSO`);
-      await CycleCount.bulkWrite(bulkOps);
+      await CycleCount.bulkWrite(bulkOps, { timestamps: false }); // prevents updatedAt change
     }
-    console.log('Bulk cyclecout update done');
+
 
     // } else {
     //   console.log("⏭️ Skipping SQL & CSO updates — Already selected today.");
@@ -483,9 +480,14 @@ router.get('/daily-counts', async (req, res) => {
       dailyData[dayKey] = {
         count: dayEntries.length,
         items: dayEntries.map(e => ({
+          _id: e._id,
           name: e.name,
           upc_barcode: e.upc_barcode,
           totalQty: (e.foh ?? 0) + (e.boh ?? 0),
+          foh: e.foh ?? 0,
+          boh: e.boh ?? 0,
+          onHandCSO: e.onHandCSO ?? null,
+          comments: e.comments ?? [],
         })),
       };
 
@@ -511,6 +513,46 @@ router.get('/daily-counts', async (req, res) => {
     res.status(500).json({ message: "Failed to get daily counts." });
   }
 });
+
+// POST /api/cycle-count/:id/comments 
+// add new comments from the reports side
+router.post('/:id/comments', async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { initials, author, text } = req.body;
+
+    if (!initials || !author || !text) {
+      return res.status(400).json({ message: 'All comment fields are required.' });
+    }
+
+    const item = await CycleCount.findById(id);
+    if (!item) return res.status(404).json({ message: 'Item not found.' });
+
+    item.comments.push({ initials, author, text });
+    await item.save();
+
+    res.json({ message: 'Comment added', comments: item.comments });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ message: 'Failed to add comment.' });
+  }
+});
+
+// GET /api/cycle-count/:id/comments 
+// get all the comments for a particular cyclecount 
+router.get('/:id/comments', async (req, res) => {
+  try {
+    const { id } = req.params;
+    const item = await CycleCount.findById(id).lean();
+    if (!item) return res.status(404).json({ message: 'Item not found.' });
+
+    res.json({ comments: item.comments || [] });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ message: 'Failed to fetch comments.' });
+  }
+});
+
 
 router.get('/lookup', async (req, res) => {
   const { upc_barcode, site } = req.query;

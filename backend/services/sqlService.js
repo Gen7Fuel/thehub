@@ -171,7 +171,6 @@ async function getInventoryCategories(site) {
 
 async function getBulkOnHandQtyCSO(site, upcs = []) {
   if (!upcs.length) return {};
-  console.log('Recevied Request for updating site:',site,'for upcs:',upcs);
   try {
     const pool = await getPool();
     const list = upcs.map(u => `'${u}'`).join(",");
@@ -183,13 +182,11 @@ async function getBulkOnHandQtyCSO(site, upcs = []) {
     `;
 
     const result = await pool.request().query(query);
-    console.log('Return Array:',result);
     // Convert array → dictionary
     const data = {};
     for (const row of result.recordset) {
       data[row.UPC] = row.qty;
     }
-    console.log('Onhands for upcs:',data);
 
     return data;
   } catch (err) {

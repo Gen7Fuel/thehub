@@ -208,6 +208,9 @@ const TableWithInputs: React.FC<TableWithInputsProps> = ({
    */
   function getVarianceForCategory(category: string = ""): number {
     const key = category.trim();
+    if (VARIANCE_RULES[key] == 0){
+      return 3;
+    }
     return VARIANCE_RULES[key] ?? 10;
   }
 
