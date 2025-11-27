@@ -1388,7 +1388,7 @@ function RouteComponent() {
 
                     <Card className="col-span-1">
                       <CardHeader>
-                        <CardTitle>Tendor Breakdown (%)</CardTitle>
+                        <CardTitle>Tender Breakdown (%)</CardTitle>
                         <CardDescription>Tender share by Transactions</CardDescription>
                       </CardHeader>
 
