@@ -317,7 +317,7 @@ const TableWithInputs: React.FC<TableWithInputsProps> = ({
                       const isTouchDevice = 'ontouchstart' in window || navigator.maxTouchPoints > 0;
 
                       const content = (
-                        <div className="max-w-[240px] p-4 text-base leading-relaxed bg-black rounded-xl shadow-lg border">
+                        <div className="max-w-[240px] p-4 text-base leading-relaxed bg-white text-gray-800 rounded-xl shadow-lg border">
                           Please re-verify your count. If it's correct, you are not expected to do anything.
                         </div>
                       );
@@ -345,6 +345,7 @@ const TableWithInputs: React.FC<TableWithInputsProps> = ({
                       }
                     })()}
                   </td>
+
 
 
 
