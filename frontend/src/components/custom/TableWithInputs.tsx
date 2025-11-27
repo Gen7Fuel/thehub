@@ -102,6 +102,7 @@ import Barcode from "react-barcode";
 import React, { useState } from "react";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"
 import { Check, AlertTriangle } from "lucide-react"
+import { Popover, PopoverTrigger, PopoverContent } from "@radix-ui/react-popover";
 
 
 interface TableWithInputsProps {
@@ -208,7 +209,7 @@ const TableWithInputs: React.FC<TableWithInputsProps> = ({
    */
   function getVarianceForCategory(category: string = ""): number {
     const key = category.trim();
-    if (VARIANCE_RULES[key] == 0){
+    if (VARIANCE_RULES[key] == 0) {
       return 3;
     }
     return VARIANCE_RULES[key] ?? 10;
@@ -241,57 +242,111 @@ const TableWithInputs: React.FC<TableWithInputsProps> = ({
                 >
 
                   {/* <td className="border px-3 py-2">{item.name}</td> */}
-                  <td className="px-3 py-2 flex items-center gap-2">
+                  {/* <td className="px-3 py-2 flex items-center gap-2"> */}
 
-                    {/* Item Name */}
+                  {/* Item Name */}
+                  {/* <span>{item.name}</span> */}
+
+                  {/* Status Icon */}
+                  {/* {(() => {
+                      const fohStr = counts[item._id]?.foh;
+                      const bohStr = counts[item._id]?.boh; */}
+
+                  {/* // Don't show icon until BOTH values exist */}
+                  {/* // if (!fohStr || !bohStr) return null;
+
+                      // const foh = Number(fohStr);
+                      // const boh = Number(bohStr);
+                      // const total = foh + boh;
+
+                      // const cso = item.onHandCSO ?? null;
+
+                      // if (cso === null) return null; // no CSO → no icon
+
+                      // const variance = Math.abs(total - cso);
+
+                      // // variance flag - different for different categories
+                      // const variance_flag = getVarianceForCategory(item.category)
+                      // console.log('variance flag for cat', item.category, 'is', variance_flag)
+                      // if (variance < variance_flag) { */}
+                  {/* //   return (
+                      //     <Check className="text-green-600 w-4 h-4" />
+                      //   );
+                      // }
+
+                      // Bad (variance >= variance_flag)
+                  //     return (
+                  //       <TooltipProvider delayDuration={150}>
+                  //         <Tooltip>
+                  //           <TooltipTrigger asChild>
+                  //             <AlertTriangle className="text-yellow-600 w-4 h-4 cursor-pointer" />
+                  //           </TooltipTrigger>
+
+                  //           <TooltipContent */}
+                  {/* //             className="max-w-[240px] p-4 text-base  leading-relaxedbg-white rounded-xl
+                  //               shadow-lg border animate-in fade-in zoom-in-95  "
+                  //           >
+                  //             <p>Please re-verify your count. If it's correct, you are not expected to do anything.</p>
+                  //           </TooltipContent>
+                  //         </Tooltip>
+                  //       </TooltipProvider>
+                  //     );
+                  //   })()}
+                  // </td> */}
+
+                  <td className="px-3 py-2 flex items-center gap-2">
                     <span>{item.name}</span>
 
-                    {/* Status Icon */}
                     {(() => {
                       const fohStr = counts[item._id]?.foh;
                       const bohStr = counts[item._id]?.boh;
 
-                      // Don't show icon until BOTH values exist
                       if (!fohStr || !bohStr) return null;
 
                       const foh = Number(fohStr);
                       const boh = Number(bohStr);
                       const total = foh + boh;
-
                       const cso = item.onHandCSO ?? null;
-
-                      if (cso === null) return null; // no CSO → no icon
+                      if (cso === null) return null;
 
                       const variance = Math.abs(total - cso);
+                      const variance_flag = getVarianceForCategory(item.category);
 
-                      // variance flag - different for different categories
-                      const variance_flag = getVarianceForCategory(item.category)
-                      console.log('variance flag for cat', item.category, 'is', variance_flag)
-                      if (variance < variance_flag) {
+                      if (variance < variance_flag) return <Check className="text-green-600 w-4 h-4" />;
+
+                      const isTouchDevice = 'ontouchstart' in window || navigator.maxTouchPoints > 0;
+
+                      const content = (
+                        <div className="max-w-[240px] p-4 text-base leading-relaxed bg-black rounded-xl shadow-lg border">
+                          Please re-verify your count. If it's correct, you are not expected to do anything.
+                        </div>
+                      );
+
+                      if (isTouchDevice) {
                         return (
-                          <Check className="text-green-600 w-4 h-4" />
+                          <Popover>
+                            <PopoverTrigger asChild>
+                              <AlertTriangle className="text-yellow-600 w-4 h-4 cursor-pointer" />
+                            </PopoverTrigger>
+                            <PopoverContent>{content}</PopoverContent>
+                          </Popover>
+                        );
+                      } else {
+                        return (
+                          <TooltipProvider delayDuration={150}>
+                            <Tooltip>
+                              <TooltipTrigger asChild>
+                                <AlertTriangle className="text-yellow-600 w-4 h-4 cursor-pointer" />
+                              </TooltipTrigger>
+                              <TooltipContent>{content}</TooltipContent>
+                            </Tooltip>
+                          </TooltipProvider>
                         );
                       }
-
-                      // Bad (variance >= variance_flag)
-                      return (
-                        <TooltipProvider delayDuration={150}>
-                          <Tooltip>
-                            <TooltipTrigger asChild>
-                              <AlertTriangle className="text-yellow-600 w-4 h-4 cursor-pointer" />
-                            </TooltipTrigger>
-
-                            <TooltipContent
-                              className="max-w-[240px] p-4 text-base  leading-relaxedbg-white rounded-xl
-                                shadow-lg border animate-in fade-in zoom-in-95  "
-                            >
-                              <p>Please re-verify your count. If it's correct, you are not expected to do anything.</p>
-                            </TooltipContent>
-                          </Tooltip>
-                        </TooltipProvider>
-                      );
                     })()}
                   </td>
+
+
 
 
                   <td
