@@ -1,6 +1,7 @@
 const React = require('react')
 const { pdf, Document, Page, Text, View, StyleSheet } = require('@react-pdf/renderer')
 const CashSummary = require('../models/CashSummaryNew')
+const { CashSummaryReport } = require('../models/CashSummaryNew')
 
 async function loadReportData(site, date) {
   const [yy, mm, dd] = String(date).split('-').map(Number)
@@ -40,7 +41,6 @@ const styles = StyleSheet.create({
   title: { fontSize: 16, fontWeight: 700 },
   sub: { fontSize: 10, color: '#6b7280', marginTop: 2 },
   sectionTitle: { fontSize: 11, fontWeight: 700, marginTop: 10, marginBottom: 6 },
-  // Totals grid
   grid: { display: 'flex', flexDirection: 'row', flexWrap: 'wrap' },
   card: {
     width: '48%',
@@ -54,9 +54,8 @@ const styles = StyleSheet.create({
   cardRight: { marginRight: 0 },
   label: { color: '#6b7280', fontSize: 9, marginBottom: 4 },
   value: { fontSize: 14, fontWeight: 700 },
-  valueOk: { color: '#059669' },    // green
-  valueBad: { color: '#dc2626' },   // red
-  // Shift cards
+  valueOk: { color: '#059669' },
+  valueBad: { color: '#dc2626' },
   shiftCard: {
     width: '100%',
     borderWidth: 1,
@@ -69,6 +68,14 @@ const styles = StyleSheet.create({
   row: { display: 'flex', flexDirection: 'row', justifyContent: 'space-between', marginBottom: 4 },
   rowLabel: { color: '#6b7280' },
   rowValue: { fontWeight: 700 },
+  notesBlock: {
+    borderWidth: 1,
+    borderColor: '#e5e7eb',
+    borderRadius: 6,
+    padding: 10,
+    marginTop: 4,
+  },
+  notesText: { fontSize: 10, lineHeight: 1.3 },
 })
 
 function TotalsCards({ totals }) {
@@ -134,7 +141,19 @@ function ShiftsList({ rows }) {
   )
 }
 
-function ReportDoc({ site, date, rows, totals }) {
+function NotesSection({ notes }) {
+  const h = React.createElement
+  const lines = String(notes || '').split(/\r?\n/)
+  return h(
+    View,
+    { style: styles.notesBlock },
+    ...lines.map((line, i) =>
+      h(Text, { key: i, style: styles.notesText }, line.length ? line : ' ')
+    )
+  )
+}
+
+function ReportDoc({ site, date, rows, totals, notes }) {
   const h = React.createElement
   return h(
     Document,
@@ -142,27 +161,59 @@ function ReportDoc({ site, date, rows, totals }) {
     h(
       Page,
       { size: 'A4', style: styles.page },
-      // Header
       h(
         View,
         { style: styles.titleRow },
         h(Text, { style: styles.title }, `Cash Summary — ${site} — ${date}`)
       ),
-      // Totals
       h(Text, { style: styles.sectionTitle }, 'Totals'),
       h(TotalsCards, { totals }),
-      // Shifts
       h(Text, { style: styles.sectionTitle }, 'Shifts'),
-      h(ShiftsList, { rows })
+      h(ShiftsList, { rows }),
+      h(Text, { style: styles.sectionTitle }, 'Notes'),
+      h(NotesSection, { notes })
     )
   )
 }
 
-async function generateCashSummaryPdf({ site, date }) {
+async function generateCashSummaryPdf({ site, date, notes = '' }) {
   if (!site || !date) throw new Error('site and date are required')
-  const { rows, totals } = await loadReportData(site, date)
-  const instance = pdf(React.createElement(ReportDoc, { site, date, rows, totals }))
+
+  const [yy, mm, dd] = String(date).split('-').map(Number)
+  const start = new Date(yy, mm - 1, dd, 0, 0, 0, 0)
+  const end = new Date(yy, mm - 1, dd + 1, 0, 0, 0, 0)
+
+  if (!notes) {
+    const reportDoc = await CashSummaryReport.findOne({ site, date: start }).lean()
+    notes = reportDoc?.notes || ''
+  }
+
+  const rows = await CashSummary.find({ site, date: { $gte: start, $lt: end } })
+    .sort({ shift_number: 1 })
+    .lean()
+
+  const sum = (k) => rows.reduce((a, r) => a + (typeof r[k] === 'number' ? r[k] : 0), 0)
+  const totals = {
+    count: rows.length,
+    canadian_cash_collected: sum('canadian_cash_collected'),
+    item_sales: sum('item_sales'),
+    cash_back: sum('cash_back'),
+    loyalty: sum('loyalty'),
+    cpl_bulloch: sum('cpl_bulloch'),
+    exempted_tax: sum('exempted_tax'),
+    report_canadian_cash: sum('report_canadian_cash'),
+    payouts: sum('payouts'),
+  }
+
+  const instance = pdf(React.createElement(ReportDoc, { site, date, rows, totals, notes }))
   return await instance.toBuffer()
 }
+
+// async function generateCashSummaryPdf({ site, date }) {
+//   if (!site || !date) throw new Error('site and date are required')
+//   const { rows, totals } = await loadReportData(site, date)
+//   const instance = pdf(React.createElement(ReportDoc, { site, date, rows, totals }))
+//   return await instance.toBuffer()
+// }
 
 module.exports = { generateCashSummaryPdf }
