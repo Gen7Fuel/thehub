@@ -21,8 +21,9 @@ function RouteComponent() {
   // const isInputActive = matchRoute({ to: '/cycle-count' });
   const isCountActive = matchRoute({ to: '/cycle-count/count' });
   const isInventoryActive = matchRoute({ to: '/cycle-count/inventory' });
-  const isConsoleActive = matchRoute({ to: '/cycle-count/console' });
-  
+  const isConsoleActive = matchRoute({ to: '/cycle-count/lookup' });
+  const isReportActive = matchRoute({ to: '/cycle-count/report' });
+
   const { user } = useAuth();
 
   // Retrieve access permissions from Auth provider
@@ -52,29 +53,43 @@ function RouteComponent() {
           </Button>
         </Link>
 
-        <Link 
-          to="/cycle-count/inventory" 
+        <Link
+          to="/cycle-count/inventory"
           activeOptions={{ exact: true }}
           search={{ site: user?.location || '', category: '' }}
         >
           <Button
             {...(!isInventoryActive && { variant: 'outline' } as object)}
             // className={access.component_cycle_count_console ? 'rounded-none' : 'rounded-l-none'} //markpoint
-            className={access?.cycleCount?.console ? 'rounded-none' : 'rounded-l-none'}
+            className={access?.cycleCount?.report ? 'rounded-none' : 'rounded-l-none'}
           >
             Inventory
           </Button>
         </Link>
 
+        <Link
+          to="/cycle-count/report"
+          activeOptions={{ exact: true }}
+          search={{ site: user?.location || '', category: '' }}
+        >
+          <Button
+            {...(!isReportActive && { variant: 'outline' } as object)}
+            // className={access.component_cycle_count_console ? 'rounded-none' : 'rounded-l-none'} //markpoint
+            className={access?.cycleCount?.lookup ? 'rounded-none' : 'rounded-l-none'}
+          >
+            Report
+          </Button>
+        </Link>
+
         {/* Console tab button, shown only if user has access */}
         {/* {access.component_cycle_count_console && ( //markpoint */}
-        {access?.cycleCount?.console && (
-          <Link to="/cycle-count/console" activeOptions={{ exact: true }}>
+        {access?.cycleCount?.lookup && (
+          <Link to="/cycle-count/lookup" activeOptions={{ exact: true }}>
             <Button
               {...(!isConsoleActive && { variant: 'outline' } as object)}
               className="rounded-l-none"
             >
-              Console
+              Lookup
             </Button>
           </Link>
         )}

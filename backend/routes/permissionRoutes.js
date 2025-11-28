@@ -306,11 +306,77 @@ router.post("/sync", async (req, res) => {
 //     res.status(500).json({ message: "Server error updating permission" });
 //   }
 // });
+
+const mergePermissionsForRename = (newStructure = [], oldStructure = []) => {
+  const merged = [];
+
+  for (const newNode of newStructure) {
+    const existing =
+      // match by new name
+      oldStructure.find(o => o.name === newNode.name) ||
+      // match by old name (coming from frontend)
+      oldStructure.find(o => o.name === newNode.oldName);
+
+    if (existing) {
+      merged.push({
+        name: newNode.name, // updated name
+        value: existing.value ?? false,
+        children: mergePermissionsForRename(
+          newNode.children || [],
+          existing.children || []
+        )
+      });
+    } else {
+      merged.push({
+        name: newNode.name,
+        value: false,
+        children: mergePermissionsForRename(newNode.children || [], [])
+      });
+    }
+  }
+
+  return merged;
+};
+
+// router.put("/:id", async (req, res) => {
+//   try {
+//     const { module_name, old_module_name, structure } = req.body;
+
+//     // Update the permission document
+//     const updated = await Permission.findByIdAndUpdate(
+//       req.params.id,
+//       { module_name, structure },
+//       { new: true }
+//     );
+//     if (!updated) return res.status(404).json({ message: "Permission not found" });
+
+//     // ---- Update existing modules in all roles ----
+//     const allRoles = await Role.find({});
+//     for (const role of allRoles) {
+//       // Find the module by old name
+//       const existingModule = role.permissions.find(p => p.name === old_module_name);
+
+//       if (existingModule) {
+//         // Update name and children
+//         existingModule.name = module_name; 
+//         existingModule.children = mergePermissions(structure, existingModule.children || []);
+//         await role.save();
+//       }
+//       // No need to add new module here; POST route handles that
+//     }
+
+//     res.status(200).json(updated);
+//   } catch (error) {
+//     console.error("Error updating permission:", error);
+//     res.status(500).json({ message: "Server error updating permission" });
+//   }
+// });
+
 router.put("/:id", async (req, res) => {
   try {
     const { module_name, old_module_name, structure } = req.body;
 
-    // Update the permission document
+    // Update permission document
     const updated = await Permission.findByIdAndUpdate(
       req.params.id,
       { module_name, structure },
@@ -318,19 +384,20 @@ router.put("/:id", async (req, res) => {
     );
     if (!updated) return res.status(404).json({ message: "Permission not found" });
 
-    // ---- Update existing modules in all roles ----
+    // Update Roles
     const allRoles = await Role.find({});
     for (const role of allRoles) {
-      // Find the module by old name
       const existingModule = role.permissions.find(p => p.name === old_module_name);
 
       if (existingModule) {
-        // Update name and children
-        existingModule.name = module_name; 
-        existingModule.children = mergePermissions(structure, existingModule.children || []);
+        existingModule.name = module_name;
+        existingModule.children = mergePermissionsForRename(
+          structure,
+          existingModule.children || []
+        );
+
         await role.save();
       }
-      // No need to add new module here; POST route handles that
     }
 
     res.status(200).json(updated);

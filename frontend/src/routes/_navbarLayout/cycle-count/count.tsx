@@ -5,7 +5,7 @@ import TableWithInputs from "@/components/custom/TableWithInputs";
 import { DateTime } from 'luxon';
 import { useRef } from "react";
 import { getSocket } from "@/lib/websocket";
-import { Button } from "@/components/ui/button";
+// import { Button } from "@/components/ui/button";
 import { useAuth } from "@/context/AuthContext";
 
 
@@ -21,7 +21,7 @@ function RouteComponent() {
   const [flaggedItems, setFlaggedItems] = useState<any[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
-  const [saving, setSaving] = useState(false);
+  // const [saving, setSaving] = useState(false);
   const navigate = useNavigate()
 
   // Track FOH and BOH values for each item
@@ -52,72 +52,74 @@ function RouteComponent() {
     };
   }, [stationName]);
 
-  // useEffect(() => {
-  //   // Handler for real-time updates
-  //   const handleUpdate = (data: { site: string }) => {
-  //     if (!data.site || data.site === stationName) {
-  //       // Re-fetch items for this station
-  //       setLoading(true);
-  //       setError("");
-  //       fetch(`/api/cycle-count/daily-items?site=${encodeURIComponent(stationName)}&chunkSize=20&timezone=${encodeURIComponent(Intl.DateTimeFormat().resolvedOptions().timeZone)}`, {
-  //         headers: {
-  //           Authorization: `Bearer ${localStorage.getItem("token") || ""}`,
-  //         },
-  //       })
-  //         .then(res => res.json())
-  //         .then(data => {
-  //           setItems(data.items || []);
-  //           setFlaggedItems(data.flaggedItems || []);
-  //           // ...re-initialize counts as in your existing code...
-  //           const initialCounts: { [id: string]: { foh: string; boh: string } } = {};
-  //           const allItems = [...(data.flaggedItems || []), ...(data.items || [])];
-  //           const timezone = Intl.DateTimeFormat().resolvedOptions().timeZone;
-  //           const now = DateTime.now().setZone(timezone);
-  //           const todayStart = now.startOf('day');
-  //           const tomorrowStart = todayStart.plus({ days: 1 });
+  // const handleInputBlur = async (
+  //   id: string,
+  //   field: "foh" | "boh",
+  //   value: string
+  // ) => {
+  //   console.log("📤 SENDING cycle-count-field-updated:");
+  //   console.log("  - Item ID:", id);
+  //   console.log("  - Field:", field);
+  //   console.log("  - Value:", value);
 
-  //           allItems.forEach((item: any) => {
-  //             const updatedAt = item.updatedAt ? DateTime.fromISO(item.updatedAt).setZone(timezone) : null;
-  //             const isToday =
-  //               updatedAt &&
-  //               updatedAt >= todayStart &&
-  //               updatedAt < tomorrowStart;
+  //   const socket = getSocket();
+  //   console.log("📤 Using socket:", socket.id || "not connected");
 
-  //             initialCounts[item._id] = {
-  //               foh:
-  //                 isToday && item.foh != null
-  //                   ? String(item.foh)
-  //                   : "",
-  //               boh:
-  //                 isToday && item.boh != null
-  //                   ? String(item.boh)
-  //                   : ""
-  //             };
-  //           });
-  //           setCounts(initialCounts);
-  //         })
-  //         .catch(() => setError("Failed to fetch items"))
-  //         .finally(() => setLoading(false));
+  //   try {
+  //     const res = await fetch("/api/cycle-count/save-item", {
+  //       method: "POST",
+  //       headers: {
+  //         "Content-Type": "application/json",
+  //         Authorization: `Bearer ${localStorage.getItem("token") || ""}`,
+  //         "X-Required-Permission": "cycleCount",
+  //       },
+  //       body: JSON.stringify({ _id: id, field, value }),
+  //     });
+
+  //     if (res.status === 403) {
+  //       navigate({ to: "/no-access" });
+  //       return;
   //     }
-  //   };
 
-  //   socket.on("cycle-count-updated", handleUpdate);
-  //   return () => {
-  //     socket.off("cycle-count-updated", handleUpdate);
-  //   };
-  // }, [stationName]);
+  //     if (!res.ok) throw new Error(`HTTP ${res.status}`);
+  //   } catch (err) {
+  //     console.error("Error saving cycle count item:", err);
+  //   }
+
+  //   // Emit websocket event for real-time update
+  //   socket.emit("cycle-count-field-updated", { itemId: id, field, value });
+  //   console.log("📤 Event emitted via WebSocket");
+  // };
+
   const handleInputBlur = async (
     id: string,
     field: "foh" | "boh",
     value: string
   ) => {
-    console.log("📤 SENDING cycle-count-field-updated:");
-    console.log("  - Item ID:", id);
+    const cleaned = value?.trim();
+
+    // 🚫 Prevent save + emit if no real input was provided
+    if (cleaned === "" || cleaned === null || cleaned === undefined) {
+      console.log("⛔ Skipping save & emit — No value entered.");
+      return;
+    }
+
+    // Convert to number safely
+    const numericValue = Number(cleaned);
+
+    // 🚫 If value is not a valid number, do not save
+    if (isNaN(numericValue)) {
+      console.log("⛔ Skipping save — Invalid number.");
+      return;
+    }
+
+    // ✅ Allow zero, positive, or negative (if needed)
+    console.log("📤 Sending update:");
+    console.log("  - ID:", id);
     console.log("  - Field:", field);
-    console.log("  - Value:", value);
+    console.log("  - Value:", numericValue);
 
     const socket = getSocket();
-    console.log("📤 Using socket:", socket.id || "not connected");
 
     try {
       const res = await fetch("/api/cycle-count/save-item", {
@@ -127,7 +129,7 @@ function RouteComponent() {
           Authorization: `Bearer ${localStorage.getItem("token") || ""}`,
           "X-Required-Permission": "cycleCount",
         },
-        body: JSON.stringify({ _id: id, field, value }),
+        body: JSON.stringify({ _id: id, field, value: numericValue }),
       });
 
       if (res.status === 403) {
@@ -140,10 +142,16 @@ function RouteComponent() {
       console.error("Error saving cycle count item:", err);
     }
 
-    // Emit websocket event for real-time update
-    socket.emit("cycle-count-field-updated", { itemId: id, field, value });
+    // 🔥 Emit real-time update
+    socket.emit("cycle-count-field-updated", {
+      itemId: id,
+      field,
+      value: numericValue,
+    });
+
     console.log("📤 Event emitted via WebSocket");
   };
+
 
   // const handleInputBlur = (id: string, field: "foh" | "boh", value: string) => {
   //   const socket = getSocket();
@@ -170,16 +178,16 @@ function RouteComponent() {
   // Listen for updates from other clients
   useEffect(() => {
     console.log("🔌 Setting up WebSocket listeners in count component");
-    
+
     const socket = getSocket();
     console.log("🔌 Got socket in count component:", socket.id || "not connected");
-    
+
     function updateField({ itemId, field, value }: CycleCountFieldUpdate) {
       console.log("📨 RECEIVED cycle-count-field-updated:");
       console.log("  - Item ID:", itemId);
       console.log("  - Field:", field);
       console.log("  - Value:", value);
-      
+
       setCounts(prev => ({
         ...prev,
         [itemId]: {
@@ -189,10 +197,10 @@ function RouteComponent() {
       }));
       console.log("📨 Updated local state");
     }
-    
+
     socket.on("cycle-count-field-updated", updateField);
     console.log("🔌 Listener registered for cycle-count-field-updated");
-    
+
     return () => {
       console.log("🔌 Cleaning up WebSocket listeners");
       socket.off("cycle-count-field-updated", updateField);
@@ -278,6 +286,7 @@ function RouteComponent() {
   }, [stationName, navigate]);
 
   const handleInputChange = (id: string, field: "foh" | "boh", value: string) => {
+    if (Number(value) < 0) value = "0";
     setCounts(prev => ({
       ...prev,
       [id]: {
@@ -287,113 +296,13 @@ function RouteComponent() {
     }));
   };
 
-  // const handleSave = async () => {
-  //   setSaving(true);
-  //   setError("");
-  //   try {
-  //     const allItems = [...flaggedItems, ...items];
-  //     const payload = allItems
-  //       .map(item => ({
-  //         _id: item._id,
-  //         foh: counts[item._id]?.foh ?? "",
-  //         boh: counts[item._id]?.boh ?? ""
-  //       }))
-  //       .filter(entry => entry.foh !== "" || entry.boh !== "");
-
-  //     if (payload.length === 0) {
-  //       setSaving(false);
-  //       alert("No counts to save.");
-  //       return;
-  //     }
-
-  //     const res = await fetch("/api/cycle-count/save-counts", {
-  //       method: "POST",
-  //       headers: {
-  //         "Content-Type": "application/json",
-  //         Authorization: `Bearer ${localStorage.getItem("token") || ""}`,
-  //       },
-  //       body: JSON.stringify({ items: payload }),
-  //     });
-  //     const data = await res.json();
-  //     if (!res.ok) throw new Error(data.message || "Failed to save counts");
-  //     alert("Counts saved!");
-
-  //     // Re-fetch the latest flagged and daily items from the backend
-  //     setLoading(true);
-  //     fetch(`/api/cycle-count/daily-items?site=${encodeURIComponent(stationName)}&chunkSize=20`, {
-  //       headers: {
-  //         Authorization: `Bearer ${localStorage.getItem("token") || ""}`,
-  //       },
-  //     })
-  //       .then(res => res.json())
-  //       .then(data => {
-  //         setItems(data.items || []);
-  //         setFlaggedItems(data.flaggedItems || []);
-  //         // Re-initialize counts for the new items
-  //         const initialCounts: { [id: string]: { foh: string; boh: string } } = {};
-  //         const allItems = [...(data.flaggedItems || []), ...(data.items || [])];
-  //         // const today = new Date();
-  //         // today.setHours(0, 0, 0, 0);
-  //         // allItems.forEach((item: any) => {
-  //         //   const updatedAt = item.updatedAt ? new Date(item.updatedAt) : null;
-  //         //   const isToday =
-  //         //     updatedAt &&
-  //         //     updatedAt >= today &&
-  //         //     updatedAt < new Date(today.getTime() + 24 * 60 * 60 * 1000);
-
-  //         //   initialCounts[item._id] = {
-  //         //     foh:
-  //         //       isToday && item.foh != null && item.foh !== 0
-  //         //         ? String(item.foh)
-  //         //         : "",
-  //         //     boh:
-  //         //       isToday && item.boh != null && item.boh !== 0
-  //         //         ? String(item.boh)
-  //         //         : ""
-  //         //   };
-  //         // });
-  //         const timezone = Intl.DateTimeFormat().resolvedOptions().timeZone;
-  //         const now = DateTime.now().setZone(timezone);
-  //         const todayStart = now.startOf('day');
-  //         const tomorrowStart = todayStart.plus({ days: 1 });
-
-  //         allItems.forEach((item: any) => {
-  //           const updatedAt = item.updatedAt ? DateTime.fromISO(item.updatedAt).setZone(timezone) : null;
-  //           const isToday =
-  //             updatedAt &&
-  //             updatedAt >= todayStart &&
-  //             updatedAt < tomorrowStart;
-
-  //           initialCounts[item._id] = {
-  //             foh:
-  //               isToday && item.foh != null
-  //                 ? String(item.foh)
-  //                 : "",
-  //             boh:
-  //               isToday && item.boh != null
-  //                 ? String(item.boh)
-  //                 : ""
-  //           };
-  //         });
-  //         setCounts(initialCounts);
-  //       })
-  //       .catch(() => setError("Failed to fetch items"))
-  //       .finally(() => setLoading(false));
-
-  //   } catch (err: any) {
-  //     setError(err.message || "Failed to save counts");
-  //     setSaving(false);
-  //   }
-  //   setSaving(false);
-  // };
-
   // create a fakeSave function that changes saving to true, waits 1 second, then changes saving to false
-  const fakeSave = () => {
-    setSaving(true);
-    setTimeout(() => {
-      setSaving(false);
-    }, 1000);
-  };
+  // const fakeSave = () => {
+  //   setSaving(true);
+  //   setTimeout(() => {
+  //     setSaving(false);
+  //   }, 1000);
+  // };
 
   // const access = user?.access || '{}'
 
@@ -414,12 +323,12 @@ function RouteComponent() {
       >
         {saving ? "Saving..." : "Save Count"}
       </button> */}
-      <Button
+      {/* <Button
         onClick={fakeSave}
         disabled={saving}
       >
         {saving ? "Saving..." : "Save Count"}
-      </Button>
+      </Button> */}
       {flaggedItems.length > 0 && (
         <div className="mb-8">
           <h2 className="text-lg font-bold mb-2 text-red-700">Flagged Items</h2>

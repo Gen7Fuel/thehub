@@ -687,20 +687,22 @@ function RouteComponent() {
   //config for the tendor pie chart
   const tenderConfig = useMemo(() => {
     if (!Array.isArray(tenderTransactions) || tenderTransactions.length === 0) return {};
+
+    // Get unique tenders
     const uniqueTenders = Array.from(
       new Set(
         tenderTransactions.map((t) => {
           if (!t || typeof t !== "object") return "Other";
-
           const raw = t.tender;
-
           if (typeof raw === "string") return raw.trim();
-
           console.warn("⚠️ Non-string tender found:", raw);
           return "Other";
         })
       )
     );
+
+    // Sort alphabetically so the same tender always gets the same color
+    uniqueTenders.sort((a, b) => (a || "").localeCompare(b || ""));
 
     const config: Record<string, { label: string; color: string }> = {};
 
@@ -709,12 +711,13 @@ function RouteComponent() {
 
       config[safeTender] = {
         label: safeTender,
-        color: DEFAULT_COLORS[index % DEFAULT_COLORS.length],
+        color: DEFAULT_COLORS[index % DEFAULT_COLORS.length], // consistent color
       };
     });
 
     return config;
   }, [tenderTransactions]);
+
 
   // const timePeriodChartData = useMemo(() => {
   //   if (!timePeriodData || timePeriodData.length === 0) return [];
@@ -1388,7 +1391,7 @@ function RouteComponent() {
 
                     <Card className="col-span-1">
                       <CardHeader>
-                        <CardTitle>Tendor Breakdown (%)</CardTitle>
+                        <CardTitle>Tender Breakdown (%)</CardTitle>
                         <CardDescription>Tender share by Transactions</CardDescription>
                       </CardHeader>
 
@@ -1714,7 +1717,7 @@ const fetchOrderRecs = async (site: string, startDate: string, endDate: string) 
   return fetch(`/api/order-rec?${params}`, { headers: { Authorization: `Bearer ${localStorage.getItem("token")}` } }).then(res => res.json());
 };
 
-const fetchLocation = async (stationName: string) => {
+export const fetchLocation = async (stationName: string) => {
   return fetch(`/api/locations/name/${encodeURIComponent(stationName)}`).then(res => res.json());
 };
 
