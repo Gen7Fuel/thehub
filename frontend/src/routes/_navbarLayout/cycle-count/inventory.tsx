@@ -79,6 +79,9 @@ function RouteComponent() {
   const queryClient = useQueryClient()
   const { site, category } = Route.useSearch()
 
+  const [searchTerm, setSearchTerm] = useState('');
+
+
   useEffect(() => {
     if (!site && user?.location) {
       navigate({ search: { site: user.location, category: '' } });
@@ -137,10 +140,33 @@ function RouteComponent() {
   const selectedCategory = category || (categories.length > 0 ? categories[0].Category : 'all')
 
   // ✅ Client-side filtering - instant
+  // const filteredInventory = useMemo(() => {
+  //   if (selectedCategory === 'all') return inventory
+  //   return inventory.filter((item: InventoryItem) => item.Category === selectedCategory)
+  // }, [inventory, selectedCategory])
   const filteredInventory = useMemo(() => {
-    if (selectedCategory === 'all') return inventory
-    return inventory.filter((item: InventoryItem) => item.Category === selectedCategory)
-  }, [inventory, selectedCategory])
+    let filtered = inventory;
+
+    // Apply search first
+    if (searchTerm.trim() !== '') {
+      const term = searchTerm.toLowerCase();
+      filtered = filtered.filter(
+        (item: InventoryItem) =>
+          item.Item_Name.toLowerCase().includes(term) ||
+          item.UPC.toLowerCase().includes(term)
+      );
+    }
+
+    // Then filter by category
+    if (selectedCategory !== 'all') {
+      filtered = filtered.filter(
+        (item: InventoryItem) => item.Category === selectedCategory
+      );
+    }
+
+    return filtered;
+  }, [inventory, selectedCategory, searchTerm]);
+
 
   const handleSiteChange = (newSite: string) => {
     navigate({
@@ -277,27 +303,39 @@ function RouteComponent() {
               </CardTitle>
               <CardDescription>View current inventory for selected site</CardDescription>
             </div>
-            <div className="flex gap-4">
+            <div className="flex flex-wrap items-center gap-4">
+              {/* Search Bar */}
+              <input
+                type="text"
+                placeholder="Search by Item Name or UPC..."
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+                className="
+                  px-3 py-2 border rounded-md flex-1 min-w-[250px] sm:min-w-[300px] md:min-w-[350px] 
+                  focus:outline-none focus:ring-2 focus:ring-blue-300
+                "
+              />
               {/* Category Filter */}
               {site && categories.length > 0 && (
-                <Select value={selectedCategory} onValueChange={handleCategoryChange}>
-                  <SelectTrigger className="w-[200px]">
-                    <SelectValue placeholder="Select category" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="all">All Categories</SelectItem>
-                    {categories.map((cat: Category) => (
-                      <SelectItem key={cat.Category} value={cat.Category}>
-                        {cat.Category}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+                <div className="flex-shrink-0">
+                  <Select value={selectedCategory} onValueChange={handleCategoryChange}>
+                    <SelectTrigger className="w-full sm:w-[200px]">
+                      <SelectValue placeholder="Select category" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">All Categories</SelectItem>
+                      {categories.map((cat: Category) => (
+                        <SelectItem key={cat.Category} value={cat.Category}>
+                          {cat.Category}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
               )}
-              
+
               {/* Site Picker */}
               <SitePicker 
-                // disabled={!access.component_cycle_count_inventory_site_picker}
                 value={site}
                 onValueChange={handleSiteChange}
                 placeholder="Select a site"
@@ -306,16 +344,13 @@ function RouteComponent() {
               {/* Excel Export Button */}
               <button
                 onClick={exportToExcel}
-                className="
-                  flex items-center gap-2 px-4 py-2  bg-emerald-600 hover:bg-emerald-700 
-                  text-white rounded-md text-sm  shadow-sm border border-emerald-700/20
-                  transition-all
-                "
+                className="flex items-center gap-2 px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-md text-sm shadow-sm border border-emerald-700/20 transition-all"
               >
                 <FileSpreadsheet className="h-4 w-4" />
                 Export Excel
               </button>
             </div>
+
           </div>
         </CardHeader>
         <CardContent className="w-full table-auto">
