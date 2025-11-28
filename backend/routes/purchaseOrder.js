@@ -3,7 +3,7 @@ const router = express.Router();
 const Transaction = require("../models/Transactions");
 const Fleet = require("../models/Fleet");
 const Product = require("../models/Product");
-const Location = require("../models/Location");
+// const Location = require("../models/Location");
 
 // Create a purchase order
 // router.post("/", async (req, res) => {
@@ -157,6 +157,7 @@ router.put("/:id", async (req, res) => {
 //     res.status(500).json({ message: "Failed to fetch purchase orders." });
 //   }
 // });
+
 router.get("/", async (req, res) => {
   const { startDate, endDate, stationName } = req.query;
   const filter = { source: "PO", stationName };

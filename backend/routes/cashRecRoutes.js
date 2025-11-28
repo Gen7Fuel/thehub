@@ -7,7 +7,7 @@ const upload = multer({
   limits: { fileSize: 10 * 1024 * 1024 }, // 10 MB
 })
 
-// Utility: robust number parser (handles commas, currency, parentheses)
+// Number parser (handles commas, currency, parentheses)
 function toNum(s) {
   if (s == null) return 0
   const t = String(s)
@@ -17,24 +17,26 @@ function toNum(s) {
   const n = Number(t)
   return Number.isFinite(n) ? n : 0
 }
+const round2 = (n) => Math.round((n + Number.EPSILON) * 100) / 100
 
-// Determine if a card value is AR (fully exposed) vs masked (e.g., 2222********0001)
+// Fully exposed card => AR; masked (contains *) => not AR
 function isARCard(value) {
   const str = String(value || '')
   if (!str) return false
-  if (str.includes('*')) return false // masked => NOT AR
+  if (str.includes('*')) return false
   const digitsOnly = str.replace(/\D/g, '')
-  return digitsOnly.length >= 12 // fully exposed number => AR
+  return digitsOnly.length >= 12
 }
 
-function extractDateRangeFromHeader(lines) {
+// Extract a single YYYY-MM-DD date from header From/To lines
+function extractDateFromHeader(lines) {
   let fromStr, toStr
   for (let i = 0; i < Math.min(lines.length, 25); i++) {
     const line = lines[i]
     const both = line.match(/\bFrom\b\s*:\s*(.*?)\s+\bTo\b\s*:\s*(.*)/i)
     if (both) {
-      fromStr = fromStr || both[1].trim()
-      toStr = toStr || both[2].trim()
+      fromStr = both[1].trim()
+      toStr = both[2].trim()
       break
     }
     const mFrom = line.match(/\bFrom\b\s*:\s*([^\t]+?)(?:\s{2,}|$)/i)
@@ -42,8 +44,6 @@ function extractDateRangeFromHeader(lines) {
     if (mFrom && !fromStr) fromStr = mFrom[1].trim()
     if (mTo && !toStr) toStr = mTo[1].trim()
   }
-
-  // Normalize to YYYY-MM-DD even if time is present (e.g., "2025-11-07 00:00")
   const toYmd = (s) => {
     if (!s) return undefined
     const ymdMatch = String(s).match(/(\d{4}-\d{2}-\d{2})/)
@@ -55,27 +55,18 @@ function extractDateRangeFromHeader(lines) {
     }
     return undefined
   }
-
-  const dateFromYMD = toYmd(fromStr)
-  const dateToYMD = toYmd(toStr)
-
-  return {
-    // keep raws internal if needed, but expose a single date
-    date: dateFromYMD || dateToYMD,
-  }
+  return toYmd(fromStr) || toYmd(toStr)
 }
 
-// Parse tab-delimited "Transaction Detail" report
+// Parse tab-delimited Kardpoll/Transaction Detail file
 function parseTransactionDetailTab(text) {
-  const round2 = (n) => Math.round((n + Number.EPSILON) * 100) / 100
   const clean = String(text || '')
-    .replace(/^\uFEFF/, '') // strip BOM
+    .replace(/^\uFEFF/, '')
     .replace(/\r\n/g, '\n')
     .replace(/\r/g, '\n')
-
   const lines = clean.split('\n').map(l => l.trimEnd()).filter(Boolean)
 
-  // Find header row requiring "Card1/Card2" and "Quantity" and "Total"
+  // Locate header with required columns
   let headerIdx = -1
   let headers = []
   for (let i = 0; i < lines.length; i++) {
@@ -96,64 +87,66 @@ function parseTransactionDetailTab(text) {
       litresSold: 0,
       sales: 0,
       ar: 0,
-      rows: 0,
+      date: undefined,
+      ar_rows: [],
       warning: 'Header row not found. Expected columns: Card1/Card2, Quantity, Total',
     }
   }
 
-  // Exact column indices
-  const idxOfExact = (name) =>
-    headers.findIndex(h => h.toLowerCase() === String(name).toLowerCase())
-
-  const qtyIdx =
-    idxOfExact('Quantity') >= 0 ? idxOfExact('Quantity') :
-    headers.findIndex(h => h.toLowerCase().includes('qty'))
-
-  const totalIdx =
-    idxOfExact('Total') >= 0 ? idxOfExact('Total') :
-    headers.findIndex(h => h.toLowerCase().includes('amount'))
-
-  const cardIdx = idxOfExact('Card1/Card2')
+  // Column indices
+  const idxExact = (name) => headers.findIndex(h => h.toLowerCase() === String(name).toLowerCase())
+  const qtyIdx = idxExact('Quantity') >= 0 ? idxExact('Quantity') : headers.findIndex(h => h.toLowerCase().includes('qty'))
+  const totalIdx = idxExact('Total') >= 0 ? idxExact('Total') : headers.findIndex(h => h.toLowerCase().includes('amount'))
+  const cardIdx = idxExact('Card1/Card2')
+  const priceIdx = idxExact('Price') >= 0 ? idxExact('Price') : headers.findIndex(h => h.toLowerCase().includes('price'))
+  const customerIdx = idxExact('Customer Name') >= 0 ? idxExact('Customer Name') : headers.findIndex(h => h.toLowerCase().includes('customer'))
 
   let litresSold = 0
   let sales = 0
   let ar = 0
-  let rows = 0
+  const ar_rows = []
 
   for (let i = headerIdx + 1; i < lines.length; i++) {
     const cols = lines[i].split('\t').map(s => s.trim())
     if (cols.length <= Math.max(qtyIdx, totalIdx, cardIdx)) continue
-
-    // Skip footer/grand total lines
     const first = (cols[0] || '').toLowerCase()
     if (first.startsWith('total')) continue
 
     const qty = qtyIdx >= 0 ? toNum(cols[qtyIdx]) : 0
     const tot = totalIdx >= 0 ? toNum(cols[totalIdx]) : 0
     const cardVal = cardIdx >= 0 ? cols[cardIdx] : ''
+    const price = priceIdx >= 0 ? toNum(cols[priceIdx]) : 0
+    const customer = customerIdx >= 0 ? cols[customerIdx] : ''
 
-    // Skip empty rows
     if (qty === 0 && tot === 0) continue
 
     litresSold += qty
     sales += tot
-    if (isARCard(cardVal)) ar += tot
-    rows++
+
+    if (isARCard(cardVal)) {
+      ar += tot
+      ar_rows.push({
+        customer,
+        card: cardVal,
+        amount: round2(tot),
+        quantity: round2(qty),
+        price_per_litre: round2(price),
+      })
+    }
   }
 
-  const headerDates = extractDateRangeFromHeader(lines)
+  const date = extractDateFromHeader(lines)
 
   return {
     litresSold: round2(litresSold),
     sales: round2(sales),
     ar: round2(ar),
-    rows,
-    date: headerDates.date,
+    date,
+    ar_rows,
   }
 }
 
-// POST /api/cash-rec/parse-transactions
-// Accepts multipart/form-data with field "file" containing a tab-delimited text report.
+// POST /api/cash-rec/parse-kardpoll
 router.post('/parse-kardpoll', upload.single('file'), async (req, res) => {
   try {
     if (!req.file) return res.status(400).json({ error: 'Missing file (use field name "file")' })
@@ -161,7 +154,7 @@ router.post('/parse-kardpoll', upload.single('file'), async (req, res) => {
     const result = parseTransactionDetailTab(text)
     return res.json(result)
   } catch (err) {
-    console.error('cashRecRoutes.parse-transactions error:', err)
+    console.error('cashRecRoutes.parse-kardpoll error:', err)
     return res.status(500).json({ error: 'Failed to parse file' })
   }
 })

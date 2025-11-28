@@ -83,6 +83,7 @@ export default function Navbar() {
   const isDashboard = matchRoute({ to: '/dashboard', fuzzy: true })
   const isSupport = matchRoute({ to: '/support', fuzzy: true })
   const isSafesheet = matchRoute({ to: '/safesheet', fuzzy: true })
+  const isCashRec = matchRoute({ to: '/cash-rec', fuzzy: true })
 
   // Returns the header text based on the current route
   const headerText = () => {
@@ -101,6 +102,7 @@ export default function Navbar() {
     if (isDashboard) return 'Dashboard'
     if (isSupport) return 'Support'
     if (isSafesheet) return 'Safe Sheet'
+    if (isCashRec) return 'Cash Rec'
     return ''
   }
 
