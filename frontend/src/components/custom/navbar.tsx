@@ -7,7 +7,7 @@ import { syncPendingActions } from "@/lib/utils"
 import { isActuallyOnline } from "@/lib/network";
 import { useAuth } from "@/context/AuthContext";
 import { HelpCircle, LogOut, Settings as SettingsIcon, LayoutDashboard, Home as HomeIcon } from 'lucide-react'
-import { clearLocalDB } from "@/lib/indexedDB";
+import { clearLocalDB } from "@/lib/orderRecIndexedDB";
 import {
   Dialog,
   DialogContent,

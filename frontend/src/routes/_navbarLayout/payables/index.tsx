@@ -24,14 +24,13 @@ function RouteComponent() {
 
   const payableLocation = useFormStore((state) => state.payableLocation)
   const setPayableLocation = useFormStore((state) => state.setPayableLocation)
-  console.log('Before:', payableLocation)
-  console.log('auth location:', user?.location)
   useEffect(() => {
-    if (user?.location) {
+    if (user?.location && !payableLocation) {
       setPayableLocation(user.location);
     }
-  }, [user?.location, payableLocation, setPayableLocation]);
-  console.log('After:', payableLocation)
+  }, [user?.location]);
+
+
 
   const payableNotes = useFormStore((state) => state.payableNotes)
   const setPayableNotes = useFormStore((state) => state.setPayableNotes)
@@ -51,6 +50,9 @@ function RouteComponent() {
   ]
 
   const isFormValid = payableVendorName && payableLocation && payablePaymentMethod && payableAmount > 0
+
+  console.log('Date:', date)
+  console.log('location', payableLocation)
 
   return (
     <div className="min-w-[30%] mx-auto">
@@ -73,10 +75,11 @@ function RouteComponent() {
           <LocationPicker
             setStationName={setPayableLocation as React.Dispatch<React.SetStateAction<string>>}
             value="stationName"
+            defaultValue={user?.location}
           // disabled={!access.component_payables_create_location_filter}
           />
         </div>
-        
+
         <div className="space-y-2">
           <h2 className="text-lg font-bold">Date</h2>
           <DatePicker
