@@ -18,60 +18,7 @@ function App() {
   return (
     <div className="flex items-center justify-center min-h-screen bg-gray-50">
       <div className="flex flex-col gap-8 w-full max-w-3xl px-4 pt-16 pb-8">
-        {access?.accounting?.value && (
-          <Section title="Accounting">
-            <div className="flex flex-wrap gap-4">
-              {access?.accounting.cashSummary && (
-                <Link to="/cash-summary" search={{ site: user?.location }}>
-                  <Button className="w-32 h-32 flex items-center justify-center break-words whitespace-normal text-center">
-                    Cash Summary
-                  </Button>
-                </Link>
-              )}
-              {access?.accounting.sftp && (
-                <Link to="/sftp" search={{ site: user?.location }}>
-                  <Button className="w-32 h-32 flex items-center justify-center break-words whitespace-normal text-center">
-                    SFTP
-                  </Button>
-                </Link>
-              )}
-              {access?.accounting.fuelRec && (
-                <Link to="/fuel-rec" search={{ site: user?.location }}>
-                <Button className="w-32 h-32 flex items-center justify-center break-words whitespace-normal text-center">
-                  Fuel Rec
-                </Button>
-              </Link>
-              )}
-            </div>
-          </Section>
-        )}
-        {access?.safesheet && (
-          <Section title="Safesheet">
-            <div className="flex flex-wrap gap-4">
-              <Link to="/safesheet" search={{ site: user?.location }}>
-                <Button className="w-32 h-32 flex items-center justify-center break-words whitespace-normal text-center">
-                  Safesheet
-                </Button>
-              </Link>
-            </div>
-          </Section>
-        )}
-
-        {/* Support Section */}
-        {/* {access.module_support && ( //markpoint */}
-        {access?.support && (
-          <Section title="Support">
-            <div className="flex flex-wrap gap-4">
-              <Link to="/support">
-                <Button className="w-32 h-32 flex items-center justify-center break-words whitespace-normal text-center">
-                  Support
-                </Button>
-              </Link>
-            </div>
-          </Section>
-        )}
         {/* Audits Section */}
-        {/* {access.module_station_audit && ( //markpoint */}
         {access?.stationAudit?.value && (
           <Section title="Audits">
             <div className="flex flex-wrap gap-4">
@@ -86,6 +33,124 @@ function App() {
             </div>
           </Section>
         )}
+
+        {/* Accounts Receivable Section */}
+        {/* {(access.module_fleet_card_assignment || access.module_po || access.module_kardpoll) && ( //markpoint */}
+        {(access?.fleetCardAssignment || access?.po?.value || access?.kardpoll) && (
+          <Section title="Accounts Receivable">
+            <div className="flex flex-wrap gap-4">
+              {/* Fleet Card Assignment button */}
+              {/* {access.module_fleet_card_assignment && ( //markpoint */}
+              {access?.fleetCardAssignment && (
+                <Link to="/fleet">
+                  <Button className="w-32 h-32 flex items-center justify-center break-words whitespace-normal text-center">
+                    Fleet Card Assignment
+                  </Button>
+                </Link>
+              )}
+              {/* Purchase Orders button */}
+              {/* {access.module_po && ( //markpoint */}
+              {access?.po?.value && (
+                <Link to="/po">
+                  <Button className="w-32 h-32 flex items-center justify-center break-words whitespace-normal text-center">
+                    Purchase Orders
+                  </Button>
+                </Link>
+              )}
+              {/* Kardpoll button */}
+              {/* {access.module_kardpoll && ( //markpoint */}
+              {/* {access?.kardpoll && (
+                <Link to="/kardpoll">
+                  <Button className="w-32 h-32 flex items-center justify-center break-words whitespace-normal text-center">
+                    Kardpoll
+                  </Button>
+                </Link>
+              )} */}
+            </div>
+          </Section>
+        )}
+
+        {/* Accounts Payable Section */}
+        {/* {access.module_payables && ( //markpoint */}
+        {access?.payables && (
+          <Section title="Accounts Payable">
+            <div className="flex flex-wrap gap-4">
+              <Link to="/payables">
+                <Button className="w-32 h-32 flex items-center justify-center break-words whitespace-normal text-center">
+                  Payables & Payouts
+                </Button>
+              </Link>
+            </div>
+          </Section>
+        )}
+
+        {access?.accounting?.value && (
+          <Section title="Accounting">
+            <div className="flex flex-wrap gap-4">
+              {access?.accounting.cashSummary && (
+                <Link to="/cash-summary" search={{ site: user?.location }}>
+                  <Button className="w-32 h-32 flex items-center justify-center break-words whitespace-normal text-center">
+                    Cash Summary
+                  </Button>
+                </Link>
+              )}
+              {access?.accounting.safesheet && (
+                <Link to="/safesheet" search={{ site: user?.location }}>
+                  <Button className="w-32 h-32 flex items-center justify-center break-words whitespace-normal text-center">
+                    Safesheet
+                  </Button>
+                </Link>
+              )}
+              {access?.accounting.cashRec && (
+                <Link to="/cash-rec" search={{ site: user?.location }}>
+                  <Button className="w-32 h-32 flex items-center justify-center break-words whitespace-normal text-center">
+                    Cash Rec
+                  </Button>
+                </Link>
+              )}
+              {/* {access?.accounting.sftp && (
+                <Link to="/sftp" search={{ site: user?.location }}>
+                  <Button className="w-32 h-32 flex items-center justify-center break-words whitespace-normal text-center">
+                    SFTP
+                  </Button>
+                </Link>
+              )} */}
+              {/* {access?.accounting.fuelRec && (
+                <Link to="/fuel-rec" search={{ site: user?.location }}>
+                <Button className="w-32 h-32 flex items-center justify-center break-words whitespace-normal text-center">
+                  Fuel Rec
+                </Button>
+              </Link>
+              )} */}
+            </div>
+          </Section>
+        )}
+        {/* {access?.safesheet && (
+          <Section title="Safesheet">
+            <div className="flex flex-wrap gap-4">
+              <Link to="/safesheet" search={{ site: user?.location }}>
+                <Button className="w-32 h-32 flex items-center justify-center break-words whitespace-normal text-center">
+                  Safesheet
+                </Button>
+              </Link>
+            </div>
+          </Section>
+        )} */}
+
+        {/* Support Section */}
+        {/* {access.module_support && ( //markpoint */}
+        {/* {access?.support && (
+          <Section title="Support">
+            <div className="flex flex-wrap gap-4">
+              <Link to="/support">
+                <Button className="w-32 h-32 flex items-center justify-center break-words whitespace-normal text-center">
+                  Support
+                </Button>
+              </Link>
+            </div>
+          </Section>
+        )} */}
+        
 
         {/* Inventory Section */}
         {/* {(access.module_order_rec || access.module_cycle_count) && ( //markpoint */}
@@ -132,63 +197,13 @@ function App() {
           </Section>
         )}
 
-        {/* Accounts Receivable Section */}
-        {/* {(access.module_fleet_card_assignment || access.module_po || access.module_kardpoll) && ( //markpoint */}
-        {(access?.fleetCardAssignment || access?.po?.value || access?.kardpoll) && (
-          <Section title="Accounts Receivable">
-            <div className="flex flex-wrap gap-4">
-              {/* Fleet Card Assignment button */}
-              {/* {access.module_fleet_card_assignment && ( //markpoint */}
-              {access?.fleetCardAssignment && (
-                <Link to="/fleet">
-                  <Button className="w-32 h-32 flex items-center justify-center break-words whitespace-normal text-center">
-                    Fleet Card Assignment
-                  </Button>
-                </Link>
-              )}
-              {/* Purchase Orders button */}
-              {/* {access.module_po && ( //markpoint */}
-              {access?.po?.value && (
-                <Link to="/po">
-                  <Button className="w-32 h-32 flex items-center justify-center break-words whitespace-normal text-center">
-                    Purchase Orders
-                  </Button>
-                </Link>
-              )}
-              {/* Kardpoll button */}
-              {/* {access.module_kardpoll && ( //markpoint */}
-              {access?.kardpoll && (
-                <Link to="/kardpoll">
-                  <Button className="w-32 h-32 flex items-center justify-center break-words whitespace-normal text-center">
-                    Kardpoll
-                  </Button>
-                </Link>
-              )}
-            </div>
-          </Section>
-        )}
-
-        {/* Accounts Payable Section */}
-        {/* {access.module_payables && ( //markpoint */}
-        {access?.payables && (
-          <Section title="Accounts Payable">
-            <div className="flex flex-wrap gap-4">
-              <Link to="/payables">
-                <Button className="w-32 h-32 flex items-center justify-center break-words whitespace-normal text-center">
-                  Payables & Payouts
-                </Button>
-              </Link>
-            </div>
-          </Section>
-        )}
+        
 
         {/* Reports Section */}
         {/* {(access.module_daily_reports || access.module_reports) && ( //markpoint */}
-        {(access?.dailyReports || access?.reports) && (
+        {/* {(access?.dailyReports || access?.reports) && (
           <Section title="Reports">
             <div className="flex flex-wrap gap-4">
-              {/* Daily Reports button */}
-               {/* {access.module_daily_reports && ( //markpoint */}
               {access?.dailyReports && (
                 <Link to="/daily-reports">
                   <Button className="w-32 h-32 flex items-center justify-center break-words whitespace-normal text-center">
@@ -196,8 +211,6 @@ function App() {
                   </Button>
                 </Link>
               )} 
-              {/* Reports button */}
-               {/* {access.module_reports && ( //markpoint */}
               {access?.reports && (
                 <Link to="/reports">
                   <Button className="w-32 h-32 flex items-center justify-center break-words whitespace-normal text-center">
@@ -207,7 +220,7 @@ function App() {
               )}
             </div>
           </Section>
-        )} 
+        )}  */}
 
         {/* Sales Section */}
         {/* {access.module_status && ( //markpoint */}
