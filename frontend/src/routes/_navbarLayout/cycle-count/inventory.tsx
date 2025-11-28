@@ -145,20 +145,20 @@ function RouteComponent() {
   //   return inventory.filter((item: InventoryItem) => item.Category === selectedCategory)
   // }, [inventory, selectedCategory])
   const filteredInventory = useMemo(() => {
-    let filtered = inventory;
+    let filtered = inventory ?? [];
 
-    // Apply search first
-    if (searchTerm.trim() !== '') {
-      const term = searchTerm.toLowerCase();
-      filtered = filtered.filter(
-        (item: InventoryItem) =>
-          item.Item_Name.toLowerCase().includes(term) ||
-          item.UPC.toLowerCase().includes(term)
-      );
+    const term = searchTerm.trim().toLowerCase();
+
+    if (term) {
+      filtered = filtered.filter((item: InventoryItem) => {
+        const name = (item.Item_Name ?? "").toString().toLowerCase();
+        const upc = (item.UPC ?? "").toString().toLowerCase();
+
+        return name.includes(term) || upc.includes(term);
+      });
     }
 
-    // Then filter by category
-    if (selectedCategory !== 'all') {
+    if (selectedCategory !== "all") {
       filtered = filtered.filter(
         (item: InventoryItem) => item.Category === selectedCategory
       );
@@ -166,7 +166,6 @@ function RouteComponent() {
 
     return filtered;
   }, [inventory, selectedCategory, searchTerm]);
-
 
   const handleSiteChange = (newSite: string) => {
     navigate({
