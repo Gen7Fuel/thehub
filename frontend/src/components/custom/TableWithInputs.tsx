@@ -102,7 +102,8 @@ import Barcode from "react-barcode";
 import React, { useState } from "react";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"
 import { Check, AlertTriangle } from "lucide-react"
-import { Popover, PopoverTrigger, PopoverContent } from "@radix-ui/react-popover";
+// import { Popover, PopoverTrigger, PopoverContent } from "@radix-ui/react-popover";
+// import { AlertDialog }
 
 
 interface TableWithInputsProps {
@@ -110,9 +111,9 @@ interface TableWithInputsProps {
   counts: { [id: string]: { foh: string; boh: string } };
   onInputChange: (id: string, field: "foh" | "boh", value: string) => void;
   onInputBlur: (id: string, field: "foh" | "boh", value: string) => void;
-  tableClassName?: string;
-  headerClassName?: string;
-  rowClassName?: string;
+  tableClassName ?: string;
+  headerClassName ?: string;
+  rowClassName ?: string;
 }
 
 const TableWithInputs: React.FC<TableWithInputsProps> = ({
@@ -235,164 +236,158 @@ const TableWithInputs: React.FC<TableWithInputsProps> = ({
             </thead>
 
             <tbody>
-              {items.map((item, idx) => (
-                <tr
-                  key={item._id || idx}
-                  className={`border-b border-gray-300 transition hover:bg-gray-50 ${rowClassName}`}
-                >
+              {items.map((item: any, idx: number) => {
+                const fohStr = counts[item._id]?.foh;
+                const bohStr = counts[item._id]?.boh;
 
-                  {/* <td className="border px-3 py-2">{item.name}</td> */}
-                  {/* <td className="px-3 py-2 flex items-center gap-2"> */}
+                return (
+                  <tr
+                    key={item._id || idx}
+                    className={`border-b border-gray-300 transition hover:bg-gray-50 ${rowClassName}`}
+                  >
+                    {/* Item Name + Status Icon */}
+                    <td className="px-3 py-2 flex items-center gap-2">
+                      <span>{item.name}</span>
 
-                  {/* Item Name */}
-                  {/* <span>{item.name}</span> */}
+                      {(() => {
+                        // Don't show icon until BOTH values exist
+                        if (!fohStr || !bohStr) return null;
 
-                  {/* Status Icon */}
-                  {/* {(() => {
-                      const fohStr = counts[item._id]?.foh;
-                      const bohStr = counts[item._id]?.boh; */}
+                        const foh = Number(fohStr);
+                        const boh = Number(bohStr);
+                        const total = foh + boh;
 
-                  {/* // Don't show icon until BOTH values exist */}
-                  {/* // if (!fohStr || !bohStr) return null;
+                        const cso = item.onHandCSO ?? null;
+                        if (cso === null) return null;
 
-                      // const foh = Number(fohStr);
-                      // const boh = Number(bohStr);
-                      // const total = foh + boh;
+                        const variance = Math.abs(total - cso);
+                        const variance_flag = getVarianceForCategory(item.category);
 
-                      // const cso = item.onHandCSO ?? null;
+                        // Good
+                        if (variance < variance_flag) {
+                          return <Check className="text-green-600 w-4 h-4" />;
+                        }
 
-                      // if (cso === null) return null; // no CSO → no icon
-
-                      // const variance = Math.abs(total - cso);
-
-                      // // variance flag - different for different categories
-                      // const variance_flag = getVarianceForCategory(item.category)
-                      // console.log('variance flag for cat', item.category, 'is', variance_flag)
-                      // if (variance < variance_flag) { */}
-                  {/* //   return (
-                      //     <Check className="text-green-600 w-4 h-4" />
-                      //   );
-                      // }
-
-                      // Bad (variance >= variance_flag)
-                  //     return (
-                  //       <TooltipProvider delayDuration={150}>
-                  //         <Tooltip>
-                  //           <TooltipTrigger asChild>
-                  //             <AlertTriangle className="text-yellow-600 w-4 h-4 cursor-pointer" />
-                  //           </TooltipTrigger>
-
-                  //           <TooltipContent */}
-                  {/* //             className="max-w-[240px] p-4 text-base  leading-relaxedbg-white rounded-xl
-                  //               shadow-lg border animate-in fade-in zoom-in-95  "
-                  //           >
-                  //             <p>Please re-verify your count. If it's correct, you are not expected to do anything.</p>
-                  //           </TooltipContent>
-                  //         </Tooltip>
-                  //       </TooltipProvider>
-                  //     );
-                  //   })()}
-                  // </td> */}
-
-                  <td className="px-3 py-2 flex items-center gap-2">
-                    <span>{item.name}</span>
-
-                    {(() => {
-                      const fohStr = counts[item._id]?.foh;
-                      const bohStr = counts[item._id]?.boh;
-
-                      if (!fohStr || !bohStr) return null;
-
-                      const foh = Number(fohStr);
-                      const boh = Number(bohStr);
-                      const total = foh + boh;
-                      const cso = item.onHandCSO ?? null;
-                      if (cso === null) return null;
-
-                      const variance = Math.abs(total - cso);
-                      const variance_flag = getVarianceForCategory(item.category);
-
-                      if (variance < variance_flag) return <Check className="text-green-600 w-4 h-4" />;
-
-                      const isTouchDevice = 'ontouchstart' in window || navigator.maxTouchPoints > 0;
-
-                      const content = (
-                        <div className="max-w-[240px] p-4 text-base leading-relaxed bg-white text-gray-800 rounded-xl shadow-lg border">
-                          Please re-verify your count. If it's correct, you are not expected to do anything.
-                        </div>
-                      );
-
-                      if (isTouchDevice) {
+                        // Bad → Tooltip (with tap support)
                         return (
-                          <Popover>
-                            <PopoverTrigger asChild>
-                              <AlertTriangle className="text-yellow-600 w-4 h-4 cursor-pointer" />
-                            </PopoverTrigger>
-                            <PopoverContent>{content}</PopoverContent>
-                          </Popover>
+                          <TooltipProvider delayDuration={150}>
+                            <Tooltip>
+                              <TooltipTrigger
+                                asChild
+                                onClick={(e) => {
+                                  e.preventDefault();
+                                  e.stopPropagation(); // enables mobile tap
+                                }}
+                              >
+                                <AlertTriangle className="text-yellow-600 w-4 h-4 cursor-pointer" />
+                              </TooltipTrigger>
+
+                              <TooltipContent
+                                className="max-w-[240px] p-4 text-base leading-relaxed
+                               bg-black text-white rounded-xl shadow-lg border
+                               animate-in fade-in zoom-in-95"
+                              >
+                                <p>
+                                  Please re-verify your count. If it's correct, you are not expected to do anything.
+                                </p>
+                              </TooltipContent>
+                            </Tooltip>
+                          </TooltipProvider>
                         );
-                      } else {
+                      })()}
+                    </td>
+
+                    {/* UPC Barcode */}
+                    <td
+                      className="px-3 py-2 text-blue-600 cursor-pointer underline hover:text-blue-800"
+                      onClick={() => setBarcodeValue(item.upc_barcode)}
+                    >
+                      {item.upc_barcode}
+                    </td>
+
+                    {/* BOH Input */}
+                    <td className="px-3 py-2">
+                      <input
+                        type="number"
+                        min="0"
+                        className={`border rounded-lg px-2 py-1 w-20 transition shadow-sm 
+                        focus:ring-2 focus:ring-blue-300 focus:outline-none 
+                        ${counts[item._id]?.boh ? "border-green-500" : "border-red-500"}`}
+                        value={counts[item._id]?.boh ?? ""}
+                        onChange={(e) => onInputChange(item._id, "boh", e.target.value)}
+                        onBlur={(e) => onInputBlur(item._id, "boh", e.target.value)}
+                      />
+                    </td>
+
+                    {/* FOH Input */}
+                    <td className="px-3 py-2">
+                      <input
+                        type="number"
+                        min="0"
+                        className={`border rounded-lg px-2 py-1 w-20 transition shadow-sm 
+                        focus:ring-2 focus:ring-blue-300 focus:outline-none 
+                        ${counts[item._id]?.foh ? "border-green-500" : "border-red-500"}`}
+                        value={counts[item._id]?.foh ?? ""}
+                        onChange={(e) => onInputChange(item._id, "foh", e.target.value)}
+                        onBlur={(e) => onInputBlur(item._id, "foh", e.target.value)}
+                      />
+                    </td>
+
+                    {/* Total (FOH + BOH) */}
+                    <td className="px-3 py-2 flex items-center justify-center">
+                      {fohStr || bohStr ? (
+                        <span>{Number(fohStr || 0) + Number(bohStr || 0)}</span>
+                      ) : null}
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+
+            {/* Item Name + Status Icon */}
+            {/* <td className="px-3 py-2 flex items-center gap-2">
+                      <span>{item.name}</span>
+
+                      {(() => {
+                        // Don't show icon until BOTH values exist
+                        if (!fohStr || !bohStr) return null;
+
+                        const foh = Number(fohStr);
+                        const boh = Number(bohStr);
+                        const total = foh + boh;
+
+                        const cso = item.onHandCSO ?? null;
+                        if (cso === null) return null;
+
+                        const variance = Math.abs(total - cso);
+                        const variance_flag = getVarianceForCategory(item.category);
+
+                        // Good
+                        if (variance < variance_flag) {
+                          return <Check className="text-green-600 w-4 h-4" />;
+                        }
+
+                        // Bad
                         return (
                           <TooltipProvider delayDuration={150}>
                             <Tooltip>
                               <TooltipTrigger asChild>
                                 <AlertTriangle className="text-yellow-600 w-4 h-4 cursor-pointer" />
                               </TooltipTrigger>
-                              <TooltipContent>{content}</TooltipContent>
+
+                              <TooltipContent
+                                className="max-w-[240px] p-4 text-base leading-relaxed bg-white rounded-xl shadow-lg border animate-in fade-in zoom-in-95"
+                              >
+                                <p>
+                                  Please re-verify your count. If it's correct, you are not expected to do anything.
+                                </p>
+                              </TooltipContent>
                             </Tooltip>
                           </TooltipProvider>
                         );
-                      }
-                    })()}
-                  </td>
+                      })()}
+                    </td> */}
 
-
-
-
-
-                  <td
-                    className=" px-3 py-2 text-blue-600 cursor-pointer underline hover:text-blue-800"
-                    onClick={() => setBarcodeValue(item.upc_barcode)}
-                  >
-                    {item.upc_barcode}
-                  </td>
-
-                  <td className="px-3 py-2">
-                    <input
-                      type="number"
-                      min='0'
-                      className={`border rounded-lg px-2 py-1 w-20 transition shadow-sm focus:ring-2 focus:ring-blue-300 focus:outline-none ${counts[item._id]?.boh ? "border-green-500" : "border-red-500"
-                        }`}
-                      value={counts[item._id]?.boh ?? ""}
-                      onChange={(e) => onInputChange(item._id, "boh", e.target.value)}
-                      onBlur={(e) => onInputBlur(item._id, "boh", e.target.value)}
-                    />
-                  </td>
-
-                  <td className="px-3 py-2">
-                    <input
-                      type="number"
-                      min='0'
-                      className={`border rounded-lg px-2 py-1 w-20 transition shadow-sm focus:ring-2 focus:ring-blue-300 focus:outline-none ${counts[item._id]?.foh ? "border-green-500" : "border-red-500"
-                        }`}
-                      value={counts[item._id]?.foh ?? ""}
-                      onChange={(e) => onInputChange(item._id, "foh", e.target.value)}
-                      onBlur={(e) => onInputBlur(item._id, "foh", e.target.value)}
-                    />
-                  </td>
-
-                  <td className="px-3 py-2 flex items-center justify-center">
-                    {(counts[item._id]?.foh || counts[item._id]?.boh) ? (
-                      <span>
-                        {Number(counts[item._id]?.foh || 0) + Number(counts[item._id]?.boh || 0)}
-                      </span>
-                    ) : null}
-                  </td>
-
-
-                </tr>
-              ))}
-            </tbody>
           </table>
         </div>
         <DialogContent>
@@ -403,8 +398,8 @@ const TableWithInputs: React.FC<TableWithInputsProps> = ({
             {barcodeValue && <Barcode value={barcodeValue} />}
           </div>
         </DialogContent>
-      </Dialog>
-    </div>
+      </Dialog >
+    </div >
   );
 };
 
