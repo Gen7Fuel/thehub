@@ -100,10 +100,7 @@
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import Barcode from "react-barcode";
 import React, { useState } from "react";
-import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"
 import { Check, AlertTriangle } from "lucide-react"
-// import { Popover, PopoverTrigger, PopoverContent } from "@radix-ui/react-popover";
-// import { AlertDialog }
 
 
 interface TableWithInputsProps {
@@ -111,9 +108,9 @@ interface TableWithInputsProps {
   counts: { [id: string]: { foh: string; boh: string } };
   onInputChange: (id: string, field: "foh" | "boh", value: string) => void;
   onInputBlur: (id: string, field: "foh" | "boh", value: string) => void;
-  tableClassName ?: string;
-  headerClassName ?: string;
-  rowClassName ?: string;
+  tableClassName?: string;
+  headerClassName?: string;
+  rowClassName?: string;
 }
 
 const TableWithInputs: React.FC<TableWithInputsProps> = ({
@@ -126,6 +123,7 @@ const TableWithInputs: React.FC<TableWithInputsProps> = ({
   rowClassName = "",
 }) => {
   const [barcodeValue, setBarcodeValue] = useState<string | null>(null);
+  const [openDialog, setOpenDialog] = useState<string | null>(null);
 
   // Example variance rules (you can modify or load from DB later)
   const VARIANCE_RULES: Record<string, number> = {
@@ -268,35 +266,39 @@ const TableWithInputs: React.FC<TableWithInputsProps> = ({
                           return <Check className="text-green-600 w-4 h-4" />;
                         }
 
-                        // Bad → Tooltip (with tap support)
+                        // Bad — open dialog on tap/click
                         return (
-                          <TooltipProvider delayDuration={150}>
-                            <Tooltip>
-                              <TooltipTrigger
-                                asChild
-                                onClick={(e) => {
-                                  e.preventDefault();
-                                  e.stopPropagation(); // enables mobile tap
-                                }}
-                              >
-                                <AlertTriangle className="text-yellow-600 w-4 h-4 cursor-pointer" />
-                              </TooltipTrigger>
+                          <>
+                            <AlertTriangle
+                              className="text-yellow-600 w-4 h-4 cursor-pointer"
+                              onClick={() => setOpenDialog(item._id)}
+                            />
 
-                              <TooltipContent
-                                className="max-w-[240px] p-4 text-base leading-relaxed
-                               bg-black text-white rounded-xl shadow-lg border
-                               animate-in fade-in zoom-in-95"
-                              >
-                                <p>
+                            <Dialog open={openDialog === item._id} onOpenChange={() => setOpenDialog(null)}>
+                              <DialogContent className="max-w-[300px] rounded-xl">
+                                <DialogHeader>
+                                  <DialogTitle className="text-yellow-700 flex items-center gap-2 text-lg">
+                                    <AlertTriangle className="w-5 h-5 text-yellow-600" />
+                                    Variance Detected
+                                  </DialogTitle>
+                                </DialogHeader>
+
+                                <p className="text-gray-700 text-base leading-relaxed mt-2">
                                   Please re-verify your count. If it's correct, you are not expected to do anything.
                                 </p>
-                              </TooltipContent>
-                            </Tooltip>
-                          </TooltipProvider>
+
+                                <button
+                                  className="mt-4 w-full py-2 bg-blue-600 text-white rounded-lg"
+                                  onClick={() => setOpenDialog(null)}
+                                >
+                                  OK
+                                </button>
+                              </DialogContent>
+                            </Dialog>
+                          </>
                         );
                       })()}
                     </td>
-
                     {/* UPC Barcode */}
                     <td
                       className="px-3 py-2 text-blue-600 cursor-pointer underline hover:text-blue-800"
@@ -343,51 +345,6 @@ const TableWithInputs: React.FC<TableWithInputsProps> = ({
                 );
               })}
             </tbody>
-
-            {/* Item Name + Status Icon */}
-            {/* <td className="px-3 py-2 flex items-center gap-2">
-                      <span>{item.name}</span>
-
-                      {(() => {
-                        // Don't show icon until BOTH values exist
-                        if (!fohStr || !bohStr) return null;
-
-                        const foh = Number(fohStr);
-                        const boh = Number(bohStr);
-                        const total = foh + boh;
-
-                        const cso = item.onHandCSO ?? null;
-                        if (cso === null) return null;
-
-                        const variance = Math.abs(total - cso);
-                        const variance_flag = getVarianceForCategory(item.category);
-
-                        // Good
-                        if (variance < variance_flag) {
-                          return <Check className="text-green-600 w-4 h-4" />;
-                        }
-
-                        // Bad
-                        return (
-                          <TooltipProvider delayDuration={150}>
-                            <Tooltip>
-                              <TooltipTrigger asChild>
-                                <AlertTriangle className="text-yellow-600 w-4 h-4 cursor-pointer" />
-                              </TooltipTrigger>
-
-                              <TooltipContent
-                                className="max-w-[240px] p-4 text-base leading-relaxed bg-white rounded-xl shadow-lg border animate-in fade-in zoom-in-95"
-                              >
-                                <p>
-                                  Please re-verify your count. If it's correct, you are not expected to do anything.
-                                </p>
-                              </TooltipContent>
-                            </Tooltip>
-                          </TooltipProvider>
-                        );
-                      })()}
-                    </td> */}
-
           </table>
         </div>
         <DialogContent>
