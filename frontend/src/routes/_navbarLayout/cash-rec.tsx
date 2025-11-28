@@ -1,6 +1,5 @@
 import { createFileRoute, Link, Outlet, useMatchRoute } from '@tanstack/react-router'
 import { Button } from '@/components/ui/button'
-import { useAuth } from '@/context/AuthContext'
 
 export const Route = createFileRoute('/_navbarLayout/cash-rec')({
   component: RouteComponent,
