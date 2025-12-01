@@ -26,7 +26,7 @@ function RouteComponent() {
       const res = await fetch(`/api/cycle-count/lookup?${params}`, {
         headers: {
           Authorization: `Bearer ${localStorage.getItem(`token`)}`,
-          "X-Required-Permission": "cycleCount.console",
+          "X-Required-Permission": "cycleCount.lookup",
         },
       });
 
