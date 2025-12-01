@@ -159,4 +159,16 @@ router.post('/parse-kardpoll', upload.single('file'), async (req, res) => {
   }
 })
 
+router.post('/parse-kardpoll-json', express.json(), async (req, res) => {
+  try {
+    const { filename = 'report.txt', base64 } = req.body || {}
+    if (!base64) return res.status(400).json({ error: 'base64 is required' })
+    const text = Buffer.from(base64, 'base64').toString('utf8')
+    const result = parseTransactionDetailTab(text)
+    res.json({ filename, ...result })
+  } catch (e) {
+    res.status(500).json({ error: 'Failed to parse file' })
+  }
+})
+
 module.exports = router
