@@ -11,7 +11,7 @@ export const RouteContext = createContext<{
   setStationName: (value: string) => void;
 }>({
   stationName: "",
-  setStationName: () => {},
+  setStationName: () => { },
 });
 
 export const Route = createFileRoute('/_navbarLayout/audit/interface')({
@@ -63,8 +63,10 @@ function RouteComponent() {
 
     axios
       .get("/api/audit", {
-        headers: { Authorization: `Bearer ${localStorage.getItem("token")}`,
-        "X-Required-Permission": "stationAudit.interface" },
+        headers: {
+          Authorization: `Bearer ${localStorage.getItem("token")}`,
+          "X-Required-Permission": "stationAudit.interface"
+        },
       })
       .then(res => {
         const filtered = res.data.filter(
@@ -87,8 +89,10 @@ function RouteComponent() {
     // fetch open issues
     axios
       .get<OpenIssueResponse>(`/api/audit/open-issues?site=${stationName}`, {
-        headers: { Authorization: `Bearer ${localStorage.getItem("token")}`, 
-        "X-Required-Permission": "stationAudit.interface" },
+        headers: {
+          Authorization: `Bearer ${localStorage.getItem("token")}`,
+          "X-Required-Permission": "stationAudit.interface"
+        },
       })
       .then(res => setOpenIssues(res.data.items || [])) // only keep the array
       .catch((err) => {
@@ -98,7 +102,7 @@ function RouteComponent() {
         } else {
           console.warn("Failed to load open issues");
         }
-      }) 
+      })
 
   }, [stationName, navigate]);
 
@@ -106,75 +110,107 @@ function RouteComponent() {
   if (loading) return <div className="text-center mt-8">Loading...</div>;
   if (error) return <div className="text-red-600 text-center mt-8">{error}</div>;
 
- // const access = JSON.parse(localStorage.getItem('access') || '{}') 
+  // const access = JSON.parse(localStorage.getItem('access') || '{}') 
 
   return (
     <RouteContext.Provider value={{ stationName, setStationName }}>
       <div className="flex flex-col items-center">
-        {/* 🔹 Location Picker temporary patch */}
-        <div className="mb-6">
+        <div className="flex items-center gap-4 mb-6">
+
+          {/* ◼ Location Picker (left) */}
           <LocationPicker
-            value="stationName" // mode
-            defaultValue={stationName} // the actual current station from parent state
+            value="stationName"
+            defaultValue={stationName}
             setStationName={(value) => {
               const newValue =
                 typeof value === "function" ? value(stationName) : value;
-
-              // 🔹 Just update React state
               updateStation(newValue);
             }}
-            // disabled={!access.component_station_audit_checklist_location_filter}
           />
 
+          {/* ◼ Checklist Carousel (center) */}
+          <div className="flex items-center h-10 border rounded-md bg-white px-2 text-sm w-[200px] justify-between shadow-sm">
 
-        </div>
+            {/* ◀ Left arrow */}
+            <button
+              disabled={templates.length <= 1}
+              className="px-2 text-lg select-none disabled:opacity-30"
+              onClick={() => {
+                const currentIndex = templates.findIndex(
+                  t =>
+                    matchRoute({
+                      to: "/audit/interface/$id",
+                      params: { id: t._id },
+                      fuzzy: true
+                    })
+                );
+                const prevIndex =
+                  (currentIndex - 1 + templates.length) % templates.length;
+                navigate({
+                  to: "/audit/interface/$id",
+                  params: { id: templates[prevIndex]._id }
+                });
+              }}
+            >
+              ◀
+            </button>
 
-        {/* 🔹 Template buttons */}
-        <div className="flex mb-4">
-          {templates.map((template, idx) => {
-            const isActive = matchRoute({
-              to: "/audit/interface/$id",
-              params: { id: template._id },
-              fuzzy: true,
-            });
+            {/* Checklist title */}
+            <div className="flex-1 text-center px-1 font-normal text-sm">
+              {(() => {
+                const active = templates.find(t =>
+                  matchRoute({
+                    to: "/audit/interface/$id",
+                    params: { id: t._id },
+                    fuzzy: true
+                  })
+                );
+                return active ? active.name : "Select Checklist";
+              })()}
+            </div>
 
-            return (
-              <Link
-                to="/audit/interface/$id"
-                params={{ id: template._id }}
-                key={template._id}
-              >
-                <Button
-                  {...(isActive ? {} : { variant: "outline" } as object)}
-                  className={
-                    idx === 0
-                      ? "rounded-r-none" // first button
-                      : idx === templates.length - 1 && openIssues.length === 0
-                      ? "rounded-l-none" // last button only if NO open issues
-                      : idx === templates.length - 1 && openIssues.length > 0
-                      ? "rounded-none"   // keep it square if open issues exist
-                      : "rounded-none"
-                  }
-                >
-                  {template.name}
-                </Button>
-              </Link>
-            );
-          })}
-            {/* 🔹 Open Issues tab in same row */}
+            {/* ▶ Right arrow */}
+            <button
+              disabled={templates.length <= 1}
+              className="px-2 text-lg select-none disabled:opacity-30"
+              onClick={() => {
+                const currentIndex = templates.findIndex(
+                  t =>
+                    matchRoute({
+                      to: "/audit/interface/$id",
+                      params: { id: t._id },
+                      fuzzy: true
+                    })
+                );
+                const nextIndex = (currentIndex + 1) % templates.length;
+                navigate({
+                  to: "/audit/interface/$id",
+                  params: { id: templates[nextIndex]._id }
+                });
+              }}
+            >
+              ▶
+            </button>
+
+          </div>
+
+          {/* ◼ Open Issues (right) */}
           {openIssues.length > 0 && (
             <Link to="/audit/interface/open-issues">
               <Button
-                {...(matchRoute({ to: "/audit/interface/open-issues", fuzzy: true }) ? {} : { variant: "outline" } as object)}
-                className="rounded-l-none"
+                {...(matchRoute({
+                  to: "/audit/interface/open-issues",
+                  fuzzy: true
+                })
+                  ? {}
+                  : { variant: "outline" } as object)}
+                className="px-4"
               >
                 Open Issues ({openIssues.length})
               </Button>
             </Link>
           )}
         </div>
-
-
         <Outlet />
       </div>
     </RouteContext.Provider>

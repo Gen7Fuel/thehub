@@ -235,7 +235,7 @@ export function ChecklistItemCard({
         </div>
 
         {/* --- FOLLOW UP DROPDOWN --- */}
-        <div className="flex-1 flex flex-col">
+        {/* <div className="flex-1 flex flex-col">
           <Select
             value={item.followUp || undefined}
             onValueChange={(val) => !handleDisabledClick() && onFieldChange("followUp", val)}
@@ -251,7 +251,7 @@ export function ChecklistItemCard({
               ))}
             </SelectContent>
           </Select>
-        </div>
+        </div> */}
         {/* Request Order / Raise Issue / Order Created */}
         <div className="flex justify-end mt-2">
           {item.orderCreated !== true ? (

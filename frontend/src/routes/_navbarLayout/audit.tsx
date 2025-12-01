@@ -20,8 +20,8 @@ function RouteComponent() {
   // Determine if the Templates or Checklist tab is active
   const isCreateActive = matchRoute({ to: '/audit/templates', fuzzy: true })
   const isChecklistActive = matchRoute({ to: '/audit/checklist', fuzzy: true })
-
   const isInterfaceActive = matchRoute({ to: '/audit/interface', fuzzy: true })
+  const isVisitorActive = matchRoute({ to: '/audit/visitor', fuzzy: true })
   
   const { user } = useAuth();
   // Retrieve access permissions from decoded token
@@ -52,6 +52,17 @@ function RouteComponent() {
               className="rounded-none"
             >
               Checklist
+            </Button>
+          </Link>
+        )}
+        {/* Checklist button is always shown */}
+        {access?.stationAudit?.visitor && (
+          <Link to="/audit/visitor">
+            <Button
+              {...(!isVisitorActive && { variant: 'outline' } as object)}
+              className="rounded-none"
+            >
+              Visitors Audit
             </Button>
           </Link>
         )}
