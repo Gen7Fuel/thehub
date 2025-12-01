@@ -134,7 +134,7 @@ async function getCurrentInventory(site, limit = null) {
     const pool = await getPool();
     let query = `
       SELECT ${limit ? `TOP ${limit}` : ''} [Item_Name]
-            ,[UPC_A_12_digits] AS 'UPC'
+            ,[UPC-A (12 digits)] AS 'UPC'
             ,[Category]
             ,[On Hand Qty]
       FROM [CSO].[Current_Inventory]
@@ -176,9 +176,9 @@ async function getBulkOnHandQtyCSO(site, upcs = []) {
     const list = upcs.map(u => `'${u}'`).join(",");
 
     const query = `
-      SELECT [UPC_A_12_digits] AS UPC, [On Hand Qty] AS qty
+      SELECT [UPC-A (12 digits)] AS UPC, [On Hand Qty] AS qty
       FROM [CSO].[Current_Inventory]
-      WHERE [Station] = '${site}' AND [UPC_A_12_digits] IN (${list})
+      WHERE [Station] = '${site}' AND [UPC-A (12 digits)] IN (${list})
     `;
 
     const result = await pool.request().query(query);
@@ -290,7 +290,7 @@ async function getUPC_barcode(gtin) {
 
     // ⏱ Timeout ensures long-running queries don't hang forever
     const result = await request.query(
-      "SELECT [UPC_A_12_digits], [UPC] FROM [CSO].[ItemBookCSO] WHERE [GTIN] = @gtin",
+      "SELECT [UPC-A (12 digits)], [UPC] FROM [CSO].[ItemBookCSO] WHERE [GTIN] = @gtin",
       { timeout: 30000 } // 30 seconds
     );
     return result.recordset;
