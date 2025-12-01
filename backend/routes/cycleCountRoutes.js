@@ -575,6 +575,7 @@ router.get('/lookup', async (req, res) => {
 //     res.status(500).json({ message: "Failed to get current inventory." });
 //   }
 // });
+
 router.get('/current-inventory', async (req, res) => {
   try {
     const { site, limit } = req.query;
@@ -619,6 +620,56 @@ router.get('/current-inventory', async (req, res) => {
   }
 });
 
+//dummyroute
+// router.get('/current-inventory', async (req, res) => {
+//   try {
+//     const { site, limit } = req.query;
+//     if (!site) return res.status(400).json({ message: "site is required" });
+
+//     const limitNum = limit ? parseInt(limit, 10) : null;
+
+//     // ✅ Dummy UPCs
+//     const upcs = [
+//       "008660100108",
+//       "010119039822",
+//       "011111614246",
+//       "011206000077",
+//       "011250000047",
+//       "011250000061",
+//       "012035930610",
+//       "012044038925",
+//       "013700975394",
+//       "013700976155"
+//     ];
+
+//     // ✅ Dummy categories
+//     const categories = ["Vapes", "Cannabis", "Convinience", "tobacco"];
+
+//     // ✅ Generate dummy inventory
+//     const inventory = upcs.map((upc, idx) => ({
+//       Item_Name: `Dummy Item ${idx + 1}`,
+//       UPC: upc,
+//       Category: categories[Math.floor(Math.random() * categories.length)],
+//       "On Hand Qty": Math.floor(Math.random() * 100), // random 0-99
+//     }));
+
+//     // Apply limit if provided
+//     const limitedInventory = limitNum ? inventory.slice(0, limitNum) : inventory;
+
+//     // ✅ Dummy cycle counts (simulate Mongo lookup)
+//     const enrichedInventory = limitedInventory.map(item => ({
+//       ...item,
+//       updatedAt: new Date(Date.now() - Math.floor(Math.random() * 7) * 24 * 60 * 60 * 1000), // random last week
+//       cycleCount: Math.floor(Math.random() * 50), // random 0-49
+//     }));
+
+//     res.json({ site, inventory: enrichedInventory });
+//   } catch (err) {
+//     console.error(err);
+//     res.status(500).json({ message: "Failed to get current inventory." });
+//   }
+// });
+
 
 router.get('/inventory-categories', async (req, res) => {
   try {
@@ -632,5 +683,28 @@ router.get('/inventory-categories', async (req, res) => {
     res.status(500).json({ message: "Failed to get categories." });
   }
 });
+
+//dummy route
+// router.get('/inventory-categories', async (req, res) => {
+//   try {
+//     const { site } = req.query;
+//     if (!site) return res.status(400).json({ message: "site is required" });
+
+//     // ✅ Dummy categories as objects
+//     const categories = [
+//       { Category: "Vapes" },
+//       { Category: "Cannabis" },
+//       { Category: "Convinience" },
+//       { Category: "tobacco" },
+//     ];
+
+//     res.json({ categories });
+//   } catch (err) {
+//     console.error(err);
+//     res.status(500).json({ message: "Failed to get categories." });
+//   }
+// });
+
+
 
 module.exports = router;
