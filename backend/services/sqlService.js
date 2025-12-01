@@ -135,7 +135,7 @@ async function getCurrentInventory(site, limit = null) {
     let query = `
       SELECT ${limit ? `TOP ${limit}` : ''} [Item_Name]
             ,[UPC-A (12 digits)] AS 'UPC'
-            ,[Category]
+            ,[Category Name]
             ,[On Hand Qty]
       FROM [CSO].[Current_Inventory]
       WHERE [Station] = '${site}'
@@ -155,11 +155,11 @@ async function getInventoryCategories(site) {
     // await sql.connect(sqlConfig);
     const pool = await getPool();
     const result = await pool.request().query(`
-      SELECT DISTINCT [Category]
+      SELECT DISTINCT [Category Name]
       FROM [CSO].[Current_Inventory]
       WHERE [Station] = '${site}'
-        AND [Category] IS NOT NULL
-      ORDER BY [Category]
+        AND [Category Name] IS NOT NULL
+      ORDER BY [Category Name]
     `);
     // await sql.close();
     return result.recordset;
