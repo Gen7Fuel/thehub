@@ -2,7 +2,7 @@ import { useState } from "react";
 import { Edit, MessageSquareText, ImagePlus, Image as ImageIcon } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
-import { CheckSquare, Square, AlertCircle } from "lucide-react"; 
+import { CheckSquare, Square, AlertCircle } from "lucide-react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from "@/components/ui/select";
 
@@ -29,8 +29,8 @@ interface ChecklistItemCardProps {
     followUp?: string;
     assignedTo?: string;
     issueRaised?: boolean;
-    checkedAt?: string; 
-    requestOrder?: boolean; 
+    checkedAt?: string;
+    requestOrder?: boolean;
     orderCreated?: boolean;
     statusTemplate: string;
     followUpTemplate: string;
@@ -45,19 +45,21 @@ interface ChecklistItemCardProps {
   onIssueToggle?: (raised: boolean) => void;
   mode?: "station" | "interface"; // New prop  
   templateName?: string;
+  type?: "store" | "visitor";
 }
 
 export function ChecklistItemCard({
   item,
-  onCheck = () => {},
-  onComment = () => {},
-  onPhotos = () => {},
-  onFieldChange = () => {},
+  onCheck = () => { },
+  onComment = () => { },
+  onPhotos = () => { },
+  onFieldChange = () => { },
   selectTemplates = [],
   borderColor = "border-gray-300",
   lastChecked,
   mode = "station",
   templateName,
+  type = "store",
 }: ChecklistItemCardProps) {
   const [commentOpen, setCommentOpen] = useState(false);
   const [commentValue, setCommentValue] = useState(item.comment || "");
@@ -101,7 +103,7 @@ export function ChecklistItemCard({
           const data = await res.json();
           uploadedFilenames.push(data.filename);
         }
-      } catch {}
+      } catch { }
     }
     const newPhotos = [...(item.photos || []), ...uploadedFilenames];
     setPhotoPreviews(newPhotos.map(name => `/cdn/download/${name}`));
@@ -209,9 +211,14 @@ export function ChecklistItemCard({
       )}
 
       {/* Last Checked */}
-      <div className={`text-sm ${lastChecked ? "text-gray-500" : "text-gray-400 italic"}`}>
+      {/* <div className={`text-sm ${lastChecked ? "text-gray-500" : "text-gray-400 italic"}`}>
         Last checked: {lastChecked ? new Date(lastChecked).toLocaleString() : "Date not available"}
+      </div> */}
+      <div className={`text-sm ${lastChecked ? "text-gray-500" : "text-gray-400 italic"}`}>
+        {type === "visitor" ? "Last Check By Station:" : "Last checked:"}{" "}
+        {lastChecked ? new Date(lastChecked).toLocaleString() : "Date not available"}
       </div>
+
 
       {/* Fields */}
       <div className="flex gap-4 items-center mt-2">

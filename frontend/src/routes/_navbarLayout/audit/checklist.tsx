@@ -82,7 +82,7 @@ import { useAuth } from "@/context/AuthContext";
 
 const socket = getSocket();
 
-export const RouteContext = createContext<{
+export const RouteContextChecklist = createContext<{
   stationName: string;
   setStationName: (value: string) => void;
 }>({
@@ -224,7 +224,7 @@ function RouteComponent() {
   // const access = user?.access || {}
 
   return (
-    <RouteContext.Provider value={{ stationName, setStationName }}>
+    <RouteContextChecklist.Provider value={{ stationName, setStationName }}>
       <div className="flex flex-col items-center">
         {/* 🔹 Location Picker temporary patch */}
         {/* <div className="mb-6">
@@ -389,7 +389,7 @@ function RouteComponent() {
 
         <Outlet />
       </div>
-    </RouteContext.Provider>
+    </RouteContextChecklist.Provider>
   );
 }
 
