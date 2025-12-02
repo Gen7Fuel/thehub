@@ -19,6 +19,7 @@ interface OpenIssue {
   assignedTo?: string;
   comment?: string;
   photos?: string[];
+  status?: string;
 }
 
 interface SelectOption {

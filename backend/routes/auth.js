@@ -174,7 +174,6 @@ router.post("/login", async (req, res) => {
       initials: getInitials(user.firstName, user.lastName),
       permissions: mergedPermissions,
       site_access: user.site_access,
-      access: user.access,
       timezone,
     };
 

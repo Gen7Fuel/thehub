@@ -3,12 +3,12 @@ import { useEffect, useState } from "react";
 import { ChecklistItemCard } from "@/components/custom/ChecklistItem";
 import { Button } from "@/components/ui/button";
 import { useContext } from "react";
-import { RouteContextChecklist } from "../checklist";
-import { getSocket } from "@/lib/websocket";
+import { RouteContextVisitor } from "../visitor";
+// import { getSocket } from "@/lib/websocket";
 import { useAuth } from "@/context/AuthContext";
 
 
-const socket = getSocket();
+// const socket = getSocket();
 
 
 interface SelectOption {
@@ -43,18 +43,17 @@ interface AuditItem {
   orderCreated?: boolean;
 }
 
-interface AuditUpdatePayload {
-  template: string;
-  site: string;
-  frequencies: string[];
-  updatedItems: Partial<AuditItem>[]; // <-- Partial here
-  updatedAt: string;
-}
+// interface AuditUpdatePayload {
+//   template: string;
+//   site: string;
+//   frequencies: string[];
+//   updatedItems: Partial<AuditItem>[]; // <-- Partial here
+//   updatedAt: string;
+// }
 
-
-export const Route = createFileRoute("/_navbarLayout/audit/checklist/$id")({
+export const Route = createFileRoute('/_navbarLayout/audit/visitor/$id')({
   component: RouteComponent,
-});
+})
 
 // Helper: periodKey generator
 function getPeriodKey(frequency: "daily" | "weekly" | "monthly", date: Date = new Date()) {
@@ -87,13 +86,14 @@ const CATEGORY_COLOR_CLASSES = [
 ];
 
 function RouteComponent() {
-  const { id } = useParams({ from: "/_navbarLayout/audit/checklist/$id" });
+  const { id } = useParams({ from: "/_navbarLayout/audit/visitor/$id" });
 
   // Temporary patch for location picker getting state from ther parent
-  const { stationName } = useContext(RouteContextChecklist);
+  const { stationName } = useContext(RouteContextVisitor);
   const { user } = useAuth();
   const site = stationName || user?.location || "";
   const navigate = useNavigate()
+  console.log('site:',site)
 
   // const site = localStorage.getItem("location") || ""; //Original file
   const [items, setItems] = useState<AuditItem[]>([]);
@@ -139,113 +139,8 @@ function RouteComponent() {
       .then(setSelectTemplates)
       .catch(() => setSelectTemplates([]));
   }, []);
+  
   // Fetch checklist
-  //   const fetchChecklist = async () => {
-  //     setLoading(true);
-  //     const token = localStorage.getItem("token");
-
-  //     try {
-  //       if (frequency !== "all") {
-  //         // single frequency (daily/weekly/monthly)
-  //         const periodKey = getPeriodKey(frequency, currentDate);
-
-  //         const instanceRes = await fetch(
-  //           `/api/audit/instance?template=${id}&site=${encodeURIComponent(
-  //             site
-  //           )}&frequency=${frequency}&periodKey=${periodKey}`,
-  //           { headers: { Authorization: `Bearer ${token}` } }
-  //         );
-
-  //         if (instanceRes.ok) {
-  //           const instanceData = await instanceRes.json();
-  //           if (instanceData?._id) {
-  //             const itemsRes = await fetch(`/api/audit/items?instanceId=${instanceData._id}&templateId=${id}&site=${encodeURIComponent(
-  //             site)}`, 
-  //             {
-  //               headers: { Authorization: `Bearer ${token}` },
-  //             });
-  //             if (itemsRes.ok) {
-  //               const itemsData = await itemsRes.json();
-  //               setItems(sortItems(itemsData));
-  //               setLoading(false);
-  //               return;
-  //             }
-  //             setTemplateName("");
-  //           }
-  //         } 
-  //         // fallback → template items
-  //           const templateRes = await fetch(`/api/audit/${id}?frequency=${frequency}&site=${encodeURIComponent(site)}`, { headers: { Authorization: `Bearer ${token}` } });
-  //           // console.log('site:',site)
-  //           if (templateRes.ok) {
-  //             const templateData = await templateRes.json();
-  //             setTemplateName(templateData.templateName || "");
-  //             setItems(sortItems(
-  //               (templateData.items || []).filter((item: AuditItem) => item.frequency === frequency).map((item: AuditItem) => ({
-  //                 ...item,
-  //                 checked: false,
-  //                 comment: "",
-  //                 photos: [],
-  //               }))
-  //             ));
-  //           }
-
-  //       } else {
-  //         // "all" → merge daily, weekly, monthly
-  //         const frequencies: ("daily" | "weekly" | "monthly")[] = ["daily", "weekly", "monthly"];
-  //         const allItems: AuditItem[] = [];
-
-  //         // fetch template once
-  //         const templateRes = await fetch(`/api/audit/${id}?frequency=${frequency}&site=${encodeURIComponent(site)}`, { headers: { Authorization: `Bearer ${token}` } });
-  //         const templateData = templateRes.ok ? await templateRes.json() : { items: [] };
-  //         const templateItems: AuditItem[] = templateData.items || [];
-
-  //         for (const freq of frequencies) {
-  //           const periodKey = getPeriodKey(freq, currentDate);
-
-  //           // check if instance exists
-  //           const instanceRes = await fetch(
-  //             `/api/audit/instance?template=${id}&site=${encodeURIComponent(site)}&frequency=${freq}&periodKey=${periodKey}`,
-  //             { headers: { Authorization: `Bearer ${token}` } }
-  //           );
-
-  //           if (instanceRes.ok) {
-  //             const instanceData = await instanceRes.json();
-  //             if (instanceData?._id) {
-  //               const itemsRes = await fetch(`/api/audit/items?instanceId=${instanceData._id}&templateId=${id}&site=${encodeURIComponent(
-  //             site)}`,  {
-  //                 headers: { Authorization: `Bearer ${token}` },
-  //               });
-  //               if (itemsRes.ok) {
-  //                 const instanceItems = await itemsRes.json();
-  //                 allItems.push(...instanceItems);
-  //                 setTemplateName("");
-  //                 continue; // skip template fallback
-  //               }
-  //             }
-  //           } 
-  //           // fallback to template for this frequency
-  //           const freqTemplateItems = templateItems
-  //             .filter((item: AuditItem) => item.frequency === freq)
-  //             .map((item: AuditItem) => ({
-  //               ...item,
-  //               checked: false,
-  //               comment: "",
-  //               photos: [],
-  //             }));
-  //             setTemplateName(templateData.templateName || "");
-
-  //           allItems.push(...freqTemplateItems);
-  //         }
-
-  //         setItems(sortItems(allItems));
-  //       }
-  //     } catch (err) {
-  //       console.error("Failed to fetch checklist:", err);
-  //       setItems([]);
-  //     } finally {
-  //     setLoading(false);
-  //   }
-  // };
   const fetchChecklist = async () => {
     setLoading(true);
     const token = localStorage.getItem("token");
@@ -254,11 +149,11 @@ function RouteComponent() {
       const res = await fetch(
         `/api/audit/items-full?templateId=${id}&site=${encodeURIComponent(
           site
-        )}&date=${currentDate.toISOString()}&frequency=${frequency}&type=store`,
+        )}&date=${currentDate.toISOString()}&frequency=${frequency}&type=visitor`,
         {
           headers: {
             Authorization: `Bearer ${token}`,
-            "X-Required-Permission": "stationAudit.checklist"
+            "X-Required-Permission": "stationAudit.visitor"
           },
         }
       );
@@ -288,30 +183,30 @@ function RouteComponent() {
     if (id && site) fetchChecklist();
   }, [id, site, frequency]);
 
-  useEffect(() => {
-    if (!socket) return;
+  // useEffect(() => {
+  //   if (!socket) return;
 
-    socket.on("auditUpdated", (payload: AuditUpdatePayload) => {
-      console.log("📡 Real-time audit update received:", payload);
+  //   socket.on("auditUpdated", (payload: AuditUpdatePayload) => {
+  //     console.log("📡 Real-time audit update received:", payload);
 
-      if (payload.template !== id || payload.site !== site) return;
+  //     if (payload.template !== id || payload.site !== site) return;
 
-      setItems((prev) => {
-        const updatedMap = new Map(payload.updatedItems.map((i) => [i.item, i]));
+  //     setItems((prev) => {
+  //       const updatedMap = new Map(payload.updatedItems.map((i) => [i.item, i]));
 
-        return prev.map((item) => {
-          const update = updatedMap.get(item.item);
+  //       return prev.map((item) => {
+  //         const update = updatedMap.get(item.item);
 
-          // Merge the partial update into existing item and assert type
-          return update ? ({ ...item, ...update } as AuditItem) : item;
-        });
-      });
-    });
+  //         // Merge the partial update into existing item and assert type
+  //         return update ? ({ ...item, ...update } as AuditItem) : item;
+  //       });
+  //     });
+  //   });
 
-    return () => {
-      socket.off("auditUpdated");
-    };
-  }, [socket, id, site]);
+  //   return () => {
+  //     socket.off("auditUpdated");
+  //   };
+  // }, [socket, id, site]);
 
   // Handlers
   const handleCheck = (idx: number, checked: boolean) =>
@@ -356,12 +251,12 @@ function RouteComponent() {
     }
 
     try {
-      const res = await fetch("/api/audit/instance", {
+      const res = await fetch("/api/audit/visitor", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
           Authorization: `Bearer ${token}`,
-          "X-Required-Permission": "stationAudit.checklist",
+          "X-Required-Permission": "stationAudit.visitor",
         },
         body: JSON.stringify({
           template: id,
@@ -506,6 +401,7 @@ function RouteComponent() {
                 key={item._id || idx}
                 item={item}
                 mode="station"
+                type="visitor"
                 templateName={templateName}
                 onCheck={(checked) => handleCheck(idx, checked)}
                 onComment={(comment) => handleComment(idx, comment)}

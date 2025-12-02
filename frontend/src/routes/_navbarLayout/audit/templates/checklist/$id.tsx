@@ -363,7 +363,7 @@ function RouteComponent() {
                 <th className="border px-2 py-1">Category</th>
                 <th className="border px-2 py-1">Item to be Checked</th>
                 <th className="border px-2 py-1">Status</th>
-                <th className="border px-2 py-1">Follow Up</th>
+                {/* <th className="border px-2 py-1">Follow Up</th> */}
                 <th className="border px-2 py-1">Assigned To</th>
                 <th className="border px-2 py-1">Frequency</th>
                 { name === "Orders" && (
@@ -418,7 +418,7 @@ function RouteComponent() {
                       </SelectContent>
                     </Select>
                   </td>
-                  <td className="border px-2 py-1">
+                  {/* <td className="border px-2 py-1">
                     <Select
                       value={row.followUpTemplate}
                       onValueChange={val => handleItemChange(idx, "followUpTemplate", val)}
@@ -434,7 +434,7 @@ function RouteComponent() {
                         ))}
                       </SelectContent>
                     </Select>
-                  </td>
+                  </td> */}
                   <td className="border px-2 py-1">
                     <Select
                       value={row.assignedTo}

@@ -115,14 +115,18 @@ const PurchaseOrderFormPDF = ({ order }: { order: Order }) => (
           <Text style={styles.cellLabel}>Price</Text>
           <Text style={styles.cellValue}>${order.amount}</Text>
         </View>
+        <View style={styles.row}>
+          <Text style={styles.cellLabel}>Price/Litre</Text>
+          <Text style={styles.cellValue}>${(order.amount/order.quantity).toFixed(3)}</Text>
+        </View>
         <View style={[styles.row, styles.rowLast]}>
           <Text style={styles.cellLabel}>Description</Text>
           <Text style={styles.cellValue}>{order.vehicleMakeModel}</Text>
         </View>
       </View>
-      <View style={styles.signatureBox}>
+      {/* <View style={styles.signatureBox}>
         <Image src={order.signature} />
-      </View>
+      </View> */}
     </Page>
 
     <Page style={styles.page}>
