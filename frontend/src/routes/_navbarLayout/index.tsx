@@ -87,21 +87,21 @@ function App() {
         {access?.accounting?.value && (
           <Section title="Accounting">
             <div className="flex flex-wrap gap-4">
-              {access?.accounting.cashSummary && (
+              {access?.accounting?.cashSummary && (
                 <Link to="/cash-summary" search={{ site: user?.location }}>
                   <Button className="w-32 h-32 flex items-center justify-center break-words whitespace-normal text-center">
                     Cash Summary
                   </Button>
                 </Link>
               )}
-              {access?.accounting.safesheet && (
+              {access?.accounting?.safesheet && (
                 <Link to="/safesheet" search={{ site: user?.location }}>
                   <Button className="w-32 h-32 flex items-center justify-center break-words whitespace-normal text-center">
                     Safesheet
                   </Button>
                 </Link>
               )}
-              {access?.accounting.cashRec && (
+              {access?.accounting?.cashRec && (
                 <Link to="/cash-rec" search={{ site: user?.location }}>
                   <Button className="w-32 h-32 flex items-center justify-center break-words whitespace-normal text-center">
                     Cash Rec
@@ -113,7 +113,7 @@ function App() {
                   <Button className="w-32 h-32 flex items-center justify-center break-words whitespace-normal text-center">
                     SFTP
                   </Button>
-                </Link>
+                </Link>s
               )} */}
               {/* {access?.accounting.fuelRec && (
                 <Link to="/fuel-rec" search={{ site: user?.location }}>

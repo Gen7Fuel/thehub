@@ -86,7 +86,7 @@ export default function RouteComponent() {
         const res = await fetch(`/api/safesheets/site/${encodeURIComponent(site)}`, {
           headers: {
             Authorization: `Bearer ${localStorage.getItem('token')}`,
-            'X-Required-Permission': 'safesheet',
+            'X-Required-Permission': 'accounting.safesheet',
           },
         })
 
@@ -156,7 +156,7 @@ export default function RouteComponent() {
         headers: {
           'Content-Type': 'application/json',
           Authorization: `Bearer ${localStorage.getItem('token')}`,
-          'X-Required-Permission': 'safesheet',
+          'X-Required-Permission': 'accounting.safesheet',
         },
         body: JSON.stringify(entryBody),
       })
@@ -202,7 +202,7 @@ export default function RouteComponent() {
           headers: {
             'Content-Type': 'application/json',
             Authorization: `Bearer ${localStorage.getItem('token')}`,
-            'X-Required-Permission': 'safesheet',
+            'X-Required-Permission': 'accounting.safesheet',
           },
           body: JSON.stringify({ [field]: value }),
         },
