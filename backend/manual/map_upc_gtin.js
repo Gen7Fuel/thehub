@@ -20,13 +20,12 @@ async function backfillUPC() {
         const itembook = await getUPC_barcode(doc.gtin);
         if (Array.isArray(itembook) && itembook.length > 0) {
           const upc = itembook[0].UPC || doc.upc;
-          const upc_barcode = itembook[0].UPC_A_12_digits || doc.upc_barcode;
+          const upc_barcode = itembook[0].UPC_barcode || doc.upc_barcode;
 
           doc.upc = upc;
           doc.upc_barcode = upc_barcode;
-          doc.updatedAt = new Date();
 
-          await doc.save();
+          await doc.save({ timestamps: false });
         } else {
           console.log(`No SQL record found for GTIN ${doc.gtin}`);
         }
