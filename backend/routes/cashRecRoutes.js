@@ -146,16 +146,15 @@ function parseTransactionDetailTab(text) {
   }
 }
 
-// POST /api/cash-rec/parse-kardpoll
-router.post('/parse-kardpoll', upload.single('file'), async (req, res) => {
+router.post('/parse-kardpoll', express.json(), async (req, res) => {
   try {
-    if (!req.file) return res.status(400).json({ error: 'Missing file (use field name "file")' })
-    const text = req.file.buffer.toString('utf8')
+    const { filename = 'report.txt', base64 } = req.body || {}
+    if (!base64) return res.status(400).json({ error: 'base64 is required' })
+    const text = Buffer.from(base64, 'base64').toString('utf8')
     const result = parseTransactionDetailTab(text)
-    return res.json(result)
-  } catch (err) {
-    console.error('cashRecRoutes.parse-kardpoll error:', err)
-    return res.status(500).json({ error: 'Failed to parse file' })
+    res.json({ filename, ...result })
+  } catch (e) {
+    res.status(500).json({ error: 'Failed to parse file' })
   }
 })
 

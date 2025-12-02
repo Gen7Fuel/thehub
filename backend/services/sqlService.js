@@ -290,7 +290,7 @@ async function getUPC_barcode(gtin) {
 
     // ⏱ Timeout ensures long-running queries don't hang forever
     const result = await request.query(
-      "SELECT [UPC-A (12 digits)], [UPC] FROM [CSO].[ItemBookCSO] WHERE [GTIN] = @gtin",
+      "SELECT [UPC-A (12 digits)] as 'UPC_barcode', [UPC] FROM [CSO].[ItemBookCSO] WHERE [GTIN] = @gtin",
       { timeout: 30000 } // 30 seconds
     );
     return result.recordset;
