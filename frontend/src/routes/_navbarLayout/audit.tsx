@@ -22,7 +22,7 @@ function RouteComponent() {
   const isChecklistActive = matchRoute({ to: '/audit/checklist', fuzzy: true })
   const isInterfaceActive = matchRoute({ to: '/audit/interface', fuzzy: true })
   const isVisitorActive = matchRoute({ to: '/audit/visitor', fuzzy: true })
-  
+
   const { user } = useAuth();
   // Retrieve access permissions from decoded token
   // const access = user?.access || '{}' //markpoint
@@ -32,52 +32,38 @@ function RouteComponent() {
     <div className="pt-16 flex flex-col items-center">
       {/* Grouped navigation buttons for audit sections */}
       <div className="flex mb-4">
-        {/* Show Templates button if user has access */}
-        {/* {access.component_station_audit_template && ( //markpoint */}
-        {access?.stationAudit?.template && (
-          <Link to="/audit/templates">
-            <Button
-              {...(isCreateActive ? {} : { variant: 'outline' } as object)}
-              className="rounded-r-none"
-            >
-              Templates
-            </Button>
-          </Link>
-        )}
-        {/* Checklist button is always shown */}
-        {access?.stationAudit?.checklist && (
-          <Link to="/audit/checklist">
-            <Button
-              {...(!isChecklistActive && { variant: 'outline' } as object)}
-              className="rounded-none"
-            >
-              Checklist
-            </Button>
-          </Link>
-        )}
-        {/* Checklist button is always shown */}
-        {access?.stationAudit?.visitor && (
-          <Link to="/audit/visitor">
-            <Button
-              {...(!isVisitorActive && { variant: 'outline' } as object)}
-              className="rounded-none"
-            >
-              Visitors Audit
-            </Button>
-          </Link>
-        )}
-        {/* {access.component_station_audit_interface && ( //markpoint */}
-        {access?.stationAudit?.interface && (
-          <Link to="/audit/interface">
-            <Button
-              {...(!isInterfaceActive && { variant: 'outline' } as object)}
-              className="rounded-l-none"
-            >
-              Interface
-            </Button>
-          </Link>
-        )}
+        {[
+          { key: 'template', label: 'Templates', to: '/audit/templates', isActive: isCreateActive },
+          { key: 'checklist', label: 'Checklist', to: '/audit/checklist', isActive: isChecklistActive },
+          { key: 'visitor', label: 'Visitors Audit', to: '/audit/visitor', isActive: isVisitorActive },
+          { key: 'interface', label: 'Interface', to: '/audit/interface', isActive: isInterfaceActive },
+        ]
+          .filter(btn => access?.stationAudit?.[btn.key]) // Only keep buttons with permission
+          .map((btn, idx, arr) => {
+            const isFirst = idx === 0;
+            const isLast = idx === arr.length - 1;
+            const isOnly = arr.length === 1;
+
+            let roundingClass = 'rounded-none';
+
+            if (isOnly) roundingClass = 'rounded-xl'; // Only one button → round all corners
+            else if (isFirst) roundingClass = 'rounded-l-xl rounded-r-none';
+            else if (isLast) roundingClass = 'rounded-r-xl rounded-l-none';
+
+            return (
+              <Link key={btn.key} to={btn.to}>
+                <Button
+                  {...(!btn.isActive && { variant: 'outline' } as object)}
+                  className={roundingClass}
+                >
+                  {btn.label}
+                </Button>
+              </Link>
+            );
+          })}
       </div>
+
+
       {/* Render the nested route content */}
       <Outlet />
     </div>
