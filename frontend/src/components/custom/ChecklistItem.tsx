@@ -204,21 +204,16 @@ export function ChecklistItemCard({
         </div>
       </div>
       {/* CheckedAt display in interface mode */}
-      {mode === "interface" && (
+      {mode === "interface" ? (
         <div className={`text-sm ${item.checkedAt ? "text-gray-500" : "text-gray-400 italic"}`}>
           Completed at: {item.checkedAt ? new Date(item.checkedAt).toLocaleString() : "Not Checked Yet"}
         </div>
+      ) : (
+        <div className={`text-sm ${lastChecked ? "text-gray-500" : "text-gray-400 italic"}`}>
+          {type === "visitor" ? "Last Check By Station:" : "Last checked:"}{" "}
+          {lastChecked ? new Date(lastChecked).toLocaleString() : "Date not available"}
+        </div>
       )}
-
-      {/* Last Checked */}
-      {/* <div className={`text-sm ${lastChecked ? "text-gray-500" : "text-gray-400 italic"}`}>
-        Last checked: {lastChecked ? new Date(lastChecked).toLocaleString() : "Date not available"}
-      </div> */}
-      <div className={`text-sm ${lastChecked ? "text-gray-500" : "text-gray-400 italic"}`}>
-        {type === "visitor" ? "Last Check By Station:" : "Last checked:"}{" "}
-        {lastChecked ? new Date(lastChecked).toLocaleString() : "Date not available"}
-      </div>
-
 
       {/* Fields */}
       <div className="flex gap-4 items-center mt-2">

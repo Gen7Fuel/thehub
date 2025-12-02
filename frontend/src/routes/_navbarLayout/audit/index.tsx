@@ -15,6 +15,8 @@ function RouteComponent() {
     if (!user) return; // wait for auth load
     if (access?.stationAudit?.checklist) {
       navigate({to: "/audit/checklist"});
+    } else if (access?.stationAudit?.visitor) {
+      navigate({to: "/audit/visitor"});
     } else {
       navigate({to: "/audit/interface"});
     }

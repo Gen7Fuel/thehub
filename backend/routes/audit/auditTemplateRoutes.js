@@ -8,6 +8,7 @@ const Vendor = require('../../models/Vendor');
 // const { sendEmail } = require('../../utils/emailService');
 const SelectTemplate = require('../../models/audit/selectTemplate');
 const { emailQueue } = require('../../queues/emailQueue');
+const User = require('../../models/User');
 
 
 // GET /api/audit/category-options
@@ -141,15 +142,149 @@ const getPeriodKey = (frequency, date) => {
 };
 
 // check from audit instance if availabe then fetch
+// router.get('/instance', async (req, res) => {
+//   try {
+//     const { template, site, frequency, periodKey, date } = req.query;
+//     if (!template || !site || !frequency) return res.status(400).json({ error: 'Missing params' });
+
+//     let key = periodKey;
+//     if (!key && date) key = getPeriodKey(frequency, date);
+
+//     const instance = await AuditInstance.findOne({ template, site, frequency, periodKey: key }).lean();
+//     res.json(instance || null);
+//   } catch (err) {
+//     console.error(err);
+//     res.status(500).json({ error: err.message });
+//   }
+// });
+
+router.get("/compare", async (req, res) => {
+  try {
+    const { template, site, frequency, date, periodKey } = req.query;
+
+    if (!template || !site || !frequency)
+      return res.status(400).json({ error: "Missing template, site, or frequency" });
+
+    // Compute periodKey if only date is given
+    const key = periodKey || getPeriodKey(frequency, date);
+
+    // Load template
+    const templateDoc = await AuditTemplate.findById(template).lean();
+    if (!templateDoc) return res.status(404).json({ error: "Template not found" });
+
+    // STEP 1: Fetch store and visitor instances for this period
+    const instances = await AuditInstance.find({
+      template,
+      site,
+      frequency,
+      periodKey: key,
+      type: { $in: ["store", "visitor"] }
+    }).lean();
+
+    const storeInst = instances.find(i => i.type === "store");
+    const visitorInst = instances.find(i => i.type === "visitor");
+
+    // STEP 2: Fetch items for each instance
+    const storeItems = storeInst
+      ? await AuditItem.find({ instance: storeInst._id }).lean()
+      : [];
+
+    const visitorItems = visitorInst
+      ? await AuditItem.find({ instance: visitorInst._id }).lean()
+      : [];
+
+    // Get auditor name safely
+    let auditorName = "N/A";
+    if (visitorInst && visitorInst.completedBy) {
+      const auditor = await User.findById(visitorInst.completedBy).lean();
+      auditorName = auditor ? `${auditor.firstName} ${auditor.lastName}` : "N/A";
+    }
+    // let visitorItems = [];
+    // if (visitorInst) {
+    //   visitorItems = await AuditItem.find({ instance: visitorInst._id }).lean();
+
+    //   // Fetch the auditor's name and attach it to each visitor item
+    //   const auditorId = visitorInst.completedBy;
+    //   if (auditorId) {
+    //     const auditor = await User.findById(auditorId).lean();
+    //     const auditorName = auditor ? `${auditor.firstName} ${auditor.lastName}` : "N/A";
+
+    //     visitorItems = visitorItems.map(item => ({
+    //       ...item,
+    //       completedByName: auditorName
+    //     }));
+    //   }
+    // }
+
+    // STEP 3: Create storeItemsAll if lengths differ
+    let storeItemsAll = [...storeItems];
+
+    if (visitorItems.length !== storeItems.length && storeItems.length > 0) {
+      for (const tmplItem of templateDoc.items) {
+        const assignedSite = tmplItem.assignedSites?.find(s => s.site === site);
+
+        if (assignedSite?.issueRaised && assignedSite.lastChecked) {
+          const existsInStore = storeItemsAll.some(s => s.item === tmplItem.item);
+          const existsInVisitor = visitorItems.some(v => v.item === tmplItem.item);
+
+          // Only add if missing in store but present in visitor
+          if (!existsInStore && existsInVisitor) {
+            const histPeriodKey = getPeriodKey(tmplItem.frequency, assignedSite.lastChecked);
+
+            const historicalInstance = await AuditInstance.findOne({
+              template,
+              site,
+              type: "store",
+              frequency: tmplItem.frequency,
+              periodKey: histPeriodKey
+            }).lean();
+
+            if (historicalInstance) {
+              const histItem = await AuditItem.findOne({
+                instance: historicalInstance._id,
+                item: tmplItem.item
+              }).lean();
+
+              if (histItem) {
+                storeItemsAll.push(histItem); // Add historical issue-raised items
+              }
+            }
+          }
+        }
+      }
+    }
+
+    const sortItems = arr => arr.sort((a, b) => a.item.localeCompare(b.item));
+
+    return res.json({
+      templateName: templateDoc.name,
+      frequency,
+      periodKey: key,
+      auditorName: auditorName,                                 // visitor who completed the audit
+      visitorItems: sortItems(visitorItems),       // full visitor list
+      storeItems: sortItems(storeItems),           // only store items for the period
+      storeItemsAll: sortItems(storeItemsAll),     // store + historical issues if needed
+    });
+
+  } catch (err) {
+    console.error("COMPARE ERROR:", err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
 router.get('/instance', async (req, res) => {
   try {
-    const { template, site, frequency, periodKey, date } = req.query;
-    if (!template || !site || !frequency) return res.status(400).json({ error: 'Missing params' });
+    const { template, site, frequency, periodKey, date, type } = req.query;
+    if (!template || !site || !frequency)
+      return res.status(400).json({ error: 'Missing params' });
 
     let key = periodKey;
     if (!key && date) key = getPeriodKey(frequency, date);
 
-    const instance = await AuditInstance.findOne({ template, site, frequency, periodKey: key }).lean();
+    const match = { template, site, frequency, periodKey: key };
+    if (type) match.type = type; // 🔑 filter by store/visitor when provided
+
+    const instance = await AuditInstance.findOne(match).lean();
     res.json(instance || null);
   } catch (err) {
     console.error(err);
@@ -351,6 +486,7 @@ router.get("/open-issues", async (req, res) => {
         instance: item.instance,
         frequency: item.frequency,
         assignedTo: item.assignedTo,
+        status: item.status,
       };
     });
 
@@ -700,8 +836,8 @@ router.post('/instance', async (req, res) => {
                       </div>
                     </div>
                   `;
-                  // const cc = ["daksh@gen7fuel.com", "ana@gen7fuel.com"];
-                  const cc = ["daksh@gen7fuel.com"];
+                  const cc = ["daksh@gen7fuel.com", "ana@gen7fuel.com"];
+                  // const cc = ["daksh@gen7fuel.com"];
                   await emailQueue.add("sendIssueEmail", { to, subject, text, html, cc });
                   console.log(`📨 Email queued for ${to}`);
                 } else {
@@ -891,157 +1027,157 @@ router.post('/visitor', async (req, res) => {
 
         // ---- Handle issueRaised logic ----
         // if (item.issueRaised === true) {
-          // let issueStatus = existingItem?.issueStatus || [];
-          // const createdStatus = issueStatus.find(
-          //   (s) => s.status === "Created"
-          // );
-          // if (createdStatus) {
-          //   createdStatus.timestamp = new Date();
-          // } else {
-          //   issueStatus.push({ status: "Created", timestamp: new Date() });
-          // }
-          // updateFields.issueStatus = issueStatus;
+        // let issueStatus = existingItem?.issueStatus || [];
+        // const createdStatus = issueStatus.find(
+        //   (s) => s.status === "Created"
+        // );
+        // if (createdStatus) {
+        //   createdStatus.timestamp = new Date();
+        // } else {
+        //   issueStatus.push({ status: "Created", timestamp: new Date() });
+        // }
+        // updateFields.issueStatus = issueStatus;
 
-          // 🔹 Emit socket event when issue raised/created
-          // if (io && item.issueRaised !== existingItem?.issueRaised) {
-          //   io.emit("issueUpdated", {
-          //     template,
-          //     site,
-          //     item: item.item,
-          //     category: item.category,
-          //     action: "created",
-          //     updatedAt: new Date(),
-          //   });
-          // }
+        // 🔹 Emit socket event when issue raised/created
+        // if (io && item.issueRaised !== existingItem?.issueRaised) {
+        //   io.emit("issueUpdated", {
+        //     template,
+        //     site,
+        //     item: item.item,
+        //     category: item.category,
+        //     action: "created",
+        //     updatedAt: new Date(),
+        //   });
+        // }
 
-          // 🔹 Send email only when issueRaised goes from false → true
-          // if (item.issueRaised === true && existingItem?.issueRaised !== true) {
-          //   try {
-          //     const assignedTemplate = await SelectTemplate.findOne({
-          //       name: "Assigned To",
-          //     });
+        // 🔹 Send email only when issueRaised goes from false → true
+        // if (item.issueRaised === true && existingItem?.issueRaised !== true) {
+        //   try {
+        //     const assignedTemplate = await SelectTemplate.findOne({
+        //       name: "Assigned To",
+        //     });
 
-          //     if (assignedTemplate && assignedTemplate.options?.length > 0) {
-          //       // Match by assignedTo text
-          //       const match = assignedTemplate.options.find(
-          //         (opt) => opt.text === item.assignedTo
-          //       );
+        //     if (assignedTemplate && assignedTemplate.options?.length > 0) {
+        //       // Match by assignedTo text
+        //       const match = assignedTemplate.options.find(
+        //         (opt) => opt.text === item.assignedTo
+        //       );
 
-          //       if (match && match.email) {
-          //         const to = match.email;
-          //         // const subject = `Issue Raised for site ${site}`;
-          //         // const text = `An issue has been raised for site ${site}.\n\nChecklist: ${item.item}\nCategory: ${item.category}\n\nPlease review the issue in the Hub under Station Audit Interface.`;
-          //         // const html = `
-          //         //   <h2>Issue Raised</h2>
-          //         //   <p><strong>Site:</strong> ${site}</p>
-          //         //   <p><strong>Checklist:</strong> ${item.item}</p>
-          //         //   <p><strong>Category:</strong> ${item.category}</p>
-          //         //   <p>Please review the issue in the Hub under Station Audit Interface.</p>
-          //         // `;
-          //         const subject = `⚠️ Issue Raised for Site ${site}`;
-          //         const text = `An issue has been raised for site ${site}.
-          //         Checklist: ${item.item}
-          //         Category: ${item.category}
+        //       if (match && match.email) {
+        //         const to = match.email;
+        //         // const subject = `Issue Raised for site ${site}`;
+        //         // const text = `An issue has been raised for site ${site}.\n\nChecklist: ${item.item}\nCategory: ${item.category}\n\nPlease review the issue in the Hub under Station Audit Interface.`;
+        //         // const html = `
+        //         //   <h2>Issue Raised</h2>
+        //         //   <p><strong>Site:</strong> ${site}</p>
+        //         //   <p><strong>Checklist:</strong> ${item.item}</p>
+        //         //   <p><strong>Category:</strong> ${item.category}</p>
+        //         //   <p>Please review the issue in the Hub under Station Audit Interface.</p>
+        //         // `;
+        //         const subject = `⚠️ Issue Raised for Site ${site}`;
+        //         const text = `An issue has been raised for site ${site}.
+        //         Checklist: ${item.item}
+        //         Category: ${item.category}
 
-          //         Please review the issue in the Hub under Station Audit Interface.`;
+        //         Please review the issue in the Hub under Station Audit Interface.`;
 
-          //         const html = `
-          //           <div style="
-          //             font-family: 'Segoe UI', Arial, sans-serif;
-          //             background-color: #f7f9fc;
-          //             padding: 30px;
-          //           ">
-          //             <div style="
-          //               max-width: 600px;
-          //               margin: 0 auto;
-          //               background-color: #ffffff;
-          //               border-radius: 12px;
-          //               box-shadow: 0 4px 8px rgba(0,0,0,0.08);
-          //               overflow: hidden;
-          //             ">
-          //               <!-- Header -->
-          //               <div style="
-          //                 background-color: #d32f2f;
-          //                 color: #ffffff;
-          //                 text-align: center;
-          //                 padding: 16px 0;
-          //               ">
-          //                 <h1 style="margin: 0; font-size: 22px;">🚨 Issue Raised Alert</h1>
-          //               </div>
+        //         const html = `
+        //           <div style="
+        //             font-family: 'Segoe UI', Arial, sans-serif;
+        //             background-color: #f7f9fc;
+        //             padding: 30px;
+        //           ">
+        //             <div style="
+        //               max-width: 600px;
+        //               margin: 0 auto;
+        //               background-color: #ffffff;
+        //               border-radius: 12px;
+        //               box-shadow: 0 4px 8px rgba(0,0,0,0.08);
+        //               overflow: hidden;
+        //             ">
+        //               <!-- Header -->
+        //               <div style="
+        //                 background-color: #d32f2f;
+        //                 color: #ffffff;
+        //                 text-align: center;
+        //                 padding: 16px 0;
+        //               ">
+        //                 <h1 style="margin: 0; font-size: 22px;">🚨 Issue Raised Alert</h1>
+        //               </div>
 
-          //               <!-- Body -->
-          //               <div style="padding: 24px 30px;">
-          //                 <p style="font-size: 16px; color: #333;">
-          //                   An issue has been raised for the following site:
-          //                 </p>
+        //               <!-- Body -->
+        //               <div style="padding: 24px 30px;">
+        //                 <p style="font-size: 16px; color: #333;">
+        //                   An issue has been raised for the following site:
+        //                 </p>
 
-          //                 <table style="width: 100%; border-collapse: collapse; margin-top: 10px;">
-          //                   <tr>
-          //                     <td style="padding: 8px; font-weight: bold; color: #555;">🏪 Site:</td>
-          //                     <td style="padding: 8px; color: #222;">${site}</td>
-          //                   </tr>
-          //                   <tr>
-          //                     <td style="padding: 8px; font-weight: bold; color: #555;">🧾 Checklist:</td>
-          //                     <td style="padding: 8px; color: #222;">${item.item}</td>
-          //                   </tr>
-          //                   <tr>
-          //                     <td style="padding: 8px; font-weight: bold; color: #555;">📂 Category:</td>
-          //                     <td style="padding: 8px; color: #222;">${item.category}</td>
-          //                   </tr>
-          //                 </table>
+        //                 <table style="width: 100%; border-collapse: collapse; margin-top: 10px;">
+        //                   <tr>
+        //                     <td style="padding: 8px; font-weight: bold; color: #555;">🏪 Site:</td>
+        //                     <td style="padding: 8px; color: #222;">${site}</td>
+        //                   </tr>
+        //                   <tr>
+        //                     <td style="padding: 8px; font-weight: bold; color: #555;">🧾 Checklist:</td>
+        //                     <td style="padding: 8px; color: #222;">${item.item}</td>
+        //                   </tr>
+        //                   <tr>
+        //                     <td style="padding: 8px; font-weight: bold; color: #555;">📂 Category:</td>
+        //                     <td style="padding: 8px; color: #222;">${item.category}</td>
+        //                   </tr>
+        //                 </table>
 
-          //                 <div style="
-          //                   margin-top: 24px;
-          //                   background-color: #fff3cd;
-          //                   border-left: 6px solid #ffc107;
-          //                   padding: 16px;
-          //                   border-radius: 8px;
-          //                 ">
-          //                   <p style="margin: 0; color: #856404; font-size: 15px;">
-          //                     ⚠️ Please review this issue in the <strong>Hub → Station Audit Interface</strong> as soon as possible.
-          //                   </p>
-          //                 </div>
+        //                 <div style="
+        //                   margin-top: 24px;
+        //                   background-color: #fff3cd;
+        //                   border-left: 6px solid #ffc107;
+        //                   padding: 16px;
+        //                   border-radius: 8px;
+        //                 ">
+        //                   <p style="margin: 0; color: #856404; font-size: 15px;">
+        //                     ⚠️ Please review this issue in the <strong>Hub → Station Audit Interface</strong> as soon as possible.
+        //                   </p>
+        //                 </div>
 
-          //                 <div style="text-align: center; margin-top: 30px;">
-          //                   <a href="https://app.gen7fuel.com/audit/interface/open-issues" 
-          //                     style="
-          //                       background-color: #1976d2;
-          //                       color: #ffffff;
-          //                       padding: 12px 22px;
-          //                       text-decoration: none;
-          //                       font-weight: 600;
-          //                       border-radius: 6px;
-          //                       display: inline-block;
-          //                       font-size: 15px;
-          //                     ">
-          //                     🔗 Open Station Audit Interface
-          //                   </a>
-          //                 </div>
+        //                 <div style="text-align: center; margin-top: 30px;">
+        //                   <a href="https://app.gen7fuel.com/audit/interface/open-issues" 
+        //                     style="
+        //                       background-color: #1976d2;
+        //                       color: #ffffff;
+        //                       padding: 12px 22px;
+        //                       text-decoration: none;
+        //                       font-weight: 600;
+        //                       border-radius: 6px;
+        //                       display: inline-block;
+        //                       font-size: 15px;
+        //                     ">
+        //                     🔗 Open Station Audit Interface
+        //                   </a>
+        //                 </div>
 
-          //                 <p style="color: #777; font-size: 13px; margin-top: 32px; text-align: center;">
-          //                   This is an automated message from the Gen7Fuel Hub Audit System.<br>
-          //                   Please do not reply to this email.
-          //                 </p>
-          //               </div>
-          //             </div>
-          //           </div>
-          //         `;
-          //         const cc = ["daksh@gen7fuel.com", "ana@gen7fuel.com"];
+        //                 <p style="color: #777; font-size: 13px; margin-top: 32px; text-align: center;">
+        //                   This is an automated message from the Gen7Fuel Hub Audit System.<br>
+        //                   Please do not reply to this email.
+        //                 </p>
+        //               </div>
+        //             </div>
+        //           </div>
+        //         `;
+        //         const cc = ["daksh@gen7fuel.com", "ana@gen7fuel.com"];
 
-          //         await emailQueue.add("sendIssueEmail", { to, subject, text, html, cc });
-          //         console.log(`📨 Email queued for ${to}`);
-          //       } else {
-          //         console.warn(
-          //           `⚠️ No matching Assigned To email found for "${item.assignedTo}"`
-          //         );
-          //       }
-          //     } else {
-          //       console.warn("⚠️ Assigned To template not found");
-          //     }
-          //   } catch (emailErr) {
-          //     console.error("❌ Error sending issueRaised email:", emailErr);
-          //   }
-          // }
+        //         await emailQueue.add("sendIssueEmail", { to, subject, text, html, cc });
+        //         console.log(`📨 Email queued for ${to}`);
+        //       } else {
+        //         console.warn(
+        //           `⚠️ No matching Assigned To email found for "${item.assignedTo}"`
+        //         );
+        //       }
+        //     } else {
+        //       console.warn("⚠️ Assigned To template not found");
+        //     }
+        //   } catch (emailErr) {
+        //     console.error("❌ Error sending issueRaised email:", emailErr);
+        //   }
+        // }
         // }
 
         await AuditItem.updateOne(

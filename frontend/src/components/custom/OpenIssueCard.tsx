@@ -14,6 +14,7 @@ interface OpenIssueCardProps {
     lastUpdated?: string;
     comment?: string;
     photos?: string[];
+    status?: string;
   };
   borderColor?: string;
   mode?: "station" | "interface";
@@ -86,6 +87,11 @@ export function OpenIssueCard({ issue, borderColor, mode = "station", onUpdateCl
       {/* Assigned to */}
       {issue.assignedTo && (
         <div className="text-sm text-gray-700">Assigned To: {issue.assignedTo}</div>
+      )}
+
+      {/* --- STATUS SELECTED --- */}
+      {issue.status && (
+        <div className="text-sm text-gray-700">Status Selected: {issue.status}</div>
       )}
 
       {/* Comment */}
