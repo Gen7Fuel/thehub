@@ -56,11 +56,43 @@ export const clearPendingActions = async () => {
 };
 
 // check for pending actions if any
-export const hasPendingActions = async (): Promise<boolean> => {
+// export const hasPendingActions = async (): Promise<boolean> => {
+//   const db = await getDB();
+//   const tx = db.transaction("pendingActions", "readonly");
+//   const count = await tx.store.count();
+//   return count > 0;
+// };
+export const hasPendingActionsForId = async (orderId: string) => {
   const db = await getDB();
-  const tx = db.transaction("pendingActions", "readonly");
-  const count = await tx.store.count();
-  return count > 0;
+  const actions = await db.getAll(PENDING_STORE);
+
+  return actions.some(a => a.orderId === orderId);
+};
+
+// delete any pending actions for a order rec if order is deleted
+export const deletePendingActionsForId = async (orderId: string) => {
+  const db = await getDB();
+
+  // 🔥 1. Delete pending actions
+  const tx1 = db.transaction(PENDING_STORE, 'readwrite');
+  const store1 = tx1.store;
+
+  const keys = await store1.getAllKeys();
+  const actions = await store1.getAll();
+
+  for (let i = 0; i < actions.length; i++) {
+    if (actions[i].orderId === orderId) {
+      await store1.delete(keys[i]);
+    }
+  }
+  await tx1.done;
+
+  // 🔥 2. Delete cached order rec
+  const tx2 = db.transaction(ORDER_STORE, 'readwrite');
+  await tx2.store.delete(orderId);  // uses keyPath (id)
+  await tx2.done;
+
+  return true;
 };
 
 // clear index db

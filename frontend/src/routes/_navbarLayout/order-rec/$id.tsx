@@ -12,7 +12,7 @@ import { Textarea } from '@/components/ui/textarea'
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip'
 import { Trash2 } from 'lucide-react'
 import { getOrderRecStatusColor } from "@/lib/utils"
-import { getOrderRecById, saveOrderRec, savePendingAction, hasPendingActions } from "@/lib/orderRecIndexedDB"
+import { getOrderRecById, saveOrderRec, savePendingAction, hasPendingActionsForId, deletePendingActionsForId } from "@/lib/orderRecIndexedDB"
 import { useAuth } from "@/context/AuthContext";
 import { isActuallyOnline } from "@/lib/network";
 // import { Switch } from "@/components/ui/switch";
@@ -35,7 +35,7 @@ function RouteComponent() {
   const [orderRec, setOrderRec] = useState<any>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
-  const [editItem, setEditItem] = useState<{catIdx: number, itemIdx: number} | null>(null)
+  const [editItem, setEditItem] = useState<{ catIdx: number, itemIdx: number } | null>(null)
   const [notifying, setNotifying] = useState<boolean>(false)
 
   const [extraNote, setExtraNote] = useState(orderRec?.extraItemsNote || '');
@@ -96,10 +96,15 @@ function RouteComponent() {
         }
 
         // 2️⃣ Check if we can safely refresh
-        const pendingExists = await hasPendingActions();
+        // const pendingExists = await hasPendingActions();
+        // if (pendingExists) {
+        //   console.log("⏸️ Skipping backend fetch — pending actions exist");
+        //   return; // prevent overwrite until sync completes
+        // }
+        const pendingExists = await hasPendingActionsForId(id);
         if (pendingExists) {
-          console.log("⏸️ Skipping backend fetch — pending actions exist");
-          return; // prevent overwrite until sync completes
+          console.log("⏸️ Skipping backend fetch — pending actions exist for this order only");
+          return;
         }
 
         // 3️⃣ Safe to refresh from backend
@@ -129,7 +134,7 @@ function RouteComponent() {
         setLoading(false);
       }
     };
-    if (user?.access?.orderRec?.id){
+    if (user?.access?.orderRec?.id) {
       fetchOrderRec();
     } else {
       navigate({ to: "/no-access" });
@@ -222,6 +227,8 @@ function RouteComponent() {
         navigate({ to: "/no-access" });
         return;
       }
+
+      await deletePendingActionsForId(id);
 
       // ✅ Redirect to list after successful delete
       navigate({ to: "/order-rec/list" });
@@ -422,14 +429,14 @@ function RouteComponent() {
     const confirmed = window.confirm('Are you sure you want to notify that this order rec has been reconciled?');
     if (!confirmed) return;
     setNotifying(true);
-     const subjectCompleted = `✅ Order Reconciliation Completed for Site ${site}`;
-      const textCompleted = `The order reconciliation for site ${site} has been completed.
+    const subjectCompleted = `✅ Order Reconciliation Completed for Site ${site}`;
+    const textCompleted = `The order reconciliation for site ${site} has been completed.
       Vendor: ${vendorName}
       File: ${orderRec.filename}
 
       You can now review and proceed with placing the order in The Hub: https://app.gen7fuel.com/order-rec/${orderRec._id}`;
 
-      const htmlCompleted = `
+    const htmlCompleted = `
       <div style="
         font-family: 'Segoe UI', Arial, sans-serif;
         background-color: #f7f9fc;
@@ -531,7 +538,7 @@ function RouteComponent() {
       setNotifying(false);
     }
   };
-  
+
   const isChanged = (item: Item) => {
     return item.onHandQty !== item.onHandQtyOld;
   }
@@ -585,68 +592,68 @@ function RouteComponent() {
   //     console.error('Failed to save locally:', err);
   //   }
   // };
-//   const handleToggleItemCompleted = async (
-//     catIdx: number,
-//     itemIdx: number,
-//     completed: boolean,
-//     isChanged: boolean
-//   ) => {
-//     if (!orderRec) return;
+  //   const handleToggleItemCompleted = async (
+  //     catIdx: number,
+  //     itemIdx: number,
+  //     completed: boolean,
+  //     isChanged: boolean
+  //   ) => {
+  //     if (!orderRec) return;
 
-//     const orderId = orderRec.id || orderRec._id; // <- fallback to _id
-//     if (!orderId) {
-//       console.error("❌ No orderId available!");
-//       return;
-//     }
+  //     const orderId = orderRec.id || orderRec._id; // <- fallback to _id
+  //     if (!orderId) {
+  //       console.error("❌ No orderId available!");
+  //       return;
+  //     }
 
-//     const updatedOrderRec = {
-//       ...orderRec,
-//       categories: orderRec.categories.map((cat: any, cIdx: any) =>
-//         cIdx === catIdx
-//           ? {
-//               ...cat,
-//               items: cat.items.map((item: any, iIdx: any) =>
-//                 iIdx === itemIdx ? { ...item, completed } : item
-//               ),
-//             }
-//           : cat
-//       ),
-//     };
+  //     const updatedOrderRec = {
+  //       ...orderRec,
+  //       categories: orderRec.categories.map((cat: any, cIdx: any) =>
+  //         cIdx === catIdx
+  //           ? {
+  //               ...cat,
+  //               items: cat.items.map((item: any, iIdx: any) =>
+  //                 iIdx === itemIdx ? { ...item, completed } : item
+  //               ),
+  //             }
+  //           : cat
+  //       ),
+  //     };
 
-//     setOrderRec(updatedOrderRec);
-//     await saveOrderRec(updatedOrderRec);
+  //     setOrderRec(updatedOrderRec);
+  //     await saveOrderRec(updatedOrderRec);
 
-//     const action = {
-//       type: 'TOGGLE_ITEM',
-//       orderId,      // ✅ ensure it's always defined
-//       catIdx,
-//       itemIdx,
-//       completed,
-//       isChanged,
-//       timestamp: Date.now(),
-//     };
+  //     const action = {
+  //       type: 'TOGGLE_ITEM',
+  //       orderId,      // ✅ ensure it's always defined
+  //       catIdx,
+  //       itemIdx,
+  //       completed,
+  //       isChanged,
+  //       timestamp: Date.now(),
+  //     };
 
-//     try {
-//       const online = await isActuallyOnline();
-//       if (online) {
-//         const res = await axios.put(
-//           `/api/order-rec/${orderId}/item/${catIdx}/${itemIdx}`,
-//           { completed, isChanged },
-//           { headers: { Authorization: `Bearer ${localStorage.getItem("token")}` } }
-//         );
+  //     try {
+  //       const online = await isActuallyOnline();
+  //       if (online) {
+  //         const res = await axios.put(
+  //           `/api/order-rec/${orderId}/item/${catIdx}/${itemIdx}`,
+  //           { completed, isChanged },
+  //           { headers: { Authorization: `Bearer ${localStorage.getItem("token")}` } }
+  //         );
 
-//         const orderToSave = { ...res.data, id: res.data._id || res.data.id };
-//         await saveOrderRec(orderToSave);
-//         setOrderRec(orderToSave);
-//       } else {
-//         console.warn('Offline — saving toggle action for later');
-//         await savePendingAction(action);
-//       }
-//     } catch (err: unknown) {
-//       console.error('Online update failed, saving action offline', err);
-//       await savePendingAction(action);
-//     }
-// };
+  //         const orderToSave = { ...res.data, id: res.data._id || res.data.id };
+  //         await saveOrderRec(orderToSave);
+  //         setOrderRec(orderToSave);
+  //       } else {
+  //         console.warn('Offline — saving toggle action for later');
+  //         await savePendingAction(action);
+  //       }
+  //     } catch (err: unknown) {
+  //       console.error('Online update failed, saving action offline', err);
+  //       await savePendingAction(action);
+  //     }
+  // };
 
   let saveTimer: NodeJS.Timeout | null = null;
 
@@ -728,12 +735,12 @@ function RouteComponent() {
   };
 
   const handleRowClick = (catIdx: number, itemIdx: number, completed: boolean) => {
-  if (completed) {
-    alert("Completed items cannot be edited. To edit, uncheck the button first.");
-    return;
-  }
-  setEditItem({ catIdx, itemIdx });
-};
+    if (completed) {
+      alert("Completed items cannot be edited. To edit, uncheck the button first.");
+      return;
+    }
+    setEditItem({ catIdx, itemIdx });
+  };
 
   async function exportOrderRecToExcel(orderRec: any) {
     const workbook = new ExcelJS.Workbook();
@@ -875,28 +882,28 @@ function RouteComponent() {
           {orderRec.completed ? 'Completed' : 'Incomplete'}
         </span> */}
         <div className="flex gap-2">
-        {/* If the order rec vendor is 'CoreMark' then show another button here called 'Template' */}
-        {/* {access.component_order_rec_id_delete_button && ( //markpoint */}
-        {access?.orderRec?.id?.deleteButton && (
-        <Button
-          variant="destructive"
-          onClick={handleDelete}
-          title="Delete Order Rec"
-        >
-          <Trash2 className="w-5 h-5" />
-        </Button>
-        )}
-        {orderRec.filename?.includes('Core-Mark') && (
+          {/* If the order rec vendor is 'CoreMark' then show another button here called 'Template' */}
+          {/* {access.component_order_rec_id_delete_button && ( //markpoint */}
+          {access?.orderRec?.id?.deleteButton && (
+            <Button
+              variant="destructive"
+              onClick={handleDelete}
+              title="Delete Order Rec"
+            >
+              <Trash2 className="w-5 h-5" />
+            </Button>
+          )}
+          {orderRec.filename?.includes('Core-Mark') && (
+            <Button
+              variant="outline"
+              onClick={handleTemplate}
+            >
+              Template
+            </Button>
+          )}
           <Button
             variant="outline"
-            onClick={handleTemplate}
-          >
-            Template
-          </Button>
-        )}
-          <Button
-            variant="outline"
-            disabled={ notifying || (!orderRec.completed && user?.email !== orderRec.email)}
+            disabled={notifying || (!orderRec.completed && user?.email !== orderRec.email)}
             onClick={handleNotify}
           >
             {notifying ? 'Notifying...' : 'Notify'}
@@ -911,26 +918,26 @@ function RouteComponent() {
       </div>
 
       <div className="flex items-center gap-6 my-4 text-base">
-            <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2">
           <span className="font-medium">Site:</span>
-            <span
-              className="text-medium font-large text-gray-800"
-            >
-              {orderRec?.site}
-            </span>
+          <span
+            className="text-medium font-large text-gray-800"
+          >
+            {orderRec?.site}
+          </span>
         </div>
         {/* Current Status */}
-          <div className="flex items-center gap-2">
-            <span className="font-medium">Current Status:</span>
-              <span
-                className="px-3 py-1 rounded-full text-sm font-medium text-gray-800"
-                style={{
-                  backgroundColor: getOrderRecStatusColor(orderRec?.currentStatus),
-                }}
-              >
-                {orderRec?.currentStatus || "N/A"}
-              </span>
-          </div>
+        <div className="flex items-center gap-2">
+          <span className="font-medium">Current Status:</span>
+          <span
+            className="px-3 py-1 rounded-full text-sm font-medium text-gray-800"
+            style={{
+              backgroundColor: getOrderRecStatusColor(orderRec?.currentStatus),
+            }}
+          >
+            {orderRec?.currentStatus || "N/A"}
+          </span>
+        </div>
 
         {/* Last Updated */}
         {/* <div className="flex items-center gap-2 text-gray-600">
@@ -943,7 +950,7 @@ function RouteComponent() {
               : "N/A"}
           </span>
         </div> */}
-    </div>
+      </div>
 
 
       <div className="mb-8 max-w-2xl mx-auto">
@@ -1033,8 +1040,8 @@ function RouteComponent() {
                     (item.onHandQtyOld !== undefined && item.onHandQty !== item.onHandQtyOld) ||
                     (item.casesToOrderOld !== undefined && item.casesToOrder !== item.casesToOrderOld)
                 ) && (
-                  <span className="text-red-500 font-bold" title="This group has changed items">*</span>
-                )}
+                    <span className="text-red-500 font-bold" title="This group has changed items">*</span>
+                  )}
               </span>
               <span
                 className={`px-2 py-1 rounded text-xs mr-2 ${cat.completed ? "bg-green-100 text-green-700" : "bg-gray-200 text-gray-700"}`}>
@@ -1067,8 +1074,8 @@ function RouteComponent() {
                             cat.items.every((item: any) => item.completed)
                               ? 'true'
                               : cat.items.some((item: any) => item.completed)
-                              ? 'mixed'
-                              : 'false'
+                                ? 'mixed'
+                                : 'false'
                           }
                           tabIndex={0}
                           className="cursor-pointer flex justify-center items-center"
@@ -1114,9 +1121,9 @@ function RouteComponent() {
                             <TooltipProvider>
                               <Tooltip>
                                 <TooltipTrigger asChild>
-                                    <span className="px-3 py-1 bg-gray-800 text-white rounded-lg cursor-pointer shadow-sm hover:bg-gray-700 text-center"> 
-                                      <b>{item.onHandQty}</b>  
-                                    </span>
+                                  <span className="px-3 py-1 bg-gray-800 text-white rounded-lg cursor-pointer shadow-sm hover:bg-gray-700 text-center">
+                                    <b>{item.onHandQty}</b>
+                                  </span>
                                 </TooltipTrigger>
                                 <TooltipContent>
                                   Previous: {item.onHandQtyOld}
@@ -1133,16 +1140,16 @@ function RouteComponent() {
                             <td className="px-4 py-3 text-center">{item.minStock}</td>
                             <td className="px-4 py-3 text-center bg-cyan-100">{item.itemsToOrder}</td>
                             <td className="px-4 py-3 text-center">{item.unitInCase}</td>
-                         </>
+                          </>
                         )}
-                        <td className="px-4 py-3 text-center bg-cyan-100"> 
+                        <td className="px-4 py-3 text-center bg-cyan-100">
                           {item.casesToOrderOld !== undefined && item.casesToOrder !== item.casesToOrderOld ? (
                             <TooltipProvider>
                               <Tooltip>
-                                <TooltipTrigger asChild> 
-                                    <span className="px-3 py-1 bg-gray-800 text-white rounded-lg cursor-pointer shadow-sm hover:bg-gray-700 text-center">
-                                      <b>{item.casesToOrder}</b>  
-                                    </span>
+                                <TooltipTrigger asChild>
+                                  <span className="px-3 py-1 bg-gray-800 text-white rounded-lg cursor-pointer shadow-sm hover:bg-gray-700 text-center">
+                                    <b>{item.casesToOrder}</b>
+                                  </span>
                                 </TooltipTrigger>
                                 <TooltipContent>
                                   Previous: {item.casesToOrderOld}
