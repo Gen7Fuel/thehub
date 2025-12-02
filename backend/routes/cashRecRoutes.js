@@ -58,6 +58,17 @@ function extractDateFromHeader(lines) {
   return toYmd(fromStr) || toYmd(toStr)
 }
 
+function extractSiteFromHeader(lines) {
+  for (let i = 0; i < Math.min(lines.length, 25); i++) {
+    const line = lines[i]
+    const m = line.match(/^\s*Site\s*:\s*(.+)$/i) // avoid "Site Grp"
+    if (m) {
+      return m[1].replace(/,\s*$/, '').trim() // remove trailing comma/space
+    }
+  }
+  return undefined
+}
+
 // Parse tab-delimited Kardpoll/Transaction Detail file
 function parseTransactionDetailTab(text) {
   const clean = String(text || '')
@@ -136,12 +147,14 @@ function parseTransactionDetailTab(text) {
   }
 
   const date = extractDateFromHeader(lines)
+  const site = extractSiteFromHeader(lines)
 
   return {
     litresSold: round2(litresSold),
     sales: round2(sales),
     ar: round2(ar),
     date,
+    site,
     ar_rows,
   }
 }
