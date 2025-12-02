@@ -86,7 +86,7 @@ export default function RouteComponent() {
         const res = await fetch(`/api/safesheets/site/${encodeURIComponent(site)}`, {
           headers: {
             Authorization: `Bearer ${localStorage.getItem('token')}`,
-            'X-Required-Permission': 'safesheet',
+            'X-Required-Permission': 'accounting.safesheet',
           },
         })
 

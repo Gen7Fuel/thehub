@@ -59,14 +59,25 @@ function extractDateFromHeader(lines) {
 }
 
 function extractSiteFromHeader(lines) {
+  let raw
   for (let i = 0; i < Math.min(lines.length, 25); i++) {
     const line = lines[i]
     const m = line.match(/^\s*Site\s*:\s*(.+)$/i) // avoid "Site Grp"
     if (m) {
-      return m[1].replace(/,\s*$/, '').trim() // remove trailing comma/space
+      raw = m[1].replace(/,\s*$/, '').trim()
+      break
     }
   }
-  return undefined
+  if (!raw) return undefined
+
+  const up = raw.toUpperCase()
+
+  if (up.includes('RANKINGEN7')) return 'Rankin'
+  if (up.includes('JOCKOPOINT')) return 'Jocko Point'
+  if (up.includes('COUCHICING')) return 'Couchiching'
+  if (up.includes('PENTICTON')) return 'Silver Grizzly'
+
+  return raw // fallback to the original string if no match
 }
 
 // Parse tab-delimited Kardpoll/Transaction Detail file
