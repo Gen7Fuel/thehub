@@ -85,6 +85,8 @@ router.get("/:userId", async (req, res) => {
       ...user,
       role: roleData,
       merged_permissions: mergedPermissions,
+      is_logged_in: user.is_loggedIn,
+      last_login: user.lastLoginDate
     });
   } catch (error) {
     console.error("Error fetching user with merged permissions:", error);
@@ -254,6 +256,40 @@ router.patch("/:id/active", async (req, res) => {
     res.json({ message: "User status updated", user });
   } catch (error) {
     console.error("Error updating user active status:", error);
+    res.status(500).json({ message: "Server error" });
+  }
+});
+
+// Admin-forced logout
+router.post("/:id/logout", async (req, res) => {
+  try {
+    const targetUserId = req.params.id;
+    console.log('userid:',targetUserId);
+
+    // Mark user as logged out
+    const updatedUser = await User.findByIdAndUpdate(
+      targetUserId,
+      {
+        is_loggedIn: false
+      },
+      { new: true, timestamps: false }
+    );
+
+    if (!updatedUser) {
+      return res.status(404).json({ message: "User not found" });
+    }
+
+    // Emit socket event to notify the user
+    const io = req.app.get("io");
+    if (io) {
+      io.to(targetUserId).emit("force-logout", {
+        message: "You have been logged out by an administrator.",
+      });
+    }
+
+    res.json({ message: "User logged out successfully", user: updatedUser });
+  } catch (err) {
+    console.error("Logout error:", err);
     res.status(500).json({ message: "Server error" });
   }
 });

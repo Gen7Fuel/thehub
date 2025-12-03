@@ -8,6 +8,8 @@ const router = express.Router();
 const Role = require("../models/Role");
 const getMergedPermissions = require("../utils/mergePermissionObjects");
 
+const { auth } = require("../middleware/authMiddleware.js");
+
 // router.post("/register", async (req, res) => {
 //   const { email, password, firstName, lastName, stationName } = req.body;
 
@@ -154,6 +156,13 @@ router.post("/login", async (req, res) => {
     const isMatch = await bcrypt.compare(password, user.password);
     if (!isMatch) return res.status(400).json({ message: "Invalid credentials" });
 
+    // Update login flags
+    user.lastLoginDate = new Date();
+    user.is_loggedIn = true;
+
+    // MUST disable timestamps so updatedAt doesn't change unnecessarily
+    await user.save({ timestamps: false });
+
     // Get merged permissions (role + custom)
     const mergedPermissions = await getMergedPermissions(user);
 
@@ -217,7 +226,25 @@ function getInitials(firstName, lastName) {
   return firstInitial + lastInitial;
 }
 
-router.post('/reset-password', async (req, res) => {
+//logout user
+router.post("/logout", auth, async (req, res) => {
+  try {
+    const userId = req.user.id; // from JWT middleware
+    console.log('user id:',userId);
+
+    await User.findByIdAndUpdate(userId, {
+      is_loggedIn: false
+    }, { timestamps: false });
+
+    res.json({ message: "Logged out successfully" });
+  } catch (err) {
+    console.error("Logout error:", err);
+    res.status(500).json({ message: "Server error" });
+  }
+});
+
+
+router.post('/reset-password', auth, async (req, res) => {
   const { userId, newPassword } = req.body;
   if (!userId || !newPassword) return res.status(400).json({ error: 'Missing fields.' });
 
@@ -229,7 +256,7 @@ router.post('/reset-password', async (req, res) => {
 });
 
 // Verify Password against all users with Admin role
-router.post("/verify-password", async (req, res) => {
+router.post("/verify-password", auth, async (req, res) => {
   const { password } = req.body;
 
   try {

@@ -14,9 +14,9 @@ export const Route = createFileRoute("/_navbarLayout/settings/users/$userId")({
     try {
       const token = localStorage.getItem("token");
       const response = await axios.get(`/api/users/${params.userId}`, {
-        headers: { 
+        headers: {
           Authorization: `Bearer ${token}`,
-          "X-Required-Permission": "settings" 
+          "X-Required-Permission": "settings"
         },
       });
 
@@ -46,7 +46,7 @@ export interface Role {
 
 export function RouteComponent() {
   const params = Route.useParams() as { userId: string };
-    const navigate = useNavigate();
+  const navigate = useNavigate();
   const { user, noAccess } = Route.useLoaderData() as {
     user: {
       _id: string;
@@ -55,6 +55,8 @@ export function RouteComponent() {
       access: Record<string, any>;
       is_admin: boolean;
       is_inOffice: boolean;
+      is_logged_in: boolean;
+      last_login: Date;
       role?: { _id: string; role_name: string };
       merged_permissions?: PermissionNode[];
       site_access: Record<string, boolean>;
@@ -81,6 +83,11 @@ export function RouteComponent() {
   const [siteAccess, setSiteAccess] = useState<Record<string, boolean>>({});
   const [locations, setLocations] = useState<{ stationName: string }[]>([]);
   const [savingAccess, setSavingAccess] = useState(false);
+  const [showLogoutConfirmDialog, setShowLogoutConfirmDialog] = useState(false);
+  const [verifyAction, setVerifyAction] = useState<
+    null | "logout" | "changeRole"
+  >(null);
+
 
   useEffect(() => {
     if (user?.site_access) setSiteAccess(user.site_access);
@@ -113,17 +120,17 @@ export function RouteComponent() {
       await axios.put(
         `/api/users/${params.userId}/site-access`,
         { siteAccess },
-        { headers: { Authorization: `Bearer ${token}`,"X-Required-Permission": "settings"  } }
+        { headers: { Authorization: `Bearer ${token}`, "X-Required-Permission": "settings" } }
       );
       alert("Site access updated!");
     } catch (err: any) {
       if (err.response?.status === 403) {
-          // Redirect to no-access page
-          navigate({ to: "/no-access" });
-        } else {
+        // Redirect to no-access page
+        navigate({ to: "/no-access" });
+      } else {
         console.error("Error saving site access:", err);
         alert("Failed to update site access.");
-        }
+      }
     } finally {
       setSavingAccess(false);
     }
@@ -138,7 +145,7 @@ export function RouteComponent() {
       try {
         const token = localStorage.getItem("token");
         const res = await axios.get("/api/roles", {
-          headers: { Authorization: `Bearer ${token}`,"X-Required-Permission": "settings"  },
+          headers: { Authorization: `Bearer ${token}`, "X-Required-Permission": "settings" },
         });
         setRoles(res.data);
       } catch (error: any) {
@@ -161,33 +168,60 @@ export function RouteComponent() {
       await axios.post(
         "/api/auth/reset-password",
         { userId: params.userId, newPassword },
-        { headers: { Authorization: `Bearer ${token}`,"X-Required-Permission": "settings"  } }
+        { headers: { Authorization: `Bearer ${token}`, "X-Required-Permission": "settings" } }
       );
       setResetStatus("Password reset successfully!");
       setNewPassword("");
     } catch (error: any) {
       if (error.response?.status === 403) {
-          // Redirect to no-access page
-         navigate({ to: "/no-access" });
+        // Redirect to no-access page
+        navigate({ to: "/no-access" });
       }
       setResetStatus("Failed to reset password.");
     }
   };
 
+  // const verifyPassword = async () => {
+  //   try {
+  //     const token = localStorage.getItem("token");
+  //     await axios.post(
+  //       "/api/auth/verify-password",
+  //       { password },
+  //       { headers: { Authorization: `Bearer ${token}` } }
+  //     );
+  //     setShowPasswordDialog(false);
+  //     setShowConfirmDialog(true);
+  //   } catch {
+  //     alert("Invalid password!");
+  //   }
+  // };
   const verifyPassword = async () => {
     try {
       const token = localStorage.getItem("token");
+
       await axios.post(
         "/api/auth/verify-password",
         { password },
         { headers: { Authorization: `Bearer ${token}` } }
       );
+
       setShowPasswordDialog(false);
-      setShowConfirmDialog(true);
+
+      // Use the verifyAction state instead of window.__VERIFY_CONTEXT__
+      if (verifyAction === "logout") {
+        setShowLogoutConfirmDialog(true);
+      } else if (verifyAction === "changeRole") {
+        setShowConfirmDialog(true);
+      }
+      // Clear the action so it doesn’t linger
+      setVerifyAction(null);
+
+
     } catch {
       alert("Invalid password!");
     }
   };
+
 
   const handleRoleChange = async () => {
     try {
@@ -195,7 +229,7 @@ export function RouteComponent() {
       await axios.put(
         `/api/users/${params.userId}/role`,
         { roleId: selectedRole },
-        { headers: { Authorization: `Bearer ${token}`,"X-Required-Permission": "settings"  } }
+        { headers: { Authorization: `Bearer ${token}`, "X-Required-Permission": "settings" } }
       );
       alert("User role updated!");
       setShowConfirmDialog(false);
@@ -217,7 +251,7 @@ export function RouteComponent() {
       await axios.put(
         `/api/users/${params.userId}/permissions`,
         { mergedPermissions, roleId: user?.role?._id },
-        { headers: { Authorization: `Bearer ${token}`,"X-Required-Permission": "settings"  } }
+        { headers: { Authorization: `Bearer ${token}`, "X-Required-Permission": "settings" } }
       );
       alert("Permissions updated!");
     } catch (err: any) {
@@ -237,7 +271,7 @@ export function RouteComponent() {
     <div className="flex justify-center w-full">
       <div className="w-full max-w-5xl bg-white rounded-3xl shadow-lg border border-gray-200 p-8 space-y-8">
         {/* PASSWORD RESET */}
-        <Card className="rounded-2xl shadow-sm border border-gray-200">
+        {/* <Card className="rounded-2xl shadow-sm border border-gray-200">
           <CardHeader>
             <CardTitle>Reset User Password</CardTitle>
           </CardHeader>
@@ -256,6 +290,79 @@ export function RouteComponent() {
               </Button>
             </form>
             {resetStatus && <p className="mt-3 text-sm text-gray-700">{resetStatus}</p>}
+          </CardContent>
+        </Card> */}
+        {/* USER PRIVACY CARD */}
+        <Card className="rounded-2xl shadow-sm border border-gray-200">
+          <CardHeader>
+            <CardTitle>User Privacy</CardTitle>
+          </CardHeader>
+
+          <CardContent>
+            {/* Password Reset */}
+            <form onSubmit={handlePasswordReset} className="flex items-center gap-3 flex-wrap mb-6">
+              <Input
+                type="password"
+                placeholder="New password"
+                value={newPassword}
+                onChange={(e) => setNewPassword(e.target.value)}
+                required
+                className="flex-1 min-w-[200px]"
+              />
+              <Button type="submit" className="bg-orange-600 text-white hover:bg-red-500">
+                Reset Password
+              </Button>
+            </form>
+
+            {resetStatus && <p className="mt-3 text-sm text-gray-700">{resetStatus}</p>}
+
+            {/* Status + Logout Row */}
+            <div className="flex items-start justify-between">
+              {/* LEFT SIDE — Status + Last Login */}
+              <div className="flex flex-col gap-1">
+
+                {/* Current Status (label + badge) */}
+                <div className="flex items-center">
+                  <span className="text-sm font-medium text-gray-700 w-28">
+                    Current Status:
+                  </span>
+
+                  <span
+                    className={`px-3 py-1 rounded-full text-sm font-semibold ${user.is_logged_in
+                      ? "bg-green-100 text-green-700"
+                      : "bg-gray-200 text-gray-700"
+                      }`}
+                  >
+                    {user.is_logged_in ? "Logged In" : "Logged Out"}
+                  </span>
+                </div>
+
+                {/* Last Login (aligned with label, not badge) */}
+                <div className="flex items-center">
+                  <span className="text-sm font-medium text-gray-700 w-18">
+                    Last Login:
+                  </span>
+
+                  <span className="text-sm text-gray-600">
+                    {user.last_login ? new Date(user.last_login).toLocaleString() : "N/A"}
+                  </span>
+                </div>
+              </div>
+
+              {/* RIGHT SIDE — Logout Button */}
+              <Button
+                className="bg-red-600 text-white hover:bg-red-500 h-9"
+                onClick={() => {
+                  // reuse existing password dialog
+                  setPassword("");
+                  // attach context: this verification is for logout
+                  setVerifyAction("logout");
+                  setShowPasswordDialog(true);
+                }}
+              >
+                Logout User
+              </Button>
+            </div>
           </CardContent>
         </Card>
 
@@ -284,11 +391,10 @@ export function RouteComponent() {
                 <button
                   key={loc.stationName}
                   onClick={() => toggleSiteAccess(loc.stationName)}
-                  className={`p-2 rounded-md border transition ${
-                    siteAccess[loc.stationName]
-                      ? "bg-green-100 border-green-500 text-green-700 font-semibold"
-                      : "bg-gray-100 border-gray-400 text-gray-600"
-                  }`}
+                  className={`p-2 rounded-md border transition ${siteAccess[loc.stationName]
+                    ? "bg-green-100 border-green-500 text-green-700 font-semibold"
+                    : "bg-gray-100 border-gray-400 text-gray-600"
+                    }`}
                 >
                   {loc.stationName}
                 </button>
@@ -340,6 +446,7 @@ export function RouteComponent() {
             <Button
               onClick={() => {
                 setShowRoleDialog(false);
+                setVerifyAction("changeRole");
                 setShowPasswordDialog(true);
               }}
             >
@@ -377,6 +484,45 @@ export function RouteComponent() {
               Cancel
             </Button>
             <Button onClick={handleRoleChange}>Yes, Change Role</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={showLogoutConfirmDialog} onOpenChange={setShowLogoutConfirmDialog}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Confirm Logout</DialogTitle>
+          </DialogHeader>
+
+          <p>Are you sure you want to log this user out?</p>
+
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setShowLogoutConfirmDialog(false)}>
+              Cancel
+            </Button>
+
+            <Button
+              className="bg-red-600 text-white"
+              onClick={async () => {
+                try {
+                  const token = localStorage.getItem("token");
+                  await axios.post(
+                    `/api/users/${user._id}/logout`,
+                    {},
+                    { headers: { Authorization: `Bearer ${token}` } }
+                  );
+
+                  alert("User logged out successfully!");
+                  window.location.reload();
+
+                } catch (err) {
+                  console.error(err);
+                  alert("Failed to logout user.");
+                }
+              }}
+            >
+              Yes, Logout User
+            </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
@@ -918,8 +1064,8 @@ export function RouteComponent() {
 //     const token = localStorage.getItem("token");
 
 //     // Send mergedPermissions to backend for comparison
-//     await axios.put(`/api/users/${params.userId}/permissions`, 
-//       { mergedPermissions, roleId: user?.role?._id }, 
+//     await axios.put(`/api/users/${params.userId}/permissions`,
+//       { mergedPermissions, roleId: user?.role?._id },
 //       { headers: { Authorization: `Bearer ${token}` } }
 //     );
 
@@ -1128,7 +1274,7 @@ export function RouteComponent() {
 //   const handleUpdate = async () => {
 //     try {
 //       // add authorization header with bearer token
-//       await axios.put(`/api/users/${params.userId}`, { 
+//       await axios.put(`/api/users/${params.userId}`, {
 //           access,
 //           is_admin: isAdmin,
 //           is_inOffice: isInOffice,
