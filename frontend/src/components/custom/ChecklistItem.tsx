@@ -86,29 +86,64 @@ export function ChecklistItemCard({
   // };
 
 
-  const handlePhotoChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+  // const handlePhotoChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+  //   if (mode === "interface") return; // read-only
+  //   const files = Array.from(e.target.files || []);
+  //   if (files.length === 0) return;
+  //   const uploadedFilenames: string[] = [];
+  //   for (const file of files) {
+  //     const formData = new FormData();
+  //     formData.append("file", file);
+  //     try {
+  //       const res = await fetch("/cdn/upload", {
+  //         method: "POST",
+  //         body: formData,
+  //       });
+  //       if (res.ok) {
+  //         const data = await res.json();
+  //         uploadedFilenames.push(data.filename);
+  //       }
+  //     } catch { }
+  //   }
+  //   const newPhotos = [...(item.photos || []), ...uploadedFilenames];
+  //   setPhotoPreviews(newPhotos.map(name => `/cdn/download/${name}`));
+  //   onPhotos(newPhotos);
+  // };
+  const handleCameraPhotoChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     if (mode === "interface") return; // read-only
+
     const files = Array.from(e.target.files || []);
     if (files.length === 0) return;
+
     const uploadedFilenames: string[] = [];
+
     for (const file of files) {
       const formData = new FormData();
       formData.append("file", file);
+
       try {
         const res = await fetch("/cdn/upload", {
           method: "POST",
           body: formData,
         });
-        if (res.ok) {
-          const data = await res.json();
-          uploadedFilenames.push(data.filename);
-        }
-      } catch { }
+
+        if (!res.ok) throw new Error("Image upload failed");
+
+        const data = await res.json();
+        uploadedFilenames.push(data.filename);
+      } catch (err) {
+        console.error(err);
+        alert("Failed to upload image");
+      }
     }
+
     const newPhotos = [...(item.photos || []), ...uploadedFilenames];
     setPhotoPreviews(newPhotos.map(name => `/cdn/download/${name}`));
     onPhotos(newPhotos);
+
+    e.target.value = ""; // reset input
   };
+
 
   const handleCommentSave = () => {
     onComment(commentValue);
@@ -155,7 +190,7 @@ export function ChecklistItemCard({
           )}
 
           {/* Attach Photo – only in station mode */}
-          {mode === "station" && (
+          {/* {mode === "station" && (
             <label>
               <Button
                 type="button"
@@ -178,7 +213,33 @@ export function ChecklistItemCard({
                 disabled={disabledControls}
               />
             </label>
+          )} */}
+          {mode === "station" && (
+            <label>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                className="bg-sky-100 border-gray-300"
+                disabled={disabledControls}
+                asChild
+              >
+                <span>
+                  <ImagePlus className="w-6 h-6 text-gray-700" />
+                </span>
+              </Button>
+              <input
+                type="file"
+                accept="image/*"
+                capture="environment" // open rear camera
+                multiple
+                className="hidden"
+                onChange={handleCameraPhotoChange} // updated handler
+                disabled={disabledControls}
+              />
+            </label>
           )}
+
 
           {/* View images – always visible if photos exist */}
           {photoPreviews.length > 0 && (
