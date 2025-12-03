@@ -172,7 +172,7 @@ router.put('/:id/item/:catIdx/:itemIdx', async (req, res) => {
           const itembook = await getUPC_barcode(gtin);
           if (itembook.length > 0) {
             upc = itembook[0].UPC || "";
-            upc_barcode = itembook[0].UPC_A_12_digits || "";
+            upc_barcode = itembook[0].UPC_barcode || "";
           }
         } catch (err) {
           console.error("SQL lookup failed for gtin:", gtin, err);
@@ -194,7 +194,7 @@ router.put('/:id/item/:catIdx/:itemIdx', async (req, res) => {
         if (isChanged) {
           cycleCount.flaggedAt = new Date();
         }
-        await cycleCount.save();
+        await cycleCount.save({ timestamps: false });
 
         console.log(
           `Updated CycleCount (${cycleCount.flagged ? "flagged=true" : "flagged=false"}):`,
@@ -259,7 +259,7 @@ router.put('/:id/item/:catIdx/:itemIdx', async (req, res) => {
         cycleCount = await CycleCount.findOneAndUpdate(
           { site, gtin: item.gtin },
           { $setOnInsert: baseData },
-          { new: true, upsert: true }
+          { new: true, upsert: true, timestamps: false }
         );
 
         console.log(
