@@ -37,7 +37,8 @@ function RouteComponent() {
   const [selectedWeek, setSelectedWeek] = useState<string>("")
   const [uniquevendors, setUniqueVendors] = useState<Record<string, Vendor[]>>({});
   const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
-  const STATUS_HIERARCHY = ["Created", "Completed", "Placed", "Delivered", "Invoice Received"];
+  // const STATUS_HIERARCHY = ["Created", "Completed", "Placed", "Delivered", "Invoice Received"];
+  const STATUS_HIERARCHY = ["Created", "Completed", "Not Placed", "Placed", "Delivered", "Invoice Received"];
 
 
 
@@ -45,9 +46,12 @@ function RouteComponent() {
   const [viewCommentsOrderId, setViewCommentsOrderId] = useState<string | null>(null)
   const [addEditCommentOrderId, setAddEditCommentOrderId] = useState<string | null>(null)
   const [commentText, setCommentText] = useState("")
-  const [currentComments, setCurrentComments] = useState<{text:string,author:string,timestamp:string}[]>([])
+  const [currentComments, setCurrentComments] = useState<{ text: string, author: string, timestamp: string }[]>([])
   const [updateStatusOrderId, setUpdateStatusOrderId] = useState<string | null>(null);
   const [newStatus, setNewStatus] = useState<string>("");
+  const [pendingStatusAfterComment, setPendingStatusAfterComment] = useState<null | string>(null);
+  // const [pendingStatusOrderId, setPendingStatusOrderId] = useState<string | null>(null);
+
 
   const allVendors = React.useMemo(() => {
     // Extract unique vendor names from keys, like before
@@ -55,7 +59,7 @@ function RouteComponent() {
       new Set(Object.keys(uniquevendors).map(key => key.split("::")[0]))
     );
 
-     if (!selectedCategory || selectedCategory === "All") {
+    if (!selectedCategory || selectedCategory === "All") {
       // No category filtering → include all vendors
       return allVendorNames;
     }
@@ -70,7 +74,7 @@ function RouteComponent() {
 
       // Check if any of the matched vendor objects has the selected category
       return matches.some(([_, vArr]) => {
-        const category = vArr[0]?.category; 
+        const category = vArr[0]?.category;
         return category && category === selectedCategory;
       });
     });
@@ -96,8 +100,8 @@ function RouteComponent() {
           author: user?.initials,
         }),
       })
-      if(res.status==403){
-        navigate({to:"/no-access"})
+      if (res.status == 403) {
+        navigate({ to: "/no-access" })
         return;
       }
 
@@ -109,10 +113,77 @@ function RouteComponent() {
     }
   }
 
+  // const handleUpdateStatus = async () => {
+  //   if (!updateStatusOrderId || !newStatus) return;
+
+  //   // 1. SPECIAL CASE: Not Placed → comment only
+  //   if (pendingStatusAfterComment === "Not Placed") {
+  //     setPendingStatusOrderId(updateStatusOrderId);
+  //     setUpdateStatusOrderId(null);
+  //     setCommentText("");
+  //     setAddEditCommentOrderId(updateStatusOrderId);
+  //     return;
+  //   }
+
+  //   try {
+  //     const res = await fetch(`/api/order-rec/${updateStatusOrderId}/status`, {
+  //       method: "PUT",
+  //       headers: {
+  //         "Content-Type": "application/json",
+  //         Authorization: `Bearer ${localStorage.getItem(`token`)}`,
+  //         "X-Required-Permission": "orderRec.workflow"
+  //       },
+  //       body: JSON.stringify({ status: newStatus }),
+  //     });
+  //     if (res.status == 403) {
+  //       navigate({ to: "/no-access" })
+  //       return;
+  //     }
+  //     if (!res.ok) throw new Error("Failed to update status");
+  //     const updated = await res.json();
+  //     setOrderRecs((prev) => prev.map((r) => (r._id === updated._id ? updated : r)));
+
+  //     const vendorsRes = await fetch("/api/vendors", {
+  //       headers: { Authorization: `Bearer ${localStorage.getItem(`token`)}` },
+  //     });
+  //     if (vendorsRes.ok) {
+  //       const vendorsData: Vendor[] = await vendorsRes.json();
+
+  //       // Rebuild grouped vendors for table display
+  //       const grouped = vendorsData.reduce((acc: Record<string, Vendor[]>, v: Vendor) => {
+  //         const key = `${v.name.trim().toLowerCase()}::${v.location}`;
+  //         if (!acc[key]) acc[key] = [];
+  //         acc[key].push(v);
+  //         return acc;
+  //       }, {});
+
+  //       setUniqueVendors(grouped);
+  //     }
+
+  //     setUpdateStatusOrderId(null);
+  //   } catch (err) {
+  //     console.error("Error updating status:", err);
+  //   }
+  // };
   const handleUpdateStatus = async () => {
-    if (!updateStatusOrderId || !newStatus) return;
+    // 1. If this is triggered after adding a "Not Placed" comment, restore updateStatusOrderId
+    const orderIdToUpdate = pendingStatusAfterComment === "Not Placed"
+      ? updateStatusOrderId || addEditCommentOrderId
+      : updateStatusOrderId;
+
+    if (!orderIdToUpdate || !newStatus) return;
+
+    // 2. SPECIAL CASE: Not Placed → comment only
+    if (!pendingStatusAfterComment && newStatus === "Not Placed") {
+      setPendingStatusAfterComment("Not Placed");
+      setUpdateStatusOrderId(null);
+      setCommentText("");
+      setAddEditCommentOrderId(orderIdToUpdate);
+      return;
+    }
+
     try {
-      const res = await fetch(`/api/order-rec/${updateStatusOrderId}/status`, {
+      const res = await fetch(`/api/order-rec/${orderIdToUpdate}/status`, {
         method: "PUT",
         headers: {
           "Content-Type": "application/json",
@@ -121,36 +192,44 @@ function RouteComponent() {
         },
         body: JSON.stringify({ status: newStatus }),
       });
-      if(res.status==403){
-        navigate({to:"/no-access"})
+
+      if (res.status === 403) {
+        navigate({ to: "/no-access" });
         return;
       }
       if (!res.ok) throw new Error("Failed to update status");
+
       const updated = await res.json();
-      setOrderRecs((prev) => prev.map((r) => (r._id === updated._id ? updated : r)));
+      setOrderRecs(prev => prev.map(r => r._id === updated._id ? updated : r));
 
       const vendorsRes = await fetch("/api/vendors", {
         headers: { Authorization: `Bearer ${localStorage.getItem(`token`)}` },
       });
+
       if (vendorsRes.ok) {
         const vendorsData: Vendor[] = await vendorsRes.json();
-
-        // Rebuild grouped vendors for table display
         const grouped = vendorsData.reduce((acc: Record<string, Vendor[]>, v: Vendor) => {
-          const key = `${v.name.trim().toLowerCase()}::${v.location}`; 
+          const key = `${v.name.trim().toLowerCase()}::${v.location}`;
           if (!acc[key]) acc[key] = [];
           acc[key].push(v);
           return acc;
         }, {});
-
         setUniqueVendors(grouped);
       }
-      
+
       setUpdateStatusOrderId(null);
+
+      // 3. Reset pendingStatusAfterComment if it was "Not Placed"
+      if (pendingStatusAfterComment === "Not Placed") {
+        setPendingStatusAfterComment(null);
+        setNewStatus(""); // reset status after updating
+      }
+
     } catch (err) {
       console.error("Error updating status:", err);
     }
   };
+
 
   const getPercentile = (lastPlaced: string | Date | undefined, freqWeeks: number | undefined) => {
     if (!lastPlaced || !freqWeeks) return 0;
@@ -166,9 +245,9 @@ function RouteComponent() {
   };
 
   const getRedColor = (
-    percentile: number, 
-    lastPlacedOrder?: string, 
-    currentStatusTimestamp?: string, 
+    percentile: number,
+    lastPlacedOrder?: string,
+    currentStatusTimestamp?: string,
     currentStatus?: string
   ) => {
     // Case 1: last placed order timestamp equals current status "Placed" timestamp → neutral grey
@@ -182,10 +261,10 @@ function RouteComponent() {
   };
 
   const formatVendorName = (name: string) => {
-  return name
-    .split(" ")
-    .map(word => word.charAt(0).toUpperCase() + word.slice(1))
-    .join(" ");
+    return name
+      .split(" ")
+      .map(word => word.charAt(0).toUpperCase() + word.slice(1))
+      .join(" ");
   };
 
 
@@ -199,7 +278,7 @@ function RouteComponent() {
       ])
 
       if ([recsRes, vendorsRes, storesRes].some(r => r.status === 403)) {
-        navigate({to:"/no-access"});
+        navigate({ to: "/no-access" });
         return;
       }
 
@@ -207,11 +286,11 @@ function RouteComponent() {
         const recsData = await recsRes.json()
         const vendorsData = await vendorsRes.json()
         const storesData = await storesRes.json()
-        
+
         // setVendors(vendorsData)
 
         const grouped = vendorsData.reduce((acc: Record<string, Vendor[]>, v: Vendor) => {
-          const key = `${v.name.trim().toLowerCase()}::${v.location}`; 
+          const key = `${v.name.trim().toLowerCase()}::${v.location}`;
           if (!acc[key]) acc[key] = [];
           acc[key].push(v);
           return acc;
@@ -325,7 +404,7 @@ function RouteComponent() {
 
       // Only include if vendor category matches
       return vendorMeta?.category === selectedCategory;
-  });
+    });
 
 
 
@@ -333,8 +412,8 @@ function RouteComponent() {
   filteredOrders.forEach((rec) => {
     const storeName = rec.site
     const vendorId = typeof rec.vendor === "object" ? rec.vendor._id : rec.vendor
-    if (!lookup[storeName]) lookup[storeName]={}
-    lookup[storeName][vendorId]=rec
+    if (!lookup[storeName]) lookup[storeName] = {}
+    lookup[storeName][vendorId] = rec
   })
 
   // logic for handling status updates
@@ -342,19 +421,44 @@ function RouteComponent() {
     ? orderRecs.find(r => r._id === updateStatusOrderId)?.currentStatus || ""
     : "";
 
+  // let allowedStatuses: string[] = [];
+  // let infoMessage = "";
+
+  // if (currentStatus === "Created") {
+  //   // Cannot update until "Completed" from other end
+  //   allowedStatuses = [];
+  //   infoMessage = "The store has not yet completed the Order Rec";
+  // } else if (currentStatus) {
+  //   const currentIndex = STATUS_HIERARCHY.indexOf(currentStatus);
+  //   if (currentIndex < STATUS_HIERARCHY.length - 1) {
+  //     allowedStatuses = [STATUS_HIERARCHY[currentIndex + 1]]; // only next status
+  //   } else {
+  //     allowedStatuses = []; // Already at final status
+  //   }
+  // }
   let allowedStatuses: string[] = [];
   let infoMessage = "";
 
+  const TERMINAL_STATUSES = ["Not Placed", "Invoice Received"];
+
   if (currentStatus === "Created") {
-    // Cannot update until "Completed" from other end
     allowedStatuses = [];
     infoMessage = "The store has not yet completed the Order Rec";
-  } else if (currentStatus) {
+  }
+  else if (currentStatus === "Completed") {
+    // Branch point
+    allowedStatuses = ["Not Placed", "Placed"];
+  }
+  else if (TERMINAL_STATUSES.includes(currentStatus)) {
+    // Terminal states – no further action
+    allowedStatuses = [];
+  }
+  else {
+    // Default: allow next status in linear hierarchy (Placed → Delivered → Invoice Received)
     const currentIndex = STATUS_HIERARCHY.indexOf(currentStatus);
-    if (currentIndex < STATUS_HIERARCHY.length - 1) {
-      allowedStatuses = [STATUS_HIERARCHY[currentIndex + 1]]; // only next status
-    } else {
-      allowedStatuses = []; // Already at final status
+
+    if (currentIndex !== -1 && currentIndex < STATUS_HIERARCHY.length - 1) {
+      allowedStatuses = [STATUS_HIERARCHY[currentIndex + 1]];
     }
   }
 
@@ -394,9 +498,9 @@ function RouteComponent() {
             ))}
           </SelectContent>
         </Select>
-          {/* Right side: Status Legend */}
+        {/* Right side: Status Legend */}
         <div className="flex space-x-4 items-center">
-          {["Created", "Completed", "Placed", "Delivered", "Invoice Received"].map(status => (
+          {STATUS_HIERARCHY.map(status => (
             <div key={status} className="flex items-center space-x-1">
               <div
                 className="w-4 h-4 rounded-sm"
@@ -435,7 +539,7 @@ function RouteComponent() {
                   // Check if this store has at least one vendor in the selected category
                   return Object.values(uniquevendors)
                     .flat()
-                    .some(vendor => 
+                    .some(vendor =>
                       vendor.location === store.stationName && vendor.category === selectedCategory
                     );
                 })
@@ -454,11 +558,11 @@ function RouteComponent() {
                     {/* Vendor columns */}
                     {allVendors.map(vendorName => {
                       // Find vendor(s) tied to this store + vendor name
-                        const vendorObjsRaw = uniquevendors[`${vendorName}::${store.stationName}`];
-                        const vendorObjs = vendorObjsRaw?.filter(
-                          v => !selectedCategory || selectedCategory === "All" || v.category === selectedCategory
-                        ) || []; 
-                        if (vendorObjs.length === 0) {
+                      const vendorObjsRaw = uniquevendors[`${vendorName}::${store.stationName}`];
+                      const vendorObjs = vendorObjsRaw?.filter(
+                        v => !selectedCategory || selectedCategory === "All" || v.category === selectedCategory
+                      ) || [];
+                      if (vendorObjs.length === 0) {
                         return (
                           <td
                             key={vendorName}
@@ -535,7 +639,7 @@ function RouteComponent() {
                                   navigate({
                                     to: '/order-rec/$id',
                                     params: { id },
-                                  }) }
+                                  })}
                                 onViewComments={id => {
                                   const recData = orderRecs.find(r => r._id === id);
                                   setCurrentComments(recData?.comments || []);
@@ -574,14 +678,14 @@ function RouteComponent() {
                                   <div className="text-sm text-gray-700 font-semibold mt-1">
                                     {vendorMeta?.lastPlacedOrder
                                       ? new Date(
-                                          vendorMeta.lastPlacedOrder
-                                        ).toLocaleString("en-CA", {
-                                          year: "numeric",
-                                          month: "short",
-                                          day: "numeric",
-                                          hour: "2-digit",
-                                          minute: "2-digit",
-                                        })
+                                        vendorMeta.lastPlacedOrder
+                                      ).toLocaleString("en-CA", {
+                                        year: "numeric",
+                                        month: "short",
+                                        day: "numeric",
+                                        hour: "2-digit",
+                                        minute: "2-digit",
+                                      })
                                       : "No record for previous order placed"}
                                   </div>
                                 </div>
@@ -599,27 +703,27 @@ function RouteComponent() {
         </div>
       </div>
       {/* View Comments Dialog */}
-      <Dialog open={!!viewCommentsOrderId} onOpenChange={()=>setViewCommentsOrderId(null)}>
+      <Dialog open={!!viewCommentsOrderId} onOpenChange={() => setViewCommentsOrderId(null)}>
         <DialogContent className="w-[400px] max-w-full">
           <DialogHeader>
             <DialogTitle>Comments</DialogTitle>
           </DialogHeader>
           <div className="flex flex-col gap-2 max-h-[300px] overflow-y-auto mt-2">
-            {currentComments.length>0 ? (
-              currentComments.map((c,idx)=>(
+            {currentComments.length > 0 ? (
+              currentComments.map((c, idx) => (
                 <div key={idx} className="text-sm text-gray-700">
                   <span className="text-xs text-gray-400 mr-1">
-                    ({new Date(c.timestamp).toLocaleString("en-US",{month:"short",day:"numeric"})})
+                    ({new Date(c.timestamp).toLocaleString("en-US", { month: "short", day: "numeric" })})
                   </span>
                   <span className="font-medium">{c.author}:</span> {c.text}
                 </div>
               ))
-            ):(
+            ) : (
               <div className="text-gray-400 text-sm">No comments yet</div>
             )}
           </div>
           <DialogFooter>
-            <Button onClick={()=>setViewCommentsOrderId(null)}>Close</Button>
+            <Button onClick={() => setViewCommentsOrderId(null)}>Close</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
@@ -631,21 +735,38 @@ function RouteComponent() {
           </DialogHeader>
 
           <Input
-            // value={commentText}
+            value={commentText}
             onChange={(e) => setCommentText(e.target.value)}
             placeholder="Enter your comment..."
           />
 
           <DialogFooter>
-            <Button variant="outline" onClick={() => setAddEditCommentOrderId(null)}>
+            <Button
+              variant="outline"
+              onClick={async () => {
+                setAddEditCommentOrderId(null);
+                setNewStatus(""); // reset new status
+                setPendingStatusAfterComment(null); // reset any pending status
+              }}
+            >
               Cancel
             </Button>
+
             <Button
-              onClick={() => {
-                if (addEditCommentOrderId && commentText.trim()) {
-                  handleComment(addEditCommentOrderId, commentText.trim())
-                  setCommentText("") // Clear input after adding
-                  setAddEditCommentOrderId(null)
+              onClick={async () => {
+                if (!addEditCommentOrderId || !commentText.trim()) return;
+
+                const orderId = addEditCommentOrderId;
+
+                // 1. Add the comment
+                await handleComment(orderId, commentText.trim());
+
+                setCommentText("");
+                setAddEditCommentOrderId(null);
+
+                // 2. If this comment was triggered by "Not Placed" → update the status
+                if (pendingStatusAfterComment === "Not Placed") {
+                  await handleUpdateStatus(); // same function handles status update
                 }
               }}
             >
@@ -654,6 +775,7 @@ function RouteComponent() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
       {/* Status Update Dialog */}
       <Dialog open={!!updateStatusOrderId} onOpenChange={() => setUpdateStatusOrderId(null)}>
         <DialogContent className="w-[350px] max-w-full">
@@ -693,8 +815,14 @@ function RouteComponent() {
             <Button variant="outline" onClick={() => setUpdateStatusOrderId(null)}>
               Cancel
             </Button>
+
             <Button
-              onClick={handleUpdateStatus}
+              onClick={async () => {
+                if (newStatus === "Not Placed") {
+                  setPendingStatusAfterComment("Not Placed"); // mark it for comment dialog
+                }
+                await handleUpdateStatus(); // handle everything in the same function
+              }}
               disabled={allowedStatuses.length === 0} // disable button if no status allowed
             >
               Update
@@ -702,8 +830,9 @@ function RouteComponent() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
       {/* View Comments Dialog */}
-      <Dialog open={!!viewCommentsOrderId} onOpenChange={() => setViewCommentsOrderId(null)}>
+      {/* <Dialog open={!!viewCommentsOrderId} onOpenChange={() => setViewCommentsOrderId(null)}>
         <DialogContent className="w-[400px] max-w-full">
           <DialogHeader>
             <DialogTitle>Comments</DialogTitle>
@@ -726,7 +855,7 @@ function RouteComponent() {
             <Button onClick={() => setViewCommentsOrderId(null)}>Close</Button>
           </DialogFooter>
         </DialogContent>
-      </Dialog>
+      </Dialog> */}
     </div>
   )
 }

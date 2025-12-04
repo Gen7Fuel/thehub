@@ -40,7 +40,7 @@ export const Route = createFileRoute('/_navbarLayout/dashboard')({
   component: RouteComponent,
 });
 
-const STATUS_KEYS = ["created", "completed", "placed", "delivered", "invoice_received"];
+const STATUS_KEYS = ["created", "completed", "not placed", "placed", "delivered", "invoice_received"];
 
 const chartConfig = {
   count: { label: "Cycle Counts", color: "var(--chart-1)" },
@@ -1059,24 +1059,30 @@ function RouteComponent() {
                   <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
                     {/* Vendor Status (Inventory) */}
                     <Card className="min-h-[365px] flex flex-col col-span-1">
-                      <CardHeader className="flex flex-col md:flex-row md:items-start md:justify-between gap-2">
-                        <div className="flex-1">
+                      <CardHeader className="space-y-2">
+                        {/* Title + Description */}
+                        <div>
                           <CardTitle>Vendor Status</CardTitle>
                           <CardDescription>Order Status (This Week)</CardDescription>
                         </div>
 
-                        <div className="flex-1 flex flex-wrap gap-2">
-                          {["Created", "Completed", "Placed", "Delivered", "Invoice Received"].map((status) => (
-                            <div key={status} className="flex items-center gap-1.5 [&>svg]:h-3 [&>svg]:w-3">
+                        {/* Legend */}
+                        <div className="w-full flex flex-wrap items-center gap-3 text-xs">
+                          {["Created", "Completed", "Not Placed", "Placed", "Delivered", "Invoice Received"].map((status) => (
+                            <div
+                              key={status}
+                              className="flex items-center gap-1.5 whitespace-nowrap"
+                            >
                               <div
-                                className="h-2 w-2 shrink-0 rounded-[2px]"
+                                className="h-2 w-2 rounded-[2px] shrink-0"
                                 style={{ backgroundColor: getOrderRecStatusColor(status) }}
                               />
-                              <span className="text-sm font-medium text-black">{status}</span>
+                              <span className="text-xs font-medium text-black">{status}</span>
                             </div>
                           ))}
                         </div>
                       </CardHeader>
+
 
                       <CardContent className="flex-1 overflow-y-auto max-h-60">
                         <ul className="divide-y divide-gray-200">
