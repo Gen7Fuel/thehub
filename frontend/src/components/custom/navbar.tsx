@@ -2,6 +2,7 @@ import { Link, useMatchRoute, useNavigate } from '@tanstack/react-router'
 import { Button } from '../ui/button'
 import { useEffect, useState } from 'react'
 import { isTokenExpired } from '../../lib/utils'
+import axios from 'axios'
 import { getSocket } from "@/lib/websocket";
 import { syncPendingActions } from "@/lib/utils"
 import { isActuallyOnline } from "@/lib/network";
@@ -21,16 +22,44 @@ export default function Navbar() {
   const navigate = useNavigate()
   const matchRoute = useMatchRoute()
   const [isHelpOpen, setIsHelpOpen] = useState(false)
+  const [forceLogoutMessage, setForceLogoutMessage] = useState<string | null>(null);
 
   // Effect: Check token expiration on mount and redirect to login if expired
+  // useEffect(() => {
+  //   const token = localStorage.getItem('token');
+  //   if (isTokenExpired(token)) {
+  //     // Clear sensitive data and redirect to login
+  //     localStorage.removeItem('token');
+  //     navigate({ to: '/login' });
+  //   }
+  // }, [navigate]);
   useEffect(() => {
     const token = localStorage.getItem('token');
+
     if (isTokenExpired(token)) {
-      // Clear sensitive data and redirect to login
+      // Call backend logout so is_loggedIn becomes false
+      if (token) {
+        axios.post("/api/auth/logout", {}, {
+          headers: { Authorization: `Bearer ${token}` }
+        }).catch(err => {
+          console.warn("Logout API failed:", err);
+        });
+      }
+
+      // Clear token locally
       localStorage.removeItem('token');
+
+
+      // Clear IndexedDB
+      clearLocalDB();
+
+      alert("Your session has expired. Please log in again.");
+      // Redirect
       navigate({ to: '/login' });
     }
   }, [navigate]);
+
+
 
   // checking for api health and syncing db once in online mode every 1 mins
   useEffect(() => {
@@ -50,7 +79,7 @@ export default function Navbar() {
     // Also sync every 1 minute if actually online
     const interval = setInterval(async () => {
       const online = await isActuallyOnline();
-      console.log("checking for backend connectivity:",online)
+      console.log("checking for backend connectivity:", online)
       if (online) {
         console.log("Running updates")
         syncPendingActions();
@@ -107,13 +136,32 @@ export default function Navbar() {
   }
 
   // Handles user logout: disconnects from socket, clears storage and redirects to login
-  const handleLogout = () => {
-    // Clear all stored data
-    localStorage.removeItem('token')
-    //clear index db 
+  // const handleLogout = () => {
+  //   // Clear all stored data
+  //   localStorage.removeItem('token')
+  //   //clear index db 
+  //   clearLocalDB();
+  //   // Navigate to login
+  //   navigate({ to: '/login' })
+  // }
+  const handleLogout = async () => {
+    try {
+      const token = localStorage.getItem("token");
+
+      if (token) {
+        await axios.post("/api/auth/logout", {}, {
+          headers: { Authorization: `Bearer ${token}` }
+        });
+      }
+    } catch (err) {
+      // don't block logout if server fails
+      console.warn("Logout API failed:", err);
+    }
+
+    // Same as before
+    localStorage.removeItem('token');
     clearLocalDB();
-    // Navigate to login
-    navigate({ to: '/login' })
+    navigate({ to: '/login' });
   }
 
   // Handles navigation to the settings page
@@ -123,33 +171,62 @@ export default function Navbar() {
 
   // Get access permissions from localStorage
 
-  const { user, refreshTokenFromBackend  } = useAuth();
-    // Retrieve access permissions from auth provider
-    // const access = user?.access || '{}' //markpoint
-    const access = user?.access || {}
-    const handlePermissionsUpdated = async () => {
-      // console.log("Permissions update received via socket");
-      // console.log("Before update:",localStorage.getItem('token'));
-      await refreshTokenFromBackend();
-      // console.log("After update:",localStorage.getItem('token'));
+  const { user, refreshTokenFromBackend } = useAuth();
+  // Retrieve access permissions from auth provider
+  // const access = user?.access || '{}' //markpoint
+  const access = user?.access || {}
+  const handlePermissionsUpdated = async () => {
+    // console.log("Permissions update received via socket");
+    // console.log("Before update:",localStorage.getItem('token'));
+    await refreshTokenFromBackend();
+    // console.log("After update:",localStorage.getItem('token'));
   };
   useEffect(() => {
     const socket = getSocket();
-    
+
     socket.on("connect", () => {
-      if(user?.id){
+      if (user?.id) {
         socket.emit("join-room", user?.id);
       }
       // console.log("socket from auth ", socket.id);
     });
     // console.log("Listeners now:", socket.listeners("permissions-updated"));
-      
+
     socket.on("permissions-updated", handlePermissionsUpdated);
-  
+
+    // socket.on("force-logout", (data) => {
+    //   alert(data.message || "You have been logged out by an admin.");
+
+    //   localStorage.removeItem("token");
+    //   clearLocalDB();
+
+    //   navigate({ to: "/login" });
+    // });
+    socket.on("force-logout", (data) => {
+      setForceLogoutMessage(data.message || "You have been logged out by an admin.");
+    });
+
+
     return () => {
       socket.off("permissions-updated", handlePermissionsUpdated);
+      socket.off("force-logout");
     };
-  },[user])
+  }, [user])
+
+  useEffect(() => {
+    if (forceLogoutMessage) {
+      const timer = setTimeout(() => {
+        // Perform logout actions
+        localStorage.removeItem("token");
+        clearLocalDB();
+        navigate({ to: "/login" });
+      }, 3000); // 3 seconds delay
+
+      return () => clearTimeout(timer);
+    }
+  }, [forceLogoutMessage]);
+
+
 
   let module_slug = window.location.href.split('/')[3]
 
@@ -238,13 +315,13 @@ export default function Navbar() {
           {/* {access.module_dashboard && ( //markpoint */}
           {access?.dashboard && (
             <Button variant="outline" onClick={() => navigate({ to: '/dashboard' })}>
-                <LayoutDashboard className="h-5 w-5 md:hidden" />
-                <span className="hidden md:inline">Dashboard</span>
+              <LayoutDashboard className="h-5 w-5 md:hidden" />
+              <span className="hidden md:inline">Dashboard</span>
             </Button>
           )}
           {/* Settings button, shown if user has access */}
           {/* {access.component_settings && ( //markpoint */}
-          {access?.settings && ( 
+          {access?.settings && (
             <Button variant="outline" onClick={handleSettings}>
               <SettingsIcon className="h-5 w-5" />
             </Button>
@@ -271,6 +348,17 @@ export default function Navbar() {
           </div>
         </DialogContent>
       </Dialog>
+      {/* Render logout modal */}
+      {forceLogoutMessage && (
+        <Dialog open={!!forceLogoutMessage} onOpenChange={() => { /* do nothing */ }}>
+          <DialogContent>
+            <DialogHeader>
+              <DialogTitle>Logged Out</DialogTitle>
+            </DialogHeader>
+            <p>{forceLogoutMessage}</p>
+          </DialogContent>
+        </Dialog>
+      )}
     </div>
   );
 }

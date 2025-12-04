@@ -86,15 +86,27 @@ const userSchema = new mongoose.Schema({
     ref: "Role",
   },
 
+  loggedOutBy: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: "User",
+    default: null,
+  },
+
+
   custom_permissions: {
     type: [permissionNodeSchema],
     default: [],
   },
 
-  access: {
-    type: Object,
-    default: { news: true },
-  },
+  // access: {
+  //   type: Object,
+  //   default: { news: true },
+  // },
+
+  lastLoginDate: { type: Date, default: null },
+
+  is_loggedIn: { type: Boolean, default: false },
+
 
   /* site_access{
        Rankin: true,
@@ -104,7 +116,7 @@ const userSchema = new mongoose.Schema({
   site_access: {
     type: Map,       // Using Map to store dynamic keys (site names)
     of: Boolean,     // All values are boolean
-    default: {},    
+    default: {},
   },
 }, { timestamps: true });
 

@@ -78,7 +78,28 @@ const auth = async (req, res, next) => {
     }
 
     const token = authHeader.replace("Bearer ", "").trim();
-    const decoded = jwt.verify(token, process.env.JWT_SECRET);
+    // const decoded = jwt.verify(token, process.env.JWT_SECRET);
+
+    // check for token expiry if token expired then juist update the is_loggedin
+    let decoded;
+    try {
+      decoded = jwt.verify(token, process.env.JWT_SECRET);
+    } catch (err) {
+      // Check for expired token
+      if (err.name === "TokenExpiredError") {
+        // update DB to set is_loggedIn = false
+        const expiredDecoded = jwt.decode(token); // get payload without verifying
+        if (expiredDecoded?.id) {
+          await User.findByIdAndUpdate(expiredDecoded.id, {
+            is_loggedIn: false
+          }, { timestamps: false });
+        }
+
+        return res.status(401).json({ message: "Token expired" });
+      }
+
+      return res.status(401).json({ message: "Token is not valid" });
+    }
 
     const user = await User.findById(decoded.id).select("-password");
     if (!user) return res.status(401).json({ message: "User not found" });
