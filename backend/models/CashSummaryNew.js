@@ -43,6 +43,8 @@ const CashSummarySchema = new mongoose.Schema(
   { timestamps: true }
 )
 
+CashSummarySchema.index({ site: 1, shift_number: 1, date: 1 }, { unique: true })
+
 const CashSummary = mongoose.model('CashSummary', CashSummarySchema)
 
 // Single report per site+day (notes + submitted state)

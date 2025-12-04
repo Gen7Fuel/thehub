@@ -147,7 +147,7 @@ router.post('/', async (req, res) => {
 
     if (!shift_number) return res.status(400).json({ error: 'shift_number is required' })
     if (!date) return res.status(400).json({ error: 'date is required' })
-
+    
     let values = {
       canadian_cash_collected: norm(canadian_cash_collected),
       item_sales: norm(item_sales),
@@ -263,7 +263,7 @@ router.post('/', async (req, res) => {
     res.status(201).json(saved)
   } catch (err) {
     console.error('CashSummary create error:', err)
-    res.status(500).json({ error: 'Failed to save CashSummary' })
+    res.status(500).json({ error: err.message || 'Failed to save CashSummary' })
   }
 })
 
@@ -283,6 +283,7 @@ router.get('/', async (req, res) => {
     const docs = await CashSummary
       .find({ site })
       .sort({ date: -1, createdAt: -1 })
+      .limit(30)
       .lean()
 
     res.json(docs)
@@ -563,16 +564,16 @@ router.put('/:id', async (req, res) => {
     if (!existing) return res.status(404).json({ error: 'Not found' })
 
     // 2️⃣ Determine if all five fields are missing (key does not exist)
-    const allMissing = !('report_canadian_cash' in existing) &&
-                       !('item_sales' in existing) &&
-                       !('cash_back' in existing) &&
-                       !('loyalty' in existing) &&
-                       !('cpl_bulloch' in existing)
+    // const allMissing = !('report_canadian_cash' in existing) &&
+    //                    !('item_sales' in existing) &&
+    //                    !('cash_back' in existing) &&
+    //                    !('loyalty' in existing) &&
+    //                    !('cpl_bulloch' in existing)
 
     let enrichedValues = {}
 
     // 3️⃣ Call Office API only if all fields are missing
-    if (site && allMissing) {
+    if (site && shift_number) {
       try {
         const url = new URL(`/api/sftp/receive/${encodeURIComponent(shift_number)}`, OFFICE_SFTP_API_BASE)
         url.searchParams.set('site', site)
