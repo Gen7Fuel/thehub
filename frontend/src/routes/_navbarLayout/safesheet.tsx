@@ -3,6 +3,9 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { SitePicker } from '@/components/custom/sitePicker'
 import { Button } from '@/components/ui/button'
 import { ImagePlus, Image as ImageIcon } from "lucide-react";
+import { DatePickerWithRange } from '@/components/custom/datePickerWithRange'
+import type { DateRange } from 'react-day-picker'
+import { getStartAndEndOfToday } from '@/lib/utils'
 
 type Entry = {
   _id: string
@@ -29,19 +32,80 @@ type SafeSheet = {
 export const Route = createFileRoute('/_navbarLayout/safesheet')({
   component: RouteComponent,
   validateSearch: (search) =>
-    search as {
+    ({
+      site: (search as any).site ?? '',
+      from: (search as any).from ?? '',
+      to: (search as any).to ?? '',
+    } as {
       site: string
-    },
-  loaderDeps: ({ search: { site } }) => ({ site })
+      from: string
+      to: string
+    }),
+  loaderDeps: ({ search: { site, from, to } }) => ({ site, from, to }),
 })
+// export const Route = createFileRoute('/_navbarLayout/safesheet')({
+//   component: RouteComponent,
+//   validateSearch: (search) =>
+//     search as {
+//       site: string
+//     },
+//   loaderDeps: ({ search: { site } }) => ({ site })
+// })
+
+// Helpers for YYYY-MM-DD
+const pad = (n: number) => String(n).padStart(2, '0')
+const ymd = (d: Date) => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`
+const parseYmd = (s?: string) => {
+  if (!s || !/^\d{4}-\d{2}-\d{2}$/.test(s)) return undefined
+  const [y, m, d] = s.split('-').map(Number)
+  return new Date(y, m - 1, d, 0, 0, 0, 0)
+}
 
 export default function RouteComponent() {
-  const { site } = Route.useSearch() as { site?: string }
+  // const { site } = Route.useSearch() as { site?: string }
+  const { site, from, to } = Route.useSearch() as { site?: string; from?: string; to?: string }
   const navigate = useNavigate({ from: Route.fullPath })
 
-  const updateSearch = (site: string) => {
-    navigate({ search: { site } })
+  const setSearch = (next: Partial<{ site: string; from: string; to: string }>) => {
+    navigate({ search: (prev: any) => ({ ...prev, ...next }) })
   }
+
+  // Initialize defaults in URL if missing
+  useEffect(() => {
+    if (!from || !to) {
+      const { start, end } = getStartAndEndOfToday()
+      setSearch({ from: start.toISOString(), to: end.toISOString() })
+    }
+  }, [from, to])
+
+  // Ensure URL has a 7-day YYYY-MM-DD range if missing/invalid
+  useEffect(() => {
+    const valid = (v?: string) => !!v && /^\d{4}-\d{2}-\d{2}$/.test(v)
+    if (!valid(from) || !valid(to)) {
+      const today = new Date()
+      const end = new Date(today.getFullYear(), today.getMonth(), today.getDate(), 0, 0, 0, 0)
+      const start = new Date(end); start.setDate(end.getDate() - 6)
+      setSearch({ from: ymd(start), to: ymd(end) })
+    }
+  }, [from, to])
+
+  // Convert URL YYYY-MM-DD to DateRange for the picker
+  const date: DateRange | undefined =
+    parseYmd(from) && parseYmd(to) ? { from: parseYmd(from), to: parseYmd(to) } : undefined
+
+  // // Convert URL params to DateRange for the picker
+  // const date: DateRange | undefined =
+  //   from && to ? { from: new Date(from), to: new Date(to) } : undefined
+
+  // // Update URL on date change (no local state)
+  // const onDateChange = (next?: DateRange) => {
+  //   if (!next?.from || !next?.to) return
+  //   setSearch({ from: next.from.toISOString(), to: next.to.toISOString() })
+  // }
+
+  // const updateSearch = (site: string) => {
+  //   navigate({ search: { site } })
+  // }
 
   const [sheet, setSheet] = useState<SafeSheet | null>(null)
   const [loading, setLoading] = useState(false)
@@ -73,7 +137,7 @@ export default function RouteComponent() {
 
   // fetch sheet
   useEffect(() => {
-    if (!site) {
+    if (!site || !from || !to) {
       setSheet(null)
       setError(null)
       return
@@ -83,7 +147,9 @@ export default function RouteComponent() {
       setLoading(true)
       setError(null)
       try {
-        const res = await fetch(`/api/safesheets/site/${encodeURIComponent(site)}`, {
+        const res = await fetch(
+          `/api/safesheets/site/${encodeURIComponent(site)}?from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}`,
+        {
           headers: {
             Authorization: `Bearer ${localStorage.getItem('token')}`,
             'X-Required-Permission': 'accounting.safesheet',
@@ -114,7 +180,7 @@ export default function RouteComponent() {
     return () => {
       mounted = false
     }
-  }, [site])
+  }, [site, from, to])
 
   // read numeric value
   const readEditableNumber = (el?: HTMLInputElement | null) => {
@@ -323,13 +389,23 @@ export default function RouteComponent() {
 
   return (
     <div className="pt-14 flex flex-col items-center">
-      <div className="my-4 flex flex-col items-center gap-4">
+      <div className="my-4 flex flex-row items-center gap-4">
         <SitePicker
           value={site}
-          onValueChange={updateSearch}
+          // onValueChange={updateSearch}
+          onValueChange={(v) => setSearch({ site: v })}
           placeholder="Pick a site"
           label="Site"
           className="w-[220px]"
+        />
+        {/* Adapt DatePicker setDate (it expects a setState dispatcher) */}
+        <DatePickerWithRange
+          date={date}
+          setDate={(val) => {
+            const next = typeof val === 'function' ? val(date) : val
+            if (!next?.from || !next?.to) return
+            setSearch({ from: ymd(next.from), to: ymd(next.to) })
+          }}
         />
       </div>
 

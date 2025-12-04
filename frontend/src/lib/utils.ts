@@ -366,6 +366,8 @@ export const getOrderRecStatusColor = (status?: string) => {
       return "#fde68a"; // light yellow
     case "Placed":
       return "#bfdbfe"; // light blue
+    case "Not Placed":
+      return "#979797ff"; // dark grey
     case "Completed":
       return "#fdba74"; // light orange/golden
     case "Delivered":

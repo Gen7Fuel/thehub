@@ -15,9 +15,37 @@ const CashSummarySchema = new mongoose.Schema(
     // Value parsed from shift report (Canadian Cash in report) kept separate
     report_canadian_cash: { type: Number },
     payouts: { type: Number },
+
+    // Parsed SFT values (no defaults; leave undefined if missing)
+    fuelSales: { type: Number },
+    dealGroupCplDiscounts: { type: Number },
+    fuelPriceOverrides: { type: Number },
+    parsedItemSales: { type: Number },
+    depositTotal: { type: Number },
+    pennyRounding: { type: Number },
+    totalSales: { type: Number },
+    afdCredit: { type: Number },
+    afdDebit: { type: Number },
+    kioskCredit: { type: Number },
+    kioskDebit: { type: Number },
+    kioskGiftCard: { type: Number },
+    totalPos: { type: Number },
+    arIncurred: { type: Number },
+    grandTotal: { type: Number },
+    couponsAccepted: { type: Number },
+    canadianCash: { type: Number },
+    cashOnHand: { type: Number },
+    parsedCashBack: { type: Number },
+    parsedPayouts: { type: Number },
+    safedropsCount: { type: Number },
+    safedropsAmount: { type: Number },
   },
   { timestamps: true }
 )
+
+CashSummarySchema.index({ site: 1, shift_number: 1, date: 1 }, { unique: true })
+
+const CashSummary = mongoose.model('CashSummary', CashSummarySchema)
 
 // Single report per site+day (notes + submitted state)
 const CashSummaryReportSchema = new mongoose.Schema(
@@ -35,7 +63,6 @@ const CashSummaryReportSchema = new mongoose.Schema(
 // Enforce one report per site+day
 CashSummaryReportSchema.index({ site: 1, date: 1 }, { unique: true })
 
-const CashSummary = mongoose.model('CashSummary', CashSummarySchema)
 const CashSummaryReport = mongoose.model('CashSummaryReport', CashSummaryReportSchema)
 
 module.exports = CashSummary
