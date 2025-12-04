@@ -449,7 +449,8 @@ router.delete('/:id', async (req, res) => {
 });
 
 // Update order status
-const STATUS_HIERARCHY = ["Created", "Completed", "Placed", "Delivered", "Invoice Received"];
+// const STATUS_HIERARCHY = ["Created", "Completed", "Placed", "Delivered", "Invoice Received"];
+const STATUS_HIERARCHY = ["Created", "Completed", "Not Placed", "Placed", "Delivered", "Invoice Received"];
 
 router.put('/:id/status', async (req, res) => {
   try {
