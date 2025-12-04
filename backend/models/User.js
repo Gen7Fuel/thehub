@@ -86,6 +86,13 @@ const userSchema = new mongoose.Schema({
     ref: "Role",
   },
 
+  loggedOutBy: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: "User",
+    default: null,
+  },
+
+
   custom_permissions: {
     type: [permissionNodeSchema],
     default: [],

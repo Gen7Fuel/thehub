@@ -76,7 +76,7 @@ export function RouteComponent() {
   const [showConfirmDialog, setShowConfirmDialog] = useState(false);
   const [password, setPassword] = useState("");
   const [newPassword, setNewPassword] = useState("");
-  const [resetStatus, setResetStatus] = useState<null | string>(null);
+  const [_ , setResetStatus] = useState<null | string>(null);
 
   const [mergedPermissions, setMergedPermissions] = useState<PermissionNode[]>([]);
 
@@ -172,6 +172,8 @@ export function RouteComponent() {
       );
       setResetStatus("Password reset successfully!");
       setNewPassword("");
+      alert("User Password Reset Succesfull!");
+      navigate({ to: `/settings/users/${user?._id}` });
     } catch (error: any) {
       if (error.response?.status === 403) {
         // Redirect to no-access page
@@ -314,7 +316,7 @@ export function RouteComponent() {
               </Button>
             </form>
 
-            {resetStatus && <p className="mt-3 text-sm text-gray-700">{resetStatus}</p>}
+            {/* {resetStatus && <p className="mt-3 text-sm text-gray-700">{resetStatus}</p>} */}
 
             {/* Status + Logout Row */}
             <div className="flex items-start justify-between">
@@ -352,6 +354,7 @@ export function RouteComponent() {
               {/* RIGHT SIDE — Logout Button */}
               <Button
                 className="bg-red-600 text-white hover:bg-red-500 h-9"
+                disabled={!user.is_logged_in}
                 onClick={() => {
                   // reuse existing password dialog
                   setPassword("");
@@ -509,12 +512,11 @@ export function RouteComponent() {
                   await axios.post(
                     `/api/users/${user._id}/logout`,
                     {},
-                    { headers: { Authorization: `Bearer ${token}` } }
+                    { headers: { Authorization: `Bearer ${token}`,"X-Required-Permission": "settings" } }
                   );
-
+                  setShowLogoutConfirmDialog(false)
                   alert("User logged out successfully!");
-                  window.location.reload();
-
+                  navigate({ to: `/settings/users/${user._id}` });
                 } catch (err) {
                   console.error(err);
                   alert("Failed to logout user.");

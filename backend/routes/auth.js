@@ -230,7 +230,7 @@ function getInitials(firstName, lastName) {
 router.post("/logout", auth, async (req, res) => {
   try {
     const userId = req.user.id; // from JWT middleware
-    console.log('user id:',userId);
+    console.log('user id:', userId);
 
     await User.findByIdAndUpdate(userId, {
       is_loggedIn: false
@@ -251,6 +251,20 @@ router.post('/reset-password', auth, async (req, res) => {
   const hashed = await bcrypt.hash(newPassword, 10);
 
   const user = await User.findByIdAndUpdate(userId, { password: hashed });
+
+  // Emit force-logout if user is logged in
+  if (user.is_loggedIn) {
+    const io = req.app.get("io");
+    if (io) {
+      io.to(userId).emit("force-logout", {
+        message: "Your account information has changed. Please log in again.",
+      });
+    }
+    // Also mark user as logged out
+    user.is_loggedIn = false;
+    await user.save();
+  }
+
   if (!user) return res.status(404).json({ error: 'User not found.' });
   res.json({ success: true });
 });
@@ -303,7 +317,11 @@ router.post("/refresh-token", async (req, res) => {
 
     // Rebuild permissions / timezone / access if needed
     const mergedPermissions = await getMergedPermissions(user);
-    const timezone = user.timezone || "America/Toronto";
+    let timezone = null;
+    if (user.stationName) {
+      const location = await Location.findOne({ stationName: user.stationName });
+      timezone = location?.timezone || null;
+    }
 
     // Prepare new token payload
     const payload = {

@@ -4,7 +4,7 @@ const bcrypt = require("bcryptjs");
 const User = require('../models/User');
 const _ = require("lodash");
 const Role = require("../models/Role");
-const getMergedPermissions =  require("../utils/mergePermissionObjects")
+const getMergedPermissions = require("../utils/mergePermissionObjects")
 
 // Compare frontend permissions with role.permissions to find overrides for saving them as custom permissions in users
 const getOverrides = (roleNodes = [], userNodes = []) => {
@@ -16,30 +16,30 @@ const getOverrides = (roleNodes = [], userNodes = []) => {
       const rNode = roleMap[key];
       if (!rNode) return uNode; // new permission branch
 
-        let hasOverride = false;
+      let hasOverride = false;
 
-        // Check if value differs
-        if (_.isBoolean(uNode.value) && uNode.value !== rNode.value) hasOverride = true;
+      // Check if value differs
+      if (_.isBoolean(uNode.value) && uNode.value !== rNode.value) hasOverride = true;
 
-        // Recursively check children
-        let childrenOverrides = [];
-        if (uNode.children && uNode.children.length > 0) {
-          childrenOverrides = getOverrides(rNode.children || [], uNode.children);
-          if (childrenOverrides.length > 0) hasOverride = true;
-        }
+      // Recursively check children
+      let childrenOverrides = [];
+      if (uNode.children && uNode.children.length > 0) {
+        childrenOverrides = getOverrides(rNode.children || [], uNode.children);
+        if (childrenOverrides.length > 0) hasOverride = true;
+      }
 
-        if (hasOverride) {
-          return {
-            name: uNode.name,
-            value: uNode.value,
-            ...(childrenOverrides.length > 0 ? { children: childrenOverrides } : {}),
-          };
-        }
+      if (hasOverride) {
+        return {
+          name: uNode.name,
+          value: uNode.value,
+          ...(childrenOverrides.length > 0 ? { children: childrenOverrides } : {}),
+        };
+      }
 
-        return null; // no override, skip
-      })
-    );
-  };
+      return null; // no override, skip
+    })
+  );
+};
 
 // GET route to fetch all users
 router.get('/', async (req, res) => {
@@ -106,7 +106,7 @@ router.put("/:userId/role", async (req, res) => {
     user.role = roleId;
     await user.save();
     const io = req.app.get("io");
-    if (io){
+    if (io) {
       io.to(userId).emit("permissions-updated");
     }
 
@@ -129,7 +129,7 @@ router.put("/:userId/site-access", async (req, res) => {
 
     await User.findByIdAndUpdate(userId, { site_access: siteAccess });
     const io = req.app.get("io");
-    if (io){
+    if (io) {
       io.to(userId).emit("permissions-updated");
     }
     res.json({ success: true, message: "Site access updated successfully" });
@@ -215,7 +215,7 @@ router.put("/:userId/permissions", async (req, res) => {
     await user.save();
     const io = req.app.get("io");
     if (io) {
-     io.to(userId).emit("permissions-updated");
+      io.to(userId).emit("permissions-updated");
     }
 
     res.json({ success: true, custom_permissions: customPermissions });
@@ -264,13 +264,15 @@ router.patch("/:id/active", async (req, res) => {
 router.post("/:id/logout", async (req, res) => {
   try {
     const targetUserId = req.params.id;
-    console.log('userid:',targetUserId);
+    const adminUserId = req.user?._id; // admin performing the action
+    // console.log('userid:', targetUserId);
 
     // Mark user as logged out
     const updatedUser = await User.findByIdAndUpdate(
       targetUserId,
       {
-        is_loggedIn: false
+        is_loggedIn: false,
+        loggedOutBy: adminUserId,
       },
       { new: true, timestamps: false }
     );
@@ -293,5 +295,58 @@ router.post("/:id/logout", async (req, res) => {
     res.status(500).json({ message: "Server error" });
   }
 });
+
+// logout-multiple route for except admin
+router.post("/logout-multiple", async (req, res) => {
+  try {
+    const adminUserId = req.user?._id;
+    // Find Admin Role ID
+    const adminRole = await Role.findOne({ role_name: "Admin" });
+    if (!adminRole) return res.status(400).json({ message: "Admin role not found" });
+
+    const adminRoleId = adminRole._id.toString();
+
+    // Find all active, logged-in NON-admin users
+    const usersToLogout = await User.find({
+      is_loggedIn: true,
+      is_active: true,
+      $or: [
+        { role: { $exists: false } },
+        { role: null },
+        { role: { $ne: adminRoleId } },
+      ],
+    });
+
+    console.log("Users to logout:", usersToLogout.length);
+
+    if (!usersToLogout.length) {
+      return res.json({ message: "No users to log out" });
+    }
+
+    const io = req.app.get("io");
+
+    for (const user of usersToLogout) {
+      user.is_loggedIn = false;
+      user.loggedOutBy = adminUserId;
+      await user.save({ timestamps: false });
+
+      if (io) {
+        io.to(user._id.toString()).emit("force-logout", {
+          message: "You have been logged out by an administrator.",
+        });
+      }
+    }
+
+    res.json({
+      message: "All non-admin active users logged out successfully",
+      count: usersToLogout.length,
+    });
+
+  } catch (err) {
+    console.error("Logout all users error:", err);
+    res.status(500).json({ message: "Server error" });
+  }
+});
+
 
 module.exports = router;

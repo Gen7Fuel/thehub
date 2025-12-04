@@ -22,6 +22,7 @@ export default function Navbar() {
   const navigate = useNavigate()
   const matchRoute = useMatchRoute()
   const [isHelpOpen, setIsHelpOpen] = useState(false)
+  const [forceLogoutMessage, setForceLogoutMessage] = useState<string | null>(null);
 
   // Effect: Check token expiration on mount and redirect to login if expired
   // useEffect(() => {
@@ -193,20 +194,38 @@ export default function Navbar() {
 
     socket.on("permissions-updated", handlePermissionsUpdated);
 
+    // socket.on("force-logout", (data) => {
+    //   alert(data.message || "You have been logged out by an admin.");
+
+    //   localStorage.removeItem("token");
+    //   clearLocalDB();
+
+    //   navigate({ to: "/login" });
+    // });
     socket.on("force-logout", (data) => {
-      alert(data.message || "You have been logged out by an admin.");
-
-      localStorage.removeItem("token");
-      clearLocalDB();
-
-      navigate({ to: "/login" });
+      setForceLogoutMessage(data.message || "You have been logged out by an admin.");
     });
+
 
     return () => {
       socket.off("permissions-updated", handlePermissionsUpdated);
       socket.off("force-logout");
     };
   }, [user])
+
+  useEffect(() => {
+    if (forceLogoutMessage) {
+      const timer = setTimeout(() => {
+        // Perform logout actions
+        localStorage.removeItem("token");
+        clearLocalDB();
+        navigate({ to: "/login" });
+      }, 3000); // 3 seconds delay
+
+      return () => clearTimeout(timer);
+    }
+  }, [forceLogoutMessage]);
+
 
 
   let module_slug = window.location.href.split('/')[3]
@@ -329,6 +348,17 @@ export default function Navbar() {
           </div>
         </DialogContent>
       </Dialog>
+      {/* Render logout modal */}
+      {forceLogoutMessage && (
+        <Dialog open={!!forceLogoutMessage} onOpenChange={() => { /* do nothing */ }}>
+          <DialogContent>
+            <DialogHeader>
+              <DialogTitle>Logged Out</DialogTitle>
+            </DialogHeader>
+            <p>{forceLogoutMessage}</p>
+          </DialogContent>
+        </Dialog>
+      )}
     </div>
   );
 }
