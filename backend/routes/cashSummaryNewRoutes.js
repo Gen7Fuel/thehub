@@ -142,11 +142,12 @@ router.post('/', async (req, res) => {
       loyalty,
       cpl_bulloch,
       exempted_tax,
+      payouts,
     } = req.body || {}
 
     if (!shift_number) return res.status(400).json({ error: 'shift_number is required' })
     if (!date) return res.status(400).json({ error: 'date is required' })
-
+    
     let values = {
       canadian_cash_collected: norm(canadian_cash_collected),
       item_sales: norm(item_sales),
@@ -156,8 +157,10 @@ router.post('/', async (req, res) => {
       report_canadian_cash: undefined,
     }
 
+    let content = ''
+
     // Enrich from Office SFTP API (HTTP proxy) instead of direct SFTP
-    if (site) {
+    if (site && shift_number) {
       try {
         const url = new URL(`/api/sftp/receive/${encodeURIComponent(shift_number)}`, OFFICE_SFTP_API_BASE)
         url.searchParams.set('site', site)
@@ -189,19 +192,69 @@ router.post('/', async (req, res) => {
       }
     }
 
+    // Helper: to number or undefined (leave missing values undefined in DB)
+    const numOrUndef = (v) => {
+      const n = Number(v)
+      return Number.isFinite(n) ? n : undefined
+    }
+
+    // ...inside POST create handler, after parseSftReport(content):
+    const parsed = parseSftReport(content) || {}
+
+    // ...existing code...
     const doc = new CashSummary({
       site,
       shift_number: String(shift_number),
       date: new Date(date),
-      canadian_cash_collected: values.canadian_cash_collected,
-      item_sales: values.item_sales,
-      cash_back: values.cash_back,
-      loyalty: values.loyalty,
-      cpl_bulloch: values.cpl_bulloch,
-      report_canadian_cash: values.report_canadian_cash,
+
+      // existing fields
+      canadian_cash_collected: norm(canadian_cash_collected),
+      item_sales: norm(item_sales),
+      cash_back: norm(cash_back),
+      loyalty: norm(loyalty),
+      cpl_bulloch: norm(cpl_bulloch),
+      report_canadian_cash: numOrUndef(parsed.canadianCash),
       exempted_tax: norm(exempted_tax),
-      payouts: values.payouts,
+      payouts: parsed.payouts ?? numOrUndef(payouts),
+
+      // parsed fields (leave undefined if missing)
+      fuelSales: numOrUndef(parsed.fuelSales),
+      dealGroupCplDiscounts: numOrUndef(parsed.dealGroupCplDiscounts),
+      fuelPriceOverrides: numOrUndef(parsed.fuelPriceOverrides),
+      parsedItemSales: numOrUndef(parsed.itemSales),
+      depositTotal: numOrUndef(parsed.depositTotal),
+      pennyRounding: numOrUndef(parsed.pennyRounding),
+      totalSales: numOrUndef(parsed.totalSales),
+      afdCredit: numOrUndef(parsed.afdCredit),
+      afdDebit: numOrUndef(parsed.afdDebit),
+      kioskCredit: numOrUndef(parsed.kioskCredit),
+      kioskDebit: numOrUndef(parsed.kioskDebit),
+      kioskGiftCard: numOrUndef(parsed.kioskGiftCard),
+      totalPos: numOrUndef(parsed.totalPos),
+      arIncurred: numOrUndef(parsed.arIncurred),
+      grandTotal: numOrUndef(parsed.grandTotal),
+      couponsAccepted: numOrUndef(parsed.couponsAccepted),
+      canadianCash: numOrUndef(parsed.canadianCash),
+      cashOnHand: numOrUndef(parsed.cashOnHand),
+      parsedCashBack: numOrUndef(parsed.cashBack),
+      parsedPayouts: numOrUndef(parsed.payouts),
+      safedropsCount: numOrUndef(parsed.safedrops?.count),
+      safedropsAmount: numOrUndef(parsed.safedrops?.amount),
     })
+
+    // const doc = new CashSummary({
+    //   site,
+    //   shift_number: String(shift_number),
+    //   date: new Date(date),
+    //   canadian_cash_collected: values.canadian_cash_collected,
+    //   item_sales: values.item_sales,
+    //   cash_back: values.cash_back,
+    //   loyalty: values.loyalty,
+    //   cpl_bulloch: values.cpl_bulloch,
+    //   report_canadian_cash: values.report_canadian_cash,
+    //   exempted_tax: norm(exempted_tax),
+    //   payouts: values.payouts,
+    // })
 
     const saved = await doc.save()
 
@@ -210,7 +263,7 @@ router.post('/', async (req, res) => {
     res.status(201).json(saved)
   } catch (err) {
     console.error('CashSummary create error:', err)
-    res.status(500).json({ error: 'Failed to save CashSummary' })
+    res.status(500).json({ error: err.message || 'Failed to save CashSummary' })
   }
 })
 
@@ -230,6 +283,7 @@ router.get('/', async (req, res) => {
     const docs = await CashSummary
       .find({ site })
       .sort({ date: -1, createdAt: -1 })
+      .limit(30)
       .lean()
 
     res.json(docs)
@@ -510,16 +564,16 @@ router.put('/:id', async (req, res) => {
     if (!existing) return res.status(404).json({ error: 'Not found' })
 
     // 2️⃣ Determine if all five fields are missing (key does not exist)
-    const allMissing = !('report_canadian_cash' in existing) &&
-                       !('item_sales' in existing) &&
-                       !('cash_back' in existing) &&
-                       !('loyalty' in existing) &&
-                       !('cpl_bulloch' in existing)
+    // const allMissing = !('report_canadian_cash' in existing) &&
+    //                    !('item_sales' in existing) &&
+    //                    !('cash_back' in existing) &&
+    //                    !('loyalty' in existing) &&
+    //                    !('cpl_bulloch' in existing)
 
     let enrichedValues = {}
 
     // 3️⃣ Call Office API only if all fields are missing
-    if (site && allMissing) {
+    if (site && shift_number) {
       try {
         const url = new URL(`/api/sftp/receive/${encodeURIComponent(shift_number)}`, OFFICE_SFTP_API_BASE)
         url.searchParams.set('site', site)

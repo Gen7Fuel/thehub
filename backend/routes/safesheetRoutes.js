@@ -59,24 +59,75 @@ router.post('/site/:site/entries', async (req, res) => {
  * Get a safesheet and its entries with computed running balance
  * GET /api/safesheets/site/:site
  */
+// Helpers for YYYY-MM-DD parsing
+const isYmd = (s) => /^\d{4}-\d{2}-\d{2}$/.test(String(s || ''))
+const pad = (n) => String(n).padStart(2, '0')
+const ymd = (d) => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`
+
+// Get a safesheet and entries (filtered by date range) with running balance
+// GET /api/safesheets/site/:site?from=YYYY-MM-DD&to=YYYY-MM-DD
 router.get('/site/:site', async (req, res) => {
   try {
-    const sheet = await Safesheet.findOne({ site: req.params.site });
-    if (!sheet) return res.status(404).json({ error: 'Safesheet not found for site' });
+    const site = req.params.site
+    if (!site) return res.status(400).json({ error: 'site is required' })
 
-    const entries = sheet.getEntriesWithRunningBalance();
+    // Build 7-day default range including today if missing or invalid
+    const { from, to } = req.query || {}
+    const today = new Date()
+    const endD = new Date(today.getFullYear(), today.getMonth(), today.getDate(), 0, 0, 0, 0)
+    const startD = new Date(endD); startD.setDate(endD.getDate() - 6)
+
+    const fromYmd = isYmd(from) ? String(from) : ymd(startD)
+    const toYmd = isYmd(to) ? String(to) : ymd(endD)
+
+    const [fy, fm, fd] = fromYmd.split('-').map(Number)
+    const [ty, tm, td] = toYmd.split('-').map(Number)
+    const start = new Date(fy, fm - 1, fd, 0, 0, 0, 0)
+    const end = new Date(ty, tm - 1, td, 23, 59, 59, 999)
+
+    const sheet = await Safesheet.findOne({ site })
+    if (!sheet) return res.status(404).json({ error: 'Safesheet not found for site' })
+
+    // Use model method to compute running balance, then filter by range
+    const allEntries = sheet.getEntriesWithRunningBalance()
+    const inRange = allEntries.filter(e => {
+      const d = new Date(e.date)
+      return d >= start && d <= end
+    })
+
     return res.json({
       _id: sheet._id,
       site: sheet.site,
       initialBalance: sheet.initialBalance,
-      entries,
+      from: fromYmd,
+      to: toYmd,
+      entries: inRange,
       createdAt: sheet.createdAt,
       updatedAt: sheet.updatedAt,
-    });
+    })
   } catch (err) {
-    return res.status(500).json({ error: err.message });
+    console.error('Safesheet site range error:', err)
+    return res.status(500).json({ error: 'Failed to load safesheet range' })
   }
-});
+})
+// router.get('/site/:site', async (req, res) => {
+//   try {
+//     const sheet = await Safesheet.findOne({ site: req.params.site });
+//     if (!sheet) return res.status(404).json({ error: 'Safesheet not found for site' });
+
+//     const entries = sheet.getEntriesWithRunningBalance();
+//     return res.json({
+//       _id: sheet._id,
+//       site: sheet.site,
+//       initialBalance: sheet.initialBalance,
+//       entries,
+//       createdAt: sheet.createdAt,
+//       updatedAt: sheet.updatedAt,
+//     });
+//   } catch (err) {
+//     return res.status(500).json({ error: err.message });
+//   }
+// });
 
 /**
  * Get current Cash On Hand (Safe) for a site
