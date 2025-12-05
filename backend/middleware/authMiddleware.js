@@ -70,7 +70,7 @@ const checkPermission = (accessTree, keyPath) => {
  * Reads required permission from custom header: `X-Required-Permission`.
  */
 const auth = async (req, res, next) => {
-  console.log("Auth middleware hit for:", req.method, req.originalUrl); // Logs each auth check
+  console.log(`🧑‍💻 ${req.user.firstName}: ${req.method} ${req.originalUrl}`); // Logs each auth check
   try {
     const authHeader = req.header("Authorization");
     if (!authHeader?.startsWith("Bearer ")) {
