@@ -121,7 +121,8 @@ function parseTransactionDetailTab(text) {
   const totalIdx = idxExact('Total') >= 0 ? idxExact('Total') : headers.findIndex(h => h.toLowerCase().includes('amount'))
   const cardIdx = idxExact('Card1/Card2')
   const priceIdx = idxExact('Price') >= 0 ? idxExact('Price') : headers.findIndex(h => h.toLowerCase().includes('price'))
-  const customerIdx = idxExact('Customer Name') >= 0 ? idxExact('Customer Name') : headers.findIndex(h => h.toLowerCase().includes('customer'))
+  // const customerIdx = idxExact('Customer Name') >= 0 ? idxExact('Customer Name') : headers.findIndex(h => h.toLowerCase().includes('customer'))
+  const customerIdx = headers.findIndex(h => h.toLowerCase() === 'customer')
 
   let litresSold = 0
   let sales = 0
@@ -138,7 +139,7 @@ function parseTransactionDetailTab(text) {
     const tot = totalIdx >= 0 ? toNum(cols[totalIdx]) : 0
     const cardVal = cardIdx >= 0 ? cols[cardIdx] : ''
     const price = priceIdx >= 0 ? toNum(cols[priceIdx]) : 0
-    const customer = customerIdx >= 0 ? cols[customerIdx] : ''
+    // const customer = customerIdx >= 0 ? cols[customerIdx] : ''
 
     if (qty === 0 && tot === 0) continue
 
@@ -147,8 +148,13 @@ function parseTransactionDetailTab(text) {
 
     if (isARCard(cardVal)) {
       ar += tot
+      // Use the next column (untitled) as the customer name, but keep the field key "customer"
+      const customerName =
+        customerIdx >= 0 && customerIdx + 1 < cols.length
+          ? (cols[customerIdx + 1] || '').trim()
+          : (cols[customerIdx] || '').trim()
       ar_rows.push({
-        customer,
+        customer: customerName,
         card: cardVal,
         amount: round2(tot),
         quantity: round2(qty),
