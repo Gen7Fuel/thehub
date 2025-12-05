@@ -3,6 +3,7 @@
   "version": "0.1.0",
   "description": "API for gen7hub app",
   "dependencies": {
+    "@azure/storage-blob": "^12.29.1",
     "@react-pdf/renderer": "^4.3.1",
     "axios": "^1.7.9",
     "bcryptjs": "^2.4.3",
@@ -10,6 +11,7 @@
     "bullmq": "^5.61.2",
     "cors": "^2.8.5",
     "dotenv": "^16.4.7",
+    "exec": "^0.2.1",
     "express": "^4.21.2",
     "ioredis": "^5.8.2",
     "jsonwebtoken": "^9.0.2",
