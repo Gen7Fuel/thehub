@@ -4,36 +4,33 @@ const fs = require("fs");
 const { BlobServiceClient } = require("@azure/storage-blob");
 
 // Temporary local backup folder
-const TEMP_BACKUP_DIR = path.join(__dirname, "mongo-backups-temp");
+// const TEMP_BACKUP_DIR = path.join(__dirname, "mongo-backups-temp");
 
 // Number of days to keep backups on Azure
-const RETENTION_DAYS = 20;
+const RETENTION_DAYS = 5;
 
 // Main backup function
 async function runBackup() {
   try {
-    // --- 1️⃣ Create temporary folder for this backup ---
-    if (!fs.existsSync(TEMP_BACKUP_DIR)) {
-      fs.mkdirSync(TEMP_BACKUP_DIR, { recursive: true });
-    }
-
-    const timestamp = new Date().toISOString().replace(/[:.]/g, "-");
-    const backupFolder = path.join(TEMP_BACKUP_DIR, `backup-${timestamp}`);
-
     const mongoUri = process.env.MONGO_URI;
     const containerName = process.env.AZURE_CONTAINER;
     const connectionString = process.env.AZURE_STORAGE_CONNECTION_STRING;
 
+    const timestamp = new Date().toISOString().replace(/[:.]/g, "-");
+
+    // --- 1️⃣ Define dump directory and archive file directly ---
+    const dumpDir = path.join(__dirname, `dump-${timestamp}`); // direct dump folder (single)
+    const archiveFile = path.join(__dirname, `backup-${timestamp}.tar.gz`);
+
     // --- 2️⃣ Run mongodump ---
     console.log("➤ Running mongodump...");
-    const dumpCommand = `mongodump --uri="${mongoUri}" --out="${backupFolder}"`;
+    const dumpCommand = `mongodump --uri="${mongoUri}" --out="${dumpDir}"`;
     await execPromise(dumpCommand);
-    console.log("✔ Mongodump completed:", backupFolder);
+    console.log("✔ Mongodump completed:", dumpDir);
 
-    // --- 3️⃣ Compress backup ---
-    const archiveFile = `${backupFolder}.tar.gz`;
+    // --- 3️⃣ Compress dump ---
     console.log("➤ Compressing backup...");
-    await execPromise(`tar -czvf ${archiveFile} -C ${TEMP_BACKUP_DIR} ${path.basename(backupFolder)}`);
+    await execPromise(`tar -czvf ${archiveFile} -C ${__dirname} ${path.basename(dumpDir)}`);
     console.log("✔ Compression complete:", archiveFile);
 
     // --- 4️⃣ Upload to Azure ---
@@ -41,18 +38,21 @@ async function runBackup() {
     const blobService = BlobServiceClient.fromConnectionString(connectionString);
     const containerClient = blobService.getContainerClient(containerName);
 
-    const blobName = `mongo-backups/backup-${timestamp}.tar.gz`;
+    const dateFolderName = new Date().toISOString().slice(0, 10).replace(/-/g, "");
+    const blobName = `mongo-backups/${dateFolderName}/backup-${timestamp}.tar.gz`;
     const blockBlob = containerClient.getBlockBlobClient(blobName);
     await blockBlob.uploadFile(archiveFile);
+    await blockBlob.setAccessTier('Hot');
     console.log("✔ Uploaded to Azure:", blobName);
 
-    // --- 5️⃣ Remove local backup folder and archive ---
-    fs.rmSync(backupFolder, { recursive: true, force: true });
-    fs.unlinkSync(archiveFile);
-    console.log("✔ Local temporary files removed");
+    // --- 5️⃣ Cleanup local dump and archive ---
+    await fs.promises.rm(dumpDir, { recursive: true, force: true });
+    await fs.promises.unlink(archiveFile);
+    console.log("✔ Local dump and archive removed");
 
     // --- 6️⃣ Cleanup old backups on Azure ---
     await cleanupOldBlobs(containerClient);
+
   } catch (err) {
     console.error("❌ Backup failed:", err);
   }
@@ -72,20 +72,33 @@ function execPromise(cmd) {
 async function cleanupOldBlobs(containerClient) {
   try {
     const now = Date.now();
+    const prefix = "mongo-backups/"; // root folder in blob
 
-    for await (const blob of containerClient.listBlobsFlat({ prefix: "mongo-backups/" })) {
-      // Extract timestamp from blob name
-      const match = blob.name.match(/backup-(\d{4}-\d{2}-\d{2}T\d{2}-\d{2}-\d{2}-\d+)Z\.tar\.gz$/);
-      if (!match) continue;
+    // List all blobs with their prefixes
+    const folders = new Set();
+    for await (const blob of containerClient.listBlobsFlat({ prefix })) {
+      // Extract date folder (e.g., mongo-backups/20251205/ => 20251205)
+      const parts = blob.name.split("/");
+      if (parts.length >= 2) {
+        folders.add(parts[1]);
+      }
+    }
 
-      const timestamp = match[1].replace(/-/g, ":"); // Convert back to ISO format
-      const blobTime = new Date(timestamp).getTime();
-      const ageInDays = (now - blobTime) / (1000 * 60 * 60 * 24);
+    for (const folderName of folders) {
+      // Parse folder name as YYYYMMDD
+      const folderDate = new Date(
+        `${folderName.slice(0,4)}-${folderName.slice(4,6)}-${folderName.slice(6,8)}T00:00:00Z`
+      ).getTime();
 
+      const ageInDays = (now - folderDate) / (1000 * 60 * 60 * 24);
       if (ageInDays > RETENTION_DAYS) {
-        console.log(`🗑 Deleting old Azure backup: ${blob.name}`);
-        const blockBlob = containerClient.getBlockBlobClient(blob.name);
-        await blockBlob.delete();
+        console.log(`🗑 Deleting old Azure backup folder: ${folderName}`);
+
+        // Delete all blobs under this folder
+        for await (const blob of containerClient.listBlobsFlat({ prefix: `${prefix}${folderName}/` })) {
+          const blockBlob = containerClient.getBlockBlobClient(blob.name);
+          await blockBlob.delete();
+        }
       }
     }
   } catch (err) {
