@@ -1,5 +1,6 @@
 const express = require('express')
 const multer = require('multer')
+const KardpollReport = require('../models/CashRec')
 
 const router = express.Router()
 const upload = multer({
@@ -121,7 +122,8 @@ function parseTransactionDetailTab(text) {
   const totalIdx = idxExact('Total') >= 0 ? idxExact('Total') : headers.findIndex(h => h.toLowerCase().includes('amount'))
   const cardIdx = idxExact('Card1/Card2')
   const priceIdx = idxExact('Price') >= 0 ? idxExact('Price') : headers.findIndex(h => h.toLowerCase().includes('price'))
-  const customerIdx = idxExact('Customer Name') >= 0 ? idxExact('Customer Name') : headers.findIndex(h => h.toLowerCase().includes('customer'))
+  // const customerIdx = idxExact('Customer Name') >= 0 ? idxExact('Customer Name') : headers.findIndex(h => h.toLowerCase().includes('customer'))
+  const customerIdx = headers.findIndex(h => h.toLowerCase() === 'customer')
 
   let litresSold = 0
   let sales = 0
@@ -138,7 +140,7 @@ function parseTransactionDetailTab(text) {
     const tot = totalIdx >= 0 ? toNum(cols[totalIdx]) : 0
     const cardVal = cardIdx >= 0 ? cols[cardIdx] : ''
     const price = priceIdx >= 0 ? toNum(cols[priceIdx]) : 0
-    const customer = customerIdx >= 0 ? cols[customerIdx] : ''
+    // const customer = customerIdx >= 0 ? cols[customerIdx] : ''
 
     if (qty === 0 && tot === 0) continue
 
@@ -147,8 +149,13 @@ function parseTransactionDetailTab(text) {
 
     if (isARCard(cardVal)) {
       ar += tot
+      // Use the next column (untitled) as the customer name, but keep the field key "customer"
+      const customerName =
+        customerIdx >= 0 && customerIdx + 1 < cols.length
+          ? (cols[customerIdx + 1] || '').trim()
+          : (cols[customerIdx] || '').trim()
       ar_rows.push({
-        customer,
+        customer: customerName,
         card: cardVal,
         amount: round2(tot),
         quantity: round2(qty),
@@ -170,15 +177,51 @@ function parseTransactionDetailTab(text) {
   }
 }
 
-router.post('/parse-kardpoll', express.json(), async (req, res) => {
+// router.post('/parse-kardpoll', express.json(), async (req, res) => {
+//   try {
+//     const { filename = 'report.txt', base64 } = req.body || {}
+//     if (!base64) return res.status(400).json({ error: 'base64 is required' })
+//     const text = Buffer.from(base64, 'base64').toString('utf8')
+//     const result = parseTransactionDetailTab(text)
+//     res.json({ filename, ...result })
+//   } catch (e) {
+//     res.status(500).json({ error: 'Failed to parse file' })
+//   }
+// })
+
+router.post('/parse-kardpoll', express.json({ limit: '15mb' }), async (req, res) => {
   try {
-    const { filename = 'report.txt', base64 } = req.body || {}
+    const { base64 } = req.body || {}
     if (!base64) return res.status(400).json({ error: 'base64 is required' })
+
     const text = Buffer.from(base64, 'base64').toString('utf8')
-    const result = parseTransactionDetailTab(text)
-    res.json({ filename, ...result })
+    const parsed = parseTransactionDetailTab(text)
+
+    // Build model doc (normalizes date to YYYY-MM-DD string via static)
+    const doc = KardpollReport.fromParsed(parsed)
+
+    // Optional: prevent duplicates by site+date; adjust if you want multiple per day
+    const existing = await KardpollReport.findOne({ site: doc.site, date: doc.date }).lean()
+    if (existing) {
+      // update existing
+      const updated = await KardpollReport.findByIdAndUpdate(
+        existing._id,
+        {
+          litresSold: parsed.litresSold,
+          sales: parsed.sales,
+          ar: parsed.ar,
+          ar_rows: parsed.ar_rows,
+        },
+        { new: true }
+      ).lean()
+      return res.json({ saved: true, upserted: true, report: updated })
+    }
+
+    const saved = await doc.save()
+    return res.json({ saved: true, report: saved })
   } catch (e) {
-    res.status(500).json({ error: 'Failed to parse file' })
+    console.error('cashRecRoutes.save-kardpoll error:', e)
+    res.status(500).json({ error: 'Failed to save Kardpoll report' })
   }
 })
 

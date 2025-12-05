@@ -50,6 +50,8 @@ jobs:
             export SFTP_OLIVER_PASS=${{ secrets.SFTP_OLIVER_PASS }}
             export SFTP_OSOYOOS_USER=${{ secrets.SFTP_OSOYOOS_USER }}
             export SFTP_OSOYOOS_PASS=${{ secrets.SFTP_OSOYOOS_PASS }}
+            export AZURE_STORAGE_CONNECTION_STRING=${{ secrets.AZURE_STORAGE_CONNECTION_STRING }}
+            export AZURE_CONTAINER=${{ secrets.AZURE_CONTAINER }}
 
             git pull origin main
             docker compose down
