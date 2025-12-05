@@ -300,6 +300,22 @@ async function getUPC_barcode(gtin) {
   }
 }
 
+async function get_Fuel_Inventory_Report() {
+  try {
+    const pool = await getPool();
+    const result = await pool.request().query(`
+      SELECT [Date],[Station_Name],[Fuel_Grade],[Stick_L]
+      FROM [CSO].[FuelInventory]
+      WHERE [Date] = CAST(GETDATE() - 1 AS date)
+    `);
+    await sql.close();
+    return result.recordset;
+  } catch (err) {
+    console.error('SQL error:', err);
+    return [];
+  }
+}
+
 async function retry(fn, retries = 2, delay = 250) {
   try {
     return await fn();
@@ -465,4 +481,5 @@ module.exports = {
   getInventoryCategories,
   getAllSQLData,
   getBulkOnHandQtyCSO,
+  get_Fuel_Inventory_Report,
 };
