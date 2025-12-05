@@ -190,6 +190,9 @@ router.post('/', async (req, res) => {
       } catch (e) {
         console.warn(`Office SFTP enrichment failed for site ${site}:`, e?.message || e)
       }
+    } else {
+      console.log("WARNING: Skipping Office SFTP enrichment due to missing site or shift_number")
+      console.log("Site:", site, "Shift Number:", shift_number)
     }
 
     // Helper: to number or undefined (leave missing values undefined in DB)
