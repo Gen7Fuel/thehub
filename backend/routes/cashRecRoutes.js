@@ -1,5 +1,6 @@
 const express = require('express')
 const multer = require('multer')
+const KardpollReport = require('../models/CashRec')
 
 const router = express.Router()
 const upload = multer({
@@ -176,15 +177,51 @@ function parseTransactionDetailTab(text) {
   }
 }
 
-router.post('/parse-kardpoll', express.json(), async (req, res) => {
+// router.post('/parse-kardpoll', express.json(), async (req, res) => {
+//   try {
+//     const { filename = 'report.txt', base64 } = req.body || {}
+//     if (!base64) return res.status(400).json({ error: 'base64 is required' })
+//     const text = Buffer.from(base64, 'base64').toString('utf8')
+//     const result = parseTransactionDetailTab(text)
+//     res.json({ filename, ...result })
+//   } catch (e) {
+//     res.status(500).json({ error: 'Failed to parse file' })
+//   }
+// })
+
+router.post('/parse-kardpoll', express.json({ limit: '15mb' }), async (req, res) => {
   try {
-    const { filename = 'report.txt', base64 } = req.body || {}
+    const { base64 } = req.body || {}
     if (!base64) return res.status(400).json({ error: 'base64 is required' })
+
     const text = Buffer.from(base64, 'base64').toString('utf8')
-    const result = parseTransactionDetailTab(text)
-    res.json({ filename, ...result })
+    const parsed = parseTransactionDetailTab(text)
+
+    // Build model doc (normalizes date to YYYY-MM-DD string via static)
+    const doc = KardpollReport.fromParsed(parsed)
+
+    // Optional: prevent duplicates by site+date; adjust if you want multiple per day
+    const existing = await KardpollReport.findOne({ site: doc.site, date: doc.date }).lean()
+    if (existing) {
+      // update existing
+      const updated = await KardpollReport.findByIdAndUpdate(
+        existing._id,
+        {
+          litresSold: parsed.litresSold,
+          sales: parsed.sales,
+          ar: parsed.ar,
+          ar_rows: parsed.ar_rows,
+        },
+        { new: true }
+      ).lean()
+      return res.json({ saved: true, upserted: true, report: updated })
+    }
+
+    const saved = await doc.save()
+    return res.json({ saved: true, report: saved })
   } catch (e) {
-    res.status(500).json({ error: 'Failed to parse file' })
+    console.error('cashRecRoutes.save-kardpoll error:', e)
+    res.status(500).json({ error: 'Failed to save Kardpoll report' })
   }
 })
 
