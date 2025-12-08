@@ -155,9 +155,11 @@ router.post('/', async (req, res) => {
       loyalty: norm(loyalty),
       cpl_bulloch: norm(cpl_bulloch),
       report_canadian_cash: undefined,
+      payouts: norm(payouts),
     }
 
     let content = ''
+    let parsed = {}
 
     // Enrich from Office SFTP API (HTTP proxy) instead of direct SFTP
     if (site && shift_number) {
@@ -165,23 +167,23 @@ router.post('/', async (req, res) => {
         const url = new URL(`/api/sftp/receive/${encodeURIComponent(shift_number)}`, OFFICE_SFTP_API_BASE)
         url.searchParams.set('site', site)
         url.searchParams.set('type', 'sft')
+        // console.log(`Fetching SFTP report for site=${site}, shift_number=${shift_number}`)
 
         const resp = await fetchWithTimeout(url.toString())
         if (resp.ok) {
           const data = await resp.json()
           content = String(data?.content || '').replace(/^\uFEFF/, '')
-          const parsed = parseSftReport(content)
+          parsed = parseSftReport(content)
+          // console.log('Parsed SFT report:', parsed)
 
-          if (parsed) {
-            values = {
-              canadian_cash_collected: values.canadian_cash_collected, // keep user counted
-              item_sales: parsed.itemSales ?? values.item_sales,
-              cash_back: parsed.cashBack ?? values.cash_back,
-              loyalty: parsed.couponsAccepted ?? values.loyalty,
-              cpl_bulloch: parsed.fuelPriceOverrides ?? values.cpl_bulloch,
-              report_canadian_cash: parsed.canadianCash ?? values.report_canadian_cash,
-              payouts: parsed.payouts ?? values.payouts,
-            }
+          values = {
+            canadian_cash_collected: values.canadian_cash_collected, // keep user counted
+            item_sales: parsed.itemSales ?? values.item_sales,
+            cash_back: parsed.cashBack ?? values.cash_back,
+            loyalty: parsed.couponsAccepted ?? values.loyalty,
+            cpl_bulloch: parsed.fuelPriceOverrides ?? values.cpl_bulloch,
+            report_canadian_cash: parsed.canadianCash ?? values.report_canadian_cash,
+            payouts: parsed.payouts ?? values.payouts,
           }
         } else {
           const msg = await resp.text().catch(() => `HTTP ${resp.status}`)
@@ -202,25 +204,25 @@ router.post('/', async (req, res) => {
     }
 
     // ...inside POST create handler, after parseSftReport(content):
-    const parsed = parseSftReport(content) || {}
+    // parsed = parseSftReport(content) || {}
 
-    // ...existing code...
+    // Build the document USING enriched values
     const doc = new CashSummary({
       site,
       shift_number: String(shift_number),
       date: new Date(date),
 
-      // existing fields
-      canadian_cash_collected: norm(canadian_cash_collected),
-      item_sales: norm(item_sales),
-      cash_back: norm(cash_back),
-      loyalty: norm(loyalty),
-      cpl_bulloch: norm(cpl_bulloch),
-      report_canadian_cash: numOrUndef(parsed.canadianCash),
+      // existing primary fields (now enriched)
+      canadian_cash_collected: values.canadian_cash_collected,
+      item_sales: values.item_sales,
+      cash_back: values.cash_back,
+      loyalty: values.loyalty,
+      cpl_bulloch: values.cpl_bulloch,
+      report_canadian_cash: values.report_canadian_cash,
       exempted_tax: norm(exempted_tax),
-      payouts: parsed.payouts ?? numOrUndef(payouts),
+      payouts: numOrUndef(values.payouts),
 
-      // parsed fields (leave undefined if missing)
+      // parsed SFT extras
       fuelSales: numOrUndef(parsed.fuelSales),
       dealGroupCplDiscounts: numOrUndef(parsed.dealGroupCplDiscounts),
       fuelPriceOverrides: numOrUndef(parsed.fuelPriceOverrides),
