@@ -56,4 +56,5 @@ jobs:
             git pull origin main
             docker compose down
             docker volume rm thehub_dist || true
+            docker volume rm thehub_redis_data || true
             docker compose up --build -d
