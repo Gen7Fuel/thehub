@@ -165,12 +165,14 @@ router.post('/', async (req, res) => {
         const url = new URL(`/api/sftp/receive/${encodeURIComponent(shift_number)}`, OFFICE_SFTP_API_BASE)
         url.searchParams.set('site', site)
         url.searchParams.set('type', 'sft')
+        console.log(`Fetching SFTP report for site=${site}, shift_number=${shift_number}`)
 
         const resp = await fetchWithTimeout(url.toString())
         if (resp.ok) {
           const data = await resp.json()
           content = String(data?.content || '').replace(/^\uFEFF/, '')
           const parsed = parseSftReport(content)
+          console.log('Parsed SFT report:', parsed)
 
           if (parsed) {
             values = {
