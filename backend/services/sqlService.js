@@ -300,6 +300,41 @@ async function getUPC_barcode(gtin) {
   }
 }
 
+// ---------------- SQL FUNCTION ----------------
+/**
+ * Fetch category names from SQL for given GTINs
+ * @param {string[]} gtins 
+ * @returns {Promise<Object>} Map of gtin => category_name
+ */
+async function getCategoriesFromSQL(gtins) {
+  if (!gtins || !gtins.length) return {};
+
+  const pool = await getPool();
+
+  // Dynamically create parameter placeholders for SQL Server
+  const params = gtins.map((_, idx) => `@p${idx}`).join(',');
+  const sqlQuery = `
+    SELECT [GTIN] AS 'gtin', [Category Name] AS 'category_name'
+    FROM [CSO].[ItemBookCSO]
+    WHERE [GTIN] IN (${params})
+  `;
+
+  // Build input parameters for mssql
+  const request = pool.request();
+  gtins.forEach((gtin, idx) => request.input(`p${idx}`, gtin));
+
+  const result = await request.query(sqlQuery);
+
+  // Convert results into a lookup map
+  const categoryMap = {};
+  result.recordset.forEach(row => {
+    categoryMap[row.gtin] = row.category_name;
+  });
+
+  return categoryMap;
+}
+
+
 async function get_Fuel_Inventory_Report() {
   try {
     const pool = await getPool();
@@ -482,4 +517,5 @@ module.exports = {
   getAllSQLData,
   getBulkOnHandQtyCSO,
   get_Fuel_Inventory_Report,
+  getCategoriesFromSQL,
 };
