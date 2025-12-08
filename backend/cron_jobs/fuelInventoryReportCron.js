@@ -52,6 +52,7 @@ async function runFuelInventoryReportJob() {
     // 5️⃣ Queue email
     await emailQueue.add("sendFuelInventoryReport", {
       to: "kellie@gen7fuel.com",
+      cc: ["daksh@gen7fuel.com"],
       subject: `Fuel Inventory Report (${formattedDate})`,
       text: "Attached is your daily fuel inventory report.",
       html: "<p>Attached is your daily fuel inventory report.</p>",
