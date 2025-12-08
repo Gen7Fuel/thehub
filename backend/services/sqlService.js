@@ -301,34 +301,63 @@ async function getUPC_barcode(gtin) {
 }
 
 // ---------------- SQL FUNCTION ----------------
-/**
- * Fetch category names from SQL for given GTINs
- * @param {string[]} gtins 
- * @returns {Promise<Object>} Map of gtin => category_name
- */
-async function getCategoriesFromSQL(gtins) {
-  if (!gtins || !gtins.length) return {};
+// /**
+//  * Fetch category names from SQL for given GTINs
+//  * @param {string[]} gtins 
+//  * @returns {Promise<Object>} Map of gtin => category_name
+//  */
+// async function getCategoriesFromSQL(gtins) {
+//   if (!gtins || !gtins.length) return {};
+
+//   const pool = await getPool();
+
+//   // Dynamically create parameter placeholders for SQL Server
+//   const params = gtins.map((_, idx) => `@p${idx}`).join(',');
+//   const sqlQuery = `
+//     SELECT [GTIN] AS 'gtin', [Category Name] AS 'category_name'
+//     FROM [CSO].[ItemBookCSO]
+//     WHERE [GTIN] IN (${params})
+//   `;
+
+//   // Build input parameters for mssql
+//   const request = pool.request();
+//   gtins.forEach((gtin, idx) => request.input(`p${idx}`, gtin));
+
+//   const result = await request.query(sqlQuery);
+
+//   // Convert results into a lookup map
+//   const categoryMap = {};
+//   result.recordset.forEach(row => {
+//     categoryMap[row.gtin] = row.category_name;
+//   });
+
+//   return categoryMap;
+// }
+
+async function getCategoryNumbersFromSQL(categoryNames) {
+  if (!categoryNames || !categoryNames.length) return {};
 
   const pool = await getPool();
 
-  // Dynamically create parameter placeholders for SQL Server
-  const params = gtins.map((_, idx) => `@p${idx}`).join(',');
-  const sqlQuery = `
-    SELECT [GTIN] AS 'gtin', [Category Name] AS 'category_name'
+  // Prepare parameters: @p0, @p1, @p2 ...
+  const params = categoryNames.map((_, idx) => `@p${idx}`).join(',');
+  const sql = `
+    SELECT 
+      [Category Name] AS 'category_name', 
+      [Cat #] AS 'category_number'
     FROM [CSO].[ItemBookCSO]
-    WHERE [GTIN] IN (${params})
+    WHERE [Category Name] IN (${params})
   `;
 
-  // Build input parameters for mssql
   const request = pool.request();
-  gtins.forEach((gtin, idx) => request.input(`p${idx}`, gtin));
+  categoryNames.forEach((name, idx) => request.input(`p${idx}`, name));
 
-  const result = await request.query(sqlQuery);
+  const result = await request.query(sql);
 
-  // Convert results into a lookup map
+  // Map for easy lookup
   const categoryMap = {};
   result.recordset.forEach(row => {
-    categoryMap[row.gtin] = row.category_name;
+    categoryMap[row.category_name] = row.category_number;
   });
 
   return categoryMap;
@@ -517,5 +546,5 @@ module.exports = {
   getAllSQLData,
   getBulkOnHandQtyCSO,
   get_Fuel_Inventory_Report,
-  getCategoriesFromSQL,
+  getCategoryNumbersFromSQL,
 };
