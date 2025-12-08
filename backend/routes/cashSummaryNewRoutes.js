@@ -169,7 +169,7 @@ router.post('/', async (req, res) => {
         const resp = await fetchWithTimeout(url.toString())
         if (resp.ok) {
           const data = await resp.json()
-          const content = String(data?.content || '').replace(/^\uFEFF/, '')
+          content = String(data?.content || '').replace(/^\uFEFF/, '')
           const parsed = parseSftReport(content)
 
           if (parsed) {
