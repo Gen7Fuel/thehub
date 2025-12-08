@@ -70,7 +70,6 @@ const checkPermission = (accessTree, keyPath) => {
  * Reads required permission from custom header: `X-Required-Permission`.
  */
 const auth = async (req, res, next) => {
-  console.log(`🧑‍💻 ${req.user.name}: ${req.method} ${req.originalUrl}`); // Logs each auth check
   try {
     const authHeader = req.header("Authorization");
     if (!authHeader?.startsWith("Bearer ")) {
@@ -105,6 +104,9 @@ const auth = async (req, res, next) => {
     if (!user) return res.status(401).json({ message: "User not found" });
 
     req.user = user;
+
+    console.log(`🧑‍💻 ${req.user.firstName}: ${req.method} ${req.originalUrl}`);
+
     // Check for permission from header
     const requiredPermission = req.header("X-Required-Permission");
     if (requiredPermission) {
