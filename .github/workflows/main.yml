@@ -57,3 +57,5 @@ jobs:
             docker compose down
             docker volume rm thehub_dist || true
             docker compose up --build -d
+            docker exec -i redis redis-cli replicaof no one
+            docker exec -i redis redis-cli SAVE
