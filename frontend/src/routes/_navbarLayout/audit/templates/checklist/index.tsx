@@ -29,13 +29,14 @@ interface ChecklistItem {
   frequency?: "daily" | "weekly" | "monthly" | "";
   assignedSites?: { site: string; assigned: boolean }[];
   vendor?: string;  // vendor field only for template name "Orders"
+  commentRequired?: boolean;
 }
 
 
 function RouteComponent() {
   const [selectTemplates, setSelectTemplates] = useState<SelectTemplate[]>([]);
   const [items, setItems] = useState<ChecklistItem[]>([
-    { category: "", item: "", statusTemplate: "", followUpTemplate: "Follow Up", assignedTo: "Assigned To", frequency: "daily" },
+    { category: "", item: "", statusTemplate: "", followUpTemplate: "Follow Up", assignedTo: "Assigned To", frequency: "daily", commentRequired: false, },
   ]);
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
@@ -136,14 +137,14 @@ function RouteComponent() {
   const getOptionsByName = (name: string) =>
     selectTemplates.find(t => t.name === name)?.options || [];
 
-  const handleItemChange = (idx: number, field: keyof ChecklistItem, value: string) => {
+  const handleItemChange = (idx: number, field: keyof ChecklistItem, value: string | boolean) => {
     setItems(items =>
       items.map((item, i) => (i === idx ? { ...item, [field]: value } : item))
     );
   };
 
   const addRow = () =>
-    setItems([...items, { category: "", item: "", statusTemplate: "", followUpTemplate: "Follow Up", assignedTo: "Assigned To", frequency: "", assignedSites: selectedSites.map(site => ({ site, assigned: false })), }]);
+    setItems([...items, { category: "", item: "", statusTemplate: "", followUpTemplate: "Follow Up", assignedTo: "Assigned To", frequency: "", assignedSites: selectedSites.map(site => ({ site, assigned: false })), commentRequired: false, }]);
 
   const removeRow = (idx: number) =>
     setItems(items => items.length > 1 ? items.filter((_, i) => i !== idx) : items);
@@ -158,34 +159,34 @@ function RouteComponent() {
     setError("");
     setSaving(true);
     const payload = {
-        name,
-        description,
-        items,
-        sites: selectedSites,
-        // createdBy will be set in backend
+      name,
+      description,
+      items,
+      sites: selectedSites,
+      // createdBy will be set in backend
     };
     try {
-        const res = await axios.post(
+      const res = await axios.post(
         "/api/audit/",
         payload,
         {
-            headers: { Authorization: `Bearer ${localStorage.getItem("token")}`, "X-Required-Permission": "stationAudit.template" },
+          headers: { Authorization: `Bearer ${localStorage.getItem("token")}`, "X-Required-Permission": "stationAudit.template" },
         }
-        );
-        if (res.status === 403) {
-          navigate({ to: "/no-access" });
-          return;
-        }
+      );
+      if (res.status === 403) {
+        navigate({ to: "/no-access" });
+        return;
+      }
 
-        // Optionally reset or redirect
-        setName("");
-        setDescription("");
-        setSelectedSites([]);
-        setItems([{ category: "", item: "", statusTemplate: "", followUpTemplate: "", assignedTo: "" }]);
+      // Optionally reset or redirect
+      setName("");
+      setDescription("");
+      setSelectedSites([]);
+      setItems([{ category: "", item: "", statusTemplate: "", followUpTemplate: "", assignedTo: "" }]);
     } catch (err: any) {
-        setError(err?.response?.data?.message || "Failed to save checklist template");
+      setError(err?.response?.data?.message || "Failed to save checklist template");
     } finally {
-        setSaving(false);
+      setSaving(false);
     }
   };
 
@@ -213,20 +214,20 @@ function RouteComponent() {
           </div>
         </div>
         <div>
-            <label className="block font-medium mb-1">Assign to Sites</label>
-            <div className="flex flex-wrap gap-4">
-                {sites.map(site => (
-                <label key={site._id} className="flex items-center gap-2">
-                    <input
-                    type="checkbox"
-                    checked={selectedSites.includes(site.stationName)}
-                    onChange={() => handleSiteToggle(site.stationName)}
-                    // required
-                    />
-                    {site.stationName}
-                </label>
-                ))}
-            </div>
+          <label className="block font-medium mb-1">Assign to Sites</label>
+          <div className="flex flex-wrap gap-4">
+            {sites.map(site => (
+              <label key={site._id} className="flex items-center gap-2">
+                <input
+                  type="checkbox"
+                  checked={selectedSites.includes(site.stationName)}
+                  onChange={() => handleSiteToggle(site.stationName)}
+                // required
+                />
+                {site.stationName}
+              </label>
+            ))}
+          </div>
         </div>
         <div>
           <table className="w-full border mt-4">
@@ -238,8 +239,9 @@ function RouteComponent() {
                 {/* <th className="border px-2 py-1">Follow Up</th> */}
                 <th className="border px-2 py-1">Assigned To</th>
                 <th className="border px-2 py-1">Frequency</th>
-                { name === "Orders" && <th className="border px-2 py-1">Vendor</th> }
+                {name === "Orders" && <th className="border px-2 py-1">Vendor</th>}
                 <th className="border px-2 py-1">Assigned Sites</th>
+                <th className="border px-2 py-1">Comment Required</th>
                 <th className="border px-2 py-1"></th>
               </tr>
             </thead>
@@ -354,7 +356,7 @@ function RouteComponent() {
                       </SelectContent>
                     </Select>
                   </td>
-                  { name === "Orders" && (
+                  {name === "Orders" && (
                     <td className="border px-2 py-1">
                       <Select
                         value={row.vendor || ""}
@@ -374,26 +376,35 @@ function RouteComponent() {
                     </td>
                   )}
                   <td className="border px-2 py-1">
-                  <MultiSelect
-                    options={selectedSites}
-                    selected={row.assignedSites?.filter(s => s.assigned).map(s => s.site) || []}
-                    onChange={(newSelected) => {
-                      setItems(prev =>
-                        prev.map((r, i) =>
-                          i === idx
-                            ? {
+                    <MultiSelect
+                      options={selectedSites}
+                      selected={row.assignedSites?.filter(s => s.assigned).map(s => s.site) || []}
+                      onChange={(newSelected) => {
+                        setItems(prev =>
+                          prev.map((r, i) =>
+                            i === idx
+                              ? {
                                 ...r,
                                 assignedSites: selectedSites.map(site => ({
                                   site,
                                   assigned: newSelected.includes(site),
                                 })),
                               }
-                            : r
-                        )
-                      );
-                    }}
-                  />
-                </td>
+                              : r
+                          )
+                        );
+                      }}
+                    />
+                  </td>
+                  <td className="border px-2 py-1 text-center">
+                    <input
+                      type="checkbox"
+                      checked={row.commentRequired || false}
+                      onChange={(e) =>
+                        handleItemChange(idx, "commentRequired", e.target.checked)
+                      }
+                    />
+                  </td>
                   <td className="border px-2 py-1 text-center">
                     <button
                       type="button"

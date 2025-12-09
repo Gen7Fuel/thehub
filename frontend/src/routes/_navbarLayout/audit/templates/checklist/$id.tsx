@@ -30,13 +30,14 @@ interface ChecklistItem {
   frequency?: "daily" | "weekly" | "monthly" | "";
   assignedSites?: { site: string; assigned: boolean }[];
   vendor?: string;
+  commentRequired?: boolean;
 }
 
 function RouteComponent() {
   const { id } = useParams({ from: '/_navbarLayout/audit/templates/checklist/$id' });
   const [selectTemplates, setSelectTemplates] = useState<SelectTemplate[]>([]);
   const [items, setItems] = useState<ChecklistItem[]>([
-    { category: "", item: "", statusTemplate: "", followUpTemplate: "Follow Up", assignedTo: "Assigned To", frequency: "daily" },
+    { category: "", item: "", statusTemplate: "", followUpTemplate: "Follow Up", assignedTo: "Assigned To", frequency: "daily", commentRequired: false, },
   ]);
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
@@ -195,6 +196,7 @@ function RouteComponent() {
                 assignedTo: item.assignedTo || "",
                 frequency: item.frequency || "",
                 vendor: item.suppliesVendor || "",
+                commentRequired: item.commentRequired || false,
                 assignedSites:
                   item.assignedSites ||
                   (audit.sites || []).map((s: string) => ({
@@ -211,6 +213,7 @@ function RouteComponent() {
                   assignedTo: "",
                   frequency: "",
                   vendor: "",
+                  commentRequired: false,
                   assignedSites: (audit.sites || []).map((s: string) => ({
                     site: s,
                     assigned: false,
@@ -240,7 +243,7 @@ function RouteComponent() {
   const getOptionsByName = (name: string) =>
     selectTemplates.find(t => t.name === name)?.options || [];
 
-  const handleItemChange = (idx: number, field: keyof ChecklistItem, value: string) => {
+  const handleItemChange = (idx: number, field: keyof ChecklistItem, value: string | boolean) => {
     setItems(items =>
       items.map((item, i) => (i === idx ? { ...item, [field]: value } : item))
     );
@@ -249,7 +252,7 @@ function RouteComponent() {
   // const addRow = () =>
   //   setItems([...items, { category: "", item: "", status: "", followUp: "Follow Up", assignedTo: "Assigned To" }]);
   const addRow = () =>
-    setItems([...items, { category: "", item: "", statusTemplate: "", followUpTemplate: "Follow Up", assignedTo: "Assigned To", frequency: "", assignedSites: selectedSites.map(site => ({ site, assigned: false })), }]);
+    setItems([...items, { category: "", item: "", statusTemplate: "", followUpTemplate: "Follow Up", assignedTo: "Assigned To", frequency: "", assignedSites: selectedSites.map(site => ({ site, assigned: false })), commentRequired: false, }]);
 
   const removeRow = (idx: number) =>
     setItems(items => items.length > 1 ? items.filter((_, i) => i !== idx) : items);
@@ -269,6 +272,7 @@ function RouteComponent() {
       frequency: row.frequency, 
       vendor: row.vendor || "",
       assignedSites: row.assignedSites || [],
+      commentRequired: row.commentRequired,
     }));
 
 
@@ -370,6 +374,7 @@ function RouteComponent() {
                   <th className="border px-2 py-1">Vendor</th>
                 )}
                 <th className="border px-2 py-1">Assigned Sites</th>
+                <th className="border px-2 py-1">Comment Required</th>
                 <th className="border px-2 py-1"></th>
               </tr>
             </thead>
@@ -505,6 +510,15 @@ function RouteComponent() {
                           )
                         );
                       }}
+                    />
+                  </td>
+                  <td className="border px-2 py-1 text-center">
+                    <input
+                      type="checkbox"
+                      checked={row.commentRequired || false}
+                      onChange={(e) =>
+                        handleItemChange(idx, "commentRequired", e.target.checked)
+                      }
                     />
                   </td>
                   <td className="border px-2 py-1 text-center">
