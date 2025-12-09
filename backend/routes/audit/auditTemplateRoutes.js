@@ -758,12 +758,14 @@ router.post('/instance', async (req, res) => {
                   }
                   else if (!to) {
                     console.warn("No email found for assignedTo:", match?.text);
-                    return; 
+                    return;
                   }
                   const subject = `⚠️ Issue Raised for Site ${site}`;
                   const text = `An issue has been raised for site ${site}.
                   Checklist: ${item.item}
                   Category: ${item.category}
+                  Status Selected: ${item.status}
+                  Comment: ${item.comment}
 
                   Please review the issue in the Hub under Station Audit Interface.`;
 
@@ -809,6 +811,18 @@ router.post('/instance', async (req, res) => {
                             <tr>
                               <td style="padding: 8px; font-weight: bold; color: #555;">📂 Category:</td>
                               <td style="padding: 8px; color: #222;">${item.category}</td>
+                            </tr>
+                            <tr>
+                              <td style="padding: 8px; font-weight: bold; color: #555;">⚡ Status Selected:</td>
+                              <td style="padding: 8px; color: #222;">
+                                ${item.status && item.status.trim() !== "" ? item.status : "No Status Selected"}
+                              </td>
+                            </tr>
+                            <tr>
+                              <td style="padding: 8px; font-weight: bold; color: #555;">📝 Comment:</td>
+                              <td style="padding: 8px; color: #222;">
+                                ${item.comment && item.comment.trim() !== "" ? item.comment : "No Comment Provided"}
+                              </td>
                             </tr>
                           </table>
 
