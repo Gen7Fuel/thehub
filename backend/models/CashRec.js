@@ -48,6 +48,71 @@ KardpollReportSchema.statics.fromParsed = function (payload = {}) {
 
 const KardpollReport = mongoose.model('KardpollReport', KardpollReportSchema)
 
+// Bank Statement (one document per statement/day/site)
+const MiscDebitSchema = new mongoose.Schema(
+  {
+    date: { type: String, required: true }, // YYYY-MM-DD
+    description: { type: String, required: true },
+    amount: { type: Number, required: true },
+  },
+  { _id: false }
+)
+
+const BankStatementSchema = new mongoose.Schema(
+  {
+    site: { type: String, required: true, index: true },
+    date: { type: String, required: true, index: true }, // YYYY-MM-DD (identifier)
+    balanceForward: { type: Number },
+    nightDeposit: { type: Number },
+    transferTo: { type: Number },
+    endingBalance: { type: Number },
+    miscDebits: { type: [MiscDebitSchema], default: [] },
+  },
+  { timestamps: true }
+)
+BankStatementSchema.index({ site: 1, date: 1 }, { unique: true }) // one per site+day
+
+// Factory to build from parsed JSON
+BankStatementSchema.statics.fromParsed = function (payload = {}) {
+  const pad = (n) => String(n).padStart(2, '0')
+  const toYmd = (d) => {
+    if (!d) return undefined
+    if (typeof d === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(d)) return d
+    const x = new Date(d)
+    if (Number.isNaN(x.getTime())) return undefined
+    return `${x.getUTCFullYear()}-${pad(x.getUTCMonth() + 1)}-${pad(x.getUTCDate())}`
+  }
+
+  const {
+    site,
+    date,
+    balanceForward,
+    nightDeposit,
+    transferTo,
+    endingBalance,
+    miscDebits = [],
+  } = payload
+
+  return new this({
+    site,
+    date: toYmd(date),
+    balanceForward,
+    nightDeposit,
+    transferTo,
+    endingBalance,
+    miscDebits: Array.isArray(miscDebits)
+      ? miscDebits.map((m) => ({
+          date: toYmd(m?.date),
+          description: String(m?.description || ''),
+          amount: Number(m?.amount) || 0,
+        }))
+      : [],
+  })
+}
+
+const BankStatement = mongoose.model('BankStatement', BankStatementSchema)
+
 module.exports = KardpollReport
 module.exports.KardpollReport = KardpollReport
 module.exports.ArRowSchema = ArRowSchema
+module.exports.BankStatement = BankStatement
