@@ -1,6 +1,7 @@
 import * as React from 'react'
 import { createFileRoute, useNavigate } from '@tanstack/react-router'
 import { SitePicker } from '@/components/custom/sitePicker'
+import { Button } from '@/components/ui/button'
 
 type ParsedTtx = {
   balanceForward?: number
@@ -244,14 +245,15 @@ function RouteComponent() {
 
           {canCapture && (
             <div className="mt-4 flex justify-end">
-              <button
-                className="px-4 py-2 text-sm border rounded hover:bg-muted"
+
+              <Button
+                className="px-4 py-2 text-sm border rounded"
                 onClick={capture}
                 disabled={!canCapture}
                 title={!site ? 'Pick a site' : undefined}
               >
                 Capture
-              </button>
+              </Button>
             </div>
           )}
         </>
