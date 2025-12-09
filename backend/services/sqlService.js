@@ -364,13 +364,29 @@ async function getCategoryNumbersFromSQL(categoryNames) {
 }
 
 
-async function get_Fuel_Inventory_Report() {
+async function getFuelInventoryReportPreviousDay() {
   try {
     const pool = await getPool();
     const result = await pool.request().query(`
       SELECT [Date],[Station_Name],[Fuel_Grade],[Stick_L]
       FROM [CSO].[FuelInventory]
       WHERE [Date] = CAST(GETDATE() - 1 AS date)
+    `);
+    await sql.close();
+    return result.recordset;
+  } catch (err) {
+    console.error('SQL error:', err);
+    return [];
+  }
+}
+
+async function getFuelInventoryReportCurrentDay() {
+  try {
+    const pool = await getPool();
+    const result = await pool.request().query(`
+      SELECT [Station_SK], [Fuel_Grade], [Volume] as 'Stick_L'
+      FROM [CSO].[CurrentFuelInv]
+      WHERE [Date_SK]=TRY_CONVERT(CHAR(8),GETDATE(),112)
     `);
     await sql.close();
     return result.recordset;
@@ -545,6 +561,7 @@ module.exports = {
   getInventoryCategories,
   getAllSQLData,
   getBulkOnHandQtyCSO,
-  get_Fuel_Inventory_Report,
+  getFuelInventoryReportPreviousDay,
+  getFuelInventoryReportCurrentDay,
   getCategoryNumbersFromSQL,
 };

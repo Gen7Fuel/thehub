@@ -16,6 +16,7 @@ const AuditTemplateSchema = new mongoose.Schema({
         enum: ["daily", "weekly", "monthly"], 
         default: "daily" 
       },
+      commentRequired: { type: Boolean, default: false},
       assignedSites:[{
         site: { type: String, required: true },
         assigned: { type: Boolean, default: false },

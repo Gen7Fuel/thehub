@@ -1,6 +1,7 @@
 const express = require('express')
 const multer = require('multer')
 const KardpollReport = require('../models/CashRec')
+const { BankStatement } = require('../models/CashRec')
 
 const router = express.Router()
 const upload = multer({
@@ -222,6 +223,56 @@ router.post('/parse-kardpoll', express.json({ limit: '15mb' }), async (req, res)
   } catch (e) {
     console.error('cashRecRoutes.save-kardpoll error:', e)
     res.status(500).json({ error: 'Failed to save Kardpoll report' })
+  }
+})
+
+// Save parsed Bank Statement (from browser JSON)
+router.post('/bank-statement', express.json({ limit: '1mb' }), async (req, res) => {
+  try {
+    const {
+      site,
+      date, // YYYY-MM-DD
+      balanceForward,
+      nightDeposit,
+      transferTo,
+      endingBalance,
+      miscDebits,
+    } = req.body || {}
+
+    if (!site || !date) {
+      return res.status(400).json({ error: 'site and date (YYYY-MM-DD) are required' })
+    }
+
+    // Build doc
+    const doc = BankStatement.fromParsed({
+      site,
+      date,
+      balanceForward,
+      nightDeposit,
+      transferTo,
+      endingBalance,
+      miscDebits,
+    })
+
+    // Upsert per site+date
+    const saved = await BankStatement.findOneAndUpdate(
+      { site: doc.site, date: doc.date },
+      {
+        $set: {
+          balanceForward: doc.balanceForward ?? 0,
+          nightDeposit: doc.nightDeposit ?? 0,
+          transferTo: doc.transferTo ?? 0,
+          endingBalance: doc.endingBalance ?? 0,
+          miscDebits: doc.miscDebits ?? [],
+        },
+      },
+      { new: true, upsert: true, setDefaultsOnInsert: true }
+    ).lean()
+
+    return res.json({ saved: true, upserted: true, statement: saved })
+  } catch (e) {
+    console.error('cashRecRoutes.save-bank-statement error:', e)
+    res.status(500).json({ error: 'Failed to save bank statement' })
   }
 })
 

@@ -54,6 +54,8 @@ export const Route = createFileRoute('/_navbarLayout/safesheet')({
 
 // Helpers for YYYY-MM-DD
 const pad = (n: number) => String(n).padStart(2, '0')
+const ymdFixed = (d: Date) =>
+  `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`
 const ymd = (d: Date) => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`
 const parseYmd = (s?: string) => {
   if (!s || !/^\d{4}-\d{2}-\d{2}$/.test(s)) return undefined
@@ -377,14 +379,20 @@ export default function RouteComponent() {
   // format display entries
   const formattedEntries = useMemo(() => {
     if (!sheet) return []
-    return sheet.entries.map((e) => ({
-      ...e,
-      dateDisplay: new Date(e.date).toLocaleDateString(),
-      cashInDisplay: fmtNumber(e.cashIn),
-      cashExpenseOutDisplay: fmtNumber(e.cashExpenseOut),
-      cashDepositBankDisplay: fmtNumber(e.cashDepositBank),
-      cashOnHandSafeDisplay: fmtNumber(e.cashOnHandSafe ?? null),
-    }))
+    return sheet.entries.map((e) => {
+      const d = new Date(e.date)
+      return {
+        ...e,
+        // Option A: ISO YMD
+        dateDisplay: ymdFixed(d),
+        // Option B: fixed locale (Canadian style YYYY-MM-DD)
+        // dateDisplay: new Intl.DateTimeFormat('en-CA', { timeZone: 'UTC' }).format(d),
+        cashInDisplay: fmtNumber(e.cashIn),
+        cashExpenseOutDisplay: fmtNumber(e.cashExpenseOut),
+        cashDepositBankDisplay: fmtNumber(e.cashDepositBank),
+        cashOnHandSafeDisplay: fmtNumber(e.cashOnHandSafe ?? null),
+      }
+    })
   }, [sheet])
 
   return (
@@ -625,7 +633,8 @@ export default function RouteComponent() {
                   {/* ADD NEW ROW */}
                   <tr className="bg-slate-50">
                     <td className="px-3 py-2 text-gray-400 border-t border-slate-300">
-                      {new Date().toLocaleDateString()}
+                      {ymdFixed(new Date())}
+                      {/* or: new Intl.DateTimeFormat('en-CA', { timeZone: 'UTC' }).format(new Date()) */}
                     </td>
 
                     <td className="px-3 py-2 border-t border-slate-300 bg-white">

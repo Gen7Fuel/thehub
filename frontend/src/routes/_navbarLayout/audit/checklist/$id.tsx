@@ -41,6 +41,7 @@ interface AuditItem {
   issueRaised?: boolean;
   requestOrder?: boolean;
   orderCreated?: boolean;
+  commentRequired?: boolean;
 }
 
 interface AuditUpdatePayload {

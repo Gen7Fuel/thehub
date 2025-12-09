@@ -5,6 +5,7 @@ const AuditInstance = require('../../models/audit/auditInstance');
 const AuditItem = require('../../models/audit/auditItem');
 const OrderRec = require('../../models/OrderRec');
 const Vendor = require('../../models/Vendor');
+const Location = require('../../models/Location');
 // const { sendEmail } = require('../../utils/emailService');
 const SelectTemplate = require('../../models/audit/selectTemplate');
 const { emailQueue } = require('../../queues/emailQueue');
@@ -60,11 +61,12 @@ router.post('/', async (req, res) => {
     const processedItems = items.map(item => ({
       category: item.category || "",
       item: item.item || "Untitled",
-      statusTemplate: item.status || "",
+      statusTemplate: item.statusTemplate || "",
       followUpTemplate: item.followUp || "",
       assignedTo: item.assignedTo || "",
       frequency: item.frequency || "daily",
       suppliesVendor: item.vendor,
+      commentRequired: item.commentRequired || false,
       assignedSites: item.assignedSites && item.assignedSites.length > 0
         ? item.assignedSites.map(siteEntry => ({
           site: siteEntry.site,
@@ -668,6 +670,7 @@ router.post('/instance', async (req, res) => {
           issueRaised: item.issueRaised,
           requestOrder: item.requestOrder,
           suppliesVendor: item.suppliesVendor,
+          commentRequired: item.commentRequired,
           currentIssueStatus: item.issueRaised === true ? "Created" : undefined,
         };
 
@@ -737,21 +740,32 @@ router.post('/instance', async (req, res) => {
                   (opt) => opt.text === item.assignedTo
                 );
 
-                if (match && match.email) {
-                  const to = match.email;
-                  // const subject = `Issue Raised for site ${site}`;
-                  // const text = `An issue has been raised for site ${site}.\n\nChecklist: ${item.item}\nCategory: ${item.category}\n\nPlease review the issue in the Hub under Station Audit Interface.`;
-                  // const html = `
-                  //   <h2>Issue Raised</h2>
-                  //   <p><strong>Site:</strong> ${site}</p>
-                  //   <p><strong>Checklist:</strong> ${item.item}</p>
-                  //   <p><strong>Category:</strong> ${item.category}</p>
-                  //   <p>Please review the issue in the Hub under Station Audit Interface.</p>
-                  // `;
+                // if (match && match.email) {
+                //   const to = match.email;
+                let to = null;
+
+                if (match) {
+                  // If assigned to is Station Manager → pull email from Location collection
+                  if (match.text === "Station Manager") {
+                    const location = await Location.findOne({ stationName: site });
+                    if (location?.email) {
+                      to = location.email;
+                    }
+                  }
+                  // Otherwise use the normal template email
+                  else if (match.email) {
+                    to = match.email;
+                  }
+                  else if (!to) {
+                    console.warn("No email found for assignedTo:", match?.text);
+                    return;
+                  }
                   const subject = `⚠️ Issue Raised for Site ${site}`;
                   const text = `An issue has been raised for site ${site}.
                   Checklist: ${item.item}
                   Category: ${item.category}
+                  Status Selected: ${item.status}
+                  Comment: ${item.comment}
 
                   Please review the issue in the Hub under Station Audit Interface.`;
 
@@ -798,6 +812,18 @@ router.post('/instance', async (req, res) => {
                               <td style="padding: 8px; font-weight: bold; color: #555;">📂 Category:</td>
                               <td style="padding: 8px; color: #222;">${item.category}</td>
                             </tr>
+                            <tr>
+                              <td style="padding: 8px; font-weight: bold; color: #555;">⚡ Status Selected:</td>
+                              <td style="padding: 8px; color: #222;">
+                                ${item.status && item.status.trim() !== "" ? item.status : "No Status Selected"}
+                              </td>
+                            </tr>
+                            <tr>
+                              <td style="padding: 8px; font-weight: bold; color: #555;">📝 Comment:</td>
+                              <td style="padding: 8px; color: #222;">
+                                ${item.comment && item.comment.trim() !== "" ? item.comment : "No Comment Provided"}
+                              </td>
+                            </tr>
                           </table>
 
                           <div style="
@@ -836,7 +862,7 @@ router.post('/instance', async (req, res) => {
                       </div>
                     </div>
                   `;
-                  const cc = ["daksh@gen7fuel.com", "ana@gen7fuel.com"];
+                  const cc = ["daksh@gen7fuel.com", "ana@gen7fuel.com", "JDzyngel@gen7fuel.com", "kporter@gen7fuel.com"];
                   // const cc = ["daksh@gen7fuel.com"];
                   await emailQueue.add("sendIssueEmail", { to, subject, text, html, cc });
                   console.log(`📨 Email queued for ${to}`);
@@ -1014,6 +1040,7 @@ router.post('/visitor', async (req, res) => {
           issueRaised: item.issueRaised,
           requestOrder: item.requestOrder,
           suppliesVendor: item.suppliesVendor,
+          commentRequired: item.commentRequired,
           currentIssueStatus: item.issueRaised === true ? "Created" : undefined,
         };
 
