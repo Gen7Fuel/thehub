@@ -30,10 +30,10 @@ async function transformFuelInventory(rows, currentDay = false) {
       for (const loc of locations) {
         stationMap[loc.csoCode] = loc.stationName;
       }
-      await mongoose.connection.close();
+      // await mongoose.connection.close();
     } catch {
       console.log('Cannot map cso code with station name');
-      await mongoose.connection.close();
+      // await mongoose.connection.close();
     }
   }
 
