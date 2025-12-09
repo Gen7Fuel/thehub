@@ -1,7 +1,6 @@
 const express = require('express')
 const multer = require('multer')
-const KardpollReport = require('../models/CashRec')
-const { BankStatement } = require('../models/CashRec')
+const { BankStatement, KardpollReport } = require('../models/CashRec')
 
 const router = express.Router()
 const upload = multer({
@@ -273,6 +272,35 @@ router.post('/bank-statement', express.json({ limit: '1mb' }), async (req, res) 
   } catch (e) {
     console.error('cashRecRoutes.save-bank-statement error:', e)
     res.status(500).json({ error: 'Failed to save bank statement' })
+  }
+})
+
+router.get('/entries', async (req, res) => {
+  try {
+    const site = String(req.query.site || '').trim()
+    const date = String(req.query.date || '').trim()
+    if (!site || !/^\d{4}-\d{2}-\d{2}$/.test(date)) {
+      return res.status(400).json({ error: 'site and date (YYYY-MM-DD) are required' })
+    }
+
+    const doc = await KardpollReport.findOne({ site, date }).lean()
+    if (!doc) return res.status(404).json({ error: 'No Kardpoll report found for site/date' })
+
+    // Return full document; ar_rows included
+    res.json({
+      _id: doc._id,
+      site: doc.site,
+      date: doc.date,
+      litresSold: doc.litresSold,
+      sales: doc.sales,
+      ar: doc.ar,
+      ar_rows: doc.ar_rows || [],
+      createdAt: doc.createdAt,
+      updatedAt: doc.updatedAt,
+    })
+  } catch (err) {
+    console.error('cashRecRoutes.entries error:', err)
+    res.status(500).json({ error: 'Failed to load entries' })
   }
 })
 
