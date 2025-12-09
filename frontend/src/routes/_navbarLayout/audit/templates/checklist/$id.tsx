@@ -5,6 +5,7 @@ import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from "@
 import { Button } from "@/components/ui/button";
 import { useNavigate, useParams } from "@tanstack/react-router";
 import { MultiSelect } from '@/components/custom/multiSelect';
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 
 export const Route = createFileRoute(
   '/_navbarLayout/audit/templates/checklist/$id',
@@ -31,13 +32,15 @@ interface ChecklistItem {
   assignedSites?: { site: string; assigned: boolean }[];
   vendor?: string;
   commentRequired?: boolean;
+  _open?: boolean;
+  _viewOptionsOpen?: boolean;
 }
 
 function RouteComponent() {
   const { id } = useParams({ from: '/_navbarLayout/audit/templates/checklist/$id' });
   const [selectTemplates, setSelectTemplates] = useState<SelectTemplate[]>([]);
   const [items, setItems] = useState<ChecklistItem[]>([
-    { category: "", item: "", statusTemplate: "", followUpTemplate: "Follow Up", assignedTo: "Assigned To", frequency: "daily", commentRequired: false, },
+    { category: "", item: "", statusTemplate: "", followUpTemplate: "Follow Up", assignedTo: "Assigned To", frequency: "daily", commentRequired: false, _open: false },
   ]);
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
@@ -46,7 +49,7 @@ function RouteComponent() {
 
   const [sites, setSites] = useState<{ _id: string; stationName: string }[]>([]);
   const [selectedSites, setSelectedSites] = useState<string[]>([]);
-  
+
   const [uniqueVendors, setUniqueVendors] = useState<string[]>([]);
   const [loading, setLoading] = useState(true);
 
@@ -117,21 +120,21 @@ function RouteComponent() {
   //         });
   //         if (!res.ok) throw new Error(`HTTP error! status: ${res.status}`);
   //         const data = (await res.json()) as { name: string; category: string }[];
-  
+
   //         // Filter only vendors with category = "Station Supplies"
   //         const stationVendors = data.filter(
   //           (v) => v.category?.trim() === "Station Supplies"
   //         );
-  
+
   //         // Extract unique vendor names
   //         const vendors = Array.from(new Set(stationVendors.map((v) => v.name).filter(Boolean)));
   //         setUniqueVendors(vendors);
-  
+
   //       } catch (err) {
   //         console.error("Failed to fetch vendors:", err);
   //       }
   //     };
-  
+
   //     fetchVendors();
   //   }, []);
 
@@ -189,37 +192,39 @@ function RouteComponent() {
         setItems(
           audit.items && audit.items.length > 0
             ? audit.items.map((item: any) => ({
-                category: item.category || "",
-                item: item.item || "",
-                statusTemplate: item.statusTemplate || "",
-                followUpTemplate: item.followUpTemplate || "",
-                assignedTo: item.assignedTo || "",
-                frequency: item.frequency || "",
-                vendor: item.suppliesVendor || "",
-                commentRequired: item.commentRequired || false,
-                assignedSites:
-                  item.assignedSites ||
-                  (audit.sites || []).map((s: string) => ({
-                    site: s,
-                    assigned: false,
-                  })),
-              }))
+              category: item.category || "",
+              item: item.item || "",
+              statusTemplate: item.statusTemplate || "",
+              followUpTemplate: item.followUpTemplate || "",
+              assignedTo: item.assignedTo || "",
+              frequency: item.frequency || "",
+              vendor: item.suppliesVendor || "",
+              commentRequired: item.commentRequired || false,
+              _open: false,
+              assignedSites:
+                item.assignedSites ||
+                (audit.sites || []).map((s: string) => ({
+                  site: s,
+                  assigned: false,
+                })),
+            }))
             : [
-                {
-                  category: "",
-                  item: "",
-                  statusTemplate: "",
-                  followUpTemplate: "",
-                  assignedTo: "",
-                  frequency: "",
-                  vendor: "",
-                  commentRequired: false,
-                  assignedSites: (audit.sites || []).map((s: string) => ({
-                    site: s,
-                    assigned: false,
-                  })),
-                },
-              ]
+              {
+                category: "",
+                item: "",
+                statusTemplate: "",
+                followUpTemplate: "",
+                assignedTo: "",
+                frequency: "",
+                vendor: "",
+                commentRequired: false,
+                _open: false,
+                assignedSites: (audit.sites || []).map((s: string) => ({
+                  site: s,
+                  assigned: false,
+                })),
+              },
+            ]
         );
       } catch (err) {
         console.error("Failed to load audit template data:", err);
@@ -252,7 +257,7 @@ function RouteComponent() {
   // const addRow = () =>
   //   setItems([...items, { category: "", item: "", status: "", followUp: "Follow Up", assignedTo: "Assigned To" }]);
   const addRow = () =>
-    setItems([...items, { category: "", item: "", statusTemplate: "", followUpTemplate: "Follow Up", assignedTo: "Assigned To", frequency: "", assignedSites: selectedSites.map(site => ({ site, assigned: false })), commentRequired: false, }]);
+    setItems([...items, { category: "", item: "", statusTemplate: "", followUpTemplate: "Follow Up", assignedTo: "Assigned To", frequency: "", assignedSites: selectedSites.map(site => ({ site, assigned: false })), commentRequired: false, _open: true, }]);
 
   const removeRow = (idx: number) =>
     setItems(items => items.length > 1 ? items.filter((_, i) => i !== idx) : items);
@@ -269,7 +274,7 @@ function RouteComponent() {
       statusTemplate: row.statusTemplate,
       followUpTemplate: row.followUpTemplate,
       assignedTo: row.assignedTo,
-      frequency: row.frequency, 
+      frequency: row.frequency,
       vendor: row.vendor || "",
       assignedSites: row.assignedSites || [],
       commentRequired: row.commentRequired,
@@ -314,6 +319,16 @@ function RouteComponent() {
     }
 
   };
+
+  const toggleRow = (idx: number) => {
+    setItems(prev =>
+      prev.map((r, i) =>
+        i === idx ? { ...r, _open: !r._open } : r
+      )
+    );
+  };
+
+
   if (loading) {
     return (
       <div className="flex items-center justify-center h-screen text-gray-600 text-lg">
@@ -360,186 +375,262 @@ function RouteComponent() {
             ))}
           </div>
         </div>
-        <div>
-          <table className="w-full border mt-4">
-            <thead>
-              <tr className="bg-gray-100">
-                <th className="border px-2 py-1">Category</th>
-                <th className="border px-2 py-1">Item to be Checked</th>
-                <th className="border px-2 py-1">Status</th>
-                {/* <th className="border px-2 py-1">Follow Up</th> */}
-                <th className="border px-2 py-1">Assigned To</th>
-                <th className="border px-2 py-1">Frequency</th>
-                { name === "Orders" && (
-                  <th className="border px-2 py-1">Vendor</th>
-                )}
-                <th className="border px-2 py-1">Assigned Sites</th>
-                <th className="border px-2 py-1">Comment Required</th>
-                <th className="border px-2 py-1"></th>
-              </tr>
-            </thead>
-            <tbody>
-              {items.map((row, idx) => (
-                <tr key={idx}>
-                  <td className="border px-2 py-1">
-                    <Select
-                      value={row.category}
-                      onValueChange={val => handleItemChange(idx, "category", val)}
-                    >
-                      <SelectTrigger>
-                        <SelectValue placeholder="Select" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {getOptionsByName("Category").map((opt, i) => (
-                          <SelectItem key={i} value={opt.text}>
-                            {opt.text}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </td>
-                  <td className="border px-2 py-1">
-                    <input
-                      className="border px-2 py-1 w-full"
-                      value={row.item}
-                      onChange={e => handleItemChange(idx, "item", e.target.value)}
-                      required
-                    />
-                  </td>
-                  <td className="border px-2 py-1">
-                    <Select
-                      value={row.statusTemplate}
-                      onValueChange={val => handleItemChange(idx, "statusTemplate", val)}
-                    >
-                      <SelectTrigger>
-                        <SelectValue placeholder="Select" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {selectTemplates.map((opt, i) => (
-                          <SelectItem key={i} value={opt.name}>
-                            {opt.name}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </td>
-                  {/* <td className="border px-2 py-1">
-                    <Select
-                      value={row.followUpTemplate}
-                      onValueChange={val => handleItemChange(idx, "followUpTemplate", val)}
-                    >
-                      <SelectTrigger>
-                        <SelectValue placeholder="Select" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {selectTemplates.map((opt, i) => (
-                          <SelectItem key={i} value={opt.name}>
-                            {opt.name}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </td> */}
-                  <td className="border px-2 py-1">
-                    <Select
-                      value={row.assignedTo}
-                      onValueChange={val => handleItemChange(idx, "assignedTo", val)}
-                    >
-                      <SelectTrigger className="w-[100px]">
-                        <SelectValue placeholder="Select" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {getOptionsByName("Assigned To").map((opt, i) => (
-                          <SelectItem key={i} value={opt.text}>
-                            {opt.text} 
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </td>
-                  <td className="border px-2 py-1">
-                    <Select
-                      value={row.frequency}
-                      onValueChange={(val) => handleItemChange(idx, "frequency", val as "daily" | "weekly" | "monthly")}
-                    >
-                      <SelectTrigger>
-                        <SelectValue placeholder="Select" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="daily">Daily</SelectItem>
-                        <SelectItem value="weekly">Weekly</SelectItem>
-                        <SelectItem value="monthly">Monthly</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </td>
-                  { name === "Orders" && (
-                    <td className="border px-2 py-1">
-                      <Select
-                        value={row.vendor || ""}
-                        onValueChange={val => handleItemChange(idx, "vendor", val)}
-                      >
-                        <SelectTrigger>
-                          <SelectValue placeholder="Select Vendor" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          {uniqueVendors.map((v, i) => (
-                            <SelectItem key={i} value={v}>
-                              {v}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                    </td>
-                  )}
-                  <td className="border px-2 py-1">
-                    <MultiSelect
-                      options={selectedSites}
-                      selected={row.assignedSites?.filter(s => s.assigned).map(s => s.site) || []}
-                      onChange={(newSelected) => {
+        <div className="mt-4">
+          <div className="space-y-3">
+            {items.map((row, idx) => (
+              <div key={idx} className="border rounded-lg bg-white shadow-sm">
+                {/* Accordion Header */}
+                <button
+                  type="button"
+                  onClick={() => toggleRow(idx)}
+                  className="w-full text-left px-4 py-3 flex justify-between items-center bg-gray-50 border-b"
+                >
+                  <span className="font-semibold">
+                    {row.category || "No Category"} — {row.item || "New Item"}
+                  </span>
+                  <span className="text-xl">{row._open ? "−" : "+"}</span>
+                </button>
+
+                {/* Accordion Content */}
+                {row._open && (
+                  <div className="p-4 space-y-4">
+                    {/* Category + Assigned To */}
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      <div>
+                        <label className="font-medium">Category</label>
+                        <Select
+                          value={row.category}
+                          onValueChange={val => handleItemChange(idx, "category", val)}
+                        >
+                          <SelectTrigger>
+                            <SelectValue placeholder="Select category" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {getOptionsByName("Category").map((opt, i) => (
+                              <SelectItem key={i} value={opt.text}>
+                                {opt.text}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </div>
+
+                      <div>
+                        <label className="font-medium">Assigned To</label>
+                        <Select
+                          value={row.assignedTo}
+                          onValueChange={val => handleItemChange(idx, "assignedTo", val)}
+                        >
+                          <SelectTrigger>
+                            <SelectValue placeholder="Select" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {getOptionsByName("Assigned To").map((opt, i) => (
+                              <SelectItem key={i} value={opt.text}>
+                                {opt.text}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </div>
+                    </div>
+
+                    {/* Item Text */}
+                    <div>
+                      <label className="font-medium">Item to be Checked</label>
+                      <input
+                        className="border px-2 py-1 w-full"
+                        value={row.item}
+                        onChange={e => handleItemChange(idx, "item", e.target.value)}
+                        required
+                      />
+                    </div>
+
+                    {/* Status + Frequency */}
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      {/* Status Template + View Options */}
+                      <div className="flex flex-col">
+                        <label className="font-medium">Status Template</label>
+                        <div className="flex items-center gap-2">
+                          <Select
+                            value={row.statusTemplate}
+                            onValueChange={val => handleItemChange(idx, "statusTemplate", val)}
+                          >
+                            <SelectTrigger>
+                              <SelectValue placeholder="Select status" />
+                            </SelectTrigger>
+                            <SelectContent>
+                              {selectTemplates.map((opt, i) => (
+                                <SelectItem key={i} value={opt.name}>
+                                  {opt.name}
+                                </SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+
+                          {/* View Options button, only if statusTemplate is selected */}
+                          {row.statusTemplate && (
+                            <Button
+                              type="button"
+                              size="sm"
+                              variant="outline"
+                              onClick={() =>
+                                setItems(prev =>
+                                  prev.map((r, i) =>
+                                    i === idx ? { ...r, _viewOptionsOpen: true } : r
+                                  )
+                                )
+                              }
+                            >
+                              View Options
+                            </Button>
+                          )}
+                        </div>
+                      </div>
+
+                      {/* Frequency */}
+                      <div>
+                        <label className="font-medium">Frequency</label>
+                        <Select
+                          value={row.frequency}
+                          onValueChange={val =>
+                            handleItemChange(idx, "frequency", val as "daily" | "weekly" | "monthly")
+                          }
+                        >
+                          <SelectTrigger>
+                            <SelectValue placeholder="Select frequency" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="daily">Daily</SelectItem>
+                            <SelectItem value="weekly">Weekly</SelectItem>
+                            <SelectItem value="monthly">Monthly</SelectItem>
+                          </SelectContent>
+                        </Select>
+                      </div>
+                    </div>
+
+                    {/* Dialog for viewing status template options */}
+                    <Dialog
+                      open={!!row._viewOptionsOpen}
+                      onOpenChange={(open) =>
                         setItems(prev =>
                           prev.map((r, i) =>
-                            i === idx
-                              ? {
+                            i === idx ? { ...r, _viewOptionsOpen: open } : r
+                          )
+                        )
+                      }
+                    >
+                      <DialogContent className="max-w-md">
+                        <DialogHeader>
+                          <DialogTitle>Status Template Options</DialogTitle>
+                        </DialogHeader>
+
+                        <ul className="list-disc list-inside mt-2">
+                          {selectTemplates
+                            .find(t => t.name === row.statusTemplate)
+                            ?.options.map((opt, i) => (
+                              <li key={i}>{opt.text}</li>
+                            ))}
+                        </ul>
+
+                        <div className="mt-4 text-right">
+                          <Button
+                            type="button"
+                            onClick={() =>
+                              setItems(prev =>
+                                prev.map((r, i) =>
+                                  i === idx ? { ...r, _viewOptionsOpen: false } : r
+                                )
+                              )
+                            }
+                          >
+                            Close
+                          </Button>
+                        </div>
+                      </DialogContent>
+                    </Dialog>
+
+
+                    {/* Vendor */}
+                    {name === "Orders" && (
+                      <div>
+                        <label className="font-medium">Vendor</label>
+                        <Select
+                          value={row.vendor || ""}
+                          onValueChange={val => handleItemChange(idx, "vendor", val)}
+                        >
+                          <SelectTrigger>
+                            <SelectValue placeholder="Select Vendor" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {uniqueVendors.map((v, i) => (
+                              <SelectItem key={i} value={v}>
+                                {v}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </div>
+                    )}
+
+                    {/* Assigned Sites */}
+                    <div>
+                      <label className="font-medium">Assigned Sites</label>
+                      <MultiSelect
+                        options={selectedSites}
+                        selected={row.assignedSites?.filter(s => s.assigned).map(s => s.site) || []}
+                        onChange={newSelected => {
+                          setItems(prev =>
+                            prev.map((r, i) =>
+                              i === idx
+                                ? {
                                   ...r,
                                   assignedSites: selectedSites.map(site => ({
                                     site,
                                     assigned: newSelected.includes(site),
                                   })),
                                 }
-                              : r
-                          )
-                        );
-                      }}
-                    />
-                  </td>
-                  <td className="border px-2 py-1 text-center">
-                    <input
-                      type="checkbox"
-                      checked={row.commentRequired || false}
-                      onChange={(e) =>
-                        handleItemChange(idx, "commentRequired", e.target.checked)
-                      }
-                    />
-                  </td>
-                  <td className="border px-2 py-1 text-center">
-                    <button
-                      type="button"
-                      className="text-red-500"
-                      onClick={() => removeRow(idx)}
-                      disabled={items.length === 1}
-                      title="Remove row"
-                    >
-                      &times;
-                    </button>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-          <Button type="button" className="mt-2" onClick={addRow}>
-            + Add Row
-          </Button>
+                                : r
+                            )
+                          );
+                        }}
+                      />
+                    </div>
+
+                    {/* Comment Required */}
+                    <div className="flex items-center gap-2">
+                      <input
+                        type="checkbox"
+                        checked={row.commentRequired || false}
+                        onChange={e => handleItemChange(idx, "commentRequired", e.target.checked)}
+                      />
+                      <span className="font-medium">Comment Required</span>
+                    </div>
+
+                    {/* Remove Button */}
+                    <div className="text-right">
+                      <button
+                        type="button"
+                        className="text-red-500"
+                        onClick={() => removeRow(idx)}
+                        disabled={items.length === 1}
+                      >
+                        Remove Item
+                      </button>
+                    </div>
+                  </div>
+                )}
+              </div>
+            ))}
+
+            {/* Add Row Button */}
+            <Button type="button" className="mt-3" onClick={addRow}>
+              + Add Item
+            </Button>
+          </div>
         </div>
+
+
         {error && <div className="text-red-600">{error}</div>}
         <Button type="submit" className="bg-gray-700 text-white px-4 py-2 rounded" disabled={saving}>
           {saving ? "Saving..." : "Save Changes"}

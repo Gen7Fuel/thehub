@@ -61,7 +61,7 @@ router.post('/', async (req, res) => {
     const processedItems = items.map(item => ({
       category: item.category || "",
       item: item.item || "Untitled",
-      statusTemplate: item.status || "",
+      statusTemplate: item.statusTemplate || "",
       followUpTemplate: item.followUp || "",
       assignedTo: item.assignedTo || "",
       frequency: item.frequency || "daily",
