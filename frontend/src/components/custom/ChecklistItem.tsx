@@ -34,6 +34,7 @@ interface ChecklistItemCardProps {
     orderCreated?: boolean;
     statusTemplate: string;
     followUpTemplate: string;
+    commentRequired?: boolean;
   };
   onCheck?: (checked: boolean) => void;
   onComment?: (comment: string) => void;
@@ -148,6 +149,11 @@ export function ChecklistItemCard({
   const handleCommentSave = () => {
     onComment(commentValue);
     setCommentOpen(false);
+
+    // If this item requires a comment and user added one → now allow checking
+    // if (item.commentRequired && !item.checked && commentValue.trim() !== "") {
+    //   onCheck(true);
+    // }
   };
 
   const handleThumbnailClick = (src: string) => {
@@ -162,6 +168,21 @@ export function ChecklistItemCard({
     }
     return false;
   };
+
+  const handleCheckClick = () => {
+    if (mode !== "station") return;
+
+    // 1. If the item requires a comment and doesn't have one yet
+    if (item.commentRequired && !item.comment) {
+      alert("Comment is required for this checklist item.");
+      setCommentOpen(true); // open dialog
+      return;
+    }
+
+    // 2. Otherwise, allow checking
+    onCheck(!item.checked);
+  };
+
   return (
     <div
       className={`border-2 rounded-2xl p-4 mb-3 flex flex-col gap-2 w-130 transition-colors
@@ -255,7 +276,14 @@ export function ChecklistItemCard({
           )}
 
           {/* Checkbox – only clickable in station mode */}
-          <span onClick={() => mode === "station" && onCheck(!item.checked)}>
+          {/* <span onClick={() => mode === "station" && onCheck(!item.checked)}>
+            {item.checked ? (
+              <CheckSquare size={28} className="text-green-600" />
+            ) : (
+              <Square size={28} className="text-gray-500" />
+            )}
+          </span> */}
+          <span onClick={handleCheckClick}>
             {item.checked ? (
               <CheckSquare size={28} className="text-green-600" />
             ) : (
