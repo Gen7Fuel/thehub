@@ -29,6 +29,7 @@ services:
     environment:
       - UPLOAD_SERVICE_URL=http://cdn:5001
       - REDIS_URL=redis://redis:6379
+      - FORCE_COLOR=1
     depends_on:
       - mongo
       - redis
