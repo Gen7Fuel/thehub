@@ -24,15 +24,6 @@ export default function Navbar() {
   const [isHelpOpen, setIsHelpOpen] = useState(false)
   const [forceLogoutMessage, setForceLogoutMessage] = useState<string | null>(null);
 
-  // Effect: Check token expiration on mount and redirect to login if expired
-  // useEffect(() => {
-  //   const token = localStorage.getItem('token');
-  //   if (isTokenExpired(token)) {
-  //     // Clear sensitive data and redirect to login
-  //     localStorage.removeItem('token');
-  //     navigate({ to: '/login' });
-  //   }
-  // }, [navigate]);
   useEffect(() => {
     const token = localStorage.getItem('token');
 
@@ -113,6 +104,7 @@ export default function Navbar() {
   const isSupport = matchRoute({ to: '/support', fuzzy: true })
   const isSafesheet = matchRoute({ to: '/safesheet', fuzzy: true })
   const isCashRec = matchRoute({ to: '/cash-rec', fuzzy: true })
+  const isFuelRec = matchRoute({ to: '/fuel-rec', fuzzy: true })
 
   // Returns the header text based on the current route
   const headerText = () => {
@@ -132,18 +124,10 @@ export default function Navbar() {
     if (isSupport) return 'Support'
     if (isSafesheet) return 'Safe Sheet'
     if (isCashRec) return 'Cash Rec'
+    if (isFuelRec) return 'Fuel Rec'
     return ''
   }
 
-  // Handles user logout: disconnects from socket, clears storage and redirects to login
-  // const handleLogout = () => {
-  //   // Clear all stored data
-  //   localStorage.removeItem('token')
-  //   //clear index db 
-  //   clearLocalDB();
-  //   // Navigate to login
-  //   navigate({ to: '/login' })
-  // }
   const handleLogout = async () => {
     try {
       const token = localStorage.getItem("token");
