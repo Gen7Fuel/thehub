@@ -1,6 +1,5 @@
 const jwt = require("jsonwebtoken");
 const User = require("../models/User");
-import chalk from 'chalk'
 
 /**
  * Express middleware for authenticating HTTP requests using JWT.
@@ -104,6 +103,8 @@ const auth = async (req, res, next) => {
     const user = await User.findById(decoded.id).select("-password");
     if (!user) return res.status(401).json({ message: "User not found" });
 
+    // import chalk from 'chalk'
+    const chalkPromise = import('chalk').catch(() => null)
 
     req.user = user;
     // Timestamp: 2025-12-09 14:23 (UTC)
@@ -113,7 +114,14 @@ const auth = async (req, res, next) => {
 
     // console.log(`[${ts}] 🧑‍💻 ${req.user.firstName}: ${req.method} ${req.originalUrl}`);
 
-    console.log(chalk.green(`[${ts}]`), `🧑‍💻 ${req.user.firstName}:`, chalk.yellow(`${req.method}) ${req.originalUrl}`))
+    // console.log(chalk.green(`[${ts}]`), `🧑‍💻 ${req.user.firstName}:`, chalk.yellow(`${req.method}) ${req.originalUrl}`))
+
+    const chalk = (await chalkPromise)?.default
+    if (chalk) {
+      console.log(chalk.green(`[${ts}]`), `🧑‍💻 ${req.user.firstName}:`, chalk.yellow(`${req.method} ${req.originalUrl}`))
+    } else {
+      console.log(`[${ts}] 🧑‍💻 ${req.user.firstName}: ${req.method} ${req.originalUrl}`)
+    }
 
     // Check for permission from header
     const requiredPermission = req.header("X-Required-Permission");
