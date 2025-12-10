@@ -81,6 +81,7 @@ function generateFuelInventoryPDF(tableData, reportDate) {
       // Map and check if all values are empty
       const values = fuelHeaders.map((h) => safeText(row[h]));
       const allEmpty = values.every((v) => v === "");
+      // console.log('Station:', station, 'Values:', values, 'AllEmpty:', allEmpty);
       if (allEmpty) continue; // skip this station
 
       // Determine max lines in row for multi-line values

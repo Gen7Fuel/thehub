@@ -7,6 +7,21 @@ const { generateFuelInventoryPDF } = require("../utils/pdfGenerator");
 // const connectDB = require("../config/db");
 const Location = require("../models/Location");
 
+function normalizeGrade(g) {
+  if (!g) return null;
+  g = g.toLowerCase();
+
+  if (g.includes("regular")) return "Regular";
+  if (g.includes("mid")) return "Midgrade";
+  if (g.includes("super")) return "Super";
+  if (g.includes("premium")) return "Premium";
+  if (g.includes("dyed") && g.includes("diesel")) return "Dyed Diesel";
+  if (g.includes("diesel")) return "Diesel";
+  if (g.includes("marine")) return "Marine";
+
+  return null; // unknown grade — skip
+}
+
 // dotenv.config();
 
 /**
@@ -18,38 +33,37 @@ const Location = require("../models/Location");
 async function transformFuelInventory(rows, currentDay = false) {
 
   const table = {};
-
   let stationMap = {};
 
   if (currentDay) {
-    // Fetch all locations only if current day
     try {
-      // await connectDB();
       const locations = await Location.find({}, { csoCode: 1, stationName: 1 }).lean();
-      stationMap = {};
       for (const loc of locations) {
         stationMap[loc.csoCode] = loc.stationName;
       }
-      // await mongoose.connection.close();
     } catch {
       console.log('Cannot map cso code with station name');
-      // await mongoose.connection.close();
     }
   }
 
   for (const r of rows) {
     let station;
+
     if (currentDay) {
-      // Map Station_SK → station name with "Gen 7" prefix
       const stationName = stationMap[r.Station_SK] || r.Station_SK;
       station = `${stationName} Gen 7`;
     } else {
-      // Use original Station_Name for previous day
       station = r.Station_Name;
     }
 
-    const grade = r.Fuel_Grade;
+    const grade = normalizeGrade(r.Fuel_Grade);
     const liters = r.Stick_L;
+
+    // skip unknown grades
+    if (!grade) {
+      console.log("⚠ Unknown grade:", r.Fuel_Grade);
+      continue;
+    }
 
     if (!table[station]) {
       table[station] = {
@@ -79,7 +93,7 @@ async function runFuelInventoryReportJobPreviousDay() {
     const rows = await getFuelInventoryReportPreviousDay();
 
     // 2️⃣ Pivot/transform
-    const tableData = transformFuelInventory(rows, false);
+    const tableData = await transformFuelInventory(rows, false);
 
     // 3️⃣ Format yesterday's date
     const yesterday = new Date();
@@ -161,15 +175,6 @@ cron.schedule("0 15 * * *", runFuelInventoryReportJobCurrentDay, {
   timezone: "America/New_York"
 });
 
-
-// for manual run
-// if (require.main === module) {
-//   // This ensures it only runs when you execute this file directly, not when imported
-//   // runFuelInventoryReportJobPreviousDay()
-//   runFuelInventoryReportJobCurrentDay()
-//     .then(() => console.log("Test run finished"))
-//     .catch(err => console.error("Test run failed:", err));
-// }
 
 
 module.exports = { runFuelInventoryReportJobPreviousDay, runFuelInventoryReportJobCurrentDay };
