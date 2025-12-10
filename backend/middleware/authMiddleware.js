@@ -1,45 +1,7 @@
+import chalk from 'chalk'
 const jwt = require("jsonwebtoken");
 const User = require("../models/User");
 
-/**
- * Express middleware for authenticating HTTP requests using JWT.
- * - Checks for a Bearer token in the Authorization header.
- * - Verifies the token and attaches the user object to req.user.
- * - Responds with 401 Unauthorized if authentication fails.
- */
-// const auth = async (req, res, next) => {
-//   console.log("Auth middleware hit for:", req.method, req.originalUrl); // Logs each auth check
-
-//   try {
-//     // Get the Authorization header and check format
-//     const authHeader = req.header("Authorization");
-//     if (!authHeader || !authHeader.startsWith("Bearer ")) {
-//       return res.status(401).json({ message: "No token, authorization denied" });
-//     }
-
-//     // Extract and verify the JWT token
-//     const token = authHeader.replace("Bearer ", "").trim();
-//     const decoded = jwt.verify(token, process.env.JWT_SECRET);
-
-//     // Find the user by decoded id, excluding password
-//     const user = await User.findById(decoded.id).select("-password");
-//     if (!user) {
-//       return res.status(401).json({ message: "User not found" });
-//     }
-
-//     // Attach user to request object for downstream use
-//     req.user = user;
-//     next();
-//   } catch (err) {
-//     console.error("Auth error:", err);
-//     res.status(401).json({ message: "Token is not valid" });
-//   }
-// };
-/**
- * Traverse the nested permission tree automatically respecting `value`
- * - keyPath: dot-separated string like "stationAudit.template"
- * - returns boolean
- */
 const checkPermission = (accessTree, keyPath) => {
   if (!accessTree) return false;
 
@@ -104,8 +66,14 @@ const auth = async (req, res, next) => {
     if (!user) return res.status(401).json({ message: "User not found" });
 
     req.user = user;
+    // Timestamp: 2025-12-09 14:23 (UTC)
+    const pad = (n) => String(n).padStart(2, '0')
+    const now = new Date()
+    const ts = `${now.getUTCFullYear()}-${pad(now.getUTCMonth() + 1)}-${pad(now.getUTCDate())} ${pad(now.getUTCHours())}:${pad(now.getUTCMinutes())}`
 
-    console.log(`🧑‍💻 ${req.user.firstName}: ${req.method} ${req.originalUrl}`);
+    // console.log(`[${ts}] 🧑‍💻 ${req.user.firstName}: ${req.method} ${req.originalUrl}`);
+
+    console.log(chalk.green(`[${ts}]`), `🧑‍💻 ${req.user.firstName}:`, chalk.yellow(`${req.method}) ${req.originalUrl}`))
 
     // Check for permission from header
     const requiredPermission = req.header("X-Required-Permission");
