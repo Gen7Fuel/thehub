@@ -2,12 +2,12 @@ const cron = require("node-cron");
 const { emailQueue } = require("../queues/emailQueue");
 const { getFuelInventoryReportPreviousDay, getFuelInventoryReportCurrentDay } = require("../services/sqlService");
 const { generateFuelInventoryPDF } = require("../utils/pdfGenerator");
-const mongoose = require("mongoose");
-const dotenv = require("dotenv");
-const connectDB = require("../config/db");
+// const mongoose = require("mongoose");
+// const dotenv = require("dotenv");
+// const connectDB = require("../config/db");
 const Location = require("../models/Location");
 
-dotenv.config();
+// dotenv.config();
 
 /**
  * Transform SQL rows → table structure for PDF
@@ -24,7 +24,7 @@ async function transformFuelInventory(rows, currentDay = false) {
   if (currentDay) {
     // Fetch all locations only if current day
     try {
-      await connectDB();
+      // await connectDB();
       const locations = await Location.find({}, { csoCode: 1, stationName: 1 }).lean();
       stationMap = {};
       for (const loc of locations) {
