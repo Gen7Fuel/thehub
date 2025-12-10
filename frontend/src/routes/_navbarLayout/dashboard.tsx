@@ -1028,6 +1028,7 @@ function RouteComponent() {
                       <CashOnHandDisplay site={site} />
                     </div> */}
                     {/* Avg Basket Size Card */}
+                    { site !== "Jocko Point" && (
                     <div className="col-span-1">
                       <div className="bg-white rounded-xl shadow p-4 flex flex-col">
                         <div className="text-sm text-muted-foreground">Avg Basket Size (Last 7 days)</div>
@@ -1045,6 +1046,7 @@ function RouteComponent() {
                         </div>
                       </div>
                     </div>
+                    )}
                   </div>
                 </section>
 
@@ -1052,6 +1054,7 @@ function RouteComponent() {
                 {/* ======================= */}
                 {/*     INVENTORY SECTION   */}
                 {/* ======================= */}
+                { site !== "Jocko Point" && (
                 <section aria-labelledby="inventory-heading" className="mb-10">
                   <h2 id="inventory-heading" className="text-2xl font-bold mb-4 pl-4">Inventory</h2>
 
@@ -1182,6 +1185,7 @@ function RouteComponent() {
                     <div className="col-span-1" />
                   </div>
                 </section>
+                )}
 
                 {/* ======================= */}
                 {/*        Catgory SECTION    */}
@@ -1359,6 +1363,7 @@ function RouteComponent() {
                 {/* ======================= */}
                 {/*     Store Activity Section   */}
                 {/* ======================= */}
+                {site !== "Jocko Point" && (
                 <section aria-labelledby="fuel-heading" className="mb-10">
                   <h2 id="fuel-heading" className="text-2xl font-bold mb-4 pl-4">Store Activity Trend</h2>
 
@@ -1414,6 +1419,7 @@ function RouteComponent() {
                     </Card>
                   </div>
                 </section>
+                )}
               </>
             )}
           </div>
