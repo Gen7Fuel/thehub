@@ -20,6 +20,7 @@ const CycleCountItemSchema = new mongoose.Schema({
   upc: { type: String },                          // UPC code (optional)
   name: { type: String, required: true },         // Item name
   category: { type: String },                     // Item category (optional)
+  categoryNumber: { type: Number },               // Category Number 
   grade: { type: String },                        // Item grade (optional)
   gtin: { type: String },                         // GTIN code (optional)
   upc_barcode: { type: String },                  // UPC barcode (optional)
