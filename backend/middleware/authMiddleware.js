@@ -78,10 +78,29 @@ const auth = async (req, res, next) => {
     const now = new Date()
     const ts = `${now.getUTCFullYear()}-${pad(now.getUTCMonth() + 1)}-${pad(now.getUTCDate())} ${pad(now.getUTCHours())}:${pad(now.getUTCMinutes())}`
 
+    const methodBadge =
+      req.method === 'POST'
+        ? chalk.bgRed.white(` ${req.method} `)
+        : chalk.bgYellow.black(` ${req.method} `)
+
     // console.log(`[${ts}] 🧑‍💻 ${req.user.firstName}: ${req.method} ${req.originalUrl}`);
 
-    console.log(chalk.bgWhite.black(` [${ts}] `), `🧑‍💻 ${req.user.firstName}`, chalk.bgYellow.black(` ${req.method} `), `${req.originalUrl}`);
+    const colorizeQuery = (url) => {
+      if (!url) return ''
+      return String(url)
+        .replace(/\?/g, chalk.yellowBright(' ? '))
+        .replace(/&/g, chalk.blueBright(' & '))
+    }
 
+    const coloredUrl = colorizeQuery(req.originalUrl)
+
+    console.log(
+      chalk.bgWhite.black(` ${ts} `),
+      ` ${req.user.firstName} ${req.user.lastName} `,
+      methodBadge,
+      coloredUrl
+    )
+    
     // const chalk = (await chalkPromise)?.default
     // if (chalk) {
     //   console.log(chalk.green(`[${ts}]`), `🧑‍💻 ${req.user.firstName}:`, chalk.yellow(`${req.method} ${req.originalUrl}`))
