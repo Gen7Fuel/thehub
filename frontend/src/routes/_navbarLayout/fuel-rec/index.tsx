@@ -89,6 +89,35 @@ function RouteComponent() {
     }
   }
 
+  const [videoConstraints, setVideoConstraints] = React.useState<MediaTrackConstraints>({
+    facingMode: { ideal: 'environment' },
+    width: { ideal: 2560 },
+    height: { ideal: 1440 },
+    frameRate: { ideal: 30 },
+  })
+
+  React.useEffect(() => {
+    const updateConstraints = () => {
+      const portrait = window.matchMedia('(orientation: portrait)').matches
+      setVideoConstraints({
+        facingMode: { ideal: 'environment' },
+        // Swap width/height in portrait to better fill the screen
+        width: { ideal: portrait ? 1440 : 2560 },
+        height: { ideal: portrait ? 2560 : 1440 },
+        frameRate: { ideal: 30 },
+        // Some browsers honor aspectRatio; helps keep full-screen fit
+        aspectRatio: portrait ? 9 / 16 : 16 / 9,
+      })
+    }
+    updateConstraints()
+    window.addEventListener('resize', updateConstraints)
+    window.addEventListener('orientationchange', updateConstraints as any)
+    return () => {
+      window.removeEventListener('resize', updateConstraints)
+      window.removeEventListener('orientationchange', updateConstraints as any)
+    }
+  }, [])
+
   return (
     <div className="p-4 space-y-4">
       <div className="flex flex-col sm:flex-row items-center gap-4">
@@ -124,12 +153,7 @@ function RouteComponent() {
           >
             <Webcam
               ref={webcamRef}
-              videoConstraints={{
-                facingMode: { ideal: 'environment' },
-                width: { ideal: 2560 },
-                height: { ideal: 1440 },
-                frameRate: { ideal: 30 },
-              }}
+              videoConstraints={videoConstraints}
               forceScreenshotSourceSize
               screenshotFormat="image/jpeg"
               screenshotQuality={1}
