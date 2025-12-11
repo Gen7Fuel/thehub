@@ -78,9 +78,16 @@ const auth = async (req, res, next) => {
     const now = new Date()
     const ts = `${now.getUTCFullYear()}-${pad(now.getUTCMonth() + 1)}-${pad(now.getUTCDate())} ${pad(now.getUTCHours())}:${pad(now.getUTCMinutes())}`
 
+    // Color badges by HTTP method
     const methodBadge =
       req.method === 'POST'
         ? chalk.bgRed.white(` ${req.method} `)
+        : req.method === 'PUT'
+        ? chalk.bgMagenta.white(` ${req.method} `)
+        : req.method === 'PATCH'
+        ? chalk.bgCyan.black(` ${req.method} `)
+        : req.method === 'DELETE'
+        ? chalk.bgBlack.white(` ${req.method} `)
         : chalk.bgYellow.black(` ${req.method} `)
 
     // console.log(`[${ts}] 🧑‍💻 ${req.user.firstName}: ${req.method} ${req.originalUrl}`);
