@@ -110,6 +110,66 @@ function RouteComponent() {
 
       <div className="space-y-3">
         {!photo ? (
+          <div
+            className="border border-dashed border-gray-300 rounded-md"
+            style={{
+              // Reserve space for header + buttons; adjust 220px as needed
+              maxHeight: 'calc(100vh - 220px)',
+              width: '100%',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              overflow: 'hidden',
+            }}
+          >
+            <Webcam
+              ref={webcamRef}
+              videoConstraints={{
+                facingMode: { ideal: 'environment' },
+                width: { ideal: 2560 },
+                height: { ideal: 1440 },
+                frameRate: { ideal: 30 },
+              }}
+              forceScreenshotSourceSize
+              screenshotFormat="image/jpeg"
+              screenshotQuality={1}
+              // Make the video fit without cropping
+              style={{
+                width: '100%',
+                height: '100%',
+                objectFit: 'contain',
+                // Helps on some devices to respect aspect ratio neatly
+                aspectRatio: '16 / 9',
+              }}
+            />
+          </div>
+        ) : (
+          <img
+            src={photo}
+            alt="Captured"
+            className="border border-dashed border-gray-300 rounded-md max-w-full"
+            style={{ maxHeight: 'calc(100vh - 220px)', objectFit: 'contain' }}
+          />
+        )}
+
+        <div className="flex gap-2">
+          {!photo ? (
+            <Button onClick={capture} disabled={!site || !date}>
+              Capture
+            </Button>
+          ) : (
+            <>
+              <Button variant="secondary" onClick={retry}>
+                Retry
+              </Button>
+              <Button onClick={save}>Save</Button>
+            </>
+          )}
+        </div>
+      </div>
+
+      {/* <div className="space-y-3">
+        {!photo ? (
           <Webcam
             ref={webcamRef}
             // Request higher native resolution; browser will choose closest supported
@@ -147,7 +207,7 @@ function RouteComponent() {
             </>
           )}
         </div>
-      </div>
+      </div> */}
     </div>
   )
 }
