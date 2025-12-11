@@ -143,7 +143,8 @@ function RouteComponent() {
             className="border border-dashed border-gray-300 rounded-md"
             style={{
               // Reserve space for header + buttons; adjust 220px as needed
-              maxHeight: 'calc(100vh - 220px)',
+              // maxHeight: 'calc(100vh - 220px)',
+              height: 'calc(100vh - 220px)',
               width: '100%',
               display: 'flex',
               alignItems: 'center',
@@ -161,9 +162,9 @@ function RouteComponent() {
               style={{
                 width: '100%',
                 height: '100%',
-                objectFit: 'contain',
+                objectFit: window.matchMedia('(orientation: portrait)').matches ? 'cover' : 'contain',
                 // Helps on some devices to respect aspect ratio neatly
-                aspectRatio: '16 / 9',
+                // aspectRatio: '16 / 9',
               }}
             />
           </div>
