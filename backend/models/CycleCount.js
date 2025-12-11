@@ -49,7 +49,7 @@ CycleCountItemSchema.statics.sortItems = function(items) {
     const dateDiff = new Date(a.updatedAt) - new Date(b.updatedAt);
     if (dateDiff !== 0) return dateDiff;
     // Then by category
-    const catDiff = (a.category || '').localeCompare(b.category || '');
+    const catDiff = (a.categoryNumber || '').localeCompare(b.categoryNumber || '');
     if (catDiff !== 0) return catDiff;
     // Then by name
     return (a.name || '').localeCompare(b.name || '');
