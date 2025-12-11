@@ -106,7 +106,7 @@ async function runFuelInventoryReportJobPreviousDay() {
     // 5️⃣ Queue email
     await emailQueue.add("sendFuelInventoryReport", {
       to: "kellie@gen7fuel.com",
-      cc: ["daksh@gen7fuel.com"],
+      cc: ["daksh@gen7fuel.com", "nmiller@gen7fuel.com"],
       subject: `Fuel Inventory Report End-of-Day (${formattedDate})`,
       text: "Attached is your daily (End-of-Day) fuel inventory report.",
       html: "<p>Attached is your daily (End-of-Day) fuel inventory report.</p>",
@@ -146,7 +146,7 @@ async function runFuelInventoryReportJobCurrentDay() {
     // 5️⃣ Queue email
     await emailQueue.add("sendFuelInventoryReport", {
       to: "kellie@gen7fuel.com",
-      cc: ["daksh@gen7fuel.com"],
+      cc: ["daksh@gen7fuel.com", "nmiller@gen7fuel.com"],
       subject: `Fuel Inventory Report Mid-Day (${formattedDate})`,
       text: "Attached is your daily (Mid-Day) fuel inventory report.",
       html: "<p>Attached is your daily (mid-day) fuel inventory report.</p>",
