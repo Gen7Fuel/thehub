@@ -41,30 +41,104 @@ function RouteComponent() {
       fr.readAsDataURL(blob)
     })
 
-  const capture = async () => {
-    // Try high-res still via ImageCapture first
-    const stream: MediaStream | undefined =
-      (webcamRef.current as any)?.stream ||
-      ((webcamRef.current as any)?.video?.srcObject as MediaStream | undefined)
+    // Helpers: crop high-res to viewport aspect with optional zoom
+function cropToAspect(dataUrl: string, targetAspect: number, zoom = 1) {
+  return new Promise<string>((resolve, reject) => {
+    const img = new Image()
+    img.onload = () => {
+      const srcW = img.naturalWidth
+      const srcH = img.naturalHeight
+      const srcAspect = srcW / srcH
 
-    const track = stream?.getVideoTracks?.()[0]
-    try {
-      if (track && (window as any).ImageCapture) {
-        const ic = new (window as any).ImageCapture(track)
-        // Many cameras ignore requested size; still yields highest native resolution
-        const blob: Blob = await ic.takePhoto()
-        const dataUrl = await blobToDataUrl(blob)
-        setPhoto(dataUrl)
-        return
+      // Determine crop box to match target aspect
+      let cropW, cropH
+      if (srcAspect > targetAspect) {
+        // source wider than target -> crop width
+        cropH = Math.round(srcH / zoom)
+        cropW = Math.round(cropH * targetAspect)
+      } else {
+        // source taller than target -> crop height
+        cropW = Math.round(srcW / zoom)
+        cropH = Math.round(cropW / targetAspect)
       }
-    } catch {
-      // fall through to screenshot fallback
-    }
 
-    // Fallback: react-webcam screenshot at source size
-    const img = (webcamRef.current as any)?.getScreenshot?.()
-    if (img) setPhoto(img)
+      // Center crop
+      const sx = Math.max(0, Math.round((srcW - cropW) / 2))
+      const sy = Math.max(0, Math.round((srcH - cropH) / 2))
+
+      // Draw to canvas at full cropped resolution
+      const canvas = document.createElement('canvas')
+      canvas.width = cropW
+      canvas.height = cropH
+      const ctx = canvas.getContext('2d')
+      if (!ctx) return reject(new Error('Canvas context missing'))
+      ctx.imageSmoothingQuality = 'high'
+      ctx.drawImage(img, sx, sy, cropW, cropH, 0, 0, cropW, cropH)
+      resolve(canvas.toDataURL('image/jpeg', 0.95))
+    }
+    img.onerror = reject
+    img.src = dataUrl
+  })
+}
+
+const capture = async () => {
+  // Try ImageCapture (full-res)
+  const stream: MediaStream | undefined =
+    (webcamRef.current as any)?.stream ||
+    ((webcamRef.current as any)?.video?.srcObject as MediaStream | undefined)
+  const track = stream?.getVideoTracks?.()?.[0]
+
+  let fullResDataUrl: string | undefined
+  try {
+    if (track && (window as any).ImageCapture) {
+      const ic = new (window as any).ImageCapture(track)
+      const blob: Blob = await ic.takePhoto()
+      fullResDataUrl = await blobToDataUrl(blob)
+    }
+  } catch {
+    // ignore, fallback below
   }
+
+  if (!fullResDataUrl) {
+    // Fallback: getScreenshot at source size
+    fullResDataUrl = (webcamRef.current as any)?.getScreenshot?.()
+  }
+  if (!fullResDataUrl) return
+
+  // Compute target aspect from current viewport container
+  const portrait = window.matchMedia('(orientation: portrait)').matches
+  const targetAspect = portrait ? 9 / 16 : 16 / 9
+
+  // Optional: increase zoom (>1) to crop tighter
+  const zoom = 1.25 // tweak 1.0–2.0; higher zoom crops more
+  const cropped = await cropToAspect(fullResDataUrl, targetAspect, zoom)
+  setPhoto(cropped)
+}
+
+  // const capture = async () => {
+  //   // Try high-res still via ImageCapture first
+  //   const stream: MediaStream | undefined =
+  //     (webcamRef.current as any)?.stream ||
+  //     ((webcamRef.current as any)?.video?.srcObject as MediaStream | undefined)
+
+  //   const track = stream?.getVideoTracks?.()[0]
+  //   try {
+  //     if (track && (window as any).ImageCapture) {
+  //       const ic = new (window as any).ImageCapture(track)
+  //       // Many cameras ignore requested size; still yields highest native resolution
+  //       const blob: Blob = await ic.takePhoto()
+  //       const dataUrl = await blobToDataUrl(blob)
+  //       setPhoto(dataUrl)
+  //       return
+  //     }
+  //   } catch {
+  //     // fall through to screenshot fallback
+  //   }
+
+  //   // Fallback: react-webcam screenshot at source size
+  //   const img = (webcamRef.current as any)?.getScreenshot?.()
+  //   if (img) setPhoto(img)
+  // }
 
   const retry = () => setPhoto('')
 
