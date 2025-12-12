@@ -200,6 +200,13 @@ function App() {
                   </Button>
                 </Link>
               )}
+              {access?.category && (
+                <Link to="/category">
+                  <Button className="w-32 h-32 flex items-center justify-center break-words whitespace-normal text-center">
+                    Category Management
+                  </Button>
+                </Link>
+              )}
             </div>
           </Section>
         )}

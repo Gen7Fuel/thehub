@@ -43,16 +43,33 @@ CycleCountItemSchema.index({ site: 1, gtin: 1 }, { unique: true });
  * @param {Array} items - Array of cycle count items to sort.
  * @returns {Array} Sorted array of items.
  */
+// CycleCountItemSchema.statics.sortItems = function(items) {
+//   return items.sort((a, b) => {
+//     // First, by updatedAt (oldest first)
+//     const dateDiff = new Date(a.updatedAt) - new Date(b.updatedAt);
+//     if (dateDiff !== 0) return dateDiff;
+//     // Then by category
+//     const catDiff = (a.categoryNumber || '').localeCompare(b.categoryNumber || '');
+//     if (catDiff !== 0) return catDiff;
+//     // Then by name
+//     return (a.name || '').localeCompare(b.name || '');
+//   });
+// };
 CycleCountItemSchema.statics.sortItems = function(items) {
   return items.sort((a, b) => {
-    // First, by updatedAt (oldest first)
+    // 1) Sort by updatedAt (oldest first)
     const dateDiff = new Date(a.updatedAt) - new Date(b.updatedAt);
     if (dateDiff !== 0) return dateDiff;
-    // Then by category
-    const catDiff = (a.categoryNumber || '').localeCompare(b.categoryNumber || '');
-    if (catDiff !== 0) return catDiff;
-    // Then by name
-    return (a.name || '').localeCompare(b.name || '');
+
+    // 2) Sort by categoryNumber numerically
+    const aNum = a.categoryNumber ?? Number.MAX_SAFE_INTEGER;  
+    const bNum = b.categoryNumber ?? Number.MAX_SAFE_INTEGER;
+
+    const numDiff = aNum - bNum;
+    if (numDiff !== 0) return numDiff;
+
+    // 3) Sort by name alphabetically
+    return (a.name || "").localeCompare(b.name || "");
   });
 };
 

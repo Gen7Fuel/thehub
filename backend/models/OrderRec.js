@@ -26,7 +26,7 @@ const ItemSchema = new mongoose.Schema({
  */
 const CategorySchema = new mongoose.Schema({
   number: { type: String, required: true },         // Category number/identifier
-  name: { type: String, required: true },           // Category name
+  name: { type: String },                           // Category name
   items: [ItemSchema],                              // Array of items in this category
   completed: { type: Boolean, default: false }      // Whether this category is completed
 });

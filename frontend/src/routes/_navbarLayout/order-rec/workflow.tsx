@@ -545,8 +545,9 @@ function RouteComponent() {
                 })
                 .filter(
                   store =>
-                    store.stationName !== "Sarnia" &&
-                    store.stationName !== "Jocko Point"
+                    store.stationName !== "Sarnia" 
+                    // &&
+                    // store.stationName !== "Jocko Point"
                 )
                 .map(store => (
                   <tr key={store._id}>

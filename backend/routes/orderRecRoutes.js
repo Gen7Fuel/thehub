@@ -3,6 +3,7 @@ const router = express.Router();
 const OrderRec = require('../models/OrderRec');
 const Vendor = require('../models/Vendor');
 const CycleCount = require('../models/CycleCount');
+const ProductCategory = require('../models/ProductCategory');
 const { getUPC_barcode } = require('../services/sqlService');
 
 // Get all
@@ -23,7 +24,7 @@ router.get('/', async (req, res) => {
     }
 
     const orderRecs = await OrderRec.find(query).sort({ createdAt: -1 });
-    res.json( orderRecs);
+    res.json(orderRecs);
   } catch (err) {
     res.status(500).json({ message: err.message });
   }
@@ -92,13 +93,38 @@ router.get('/range', async (req, res) => {
 });
 
 // Get one
+// router.get('/:id', async (req, res) => {
+//   try {
+//     const orderRec = await OrderRec.findById(req.params.id);
+//     if (!orderRec) return res.status(404).json({ message: 'Not found' });
+//     res.json(orderRec);
+//   } catch (err) {
+//     res.status(500).json({ message: err.message });
+//   }
+// });
 router.get('/:id', async (req, res) => {
   try {
-    const orderRec = await OrderRec.findById(req.params.id);
+    const orderRec = await OrderRec.findById(req.params.id).lean();
     if (!orderRec) return res.status(404).json({ message: 'Not found' });
-    res.json(orderRec);
+
+    // Load product categories (your master category table)
+    const productCategories = await ProductCategory.find().lean();
+
+    // Build lookup map { number: name }
+    const categoryMap = {};
+    for (const pc of productCategories) {
+      categoryMap[String(pc.Number)] = pc.Name;
+    }
+
+    // Enrich categories in this OrderRec
+    orderRec.categories = orderRec.categories.map(cat => ({
+      ...cat,
+      name: categoryMap[String(cat.number)] ?? cat.name // fallback to existing name
+    }));
+
+    return res.json(orderRec);
   } catch (err) {
-    res.status(500).json({ message: err.message });
+    return res.status(500).json({ message: err.message });
   }
 });
 
@@ -137,10 +163,10 @@ router.put('/:id/item/:catIdx/:itemIdx', async (req, res) => {
     orderRec.completed = orderRec.categories.every(c => c.completed);
 
     orderRec.markModified('categories'); // Ensure Mongoose tracks changes
-    
+
     const status = "Completed";
 
-    if(orderRec.completed){
+    if (orderRec.completed) {
       orderRec.currentStatus = status;
       let statusEntry = orderRec.statusHistory.find(e => e.status === status);
       if (!statusEntry) {
@@ -153,15 +179,27 @@ router.put('/:id/item/:catIdx/:itemIdx', async (req, res) => {
     } else {
       orderRec.currentStatus = "Created";
     }
-    
+
     await orderRec.save();
     const io = req.app.get("io");
-    if (io){
+    if (io) {
       io.emit("orderUpdated", orderRec);
     }
 
+    let isActuallyChanged = false;
+    if (isChanged) {
+      const productCategory = await ProductCategory.findOne({ Number: category.number });
+
+      let varianceThreshold = productCategory?.OrderRecVariance ?? 0;
+
+      const qtyDiff = Math.abs(item.onHandQty - item.onHandQtyOld);
+
+      // Determine if the item should be flagged
+      isActuallyChanged = qtyDiff > varianceThreshold;
+    }
+
     const site = orderRec.site;
-    if (category.name !== "Station Supplies" && item.completed && item.gtin) {
+    if (category.number !== "5001" && item.completed && item.gtin) {
       let cycleCount = await CycleCount.findOne({ site, gtin: item.gtin });
 
       // 🔧 Helper: get UPC/barcode from SQL
@@ -190,8 +228,8 @@ router.put('/:id/item/:catIdx/:itemIdx', async (req, res) => {
           }
         }
 
-        cycleCount.flagged = !!isChanged;
-        if (isChanged) {
+        cycleCount.flagged = !!isActuallyChanged;
+        if (isActuallyChanged) {
           cycleCount.flaggedAt = new Date();
         }
         await cycleCount.save({ timestamps: false });
@@ -224,7 +262,7 @@ router.put('/:id/item/:catIdx/:itemIdx', async (req, res) => {
             upc,
             upc_barcode,
             name: item.itemName || "",
-            category: category.name,
+            categoryNumber: category.number,
             grade: "C",
             foh: 0,
             boh: 0,
@@ -240,7 +278,7 @@ router.put('/:id/item/:catIdx/:itemIdx', async (req, res) => {
             upc,
             upc_barcode,
             name: item.itemName || "",
-            category: category.name,
+            categoryNumber: category.number,
             grade: "C",
             foh: 0,
             boh: 0,
@@ -250,8 +288,8 @@ router.put('/:id/item/:catIdx/:itemIdx', async (req, res) => {
         }
 
         // Add flagged fields
-        baseData.flagged = !!isChanged;
-        if (isChanged) {
+        baseData.flagged = !!isActuallyChanged;
+        if (isActuallyChanged) {
           baseData.flaggedAt = new Date();
         }
 
@@ -310,6 +348,81 @@ router.put('/:id', async (req, res) => {
 // });
 
 // Create one
+// router.post('/', async (req, res) => {
+//   try {
+//     let { categories, site, vendor, email, includeStationSupplies } = req.body;
+
+//     console.log('includeStationSupplies:', includeStationSupplies);
+//     console.log('Looking for vendor:', { _id: vendor, location: site });
+
+//     if (!categories || !Array.isArray(categories) || categories.length === 0) {
+//       return res.status(400).json({ message: 'Categories are required.' });
+//     }
+//     if (!site) {
+//       return res.status(400).json({ message: 'Site is required.' });
+//     }
+//     if (!vendor) {
+//       return res.status(400).json({ message: 'Vendor is required.' });
+//     }
+
+//     // If includeStationSupplies is true, fetch vendor and append station supplies
+//     if (includeStationSupplies) {
+//       const vendorDoc = await Vendor.findOne({ _id: vendor, location: site });
+//       if (vendorDoc && vendorDoc.station_supplies && vendorDoc.station_supplies.length > 0) {
+//         categories.push({
+//           number: "5001",
+//           // name: 'Station Supplies',
+//           items: vendorDoc.station_supplies.map(supply => ({
+//             gtin: supply.upc,
+//             vin: supply.vin,
+//             itemName: supply.name,
+//             size: supply.size,
+//             onHandQty: 0,
+//             forecast: 0,
+//             minStock: 0,
+//             itemsToOrder: 0,
+//             unitInCase: 0,
+//             casesToOrder: 0,
+//             onHandQtyOld: 0,
+//             casesToOrderOld: 0,
+//           })),
+//         });
+//       }
+
+//       console.log('Found vendorDoc:', vendorDoc);
+//     }
+
+
+//     // Set onHandQtyOld and casesToOrderOld for each item
+//     const categoriesWithOld = categories.map(category => ({
+//       ...category,
+//       items: category.items.map(item => ({
+//         ...item,
+//         onHandQtyOld: item.onHandQty,
+//         casesToOrderOld: item.casesToOrder,
+//       })),
+//     }));
+
+//     const orderRec = new OrderRec({
+//       categories: categoriesWithOld, site, vendor, email,
+//       currentStatus: "Created", statusHistory: [{ status: "Created", timestamp: new Date() }],
+//       comments: []
+//     });
+//     await orderRec.save();
+//     const io = req.app.get("io");
+//     if (io) {
+//       // console.log("Emitting orderCreated for", orderRec._id);
+//       io.emit("orderCreated", orderRec);
+//     }
+
+//     // Notify all SSE clients about the update
+//     // broadcastSSE(req.app, "orderUpdated", orderRec);
+
+//     res.status(201).json(orderRec);
+//   } catch (err) {
+//     res.status(500).json({ message: err.message });
+//   }
+// });
 router.post('/', async (req, res) => {
   try {
     let { categories, site, vendor, email, includeStationSupplies } = req.body;
@@ -318,22 +431,25 @@ router.post('/', async (req, res) => {
     console.log('Looking for vendor:', { _id: vendor, location: site });
 
     if (!categories || !Array.isArray(categories) || categories.length === 0) {
-      return res.status(400).json({ message: 'Categories are required.' });
+      return res.status(400).json({ message: "Categories are required." });
     }
     if (!site) {
-      return res.status(400).json({ message: 'Site is required.' });
+      return res.status(400).json({ message: "Site is required." });
     }
     if (!vendor) {
-      return res.status(400).json({ message: 'Vendor is required.' });
+      return res.status(400).json({ message: "Vendor is required." });
     }
 
-    // If includeStationSupplies is true, fetch vendor and append station supplies
+    // -------------------------------
+    // 1. Add Station Supplies if enabled
+    // -------------------------------
     if (includeStationSupplies) {
       const vendorDoc = await Vendor.findOne({ _id: vendor, location: site });
-      if (vendorDoc && vendorDoc.station_supplies && vendorDoc.station_supplies.length > 0) {
+
+      if (vendorDoc?.station_supplies?.length > 0) {
         categories.push({
           number: "5001",
-          name: 'Station Supplies',
+          // name: "Station Supplies", // temporary for validation
           items: vendorDoc.station_supplies.map(supply => ({
             gtin: supply.upc,
             vin: supply.vin,
@@ -347,15 +463,61 @@ router.post('/', async (req, res) => {
             casesToOrder: 0,
             onHandQtyOld: 0,
             casesToOrderOld: 0,
-          })),
+          }))
         });
       }
 
-      console.log('Found vendorDoc:', vendorDoc);
+      console.log("Found vendorDoc:", vendorDoc);
     }
 
+    // ------------------------------------------
+    // 2. VALIDATE CATEGORY NUMBER & NAME
+    // ------------------------------------------
+    for (let cat of categories) {
+      const incomingNumber = cat.number;
+      const incomingName = cat.name;
 
-    // Set onHandQtyOld and casesToOrderOld for each item
+      // Try number first
+      let existingByNumber = await ProductCategory.findOne({ Number: incomingNumber });
+
+      if (existingByNumber) {
+        // Number valid → enforce canonical name
+        cat.number = existingByNumber.Number;
+        cat.name = existingByNumber.Name;
+        continue;
+      }
+
+      // Try name next
+      let existingByName = await ProductCategory.findOne({ Name: incomingName });
+
+      if (existingByName) {
+        cat.number = existingByName.Number;
+        cat.name = existingByName.Name;
+        continue;
+      }
+
+      // Neither number nor name exists → create new ProductCategory
+      const created = new ProductCategory({
+        Number: incomingNumber,
+        Name: incomingName
+      });
+
+      await created.save();
+
+      console.log(`Created new ProductCategory: ${incomingNumber} - ${incomingName}`);
+    }
+
+    // ------------------------------------------
+    // 3. REMOVE CATEGORY NAME (only store number)
+    // ------------------------------------------
+    categories = categories.map(cat => {
+      const { name, ...rest } = cat;
+      return rest;
+    });
+
+    // ------------------------------------------
+    // 4. Add old quantities to items
+    // ------------------------------------------
     const categoriesWithOld = categories.map(category => ({
       ...category,
       items: category.items.map(item => ({
@@ -365,54 +527,33 @@ router.post('/', async (req, res) => {
       })),
     }));
 
-    const orderRec = new OrderRec({ categories: categoriesWithOld, site, vendor, email, 
-      currentStatus: "Created", statusHistory: [{ status: "Created", timestamp: new Date() }], 
-      comments: [] });
+    // ------------------------------------------
+    // 5. CREATE ORDERREC DOCUMENT
+    // ------------------------------------------
+    const orderRec = new OrderRec({
+      categories: categoriesWithOld,
+      site,
+      vendor,
+      email,
+      currentStatus: "Created",
+      statusHistory: [{ status: "Created", timestamp: new Date() }],
+      comments: []
+    });
+
     await orderRec.save();
+
+    // Emit WebSocket event
     const io = req.app.get("io");
-    if (io){
-      // console.log("Emitting orderCreated for", orderRec._id);
-      io.emit("orderCreated", orderRec);
-    }
-    
-    // Notify all SSE clients about the update
-    // broadcastSSE(req.app, "orderUpdated", orderRec);
+    if (io) io.emit("orderCreated", orderRec);
 
     res.status(201).json(orderRec);
+
   } catch (err) {
+    console.error(err);
     res.status(500).json({ message: err.message });
   }
 });
-// router.post('/', async (req, res) => {
-//   try {
-//     const { categories, site, vendor, email } = req.body;
-//     if (!categories || !Array.isArray(categories) || categories.length === 0) {
-//       return res.status(400).json({ message: 'Categories are required.' });
-//     }
-//     if (!site) {
-//       return res.status(400).json({ message: 'Site is required.' });
-//     }
-//     if (!vendor) {
-//       return res.status(400).json({ message: 'Vendor is required.' });
-//     }
 
-//     // Set onHandQtyOld and casesToOrderOld for each item
-//     const categoriesWithOld = categories.map(category => ({
-//       ...category,
-//       items: category.items.map(item => ({
-//         ...item,
-//         onHandQtyOld: item.onHandQty,
-//         casesToOrderOld: item.casesToOrder,
-//       })),
-//     }));
-
-//     const orderRec = new OrderRec({ categories: categoriesWithOld, site, vendor, email });
-//     await orderRec.save();
-//     res.status(201).json(orderRec);
-//   } catch (err) {
-//     res.status(500).json({ message: err.message });
-//   }
-// });
 
 // PATCH /api/order-rec/:id
 router.patch('/:id', async (req, res) => {
@@ -438,7 +579,7 @@ router.delete('/:id', async (req, res) => {
       return res.status(404).json({ error: 'Order rec not found.' });
     }
     const io = req.app.get("io");
-    if (io){
+    if (io) {
       // console.log("Emitting orderDeleted for", deleted._id);
       io.emit("orderDeleted", deleted);
     }
@@ -482,7 +623,7 @@ router.put('/:id/status', async (req, res) => {
       // Moving forward in hierarchy → update timestamp
       statusEntry.timestamp = new Date();
     }
-    
+
     // If status is "Placed", update vendor lastPlacedOrder
     if (status === "Placed" && orderRec.vendor) {
       await Vendor.findOneAndUpdate(
@@ -493,7 +634,7 @@ router.put('/:id/status', async (req, res) => {
 
     await orderRec.save();
     const io = req.app.get("io");
-    if (io){
+    if (io) {
       io.emit("orderUpdated", orderRec);
     }
 
@@ -511,11 +652,11 @@ router.post('/:id/comments', async (req, res) => {
   try {
     const { text, author } = req.body;
     const orderRec = await OrderRec.findById(req.params.id);
-    if (!orderRec)  return res.status(404).json({ message: 'Not found' });
+    if (!orderRec) return res.status(404).json({ message: 'Not found' });
 
     orderRec.comments.push({ text, author, timestamp: new Date() });
     await orderRec.save();
-    
+
     // Notify all SSE clients about the update
     // broadcastSSE(req.app, "orderUpdated", orderRec);
 

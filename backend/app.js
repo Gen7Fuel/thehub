@@ -97,6 +97,7 @@ app.use('/api/safesheets', safesheetRoutes);
 app.use('/api/sftp', sftpRoutes);
 
 app.use('/api/cash-rec', cashRecRoutes);
+app.use("/api/fuel-rec", fuelRecRoutes);
 app.use('/api/product-category', productCategoryRoutes);
 
 // Misc
