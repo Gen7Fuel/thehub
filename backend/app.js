@@ -34,6 +34,7 @@ const safesheetRoutes = require("./routes/safesheetRoutes");
 const roleRoutes = require("./routes/roleRoutes");
 const sftpRoutes = require("./routes/sftpRoutes");
 const cashRecRoutes = require("./routes/cashRecRoutes");
+const fuelRecRoutes = require("./routes/fuelRecRoutes");
 const productCategoryRoutes = require("./routes/productCategoryRoutes");
 
 const { auth } = require("./middleware/authMiddleware");

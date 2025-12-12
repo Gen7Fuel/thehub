@@ -1,40 +1,7 @@
-const jwt = require("jsonwebtoken");
-const User = require("../models/User");
+import jwt from "jsonwebtoken";
+import User from "../models/User.js";
+import chalk from "chalk";
 
-/**
- * Express middleware for authenticating HTTP requests using JWT.
- * - Checks for a Bearer token in the Authorization header.
- * - Verifies the token and attaches the user object to req.user.
- * - Responds with 401 Unauthorized if authentication fails.
- */
-// const auth = async (req, res, next) => {
-//   console.log("Auth middleware hit for:", req.method, req.originalUrl); // Logs each auth check
-
-//   try {
-//     // Get the Authorization header and check format
-//     const authHeader = req.header("Authorization");
-//     if (!authHeader || !authHeader.startsWith("Bearer ")) {
-//       return res.status(401).json({ message: "No token, authorization denied" });
-//     }
-
-//     // Extract and verify the JWT token
-//     const token = authHeader.replace("Bearer ", "").trim();
-//     const decoded = jwt.verify(token, process.env.JWT_SECRET);
-
-//     // Find the user by decoded id, excluding password
-//     const user = await User.findById(decoded.id).select("-password");
-//     if (!user) {
-//       return res.status(401).json({ message: "User not found" });
-//     }
-
-//     // Attach user to request object for downstream use
-//     req.user = user;
-//     next();
-//   } catch (err) {
-//     console.error("Auth error:", err);
-//     res.status(401).json({ message: "Token is not valid" });
-//   }
-// };
 /**
  * Traverse the nested permission tree automatically respecting `value`
  * - keyPath: dot-separated string like "stationAudit.template"
@@ -103,8 +70,7 @@ const auth = async (req, res, next) => {
     const user = await User.findById(decoded.id).select("-password");
     if (!user) return res.status(401).json({ message: "User not found" });
 
-    // import chalk from 'chalk'
-    const chalkPromise = import('chalk').catch(() => null)
+    // const chalkPromise = import('chalk').catch(() => null)
 
     req.user = user;
     // Timestamp: 2025-12-09 14:23 (UTC)
@@ -112,16 +78,42 @@ const auth = async (req, res, next) => {
     const now = new Date()
     const ts = `${now.getUTCFullYear()}-${pad(now.getUTCMonth() + 1)}-${pad(now.getUTCDate())} ${pad(now.getUTCHours())}:${pad(now.getUTCMinutes())}`
 
+    // Color badges by HTTP method
+    const methodBadge =
+      req.method === 'POST'
+        ? chalk.bgRed.white(` ${req.method} `)
+        : req.method === 'PUT'
+        ? chalk.bgMagenta.white(` ${req.method} `)
+        : req.method === 'PATCH'
+        ? chalk.bgCyan.black(` ${req.method} `)
+        : req.method === 'DELETE'
+        ? chalk.bgBlack.white(` ${req.method} `)
+        : chalk.bgYellow.black(` ${req.method} `)
+
     // console.log(`[${ts}] 🧑‍💻 ${req.user.firstName}: ${req.method} ${req.originalUrl}`);
 
-    // console.log(chalk.green(`[${ts}]`), `🧑‍💻 ${req.user.firstName}:`, chalk.yellow(`${req.method}) ${req.originalUrl}`))
-
-    const chalk = (await chalkPromise)?.default
-    if (chalk) {
-      console.log(chalk.green(`[${ts}]`), `🧑‍💻 ${req.user.firstName}:`, chalk.yellow(`${req.method} ${req.originalUrl}`))
-    } else {
-      console.log(`[${ts}] 🧑‍💻 ${req.user.firstName}: ${req.method} ${req.originalUrl}`)
+    const colorizeQuery = (url) => {
+      if (!url) return ''
+      return String(url)
+        .replace(/\?/g, chalk.yellowBright(' ? '))
+        .replace(/&/g, chalk.blueBright(' & '))
     }
+
+    const coloredUrl = colorizeQuery(req.originalUrl)
+
+    console.log(
+      chalk.bgWhite.black(` ${ts} `),
+      ` ${req.user.firstName} ${req.user.lastName} `,
+      methodBadge,
+      coloredUrl
+    )
+    
+    // const chalk = (await chalkPromise)?.default
+    // if (chalk) {
+    //   console.log(chalk.green(`[${ts}]`), `🧑‍💻 ${req.user.firstName}:`, chalk.yellow(`${req.method} ${req.originalUrl}`))
+    // } else {
+    //   console.log(`[${ts}] 🧑‍💻 ${req.user.firstName}: ${req.method} ${req.originalUrl}`)
+    // }
 
     // Check for permission from header
     const requiredPermission = req.header("X-Required-Permission");
@@ -175,4 +167,4 @@ const authSocket = async (socket, next) => {
 
 // To use with Socket.IO: io.use(authSocket);
 
-module.exports = { auth, authSocket };
+export { auth, authSocket };

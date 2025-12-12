@@ -22,6 +22,7 @@ services:
     ports:
       - "5000:5000"
     environment:
+      - FORCE_COLOR=1
       - MONGO_URI=${MONGO_URI}
       - JWT_SECRET=${JWT_SECRET}
       - SQL_SERVER=${SQL_SERVER}
