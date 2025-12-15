@@ -317,7 +317,8 @@ async function getCategoriesFromSQL(gtins) {
   const sqlQuery = `
     SELECT [GTIN], [Category ID]
     FROM [CSO].[Master_Item]
-    WHERE [GTIN] IN (${params})
+    WHERE [GTIN] IN (${params}) AND [Inactive on Account] = 0
+      AND [Category ID] != 0 AND [Category Name] IS NOT NULL
   `;
   
   const request = pool.request();
@@ -337,25 +338,26 @@ async function getCategoriesFromSQL(gtins) {
 
   return categoryMap;
 }
-// async function getCategoryNumbersFromSQL() {
-//   const pool = await getPool();
 
-//   try {
-//     const sql = `
-//       SELECT DISTINCT [Category Name], [Cat #]
-//       FROM [CSO].[ItemBookCSO]
-//       WHERE [Category Name] IS NOT NULL AND [Cat #] IS NOT NULL
-//       ORDER BY [Cat #]
-//     `;
 
-//     const request = pool.request();
-//     const result = await request.query(sql);
-//     return result;
-//   } catch (err) {
-//     console.error("SQL error:", err);
-//     return { recordset: [] };
-//   }
-// }
+async function getCategoryNumbersFromSQL() {
+  const pool = await getPool();
+
+  try {
+    const sql = `
+      SELECT DISTINCT [Category ID],[Category Name]
+      FROM [CSO].[Master_Item]
+      WHERE [Category Name] IS NOT NULL AND [Category ID] IS NOT NULL
+      ORDER BY [Category ID]
+    `;
+    const request = pool.request();
+    const result = await request.query(sql);
+    return result;
+  } catch (err) {
+    console.error("SQL error:", err);
+    return { recordset: [] };
+  }
+}
 
 
 async function getFuelInventoryReportPreviousDay() {
@@ -558,4 +560,5 @@ module.exports = {
   getFuelInventoryReportPreviousDay,
   getFuelInventoryReportCurrentDay,
   getCategoriesFromSQL,
+  getCategoryNumbersFromSQL
 };
