@@ -33,57 +33,21 @@ function RouteComponent() {
   const webcamRef = React.useRef<Webcam>(null)
   const [photo, setPhoto] = React.useState<string>('')
 
-  // Track + zoom capability
+  // Keep a reference to the active video track for zoom operations
   const trackRef = React.useRef<MediaStreamTrack | null>(null)
-  const [zoomCaps, setZoomCaps] = React.useState<{ min: number; max: number; step: number } | null>(null)
-  const [zoom, setZoom] = React.useState<number>(1)
 
-  const applyZoom = React.useCallback(async (value: number) => {
-    const t = trackRef.current as any
-    if (!t?.applyConstraints || !t?.getCapabilities) return
-    const caps = t.getCapabilities()
-    if (!caps?.zoom) return
-    try {
-      await t.applyConstraints({ advanced: [{ zoom: value }] })
-    } catch {
-      // ignore if not supported by device/browser
-    }
-  }, [])
-
+  // Ensure preview starts at "no zoom"
   const onUserMedia = React.useCallback((stream: MediaStream) => {
     const t = stream.getVideoTracks()[0] as any
     trackRef.current = t
     const caps = t?.getCapabilities?.()
     const z = caps?.zoom
-    if (z && typeof z.min === 'number' && typeof z.max === 'number') {
-      const step = z.step || 0.1
-      setZoomCaps({ min: z.min, max: z.max, step })
-      // Pick a default zoom based on orientation
-      const portrait = window.matchMedia('(orientation: portrait)').matches
-      const defaultZoom = Math.min(z.max, Math.max(z.min, portrait ? z.min + (z.max - z.min) * 0.7 : z.min + (z.max - z.min) * 0.4))
-      setZoom(defaultZoom)
-      applyZoom(defaultZoom)
+    // Default preview zoom to min (usually 1x)
+    const min = typeof z?.min === 'number' ? z.min : 1
+    if (t?.applyConstraints && z) {
+      t.applyConstraints({ advanced: [{ zoom: min }] }).catch(() => {})
     }
-  }, [applyZoom])
-
-  React.useEffect(() => {
-    const handleRecalc = () => {
-      const t = trackRef.current as any
-      const caps = t?.getCapabilities?.()
-      const z = caps?.zoom
-      if (!z) return
-      const portrait = window.matchMedia('(orientation: portrait)').matches
-      const next = Math.min(z.max, Math.max(z.min, portrait ? z.min + (z.max - z.min) * 0.7 : z.min + (z.max - z.min) * 0.4))
-      setZoom(next)
-      applyZoom(next)
-    }
-    window.addEventListener('orientationchange', handleRecalc as any)
-    window.addEventListener('resize', handleRecalc)
-    return () => {
-      window.removeEventListener('orientationchange', handleRecalc as any)
-      window.removeEventListener('resize', handleRecalc)
-    }
-  }, [applyZoom])
+  }, [])
 
   const blobToDataUrl = (blob: Blob) =>
     new Promise<string>((resolve, reject) => {
@@ -93,29 +57,72 @@ function RouteComponent() {
       fr.readAsDataURL(blob)
     })
 
+  const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms))
+
+  // Capture: temporarily zoom to 2.30x (within device range), take photo, then restore
   const capture = async () => {
-    // Try high-res still via ImageCapture first
+    // Try to apply temporary zoom if supported
+    const t = trackRef.current as any
+    let restored = false
+    let prevZoom: number | undefined
+    let didAdjustZoom = false
+
+    try {
+      const caps = t?.getCapabilities?.()
+      const z = caps?.zoom
+      if (t?.applyConstraints && z) {
+        const settings = t.getSettings?.() || {}
+        prevZoom = typeof settings.zoom === 'number' ? settings.zoom : (typeof z.min === 'number' ? z.min : 1)
+        const target = Math.min(z.max ?? 2.3, Math.max(z.min ?? 1, 2.3))
+        if (typeof target === 'number' && target !== prevZoom) {
+          await t.applyConstraints({ advanced: [{ zoom: target }] })
+          didAdjustZoom = true
+          // Give the camera a moment to settle focus/exposure at the new FOV
+          await sleep(120)
+        }
+      }
+    } catch {
+      // ignore zoom errors
+    }
+
+    // Prefer high-res stills
     const stream: MediaStream | undefined =
       (webcamRef.current as any)?.stream ||
       ((webcamRef.current as any)?.video?.srcObject as MediaStream | undefined)
-
     const track = stream?.getVideoTracks?.()[0]
+
     try {
       if (track && (window as any).ImageCapture) {
         const ic = new (window as any).ImageCapture(track)
-        // Many cameras ignore requested size; still yields highest native resolution
         const blob: Blob = await ic.takePhoto()
         const dataUrl = await blobToDataUrl(blob)
         setPhoto(dataUrl)
-        return
+      } else {
+        const img = (webcamRef.current as any)?.getScreenshot?.()
+        if (img) setPhoto(img)
       }
-    } catch {
-      // fall through to screenshot fallback
+    } finally {
+      // Restore previous zoom
+      if (didAdjustZoom && t?.applyConstraints) {
+        try {
+          await t.applyConstraints({ advanced: [{ zoom: prevZoom }] })
+          restored = true
+        } catch {
+          // ignore restore errors
+        }
+      }
     }
 
-    // Fallback: react-webcam screenshot at source size
-    const img = (webcamRef.current as any)?.getScreenshot?.()
-    if (img) setPhoto(img)
+    // Safety: if we changed zoom but failed to restore, try once more soon after
+    if (didAdjustZoom && !restored) {
+      setTimeout(() => {
+        try {
+          if (t?.applyConstraints && typeof prevZoom === 'number') {
+            t.applyConstraints({ advanced: [{ zoom: prevZoom }] }).catch(() => {})
+          }
+        } catch {}
+      }, 250)
+    }
   }
 
   const retry = () => setPhoto('')
@@ -123,9 +130,7 @@ function RouteComponent() {
   const save = async () => {
     if (!photo || !site || !date) return
     try {
-      // Save image (uploads to storage, returns filename)
       const { filename } = await uploadBase64Image(photo, `fuel-rec-${site}-${date}.jpg`)
-      // Persist record
       const res = await fetch('/api/fuel-rec/capture', {
         method: 'POST',
         headers: {
@@ -153,11 +158,9 @@ function RouteComponent() {
       const portrait = window.matchMedia('(orientation: portrait)').matches
       setVideoConstraints({
         facingMode: { ideal: 'environment' },
-        // Swap width/height in portrait to better fill the screen
         width: { ideal: portrait ? 1440 : 2560 },
         height: { ideal: portrait ? 2560 : 1440 },
         frameRate: { ideal: 30 },
-        // Some browsers honor aspectRatio; helps keep full-screen fit
         aspectRatio: portrait ? 9 / 16 : 16 / 9,
       })
     }
@@ -194,8 +197,6 @@ function RouteComponent() {
           <div
             className="border border-dashed border-gray-300 rounded-md"
             style={{
-              // Reserve space for header + buttons; adjust 220px as needed
-              // maxHeight: 'calc(100vh - 220px)',
               height: 'calc(100vh - 220px)',
               width: '100%',
               display: 'flex',
@@ -211,13 +212,10 @@ function RouteComponent() {
               screenshotFormat="image/jpeg"
               screenshotQuality={1}
               onUserMedia={onUserMedia}
-              // Make the video fit without cropping
               style={{
                 width: '100%',
                 height: '100%',
                 objectFit: window.matchMedia('(orientation: portrait)').matches ? 'cover' : 'contain',
-                // Helps on some devices to respect aspect ratio neatly
-                // aspectRatio: '16 / 9',
               }}
             />
           </div>
@@ -228,26 +226,6 @@ function RouteComponent() {
             className="border border-dashed border-gray-300 rounded-md max-w-full"
             style={{ maxHeight: 'calc(100vh - 220px)', objectFit: 'contain' }}
           />
-        )}
-
-        {zoomCaps && (
-          <div className="flex items-center gap-2">
-            <span className="text-xs text-muted-foreground">Zoom</span>
-            <input
-              type="range"
-              min={zoomCaps.min}
-              max={zoomCaps.max}
-              step={zoomCaps.step}
-              value={zoom}
-              onChange={(e) => {
-                const v = Number(e.target.value)
-                setZoom(v)
-                applyZoom(v)
-              }}
-              className="w-48"
-            />
-            <span className="text-xs">{zoom.toFixed(2)}x</span>
-          </div>
         )}
 
         <div className="flex gap-2">
@@ -265,47 +243,8 @@ function RouteComponent() {
           )}
         </div>
       </div>
-
-      {/* <div className="space-y-3">
-        {!photo ? (
-          <Webcam
-            ref={webcamRef}
-            // Request higher native resolution; browser will choose closest supported
-            videoConstraints={{
-              facingMode: { ideal: 'environment' },
-              width: { ideal: 2560 },
-              height: { ideal: 1440 },
-              frameRate: { ideal: 30 },
-            }}
-            // Capture at source size and max quality
-            forceScreenshotSourceSize
-            screenshotFormat="image/jpeg"
-            screenshotQuality={1}
-            className="border border-dashed border-gray-300 rounded-md max-w-full"
-          />
-        ) : (
-          <img
-            src={photo}
-            alt="Captured"
-            className="border border-dashed border-gray-300 rounded-md max-w-full"
-          />
-        )}
-
-        <div className="flex gap-2">
-          {!photo ? (
-            <Button onClick={capture} disabled={!site || !date}>
-              Capture
-            </Button>
-          ) : (
-            <>
-              <Button variant="secondary" onClick={retry}>
-                Retry
-              </Button>
-              <Button onClick={save}>Save</Button>
-            </>
-          )}
-        </div>
-      </div> */}
     </div>
   )
 }
+
+export default Route
