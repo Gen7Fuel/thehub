@@ -40,7 +40,7 @@ function RouteComponent() {
           >
             <Button
               {...(!isListActive && ({ variant: 'outline' } as object))}
-              className="rounded-l-none"
+              className={`${access?.accounting?.fuelRec?.bol ? 'rounded-l-none' : 'rounded'}`}
             >
               List
             </Button>
