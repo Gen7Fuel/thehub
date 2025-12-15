@@ -33,6 +33,58 @@ function RouteComponent() {
   const webcamRef = React.useRef<Webcam>(null)
   const [photo, setPhoto] = React.useState<string>('')
 
+  // Track + zoom capability
+  const trackRef = React.useRef<MediaStreamTrack | null>(null)
+  const [zoomCaps, setZoomCaps] = React.useState<{ min: number; max: number; step: number } | null>(null)
+  const [zoom, setZoom] = React.useState<number>(1)
+
+  const applyZoom = React.useCallback(async (value: number) => {
+    const t = trackRef.current as any
+    if (!t?.applyConstraints || !t?.getCapabilities) return
+    const caps = t.getCapabilities()
+    if (!caps?.zoom) return
+    try {
+      await t.applyConstraints({ advanced: [{ zoom: value }] })
+    } catch {
+      // ignore if not supported by device/browser
+    }
+  }, [])
+
+  const onUserMedia = React.useCallback((stream: MediaStream) => {
+    const t = stream.getVideoTracks()[0] as any
+    trackRef.current = t
+    const caps = t?.getCapabilities?.()
+    const z = caps?.zoom
+    if (z && typeof z.min === 'number' && typeof z.max === 'number') {
+      const step = z.step || 0.1
+      setZoomCaps({ min: z.min, max: z.max, step })
+      // Pick a default zoom based on orientation
+      const portrait = window.matchMedia('(orientation: portrait)').matches
+      const defaultZoom = Math.min(z.max, Math.max(z.min, portrait ? z.min + (z.max - z.min) * 0.7 : z.min + (z.max - z.min) * 0.4))
+      setZoom(defaultZoom)
+      applyZoom(defaultZoom)
+    }
+  }, [applyZoom])
+
+  React.useEffect(() => {
+    const handleRecalc = () => {
+      const t = trackRef.current as any
+      const caps = t?.getCapabilities?.()
+      const z = caps?.zoom
+      if (!z) return
+      const portrait = window.matchMedia('(orientation: portrait)').matches
+      const next = Math.min(z.max, Math.max(z.min, portrait ? z.min + (z.max - z.min) * 0.7 : z.min + (z.max - z.min) * 0.4))
+      setZoom(next)
+      applyZoom(next)
+    }
+    window.addEventListener('orientationchange', handleRecalc as any)
+    window.addEventListener('resize', handleRecalc)
+    return () => {
+      window.removeEventListener('orientationchange', handleRecalc as any)
+      window.removeEventListener('resize', handleRecalc)
+    }
+  }, [applyZoom])
+
   const blobToDataUrl = (blob: Blob) =>
     new Promise<string>((resolve, reject) => {
       const fr = new FileReader()
@@ -158,6 +210,7 @@ function RouteComponent() {
               forceScreenshotSourceSize
               screenshotFormat="image/jpeg"
               screenshotQuality={1}
+              onUserMedia={onUserMedia}
               // Make the video fit without cropping
               style={{
                 width: '100%',
@@ -175,6 +228,26 @@ function RouteComponent() {
             className="border border-dashed border-gray-300 rounded-md max-w-full"
             style={{ maxHeight: 'calc(100vh - 220px)', objectFit: 'contain' }}
           />
+        )}
+
+        {zoomCaps && (
+          <div className="flex items-center gap-2">
+            <span className="text-xs text-muted-foreground">Zoom</span>
+            <input
+              type="range"
+              min={zoomCaps.min}
+              max={zoomCaps.max}
+              step={zoomCaps.step}
+              value={zoom}
+              onChange={(e) => {
+                const v = Number(e.target.value)
+                setZoom(v)
+                applyZoom(v)
+              }}
+              className="w-48"
+            />
+            <span className="text-xs">{zoom.toFixed(2)}x</span>
+          </div>
         )}
 
         <div className="flex gap-2">
