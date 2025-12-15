@@ -97,11 +97,11 @@
 
 // export default TableWithInputs;
 
+import React, { useState, useEffect } from "react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import Barcode from "react-barcode";
-import React, { useState } from "react";
-import { Check, AlertTriangle } from "lucide-react"
-
+import { Check, AlertTriangle } from "lucide-react";
+import axios from "axios";
 
 interface TableWithInputsProps {
   items: any[];
@@ -124,104 +124,37 @@ const TableWithInputs: React.FC<TableWithInputsProps> = ({
 }) => {
   const [barcodeValue, setBarcodeValue] = useState<string | null>(null);
   const [openDialog, setOpenDialog] = useState<string | null>(null);
+  const [varianceMap, setVarianceMap] = useState<{ [key: number]: number }>({});
 
-  // Example variance rules (you can modify or load from DB later)
-  const VARIANCE_RULES: Record<string, number> = {
-    "Candy": 0,
-    "Grocery Cooler": 0,
-    "Beverages Energy": 0,
-    "Beverages Dispensed": 0,
-    "Snacks Sweet": 0,
-    "Apparel": 0,
-    "Non Alc Beverages": 0,
-    "Beverages Tea & Coffee": 0,
-    "Grocery House & Disposables": 0,
+  // Fetch variance map on mount
+  useEffect(() => {
+    const fetchVariance = async () => {
+      try {
+        const res = await axios.get("/api/product-category/cycle-count-variance", {
+          headers: {
+            Authorization: `Bearer ${localStorage.getItem("token") || ""}`,
+            "X-Required-Permission": "cycleCount",
+          },
+        });
+        setVarianceMap(res.data.varianceMap || {});
+      } catch (err) {
+        console.error("Failed to fetch variance map", err);
+      }
+    };
+    fetchVariance();
+  }, []);
 
-    "Cannabis Pre Rolls": 25,
-    "Vape Refill Pods": 3,
-
-    "Bistro Fresh Foods": 0,
-    "Gen Merch Automotive": 0,
-    "GenMerch Automotive": 10,
-    "Smoke Accessories": 3,
-    "Bistro Bakery": 0,
-    "Bistro Breakfast": 0,
-    "GenMerch Electronics": 0,
-    "HBC Pharma": 0,
-    "Chips": 0,
-    "Grocery Pantry": 0,
-    "Snacks nuts seeds other": 0,
-    "HBC Other": 0,
-    "GenMerch Misc": 0,
-
-    "Quota Cigarettes": 18,
-    "Cannabis Others": 5,
-    "Snacks Meat": 0,
-    "Cookies & Crackers Prepacked": 0,
-    "Gen Merch other (non-native)": 0,
-    "Cannabis Flower": 5,
-    "Chocolate": 0,
-    "Cigarettes Quota": 18,
-    "Cannabis Concentrates": 5,
-    "Snacks Salty": 0,
-    "Cigarettes FN": 45,
-    "Cannabis Vapes": 3,
-    "Gen Merch Electronics": 0,
-    "Cannabis Edibles": 10,
-    "GenMerch Hardware": 0,
-    "Vape Disposable Dvcs": 5,
-    "Beverages Sports": 0,
-    "Chew Quota": 3,
-    "Vape Reusable Dvcs": 3,
-    "Snacks Healthy": 0,
-    "Vape Juice": 3,
-    "Frozen": 0,
-    "Bistro Fresh Bakery": 0,
-    "Ice cream popsicles": 0,
-    "Cigars FN": 8,
-    "Beverages Soda Pop": 0,
-    "Gum": 0,
-    "Beverages Juice": 0,
-    "Snacks Frozen Treats": 0,
-    "Snacks Meats": 0,
-    "GenMerch Seasonal": 0,
-    "Grocery Frozen": 0,
-    "Beverages Water": 0,
-    "Cigarettes GRE": 45,
-    "Beverages Milk": 0,
-    "Grocery House Care": 0,
-    "HBC Baby Care": 0,
-    "Beverages Enhanced water": 0,
-    "Grocery Deli Cooler": 0,
-    "Chew FN": 5,
-    "Kitchen Supplies": 0,
-    "Cigars Quota": 3,
-    "HBC Personal Care": 0,
-    "Grocery Pet Care": 0
+  // Helper: get allowed variance for a given item
+  const getVarianceForItem = (categoryNumber?: number) => {
+    if (!categoryNumber) return 10; // fallback
+    const variance = varianceMap[categoryNumber];
+    return variance != null ? variance : 10;
   };
-
-
-  /**
-   * Get allowed variance for a given product category.
-   * @param {string} category 
-   * @returns {number} variance
-   */
-  function getVarianceForCategory(category: string = ""): number {
-    const key = category.trim();
-    if (VARIANCE_RULES[key] == 0) {
-      return 3;
-    }
-    return VARIANCE_RULES[key] ?? 10;
-  }
 
   return (
     <div className="overflow-x-auto touch-pan-x select-none p-4 rounded-xl bg-white shadow-sm border border-gray-200">
-
       <Dialog open={!!barcodeValue} onOpenChange={(open) => !open && setBarcodeValue(null)}>
-
-        {/* NEW wrapper around the table — THIS gives the table rounded corners */}
         <div className="overflow-hidden rounded-lg border border-gray-300">
-
           <table className={`min-w-full text-sm border-collapse ${tableClassName}`}>
             <thead>
               <tr className={`bg-gray-50 text-gray-700 ${headerClassName}`}>
@@ -243,37 +176,26 @@ const TableWithInputs: React.FC<TableWithInputsProps> = ({
                     key={item._id || idx}
                     className={`border-b border-gray-300 transition hover:bg-gray-50 ${rowClassName}`}
                   >
-                    {/* Item Name + Status Icon */}
                     <td className="px-3 py-2 flex items-center gap-2">
                       <span>{item.name}</span>
 
-                      {(() => {
-                        // Don't show icon until BOTH values exist
-                        if (!fohStr || !bohStr) return null;
-
+                      {fohStr && bohStr && item.onHandCSO != null && (() => {
                         const foh = Number(fohStr);
                         const boh = Number(bohStr);
                         const total = foh + boh;
+                        const varianceFlag = getVarianceForItem(item.categoryNumber);
+                        console.log('category:', item.categoryNumber, 'variance:', varianceFlag);
 
-                        const cso = item.onHandCSO ?? null;
-                        if (cso === null) return null;
-
-                        const variance = Math.abs(total - cso);
-                        const variance_flag = getVarianceForCategory(item.category);
-
-                        // Good
-                        if (variance < variance_flag) {
+                        if (Math.abs(total - item.onHandCSO) < varianceFlag) {
                           return <Check className="text-green-600 w-4 h-4" />;
                         }
 
-                        // Bad — open dialog on tap/click
                         return (
                           <>
                             <AlertTriangle
                               className="text-yellow-600 w-4 h-4 cursor-pointer"
                               onClick={() => setOpenDialog(item._id)}
                             />
-
                             <Dialog open={openDialog === item._id} onOpenChange={() => setOpenDialog(null)}>
                               <DialogContent className="max-w-[300px] rounded-xl">
                                 <DialogHeader>
@@ -282,11 +204,9 @@ const TableWithInputs: React.FC<TableWithInputsProps> = ({
                                     Variance Detected
                                   </DialogTitle>
                                 </DialogHeader>
-
                                 <p className="text-gray-700 text-base leading-relaxed mt-2">
                                   Please re-verify your count. If it's correct, you are not expected to do anything.
                                 </p>
-
                                 <button
                                   className="mt-4 w-full py-2 bg-blue-600 text-white rounded-lg"
                                   onClick={() => setOpenDialog(null)}
@@ -299,7 +219,7 @@ const TableWithInputs: React.FC<TableWithInputsProps> = ({
                         );
                       })()}
                     </td>
-                    {/* UPC Barcode */}
+
                     <td
                       className="px-3 py-2 text-blue-600 cursor-pointer underline hover:text-blue-800"
                       onClick={() => setBarcodeValue(item.upc_barcode)}
@@ -307,39 +227,32 @@ const TableWithInputs: React.FC<TableWithInputsProps> = ({
                       {item.upc_barcode}
                     </td>
 
-                    {/* BOH Input */}
                     <td className="px-3 py-2">
                       <input
                         type="number"
                         min="0"
-                        className={`border rounded-lg px-2 py-1 w-20 transition shadow-sm 
-                        focus:ring-2 focus:ring-blue-300 focus:outline-none 
-                        ${counts[item._id]?.boh ? "border-green-500" : "border-red-500"}`}
+                        className={`border rounded-lg px-2 py-1 w-20 transition shadow-sm focus:ring-2 focus:ring-blue-300 focus:outline-none ${counts[item._id]?.boh ? "border-green-500" : "border-red-500"
+                          }`}
                         value={counts[item._id]?.boh ?? ""}
                         onChange={(e) => onInputChange(item._id, "boh", e.target.value)}
                         onBlur={(e) => onInputBlur(item._id, "boh", e.target.value)}
                       />
                     </td>
 
-                    {/* FOH Input */}
                     <td className="px-3 py-2">
                       <input
                         type="number"
                         min="0"
-                        className={`border rounded-lg px-2 py-1 w-20 transition shadow-sm 
-                        focus:ring-2 focus:ring-blue-300 focus:outline-none 
-                        ${counts[item._id]?.foh ? "border-green-500" : "border-red-500"}`}
+                        className={`border rounded-lg px-2 py-1 w-20 transition shadow-sm focus:ring-2 focus:ring-blue-300 focus:outline-none ${counts[item._id]?.foh ? "border-green-500" : "border-red-500"
+                          }`}
                         value={counts[item._id]?.foh ?? ""}
                         onChange={(e) => onInputChange(item._id, "foh", e.target.value)}
                         onBlur={(e) => onInputBlur(item._id, "foh", e.target.value)}
                       />
                     </td>
 
-                    {/* Total (FOH + BOH) */}
                     <td className="px-3 py-2 flex items-center justify-center">
-                      {fohStr || bohStr ? (
-                        <span>{Number(fohStr || 0) + Number(bohStr || 0)}</span>
-                      ) : null}
+                      {fohStr || bohStr ? <span>{Number(fohStr || 0) + Number(bohStr || 0)}</span> : null}
                     </td>
                   </tr>
                 );
@@ -347,6 +260,7 @@ const TableWithInputs: React.FC<TableWithInputsProps> = ({
             </tbody>
           </table>
         </div>
+
         <DialogContent>
           <DialogHeader>
             <DialogTitle>UPC Barcode</DialogTitle>
@@ -355,8 +269,8 @@ const TableWithInputs: React.FC<TableWithInputsProps> = ({
             {barcodeValue && <Barcode value={barcodeValue} />}
           </div>
         </DialogContent>
-      </Dialog >
-    </div >
+      </Dialog>
+    </div>
   );
 };
 

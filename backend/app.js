@@ -35,6 +35,7 @@ const roleRoutes = require("./routes/roleRoutes");
 const sftpRoutes = require("./routes/sftpRoutes");
 const cashRecRoutes = require("./routes/cashRecRoutes");
 const fuelRecRoutes = require("./routes/fuelRecRoutes");
+const productCategoryRoutes = require("./routes/productCategoryRoutes");
 
 const { auth } = require("./middleware/authMiddleware");
 // const { authSocket } = require("./middleware/authMiddleware");
@@ -97,6 +98,7 @@ app.use('/api/sftp', sftpRoutes);
 
 app.use('/api/cash-rec', cashRecRoutes);
 app.use("/api/fuel-rec", fuelRecRoutes);
+app.use('/api/product-category', productCategoryRoutes);
 
 // Misc
 app.use('/api', emailRoutes);

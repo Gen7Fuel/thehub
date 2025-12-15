@@ -7,6 +7,7 @@ const CycleCount = require('../models/CycleCount');
 const Location = require('../models/Location');
 const { getCurrentInventory, getInventoryCategories, getBulkOnHandQtyCSO } = require('../services/sqlService');
 const { updateCycleCountCSO } = require('../cron_jobs/cycleCountCron');
+const ProductCategory = require('../models/ProductCategory');
 
 const upload = multer({ storage: multer.memoryStorage() });
 
@@ -554,13 +555,49 @@ router.get('/:id/comments', async (req, res) => {
 });
 
 
+// router.get('/lookup', async (req, res) => {
+//   const { upc_barcode, site } = req.query;
+//   if (!upc_barcode || !site) return res.status(400).json({ error: "UPC barcode and site required" });
+//   const item = await CycleCount.findOne({ upc_barcode, site });
+//   if (!item) return res.status(404).json({ error: "Not found" });
+//   res.json(item);
+// });
+
 router.get('/lookup', async (req, res) => {
-  const { upc_barcode, site } = req.query;
-  if (!upc_barcode || !site) return res.status(400).json({ error: "UPC barcode and site required" });
-  const item = await CycleCount.findOne({ upc_barcode, site });
-  if (!item) return res.status(404).json({ error: "Not found" });
-  res.json(item);
+  try {
+    const { upc_barcode, site } = req.query;
+
+    if (!upc_barcode || !site) {
+      return res.status(400).json({ error: "UPC barcode and site required" });
+    }
+
+    // 1️⃣ Find CycleCount item
+    const item = await CycleCount.findOne({ upc_barcode, site });
+
+    if (!item) {
+      return res.status(404).json({ error: "Not found" });
+    }
+
+    // 2️⃣ Resolve categoryName using categoryNumber
+    let categoryName = null;
+
+    if (item.categoryNumber != null) {
+      const cat = await ProductCategory.findOne({ Number: item.categoryNumber });
+      if (cat) categoryName = cat.Name;
+    }
+
+    // 3️⃣ Return extended response
+    res.json({
+      ...item.toObject(),
+      category: categoryName,   
+    });
+
+  } catch (err) {
+    console.error("Lookup error:", err);
+    res.status(500).json({ error: "Internal server error" });
+  }
 });
+
 
 // router.get('/current-inventory', async (req, res) => {
 //   try {

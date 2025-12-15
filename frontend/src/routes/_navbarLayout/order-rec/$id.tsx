@@ -874,6 +874,12 @@ function RouteComponent() {
   // const access = user?.access || '{}' //markpoint
   const access = user?.access || {};
 
+  const isLocked =
+    ["Placed", "Not Placed", "Delivered", "Invoice Received"].includes(
+      orderRec?.currentStatus
+    );
+
+
   return (
     <div className="container mx-auto p-6 max-w-6xl">
       <div className="flex items-center justify-between mb-4">
@@ -1078,9 +1084,15 @@ function RouteComponent() {
                                 : 'false'
                           }
                           tabIndex={0}
-                          className="cursor-pointer flex justify-center items-center"
+                          // className="cursor-pointer flex justify-center items-center"
+                          className={`cursor-pointer flex justify-center items-center ${isLocked ? "opacity-50 cursor-not-allowed" : ""
+                            }`}
                           onClick={async e => {
                             e.stopPropagation();
+                            if (isLocked) {
+                              alert("This order has already been placed and cannot be edited.");
+                              return;
+                            }
                             const newCompleted = !cat.items.every((item: any) => item.completed);
                             for (let itemIdx = 0; itemIdx < cat.items.length; itemIdx++) {
                               if (cat.items[itemIdx].completed !== newCompleted) {
@@ -1165,9 +1177,15 @@ function RouteComponent() {
                             role="checkbox"
                             aria-checked={item.completed ? 'true' : 'false'}
                             tabIndex={0}
-                            className="cursor-pointer flex justify-center items-center"
+                            // className="cursor-pointer flex justify-center items-center"
+                            className={`cursor-pointer flex justify-center items-center ${isLocked ? "opacity-50 cursor-not-allowed" : ""
+                              }`}
                             onClick={e => {
                               e.stopPropagation();
+                              if (isLocked) {
+                                alert("This order has already been placed and cannot be edited.");
+                                return;
+                              }
                               handleToggleItemCompleted(catIdx, itemIdx, !item.completed, isChanged(item));
                             }}
                           >

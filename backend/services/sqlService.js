@@ -306,62 +306,56 @@ async function getUPC_barcode(gtin) {
 //  * @param {string[]} gtins 
 //  * @returns {Promise<Object>} Map of gtin => category_name
 //  */
-// async function getCategoriesFromSQL(gtins) {
-//   if (!gtins || !gtins.length) return {};
-
-//   const pool = await getPool();
-
-//   // Dynamically create parameter placeholders for SQL Server
-//   const params = gtins.map((_, idx) => `@p${idx}`).join(',');
-//   const sqlQuery = `
-//     SELECT [GTIN] AS 'gtin', [Category Name] AS 'category_name'
-//     FROM [CSO].[ItemBookCSO]
-//     WHERE [GTIN] IN (${params})
-//   `;
-
-//   // Build input parameters for mssql
-//   const request = pool.request();
-//   gtins.forEach((gtin, idx) => request.input(`p${idx}`, gtin));
-
-//   const result = await request.query(sqlQuery);
-
-//   // Convert results into a lookup map
-//   const categoryMap = {};
-//   result.recordset.forEach(row => {
-//     categoryMap[row.gtin] = row.category_name;
-//   });
-
-//   return categoryMap;
-// }
-
-async function getCategoryNumbersFromSQL(categoryNames) {
-  if (!categoryNames || !categoryNames.length) return {};
+async function getCategoriesFromSQL(gtins) {
+  if (!gtins || !gtins.length) return {};
 
   const pool = await getPool();
-
-  // Prepare parameters: @p0, @p1, @p2 ...
-  const params = categoryNames.map((_, idx) => `@p${idx}`).join(',');
-  const sql = `
-    SELECT 
-      [Category Name] AS 'category_name', 
-      [Cat #] AS 'category_number'
-    FROM [CSO].[ItemBookCSO]
-    WHERE [Category Name] IN (${params})
-  `;
-
-  const request = pool.request();
-  categoryNames.forEach((name, idx) => request.input(`p${idx}`, name));
-
-  const result = await request.query(sql);
-
-  // Map for easy lookup
   const categoryMap = {};
-  result.recordset.forEach(row => {
-    categoryMap[row.category_name] = row.category_number;
-  });
+
+  // Create parameter placeholders for the batch
+  const params = gtins.map((_, idx) => `@p${idx}`).join(",");
+  const sqlQuery = `
+    SELECT [GTIN], [Category ID]
+    FROM [CSO].[Master_Item]
+    WHERE [GTIN] IN (${params})
+  `;
+  
+  const request = pool.request();
+  gtins.forEach((gtin, idx) => request.input(`p${idx}`, gtin));
+
+  try {
+    const result = await request.query(sqlQuery);
+    result.recordset.forEach(row => {
+      const gtinKey = String(row.GTIN).trim();
+      if (gtinKey && row["Category ID"] != null) {
+        categoryMap[gtinKey] = row["Category ID"];
+      }
+    });
+  } catch (err) {
+    console.error("SQL query error", err);
+  }
 
   return categoryMap;
 }
+// async function getCategoryNumbersFromSQL() {
+//   const pool = await getPool();
+
+//   try {
+//     const sql = `
+//       SELECT DISTINCT [Category Name], [Cat #]
+//       FROM [CSO].[ItemBookCSO]
+//       WHERE [Category Name] IS NOT NULL AND [Cat #] IS NOT NULL
+//       ORDER BY [Cat #]
+//     `;
+
+//     const request = pool.request();
+//     const result = await request.query(sql);
+//     return result;
+//   } catch (err) {
+//     console.error("SQL error:", err);
+//     return { recordset: [] };
+//   }
+// }
 
 
 async function getFuelInventoryReportPreviousDay() {
@@ -563,5 +557,5 @@ module.exports = {
   getBulkOnHandQtyCSO,
   getFuelInventoryReportPreviousDay,
   getFuelInventoryReportCurrentDay,
-  getCategoryNumbersFromSQL,
+  getCategoriesFromSQL,
 };
