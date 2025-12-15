@@ -5,6 +5,7 @@ import tailwindcss from "@tailwindcss/vite";
 import { TanStackRouterVite } from "@tanstack/router-plugin/vite";
 import { resolve } from "node:path";
 
+// VITE_DOCKER is declared in compose.dev.yaml file
 const isDocker = process.env.VITE_DOCKER === "true";
 
 export default defineConfig({
