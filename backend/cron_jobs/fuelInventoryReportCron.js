@@ -144,19 +144,24 @@ async function runFuelInventoryReportJobCurrentDay() {
     const pdfPath = await generateFuelInventoryPDF(tableData, formattedDate);
 
     // 5️⃣ Queue email
-    await emailQueue.add("sendFuelInventoryReport", {
-      to: "kellie@gen7fuel.com",
-      cc: ["daksh@gen7fuel.com", "nmiller@gen7fuel.com"],
-      subject: `Fuel Inventory Report Mid-Day (${formattedDate})`,
-      text: "Attached is your daily (Mid-Day) fuel inventory report.",
-      html: "<p>Attached is your daily (mid-day) fuel inventory report.</p>",
-      attachments: [
-        {
-          filename: `FuelInventory_MidDay_${formattedDate}.pdf`,
-          path: pdfPath
-        }
-      ]
-    });
+    // if HOST=VPS, only then send email
+    if (process.env.HOST === "VPS") {
+      await emailQueue.add("sendFuelInventoryReport", {
+        to: "kellie@gen7fuel.com",
+        cc: ["daksh@gen7fuel.com", "nmiller@gen7fuel.com"],
+        subject: `Fuel Inventory Report Mid-Day (${formattedDate})`,
+        text: "Attached is your daily (Mid-Day) fuel inventory report.",
+        html: "<p>Attached is your daily (mid-day) fuel inventory report.</p>",
+        attachments: [
+          {
+            filename: `FuelInventory_MidDay_${formattedDate}.pdf`,
+            path: pdfPath
+          }
+        ]
+      });
+    } else {
+      console.log("Skipping email - not running on VPS host.");
+    }
 
     console.log("Fuel Inventory Email Queued.");
   } catch (err) {
@@ -170,7 +175,7 @@ cron.schedule("0 5 * * *", runFuelInventoryReportJobPreviousDay, {
   timezone: "America/New_York" // will automatically handle EST/EDT
 });
 
-// CRON SCHEDULER - runs at 3 om est/edt
+// CRON SCHEDULER - runs at 3 pm est/edt
 cron.schedule("0 15 * * *", runFuelInventoryReportJobCurrentDay, {
   timezone: "America/New_York"
 });
