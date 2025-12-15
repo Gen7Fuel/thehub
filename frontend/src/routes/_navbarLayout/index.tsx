@@ -108,8 +108,8 @@ function App() {
                   </Button>
                 </Link>
               )}
-              {access?.accounting?.fuelRec && (
-                <Link to="/fuel-rec" search={{ site: user?.location }}>
+              {access?.accounting?.fuelRec.value && (
+                <Link to={access?.accounting?.fuelRec?.bol ? `/fuel-rec` : `/fuel-rec/list`} search={{ site: user?.location }}>
                   <Button className="w-32 h-32 flex items-center justify-center break-words whitespace-normal text-center">
                     Fuel Rec
                   </Button>
