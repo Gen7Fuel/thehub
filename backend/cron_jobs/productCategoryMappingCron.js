@@ -1,6 +1,7 @@
 const ProductCategory = require('../models/ProductCategory');
 const CycleCount = require('../models/CycleCount');
 const sqlService = require('../services/sqlService');
+const Location = require('../models/Location');
 
 const BATCH_SIZE = 2000;
 
@@ -170,18 +171,94 @@ async function syncCategoryProductMapping() {
 
     console.log('syncCategoryProductMapping finished.');
 
-    // return minimal summary in case caller needs it
-    // return {
-    //   added: addedItems.length,
-    //   updated: updatedItems.length,
-    //   deleted: deletedItems.length,
-    //   cycleCount: {
-    //     totalGtinsChecked: filteredGtins.length,
-    //     updatedCount: cyclecountUpdatedCount,
-    //     updatedGTINsCount: updatedGTINs.length,
-    //     notFoundGTINsCount: notFoundGTINs.length
-    //   }
-    // };
+    // ------------------ Inactive check & mark CycleCount.active / inventoryExists ------------------
+    console.log('Starting inactive-product check and active/inventoryExists updates...');
+    // Get unique sites present in CycleCount
+    const sites = await CycleCount.distinct('site');
+    const inactiveMarked = [];
+    const inventoryFlagged = [];
+
+    for (const site of sites || []) {
+      if (!site) continue;
+
+      // find Location to get station code (csoCode)
+      const loc = await Location.findOne({ stationName: site }).lean();
+      if (!loc || !loc.csoCode) {
+        console.log(`No Location.csoCode found for site '${site}', skipping inactive check for this site.`);
+        continue;
+      }
+      const stationSk = String(loc.csoCode);
+      console.log(`Checking inactive GTINs for site='${site}' (stationSk=${stationSk})`);
+
+      // collect GTINs for this site
+      const siteGtins = await CycleCount.distinct('gtin', { site, gtin: { $ne: null } });
+      const filteredSiteGtins = (siteGtins || []).map(g => String(g).trim()).filter(Boolean);
+      if (!filteredSiteGtins.length) {
+        console.log(`No GTINs found for site='${site}'.`);
+        continue;
+      }
+
+      // process in batches
+      for (let i = 0; i < filteredSiteGtins.length; i += BATCH_SIZE) {
+        const batch = filteredSiteGtins.slice(i, i + BATCH_SIZE);
+        console.log(`Site='${site}': processing inactive-master batch ${i / BATCH_SIZE + 1} (${batch.length} GTINs)`);
+
+        const inactiveMap = await sqlService.getInactiveMasterItems(batch); // { gtin: [upc,...] }
+        const ops = [];
+
+        for (const gtin of batch) {
+          const upcs = inactiveMap[gtin] || [];
+          if (!upcs.length) {
+            // Not marked inactive in Master_Item — skip
+            continue;
+          }
+
+          // Item is marked INACTIVE in Master_Item -> active should always be false
+          // Determine inventoryExists by checking yesterday's On_hand across UPCs
+          let hasInventory = false;
+          for (const upc of upcs) {
+            try {
+              const onHand = await sqlService.getInventoryOnHandForUPCAndStation(upc, stationSk);
+              if (onHand != null && Number(onHand) > 0) {
+                hasInventory = true;
+                break;
+              }
+            } catch (err) {
+              console.error(`Error checking inventory for UPC '${upc}' at station ${stationSk}:`, err);
+            }
+          }
+
+          // active: always false for items flagged inactive in Master_Item
+          // inventoryExists: true iff yesterday's On_hand > 0
+          console.log(`Scheduling active=false for GTIN='${gtin}' at site='${site}' (inventoryExists=${hasInventory})`);
+          ops.push({
+            updateMany: {
+              filter: { site, gtin },
+              update: { $set: { active: false, inventoryExists: Boolean(hasInventory) } }
+            }
+          });
+
+          inactiveMarked.push({ site, gtin, inventoryExists: hasInventory });
+          if (hasInventory) inventoryFlagged.push({ site, gtin });
+        }
+
+        if (ops.length) {
+          try {
+            const res = await CycleCount.bulkWrite(ops, { timestamps: false, ordered: false });
+            const modified = res.modifiedCount != null ? res.modifiedCount : (res.nModified || 0);
+            console.log(`Applied active/inventoryExists updates for site='${site}' batch, modified: ${modified}`);
+          } catch (err) {
+            console.error(`Error applying active/inventoryExists updates for site='${site}' batch:`, err);
+          }
+        } else {
+          console.log(`No active/inventoryExists updates needed for site='${site}' batch.`);
+        }
+      } // end batch loop
+    } // end site loop
+
+    console.log(`Inactive-flagging complete. Marked ${inactiveMarked.length} GTIN/site pairs as inactive.`);
+    if (inventoryFlagged.length) console.log(`Marked ${inventoryFlagged.length} GTIN/site pairs as having inventory (inventoryExists=true).`);
+    console.log('syncCategoryProductMapping finished all tasks.');
   } catch (err) {
     console.error('Error syncing product categories and updating CycleCount:', err);
     throw err;

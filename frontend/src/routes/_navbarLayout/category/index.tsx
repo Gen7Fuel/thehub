@@ -99,7 +99,7 @@ function RouteComponent() {
 
   return (
     <>
-      <div className="pt-32"></div> {/* spacer for fixed navbar */}
+      <div className="pt-8"></div> {/* spacer for fixed navbar */}
       <div className="max-w-5xl mx-auto py-8 p-4 border rounded">{/* increased padding-top to avoid navbar */}
         <div className="w-full max-w-4xl bg-white shadow-md rounded-lg p-6">
           {/* Search + Add button */}
