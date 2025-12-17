@@ -440,20 +440,25 @@ async function runAndEmailReport() {
   const text = lines.join('\n');
 
   // Enqueue email job
-  try {
-    await emailQueue.add("sendCategoryProductMappingReport", {
-      to: "daksh@gen7fuel.com",
-      subject,
-      text,
-      html: `<pre>${text.replace(/</g,"&lt;")}</pre>`
-    });
-    console.log('Category sync report queued to emailQueue.');
-  } catch (err) {
-    console.error('Failed to enqueue category sync report email:', err);
+  // if HOST=VPS, only then send email
+  if (process.env.HOST === "VPS") {
+    try {
+      await emailQueue.add("sendCategoryProductMappingReport", {
+        to: "daksh@gen7fuel.com",
+        subject,
+        text,
+        html: `<pre>${text.replace(/</g, "&lt;")}</pre>`
+      });
+      console.log('Category sync report queued to emailQueue.');
+    } catch (err) {
+      console.error('Failed to enqueue category sync report email:', err);
+    }
+  } else {
+    console.log("Skipping email - not running on VPS host.");
   }
 
   const end = new Date();
-  console.log(`Category sync run completed in ${(end - start)/1000}s`);
+  console.log(`Category sync run completed in ${(end - start) / 1000}s`);
   return report;
 }
 
