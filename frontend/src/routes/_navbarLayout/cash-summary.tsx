@@ -55,7 +55,8 @@ function RouteComponent() {
           </Button>
         </Link>
 
-        <Link
+        
+        {/* <Link
           to="/cash-summary/lottery"
           search={(prev: any) => {
             const { id, date, ...rest } = prev || {}
@@ -85,7 +86,7 @@ function RouteComponent() {
           >
             Lottery Images
           </Button>
-        </Link>
+        </Link> */}
 
         <Link
           to="/cash-summary/report"
