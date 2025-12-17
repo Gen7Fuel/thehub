@@ -14,8 +14,8 @@ function RouteComponent() {
   const isSummaryActive = matchRoute({ to: '/cash-summary/report' })
   const isListActive = matchRoute({ to: '/cash-summary/list' })
   const isFormActive = matchRoute({ to: '/cash-summary' })
-  const isLotteryActive = matchRoute({ to: '/cash-summary/lottery' })
-  const isLotteryImagesActive = matchRoute({ to: '/cash-summary/lottery-images' })
+  // const isLotteryActive = matchRoute({ to: '/cash-summary/lottery' })
+  // const isLotteryImagesActive = matchRoute({ to: '/cash-summary/lottery-images' })
 
   const fallbackSite = user?.location
 
