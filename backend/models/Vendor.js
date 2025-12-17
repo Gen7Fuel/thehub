@@ -33,7 +33,9 @@ const VendorSchema = new mongoose.Schema({
     enum: ['Email', 'Template', 'Web Portal', 'Telephone'],
     default: 'Email'
   },
+  notes: { type: String },                        // Admin/vendor notes
   vendor_order_frequency: { type: Number },       // How often orders are placed (in weeks)
+  leadTime: { type: Number, default: null },     // Average lead time in days (Placed -> Delivered)
   lastPlacedOrder: { type: Date },                // Date of the last order placed
 }, { timestamps: true });                         // Adds createdAt and updatedAt fields
 

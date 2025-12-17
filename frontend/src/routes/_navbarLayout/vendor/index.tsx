@@ -28,6 +28,7 @@ function RouteComponent() {
   const [vendorOrderFrequency, setVendorOrderFrequency] = useState("");
   const [saving, setSaving] = useState(false);
   const [category, setCategory] = useState("");
+  const [notes, setNotes] = useState("");
   const [uniqueVendors, setUniqueVendors] = useState<string[]>([]);
   const [uniqueCategories, setUniqueCategories] = useState<string[]>([]);
   const [sites, setSites] = useState<{ _id: string; stationName: string }[]>([]);
@@ -91,6 +92,7 @@ function RouteComponent() {
           station_supplies: stationSupplies.filter(s => s.name && s.upc && s.size),
           email_order: emailOrder,
           email,
+          notes,
           order_placement_method: orderPlacementMethod,
           vendor_order_frequency: vendorOrderFrequency ? parseFloat(vendorOrderFrequency) : undefined,
         }),
@@ -101,15 +103,17 @@ function RouteComponent() {
         setStationSupplies([]);
         setEmailOrder(false);
         setEmail("");
+        setNotes("");
+        setVendorSites([]);
         setOrderPlacementMethod("Email");
         setVendorOrderFrequency("");
-        setCategory("Other");
+        setCategory("");
       } else if (res.status === 409) {
         // Handle duplicate vendor (name + location)
         const data = await res.json();
         alert(data.error || "Vendor with this name and location already exists. Try editing it instead.");
       } else if (res.status === 403) {
-        navigate({to:"/no-access"});
+        navigate({ to: "/no-access" });
         return;
       } else {
         const data = await res.json();
@@ -128,11 +132,13 @@ function RouteComponent() {
       try {
         const token = localStorage.getItem("token");
         const res = await fetch("/api/vendors", {
-          headers: { Authorization: `Bearer ${token}`,
-          "X-Required-Permission": "vendor" },
+          headers: {
+            Authorization: `Bearer ${token}`,
+            "X-Required-Permission": "vendor"
+          },
         });
-        if (res.status == 403){
-          navigate({to:"/no-access"})
+        if (res.status == 403) {
+          navigate({ to: "/no-access" })
         }
         if (!res.ok) throw new Error(`HTTP error! status: ${res.status}`);
         const data = (await res.json()) as { name: string; category: string }[];
@@ -156,50 +162,50 @@ function RouteComponent() {
   }, []);
 
   // Custom styles to match LocationPicker for creatable select
-const customSelectStyles = {
-  control: (provided: any, state: any) => ({
-    ...provided,
-    width: '100%',
-    maxWidth: '250px',           // same width as LocationPicker
-    minHeight: '40px',           // match LocationPicker height
-    borderRadius: '0.75rem',     // rounded-xl
-    border: '1px solid #d1d5db', // gray-300
-    padding: '0 6px',            // reduce vertical padding
-    boxShadow: state.isFocused ? '0 0 0 2px #3b82f6' : '0 1px 2px rgba(0,0,0,0.05)',
-    '&:hover': {
-      borderColor: '#3b82f6',
-    },
-    fontSize: '0.875rem',  
-  }),
-  menu: (provided: any) => ({
-    ...provided,
-    borderRadius: '0.75rem',
-    maxHeight: '20rem',         // scrollable like LocationPicker
-    overflowY: 'auto',
-    boxShadow: '0 4px 6px rgba(0,0,0,0.1)',
-    zIndex: 50,    
-    fontSize: '0.875rem',             // ensure dropdown overlays everything
-  }),
-  menuPortal: (base: any) => ({
-    ...base,
-    zIndex: 9999,               // for portal usage
-  }),
-  option: (provided: any, state: any) => ({
-    ...provided,
-    padding: '8px 12px',
-    backgroundColor: state.isFocused ? '#eff6ff' : 'white',
-    color: 'black',
-    cursor: 'pointer',
-  }),
-  placeholder: (provided: any) => ({
-    ...provided,
-    color: '#9ca3af', // gray-400
-  }),
-  singleValue: (provided: any) => ({
-    ...provided,
-    color: 'black',
-  }),
-}
+  const customSelectStyles = {
+    control: (provided: any, state: any) => ({
+      ...provided,
+      width: '100%',
+      maxWidth: '250px',           // same width as LocationPicker
+      minHeight: '40px',           // match LocationPicker height
+      borderRadius: '0.75rem',     // rounded-xl
+      border: '1px solid #d1d5db', // gray-300
+      padding: '0 6px',            // reduce vertical padding
+      boxShadow: state.isFocused ? '0 0 0 2px #3b82f6' : '0 1px 2px rgba(0,0,0,0.05)',
+      '&:hover': {
+        borderColor: '#3b82f6',
+      },
+      fontSize: '0.875rem',
+    }),
+    menu: (provided: any) => ({
+      ...provided,
+      borderRadius: '0.75rem',
+      maxHeight: '20rem',         // scrollable like LocationPicker
+      overflowY: 'auto',
+      boxShadow: '0 4px 6px rgba(0,0,0,0.1)',
+      zIndex: 50,
+      fontSize: '0.875rem',             // ensure dropdown overlays everything
+    }),
+    menuPortal: (base: any) => ({
+      ...base,
+      zIndex: 9999,               // for portal usage
+    }),
+    option: (provided: any, state: any) => ({
+      ...provided,
+      padding: '8px 12px',
+      backgroundColor: state.isFocused ? '#eff6ff' : 'white',
+      color: 'black',
+      cursor: 'pointer',
+    }),
+    placeholder: (provided: any) => ({
+      ...provided,
+      color: '#9ca3af', // gray-400
+    }),
+    singleValue: (provided: any) => ({
+      ...provided,
+      color: 'black',
+    }),
+  }
 
   return (
     <div className="max-w-2xl mx-auto p-6">
@@ -396,6 +402,16 @@ const customSelectStyles = {
                 required
               />
             </div> */}
+            <div>
+              <label className="block font-medium mb-1">Notes</label>
+              <textarea
+                className="border rounded px-3 py-2 w-full"
+                value={notes}
+                onChange={e => setNotes(e.target.value)}
+                placeholder="Optional notes/credentials/details about this vendor"
+                rows={4}
+              />
+            </div>
             <Button type="submit" disabled={saving}>
               {saving ? "Saving..." : "Create Vendor"}
             </Button>
