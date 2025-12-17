@@ -1,6 +1,8 @@
 const express = require('express')
 const { CashSummary, CashSummaryReport } = require('../models/CashSummaryNew')
 const Safesheet = require('../models/Safesheet')
+const LotteryModule = require('../models/Lottery')
+const Lottery = LotteryModule?.Lottery || LotteryModule?.default || LotteryModule
 const { parseSftReport } = require('../utils/parseSftReport')
 const { dateFromYMDLocal } = require('../utils/dateUtils')
 const { sendEmail } = require('../utils/emailService')
@@ -245,6 +247,12 @@ router.post('/', async (req, res) => {
       parsedPayouts: numOrUndef(parsed.payouts),
       safedropsCount: numOrUndef(parsed.safedrops?.count),
       safedropsAmount: numOrUndef(parsed.safedrops?.amount),
+      // Lottery / Bulloch parsed values
+      lottoPayout: numOrUndef(parsed.lottoPayout),
+      onlineLottoTotal: numOrUndef(parsed.onlineLottoTotal),
+      instantLottTotal: numOrUndef(parsed.instantLottTotal),
+      dataWave: numOrUndef(parsed.dataWave),
+      feeDataWave: numOrUndef(parsed.feeDataWave),
     })
 
     // const doc = new CashSummary({
@@ -295,6 +303,119 @@ router.get('/', async (req, res) => {
   } catch (err) {
     console.error('CashSummary list error:', err)
     res.status(500).json({ error: 'Failed to fetch CashSummary list' })
+  }
+})
+
+// Return lottery-specific sums for a given site + date (YYYY-MM-DD)
+router.get('/lottery', async (req, res) => {
+  try {
+    const { site, date } = req.query || {}
+    if (!site) return res.status(400).json({ error: 'site query parameter is required' })
+    if (!date || !/^\d{4}-\d{2}-\d{2}$/.test(String(date))) {
+      return res.status(400).json({ error: 'date (YYYY-MM-DD) is required' })
+    }
+
+    const [yy, mm, dd] = String(date).split('-').map(Number)
+    const start = new Date(yy, mm - 1, dd, 0, 0, 0, 0)
+    const end = new Date(yy, mm - 1, dd + 1, 0, 0, 0, 0)
+
+    const csRows = await CashSummary.find({ site, date: { $gte: start, $lt: end } }).lean()
+
+    // Check for a user-saved Lottery entry for this site+date (YYYY-MM-DD)
+    const ymdStr = String(date)
+    let lotteryDoc = null
+    try {
+      lotteryDoc = await Lottery.findOne({ site, date: ymdStr }).lean()
+    } catch (e) {
+      // ignore lookup errors; we'll still return aggregated Bullock values
+      console.warn('Lottery lookup failed', e?.message || e)
+    }
+
+    // Build response rows.
+    // If a user-saved Lottery doc exists, prepend it (so frontend can populate saved values/images).
+    // If no Lottery doc exists, remove lottery-related parsed fields from shift rows so the frontend
+    // doesn't mistake parsed per-shift values for a saved lottery entry.
+    let rows = []
+    if (lotteryDoc) {
+      rows.push({
+        _id: lotteryDoc._id,
+        site: lotteryDoc.site,
+        date: lotteryDoc.date,
+        lottoPayout: lotteryDoc.lottoPayout,
+        onlineLottoTotal: lotteryDoc.onlineLottoTotal,
+        instantLottTotal: lotteryDoc.instantLottTotal,
+        scratchFreeTickets: lotteryDoc.scratchFreeTickets,
+        dataWave: lotteryDoc.dataWave,
+        feeDataWave: lotteryDoc.feeDataWave,
+        images: Array.isArray(lotteryDoc.images) ? lotteryDoc.images : [],
+      })
+      // append raw CashSummary rows (they may include parsed lottery fields but frontend will prefer the saved lottery)
+      rows.push(...csRows)
+    } else {
+      // strip lottery-specific keys from CashSummary rows to ensure frontend treats this as "no saved lottery"
+      rows = csRows.map((r) => {
+        const copy = { ...r }
+        delete copy.lottoPayout
+        delete copy.onlineLottoTotal
+        delete copy.instantLottTotal
+        delete copy.scratchFreeTickets
+        delete copy.dataWave
+        delete copy.feeDataWave
+        delete copy.images
+        return copy
+      })
+    }
+
+    const sum = (k) => csRows.reduce((a, r) => a + (typeof r[k] === 'number' ? r[k] : 0), 0)
+
+    const totals = {
+      count: csRows.length,
+      onlineSales: sum('onlineLottoTotal'),
+      scratchSales: sum('instantLottTotal'),
+      // note: scratchFreeTickets is a user-entered field and not part of Bullock totals
+      payouts: sum('lottoPayout'),
+      dataWave: sum('dataWave'),
+      dataWaveFee: sum('feeDataWave'),
+    }
+
+    res.json({ site, date, rows, totals, lottery: lotteryDoc || null })
+  } catch (err) {
+    console.error('CashSummary lottery fetch error:', err)
+    res.status(500).json({ error: 'Failed to fetch lottery totals' })
+  }
+})
+
+// Create or update a saved Lottery entry for a site+date
+router.post('/lottery', async (req, res) => {
+  try {
+    const { site, date, values, images } = req.body || {}
+    if (!site) return res.status(400).json({ error: 'site is required' })
+    if (!date || !/^\d{4}-\d{2}-\d{2}$/.test(String(date))) {
+      return res.status(400).json({ error: 'date (YYYY-MM-DD) is required' })
+    }
+
+    const payload = {
+      site: String(site),
+      date: String(date),
+      lottoPayout: (values && typeof values.payouts === 'number') ? values.payouts : (values && typeof values.payout === 'number' ? values.payout : null),
+      onlineLottoTotal: (values && typeof values.onlineSales === 'number') ? values.onlineSales : null,
+      instantLottTotal: (values && typeof values.scratchSales === 'number') ? values.scratchSales : null,
+      scratchFreeTickets: (values && typeof values.scratchFreeTickets === 'number') ? values.scratchFreeTickets : null,
+      dataWave: (values && typeof values.datawaveValue === 'number') ? values.datawaveValue : null,
+      feeDataWave: (values && typeof values.datawaveFee === 'number') ? values.datawaveFee : null,
+      images: Array.isArray(images) ? images.map(String) : [],
+    }
+
+    const updated = await Lottery.findOneAndUpdate(
+      { site: payload.site, date: payload.date },
+      { $set: payload },
+      { upsert: true, new: true, runValidators: true }
+    )
+
+    res.status(200).json({ saved: true, lottery: updated })
+  } catch (err) {
+    console.error('Lottery save error:', err)
+    res.status(500).json({ error: 'Failed to save lottery' })
   }
 })
 
@@ -597,6 +718,12 @@ router.put('/:id', async (req, res) => {
               loyalty: parsed.couponsAccepted,
               cpl_bulloch: parsed.fuelPriceOverrides,
               report_canadian_cash: parsed.canadianCash,
+              // include lottery parsed fields for enrichment on update
+              lottoPayout: parsed.lottoPayout,
+              onlineLottoTotal: parsed.onlineLottoTotal,
+              instantLottTotal: parsed.instantLottTotal,
+              dataWave: parsed.dataWave,
+              feeDataWave: parsed.feeDataWave,
             }
           }
         } else {
@@ -623,6 +750,12 @@ router.put('/:id', async (req, res) => {
       report_canadian_cash: norm(report_canadian_cash ?? enrichedValues.report_canadian_cash ?? existing.report_canadian_cash),
 
       exempted_tax: norm(exempted_tax),
+      // lottery fields (preserve existing if caller doesn't supply)
+      lottoPayout: norm(req.body.lottoPayout ?? enrichedValues.lottoPayout ?? existing.lottoPayout),
+      onlineLottoTotal: norm(req.body.onlineLottoTotal ?? enrichedValues.onlineLottoTotal ?? existing.onlineLottoTotal),
+      instantLottTotal: norm(req.body.instantLottTotal ?? enrichedValues.instantLottTotal ?? existing.instantLottTotal),
+      dataWave: norm(req.body.dataWave ?? enrichedValues.dataWave ?? existing.dataWave),
+      feeDataWave: norm(req.body.feeDataWave ?? enrichedValues.feeDataWave ?? existing.feeDataWave),
     }
 
     // 5️⃣ Update and return

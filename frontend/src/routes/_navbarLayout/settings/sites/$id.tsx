@@ -324,6 +324,7 @@ function RouteComponent() {
     timezone: string;
     email: string;
     managerCode: number;
+    sellsLottery?: boolean;
   } | null>(null);
 
   const [loading, setLoading] = useState(true);
@@ -367,6 +368,7 @@ function RouteComponent() {
     csoCode: string;
     timezone: string;
     email: string;
+    sellsLottery?: boolean;
   }
 
   const [formData, setFormData] = useState<LocationForm>({
@@ -378,6 +380,7 @@ function RouteComponent() {
     csoCode: "",
     timezone: "",
     email: "",
+    sellsLottery: false,
   });
 
   const [timezones, setTimezones] = useState<string[]>([]);
@@ -414,6 +417,7 @@ function RouteComponent() {
         csoCode: location.csoCode || "",
         email: location.email || "",
         timezone: location.timezone || timezones[0], // default if missing
+        sellsLottery: !!location.sellsLottery,
       });
       setOtp(location.managerCode?.toString() || "");
     }
@@ -427,6 +431,7 @@ function RouteComponent() {
       await axios.put(`/api/locations/${id}`, {
         ...formData,
         managerCode: otp, // send OTP as managerCode
+        sellsLottery: !!formData.sellsLottery,
       }, {
         headers: {
           Authorization: `Bearer ${localStorage.getItem('token')}`,
@@ -516,15 +521,27 @@ function RouteComponent() {
         <CardHeader className="flex justify-between items-center">
           <CardTitle>Edit Location</CardTitle>
 
-          {/* 🧩 Generate Safesheet Button (only show if not created yet) */}
-          {!hasSafesheet && (
-            <Button
-              variant="default"
-              onClick={() => setShowDialog(true)}
-            >
-              Generate Safesheet
-            </Button>
-          )}
+            <div className="flex items-center gap-4">
+              {/* Sells Lottery toggle */}
+              <label className="flex items-center gap-2">
+                <input
+                  type="checkbox"
+                  checked={!!formData.sellsLottery}
+                  onChange={(e) => setFormData({ ...formData, sellsLottery: e.target.checked })}
+                />
+                <span className="text-sm">Sells Lottery</span>
+              </label>
+
+              {/* 🧩 Generate Safesheet Button (only show if not created yet) */}
+              {!hasSafesheet && (
+                <Button
+                  variant="default"
+                  onClick={() => setShowDialog(true)}
+                >
+                  Generate Safesheet
+                </Button>
+              )}
+            </div>
         </CardHeader>
 
                 <CardContent>

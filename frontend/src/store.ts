@@ -57,6 +57,32 @@ type FormStore = {
 
 
     resetPayableForm: () => void;
+
+    // ...existing props
+    lotteryValues: {
+        onlineSales: number;
+        scratchSales: number;
+        scratchFreeTickets: number;
+        payouts: number;
+        datawaveValue: number;
+        datawaveFee: number;
+    };
+    setLotteryValues: (vals: Partial<{
+        onlineSales: number;
+        scratchSales: number;
+        scratchFreeTickets: number;
+        payouts: number;
+        datawaveValue: number;
+        datawaveFee: number;
+    }>) => void;
+
+    lotteryImages: string[];
+    setLotteryImages: (images: string[]) => void;
+    
+    lotterySite: string;
+    setLotterySite: (site: string) => void;
+
+    resetLotteryForm: () => void;
 }
 
 export const useFormStore = create<FormStore>((set) => ({
@@ -122,4 +148,33 @@ export const useFormStore = create<FormStore>((set) => ({
         payableAmount: 0,
         payableImages: [],
     }),
+
+    lotteryValues: {
+        onlineSales: 0,
+        scratchSales: 0,
+        scratchFreeTickets: 0,
+        payouts: 0,
+        datawaveValue: 0,
+        datawaveFee: 0,
+    },
+    setLotteryValues: (vals) =>
+        set((state) => ({ lotteryValues: { ...state.lotteryValues, ...vals } })),
+
+    lotteryImages: [],
+    setLotteryImages: (lotteryImages) => set({ lotteryImages }),
+
+    resetLotteryForm: () => set({
+        lotteryValues: {
+            onlineSales: 0,
+            scratchSales: 0,
+            scratchFreeTickets: 0,
+            payouts: 0,
+            datawaveValue: 0,
+            datawaveFee: 0,
+        },
+        lotteryImages: [],
+    }),
+    // current selected site for lottery flow
+    lotterySite: '',
+    setLotterySite: (lotterySite: string) => set({ lotterySite }),
 }));

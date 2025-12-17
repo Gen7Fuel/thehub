@@ -1,7 +1,8 @@
 import { createFileRoute, useNavigate } from '@tanstack/react-router'
-import { useMemo, useState } from 'react'
+import { useMemo, useState, useEffect } from 'react'
 import { SitePicker } from '@/components/custom/sitePicker'
 import { Button } from '@/components/ui/button';
+// import { domain } from '@/lib/constants'
 
 type Search = { site: string; date: string }
 
@@ -92,11 +93,33 @@ function RouteComponent() {
   const onSubmitClick = async () => {
     if (submitState !== 'idle' || !site || !date) return
 
+    // If this site sells lottery, ensure a saved Lottery entry exists for this date
+    try {
+      const token = localStorage.getItem('token')
+      const locResp = await fetch('/api/locations', { headers: token ? { Authorization: `Bearer ${token}` } : {} })
+      if (locResp.ok) {
+        const locs = await locResp.json()
+        const found = Array.isArray(locs) ? locs.find((l: any) => l.stationName === site) : null
+        if (found && found.sellsLottery) {
+          // lottery state was loaded earlier; if missing, block submit
+          if (!lottery) {
+            alert('You need to add lottery values to submit this report. Redirecting to Lottery entry page.')
+            navigate({ to: '/cash-summary/lottery' })
+            return
+          }
+        }
+      }
+    } catch (e) {
+      console.warn('Could not verify site sellsLottery', e)
+      // if we cannot verify, allow submit to proceed
+    }
+
     const proceed = window.confirm(
       'An email will be sent to Accounting with a copy of the Cash Summary Report.\n\nDo you want to continue?'
     )
     if (!proceed) return
 
+    // console.log('submitted')
     try {
       setSubmitState('submitting')
       const r = await fetch('/api/cash-summary/submit/to/safesheet', {
@@ -132,6 +155,43 @@ function RouteComponent() {
   const totals = report?.totals
   const hasRows = rows.length > 0
 
+  // Lottery saved entry for this site/date (for report print)
+  const [lottery, setLottery] = useState<any | null>(null)
+  const [bullock, setBullock] = useState<any | null>(null)
+  const [_, setLotteryLoading] = useState(false)
+
+  useEffect(() => {
+    const fetchLottery = async () => {
+      if (!site || !date) {
+        setLottery(null)
+        setBullock(null)
+        return
+      }
+      setLotteryLoading(true)
+      try {
+        const token = localStorage.getItem('token')
+        const resp = await fetch(`/api/cash-summary/lottery?site=${encodeURIComponent(site)}&date=${encodeURIComponent(date)}`, {
+          headers: token ? { Authorization: `Bearer ${token}` } : {},
+        })
+        if (!resp.ok) {
+          setLottery(null)
+          setBullock(null)
+          return
+        }
+        const data = await resp.json()
+        setLottery(data?.lottery ?? null)
+        setBullock(data?.totals ?? null)
+      } catch (e) {
+        console.warn('Failed to fetch lottery for report', e)
+        setLottery(null)
+        setBullock(null)
+      } finally {
+        setLotteryLoading(false)
+      }
+    }
+    fetchLottery()
+  }, [site, date])
+
   const fmtNum = (n?: number) =>
     typeof n === 'number'
       ? n.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })
@@ -157,7 +217,7 @@ function RouteComponent() {
         @media print {
           body * { visibility: hidden !important; }
           #print-area, #print-area * { visibility: visible !important; }
-          #print-area { position: absolute; inset: 0; width: 100%; }
+          #print-area { position: relative; inset: 0; width: 100%; }
         }
       `}</style>
 
@@ -223,6 +283,57 @@ function RouteComponent() {
                   <Card title="Payouts" value={fmtNum(totals?.payouts)} />
                 </div>
               </div>
+
+              {/* Lottery summary (only show when a saved Lottery exists for this site/date)
+                  Rendered between Totals and Shifts. Images are excluded from this report view. */}
+              {lottery && (
+                <div className="mb-4 border rounded p-3 bg-card">
+                  <h4 className="text-sm font-semibold mb-2">Lottery</h4>
+                  <div className="overflow-x-auto">
+                    <table className="min-w-full table-auto">
+                      <thead className="bg-gray-50">
+                        <tr>
+                          <th className="px-3 py-2 text-left">Description</th>
+                          <th className="px-3 py-2 text-left">Lottery</th>
+                          <th className="px-3 py-2 text-left">Bullock</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        <tr className="border-t">
+                          <td className="px-3 py-2">Online Sales</td>
+                          <td className="px-3 py-2">${Number(lottery.onlineLottoTotal ?? 0).toFixed(2)}</td>
+                          <td className="px-3 py-2">{bullock ? `$${Number(bullock.onlineSales || 0).toFixed(2)}` : '—'}</td>
+                        </tr>
+                        <tr className="border-t">
+                          <td className="px-3 py-2">Scratch Sales</td>
+                          <td className="px-3 py-2">${Number(lottery.instantLottTotal ?? 0).toFixed(2)}</td>
+                          <td className="px-3 py-2">{bullock ? `$${Number(bullock.scratchSales || 0).toFixed(2)}` : '—'}</td>
+                        </tr>
+                        <tr className="border-t">
+                          <td className="px-3 py-2">Scratch Free Tickets</td>
+                          <td className="px-3 py-2">{lottery.scratchFreeTickets != null ? Number(lottery.scratchFreeTickets).toFixed(2) : '—'}</td>
+                          <td className="px-3 py-2">—</td>
+                        </tr>
+                        <tr className="border-t">
+                          <td className="px-3 py-2">Payouts</td>
+                          <td className="px-3 py-2">${Number(lottery.lottoPayout ?? 0).toFixed(2)}</td>
+                          <td className="px-3 py-2">{bullock ? `$${Number(bullock.payouts || 0).toFixed(2)}` : '—'}</td>
+                        </tr>
+                        <tr className="border-t">
+                          <td className="px-3 py-2">Datawave Value</td>
+                          <td className="px-3 py-2">${Number(lottery.dataWave ?? 0).toFixed(2)}</td>
+                          <td className="px-3 py-2">{bullock ? `$${Number(bullock.dataWave || 0).toFixed(2)}` : '—'}</td>
+                        </tr>
+                        <tr className="border-t">
+                          <td className="px-3 py-2">Datawave Fee</td>
+                          <td className="px-3 py-2">${Number(lottery.feeDataWave ?? 0).toFixed(2)}</td>
+                          <td className="px-3 py-2">{bullock ? `$${Number(bullock.dataWaveFee || 0).toFixed(2)}` : '—'}</td>
+                        </tr>
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              )}
 
               <div>
                 <h3 className="text-sm font-semibold mb-2">Shifts</h3>
