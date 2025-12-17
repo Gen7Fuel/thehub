@@ -14,6 +14,8 @@ function RouteComponent() {
   const isSummaryActive = matchRoute({ to: '/cash-summary/report' })
   const isListActive = matchRoute({ to: '/cash-summary/list' })
   const isFormActive = matchRoute({ to: '/cash-summary' })
+  const isLotteryActive = matchRoute({ to: '/cash-summary/lottery' })
+  const isLotteryImagesActive = matchRoute({ to: '/cash-summary/lottery-images' })
 
   const fallbackSite = user?.location
 
@@ -50,6 +52,38 @@ function RouteComponent() {
             className="rounded-none"
           >
             List
+          </Button>
+        </Link>
+
+        <Link
+          to="/cash-summary/lottery"
+          search={(prev: any) => {
+            const { id, date, ...rest } = prev || {}
+            return { ...rest, site: rest?.site ?? fallbackSite }
+          }}
+          activeOptions={{ exact: true }}
+        >
+          <Button
+            {...(!isLotteryActive && { variant: 'outline' } as object)}
+            className="rounded-none"
+          >
+            Lottery
+          </Button>
+        </Link>
+
+        <Link
+          to="/cash-summary/lottery-images"
+          search={(prev: any) => {
+            const { id, date, ...rest } = prev || {}
+            return { ...rest, site: rest?.site ?? fallbackSite }
+          }}
+          activeOptions={{ exact: true }}
+        >
+          <Button
+            {...(!isLotteryImagesActive && { variant: 'outline' } as object)}
+            className="rounded-none"
+          >
+            Lottery Images
           </Button>
         </Link>
 
