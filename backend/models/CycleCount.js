@@ -21,6 +21,8 @@ const CycleCountItemSchema = new mongoose.Schema({
   name: { type: String, required: true },         // Item name
   category: { type: String },                     // Item category (optional)
   categoryNumber: { type: Number },               // Category Number 
+  active: { type: Boolean, default: true },       // Active flag: true = product active (default true)
+  inventoryExists: { type: Boolean, default: true }, // Inventory exists as of yesterday (default true)
   grade: { type: String },                        // Item grade (optional)
   gtin: { type: String },                         // GTIN code (optional)
   upc_barcode: { type: String },                  // UPC barcode (optional)
@@ -55,14 +57,14 @@ CycleCountItemSchema.index({ site: 1, gtin: 1 }, { unique: true });
 //     return (a.name || '').localeCompare(b.name || '');
 //   });
 // };
-CycleCountItemSchema.statics.sortItems = function(items) {
+CycleCountItemSchema.statics.sortItems = function (items) {
   return items.sort((a, b) => {
     // 1) Sort by updatedAt (oldest first)
     const dateDiff = new Date(a.updatedAt) - new Date(b.updatedAt);
     if (dateDiff !== 0) return dateDiff;
 
     // 2) Sort by categoryNumber numerically
-    const aNum = a.categoryNumber ?? Number.MAX_SAFE_INTEGER;  
+    const aNum = a.categoryNumber ?? Number.MAX_SAFE_INTEGER;
     const bNum = b.categoryNumber ?? Number.MAX_SAFE_INTEGER;
 
     const numDiff = aNum - bNum;
@@ -79,7 +81,7 @@ CycleCountItemSchema.statics.sortItems = function(items) {
  * @param {Array} items - Array of flagged cycle count items to sort.
  * @returns {Array} Sorted array of flagged items.
  */
-CycleCountItemSchema.statics.sortFlaggedItems = function(items) {
+CycleCountItemSchema.statics.sortFlaggedItems = function (items) {
   return items.sort((a, b) => {
     const dateA = a.flaggedAt ? new Date(a.flaggedAt) : new Date(0);
     const dateB = b.flaggedAt ? new Date(b.flaggedAt) : new Date(0);
