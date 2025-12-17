@@ -33,6 +33,30 @@ function parseSftReport(text) {
     cashOnHand: pickNum(/^\s*Cash On Hand\s+([-\d.,]+)\s*$/mi, text),
     cashBack: pickNum(/^\s*Cash Back\s+([-\d.,]+)\s*$/mi, text),
     payouts: pickNum(/^\s*Payouts\s+([-\d.,]+)\s*$/mi, text),
+
+    // NEW: specific lotto/payout fields
+    // Case-insensitive; tolerate optional colon/dash and $; allow "payout" or "payouts"
+    lottoPayout: pickNum(/^\s*lotto\s*payouts?\s*[:\-]?\s*\$?\s*([-\d.,]+)\s*$/mi, text),
+
+    // Department Grand Total: Online Lotto
+    onlineLottoTotal: (() => {
+      const m = text.match(
+        /Department:\s*\d+\s*Online\s+Lotto[\s\S]*?^\s*Grand\s+Total[^\n]*\$\s*([-\d.,]+)\s*$/mi
+      )
+      return m ? toNumber(m[1]) : null
+    })(),
+
+    // NEW: Data Wave and FEE DATA WAVE (case-insensitive)
+    dataWave: pickNum(/^\s*data\s*wave\s*[:\-]?\s*\$?\s*([-\d.,]+)\s*$/mi, text),
+    feeDataWave: pickNum(/^\s*fee\s*data\s*wave\s*[:\-]?\s*\$?\s*([-\d.,]+)\s*$/mi, text),
+
+    // Department Grand Total: Instant Lott
+    instantLottTotal: (() => {
+      const m = text.match(
+        /Department:\s*\d+\s*Instant\s+Lott[\s\S]*?^\s*Grand\s+Total[^\n]*\$\s*([-\d.,]+)\s*$/mi
+      )
+      return m ? toNumber(m[1]) : null
+    })(),
   }
 
   const sd = text.match(/^\s*Safedrops\s+(\d+)\s+([-\d.,]+)\s*$/mi)
