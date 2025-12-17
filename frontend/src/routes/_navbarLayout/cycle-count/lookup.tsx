@@ -80,6 +80,8 @@ function RouteComponent() {
           <div><strong>FOH:</strong> {result.foh}</div>
           <div><strong>BOH:</strong> {result.boh}</div>
           <div><strong>Updated At:</strong> {result.updatedAt ? new Date(result.updatedAt).toLocaleString() : ""}</div>
+          <div><strong>Active:</strong> {result.active ? 'Yes' : "No"}</div>
+          <div><strong>Inventory Exists:</strong> {result.inventoryExists ? 'Yes' : "No"}</div>
         </div>
       )}
       {result?.error && (

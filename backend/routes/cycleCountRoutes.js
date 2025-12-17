@@ -74,7 +74,8 @@ router.get('/daily-items', async (req, res) => {
     const flaggedItems = await CycleCount.find({
       site: site.toString().trim(),
       displayDate: todayDate,
-      flaggedDisplayDate: todayDate
+      flaggedDisplayDate: todayDate,
+      inventoryExists: true
     }).lean();
 
     // Regular items: those with displayDate set to today, but NOT flaggedDisplayDate
@@ -84,7 +85,8 @@ router.get('/daily-items', async (req, res) => {
       $or: [
         { flaggedDisplayDate: { $ne: todayDate } },
         { flaggedDisplayDate: { $exists: false } }
-      ]
+      ],
+      inventoryExists: true
     }).lean();
 
     console.log('flagged items len:', flaggedItems.length);
@@ -102,7 +104,7 @@ router.get('/daily-items', async (req, res) => {
     const tomorrowStart = todayStart.plus({ days: 1 });
 
     // Fetch flagged items (top candidates)
-    const flaggedItemsRaw = await CycleCount.find({ site: site.toString().trim(), flagged: true });
+    const flaggedItemsRaw = await CycleCount.find({ site: site.toString().trim(), flagged: true, inventoryExists: true });
     const flaggedSelected = CycleCount.sortFlaggedItems(flaggedItemsRaw).slice(0, 5);
     const flaggedCount = flaggedSelected.length;
 
@@ -112,7 +114,8 @@ router.get('/daily-items', async (req, res) => {
     // Fetch all unflagged items for the site
     let allUnflagged = await CycleCount.find({
       site: site.toString().trim(),
-      flagged: false
+      flagged: false,
+      inventoryExists: true
     });
     allUnflagged = CycleCount.sortItems(allUnflagged);
 
@@ -589,7 +592,7 @@ router.get('/lookup', async (req, res) => {
     // 3️⃣ Return extended response
     res.json({
       ...item.toObject(),
-      category: categoryName,   
+      category: categoryName,
     });
 
   } catch (err) {

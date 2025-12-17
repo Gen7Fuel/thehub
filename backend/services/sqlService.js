@@ -120,6 +120,16 @@ async function getGradeVolumeFuelData(pool, csoCode, startDate, endDate) {
         AND s.[businessDate] BETWEEN '${startDate}' AND '${endDate}'
       ORDER BY s.[businessDate]
     `);
+    // const dbStartDate = formatDateForDB(startDate);
+    // const dbEndDate = formatDateForDB(endDate);
+    // const result = await pool.request().query(`
+    //   SELECT s.[Station_SK], s.[Date_SK], s.[FuelGradeID], s.[Sales_Volume_LTR], s.[Description]
+    //   FROM [CSO].[FuelSummary] s
+    //   WHERE
+    //     s.[Station_SK] = ${csoCode}
+    //     AND s.[Date_SK] BETWEEN '${dbStartDate}' AND '${dbEndDate}'
+    //   ORDER BY s.[Date_SK]
+    // `);
     await sql.close();
     return result.recordset;
   } catch (err) {
@@ -317,9 +327,10 @@ async function getCategoriesFromSQL(gtins) {
   const sqlQuery = `
     SELECT [GTIN], [Category ID]
     FROM [CSO].[Master_Item]
-    WHERE [GTIN] IN (${params})
+    WHERE [GTIN] IN (${params}) AND [Inactive on Account] = 0
+      AND [Category ID] != 0 AND [Category Name] IS NOT NULL
   `;
-  
+
   const request = pool.request();
   gtins.forEach((gtin, idx) => request.input(`p${idx}`, gtin));
 
@@ -337,25 +348,26 @@ async function getCategoriesFromSQL(gtins) {
 
   return categoryMap;
 }
-// async function getCategoryNumbersFromSQL() {
-//   const pool = await getPool();
 
-//   try {
-//     const sql = `
-//       SELECT DISTINCT [Category Name], [Cat #]
-//       FROM [CSO].[ItemBookCSO]
-//       WHERE [Category Name] IS NOT NULL AND [Cat #] IS NOT NULL
-//       ORDER BY [Cat #]
-//     `;
 
-//     const request = pool.request();
-//     const result = await request.query(sql);
-//     return result;
-//   } catch (err) {
-//     console.error("SQL error:", err);
-//     return { recordset: [] };
-//   }
-// }
+async function getCategoryNumbersFromSQL() {
+  const pool = await getPool();
+
+  try {
+    const sql = `
+      SELECT DISTINCT [Category ID],[Category Name]
+      FROM [CSO].[Master_Item]
+      WHERE [Category Name] IS NOT NULL AND [Category ID] IS NOT NULL
+      ORDER BY [Category ID]
+    `;
+    const request = pool.request();
+    const result = await request.query(sql);
+    return result;
+  } catch (err) {
+    console.error("SQL error:", err);
+    return { recordset: [] };
+  }
+}
 
 
 async function getFuelInventoryReportPreviousDay() {
@@ -387,6 +399,72 @@ async function getFuelInventoryReportCurrentDay() {
   } catch (err) {
     console.error('SQL error:', err);
     return [];
+  }
+}
+
+/**
+ * Fetch GTIN -> UPC list for items marked inactive on account.
+ * @param {string[]} gtins
+ * @returns {Promise<Object>} mapping: { gtin: [upc1, upc2, ...], ... }
+ */
+async function getInactiveMasterItems(gtins = []) {
+  if (!gtins || !gtins.length) return {};
+  const pool = await getPool();
+  const params = gtins.map((_, idx) => `@p${idx}`).join(',');
+  const sqlQuery = `
+    SELECT DISTINCT [GTIN], [UPC]
+    FROM [CSO].[Master_Item]
+    WHERE [Inactive on Account] = 1
+      AND [GTIN] IN (${params})
+  `;
+  const request = pool.request();
+  gtins.forEach((g, idx) => request.input(`p${idx}`, g));
+  const mapping = {};
+  try {
+    const result = await request.query(sqlQuery);
+    for (const row of result.recordset || []) {
+      const gtin = String(row.GTIN || '').trim();
+      const upc = row.UPC != null ? String(row.UPC).trim() : null;
+      if (!gtin) continue;
+      if (!mapping[gtin]) mapping[gtin] = [];
+      if (upc) mapping[gtin].push(upc);
+    }
+  } catch (err) {
+    console.error('SQL error in getInactiveMasterItems:', err);
+  }
+  return mapping;
+}
+
+/**
+ * Get On_hand value from [CSO].[Inventory Balance] for a UPC and station, filtered to yesterday.
+ * Uses LIKE '%upc%' to match (per existing usage).
+ * @param {string} upc
+ * @param {string} stationSk
+ * @returns {Promise<number|null>} On_hand number or null if not found
+ */
+async function getInventoryOnHandForUPCAndStation(upc, stationSk) {
+  if (!upc || !stationSk) return null;
+  try {
+    const pool = await getPool();
+    const request = pool.request();
+    request.input('upc', sql.VarChar, `%${upc}%`);
+    request.input('stationSk', sql.VarChar, stationSk);
+    const q = `
+      SELECT TOP (1) [On_hand]
+      FROM [CSO].[Inventory Balance]
+      WHERE [UPC] LIKE @upc
+        AND [Station_SK] = @stationSk
+        AND [Date] = CAST(GETDATE() - 1 AS date)
+    `;
+    const result = await request.query(q);
+    if (result && result.recordset && result.recordset.length) {
+      const v = result.recordset[0].On_hand;
+      return (v != null) ? Number(v) : null;
+    }
+    return null;
+  } catch (err) {
+    console.error('SQL error in getInventoryOnHandForUPCAndStation:', err);
+    return null;
   }
 }
 
@@ -558,4 +636,7 @@ module.exports = {
   getFuelInventoryReportPreviousDay,
   getFuelInventoryReportCurrentDay,
   getCategoriesFromSQL,
+  getCategoryNumbersFromSQL,
+  getInactiveMasterItems,
+  getInventoryOnHandForUPCAndStation
 };

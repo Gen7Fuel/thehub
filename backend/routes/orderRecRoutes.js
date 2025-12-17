@@ -227,7 +227,15 @@ router.put('/:id/item/:catIdx/:itemIdx', async (req, res) => {
             cycleCount.upc_barcode = cycleCount.upc_barcode || upc_barcode;
           }
         }
-
+        // Ensure flags are true for existing docs when updating from an OrderRec
+        if (!cycleCount.active) {
+          console.log(`Setting active=true for existing CycleCount (gtin=${cycleCount.gtin}, upc=${cycleCount.upc})`);
+          cycleCount.active = true;
+        }
+        if (!cycleCount.inventoryExists) {
+          console.log(`Setting inventoryExists=true for existing CycleCount (gtin=${cycleCount.gtin}, upc=${cycleCount.upc})`);
+          cycleCount.inventoryExists = true;
+        }
         cycleCount.flagged = !!isActuallyChanged;
         if (isActuallyChanged) {
           cycleCount.flaggedAt = new Date();
