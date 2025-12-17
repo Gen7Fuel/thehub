@@ -111,6 +111,7 @@ function RouteComponent() {
                   <tr className="text-left border-b">
                     <th className="px-2 py-2">Date</th>
                     <th className="px-2 py-2">Filename</th>
+                    <th className="px-2 py-2">Preview</th>
                     {/* <th className="px-2 py-2">Created</th> */}
                     <th className="px-2 py-2">Action</th>
                   </tr>
@@ -120,6 +121,14 @@ function RouteComponent() {
                     <tr key={e._id} className="border-b">
                       <td className="px-2 py-2 font-mono">{e.date}</td>
                       <td className="px-2 py-2">{e.filename}</td>
+                      <td className="px-2 py-2">
+                        <img 
+                          src={`/cdn/download/${e.filename}`} 
+                          alt={`${e.date} preview`}
+                          className="w-16 h-16 object-cover rounded border"
+                          loading="lazy"
+                        />
+                      </td>
                       {/* <td className="px-2 py-2">{e.createdAt ? format(new Date(e.createdAt), 'yyyy-MM-dd HH:mm') : '—'}</td> */}
                       <td className="px-2 py-2">
                         <a download={true} href={`/cdn/download/${e.filename}`}>Download</a>
