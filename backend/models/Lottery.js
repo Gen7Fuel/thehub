@@ -24,6 +24,9 @@ const LotterySchema = new mongoose.Schema(
     instantLottTotal: { type: Number, default: null },
     // Number of scratch free tickets reported by the site (user-entered)
     scratchFreeTickets: { type: Number, default: null },
+    // New online adjustments entered by user
+    onlineCancellations: { type: Number, default: null },
+    onlineDiscounts: { type: Number, default: null },
 
     // Filenames stored by CDN upload (e.g., ["bol-2025-12-10-1.jpg", ...])
     images: { type: [String], default: [] },

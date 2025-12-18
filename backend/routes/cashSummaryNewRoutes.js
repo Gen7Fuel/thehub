@@ -8,6 +8,7 @@ const { dateFromYMDLocal } = require('../utils/dateUtils')
 const { sendEmail } = require('../utils/emailService')
 const { generateCashSummaryPdf } = require('../utils/cashSummaryPdf')
 const { generateShiftReportsPdf } = require('../utils/shiftReportsPdf')
+const { generateLotteryImagesPdf } = require('../utils/lotteryImagesPdf')
 
 const path = require('path')
 
@@ -15,7 +16,11 @@ const router = express.Router()
 
 const CDN_BASE_URL = process.env.CDN_BASE_URL || process.env.PUBLIC_CDN_BASE_URL || 'http://cdn:5001'
 const OFFICE_SFTP_API_BASE = 'http://24.50.55.130:5000'
-const CASH_SUMMARY_EMAILS = (process.env.CASH_SUMMARY_EMAILS || 'reports@bosservicesltd.com')
+// const CASH_SUMMARY_EMAILS = (process.env.CASH_SUMMARY_EMAILS || 'reports@bosservicesltd.com')
+//   .split(',')
+//   .map(e => e.trim())
+//   .filter(Boolean)
+const CASH_SUMMARY_EMAILS = ('daksh@gen7fuel.com')
   .split(',')
   .map(e => e.trim())
   .filter(Boolean)
@@ -50,7 +55,7 @@ async function getDepositSlipAttachment(req, site, start, end) {
 
     const photoName = path.basename(String(candidate.photo))
     const origin = (CDN_BASE_URL || `${req.protocol}://${req.get('host')}`).replace(/\/$/, '')
-    console.log('Origin',origin)
+    console.log('Origin', origin)
     const url = `${origin}/cdn/download/${encodeURIComponent(photoName)}`
 
     const resp = await fetchWithTimeout(url, {}, 15000)
@@ -149,7 +154,7 @@ router.post('/', async (req, res) => {
 
     if (!shift_number) return res.status(400).json({ error: 'shift_number is required' })
     if (!date) return res.status(400).json({ error: 'date is required' })
-    
+
     let values = {
       canadian_cash_collected: norm(canadian_cash_collected),
       item_sales: norm(item_sales),
@@ -271,7 +276,7 @@ router.post('/', async (req, res) => {
 
     const saved = await doc.save()
 
-    await upsertDailyDepositForSiteDate(site, date).catch(() => {})
+    await upsertDailyDepositForSiteDate(site, date).catch(() => { })
 
     res.status(201).json(saved)
   } catch (err) {
@@ -343,6 +348,8 @@ router.get('/lottery', async (req, res) => {
         date: lotteryDoc.date,
         lottoPayout: lotteryDoc.lottoPayout,
         onlineLottoTotal: lotteryDoc.onlineLottoTotal,
+        onlineCancellations: lotteryDoc.onlineCancellations,
+        onlineDiscounts: lotteryDoc.onlineDiscounts,
         instantLottTotal: lotteryDoc.instantLottTotal,
         scratchFreeTickets: lotteryDoc.scratchFreeTickets,
         dataWave: lotteryDoc.dataWave,
@@ -357,6 +364,8 @@ router.get('/lottery', async (req, res) => {
         const copy = { ...r }
         delete copy.lottoPayout
         delete copy.onlineLottoTotal
+        delete copy.onlineCancellations
+        delete copy.onlineDiscounts
         delete copy.instantLottTotal
         delete copy.scratchFreeTickets
         delete copy.dataWave
@@ -399,6 +408,8 @@ router.post('/lottery', async (req, res) => {
       date: String(date),
       lottoPayout: (values && typeof values.payouts === 'number') ? values.payouts : (values && typeof values.payout === 'number' ? values.payout : null),
       onlineLottoTotal: (values && typeof values.onlineSales === 'number') ? values.onlineSales : null,
+      onlineCancellations: (values && typeof values.onlineCancellations === 'number') ? values.onlineCancellations : null,
+      onlineDiscounts: (values && typeof values.onlineDiscounts === 'number') ? values.onlineDiscounts : null,
       instantLottTotal: (values && typeof values.scratchSales === 'number') ? values.scratchSales : null,
       scratchFreeTickets: (values && typeof values.scratchFreeTickets === 'number') ? values.scratchFreeTickets : null,
       dataWave: (values && typeof values.datawaveValue === 'number') ? values.datawaveValue : null,
@@ -489,54 +500,65 @@ router.post('/submit/to/safesheet', async (req, res) => {
     const entryId = idx >= 0 ? sheet.entries[idx]._id : sheet.entries[sheet.entries.length - 1]._id
     res.json({ site, date, cashIn: totalCanadianCashCollected, entryId })
 
-    // Background: generate PDFs and email them with optional deposit slip image
-    ;(async () => {
-      try {
-        // Load notes for this site+day and pass into PDF
-        const reportForPdf = await CashSummaryReport.findOne({ site, date: start }).lean()
-        const notes = reportForPdf?.notes || ''
+      // Background: generate PDFs and email them with optional deposit slip image
+      ; (async () => {
+        try {
+          // Load notes for this site+day and pass into PDF
+          const reportForPdf = await CashSummaryReport.findOne({ site, date: start }).lean()
+          const notes = reportForPdf?.notes || ''
 
-        // Cash Summary PDF
-        const cashSummaryPdf = await generateCashSummaryPdf({ site, date })
+          // Cash Summary PDF
+          const cashSummaryPdf = await generateCashSummaryPdf({ site, date })
 
-        // Shift Reports PDF (all shifts for the date)
-        const shiftReportsPdf = await generateShiftReportsPdf({ site, date })
+          // Shift Reports PDF (all shifts for the date)
+          const shiftReportsPdf = await generateShiftReportsPdf({ site, date })
 
-        // Bank Deposit Slip image (for entries on that date with photo and cashDepositBank > 0)
-        const depositSlip = await getDepositSlipAttachment(req, site, start, end)
+          // Bank Deposit Slip image (for entries on that date with photo and cashDepositBank > 0)
+          const depositSlip = await getDepositSlipAttachment(req, site, start, end)
+          //Lottery images pdf
+          const origin = (CDN_BASE_URL || `${req.protocol}://${req.get('host')}`).replace(/\/$/, '')
 
-        const attachments = [
-          { filename: `Cash-Summary-${site}-${date}.pdf`, content: cashSummaryPdf, contentType: 'application/pdf' },
-        ]
+          const lotteryImagesPdf = await generateLotteryImagesPdf({ site, date, origin })
+          const attachments = [
+            { filename: `Cash-Summary-${site}-${date}.pdf`, content: cashSummaryPdf, contentType: 'application/pdf' },
+          ]
 
-        if (shiftReportsPdf) {
-          attachments.push({
-            filename: `Shift-Reports-${site}-${date}.pdf`,
-            content: shiftReportsPdf,
-            contentType: 'application/pdf',
+          if (lotteryImagesPdf) {
+            attachments.push({
+              filename: `Lottery-Images-${site}-${date}.pdf`,
+              content: lotteryImagesPdf,
+              contentType: 'application/pdf',
+            })
+          }
+
+          if (shiftReportsPdf) {
+            attachments.push({
+              filename: `Shift-Reports-${site}-${date}.pdf`,
+              content: shiftReportsPdf,
+              contentType: 'application/pdf',
+            })
+          }
+
+          if (depositSlip) attachments.push(depositSlip)
+
+          await sendEmail({
+            to: CASH_SUMMARY_EMAILS.join(','),
+            // cc: ['mohammad@gen7fuel.com', 'JDzyngel@gen7fuel.com', 'ana@gen7fuel.com'],
+            subject: `Daily Report – ${site} – ${date}`,
+            text: `Attached are the Cash Summary${shiftReportsPdf ? ', Shift Reports' : ''}${depositSlip ? ' and Bank Deposit Slip' : ''} for ${site} on ${date}.`,
+            attachments,
           })
+
+          console.log(
+            'Cash Summary email sent:',
+            site,
+            date,
+            `[attachments: summary${shiftReportsPdf ? ', shifts' : ''}${depositSlip ? ', deposit-slip' : ''}]`
+          )
+        } catch (e) {
+          console.error('Cash Summary email/PDF failed:', e?.message || e)
         }
-
-        if (depositSlip) attachments.push(depositSlip)
-
-        await sendEmail({
-          to: CASH_SUMMARY_EMAILS.join(','),
-          cc: ['mohammad@gen7fuel.com', 'JDzyngel@gen7fuel.com', 'ana@gen7fuel.com'],
-          subject: `Daily Report – ${site} – ${date}`,
-          text: `Attached are the Cash Summary${shiftReportsPdf ? ', Shift Reports' : ''}${depositSlip ? ' and Bank Deposit Slip' : ''} for ${site} on ${date}.`,
-          attachments,
-        })
-
-        console.log(
-          'Cash Summary email sent:',
-          site,
-          date,
-          `[attachments: summary${shiftReportsPdf ? ', shifts' : ''}${depositSlip ? ', deposit-slip' : ''}]`
-        )
-      } catch (e) {
-        console.error('Cash Summary email/PDF failed:', e?.message || e)
-      }
-    })()
+      })()
   } catch (err) {
     console.error('CashSummary submit error:', err)
     return res.status(500).json({ error: 'Failed to submit' })
@@ -577,7 +599,7 @@ router.get('/report', async (req, res) => {
       cpl_bulloch: sum('cpl_bulloch'),
       exempted_tax: sum('exempted_tax'),
       report_canadian_cash: sum('report_canadian_cash'),
-      payouts: rows.reduce((a,r)=> a + (r.payouts || 0), 0),
+      payouts: rows.reduce((a, r) => a + (r.payouts || 0), 0),
     }
 
     // Fetch or create the single report for site+day (normalized date)
@@ -768,13 +790,13 @@ router.put('/:id', async (req, res) => {
     // Auto-update Safesheet for the new site/date
     const newSite = finalValues.site || existing.site
     const newDate = finalValues.date
-    await upsertDailyDepositForSiteDate(newSite, newDate).catch(() => {})
+    await upsertDailyDepositForSiteDate(newSite, newDate).catch(() => { })
 
     // If site or date changed, also refresh the old site/date
     const siteChanged = String(existing.site) !== String(newSite)
     const dateChanged = new Date(existing.date).toDateString() !== new Date(newDate).toDateString()
     if (siteChanged || dateChanged) {
-      await upsertDailyDepositForSiteDate(existing.site, existing.date).catch(() => {})
+      await upsertDailyDepositForSiteDate(existing.site, existing.date).catch(() => { })
     }
 
     res.json(updated)

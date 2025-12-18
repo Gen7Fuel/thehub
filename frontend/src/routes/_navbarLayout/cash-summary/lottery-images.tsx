@@ -23,6 +23,35 @@ function RouteComponent() {
   const resetLotteryForm = useFormStore((s) => s.resetLotteryForm)
   const lotterySite = useFormStore((s) => s.lotterySite)
 
+  // Load existing saved lottery images into form state when opening this page
+  useEffect(() => {
+    const loadSaved = async () => {
+      try {
+        if (!lotterySite || !date) return
+        if (lotteryImages && lotteryImages.length > 0) return
+        const ymd = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`
+        const token = localStorage.getItem('token')
+        const resp = await fetch(`/api/cash-summary/lottery?site=${encodeURIComponent(lotterySite)}&date=${encodeURIComponent(ymd)}`, {
+          headers: {
+            ...(token ? { Authorization: `Bearer ${token}` } : {}),
+          },
+        })
+        if (!resp.ok) return
+        const j = await resp.json()
+        const existing = j?.lottery?.images || []
+        if (existing && existing.length > 0) {
+          // store raw filenames in form state (so submit sends filenames), display will use CDN URL
+          setLotteryImages(existing)
+        }
+      } catch (e) {
+        console.error('Failed to load saved lottery images', e)
+      }
+    }
+    loadSaved()
+    // only run on initial mount / when date or site changes
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [date, lotterySite])
+
   useEffect(() => {
     // basic guard: if user hasn't filled anything, go back
     if (!date) {
@@ -126,10 +155,14 @@ function RouteComponent() {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+          ...(token ? { Authorization: `Bearer ${token}`, "X-Required-Permission": "accounting.lottery" } : {}),
         },
         body: JSON.stringify({ site: lotterySite, date: ymd, values: lotteryValues, images: uploadedFilenames }),
       })
+      if (resp2.status === 403) {
+        navigate({ to: "/no-access" });
+        return;
+      }
       if (!resp2.ok) {
         const txt = await resp2.text().catch(() => '')
         throw new Error(`Save failed: ${resp2.status} ${txt}`)
@@ -137,7 +170,7 @@ function RouteComponent() {
 
       // reset local lottery form after successful save
       resetLotteryForm()
-      navigate({ to: '/cash-summary' })
+      navigate({ to: '/cash-summary/report?site=' + lotterySite + '&date=' + ymd })
     } catch (err) {
       console.error('Save failed', err)
     }
@@ -193,14 +226,17 @@ function RouteComponent() {
         <div className="space-y-2">
           <h3 className="text-md font-semibold">Saved Images ({lotteryImages.length})</h3>
           <div className="grid grid-cols-2 gap-4">
-            {lotteryImages.map((img, idx) => (
-              <div key={idx} className="relative">
-                <img src={img} alt={`img-${idx}`} className="border border-dashed border-gray-300 rounded-md w-full h-32 object-cover" />
-                <Button variant="destructive" size="sm" className="absolute top-1 right-1 h-6 w-6 p-0" onClick={() => removeImage(idx)}>
-                  <X className="h-3 w-3" />
-                </Button>
-              </div>
-            ))}
+            {lotteryImages.map((img, idx) => {
+              const src = typeof img === 'string' && img.startsWith('data:') ? img : `${domain || ''}/cdn/download/${encodeURIComponent(String(img))}`
+              return (
+                <div key={idx} className="relative">
+                  <img src={src} alt={`img-${idx}`} className="border border-dashed border-gray-300 rounded-md w-full h-32 object-cover" />
+                  <Button variant="destructive" size="sm" className="absolute top-1 right-1 h-6 w-6 p-0" onClick={() => removeImage(idx)}>
+                    <X className="h-3 w-3" />
+                  </Button>
+                </div>
+              )
+            })}
           </div>
         </div>
       )}
@@ -212,7 +248,7 @@ function RouteComponent() {
           <Button variant="outline">Back</Button>
         </Link>
         <div className="flex gap-2">
-           <Button onClick={handleSubmit}>Submit</Button>
+          <Button onClick={handleSubmit}>Submit</Button>
         </div>
       </div>
     </div>

@@ -522,15 +522,18 @@ function RouteComponent() {
           <CardTitle>Edit Location</CardTitle>
 
             <div className="flex items-center gap-4">
-              {/* Sells Lottery toggle */}
-              <label className="flex items-center gap-2">
-                <input
-                  type="checkbox"
-                  checked={!!formData.sellsLottery}
-                  onChange={(e) => setFormData({ ...formData, sellsLottery: e.target.checked })}
-                />
+              {/* Sells Lottery toggle (styled) */}
+              <div className="flex items-center gap-3">
                 <span className="text-sm">Sells Lottery</span>
-              </label>
+                <button
+                  type="button"
+                  aria-pressed={!!formData.sellsLottery}
+                  onClick={() => setFormData({ ...formData, sellsLottery: !formData.sellsLottery })}
+                  className={`relative inline-flex items-center h-6 rounded-full w-12 transition-colors duration-150 ${formData.sellsLottery ? 'bg-green-500' : 'bg-gray-300'}`}
+                >
+                  <span className={`inline-block w-4 h-4 bg-white rounded-full transform transition-transform duration-150 ${formData.sellsLottery ? 'translate-x-6' : 'translate-x-1'}`} />
+                </button>
+              </div>
 
               {/* 🧩 Generate Safesheet Button (only show if not created yet) */}
               {!hasSafesheet && (
@@ -566,18 +569,18 @@ function RouteComponent() {
             {/* TEXT INPUT FIELDS */}
             {[
               { label: "Station Name", name: "stationName" },
-              { label: "Legal Name", name: "legalName" },
-              { label: "IND Number", name: "INDNumber" },
-              { label: "Kardpoll Code", name: "kardpollCode" },
-              { label: "CSO Code", name: "csoCode" },
-              { label: "Email", name: "email" },
-            ].map((field) => (
+                { label: "Legal Name", name: "legalName" },
+                { label: "IND Number", name: "INDNumber" },
+                { label: "Kardpoll Code", name: "kardpollCode" },
+                { label: "CSO Code", name: "csoCode" },
+                { label: "Email", name: "email" },
+              ].map((field) => (
               <div key={field.name}>
                 <Label className="block font-medium mb-1">{field.label}</Label>
                 <input
                   type="text"
                   name={field.name}
-                  value={formData[field.name as keyof LocationForm] || ""}
+                    value={String(formData[field.name as keyof LocationForm] ?? "")}
                   onChange={(e) =>
                     setFormData({
                       ...formData,

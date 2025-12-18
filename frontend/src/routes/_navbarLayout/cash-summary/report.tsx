@@ -72,7 +72,10 @@ function RouteComponent() {
   const { site, date } = Route.useSearch()
   const { report, error } = Route.useLoaderData() as { report: ReportData | null; error: string | null }
   const navigate = useNavigate({ from: Route.fullPath })
-  const [submitState, setSubmitState] = useState<'idle' | 'submitting' | 'submitted'>('idle')
+  // const [submitState, setSubmitState] = useState<'idle' | 'submitting' | 'submitted'>('idle')
+  const [submitState, setSubmitState] = useState<'idle' | 'submitting' | 'submitted'>(
+    report?.report?.submitted === true ? 'submitted' : 'idle'
+  )
   const notes = report?.report?.notes ?? ''
   const submitted = report?.report?.submitted === true
 
@@ -85,10 +88,19 @@ function RouteComponent() {
         Authorization: `Bearer ${localStorage.getItem('token') || ''}`,
       },
       body: JSON.stringify({ site, date, notes: text }),
-    }).catch(() => {})
+    }).catch(() => { })
     // Optionally refetch route loader:
     // navigate({ search: (prev: Search) => ({ ...prev }) })
   }
+
+  useEffect(() => {
+    if (report?.report?.submitted === true) {
+      setSubmitState('submitted')
+    } else {
+      setSubmitState('idle')
+    }
+  }, [report])
+
 
   const onSubmitClick = async () => {
     if (submitState !== 'idle' || !site || !date) return
@@ -296,38 +308,58 @@ function RouteComponent() {
                           <th className="px-3 py-2 text-left">Description</th>
                           <th className="px-3 py-2 text-left">Lottery</th>
                           <th className="px-3 py-2 text-left">Bullock</th>
+                          <th className="px-3 py-2 text-left">Over / Short</th>
                         </tr>
                       </thead>
                       <tbody>
-                        <tr className="border-t">
+                        <tr className="border-t font-semibold">
                           <td className="px-3 py-2">Online Sales</td>
                           <td className="px-3 py-2">${Number(lottery.onlineLottoTotal ?? 0).toFixed(2)}</td>
                           <td className="px-3 py-2">{bullock ? `$${Number(bullock.onlineSales || 0).toFixed(2)}` : '—'}</td>
+                          <td className="px-3 py-2">{bullock ? <span className={`${((lottery.onlineLottoTotal ?? 0) - ((bullock.onlineSales || 0) + (lottery.onlineCancellations || 0) + (lottery.onlineDiscounts || 0))) > 0 ? 'text-green-600' : ((lottery.onlineLottoTotal ?? 0) - ((bullock.onlineSales || 0) + (lottery.onlineCancellations || 0) + (lottery.onlineDiscounts || 0))) < 0 ? 'text-red-600' : 'text-muted-foreground'}`}>${Number((lottery.onlineLottoTotal ?? 0) - ((bullock.onlineSales || 0) + (lottery.onlineCancellations || 0) + (lottery.onlineDiscounts || 0))).toFixed(2)}</span> : '—'}</td>
                         </tr>
-                        <tr className="border-t">
+                        <tr className="border-t bg-gray-50">
+                          <td className="px-3 py-2 pl-4">Lotto Cancellations</td>
+                          <td className="px-3 py-2">${Number(lottery.onlineCancellations ?? 0).toFixed(2)}</td>
+                          <td className="px-3 py-2">—</td>
+                          <td className="px-3 py-2">—</td>
+                        </tr>
+                        <tr className="border-t bg-gray-50">
+                          <td className="px-3 py-2 pl-4">Lotto Discounts</td>
+                          <td className="px-3 py-2">${Number(lottery.onlineDiscounts ?? 0).toFixed(2)}</td>
+                          <td className="px-3 py-2">—</td>
+                          <td className="px-3 py-2">—</td>
+                        </tr>
+                        <tr className="border-t font-semibold">
                           <td className="px-3 py-2">Scratch Sales</td>
                           <td className="px-3 py-2">${Number(lottery.instantLottTotal ?? 0).toFixed(2)}</td>
                           <td className="px-3 py-2">{bullock ? `$${Number(bullock.scratchSales || 0).toFixed(2)}` : '—'}</td>
+                          <td className="px-3 py-2">{bullock ? <span className={`${(((lottery.instantLottTotal ?? 0) + (lottery.scratchFreeTickets ?? 0)) - (bullock.scratchSales || 0)) > 0 ? 'text-green-600' : (((lottery.instantLottTotal ?? 0) + (lottery.scratchFreeTickets ?? 0)) - (bullock.scratchSales || 0)) < 0 ? 'text-red-600' : 'text-muted-foreground'}`}>${Number(((lottery.instantLottTotal ?? 0) + (lottery.scratchFreeTickets ?? 0)) - (bullock.scratchSales || 0)).toFixed(2)}</span> : '—'}</td>
                         </tr>
-                        <tr className="border-t">
-                          <td className="px-3 py-2">Scratch Free Tickets</td>
+                        <tr className="border-t bg-gray-50">
+                          <td className="px-3 py-2 pl-4">Scratch Free Tickets</td>
                           <td className="px-3 py-2">{lottery.scratchFreeTickets != null ? Number(lottery.scratchFreeTickets).toFixed(2) : '—'}</td>
                           <td className="px-3 py-2">—</td>
+                          <td className="px-3 py-2">—</td>
+                          {/* <td className="px-3 py-2">{bullock ? <span className={`${(((lottery.instantLottTotal ?? 0) + (lottery.scratchFreeTickets ?? 0)) - (bullock.scratchSales || 0)) > 0 ? 'text-green-600' : (((lottery.instantLottTotal ?? 0) + (lottery.scratchFreeTickets ?? 0)) - (bullock.scratchSales || 0)) < 0 ? 'text-red-600' : 'text-muted-foreground'}`}>${Number(((lottery.instantLottTotal ?? 0) + (lottery.scratchFreeTickets ?? 0)) - (bullock.scratchSales || 0)).toFixed(2)}</span> : '—'}</td> */}
                         </tr>
-                        <tr className="border-t">
+                        <tr className="border-t font-semibold">
                           <td className="px-3 py-2">Payouts</td>
                           <td className="px-3 py-2">${Number(lottery.lottoPayout ?? 0).toFixed(2)}</td>
                           <td className="px-3 py-2">{bullock ? `$${Number(bullock.payouts || 0).toFixed(2)}` : '—'}</td>
+                          <td className="px-3 py-2">{bullock ? <span className={`${((lottery.lottoPayout ?? 0) - (bullock.payouts || 0)) > 0 ? 'text-green-600' : ((lottery.lottoPayout ?? 0) - (bullock.payouts || 0)) < 0 ? 'text-red-600' : 'text-muted-foreground'}`}>${Number((lottery.lottoPayout ?? 0) - (bullock.payouts || 0)).toFixed(2)}</span> : '—'}</td>
                         </tr>
-                        <tr className="border-t">
+                        <tr className="border-t font-semibold">
                           <td className="px-3 py-2">Datawave Value</td>
                           <td className="px-3 py-2">${Number(lottery.dataWave ?? 0).toFixed(2)}</td>
                           <td className="px-3 py-2">{bullock ? `$${Number(bullock.dataWave || 0).toFixed(2)}` : '—'}</td>
+                          <td className="px-3 py-2">{bullock ? <span className={`${((lottery.dataWave ?? 0) - (bullock.dataWave || 0)) > 0 ? 'text-green-600' : ((lottery.dataWave ?? 0) - (bullock.dataWave || 0)) < 0 ? 'text-red-600' : 'text-muted-foreground'}`}>${Number((lottery.dataWave ?? 0) - (bullock.dataWave || 0)).toFixed(2)}</span> : '—'}</td>
                         </tr>
-                        <tr className="border-t">
-                          <td className="px-3 py-2">Datawave Fee</td>
+                        <tr className="border-t bg-gray-50">
+                          <td className="px-3 py-2 pl-4">Datawave Fee</td>
                           <td className="px-3 py-2">${Number(lottery.feeDataWave ?? 0).toFixed(2)}</td>
                           <td className="px-3 py-2">{bullock ? `$${Number(bullock.dataWaveFee || 0).toFixed(2)}` : '—'}</td>
+                          <td className="px-3 py-2">{bullock ? <span className={`${((lottery.feeDataWave ?? 0) - (bullock.dataWaveFee || 0)) > 0 ? 'text-green-600' : ((lottery.feeDataWave ?? 0) - (bullock.dataWaveFee || 0)) < 0 ? 'text-red-600' : 'text-muted-foreground'}`}>${Number((lottery.feeDataWave ?? 0) - (bullock.dataWaveFee || 0)).toFixed(2)}</span> : '—'}</td>
                         </tr>
                       </tbody>
                     </table>

@@ -86,15 +86,26 @@ router.put("/:id", async (req, res) => {
 // POST /api/locations
 router.post("/", async (req, res) => {
   try {
-    const { type, stationName,  legalName, INDNumber, kardpollCode,   csoCode,  timezone,  email, managerCode } = req.body;
+    const { type, stationName,  legalName, INDNumber, kardpollCode,   csoCode,  timezone,  email, managerCode, sellsLottery } = req.body;
 
     // Basic validation
     if (!type || !stationName || !legalName || !INDNumber || !csoCode || !timezone || !email || !managerCode) {
       return res.status(400).json({ message: "Missing required fields." });
     }
 
-    // Create new location
-    const location = new Location({ type,stationName,legalName,INDNumber,kardpollCode,csoCode,timezone,email, managerCode,});
+    // Create new location, include sellsLottery if provided
+    const location = new Location({
+      type,
+      stationName,
+      legalName,
+      INDNumber,
+      kardpollCode,
+      csoCode,
+      timezone,
+      email,
+      managerCode,
+      sellsLottery: !!sellsLottery,
+    });
 
     await location.save();
 

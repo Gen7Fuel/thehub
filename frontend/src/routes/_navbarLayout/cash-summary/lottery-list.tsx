@@ -8,15 +8,26 @@ import { domain } from '@/lib/constants'
 import { Eye, ChevronLeft, ChevronRight, ExternalLink } from 'lucide-react'
 import { useAuth } from '@/context/AuthContext'
 
+type LotteryListSearch = {
+  site?: string
+}
+
 export const Route = createFileRoute('/_navbarLayout/cash-summary/lottery-list')({
   component: RouteComponent,
+  validateSearch: (search: Record<string, unknown>): LotteryListSearch => ({
+    site: search.site as string | undefined,
+  }),
 })
 
+
 function RouteComponent() {
-  const navigate = useNavigate()
+  const navigate = useNavigate({ from: Route.fullPath })
   const { user } = useAuth()
 
-  const [site, setSite] = useState<string>(user?.location || '')
+  const { site: siteFromUrl } = Route.useSearch()
+
+  const [site, setSite] = useState<string>(siteFromUrl || '')
+
   const [date, setDate] = useState<Date | undefined>(new Date())
   const [loading, setLoading] = useState(false)
   const [lottery, setLottery] = useState<any | null>(null)
@@ -37,44 +48,60 @@ function RouteComponent() {
   }
 
   useEffect(() => {
-    if (!user?.location) return
-    setSite(user.location)
-  }, [user])
+    if (!siteFromUrl && user?.location) {
+      navigate({
+        search: (prev: LotteryListSearch) => ({
+          ...prev,
+          site: user.location,
+        }),
+        replace: true,
+      })
+    }
+  }, [siteFromUrl, user])
+
+
+
+  useEffect(() => {
+    if (siteFromUrl && siteFromUrl !== site) {
+      setSite(siteFromUrl)
+    }
+  }, [siteFromUrl])
+
 
   useEffect(() => {
     const ymd = toYmd(date)
     if (!site || !ymd) return
 
     const controller = new AbortController()
-    ;(async () => {
-      setLoading(true)
-      try {
-        const token = localStorage.getItem('token')
-        const resp = await fetch(`/api/cash-summary/lottery?site=${encodeURIComponent(site)}&date=${encodeURIComponent(ymd)}`, {
-          signal: controller.signal,
-          headers: token ? { Authorization: `Bearer ${token}` } : {},
-        })
+      ; (async () => {
+        setLoading(true)
+        try {
+          const token = localStorage.getItem('token')
+          const resp = await fetch(`/api/cash-summary/lottery?site=${encodeURIComponent(site)}&date=${encodeURIComponent(ymd)}`, {
+            signal: controller.signal,
+            headers: token ? { Authorization: `Bearer ${token}`, "X-Required-Permission": "accounting.lotteryList" } : {},
+          })
 
-        if (resp.status === 403) {
-          navigate({ to: '/no-access' })
-          return
-        }
+          if (resp.status === 403) {
+            navigate({ to: '/no-access' })
+            return
+          }
 
-        if (!resp.ok) {
+          if (!resp.ok) {
+            setLottery(null)
+            return
+          }
+
+          const data = await resp.json()
+          setLottery(data?.lottery ?? null)
+          setBullock(data?.totals ?? null)
+        } catch (e) {
+          if ((e as any).name !== 'AbortError') console.warn('Lottery list fetch failed', e)
           setLottery(null)
-          return
+        } finally {
+          setLoading(false)
         }
-
-        const data = await resp.json()
-        setLottery(data?.lottery ?? null)
-        setBullock(data?.totals ?? null)
-      } catch (e) {
-        if ((e as any).name !== 'AbortError') console.warn('Lottery list fetch failed', e)
-        setLottery(null)
-      } finally {
-        setLoading(false)
-      }
-    })()
+      })()
 
     return () => controller.abort()
   }, [site, date, navigate])
@@ -99,7 +126,20 @@ function RouteComponent() {
       <div className="grid grid-cols-2 gap-4 items-end mb-4">
         <div>
           <h3 className="text-sm font-semibold mb-2">Site</h3>
-          <SitePicker value={site} onValueChange={(v) => setSite(v)} placeholder="Select site" />
+          <SitePicker
+            value={site}
+            placeholder="Select site"
+            onValueChange={(newSite) => {
+              setSite(newSite)
+
+              navigate({
+                search: (prev: LotteryListSearch) => ({
+                  ...prev,
+                  site: newSite,
+                }),
+              })
+            }}
+          />
         </div>
         <div>
           <h3 className="text-sm font-semibold mb-2">Date</h3>
@@ -124,50 +164,70 @@ function RouteComponent() {
           <table className="min-w-full table-auto">
             <thead className="bg-gray-50">
               <tr>
-                  <th className="px-4 py-2 text-left">Description</th>
-                  <th className="px-4 py-2 text-left">Lottery Value</th>
-                  <th className="px-4 py-2 text-left">Bullock Value</th>
-                </tr>
+                <th className="px-4 py-2 text-left">Description</th>
+                <th className="px-4 py-2 text-left">Lottery Value</th>
+                <th className="px-4 py-2 text-left">Bullock Value</th>
+                <th className="px-4 py-2 text-left">Over / Short</th>
+              </tr>
             </thead>
             <tbody>
               <tr className="border-t">
-                <td className="px-4 py-2">Online Sales</td>
+                <td className="px-4 py-2 font-semibold">Online Sales</td>
                 <td className="px-4 py-2">${Number(lottery.onlineLottoTotal ?? 0).toFixed(2)}</td>
                 <td className="px-4 py-2">{bullock ? `$${Number(bullock.onlineSales || 0).toFixed(2)}` : '-'}</td>
+                <td className="px-4 py-2">{bullock ? <span className={`${((lottery.onlineLottoTotal ?? 0) - ((bullock.onlineSales || 0) + (lottery.onlineCancellations || 0) + (lottery.onlineDiscounts || 0))) > 0 ? 'text-green-600' : ((lottery.onlineLottoTotal ?? 0) - ((bullock.onlineSales || 0) + (lottery.onlineCancellations || 0) + (lottery.onlineDiscounts || 0))) < 0 ? 'text-red-600' : 'text-muted-foreground'}`}>${Number((lottery.onlineLottoTotal ?? 0) - ((bullock.onlineSales || 0) + (lottery.onlineCancellations || 0) + (lottery.onlineDiscounts || 0))).toFixed(2)}</span> : '-'}</td>
               </tr>
-              <tr className="border-t">
+              <tr className="border-t bg-gray-50">
+                <td className="px-4 py-2 pl-8">Lotto Cancellations</td>
+                <td className="px-4 py-2">{lottery.onlineCancellations != null ? `$${Number(lottery.onlineCancellations).toFixed(2)}` : '-'}</td>
+                <td className="px-4 py-2">-</td>
+                <td className="px-4 py-2">-</td>
+              </tr>
+              <tr className="border-t bg-gray-50">
+                <td className="px-4 py-2 pl-8">Lotto Discounts</td>
+                <td className="px-4 py-2">{lottery.onlineDiscounts != null ? `$${Number(lottery.onlineDiscounts).toFixed(2)}` : '-'}</td>
+                <td className="px-4 py-2">-</td>
+                <td className="px-4 py-2">-</td>
+              </tr>
+              <tr className="border-t font-semibold">
                 <td className="px-4 py-2">Scratch Sales</td>
                 <td className="px-4 py-2">${Number(lottery.instantLottTotal ?? 0).toFixed(2)}</td>
                 <td className="px-4 py-2">{bullock ? `$${Number(bullock.scratchSales || 0).toFixed(2)}` : '-'}</td>
+                <td className="px-4 py-2">{bullock ? <span className={`${(((lottery.instantLottTotal ?? 0) + (lottery.scratchFreeTickets ?? 0)) - (bullock.scratchSales || 0)) > 0 ? 'text-green-600' : (((lottery.instantLottTotal ?? 0) + (lottery.scratchFreeTickets ?? 0)) - (bullock.scratchSales || 0)) < 0 ? 'text-red-600' : 'text-muted-foreground'}`}>${Number(((lottery.instantLottTotal ?? 0) + (lottery.scratchFreeTickets ?? 0)) - (bullock.scratchSales || 0)).toFixed(2)}</span> : '-'}</td>
               </tr>
-              <tr className="border-t">
-                <td className="px-4 py-2">Scratch Free Tickets</td>
+              <tr className="border-t bg-gray-50">
+                <td className="px-4 py-2 pl-8">Scratch Free Tickets</td>
                 <td className="px-4 py-2">{lottery.scratchFreeTickets != null ? `$${Number(lottery.scratchFreeTickets).toFixed(2)}` : '-'}</td>
                 <td className="px-4 py-2">-</td>
+                <td className="px-4 py-2">-</td>
+                {/* <td className="px-4 py-2">{bullock ? <span className={`${(((lottery.instantLottTotal ?? 0) + (lottery.scratchFreeTickets ?? 0)) - (bullock.scratchSales || 0)) > 0 ? 'text-green-600' : (((lottery.instantLottTotal ?? 0) + (lottery.scratchFreeTickets ?? 0)) - (bullock.scratchSales || 0)) < 0 ? 'text-red-600' : 'text-muted-foreground'}`}>${Number(((lottery.instantLottTotal ?? 0) + (lottery.scratchFreeTickets ?? 0)) - (bullock.scratchSales || 0)).toFixed(2)}</span> : '-'}</td> */}
               </tr>
-              <tr className="border-t">
+              <tr className="border-t font-semibold">
                 <td className="px-4 py-2">Payouts</td>
                 <td className="px-4 py-2">${Number(lottery.lottoPayout ?? 0).toFixed(2)}</td>
                 <td className="px-4 py-2">{bullock ? `$${Number(bullock.payouts || 0).toFixed(2)}` : '-'}</td>
+                <td className="px-4 py-2">{bullock ? <span className={`${((lottery.lottoPayout ?? 0) - (bullock.payouts || 0)) > 0 ? 'text-green-600' : ((lottery.lottoPayout ?? 0) - (bullock.payouts || 0)) < 0 ? 'text-red-600' : 'text-muted-foreground'}`}>${Number((lottery.lottoPayout ?? 0) - (bullock.payouts || 0)).toFixed(2)}</span> : '-'}</td>
               </tr>
-              <tr className="border-t">
+              <tr className="border-t font-semibold">
                 <td className="px-4 py-2">Datawave Value</td>
                 <td className="px-4 py-2">${Number(lottery.dataWave ?? 0).toFixed(2)}</td>
                 <td className="px-4 py-2">{bullock ? `$${Number(bullock.dataWave || 0).toFixed(2)}` : '-'}</td>
+                <td className="px-4 py-2">{bullock ? <span className={`${((lottery.dataWave ?? 0) - (bullock.dataWave || 0)) > 0 ? 'text-green-600' : ((lottery.dataWave ?? 0) - (bullock.dataWave || 0)) < 0 ? 'text-red-600' : 'text-muted-foreground'}`}>${Number((lottery.dataWave ?? 0) - (bullock.dataWave || 0)).toFixed(2)}</span> : '-'}</td>
               </tr>
-              <tr className="border-t">
-                <td className="px-4 py-2">Datawave Fee</td>
+              <tr className="border-t bg-gray-50">
+                <td className="px-4 py-2 pl-8">Datawave Fee</td>
                 <td className="px-4 py-2">${Number(lottery.feeDataWave ?? 0).toFixed(2)}</td>
                 <td className="px-4 py-2">{bullock ? `$${Number(bullock.dataWaveFee || 0).toFixed(2)}` : '-'}</td>
+                <td className="px-4 py-2">{bullock ? <span className={`${((lottery.feeDataWave ?? 0) - (bullock.dataWaveFee || 0)) > 0 ? 'text-green-600' : ((lottery.feeDataWave ?? 0) - (bullock.dataWaveFee || 0)) < 0 ? 'text-red-600' : 'text-muted-foreground'}`}>${Number((lottery.feeDataWave ?? 0) - (bullock.dataWaveFee || 0)).toFixed(2)}</span> : '-'}</td>
               </tr>
               <tr className="border-t">
-                <td className="px-4 py-2">Images</td>
+                <td className="px-4 py-2 font-semibold">Images</td>
                 <td className="px-4 py-2">
                   {Array.isArray(lottery.images) ? lottery.images.length : 0} image(s)
                 </td>
               </tr>
               <tr className="border-t">
-                <td className="px-4 py-2">Actions</td>
+                <td className="px-4 py-2 font-semibold">Actions</td>
                 <td className="px-4 py-2">
                   <div className="flex gap-2">
                     <Button size="sm" variant="outline" onClick={() => viewImages(lottery.images || [])}>

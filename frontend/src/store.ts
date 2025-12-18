@@ -63,6 +63,8 @@ type FormStore = {
         onlineSales: number;
         scratchSales: number;
         scratchFreeTickets: number;
+        onlineCancellations: number;
+        onlineDiscounts: number;
         payouts: number;
         datawaveValue: number;
         datawaveFee: number;
@@ -71,6 +73,8 @@ type FormStore = {
         onlineSales: number;
         scratchSales: number;
         scratchFreeTickets: number;
+        onlineCancellations: number;
+        onlineDiscounts: number;
         payouts: number;
         datawaveValue: number;
         datawaveFee: number;
@@ -78,7 +82,7 @@ type FormStore = {
 
     lotteryImages: string[];
     setLotteryImages: (images: string[]) => void;
-    
+
     lotterySite: string;
     setLotterySite: (site: string) => void;
 
@@ -153,6 +157,8 @@ export const useFormStore = create<FormStore>((set) => ({
         onlineSales: 0,
         scratchSales: 0,
         scratchFreeTickets: 0,
+        onlineCancellations: 0,
+        onlineDiscounts: 0,
         payouts: 0,
         datawaveValue: 0,
         datawaveFee: 0,
@@ -168,6 +174,8 @@ export const useFormStore = create<FormStore>((set) => ({
             onlineSales: 0,
             scratchSales: 0,
             scratchFreeTickets: 0,
+            onlineCancellations: 0,
+            onlineDiscounts: 0,
             payouts: 0,
             datawaveValue: 0,
             datawaveFee: 0,
