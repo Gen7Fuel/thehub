@@ -39,6 +39,12 @@ const CashSummarySchema = new mongoose.Schema(
     parsedPayouts: { type: Number },
     safedropsCount: { type: Number },
     safedropsAmount: { type: Number },
+    // Lottery / Bulloch parsed fields
+    lottoPayout: { type: Number },
+    onlineLottoTotal: { type: Number },
+    instantLottTotal: { type: Number },
+    dataWave: { type: Number },
+    feeDataWave: { type: Number },
   },
   { timestamps: true }
 )

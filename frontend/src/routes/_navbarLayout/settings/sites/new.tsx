@@ -16,60 +16,61 @@ export const Route = createFileRoute('/_navbarLayout/settings/sites/new')({
 });
 
 function NewSiteRouteComponent() {
-    const { user } = useAuth();
-    const navigate = useNavigate();
-    const access = user?.access || {}
-    if(!access?.settings){
-      navigate({to:"/no-access"});
-      return;
+  const { user } = useAuth();
+  const navigate = useNavigate();
+  const access = user?.access || {}
+  if (!access?.settings) {
+    navigate({ to: "/no-access" });
+    return;
+  }
+  const [formData, setFormData] = useState({
+    type: "store", // default type
+    stationName: "",
+    legalName: "",
+    INDNumber: "",
+    kardpollCode: "",
+    csoCode: "",
+    timezone: "America/Toronto", // default timezone
+    email: "",
+    sellsLottery: false,
+  });
+  const [managerCode, setManagerCode] = useState("");
+  const [loading, setLoading] = useState(false);
+  const router = useRouter(); // ✅ get router instance here
+
+
+  const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
+    setFormData(prev => ({ ...prev, [e.target.name]: e.target.value }));
+  };
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setLoading(true);
+    try {
+      const response = await axios.post("/api/locations", {
+        ...formData,
+        managerCode, // include OTP value
+      }, {
+        headers: { Authorization: `Bearer ${localStorage.getItem('token')}` },
+      });
+
+      const createdLocation = response.data; // this will have the _id
+      alert(`Location: ${createdLocation.stationName} has been created successfully!`);
+      router.load();
+
+      // Navigate to the newly created location's edit page
+      navigate({
+        to: "/settings/sites/$id",
+        params: { id: createdLocation._id },
+      });
+
+    } catch (err) {
+      console.error(err);
+      alert("Failed to create location. Please try again.");
+    } finally {
+      setLoading(false);
     }
-    const [formData, setFormData] = useState({
-        type: "store", // default type
-        stationName: "",
-        legalName: "",
-        INDNumber: "",
-        kardpollCode: "",
-        csoCode: "",
-        timezone: "America/Toronto", // default timezone
-        email: "",
-    });
-    const [managerCode, setManagerCode] = useState("");
-    const [loading, setLoading] = useState(false);
-    const router = useRouter(); // ✅ get router instance here
-
-
-    const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
-        setFormData(prev => ({ ...prev, [e.target.name]: e.target.value }));
-    };
-
-    const handleSubmit = async (e: React.FormEvent) => {
-        e.preventDefault();
-        setLoading(true);
-        try {
-                const response = await axios.post("/api/locations", {
-                  ...formData,
-                  managerCode, // include OTP value
-                }, {
-                  headers: { Authorization: `Bearer ${localStorage.getItem('token')}` },
-                });
-
-            const createdLocation = response.data; // this will have the _id
-            alert(`Location: ${createdLocation.stationName} has been created successfully!`);
-            router.load();
-
-            // Navigate to the newly created location's edit page
-            navigate({
-            to: "/settings/sites/$id",
-            params: { id: createdLocation._id },
-            });
-
-        } catch (err) {
-            console.error(err);
-            alert("Failed to create location. Please try again.");
-        } finally {
-            setLoading(false);
-        }
-    };
+  };
 
 
   return (
@@ -134,6 +135,17 @@ function NewSiteRouteComponent() {
         <div>
           <Label>Email</Label>
           <Input type="email" name="email" value={formData.email} onChange={handleChange} required />
+        </div>
+        <div className="flex items-center gap-3">
+          <span className="text-sm">Sells Lottery</span>
+          <button
+            type="button"
+            aria-pressed={!!formData.sellsLottery}
+            onClick={() => setFormData({ ...formData, sellsLottery: !formData.sellsLottery })}
+            className={`relative inline-flex items-center h-6 rounded-full w-12 transition-colors duration-150 ${formData.sellsLottery ? 'bg-green-500' : 'bg-gray-300'}`}
+          >
+            <span className={`inline-block w-4 h-4 bg-white rounded-full transform transition-transform duration-150 ${formData.sellsLottery ? 'translate-x-6' : 'translate-x-1'}`} />
+          </button>
         </div>
         <div>
           <Label className="block font-medium mb-1">Manager Code</Label>
