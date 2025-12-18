@@ -24,6 +24,8 @@ import { PasswordProtection } from '@/components/custom/PasswordProtection'
 import { useAuth } from "@/context/AuthContext";
 import * as XLSX from "xlsx";
 import { FileSpreadsheet } from "lucide-react"
+import Barcode from "react-barcode";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 
 export const Route = createFileRoute('/_navbarLayout/cycle-count/inventory')({
   component: RouteComponent,
@@ -78,6 +80,7 @@ function RouteComponent() {
   const navigate = useNavigate({ from: Route.fullPath })
   const queryClient = useQueryClient()
   const { site, category } = Route.useSearch()
+  const [barcodeValue, setBarcodeValue] = useState<string | null>(null);
 
   const [searchTerm, setSearchTerm] = useState('');
 
@@ -390,7 +393,7 @@ function RouteComponent() {
                   {filteredInventory.map((item: InventoryItem, idx: number) => (
                     <TableRow key={`${item.UPC}-${idx}`}>
                       <TableCell className="font-medium truncate max-w-xs">{item.Item_Name}</TableCell>
-                      <TableCell>{item.UPC}</TableCell>
+                      <TableCell className="px-3 py-2 text-blue-600 cursor-pointer underline hover:text-blue-800" onClick={() => setBarcodeValue(item.UPC)}>{item.UPC}</TableCell>
                       <TableCell>{item.Category}</TableCell>
                       <TableCell className="text-center">{formatDateTime(item.updatedAt)}</TableCell>
                       {/* <TableCell className="text-right">{item.cycleCount === null || item.cycleCount === undefined ? '-' : item.cycleCount}</TableCell> */}
@@ -404,6 +407,17 @@ function RouteComponent() {
           )}
         </CardContent>
       </Card>
+      
+      <Dialog open={!!barcodeValue} onOpenChange={(open) => !open && setBarcodeValue(null)}>
+       <DialogContent>
+          <DialogHeader>
+            <DialogTitle>UPC Barcode</DialogTitle>
+          </DialogHeader>
+          <div className="flex justify-center items-center py-4">
+              {barcodeValue && <Barcode value={barcodeValue} />}
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }

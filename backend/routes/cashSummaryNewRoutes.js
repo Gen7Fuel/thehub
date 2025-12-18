@@ -16,14 +16,14 @@ const router = express.Router()
 
 const CDN_BASE_URL = process.env.CDN_BASE_URL || process.env.PUBLIC_CDN_BASE_URL || 'http://cdn:5001'
 const OFFICE_SFTP_API_BASE = 'http://24.50.55.130:5000'
-// const CASH_SUMMARY_EMAILS = (process.env.CASH_SUMMARY_EMAILS || 'reports@bosservicesltd.com')
-//   .split(',')
-//   .map(e => e.trim())
-//   .filter(Boolean)
-const CASH_SUMMARY_EMAILS = ('daksh@gen7fuel.com')
+const CASH_SUMMARY_EMAILS = (process.env.CASH_SUMMARY_EMAILS || 'reports@bosservicesltd.com')
   .split(',')
   .map(e => e.trim())
   .filter(Boolean)
+// const CASH_SUMMARY_EMAILS = ('daksh@gen7fuel.com')
+//   .split(',')
+//   .map(e => e.trim())
+//   .filter(Boolean)
 
 async function fetchWithTimeout(url, opts = {}, ms = 15000) {
   const controller = new AbortController()
@@ -543,7 +543,7 @@ router.post('/submit/to/safesheet', async (req, res) => {
 
           await sendEmail({
             to: CASH_SUMMARY_EMAILS.join(','),
-            // cc: ['mohammad@gen7fuel.com', 'JDzyngel@gen7fuel.com', 'ana@gen7fuel.com'],
+            cc: ['mohammad@gen7fuel.com', 'JDzyngel@gen7fuel.com', 'ana@gen7fuel.com'],
             subject: `Daily Report – ${site} – ${date}`,
             text: `Attached are the Cash Summary${shiftReportsPdf ? ', Shift Reports' : ''}${depositSlip ? ' and Bank Deposit Slip' : ''} for ${site} on ${date}.`,
             attachments,

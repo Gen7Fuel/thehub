@@ -47,6 +47,7 @@ router.post('/', async (req, res) => {
       order_placement_method,
       vendor_order_frequency,
       category,
+      notes,
     } = req.body;
 
     // Validate required fields
@@ -74,6 +75,7 @@ router.post('/', async (req, res) => {
           email_order,
           email,
           order_placement_method,
+          notes,
           vendor_order_frequency: s.frequency || vendor_order_frequency, // use site-specific frequency if provided
           category,
         })
@@ -130,6 +132,7 @@ router.get('/by-name/:id', async (req, res) => {
     const sites = allVendorDocs.map(v => ({
       site: v.location,
       frequency: v.vendor_order_frequency || '',
+      leadTime: typeof v.leadTime === 'number' && v.leadTime > 0 ? v.leadTime : null,
     }));
 
     // Optionally, merge supplies if needed
@@ -141,6 +144,8 @@ router.get('/by-name/:id', async (req, res) => {
       email: vendor.email,
       order_placement_method: vendor.order_placement_method,
       station_supplies: vendor.station_supplies,
+      notes: vendor.notes,
+      leadTime: vendor.leadTime,
       sites,
     });
   } catch (err) {
@@ -153,7 +158,7 @@ router.get('/by-name/:id', async (req, res) => {
 // Update a vendor by ID
 router.put('/:id', async (req, res) => {
   try {
-    const { name: newName, station_supplies, email_order, email, order_placement_method, category, sites } = req.body;
+    const { name: newName, station_supplies, email_order, email, order_placement_method, category, sites, notes } = req.body;
 
     if (!newName || !Array.isArray(sites)) {
       return res.status(400).json({ error: 'Vendor name and sites are required.' });
@@ -189,6 +194,7 @@ router.put('/:id', async (req, res) => {
         existingOldDoc.email = email;
         existingOldDoc.order_placement_method = order_placement_method;
         existingOldDoc.category = category;
+        existingOldDoc.notes = notes;
         await existingOldDoc.save();
       } else if (!existingNewDoc) {
         // Create new document for a new location (if not already existing)
@@ -200,6 +206,7 @@ router.put('/:id', async (req, res) => {
           email,
           order_placement_method,
           category,
+          notes,
           vendor_order_frequency: site.frequency ?? 0,
         });
       }
