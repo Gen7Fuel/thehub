@@ -519,25 +519,25 @@ function RouteComponent() {
 
     const nextValues = found
       ? {
-          onlineSales: Number(found.onlineLottoTotal ?? 0),
-          onlineCancellations: Number(found.onlineCancellations ?? 0),
-          onlineDiscounts: Number(found.onlineDiscounts ?? 0),
-          scratchSales: Number(found.instantLottTotal ?? 0),
-          payouts: Number(found.lottoPayout ?? 0),
-          datawaveValue: Number(found.dataWave ?? 0),
-          datawaveFee: Number(found.feeDataWave ?? 0),
-          scratchFreeTickets: Number(found.scratchFreeTickets ?? 0),
-        }
+        onlineSales: Number(found.onlineLottoTotal ?? 0),
+        onlineCancellations: Number(found.onlineCancellations ?? 0),
+        onlineDiscounts: Number(found.onlineDiscounts ?? 0),
+        scratchSales: Number(found.instantLottTotal ?? 0),
+        payouts: Number(found.lottoPayout ?? 0),
+        datawaveValue: Number(found.dataWave ?? 0),
+        datawaveFee: Number(found.feeDataWave ?? 0),
+        scratchFreeTickets: Number(found.scratchFreeTickets ?? 0),
+      }
       : {
-          onlineSales: 0,
-          onlineCancellations: 0,
-          onlineDiscounts: 0,
-          scratchSales: 0,
-          scratchFreeTickets: 0,
-          payouts: 0,
-          datawaveValue: 0,
-          datawaveFee: 0,
-        }
+        onlineSales: 0,
+        onlineCancellations: 0,
+        onlineDiscounts: 0,
+        scratchSales: 0,
+        scratchFreeTickets: 0,
+        payouts: 0,
+        datawaveValue: 0,
+        datawaveFee: 0,
+      }
 
     setLotteryValues(nextValues)
 
@@ -559,19 +559,21 @@ function RouteComponent() {
   const overShort = useMemo(() => {
     return {
       onlineSales:
-        (lotteryValues.onlineSales || 0) -
-        ((bullock.onlineSales || 0) +
-          (lotteryValues.onlineCancellations || 0) +
+        (bullock.onlineSales || 0) -
+        ((lotteryValues.onlineSales || 0) -
+          (lotteryValues.onlineCancellations || 0) -
           (lotteryValues.onlineDiscounts || 0)),
       scratchSales:
+        (bullock.scratchSales || 0) -
         ((lotteryValues.scratchSales || 0) +
-          (lotteryValues.scratchFreeTickets || 0)) -
-        (bullock.scratchSales || 0),
-      payouts: (lotteryValues.payouts || 0) - (bullock.payouts || 0),
+          (lotteryValues.scratchFreeTickets || 0)),
+      payouts: (bullock.payouts || 0) -
+        ((lotteryValues.payouts || 0) +
+          (lotteryValues.scratchFreeTickets || 0)),
       datawaveValue:
-        (lotteryValues.datawaveValue || 0) - (bullock.datawaveValue || 0),
+        (bullock.datawaveValue || 0) - (lotteryValues.datawaveValue || 0),
       datawaveFee:
-        (lotteryValues.datawaveFee || 0) - (bullock.datawaveFee || 0),
+        (bullock.datawaveFee || 0) - (lotteryValues.datawaveFee || 0),
     }
   }, [lotteryValues, bullock])
 
@@ -644,7 +646,7 @@ function RouteComponent() {
               <tr>
                 <th className="px-4 py-2 text-left">Description</th>
                 <th className="px-4 py-2 text-left">Lottery Report</th>
-                <th className="px-4 py-2 text-left">Bullock Report</th>
+                <th className="px-4 py-2 text-left">Bulloch Report</th>
                 <th className="px-4 py-2 text-left">Over / Short</th>
               </tr>
             </thead>
@@ -769,6 +771,24 @@ function RouteComponent() {
                 </td>
               </tr>
 
+              <tr className="border-t bg-gray-50">
+                <td className="px-4 py-2 pl-8">Scratch Free Tickets Payouts</td>
+                <td className="px-4 py-2">
+                  <input
+                    type="number"
+                    className="w-36 p-2 border rounded"
+                    value={(lotteryValues as any).scratchFreeTickets ?? 0}
+                    onChange={(e) =>
+                      useFormStore.getState().setLotteryValues({
+                        scratchFreeTickets: Number(e.target.value || 0),
+                      })
+                    }
+                  />
+                </td>
+                <td className="px-4 py-2">—</td>
+                <td className="px-4 py-2">—</td>
+              </tr>
+
               <tr className="border-t font-semibold">
                 <td className="px-4 py-2">Datawave Value</td>
                 <td className="px-4 py-2">
@@ -822,11 +842,11 @@ function RouteComponent() {
           <div />
           <Link
             to="/cash-summary/lottery-images"
-            search={(prev: any) => ({ ...prev})}
-            // search={(prev: any) => {
-            //   const { id, ...rest } = prev || {}
-            //   return { ...rest, site: rest?.site, date: rest?.date }
-            // }}
+            search={(prev: any) => ({ ...prev })}
+          // search={(prev: any) => {
+          //   const { id, ...rest } = prev || {}
+          //   return { ...rest, site: rest?.site, date: rest?.date }
+          // }}
           >
             <Button>Next</Button>
           </Link>
