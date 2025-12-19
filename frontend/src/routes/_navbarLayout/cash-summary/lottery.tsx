@@ -354,7 +354,7 @@
 //   )
 // }
 
-import { useEffect, useMemo } from 'react'
+import { useEffect, useMemo, useRef } from 'react'
 import { createFileRoute, Link, useNavigate } from '@tanstack/react-router'
 import { Button } from '@/components/ui/button'
 import { useFormStore } from '@/store'
@@ -387,8 +387,7 @@ const toYmd = (d?: Date) => {
 const parseYmdToDate = (ymd?: string): Date | undefined => {
   if (!ymd || !/^\d{4}-\d{2}-\d{2}$/.test(ymd)) return undefined
   const [y, m, d] = ymd.split('-').map(Number)
-  // Local midnight to avoid TZ shifts in picker
-  return new Date(y, m - 1, d)
+  return new Date(y, m - 1, d) // local midnight
 }
 
 export const Route = createFileRoute('/_navbarLayout/cash-summary/lottery')({
@@ -501,8 +500,14 @@ function RouteComponent() {
     if (siteFromUrl) setLotterySite(siteFromUrl)
   }, [siteFromUrl, setLotterySite])
 
-  // Populate store values/images from loader (only when changed)
+  // Initialize store values/images only once per site+date so inputs stay editable
+  const initKeyRef = useRef<string>('')
   useEffect(() => {
+    const key = `${siteFromUrl || ''}|${dateFromUrl || ''}`
+    if (!key) return
+    if (key === initKeyRef.current) return
+    initKeyRef.current = key
+
     const found =
       Array.isArray(rows) &&
       rows.find(
@@ -534,22 +539,11 @@ function RouteComponent() {
           datawaveFee: 0,
         }
 
-    const lv = lotteryValues
-    const valuesChanged =
-      (lv.onlineSales || 0) !== nextValues.onlineSales ||
-      (lv.onlineCancellations || 0) !== nextValues.onlineCancellations ||
-      (lv.onlineDiscounts || 0) !== nextValues.onlineDiscounts ||
-      (lv.scratchSales || 0) !== nextValues.scratchSales ||
-      (lv.scratchFreeTickets || 0) !== nextValues.scratchFreeTickets ||
-      (lv.payouts || 0) !== nextValues.payouts ||
-      (lv.datawaveValue || 0) !== nextValues.datawaveValue ||
-      (lv.datawaveFee || 0) !== nextValues.datawaveFee
-
-    if (valuesChanged) setLotteryValues(nextValues)
+    setLotteryValues(nextValues)
 
     const nextImages = (found && Array.isArray(found.images)) ? found.images : []
     setLotteryImages(nextImages)
-  }, [rows, lotteryValues, setLotteryValues, setLotteryImages])
+  }, [rows, siteFromUrl, dateFromUrl, setLotteryValues, setLotteryImages])
 
   // Derive Bullock totals and count directly from loader
   const totalsCount = count ?? 0
@@ -588,6 +582,8 @@ function RouteComponent() {
         site: newSite,
       }),
     })
+    // Reset init key to allow re-init on site change
+    initKeyRef.current = ''
   }
 
   return (
@@ -617,6 +613,8 @@ function RouteComponent() {
                     date: next ? toYmd(next) : undefined,
                   }),
                 })
+                // Reset init key to allow re-init on date change
+                initKeyRef.current = ''
               }}
             />
           </div>
@@ -822,7 +820,14 @@ function RouteComponent() {
       {sellsLottery !== false && totalsCount !== 0 && (
         <div className="flex justify-between mt-4">
           <div />
-          <Link to="/cash-summary/lottery-images">
+          <Link
+            to="/cash-summary/lottery-images"
+            search={(prev: any) => ({ ...prev})}
+            // search={(prev: any) => {
+            //   const { id, ...rest } = prev || {}
+            //   return { ...rest, site: rest?.site, date: rest?.date }
+            // }}
+          >
             <Button>Next</Button>
           </Link>
         </div>
