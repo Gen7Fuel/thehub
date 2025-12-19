@@ -1,11 +1,24 @@
 // Shared parser for .sft shift report files
 // Extracts numeric metrics via regex; returns an object of parsed values.
 // If a metric isn't found it will be null. Safedrops included if present.
-
 const toNumber = (s) => (s == null ? null : Number(String(s).replace(/,/g, '')))
 const pickNum = (re, text) => {
   const m = text.match(re)
   return m ? toNumber(m[1]) : null
+}
+
+// Capture the last "$ amount" on the line that starts with the label (case-insensitive)
+const pickLastMoney = (labelPattern, text) => {
+  // 1) Find the full line that starts with the label
+  const lineRe = new RegExp(`^\\s*${labelPattern}\\b.*$`, 'gmi')
+  const lines = text.match(lineRe)
+  if (!lines || !lines.length) return null
+  const line = lines[lines.length - 1]
+
+  // 2) From that line, grab the last $ amount
+  const moneyMatches = [...line.matchAll(/\$\s*([-\d.,]+)/g)]
+  if (!moneyMatches.length) return null
+  return toNumber(moneyMatches[moneyMatches.length - 1][1])
 }
 
 function parseSftReport(text) {
@@ -46,9 +59,9 @@ function parseSftReport(text) {
       return m ? toNumber(m[1]) : null
     })(),
 
-    // NEW: Data Wave and FEE DATA WAVE (case-insensitive)
-    dataWave: pickNum(/^\s*data\s*wave\s*[:\-]?\s*\$?\s*([-\d.,]+)\s*$/mi, text),
-    feeDataWave: pickNum(/^\s*fee\s*data\s*wave\s*[:\-]?\s*\$?\s*([-\d.,]+)\s*$/mi, text),
+    // Use last money value on the line (last column)
+    dataWave: pickLastMoney('data\\s*wave', text),
+    feeDataWave: pickLastMoney('fee\\s*data\\s*wave', text),
 
     // Department Grand Total: Instant Lott
     instantLottTotal: (() => {
