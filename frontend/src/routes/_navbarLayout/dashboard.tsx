@@ -606,43 +606,106 @@ function RouteComponent() {
     ])
   );
 
-  // Build 35-day  fuel chart data
-  const fuelMix90 = useMemo(() => {
+  const last35FuelData = useMemo(() => {
     if (!fuelData?.length) return [];
 
-    const allDates = Array.from(new Set(fuelData.map(d => d.businessDate.slice(5, 10)))).sort();
-    const last7Dates = allDates.slice(-35); // last 35 days
+    // Get unique sorted MM-DD dates
+    const allDates = Array.from(
+      new Set(fuelData.map(d => d.businessDate.slice(5, 10)))
+    ).sort();
 
-    const grades = Array.from(new Set(fuelData.map(d => d.fuelGradeDescription)));
+    const last35Dates = new Set(allDates.slice(-35));
 
-    // group by date
-    const byDate: Record<string, Record<string, number>> = {};
-    fuelData.forEach(d => {
-      const day = d.businessDate.slice(5, 10);
-      if (!last7Dates.includes(day)) return;
-      if (!byDate[day]) byDate[day] = {};
-      byDate[day][d.fuelGradeDescription] = Number(d.fuelGradeSalesVolume ?? 0);
-    });
-
-    // Build chart rows
-    return last7Dates.map(day => {
-      const row: Record<string, any> = { day }; // MM-DD for x-axis
-      grades.forEach(g => (row[g] = byDate[day]?.[g] ?? 0));
-      return row;
-    });
+    return fuelData.filter(d =>
+      last35Dates.has(d.businessDate.slice(5, 10))
+    );
   }, [fuelData]);
 
 
-  // Mini fuel sparkline datasets per grade
-  const fuelSparklines = useMemo(() => {
-    if (!fuelData?.length) return {};
 
-    const grades = Array.from(new Set(fuelData.map(d => d.fuelGradeDescription)));
+  // Build 35-day  fuel chart data
+  // const fuelMix90 = useMemo(() => {
+  //   if (!fuelData?.length) return [];
+
+  //   const allDates = Array.from(new Set(fuelData.map(d => d.businessDate.slice(5, 10)))).sort();
+  //   const last7Dates = allDates.slice(-35); // last 35 days
+
+  //   const grades = Array.from(new Set(fuelData.map(d => d.fuelGradeDescription)));
+
+  //   // group by date
+  //   const byDate: Record<string, Record<string, number>> = {};
+  //   fuelData.forEach(d => {
+  //     const day = d.businessDate.slice(5, 10);
+  //     if (!last7Dates.includes(day)) return;
+  //     if (!byDate[day]) byDate[day] = {};
+  //     byDate[day][d.fuelGradeDescription] = Number(d.fuelGradeSalesVolume ?? 0);
+  //   });
+
+  //   // Build chart rows
+  //   return last7Dates.map(day => {
+  //     const row: Record<string, any> = { day }; // MM-DD for x-axis
+  //     grades.forEach(g => (row[g] = byDate[day]?.[g] ?? 0));
+  //     return row;
+  //   });
+  // }, [fuelData]);
+  const fuelMix90 = useMemo(() => {
+    if (!last35FuelData.length) return [];
+
+    const grades = Array.from(
+      new Set(last35FuelData.map(d => d.fuelGradeDescription))
+    );
+
+    const byDate: Record<string, Record<string, number>> = {};
+
+    last35FuelData.forEach(d => {
+      const day = d.businessDate.slice(5, 10);
+      if (!byDate[day]) byDate[day] = {};
+      byDate[day][d.fuelGradeDescription] =
+        Number(d.fuelGradeSalesVolume ?? 0);
+    });
+
+    const dates = Object.keys(byDate).sort();
+
+    return dates.map(day => {
+      const row: Record<string, any> = { day };
+      grades.forEach(g => (row[g] = byDate[day]?.[g] ?? 0));
+      return row;
+    });
+  }, [last35FuelData]);
+
+
+
+  // Mini fuel sparkline datasets per grade
+  // const fuelSparklines = useMemo(() => {
+  //   if (!fuelData?.length) return {};
+
+  //   const grades = Array.from(new Set(fuelData.map(d => d.fuelGradeDescription)));
+
+  //   const byGrade: Record<string, any[]> = {};
+
+  //   grades.forEach(g => {
+  //     byGrade[g] = fuelData
+  //       .filter(d => d.fuelGradeDescription === g)
+  //       .map(d => ({
+  //         day: d.businessDate.slice(5, 10),
+  //         value: Number(d.fuelGradeSalesVolume ?? 0)
+  //       }))
+  //       .sort((a, b) => a.day.localeCompare(b.day));
+  //   });
+
+  //   return byGrade;
+  // }, [fuelData]);
+  const fuelSparklines = useMemo(() => {
+    if (!last35FuelData.length) return {};
+
+    const grades = Array.from(
+      new Set(last35FuelData.map(d => d.fuelGradeDescription))
+    );
 
     const byGrade: Record<string, any[]> = {};
 
     grades.forEach(g => {
-      byGrade[g] = fuelData
+      byGrade[g] = last35FuelData
         .filter(d => d.fuelGradeDescription === g)
         .map(d => ({
           day: d.businessDate.slice(5, 10),
@@ -652,7 +715,8 @@ function RouteComponent() {
     });
 
     return byGrade;
-  }, [fuelData]);
+  }, [last35FuelData]);
+
 
 
   //transactions and visits char config
