@@ -42,10 +42,11 @@ function RouteComponent() {
 
         <Link
           to="/cash-summary/list"
-          search={(prev: any) => {
-            const { id, date, ...rest } = prev || {}
-            return { ...rest, site: rest?.site ?? fallbackSite }
-          }}
+          // search={(prev: any) => {
+          //   const { id, date, ...rest } = prev || {}
+          //   return { ...rest, site: rest?.site ?? fallbackSite }
+          // }}
+          search={(prev: any) => ({ ...prev})}
           activeOptions={{ exact: true }}
         >
           <Button
@@ -59,10 +60,11 @@ function RouteComponent() {
         {access?.accounting?.lottery && (
           <Link
             to="/cash-summary/lottery"
-            search={(prev: any) => {
-              const { id, date, ...rest } = prev || {}
-              return { ...rest, site: rest?.site ?? fallbackSite }
-            }}
+            // search={(prev: any) => {
+            //   const { id, ...rest } = prev || {}
+            //   return { ...rest, site: rest?.site, date: rest?.date }
+            // }}
+            search={(prev: any) => ({ ...prev})}
             activeOptions={{ exact: true }}
           >
             <Button
@@ -76,10 +78,11 @@ function RouteComponent() {
         {access?.accounting?.lotteryList && (
           <Link
             to="/cash-summary/lottery-list"
-            search={(prev: any) => {
-              const { id, date, ...rest } = prev || {}
-              return { ...rest, site: rest?.site ?? fallbackSite }
-            }}
+            // search={(prev: any) => {
+            //   const { id, ...rest } = prev || {}
+            //   return { ...rest, site: rest?.site, date: rest?.date }
+            // }}
+            search={(prev: any) => ({ ...prev})}
             activeOptions={{ exact: true }}
           >
             <Button
@@ -92,10 +95,7 @@ function RouteComponent() {
         )}
         <Link
           to="/cash-summary/report"
-          search={(prev: any) => {
-            const { id, ...rest } = prev || {}
-            return { ...rest, site: rest?.site ?? fallbackSite }
-          }}
+          search={(prev: any) => ({ ...prev})}
           activeOptions={{ exact: true }}
         >
           <Button
