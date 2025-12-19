@@ -625,7 +625,7 @@ router.post('/instance', async (req, res) => {
     const { template, site, frequency, periodKey, date, items } = req.body;
     const type = "store"
     const io = req.app.get("io");
-    if (!template || !site || !frequency || !date || !items) {
+    if (!template || !site || !frequency || !date || !items || !periodKey) {
       return res.status(400).json({ error: "Missing fields" });
     }
 
