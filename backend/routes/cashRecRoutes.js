@@ -1,6 +1,7 @@
 const express = require('express')
 const multer = require('multer')
 const { BankStatement, KardpollReport } = require('../models/CashRec')
+const CashSummary = require('../models/CashSummaryNew')
 
 const router = express.Router()
 const upload = multer({
@@ -275,7 +276,7 @@ router.post('/bank-statement', express.json({ limit: '1mb' }), async (req, res) 
   }
 })
 
-router.get('/entries', async (req, res) => {
+router.get('/kardpoll-entries', async (req, res) => {
   try {
     const site = String(req.query.site || '').trim()
     const date = String(req.query.date || '').trim()
@@ -301,6 +302,117 @@ router.get('/entries', async (req, res) => {
   } catch (err) {
     console.error('cashRecRoutes.entries error:', err)
     res.status(500).json({ error: 'Failed to load entries' })
+  }
+})
+
+// helper: YYYY-MM-DD <-> Date (UTC) utilities
+const pad2 = (n) => String(n).padStart(2, '0')
+const toYmdUtc = (d) => {
+  const x = new Date(d)
+  if (Number.isNaN(x.getTime())) return undefined
+  return `${x.getUTCFullYear()}-${pad2(x.getUTCMonth() + 1)}-${pad2(x.getUTCDate())}`
+}
+const addDaysYmd = (ymd, days) => {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(ymd)) return undefined
+  const [y, m, d] = ymd.split('-').map(Number)
+  const dt = new Date(Date.UTC(y, m - 1, d))
+  dt.setUTCDate(dt.getUTCDate() + days)
+  return toYmdUtc(dt)
+}
+const startOfUtcDay = (ymd) => {
+  const [y, m, d] = ymd.split('-').map(Number)
+  return new Date(Date.UTC(y, m - 1, d, 0, 0, 0, 0))
+}
+const endOfUtcDay = (ymd) => {
+  const [y, m, d] = ymd.split('-').map(Number)
+  return new Date(Date.UTC(y, m - 1, d, 23, 59, 59, 999))
+}
+
+router.get('/entries', async (req, res) => {
+  try {
+    const site = String(req.query.site || '').trim()
+    const date = String(req.query.date || '').trim() // YYYY-MM-DD
+
+    if (!site || !/^\d{4}-\d{2}-\d{2}$/.test(date)) {
+      return res.status(400).json({ error: 'site and date (YYYY-MM-DD) are required' })
+    }
+
+    // 1) Kardpoll for same date (string date in DB)
+    const kardpoll = await KardpollReport.findOne({ site, date }).lean()
+
+    // 2) BankStatement for next day
+    const nextDate = addDaysYmd(date, 1)
+    const bank = nextDate
+      ? await BankStatement.findOne({ site, date: nextDate }).lean()
+      : null
+
+    // 3) CashSummary aggregate (Date type, sum all numeric fields for the day)
+    const start = startOfUtcDay(date)
+    const end = endOfUtcDay(date)
+
+    const numericFields = [
+      'canadian_cash_collected',
+      'item_sales',
+      'cash_back',
+      'loyalty',
+      'cpl_bulloch',
+      'exempted_tax',
+      'report_canadian_cash',
+      'payouts',
+      'fuelSales',
+      'dealGroupCplDiscounts',
+      'fuelPriceOverrides',
+      'parsedItemSales',
+      'depositTotal',
+      'pennyRounding',
+      'totalSales',
+      'afdCredit',
+      'afdDebit',
+      'kioskCredit',
+      'kioskDebit',
+      'kioskGiftCard',
+      'totalPos',
+      'arIncurred',
+      'grandTotal',
+      'couponsAccepted',
+      'canadianCash',
+      'cashOnHand',
+      'parsedCashBack',
+      'parsedPayouts',
+      'safedropsCount',
+      'safedropsAmount',
+    ]
+
+    const groupStage = numericFields.reduce(
+      (acc, f) => {
+        acc[f] = { $sum: { $ifNull: [`$${f}`, 0] } }
+        return acc
+      },
+      { shiftCount: { $sum: 1 } }
+    )
+
+    const [agg] = await CashSummary.aggregate([
+      { $match: { site, date: { $gte: start, $lte: end } } },
+      { $group: { _id: null, ...groupStage } },
+      { $project: { _id: 0 } },
+    ])
+
+    const emptyTotals = numericFields.reduce((o, k) => ((o[k] = 0), o), {})
+    const cashSummary = {
+      site,
+      date,
+      shiftCount: agg?.shiftCount || 0,
+      totals: agg ? agg : { ...emptyTotals, shiftCount: 0 },
+    }
+
+    return res.json({
+      kardpoll: kardpoll || null,
+      bank: bank || null,
+      cashSummary,
+    })
+  } catch (err) {
+    console.error('cashRecRoutes.entries error:', err)
+    return res.status(500).json({ error: 'Failed to load entries' })
   }
 })
 
