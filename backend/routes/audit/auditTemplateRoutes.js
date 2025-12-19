@@ -637,7 +637,7 @@ router.post('/instance', async (req, res) => {
     const allUpdatedItems = []; // 🔹 collect updated items for response & socket emit
 
     for (const freq of frequenciesToProcess) {
-      const periodKey = getPeriodKey(freq, date);
+      // const periodKey = getPeriodKey(freq, date);
 
       let instance = await AuditInstance.findOne({ template, site, frequency: freq, periodKey, type });
 
