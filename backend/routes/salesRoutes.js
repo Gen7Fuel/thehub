@@ -47,6 +47,7 @@ router.get('/all-data', async (req, res) => {
       transStart,
       transEnd
     });
+    console.log('transstart:',transStart,'transend:',transEnd);
 
     res.json(response);
   } catch (err) {

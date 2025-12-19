@@ -326,8 +326,41 @@ function RouteComponent() {
           // Optionally handle other errors here
         }
 
+        // const today = new Date();
+        // const end = new Date(today);
+
         const today = new Date();
+
+        // ------------------- END (yesterday) -------------------
         const end = new Date(today);
+        end.setDate(end.getDate() - 1);
+
+        // ------------------- FUEL -------------------
+        const fuelStart = new Date(end);
+        fuelStart.setDate(fuelStart.getDate() - 60);
+
+        const fuelStartDate = fuelStart.toISOString().slice(0, 10);
+        const fuelEndDate = end.toISOString().slice(0, 10);
+
+        // ------------------- TRANSACTIONS -------------------
+        const transStart = new Date(end);
+        transStart.setDate(transStart.getDate() - 14);
+
+        const transStartDate = transStart.toISOString().slice(0, 10);
+        const transEndDate = end.toISOString().slice(0, 10);
+
+        // ------------------- SALES -------------------
+        const salesStart = new Date(end);
+        salesStart.setDate(salesStart.getDate() - 59);
+        salesStart.setHours(0, 0, 0, 0);
+
+        const salesEnd = new Date(end);
+        salesEnd.setHours(23, 59, 59, 999);
+
+        const fmt = (d: Date) => d.toISOString().slice(0, 10);
+        const salesStartDate = fmt(salesStart);
+        const salesEndDate = fmt(salesEnd);
+
         // Cycle counts
         const timezone = await fetchLocation(site).then(loc => loc.timezone || "UTC");
         const dailyCountsRes = await fetchDailyCounts(site, sevenDaysAgo.toISOString().slice(0, 10), today.toISOString().slice(0, 10), timezone);
@@ -362,27 +395,30 @@ function RouteComponent() {
         }));
 
 
-        end.setDate(today.getDate() - 1); // yesterday
+        // end.setDate(today.getDate() - 1); // yesterday
 
-        const start = new Date(end);
-        start.setDate(end.getDate() - 60); // last 60 days
+        // const start = new Date(end);
+        // start.setDate(end.getDate() - 60); // last 60 days
 
-        const fuelStartDate = start.toISOString().slice(0, 10)
-        const fuelEndDate = end.toISOString().slice(0, 10)
+        // const fuelStartDate = start.toISOString().slice(0, 10)
+        // const fuelEndDate = end.toISOString().slice(0, 10)
 
-        start.setDate(end.getDate() - 35); // last 35 days
+        // start.setDate(end.getDate() - 14); // last 14 days
 
-        const transStartDate = start.toISOString().slice(0, 10)
-        const transEndDate = end.toISOString().slice(0, 10)
+        // const transStartDate = start.toISOString().slice(0, 10)
+        // const transEndDate = end.toISOString().slice(0, 10)
 
-        end.setHours(23, 59, 59, 999)
+        // // Sales data
+        // // start.setDate(end.getDate() - 35); // last 35 days
 
-        start.setDate(start.getDate() - (60 - 1)) // 60 days window
-        start.setHours(0, 0, 0, 0)
+        // end.setHours(23, 59, 59, 999)
 
-        const fmt = (d: Date) => d.toISOString().slice(0, 10)
-        const salesStartDate = fmt(start)
-        const salesEndDate = fmt(end)
+        // start.setDate(start.getDate() - (60 - 1)) // 60 days window
+        // start.setHours(0, 0, 0, 0)
+
+        // const fmt = (d: Date) => d.toISOString().slice(0, 10)
+        // const salesStartDate = fmt(start)
+        // const salesEndDate = fmt(end)
 
         // ------------------------------------------------------------
         // 1️⃣ CHECK INDEXEDDB FIRST
@@ -1028,24 +1064,24 @@ function RouteComponent() {
                       <CashOnHandDisplay site={site} />
                     </div> */}
                     {/* Avg Basket Size Card */}
-                    { site !== "Jocko Point" && (
-                    <div className="col-span-1">
-                      <div className="bg-white rounded-xl shadow p-4 flex flex-col">
-                        <div className="text-sm text-muted-foreground">Avg Basket Size (Last 7 days)</div>
-                        <div className="text-2xl font-bold mt-1">
-                          C$ {avgBasketStats.current}
-                        </div>
-                        <div className="text-sm mt-1">
-                          <span className="text-muted-foreground">C$ {avgBasketStats.previous}</span>
-                          <span
-                            className={`ml-2 font-semibold ${avgBasketStats.changePct >= 0 ? "text-green-600" : "text-red-600"
-                              }`}
-                          >
-                            ({avgBasketStats.changePct}%)
-                          </span>
+                    {site !== "Jocko Point" && (
+                      <div className="col-span-1">
+                        <div className="bg-white rounded-xl shadow p-4 flex flex-col">
+                          <div className="text-sm text-muted-foreground">Avg Basket Size (Last 7 days)</div>
+                          <div className="text-2xl font-bold mt-1">
+                            C$ {avgBasketStats.current}
+                          </div>
+                          <div className="text-sm mt-1">
+                            <span className="text-muted-foreground">C$ {avgBasketStats.previous}</span>
+                            <span
+                              className={`ml-2 font-semibold ${avgBasketStats.changePct >= 0 ? "text-green-600" : "text-red-600"
+                                }`}
+                            >
+                              ({avgBasketStats.changePct}%)
+                            </span>
+                          </div>
                         </div>
                       </div>
-                    </div>
                     )}
                   </div>
                 </section>
@@ -1054,83 +1090,83 @@ function RouteComponent() {
                 {/* ======================= */}
                 {/*     INVENTORY SECTION   */}
                 {/* ======================= */}
-                { site !== "Jocko Point" && (
-                <section aria-labelledby="inventory-heading" className="mb-10">
-                  <h2 id="inventory-heading" className="text-2xl font-bold mb-4 pl-4">Inventory</h2>
+                {site !== "Jocko Point" && (
+                  <section aria-labelledby="inventory-heading" className="mb-10">
+                    <h2 id="inventory-heading" className="text-2xl font-bold mb-4 pl-4">Inventory</h2>
 
-                  {/* Responsive grid: 1 col mobile, 2 col tablet, 3 col desktop */}
-                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                    {/* Vendor Status (Inventory) */}
-                    <Card className="min-h-[365px] flex flex-col col-span-1">
-                      <CardHeader className="space-y-2">
-                        {/* Title + Description */}
-                        <div>
-                          <CardTitle>Vendor Status</CardTitle>
-                          <CardDescription>Order Status (This Week)</CardDescription>
-                        </div>
+                    {/* Responsive grid: 1 col mobile, 2 col tablet, 3 col desktop */}
+                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                      {/* Vendor Status (Inventory) */}
+                      <Card className="min-h-[365px] flex flex-col col-span-1">
+                        <CardHeader className="space-y-2">
+                          {/* Title + Description */}
+                          <div>
+                            <CardTitle>Vendor Status</CardTitle>
+                            <CardDescription>Order Status (This Week)</CardDescription>
+                          </div>
 
-                        {/* Legend */}
-                        <div className="w-full flex flex-wrap items-center gap-3 text-xs">
-                          {["Created", "Completed", "Not Placed", "Placed", "Delivered", "Invoice Received"].map((status) => (
-                            <div
-                              key={status}
-                              className="flex items-center gap-1.5 whitespace-nowrap"
-                            >
+                          {/* Legend */}
+                          <div className="w-full flex flex-wrap items-center gap-3 text-xs">
+                            {["Created", "Completed", "Not Placed", "Placed", "Delivered", "Invoice Received"].map((status) => (
                               <div
-                                className="h-2 w-2 rounded-[2px] shrink-0"
-                                style={{ backgroundColor: getOrderRecStatusColor(status) }}
-                              />
-                              <span className="text-xs font-medium text-black">{status}</span>
-                            </div>
-                          ))}
-                        </div>
-                      </CardHeader>
+                                key={status}
+                                className="flex items-center gap-1.5 whitespace-nowrap"
+                              >
+                                <div
+                                  className="h-2 w-2 rounded-[2px] shrink-0"
+                                  style={{ backgroundColor: getOrderRecStatusColor(status) }}
+                                />
+                                <span className="text-xs font-medium text-black">{status}</span>
+                              </div>
+                            ))}
+                          </div>
+                        </CardHeader>
 
 
-                      <CardContent className="flex-1 overflow-y-auto max-h-60">
-                        <ul className="divide-y divide-gray-200">
-                          {vendorStatus.map((vendor) => (
-                            <li
-                              key={vendor._id}
-                              className="px-2 py-1 font-medium rounded mb-1"
-                              style={{
-                                backgroundColor: vendor.orderRec
-                                  ? getOrderRecStatusColor(vendor.orderRec.currentStatus)
-                                  : "#F3F3F3",
-                              }}
-                            >
-                              {vendor.orderRec ? (
-                                <Link
-                                  to="/order-rec/$id"
-                                  params={{ id: vendor.orderRec.orderRecId }}
-                                  className="underline"
-                                  style={{ color: "inherit" }}
-                                >
-                                  {vendor.name}
-                                </Link>
-                              ) : (
-                                vendor.name
-                              )}
-                            </li>
-                          ))}
-                        </ul>
-                      </CardContent>
-                    </Card>
+                        <CardContent className="flex-1 overflow-y-auto max-h-60">
+                          <ul className="divide-y divide-gray-200">
+                            {vendorStatus.map((vendor) => (
+                              <li
+                                key={vendor._id}
+                                className="px-2 py-1 font-medium rounded mb-1"
+                                style={{
+                                  backgroundColor: vendor.orderRec
+                                    ? getOrderRecStatusColor(vendor.orderRec.currentStatus)
+                                    : "#F3F3F3",
+                                }}
+                              >
+                                {vendor.orderRec ? (
+                                  <Link
+                                    to="/order-rec/$id"
+                                    params={{ id: vendor.orderRec.orderRecId }}
+                                    className="underline"
+                                    style={{ color: "inherit" }}
+                                  >
+                                    {vendor.name}
+                                  </Link>
+                                ) : (
+                                  vendor.name
+                                )}
+                              </li>
+                            ))}
+                          </ul>
+                        </CardContent>
+                      </Card>
 
-                    {/* Cycle Counts (Inventory) */}
-                    <Card className="col-span-1">
-                      <CardHeader>
-                        <CardTitle>Cycle Counts</CardTitle>
-                        <CardDescription>Daily cycle count entries for {site}</CardDescription>
-                      </CardHeader>
-                      <CardContent>
-                        <ChartContainer config={chartConfig}>
-                          <BarChart accessibilityLayer data={chartData}>
-                            <CartesianGrid vertical={false} />
-                            <XAxis dataKey="day" tickLine={false} axisLine={false} tickMargin={10} />
-                            <YAxis axisLine={false} tickLine={false} />
-                            {/* <Tooltip content={<CycleCountTooltip />} /> */}
-                            {/* <Bar
+                      {/* Cycle Counts (Inventory) */}
+                      <Card className="col-span-1">
+                        <CardHeader>
+                          <CardTitle>Cycle Counts</CardTitle>
+                          <CardDescription>Daily cycle count entries for {site}</CardDescription>
+                        </CardHeader>
+                        <CardContent>
+                          <ChartContainer config={chartConfig}>
+                            <BarChart accessibilityLayer data={chartData}>
+                              <CartesianGrid vertical={false} />
+                              <XAxis dataKey="day" tickLine={false} axisLine={false} tickMargin={10} />
+                              <YAxis axisLine={false} tickLine={false} />
+                              {/* <Tooltip content={<CycleCountTooltip />} /> */}
+                              {/* <Bar
                               dataKey="count"
                               fill="var(--color-count)"
                               radius={8}
@@ -1141,50 +1177,50 @@ function RouteComponent() {
                             >
                               <LabelList position="top" offset={12} className="fill-foreground" fontSize={12} />
                             </Bar> */}
-                            <Bar
-                              dataKey="count"
-                              radius={8}
-                              onClick={(data) => {
-                                setSelectedDay(data.payload as CycleCountDayData);
-                                setIsModalOpen(true);
-                              }}
-                            >
-                              {chartData.map((entry, index) => (
-                                <Cell
-                                  key={`cell-${index}`}
-                                  fill={entry.count === 20 ? "#22c55e" : "var(--color-count)"}
+                              <Bar
+                                dataKey="count"
+                                radius={8}
+                                onClick={(data) => {
+                                  setSelectedDay(data.payload as CycleCountDayData);
+                                  setIsModalOpen(true);
+                                }}
+                              >
+                                {chartData.map((entry, index) => (
+                                  <Cell
+                                    key={`cell-${index}`}
+                                    fill={entry.count === 20 ? "#22c55e" : "var(--color-count)"}
+                                  />
+                                ))}
+
+                                <LabelList
+                                  position="top"
+                                  offset={12}
+                                  className="fill-foreground"
+                                  fontSize={12}
                                 />
-                              ))}
+                              </Bar>
 
-                              <LabelList
-                                position="top"
-                                offset={12}
-                                className="fill-foreground"
-                                fontSize={12}
-                              />
-                            </Bar>
+                            </BarChart>
 
-                          </BarChart>
+                          </ChartContainer>
+                        </CardContent>
+                        <CardFooter className="flex-col items-start gap-2 text-sm">
+                          <div className="text-muted-foreground leading-none">
+                            Showing cycle count entries per day for the selected range
+                          </div>
+                        </CardFooter>
+                      </Card>
+                      <ChartBarModal
+                        data={selectedDay}
+                        isOpen={isModalOpen}
+                        onClose={() => setIsModalOpen(false)}
+                      />
 
-                        </ChartContainer>
-                      </CardContent>
-                      <CardFooter className="flex-col items-start gap-2 text-sm">
-                        <div className="text-muted-foreground leading-none">
-                          Showing cycle count entries per day for the selected range
-                        </div>
-                      </CardFooter>
-                    </Card>
-                    <ChartBarModal
-                      data={selectedDay}
-                      isOpen={isModalOpen}
-                      onClose={() => setIsModalOpen(false)}
-                    />
-
-                    {/* Empty slot / placeholder: keeps grid balanced on larger screens.
+                      {/* Empty slot / placeholder: keeps grid balanced on larger screens.
                       Remove or replace with another inventory widget later. */}
-                    <div className="col-span-1" />
-                  </div>
-                </section>
+                      <div className="col-span-1" />
+                    </div>
+                  </section>
                 )}
 
                 {/* ======================= */}
@@ -1364,61 +1400,61 @@ function RouteComponent() {
                 {/*     Store Activity Section   */}
                 {/* ======================= */}
                 {site !== "Jocko Point" && (
-                <section aria-labelledby="fuel-heading" className="mb-10">
-                  <h2 id="fuel-heading" className="text-2xl font-bold mb-4 pl-4">Store Activity Trend</h2>
+                  <section aria-labelledby="fuel-heading" className="mb-10">
+                    <h2 id="fuel-heading" className="text-2xl font-bold mb-4 pl-4">Store Activity Trend</h2>
 
-                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
 
-                    <TransactionsLineChart
-                      data={transactionChartData}
-                      config={transactionChartConfig}
-                    />
+                      <TransactionsLineChart
+                        data={transactionChartData}
+                        config={transactionChartConfig}
+                      />
 
-                    <Card className="col-span-1">
-                      <CardHeader>
-                        <CardTitle>Avg Transactions by Hour</CardTitle>
-                        <CardDescription>Aggregated across hours by Days</CardDescription>
-                      </CardHeader>
-                      <CardContent>
-                        <ChartContainer config={timePeriodChartConfig}>
-                          <BarChart data={timePeriodChartData}>
-                            <CartesianGrid vertical={false} />
-                            <XAxis dataKey="hour" />
-                            <YAxis axisLine={false} tickLine={false} />
-                            <ChartTooltip content={<MultiLineChartToolTip config={timePeriodChartConfig} labelTypeIsHour={true} />} />
-                            <ChartLegend content={<ChartLegendContent data={timePeriodChartData} />} />
+                      <Card className="col-span-1">
+                        <CardHeader>
+                          <CardTitle>Avg Transactions by Hour</CardTitle>
+                          <CardDescription>Aggregated across hours by Days</CardDescription>
+                        </CardHeader>
+                        <CardContent>
+                          <ChartContainer config={timePeriodChartConfig}>
+                            <BarChart data={timePeriodChartData}>
+                              <CartesianGrid vertical={false} />
+                              <XAxis dataKey="hour" />
+                              <YAxis axisLine={false} tickLine={false} />
+                              <ChartTooltip content={<MultiLineChartToolTip config={timePeriodChartConfig} labelTypeIsHour={true} />} />
+                              <ChartLegend content={<ChartLegendContent data={timePeriodChartData} />} />
 
-                            <Bar dataKey="Fuel" stackId="a" fill={timePeriodChartConfig.Fuel.color} />
-                            <Bar dataKey="CStore" stackId="a" fill={timePeriodChartConfig.CStore.color} />
-                            <Bar dataKey="Both" stackId="a" fill={timePeriodChartConfig.Both.color} />
-                          </BarChart>
-                        </ChartContainer>
-                      </CardContent>
-                      <CardFooter className="text-sm text-muted-foreground">
-                        Aggregated hourly data from 14th Nov till Yesterday
-                      </CardFooter>
-                    </Card>
+                              <Bar dataKey="Fuel" stackId="a" fill={timePeriodChartConfig.Fuel.color} />
+                              <Bar dataKey="CStore" stackId="a" fill={timePeriodChartConfig.CStore.color} />
+                              <Bar dataKey="Both" stackId="a" fill={timePeriodChartConfig.Both.color} />
+                            </BarChart>
+                          </ChartContainer>
+                        </CardContent>
+                        <CardFooter className="text-sm text-muted-foreground">
+                          Aggregated hourly data from 14th Nov till Yesterday
+                        </CardFooter>
+                      </Card>
 
 
-                    <Card className="col-span-1">
-                      <CardHeader>
-                        <CardTitle>Tender Breakdown (%)</CardTitle>
-                        <CardDescription>Tender share by Transactions</CardDescription>
-                      </CardHeader>
+                      <Card className="col-span-1">
+                        <CardHeader>
+                          <CardTitle>Tender Breakdown (%)</CardTitle>
+                          <CardDescription>Tender share by Transactions</CardDescription>
+                        </CardHeader>
 
-                      <CardContent>
-                        {tenderChartData.length > 0 ? (
-                          <PieTenderChart data={tenderChartData} config={tenderConfig} />
-                        ) : (
-                          <div className="text-center text-muted-foreground py-10">Loading...</div>
-                        )}
-                      </CardContent>
-                      <CardFooter className="text-sm text-muted-foreground">
-                        Cumulative from 14th Nov till Yesterday
-                      </CardFooter>
-                    </Card>
-                  </div>
-                </section>
+                        <CardContent>
+                          {tenderChartData.length > 0 ? (
+                            <PieTenderChart data={tenderChartData} config={tenderConfig} />
+                          ) : (
+                            <div className="text-center text-muted-foreground py-10">Loading...</div>
+                          )}
+                        </CardContent>
+                        <CardFooter className="text-sm text-muted-foreground">
+                          Cumulative from 14th Nov till Yesterday
+                        </CardFooter>
+                      </Card>
+                    </div>
+                  </section>
                 )}
               </>
             )}
