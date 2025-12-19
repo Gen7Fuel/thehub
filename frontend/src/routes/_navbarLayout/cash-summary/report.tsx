@@ -307,7 +307,7 @@ function RouteComponent() {
                         <tr>
                           <th className="px-3 py-2 text-left">Description</th>
                           <th className="px-3 py-2 text-left">Lottery</th>
-                          <th className="px-3 py-2 text-left">Bullock</th>
+                          <th className="px-3 py-2 text-left">Bulloch</th>
                           <th className="px-3 py-2 text-left">Over / Short</th>
                         </tr>
                       </thead>

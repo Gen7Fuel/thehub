@@ -179,7 +179,7 @@ function LotteryTable({ lottery, bullock }) {
       { style: styles.tableHeader },
       h(Text, { style: [styles.th, styles.colDesc] }, 'Description'),
       h(Text, { style: [styles.th, styles.col] }, 'Lottery'),
-      h(Text, { style: [styles.th, styles.col] }, 'Bullock'),
+      h(Text, { style: [styles.th, styles.col] }, 'Bulloch'),
       h(Text, { style: [styles.th, styles.col] }, 'Over / Short')
     ),
     ...rows.map((r, i) =>
