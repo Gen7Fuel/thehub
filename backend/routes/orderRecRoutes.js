@@ -5,6 +5,7 @@ const Vendor = require('../models/Vendor');
 const CycleCount = require('../models/CycleCount');
 const ProductCategory = require('../models/ProductCategory');
 const { getUPC_barcode } = require('../services/sqlService');
+const { calcSingleVendorLeadTime } = require('../utils/calcSingleVendorLeadTime');
 
 // Get all
 router.get('/', async (req, res) => {
@@ -641,6 +642,16 @@ router.put('/:id/status', async (req, res) => {
     }
 
     await orderRec.save();
+
+    // ✅ Recalculate lead time ONLY when transitioning to Delivered
+    if (
+      status === "Delivered" &&
+      orderRec.vendor &&
+      orderRec.site
+    ) {
+      await calcSingleVendorLeadTime(orderRec.vendor, orderRec.site);
+    }
+
     const io = req.app.get("io");
     if (io) {
       io.emit("orderUpdated", orderRec);

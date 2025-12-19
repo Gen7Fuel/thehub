@@ -14,7 +14,10 @@ const locationSchema = new mongoose.Schema({
   csoCode: { type: String, required: true, unique: true },   // Unique CSO code for the location
   timezone: { type: String, required: true },         // Timezone of the location
   email: { type: String, required: true },          // Contact email for the location
-  managerCode: { type: Number, required: true }     // Four digit code for manager's dashboard
+  managerCode: { type: Number, required: true },    // Four digit code for manager's dashboard
+  // Indicates whether this site sells lottery tickets and therefore requires
+  // a lottery reconciliation to be provided when submitting daily reports.
+  sellsLottery: { type: Boolean, default: false },
 });
 
 // Export the Location model based on the schema

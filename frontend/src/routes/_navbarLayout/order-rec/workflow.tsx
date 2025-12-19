@@ -10,6 +10,14 @@ import { useNavigate } from '@tanstack/react-router'
 import { getSocket } from "@/lib/websocket"
 import { getOrderRecStatusColor } from "@/lib/utils"
 import { useAuth } from "@/context/AuthContext";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip"
+import { Info } from "lucide-react"
+
 
 const socket = getSocket();
 
@@ -24,6 +32,7 @@ type Vendor = {
   vendor_order_frequency?: number | string;
   location: string;
   category: string;
+  leadTime?: number | null;
 };
 
 function RouteComponent() {
@@ -499,7 +508,7 @@ function RouteComponent() {
           </SelectContent>
         </Select>
         {/* Right side: Status Legend */}
-        <div className="flex space-x-4 items-center">
+        {/* <div className="flex space-x-4 items-center">
           {STATUS_HIERARCHY.map(status => (
             <div key={status} className="flex items-center space-x-1">
               <div
@@ -509,7 +518,46 @@ function RouteComponent() {
               <span className="text-xs text-gray-700">{status}</span>
             </div>
           ))}
-        </div>
+          <div className="flex items-center space-x-1">
+            <div
+              className="w-4 h-4 rounded-sm bg-white-300 flex items-center justify-center text-xs font-semibold text-gray-700"
+            > LT </div>
+            <span className="text-xs text-gray-700"> - Average Lead Time</span>
+          </div>
+        </div> */}
+        <TooltipProvider delayDuration={300}>
+          <div className="flex space-x-4 items-center">
+            {STATUS_HIERARCHY.map(status => (
+              <div key={status} className="flex items-center space-x-1">
+                <div
+                  className="w-4 h-4 rounded-sm"
+                  style={{ backgroundColor: getOrderRecStatusColor(status) }}
+                />
+                <span className="text-xs text-gray-700">{status}</span>
+              </div>
+            ))}
+
+            {/* Lead Time legend */}
+            <div className="flex items-center space-x-1">
+              <div className="w-4 h-4 rounded-sm bg-white-200 flex items-center justify-center text-[12px] font-bold text-gray-700">
+                LT
+              </div>
+
+              <span className="text-xs text-gray-700 flex items-center gap-1">
+                - Average Lead Time
+
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <Info className="w-3.5 h-3.5 text-gray-400 hover:text-gray-600" />
+                  </TooltipTrigger>
+                  <TooltipContent className="text-xs leading-relaxed">
+                    Average number of days between when an order is placed and delivered.
+                  </TooltipContent>
+                </Tooltip>
+              </span>
+            </div>
+          </div>
+        </TooltipProvider>
       </div>
       {/* Grid */}
       <div className="relative max-h-[80vh]">
@@ -545,9 +593,9 @@ function RouteComponent() {
                 })
                 .filter(
                   store =>
-                    store.stationName !== "Sarnia" 
-                    // &&
-                    // store.stationName !== "Jocko Point"
+                    store.stationName !== "Sarnia"
+                  // &&
+                  // store.stationName !== "Jocko Point"
                 )
                 .map(store => (
                   <tr key={store._id}>
@@ -631,6 +679,7 @@ function RouteComponent() {
                                   setNewStatus(rec.currentStatus);
                                 }}
                                 lastPlacedOrder={vendorMeta?.lastPlacedOrder || undefined}
+                                leadTime={vendorMeta?.leadTime}
                                 vendor_order_frequency={
                                   vendorMeta?.vendor_order_frequency
                                     ? Number(vendorMeta.vendor_order_frequency)
@@ -653,7 +702,14 @@ function RouteComponent() {
                               />)
                             ) : (
                               // Case 3: orders in history but none this week
-                              (<Card className="w-80 overflow-hidden rounded-2xl border border-gray-300 shadow-sm">
+                              // (<Card className="w-80 overflow-hidden rounded-2xl border border-gray-300 shadow-sm">
+                              (<Card className="relative w-80 overflow-hidden rounded-2xl border border-gray-300 shadow-sm">
+                                {/* LT badge (top-right) */}
+                                {vendorMeta?.leadTime != null && (
+                                  <div className="absolute top-2 right-2 text-xs font-semibold text-gray-700 bg-white/90 px-2 py-0.5 rounded-md border shadow-sm">
+                                    LT: {vendorMeta.leadTime.toFixed(0)} d
+                                  </div>
+                                )}
                                 {/* Top Section */}
                                 <div className="flex flex-col p-4 h-full justify-between bg-gray-50">
                                   <div className="text-sm font-semibold text-gray-800 text-center">
