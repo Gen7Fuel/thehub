@@ -162,13 +162,13 @@ const getPeriodKey = (frequency, date) => {
 
 router.get("/compare", async (req, res) => {
   try {
-    const { template, site, frequency, date, periodKey } = req.query;
+    const { template, site, frequency, periodKey } = req.query;
 
-    if (!template || !site || !frequency)
+    if (!template || !site || !frequency || !periodKey)
       return res.status(400).json({ error: "Missing template, site, or frequency" });
 
     // Compute periodKey if only date is given
-    const key = periodKey || getPeriodKey(frequency, date);
+    const key = periodKey;
 
     // Load template
     const templateDoc = await AuditTemplate.findById(template).lean();
@@ -333,9 +333,17 @@ router.get('/items', async (req, res) => {
 //--GET ALL THE ITEMS--
 router.get("/items-full", async (req, res) => {
   try {
-    const { templateId, site, date, frequency, type = "store" } = req.query;
-    if (!templateId || !site || !frequency || !date)
+    const { templateId, site, date, frequency, type = "store", periodKeys } = req.query;
+    if (!templateId || !site || !frequency || !date || !periodKeys)
       return res.status(400).json({ error: "Missing required params" });
+
+    // ✅ Parse periodKeys once (it comes as a string)
+    let periodKeysObj;
+    try {
+      periodKeysObj = typeof periodKeys === "string" ? JSON.parse(periodKeys) : periodKeys;
+    } catch {
+      return res.status(400).json({ error: "Invalid periodKeys JSON" });
+    }
 
     const templateDoc = await AuditTemplate.findById(templateId).lean();
     if (!templateDoc) return res.status(404).json({ error: "Template not found" });
@@ -345,10 +353,18 @@ router.get("/items-full", async (req, res) => {
 
     const freqOrder = { daily: 1, weekly: 2, monthly: 3 };
 
+    // ✅ Pre-validate period keys ONCE (avoid res.json inside map)
+    for (const freq of frequencies) {
+      if (!periodKeysObj?.[freq]) {
+        return res.status(400).json({ error: `Missing periodKey for ${freq}` });
+      }
+    }
+
     // fetch items for all frequencies in parallel
     const itemsPerFrequency = await Promise.all(
       frequencies.map(async (freq) => {
-        const periodKey = getPeriodKey(freq, new Date(date));
+        // const periodKey = getPeriodKey(freq, new Date(date));
+        const periodKey = periodKeys?.[freq]; // gets the preriod key for all frequencies
 
         // 1️⃣ try fetch instance
         const instance = await AuditInstance.findOne({
@@ -622,10 +638,11 @@ router.get('/:id', async (req, res) => {
 router.post('/instance', async (req, res) => {
   try {
     const completedBy = req.user._id;
-    const { template, site, frequency, periodKey, date, items } = req.body;
+    const { template, site, frequency, periodKeys, date, items } = req.body;
     const type = "store"
     const io = req.app.get("io");
-    if (!template || !site || !frequency || !date || !items || !periodKey) {
+    // console.log('template',template,'site',site,'frequency',frequency,'periodKey',periodKeys,'date',date);
+    if (!template || !site || !frequency || !date || !items || !periodKeys) {
       return res.status(400).json({ error: "Missing fields" });
     }
 
@@ -637,7 +654,11 @@ router.post('/instance', async (req, res) => {
     const allUpdatedItems = []; // 🔹 collect updated items for response & socket emit
 
     for (const freq of frequenciesToProcess) {
-      // const periodKey = getPeriodKey(freq, date);
+      const periodKey = periodKeys?.[freq]; // gets the preriod key for all frequencies
+
+      if (!periodKey) {
+        return res.status(400).json({ error: `Missing periodKey for ${freq}` });
+      }
 
       let instance = await AuditInstance.findOne({ template, site, frequency: freq, periodKey, type });
 
@@ -993,9 +1014,9 @@ router.post('/instance', async (req, res) => {
 router.post('/visitor', async (req, res) => {
   try {
     const completedBy = req.user._id;
-    const { template, site, frequency, date, items } = req.body;
+    const { template, site, frequency, periodKeys, date, items } = req.body;
     const type = "visitor"
-    if (!template || !site || !frequency || !date || !items) {
+    if (!template || !site || !frequency || !date || !items || !periodKeys) {
       return res.status(400).json({ error: "Missing fields" });
     }
 
@@ -1007,7 +1028,12 @@ router.post('/visitor', async (req, res) => {
     const allUpdatedItems = []; // 🔹 collect updated items for response & socket emit
 
     for (const freq of frequenciesToProcess) {
-      const periodKey = getPeriodKey(freq, date);
+      // const periodKey = getPeriodKey(freq, date);
+      const periodKey = periodKeys?.[freq]; // gets the preriod key for all frequencies
+
+      if (!periodKey) {
+        return res.status(400).json({ error: `Missing periodKey for ${freq}` });
+      }
 
       let instance = await AuditInstance.findOne({ template, site, frequency: freq, periodKey, type });
 

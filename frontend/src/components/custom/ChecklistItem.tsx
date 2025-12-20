@@ -47,6 +47,25 @@ interface ChecklistItemCardProps {
   mode?: "station" | "interface"; // New prop  
   templateName?: string;
   type?: "store" | "visitor";
+  timezone?: string;
+}
+
+function formatInTZ(value: string | Date, timeZone?: string) {
+  if (!value) return "";
+  const d = new Date(value);
+
+  // Fallback: if timezone missing, use user's local
+  if (!timeZone) return d.toLocaleString();
+
+  return new Intl.DateTimeFormat(undefined, {
+    timeZone,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit",
+  }).format(d);
 }
 
 export function ChecklistItemCard({
@@ -61,6 +80,7 @@ export function ChecklistItemCard({
   mode = "station",
   templateName,
   type = "store",
+  timezone = "America/New_York",
 }: ChecklistItemCardProps) {
   const [commentOpen, setCommentOpen] = useState(false);
   const [commentValue, setCommentValue] = useState(item.comment || "");
@@ -293,7 +313,7 @@ export function ChecklistItemCard({
         </div>
       </div>
       {/* CheckedAt display in interface mode */}
-      {mode === "interface" ? (
+      {/* {mode === "interface" ? (
         <div className={`text-sm ${item.checkedAt ? "text-gray-500" : "text-gray-400 italic"}`}>
           Completed at: {item.checkedAt ? new Date(item.checkedAt).toLocaleString() : "Not Checked Yet"}
         </div>
@@ -302,7 +322,18 @@ export function ChecklistItemCard({
           {type === "visitor" ? "Last Check By Station:" : "Last checked:"}{" "}
           {lastChecked ? new Date(lastChecked).toLocaleString() : "Date not available"}
         </div>
+      )} */}
+      {mode === "interface" ? (
+        <div className={`text-sm ${item.checkedAt ? "text-gray-500" : "text-gray-400 italic"}`}>
+          Completed at: {item.checkedAt ? formatInTZ(item.checkedAt, timezone) : "Not Checked Yet"}
+        </div>
+      ) : (
+        <div className={`text-sm ${lastChecked ? "text-gray-500" : "text-gray-400 italic"}`}>
+          {type === "visitor" ? "Last Check By Station:" : "Last checked:"}{" "}
+          {lastChecked ? formatInTZ(lastChecked, timezone) : "Date not available"}
+        </div>
       )}
+
 
       {/* Fields */}
       <div className="flex gap-4 items-center mt-2">
@@ -310,7 +341,7 @@ export function ChecklistItemCard({
         <div className="flex-1 flex flex-col">
           <Select
             value={item.status || undefined}
-            onValueChange={(val) => !handleDisabledClick() && onFieldChange("status", val)}
+            onValueChange={(val: any) => !handleDisabledClick() && onFieldChange("status", val)}
           >
             <SelectTrigger className="w-[150px] bg-gray-100 border-gray-300 focus:ring-2 focus:ring-green-500">
               <SelectValue placeholder="Status" />
