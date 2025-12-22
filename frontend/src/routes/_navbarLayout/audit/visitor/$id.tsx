@@ -56,22 +56,49 @@ export const Route = createFileRoute('/_navbarLayout/audit/visitor/$id')({
 })
 
 // Helper: periodKey generator
-function getPeriodKey(frequency: "daily" | "weekly" | "monthly", date: Date = new Date()) {
-  const d = new Date(date);
-  d.setHours(0, 0, 0, 0);
+// function getPeriodKey(frequency: "daily" | "weekly" | "monthly", date: Date = new Date()) {
+//   const d = new Date(date);
+//   d.setHours(0, 0, 0, 0);
 
-  if (frequency === "daily") {
-    return d.toISOString().slice(0, 10); // e.g. 2025-09-26
-  }
+//   if (frequency === "daily") {
+//     return d.toISOString().slice(0, 10); // e.g. 2025-09-26
+//   }
+//   if (frequency === "weekly") {
+//     const onejan = new Date(d.getFullYear(), 0, 1);
+//     const week = Math.ceil((((d.getTime() - onejan.getTime()) / 86400000) + onejan.getDay() + 1) / 7);
+//     return `${d.getFullYear()}-W${week}`;
+//   }
+//   if (frequency === "monthly") {
+//     return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
+//   }
+// }
+type AuditFrequency = "daily" | "weekly" | "monthly";
+
+const pad2 = (n: number) => String(n).padStart(2, "0");
+
+const formatLocalYMD = (d: Date) =>
+  `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}`;
+
+function getPeriodKey(frequency: AuditFrequency, date: Date = new Date()) {
+  const d = new Date(date);
+  d.setHours(0, 0, 0, 0); // local midnight
+
+  if (frequency === "daily") return formatLocalYMD(d);
+
   if (frequency === "weekly") {
     const onejan = new Date(d.getFullYear(), 0, 1);
-    const week = Math.ceil((((d.getTime() - onejan.getTime()) / 86400000) + onejan.getDay() + 1) / 7);
+    onejan.setHours(0, 0, 0, 0);
+
+    const week = Math.ceil(
+      (((d.getTime() - onejan.getTime()) / 86400000) + onejan.getDay() + 1) / 7
+    );
     return `${d.getFullYear()}-W${week}`;
   }
-  if (frequency === "monthly") {
-    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
-  }
+
+  // monthly
+  return `${d.getFullYear()}-${pad2(d.getMonth() + 1)}`;
 }
+
 const frequencyOrder: Record<string, number> = { daily: 0, weekly: 1, monthly: 2 };
 
 const CATEGORY_COLOR_CLASSES = [
@@ -93,7 +120,7 @@ function RouteComponent() {
   const { user } = useAuth();
   const site = stationName || user?.location || "";
   const navigate = useNavigate()
-  console.log('site:',site)
+  console.log('site:', site)
 
   // const site = localStorage.getItem("location") || ""; //Original file
   const [items, setItems] = useState<AuditItem[]>([]);
@@ -105,6 +132,7 @@ function RouteComponent() {
   const [frequency, setFrequency] = useState<"daily" | "weekly" | "monthly" | "all">("all");
   const [currentDate] = useState(new Date());
   const [templateName, setTemplateName] = useState("");
+  const [siteTimezone, setSiteTimezone] = useState<string>(""); // e.g. "America/Toronto"
   // Extract unique categories
   const categories = [...new Set(items.map(item => item.category).filter(Boolean))];
 
@@ -139,17 +167,27 @@ function RouteComponent() {
       .then(setSelectTemplates)
       .catch(() => setSelectTemplates([]));
   }, []);
-  
+
   // Fetch checklist
   const fetchChecklist = async () => {
     setLoading(true);
     const token = localStorage.getItem("token");
+    const periodKeys =
+      frequency === "all"
+        ? {
+          daily: getPeriodKey("daily", currentDate),
+          weekly: getPeriodKey("weekly", currentDate),
+          monthly: getPeriodKey("monthly", currentDate),
+        }
+        : {
+          [frequency]: getPeriodKey(frequency as AuditFrequency, currentDate),
+        };
 
     try {
       const res = await fetch(
         `/api/audit/items-full?templateId=${id}&site=${encodeURIComponent(
           site
-        )}&date=${currentDate.toISOString()}&frequency=${frequency}&type=visitor`,
+        )}&date=${currentDate.toISOString()}&frequency=${frequency}&type=visitor&periodKeys=${encodeURIComponent(JSON.stringify(periodKeys))}`,
         {
           headers: {
             Authorization: `Bearer ${token}`,
@@ -182,6 +220,32 @@ function RouteComponent() {
   useEffect(() => {
     if (id && site) fetchChecklist();
   }, [id, site, frequency]);
+
+  useEffect(() => {
+    if (!site) return;
+
+    const controller = new AbortController();
+
+    fetch(`/api/locations?stationName=${encodeURIComponent(site)}`, {
+      signal: controller.signal,
+    })
+      .then(async (res) => {
+        if (!res.ok) throw new Error("Failed to fetch location");
+        return res.json();
+      })
+      .then((location) => {
+        setSiteTimezone(location?.timezone || "");
+      })
+      .catch((err) => {
+        // ignore abort errors
+        if (err?.name !== "AbortError") {
+          console.error("Failed to fetch location timezone:", err);
+        }
+        setSiteTimezone("");
+      });
+
+    return () => controller.abort();
+  }, [site]);
 
   // useEffect(() => {
   //   if (!socket) return;
@@ -242,7 +306,17 @@ function RouteComponent() {
     }
 
     const token = localStorage.getItem("token");
-    const periodKey = getPeriodKey(frequency as any, currentDate);
+    // const periodKey = getPeriodKey(frequency as any, currentDate);
+    const periodKeys =
+      frequency === "all"
+        ? {
+          daily: getPeriodKey("daily", currentDate),
+          weekly: getPeriodKey("weekly", currentDate),
+          monthly: getPeriodKey("monthly", currentDate),
+        }
+        : {
+          [frequency]: getPeriodKey(frequency as AuditFrequency, currentDate),
+        };
 
     // 2️⃣ Check for Request Order items
     const newlyRequestedOrders = items.filter(item => item.requestOrder && !item.orderCreated);
@@ -262,7 +336,7 @@ function RouteComponent() {
           template: id,
           site,
           frequency,
-          periodKey,
+          periodKeys,
           items,
           date: new Date().toISOString(),
         }),
@@ -410,6 +484,7 @@ function RouteComponent() {
                 selectTemplates={selectTemplates}
                 borderColor={categoryColorMap[item.category || ""].border}
                 lastChecked={item.lastChecked}
+                timezone={siteTimezone}
               />
             ))}
           </div>
