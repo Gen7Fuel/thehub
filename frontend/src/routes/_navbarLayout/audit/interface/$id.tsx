@@ -351,21 +351,48 @@ export const Route = createFileRoute("/_navbarLayout/audit/interface/$id")({
 });
 
 // 🔹 periodKey generator
-function getPeriodKey(frequency: "daily" | "weekly" | "monthly", date: Date) {
-  const d = new Date(date);
-  d.setHours(0, 0, 0, 0);
+// function getPeriodKey(frequency: "daily" | "weekly" | "monthly", date: Date) {
+//   const d = new Date(date);
+//   d.setHours(0, 0, 0, 0);
 
-  if (frequency === "daily") return d.toISOString().slice(0, 10);
+//   if (frequency === "daily") return d.toISOString().slice(0, 10);
+//   if (frequency === "weekly") {
+//     const onejan = new Date(d.getFullYear(), 0, 1);
+//     const week = Math.ceil(
+//       ((d.getTime() - onejan.getTime()) / 86400000 + onejan.getDay() + 1) / 7
+//     );
+//     return `${d.getFullYear()}-W${week}`;
+//   }
+//   if (frequency === "monthly")
+//     return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
+// }
+type AuditFrequency = "daily" | "weekly" | "monthly";
+
+const pad2 = (n: number) => String(n).padStart(2, "0");
+
+const formatLocalYMD = (d: Date) =>
+  `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}`;
+
+function getPeriodKey(frequency: AuditFrequency, date: Date = new Date()) {
+  const d = new Date(date);
+  d.setHours(0, 0, 0, 0); // local midnight
+
+  if (frequency === "daily") return formatLocalYMD(d);
+
   if (frequency === "weekly") {
     const onejan = new Date(d.getFullYear(), 0, 1);
+    onejan.setHours(0, 0, 0, 0);
+
     const week = Math.ceil(
-      ((d.getTime() - onejan.getTime()) / 86400000 + onejan.getDay() + 1) / 7
+      (((d.getTime() - onejan.getTime()) / 86400000) + onejan.getDay() + 1) / 7
     );
     return `${d.getFullYear()}-W${week}`;
   }
-  if (frequency === "monthly")
-    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
+
+  // monthly
+  return `${d.getFullYear()}-${pad2(d.getMonth() + 1)}`;
 }
+
 
 function RouteComponent() {
   const { id } = useParams({ from: "/_navbarLayout/audit/interface/$id" });
@@ -395,7 +422,8 @@ function RouteComponent() {
   const { stationName } = useContext(RouteContext);
   const { user } = useAuth();
   const site = stationName || user?.location || "";
-  const [auditorName, setAuditorName]= useState<string | null>(null);
+  const [auditorName, setAuditorName] = useState<string | null>(null);
+  const [siteTimezone, setSiteTimezone] = useState<string>(""); // e.g. "America/Toronto"
 
   const shiftDate = (direction: number) => {
     const newDate = new Date(currentDate);
@@ -408,6 +436,32 @@ function RouteComponent() {
 
     setCurrentDate(newDate);
   };
+
+  useEffect(() => {
+    if (!site) return;
+
+    const controller = new AbortController();
+
+    fetch(`/api/locations?stationName=${encodeURIComponent(site)}`, {
+      signal: controller.signal,
+    })
+      .then(async (res) => {
+        if (!res.ok) throw new Error("Failed to fetch location");
+        return res.json();
+      })
+      .then((location) => {
+        setSiteTimezone(location?.timezone || "");
+      })
+      .catch((err) => {
+        // ignore abort errors
+        if (err?.name !== "AbortError") {
+          console.error("Failed to fetch location timezone:", err);
+        }
+        setSiteTimezone("");
+      });
+
+    return () => controller.abort();
+  }, [site]);
 
   // const fetchItemsForInstance = async () => {
   //   if (!id || !currentDate || !site || !token) return;
@@ -762,6 +816,7 @@ function RouteComponent() {
                     selectTemplates={selectTemplates}
                     borderColor={categoryColorMap[item.category || ""]?.border}
                     lastChecked={item.lastChecked}
+                    timezone={siteTimezone}
                   />
                 ))}
               </div>
@@ -776,7 +831,7 @@ function RouteComponent() {
           {/* Visitor side */}
           <div>
             <h2 className="font-semibold text-lg mb-3">
-              Visitor Audit - 
+              Visitor Audit -
               {auditorName && <span className="text-lg text-gray-500"> {auditorName}</span>}
             </h2>
             {visitorItems.length > 0 ? (
@@ -790,6 +845,7 @@ function RouteComponent() {
                     selectTemplates={selectTemplates}
                     borderColor={categoryColorMap[item.category || ""]?.border}
                     lastChecked={item.lastChecked}
+                    timezone={siteTimezone}
                   />
                 ))}
               </div>
@@ -816,6 +872,7 @@ function RouteComponent() {
                   selectTemplates={selectTemplates}
                   borderColor={categoryColorMap[item.category || ""]?.border}
                   lastChecked={item.lastChecked}
+                  timezone={siteTimezone}
                 />
               ))}
             </div>

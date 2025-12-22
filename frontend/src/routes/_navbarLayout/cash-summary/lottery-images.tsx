@@ -170,7 +170,11 @@ function RouteComponent() {
 
       // reset local lottery form after successful save
       resetLotteryForm()
-      navigate({ to: '/cash-summary/report?site=' + lotterySite + '&date=' + ymd })
+      // navigate({ to: '/cash-summary/report?site=' + lotterySite + '&date=' + ymd })
+      navigate({ to: '/cash-summary/report' , search: (prev: any) => {
+        const { id, ...rest } = prev || {}
+        return { ...rest, site: rest?.site, date: rest?.date}
+      }})
     } catch (err) {
       console.error('Save failed', err)
     }
@@ -244,7 +248,14 @@ function RouteComponent() {
       <hr className="border-t border-dashed border-gray-300" />
 
       <div className="flex justify-between">
-        <Link to="/cash-summary/lottery">
+        <Link
+          to="/cash-summary/lottery"
+          // search={(prev: any) => {
+          //     const { id, ...rest } = prev || {}
+          //     return { ...rest, site: rest?.site, date: rest?.date }
+          //   }}
+          search={(prev: any) => ({ ...prev})}
+        >
           <Button variant="outline">Back</Button>
         </Link>
         <div className="flex gap-2">

@@ -6,6 +6,7 @@ import { Button } from '@/components/ui/button'
 import { SitePicker } from '@/components/custom/sitePicker'
 import { DatePicker } from '@/components/custom/datePicker'
 import { uploadBase64Image } from '@/lib/utils'
+import { Loader2 } from 'lucide-react'
 
 type Search = { site: string; date: string }
 
@@ -32,6 +33,9 @@ function RouteComponent() {
 
   const webcamRef = React.useRef<Webcam>(null)
   const [photo, setPhoto] = React.useState<string>('')
+
+  // Disable Save after click and show spinner
+  const [saving, setSaving] = React.useState(false)
 
   // Keep a reference to the active video track for zoom operations
   const trackRef = React.useRef<MediaStreamTrack | null>(null)
@@ -128,7 +132,8 @@ function RouteComponent() {
   const retry = () => setPhoto('')
 
   const save = async () => {
-    if (!photo || !site || !date) return
+    if (!photo || !site || !date || saving) return
+    setSaving(true)
     try {
       const { filename } = await uploadBase64Image(photo, `fuel-rec-${site}-${date}.jpg`)
       const res = await fetch('/api/fuel-rec/capture', {
@@ -143,6 +148,7 @@ function RouteComponent() {
       navigate({ to: '/fuel-rec/list', search: { site } })
     } catch (e: any) {
       alert(`Save failed: ${e?.message || e}`)
+      setSaving(false)
     }
   }
 
@@ -238,7 +244,10 @@ function RouteComponent() {
               <Button variant="secondary" onClick={retry}>
                 Retry
               </Button>
-              <Button onClick={save}>Save</Button>
+              <Button onClick={save} disabled={saving || !site || !date}>
+                {saving && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                Save
+              </Button>
             </>
           )}
         </div>
