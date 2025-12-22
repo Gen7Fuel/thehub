@@ -5,6 +5,7 @@ import { getCsoCodeByStationName, getVendorNameById } from '@/lib/utils';
 import { DonutSalesChart } from "@/components/custom/dashboard/salesByCategoryDonut";
 import { getDashboardData, saveDashboardData, STORES } from "@/lib/dashboardIndexedDB"
 import { PieTenderChart, type TenderTransaction } from "@/components/custom/dashboard/pieCharts"
+import { BistroBarLineChart, Top10BistroChart } from "@/components/custom/dashboard/bistroCharts";
 import {
   Bar, BarChart, CartesianGrid, XAxis, LabelList,
   Line, YAxis, Cell
@@ -54,6 +55,7 @@ const salesChartConfig = {
   Convenience: { label: "Convenience", color: "var(--chart-5)" },
   Vapes: { label: "Vapes", color: "var(--chart-6)" },
   "Native Gifts": { label: "Native Gifts", color: "var(--chart-7)" },
+  Bistro: { label: "Bistro", color: "var(--chart-8)" },
 } satisfies ChartConfig;
 
 import {
@@ -164,6 +166,14 @@ interface SalesData {
   cards: SalesCards;
 }
 
+interface BistroWowSales {
+  WeekStart: string; // or Date
+  BistroSales: number;
+  WoW_Growth_Pct: number | null;
+  UnitsSold: number;
+  Category: string;
+}
+
 export const fetchFuelMonthToMonth = async (data: any) => {
   const today = new Date();
   const end = new Date(today);
@@ -235,6 +245,22 @@ export function formatNumberCompact(value: number | undefined | null): string {
   }
 }
 
+interface BistroStackedChartRow {
+  week: string;              // "11-17"
+  sales_130: number;         // category 130 sales
+  sales_134: number;         // category 134 sales
+  units_130: number;         // category 130 units
+  units_134: number;         // category 134 units
+  growth: number | null;     // WoW growth (same for both categories)
+}
+
+interface Top10Bistro {
+  Station: string; // or Date
+  Item: string;
+  UnitsSold: number;
+  TotalSales: number;
+  UnitsPerDay: number;
+}
 
 function RouteComponent() {
   const { user } = useAuth();
@@ -248,7 +274,8 @@ function RouteComponent() {
   const [selectedGrade, setSelectedGrade] = useState<string | null>(null);
   const [transactionChartData, setTransactionChartData] = useState<TransactionData[]>([]);
   const [tenderTransactions, setTenderTransactions] = useState<TenderTransaction[]>([]);
-
+  const [bistroWoWSales, setBistroWoWSales] = useState<BistroWowSales[]>([]);
+  const [top10Bistro, setTop10Bistro] = useState<Top10Bistro[]>([]);
 
   const [salesData, setSalesData] = useState<SalesData | null>(null);
   const [vendorStatus, setVendorStatus] = useState<any[]>([]);
@@ -428,18 +455,24 @@ function RouteComponent() {
         const transCached = await getDashboardData(STORES.TRANS, site);
         const timePeriodCached = await getDashboardData(STORES.TIME_PERIOD_TRANS, site);
         const tenderCached = await getDashboardData(STORES.TENDER_TRANS, site);
+        const bistroWowSalesCached = await getDashboardData(STORES.BISTRO_WOW_SALES, site);
+        const top10BistroCached = await getDashboardData(STORES.TOP_10_BISTRO, site);
         let sqlSales = salesCached;
         let sqlFuel = fuelCached;
         let sqlTrans = transCached;
         let sqlTimePeriodTrans = timePeriodCached;
         let sqlTenderTrans = tenderCached;
+        let sqlBistroWoWSales = bistroWowSalesCached;
+        let sqlTop10Bistro = top10BistroCached;
 
         if (
           !sqlSales?.length ||
           !sqlFuel?.length ||
           !sqlTrans?.length ||
           !sqlTimePeriodTrans?.length ||
-          !sqlTenderTrans?.length
+          !sqlTenderTrans?.length ||
+          !sqlBistroWoWSales?.length ||
+          !sqlTop10Bistro?.length
         ) {
           console.log("📡 No cache → Calling SQL backend...");
 
@@ -460,6 +493,8 @@ function RouteComponent() {
           sqlTrans = data.transactions;
           sqlTimePeriodTrans = data.timePeriodTransactions;
           sqlTenderTrans = data.tenderTransactions;
+          sqlBistroWoWSales = data.bistroWoWSales;
+          sqlTop10Bistro = data.top10Bistro;
 
           // Save to IDB
           await saveDashboardData(STORES.SALES, site, sqlSales);
@@ -467,7 +502,8 @@ function RouteComponent() {
           await saveDashboardData(STORES.TRANS, site, sqlTrans);
           await saveDashboardData(STORES.TIME_PERIOD_TRANS, site, sqlTimePeriodTrans);
           await saveDashboardData(STORES.TENDER_TRANS, site, sqlTenderTrans);
-
+          await saveDashboardData(STORES.BISTRO_WOW_SALES, site, sqlBistroWoWSales);
+          await saveDashboardData(STORES.TOP_10_BISTRO, site, sqlTop10Bistro);
         } else {
           console.log("⚡ Using cached dashboard SQL data");
         }
@@ -505,6 +541,10 @@ function RouteComponent() {
         setTransactionChartData(transactionModChartData);
         setTenderTransactions(tenderTransactions);
         setTimePeriodData(timePeriodTransactions);
+        setBistroWoWSales(sqlBistroWoWSales);
+        setTop10Bistro(sqlTop10Bistro);
+
+        console.log('top 10 bistro:', sqlTop10Bistro)
       } catch (err) {
         console.error("Error fetching dashboard data:", err);
       } finally {
@@ -949,7 +989,45 @@ function RouteComponent() {
     };
   }, [transactionChartData]);
 
+  const bistroChartData: BistroStackedChartRow[] = Object.values(
+    bistroWoWSales.reduce<Record<string, BistroStackedChartRow>>(
+      (acc, d) => {
+        const weekDate = new Date(d.WeekStart);
+        const key = `${weekDate.getMonth() + 1}-${weekDate.getDate()}`;
 
+        if (!acc[key]) {
+          acc[key] = {
+            week: key,
+            sales_130: 0,
+            sales_134: 0,
+            units_130: 0,
+            units_134: 0,
+            growth: d.WoW_Growth_Pct, // same across categories
+          };
+        }
+
+        if (d.Category === '130') {
+          acc[key].sales_130 += d.BistroSales;
+          acc[key].units_130 += d.UnitsSold;
+        }
+
+        if (d.Category === '134') {
+          acc[key].sales_134 += d.BistroSales;
+          acc[key].units_134 += d.UnitsSold;
+        }
+
+        return acc;
+      },
+      {}
+    )
+  ).filter(d => d.growth !== null);
+
+  const top10BistroChartData = top10Bistro.map(d => ({
+    item: d.Item,
+    sales: d.TotalSales,
+    units: d.UnitsSold,
+    unitsPerDay: d.UnitsPerDay,
+  }));
 
 
 
@@ -974,6 +1052,7 @@ function RouteComponent() {
     Convenience: entry.Convenience ?? 0,
     Vapes: entry.Vapes ?? 0,
     "Native Gifts": entry["Native Gifts"] ?? 0,
+    Bistro: entry.Bistro ?? 0,
   }))
 
   // Weekly aggregated (last 5 weeks)
@@ -986,6 +1065,7 @@ function RouteComponent() {
     Convenience: entry.Convenience ?? 0,
     Vapes: entry.Vapes ?? 0,
     "Native Gifts": entry['Native Gifts'] ?? 0,
+    Bistro: entry.Bistro ?? 0,
   }))
 
   // Build 7-day totals for the donut chart
@@ -997,6 +1077,7 @@ function RouteComponent() {
     "Convenience",
     "Vapes",
     "Native Gifts",
+    "Bistro",
   ] as const;
 
   // Build proper data shape for DonutSalesChart
@@ -1324,6 +1405,7 @@ function RouteComponent() {
                             <Bar dataKey="Convenience" stackId="a" fill="var(--chart-5)" />
                             <Bar dataKey="Vapes" stackId="a" fill="var(--chart-6)" />
                             <Bar dataKey="Native Gifts" stackId="a" fill="var(--chart-7)" />
+                            <Bar dataKey="Bistro" stackId="a" fill="var(--chart-8)" />
                           </BarChart>
                         </ChartContainer>
                       </CardContent>
@@ -1362,6 +1444,7 @@ function RouteComponent() {
                             <Bar dataKey="Convenience" stackId="a" fill="var(--chart-5)" />
                             <Bar dataKey="Vapes" stackId="a" fill="var(--chart-6)" />
                             <Bar dataKey="Native Gifts" stackId="a" fill="var(--chart-7)" />
+                            <Bar dataKey="Bistro" stackId="a" fill="var(--chart-8)" />
                           </BarChart>
                         </ChartContainer>
                       </CardContent>
@@ -1390,7 +1473,18 @@ function RouteComponent() {
 
                   </div>
                 </section>
+                {/* ======================= */}
+                {/*     BISTRO SECTION   */}
+                {/* ======================= */}
+                <section aria-labelledby="bistro-heading" className="mb-10">
+                  <h2 id="bistro-heading" className="text-2xl font-bold mb-4 pl-4">Bistro</h2>
 
+                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                    {/* Bistro WoW Sales Area Chart */}
+                    <BistroBarLineChart data={bistroChartData} />
+                    <Top10BistroChart data={top10BistroChartData} />
+                  </div>
+                </section>
                 {/* ======================= */}
                 {/*     FUEL SECTION   */}
                 {/* ======================= */}
@@ -1495,7 +1589,7 @@ function RouteComponent() {
                           </ChartContainer>
                         </CardContent>
                         <CardFooter className="text-sm text-muted-foreground">
-                          Aggregated hourly data from 14th Nov till Yesterday
+                          Aggregated hourly data - last 14 days ending Yesterday
                         </CardFooter>
                       </Card>
 
@@ -1514,7 +1608,7 @@ function RouteComponent() {
                           )}
                         </CardContent>
                         <CardFooter className="text-sm text-muted-foreground">
-                          Cumulative from 14th Nov till Yesterday
+                          Cumulative from last 14 days ending Yesterday
                         </CardFooter>
                       </Card>
                     </div>
@@ -1620,7 +1714,7 @@ const fetchDailyCounts = async (site: string, startDate: string, endDate: string
 
 const fetchSalesData = async (rows: any) => {
   // Categories used across charts
-  const CATS = ['FN', 'Quota', 'Cannabis', 'GRE', 'Convenience', 'Vapes', 'Native Gifts'] as const
+  const CATS = ['FN', 'Quota', 'Cannabis', 'GRE', 'Convenience', 'Vapes', 'Native Gifts', 'Bistro'] as const
 
   // Compute date window: last 5 weeks ending yesterday
   const end = new Date()

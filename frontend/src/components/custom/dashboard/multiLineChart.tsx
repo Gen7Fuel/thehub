@@ -274,7 +274,7 @@ export function TransactionsLineChart({
         </div>
       </CardContent>
       <CardFooter className="text-sm text-muted-foreground">
-        From 14th Nov till Yesterday
+        Last 14 days ending Yesterday
       </CardFooter>
     </Card>
   );
