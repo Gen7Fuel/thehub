@@ -35,16 +35,79 @@ function LotteryTable({ lottery, bullock }) {
         `$${value.toFixed(2)}`
       )
 
+  // const rows = [
+  //   {
+  //     label: 'Online Sales',
+  //     lotto: lottery.onlineLottoTotal,
+  //     bullock: bullock?.onlineSales,
+  //     diff:
+  //       lottery.onlineLottoTotal -
+  //       ((bullock?.onlineSales || 0) +
+  //         (lottery.onlineCancellations || 0) +
+  //         (lottery.onlineDiscounts || 0)),
+  //     bold: true,
+  //   },
+  //   {
+  //     label: 'Lotto Cancellations',
+  //     lotto: lottery.onlineCancellations,
+  //     indent: true,
+  //     alt: true,
+  //   },
+  //   {
+  //     label: 'Lotto Discounts',
+  //     lotto: lottery.onlineDiscounts,
+  //     indent: true,
+  //     alt: true,
+  //   },
+  //   {
+  //     label: 'Scratch Sales',
+  //     lotto: lottery.instantLottTotal,
+  //     bullock: bullock?.scratchSales,
+  //     diff:
+  //       (lottery.instantLottTotal || 0) +
+  //       (lottery.scratchFreeTickets || 0) -
+  //       (bullock?.scratchSales || 0),
+  //     bold: true,
+  //   },
+  //   {
+  //     label: 'Scratch Free Tickets',
+  //     lotto: lottery.scratchFreeTickets,
+  //     indent: true,
+  //     alt: true,
+  //   },
+  //   {
+  //     label: 'Payouts',
+  //     lotto: lottery.lottoPayout,
+  //     bullock: bullock?.payouts,
+  //     diff: diff(lottery.lottoPayout, bullock?.payouts),
+  //     bold: true,
+  //   },
+  //   {
+  //     label: 'Datawave Value',
+  //     lotto: lottery.dataWave,
+  //     bullock: bullock?.dataWave,
+  //     diff: diff(lottery.dataWave, bullock?.dataWave),
+  //     bold: true,
+  //   },
+  //   {
+  //     label: 'Datawave Fee',
+  //     lotto: lottery.feeDataWave,
+  //     bullock: bullock?.dataWaveFee,
+  //     diff: diff(lottery.feeDataWave, bullock?.dataWaveFee),
+  //     indent: true,
+  //     alt: true,
+  //   },
+  // ]
   const rows = [
     {
       label: 'Online Sales',
       lotto: lottery.onlineLottoTotal,
       bullock: bullock?.onlineSales,
       diff:
-        lottery.onlineLottoTotal -
-        ((bullock?.onlineSales || 0) +
-          (lottery.onlineCancellations || 0) +
-          (lottery.onlineDiscounts || 0)),
+        (bullock?.onlineSales ?? 0) -
+        ((lottery.onlineLottoTotal ?? 0) -
+          (lottery.onlineCancellations ?? 0) -
+          (lottery.onlineDiscounts ?? 0)),
       bold: true,
     },
     {
@@ -64,9 +127,9 @@ function LotteryTable({ lottery, bullock }) {
       lotto: lottery.instantLottTotal,
       bullock: bullock?.scratchSales,
       diff:
-        (lottery.instantLottTotal || 0) +
-        (lottery.scratchFreeTickets || 0) -
-        (bullock?.scratchSales || 0),
+        (bullock?.scratchSales ?? 0) -
+        ((lottery.instantLottTotal ?? 0) +
+          (lottery.scratchFreeTickets ?? 0)),
       bold: true,
     },
     {
@@ -79,21 +142,30 @@ function LotteryTable({ lottery, bullock }) {
       label: 'Payouts',
       lotto: lottery.lottoPayout,
       bullock: bullock?.payouts,
-      diff: diff(lottery.lottoPayout, bullock?.payouts),
+      diff:
+        (bullock?.payouts ?? 0) -
+        ((lottery.lottoPayout ?? 0) +
+          (lottery.scratchFreeTickets ?? 0)),
       bold: true,
+    },
+    {
+      label: 'Scratch Free Tickets Payouts',
+      lotto: lottery.scratchFreeTickets,
+      indent: true,
+      alt: true,
     },
     {
       label: 'Datawave Value',
       lotto: lottery.dataWave,
       bullock: bullock?.dataWave,
-      diff: diff(lottery.dataWave, bullock?.dataWave),
+      diff: diff(bullock?.dataWave, lottery.dataWave),
       bold: true,
     },
     {
       label: 'Datawave Fee',
       lotto: lottery.feeDataWave,
       bullock: bullock?.dataWaveFee,
-      diff: diff(lottery.feeDataWave, bullock?.dataWaveFee),
+      diff: diff(bullock?.dataWaveFee, lottery.feeDataWave),
       indent: true,
       alt: true,
     },
@@ -107,7 +179,7 @@ function LotteryTable({ lottery, bullock }) {
       { style: styles.tableHeader },
       h(Text, { style: [styles.th, styles.colDesc] }, 'Description'),
       h(Text, { style: [styles.th, styles.col] }, 'Lottery'),
-      h(Text, { style: [styles.th, styles.col] }, 'Bullock'),
+      h(Text, { style: [styles.th, styles.col] }, 'Bulloch'),
       h(Text, { style: [styles.th, styles.col] }, 'Over / Short')
     ),
     ...rows.map((r, i) =>
