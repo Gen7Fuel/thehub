@@ -93,6 +93,7 @@ import {
   Tooltip,
   CartesianGrid,
   ResponsiveContainer,
+  LabelList,
 } from "recharts";
 import { Card, CardHeader, CardTitle, CardContent, CardFooter, CardDescription } from "@/components/ui/card";
 import { cn } from "@/lib/utils";
@@ -287,7 +288,7 @@ export function BistroBarLineChart({
               yAxisId="left"
               dataKey="units_134"
               stackId="units"
-              fill="#E84855"  
+              fill="#E84855"
               barSize={22}
             // radius={[4, 4, 0, 0]}
             />
@@ -341,37 +342,63 @@ export function BistroBarLineChart({
 
 
 interface Top10BistroChartProps {
-  data: { item: string; sales: number; units: number; unitsPerDay: number }[];
-  hideIcon?: boolean;
-  className?: string;
-  verticalAlign?: "top" | "bottom";
+  data: {
+    item: string;
+    sales: number;
+    units: number;
+    unitsPerDay: number;
+  }[];
 }
 
-function Top10Tooltip({ active, payload, label }: any) {
-  if (!active || !payload || !payload.length) return null;
+function BarItemLabel(props: any) {
+  const { x, y, width, height, value } = props;
 
-  const data = payload[0].payload;
+  const isSmallBar = width < 150; // tweak threshold if needed
+  const textY = y + height / 2 + 4;
 
   return (
-    <div className="border-border/50 bg-background grid min-w-[10rem] items-start gap-1.5 rounded-lg border px-2.5 py-1.5 text-xs shadow-xl">
-      <div className="text-sm font-medium">{data.item}</div>
+    <text
+      x={isSmallBar ? x + width + 8 : x + 8}
+      y={textY}
+      fill={isSmallBar ? "#111827" : "#ffffff"}
+      fontSize={11}
+      fontWeight={500}
+      textAnchor="start"
+    >
+      {/* {value.length > 42 ? `${value.slice(0, 42)}…` : value} */}
+      {value}
+    </text>
+  );
+}
+
+function Top10Tooltip({ active, payload }: any) {
+  if (!active || !payload || !payload.length) return null;
+
+  const d = payload[0].payload;
+
+  return (
+    <div className="border-border/50 bg-background grid min-w-[10rem] gap-1.5 rounded-lg border px-2.5 py-1.5 text-xs shadow-xl">
+      <div className="text-sm font-medium">{d.item}</div>
+
       <div className="grid gap-1">
         <div className="flex justify-between">
           <span className="text-muted-foreground">Total Sales</span>
-          <span className="text-foreground font-mono font-medium tabular-nums">
-            ${data.sales.toLocaleString()}
+          <span className="font-mono font-medium">
+            ${d.sales.toLocaleString()}
           </span>
         </div>
+
         <div className="flex justify-between">
           <span className="text-muted-foreground">Units Sold</span>
-          <span className="text-foreground font-mono font-medium tabular-nums">
-            {data.units.toLocaleString()}
+          <span className="font-mono font-medium">
+            {d.units.toLocaleString()}
           </span>
         </div>
+
         <div className="flex justify-between">
-          <span className="text-muted-foreground">Units/Day</span>
-          <span className="text-foreground font-mono font-medium tabular-nums">
-            {data.unitsPerDay.toFixed(2)}
+          <span className="text-muted-foreground">Avg. Units / Day</span>
+          <span className="font-mono font-medium">
+            {d.unitsPerDay.toFixed(0)}
           </span>
         </div>
       </div>
@@ -379,38 +406,58 @@ function Top10Tooltip({ active, payload, label }: any) {
   );
 }
 
-export function Top10BistroChart({
-  data,
-  hideIcon = false,
-  className,
-  verticalAlign = "top",
-}: Top10BistroChartProps) {
+export function Top10BistroChart({ data }: Top10BistroChartProps) {
   return (
     <Card className="w-full">
       <CardHeader>
-        <CardTitle>Top 10 Bistro Items (Last 30 days)</CardTitle>
-        <CardDescription>Sorted by Total Sales</CardDescription>
+        <CardTitle>Top 10 Bistro Items</CardTitle>
+        <CardDescription>Last 30 days • Sorted by sales</CardDescription>
       </CardHeader>
 
       <CardContent>
-        <ResponsiveContainer width="100%" height={200}>
+        <ResponsiveContainer width="100%" height={260}>
           <BarChart
             layout="vertical"
             data={data}
-            margin={{ top: 20, right: 30, left: 20, bottom: 20 }}
+            barCategoryGap={12}
           >
             <CartesianGrid strokeDasharray="3 3" vertical={false} />
-            <XAxis type="number" tickLine={false} axisLine={false} />
-            <YAxis type="category" dataKey="item" tickLine={false} axisLine={false} width={140} />
+
+            {/* REQUIRED for tooltip mapping – hidden */}
+            <YAxis
+              type="category"
+              dataKey="item"
+              hide
+            />
+
+            <XAxis
+              type="number"
+              tickLine={false}
+              axisLine={false}
+              tick={{ fontSize: 12 }}
+              tickFormatter={(v) => `$${v.toLocaleString()}`}
+            />
+
             <Tooltip content={<Top10Tooltip />} />
 
-            <Bar dataKey="sales" fill="#4f46e5" barSize={20} radius={[4, 4, 0, 0]} />
+            <Bar
+              dataKey="sales"
+              fill="#c59100ff"
+              radius={[4, 4, 4, 4]}
+              barSize={22}
+            >
+              <LabelList
+                dataKey="item"
+                content={<BarItemLabel />}
+              />
+            </Bar>
+
           </BarChart>
         </ResponsiveContainer>
       </CardContent>
 
       <CardFooter className="text-sm text-muted-foreground">
-        Total Sales over the past 30 days
+        Hover bars to see units and velocity
       </CardFooter>
     </Card>
   );

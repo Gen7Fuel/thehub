@@ -1476,15 +1476,20 @@ function RouteComponent() {
                 {/* ======================= */}
                 {/*     BISTRO SECTION   */}
                 {/* ======================= */}
-                <section aria-labelledby="bistro-heading" className="mb-10">
-                  <h2 id="bistro-heading" className="text-2xl font-bold mb-4 pl-4">Bistro</h2>
 
-                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                    {/* Bistro WoW Sales Area Chart */}
-                    <BistroBarLineChart data={bistroChartData} />
-                    <Top10BistroChart data={top10BistroChartData} />
-                  </div>
-                </section>
+                {["Rankin", "Couchiching", "Silver Grizzly"].includes(site) && (
+                  <section aria-labelledby="bistro-heading" className="mb-10">
+                    <h2 id="bistro-heading" className="text-2xl font-bold mb-4 pl-4">
+                      Bistro
+                    </h2>
+
+                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                      <BistroBarLineChart data={bistroChartData} />
+                      <Top10BistroChart data={top10BistroChartData} />
+                    </div>
+                  </section>
+                )}
+                
                 {/* ======================= */}
                 {/*     FUEL SECTION   */}
                 {/* ======================= */}

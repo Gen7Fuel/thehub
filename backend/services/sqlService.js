@@ -99,7 +99,7 @@ async function getCategorizedSalesData(pool, csoCode, startDate, endDate) {
         AND s.[Date_SK] BETWEEN '${startDate}' AND '${endDate}'
       ORDER BY s.[Date_SK]
     `);
-    await sql.close();
+    // await sql.close();
     return result.recordset;
   } catch (err) {
     console.error('SQL error:', err);
@@ -130,7 +130,7 @@ async function getGradeVolumeFuelData(pool, csoCode, startDate, endDate) {
     //     AND s.[Date_SK] BETWEEN '${dbStartDate}' AND '${dbEndDate}'
     //   ORDER BY s.[Date_SK]
     // `);
-    await sql.close();
+    // await sql.close();
     return result.recordset;
   } catch (err) {
     console.error('SQL error:', err);
@@ -250,79 +250,45 @@ async function getBulkOnHandQtyCSO(site, upcs = []) {
 //   }
 // }
 
-// let pool = null;
-
-// async function getPool() {
-//   try {
-//     if (!pool || !pool.connected) {
-//       if (pool) {
-//         try { await pool.close(); } catch { }
-//       }
-
-//       console.log("🔌 Creating new SQL connection pool...");
-//       pool = await sql.connect({
-//         server: process.env.SQL_SERVER,
-//         database: process.env.SQL_DB,
-//         user: process.env.SQL_USER,
-//         password: process.env.SQL_PASSWORD,
-//         pool: {
-//           max: 50, // increase if VPS can handle it
-//           min: 0,
-//           idleTimeoutMillis: 60000, // more time for idle connections
-//           acquireTimeoutMillis: 300000, // more time to acquire heavy queries
-//         },
-//         options: {
-//           encrypt: true,
-//           trustServerCertificate: false,
-//         },
-//       });
-
-//       pool.on("error", (err) => {
-//         console.error("SQL Pool Error:", err);
-//         pool = null; // force reconnect next time
-//       });
-//     }
-
-//     return pool;
-//   } catch (err) {
-//     console.error("Failed to get SQL pool:", err);
-//     pool = null;
-//     throw err;
-//   }
-// }
-let poolPromise = null;
+let pool = null;
 
 async function getPool() {
-  if (!poolPromise) {
-    console.log("🔌 Creating new SQL connection pool...");
-    poolPromise = sql.connect({
-      server: process.env.SQL_SERVER,
-      database: process.env.SQL_DB,
-      user: process.env.SQL_USER,
-      password: process.env.SQL_PASSWORD,
-      pool: {
-        max: 30,
-        min: 0,
-        idleTimeoutMillis: 30000,
-        acquireTimeoutMillis: 300000, // increase for long queries
-      },
-      options: {
-        encrypt: true,
-        trustServerCertificate: false,
-      },
-    }).catch(err => {
-      console.error("Failed to create SQL pool:", err);
-      poolPromise = null; // reset so next call can retry
-      throw err;
-    });
+  try {
+    if (!pool || !pool.connected) {
+      if (pool) {
+        try { await pool.close(); } catch { }
+      }
 
-    poolPromise.on("error", err => {
-      console.error("SQL Pool Error:", err);
-      poolPromise = null; // force reconnect
-    });
+      console.log("🔌 Creating new SQL connection pool...");
+      pool = await sql.connect({
+        server: process.env.SQL_SERVER,
+        database: process.env.SQL_DB,
+        user: process.env.SQL_USER,
+        password: process.env.SQL_PASSWORD,
+        pool: {
+          max: 50, // increase if VPS can handle it
+          min: 0,
+          idleTimeoutMillis: 60000, // more time for idle connections
+          acquireTimeoutMillis: 300000, // more time to acquire heavy queries
+        },
+        options: {
+          encrypt: true,
+          trustServerCertificate: false,
+        },
+      });
+
+      pool.on("error", (err) => {
+        console.error("SQL Pool Error:", err);
+        pool = null; // force reconnect next time
+      });
+    }
+
+    return pool;
+  } catch (err) {
+    console.error("Failed to get SQL pool:", err);
+    pool = null;
+    throw err;
   }
-
-  return poolPromise;
 }
 
 async function getUPC_barcode(gtin) {
@@ -610,87 +576,12 @@ async function getWeeklyBistroSales(pool,csoCode) {
     const result = await pool.request()
     .input("csoCode", sql.Int, csoCode)
     .query(`
-      -- Calculate Monday of current week
-      DECLARE @CurrentMonday DATE =
-          DATEADD(DAY, 1 - DATEPART(WEEKDAY, GETDATE()), CAST(GETDATE() AS DATE));
-
-      WITH Weeks AS (
-          SELECT 
-              DATEADD(WEEK, -7, @CurrentMonday) AS StartDate,   -- extra week for WoW
-              @CurrentMonday AS CurrentWeekStart
-      ),
-
-      -- Weekly totals per category
-      WeeklyBistroByCategory AS (
-          SELECT
-              s.Station_Code,
-              DATEADD(DAY, 1 - DATEPART(WEEKDAY, CAST(s.[Date] AS DATE)), CAST(s.[Date] AS DATE)) AS WeekStart,
-              item.[Cat #] AS Category,
-              SUM(s.[Total Sales]) AS BistroSales,
-              SUM(s.[QTY]) AS UnitsSold
-          FROM [CSO].[Sales] s
-          JOIN [CSO].[ItemBookCSO] item
-              ON s.[Item_BK] = item.[Item_BK]
-          CROSS JOIN Weeks w
-          WHERE item.[Cat #] IN (130, 134)
-            AND CAST(s.[Date] AS DATE) >= w.StartDate
-            AND CAST(s.[Date] AS DATE) < w.CurrentWeekStart   -- exclude current week
-          GROUP BY
-              s.Station_Code,
-              DATEADD(DAY, 1 - DATEPART(WEEKDAY, CAST(s.[Date] AS DATE)), CAST(s.[Date] AS DATE)),
-              item.[Cat #]
-      ),
-
-      -- Weekly TOTAL Bistro sales (used ONLY for WoW)
-      WeeklyBistroTotals AS (
-          SELECT
-              Station_Code,
-              WeekStart,
-              SUM(BistroSales) AS TotalBistroSales
-          FROM WeeklyBistroByCategory
-          GROUP BY Station_Code, WeekStart
-      ),
-
-      -- Remove first week (used only for WoW baseline)
-      MinWeek AS (
-          SELECT Station_Code, MIN(WeekStart) AS MinWeekStart
-          FROM WeeklyBistroTotals
-          GROUP BY Station_Code
-      ),
-
-      WeeklyBistroForDisplay AS (
-          SELECT
-              t.Station_Code,
-              t.WeekStart,
-              t.TotalBistroSales,
-              LAG(t.TotalBistroSales) OVER (
-                  PARTITION BY t.Station_Code ORDER BY t.WeekStart
-              ) AS PrevWeekSales
-          FROM WeeklyBistroTotals t
-          JOIN MinWeek mw
-            ON t.Station_Code = mw.Station_Code
-          WHERE t.WeekStart > mw.MinWeekStart
-      )
-
-      -- Final output: category rows + shared WoW
-      SELECT
-          c.Station_Code,
-          c.WeekStart,
-          c.BistroSales,
-          c.UnitsSold,
-          c.Category,
-          (f.TotalBistroSales - f.PrevWeekSales)
-              / NULLIF(f.PrevWeekSales, 0) * 100 AS WoW_Growth_Pct
-      FROM WeeklyBistroByCategory c
-      JOIN WeeklyBistroForDisplay f
-        ON c.Station_Code = f.Station_Code
-      AND c.WeekStart   = f.WeekStart
-      WHERE c.Station_Code = @csoCode
-      ORDER BY
-          c.WeekStart,
-          c.Category;
+      SELECT *
+      FROM [CSO].[BistroSales]
+      WHERE [Station_Code] = @csoCode
+      ORDER BY [WeekStart]
     `);
-    await sql.close();
+    // await sql.close();
     return result.recordset;
   } catch (err) {
     console.error('SQL error:', err);
@@ -712,7 +603,7 @@ async function getTop10Bistro(pool,csoCode) {
 
       SELECT TOP 10
           s.Station_Code,
-          item.[Item Description],
+          item.[Item Description] as Item,
           SUM(s.[QTY]) AS UnitsSold,
           SUM(s.[Total Sales]) AS TotalSales,
           CAST(SUM(s.[QTY]) / 7.0 AS DECIMAL(10,2)) AS UnitsPerDay
@@ -728,7 +619,7 @@ async function getTop10Bistro(pool,csoCode) {
       ORDER BY
           UnitsSold DESC;
     `);
-    await sql.close();
+    // await sql.close();
     return result.recordset;
   } catch (err) {
     console.error('SQL error:', err);
@@ -768,36 +659,6 @@ function transformTimePeriodData(data) {
   return transformed;
 }
 
-// async function getAllSQLData(csoCode, dates) {
-//   const pool = await getPool();
-
-//   const {
-//     salesStart, salesEnd,
-//     fuelStart, fuelEnd,
-//     transStart, transEnd,
-//   } = dates;
-
-//   const results = await Promise.allSettled([
-//     retry(() => getCategorizedSalesData(pool, csoCode, salesStart, salesEnd)),
-//     retry(() => getGradeVolumeFuelData(pool, csoCode, fuelStart, fuelEnd)),
-//     retry(() => getAllTransactionsData(pool, csoCode, transStart, transEnd)),
-//     retry(() => getAllPeriodData(pool, csoCode, transStart, transEnd)), // unified
-//     retry(() => getAllTendorData(pool, csoCode, transStart, transEnd)),
-//     retry(() => getWeeklyBistroSales(pool, csoCode)),
-//     retry(() => getTop10Bistro(pool, csoCode)),
-//   ]);
-
-//   return {
-//     sales: results[0].status === "fulfilled" ? results[0].value : [],
-//     fuel: results[1].status === "fulfilled" ? results[1].value : [],
-//     transactions: results[2].status === "fulfilled" ? results[2].value.transactions : [],
-//     timePeriodTransactions: results[3].status === "fulfilled" ? results[3].value.timePeriodTransactions : [],
-//     tenderTransactions: results[4].status === "fulfilled" ? results[4].value.tenderTransactions : [],
-//     bistroWoWSales: results[5].status === "fulfilled" ? results[5].value : [],
-//     top10Bistro: results[6].status === "fulfilled" ? results[6].value : [],
-//   };
-// }
-
 async function getAllSQLData(csoCode, dates) {
   const pool = await getPool();
 
@@ -807,38 +668,24 @@ async function getAllSQLData(csoCode, dates) {
     transStart, transEnd,
   } = dates;
 
-  // Run queries sequentially to prevent pool exhaustion
-  const results = [];
-
-  // 1. Categorized Sales
-  results[0] = await retry(() => getCategorizedSalesData(pool, csoCode, salesStart, salesEnd));
-
-  // 2. Fuel Data
-  results[1] = await retry(() => getGradeVolumeFuelData(pool, csoCode, fuelStart, fuelEnd));
-
-  // 3. Transactions
-  results[2] = await retry(() => getAllTransactionsData(pool, csoCode, transStart, transEnd));
-
-  // 4. Time Period Transactions
-  results[3] = await retry(() => getAllPeriodData(pool, csoCode, transStart, transEnd));
-
-  // 5. Tender Transactions
-  results[4] = await retry(() => getAllTendorData(pool, csoCode, transStart, transEnd));
-
-  // 6. Bistro WoW Sales
-  results[5] = await retry(() => getWeeklyBistroSales(pool, csoCode));
-
-  // 7. Top 10 Bistro
-  results[6] = await retry(() => getTop10Bistro(pool, csoCode));
+  const results = await Promise.allSettled([
+    retry(() => getCategorizedSalesData(pool, csoCode, salesStart, salesEnd)),
+    retry(() => getGradeVolumeFuelData(pool, csoCode, fuelStart, fuelEnd)),
+    retry(() => getAllTransactionsData(pool, csoCode, transStart, transEnd)),
+    retry(() => getAllPeriodData(pool, csoCode, transStart, transEnd)), // unified
+    retry(() => getAllTendorData(pool, csoCode, transStart, transEnd)),
+    retry(() => getWeeklyBistroSales(pool, csoCode)),
+    retry(() => getTop10Bistro(pool, csoCode)),
+  ]);
 
   return {
-    sales: results[0] || [],
-    fuel: results[1] || [],
-    transactions: results[2]?.transactions || [],
-    timePeriodTransactions: results[3]?.timePeriodTransactions || [],
-    tenderTransactions: results[4]?.tenderTransactions || [],
-    bistroWoWSales: results[5] || [],
-    top10Bistro: results[6] || [],
+    sales: results[0].status === "fulfilled" ? results[0].value : [],
+    fuel: results[1].status === "fulfilled" ? results[1].value : [],
+    transactions: results[2].status === "fulfilled" ? results[2].value.transactions : [],
+    timePeriodTransactions: results[3].status === "fulfilled" ? results[3].value.timePeriodTransactions : [],
+    tenderTransactions: results[4].status === "fulfilled" ? results[4].value.tenderTransactions : [],
+    bistroWoWSales: results[5].status === "fulfilled" ? results[5].value : [],
+    top10Bistro: results[6].status === "fulfilled" ? results[6].value : [],
   };
 }
 
