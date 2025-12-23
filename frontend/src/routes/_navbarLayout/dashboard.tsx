@@ -1363,7 +1363,8 @@ function RouteComponent() {
                 {/* ======================= */}
                 {/*     Store Activity Section   */}
                 {/* ======================= */}
-                {site !== "Jocko Point" && (
+                {false && (
+                // {site !== "Jocko Point" && (
                 <section aria-labelledby="fuel-heading" className="mb-10">
                   <h2 id="fuel-heading" className="text-2xl font-bold mb-4 pl-4">Store Activity Trend</h2>
 
