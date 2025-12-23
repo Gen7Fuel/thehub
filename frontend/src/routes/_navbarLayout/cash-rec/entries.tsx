@@ -136,8 +136,8 @@ function RouteComponent() {
   const displayDate = data?.kardpoll?.date || data?.cashSummary?.date || date
 
   return (
-    <div className="p-4 space-y-4">
-      <div className="flex flex-col sm:flex-row items-center gap-4">
+    <div className="px-4 pb-0 space-y-4 w-full max-w-[100vw] overflow-x-hidden flex flex-col">
+      <div className="flex w-full flex-col sm:flex-row items-center justify-center gap-4 rounded">
         <SitePicker
           value={site}
           onValueChange={(val) =>
@@ -169,60 +169,59 @@ function RouteComponent() {
       {data === null ? (
         <div className="text-sm text-muted-foreground">No data for this selection.</div>
       ) : (
-        <div className="space-y-3">
-          <div className="overflow-x-auto border rounded">
-            <table className="min-w-[1200px] w-full text-sm">
+        <div className="p-0 flex flex-col">
+          <div className="w-full max-w-full overflow-x-auto overflow-y-auto overscroll-contain border h-[calc(72vh)]">
+            <div className="block min-w-max h-full">
+              <table className="text-sm whitespace-nowrap">
               <thead>
                 <tr className="bg-muted/50">
-                  <th className="px-2 py-2 text-left">Site</th>
-                  <th className="px-2 py-2 text-left">Date</th>
+                  <th className="px-1 py-1 text-center align-bottom h-24">Date</th>
                   {/* Kardpoll group */}
-                  <th className="px-2 py-2 text-left">Kardpoll: Litres Sold</th>
-                  <th className="px-2 py-2 text-left">Kardpoll: Sales</th>
-                  <th className="px-2 py-2 text-left">Kardpoll: AR</th>
+                  <th className="px-1 py-1 text-center align-bottom h-24 bg-emerald-50">Litres Sold</th>
+                  <th className="px-1 py-1 text-center align-bottom h-24 bg-emerald-50">Sales</th>
+                  <th className="px-1 py-1 text-center align-bottom h-24 bg-emerald-50">AR</th>
                   {/* Bank group (no bank date shown) */}
-                  <th className="px-2 py-2 text-left">Bank: Balance Forward</th>
-                  <th className="px-2 py-2 text-left">Bank: Night Deposit</th>
-                  <th className="px-2 py-2 text-left">Bank: Transfer To</th>
-                  <th className="px-2 py-2 text-left">Bank: Ending Balance</th>
-                  <th className="px-2 py-2 text-left">Bank: Misc Debits Total</th>
+                  <th className="px-1 py-1 text-center align-bottom h-24 bg-sky-50">Balance Forward</th>
+                  <th className="px-1 py-1 text-center align-bottom h-24 bg-sky-50">Night Deposit</th>
+                  <th className="px-1 py-1 text-center align-bottom h-24 bg-sky-50">Transfer To</th>
+                  <th className="px-1 py-1 text-center align-bottom h-24 bg-sky-50">Ending Balance</th>
+                  <th className="px-1 py-1 text-center align-bottom h-24 bg-sky-50">Misc Debits Total</th>
                   {/* Cash Summary group */}
-                  <th className="px-2 py-2 text-left">Cash: Shift Count</th>
-                  <th className="px-2 py-2 text-left">Cash: Canadian Cash Collected</th>
-                  <th className="px-2 py-2 text-left">Cash: Item Sales</th>
-                  <th className="px-2 py-2 text-left">Cash: Cash Back</th>
-                  <th className="px-2 py-2 text-left">Cash: Loyalty</th>
-                  <th className="px-2 py-2 text-left">Cash: CPL Bulloch</th>
-                  <th className="px-2 py-2 text-left">Cash: Exempted Tax</th>
-                  <th className="px-2 py-2 text-left">Cash: Report Canadian Cash</th>
-                  <th className="px-2 py-2 text-left">Cash: Payouts</th>
-                  <th className="px-2 py-2 text-left">Cash: Fuel Sales</th>
-                  <th className="px-2 py-2 text-left">Cash: DealGroup CPL Discounts</th>
-                  <th className="px-2 py-2 text-left">Cash: Fuel Price Overrides</th>
-                  <th className="px-2 py-2 text-left">Cash: Parsed Item Sales</th>
-                  <th className="px-2 py-2 text-left">Cash: Deposit Total</th>
-                  <th className="px-2 py-2 text-left">Cash: Penny Rounding</th>
-                  <th className="px-2 py-2 text-left">Cash: Total Sales</th>
-                  <th className="px-2 py-2 text-left">Cash: AFD Credit</th>
-                  <th className="px-2 py-2 text-left">Cash: AFD Debit</th>
-                  <th className="px-2 py-2 text-left">Cash: Kiosk Credit</th>
-                  <th className="px-2 py-2 text-left">Cash: Kiosk Debit</th>
-                  <th className="px-2 py-2 text-left">Cash: Kiosk Gift Card</th>
-                  <th className="px-2 py-2 text-left">Cash: Total POS</th>
-                  <th className="px-2 py-2 text-left">Cash: AR Incurred</th>
-                  <th className="px-2 py-2 text-left">Cash: Grand Total</th>
-                  <th className="px-2 py-2 text-left">Cash: Coupons Accepted</th>
-                  <th className="px-2 py-2 text-left">Cash: Canadian Cash</th>
-                  <th className="px-2 py-2 text-left">Cash: Cash On Hand</th>
-                  <th className="px-2 py-2 text-left">Cash: Parsed Cash Back</th>
-                  <th className="px-2 py-2 text-left">Cash: Parsed Payouts</th>
-                  <th className="px-2 py-2 text-left">Cash: Safedrops Count</th>
-                  <th className="px-2 py-2 text-left">Cash: Safedrops Amount</th>
+                  <th className="px-1 py-1 text-center align-bottom h-24 bg-violet-50">Shift Count</th>
+                  <th className="px-1 py-1 text-center align-bottom h-24 bg-violet-50">Canadian Cash Collected</th>
+                  <th className="px-1 py-1 text-center align-bottom h-24 bg-violet-50">Item Sales</th>
+                  <th className="px-1 py-1 text-center align-bottom h-24 bg-violet-50">Cash Back</th>
+                  <th className="px-1 py-1 text-center align-bottom h-24 bg-violet-50">Loyalty</th>
+                  <th className="px-1 py-1 text-center align-bottom h-24 bg-violet-50">CPL Bulloch</th>
+                  <th className="px-1 py-1 text-center align-bottom h-24 bg-violet-50">Exempted Tax</th>
+                  <th className="px-1 py-1 text-center align-bottom h-24 bg-violet-50">Report Canadian Cash</th>
+                  <th className="px-1 py-1 text-center align-bottom h-24 bg-violet-50">Payouts</th>
+                  <th className="px-1 py-1 text-center align-bottom h-24 bg-violet-50">Fuel Sales</th>
+                  <th className="px-1 py-1 text-center align-bottom h-24 bg-violet-50">DealGroup CPL Discounts</th>
+                  <th className="px-1 py-1 text-center align-bottom h-24 bg-violet-50">Fuel Price Overrides</th>
+                  <th className="px-1 py-1 text-center align-bottom h-24 bg-violet-50">Parsed Item Sales</th>
+                  <th className="px-1 py-1 text-center align-bottom h-24 bg-violet-50">Deposit Total</th>
+                  <th className="px-1 py-1 text-center align-bottom h-24 bg-violet-50">Penny Rounding</th>
+                  <th className="px-1 py-1 text-center align-bottom h-24 bg-violet-50">Total Sales</th>
+                  <th className="px-1 py-1 text-center align-bottom h-24 bg-violet-50">AFD Credit</th>
+                  <th className="px-1 py-1 text-center align-bottom h-24 bg-violet-50">AFD Debit</th>
+                  <th className="px-1 py-1 text-center align-bottom h-24 bg-violet-50">Kiosk Credit</th>
+                  <th className="px-1 py-1 text-center align-bottom h-24 bg-violet-50">Kiosk Debit</th>
+                  <th className="px-1 py-1 text-center align-bottom h-24 bg-violet-50">Kiosk Gift Card</th>
+                  <th className="px-1 py-1 text-center align-bottom h-24 bg-violet-50">Total POS</th>
+                  <th className="px-1 py-1 text-center align-bottom h-24 bg-violet-50">AR Incurred</th>
+                  <th className="px-1 py-1 text-center align-bottom h-24 bg-violet-50">Grand Total</th>
+                  <th className="px-1 py-1 text-center align-bottom h-24 bg-violet-50">Coupons Accepted</th>
+                  <th className="px-1 py-1 text-center align-bottom h-24 bg-violet-50">Canadian Cash</th>
+                  <th className="px-1 py-1 text-center align-bottom h-24 bg-violet-50">Cash On Hand</th>
+                  <th className="px-1 py-1 text-center align-bottom h-24 bg-violet-50">Parsed Cash Back</th>
+                  <th className="px-1 py-1 text-center align-bottom h-24 bg-violet-50">Parsed Payouts</th>
+                  <th className="px-1 py-1 text-center align-bottom h-24 bg-violet-50">Safedrops Count</th>
+                  <th className="px-1 py-1 text-center align-bottom h-24 bg-violet-50">Safedrops Amount</th>
                 </tr>
               </thead>
               <tbody>
                 <tr className="border-t">
-                  <td className="px-2 py-2">{site}</td>
                   <td className="px-2 py-2">{displayDate}</td>
                   {/* Kardpoll values */}
                   <td className="px-2 py-2">{fmt2(data.kardpoll?.litresSold)}</td>
@@ -268,7 +267,8 @@ function RouteComponent() {
                   <td className="px-2 py-2">{fmt2(data.cashSummary?.totals.safedropsAmount)}</td>
                 </tr>
               </tbody>
-            </table>
+              </table>
+            </div>
           </div>
         </div>
       )}
