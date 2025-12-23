@@ -9,6 +9,8 @@ export const STORES = {
   TRANS: "dashboard_transactions",
   TIME_PERIOD_TRANS: "dashboard_time_period_transactions",
   TENDER_TRANS: "dashboard_tender_transactions",
+  BISTRO_WOW_SALES: "dashboard_bistro_wow_sales",
+  TOP_10_BISTRO: "dashboard_top_10_bistro",
 };
 
 export const getDashboardDB = async () => {

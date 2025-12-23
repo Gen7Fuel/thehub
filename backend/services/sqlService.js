@@ -92,14 +92,14 @@ async function getCategorizedSalesData(pool, csoCode, startDate, endDate) {
     // const result = await sql.query(`
     const result = await pool.request().query(`
       SELECT
-        s.[Date_SK],s.[FN],s.[Quota],s.[Cannabis],s.[GRE],s.[Vapes],s.[Native Gifts],s.[Convenience],s.[Total_Sales]
+        s.[Date_SK],s.[FN],s.[Quota],s.[Cannabis],s.[GRE],s.[Vapes],s.[Native Gifts],s.[Convenience],s.[Bistro],s.[Total_Sales]
       FROM [CSO].[TotalSales] s
       WHERE
         s.[Station_SK] = ${csoCode}
         AND s.[Date_SK] BETWEEN '${startDate}' AND '${endDate}'
       ORDER BY s.[Date_SK]
     `);
-    await sql.close();
+    // await sql.close();
     return result.recordset;
   } catch (err) {
     console.error('SQL error:', err);
@@ -130,7 +130,7 @@ async function getGradeVolumeFuelData(pool, csoCode, startDate, endDate) {
     //     AND s.[Date_SK] BETWEEN '${dbStartDate}' AND '${dbEndDate}'
     //   ORDER BY s.[Date_SK]
     // `);
-    await sql.close();
+    // await sql.close();
     return result.recordset;
   } catch (err) {
     console.error('SQL error:', err);
@@ -266,10 +266,10 @@ async function getPool() {
         user: process.env.SQL_USER,
         password: process.env.SQL_PASSWORD,
         pool: {
-          max: 20,
+          max: 50, // increase if VPS can handle it
           min: 0,
-          idleTimeoutMillis: 30000,
-          acquireTimeoutMillis: 60000,
+          idleTimeoutMillis: 60000, // more time for idle connections
+          acquireTimeoutMillis: 300000, // more time to acquire heavy queries
         },
         options: {
           encrypt: true,
@@ -290,7 +290,6 @@ async function getPool() {
     throw err;
   }
 }
-
 
 async function getUPC_barcode(gtin) {
   try {
@@ -568,6 +567,66 @@ async function getAllTransactionsData(pool, csoCode, startDate, endDate) {
   }
 }
 
+async function getWeeklyBistroSales(pool,csoCode) {
+  try {
+    // await sql.connect(sqlConfig);
+    // const result = await sql.query(`SELECT TOP (10) * from [CSO].[Sales]`);
+    // const result = await sql.query(`
+    // const pool = await getPool();
+    const result = await pool.request()
+    .input("csoCode", sql.Int, csoCode)
+    .query(`
+      SELECT *
+      FROM [CSO].[BistroSales]
+      WHERE [Station_Code] = @csoCode
+      ORDER BY [WeekStart]
+    `);
+    // await sql.close();
+    return result.recordset;
+  } catch (err) {
+    console.error('SQL error:', err);
+    return [];
+  }
+}
+
+async function getTop10Bistro(pool,csoCode) {
+  try {
+    // await sql.connect(sqlConfig);
+    // const result = await sql.query(`SELECT TOP (10) * from [CSO].[Sales]`);
+    // const result = await sql.query(`
+    // const pool = await getPool();
+    const result = await pool.request()
+    .input("csoCode", sql.Int, csoCode)
+    .query(`
+      DECLARE @EndDate DATE = CAST(GETDATE() - 1 AS DATE);
+      DECLARE @StartDate DATE = DATEADD(DAY, -30, @EndDate);
+
+      SELECT TOP 10
+          s.Station_Code,
+          item.[Item Description] as Item,
+          SUM(s.[QTY]) AS UnitsSold,
+          SUM(s.[Total Sales]) AS TotalSales,
+          CAST(SUM(s.[QTY]) / 7.0 AS DECIMAL(10,2)) AS UnitsPerDay
+      FROM [CSO].[Sales] s
+      JOIN [CSO].[ItemBookCSO] item
+          ON s.[Item_BK] = item.[Item_BK]
+      WHERE item.[Cat #] IN (130, 134)
+        AND s.[Station_Code] = @csoCode
+        AND CAST(s.[Date] AS DATE) BETWEEN @StartDate AND @EndDate
+      GROUP BY
+          s.Station_Code,
+          item.[Item Description]
+      ORDER BY
+          UnitsSold DESC;
+    `);
+    // await sql.close();
+    return result.recordset;
+  } catch (err) {
+    console.error('SQL error:', err);
+    return [];
+  }
+}
+
 function formatDateForDB(dateString) {
   // input: "2025-11-14"
   // output: "20251114"
@@ -615,6 +674,8 @@ async function getAllSQLData(csoCode, dates) {
     retry(() => getAllTransactionsData(pool, csoCode, transStart, transEnd)),
     retry(() => getAllPeriodData(pool, csoCode, transStart, transEnd)), // unified
     retry(() => getAllTendorData(pool, csoCode, transStart, transEnd)),
+    retry(() => getWeeklyBistroSales(pool, csoCode)),
+    retry(() => getTop10Bistro(pool, csoCode)),
   ]);
 
   return {
@@ -623,6 +684,8 @@ async function getAllSQLData(csoCode, dates) {
     transactions: results[2].status === "fulfilled" ? results[2].value.transactions : [],
     timePeriodTransactions: results[3].status === "fulfilled" ? results[3].value.timePeriodTransactions : [],
     tenderTransactions: results[4].status === "fulfilled" ? results[4].value.tenderTransactions : [],
+    bistroWoWSales: results[5].status === "fulfilled" ? results[5].value : [],
+    top10Bistro: results[6].status === "fulfilled" ? results[6].value : [],
   };
 }
 
@@ -638,5 +701,7 @@ module.exports = {
   getCategoriesFromSQL,
   getCategoryNumbersFromSQL,
   getInactiveMasterItems,
-  getInventoryOnHandForUPCAndStation
+  getInventoryOnHandForUPCAndStation,
+  getWeeklyBistroSales,
+  getTop10Bistro,
 };
