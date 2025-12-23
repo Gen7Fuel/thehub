@@ -1562,9 +1562,10 @@ function RouteComponent() {
                 {/* ======================= */}
                 {/*     Store Activity Section   */}
                 {/* ======================= */}
-                {site !== "Jocko Point" && (
-                  <section aria-labelledby="fuel-heading" className="mb-10">
-                    <h2 id="fuel-heading" className="text-2xl font-bold mb-4 pl-4">Store Activity Trend</h2>
+                {false && (
+                // {site !== "Jocko Point" && (
+                <section aria-labelledby="fuel-heading" className="mb-10">
+                  <h2 id="fuel-heading" className="text-2xl font-bold mb-4 pl-4">Store Activity Trend</h2>
 
                     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
 
