@@ -364,7 +364,7 @@ router.get("/items-full", async (req, res) => {
     const itemsPerFrequency = await Promise.all(
       frequencies.map(async (freq) => {
         // const periodKey = getPeriodKey(freq, new Date(date));
-        const periodKey = periodKeys?.[freq]; // gets the preriod key for all frequencies
+        const periodKey = periodKeysObj?.[freq]; // gets the preriod key for all frequencies
 
         // 1️⃣ try fetch instance
         const instance = await AuditInstance.findOne({
