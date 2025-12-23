@@ -47,6 +47,9 @@ router.get('/all-data', async (req, res) => {
       transStart,
       transEnd
     });
+    // console.log('transstart:',transStart,'transend:',transEnd);
+    // console.log('salesstart:',salesStart,'salesend:',salesEnd);
+    // console.log('fuelsalesstart:',fuelStart,'fuelsalesend:',fuelEnd);
 
     res.json(response);
   } catch (err) {
