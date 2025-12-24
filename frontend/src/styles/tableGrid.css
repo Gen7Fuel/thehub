@@ -1,41 +1,47 @@
-.table-grid th,
-.table-grid td {
-  border-right: 1px dotted #d1d5db; /* Tailwind gray-300 */
-  border-bottom: 1px dotted #d1d5db;
-}
-
-/* Remove bottom border on the last body row */
-.table-grid tbody tr:last-child td {
-  border-bottom: 0;
-}
-
-/* Remove right border on the last column */
-.table-grid th:last-child,
-.table-grid td:last-child {
-  border-right: 0;
-}
-
-/* Fixed, uniform column widths */
-.table-grid {
-  table-layout: fixed;
-}
-.table-grid th,
-.table-grid td {
-  width: 100px;
-  min-width: 100px;
-}
-
-/* Alignment: date column centered, others right-aligned */
-.table-grid tbody td {
-  text-align: right;
-}
-.table-grid tbody td:first-child {
-  text-align: center;
-}
-
-/* Allow header titles to wrap within fixed column width */
+/* Sticky header row (preserves existing colors because we don't set background) */
 .table-grid thead th {
-  white-space: normal;            /* override table's nowrap */
-  overflow-wrap: anywhere;        /* wrap long words */
-  word-break: break-word;         /* ensure breakable words wrap */
+	position: sticky;
+	top: 0;
+	z-index: 2;
+}
+
+/* Sticky first column for date (header + body cells) */
+.table-grid th:first-child,
+.table-grid td:first-child {
+	position: sticky;
+	left: 0;
+	z-index: 1;
+	background-color: #fff; /* prevent text overlap under sticky column */
+}
+
+/* Top-left header cell above all */
+.table-grid thead th:first-child {
+	z-index: 3;
+}
+
+/* Uniform column widths */
+.table-grid {
+	table-layout: fixed;
+}
+.table-grid th,
+.table-grid td {
+	width: 100px;
+	min-width: 100px;
+}
+
+/* Allow header titles to wrap within fixed width */
+.table-grid thead th {
+	white-space: normal;        /* override table's whitespace-nowrap */
+	overflow-wrap: anywhere;    /* wrap long words */
+	word-break: break-word;     /* ensure breakable words wrap */
+}
+
+/* Dotted light-gray right border on all cells except last column */
+.table-grid th,
+.table-grid td {
+	border-right: 1px dotted #d1d5db; /* Tailwind gray-300 */
+}
+.table-grid thead th:last-child,
+.table-grid tbody td:last-child {
+	border-right: 0;
 }
