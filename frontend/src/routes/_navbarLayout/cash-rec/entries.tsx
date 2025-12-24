@@ -2,7 +2,9 @@ import { createFileRoute, useLoaderData, useNavigate, useSearch } from '@tanstac
 import { format } from 'date-fns'
 import { SitePicker } from '@/components/custom/sitePicker'
 import { DatePickerWithRange } from '@/components/custom/datePickerWithRange'
+import '@/styles/tableGrid.css'
 import type { DateRange } from 'react-day-picker'
+import '@/styles/typewriter.css'
 
 type Search = { site: string; from: string; to?: string; date?: string }
 
@@ -211,7 +213,7 @@ function RouteComponent() {
       <div className="p-0 flex flex-col">
         <div className="w-full max-w-full overflow-x-auto overflow-y-auto overscroll-contain border h-[calc(72vh)]">
           <div className="block min-w-max h-full">
-            <table className="text-sm whitespace-nowrap">
+              <table className="table-grid typewriter-font text-sm whitespace-nowrap">
             <thead>
               <tr className="bg-muted/50">
                 <th className="px-1 py-1 text-center align-bottom h-24">Date</th>

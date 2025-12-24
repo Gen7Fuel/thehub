@@ -1,0 +1,11 @@
+@font-face {
+  font-family: 'BPTypewrite';
+  src: url('/fonts/BPtypewrite.otf') format('opentype');
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
+}
+
+.typewriter-font {
+  font-family: 'BPTypewrite', ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', 'Courier New', monospace;
+}
