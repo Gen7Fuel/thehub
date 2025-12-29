@@ -202,7 +202,7 @@ services:
       - ./Caddyfile:/etc/caddy/Caddyfile
       - dist:/usr/share/caddy
     depends_on:
-      - backend:
+      backend:
         condition: service_healthy
     restart: always
 
