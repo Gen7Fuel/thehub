@@ -41,3 +41,10 @@ jobs:
           cd frontend
           npm install
           npm run build
+      
+      # 7. Upload frontend dist file artifact
+      - name: Upload frontend artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: frontend-dist
+          path: frontend/dist
