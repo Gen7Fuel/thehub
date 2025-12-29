@@ -2,8 +2,8 @@ import { createFileRoute, useParams, useNavigate } from "@tanstack/react-router"
 import { useEffect, useState } from "react";
 import { ChecklistItemCard } from "@/components/custom/ChecklistItem";
 import { Button } from "@/components/ui/button";
-import { useContext } from "react";
-import { RouteContextVisitor } from "../visitor";
+// import { useContext } from "react";
+// import { RouteContextVisitor } from "../visitor";
 // import { getSocket } from "@/lib/websocket";
 import { useAuth } from "@/context/AuthContext";
 
@@ -52,6 +52,9 @@ interface AuditItem {
 // }
 
 export const Route = createFileRoute('/_navbarLayout/audit/visitor/$id')({
+  validateSearch: (search: { site?: string }) => ({
+    site: search.site,
+  }),
   component: RouteComponent,
 })
 
@@ -116,11 +119,10 @@ function RouteComponent() {
   const { id } = useParams({ from: "/_navbarLayout/audit/visitor/$id" });
 
   // Temporary patch for location picker getting state from ther parent
-  const { stationName } = useContext(RouteContextVisitor);
+  // const { stationName } = useContext(RouteContextVisitor);
   const { user } = useAuth();
-  const site = stationName || user?.location || "";
-  const navigate = useNavigate()
-  console.log('site:', site)
+  const { site } = Route.useSearch() || user?.location;
+  const navigate = useNavigate({ from: Route.fullPath });
 
   // const site = localStorage.getItem("location") || ""; //Original file
   const [items, setItems] = useState<AuditItem[]>([]);

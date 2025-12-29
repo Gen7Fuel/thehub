@@ -74,25 +74,32 @@ import { createFileRoute, Link, Outlet, useMatchRoute, useNavigate } from '@tans
 import { useEffect, useState } from "react"
 import { Button } from '@/components/ui/button'
 import axios from "axios"
-import { LocationPicker } from "@/components/custom/locationPicker";
-import { createContext } from "react";
+// import { LocationPicker } from "@/components/custom/locationPicker";
+// import { createContext } from "react";
 import { getSocket } from "@/lib/websocket";
 import { useAuth } from "@/context/AuthContext";
+import { SitePicker } from '@/components/custom/sitePicker';
 
 
 const socket = getSocket();
 
-export const RouteContextChecklist = createContext<{
-  stationName: string;
-  setStationName: (value: string) => void;
-}>({
-  stationName: "",
-  setStationName: () => { },
-});
+// export const RouteContextChecklist = createContext<{
+//   stationName: string;
+//   setStationName: (value: string) => void;
+// }>({
+//   stationName: "",
+//   setStationName: () => { },
+// });
 
+// export const Route = createFileRoute('/_navbarLayout/audit/checklist')({
+//   component: RouteComponent,
+// })
 export const Route = createFileRoute('/_navbarLayout/audit/checklist')({
+  validateSearch: (search: { site?: string }) => ({
+    site: search.site,
+  }),
   component: RouteComponent,
-})
+});
 
 interface AuditTemplate {
   _id: string;
@@ -113,31 +120,74 @@ interface OpenIssueResponse {
 
 function RouteComponent() {
   const matchRoute = useMatchRoute()
-  const navigate = useNavigate()
+  // const navigate = useNavigate()
+  const navigate = useNavigate({ from: Route.fullPath });
+  const { site } = Route.useSearch();
   const [templates, setTemplates] = useState<AuditTemplate[]>([]);
   const [openIssues, setOpenIssues] = useState<OpenIssueItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const { user } = useAuth();
-  const [stationName, setStationName] = useState(user?.location || "");
+  // const [stationName, setStationName] = useState(user?.location || "");
+
+  // 🔁 URL → Context sync
+  // useEffect(() => {
+  //   if (site && site !== stationName) {
+  //     setStationName(site);
+  //   }
+  // }, [site, stationName]);
 
   // temporary central patch function
-  const updateStation = (newStation: string) => {
-    setStationName(newStation);
+  // const updateStation = (newStation: string) => {
+  //   setStationName(newStation);
 
-    // navigate back to checklist root
-    // navigate({ to: "/audit/checklist"});
-  };
+  //   // navigate back to checklist root
+  //   // navigate({ to: "/audit/checklist"});
+  // };
 
   useEffect(() => {
-    if (!socket || !stationName) return;
+    if (!site && user?.location) {
+      navigate({
+        search: { site: user.location },
+        replace: true,
+      });
+    }
+  }, [site, user?.location, navigate]);
+
+  const handleSiteChange = (newSite: string) => {
+    const activeTemplateId = templates.find(t =>
+      matchRoute({
+        to: "/audit/checklist/$id",
+        params: { id: t._id },
+        fuzzy: true,
+      })
+    )?._id;
+
+    navigate(
+      activeTemplateId
+        ? {
+          to: "/audit/checklist/$id",
+          params: { id: activeTemplateId },
+          search: { site: newSite },
+        }
+        : {
+          to: "/audit/checklist",
+          search: { site: newSite },
+        }
+    );
+  };
+
+
+
+  useEffect(() => {
+    if (!socket || !site) return;
 
     // 🔹 Listen for issue changes
     socket.on("issueUpdated", (payload) => {
       console.log("📡 Real-time issue update:", payload);
 
       // Only handle updates for the active site
-      if (payload.site !== stationName) return;
+      if (payload.site !== site) return;
 
       // 🔸 Case 1: New issue created → add to open issues
       if (payload.action === "created") {
@@ -163,12 +213,12 @@ function RouteComponent() {
     return () => {
       socket.off("issueUpdated");
     };
-  }, [socket, stationName]);
+  }, [socket, site]);
 
 
-  // 🔹 refetch audits whenever stationName changes
+  // 🔹 refetch audits whenever site changes
   useEffect(() => {
-    if (!stationName) return;
+    if (!site) return;
 
     setLoading(true);
     setError("");
@@ -182,12 +232,12 @@ function RouteComponent() {
       })
       .then(res => {
         const filtered = res.data.filter(
-          (t: AuditTemplate) => t.sites && t.sites.includes(stationName)
+          (t: AuditTemplate) => t.sites && t.sites.includes(site)
         );
         setTemplates(filtered);
 
         // keep latest location in localStorage so it persists
-        // localStorage.setItem("location", stationName);
+        // localStorage.setItem("location", site);
       })
       .catch((err) => {
         if (err.response?.status === 403) {
@@ -200,7 +250,7 @@ function RouteComponent() {
       .finally(() => setLoading(false));
     // fetch open issues
     axios
-      .get<OpenIssueResponse>(`/api/audit/open-issues?site=${stationName}`, {
+      .get<OpenIssueResponse>(`/api/audit/open-issues?site=${site}`, {
         headers: {
           Authorization: `Bearer ${localStorage.getItem("token")}`,
           "X-Required-Permission": "stationAudit"
@@ -216,7 +266,7 @@ function RouteComponent() {
         }
       })
 
-  }, [stationName, navigate]);
+  }, [site, navigate]);
 
   if (loading) return <div className="text-center mt-8">Loading...</div>;
   if (error) return <div className="text-red-600 text-center mt-8">{error}</div>;
@@ -224,10 +274,10 @@ function RouteComponent() {
   // const access = user?.access || {}
 
   return (
-    <RouteContextChecklist.Provider value={{ stationName, setStationName }}>
-      <div className="flex flex-col items-center">
-        {/* 🔹 Location Picker temporary patch */}
-        {/* <div className="mb-6">
+    // <RouteContextChecklist.Provider value={{ stationName, setStationName }}>
+    <div className="flex flex-col items-center">
+      {/* 🔹 Location Picker temporary patch */}
+      {/* <div className="mb-6">
           <LocationPicker
             value="stationName" // mode
             defaultValue={stationName} // the actual current station from parent state
@@ -243,8 +293,8 @@ function RouteComponent() {
 
         </div> */}
 
-        {/* 🔹 Template buttons */}
-        {/* <div className="flex mb-4">
+      {/* 🔹 Template buttons */}
+      {/* <div className="flex mb-4">
           {templates.map((template, idx) => {
             const isActive = matchRoute({
               to: "/audit/checklist/$id",
@@ -275,8 +325,8 @@ function RouteComponent() {
               </Link>
             );
           })} */}
-        {/* 🔹 Open Issues tab in same row */}
-        {/* {openIssues.length > 0 && (
+      {/* 🔹 Open Issues tab in same row */}
+      {/* {openIssues.length > 0 && (
             <Link to="/audit/checklist/open-issues">
               <Button
                 {...(matchRoute({ to: "/audit/checklist/open-issues", fuzzy: true }) ? {} : { variant: "outline" } as object)}
@@ -287,11 +337,11 @@ function RouteComponent() {
             </Link>
           )}
         </div> */}
-        {/* ▲ Row: Location Picker + Checklist Selector + Open Issues */}
-        <div className="flex items-center gap-4 mb-6">
+      {/* ▲ Row: Location Picker + Checklist Selector + Open Issues */}
+      <div className="flex items-center gap-4 mb-6">
 
-          {/* ◼ Location Picker (left) */}
-          <LocationPicker
+        {/* ◼ Location Picker (left) */}
+        {/* <LocationPicker
             value="stationName"
             defaultValue={stationName}
             setStationName={(value) => {
@@ -299,97 +349,112 @@ function RouteComponent() {
                 typeof value === "function" ? value(stationName) : value;
               updateStation(newValue);
             }}
-          />
+          /> */}
+        {/* <SitePicker
+          value={site}
+          onValueChange={(newSite) => {
+            navigate({ search: { site: newSite } });
+          }}
+        /> */}
+        <SitePicker
+          value={site}
+          onValueChange={handleSiteChange}
+        />
 
-          {/* ◼ Checklist Carousel (center) */}
-          <div className="flex items-center h-10 border rounded-md bg-white px-2 text-sm w-[200px] justify-between shadow-sm">
 
-            {/* ◀ Left arrow */}
-            <button
-              disabled={templates.length <= 1}
-              className="px-2 text-lg select-none disabled:opacity-30"
-              onClick={() => {
-                const currentIndex = templates.findIndex(
-                  t =>
-                    matchRoute({
-                      to: "/audit/checklist/$id",
-                      params: { id: t._id },
-                      fuzzy: true
-                    })
-                );
-                const prevIndex =
-                  (currentIndex - 1 + templates.length) % templates.length;
-                navigate({
-                  to: "/audit/checklist/$id",
-                  params: { id: templates[prevIndex]._id }
-                });
-              }}
-            >
-              ◀
-            </button>
 
-            {/* Checklist title */}
-            <div className="flex-1 text-center px-1 font-normal text-sm">
-              {(() => {
-                const active = templates.find(t =>
+
+        {/* ◼ Checklist Carousel (center) */}
+        <div className="flex items-center h-10 border rounded-md bg-white px-2 text-sm w-[200px] justify-between shadow-sm">
+
+          {/* ◀ Left arrow */}
+          <button
+            disabled={templates.length <= 1}
+            className="px-2 text-lg select-none disabled:opacity-30"
+            onClick={() => {
+              const currentIndex = templates.findIndex(
+                t =>
                   matchRoute({
                     to: "/audit/checklist/$id",
                     params: { id: t._id },
                     fuzzy: true
                   })
-                );
-                return active ? active.name : "Select Checklist";
-              })()}
-            </div>
+              );
+              const prevIndex =
+                (currentIndex - 1 + templates.length) % templates.length;
+              navigate({
+                to: "/audit/checklist/$id",
+                params: { id: templates[prevIndex]._id },
+                search: (prev: any) => ({ site: prev.site }),
+              });
+            }}
+          >
+            ◀
+          </button>
 
-            {/* ▶ Right arrow */}
-            <button
-              disabled={templates.length <= 1}
-              className="px-2 text-lg select-none disabled:opacity-30"
-              onClick={() => {
-                const currentIndex = templates.findIndex(
-                  t =>
-                    matchRoute({
-                      to: "/audit/checklist/$id",
-                      params: { id: t._id },
-                      fuzzy: true
-                    })
-                );
-                const nextIndex = (currentIndex + 1) % templates.length;
-                navigate({
+          {/* Checklist title */}
+          <div className="flex-1 text-center px-1 font-normal text-sm">
+            {(() => {
+              const active = templates.find(t =>
+                matchRoute({
                   to: "/audit/checklist/$id",
-                  params: { id: templates[nextIndex]._id }
-                });
-              }}
-            >
-              ▶
-            </button>
-
-          </div>
-
-          {/* ◼ Open Issues (right) */}
-          {openIssues.length > 0 && (
-            <Link to="/audit/checklist/open-issues">
-              <Button
-                {...(matchRoute({
-                  to: "/audit/checklist/open-issues",
+                  params: { id: t._id },
                   fuzzy: true
                 })
-                  ? {}
-                  : { variant: "outline" } as object)}
-                className="px-4"
-              >
-                Open Issues ({openIssues.length})
-              </Button>
-            </Link>
-          )}
+              );
+              return active ? active.name : "Select Checklist";
+            })()}
+          </div>
+
+          {/* ▶ Right arrow */}
+          <button
+            disabled={templates.length <= 1}
+            className="px-2 text-lg select-none disabled:opacity-30"
+            onClick={() => {
+              const currentIndex = templates.findIndex(
+                t =>
+                  matchRoute({
+                    to: "/audit/checklist/$id",
+                    params: { id: t._id },
+                    fuzzy: true
+                  })
+              );
+              const nextIndex = (currentIndex + 1) % templates.length;
+              navigate({
+                to: "/audit/checklist/$id",
+                params: { id: templates[nextIndex]._id },
+                search: (prev: any) => ({ site: prev.site }),
+              });
+            }}
+          >
+            ▶
+          </button>
+
         </div>
 
-
-
-        <Outlet />
+        {/* ◼ Open Issues (right) */}
+        {openIssues.length > 0 && (
+          <Link to="/audit/checklist/open-issues" search={(prev: any) => ({ site: prev.site })}>
+            <Button
+              {...(matchRoute({
+                to: "/audit/checklist/open-issues",
+                fuzzy: true
+              })
+                ? {}
+                : { variant: "outline" } as object)}
+              className="px-4"
+            >
+              Open Issues ({openIssues.length})
+            </Button>
+          </Link>
+        )}
       </div>
-    </RouteContextChecklist.Provider>
+
+
+
+      <Outlet />
+    </div>
+    // </RouteContextChecklist.Provider>
   );
 }
 

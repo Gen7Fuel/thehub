@@ -2,8 +2,8 @@ import { createFileRoute, useParams, useNavigate } from "@tanstack/react-router"
 import { useEffect, useState } from "react";
 import { ChecklistItemCard } from "@/components/custom/ChecklistItem";
 import { Button } from "@/components/ui/button";
-import { useContext } from "react";
-import { RouteContextChecklist } from "../checklist";
+// import { useContext } from "react";
+// import { RouteContextChecklist } from "../checklist";
 import { getSocket } from "@/lib/websocket";
 import { useAuth } from "@/context/AuthContext";
 
@@ -53,9 +53,16 @@ interface AuditUpdatePayload {
 }
 
 
+// export const Route = createFileRoute("/_navbarLayout/audit/checklist/$id")({
+//   component: RouteComponent,
+// });
 export const Route = createFileRoute("/_navbarLayout/audit/checklist/$id")({
+  validateSearch: (search: { site?: string }) => ({
+    site: search.site,
+  }),
   component: RouteComponent,
 });
+
 
 // Helper: periodKey generator
 // function getPeriodKey(frequency: "daily" | "weekly" | "monthly", date: Date = new Date()) {
@@ -119,10 +126,13 @@ function RouteComponent() {
   const { id } = useParams({ from: "/_navbarLayout/audit/checklist/$id" });
 
   // Temporary patch for location picker getting state from ther parent
-  const { stationName } = useContext(RouteContextChecklist);
+  // const { stationName } = useContext(RouteContextChecklist);
   const { user } = useAuth();
-  const site = stationName || user?.location || "";
-  const navigate = useNavigate()
+  // const { stationName } = Route.useSearch();
+  // const site = stationName || user?.location || "";
+  const { site } = Route.useSearch() || user?.location;
+  // const navigate = useNavigate()
+  const navigate = useNavigate({ from: Route.fullPath });
 
   // const site = localStorage.getItem("location") || ""; //Original file
   const [items, setItems] = useState<AuditItem[]>([]);
@@ -330,9 +340,9 @@ function RouteComponent() {
 
   useEffect(() => {
     if (!site) return;
-  
+
     const controller = new AbortController();
-  
+
     fetch(`/api/locations?stationName=${encodeURIComponent(site)}`, {
       signal: controller.signal,
     })
@@ -350,11 +360,11 @@ function RouteComponent() {
         }
         setSiteTimezone("");
       });
-  
+
     return () => controller.abort();
   }, [site]);
-  
-  
+
+
 
   useEffect(() => {
     if (!socket) return;
