@@ -104,6 +104,7 @@ function parseSftReport(text) {
 
     afdCredit: pickNum(/^\s*AFD Credit\s+([-\d.,]+)\s*$/mi, text),
     afdDebit: pickNum(/^\s*AFD Debit\s+([-\d.,]+)\s*$/mi, text),
+    afdGiftCard: pickNum(/^\s*AFD\s*Gift\s*Card\s*[:\-]?\s*\$?\s*([-\d.,]+)\s*$/mi, text),
     kioskCredit: pickNum(/^\s*Kiosk Credit\s+([-\d.,]+)\s*$/mi, text),
     kioskDebit: pickNum(/^\s*Kiosk Debit\s+([-\d.,]+)\s*$/mi, text),
     kioskGiftCard: pickNum(/^\s*Kiosk Gift Card\s+([-\d.,]+)\s*$/mi, text),
