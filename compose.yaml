@@ -127,8 +127,10 @@ services:
   backend:
     container_name: backend
     build: ./backend
-    ports:
-      - "5000:5000"
+    # ports:
+    #   - "5000:5000"
+    expose:
+      - "5000"
     environment:
       - HOST=VPS
       - FORCE_COLOR=1
@@ -163,6 +165,11 @@ services:
     depends_on:
       - mongo
       - redis
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:5000/api/health"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
     restart: always
 
   cdn:
@@ -195,7 +202,8 @@ services:
       - ./Caddyfile:/etc/caddy/Caddyfile
       - dist:/usr/share/caddy
     depends_on:
-      - frontend
+      backend:
+        condition: service_healthy
     restart: always
 
 volumes:

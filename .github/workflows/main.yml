@@ -1,6 +1,68 @@
+# name: Deploy to Server
+
+# # Trigger on pushes to the main branch
+# on:
+#   push:
+#     branches:
+#       - main
+
+# jobs:
+#   deploy:
+#     runs-on: ubuntu-latest
+
+#     steps:
+#       # Step 1: Checkout repo (optional, mainly for GitHub Actions context)
+#       - name: Checkout repository
+#         uses: actions/checkout@v4
+
+#       # Step 2: SSH to server and run deployment commands
+#       - name: Deploy via SSH
+#         uses: appleboy/ssh-action@v0.1.7
+#         with:
+#           host: ${{ secrets.SERVER_HOST }}       # Server IP or hostname
+#           username: ${{ secrets.SERVER_USER }}   # SSH username
+#           key: ${{ secrets.SERVER_SSH_KEY }}     # Private SSH key from GitHub Secrets
+#           script: |
+#             cd /home/gen7fuel/thehub
+
+#             export MONGO_URI=${{ secrets.MONGO_URI }}
+#             export JWT_SECRET=${{ secrets.JWT_SECRET }}
+#             export SQL_SERVER=${{ secrets.SQL_SERVER }}
+#             export SQL_DB=${{ secrets.SQL_DB }}
+#             export SQL_USER=${{ secrets.SQL_USER }}
+#             export SQL_PASSWORD=${{ secrets.SQL_PASSWORD }}
+#             export REDIS_URL=${{ secrets.REDIS_URL }}
+#             export SFTP_HOST=${{ secrets.SFTP_HOST }}
+#             export SFTP_PORT=${{ secrets.SFTP_PORT }}
+#             export SFTP_COUCHICHING_USER=${{ secrets.SFTP_COUCHICHING_USER }}
+#             export SFTP_COUCHICHING_PASS=${{ secrets.SFTP_COUCHICHING_PASS }}
+#             export SFTP_RANKIN_USER=${{ secrets.SFTP_RANKIN_USER }}
+#             export SFTP_RANKIN_PASS=${{ secrets.SFTP_RANKIN_PASS }}
+#             export SFTP_JOCKO_POINT_USER=${{ secrets.SFTP_JOCKO_POINT_USER }}
+#             export SFTP_JOCKO_POINT_PASS=${{ secrets.SFTP_JOCKO_POINT_PASS }}
+#             export SFTP_WALPOLE_USER=${{ secrets.SFTP_WALPOLE_USER }}
+#             export SFTP_WALPOLE_PASS=${{ secrets.SFTP_WALPOLE_PASS }}
+#             export SFTP_SARNIA_USER=${{ secrets.SFTP_SARNIA_USER }}
+#             export SFTP_SARNIA_PASS=${{ secrets.SFTP_SARNIA_PASS }}
+#             export SFTP_SILVER_GRIZZLY_USER=${{ secrets.SFTP_SILVER_GRIZZLY_USER }}
+#             export SFTP_SILVER_GRIZZLY_PASS=${{ secrets.SFTP_SILVER_GRIZZLY_PASS }}
+#             export SFTP_OLIVER_USER=${{ secrets.SFTP_OLIVER_USER }}
+#             export SFTP_OLIVER_PASS=${{ secrets.SFTP_OLIVER_PASS }}
+#             export SFTP_OSOYOOS_USER=${{ secrets.SFTP_OSOYOOS_USER }}
+#             export SFTP_OSOYOOS_PASS=${{ secrets.SFTP_OSOYOOS_PASS }}
+#             export AZURE_STORAGE_CONNECTION_STRING=${{ secrets.AZURE_STORAGE_CONNECTION_STRING }}
+#             export AZURE_CONTAINER=${{ secrets.AZURE_CONTAINER }}
+
+#             git pull origin main
+#             docker compose down
+#             docker volume rm thehub_dist || true
+#             docker compose up --build -d
+#             docker exec -i redis redis-cli replicaof no one
+#             docker exec -i redis redis-cli SAVE
+
+
 name: Deploy to Server
 
-# Trigger on pushes to the main branch
 on:
   push:
     branches:
@@ -11,20 +73,19 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      # Step 1: Checkout repo (optional, mainly for GitHub Actions context)
-      - name: Checkout repository
-        uses: actions/checkout@v4
-
-      # Step 2: SSH to server and run deployment commands
       - name: Deploy via SSH
         uses: appleboy/ssh-action@v0.1.7
         with:
-          host: ${{ secrets.SERVER_HOST }}       # Server IP or hostname
-          username: ${{ secrets.SERVER_USER }}   # SSH username
-          key: ${{ secrets.SERVER_SSH_KEY }}     # Private SSH key from GitHub Secrets
+          host: ${{ secrets.SERVER_HOST }}
+          username: ${{ secrets.SERVER_USER }}
+          key: ${{ secrets.SERVER_SSH_KEY }}
           script: |
+            set -e
             cd /home/gen7fuel/thehub
 
+            git pull origin main
+
+            # Export env vars
             export MONGO_URI=${{ secrets.MONGO_URI }}
             export JWT_SECRET=${{ secrets.JWT_SECRET }}
             export SQL_SERVER=${{ secrets.SQL_SERVER }}
@@ -53,9 +114,36 @@ jobs:
             export AZURE_STORAGE_CONNECTION_STRING=${{ secrets.AZURE_STORAGE_CONNECTION_STRING }}
             export AZURE_CONTAINER=${{ secrets.AZURE_CONTAINER }}
 
-            git pull origin main
-            docker compose down
-            docker volume rm thehub_dist || true
-            docker compose up --build -d
+            # Build frontend
+            cd frontend
+            npm ci
+            npm run build
+
+            # Atomic frontend swap
+            TMP_DIR=/tmp/dist_new
+            rm -rf $TMP_DIR
+            cp -r dist $TMP_DIR
+
+            DIST_VOL=/var/lib/docker/volumes/thehub_dist/_data
+
+            rm -rf ${DIST_VOL}_new
+            mv $TMP_DIR ${DIST_VOL}_new
+
+            # atomic swap
+            mv ${DIST_VOL} ${DIST_VOL}_old
+            mv ${DIST_VOL}_new ${DIST_VOL}
+
+            rm -rf ${DIST_VOL}_old
+
+
+            # Back to root
+            cd ..
+
+            # Rolling backend + cdn update
+            # docker compose up -d --build --no-deps backend cdn # optional cdn update
+            docker compose up -d --build --no-deps --wait backend
+            
+            # Optional redis safety
             docker exec -i redis redis-cli replicaof no one
             docker exec -i redis redis-cli SAVE
+
