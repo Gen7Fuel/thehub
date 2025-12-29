@@ -222,22 +222,21 @@ function RouteComponent() {
                 <th className="px-1 py-1 text-center align-bottom h-24 bg-emerald-50">Sales</th>
                 <th className="px-1 py-1 text-center align-bottom h-24 bg-emerald-50">AR</th>
                 {/* Cash Summary group */}
-                <th className="px-1 py-1 text-center align-bottom h-24 bg-violet-50">Shift Count</th>
-                <th className="px-1 py-1 text-center align-bottom h-24 bg-violet-50">Canadian Cash Collected</th>
+                <th className="px-1 py-1 text-center align-bottom h-24 bg-violet-50">DealGroup CPL Discounts</th>
+                <th className="px-1 py-1 text-center align-bottom h-24 bg-violet-50">Unsettled Prepays</th>
                 <th className="px-1 py-1 text-center align-bottom h-24 bg-violet-50">Item Sales</th>
+                <th className="px-1 py-1 text-center align-bottom h-24 bg-violet-50">Total Sales</th>
+                <th className="px-1 py-1 text-center align-bottom h-24 bg-violet-50">Fuel Sales</th>
                 <th className="px-1 py-1 text-center align-bottom h-24 bg-violet-50">Cash Back</th>
                 <th className="px-1 py-1 text-center align-bottom h-24 bg-violet-50">Loyalty</th>
                 <th className="px-1 py-1 text-center align-bottom h-24 bg-violet-50">CPL Bulloch</th>
                 <th className="px-1 py-1 text-center align-bottom h-24 bg-violet-50">Exempted Tax</th>
-                <th className="px-1 py-1 text-center align-bottom h-24 bg-violet-50">Report Canadian Cash</th>
                 <th className="px-1 py-1 text-center align-bottom h-24 bg-violet-50">Payouts</th>
                 <th className="px-1 py-1 text-center align-bottom h-24 bg-violet-50">Fuel Sales</th>
-                <th className="px-1 py-1 text-center align-bottom h-24 bg-violet-50">DealGroup CPL Discounts</th>
                 <th className="px-1 py-1 text-center align-bottom h-24 bg-violet-50">Fuel Price Overrides</th>
                 <th className="px-1 py-1 text-center align-bottom h-24 bg-violet-50">Parsed Item Sales</th>
                 <th className="px-1 py-1 text-center align-bottom h-24 bg-violet-50">Deposit Total</th>
                 <th className="px-1 py-1 text-center align-bottom h-24 bg-violet-50">Penny Rounding</th>
-                <th className="px-1 py-1 text-center align-bottom h-24 bg-violet-50">Total Sales</th>
                 <th className="px-1 py-1 text-center align-bottom h-24 bg-violet-50">AFD Credit</th>
                 <th className="px-1 py-1 text-center align-bottom h-24 bg-violet-50">AFD Debit</th>
                 <th className="px-1 py-1 text-center align-bottom h-24 bg-violet-50">Kiosk Credit</th>
@@ -253,18 +252,21 @@ function RouteComponent() {
                 <th className="px-1 py-1 text-center align-bottom h-24 bg-violet-50">Parsed Payouts</th>
                 <th className="px-1 py-1 text-center align-bottom h-24 bg-violet-50">Safedrops Count</th>
                 <th className="px-1 py-1 text-center align-bottom h-24 bg-violet-50">Safedrops Amount</th>
+                <th className="px-1 py-1 text-center align-bottom h-24 bg-violet-50">CDN Cash</th>
+                <th className="px-1 py-1 text-center align-bottom h-24 bg-amber-50">Handheld Debit</th>
+                <th className="px-1 py-1 text-center align-bottom h-24 bg-amber-50">Bank Slip</th>
                 {/* Bank group moved to end */}
-                <th className="px-1 py-1 text-center align-bottom h-24 bg-sky-50">Balance Forward</th>
+                {/* <th className="px-1 py-1 text-center align-bottom h-24 bg-sky-50">Balance Forward</th>
                 <th className="px-1 py-1 text-center align-bottom h-24 bg-sky-50">Night Deposit</th>
-                <th className="px-1 py-1 text-center align-bottom h-24 bg-sky-50">Transfer To</th>
-                <th className="px-1 py-1 text-center align-bottom h-24 bg-sky-50">Ending Balance</th>
-                <th className="px-1 py-1 text-center align-bottom h-24 bg-sky-50">Misc Debits Total</th>
+                <th className="px-1 py-1 text-center align-bottom h-24 bg-sky-50">Transfer To</th> */}
+                <th className="px-1 py-1 text-center align-bottom h-24 bg-sky-50">Daily Bank Stmt Balance</th>
+                {/* <th className="px-1 py-1 text-center align-bottom h-24 bg-sky-50">Misc Debits Total</th> */}
               </tr>
             </thead>
             <tbody>
               {rows.map(({ date, data }) => {
                 const displayDate = data?.kardpoll?.date || data?.cashSummary?.date || date
-                const miscDebitsTotal = (data?.bank?.miscDebits || []).reduce((sum, x) => sum + (x?.amount || 0), 0)
+                // const miscDebitsTotal = (data?.bank?.miscDebits || []).reduce((sum, x) => sum + (x?.amount || 0), 0)
                 return (
                   <tr className="border-t" key={date}>
                     <td className="px-2 py-2">{displayDate}</td>
@@ -273,22 +275,21 @@ function RouteComponent() {
                     <td className="px-2 py-2">{fmt2(data?.kardpoll?.sales)}</td>
                     <td className="px-2 py-2">{fmt2(data?.kardpoll?.ar)}</td>
                     {/* Cash Summary totals */}
-                    <td className="px-2 py-2">{fmt0(data?.cashSummary?.shiftCount)}</td>
-                    <td className="px-2 py-2">{fmt2(data?.cashSummary?.totals.canadian_cash_collected)}</td>
+                    <td className="px-2 py-2">{fmt2(data?.cashSummary?.totals.dealGroupCplDiscounts)}</td>
+                    <td className="px-2 py-2">-</td>
                     <td className="px-2 py-2">{fmt2(data?.cashSummary?.totals.item_sales)}</td>
+                    <td className="px-2 py-2">{fmt2(data?.cashSummary?.totals.totalSales)}</td>
+                    <td className="px-2 py-2">{fmt2((data?.cashSummary?.totals.totalSales ?? 0) - (data?.cashSummary?.totals.item_sales ?? 0))}</td>
                     <td className="px-2 py-2">{fmt2(data?.cashSummary?.totals.cash_back)}</td>
                     <td className="px-2 py-2">{fmt2(data?.cashSummary?.totals.loyalty)}</td>
                     <td className="px-2 py-2">{fmt2(data?.cashSummary?.totals.cpl_bulloch)}</td>
                     <td className="px-2 py-2">{fmt2(data?.cashSummary?.totals.exempted_tax)}</td>
-                    <td className="px-2 py-2">{fmt2(data?.cashSummary?.totals.report_canadian_cash)}</td>
                     <td className="px-2 py-2">{fmt2(data?.cashSummary?.totals.payouts)}</td>
                     <td className="px-2 py-2">{fmt2(data?.cashSummary?.totals.fuelSales)}</td>
-                    <td className="px-2 py-2">{fmt2(data?.cashSummary?.totals.dealGroupCplDiscounts)}</td>
                     <td className="px-2 py-2">{fmt2(data?.cashSummary?.totals.fuelPriceOverrides)}</td>
                     <td className="px-2 py-2">{fmt2(data?.cashSummary?.totals.parsedItemSales)}</td>
                     <td className="px-2 py-2">{fmt2(data?.cashSummary?.totals.depositTotal)}</td>
                     <td className="px-2 py-2">{fmt2(data?.cashSummary?.totals.pennyRounding)}</td>
-                    <td className="px-2 py-2">{fmt2(data?.cashSummary?.totals.totalSales)}</td>
                     <td className="px-2 py-2">{fmt2(data?.cashSummary?.totals.afdCredit)}</td>
                     <td className="px-2 py-2">{fmt2(data?.cashSummary?.totals.afdDebit)}</td>
                     <td className="px-2 py-2">{fmt2(data?.cashSummary?.totals.kioskCredit)}</td>
@@ -304,12 +305,17 @@ function RouteComponent() {
                     <td className="px-2 py-2">{fmt2(data?.cashSummary?.totals.parsedPayouts)}</td>
                     <td className="px-2 py-2">{fmt0(data?.cashSummary?.totals.safedropsCount)}</td>
                     <td className="px-2 py-2">{fmt2(data?.cashSummary?.totals.safedropsAmount)}</td>
+                    <td className="px-2 py-2">{fmt2(data?.cashSummary?.totals.report_canadian_cash)}</td>
+
+                    <td className="px-2 py-2">-</td>
+                    <td className="px-2 py-2">{fmt2(data?.cashSummary?.totals.canadian_cash_collected)}</td>
+
                     {/* Bank values moved to end (no bank date) */}
-                    <td className="px-2 py-2">{fmt2(data?.bank?.balanceForward)}</td>
+                    {/* <td className="px-2 py-2">{fmt2(data?.bank?.balanceForward)}</td>
                     <td className="px-2 py-2">{fmt2(data?.bank?.nightDeposit)}</td>
-                    <td className="px-2 py-2">{fmt2(data?.bank?.transferTo)}</td>
+                    <td className="px-2 py-2">{fmt2(data?.bank?.transferTo)}</td> */}
                     <td className="px-2 py-2">{fmt2(data?.bank?.endingBalance)}</td>
-                    <td className="px-2 py-2">{fmt2(miscDebitsTotal)}</td>
+                    {/* <td className="px-2 py-2">{fmt2(miscDebitsTotal)}</td> */}
                   </tr>
                 )
               })}
