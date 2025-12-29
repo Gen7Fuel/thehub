@@ -1,6 +1,6 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
-import { useContext, useEffect, useState } from "react";
-import { RouteContextChecklist } from "../checklist";
+import { useEffect, useState } from "react";
+// import { RouteContextChecklist } from "../checklist";
 import { OpenIssueCard } from "@/components/custom/OpenIssueCard";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
@@ -23,13 +23,17 @@ interface OpenIssue {
 
 
 export const Route = createFileRoute("/_navbarLayout/audit/checklist/open-issues")({
+  validateSearch: (search: { site?: string }) => ({
+    site: search.site,
+  }),
   component: OpenIssuesPage,
 });
 
 export function OpenIssuesPage() {
-  const { stationName } = useContext(RouteContextChecklist);
+  // const { stationName } = useContext(RouteContextChecklist);
   const { user } = useAuth()
-  const site = stationName || user?.location || "";
+  const { site } = Route.useSearch() || user?.location;
+  // const site = stationName || user?.location || "";
   const navigate = useNavigate()
 
   const [openIssues, setOpenIssues] = useState<OpenIssue[]>([]);
