@@ -75,11 +75,11 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Download frontend artifact
-        uses: actions/download-artifact@v4
-        with:
-          name: frontend-dist
-          path: frontend/dist
+      # - name: Download frontend artifact
+      #   uses: actions/download-artifact@v4
+      #   with:
+      #     name: frontend-dist
+      #     path: frontend/dist
 
       - name: Copy frontend build to server
         uses: appleboy/scp-action@v0.1.7
