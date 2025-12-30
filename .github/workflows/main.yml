@@ -150,9 +150,10 @@ jobs:
 
 #             # ---- Frontend zero-downtime update ----
 #             VERSION=${{ env.VERSION }}
+#             # Point these to the HOST paths, not container paths
 #             TMP_DIR=/tmp/frontend-dist/$VERSION
-#             CURRENT_DIR=/usr/share/caddy/dist_current
-#             NEW_DIR=/usr/share/caddy/$VERSION
+#             NEW_DIR=/var/www/thehub/$VERSION
+#             CURRENT_DIR=/var/www/thehub/dist_current
 
 #             # Copy new build to versioned folder
 #             sudo mkdir -p $NEW_DIR
@@ -162,9 +163,12 @@ jobs:
 #             sudo ln -sfn $NEW_DIR $CURRENT_DIR
 
 #             # Reload Caddy in-place (no downtime)
-#             docker exec webserver caddy reload
+#             docker exec webserver caddy reload --config /etc/caddy/Caddyfile
 
 #             # ---- Redis safety ----
 #             docker exec -i redis redis-cli replicaof no one
 #             docker exec -i redis redis-cli SAVE
+
+#             # Keep only the 5 most recent versions to save disk space
+#             cd /var/www/thehub && ls -dt */ | tail -n +6 | xargs rm -rf
 
