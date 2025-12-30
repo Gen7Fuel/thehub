@@ -97,7 +97,7 @@ jobs:
           username: ${{ secrets.SERVER_USER }}
           key: ${{ secrets.SERVER_SSH_KEY }}
           source: "frontend/dist"
-          target: "/home/gen7fuel/thehub/frontend"
+          target: "/tmp/frontend-dist"
 
       # 5. Deploy on VPS (NO npm here)
       - name: Deploy via SSH
@@ -142,14 +142,13 @@ jobs:
             export AZURE_CONTAINER=${{ secrets.AZURE_CONTAINER }}
 
             # ---- FRONTEND ATOMIC SWAP ----
-            TMP_DIR=/tmp/dist_new
-            rm -rf $TMP_DIR
-            cp -r frontend/dist $TMP_DIR
-
+            TMP_DIR=/tmp/frontend-dist/dist
             DIST_VOL=/var/lib/docker/volumes/thehub_dist/_data
 
+            test -d "$TMP_DIR" || { echo "Frontend dist missing"; exit 1; }
+
             mv $DIST_VOL ${DIST_VOL}_old || true
-            mv $TMP_DIR $DIST_VOL
+            cp -r $TMP_DIR $DIST_VOL
             rm -rf ${DIST_VOL}_old
 
             # ---- BACKEND ROLLING UPDATE ----
