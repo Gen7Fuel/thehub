@@ -1,6 +1,5 @@
 import * as React from 'react'
 import { createFileRoute, useNavigate } from '@tanstack/react-router'
-import { SitePicker } from '@/components/custom/sitePicker'
 import { Button } from '@/components/ui/button'
 
 type ParsedTtx = {
@@ -10,6 +9,8 @@ type ParsedTtx = {
   miscDebits: { date: string; description: string; amount: number }[]
   endingBalance?: number
   statementDate?: string // YYYY-MM-DD
+  accountName?: string // raw Account Name (legalName)
+  derivedSite?: string // first token fallback
 }
 
 const pad = (n: number) => String(n).padStart(2, '0')
@@ -57,6 +58,7 @@ function parseTtx(text: string): ParsedTtx {
   const debitsIdx = idx('Debits')
   const creditsIdx = idx('Credits')
   const balanceIdx = idx('Balance')
+  const acctNameIdx = idx('Account Name')
 
   const out: ParsedTtx = { miscDebits: [] }
   let lastBalance: number | undefined
@@ -79,6 +81,11 @@ function parseTtx(text: string): ParsedTtx {
         if (!latestDate || dateStr > latestDate) latestDate = dateStr
       }
 
+      // Capture legalName from Balance Forward row
+      if (!out.accountName && acctNameIdx >= 0 && description.toLowerCase().includes('balance forward')) {
+        out.accountName = cols[acctNameIdx].trim()
+      }
+
       const descLower = description.toLowerCase()
       if (out.balanceForward == null && descLower.includes('balance forward')) out.balanceForward = balance
       if (descLower.includes('night deposit')) out.nightDeposit = (out.nightDeposit ?? 0) + credits
@@ -88,21 +95,41 @@ function parseTtx(text: string): ParsedTtx {
       }
     }
   }
+  else {
+    // Fallback for fixed-width .txt: try to extract Account Name from the Balance Forward line
+    const bfLine = nonEmpty.find(l => /balance forward/i.test(l))
+    if (bfLine) {
+      // Example pattern: "... CAD BKEJWANONG Balance Forward ..."
+      const m = bfLine.match(/\bCAD\s+(.+?)\s+Balance Forward/i)
+      if (m) {
+        if (!out.accountName) out.accountName = m[1].trim()
+      }
+      const d = bfLine.match(/^(\d{2}\/\d{2}\/\d{2})/)
+      if (d) {
+        const parsedDate = parseTtxDate(d[1])
+        if (parsedDate) latestDate = parsedDate
+      }
+    }
+  }
 
   out.endingBalance = lastBalance
   out.statementDate = latestDate
+  if (out.accountName) {
+    const first = out.accountName.trim().split(/\s+/)[0]
+    if (first) out.derivedSite = first
+  }
   return out
 }
 
 function RouteComponent() {
   const { site } = Route.useSearch() as { site: string }
   const navigate = useNavigate({ from: Route.fullPath })
-  const setSearch = (next: Partial<{ site: string }>) =>
-    navigate({ search: (prev: any) => ({ ...prev, ...next }) })
+  // Note: SitePicker removed; URL search param is updated automatically by detection
 
   const [parsed, setParsed] = React.useState<ParsedTtx | null>(null)
   const [error, setError] = React.useState<string | null>(null)
   const [isOver, setIsOver] = React.useState(false)
+  const [detectedStation, setDetectedStation] = React.useState<string | null>(null)
 
   const handleFiles = async (files: FileList | null) => {
     setError(null)
@@ -124,6 +151,62 @@ function RouteComponent() {
     }
   }
 
+  // Auto-select site by matching Account Name (legalName) against /api/locations
+  React.useEffect(() => {
+    const autoPickSite = async () => {
+      if (!parsed?.accountName) return
+      try {
+        let locations: { stationName: string; legalName: string }[] | null = null
+        // Try local proxy first
+        const localResp = await fetch('/api/locations', {
+          headers: { Authorization: `Bearer ${localStorage.getItem('token') || ''}` },
+        })
+        if (localResp.ok) {
+          locations = await localResp.json()
+        } else {
+          // Fallback to remote API
+          const remoteResp = await fetch('https://app.gen7fuel.com/api/locations')
+          if (remoteResp.ok) locations = await remoteResp.json()
+        }
+        if (!locations) return
+
+        const normalize = (s: string) => s.trim().toLowerCase()
+        const stripGen7 = (s: string) =>
+          s
+            .replace(/\bgen7\b/gi, '')
+            .replace(/\blp\b/gi, '')
+            .replace(/\s{2,}/g, ' ')
+            .trim()
+
+        const candidates = [
+          parsed.accountName,
+          stripGen7(parsed.accountName),
+          parsed.derivedSite || '',
+        ]
+          .map(normalize)
+          .filter(Boolean)
+
+        const match = locations.find((loc) => {
+          const ln = normalize(loc.legalName)
+          const sn = normalize(loc.stationName)
+          return candidates.some((c) => c === ln || c === sn)
+        })
+
+        if (match) {
+          setDetectedStation(match.stationName)
+          if (!site) {
+            navigate({ to: Route.fullPath, search: (prev: any) => ({ ...prev, site: match.stationName }) })
+          }
+        } else {
+          setDetectedStation(null)
+        }
+      } catch {
+        // silent failure; user can select manually
+      }
+    }
+    autoPickSite()
+  }, [parsed, site])
+
   const onDrop: React.DragEventHandler<HTMLDivElement> = (e) => {
     e.preventDefault()
     e.stopPropagation()
@@ -143,13 +226,14 @@ function RouteComponent() {
   const onFileInput: React.ChangeEventHandler<HTMLInputElement> = (e) => {
     handleFiles(e.target.files)
   }
-
-  const canCapture = Boolean(parsed && parsed.statementDate && site)
+  // Prefer detected station over SitePicker value for the `site` used in capture
+  const selectedSite = detectedStation || site
+  const canCapture = Boolean(parsed && parsed.statementDate && selectedSite)
 
   const capture = async () => {
     if (!canCapture || !parsed) return
     const payload = {
-      site,
+      site: selectedSite,
       date: parsed.statementDate,
       balanceForward: parsed.balanceForward ?? 0,
       nightDeposit: parsed.nightDeposit ?? 0,
@@ -177,15 +261,7 @@ function RouteComponent() {
 
   return (
     <div className="p-4 space-y-4">
-      <div className="flex items-center gap-4">
-        <SitePicker
-          value={site}
-          onValueChange={(v) => setSearch({ site: v })}
-          placeholder="Pick a site"
-          label="Site"
-          className="w-[240px]"
-        />
-      </div>
+      {/* SitePicker removed: site is derived from detected station */}
 
       <div
         onDrop={onDrop}
@@ -207,6 +283,23 @@ function RouteComponent() {
         <>
           <div className="text-sm text-muted-foreground">
             Statement Date: <span className="font-mono">{parsed.statementDate || '-'}</span>
+          </div>
+          <div className="border rounded p-3 bg-muted/20">
+            <div className="font-semibold">Detected Account</div>
+            <div className="text-sm">
+              <span className="mr-2">{parsed.accountName || '-'}</span>
+              {parsed.derivedSite ? (
+                <span className="text-muted-foreground">(derived: {parsed.derivedSite})</span>
+              ) : null}
+            </div>
+            <div className="mt-1 text-sm">
+              <span className="font-semibold">Selected Site:</span>
+              <span className="ml-1">{selectedSite || '-'}</span>
+            </div>
+            <div className="mt-1 text-sm">
+              <span className="font-semibold">Detected Station:</span>
+              <span className="ml-1">{detectedStation || '-'}</span>
+            </div>
           </div>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div className="border rounded p-3">
@@ -250,7 +343,7 @@ function RouteComponent() {
                 className="px-4 py-2 text-sm border rounded"
                 onClick={capture}
                 disabled={!canCapture}
-                title={!site ? 'Pick a site' : undefined}
+                title={!selectedSite ? 'No station detected' : undefined}
               >
                 Capture
               </Button>
