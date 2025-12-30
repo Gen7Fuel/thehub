@@ -63,4 +63,28 @@ router.get('/receive/:shift', async (req, res) => {
   }
 })
 
+router.get('/check/:shift', async (req, res) => {
+  const { shift } = req.params
+  if (!/^\d+$/.test(shift)) return res.status(400).json({ valid: false, error: 'Invalid shift' })
+
+  try {
+    const url = new URL(`/api/sftp/check/${encodeURIComponent(shift)}`, OFFICE_SFTP_API_BASE)
+    for (const [k, v] of Object.entries(req.query || {})) {
+      if (v != null && v !== '') url.searchParams.set(k, String(v))
+    }
+
+    const resp = await fetchWithTimeout(url.toString())
+    const text = await resp.text()
+    res.status(resp.status).type(resp.headers.get('content-type') || 'application/json')
+    try {
+      return res.send(JSON.parse(text))
+    } catch {
+      return res.send(text)
+    }
+  } catch (err) {
+    console.error('SFTP proxy check error:', err?.message || err)
+    res.status(502).json({ valid: false, error: 'Failed to reach office SFTP API' })
+  }
+})
+
 module.exports = router
