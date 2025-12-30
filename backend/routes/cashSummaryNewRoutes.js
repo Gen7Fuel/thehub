@@ -137,6 +137,97 @@ async function upsertDailyDepositForSiteDate(site, dateInput) {
   }
 }
 
+router.get('/over-short', async (req, res) => {
+  try {
+    const { site } = req.query
+    if (!site) {
+      return res.status(400).json({ error: 'site is required' })
+    }
+
+    // 1️⃣ Date range: past 7 days (normalized)
+    const end = new Date()
+    end.setHours(0, 0, 0, 0)
+
+    const start = new Date(end)
+    start.setDate(start.getDate() - 10) // today + previous 10 days
+
+    // 2️⃣ Fetch submitted reports for site
+    const reports = await CashSummaryReport.find({
+      site,
+      submitted: true,
+      date: { $gte: start, $lte: end },
+    })
+      .sort({ date: 1 })
+      .lean()
+
+    if (!reports.length) {
+      return res.json([])
+    }
+
+    // 3️⃣ Fetch shifts for all those report dates
+    const dayRanges = reports.map(r => ({
+      date: {
+        $gte: r.date,
+        $lt: new Date(r.date.getTime() + 24 * 60 * 60 * 1000),
+      },
+    }))
+
+    const shifts = await CashSummary.find({
+      site,
+      $or: dayRanges,
+    }).lean()
+
+
+    // 4️⃣ Group shifts by date (day start time)
+    const byDate = {}
+
+    for (const shift of shifts) {
+      const d = new Date(shift.date)
+      d.setHours(0, 0, 0, 0)
+      const key = d.toISOString()
+
+      if (!byDate[key]) {
+        byDate[key] = {
+          canadian_cash_collected: 0,
+          report_canadian_cash: 0,
+          shifts: 0,
+        }
+      }
+
+      byDate[key].canadian_cash_collected += shift.canadian_cash_collected || 0
+      byDate[key].report_canadian_cash += shift.report_canadian_cash || 0
+      byDate[key].shifts += 1
+    }
+
+    // 5️⃣ Build final chart data
+    const data = reports.map(r => {
+      const key = r.date.toISOString()
+      const totals = byDate[key] || {
+        canadian_cash_collected: 0,
+        report_canadian_cash: 0,
+        shifts: 0,
+      }
+
+      const overShort =
+        totals.canadian_cash_collected - totals.report_canadian_cash
+
+      return {
+        date: r.date.toISOString().slice(0, 10), // YYYY-MM-DD
+        overShort,
+        canadian_cash_collected: totals.canadian_cash_collected,
+        report_canadian_cash: totals.report_canadian_cash,
+        shifts: totals.shifts,
+        notes: r.notes || '',
+      }
+    })
+
+    res.json(data)
+  } catch (err) {
+    console.error('Over/Short report error:', err)
+    res.status(500).json({ error: 'Failed to fetch over/short data' })
+  }
+})
+
 router.post('/', async (req, res) => {
   try {
     const {

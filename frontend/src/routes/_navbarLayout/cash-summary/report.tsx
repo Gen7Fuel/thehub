@@ -79,6 +79,12 @@ function RouteComponent() {
   const notes = report?.report?.notes ?? ''
   const submitted = report?.report?.submitted === true
 
+  const [noteText, setNoteText] = useState('')
+
+  useEffect(() => {
+    setNoteText(notes)
+  }, [notes])
+
   const saveNotes = async (text: string) => {
     if (!site || !date || submitted || !text.trim()) return
     await fetch('/api/cash-summary/report', {
@@ -544,8 +550,9 @@ function RouteComponent() {
                 <h3 className="text-sm font-semibold mb-2">Notes</h3>
                 <textarea
                   className="w-full min-h-[120px] border rounded px-3 py-2 text-sm"
-                  defaultValue={notes}
-                  onBlur={(e) => saveNotes(e.target.value)}
+                  value={noteText}
+                  onChange={(e) => setNoteText(e.target.value)}
+                  onBlur={() => saveNotes(noteText)}
                   placeholder="Add notes for this cash summary…"
                   disabled={submitted}
                 />

@@ -65,6 +65,7 @@ import {
   DialogTitle,
   DialogDescription,
 } from "@/components/ui/dialog";
+import { OverShortChart } from '@/components/custom/dashboard/accountingCharts';
 
 interface CycleCountItem {
   name: string;
@@ -105,6 +106,15 @@ export interface HourlyRecord {
   "C-Store": number;
   Both: number;
   count: number;
+}
+
+interface OverShortChartItem {
+  date: string; // YYYY-MM-DD
+  overShort: number;
+  canadian_cash_collected: number;
+  report_canadian_cash: number;
+  shifts: number;
+  notes: string;
 }
 
 // type HourlyMap = Record<string, HourlyRecord>;
@@ -262,6 +272,25 @@ interface Top10Bistro {
   UnitsPerDay: number;
 }
 
+function processOverShortData(data: OverShortChartItem[]) {
+  const maxAbs = Math.max(...data.map(d => Math.abs(d.overShort)));
+
+  return data.map(d => {
+    const relativeHeight = maxAbs ? d.overShort / maxAbs : 0;
+
+    let fill = "";
+    const abs = Math.abs(d.overShort);
+    if (d.overShort >= 0) fill = abs <= 20 ? "#90ee90" : "#006400";
+    else fill = abs <= 20 ? "#f08080" : "#8b0000";
+
+    return {
+      ...d,
+      fill,
+      displayValue: relativeHeight // for chart height
+    };
+  });
+}
+
 function RouteComponent() {
   const { user } = useAuth();
   const [site, setSite] = useState(user?.location || "Rankin");
@@ -292,6 +321,7 @@ function RouteComponent() {
 
   const [showPasswordDialog, setShowPasswordDialog] = useState(false);
   const [hasAccess, setHasAccess] = useState(false);
+  const [overShortData, setOverShortData] = useState<any[]>([])
   const [fuelData, setFuelData] = useState<any[]>([]);
   const [fuelMonthStats, setFuelMonthStats] = useState<{
     currentMonthVolume: number;
@@ -352,6 +382,35 @@ function RouteComponent() {
           console.error("Error fetching order records:", error);
           // Optionally handle other errors here
         }
+
+        // ---- Over / Short ----
+        try {
+          const res = await fetch(
+            `/api/cash-summary/over-short?site=${encodeURIComponent(site)}`,
+            {
+              headers: {
+                Authorization: `Bearer ${localStorage.getItem("token")}`,
+                "X-Required-Permission": "dashboard",
+              },
+            }
+          );
+
+          if (res.status === 403) {
+            navigate({ to: "/no-access" });
+            return;
+          }
+
+          if (!res.ok) {
+            throw new Error(`Failed to fetch over/short data`);
+          }
+
+          const data = await res.json();
+          setOverShortData(data);
+        } catch (error) {
+          console.error("Error fetching over/short data:", error);
+        }
+
+        console.log('dashboard over short data:', overShortData)
 
         // const today = new Date();
         // const end = new Date(today);
@@ -1489,7 +1548,7 @@ function RouteComponent() {
                     </div>
                   </section>
                 )}
-                
+
                 {/* ======================= */}
                 {/*     FUEL SECTION   */}
                 {/* ======================= */}
@@ -1560,12 +1619,29 @@ function RouteComponent() {
                 </section>
 
                 {/* ======================= */}
+                {/*     BISTRO SECTION   */}
+                {/* ======================= */}
+
+                {!["Sarnia"].includes(site) && (
+                  <section aria-labelledby="accounting-heading" className="mb-10">
+                    <h2 id="accounting-heading" className="text-2xl font-bold mb-4 pl-4">
+                      Accounting
+                    </h2>
+
+                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                      <OverShortChart data={processOverShortData(overShortData)} />
+                    </div>
+                  </section>
+                )}
+
+
+                {/* ======================= */}
                 {/*     Store Activity Section   */}
                 {/* ======================= */}
                 {false && (
-                // {site !== "Jocko Point" && (
-                <section aria-labelledby="fuel-heading" className="mb-10">
-                  <h2 id="fuel-heading" className="text-2xl font-bold mb-4 pl-4">Store Activity Trend</h2>
+                  // {site !== "Jocko Point" && (
+                  <section aria-labelledby="fuel-heading" className="mb-10">
+                    <h2 id="fuel-heading" className="text-2xl font-bold mb-4 pl-4">Store Activity Trend</h2>
 
                     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
 
