@@ -152,6 +152,24 @@ function RouteComponent() {
     setError(null)
   }
 
+  // Validate the shift number on blur via secured endpoint
+  const checkShift = async (value: string) => {
+    const v = value.trim()
+    if (!v) return
+    try {
+      const qs = site ? `?site=${encodeURIComponent(site)}` : ''
+      const res = await fetch(`/api/sftp/check/${encodeURIComponent(v)}${qs}`, {
+        headers: { Authorization: `Bearer ${localStorage.getItem('token') || ''}` },
+      })
+      if (!res.ok) throw new Error('Shift check failed')
+      const { valid } = await res.json()
+      setError(valid ? '' : 'This shift number seems to be invalid, please check again.')
+    } catch {
+      // On network/server error, do not block user
+      setError('')
+    }
+  }
+
   return (
     <div className="pt-16 flex flex-col items-center w-full">
       <div className="w-full max-w-2xl space-y-6 p-4">
@@ -184,6 +202,7 @@ function RouteComponent() {
               <input
                 value={shiftNumber}
                 onChange={(e) => setShiftNumber(e.target.value)}
+                onBlur={() => checkShift(shiftNumber)}
                 className="w-full border rounded px-3 py-2"
                 required
               />
