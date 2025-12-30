@@ -33,3 +33,39 @@
         try_files {path} /index.html
     }
 }
+
+// :3000 {
+//     log {
+//         output stdout
+//         format console
+//         level DEBUG
+//     }
+    
+//     root * /usr/share/caddy/dist_current
+//     file_server
+
+//     # === WebSocket routes (Socket.IO) ===
+//     handle /socket.io/* {
+//         reverse_proxy backend:5000
+//     }
+
+//     # === WebRTC Signaling WebSocket ===
+//     handle /signaling/* {
+//         reverse_proxy signaling:5002
+//     }
+
+//     # === API routes ===
+//     handle /api/* {
+//         reverse_proxy backend:5000
+//     }
+
+//     # === CDN routes ===
+//     handle /cdn/* {
+//         reverse_proxy cdn:5001
+//     }
+
+//     # === Frontend routing (React SPA) ===
+//     handle {
+//         try_files {path} /index.html
+//     }
+// }
