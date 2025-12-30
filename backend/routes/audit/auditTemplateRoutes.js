@@ -747,6 +747,38 @@ router.post('/instance', async (req, res) => {
               updatedAt: new Date(),
             });
           }
+        // if (item.issueRaised === true) {
+        //   let issueStatus = existingItem?.issueStatus || [];
+
+        //   // Only set currentIssueStatus to "Created" if previous status not In Progress / Resolved
+        //   if (!["Resolved", "In Progress"].includes(existingItem?.currentIssueStatus)) {
+        //     updateFields.currentIssueStatus = "Created";
+        //   } else {
+        //     updateFields.currentIssueStatus = existingItem?.currentIssueStatus;
+        //   }
+
+        //   // Update issueStatus array (keep existing timestamps)
+        //   const createdStatus = issueStatus.find((s) => s.status === "Created");
+        //   if (createdStatus) {
+        //     createdStatus.timestamp = new Date();
+        //   } else {
+        //     issueStatus.push({ status: "Created", timestamp: new Date() });
+        //   }
+        //   updateFields.issueStatus = issueStatus;
+
+        //   // Emit socket event only if issueRaised changed
+        //   if (io && item.issueRaised !== existingItem?.issueRaised) {
+        //     io.emit("issueUpdated", {
+        //       template,
+        //       site,
+        //       item: item.item,
+        //       category: item.category,
+        //       action: "created",
+        //       updatedAt: new Date(),
+        //     });
+        //   }
+        // }
+
 
           // 🔹 Send email only when issueRaised goes from false → true
           if (item.issueRaised === true && existingItem?.issueRaised !== true) {
