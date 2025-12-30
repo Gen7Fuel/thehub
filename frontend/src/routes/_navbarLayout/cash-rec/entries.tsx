@@ -175,8 +175,8 @@ function RouteComponent() {
     typeof v === 'number' && Number.isFinite(v)
       ? v.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })
       : ''
-  const fmt0 = (v: number | undefined | null) =>
-    typeof v === 'number' && Number.isFinite(v) ? v.toLocaleString(undefined, { maximumFractionDigits: 0 }) : ''
+  // const fmt0 = (v: number | undefined | null) =>
+  //   typeof v === 'number' && Number.isFinite(v) ? v.toLocaleString(undefined, { maximumFractionDigits: 0 }) : ''
 
   return (
     <div className="px-4 pb-0 space-y-4 w-full max-w-[100vw] overflow-x-hidden flex flex-col">
@@ -236,7 +236,7 @@ function RouteComponent() {
                 <th className="px-1 py-1 text-center align-bottom h-24 bg-violet-50">Coupons</th>
                 <th className="px-1 py-1 text-center align-bottom h-24 bg-violet-50">Cash Back</th>
                 <th className="px-1 py-1 text-center align-bottom h-24 bg-violet-50">CDN Cash</th>
-                <th className="px-1 py-1 text-center align-bottom h-24 bg-violet-50">Loyalty</th>
+                {/* <th className="px-1 py-1 text-center align-bottom h-24 bg-violet-50">Loyalty</th>
                 <th className="px-1 py-1 text-center align-bottom h-24 bg-violet-50">Exempted Tax</th>
                 <th className="px-1 py-1 text-center align-bottom h-24 bg-violet-50">Fuel Price Overrides</th>
                 <th className="px-1 py-1 text-center align-bottom h-24 bg-violet-50">Parsed Item Sales</th>
@@ -252,7 +252,7 @@ function RouteComponent() {
                 <th className="px-1 py-1 text-center align-bottom h-24 bg-violet-50">Parsed Cash Back</th>
                 <th className="px-1 py-1 text-center align-bottom h-24 bg-violet-50">Parsed Payouts</th>
                 <th className="px-1 py-1 text-center align-bottom h-24 bg-violet-50">Safedrops Count</th>
-                <th className="px-1 py-1 text-center align-bottom h-24 bg-violet-50">Safedrops Amount</th>
+                <th className="px-1 py-1 text-center align-bottom h-24 bg-violet-50">Safedrops Amount</th> */}
                 <th className="px-1 py-1 text-center align-bottom h-24 bg-amber-50">Handheld Debit</th>
                 <th className="px-1 py-1 text-center align-bottom h-24 bg-amber-50">Bank Slip</th>
                 {/* Bank group moved to end */}
@@ -260,6 +260,11 @@ function RouteComponent() {
                 <th className="px-1 py-1 text-center align-bottom h-24 bg-sky-50">Night Deposit</th>
                 <th className="px-1 py-1 text-center align-bottom h-24 bg-sky-50">Transfer To</th> */}
                 <th className="px-1 py-1 text-center align-bottom h-24 bg-sky-50">Daily Bank Stmt Balance</th>
+                <th className="px-1 py-1 text-center align-bottom h-24 bg-sky-50">Cash Deposited Date</th>
+                <th className="px-1 py-1 text-center align-bottom h-24 bg-sky-50">Till</th>
+                <th className="px-1 py-1 text-center align-bottom h-24 bg-sky-50">Balance Check</th>
+                <th className="px-1 py-1 text-center align-bottom h-24 bg-sky-50">Bank Stmt Trans</th>
+                <th className="px-1 py-1 text-center align-bottom h-24 bg-sky-50">Bank Rec</th>
                 {/* <th className="px-1 py-1 text-center align-bottom h-24 bg-sky-50">Misc Debits Total</th> */}
               </tr>
             </thead>
@@ -289,7 +294,7 @@ function RouteComponent() {
                     <td className="px-2 py-2">{fmt2(data?.cashSummary?.totals.couponsAccepted)}</td>
                     <td className="px-2 py-2">{fmt2(data?.cashSummary?.totals.cash_back)}</td>
                     <td className="px-2 py-2">{fmt2(data?.cashSummary?.totals.report_canadian_cash)}</td>
-                    <td className="px-2 py-2">{fmt2(data?.cashSummary?.totals.loyalty)}</td>
+                    {/* <td className="px-2 py-2">{fmt2(data?.cashSummary?.totals.loyalty)}</td>
                     <td className="px-2 py-2">{fmt2(data?.cashSummary?.totals.exempted_tax)}</td>
                     <td className="px-2 py-2">{fmt2(data?.cashSummary?.totals.fuelSales)}</td>
                     <td className="px-2 py-2">{fmt2(data?.cashSummary?.totals.fuelPriceOverrides)}</td>
@@ -306,7 +311,7 @@ function RouteComponent() {
                     <td className="px-2 py-2">{fmt2(data?.cashSummary?.totals.parsedCashBack)}</td>
                     <td className="px-2 py-2">{fmt2(data?.cashSummary?.totals.parsedPayouts)}</td>
                     <td className="px-2 py-2">{fmt0(data?.cashSummary?.totals.safedropsCount)}</td>
-                    <td className="px-2 py-2">{fmt2(data?.cashSummary?.totals.safedropsAmount)}</td>
+                    <td className="px-2 py-2">{fmt2(data?.cashSummary?.totals.safedropsAmount)}</td> */}
 
                     <td className="px-2 py-2">-</td>
                     <td className="px-2 py-2">{fmt2(data?.cashSummary?.totals.canadian_cash_collected)}</td>
@@ -316,6 +321,11 @@ function RouteComponent() {
                     <td className="px-2 py-2">{fmt2(data?.bank?.nightDeposit)}</td>
                     <td className="px-2 py-2">{fmt2(data?.bank?.transferTo)}</td> */}
                     <td className="px-2 py-2">{fmt2(data?.bank?.endingBalance)}</td>
+                    <td className="px-2 py-2"></td>
+                    <td className="px-2 py-2"></td>
+                    <td className="px-2 py-2"></td>
+                    <td className="px-2 py-2"></td>
+                    <td className="px-2 py-2"></td>
                     {/* <td className="px-2 py-2">{fmt2(miscDebitsTotal)}</td> */}
                   </tr>
                 )

@@ -4,6 +4,7 @@ import { format, subDays } from 'date-fns'
 import type { DateRange } from 'react-day-picker'
 import { SitePicker } from '@/components/custom/sitePicker'
 import { DatePickerWithRange } from '@/components/custom/datePickerWithRange'
+import { pdf, Document, Page, Image as PdfImage, StyleSheet } from '@react-pdf/renderer'
 
 type Search = { site: string; from: string; to: string }
 type BOLPhoto = {
@@ -82,6 +83,53 @@ function RouteComponent() {
     setSearch({ from: ymd(next.from), to: ymd(next.to) })
   }
 
+  const styles = React.useMemo(
+    () =>
+      StyleSheet.create({
+        page: { padding: 16 },
+        image: { width: '100%', height: '100%', objectFit: 'contain' },
+      }),
+    []
+  )
+
+  const fetchAsDataUrl = async (url: string): Promise<string> => {
+    const res = await fetch(url)
+    if (!res.ok) throw new Error(`Failed to load image (${res.status})`)
+    const blob = await res.blob()
+    return new Promise<string>((resolve, reject) => {
+      const reader = new FileReader()
+      reader.onloadend = () => resolve(String(reader.result))
+      reader.onerror = reject
+      reader.readAsDataURL(blob)
+    })
+  }
+
+  const downloadPdfForEntry = async (e: BOLPhoto) => {
+    try {
+      const imgUrl = `/cdn/download/${e.filename}`
+      const dataUrl = await fetchAsDataUrl(imgUrl)
+      const Doc = (
+        <Document>
+          <Page size="A4" style={styles.page}>
+            <PdfImage src={dataUrl} style={styles.image} />
+          </Page>
+        </Document>
+      )
+      const blob = await pdf(Doc).toBlob()
+      const a = document.createElement('a')
+      const url = URL.createObjectURL(blob)
+      a.href = url
+      const base = e.filename.replace(/\.[^.]+$/, '')
+      a.download = `${base}.pdf`
+      document.body.appendChild(a)
+      a.click()
+      a.remove()
+      URL.revokeObjectURL(url)
+    } catch (err) {
+      alert(`PDF download failed: ${err instanceof Error ? err.message : String(err)}`)
+    }
+  }
+
   return (
     <div className="p-4 space-y-4">
       <div className="flex flex-col sm:flex-row items-center gap-4">
@@ -130,8 +178,15 @@ function RouteComponent() {
                         />
                       </td>
                       {/* <td className="px-2 py-2">{e.createdAt ? format(new Date(e.createdAt), 'yyyy-MM-dd HH:mm') : '—'}</td> */}
-                      <td className="px-2 py-2">
-                        <a download={true} href={`/cdn/download/${e.filename}`}>Download</a>
+                      <td className="px-2 py-2 space-x-3">
+                        <a download={true} href={`/cdn/download/${e.filename}`}>Image</a>
+                        <button
+                          type="button"
+                          className="underline text-blue-600 hover:text-blue-800"
+                          onClick={() => downloadPdfForEntry(e)}
+                        >
+                          PDF
+                        </button>
                       </td>
                     </tr>
                   ))}
