@@ -269,6 +269,8 @@ router.post('/bank-statement', express.json({ limit: '1mb' }), async (req, res) 
       { new: true, upsert: true, setDefaultsOnInsert: true }
     ).lean()
 
+    console.log('Saved bank statement for', site, date, saved)
+
     return res.json({ saved: true, upserted: true, statement: saved })
   } catch (e) {
     console.error('cashRecRoutes.save-bank-statement error:', e)
