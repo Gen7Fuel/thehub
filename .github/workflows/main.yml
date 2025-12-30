@@ -73,14 +73,23 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
+      # 1. Checkout repo
       - uses: actions/checkout@v4
 
-      # - name: Download frontend artifact
-      #   uses: actions/download-artifact@v4
-      #   with:
-      #     name: frontend-dist
-      #     path: frontend/dist
+      # 2. Setup Node (GitHub runner ONLY)
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 23
 
+      # 3. Build frontend on GitHub
+      - name: Build frontend
+        run: |
+          cd frontend
+          npm ci
+          npm run build
+
+      # 4. Copy built frontend to VPS
       - name: Copy frontend build to server
         uses: appleboy/scp-action@v0.1.7
         with:
@@ -90,6 +99,7 @@ jobs:
           source: "frontend/dist"
           target: "/home/gen7fuel/thehub/frontend"
 
+      # 5. Deploy on VPS (NO npm here)
       - name: Deploy via SSH
         uses: appleboy/ssh-action@v0.1.7
         with:
@@ -138,16 +148,13 @@ jobs:
 
             DIST_VOL=/var/lib/docker/volumes/thehub_dist/_data
 
-            rm -rf ${DIST_VOL}_new
-            mv $TMP_DIR ${DIST_VOL}_new
-
-            mv ${DIST_VOL} ${DIST_VOL}_old
-            mv ${DIST_VOL}_new ${DIST_VOL}
+            mv $DIST_VOL ${DIST_VOL}_old || true
+            mv $TMP_DIR $DIST_VOL
             rm -rf ${DIST_VOL}_old
 
             # ---- BACKEND ROLLING UPDATE ----
             docker compose up -d --build --no-deps --wait backend
 
-            # ---- REDIS SAFETY (optional) ----
+            # ---- REDIS SAFETY ----
             docker exec -i redis redis-cli replicaof no one
             docker exec -i redis redis-cli SAVE
