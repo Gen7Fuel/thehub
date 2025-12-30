@@ -141,18 +141,26 @@ jobs:
             export AZURE_STORAGE_CONNECTION_STRING=${{ secrets.AZURE_STORAGE_CONNECTION_STRING }}
             export AZURE_CONTAINER=${{ secrets.AZURE_CONTAINER }}
 
+            # ---- BACKEND ROLLING UPDATE ----
+            docker compose up -d --build --no-deps --wait backend
+
             # ---- FRONTEND ATOMIC SWAP ----
             TMP_DIR=/tmp/frontend-dist/frontend/dist
             DIST_VOL=/var/lib/docker/volumes/thehub_dist/_data
 
+            # Sanity check
             test -d "$TMP_DIR" || { echo "Frontend dist missing"; exit 1; }
 
-            sudo mv $DIST_VOL ${DIST_VOL}_old || true
-            sudo cp -r $TMP_DIR $DIST_VOL
+            # Prepare
             sudo rm -rf ${DIST_VOL}_old
+            sudo mv $DIST_VOL ${DIST_VOL}_old
+            sudo mkdir -p $DIST_VOL
 
-            # ---- BACKEND ROLLING UPDATE ----
-            docker compose up -d --build --no-deps --wait backend
+            # Copy contents, not the folder itself
+            sudo cp -r $TMP_DIR/* $DIST_VOL/
+
+            # Cleanup
+            sudo rm -rf ${DIST_VOL}_old
 
             # ---- REDIS SAFETY ----
             docker exec -i redis redis-cli replicaof no one
