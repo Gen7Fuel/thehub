@@ -142,7 +142,7 @@ jobs:
             export AZURE_CONTAINER=${{ secrets.AZURE_CONTAINER }}
 
             # ---- FRONTEND ATOMIC SWAP ----
-            TMP_DIR=/tmp/frontend-dist/dist
+            TMP_DIR=/tmp/frontend-dist/frontend/dist
             DIST_VOL=/var/lib/docker/volumes/thehub_dist/_data
 
             test -d "$TMP_DIR" || { echo "Frontend dist missing"; exit 1; }
