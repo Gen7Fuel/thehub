@@ -147,9 +147,9 @@ jobs:
 
             test -d "$TMP_DIR" || { echo "Frontend dist missing"; exit 1; }
 
-            mv $DIST_VOL ${DIST_VOL}_old || true
-            cp -r $TMP_DIR $DIST_VOL
-            rm -rf ${DIST_VOL}_old
+            sudo mv $DIST_VOL ${DIST_VOL}_old || true
+            sudo cp -r $TMP_DIR $DIST_VOL
+            sudo rm -rf ${DIST_VOL}_old
 
             # ---- BACKEND ROLLING UPDATE ----
             docker compose up -d --build --no-deps --wait backend
