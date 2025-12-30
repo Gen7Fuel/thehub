@@ -76,20 +76,23 @@ jobs:
       # 1. Checkout repo
       - uses: actions/checkout@v4
 
-      # 2. Setup Node (GitHub runner ONLY)
+      # 2. Setup Node
       - name: Setup Node
         uses: actions/setup-node@v4
         with:
           node-version: 23
 
-      # 3. Build frontend on GitHub
+      # 3. Build frontend
       - name: Build frontend
         run: |
           cd frontend
           npm ci
           npm run build
+          # Generate version string (timestamp + short SHA)
+          VERSION=$(date +%Y%m%d%H%M%S)-${GITHUB_SHA::7}
+          echo "VERSION=$VERSION" >> $GITHUB_ENV
 
-      # 4. Copy built frontend to VPS
+      # 4. Copy frontend build to server
       - name: Copy frontend build to server
         uses: appleboy/scp-action@v0.1.7
         with:
@@ -97,9 +100,9 @@ jobs:
           username: ${{ secrets.SERVER_USER }}
           key: ${{ secrets.SERVER_SSH_KEY }}
           source: "frontend/dist"
-          target: "/tmp/frontend-dist"
+          target: "/tmp/frontend-dist/${{ env.VERSION }}"
 
-      # 5. Deploy on VPS (NO npm here)
+      # 5. Deploy backend + frontend
       - name: Deploy via SSH
         uses: appleboy/ssh-action@v0.1.7
         with:
@@ -110,9 +113,10 @@ jobs:
             set -e
             cd /home/gen7fuel/thehub
 
+            # ---- Pull backend ----
             git pull origin main
 
-            # ---- ENV VARS ----
+            # ---- Export env vars ----
             export MONGO_URI=${{ secrets.MONGO_URI }}
             export JWT_SECRET=${{ secrets.JWT_SECRET }}
             export SQL_SERVER=${{ secrets.SQL_SERVER }}
@@ -141,27 +145,26 @@ jobs:
             export AZURE_STORAGE_CONNECTION_STRING=${{ secrets.AZURE_STORAGE_CONNECTION_STRING }}
             export AZURE_CONTAINER=${{ secrets.AZURE_CONTAINER }}
 
-            # ---- BACKEND ROLLING UPDATE ----
+            # ---- Backend rolling update ----
             docker compose up -d --build --no-deps --wait backend
 
-            # ---- FRONTEND ATOMIC SWAP ----
-            TMP_DIR=/tmp/frontend-dist/frontend/dist
-            DIST_VOL=/var/lib/docker/volumes/thehub_dist/_data
+            # ---- Frontend zero-downtime update ----
+            VERSION=${{ env.VERSION }}
+            TMP_DIR=/tmp/frontend-dist/$VERSION
+            CURRENT_DIR=/usr/share/caddy/dist_current
+            NEW_DIR=/usr/share/caddy/$VERSION
 
-            # Sanity check
-            test -d "$TMP_DIR" || { echo "Frontend dist missing"; exit 1; }
+            # Copy new build to versioned folder
+            sudo mkdir -p $NEW_DIR
+            sudo cp -r $TMP_DIR/* $NEW_DIR
 
-            # Prepare
-            sudo rm -rf ${DIST_VOL}_old
-            sudo mv $DIST_VOL ${DIST_VOL}_old
-            sudo mkdir -p $DIST_VOL
+            # Atomically update symlink
+            sudo ln -sfn $NEW_DIR $CURRENT_DIR
 
-            # Copy contents, not the folder itself
-            sudo cp -r $TMP_DIR/* $DIST_VOL/
+            # Reload Caddy in-place (no downtime)
+            docker exec webserver caddy reload
 
-            # Cleanup
-            sudo rm -rf ${DIST_VOL}_old
-
-            # ---- REDIS SAFETY ----
+            # ---- Redis safety ----
             docker exec -i redis redis-cli replicaof no one
             docker exec -i redis redis-cli SAVE
+
