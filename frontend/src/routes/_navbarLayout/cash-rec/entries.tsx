@@ -39,6 +39,8 @@ type BankStatementResp = {
   miscDebits: BankMiscDebit[]
   createdAt?: string
   updatedAt?: string
+  unsettledPrepays?: number
+  handheldDebit?: number
 }
 
 type CashSummaryTotals = {
@@ -79,6 +81,8 @@ type CashSummaryAgg = {
   site: string
   date: string
   shiftCount: number
+  unsettledPrepays: number
+  handheldDebit: number
   totals: CashSummaryTotals
 }
 
@@ -281,11 +285,11 @@ function RouteComponent() {
                     <td className="px-2 py-2">{fmt2(data?.kardpoll?.ar)}</td>
                     {/* Cash Summary totals */}
                     <td className="px-2 py-2">{fmt2(data?.cashSummary?.totals.dealGroupCplDiscounts)}</td>
-                    <td className="px-2 py-2">-</td>
+                    <td className="px-2 py-2">{fmt2(data?.cashSummary?.unsettledPrepays)}</td>
                     <td className="px-2 py-2">{fmt2(data?.cashSummary?.totals.item_sales)}</td>
                     <td className="px-2 py-2">{fmt2(data?.cashSummary?.totals.totalSales)}</td>
                     <td className="px-2 py-2">{fmt2((data?.cashSummary?.totals.totalSales ?? 0) - (data?.cashSummary?.totals.item_sales ?? 0))}</td>
-                    <td className="px-2 py-2">-</td>
+                    <td className="px-2 py-2">{fmt2(data?.cashSummary?.handheldDebit)}</td>
                     <td className="px-2 py-2">{fmt2(data?.cashSummary?.totals.totalPos)}</td>
                     <td className="px-2 py-2">{fmt2(data?.cashSummary?.totals.kioskGiftCard)}</td>
                     <td className="px-2 py-2">{fmt2(data?.cashSummary?.totals.arIncurred)}</td>

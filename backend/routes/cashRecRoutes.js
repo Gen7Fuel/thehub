@@ -405,6 +405,18 @@ router.get('/entries', async (req, res) => {
       totals: agg ? agg : { ...emptyTotals, shiftCount: 0 },
     }
 
+    // Fetch CashSummaryReport for unsettledPrepays and handheldDebit
+    try {
+      const { CashSummaryReport } = require('../models/CashSummaryNew')
+      const report = await CashSummaryReport.findOne({ site, date: start }).lean()
+      if (report) {
+        cashSummary.unsettledPrepays = typeof report.unsettledPrepays === 'number' ? report.unsettledPrepays : undefined
+        cashSummary.handheldDebit = typeof report.handheldDebit === 'number' ? report.handheldDebit : undefined
+      }
+    } catch (e) {
+      // ignore errors, just don't include fields
+    }
+
     return res.json({
       kardpoll: kardpoll || null,
       bank: bank || null,
