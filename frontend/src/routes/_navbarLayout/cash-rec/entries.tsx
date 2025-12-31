@@ -175,10 +175,15 @@ function RouteComponent() {
   const fromObj = ymdToLocalDate(from)
   const toObj = ymdToLocalDate(to || from)
 
-  const fmt2 = (v: number | undefined | null) =>
-    typeof v === 'number' && Number.isFinite(v)
-      ? v.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })
-      : ''
+  const fmt2 = (v: number | undefined | null) => {
+    if (typeof v === 'number' && Number.isFinite(v)) {
+      if (v < 0) {
+        return `(${Math.abs(v).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })})`;
+      }
+      return v.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    }
+    return '';
+  }
   // const fmt0 = (v: number | undefined | null) =>
   //   typeof v === 'number' && Number.isFinite(v) ? v.toLocaleString(undefined, { maximumFractionDigits: 0 }) : ''
 
