@@ -1,12 +1,22 @@
-import {getWeeklyBistroSales} from '../services/sqlService.js';
+const connectDB = require('../config/db');
+const mongoose = require('mongoose');
+const { runAndEmailReport } = require('../cron_jobs/productCategoryMappingCron');
 
-export async function testWeeklyBistroSales() {
+async function run() {
+  let hadError = false;
   try {
-    const data = await getWeeklyBistroSales('30900');
-    console.log('Weekly Bistro Sales Data:', data);
-  } catch (error) {
-    console.error('Error fetching Weekly Bistro Sales Data:', error);
-  } 
+    await connectDB();
+    console.log('Starting categoryProductMapping sync...');
+    await runAndEmailReport();
+  } catch (err) {
+    hadError = true;
+    console.error('Sync failed:', err);
+  } finally {
+    try { await mongoose.disconnect(); } catch (e) { }
+    process.exit(hadError ? 1 : 0);
+  }
 }
 
-testWeeklyBistroSales();
+if (require.main === module) run();
+
+module.exports = { run };

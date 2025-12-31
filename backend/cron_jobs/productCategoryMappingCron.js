@@ -373,6 +373,95 @@ async function syncCategoryProductMapping() {
           console.log(`No active/inventoryExists updates needed for site='${site}' batch.`);
         }
       } // end batch loop
+
+      // ------------------ Active items inventoryExists check (bulk SQL version) ------------------
+      console.log(`Checking inventoryExists for ACTIVE items at site='${site}'`);
+
+      const activeItems = await CycleCount.find(
+        {
+          site,
+          active: true,
+          upc: { $ne: null },
+        },
+        { gtin: 1, upc: 1 }
+      ).lean();
+
+      if (!activeItems.length) {
+        console.log(`No active items with UPC found for site='${site}'`);
+      } else {
+        const ACTIVE_BATCH_SIZE = 1000; // can increase because bulk SQL handles it
+
+        for (let i = 0; i < activeItems.length; i += ACTIVE_BATCH_SIZE) {
+          const batch = activeItems.slice(i, i + ACTIVE_BATCH_SIZE);
+          console.log(
+            `Site='${site}': processing ACTIVE inventory batch ${i / ACTIVE_BATCH_SIZE + 1} (${batch.length} items)`
+          );
+
+          // Extract UPCs for the batch
+          const upcs = batch.map((item) => String(item.upc).trim()).filter(Boolean);
+
+          // Bulk SQL call to get On_hand values for all UPCs
+          let inventoryMap = {};
+          try {
+            inventoryMap = await sqlService.getInventoryOnHandForActiveUPCsAndStation(
+              upcs,
+              stationSk
+            );
+          } catch (err) {
+            console.error(
+              `Error fetching bulk inventory for ACTIVE batch at site='${site}':`,
+              err
+            );
+            report.errors.push({
+              stage: 'getInventoryOnHandForActiveUPCsAndStation',
+              site,
+              message: err.message,
+            });
+          }
+
+          // Prepare bulkWrite operations for items missing inventory
+          const ops = batch
+            .filter((item) => {
+              const onHand = inventoryMap[item.upc];
+              return onHand == null || Number(onHand) <= 0;
+            })
+            .map((item) => ({
+              updateMany: {
+                filter: { site, gtin: item.gtin },
+                update: { $set: { inventoryExists: false } },
+              },
+            }));
+
+          // Execute bulkWrite if needed
+          if (ops.length) {
+            try {
+              const res = await CycleCount.bulkWrite(ops, {
+                timestamps: false,
+                ordered: false,
+              });
+              const modified =
+                res.modifiedCount != null ? res.modifiedCount : res.nModified || 0;
+              console.log(
+                `Updated inventoryExists=false for ${modified} ACTIVE items (batch ${i / ACTIVE_BATCH_SIZE + 1})`
+              );
+            } catch (err) {
+              console.error(
+                `Error updating inventoryExists for ACTIVE items (batch ${i / ACTIVE_BATCH_SIZE + 1}):`,
+                err
+              );
+              report.errors.push({
+                stage: 'CycleCount.bulkWrite(activeInventoryCheck)',
+                site,
+                message: err.message,
+              });
+            }
+          } else {
+            console.log(
+              `No ACTIVE inventoryExists updates needed for batch ${i / ACTIVE_BATCH_SIZE + 1}`
+            );
+          }
+        }
+      }
     } // end site loop
 
     report.inactiveFlags.markedInactive = inactiveMarked;

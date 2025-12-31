@@ -454,6 +454,7 @@ async function getInventoryOnHandForUPCAndStation(upc, stationSk) {
       WHERE [UPC] LIKE @upc
         AND [Station_SK] = @stationSk
         AND [Date] = CAST(GETDATE() - 1 AS date)
+      ORDER BY [On_hand] DESC  
     `;
     const result = await request.query(q);
     if (result && result.recordset && result.recordset.length) {
@@ -464,6 +465,55 @@ async function getInventoryOnHandForUPCAndStation(upc, stationSk) {
   } catch (err) {
     console.error('SQL error in getInventoryOnHandForUPCAndStation:', err);
     return null;
+  }
+}
+
+/**
+/**
+ * Get On_hand values from [CSO].[Inventory Balance] for multiple UPCs and a station for yesterday.
+ * Returns a map: { upc: onHandValue | null }
+ * Uses IN for exact match (batch processing).
+ * @param {string[]} upcs
+ * @param {string} stationSk
+ * @returns {Promise<Record<string, number|null>>} 
+ */
+async function getInventoryOnHandForActiveUPCsAndStation(upcs = [], stationSk) {
+  if (!upcs.length || !stationSk) return {};
+
+  try {
+    const pool = await getPool();
+    const request = pool.request();
+
+    // Prepare dynamic parameters for IN clause
+    const params = upcs.map((_, idx) => `@p${idx}`).join(', ');
+    upcs.forEach((upc, idx) => request.input(`p${idx}`, sql.VarChar, upc));
+    request.input('stationSk', sql.VarChar, stationSk);
+
+    const query = `
+      SELECT UPC, MAX(On_hand) AS On_hand
+      FROM [CSO].[Inventory Balance]
+      WHERE Station_SK = @stationSk
+        AND Date = CAST(GETDATE() - 1 AS date)
+        AND UPC IN (${params})
+      GROUP BY UPC
+    `;
+
+    const result = await request.query(query);
+
+    const mapping = {};
+    // Initialize all UPCs as null
+    upcs.forEach((u) => { mapping[u] = null; });
+
+    for (const row of result.recordset || []) {
+      const upc = String(row.UPC || '').trim();
+      const onHand = row.On_hand != null ? Number(row.On_hand) : null;
+      if (upc) mapping[upc] = onHand;
+    }
+
+    return mapping;
+  } catch (err) {
+    console.error('SQL error in getInventoryOnHandForUPCsAndStation (bulk IN):', err);
+    return upcs.reduce((acc, u) => ({ ...acc, [u]: null }), {});
   }
 }
 
@@ -704,4 +754,5 @@ module.exports = {
   getInventoryOnHandForUPCAndStation,
   getWeeklyBistroSales,
   getTop10Bistro,
+  getInventoryOnHandForActiveUPCsAndStation,
 };
