@@ -356,7 +356,7 @@ const styles = StyleSheet.create({
 
 })
 
-function TotalsCards({ totals }) {
+function TotalsCards({ totals, unsettledPrepays, handheldDebit }) {
   const overShort = Number((totals.canadian_cash_collected || 0) - (totals.report_canadian_cash || 0))
   const h = React.createElement
   const cards = [
@@ -373,6 +373,19 @@ function TotalsCards({ totals }) {
     { label: 'Exempted Tax', value: currency(totals.exempted_tax) },
     { label: 'Payouts', value: currency(totals.payouts) },
   ]
+
+  if (typeof unsettledPrepays === 'number' && !Number.isNaN(unsettledPrepays)) {
+    cards.push({
+      label: 'Unsettled Prepays',
+      value: currency(unsettledPrepays),
+    })
+  }
+  if (typeof handheldDebit === 'number' && !Number.isNaN(handheldDebit)) {
+    cards.push({
+      label: 'Handheld Debit',
+      value: currency(handheldDebit),
+    })
+  }
 
   // Render in two columns, wrapping
   return h(
@@ -468,8 +481,35 @@ function NotesSection({ notes }) {
   )
 }
 
+// Render optional daily adjustments when values exist
+function ExtrasSection({ unsettledPrepays, handheldDebit }) {
+  const h = React.createElement
+  const hasUnsettled = typeof unsettledPrepays === 'number' && !Number.isNaN(unsettledPrepays)
+  const hasHandheld = typeof handheldDebit === 'number' && !Number.isNaN(handheldDebit)
+  if (!hasUnsettled && !hasHandheld) return null
+
+  return h(
+    View,
+    { style: styles.notesBlock },
+    hasUnsettled &&
+      h(
+        View,
+        { style: styles.row },
+        h(Text, { style: styles.rowLabel }, 'Unsettled Prepays'),
+        h(Text, { style: styles.rowValue }, currency(unsettledPrepays))
+      ),
+    hasHandheld &&
+      h(
+        View,
+        { style: styles.row },
+        h(Text, { style: styles.rowLabel }, 'Handheld Debit'),
+        h(Text, { style: styles.rowValue }, currency(handheldDebit))
+      )
+  )
+}
+
 // function ReportDoc({ site, date, rows, totals, notes }) {
-function ReportDoc({ site, date, rows, totals, notes, lottery, bullock }) {
+function ReportDoc({ site, date, rows, totals, notes, lottery, bullock, unsettledPrepays, handheldDebit }) {
   const h = React.createElement
   return h(
     Document,
@@ -483,7 +523,8 @@ function ReportDoc({ site, date, rows, totals, notes, lottery, bullock }) {
         h(Text, { style: styles.title }, `Cash Summary — ${site} — ${date}`)
       ),
       h(Text, { style: styles.sectionTitle }, 'Totals'),
-      h(TotalsCards, { totals }),
+      h(TotalsCards, { totals, unsettledPrepays, handheldDebit }),
+      // No separate Adjustments section/cards; handled in TotalsCards
       lottery &&
       h(
         React.Fragment,
@@ -506,9 +547,11 @@ async function generateCashSummaryPdf({ site, date, notes = '' }) {
   const start = new Date(yy, mm - 1, dd, 0, 0, 0, 0)
   const end = new Date(yy, mm - 1, dd + 1, 0, 0, 0, 0)
 
+  let reportDocForExtras = null
   if (!notes) {
     const reportDoc = await CashSummaryReport.findOne({ site, date: start }).lean()
     notes = reportDoc?.notes || ''
+    reportDocForExtras = reportDoc
   }
 
   const rows = await CashSummary.find({ site, date: { $gte: start, $lt: end } })
@@ -533,6 +576,15 @@ async function generateCashSummaryPdf({ site, date, notes = '' }) {
   }
 
   // const instance = pdf(React.createElement(ReportDoc, { site, date, rows, totals, notes }))
+  // Fetch report again if needed to read optional extras
+  if (!reportDocForExtras) {
+    try {
+      reportDocForExtras = await CashSummaryReport.findOne({ site, date: start }).lean()
+    } catch (_) { /* ignore */ }
+  }
+  const unsettledPrepays = reportDocForExtras?.unsettledPrepays
+  const handheldDebit = reportDocForExtras?.handheldDebit
+
   const instance = pdf(
     React.createElement(ReportDoc, {
       site,
@@ -542,6 +594,8 @@ async function generateCashSummaryPdf({ site, date, notes = '' }) {
       notes,
       lottery,
       bullock,
+      unsettledPrepays,
+      handheldDebit,
     })
   )
 
