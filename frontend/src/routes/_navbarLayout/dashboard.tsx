@@ -65,7 +65,7 @@ import {
   DialogTitle,
   DialogDescription,
 } from "@/components/ui/dialog";
-import { OverShortChart } from '@/components/custom/dashboard/accountingCharts';
+import { OverShortSparkline } from '@/components/custom/dashboard/accountingCharts';
 
 interface CycleCountItem {
   name: string;
@@ -1619,7 +1619,7 @@ function RouteComponent() {
                 </section>
 
                 {/* ======================= */}
-                {/*     BISTRO SECTION   */}
+                {/*     Accounting SECTION   */}
                 {/* ======================= */}
 
                 {!["Sarnia"].includes(site) && (
@@ -1629,7 +1629,8 @@ function RouteComponent() {
                     </h2>
 
                     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                      <OverShortChart data={processOverShortData(overShortData)} />
+                      {/* <OverShortChart data={processOverShortData(overShortData)} /> */}
+                      <OverShortSparkline data={processOverShortData(overShortData)} />
                     </div>
                   </section>
                 )}
