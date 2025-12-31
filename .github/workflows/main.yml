@@ -99,7 +99,8 @@ jobs:
           host: ${{ secrets.SERVER_HOST }}
           username: ${{ secrets.SERVER_USER }}
           key: ${{ secrets.SERVER_SSH_KEY }}
-          source: "frontend/dist"
+          source: "frontend/dist/*"   # Add /* to get the contents
+          strip_components: 2        # This removes 'frontend/' and 'dist/' from the folder structure
           target: "/tmp/frontend-dist/${{ env.VERSION }}"
 
       # 5. Deploy backend + frontend
@@ -150,19 +151,22 @@ jobs:
 
             # ---- Frontend zero-downtime update ----
             VERSION=${{ env.VERSION }}
-            # Point these to the HOST paths, not container paths
+            # Point these to the HOST paths
             TMP_DIR=/tmp/frontend-dist/$VERSION
             NEW_DIR=/var/www/thehub/$VERSION
             CURRENT_DIR=/var/www/thehub/dist_current
 
-            # Copy new build to versioned folder
+            # Create the versioned folder
             sudo mkdir -p $NEW_DIR
+
+            # Copy from tmp to the versioned folder
+            # (Since we stripped components, index.html is directly inside $TMP_DIR)
             sudo cp -r $TMP_DIR/* $NEW_DIR
 
-            # Atomically update symlink
+            # Atomic update of the symlink
             sudo ln -sfn $NEW_DIR $CURRENT_DIR
 
-            # Reload Caddy in-place (no downtime)
+            # Reload Caddy
             docker exec webserver caddy reload --config /etc/caddy/Caddyfile
 
             # ---- Redis safety ----
