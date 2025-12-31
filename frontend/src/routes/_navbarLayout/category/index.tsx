@@ -109,13 +109,13 @@ function RouteComponent() {
               value={search}
               onChange={e => setSearch(e.target.value)}
             />
-            <Button
+            {/* <Button
               onClick={() =>
                 openUpdateDialog({ Name: '', Number: 0, CycleCountVariance: 1, OrderRecVariance: 1 })
               }
             >
               Add New Category
-            </Button>
+            </Button> */}
           </div>
 
           {/* Accordion for categories */}
