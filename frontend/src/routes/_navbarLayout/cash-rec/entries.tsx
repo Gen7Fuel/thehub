@@ -81,6 +81,8 @@ type CashSummaryAgg = {
   site: string
   date: string
   shiftCount: number
+  unsettledPrepays: number
+  handheldDebit: number
   totals: CashSummaryTotals
 }
 
