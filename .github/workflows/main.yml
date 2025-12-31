@@ -87,8 +87,8 @@ jobs:
         run: |
           cd frontend
           npm ci
+          rm -rf dist  # <--- FORCE DELETE OLD BUILD
           npm run build
-          # Generate version string (timestamp + short SHA)
           VERSION=$(date +%Y%m%d%H%M%S)-${GITHUB_SHA::7}
           echo "VERSION=$VERSION" >> $GITHUB_ENV
 
@@ -151,27 +151,37 @@ jobs:
 
             # ---- Frontend zero-downtime update ----
             VERSION=${{ env.VERSION }}
-            # Point these to the HOST paths
             TMP_DIR=/tmp/frontend-dist/$VERSION
             NEW_DIR=/var/www/thehub/$VERSION
             CURRENT_DIR=/var/www/thehub/dist_current
 
-            # Create the versioned folder
+            # 1. Create a fresh versioned folder (ensure it's empty)
+            sudo rm -rf $NEW_DIR
             sudo mkdir -p $NEW_DIR
 
-            # Copy from tmp to the versioned folder
-            # (Since we stripped components, index.html is directly inside $TMP_DIR)
-            sudo cp -r $TMP_DIR/* $NEW_DIR
+            # 2. Copy from tmp to the versioned folder
+            sudo cp -rp $TMP_DIR/. $NEW_DIR/
 
-            # Atomic update of the symlink
-            sudo ln -sfn $NEW_DIR $CURRENT_DIR
+            # 3. FIX PERMISSIONS (Ensures Caddy can read the new files)
+            sudo chown -R gen7fuel:gen7fuel $NEW_DIR
+            sudo chmod -R 755 $NEW_DIR
 
-            # Reload Caddy
+            # 4. ATOMIC RELATIVE SYMLINK (Crucial for Docker)
+            # We 'cd' into the directory so the link is "2025... -> dist_current" 
+            # instead of "/var/www/thehub/2025... -> dist_current"
+            cd /var/www/thehub
+            sudo ln -sfn $VERSION dist_current
+
+            # 5. Reload Caddy
             docker exec webserver caddy reload --config /etc/caddy/Caddyfile
+
+            # ---- Cleanup ----
+            # Keep only the 3 most recent versions
+            cd /var/www/thehub && ls -1dt 202* | tail -n +4 | xargs sudo rm -rf
+            
+            # Clean up the /tmp folder so it doesn't grow forever
+            sudo rm -rf /tmp/frontend-dist/
 
             # ---- Redis safety ----
             docker exec -i redis redis-cli replicaof no one
             docker exec -i redis redis-cli SAVE
-
-            # Keep only the 5 most recent versions to save disk space
-            cd /var/www/thehub && ls -dt */ | tail -n +6 | xargs rm -rf
