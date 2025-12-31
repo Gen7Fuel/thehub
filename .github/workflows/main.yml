@@ -1,68 +1,6 @@
-name: Deploy to Server
-
-# Trigger on pushes to the main branch
-on:
-  push:
-    branches:
-      - main
-
-jobs:
-  deploy:
-    runs-on: ubuntu-latest
-
-    steps:
-      # Step 1: Checkout repo (optional, mainly for GitHub Actions context)
-      - name: Checkout repository
-        uses: actions/checkout@v4
-
-      # Step 2: SSH to server and run deployment commands
-      - name: Deploy via SSH
-        uses: appleboy/ssh-action@v0.1.7
-        with:
-          host: ${{ secrets.SERVER_HOST }}       # Server IP or hostname
-          username: ${{ secrets.SERVER_USER }}   # SSH username
-          key: ${{ secrets.SERVER_SSH_KEY }}     # Private SSH key from GitHub Secrets
-          script: |
-            cd /home/gen7fuel/thehub
-
-            export MONGO_URI=${{ secrets.MONGO_URI }}
-            export JWT_SECRET=${{ secrets.JWT_SECRET }}
-            export SQL_SERVER=${{ secrets.SQL_SERVER }}
-            export SQL_DB=${{ secrets.SQL_DB }}
-            export SQL_USER=${{ secrets.SQL_USER }}
-            export SQL_PASSWORD=${{ secrets.SQL_PASSWORD }}
-            export REDIS_URL=${{ secrets.REDIS_URL }}
-            export SFTP_HOST=${{ secrets.SFTP_HOST }}
-            export SFTP_PORT=${{ secrets.SFTP_PORT }}
-            export SFTP_COUCHICHING_USER=${{ secrets.SFTP_COUCHICHING_USER }}
-            export SFTP_COUCHICHING_PASS=${{ secrets.SFTP_COUCHICHING_PASS }}
-            export SFTP_RANKIN_USER=${{ secrets.SFTP_RANKIN_USER }}
-            export SFTP_RANKIN_PASS=${{ secrets.SFTP_RANKIN_PASS }}
-            export SFTP_JOCKO_POINT_USER=${{ secrets.SFTP_JOCKO_POINT_USER }}
-            export SFTP_JOCKO_POINT_PASS=${{ secrets.SFTP_JOCKO_POINT_PASS }}
-            export SFTP_WALPOLE_USER=${{ secrets.SFTP_WALPOLE_USER }}
-            export SFTP_WALPOLE_PASS=${{ secrets.SFTP_WALPOLE_PASS }}
-            export SFTP_SARNIA_USER=${{ secrets.SFTP_SARNIA_USER }}
-            export SFTP_SARNIA_PASS=${{ secrets.SFTP_SARNIA_PASS }}
-            export SFTP_SILVER_GRIZZLY_USER=${{ secrets.SFTP_SILVER_GRIZZLY_USER }}
-            export SFTP_SILVER_GRIZZLY_PASS=${{ secrets.SFTP_SILVER_GRIZZLY_PASS }}
-            export SFTP_OLIVER_USER=${{ secrets.SFTP_OLIVER_USER }}
-            export SFTP_OLIVER_PASS=${{ secrets.SFTP_OLIVER_PASS }}
-            export SFTP_OSOYOOS_USER=${{ secrets.SFTP_OSOYOOS_USER }}
-            export SFTP_OSOYOOS_PASS=${{ secrets.SFTP_OSOYOOS_PASS }}
-            export AZURE_STORAGE_CONNECTION_STRING=${{ secrets.AZURE_STORAGE_CONNECTION_STRING }}
-            export AZURE_CONTAINER=${{ secrets.AZURE_CONTAINER }}
-
-            git pull origin main
-            docker compose down
-            docker volume rm thehub_dist || true
-            docker compose up --build -d
-            docker exec -i redis redis-cli replicaof no one
-            docker exec -i redis redis-cli SAVE
-
-
 # name: Deploy to Server
 
+# # Trigger on pushes to the main branch
 # on:
 #   push:
 #     branches:
@@ -73,50 +11,20 @@ jobs:
 #     runs-on: ubuntu-latest
 
 #     steps:
-#       # 1. Checkout repo
-#       - uses: actions/checkout@v4
+#       # Step 1: Checkout repo (optional, mainly for GitHub Actions context)
+#       - name: Checkout repository
+#         uses: actions/checkout@v4
 
-#       # 2. Setup Node
-#       - name: Setup Node
-#         uses: actions/setup-node@v4
-#         with:
-#           node-version: 23
-
-#       # 3. Build frontend
-#       - name: Build frontend
-#         run: |
-#           cd frontend
-#           npm ci
-#           npm run build
-#           # Generate version string (timestamp + short SHA)
-#           VERSION=$(date +%Y%m%d%H%M%S)-${GITHUB_SHA::7}
-#           echo "VERSION=$VERSION" >> $GITHUB_ENV
-
-#       # 4. Copy frontend build to server
-#       - name: Copy frontend build to server
-#         uses: appleboy/scp-action@v0.1.7
-#         with:
-#           host: ${{ secrets.SERVER_HOST }}
-#           username: ${{ secrets.SERVER_USER }}
-#           key: ${{ secrets.SERVER_SSH_KEY }}
-#           source: "frontend/dist"
-#           target: "/tmp/frontend-dist/${{ env.VERSION }}"
-
-#       # 5. Deploy backend + frontend
+#       # Step 2: SSH to server and run deployment commands
 #       - name: Deploy via SSH
 #         uses: appleboy/ssh-action@v0.1.7
 #         with:
-#           host: ${{ secrets.SERVER_HOST }}
-#           username: ${{ secrets.SERVER_USER }}
-#           key: ${{ secrets.SERVER_SSH_KEY }}
+#           host: ${{ secrets.SERVER_HOST }}       # Server IP or hostname
+#           username: ${{ secrets.SERVER_USER }}   # SSH username
+#           key: ${{ secrets.SERVER_SSH_KEY }}     # Private SSH key from GitHub Secrets
 #           script: |
-#             set -e
 #             cd /home/gen7fuel/thehub
 
-#             # ---- Pull backend ----
-#             git pull origin main
-
-#             # ---- Export env vars ----
 #             export MONGO_URI=${{ secrets.MONGO_URI }}
 #             export JWT_SECRET=${{ secrets.JWT_SECRET }}
 #             export SQL_SERVER=${{ secrets.SQL_SERVER }}
@@ -145,30 +53,135 @@ jobs:
 #             export AZURE_STORAGE_CONNECTION_STRING=${{ secrets.AZURE_STORAGE_CONNECTION_STRING }}
 #             export AZURE_CONTAINER=${{ secrets.AZURE_CONTAINER }}
 
-#             # ---- Backend rolling update ----
-#             docker compose up -d --build --no-deps --wait backend
-
-#             # ---- Frontend zero-downtime update ----
-#             VERSION=${{ env.VERSION }}
-#             # Point these to the HOST paths, not container paths
-#             TMP_DIR=/tmp/frontend-dist/$VERSION
-#             NEW_DIR=/var/www/thehub/$VERSION
-#             CURRENT_DIR=/var/www/thehub/dist_current
-
-#             # Copy new build to versioned folder
-#             sudo mkdir -p $NEW_DIR
-#             sudo cp -r $TMP_DIR/* $NEW_DIR
-
-#             # Atomically update symlink
-#             sudo ln -sfn $NEW_DIR $CURRENT_DIR
-
-#             # Reload Caddy in-place (no downtime)
-#             docker exec webserver caddy reload --config /etc/caddy/Caddyfile
-
-#             # ---- Redis safety ----
+#             git pull origin main
+#             docker compose down
+#             docker volume rm thehub_dist || true
+#             docker compose up --build -d
 #             docker exec -i redis redis-cli replicaof no one
 #             docker exec -i redis redis-cli SAVE
 
-#             # Keep only the 5 most recent versions to save disk space
-#             cd /var/www/thehub && ls -dt */ | tail -n +6 | xargs rm -rf
 
+name: Deploy to Server
+
+on:
+  push:
+    branches:
+      - main
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+      # 1. Checkout repo
+      - uses: actions/checkout@v4
+
+      # 2. Setup Node
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 23
+
+      # 3. Build frontend
+      - name: Build frontend
+        run: |
+          cd frontend
+          npm ci
+          rm -rf dist  # <--- FORCE DELETE OLD BUILD
+          npm run build
+          VERSION=$(date +%Y%m%d%H%M%S)-${GITHUB_SHA::7}
+          echo "VERSION=$VERSION" >> $GITHUB_ENV
+
+      # 4. Copy frontend build to server
+      - name: Copy frontend build to server
+        uses: appleboy/scp-action@v0.1.7
+        with:
+          host: ${{ secrets.SERVER_HOST }}
+          username: ${{ secrets.SERVER_USER }}
+          key: ${{ secrets.SERVER_SSH_KEY }}
+          source: "frontend/dist/*"   # Add /* to get the contents
+          strip_components: 2        # This removes 'frontend/' and 'dist/' from the folder structure
+          target: "/tmp/frontend-dist/${{ env.VERSION }}"
+
+      # 5. Deploy backend + frontend
+      - name: Deploy via SSH
+        uses: appleboy/ssh-action@v0.1.7
+        with:
+          host: ${{ secrets.SERVER_HOST }}
+          username: ${{ secrets.SERVER_USER }}
+          key: ${{ secrets.SERVER_SSH_KEY }}
+          script: |
+            set -e
+            cd /home/gen7fuel/thehub
+
+            # ---- Pull backend ----
+            git pull origin main
+
+            # ---- Export env vars ----
+            export MONGO_URI=${{ secrets.MONGO_URI }}
+            export JWT_SECRET=${{ secrets.JWT_SECRET }}
+            export SQL_SERVER=${{ secrets.SQL_SERVER }}
+            export SQL_DB=${{ secrets.SQL_DB }}
+            export SQL_USER=${{ secrets.SQL_USER }}
+            export SQL_PASSWORD=${{ secrets.SQL_PASSWORD }}
+            export REDIS_URL=${{ secrets.REDIS_URL }}
+            export SFTP_HOST=${{ secrets.SFTP_HOST }}
+            export SFTP_PORT=${{ secrets.SFTP_PORT }}
+            export SFTP_COUCHICHING_USER=${{ secrets.SFTP_COUCHICHING_USER }}
+            export SFTP_COUCHICHING_PASS=${{ secrets.SFTP_COUCHICHING_PASS }}
+            export SFTP_RANKIN_USER=${{ secrets.SFTP_RANKIN_USER }}
+            export SFTP_RANKIN_PASS=${{ secrets.SFTP_RANKIN_PASS }}
+            export SFTP_JOCKO_POINT_USER=${{ secrets.SFTP_JOCKO_POINT_USER }}
+            export SFTP_JOCKO_POINT_PASS=${{ secrets.SFTP_JOCKO_POINT_PASS }}
+            export SFTP_WALPOLE_USER=${{ secrets.SFTP_WALPOLE_USER }}
+            export SFTP_WALPOLE_PASS=${{ secrets.SFTP_WALPOLE_PASS }}
+            export SFTP_SARNIA_USER=${{ secrets.SFTP_SARNIA_USER }}
+            export SFTP_SARNIA_PASS=${{ secrets.SFTP_SARNIA_PASS }}
+            export SFTP_SILVER_GRIZZLY_USER=${{ secrets.SFTP_SILVER_GRIZZLY_USER }}
+            export SFTP_SILVER_GRIZZLY_PASS=${{ secrets.SFTP_SILVER_GRIZZLY_PASS }}
+            export SFTP_OLIVER_USER=${{ secrets.SFTP_OLIVER_USER }}
+            export SFTP_OLIVER_PASS=${{ secrets.SFTP_OLIVER_PASS }}
+            export SFTP_OSOYOOS_USER=${{ secrets.SFTP_OSOYOOS_USER }}
+            export SFTP_OSOYOOS_PASS=${{ secrets.SFTP_OSOYOOS_PASS }}
+            export AZURE_STORAGE_CONNECTION_STRING=${{ secrets.AZURE_STORAGE_CONNECTION_STRING }}
+            export AZURE_CONTAINER=${{ secrets.AZURE_CONTAINER }}
+
+            # ---- Backend rolling update ----
+            docker compose up -d --build --no-deps --wait backend
+
+            # ---- Frontend zero-downtime update ----
+            VERSION=${{ env.VERSION }}
+            TMP_DIR=/tmp/frontend-dist/$VERSION
+            NEW_DIR=/var/www/thehub/$VERSION
+            CURRENT_DIR=/var/www/thehub/dist_current
+
+            # 1. Create a fresh versioned folder (ensure it's empty)
+            sudo rm -rf $NEW_DIR
+            sudo mkdir -p $NEW_DIR
+
+            # 2. Copy from tmp to the versioned folder
+            sudo cp -rp $TMP_DIR/. $NEW_DIR/
+
+            # 3. FIX PERMISSIONS (Ensures Caddy can read the new files)
+            sudo chown -R gen7fuel:gen7fuel $NEW_DIR
+            sudo chmod -R 755 $NEW_DIR
+
+            # 4. ATOMIC RELATIVE SYMLINK (Crucial for Docker)
+            # We 'cd' into the directory so the link is "2025... -> dist_current" 
+            # instead of "/var/www/thehub/2025... -> dist_current"
+            cd /var/www/thehub
+            sudo ln -sfn $VERSION dist_current
+
+            # 5. Reload Caddy
+            docker exec webserver caddy reload --config /etc/caddy/Caddyfile
+
+            # ---- Cleanup ----
+            # Keep only the 3 most recent versions
+            cd /var/www/thehub && ls -1dt 202* | tail -n +4 | xargs sudo rm -rf
+            
+            # Clean up the /tmp folder so it doesn't grow forever
+            sudo rm -rf /tmp/frontend-dist/
+
+            # ---- Redis safety ----
+            docker exec -i redis redis-cli replicaof no one
+            docker exec -i redis redis-cli SAVE

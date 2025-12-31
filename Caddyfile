@@ -5,7 +5,7 @@
         level DEBUG
     }
     
-    root * /usr/share/caddy
+    root * /usr/share/caddy/dist_current
     file_server
 
     # === WebSocket routes (Socket.IO) ===
