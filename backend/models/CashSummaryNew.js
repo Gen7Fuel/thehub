@@ -60,6 +60,9 @@ const CashSummaryReportSchema = new mongoose.Schema(
     // Store normalized local start-of-day for the report date
     date: { type: Date, required: true, index: true },
     notes: { type: String, default: '' },
+    // Additional daily adjustment fields (optional)
+    unsettledPrepays: { type: Number },
+    handheldDebit: { type: Number },
     submitted: { type: Boolean, default: false },
     submittedAt: { type: Date },
   },
