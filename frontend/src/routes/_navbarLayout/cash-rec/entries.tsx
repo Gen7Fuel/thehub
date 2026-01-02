@@ -90,6 +90,7 @@ type EntriesResponse = {
   kardpoll: KardpollReport | null
   bank: BankStatementResp | null
   cashSummary: CashSummaryAgg
+  totalReceivablesAmount?: number
 }
 
 type EntriesRow = { date: string; data: EntriesResponse | null }
@@ -274,6 +275,7 @@ function RouteComponent() {
                 <th className="px-1 py-1 text-center align-bottom h-24 bg-sky-50">Balance Check</th>
                 <th className="px-1 py-1 text-center align-bottom h-24 bg-sky-50">Bank Stmt Trans</th>
                 <th className="px-1 py-1 text-center align-bottom h-24 bg-sky-50">Bank Rec</th>
+                <th className="px-1 py-1 text-center align-bottom h-24 bg-yellow-100">Receivables Total</th>
                 {/* <th className="px-1 py-1 text-center align-bottom h-24 bg-sky-50">Misc Debits Total</th> */}
               </tr>
             </thead>
@@ -331,10 +333,19 @@ function RouteComponent() {
                     <td className="px-2 py-2">{fmt2(data?.bank?.transferTo)}</td> */}
                     <td className="px-2 py-2 text-right">{fmt2(data?.bank?.endingBalance)}</td>
                     <td className="px-2 py-2"></td>
-                    <td className="px-2 py-2 text-right">{fmt2((data?.cashSummary?.totals.canadian_cash_collected?? 0) - (data?.cashSummary?.totals.report_canadian_cash ?? 0) + (data?.cashSummary?.handheldDebit ?? 0) + (data?.cashSummary?.unsettledPrepays ?? 0))}</td>
+                    <td className="px-2 py-2 text-right">{fmt2(
+                      (data?.cashSummary?.totals.totalPos ?? 0) +
+                      (data?.cashSummary?.totals.report_canadian_cash ?? 0) +
+                      (data?.cashSummary?.totals.couponsAccepted ?? 0) +
+                      (data?.cashSummary?.totals.payouts ?? 0) +
+                      (data?.cashSummary?.totals.cpl_bulloch ?? 0) -
+                      (data?.cashSummary?.totals.totalSales ?? 0) +
+                      (data?.totalReceivablesAmount ?? 0)
+                    )}</td>
                     <td className="px-2 py-2"></td>
                     <td className="px-2 py-2"></td>
                     <td className="px-2 py-2"></td>
+                    <td className="px-2 py-2 text-right">{fmt2(data?.totalReceivablesAmount)}</td>
                     {/* <td className="px-2 py-2">{fmt2(miscDebitsTotal)}</td> */}
                   </tr>
                 )
