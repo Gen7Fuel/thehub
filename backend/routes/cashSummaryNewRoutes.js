@@ -712,26 +712,28 @@ router.get('/report', async (req, res) => {
 
 router.put('/report', async (req, res) => {
   try {
-    const { site, date, notes = '', submitted } = req.body || {}
+    const { site, date, notes = '', submitted, unsettledPrepays, handheldDebit } = req.body || {}
     if (!site) return res.status(400).json({ error: 'site is required' })
     if (!date || !/^\d{4}-\d{2}-\d{2}$/.test(String(date))) {
       return res.status(400).json({ error: 'date (YYYY-MM-DD) is required' })
     }
 
     const { start } = startEndOfYmd(date)
-    const update = {
-      site,
-      date: start,
-      notes,
-    }
+    // Build $set payload only for provided fields
+    const setPayload = { site, date: start }
+    if (typeof notes === 'string') setPayload.notes = notes
+    const prepayNum = norm(unsettledPrepays)
+    if (prepayNum !== undefined) setPayload.unsettledPrepays = prepayNum
+    const handheldNum = norm(handheldDebit)
+    if (handheldNum !== undefined) setPayload.handheldDebit = handheldNum
     if (typeof submitted === 'boolean') {
-      update.submitted = submitted
-      update.submittedAt = submitted ? new Date() : undefined
+      setPayload.submitted = submitted
+      setPayload.submittedAt = submitted ? new Date() : undefined
     }
 
     const doc = await CashSummaryReport.findOneAndUpdate(
       { site, date: start },
-      { $set: { site, date: start, notes } },
+      { $set: setPayload },
       { upsert: true, new: true, setDefaultsOnInsert: true }
     ).lean()
 

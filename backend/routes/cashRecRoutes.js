@@ -2,6 +2,7 @@ const express = require('express')
 const multer = require('multer')
 const { BankStatement, KardpollReport } = require('../models/CashRec')
 const CashSummary = require('../models/CashSummaryNew')
+const Transactions = require('../models/Transactions')
 
 const router = express.Router()
 const upload = multer({
@@ -405,10 +406,42 @@ router.get('/entries', async (req, res) => {
       totals: agg ? agg : { ...emptyTotals, shiftCount: 0 },
     }
 
+    // Fetch CashSummaryReport for unsettledPrepays and handheldDebit
+    try {
+      const { CashSummaryReport } = require('../models/CashSummaryNew')
+      const report = await CashSummaryReport.findOne({ site, date: start }).lean()
+      if (report) {
+        cashSummary.unsettledPrepays = typeof report.unsettledPrepays === 'number' ? report.unsettledPrepays : undefined
+        cashSummary.handheldDebit = typeof report.handheldDebit === 'number' ? report.handheldDebit : undefined
+      }
+    } catch (e) {
+      // ignore errors, just don't include fields
+    }
+
+    // 4) Receivables total from Transactions (source: 'PO') for stationName/site and day range
+    let totalReceivablesAmount = 0
+    try {
+      const [txAgg] = await Transactions.aggregate([
+        {
+          $match: {
+            source: 'PO',
+            stationName: site,
+            date: { $gte: start, $lte: end },
+          },
+        },
+        { $group: { _id: null, total: { $sum: { $ifNull: ['$amount', 0] } } } },
+      ])
+      totalReceivablesAmount = txAgg?.total || 0
+    } catch (e) {
+      // Defensive: log but do not fail the endpoint
+      console.error('Failed to aggregate receivables:', e)
+    }
+
     return res.json({
       kardpoll: kardpoll || null,
       bank: bank || null,
       cashSummary,
+      totalReceivablesAmount,
     })
   } catch (err) {
     console.error('cashRecRoutes.entries error:', err)

@@ -34,7 +34,7 @@ type ReportData = {
     report_canadian_cash: number
     payouts: number
   }
-  report?: { notes?: string; submitted?: boolean }
+  report?: { notes?: string; submitted?: boolean; unsettledPrepays?: number; handheldDebit?: number }
 }
 
 export const Route = createFileRoute('/_navbarLayout/cash-summary/report')({
@@ -78,6 +78,8 @@ function RouteComponent() {
   )
   const notes = report?.report?.notes ?? ''
   const submitted = report?.report?.submitted === true
+  const unsettledPrepays = report?.report?.unsettledPrepays ?? undefined
+  const handheldDebit = report?.report?.handheldDebit ?? undefined
 
   const [noteText, setNoteText] = useState('')
 
@@ -97,6 +99,20 @@ function RouteComponent() {
     }).catch(() => { })
     // Optionally refetch route loader:
     // navigate({ search: (prev: Search) => ({ ...prev }) })
+  }
+
+  const saveField = async (key: 'unsettledPrepays' | 'handheldDebit', value: string) => {
+    if (!site || !date || submitted) return
+    const num = Number(value)
+    if (!Number.isFinite(num)) return
+    await fetch('/api/cash-summary/report', {
+      method: 'PUT',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${localStorage.getItem('token') || ''}`,
+      },
+      body: JSON.stringify({ site, date, [key]: num }),
+    }).catch(() => { })
   }
 
   useEffect(() => {
@@ -300,6 +316,39 @@ function RouteComponent() {
                   <Card title="Exempted Tax" value={fmtNum(totals?.exempted_tax)} />
                   <Card title="Payouts" value={fmtNum(totals?.payouts)} />
                 </div>
+              </div>
+
+              <div>
+                <h3 className="text-sm font-semibold mb-2">Adjustments</h3>
+                <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+                  <div className="border rounded-md p-4 bg-card">
+                    <label className="text-xs text-muted-foreground mb-1 block">Unsettled Prepays</label>
+                    <input
+                      type="number"
+                      step="0.01"
+                      defaultValue={typeof unsettledPrepays === 'number' ? unsettledPrepays : ''}
+                      onBlur={(e) => saveField('unsettledPrepays', e.target.value)}
+                      disabled={submitted}
+                      className="border rounded px-3 py-2 w-full"
+                    />
+                  </div>
+                  <div className="border rounded-md p-4 bg-card">
+                    <label className="text-xs text-muted-foreground mb-1 block">Handheld Debit</label>
+                    <input
+                      type="number"
+                      step="0.01"
+                      defaultValue={typeof handheldDebit === 'number' ? handheldDebit : ''}
+                      onBlur={(e) => saveField('handheldDebit', e.target.value)}
+                      disabled={submitted}
+                      className="border rounded px-3 py-2 w-full"
+                    />
+                  </div>
+                </div>
+                {submitted && (
+                  <div className="mt-1 text-xs text-muted-foreground">
+                    Adjustments are locked because this report is submitted.
+                  </div>
+                )}
               </div>
 
               {/* Lottery summary (only show when a saved Lottery exists for this site/date)
