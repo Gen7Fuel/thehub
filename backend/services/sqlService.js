@@ -755,4 +755,5 @@ module.exports = {
   getWeeklyBistroSales,
   getTop10Bistro,
   getInventoryOnHandForActiveUPCsAndStation,
+  getPool,
 };
