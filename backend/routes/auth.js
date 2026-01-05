@@ -10,6 +10,11 @@ const getMergedPermissions = require("../utils/mergePermissionObjects");
 
 const { auth } = require("../middleware/authMiddleware.js");
 
+// Escape input for use in RegExp to avoid injection
+function escapeRegExp(str) {
+  return String(str).replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
 // router.post("/register", async (req, res) => {
 //   const { email, password, firstName, lastName, stationName } = req.body;
 
@@ -62,8 +67,11 @@ router.post("/register", async (req, res) => {
   const { email, password, firstName, lastName, stationName } = req.body;
 
   try {
-    // Check if user already exists
-    const userExists = await User.findOne({ email });
+    const inputEmail = String(email || '').trim();
+    const normalizedEmail = inputEmail.toLowerCase();
+
+    // Check if user already exists (case-insensitive)
+    const userExists = await User.findOne({ email: new RegExp(`^${escapeRegExp(inputEmail)}$`, 'i') });
     if (userExists)
       return res.status(400).json({ message: "User already exists" });
 
@@ -76,9 +84,9 @@ router.post("/register", async (req, res) => {
       site_access[loc.stationName] = loc.stationName === stationName;
     });
 
-    // Create the user
+    // Create the user (store email in lowercase)
     const user = await User.create({
-      email,
+      email: normalizedEmail,
       password,
       firstName,
       lastName,
@@ -145,7 +153,9 @@ router.post("/login", async (req, res) => {
   const { email, password } = req.body;
 
   try {
-    const user = await User.findOne({ email });
+    const inputEmail = String(email || '').trim();
+    // Case-insensitive lookup by email
+    const user = await User.findOne({ email: new RegExp(`^${escapeRegExp(inputEmail)}$`, 'i') });
     if (!user) return res.status(400).json({ message: "Invalid credentials" });
 
     // Check if user is inactive
