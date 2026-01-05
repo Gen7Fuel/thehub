@@ -238,6 +238,8 @@ router.post('/bank-statement', express.json({ limit: '1mb' }), async (req, res) 
       transferTo,
       endingBalance,
       miscDebits,
+      // NEW: accept miscCredits in payload
+      miscCredits,
     } = req.body || {}
 
     if (!site || !date) {
@@ -253,6 +255,8 @@ router.post('/bank-statement', express.json({ limit: '1mb' }), async (req, res) 
       transferTo,
       endingBalance,
       miscDebits,
+      // NEW: include miscCredits
+      miscCredits,
     })
 
     // Upsert per site+date
@@ -265,6 +269,8 @@ router.post('/bank-statement', express.json({ limit: '1mb' }), async (req, res) 
           transferTo: doc.transferTo ?? 0,
           endingBalance: doc.endingBalance ?? 0,
           miscDebits: doc.miscDebits ?? [],
+          // NEW: persist miscCredits
+          miscCredits: doc.miscCredits ?? [],
         },
       },
       { new: true, upsert: true, setDefaultsOnInsert: true }
@@ -375,6 +381,7 @@ router.get('/entries', async (req, res) => {
       'totalPos',
       'arIncurred',
       'grandTotal',
+      'missedCpl',
       'couponsAccepted',
       'canadianCash',
       'cashOnHand',

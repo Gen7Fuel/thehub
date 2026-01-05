@@ -7,6 +7,8 @@ type ParsedTtx = {
   nightDeposit?: number
   transferTo?: number
   miscDebits: { date: string; description: string; amount: number }[]
+  // NEW: capture miscellaneous credits
+  miscCredits?: { date: string; description: string; amount: number }[]
   endingBalance?: number
   statementDate?: string // YYYY-MM-DD
   accountName?: string // raw Account Name (legalName)
@@ -60,7 +62,7 @@ function parseTtx(text: string): ParsedTtx {
   const balanceIdx = idx('Balance')
   const acctNameIdx = idx('Account Name')
 
-  const out: ParsedTtx = { miscDebits: [] }
+  const out: ParsedTtx = { miscDebits: [], miscCredits: [] }
   let lastBalance: number | undefined
   let latestDate: string | undefined
 
@@ -92,6 +94,10 @@ function parseTtx(text: string): ParsedTtx {
       if (descLower.includes('transfer to')) out.transferTo = (out.transferTo ?? 0) + debits
       if (descLower.includes('misc debit')) {
         out.miscDebits.push({ date: dateStr || '', description, amount: debits })
+      }
+      // NEW: capture miscellaneous credit entries
+      if (descLower.includes('misc credit') || descLower.includes('miscellaneous credit')) {
+        out.miscCredits!.push({ date: dateStr || '', description, amount: credits })
       }
     }
   }
@@ -240,6 +246,8 @@ function RouteComponent() {
       transferTo: parsed.transferTo ?? 0,
       endingBalance: parsed.endingBalance ?? 0,
       miscDebits: parsed.miscDebits ?? [],
+      // NEW: include miscCredits when uploading
+      miscCredits: parsed.miscCredits ?? [],
     }
     try {
       const res = await fetch('/api/cash-rec/bank-statement', {
