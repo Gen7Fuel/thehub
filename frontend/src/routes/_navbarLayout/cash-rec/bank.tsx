@@ -342,6 +342,23 @@ function RouteComponent() {
                 </ul>
               )}
             </div>
+            {/* NEW: Misc Credits list */}
+            <div className="sm:col-span-2 border rounded p-3">
+              <div className="font-semibold mb-2">Misc Credits (Credits column)</div>
+              {(parsed.miscCredits?.length ?? 0) === 0 ? (
+                <div className="text-sm text-muted-foreground">None found</div>
+              ) : (
+                <ul className="space-y-1">
+                  {parsed.miscCredits!.map((m, i) => (
+                    <li key={i} className="text-sm">
+                      <span className="mr-2">{m.date || '-'}</span>
+                      <span className="mr-2">{m.description}</span>
+                      <span className="font-mono">{m.amount}</span>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </div>
           </div>
 
           {canCapture && (
