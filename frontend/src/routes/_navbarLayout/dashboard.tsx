@@ -65,7 +65,7 @@ import {
   DialogTitle,
   DialogDescription,
 } from "@/components/ui/dialog";
-import { OverShortSparkline } from '@/components/custom/dashboard/accountingCharts';
+import { OverShortSparkline, SafeBalanceTrendChart } from '@/components/custom/dashboard/accountingCharts';
 
 interface CycleCountItem {
   name: string;
@@ -193,7 +193,6 @@ export const fetchFuelMonthToMonth = async (data: any) => {
   start.setDate(end.getDate() - 60); // last 60 days
 
   const fuelData = data ?? [];
-  console.log('fueldata60:', fuelData)
 
   if (!fuelData.length) return null;
 
@@ -305,6 +304,9 @@ function RouteComponent() {
   const [tenderTransactions, setTenderTransactions] = useState<TenderTransaction[]>([]);
   const [bistroWoWSales, setBistroWoWSales] = useState<BistroWowSales[]>([]);
   const [top10Bistro, setTop10Bistro] = useState<Top10Bistro[]>([]);
+  // Safe balance (end-of-day) data
+  const [safeBalanceRaw, setSafeBalanceRaw] = useState<any[]>([]);
+
 
   const [salesData, setSalesData] = useState<SalesData | null>(null);
   const [vendorStatus, setVendorStatus] = useState<any[]>([]);
@@ -318,6 +320,8 @@ function RouteComponent() {
 
   const [startDate,] = useState(sevenDaysAgo.toISOString().slice(0, 10));
   const [endDate,] = useState(today.toISOString().slice(0, 10));
+  const [safeMaxBalance, setSafeMaxBalance] = useState<number>(25_000);
+  const [payablesComparisonData, setPayablesComparisonData] = useState([]);
 
   const [showPasswordDialog, setShowPasswordDialog] = useState(false);
   const [hasAccess, setHasAccess] = useState(false);
@@ -383,6 +387,37 @@ function RouteComponent() {
           // Optionally handle other errors here
         }
 
+        // ----------------------------
+        // Safe balance – last 10 days
+        // ----------------------------
+        try {
+          const res = await fetch(`/api/safesheets/site/${encodeURIComponent(site)}/daily-balances?days=10`, {
+            headers: {
+              Authorization: `Bearer ${localStorage.getItem("token")}`,
+              "X-Required-Permission": "dashboard",
+            },
+          });
+
+          if (res.status === 403) {
+            navigate({ to: "/no-access" });
+            return;
+          }
+
+          if (!res.ok) {
+            throw new Error(`Failed to fetch safe balance data: ${res.statusText}`);
+          }
+
+          const json = await res.json();
+          setSafeBalanceRaw(json.data || []);
+        } catch (error) {
+          console.error("Error fetching safe balance data:", error);
+          setSafeBalanceRaw([]);
+        }
+
+        // setSafeMaxBalance(await fetchLocation(site).then(loc => loc.safeMaxBalance || 25_000));
+        setSafeMaxBalance(await fetchLocation(site).then(loc => loc.safeMaxBalance));
+        console.log("Safe max balance for", site, "is", safeMaxBalance);
+
         // ---- Over / Short ----
         try {
           const res = await fetch(
@@ -410,7 +445,33 @@ function RouteComponent() {
           console.error("Error fetching over/short data:", error);
         }
 
-        console.log('dashboard over short data:', overShortData)
+        // ---- Payables Comparison ----
+        try {
+          const res = await fetch(
+            `/api/cash-summary/payables-comparison?site=${encodeURIComponent(site)}`,
+            {
+              headers: {
+                Authorization: `Bearer ${localStorage.getItem("token")}`,
+                "X-Required-Permission": "dashboard",
+              },
+            }
+          );
+
+          if (res.status === 403) {
+            navigate({ to: "/no-access" });
+            return;
+          }
+
+          if (!res.ok) {
+            throw new Error("Failed to fetch payables comparison data");
+          }
+
+          const data = await res.json();
+          setPayablesComparisonData(data);
+        } catch (error) {
+          console.error("Error fetching payables comparison data:", error);
+        }
+         console.log("Payables comparison data:", payablesComparisonData);
 
         // const today = new Date();
         // const end = new Date(today);
@@ -603,7 +664,6 @@ function RouteComponent() {
         setBistroWoWSales(sqlBistroWoWSales);
         setTop10Bistro(sqlTop10Bistro);
 
-        console.log('top 10 bistro:', sqlTop10Bistro)
       } catch (err) {
         console.error("Error fetching dashboard data:", err);
       } finally {
@@ -1088,6 +1148,22 @@ function RouteComponent() {
     unitsPerDay: d.UnitsPerDay,
   }));
 
+
+  const safeBalanceChartData = useMemo(() => {
+    return safeBalanceRaw.map((d) => {
+      const balance = Number(d.endOfDayBalance || 0);
+
+      return {
+        date: d.date,
+        balance,
+        bankDeposit: Number(d.bankDepositTotal || 0),
+
+        // Only safe or over
+        safeBalance: balance <= safeMaxBalance ? balance : null,
+        overBalance: balance > safeMaxBalance ? balance : null,
+      };
+    });
+  }, [safeBalanceRaw]);
 
 
   // ----------------------------
@@ -1631,6 +1707,7 @@ function RouteComponent() {
                     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
                       {/* <OverShortChart data={processOverShortData(overShortData)} /> */}
                       <OverShortSparkline data={processOverShortData(overShortData)} />
+                      <SafeBalanceTrendChart data={safeBalanceChartData} maxBalance={safeMaxBalance} />
                     </div>
                   </section>
                 )}
@@ -1639,8 +1716,8 @@ function RouteComponent() {
                 {/* ======================= */}
                 {/*     Store Activity Section   */}
                 {/* ======================= */}
-                {false && (
-                  // {site !== "Jocko Point" && (
+                {/* {false && ( */}
+                {site !== "Jocko Point" && (
                   <section aria-labelledby="fuel-heading" className="mb-10">
                     <h2 id="fuel-heading" className="text-2xl font-bold mb-4 pl-4">Store Activity Trend</h2>
 

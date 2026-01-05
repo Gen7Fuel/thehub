@@ -143,4 +143,42 @@ SafesheetSchema.statics.computeRunning = function (entries, initialBalance = 0) 
   });
 };
 
+/**
+ * Returns end-of-day balances and bank deposits for last N days
+ */
+SafesheetSchema.methods.getDailyBalances = function (days = 10) {
+  const entries = this.getEntriesWithRunningBalance();
+
+  const dayKey = (d) => {
+    const x = new Date(d);
+    const y = x.getFullYear();
+    const m = String(x.getMonth() + 1).padStart(2, '0');
+    const day = String(x.getDate()).padStart(2, '0');
+    return `${y}-${m}-${day}`;
+  };
+
+  const dailyMap = new Map();
+
+  for (const e of entries) {
+    const key = dayKey(e.date);
+
+    if (!dailyMap.has(key)) {
+      dailyMap.set(key, {
+        date: key,
+        endOfDayBalance: e.cashOnHandSafe,
+        bankDepositTotal: Number(e.cashDepositBank || 0),
+      });
+    } else {
+      const d = dailyMap.get(key);
+      d.endOfDayBalance = e.cashOnHandSafe;
+      d.bankDepositTotal += Number(e.cashDepositBank || 0);
+    }
+  }
+
+  return Array.from(dailyMap.values())
+    .sort((a, b) => a.date.localeCompare(b.date))
+    .slice(-days);
+};
+
+
 module.exports = mongoose.model('Safesheet', SafesheetSchema);

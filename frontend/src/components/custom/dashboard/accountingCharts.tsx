@@ -1,7 +1,7 @@
 import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter } from "@/components/ui/card";
 import {
   ResponsiveContainer, CartesianGrid, XAxis, YAxis, Tooltip,
-  ReferenceLine, LineChart, Line,
+  ReferenceLine, LineChart, AreaChart, Area, Line
 } from "recharts";
 
 // interface OverShortChartItem {
@@ -218,7 +218,7 @@ export function OverShortSparkline({ data }: OverShortSparklineProps) {
   return (
     <Card className="w-full">
       <CardHeader>
-         <CardTitle>Cash Summary Report - Over/Short</CardTitle>
+        <CardTitle>Cash Summary Report - Over/Short</CardTitle>
         <CardDescription>Last 10 days (Trend View)</CardDescription>
       </CardHeader>
 
@@ -283,6 +283,188 @@ export function OverShortSparkline({ data }: OverShortSparklineProps) {
       </CardContent>
       <CardFooter className="text-sm text-muted-foreground">
         Click the dots for more details.
+      </CardFooter>
+    </Card>
+  );
+}
+
+
+function SafeBalanceTooltip({ active, payload, label }: any) {
+  if (!active || !payload?.length) return null;
+
+  const d = payload[0].payload;
+
+  return (
+    <div className="rounded-md border bg-background p-3 shadow-sm text-sm">
+      <div className="font-medium mb-1">{label}</div>
+
+      <div className="text-foreground">
+        Balance: <span className="font-semibold">C$ {d.balance.toLocaleString()}</span>
+      </div>
+
+      {d.bankDeposit > 0 && (
+        <div className="text-green-600 mt-1">
+          Bank Deposit: +C$ {d.bankDeposit.toLocaleString()}
+        </div>
+      )}
+    </div>
+  );
+}
+
+interface SafeBalanceTrendChartProps {
+  data: any[];
+  maxBalance?: number;
+}
+
+export function SafeBalanceTrendChart({
+  data,
+  maxBalance = 25_000,
+}: SafeBalanceTrendChartProps) {
+  const balances = data.map(d => d.balance);
+  const yMin = Math.min(...balances) - 1000;
+  const yMax = Math.max(...balances, maxBalance) + 1000;
+
+  const clamp = (v: number) => Math.min(100, Math.max(0, v));
+
+  /* ------------------ Deposit marker ------------------ */
+  function DepositDot({ cx, cy, payload }: any) {
+    if (!payload?.bankDeposit) return null;
+    return (
+      <circle
+        cx={cx}
+        cy={cy - 4}
+        r={6}
+        fill="#5316a3"
+        stroke="#fff"
+        strokeWidth={2}
+      />
+    );
+  }
+
+  const legendConfig = {
+    max: { label: "Max Suggested Balance", color: "#f00a0aff" },
+    safe: { label: "Balance in Correct Range", color: "rgba(34,197,94,0.25)" },
+    over: { label: "Over Threshold", color: "rgba(220,38,38,0.25)" },
+    deposit: { label: "Bank Deposit", color: "#5316a3" },
+  };
+
+  const maxBalanceExceeded = balances.some(b => b > maxBalance);
+  const maxOffset = maxBalanceExceeded
+    ? clamp(((yMax - maxBalance) / (yMax - yMin)) * 100)
+    : 0; // if nothing exceeds max, red area starts at 0%
+
+
+  return (
+    <Card className="w-full">
+      <CardHeader>
+        <CardTitle>SafeSheet – Cash On Hand Balance</CardTitle>
+        <CardDescription>Last 10 days (End of Day)</CardDescription>
+      </CardHeader>
+
+      <CardContent>
+        <ResponsiveContainer width="100%" maxHeight={220}>
+          <AreaChart data={data}>
+            <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e5e7eb" />
+
+            <XAxis
+              dataKey="date"
+              axisLine={false}
+              tickLine={false}
+              tick={{ fontSize: 11 }}
+              tickFormatter={(v: string) => {
+                const [, month, day] = v.split("-");
+                return `${month}-${day}`;
+              }}
+            />
+
+            <YAxis
+              axisLine={false}
+              tickLine={false}
+              tick={{ fontSize: 11, fill: "#6b7280" }}
+              width={64}
+              domain={[yMin, yMax]}
+              tickFormatter={(v: number) => `C$ ${Math.round(v / 1000)}k`}
+            />
+
+            {/* Max Threshold Reference Line */}
+            <ReferenceLine
+              y={maxBalance}
+              stroke="#f00a0aff"
+              strokeDasharray="3 3"
+              strokeWidth={1}
+              label={{ value: `Max: C$${maxBalance.toLocaleString()}`, position: "right", fontSize: 10 }}
+            />
+
+            <Tooltip content={<SafeBalanceTooltip />} />
+
+            {/* Gradient area: green below max, red above */}
+            <defs>
+              <linearGradient id="safeBalanceGradient" x1="0" y1="0" x2="0" y2="1">
+                {maxBalanceExceeded ? (
+                  <>
+                    {/* Red above max */}
+                    <stop offset="0%" stopColor="rgba(220,38,38,0.25)" />
+                    <stop offset={`${maxOffset}%`} stopColor="rgba(220,38,38,0.25)" />
+                    <stop offset={`${maxOffset}%`} stopColor="rgba(34,197,94,0.25)" />
+                    <stop offset="100%" stopColor="rgba(34,197,94,0.25)" />
+                  </>
+                ) : (
+                  <>
+                    {/* All green if under max */}
+                    <stop offset="0%" stopColor="rgba(34,197,94,0.25)" />
+                    <stop offset="100%" stopColor="rgba(34,197,94,0.25)" />
+                  </>
+                )}
+              </linearGradient>
+            </defs>
+
+
+            {/* Area */}
+            <Area
+              type="monotone"
+              dataKey="balance"
+              stroke="none"
+              fill="url(#safeBalanceGradient)"
+              dot={(props: any) => <DepositDot {...props} />}
+              isAnimationActive
+              animationDuration={600}
+            />
+          </AreaChart>
+        </ResponsiveContainer>
+
+        {/* ------------------ Legend ------------------ */}
+        <div className="flex flex-wrap items-center justify-center gap-4 pt-3">
+          {(Object.keys(legendConfig) as Array<keyof typeof legendConfig>).map((key) => (
+            <div key={key} className="flex items-center gap-1.5">
+              {/* Purple dot for deposit, rectangles for areas/line */}
+              {key === "deposit" ? (
+                <div
+                  className="h-2 w-2 shrink-0 rounded-full" // circle
+                  style={{ backgroundColor: legendConfig[key].color }}
+                />
+              ) : key === "max" ? (
+                // Dotted line for max threshold
+                <div
+                  className="h-0.5 w-2 shrink-0 border-b-2 border-dotted"
+                  style={{ borderColor: legendConfig[key].color }}
+                />
+              ) : (
+                <div
+                  className="h-2 w-2 shrink-0 rounded-[2px]" // rectangle
+                  style={{ backgroundColor: legendConfig[key].color }}
+                />
+              )}
+              <span className="text-sm font-medium text-black">
+                {legendConfig[key].label}
+              </span>
+            </div>
+          ))}
+        </div>
+
+      </CardContent>
+
+      <CardFooter className="text-sm text-muted-foreground">
+        End-of-day safe balance with threshold.
       </CardFooter>
     </Card>
   );

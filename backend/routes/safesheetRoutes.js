@@ -153,6 +153,33 @@ router.get('/site/:site/current', async (req, res) => {
 });
 
 /**
+ * Get running Cash On Hand (Safe) for a site for N Days
+ * GET /api/safesheets/site/:site/daily-balances
+ * Response: { data: array of { date: string, cashOnHandSafe: number, totalDepositBank: number } }
+ */
+router.get('/site/:site/daily-balances', async (req, res) => {
+  try {
+    const { site } = req.params;
+    const days = Number(req.query.days || 10);
+    console.log('[SAFE BALANCE]', site);
+
+    const sheet = await Safesheet.findOne({ site });
+    if (!sheet) {
+      console.log('No safesheet found');
+      return res.status(404).json({ error: 'Safesheet not found for site' });
+    }
+
+    const data = sheet.getDailyBalances(days);
+    console.log('[SAFE BALANCE] data:', data);
+
+    return res.json({ data });
+  } catch (err) {
+    return res.status(500).json({ error: err.message });
+  }
+});
+
+
+/**
  * Update a specific entry by its _id
  * PUT /api/safesheets/site/:site/entries/:entryId
  * body: { description?, cashIn?, cashExpenseOut?, cashDepositBank? }

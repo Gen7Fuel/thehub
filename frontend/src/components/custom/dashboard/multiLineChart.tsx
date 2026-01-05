@@ -165,7 +165,7 @@ export function TransactionsLineChart({
     <Card>
       <CardHeader>
         <CardTitle>Store Activity Trend (Daily)</CardTitle>
-        <CardDescription>Total Transactions, Visits and Avg Basket Size by Day</CardDescription>
+        <CardDescription>Total Transactions and Avg Basket Size by Day</CardDescription>
       </CardHeader>                      
 
       <CardContent>
@@ -231,6 +231,7 @@ export function TransactionsLineChart({
             {/* Line Charts */}
             {config
               .filter((c) => c.dataKey !== "avgBasket")
+              .filter((c) => c.dataKey !== "visits")
               .map((c) => (
                 <Line
                   key={c.dataKey}
@@ -257,7 +258,7 @@ export function TransactionsLineChart({
             className
           )}
         >
-          {config.map((c) => (
+          {config.filter((c) => c.dataKey !== "visits").map((c) => (
             <div
               key={c.dataKey}
               className="flex items-center gap-1.5 [&>div]:h-2 [&>div]:w-2 [&>div]:rounded-[2px]"

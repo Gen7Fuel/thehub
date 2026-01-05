@@ -18,6 +18,7 @@ const locationSchema = new mongoose.Schema({
   // Indicates whether this site sells lottery tickets and therefore requires
   // a lottery reconciliation to be provided when submitting daily reports.
   sellsLottery: { type: Boolean, default: false },
+  safeMaxBalance: { type: Number, default: 25000 }, // Maximum safe balance for the location
 });
 
 // Export the Location model based on the schema

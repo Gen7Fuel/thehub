@@ -2,6 +2,8 @@ const express = require('express')
 const { CashSummary, CashSummaryReport } = require('../models/CashSummaryNew')
 const Safesheet = require('../models/Safesheet')
 const LotteryModule = require('../models/Lottery')
+const Location = require('../models/Location')
+const Payable = require('../models/Payables');
 const Lottery = LotteryModule?.Lottery || LotteryModule?.default || LotteryModule
 const { parseSftReport } = require('../utils/parseSftReport')
 const { dateFromYMDLocal } = require('../utils/dateUtils')
@@ -225,6 +227,117 @@ router.get('/over-short', async (req, res) => {
   } catch (err) {
     console.error('Over/Short report error:', err)
     res.status(500).json({ error: 'Failed to fetch over/short data' })
+  }
+})
+
+// for payout comparision on dashboard
+router.get('/payables-comparison', async (req, res) => {
+  try {
+    const { site } = req.query
+    if (!site) {
+      return res.status(400).json({ error: 'site is required' })
+    }
+
+    // 1️⃣ Date range: past 10 days (normalized)
+    const end = new Date()
+    end.setHours(0, 0, 0, 0)
+
+    const start = new Date(end)
+    start.setDate(start.getDate() - 10)
+
+    // 2️⃣ Fetch submitted reports for site
+    const reports = await CashSummaryReport.find({
+      site,
+      submitted: true,
+      date: { $gte: start, $lte: end },
+    })
+      .sort({ date: 1 })
+      .lean()
+
+    if (!reports.length) {
+      return res.json([])
+    }
+
+    // 3️⃣ Build day ranges for querying shifts & payables
+    const dayRanges = reports.map(r => ({
+      start: r.date,
+      end: new Date(r.date.getTime() + 24 * 60 * 60 * 1000),
+    }))
+
+    // 4️⃣ Fetch POS shifts (CashSummary)
+    const shifts = await CashSummary.find({
+      site,
+      $or: dayRanges.map(r => ({
+        date: { $gte: r.start, $lt: r.end },
+      })),
+    }).lean()
+
+    // 5️⃣ Fetch internal payables
+    // 1️⃣ Get location for site (1:1 mapping)
+    const location = await Location.findOne({ site }, { _id: 1 }).lean()
+
+    if (!location) {
+      return res.json([]) // or throw error if this should never happen
+    }
+
+    // 2️⃣ Fetch internal till payables for that location
+    const payables = await Payable.find({
+      location: location._id,
+      paymentMethod: 'till',
+      createdAt: {
+        $gte: start,
+        $lt: new Date(end.getTime() + 24 * 60 * 60 * 1000),
+      },
+    }).lean()
+
+
+    // 6️⃣ Aggregate POS payouts by date
+    const posByDate = {}
+    for (const shift of shifts) {
+      const d = new Date(shift.date)
+      d.setHours(0, 0, 0, 0)
+      const key = d.toISOString()
+
+      if (!posByDate[key]) posByDate[key] = 0
+      posByDate[key] += shift.payouts || 0
+    }
+
+    // 7️⃣ Aggregate internal payables by date (TILL ONLY)
+    const internalByDate = {}
+
+    for (const p of payables) {
+      if (p.paymentMethod !== 'till') continue
+
+      const d = new Date(p.createdAt)
+      d.setHours(0, 0, 0, 0)
+      const key = d.toISOString()
+
+      if (!internalByDate[key]) {
+        internalByDate[key] = 0
+      }
+
+      internalByDate[key] += p.amount || 0
+    }
+
+    // 8️⃣ Build final chart data
+    const data = reports.map(r => {
+      const key = r.date.toISOString()
+
+      const posPayout = posByDate[key] || 0
+      const internalPayout = internalByDate[key] || 0
+
+      return {
+        date: r.date.toISOString().slice(0, 10), // YYYY-MM-DD
+        posPayout,
+        internalPayout,
+        difference: internalPayout - posPayout,
+      }
+    })
+
+    res.json(data)
+  } catch (err) {
+    console.error('Payables comparison error:', err)
+    res.status(500).json({ error: 'Failed to fetch payables comparison data' })
   }
 })
 
