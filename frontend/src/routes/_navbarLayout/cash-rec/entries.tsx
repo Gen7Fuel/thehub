@@ -68,6 +68,7 @@ type CashSummaryTotals = {
   totalPos: number
   arIncurred: number
   grandTotal: number
+  missedCpl?: number
   couponsAccepted: number
   canadianCash: number
   cashOnHand: number
@@ -297,7 +298,7 @@ function RouteComponent() {
                       (data?.cashSummary?.totals.totalPos ?? 0) +
                       (data?.cashSummary?.totals.report_canadian_cash ?? 0) +
                       (data?.cashSummary?.totals.couponsAccepted ?? 0) +
-                      (data?.cashSummary?.totals.payouts ?? 0) +
+                      (data?.cashSummary?.totals.payouts ?? 0) -
                       // (data?.cashSummary?.totals.cpl_bulloch ?? 0) -
                       (data?.cashSummary?.totals.totalSales ?? 0) +
                       (data?.totalReceivablesAmount ?? 0)

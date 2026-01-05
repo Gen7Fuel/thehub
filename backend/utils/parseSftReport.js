@@ -112,6 +112,9 @@ function parseSftReport(text) {
     arIncurred: pickNum(/^\s*A\/R incurred\s+([-\d.,]+)\s*$/mi, text),
     grandTotal: pickNum(/^\s*Total\s+([-\d.,]+)\s*$/mi, text),
 
+    // Native cpl miss -> missedCpl (placed above couponsAccepted)
+    missedCpl: pickNum(/^\s*Native\s*cpl\s*miss\s+([-\d.,]+)\s*$/mi, text),
+
     couponsAccepted: pickNum(/^\s*Coupons Accepted\s+([-\d.,]+)\s*$/mi, text),
     canadianCash: pickNum(/^\s*Canadian Cash\s+([-\d.,]+)\s*$/mi, text),
     cashOnHand: pickNum(/^\s*Cash On Hand\s+([-\d.,]+)\s*$/mi, text),
