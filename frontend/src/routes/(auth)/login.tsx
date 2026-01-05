@@ -34,7 +34,8 @@ function RouteComponent() {
     setError(null)
 
     try {
-      const response = await axios.post(`${domain}/api/auth/login`, { email, password })
+      const inputEmail = email.trim().toLowerCase()
+      const response = await axios.post(`${domain}/api/auth/login`, { email: inputEmail, password })
       const { token } = response.data
       // Save token to localStorage
       localStorage.setItem('token', token)
