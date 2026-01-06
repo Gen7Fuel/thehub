@@ -73,38 +73,88 @@ router.post("/", async (req, res) => {
 });
 
 // Update a purchase order
-router.put("/:id", async (req, res) => {
-  const { id } = req.params;
-  const { fleetCardNumber, date, quantity, amount, signature, productCode, stationName, source, customerID } = req.body;
-
+router.put("/:id", express.json(), async (req, res) => {
   try {
-    const updatedOrder = await Transaction.findByIdAndUpdate(
-      id,
-      {
-        fleetCardNumber,
-        date,
-        quantity,
-        amount,
-        signature,
-        productCode,
-        stationName,
-        source,
-        customerID,
-        receipt
-      },
-      { new: true }
-    );
+    const { id } = req.params
 
-    if (!updatedOrder) {
-      return res.status(404).json({ message: "Purchase order not found." });
+    // Only allow these fields to be updated
+    const allowed = [
+      'fleetCardNumber',
+      'poNumber',
+      'date',
+      'quantity',
+      'amount',
+      'signature',
+      'productCode',
+      'stationName',
+      'source',
+      'customerID',
+      'receipt',
+      'customerName',
+      'driverName',
+      'vehicleInfo',
+      'vehicleMakeModel',
+    ]
+
+    const updates = {}
+    for (const key of allowed) {
+      if (Object.prototype.hasOwnProperty.call(req.body, key) && req.body[key] !== undefined) {
+        updates[key] = req.body[key]
+      }
     }
 
-    res.status(200).json(updatedOrder);
+    if (Object.keys(updates).length === 0) {
+      return res.status(400).json({ message: "No valid fields to update." })
+    }
+
+    const updatedOrder = await Transaction.findByIdAndUpdate(
+      id,
+      { $set: updates },
+      { new: true, runValidators: true }
+    )
+
+    if (!updatedOrder) {
+      return res.status(404).json({ message: "Purchase order not found." })
+    }
+
+    return res.status(200).json(updatedOrder)
   } catch (err) {
-    console.error(err);
-    res.status(500).json({ message: "Failed to update purchase order." });
+    console.error('PUT /api/purchase-orders/:id failed:', err)
+    return res.status(500).json({ message: "Failed to update purchase order." })
   }
-});
+})
+// router.put("/:id", async (req, res) => {
+//   const { id } = req.params;
+//   const { fleetCardNumber, date, quantity, amount, signature, productCode, stationName, source, customerID } = req.body;
+
+//   try {
+//     const updatedOrder = await Transaction.findByIdAndUpdate(
+//       id,
+//       {
+//         fleetCardNumber,
+//         date,
+//         quantity,
+//         amount,
+//         signature,
+//         productCode,
+//         stationName,
+//         source,
+//         customerID,
+//         receipt
+//       },
+//       { new: true }
+//     );
+
+//     if (!updatedOrder) {
+//       return res.status(404).json({ message: "Purchase order not found." });
+//     }
+
+//     res.status(200).json(updatedOrder);
+//   } catch (err) {
+//     console.error(err);
+//     res.status(500).json({ message: "Failed to update purchase order." });
+//   }
+// });
 
 // Get all purchase orders with optional date and location filters
 // router.get("/", async (req, res) => {
