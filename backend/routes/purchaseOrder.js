@@ -107,6 +107,48 @@ router.put("/:id", express.json(), async (req, res) => {
       return res.status(400).json({ message: "No valid fields to update." })
     }
 
+    // If changing date, preserve original UTC time for PO
+    if (Object.prototype.hasOwnProperty.call(updates, 'date')) {
+      const existing = await Transaction.findById(id).select('date source')
+      if (!existing) {
+        return res.status(404).json({ message: "Purchase order not found." })
+      }
+
+      // Parse incoming new date (accepts 'YYYY-MM-DD' or ISO string)
+      const raw = updates.date
+      let newDateParsed
+      if (typeof raw === 'string') {
+        if (/^\d{4}-\d{2}-\d{2}$/.test(raw)) {
+          newDateParsed = new Date(`${raw}T00:00:00Z`)
+        } else {
+          newDateParsed = new Date(raw)
+        }
+      } else {
+        newDateParsed = new Date(raw)
+      }
+      if (Number.isNaN(newDateParsed.getTime())) {
+        return res.status(400).json({ message: "Invalid date format." })
+      }
+
+      // For PO only: keep original UTC time component
+      if (existing.source === 'PO' && existing.date instanceof Date && !Number.isNaN(existing.date.getTime())) {
+        const h = existing.date.getUTCHours()
+        const m = existing.date.getUTCMinutes()
+        const s = existing.date.getUTCSeconds()
+        const ms = existing.date.getUTCMilliseconds()
+        const combined = new Date(Date.UTC(
+          newDateParsed.getUTCFullYear(),
+          newDateParsed.getUTCMonth(),
+          newDateParsed.getUTCDate(),
+          h, m, s, ms
+        ))
+        updates.date = combined
+      } else {
+        // Non-PO or missing original time: just use parsed new date
+        updates.date = newDateParsed
+      }
+    }
+
     const updatedOrder = await Transaction.findByIdAndUpdate(
       id,
       { $set: updates },
