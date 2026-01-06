@@ -11,7 +11,7 @@ import { Button } from '@/components/ui/button'
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog'
 import { Label } from '@/components/ui/label'
 import { getStartAndEndOfToday } from '@/lib/utils'
-import { toZonedTime } from 'date-fns-tz'
+import { DateTime } from 'luxon'
 import axios from "axios"
 import { useAuth } from "@/context/AuthContext";
 import { formatFleetCardNumber } from '@/lib/utils';
@@ -55,17 +55,23 @@ function RouteComponent() {
     console.log('fetchPurchaseOrders called with:', date, stationName);
     if (!date?.from || !date?.to || !stationName) return;
 
-    // Convert dates to the selected timezone before sending to API
-    const startDateInTimezone = toZonedTime(date.from, timezone);
-    const endDateInTimezone = toZonedTime(date.to, timezone);
+    // Convert day boundaries in station timezone -> UTC instants
+    const toYmd = (d: Date) => {
+      const y = d.getFullYear()
+      const m = String(d.getMonth() + 1).padStart(2, '0')
+      const day = String(d.getDate()).padStart(2, '0')
+      return `${y}-${m}-${day}`
+    }
+    const startUtc = DateTime.fromISO(`${toYmd(date.from)}T00:00:00`, { zone: timezone }).toUTC().toJSDate()
+    const endUtc = DateTime.fromISO(`${toYmd(date.to)}T00:00:00`, { zone: timezone }).toUTC().toJSDate()
 
     try {
       // add authorization header with bearer token
       const response = await axios.get(
         `/api/purchase-orders`, {
           params: {
-            startDate: startDateInTimezone.toISOString(),
-            endDate: endDateInTimezone.toISOString(),
+            startDate: startUtc.toISOString(),
+            endDate: endUtc.toISOString(),
             stationName
           },
           headers: {
@@ -153,13 +159,9 @@ function RouteComponent() {
   const saveNewDate = async () => {
     if (!selectedOrder || !newDate) return
     try {
-      const base = new Date(`${newDate}T00:00:00`)
-      const zoned = toZonedTime(base, timezone)
-      const iso = zoned.toISOString()
-
-      await axios.put(
+      const res = await axios.put(
         `/api/purchase-orders/${selectedOrder._id}`,
-        { date: iso },
+        { date: newDate },
         {
           headers: {
             Authorization: `Bearer ${localStorage.getItem('token')}`,
@@ -167,8 +169,8 @@ function RouteComponent() {
           },
         }
       )
-
-      setPurchaseOrders(prev => prev.map(o => (o as any)._id === selectedOrder._id ? { ...o, date: iso } : o))
+      const updated = res.data
+      setPurchaseOrders(prev => prev.map(o => (o as any)._id === selectedOrder._id ? { ...o, date: updated.date } : o))
 
       setChangeDateOpen(false)
       setSelectedOrder(null)
