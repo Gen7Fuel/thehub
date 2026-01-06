@@ -1,7 +1,9 @@
 const express = require('express');
 const router = express.Router();
+const mongoose = require('mongoose');
 const Payable = require('../models/Payables');
 const Safesheet = require('../models/Safesheet');
+const { logAction } = require('../middleware/actionLogger');
 
 // GET all payables
 router.get('/', async (req, res) => {
@@ -111,11 +113,33 @@ router.post('/', async (req, res) => {
       }
     }
     
+    // Audit log (success)
+    try {
+      await logAction(req, {
+        action: 'create',
+        resourceType: 'payable',
+        resourceId: populatedPayable._id,
+        success: true,
+        statusCode: 201,
+        message: `Payable created: ${populatedPayable.vendorName}`,
+        after: {
+          vendorName: populatedPayable.vendorName,
+          amount: populatedPayable.amount,
+          paymentMethod: populatedPayable.paymentMethod,
+          location: populatedPayable.location?._id?.toString() || populatedPayable.location?.toString(),
+        },
+      });
+    } catch (e) {
+      // do not block response
+    }
+
     res.status(201).json(populatedPayable);
   } catch (error) {
     if (error.name === 'ValidationError') {
+      try { await logAction(req, { action: 'create', resourceType: 'payable', success: false, statusCode: 400, message: error.message }); } catch (_) {}
       return res.status(400).json({ error: error.message });
     }
+    try { await logAction(req, { action: 'create', resourceType: 'payable', success: false, statusCode: 500, message: error.message }); } catch (_) {}
     res.status(500).json({ error: error.message });
   }
 });
@@ -138,6 +162,8 @@ router.put('/:id', async (req, res) => {
     if (amount !== undefined) updateData.amount = amount;
     if (images !== undefined) updateData.images = images;
     
+    const before = await Payable.findById(req.params.id).lean();
+
     const payable = await Payable.findByIdAndUpdate(
       req.params.id,
       updateData,
@@ -147,12 +173,37 @@ router.put('/:id', async (req, res) => {
     if (!payable) {
       return res.status(404).json({ error: 'Payable not found' });
     }
-    
+    // Audit log (success)
+    try {
+      await logAction(req, {
+        action: 'update',
+        resourceType: 'payable',
+        resourceId: payable._id,
+        success: true,
+        statusCode: 200,
+        message: `Payable updated: ${payable.vendorName}`,
+        before: before ? {
+          vendorName: before.vendorName,
+          amount: before.amount,
+          paymentMethod: before.paymentMethod,
+          location: before.location?.toString(),
+        } : undefined,
+        after: {
+          vendorName: payable.vendorName,
+          amount: payable.amount,
+          paymentMethod: payable.paymentMethod,
+          location: payable.location?._id?.toString() || payable.location?.toString(),
+        },
+      });
+    } catch (e) {}
+
     res.json(payable);
   } catch (error) {
     if (error.name === 'ValidationError') {
+      try { await logAction(req, { action: 'update', resourceType: 'payable', resourceId: req.params.id, success: false, statusCode: 400, message: error.message }); } catch (_) {}
       return res.status(400).json({ error: error.message });
     }
+    try { await logAction(req, { action: 'update', resourceType: 'payable', resourceId: req.params.id, success: false, statusCode: 500, message: error.message }); } catch (_) {}
     res.status(500).json({ error: error.message });
   }
 });
@@ -165,9 +216,27 @@ router.delete('/:id', async (req, res) => {
     if (!payable) {
       return res.status(404).json({ error: 'Payable not found' });
     }
-    
+    // Audit log (success)
+    try {
+      await logAction(req, {
+        action: 'delete',
+        resourceType: 'payable',
+        resourceId: payable._id,
+        success: true,
+        statusCode: 200,
+        message: `Payable deleted: ${payable.vendorName}`,
+        before: {
+          vendorName: payable.vendorName,
+          amount: payable.amount,
+          paymentMethod: payable.paymentMethod,
+          location: payable.location?.toString(),
+        },
+      });
+    } catch (e) {}
+
     res.json({ message: 'Payable deleted successfully', deletedPayable: payable });
   } catch (error) {
+    try { await logAction(req, { action: 'delete', resourceType: 'payable', resourceId: req.params.id, success: false, statusCode: 500, message: error.message }); } catch (_) {}
     res.status(500).json({ error: error.message });
   }
 });
