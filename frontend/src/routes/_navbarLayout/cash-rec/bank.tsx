@@ -7,6 +7,8 @@ type ParsedTtx = {
   nightDeposit?: number
   transferTo?: number
   miscDebits: { date: string; description: string; amount: number }[]
+  // NEW: capture miscellaneous credits
+  miscCredits?: { date: string; description: string; amount: number }[]
   endingBalance?: number
   statementDate?: string // YYYY-MM-DD
   accountName?: string // raw Account Name (legalName)
@@ -60,7 +62,7 @@ function parseTtx(text: string): ParsedTtx {
   const balanceIdx = idx('Balance')
   const acctNameIdx = idx('Account Name')
 
-  const out: ParsedTtx = { miscDebits: [] }
+  const out: ParsedTtx = { miscDebits: [], miscCredits: [] }
   let lastBalance: number | undefined
   let latestDate: string | undefined
 
@@ -92,6 +94,10 @@ function parseTtx(text: string): ParsedTtx {
       if (descLower.includes('transfer to')) out.transferTo = (out.transferTo ?? 0) + debits
       if (descLower.includes('misc debit')) {
         out.miscDebits.push({ date: dateStr || '', description, amount: debits })
+      }
+      // NEW: capture miscellaneous credit entries
+      if (descLower.includes('misc credit') || descLower.includes('miscellaneous credit')) {
+        out.miscCredits!.push({ date: dateStr || '', description, amount: credits })
       }
     }
   }
@@ -240,6 +246,8 @@ function RouteComponent() {
       transferTo: parsed.transferTo ?? 0,
       endingBalance: parsed.endingBalance ?? 0,
       miscDebits: parsed.miscDebits ?? [],
+      // NEW: include miscCredits when uploading
+      miscCredits: parsed.miscCredits ?? [],
     }
     try {
       const res = await fetch('/api/cash-rec/bank-statement', {
@@ -325,6 +333,23 @@ function RouteComponent() {
               ) : (
                 <ul className="space-y-1">
                   {parsed.miscDebits.map((m, i) => (
+                    <li key={i} className="text-sm">
+                      <span className="mr-2">{m.date || '-'}</span>
+                      <span className="mr-2">{m.description}</span>
+                      <span className="font-mono">{m.amount}</span>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </div>
+            {/* NEW: Misc Credits list */}
+            <div className="sm:col-span-2 border rounded p-3">
+              <div className="font-semibold mb-2">Misc Credits (Credits column)</div>
+              {(parsed.miscCredits?.length ?? 0) === 0 ? (
+                <div className="text-sm text-muted-foreground">None found</div>
+              ) : (
+                <ul className="space-y-1">
+                  {parsed.miscCredits!.map((m, i) => (
                     <li key={i} className="text-sm">
                       <span className="mr-2">{m.date || '-'}</span>
                       <span className="mr-2">{m.description}</span>

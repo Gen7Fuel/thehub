@@ -68,6 +68,7 @@ type CashSummaryTotals = {
   totalPos: number
   arIncurred: number
   grandTotal: number
+  missedCpl?: number
   couponsAccepted: number
   canadianCash: number
   cashOnHand: number
@@ -292,12 +293,19 @@ function RouteComponent() {
 
                     <td className="px-2 py-2 text-right">{fmt2(data?.bank?.endingBalance)}</td>
                     <td className="px-2 py-2"></td>
-                    <td className="px-2 py-2"></td>
+                    <td className="px-2 py-2">
+                      {fmt2(
+                        (data?.cashSummary?.totals.canadian_cash_collected ?? 0) -
+                        (data?.cashSummary?.totals.report_canadian_cash ?? 0) +
+                        (data?.cashSummary?.handheldDebit ?? 0) +
+                        (data?.cashSummary?.unsettledPrepays ?? 0)
+                      )}
+                    </td>
                     <td className="px-2 py-2 text-right">{fmt2(
                       (data?.cashSummary?.totals.totalPos ?? 0) +
                       (data?.cashSummary?.totals.report_canadian_cash ?? 0) +
                       (data?.cashSummary?.totals.couponsAccepted ?? 0) +
-                      (data?.cashSummary?.totals.payouts ?? 0) +
+                      (data?.cashSummary?.totals.payouts ?? 0) -
                       // (data?.cashSummary?.totals.cpl_bulloch ?? 0) -
                       (data?.cashSummary?.totals.totalSales ?? 0) +
                       (data?.totalReceivablesAmount ?? 0)

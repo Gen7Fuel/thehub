@@ -67,6 +67,8 @@ const BankStatementSchema = new mongoose.Schema(
     transferTo: { type: Number },
     endingBalance: { type: Number },
     miscDebits: { type: [MiscDebitSchema], default: [] },
+    // NEW: store miscellaneous credits
+    miscCredits: { type: [MiscDebitSchema], default: [] },
   },
   { timestamps: true }
 )
@@ -91,6 +93,8 @@ BankStatementSchema.statics.fromParsed = function (payload = {}) {
     transferTo,
     endingBalance,
     miscDebits = [],
+    // NEW: accept miscCredits
+    miscCredits = [],
   } = payload
 
   return new this({
@@ -102,6 +106,13 @@ BankStatementSchema.statics.fromParsed = function (payload = {}) {
     endingBalance,
     miscDebits: Array.isArray(miscDebits)
       ? miscDebits.map((m) => ({
+          date: toYmd(m?.date),
+          description: String(m?.description || ''),
+          amount: Number(m?.amount) || 0,
+        }))
+      : [],
+    miscCredits: Array.isArray(miscCredits)
+      ? miscCredits.map((m) => ({
           date: toYmd(m?.date),
           description: String(m?.description || ''),
           amount: Number(m?.amount) || 0,

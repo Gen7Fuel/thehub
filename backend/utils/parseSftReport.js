@@ -104,13 +104,18 @@ function parseSftReport(text) {
 
     afdCredit: pickNum(/^\s*AFD Credit\s+([-\d.,]+)\s*$/mi, text),
     afdDebit: pickNum(/^\s*AFD Debit\s+([-\d.,]+)\s*$/mi, text),
-    afdGiftCard: pickNum(/^\s*AFD\s*Gift\s*Card\s*[:\-]?\s*\$?\s*([-\d.,]+)\s*$/mi, text),
+    // afdGiftCard: pickNum(/^\s*AFD\s*Gift\s*Card\s*[:\-]?\s*\$?\s*([-\d.,]+)\s*$/mi, text),
+    afdGiftCard: pickNum(/^\s*AFD Gift Card\s+([-\d.,]+)\s*$/mi, text),
     kioskCredit: pickNum(/^\s*Kiosk Credit\s+([-\d.,]+)\s*$/mi, text),
     kioskDebit: pickNum(/^\s*Kiosk Debit\s+([-\d.,]+)\s*$/mi, text),
     kioskGiftCard: pickNum(/^\s*Kiosk Gift Card\s+([-\d.,]+)\s*$/mi, text),
     totalPos: pickNum(/^\s*Total POS\s+([-\d.,]+)\s*$/mi, text),
     arIncurred: pickNum(/^\s*A\/R incurred\s+([-\d.,]+)\s*$/mi, text),
     grandTotal: pickNum(/^\s*Total\s+([-\d.,]+)\s*$/mi, text),
+
+    // Native cpl miss -> missedCpl (placed above couponsAccepted)
+    // missedCpl: pickNum(/^\s*Native\s*cpl\s*miss\s+([-\d.,]+)\s*$/mi, text),
+    missedCpl: pickNum(/^\s*Native cpl miss\s+([-\d.,]+)\s*$/mi, text),
 
     couponsAccepted: pickNum(/^\s*Coupons Accepted\s+([-\d.,]+)\s*$/mi, text),
     canadianCash: pickNum(/^\s*Canadian Cash\s+([-\d.,]+)\s*$/mi, text),

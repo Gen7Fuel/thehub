@@ -73,38 +73,130 @@ router.post("/", async (req, res) => {
 });
 
 // Update a purchase order
-router.put("/:id", async (req, res) => {
-  const { id } = req.params;
-  const { fleetCardNumber, date, quantity, amount, signature, productCode, stationName, source, customerID } = req.body;
-
+router.put("/:id", express.json(), async (req, res) => {
   try {
-    const updatedOrder = await Transaction.findByIdAndUpdate(
-      id,
-      {
-        fleetCardNumber,
-        date,
-        quantity,
-        amount,
-        signature,
-        productCode,
-        stationName,
-        source,
-        customerID,
-        receipt
-      },
-      { new: true }
-    );
+    const { id } = req.params
 
-    if (!updatedOrder) {
-      return res.status(404).json({ message: "Purchase order not found." });
+    // Only allow these fields to be updated
+    const allowed = [
+      'fleetCardNumber',
+      'poNumber',
+      'date',
+      'quantity',
+      'amount',
+      'signature',
+      'productCode',
+      'stationName',
+      'source',
+      'customerID',
+      'receipt',
+      'customerName',
+      'driverName',
+      'vehicleInfo',
+      'vehicleMakeModel',
+    ]
+
+    const updates = {}
+    for (const key of allowed) {
+      if (Object.prototype.hasOwnProperty.call(req.body, key) && req.body[key] !== undefined) {
+        updates[key] = req.body[key]
+      }
     }
 
-    res.status(200).json(updatedOrder);
+    if (Object.keys(updates).length === 0) {
+      return res.status(400).json({ message: "No valid fields to update." })
+    }
+
+    // If changing date, preserve original UTC time for PO
+    if (Object.prototype.hasOwnProperty.call(updates, 'date')) {
+      const existing = await Transaction.findById(id).select('date source')
+      if (!existing) {
+        return res.status(404).json({ message: "Purchase order not found." })
+      }
+
+      // Parse incoming new date (accepts 'YYYY-MM-DD' or ISO string)
+      const raw = updates.date
+      let newDateParsed
+      if (typeof raw === 'string') {
+        if (/^\d{4}-\d{2}-\d{2}$/.test(raw)) {
+          newDateParsed = new Date(`${raw}T00:00:00Z`)
+        } else {
+          newDateParsed = new Date(raw)
+        }
+      } else {
+        newDateParsed = new Date(raw)
+      }
+      if (Number.isNaN(newDateParsed.getTime())) {
+        return res.status(400).json({ message: "Invalid date format." })
+      }
+
+      // For PO only: keep original UTC time component
+      if (existing.source === 'PO' && existing.date instanceof Date && !Number.isNaN(existing.date.getTime())) {
+        const h = existing.date.getUTCHours()
+        const m = existing.date.getUTCMinutes()
+        const s = existing.date.getUTCSeconds()
+        const ms = existing.date.getUTCMilliseconds()
+        const combined = new Date(Date.UTC(
+          newDateParsed.getUTCFullYear(),
+          newDateParsed.getUTCMonth(),
+          newDateParsed.getUTCDate(),
+          h, m, s, ms
+        ))
+        updates.date = combined
+      } else {
+        // Non-PO or missing original time: just use parsed new date
+        updates.date = newDateParsed
+      }
+    }
+
+    const updatedOrder = await Transaction.findByIdAndUpdate(
+      id,
+      { $set: updates },
+      { new: true, runValidators: true }
+    )
+
+    if (!updatedOrder) {
+      return res.status(404).json({ message: "Purchase order not found." })
+    }
+
+    return res.status(200).json(updatedOrder)
   } catch (err) {
-    console.error(err);
-    res.status(500).json({ message: "Failed to update purchase order." });
+    console.error('PUT /api/purchase-orders/:id failed:', err)
+    return res.status(500).json({ message: "Failed to update purchase order." })
   }
-});
+})
+// router.put("/:id", async (req, res) => {
+//   const { id } = req.params;
+//   const { fleetCardNumber, date, quantity, amount, signature, productCode, stationName, source, customerID } = req.body;
+
+//   try {
+//     const updatedOrder = await Transaction.findByIdAndUpdate(
+//       id,
+//       {
+//         fleetCardNumber,
+//         date,
+//         quantity,
+//         amount,
+//         signature,
+//         productCode,
+//         stationName,
+//         source,
+//         customerID,
+//         receipt
+//       },
+//       { new: true }
+//     );
+
+//     if (!updatedOrder) {
+//       return res.status(404).json({ message: "Purchase order not found." });
+//     }
+
+//     res.status(200).json(updatedOrder);
+//   } catch (err) {
+//     console.error(err);
+//     res.status(500).json({ message: "Failed to update purchase order." });
+//   }
+// });
 
 // Get all purchase orders with optional date and location filters
 // router.get("/", async (req, res) => {
