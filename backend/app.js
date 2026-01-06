@@ -4,6 +4,7 @@ const cors = require("cors");
 const connectDB = require("./config/db");
 const http = require("http");
 const { Server } = require("socket.io");
+const requestId = require("./middleware/requestId");
 
 //BullMQ for background email processing running
 require("./queues/emailQueue"); // Just runs the worker
@@ -37,6 +38,7 @@ const sftpRoutes = require("./routes/sftpRoutes");
 const cashRecRoutes = require("./routes/cashRecRoutes");
 const fuelRecRoutes = require("./routes/fuelRecRoutes");
 const productCategoryRoutes = require("./routes/productCategoryRoutes");
+const logsRoute = require("./routes/logsRoute");
 
 const { auth } = require("./middleware/authMiddleware");
 // const { authSocket } = require("./middleware/authMiddleware");
@@ -56,6 +58,7 @@ const server = http.createServer(app);
 
 app.use(cors());
 app.use(express.json({ limit: '200mb' }));
+app.use(requestId());
 
 // Health check
 app.get('/api/health', (req, res) => res.send('OK'));
@@ -87,6 +90,7 @@ app.use("/api/audit/select-templates", selectTemplateRoutes);
 app.use("/api/audit", auditRoutes);
 app.use("/api/permissions", permissionRoutes);
 app.use("/api/roles", roleRoutes);
+app.use("/api/logs", logsRoute);
 
 // Reporting
 app.use("/api/sales-summary", salesSummaryRoutes);
