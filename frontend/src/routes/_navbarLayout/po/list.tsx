@@ -8,6 +8,8 @@ import { LocationPicker } from '@/components/custom/locationPicker'
 import PurchaseOrderPDF from '@/components/custom/poForm'
 import { pdf } from '@react-pdf/renderer'
 import { Button } from '@/components/ui/button'
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog'
+import { Label } from '@/components/ui/label'
 import { getStartAndEndOfToday } from '@/lib/utils'
 import { toZonedTime } from 'date-fns-tz'
 import axios from "axios"
@@ -34,6 +36,7 @@ function RouteComponent() {
   const [timezone, setTimezone] = React.useState<string>(user?.timezone || "America/Toronto");
   const [purchaseOrders, setPurchaseOrders] = React.useState<
     {
+    _id?: string;
     date: string;
     fleetCardNumber: string;
     customerName: string;
@@ -128,6 +131,54 @@ function RouteComponent() {
   // const access = user?.access || '{}' //markpoint
   const access = user?.access || {}
 
+  // Change Date dialog state
+  const [changeDateOpen, setChangeDateOpen] = React.useState(false)
+  const [selectedOrder, setSelectedOrder] = React.useState<any | null>(null)
+  const [newDate, setNewDate] = React.useState<string>('')
+
+  const toYmd = (d: string | Date) => {
+    const x = new Date(d as any)
+    const y = x.getFullYear()
+    const m = String(x.getMonth() + 1).padStart(2, '0')
+    const dd = String(x.getDate()).padStart(2, '0')
+    return `${y}-${m}-${dd}`
+  }
+
+  const onChangeDateClick = (order: any) => {
+    setSelectedOrder(order)
+    setNewDate(toYmd(order.date))
+    setChangeDateOpen(true)
+  }
+
+  const saveNewDate = async () => {
+    if (!selectedOrder || !newDate) return
+    try {
+      const base = new Date(`${newDate}T00:00:00`)
+      const zoned = toZonedTime(base, timezone)
+      const iso = zoned.toISOString()
+
+      await axios.put(
+        `/api/purchase-orders/${selectedOrder._id}`,
+        { date: iso },
+        {
+          headers: {
+            Authorization: `Bearer ${localStorage.getItem('token')}`,
+            "X-Required-Permission": "po",
+          },
+        }
+      )
+
+      setPurchaseOrders(prev => prev.map(o => (o as any)._id === selectedOrder._id ? { ...o, date: iso } : o))
+
+      setChangeDateOpen(false)
+      setSelectedOrder(null)
+      setNewDate('')
+    } catch (error: any) {
+      console.error('Failed to update date:', error)
+      if (error.response?.status === 403) navigate({ to: "/no-access" })
+    }
+  }
+
   return (
     <div className="p-4 border border-dashed border-gray-300 rounded-md">
       <h2 className="text-lg font-bold mb-2">Purchase Order List</h2>
@@ -152,11 +203,9 @@ function RouteComponent() {
             <th className="border-dashed border-b border-gray-300 px-4 py-2">Driver Name</th>
             <th className="border-dashed border-b border-gray-300 px-4 py-2">Quantity</th>
             <th className="border-dashed border-b border-gray-300 px-4 py-2">Amount</th>
-            {
-              // access.component_po_pdf && //markpoint
-              access?.po?.pdf && (
+            {(access?.po?.pdf || access?.po?.changeDate) && (
               <th className="border-dashed border-b border-gray-300 px-4 py-2">Actions</th>
-              )}
+            )}
           </tr>
         </thead>
         <tbody>
@@ -169,11 +218,14 @@ function RouteComponent() {
                 <td className="border-dashed border-t border-gray-300 px-4 py-2">{order.driverName}</td>
                 <td className="border-dashed border-t border-gray-300 px-4 py-2">{order.quantity}</td>
                 <td className="border-dashed border-t border-gray-300 px-4 py-2">{order.amount.toFixed(2)}</td>
-                  {
-                    // access.component_po_pdf && //markpoint
-                    access?.po?.pdf && (
-                    <td className="border-dashed border-t border-gray-300 px-4 py-2">
-                      <Button onClick={() => generatePDF(order)}>PDF</Button> 
+                  {(access?.po?.pdf || access?.po?.changeDate) && (
+                    <td className="border-dashed border-t border-gray-300 px-4 py-2 space-x-2">
+                      {access?.po?.pdf && (
+                        <Button onClick={() => generatePDF(order)}>PDF</Button>
+                      )}
+                      {access?.po?.changeDate && (
+                        <Button variant="outline" onClick={() => onChangeDateClick(order)}>Change Date</Button>
+                      )}
                     </td>
                   )}
               </tr>
@@ -187,6 +239,30 @@ function RouteComponent() {
           )}
         </tbody>
       </table>
+      {/* Change Date Dialog */}
+      <Dialog open={changeDateOpen} onOpenChange={setChangeDateOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Change Purchase Order Date</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-3">
+            <div className="grid gap-2">
+              <Label htmlFor="po-date">Date</Label>
+              <input
+                id="po-date"
+                type="date"
+                className="border rounded px-2 py-1"
+                value={newDate}
+                onChange={(e) => setNewDate(e.target.value)}
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setChangeDateOpen(false)}>Cancel</Button>
+            <Button onClick={saveNewDate}>Save</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
       </div>
   );
 }
