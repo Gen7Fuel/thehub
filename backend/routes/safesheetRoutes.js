@@ -1,6 +1,7 @@
 const express = require('express');
 const router = express.Router();
 const Safesheet = require('../models/Safesheet');
+const { logAction } = require('../middleware/actionLogger');
 
 
 /**
@@ -11,8 +12,19 @@ router.get('/:site', async (req, res) => {
   try {
     const { site } = req.params;
     const sheet = await Safesheet.findOne({ site });
+    try {
+      await logAction(req, {
+        action: 'read',
+        resourceType: 'safesheet',
+        resourceId: sheet?._id,
+        success: true,
+        statusCode: 200,
+        message: `Safesheet exists check for site: ${site}`,
+      });
+    } catch (e) {}
     return res.status(200).json({ exists: !!sheet });
   } catch (err) {
+    try { await logAction(req, { action: 'read', resourceType: 'safesheet', success: false, statusCode: 500, message: err.message }); } catch (_) {}
     return res.status(500).json({ error: err.message });
   }
 });
@@ -26,8 +38,24 @@ router.post('/', async (req, res) => {
     const { site, initialBalance } = req.body;
     if (!site) return res.status(400).json({ error: 'site is required' });
     const sheet = await Safesheet.create({ site, initialBalance });
+    try {
+      await logAction(req, {
+        action: 'create',
+        resourceType: 'safesheet',
+        resourceId: sheet._id,
+        success: true,
+        statusCode: 201,
+        message: `Safesheet created for site: ${site}`,
+        after: { site, initialBalance },
+      });
+    } catch (e) {}
     return res.status(201).json(sheet);
   } catch (err) {
+    if (!req.body?.site) {
+      try { await logAction(req, { action: 'create', resourceType: 'safesheet', success: false, statusCode: 400, message: 'site is required' }); } catch (_) {}
+    } else {
+      try { await logAction(req, { action: 'create', resourceType: 'safesheet', success: false, statusCode: 500, message: err.message }); } catch (_) {}
+    }
     return res.status(500).json({ error: err.message });
   }
 });
@@ -49,8 +77,25 @@ router.post('/site/:site/entries', async (req, res) => {
     await sheet.save();
 
     const entriesWithRunning = sheet.getEntriesWithRunningBalance();
+    try {
+      await logAction(req, {
+        action: 'update',
+        resourceType: 'safesheet',
+        resourceId: sheet._id,
+        success: true,
+        statusCode: 201,
+        message: `Safesheet entry added for site: ${req.params.site}`,
+        after: {
+          entryDate: entry.date,
+          cashIn: entry.cashIn,
+          cashExpenseOut: entry.cashExpenseOut,
+          cashDepositBank: entry.cashDepositBank,
+        },
+      });
+    } catch (e) {}
     return res.status(201).json({ entries: entriesWithRunning });
   } catch (err) {
+    try { await logAction(req, { action: 'update', resourceType: 'safesheet', success: false, statusCode: err.status || 500, message: err.message }); } catch (_) {}
     return res.status(500).json({ error: err.message });
   }
 });
@@ -95,7 +140,7 @@ router.get('/site/:site', async (req, res) => {
       return d >= start && d <= end
     })
 
-    return res.json({
+    const payload = {
       _id: sheet._id,
       site: sheet.site,
       initialBalance: sheet.initialBalance,
@@ -104,9 +149,22 @@ router.get('/site/:site', async (req, res) => {
       entries: inRange,
       createdAt: sheet.createdAt,
       updatedAt: sheet.updatedAt,
-    })
+    };
+
+    try {
+      await logAction(req, {
+        action: 'read',
+        resourceType: 'safesheet',
+        resourceId: sheet._id,
+        success: true,
+        statusCode: 200,
+        message: `Safesheet read for site: ${site} (${fromYmd} to ${toYmd})`,
+      });
+    } catch (e) {}
+    return res.json(payload)
   } catch (err) {
     console.error('Safesheet site range error:', err)
+    try { await logAction(req, { action: 'read', resourceType: 'safesheet', success: false, statusCode: 500, message: 'Failed to load safesheet range' }); } catch (_) {}
     return res.status(500).json({ error: 'Failed to load safesheet range' })
   }
 })
@@ -146,8 +204,20 @@ router.get('/site/:site/current', async (req, res) => {
       current = Number(last.cashOnHandSafe ?? current);
     }
 
-    return res.json({ site: sheet.site, cashOnHandSafe: Number(current.toFixed(2)) });
+    const result = { site: sheet.site, cashOnHandSafe: Number(current.toFixed(2)) };
+    try {
+      await logAction(req, {
+        action: 'read',
+        resourceType: 'safesheet',
+        resourceId: sheet._id,
+        success: true,
+        statusCode: 200,
+        message: `Safesheet current balance for site: ${req.params.site}`,
+      });
+    } catch (e) {}
+    return res.json(result);
   } catch (err) {
+    try { await logAction(req, { action: 'read', resourceType: 'safesheet', success: false, statusCode: 500, message: err.message }); } catch (_) {}
     return res.status(500).json({ error: err.message });
   }
 });
@@ -169,8 +239,19 @@ router.get('/site/:site/daily-balances', async (req, res) => {
 
     const data = sheet.getDailyBalances(days);
 
+    try {
+      await logAction(req, {
+        action: 'read',
+        resourceType: 'safesheet',
+        resourceId: sheet._id,
+        success: true,
+        statusCode: 200,
+        message: `Safesheet daily balances for site: ${site} (days=${days})`,
+      });
+    } catch (e) {}
     return res.json({ data });
   } catch (err) {
+    try { await logAction(req, { action: 'read', resourceType: 'safesheet', success: false, statusCode: 500, message: err.message }); } catch (_) {}
     return res.status(500).json({ error: err.message });
   }
 });
@@ -193,13 +274,39 @@ router.put('/site/:site/entries/:entryId', async (req, res) => {
     if (entryIndex === -1) return res.status(404).json({ error: 'Entry not found' });
 
     // Update the entry
-    sheet.entries[entryIndex] = { ...sheet.entries[entryIndex].toObject(), ...updates, updatedAt: new Date() };
+    const beforeEntry = sheet.entries[entryIndex].toObject();
+    sheet.entries[entryIndex] = { ...beforeEntry, ...updates, updatedAt: new Date() };
 
     await sheet.save();
 
     const entriesWithRunning = sheet.getEntriesWithRunningBalance();
+    try {
+      await logAction(req, {
+        action: 'update',
+        resourceType: 'safesheet',
+        resourceId: sheet._id,
+        success: true,
+        statusCode: 200,
+        message: `Safesheet entry updated for site: ${site}`,
+        before: {
+          entryDate: beforeEntry.date,
+          description: beforeEntry.description,
+          cashIn: beforeEntry.cashIn,
+          cashExpenseOut: beforeEntry.cashExpenseOut,
+          cashDepositBank: beforeEntry.cashDepositBank,
+        },
+        after: {
+          entryDate: sheet.entries[entryIndex].date,
+          description: sheet.entries[entryIndex].description,
+          cashIn: sheet.entries[entryIndex].cashIn,
+          cashExpenseOut: sheet.entries[entryIndex].cashExpenseOut,
+          cashDepositBank: sheet.entries[entryIndex].cashDepositBank,
+        },
+      });
+    } catch (e) {}
     return res.json({ entries: entriesWithRunning });
   } catch (err) {
+    try { await logAction(req, { action: 'update', resourceType: 'safesheet', success: false, statusCode: 500, message: err.message }); } catch (_) {}
     return res.status(500).json({ error: err.message });
   }
 });
