@@ -112,26 +112,32 @@ async function getGradeVolumeFuelData(pool, csoCode, startDate, endDate) {
     // await sql.connect(sqlConfig);
     // const result = await sql.query(`SELECT TOP (10) * from [CSO].[Sales]`);
     // const result = await sql.query(`
-    const result = await pool.request().query(`
-      SELECT s.[Station_SK], s.[businessDate], s.[fuelGradeID], s.[fuelGradeSalesVolume], s.[fuelGradeDescription]
-      FROM [CSO].[Fuel] s
-      WHERE
-        s.[Station_SK] = ${csoCode}
-        AND s.[businessDate] BETWEEN '${startDate}' AND '${endDate}'
-      ORDER BY s.[businessDate]
-    `);
-    // const dbStartDate = formatDateForDB(startDate);
-    // const dbEndDate = formatDateForDB(endDate);
     // const result = await pool.request().query(`
-    //   SELECT s.[Station_SK], s.[Date_SK], s.[FuelGradeID], s.[Sales_Volume_LTR], s.[Description]
-    //   FROM [CSO].[FuelSummary] s
+    //   SELECT s.[Station_SK], s.[businessDate], s.[fuelGradeID], s.[fuelGradeSalesVolume], s.[fuelGradeDescription]
+    //   FROM [CSO].[Fuel] s
     //   WHERE
     //     s.[Station_SK] = ${csoCode}
-    //     AND s.[Date_SK] BETWEEN '${dbStartDate}' AND '${dbEndDate}'
-    //   ORDER BY s.[Date_SK]
+    //     AND s.[businessDate] BETWEEN '${startDate}' AND '${endDate}'
+    //   ORDER BY s.[businessDate]
     // `);
+    const dbStartDate = formatDateForDB(startDate);
+    const dbEndDate = formatDateForDB(endDate);
+    const result = await pool.request().query(`
+      SELECT s.[Station_SK], s.[Date_SK] as 'businessDate', s.[FuelGradeID] as 'fuelGradeID', s.[Sales_Volume_LTR] as 'fuelGradeSalesVolume', s.[Description] as 'fuelGradeDescription'
+      FROM [CSO].[FuelSummary] s
+      WHERE
+        s.[Station_SK] = ${csoCode}
+        AND TRY_CONVERT(NVARCHAR, s.[Date_SK], 112) BETWEEN '${dbStartDate}' AND '${dbEndDate}'
+      ORDER BY s.[Date_SK]
+    `);
     // await sql.close();
-    return result.recordset;
+    // return result.recordset;
+    const rowsWithDate = result.recordset.map(r => ({
+      ...r,
+      businessDate: parseBusinessDate(r.businessDate)
+    }));
+
+    return rowsWithDate;
   } catch (err) {
     console.error('SQL error:', err);
     return [];
@@ -681,6 +687,16 @@ function formatDateForDB(dateString) {
   // input: "2025-11-14"
   // output: "20251114"
   return dateString.replace(/-/g, "");
+}
+
+// Helper to convert YYYYMMDD integer to JS Date
+function parseBusinessDate(d) {
+  const str = d.toString();
+  if (str.length !== 8) return new Date(NaN); // invalid
+  const year = Number(str.slice(0, 4));
+  const month = Number(str.slice(4, 6)) - 1; // JS months 0-11
+  const day = Number(str.slice(6, 8));
+  return new Date(year, month, day);
 }
 
 function transformTimePeriodData(data) {

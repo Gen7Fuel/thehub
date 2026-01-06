@@ -65,6 +65,8 @@ import {
   DialogTitle,
   DialogDescription,
 } from "@/components/ui/dialog";
+import { OverShortSparkline, SafeBalanceTrendChart, PayablesDiscrepancyTable } from '@/components/custom/dashboard/accountingCharts';
+// import { PayablesDiscrepancyChart, OverShortChart } from '@/components/custom/dashboard/accountingCharts';
 
 interface CycleCountItem {
   name: string;
@@ -105,6 +107,15 @@ export interface HourlyRecord {
   "C-Store": number;
   Both: number;
   count: number;
+}
+
+interface OverShortChartItem {
+  date: string; // YYYY-MM-DD
+  overShort: number;
+  canadian_cash_collected: number;
+  report_canadian_cash: number;
+  shifts: number;
+  notes: string;
 }
 
 // type HourlyMap = Record<string, HourlyRecord>;
@@ -183,7 +194,6 @@ export const fetchFuelMonthToMonth = async (data: any) => {
   start.setDate(end.getDate() - 60); // last 60 days
 
   const fuelData = data ?? [];
-  console.log('fueldata60:', fuelData)
 
   if (!fuelData.length) return null;
 
@@ -262,6 +272,25 @@ interface Top10Bistro {
   UnitsPerDay: number;
 }
 
+function processOverShortData(data: OverShortChartItem[]) {
+  const maxAbs = Math.max(...data.map(d => Math.abs(d.overShort)));
+
+  return data.map(d => {
+    const relativeHeight = maxAbs ? d.overShort / maxAbs : 0;
+
+    let fill = "";
+    const abs = Math.abs(d.overShort);
+    if (d.overShort >= 0) fill = abs <= 20 ? "#90ee90" : "#006400";
+    else fill = abs <= 20 ? "#f08080" : "#8b0000";
+
+    return {
+      ...d,
+      fill,
+      displayValue: relativeHeight // for chart height
+    };
+  });
+}
+
 function RouteComponent() {
   const { user } = useAuth();
   const [site, setSite] = useState(user?.location || "Rankin");
@@ -276,6 +305,9 @@ function RouteComponent() {
   const [tenderTransactions, setTenderTransactions] = useState<TenderTransaction[]>([]);
   const [bistroWoWSales, setBistroWoWSales] = useState<BistroWowSales[]>([]);
   const [top10Bistro, setTop10Bistro] = useState<Top10Bistro[]>([]);
+  // Safe balance (end-of-day) data
+  const [safeBalanceRaw, setSafeBalanceRaw] = useState<any[]>([]);
+
 
   const [salesData, setSalesData] = useState<SalesData | null>(null);
   const [vendorStatus, setVendorStatus] = useState<any[]>([]);
@@ -289,9 +321,12 @@ function RouteComponent() {
 
   const [startDate,] = useState(sevenDaysAgo.toISOString().slice(0, 10));
   const [endDate,] = useState(today.toISOString().slice(0, 10));
+  const [safeMaxBalance, setSafeMaxBalance] = useState<number>(25_000);
+  const [payablesComparisonData, setPayablesComparisonData] = useState([]);
 
   const [showPasswordDialog, setShowPasswordDialog] = useState(false);
   const [hasAccess, setHasAccess] = useState(false);
+  const [overShortData, setOverShortData] = useState<any[]>([])
   const [fuelData, setFuelData] = useState<any[]>([]);
   const [fuelMonthStats, setFuelMonthStats] = useState<{
     currentMonthVolume: number;
@@ -351,6 +386,90 @@ function RouteComponent() {
         } catch (error: any) {
           console.error("Error fetching order records:", error);
           // Optionally handle other errors here
+        }
+
+        // ----------------------------
+        // Safe balance – last 10 days
+        // ----------------------------
+        try {
+          const res = await fetch(`/api/safesheets/site/${encodeURIComponent(site)}/daily-balances?days=20`, {
+            headers: {
+              Authorization: `Bearer ${localStorage.getItem("token")}`,
+              "X-Required-Permission": "dashboard",
+            },
+          });
+
+          if (res.status === 403) {
+            navigate({ to: "/no-access" });
+            return;
+          }
+
+          if (!res.ok) {
+            throw new Error(`Failed to fetch safe balance data: ${res.statusText}`);
+          }
+
+          const json = await res.json();
+          setSafeBalanceRaw(json.data || []);
+        } catch (error) {
+          console.error("Error fetching safe balance data:", error);
+          setSafeBalanceRaw([]);
+        }
+
+        // setSafeMaxBalance(await fetchLocation(site).then(loc => loc.safeMaxBalance || 25_000));
+        setSafeMaxBalance(await fetchLocation(site).then(loc => loc.safeMaxBalance));
+
+        // ---- Over / Short ----
+        try {
+          const res = await fetch(
+            `/api/cash-summary/over-short?site=${encodeURIComponent(site)}`,
+            {
+              headers: {
+                Authorization: `Bearer ${localStorage.getItem("token")}`,
+                "X-Required-Permission": "dashboard",
+              },
+            }
+          );
+
+          if (res.status === 403) {
+            navigate({ to: "/no-access" });
+            return;
+          }
+
+          if (!res.ok) {
+            throw new Error(`Failed to fetch over/short data`);
+          }
+
+          const data = await res.json();
+          setOverShortData(data);
+        } catch (error) {
+          console.error("Error fetching over/short data:", error);
+        }
+
+        // ---- Payables Comparison ----
+        try {
+          const res = await fetch(
+            `/api/cash-summary/payables-comparison?site=${encodeURIComponent(site)}`,
+            {
+              headers: {
+                Authorization: `Bearer ${localStorage.getItem("token")}`,
+                "X-Required-Permission": "dashboard",
+              },
+            }
+          );
+
+          if (res.status === 403) {
+            navigate({ to: "/no-access" });
+            return;
+          }
+
+          if (!res.ok) {
+            throw new Error("Failed to fetch payables comparison data");
+          }
+
+          const data = await res.json();
+          setPayablesComparisonData(data);
+        } catch (error) {
+          console.error("Error fetching payables comparison data:", error);
         }
 
         // const today = new Date();
@@ -544,7 +663,6 @@ function RouteComponent() {
         setBistroWoWSales(sqlBistroWoWSales);
         setTop10Bistro(sqlTop10Bistro);
 
-        console.log('top 10 bistro:', sqlTop10Bistro)
       } catch (err) {
         console.error("Error fetching dashboard data:", err);
       } finally {
@@ -688,6 +806,30 @@ function RouteComponent() {
   //     return row;
   //   });
   // }, [fuelData]);
+  // const fuelMix90 = useMemo(() => {
+  //   if (!last35FuelData.length) return [];
+
+  //   const grades = Array.from(
+  //     new Set(last35FuelData.map(d => d.fuelGradeDescription))
+  //   );
+
+  //   const byDate: Record<string, Record<string, number>> = {};
+
+  //   last35FuelData.forEach(d => {
+  //     const day = d.businessDate.slice(5, 10);
+  //     if (!byDate[day]) byDate[day] = {};
+  //     byDate[day][d.fuelGradeDescription] =
+  //       Number(d.fuelGradeSalesVolume ?? 0);
+  //   });
+
+  //   const dates = Object.keys(byDate).sort();
+
+  //   return dates.map(day => {
+  //     const row: Record<string, any> = { day };
+  //     grades.forEach(g => (row[g] = byDate[day]?.[g] ?? 0));
+  //     return row;
+  //   });
+  // }, [last35FuelData]);
   const fuelMix90 = useMemo(() => {
     if (!last35FuelData.length) return [];
 
@@ -698,20 +840,24 @@ function RouteComponent() {
     const byDate: Record<string, Record<string, number>> = {};
 
     last35FuelData.forEach(d => {
-      const day = d.businessDate.slice(5, 10);
-      if (!byDate[day]) byDate[day] = {};
-      byDate[day][d.fuelGradeDescription] =
+      const dateObj = new Date(d.businessDate); // ensure Date
+      const dayKey = dateObj.toISOString().slice(0, 10); // YYYY-MM-DD
+      if (!byDate[dayKey]) byDate[dayKey] = {};
+      byDate[dayKey][d.fuelGradeDescription] =
         Number(d.fuelGradeSalesVolume ?? 0);
     });
 
-    const dates = Object.keys(byDate).sort();
+    const dates = Object.keys(byDate).sort(
+      (a, b) => new Date(a).getTime() - new Date(b).getTime()
+    );
 
-    return dates.map(day => {
-      const row: Record<string, any> = { day };
-      grades.forEach(g => (row[g] = byDate[day]?.[g] ?? 0));
+    return dates.map(dateStr => {
+      const row: Record<string, any> = { day: dateStr.slice(5, 10) }; // display MM-DD
+      grades.forEach(g => (row[g] = byDate[dateStr]?.[g] ?? 0));
       return row;
     });
   }, [last35FuelData]);
+
 
 
 
@@ -735,6 +881,27 @@ function RouteComponent() {
 
   //   return byGrade;
   // }, [fuelData]);
+  // const fuelSparklines = useMemo(() => {
+  //   if (!last35FuelData.length) return {};
+
+  //   const grades = Array.from(
+  //     new Set(last35FuelData.map(d => d.fuelGradeDescription))
+  //   );
+
+  //   const byGrade: Record<string, any[]> = {};
+
+  //   grades.forEach(g => {
+  //     byGrade[g] = last35FuelData
+  //       .filter(d => d.fuelGradeDescription === g)
+  //       .map(d => ({
+  //         day: d.businessDate.slice(5, 10),
+  //         value: Number(d.fuelGradeSalesVolume ?? 0)
+  //       }))
+  //       .sort((a, b) => a.day.localeCompare(b.day));
+  //   });
+
+  //   return byGrade;
+  // }, [last35FuelData]);
   const fuelSparklines = useMemo(() => {
     if (!last35FuelData.length) return {};
 
@@ -747,11 +914,15 @@ function RouteComponent() {
     grades.forEach(g => {
       byGrade[g] = last35FuelData
         .filter(d => d.fuelGradeDescription === g)
-        .map(d => ({
-          day: d.businessDate.slice(5, 10),
-          value: Number(d.fuelGradeSalesVolume ?? 0)
-        }))
-        .sort((a, b) => a.day.localeCompare(b.day));
+        .map(d => {
+          const dateObj = new Date(d.businessDate);
+          return {
+            day: dateObj.toISOString().slice(5, 10), // display MM-DD
+            fullDate: dateObj, // for sorting
+            value: Number(d.fuelGradeSalesVolume ?? 0)
+          };
+        })
+        .sort((a, b) => a.fullDate.getTime() - b.fullDate.getTime());
     });
 
     return byGrade;
@@ -1030,6 +1201,22 @@ function RouteComponent() {
   }));
 
 
+  const safeBalanceChartData = useMemo(() => {
+    return safeBalanceRaw.map((d) => {
+      const balance = Number(d.endOfDayBalance || 0);
+
+      return {
+        date: d.date,
+        balance,
+        bankDeposit: Number(d.bankDepositTotal || 0),
+
+        // Only safe or over
+        safeBalance: balance <= safeMaxBalance ? balance : null,
+        overBalance: balance > safeMaxBalance ? balance : null,
+      };
+    });
+  }, [safeBalanceRaw]);
+
 
   // ----------------------------
   // Prepare chart data
@@ -1209,7 +1396,7 @@ function RouteComponent() {
                       <CashOnHandDisplay site={site} />
                     </div> */}
                     {/* Avg Basket Size Card */}
-                    {site !== "Jocko Point" && (
+                    {site !== "Jocko Point" && site !== "Sarnia" && (
                       <div className="col-span-1">
                         <div className="bg-white rounded-xl shadow p-4 flex flex-col">
                           <div className="text-sm text-muted-foreground">Avg Basket Size (Last 7 days)</div>
@@ -1235,7 +1422,7 @@ function RouteComponent() {
                 {/* ======================= */}
                 {/*     INVENTORY SECTION   */}
                 {/* ======================= */}
-                {site !== "Jocko Point" && (
+                {site !== "Jocko Point" && site !== "Sarnia" && (
                   <section aria-labelledby="inventory-heading" className="mb-10">
                     <h2 id="inventory-heading" className="text-2xl font-bold mb-4 pl-4">Inventory</h2>
 
@@ -1489,7 +1676,7 @@ function RouteComponent() {
                     </div>
                   </section>
                 )}
-                
+
                 {/* ======================= */}
                 {/*     FUEL SECTION   */}
                 {/* ======================= */}
@@ -1560,12 +1747,33 @@ function RouteComponent() {
                 </section>
 
                 {/* ======================= */}
+                {/*     Accounting SECTION   */}
+                {/* ======================= */}
+
+                {!["Sarnia"].includes(site) && (
+                  <section aria-labelledby="accounting-heading" className="mb-10">
+                    <h2 id="accounting-heading" className="text-2xl font-bold mb-4 pl-4">
+                      Accounting
+                    </h2>
+
+                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                      {/* <OverShortChart data={processOverShortData(overShortData)} /> */}
+                      <OverShortSparkline data={processOverShortData(overShortData)} />
+                      <SafeBalanceTrendChart data={safeBalanceChartData} maxBalance={safeMaxBalance} />
+                      {/* <PayablesDiscrepancyChart data={payablesComparisonData} /> */}
+                      <PayablesDiscrepancyTable data={payablesComparisonData} />
+                    </div>
+                  </section>
+                )} 
+
+
+                {/* ======================= */}
                 {/*     Store Activity Section   */}
                 {/* ======================= */}
-                {false && (
-                // {site !== "Jocko Point" && (
-                <section aria-labelledby="fuel-heading" className="mb-10">
-                  <h2 id="fuel-heading" className="text-2xl font-bold mb-4 pl-4">Store Activity Trend</h2>
+                {/* {false && ( */}
+                {site !== "Jocko Point" && site !== "Sarnia" && (
+                  <section aria-labelledby="fuel-heading" className="mb-10">
+                    <h2 id="fuel-heading" className="text-2xl font-bold mb-4 pl-4">Store Activity Trend</h2>
 
                     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
 
@@ -1863,7 +2071,20 @@ const fetchSalesData = async (rows: any) => {
   };
 }
 
+// const parseBusinessDate = (d: string | number) => {
+//   const str = d.toString();
+//   if (str.length !== 8) return new Date(NaN); // invalid
+//   const year = Number(str.slice(0, 4));
+//   const month = Number(str.slice(4, 6)) - 1; // JS months 0-11
+//   const day = Number(str.slice(6, 8));
+//   return new Date(year, month, day);
+// };
+
 const fetchFuelData = async (rows: any) => {
+  //  rows = rows.map((r:any) => ({
+  //   ...r,
+  //   businessDate: parseBusinessDate(r.businessDate)
+  // }));
   // let rows = await res.json();
   const fullFuelData = rows;
   rows = rows ?? [];
