@@ -11,7 +11,7 @@ import { Button } from '@/components/ui/button'
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog'
 import { Label } from '@/components/ui/label'
 import { getStartAndEndOfToday } from '@/lib/utils'
-import { zonedTimeToUtc } from 'date-fns-tz'
+import { DateTime } from 'luxon'
 import axios from "axios"
 import { useAuth } from "@/context/AuthContext";
 import { formatFleetCardNumber } from '@/lib/utils';
@@ -62,8 +62,8 @@ function RouteComponent() {
       const day = String(d.getDate()).padStart(2, '0')
       return `${y}-${m}-${day}`
     }
-    const startUtc = zonedTimeToUtc(new Date(`${toYmd(date.from)}T00:00:00`), timezone)
-    const endUtc = zonedTimeToUtc(new Date(`${toYmd(date.to)}T00:00:00`), timezone)
+    const startUtc = DateTime.fromISO(`${toYmd(date.from)}T00:00:00`, { zone: timezone }).toUTC().toJSDate()
+    const endUtc = DateTime.fromISO(`${toYmd(date.to)}T00:00:00`, { zone: timezone }).toUTC().toJSDate()
 
     try {
       // add authorization header with bearer token
