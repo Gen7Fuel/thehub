@@ -1,23 +1,26 @@
 import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter } from "@/components/ui/card";
 import {
   ResponsiveContainer, CartesianGrid, XAxis, YAxis, Tooltip,
-  ReferenceLine, LineChart, AreaChart, Area, Line
+  ReferenceLine, LineChart, AreaChart, Area, Line,
+  Bar, Cell,
+  BarChart
 } from "recharts";
+import clsx from "clsx";
 
-// interface OverShortChartItem {
-//   date: string;
-//   overShort: number;
-//   canadian_cash_collected: number;
-//   report_canadian_cash: number;
-//   shifts: number;
-//   notes: string;
-//   fill?: string;
-//   displayValue?: number; // normalized for chart
-// }
+interface OverShortChartItem {
+  date: string;
+  overShort: number;
+  canadian_cash_collected: number;
+  report_canadian_cash: number;
+  shifts: number;
+  notes: string;
+  fill?: string;
+  displayValue?: number; // normalized for chart
+}
 
-// interface OverShortChartProps {
-//   data: OverShortChartItem[];
-// }
+interface OverShortChartProps {
+  data: OverShortChartItem[];
+}
 
 function OverShortTooltip({ active, payload }: any) {
   if (!active || !payload || !payload.length) return null;
@@ -94,83 +97,83 @@ function OverShortTooltip({ active, payload }: any) {
   );
 }
 
-// export function OverShortChart({ data }: OverShortChartProps) {
-//   // Compute absolute max for normalization
-//   const maxAbs = Math.max(...data.map(d => Math.abs(d.overShort)), 1); // avoid divide by zero
-//   const MIN_BAR_HEIGHT = 0.02;
-//   // Normalize values for chart height and assign fill colors
-//   const chartData = data.map(d => {
-//     let relativeHeight = d.overShort / maxAbs; // -1 to 1
-//     const abs = Math.abs(d.overShort);
-//     let fill = "";
-//     if (d.overShort > 0) fill = abs <= 20 ? "#94f594ff" : "#0af30aff"; // light/dark green
-//     else if (d.overShort < 0) fill = abs <= 20 ? "#f37171ff" : "#f10b0bff"; // light/dark red
-//     else fill = "#999999"
+export function OverShortChart({ data }: OverShortChartProps) {
+  // Compute absolute max for normalization
+  const maxAbs = Math.max(...data.map(d => Math.abs(d.overShort)), 1); // avoid divide by zero
+  const MIN_BAR_HEIGHT = 0.02;
+  // Normalize values for chart height and assign fill colors
+  const chartData = data.map(d => {
+    let relativeHeight = d.overShort / maxAbs; // -1 to 1
+    const abs = Math.abs(d.overShort);
+    let fill = "";
+    if (d.overShort > 0) fill = abs <= 20 ? "#94f594ff" : "#0af30aff"; // light/dark green
+    else if (d.overShort < 0) fill = abs <= 20 ? "#f37171ff" : "#f10b0bff"; // light/dark red
+    else fill = "#999999"
 
-//     if (d.overShort === 0) {
-//       relativeHeight = MIN_BAR_HEIGHT;
-//     }
-//     return {
-//       ...d,
-//       displayValue: relativeHeight,
-//       fill,
-//     };
-//   });
+    if (d.overShort === 0) {
+      relativeHeight = MIN_BAR_HEIGHT;
+    }
+    return {
+      ...d,
+      displayValue: relativeHeight,
+      fill,
+    };
+  });
 
-//   return (
-//     <Card className="w-full">
-//       <CardHeader>
-//         <CardTitle>Cash Summary Report - Over/Short</CardTitle>
-//         <CardDescription>Last 10 days (normalized view)</CardDescription>
-//       </CardHeader>
+  return (
+    <Card className="w-full">
+      <CardHeader>
+        <CardTitle>Cash Summary Report - Over/Short</CardTitle>
+        <CardDescription>Last 20 days (normalized view)</CardDescription>
+      </CardHeader>
 
-//       <CardContent>
-//         <ResponsiveContainer width="100%" height={220}>
-//           <BarChart
-//             data={chartData}
-//           // margin={{ top: 10, right: 0, left: 0, bottom: 10 }}
-//           >
-//             <CartesianGrid strokeDasharray="3 3" vertical={false} />
-//             <XAxis
-//               dataKey="date"
-//               tick={{ fontSize: 12 }}
-//               tickLine={false}
-//               tickMargin={10}
-//               axisLine={false}
-//               tickFormatter={(value: string) => {
-//                 // value is expected in YYYY-MM-DD format
-//                 const [_, month, day] = value.split("-");
-//                 return `${month}-${day}`;
-//               }}
-//             />
-//             <YAxis
-//               type="number"
-//               domain={[-1, 1]} // normalized -1 to 1
-//               tick={{ fontSize: 12 }}
-//               tickLine={false}
-//               axisLine={false}
-//               tickFormatter={(v) => {
-//                 // convert normalized back to actual value for display
-//                 const realVal = Math.round(v * maxAbs * 100) / 100;
-//                 return `$${realVal}`;
-//               }}
-//             />
-//             <Tooltip content={<OverShortTooltip />} />
-//             <Bar dataKey="displayValue" radius={[4, 4, 0, 0]}>
-//               {chartData.map((entry, index) => (
-//                 <Cell key={`cell-${index}`} fill={entry.fill} />
-//               ))}
-//             </Bar>
-//           </BarChart>
-//         </ResponsiveContainer>
-//       </CardContent>
+      <CardContent>
+        <ResponsiveContainer width="100%" height={220}>
+          <BarChart
+            data={chartData}
+          // margin={{ top: 10, right: 0, left: 0, bottom: 10 }}
+          >
+            <CartesianGrid strokeDasharray="3 3" vertical={false} />
+            <XAxis
+              dataKey="date"
+              tick={{ fontSize: 12 }}
+              tickLine={false}
+              tickMargin={10}
+              axisLine={false}
+              tickFormatter={(value: string) => {
+                // value is expected in YYYY-MM-DD format
+                const [_, month, day] = value.split("-");
+                return `${month}-${day}`;
+              }}
+            />
+            <YAxis
+              type="number"
+              domain={[-1, 1]} // normalized -1 to 1
+              tick={{ fontSize: 12 }}
+              tickLine={false}
+              axisLine={false}
+              tickFormatter={(v) => {
+                // convert normalized back to actual value for display
+                const realVal = Math.round(v * maxAbs * 100) / 100;
+                return `$${realVal}`;
+              }}
+            />
+            <Tooltip content={<OverShortTooltip />} />
+            <Bar dataKey="displayValue" radius={[4, 4, 0, 0]}>
+              {chartData.map((entry, index) => (
+                <Cell key={`cell-${index}`} fill={entry.fill} />
+              ))}
+            </Bar>
+          </BarChart>
+        </ResponsiveContainer>
+      </CardContent>
 
-//       <CardFooter className="text-sm text-muted-foreground">
-//         Bars normalized to show all differences. Click for actual values.
-//       </CardFooter>
-//     </Card>
-//   );
-// }
+      <CardFooter className="text-sm text-muted-foreground">
+        Bars normalized to show all differences. Click for actual values.
+      </CardFooter>
+    </Card>
+  );
+}
 
 interface OverShortSparklineProps {
   data: {
@@ -196,7 +199,7 @@ function OverShortDot({ cx, cy, payload }: any) {
     <circle
       cx={cx}
       cy={cy}
-      r={4}
+      r={3}
       fill={fill}
       stroke="#111827"
       strokeWidth={0.5}
@@ -219,7 +222,7 @@ export function OverShortSparkline({ data }: OverShortSparklineProps) {
     <Card className="w-full">
       <CardHeader>
         <CardTitle>Cash Summary Report - Over/Short</CardTitle>
-        <CardDescription>Last 10 days (Trend View)</CardDescription>
+        <CardDescription>Last 20 days (Trend View)</CardDescription>
       </CardHeader>
 
       <CardContent>
@@ -280,6 +283,37 @@ export function OverShortSparkline({ data }: OverShortSparklineProps) {
             />
           </LineChart>
         </ResponsiveContainer>
+        <div className="flex flex-wrap items-center justify-center gap-4 pt-3">
+          <div className="flex items-center gap-1.5">
+            <div
+              className="h-2 w-2 shrink-0 rounded-full" // circle
+              style={{ backgroundColor: "#0af30aff" }}
+            />
+            <span className="text-sm font-medium text-black">
+              Over
+            </span>
+          </div>
+
+          <div className="flex items-center gap-1.5">
+            <div
+              className="h-2 w-2 shrink-0 rounded-full" // circle
+              style={{ backgroundColor: "#f10b0bff" }}
+            />
+            <span className="text-sm font-medium text-black">
+              Short
+            </span>
+          </div>
+
+          <div className="flex items-center gap-1.5">
+            <div
+              className="h-2 w-2 shrink-0 rounded-full" // circle
+              style={{ backgroundColor: "#999999" }}
+            />
+            <span className="text-sm font-medium text-black">
+              Balanced
+            </span>
+          </div>
+        </div>
       </CardContent>
       <CardFooter className="text-sm text-muted-foreground">
         Click the dots for more details.
@@ -358,7 +392,7 @@ export function SafeBalanceTrendChart({
     <Card className="w-full">
       <CardHeader>
         <CardTitle>SafeSheet – Cash On Hand Balance</CardTitle>
-        <CardDescription>Last 10 days (End of Day)</CardDescription>
+        <CardDescription>Last 20 days (End of Day)</CardDescription>
       </CardHeader>
 
       <CardContent>
@@ -466,6 +500,212 @@ export function SafeBalanceTrendChart({
       <CardFooter className="text-sm text-muted-foreground">
         End-of-day safe balance with threshold.
       </CardFooter>
+    </Card>
+  );
+}
+
+function DiscrepancyTooltip({ active, payload, label }: any) {
+  if (!active || !payload?.length) return null;
+
+  const { posPayout, internalPayout, difference } = payload[0].payload;
+
+  const diffLabel =
+    difference > 0 ? "Till > POS" : "POS > Till";
+
+  return (
+    <div className="rounded-md border bg-background p-3 text-sm shadow">
+      <div className="font-medium mb-1">{label}</div>
+
+      <div className="flex justify-between gap-4">
+        <span>POS Payout</span>
+        <span>${posPayout.toFixed(2)}</span>
+      </div>
+
+      <div className="flex justify-between gap-4">
+        <span>Till Payout</span>
+        <span>${internalPayout.toFixed(2)}</span>
+      </div>
+
+      <div className="mt-2 flex justify-between font-semibold">
+        <span>{diffLabel}</span>
+        <span className={difference > 0 ? "text-red-600" : "text-orange-600"}>
+          {difference > 0 ? "+" : ""}
+          ${difference.toFixed(2)}
+        </span>
+      </div>
+    </div>
+  );
+}
+
+interface PayablesComparisonDatum {
+  date: string;              // YYYY-MM-DD
+  posPayout: number;         // POS payout total for the day
+  internalPayout: number;    // Till payout total for the day
+  difference: number;        // internalPayout - posPayout
+}
+
+export function PayablesDiscrepancyChart({ data }: { data: PayablesComparisonDatum[] }) {
+  // 1️⃣ Filter to actionable discrepancies only
+  const chartData = (data || []).filter(d =>
+    (d.posPayout !== 0 || d.internalPayout !== 0) &&
+    d.posPayout !== d.internalPayout
+  );
+
+  // 2️⃣ Empty / success state
+  if (!chartData.length) {
+    return (
+      <Card className="w-full">
+        <CardHeader>
+          <CardTitle>Payout Discrepancies</CardTitle>
+        </CardHeader>
+        <CardContent className="text-sm text-muted-foreground">
+          No payout discrepancies for the selected period ✅
+        </CardContent>
+      </Card>
+    );
+  }
+
+  return (
+    <Card className="w-full">
+      <CardHeader>
+        <CardTitle>Payout Discrepancies</CardTitle>
+      </CardHeader>
+
+      <CardContent>
+        <ResponsiveContainer width="100%" height={260}>
+          <BarChart data={chartData}>
+            <CartesianGrid strokeDasharray="3 3" vertical={false} />
+            <XAxis
+              dataKey="date"
+              tick={{ fontSize: 12 }}
+            />
+            <YAxis
+              tick={{ fontSize: 12 }}
+            />
+
+            {/* Zero reference line */}
+            <ReferenceLine y={0} stroke="#999" />
+
+            <Tooltip content={<DiscrepancyTooltip />} />
+
+            <Bar
+              dataKey="difference"
+              radius={[4, 4, 0, 0]}
+              fill="#ef4444"
+            />
+          </BarChart>
+        </ResponsiveContainer>
+      </CardContent>
+    </Card>
+  );
+}
+
+export function PayablesDiscrepancyTable({
+  data,
+}: {
+  data: PayablesComparisonDatum[];
+}) {
+  if (!data || data.length === 0) {
+    return (
+      <Card className="w-full">
+        <CardHeader>
+          <CardTitle>Payout Discrepancy Report</CardTitle>
+          <CardDescription>Last 20 days (End of Day)</CardDescription>
+        </CardHeader>
+        <CardContent className="text-sm text-muted-foreground">
+          No payout data available.
+        </CardContent>
+      </Card>
+    );
+  }
+
+  // ✅ Sort newest → oldest (YYYY-MM-DD is lexicographically safe)
+  const sortedData = [...data].sort(
+    (a, b) => b.date.localeCompare(a.date)
+  );
+
+  return (
+    <Card className="w-full">
+      <CardHeader>
+        <CardTitle>Payout Discrepancy Report</CardTitle>
+        <CardDescription>Last 20 days (End of Day)</CardDescription>
+      </CardHeader>
+
+      <CardContent className="p-0">
+        {/* Table header */}
+        <div className="border-b">
+          <table className="w-full text-xs">
+            <thead className="bg-background">
+              <tr className="text-muted-foreground">
+                <th className="py-2 px-3 text-left">Date</th>
+                <th className="py-2 px-3 pl-10 text-right">Bulloch Payouts</th>
+                <th className="py-2 px-3 text-right">Hub Payouts (Till)</th>
+                <th className="py-2 px-3 text-right">Difference</th>
+              </tr>
+            </thead>
+          </table>
+        </div>
+
+        {/* Scrollable body */}
+        <div className="max-h-[220px] overflow-y-auto">
+          <table className="w-full text-sm border-collapse">
+            <tbody>
+              {sortedData.map(row => {
+                const rowClass = clsx(
+                  "border-b last:border-b-0",
+                  row.difference === 0 && "bg-green-50 text-green-700",
+                  row.difference > 0 && "bg-red-50 text-red-700",
+                  row.difference < 0 && "bg-orange-50 text-orange-700"
+                );
+
+                return (
+                  <tr key={row.date} className={rowClass}>
+                    <td className="py-2 px-3 font-medium">
+                      {row.date}
+                    </td>
+
+                    <td className="py-2 px-3 pr-20 text-right">
+                      ${row.posPayout.toFixed(2)}
+                    </td>
+
+                    <td className="py-2 px-3 pr-8 text-center">
+                      ${row.internalPayout.toFixed(2)}
+                    </td>
+
+                    <td className="py-2 px-3 text-right font-semibold">
+                      {row.difference > 0 && "+"}
+                      ${row.difference.toFixed(2)}
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+        {/* ------------------ Discrepancy Legend ------------------ */}
+        <div className="flex flex-wrap items-center justify-center gap-4 pt-3">
+          <div className="flex items-center gap-1.5">
+            <div className="h-2 w-2 rounded-[2px] bg-green-50 border border-green-300" />
+            <span className="text-xs font-medium text-black">
+              Balanced (Bulloch Payouts = Hub Payouts)
+            </span>
+          </div>
+
+          <div className="flex items-center gap-1.5">
+            <div className="h-2 w-2 rounded-[2px] bg-red-50 border border-red-300" />
+            <span className="text-xs font-medium text-black">
+              Hub Payouts &gt; Bulloch Payouts
+            </span>
+          </div>
+
+          <div className="flex items-center gap-1.5">
+            <div className="h-2 w-2 rounded-[2px] bg-orange-50 border border-orange-300" />
+            <span className="text-xs font-medium text-black">
+              Bulloch Payouts &gt; Hub Payouts
+            </span>
+          </div>
+        </div>
+      </CardContent>
     </Card>
   );
 }

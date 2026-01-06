@@ -151,7 +151,7 @@ router.get('/over-short', async (req, res) => {
     end.setHours(0, 0, 0, 0)
 
     const start = new Date(end)
-    start.setDate(start.getDate() - 10) // today + previous 10 days
+    start.setDate(start.getDate() - 20) // today + previous 20 days
 
     // 2️⃣ Fetch submitted reports for site
     const reports = await CashSummaryReport.find({
@@ -243,7 +243,7 @@ router.get('/payables-comparison', async (req, res) => {
     end.setHours(0, 0, 0, 0)
 
     const start = new Date(end)
-    start.setDate(start.getDate() - 10)
+    start.setDate(start.getDate() - 20)
 
     // 2️⃣ Fetch submitted reports for site
     const reports = await CashSummaryReport.find({
@@ -274,8 +274,7 @@ router.get('/payables-comparison', async (req, res) => {
 
     // 5️⃣ Fetch internal payables
     // 1️⃣ Get location for site (1:1 mapping)
-    const location = await Location.findOne({ site }, { _id: 1 }).lean()
-
+    const location = await Location.findOne({ stationName: site }, { _id: 1 }).lean()
     if (!location) {
       return res.json([]) // or throw error if this should never happen
     }
@@ -333,7 +332,6 @@ router.get('/payables-comparison', async (req, res) => {
         difference: internalPayout - posPayout,
       }
     })
-
     res.json(data)
   } catch (err) {
     console.error('Payables comparison error:', err)

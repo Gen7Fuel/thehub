@@ -161,16 +161,13 @@ router.get('/site/:site/daily-balances', async (req, res) => {
   try {
     const { site } = req.params;
     const days = Number(req.query.days || 10);
-    console.log('[SAFE BALANCE]', site);
 
     const sheet = await Safesheet.findOne({ site });
     if (!sheet) {
-      console.log('No safesheet found');
       return res.status(404).json({ error: 'Safesheet not found for site' });
     }
 
     const data = sheet.getDailyBalances(days);
-    console.log('[SAFE BALANCE] data:', data);
 
     return res.json({ data });
   } catch (err) {
