@@ -87,6 +87,7 @@ interface ChartBarModalProps {
 }
 
 interface TransactionData {
+  dayFull: string;    // full date string e.g., "2023-11-14"
   day: string;           // e.g., "11-14"
   transactions: number;
   visits: number;
@@ -639,14 +640,24 @@ function RouteComponent() {
         const timePeriodTransactions = sqlTimePeriodTrans;
         const tenderTransactions = sqlTenderTrans;
 
-        const transactionModChartData = transactions.map((t: any) => ({
-          day: t.Date.slice(5, 10),   // X-axis key
-          transactions: t.transactions,
-          visits: t.visits,
-          avgBasket: t.bucket_size,
-        }));
+        // const transactionModChartData = transactions.map((t: any) => ({
+        //   day: t.Date.slice(5, 10),   // X-axis key
+        //   transactions: t.transactions,
+        //   visits: t.visits,
+        //   avgBasket: t.bucket_size,
+        // }));
+        const transactionModChartData = transactions.map((t: any) => {
+          const dayFull = t.Date; // 'YYYY-MM-DD' from SQL
+          const dayLabel = dayFull.slice(5, 10); // 'MM-DD' for chart
 
-
+          return {
+            dayFull,     // for calculations
+            day: dayLabel, // X-axis
+            transactions: t.transactions,
+            visits: t.visits,
+            avgBasket: t.bucket_size,
+          };
+        });
 
         // Set states
         setOrderRecs(orderRecsRes);
@@ -1121,37 +1132,84 @@ function RouteComponent() {
 
 
   // Compute current and previous 7-day average basket sizes
+  // const avgBasketStats = useMemo(() => {
+  //   if (!transactionChartData || transactionChartData.length === 0) return { current: 0, previous: 0, changePct: 0 };
+
+  //   const today = new Date();
+  //   const yesterday = new Date(today);
+  //   yesterday.setDate(today.getDate() - 1);
+
+  //   const formatKey = (date: Date) => date.toISOString().slice(5, 10); // 'MM-DD'
+
+  //   const currentStart = new Date(yesterday);
+  //   currentStart.setDate(yesterday.getDate() - 6); // 7-day range
+  //   const previousStart = new Date(currentStart);
+  //   previousStart.setDate(currentStart.getDate() - 7); // previous 7 days
+  //   const previousEnd = new Date(currentStart);
+  //   previousEnd.setDate(currentStart.getDate() - 1);
+
+  //   const currentSlice = transactionChartData.filter(
+  //     (d: TransactionData) => d.day >= formatKey(currentStart) && d.day <= formatKey(yesterday)
+  //   );
+  //   const previousSlice = transactionChartData.filter(
+  //     (d: TransactionData) => d.day >= formatKey(previousStart) && d.day <= formatKey(previousEnd)
+  //   );
+
+  //   const currentAvg = currentSlice.length
+  //     ? currentSlice.reduce((sum, d) => sum + (d.avgBasket || 0), 0) / currentSlice.length
+  //     : 0;
+  //   const previousAvg = previousSlice.length
+  //     ? previousSlice.reduce((sum, d) => sum + (d.avgBasket || 0), 0) / previousSlice.length
+  //     : 0;
+
+  //   const changePct = previousAvg > 0 ? ((currentAvg - previousAvg) / previousAvg) * 100 : 0;
+
+  //   return {
+  //     current: Number(currentAvg.toFixed(2)),
+  //     previous: Number(previousAvg.toFixed(2)),
+  //     changePct: Number(changePct.toFixed(1)),
+  //   };
+  // }, [transactionChartData]);
   const avgBasketStats = useMemo(() => {
-    if (!transactionChartData || transactionChartData.length === 0) return { current: 0, previous: 0, changePct: 0 };
+    if (!transactionChartData || transactionChartData.length === 0)
+      return { current: 0, previous: 0, changePct: 0 };
 
     const today = new Date();
     const yesterday = new Date(today);
     yesterday.setDate(today.getDate() - 1);
 
-    const formatKey = (date: Date) => date.toISOString().slice(5, 10); // 'MM-DD'
-
     const currentStart = new Date(yesterday);
-    currentStart.setDate(yesterday.getDate() - 6); // 7-day range
+    currentStart.setDate(yesterday.getDate() - 6);
+
     const previousStart = new Date(currentStart);
-    previousStart.setDate(currentStart.getDate() - 7); // previous 7 days
+    previousStart.setDate(currentStart.getDate() - 7);
+
     const previousEnd = new Date(currentStart);
     previousEnd.setDate(currentStart.getDate() - 1);
 
-    const currentSlice = transactionChartData.filter(
-      (d: TransactionData) => d.day >= formatKey(currentStart) && d.day <= formatKey(yesterday)
-    );
-    const previousSlice = transactionChartData.filter(
-      (d: TransactionData) => d.day >= formatKey(previousStart) && d.day <= formatKey(previousEnd)
-    );
+    const parseDay = (d: TransactionData) => new Date(d.dayFull);
+
+    const currentSlice = transactionChartData.filter(d => {
+      const dayDate = parseDay(d);
+      return dayDate >= currentStart && dayDate <= yesterday;
+    });
+
+    const previousSlice = transactionChartData.filter(d => {
+      const dayDate = parseDay(d);
+      return dayDate >= previousStart && dayDate <= previousEnd;
+    });
 
     const currentAvg = currentSlice.length
       ? currentSlice.reduce((sum, d) => sum + (d.avgBasket || 0), 0) / currentSlice.length
       : 0;
+
     const previousAvg = previousSlice.length
       ? previousSlice.reduce((sum, d) => sum + (d.avgBasket || 0), 0) / previousSlice.length
       : 0;
 
-    const changePct = previousAvg > 0 ? ((currentAvg - previousAvg) / previousAvg) * 100 : 0;
+    const changePct = previousAvg > 0
+      ? ((currentAvg - previousAvg) / previousAvg) * 100
+      : 0;
 
     return {
       current: Number(currentAvg.toFixed(2)),
@@ -1764,7 +1822,7 @@ function RouteComponent() {
                       <PayablesDiscrepancyTable data={payablesComparisonData} />
                     </div>
                   </section>
-                )} 
+                )}
 
 
                 {/* ======================= */}
