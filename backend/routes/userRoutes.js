@@ -7,27 +7,65 @@ const Role = require("../models/Role");
 const getMergedPermissions = require("../utils/mergePermissionObjects")
 
 // Compare frontend permissions with role.permissions to find overrides for saving them as custom permissions in users
-const getOverrides = (roleNodes = [], userNodes = []) => {
-  const roleMap = _.keyBy(roleNodes, "name");
-  const userMap = _.keyBy(userNodes, "name");
+// const getOverrides = (roleNodes = [], userNodes = []) => {
+//   const roleMap = _.keyBy(roleNodes, "name");
+//   const userMap = _.keyBy(userNodes, "name");
 
+//   return _.compact(
+//     _.map(userMap, (uNode, key) => {
+//       const rNode = roleMap[key];
+//       if (!rNode) return uNode; // new permission branch
+
+//       let hasOverride = false;
+
+//       // Check if value differs
+//       if (_.isBoolean(uNode.value) && uNode.value !== rNode.value) hasOverride = true;
+
+//       // Recursively check children
+//       let childrenOverrides = [];
+//       if (uNode.children && uNode.children.length > 0) {
+//         childrenOverrides = getOverrides(rNode.children || [], uNode.children);
+//         if (childrenOverrides.length > 0) hasOverride = true;
+//       }
+
+//       if (hasOverride) {
+//         return {
+//           name: uNode.name,
+//           value: uNode.value,
+//           ...(childrenOverrides.length > 0 ? { children: childrenOverrides } : {}),
+//         };
+//       }
+
+//       return null; // no override, skip
+//     })
+//   );
+// };
+const getOverrides = (roleNodes = [], userNodes = []) => {
   return _.compact(
-    _.map(userMap, (uNode, key) => {
-      const rNode = roleMap[key];
-      if (!rNode) return uNode; // new permission branch
+    userNodes.map((uNode) => {
+      // Find matching node in the CURRENT role structure
+      const rNode = roleNodes.find(r => r.name === uNode.name);
+      
+      // If the node no longer exists in the role, discard this override branch
+      if (!rNode) return null; 
 
       let hasOverride = false;
-
-      // Check if value differs
-      if (_.isBoolean(uNode.value) && uNode.value !== rNode.value) hasOverride = true;
-
-      // Recursively check children
       let childrenOverrides = [];
-      if (uNode.children && uNode.children.length > 0) {
-        childrenOverrides = getOverrides(rNode.children || [], uNode.children);
-        if (childrenOverrides.length > 0) hasOverride = true;
+
+      // 1. Check if the boolean value itself is an override
+      if (uNode.value !== rNode.value) {
+        hasOverride = true;
       }
 
+      // 2. Recursively check children based ONLY on current role children
+      if (uNode.children && uNode.children.length > 0) {
+        childrenOverrides = getOverrides(rNode.children || [], uNode.children);
+        if (childrenOverrides.length > 0) {
+          hasOverride = true;
+        }
+      }
+
+      // 3. Only return the node if it or its children actually differ from the role
       if (hasOverride) {
         return {
           name: uNode.name,
@@ -36,7 +74,7 @@ const getOverrides = (roleNodes = [], userNodes = []) => {
         };
       }
 
-      return null; // no override, skip
+      return null;
     })
   );
 };
