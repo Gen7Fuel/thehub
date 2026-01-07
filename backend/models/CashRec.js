@@ -72,6 +72,8 @@ const BankStatementSchema = new mongoose.Schema(
     // NEW: store GBL debits/credits
     gblDebits: { type: [MiscDebitSchema], default: [] },
     gblCredits: { type: [MiscDebitSchema], default: [] },
+    // NEW: merchant fees (required on frontend)
+    merchantFees: { type: Number },
   },
   { timestamps: true }
 )
@@ -101,6 +103,8 @@ BankStatementSchema.statics.fromParsed = function (payload = {}) {
     // NEW: accept GBL buckets
     gblDebits = [],
     gblCredits = [],
+    // NEW: accept merchantFees
+    merchantFees,
   } = payload
 
   return new this({
@@ -138,6 +142,7 @@ BankStatementSchema.statics.fromParsed = function (payload = {}) {
           amount: Number(m?.amount) || 0,
         }))
       : [],
+    merchantFees: typeof merchantFees === 'number' ? merchantFees : undefined,
   })
 }
 

@@ -142,6 +142,18 @@ function RouteComponent() {
   const [error, setError] = React.useState<string | null>(null)
   const [isOver, setIsOver] = React.useState(false)
   const [detectedStation, setDetectedStation] = React.useState<string | null>(null)
+  const [merchantFees, setMerchantFees] = React.useState<string>('')
+  const merchantFeesNumber = React.useMemo(() => {
+    const n = Number(merchantFees)
+    return Number.isFinite(n) ? n : NaN
+  }, [merchantFees])
+  const merchantFeesValid = React.useMemo(() => {
+    // allow up to 2 decimals, strictly > 0
+    if (!merchantFees) return false
+    if (!/^\d+(\.\d{1,2})?$/.test(merchantFees.trim())) return false
+    const n = Number(merchantFees)
+    return Number.isFinite(n) && n > 0
+  }, [merchantFees])
 
   const handleFiles = async (files: FileList | null) => {
     setError(null)
@@ -240,7 +252,7 @@ function RouteComponent() {
   }
   // Prefer detected station over SitePicker value for the `site` used in capture
   const selectedSite = detectedStation || site
-  const canCapture = Boolean(parsed && parsed.statementDate && selectedSite)
+  const canCapture = Boolean(parsed && parsed.statementDate && selectedSite && merchantFeesValid)
 
   const capture = async () => {
     if (!canCapture || !parsed) return
@@ -257,6 +269,8 @@ function RouteComponent() {
       // NEW: include gbl buckets when uploading
       gblDebits: parsed.gblDebits ?? [],
       gblCredits: parsed.gblCredits ?? [],
+      // NEW: include merchantFees
+      merchantFees: merchantFeesNumber,
     }
     try {
       const res = await fetch('/api/cash-rec/bank-statement', {
@@ -301,6 +315,23 @@ function RouteComponent() {
           <div className="text-sm text-muted-foreground">
             Statement Date: <span className="font-mono">{parsed.statementDate || '-'}</span>
           </div>
+          <div className="flex items-end gap-3">
+            <div className="flex-1">
+              <label className="block text-sm font-medium mb-1">Merchant Fees (required)</label>
+              <input
+                type="text"
+                inputMode="decimal"
+                placeholder="e.g. 12.34"
+                value={merchantFees}
+                onChange={(e) => setMerchantFees(e.target.value.trim())}
+                className={`w-full border rounded px-3 py-2 text-sm ${merchantFees && !merchantFeesValid ? 'border-red-500' : 'border-input'}`}
+              />
+              {!merchantFeesValid && merchantFees && (
+                <div className="text-xs text-red-600 mt-1">Enter a number > 0 with up to 2 decimals.</div>
+              )}
+            </div>
+            <div className="text-xs text-muted-foreground pb-2">Capture requires Merchant Fees.</div>
+          </div>
           <div className="border rounded p-3 bg-muted/20">
             <div className="font-semibold">Detected Account</div>
             <div className="text-sm">
@@ -334,6 +365,10 @@ function RouteComponent() {
             <div className="border rounded p-3">
               <div className="font-semibold">Ending Balance</div>
               <div>{parsed.endingBalance ?? 0}</div>
+            </div>
+            <div className="border rounded p-3">
+              <div className="font-semibold">Merchant Fees</div>
+              <div>{merchantFeesValid ? merchantFees : '-'}</div>
             </div>
               {/* GBL Debits */}
               <div className="sm:col-span-2 border rounded p-3">
@@ -373,7 +408,7 @@ function RouteComponent() {
                       ))}
                     </ul>
                     <div className="mt-2 text-sm font-semibold">
-                      Total: {parsed.miscDebits.reduce((s, x) => s + (x.amount || 0), 0)}
+                    Total: {parsed.miscDebits.reduce((s, x) => s + (x.amount || 0), 0) + (merchantFeesValid ? merchantFeesNumber : 0)}
                     </div>
                   </>
               )}

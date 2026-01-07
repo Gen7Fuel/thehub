@@ -243,6 +243,8 @@ router.post('/bank-statement', express.json({ limit: '1mb' }), async (req, res) 
       // NEW: accept GBL buckets in payload
       gblDebits,
       gblCredits,
+      // NEW: accept merchantFees in payload
+      merchantFees,
     } = req.body || {}
 
     if (!site || !date) {
@@ -263,6 +265,7 @@ router.post('/bank-statement', express.json({ limit: '1mb' }), async (req, res) 
       // NEW: include GBL buckets
       gblDebits,
       gblCredits,
+      merchantFees,
     })
 
     // Upsert per site+date
@@ -280,6 +283,7 @@ router.post('/bank-statement', express.json({ limit: '1mb' }), async (req, res) 
           // NEW: persist GBL buckets
           gblDebits: doc.gblDebits ?? [],
           gblCredits: doc.gblCredits ?? [],
+          merchantFees: typeof doc.merchantFees === 'number' ? doc.merchantFees : 0,
         },
       },
       { new: true, upsert: true, setDefaultsOnInsert: true }
