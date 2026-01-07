@@ -388,6 +388,7 @@ router.get('/entries', async (req, res) => {
       'totalSales',
       'afdCredit',
       'afdDebit',
+      'afdGiftCard',
       'kioskCredit',
       'kioskDebit',
       'kioskGiftCard',
@@ -458,7 +459,7 @@ router.get('/entries', async (req, res) => {
     }
 
     // Compute Bank Stmt Trans:
-    // balanceForward - sum(miscDebits.amount) - sum(gblDebits.amount) - merchantFees
+    // balanceForward - sum(miscDebits.amount) - sum(gblDebits.amount) - merchantFees + sum(miscCredits.amount)
     const miscDebitsTotal = (bank?.miscDebits || []).reduce((sum, x) => {
       const amt = Number(x?.amount) || 0
       return sum + (amt > 0 ? amt : 0)
@@ -467,11 +468,28 @@ router.get('/entries', async (req, res) => {
       const amt = Number(x?.amount) || 0
       return sum + (amt > 0 ? amt : 0)
     }, 0)
+    const miscCreditsTotal = (bank?.miscCredits || []).reduce((sum, x) => {
+      const amt = Number(x?.amount) || 0
+      return sum + (amt > 0 ? amt : 0)
+    }, 0)
     const bankStmtTrans =
       (Number(bank?.balanceForward) || 0) -
       miscDebitsTotal -
       gblDebitsTotal -
-      (Number(bank?.merchantFees) || 0)
+      (Number(bank?.merchantFees) || 0) +
+      miscCreditsTotal
+
+    // Compute Bank Rec:
+    // Ending Balance - Bank Stmt Trans - Total POS - Kardpoll Sales + Kiosk GC + AFD GC + Kardpoll AR - Handheld Debit
+    const endingBalance = Number(bank?.endingBalance) || 0
+    const totalPos = Number(cashSummary?.totals?.totalPos) || 0
+    const kioskGC = Number(cashSummary?.totals?.kioskGiftCard) || 0
+    const afdGC = Number(cashSummary?.totals?.afdGiftCard) || 0
+    const kardpollSales = Number(kardpoll?.sales) || 0
+    const kardpollAr = Number(kardpoll?.ar) || 0
+    const handheldDebit = Number(cashSummary?.handheldDebit) || 0
+
+    const bankRec = endingBalance - bankStmtTrans - totalPos - kardpollSales + kioskGC + afdGC + kardpollAr - handheldDebit
 
     return res.json({
       kardpoll: kardpoll || null,
@@ -479,6 +497,7 @@ router.get('/entries', async (req, res) => {
       cashSummary,
       totalReceivablesAmount,
       bankStmtTrans,
+      bankRec,
     })
   } catch (err) {
     console.error('cashRecRoutes.entries error:', err)

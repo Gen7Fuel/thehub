@@ -65,6 +65,7 @@ type CashSummaryTotals = {
   totalSales: number
   afdCredit: number
   afdDebit: number
+  afdGiftCard?: number
   kioskCredit: number
   kioskDebit: number
   kioskGiftCard: number
@@ -96,6 +97,7 @@ type EntriesResponse = {
   cashSummary: CashSummaryAgg
   totalReceivablesAmount?: number
   bankStmtTrans?: number
+  bankRec?: number
 }
 
 type EntriesRow = { date: string; data: EntriesResponse | null }
@@ -281,7 +283,7 @@ function RouteComponent() {
                     <td className="px-2 py-2 text-right">{fmt2(data?.cashSummary?.totals.item_sales)}</td>
                     <td className="px-2 py-2 text-right">{fmt2(data?.cashSummary?.totals.totalSales)}</td>
                     <td className="px-2 py-2 text-right">{fmt2((data?.cashSummary?.totals.totalSales ?? 0) - (data?.cashSummary?.totals.item_sales ?? 0))}</td>
-                    <td className="px-2 py-2 text-right">{fmt2(data?.cashSummary?.handheldDebit)}</td>
+                    <td className="px-2 py-2 text-right">{fmt2(data?.cashSummary?.totals.afdGiftCard)}</td>
                     <td className="px-2 py-2 text-right">{fmt2(data?.cashSummary?.totals.totalPos)}</td>
                     <td className="px-2 py-2 text-right">{fmt2(data?.cashSummary?.totals.kioskGiftCard)}</td>
                     <td className="px-2 py-2 text-right">{fmt2(data?.cashSummary?.totals.arIncurred)}</td>
@@ -315,7 +317,7 @@ function RouteComponent() {
                       (data?.totalReceivablesAmount ?? 0)
                     )}</td>
                         <td className="px-2 py-2 text-right">{fmt2(data?.bankStmtTrans)}</td>
-                    <td className="px-2 py-2"></td>
+                    <td className="px-2 py-2 text-right">{fmt2(data?.bankRec)}</td>
                     <td className="px-2 py-2 text-right">{fmt2(data?.totalReceivablesAmount)}</td>
                   </tr>
                 )
