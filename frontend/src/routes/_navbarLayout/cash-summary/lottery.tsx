@@ -527,6 +527,7 @@ function RouteComponent() {
         datawaveValue: Number(found.dataWave ?? 0),
         datawaveFee: Number(found.feeDataWave ?? 0),
         scratchFreeTickets: Number(found.scratchFreeTickets ?? 0),
+        oldScratchTickets: Number(found.oldScratchTickets ?? 0),
       }
       : {
         onlineSales: 0,
@@ -537,6 +538,7 @@ function RouteComponent() {
         payouts: 0,
         datawaveValue: 0,
         datawaveFee: 0,
+        oldScratchTickets: 0,
       }
 
     setLotteryValues(nextValues)
@@ -566,7 +568,8 @@ function RouteComponent() {
       scratchSales:
         (bullock.scratchSales || 0) -
         ((lotteryValues.scratchSales || 0) +
-          (lotteryValues.scratchFreeTickets || 0)),
+          (lotteryValues.scratchFreeTickets || 0) +
+          (lotteryValues.oldScratchTickets || 0)),
       payouts: (bullock.payouts || 0) -
         ((lotteryValues.payouts || 0) +
           (lotteryValues.scratchFreeTickets || 0)),
@@ -741,6 +744,24 @@ function RouteComponent() {
                     onChange={(e) =>
                       useFormStore.getState().setLotteryValues({
                         scratchFreeTickets: Number(e.target.value || 0),
+                      })
+                    }
+                  />
+                </td>
+                <td className="px-4 py-2">—</td>
+                <td className="px-4 py-2">—</td>
+              </tr>
+
+              <tr className="border-t bg-gray-50">
+                <td className="px-4 py-2 pl-8">Old Scratch Tickets</td>
+                <td className="px-4 py-2">
+                  <input
+                    type="number"
+                    className="w-36 p-2 border rounded"
+                    value={(lotteryValues as any).oldScratchTickets ?? 0}
+                    onChange={(e) =>
+                      useFormStore.getState().setLotteryValues({
+                        oldScratchTickets: Number(e.target.value || 0),
                       })
                     }
                   />
