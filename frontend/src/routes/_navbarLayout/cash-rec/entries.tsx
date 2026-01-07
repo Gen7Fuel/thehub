@@ -37,6 +37,9 @@ type BankStatementResp = {
   transferTo: number
   endingBalance: number
   miscDebits: BankMiscDebit[]
+  // Optional fields present in backend for additional calculations
+  gblDebits?: BankMiscDebit[]
+  merchantFees?: number
   createdAt?: string
   updatedAt?: string
   unsettledPrepays?: number
@@ -92,6 +95,7 @@ type EntriesResponse = {
   bank: BankStatementResp | null
   cashSummary: CashSummaryAgg
   totalReceivablesAmount?: number
+  bankStmtTrans?: number
 }
 
 type EntriesRow = { date: string; data: EntriesResponse | null }
@@ -310,9 +314,7 @@ function RouteComponent() {
                       (data?.cashSummary?.totals.totalSales ?? 0) +
                       (data?.totalReceivablesAmount ?? 0)
                     )}</td>
-                    <td className="px-2 py-2">
-                      
-                    </td>
+                        <td className="px-2 py-2 text-right">{fmt2(data?.bankStmtTrans)}</td>
                     <td className="px-2 py-2"></td>
                     <td className="px-2 py-2 text-right">{fmt2(data?.totalReceivablesAmount)}</td>
                   </tr>

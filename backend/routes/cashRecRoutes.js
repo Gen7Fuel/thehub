@@ -457,11 +457,28 @@ router.get('/entries', async (req, res) => {
       console.error('Failed to aggregate receivables:', e)
     }
 
+    // Compute Bank Stmt Trans:
+    // balanceForward - sum(miscDebits.amount) - sum(gblDebits.amount) - merchantFees
+    const miscDebitsTotal = (bank?.miscDebits || []).reduce((sum, x) => {
+      const amt = Number(x?.amount) || 0
+      return sum + (amt > 0 ? amt : 0)
+    }, 0)
+    const gblDebitsTotal = (bank?.gblDebits || []).reduce((sum, x) => {
+      const amt = Number(x?.amount) || 0
+      return sum + (amt > 0 ? amt : 0)
+    }, 0)
+    const bankStmtTrans =
+      (Number(bank?.balanceForward) || 0) -
+      miscDebitsTotal -
+      gblDebitsTotal -
+      (Number(bank?.merchantFees) || 0)
+
     return res.json({
       kardpoll: kardpoll || null,
       bank: bank || null,
       cashSummary,
       totalReceivablesAmount,
+      bankStmtTrans,
     })
   } catch (err) {
     console.error('cashRecRoutes.entries error:', err)
