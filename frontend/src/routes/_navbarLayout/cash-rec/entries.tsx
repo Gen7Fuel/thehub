@@ -310,7 +310,9 @@ function RouteComponent() {
                       (data?.cashSummary?.totals.totalSales ?? 0) +
                       (data?.totalReceivablesAmount ?? 0)
                     )}</td>
-                    <td className="px-2 py-2"></td>
+                    <td className="px-2 py-2">
+                      
+                    </td>
                     <td className="px-2 py-2"></td>
                     <td className="px-2 py-2 text-right">{fmt2(data?.totalReceivablesAmount)}</td>
                   </tr>
