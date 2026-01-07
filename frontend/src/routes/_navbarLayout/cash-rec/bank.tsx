@@ -9,6 +9,9 @@ type ParsedTtx = {
   miscDebits: { date: string; description: string; amount: number }[]
   // NEW: capture miscellaneous credits
   miscCredits?: { date: string; description: string; amount: number }[]
+  // NEW: capture GBL debits/credits
+  gblDebits?: { date: string; description: string; amount: number }[]
+  gblCredits?: { date: string; description: string; amount: number }[]
   endingBalance?: number
   statementDate?: string // YYYY-MM-DD
   accountName?: string // raw Account Name (legalName)
@@ -62,7 +65,7 @@ function parseTtx(text: string): ParsedTtx {
   const balanceIdx = idx('Balance')
   const acctNameIdx = idx('Account Name')
 
-  const out: ParsedTtx = { miscDebits: [], miscCredits: [] }
+  const out: ParsedTtx = { miscDebits: [], miscCredits: [], gblDebits: [], gblCredits: [] }
   let lastBalance: number | undefined
   let latestDate: string | undefined
 
@@ -92,12 +95,15 @@ function parseTtx(text: string): ParsedTtx {
       if (out.balanceForward == null && descLower.includes('balance forward')) out.balanceForward = balance
       if (descLower.includes('night deposit')) out.nightDeposit = (out.nightDeposit ?? 0) + credits
       if (descLower.includes('transfer to')) out.transferTo = (out.transferTo ?? 0) + debits
-      if (descLower.includes('misc debit')) {
-        out.miscDebits.push({ date: dateStr || '', description, amount: debits })
+      // Column-driven classification with GBL split (strictly > 0)
+      const hasGBL = /gbl/i.test(description)
+      if (debits > 0) {
+        if (hasGBL) out.gblDebits!.push({ date: dateStr || '', description, amount: debits })
+        else out.miscDebits.push({ date: dateStr || '', description, amount: debits })
       }
-      // NEW: capture miscellaneous credit entries
-      if (descLower.includes('misc credit') || descLower.includes('miscellaneous credit')) {
-        out.miscCredits!.push({ date: dateStr || '', description, amount: credits })
+      if (credits > 0) {
+        if (hasGBL) out.gblCredits!.push({ date: dateStr || '', description, amount: credits })
+        else out.miscCredits!.push({ date: dateStr || '', description, amount: credits })
       }
     }
   }
@@ -248,6 +254,9 @@ function RouteComponent() {
       miscDebits: parsed.miscDebits ?? [],
       // NEW: include miscCredits when uploading
       miscCredits: parsed.miscCredits ?? [],
+      // NEW: include gbl buckets when uploading
+      gblDebits: parsed.gblDebits ?? [],
+      gblCredits: parsed.gblCredits ?? [],
     }
     try {
       const res = await fetch('/api/cash-rec/bank-statement', {
@@ -326,37 +335,91 @@ function RouteComponent() {
               <div className="font-semibold">Ending Balance</div>
               <div>{parsed.endingBalance ?? 0}</div>
             </div>
+              {/* GBL Debits */}
+              <div className="sm:col-span-2 border rounded p-3">
+                <div className="font-semibold mb-2">GBL Debits</div>
+                {((parsed.gblDebits?.length ?? 0) === 0) ? (
+                  <div className="text-sm text-muted-foreground">None found</div>
+                ) : (
+                  <>
+                    <ul className="space-y-1">
+                      {parsed.gblDebits!.map((m, i) => (
+                        <li key={i} className="text-sm">
+                          <span className="mr-2">{m.date || '-'}</span>
+                          <span className="mr-2">{m.description}</span>
+                          <span className="font-mono">{m.amount}</span>
+                        </li>
+                      ))}
+                    </ul>
+                    <div className="mt-2 text-sm font-semibold">
+                      Total: {parsed.gblDebits!.reduce((s, x) => s + (x.amount || 0), 0)}
+                    </div>
+                  </>
+                )}
+              </div>
             <div className="sm:col-span-2 border rounded p-3">
               <div className="font-semibold mb-2">Misc Debits (Debits column)</div>
               {parsed.miscDebits.length === 0 ? (
                 <div className="text-sm text-muted-foreground">None found</div>
               ) : (
-                <ul className="space-y-1">
-                  {parsed.miscDebits.map((m, i) => (
-                    <li key={i} className="text-sm">
-                      <span className="mr-2">{m.date || '-'}</span>
-                      <span className="mr-2">{m.description}</span>
-                      <span className="font-mono">{m.amount}</span>
-                    </li>
-                  ))}
-                </ul>
+                  <>
+                    <ul className="space-y-1">
+                      {parsed.miscDebits.map((m, i) => (
+                        <li key={i} className="text-sm">
+                          <span className="mr-2">{m.date || '-'}</span>
+                          <span className="mr-2">{m.description}</span>
+                          <span className="font-mono">{m.amount}</span>
+                        </li>
+                      ))}
+                    </ul>
+                    <div className="mt-2 text-sm font-semibold">
+                      Total: {parsed.miscDebits.reduce((s, x) => s + (x.amount || 0), 0)}
+                    </div>
+                  </>
               )}
             </div>
-            {/* NEW: Misc Credits list */}
+              {/* GBL Credits */}
+              <div className="sm:col-span-2 border rounded p-3">
+                <div className="font-semibold mb-2">GBL Credits</div>
+                {((parsed.gblCredits?.length ?? 0) === 0) ? (
+                  <div className="text-sm text-muted-foreground">None found</div>
+                ) : (
+                  <>
+                    <ul className="space-y-1">
+                      {parsed.gblCredits!.map((m, i) => (
+                        <li key={i} className="text-sm">
+                          <span className="mr-2">{m.date || '-'}</span>
+                          <span className="mr-2">{m.description}</span>
+                          <span className="font-mono">{m.amount}</span>
+                        </li>
+                      ))}
+                    </ul>
+                    <div className="mt-2 text-sm font-semibold">
+                      Total: {parsed.gblCredits!.reduce((s, x) => s + (x.amount || 0), 0)}
+                    </div>
+                  </>
+                )}
+              </div>
+              {/* Misc Credits list */}
             <div className="sm:col-span-2 border rounded p-3">
               <div className="font-semibold mb-2">Misc Credits (Credits column)</div>
               {(parsed.miscCredits?.length ?? 0) === 0 ? (
                 <div className="text-sm text-muted-foreground">None found</div>
               ) : (
-                <ul className="space-y-1">
-                  {parsed.miscCredits!.map((m, i) => (
-                    <li key={i} className="text-sm">
-                      <span className="mr-2">{m.date || '-'}</span>
-                      <span className="mr-2">{m.description}</span>
-                      <span className="font-mono">{m.amount}</span>
-                    </li>
-                  ))}
-                </ul>
+                  <>
+                    <ul className="space-y-1">
+                      {parsed.miscCredits!.map((m, i) => (
+                        <li key={i} className="text-sm">
+                          <span className="mr-2">{m.date || '-'}</span>
+                          <span className="mr-2">{m.description}</span>
+                          <span className="font-mono">{m.amount}</span>
+                        </li>
+                      ))}
+                    </ul>
+                    <div className="mt-2 text-sm font-semibold">
+                      Total: {parsed.miscCredits!.reduce((s, x) => s + (x.amount || 0), 0)}
+                    </div>
+                  </>
               )}
             </div>
           </div>

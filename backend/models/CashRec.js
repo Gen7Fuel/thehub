@@ -69,6 +69,9 @@ const BankStatementSchema = new mongoose.Schema(
     miscDebits: { type: [MiscDebitSchema], default: [] },
     // NEW: store miscellaneous credits
     miscCredits: { type: [MiscDebitSchema], default: [] },
+    // NEW: store GBL debits/credits
+    gblDebits: { type: [MiscDebitSchema], default: [] },
+    gblCredits: { type: [MiscDebitSchema], default: [] },
   },
   { timestamps: true }
 )
@@ -95,6 +98,9 @@ BankStatementSchema.statics.fromParsed = function (payload = {}) {
     miscDebits = [],
     // NEW: accept miscCredits
     miscCredits = [],
+    // NEW: accept GBL buckets
+    gblDebits = [],
+    gblCredits = [],
   } = payload
 
   return new this({
@@ -113,6 +119,20 @@ BankStatementSchema.statics.fromParsed = function (payload = {}) {
       : [],
     miscCredits: Array.isArray(miscCredits)
       ? miscCredits.map((m) => ({
+          date: toYmd(m?.date),
+          description: String(m?.description || ''),
+          amount: Number(m?.amount) || 0,
+        }))
+      : [],
+    gblDebits: Array.isArray(gblDebits)
+      ? gblDebits.map((m) => ({
+          date: toYmd(m?.date),
+          description: String(m?.description || ''),
+          amount: Number(m?.amount) || 0,
+        }))
+      : [],
+    gblCredits: Array.isArray(gblCredits)
+      ? gblCredits.map((m) => ({
           date: toYmd(m?.date),
           description: String(m?.description || ''),
           amount: Number(m?.amount) || 0,

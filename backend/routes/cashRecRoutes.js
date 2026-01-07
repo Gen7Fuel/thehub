@@ -240,6 +240,9 @@ router.post('/bank-statement', express.json({ limit: '1mb' }), async (req, res) 
       miscDebits,
       // NEW: accept miscCredits in payload
       miscCredits,
+      // NEW: accept GBL buckets in payload
+      gblDebits,
+      gblCredits,
     } = req.body || {}
 
     if (!site || !date) {
@@ -257,6 +260,9 @@ router.post('/bank-statement', express.json({ limit: '1mb' }), async (req, res) 
       miscDebits,
       // NEW: include miscCredits
       miscCredits,
+      // NEW: include GBL buckets
+      gblDebits,
+      gblCredits,
     })
 
     // Upsert per site+date
@@ -271,6 +277,9 @@ router.post('/bank-statement', express.json({ limit: '1mb' }), async (req, res) 
           miscDebits: doc.miscDebits ?? [],
           // NEW: persist miscCredits
           miscCredits: doc.miscCredits ?? [],
+          // NEW: persist GBL buckets
+          gblDebits: doc.gblDebits ?? [],
+          gblCredits: doc.gblCredits ?? [],
         },
       },
       { new: true, upsert: true, setDefaultsOnInsert: true }
