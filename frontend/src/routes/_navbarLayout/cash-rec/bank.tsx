@@ -327,7 +327,7 @@ function RouteComponent() {
                 className={`w-full border rounded px-3 py-2 text-sm ${merchantFees && !merchantFeesValid ? 'border-red-500' : 'border-input'}`}
               />
               {!merchantFeesValid && merchantFees && (
-                <div className="text-xs text-red-600 mt-1">Enter a number > 0 with up to 2 decimals.</div>
+                <div className="text-xs text-red-600 mt-1">Enter a number &gt; 0 with up to 2 decimals.</div>
               )}
             </div>
             <div className="text-xs text-muted-foreground pb-2">Capture requires Merchant Fees.</div>
