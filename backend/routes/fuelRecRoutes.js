@@ -101,4 +101,61 @@ router.get('/list', async (req, res) => {
   }
 })
 
+// Bridge to Location model (CJS) and email service (CJS)
+let _Location
+async function getLocation() {
+  if (_Location) return _Location
+  const mod = await import('../models/Location.js')
+  _Location = mod.default || mod.Location
+  return _Location
+}
+
+let _sendEmail
+async function getSendEmail() {
+  if (_sendEmail) return _sendEmail
+  const mod = await import('../utils/emailService.js')
+  _sendEmail = mod.sendEmail || (mod.default && mod.default.sendEmail)
+  return _sendEmail
+}
+
+// POST /api/fuel-rec/request-again
+// body: { site: string, date: 'YYYY-MM-DD' }
+router.post('/request-again', async (req, res) => {
+  const site = String(req.body?.site || '').trim()
+  const date = String(req.body?.date || '').trim()
+
+  if (!site || !isYmd(date)) {
+    return res.status(400).json({ error: 'site and date (YYYY-MM-DD) are required' })
+  }
+
+  try {
+    const Location = await getLocation()
+    const location = await Location.findOne(
+      { stationName: site },
+      { email: 1, stationName: 1 }
+    ).lean()
+
+    if (!location) {
+      return res.status(404).json({ error: `Location not found for stationName '${site}'` })
+    }
+
+    const to = String(location.email || '').trim()
+    if (!to) {
+      return res.status(400).json({ error: 'Location has no email configured' })
+    }
+
+    const sendEmail = await getSendEmail()
+    await sendEmail({
+      to: 'mohammad@gen7fuel.com',
+      subject: `BOL Photo Retake Requested – ${location.stationName} – ${date}`,
+      text: `A new photo for the BOL was requested for the date of ${date}. Reason: Image not clear.`,
+    })
+
+    return res.status(200).json({ sent: true })
+  } catch (e) {
+    console.error('fuelRec.request-again error:', e)
+    return res.status(500).json({ error: 'Failed to send retake request email' })
+  }
+})
+
 module.exports = router

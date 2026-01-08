@@ -410,7 +410,7 @@ export default function RouteComponent() {
         cashInDisplay: fmtNumber(e.cashIn),
         cashExpenseOutDisplay: fmtNumber(e.cashExpenseOut),
         cashDepositBankDisplay: fmtNumber(e.cashDepositBank),
-        cashOnHandSafeDisplay: fmtNumber(e.cashOnHandSafe ?? null),
+        cashOnHandSafeDisplay: fmtNumber(e.cashOnHandSafe ?? 0),
       }
     })
   }, [sheet])
