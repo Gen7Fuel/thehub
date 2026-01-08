@@ -263,7 +263,6 @@ function RouteComponent() {
                 <th className="px-1 py-1 text-center align-bottom h-24 bg-sky-50">Balance Check</th>
                 <th className="px-1 py-1 text-center align-bottom h-24 bg-sky-50">Bank Stmt Trans</th>
                 <th className="px-1 py-1 text-center align-bottom h-24 bg-sky-50">Bank Rec</th>
-                <th className="px-1 py-1 text-center align-bottom h-24 bg-yellow-100">Receivables Total</th>
               </tr>
             </thead>
             <tbody>
