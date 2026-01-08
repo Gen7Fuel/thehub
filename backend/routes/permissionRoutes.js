@@ -229,192 +229,170 @@ router.post("/sync", async (req, res) => {
 });
 
 
-const mergePermissionsForRename = (newStructure = [], oldStructure = []) => {
-  return newStructure.map(newNode => {
-    // Try to find matching old node by name OR by the oldName property
-    const existing = oldStructure.find(o => 
-      o.name === newNode.name || (newNode.oldName && o.name === newNode.oldName)
-    );
-
-    return {
-      name: newNode.name,
-      value: existing ? existing.value : false, // Preserve existing checkbox state
-      children: mergePermissionsForRename(
-        newNode.children || [],
-        existing ? existing.children : []
-      )
-    };
-  });
-};
-
 // const mergePermissionsForRename = (newStructure = [], oldStructure = []) => {
-//   const merged = [];
+//   return newStructure.map(newNode => {
+//     // Try to find matching old node by name OR by the oldName property
+//     const existing = oldStructure.find(o => 
+//       o.name === newNode.name || (newNode.oldName && o.name === newNode.oldName)
+//     );
 
-//   for (const newNode of newStructure) {
-//     const existing =
-//       // match by new name
-//       oldStructure.find(o => o.name === newNode.name) ||
-//       // match by old name (coming from frontend)
-//       oldStructure.find(o => o.name === newNode.oldName);
-
-//     if (existing) {
-//       merged.push({
-//         name: newNode.name, // updated name
-//         value: existing.value ?? false,
-//         children: mergePermissionsForRename(
-//           newNode.children || [],
-//           existing.children || []
-//         )
-//       });
-//     } else {
-//       merged.push({
-//         name: newNode.name,
-//         value: false,
-//         children: mergePermissionsForRename(newNode.children || [], [])
-//       });
-//     }
-//   }
-
-//   return merged;
+//     return {
+//       name: newNode.name,
+//       value: existing ? existing.value : false, // Preserve existing checkbox state
+//       children: mergePermissionsForRename(
+//         newNode.children || [],
+//         existing ? existing.children : []
+//       )
+//     };
+//   });
 // };
 
 // router.put("/:id", async (req, res) => {
 //   try {
 //     const { module_name, old_module_name, structure } = req.body;
 
-//     // Update permission document
-//     const updated = await Permission.findByIdAndUpdate(
+//     // 1. Update the Master Permission document
+//     const updatedMaster = await Permission.findByIdAndUpdate(
 //       req.params.id,
 //       { module_name, structure },
 //       { new: true }
 //     );
-//     if (!updated) return res.status(404).json({ message: "Permission not found" });
+//     if (!updatedMaster) return res.status(404).json({ message: "Permission not found" });
 
-//     // Update Roles
+//     // 2. Fetch all Master permissions to ensure we have the full current state
+//     const allMasterPermissions = await Permission.find({});
 //     const allRoles = await Role.find({});
-//     for (const role of allRoles) {
-//       const existingModule = role.permissions.find(p => p.name === old_module_name);
 
-//       if (existingModule) {
-//         existingModule.name = module_name;
-//         existingModule.children = mergePermissionsForRename(
-//           structure,
-//           existingModule.children || []
+//     const updatePromises = allRoles.map(async (role) => {
+//       const updatedPermissions = [];
+//       const seenNames = new Set();
+
+//       // We reconstruct the role's permissions based on EVERY master permission
+//       for (const master of allMasterPermissions) {
+//         if (seenNames.has(master.module_name)) continue;
+//         seenNames.add(master.module_name);
+
+//         // Try to find the existing role data
+//         // Check for the NEW name OR the OLD name to bridge the gap during a rename
+//         const existing = role.permissions.find(p => 
+//           p.name === master.module_name || p.name === old_module_name
 //         );
 
-//         await role.save();
+//         updatedPermissions.push({
+//           name: master.module_name,
+//           value: existing ? existing.value : false,
+//           children: mergePermissionsForRename(
+//             master.structure, 
+//             existing ? existing.children : []
+//           )
+//         });
 //       }
-//     }
 
-//     res.status(200).json(updated);
-//   } catch (error) {
-//     console.error("Error updating permission:", error);
-//     res.status(500).json({ message: "Server error updating permission" });
-//   }
-// });
-// router.put("/:id", async (req, res) => {
-//   try {
-//     const { module_name, old_module_name, structure } = req.body;
-
-//     // 1. Update the Master Permission
-//     const updatedPermission = await Permission.findByIdAndUpdate(
-//       req.params.id,
-//       { module_name, structure },
-//       { new: true }
-//     );
-//     if (!updatedPermission) return res.status(404).json({ message: "Permission not found" });
-
-//     // 2. Update all Roles containing this module
-//     // Optimization: Only query roles that actually have this module
-//     const rolesToUpdate = await Role.find({ "permissions.name": old_module_name });
-
-//     const updatePromises = rolesToUpdate.map(async (role) => {
-//       // Find the index of the module to be updated
-//       const moduleIndex = role.permissions.findIndex(p => p.name === old_module_name);
-
-//       if (moduleIndex !== -1) {
-//         // Get the existing data
-//         const existingModule = role.permissions[moduleIndex];
-
-//         // Create the new merged structure
-//         const mergedChildren = mergePermissionsForRename(
-//           structure, // The new master structure
-//           existingModule.children || [] // The existing role-specific values
-//         );
-
-//         // Update the specific element in the array
-//         role.permissions[moduleIndex] = {
-//           name: module_name,
-//           value: existingModule.value, // Keep the module-level toggle if it exists
-//           children: mergedChildren
-//         };
-
-//         // Explicitly tell Mongoose the permissions array has changed
-//         role.markModified('permissions');
-//         return role.save();
-//       }
+//       role.permissions = updatedPermissions;
+//       role.markModified('permissions');
+//       return role.save();
 //     });
 
 //     await Promise.all(updatePromises);
+//     res.status(200).json(updatedMaster);
 
-//     res.status(200).json(updatedPermission);
 //   } catch (error) {
-//     console.error("Error updating permission:", error);
-//     res.status(500).json({ message: "Server error" });
+//     console.error("Critical Update Error:", error);
+//     res.status(500).json({ message: "Internal Server Error" });
 //   }
 // });
+
+
 router.put("/:id", async (req, res) => {
   try {
-    const { module_name, old_module_name, structure } = req.body;
+    const { module_name, structure } = req.body;
 
-    // 1. Update the Master Permission document
-    const updatedMaster = await Permission.findByIdAndUpdate(
-      req.params.id,
-      { module_name, structure },
-      { new: true }
-    );
-    if (!updatedMaster) return res.status(404).json({ message: "Permission not found" });
+    // 1️⃣ Update the Permission Module
+    const permission = await Permission.findById(req.params.id);
+    if (!permission) return res.status(404).json({ message: "Permission not found" });
 
-    // 2. Fetch all Master permissions to ensure we have the full current state
-    const allMasterPermissions = await Permission.find({});
-    const allRoles = await Role.find({});
+    permission.module_name = module_name;
+    permission.structure = structure;
+    
+    // The pre-validate hook in your model automatically handles permId assignment
+    // We save first so we can work with the finalized IDs
+    await permission.save(); 
+    permission.markModified("structure");
 
-    const updatePromises = allRoles.map(async (role) => {
-      const updatedPermissions = [];
-      const seenNames = new Set();
+    // 2️⃣ Get the "Source of Truth" for THIS module only
+    const currentModuleIds = new Set();
+    currentModuleIds.add(permission.module_permId); // The module root ID
 
-      // We reconstruct the role's permissions based on EVERY master permission
-      for (const master of allMasterPermissions) {
-        if (seenNames.has(master.module_name)) continue;
-        seenNames.add(master.module_name);
-
-        // Try to find the existing role data
-        // Check for the NEW name OR the OLD name to bridge the gap during a rename
-        const existing = role.permissions.find(p => 
-          p.name === master.module_name || p.name === old_module_name
-        );
-
-        updatedPermissions.push({
-          name: master.module_name,
-          value: existing ? existing.value : false,
-          children: mergePermissionsForRename(
-            master.structure, 
-            existing ? existing.children : []
-          )
-        });
+    const extractIds = (nodes) => {
+      for (const node of nodes) {
+        if (node.permId) currentModuleIds.add(node.permId);
+        if (node.children?.length) extractIds(node.children);
       }
+    };
+    extractIds(permission.structure);
 
-      role.permissions = updatedPermissions;
-      role.markModified('permissions');
+    /**
+     * Now we need to know which IDs belong to this module range 
+     * based on your 5000-block logic.
+     */
+    const rangeMin = permission.module_permId;
+    const rangeMax = permission.module_permId + 4999;
+
+    // 3️⃣ Update All Roles
+    const roles = await Role.find({});
+    const rolePromises = roles.map(async (role) => {
+      // Create a map of current permissions to preserve existing Boolean values
+      const rolePermMap = new Map(role.permissionsArray.map(p => [p.permId, p.value]));
+
+      // A: Filter out IDs that were deleted from THIS module range
+      // (Leave IDs from other modules untouched)
+      let updatedArray = role.permissionsArray.filter(p => {
+        const isFromThisModule = p.permId >= rangeMin && p.permId <= rangeMax;
+        if (!isFromThisModule) return true; // Keep other modules
+        return currentModuleIds.has(p.permId); // Keep only if still in this module
+      });
+
+      // B: Add new IDs that don't exist in the role yet
+      currentModuleIds.forEach(pid => {
+        const alreadyHasIt = updatedArray.some(p => p.permId === pid);
+        if (!alreadyHasIt) {
+          updatedArray.push({ permId: pid, value: false }); // New perms default to false
+        }
+      });
+
+      role.permissionsArray = updatedArray;
+      role.markModified('permissionsArray');
       return role.save();
     });
 
-    await Promise.all(updatePromises);
-    res.status(200).json(updatedMaster);
+    // 4️⃣ Update All Users (Custom Overrides)
+    const users = await User.find({ "customPermissionsArray.0": { $exists: true } });
+    const userPromises = users.map(async (user) => {
+      // Users only store overrides, so we only need to DELETE orphaned IDs
+      const initialCount = user.customPermissionsArray.length;
+      
+      user.customPermissionsArray = user.customPermissionsArray.filter(p => {
+        const isFromThisModule = p.permId >= rangeMin && p.permId <= rangeMax;
+        if (!isFromThisModule) return true; // Keep other modules
+        return currentModuleIds.has(p.permId); // Remove if deleted from module
+      });
+
+      if (user.customPermissionsArray.length !== initialCount) {
+        user.markModified('customPermissionsArray');
+        return user.save();
+      }
+    });
+
+    await Promise.all([...rolePromises, ...userPromises]);
+
+    res.status(200).json({
+      message: "Permission and associated Roles/Users synced successfully",
+      data: permission
+    });
 
   } catch (error) {
-    console.error("Critical Update Error:", error);
-    res.status(500).json({ message: "Internal Server Error" });
+    console.error("Permission Sync Error:", error);
+    res.status(500).json({ message: "Internal Server Error", error: error.message });
   }
 });
 

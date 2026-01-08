@@ -39,11 +39,12 @@ function RouteComponent() {
   if (!permission) return <div className="p-4 text-red-500">Permission not found.</div>;
 
   // Handle save callback
-  const handleSave = async (structure: any[], moduleName: string, oldModuleName: string) => {
+  // const handleSave = async (structure: any[], moduleName: string, oldModuleName: string) => {
+  const handleSave = async (structure: any[], moduleName: string) => {
     try {
       await axios.put(`/api/permissions/${permission._id}`, {
         module_name: moduleName,
-        old_module_name: oldModuleName,
+        // old_module_name: oldModuleName,
         structure,
       }, {
         headers: {
