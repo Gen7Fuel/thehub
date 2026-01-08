@@ -6,6 +6,8 @@ import { ImagePlus, Image as ImageIcon } from "lucide-react";
 import { DatePickerWithRange } from '@/components/custom/datePickerWithRange'
 import type { DateRange } from 'react-day-picker'
 import { getStartAndEndOfToday } from '@/lib/utils'
+import { PasswordProtection } from "@/components/custom/PasswordProtection";
+import { useAuth } from "@/context/AuthContext";
 
 type Entry = {
   _id: string
@@ -32,15 +34,15 @@ type SafeSheet = {
 export const Route = createFileRoute('/_navbarLayout/safesheet')({
   component: RouteComponent,
   validateSearch: (search) =>
-    ({
-      site: (search as any).site ?? '',
-      from: (search as any).from ?? '',
-      to: (search as any).to ?? '',
-    } as {
-      site: string
-      from: string
-      to: string
-    }),
+  ({
+    site: (search as any).site ?? '',
+    from: (search as any).from ?? '',
+    to: (search as any).to ?? '',
+  } as {
+    site: string
+    from: string
+    to: string
+  }),
   loaderDeps: ({ search: { site, from, to } }) => ({ site, from, to }),
 })
 // export const Route = createFileRoute('/_navbarLayout/safesheet')({
@@ -65,11 +67,29 @@ const parseYmd = (s?: string) => {
 
 export default function RouteComponent() {
   // const { site } = Route.useSearch() as { site?: string }
+  const { user } = useAuth();
   const { site, from, to } = Route.useSearch() as { site?: string; from?: string; to?: string }
   const navigate = useNavigate({ from: Route.fullPath })
 
   const setSearch = (next: Partial<{ site: string; from: string; to: string }>) => {
     navigate({ search: (prev: any) => ({ ...prev, ...next }) })
+  }
+
+  const [showPasswordDialog, setShowPasswordDialog] = useState(false);
+  const [hasAccess, setHasAccess] = useState(false);
+  useEffect(() => {
+    setShowPasswordDialog(true);
+  }, []);
+
+  const handlePasswordSuccess = () => {
+    setHasAccess(true);
+    setShowPasswordDialog(false);
+  };
+
+  const handlePasswordCancel = () => {
+    setShowPasswordDialog(false)
+    // Navigate back to cycle-count main page
+    navigate({ to: '/' })
   }
 
   // Initialize defaults in URL if missing
@@ -151,12 +171,12 @@ export default function RouteComponent() {
       try {
         const res = await fetch(
           `/api/safesheets/site/${encodeURIComponent(site)}?from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}`,
-        {
-          headers: {
-            Authorization: `Bearer ${localStorage.getItem('token')}`,
-            'X-Required-Permission': 'accounting.safesheet',
-          },
-        })
+          {
+            headers: {
+              Authorization: `Bearer ${localStorage.getItem('token')}`,
+              'X-Required-Permission': 'accounting.safesheet',
+            },
+          })
 
         if (res.status === 403) {
           navigate({ to: '/no-access' })
@@ -289,9 +309,9 @@ export default function RouteComponent() {
         setSheet((prev) =>
           prev
             ? {
-                ...prev,
-                entries: recomputeCashOnHand(body.entries, prev.initialBalance),
-              }
+              ...prev,
+              entries: recomputeCashOnHand(body.entries, prev.initialBalance),
+            }
             : prev,
         )
       }
@@ -396,310 +416,323 @@ export default function RouteComponent() {
   }, [sheet])
 
   return (
-    <div className="pt-14 flex flex-col items-center">
-      <div className="my-4 flex flex-row items-center gap-4">
-        <SitePicker
-          value={site}
-          // onValueChange={updateSearch}
-          onValueChange={(v) => setSearch({ site: v })}
-          placeholder="Pick a site"
-          label="Site"
-          className="w-[220px]"
+    <>
+      {!hasAccess && (
+        <PasswordProtection
+          isOpen={showPasswordDialog}
+          onSuccess={handlePasswordSuccess}
+          onCancel={handlePasswordCancel}
+          userLocation={user?.location || "Rankin"}
         />
-        {/* Adapt DatePicker setDate (it expects a setState dispatcher) */}
-        <DatePickerWithRange
-          date={date}
-          setDate={(val) => {
-            const next = typeof val === 'function' ? val(date) : val
-            if (!next?.from || !next?.to) return
-            setSearch({ from: ymd(next.from), to: ymd(next.to) })
-          }}
-        />
-      </div>
-
-      {!site && (
-        <p className="text-sm text-muted-foreground text-center">
-          Please select a site to view the safesheet.
-        </p>
       )}
 
-      {site && (
-        <div className="w-full max-w-5xl px-2 sm:px-4">
-          {loading && <p className="text-center">Loading...</p>}
-          {error && <p className="text-red-600 text-center">{error}</p>}
+      {hasAccess && (
+        <div className="pt-14 flex flex-col items-center">
+          <div className="my-4 flex flex-row items-center gap-4">
+            <SitePicker
+              value={site}
+              // onValueChange={updateSearch}
+              onValueChange={(v) => setSearch({ site: v })}
+              placeholder="Pick a site"
+              label="Site"
+              className="w-[220px]"
+            />
+            {/* Adapt DatePicker setDate (it expects a setState dispatcher) */}
+            <DatePickerWithRange
+              date={date}
+              setDate={(val) => {
+                const next = typeof val === 'function' ? val(date) : val
+                if (!next?.from || !next?.to) return
+                setSearch({ from: ymd(next.from), to: ymd(next.to) })
+              }}
+            />
+          </div>
 
-          {!loading && !error && sheet && (
-            <div className="overflow-x-auto border border-slate-300 rounded-lg shadow-sm bg-white">
-              <table className="min-w-full text-sm border-collapse table-fixed">
-                <thead className="bg-slate-100 text-slate-700 sticky top-0 z-10">
-                  <tr>
-                    <th className="px-2 py-1 text-left font-medium border-b border-slate-300 w-24">
-                      Date
-                    </th>
-                    <th className="px-2 py-1 text-left font-medium border-b border-slate-300 w-50">
-                      Description
-                    </th>
-                    <th className="px-2 py-1 text-right font-medium border-b border-slate-300 w-42">
-                      Cash In
-                    </th>
-                    <th className="px-2 py-1 text-right font-medium border-b border-slate-300 w-42">
-                      Cash Expense Out
-                    </th>
-                    <th className="px-2 py-1 text-right font-medium border-b border-slate-300 w-42">
-                      Cash Deposit Bank
-                    </th>
-                    <th className="px-2 py-1 text-right font-medium border-b border-slate-300 w-42">
-                      Cash On Hand
-                    </th>
-                    <th className="px-2 py-1 text-center font-medium border-b border-slate-300 w-32">
-                      Actions
-                    </th>
-                  </tr>
-                </thead>
+          {!site && (
+            <p className="text-sm text-muted-foreground text-center">
+              Please select a site to view the safesheet.
+            </p>
+          )}
 
-                <tbody>
-                  {formattedEntries.map((e) => {
-                    const isToday = (() => {
-                      const entry = new Date(e.date)
-                      const now = new Date()
-                      return (
-                        entry.getUTCFullYear() === now.getUTCFullYear() &&
-                        entry.getUTCMonth() === now.getUTCMonth() &&
-                        entry.getUTCDate() === now.getUTCDate()
-                      )
-                    })()
+          {site && (
+            <div className="w-full max-w-5xl px-2 sm:px-4">
+              {loading && <p className="text-center">Loading...</p>}
+              {error && <p className="text-red-600 text-center">{error}</p>}
 
-                    return (
-                      <tr
-                        key={e._id}
-                        className="odd:bg-white even:bg-slate-50 hover:bg-blue-50 transition-colors"
-                      >
-                        <td className="px-3 py-1.5 border-b border-slate-200 text-gray-700">
-                          {e.dateDisplay}
+              {!loading && !error && sheet && (
+                <div className="overflow-x-auto border border-slate-300 rounded-lg shadow-sm bg-white">
+                  <table className="min-w-full text-sm border-collapse table-fixed">
+                    <thead className="bg-slate-100 text-slate-700 sticky top-0 z-10">
+                      <tr>
+                        <th className="px-2 py-1 text-left font-medium border-b border-slate-300 w-24">
+                          Date
+                        </th>
+                        <th className="px-2 py-1 text-left font-medium border-b border-slate-300 w-50">
+                          Description
+                        </th>
+                        <th className="px-2 py-1 text-right font-medium border-b border-slate-300 w-42">
+                          Cash In
+                        </th>
+                        <th className="px-2 py-1 text-right font-medium border-b border-slate-300 w-42">
+                          Cash Expense Out
+                        </th>
+                        <th className="px-2 py-1 text-right font-medium border-b border-slate-300 w-42">
+                          Cash Deposit Bank
+                        </th>
+                        <th className="px-2 py-1 text-right font-medium border-b border-slate-300 w-42">
+                          Cash On Hand
+                        </th>
+                        <th className="px-2 py-1 text-center font-medium border-b border-slate-300 w-32">
+                          Actions
+                        </th>
+                      </tr>
+                    </thead>
+
+                    <tbody>
+                      {formattedEntries.map((e) => {
+                        const isToday = (() => {
+                          const entry = new Date(e.date)
+                          const now = new Date()
+                          return (
+                            entry.getUTCFullYear() === now.getUTCFullYear() &&
+                            entry.getUTCMonth() === now.getUTCMonth() &&
+                            entry.getUTCDate() === now.getUTCDate()
+                          )
+                        })()
+
+                        return (
+                          <tr
+                            key={e._id}
+                            className="odd:bg-white even:bg-slate-50 hover:bg-blue-50 transition-colors"
+                          >
+                            <td className="px-3 py-1.5 border-b border-slate-200 text-gray-700">
+                              {e.dateDisplay}
+                            </td>
+
+                            {/* Description */}
+                            <td className="px-3 py-1.5 border-b border-slate-200 text-gray-700">
+                              {isEditing(e._id, 'description') ? (
+                                <input
+                                  autoFocus
+                                  type="text"
+                                  value={editValue}
+                                  onChange={(ev) => setEditValue(ev.target.value)}
+                                  onBlur={() => finishEdit(e._id, 'description')}
+                                  onKeyDown={handleKeyDown}
+                                  className="w-full bg-transparent border-none outline-none p-0 m-0"
+                                />
+                              ) : (
+                                <span
+                                  className="block w-full cursor-text min-h-[1rem]"
+                                  onDoubleClick={() =>
+                                    isToday &&
+                                    startEdit(e._id, 'description', e.description || '')
+                                  }
+                                >
+                                  {e.description || '\u00A0'}
+                                </span>
+                              )}
+                            </td>
+
+                            {/* Cash In */}
+                            <td className="px-3 py-1.5 border-b border-slate-200 text-right text-gray-700">
+                              {isEditing(e._id, 'cashIn') ? (
+                                <input
+                                  autoFocus
+                                  type="number"
+                                  value={editValue}
+                                  onChange={(ev) => setEditValue(ev.target.value)}
+                                  onBlur={() => finishEdit(e._id, 'cashIn')}
+                                  onKeyDown={handleKeyDown}
+                                  className="w-full text-right bg-transparent border-none outline-none p-0 m-0"
+                                />
+                              ) : (
+                                <span
+                                  className="block w-full cursor-text"
+                                  onDoubleClick={() =>
+                                    isToday &&
+                                    startEdit(
+                                      e._id,
+                                      'cashIn',
+                                      e.cashIn != null ? e.cashIn.toString() : '',
+                                    )
+                                  }
+                                >
+                                  {e.cashInDisplay || '\u00A0'}
+                                </span>
+                              )}
+                            </td>
+
+                            {/* Cash Expense Out */}
+                            <td className="px-3 py-1.5 border-b border-slate-200 text-right text-gray-700">
+                              {isEditing(e._id, 'cashExpenseOut') ? (
+                                <input
+                                  autoFocus
+                                  type="number"
+                                  value={editValue}
+                                  onChange={(ev) => setEditValue(ev.target.value)}
+                                  onBlur={() => finishEdit(e._id, 'cashExpenseOut')}
+                                  onKeyDown={handleKeyDown}
+                                  className="w-full text-right bg-transparent border-none outline-none p-0 m-0"
+                                />
+                              ) : (
+                                <span
+                                  className="block w-full cursor-text"
+                                  onDoubleClick={() =>
+                                    isToday &&
+                                    startEdit(
+                                      e._id,
+                                      'cashExpenseOut',
+                                      e.cashExpenseOut != null
+                                        ? e.cashExpenseOut.toString()
+                                        : '',
+                                    )
+                                  }
+                                >
+                                  {e.cashExpenseOutDisplay || '\u00A0'}
+                                </span>
+                              )}
+                            </td>
+
+                            {/* Cash Deposit Bank */}
+                            <td className="px-3 py-1.5 border-b border-slate-200 text-right text-gray-700">
+                              {isEditing(e._id, 'cashDepositBank') ? (
+                                <input
+                                  autoFocus
+                                  type="number"
+                                  value={editValue}
+                                  onChange={(ev) => setEditValue(ev.target.value)}
+                                  onBlur={() => finishEdit(e._id, 'cashDepositBank')}
+                                  onKeyDown={handleKeyDown}
+                                  className="w-full text-right bg-transparent border-none outline-none p-0 m-0"
+                                />
+                              ) : (
+                                <span
+                                  className="block w-full cursor-text"
+                                  onDoubleClick={() =>
+                                    isToday &&
+                                    startEdit(
+                                      e._id,
+                                      'cashDepositBank',
+                                      e.cashDepositBank != null
+                                        ? e.cashDepositBank.toString()
+                                        : '',
+                                    )
+                                  }
+                                >
+                                  {e.cashDepositBankDisplay || '\u00A0'}
+                                </span>
+                              )}
+                            </td>
+
+                            {/* Cash On Hand */}
+                            <td className="px-3 py-1.5 border-b border-slate-200 text-right font-medium text-gray-800">
+                              {e.cashOnHandSafeDisplay}
+                            </td>
+
+                            {/* Actions */}
+                            <td className="px-3 py-1.5 border-b border-slate-200 text-center">
+                              <div className="flex justify-center">
+                                {e.cashDepositBank > 0 &&
+                                  (!e.photo ? (
+                                    <Button
+                                      size="sm"
+                                      variant="outline"
+                                      onClick={() => openCameraForEntry(e._id)}
+                                      className="flex items-center gap-2 px-3 py-1.5 rounded-md border-blue-500 text-blue-600 hover:bg-blue-50"
+                                    >
+                                      <ImagePlus className="w-4 h-4" />
+                                      {/* <span className="text-xs font-medium">Add Photo</span> */}
+                                    </Button>
+                                  ) : (
+                                    // Photo exists → Show "View Photo"
+                                    <Button
+                                      size="sm"
+                                      variant="default"
+                                      onClick={() => window.open(`/cdn/download/${e.photo}`, '_blank')}
+                                      className="flex items-center gap-2 px-3 py-1.5 bg-green-600 hover:bg-green-700 text-white rounded-md"
+                                    >
+                                      <ImageIcon className="w-4 h-4" />
+                                      {/* <span className="text-xs font-medium">View</span> */}
+                                    </Button>
+                                  ))}</div>
+                            </td>
+                          </tr>
+                        )
+                      })}
+
+                      {/* ADD NEW ROW */}
+                      <tr className="bg-slate-50">
+                        <td className="px-3 py-2 text-gray-400 border-t border-slate-300">
+                          {ymdFixed(new Date())}
+                          {/* or: new Intl.DateTimeFormat('en-CA', { timeZone: 'UTC' }).format(new Date()) */}
                         </td>
 
-                        {/* Description */}
-                        <td className="px-3 py-1.5 border-b border-slate-200 text-gray-700">
-                          {isEditing(e._id, 'description') ? (
-                            <input
-                              autoFocus
-                              type="text"
-                              value={editValue}
-                              onChange={(ev) => setEditValue(ev.target.value)}
-                              onBlur={() => finishEdit(e._id, 'description')}
-                              onKeyDown={handleKeyDown}
-                              className="w-full bg-transparent border-none outline-none p-0 m-0"
-                            />
-                          ) : (
-                            <span
-                              className="block w-full cursor-text min-h-[1rem]"
-                              onDoubleClick={() =>
-                                isToday &&
-                                startEdit(e._id, 'description', e.description || '')
-                              }
-                            >
-                              {e.description || '\u00A0'}
-                            </span>
-                          )}
+                        <td className="px-3 py-2 border-t border-slate-300 bg-white">
+                          <input
+                            ref={descRef}
+                            type="text"
+                            placeholder="Description"
+                            className="w-full px-3 py-2 bg-white focus:outline-none focus:ring-1 focus:ring-blue-400 rounded-sm"
+                            onKeyDown={handleKeyDown}
+                          />
                         </td>
 
-                        {/* Cash In */}
-                        <td className="px-3 py-1.5 border-b border-slate-200 text-right text-gray-700">
-                          {isEditing(e._id, 'cashIn') ? (
-                            <input
-                              autoFocus
-                              type="number"
-                              value={editValue}
-                              onChange={(ev) => setEditValue(ev.target.value)}
-                              onBlur={() => finishEdit(e._id, 'cashIn')}
-                              onKeyDown={handleKeyDown}
-                              className="w-full text-right bg-transparent border-none outline-none p-0 m-0"
-                            />
-                          ) : (
-                            <span
-                              className="block w-full cursor-text"
-                              onDoubleClick={() =>
-                                isToday &&
-                                startEdit(
-                                  e._id,
-                                  'cashIn',
-                                  e.cashIn != null ? e.cashIn.toString() : '',
-                                )
-                              }
-                            >
-                              {e.cashInDisplay || '\u00A0'}
-                            </span>
-                          )}
+                        <td className="px-3 py-2 border-t border-slate-300 text-right bg-white">
+                          <input
+                            ref={cashInRef}
+                            type="number"
+                            placeholder="0.00"
+                            className="w-full px-3 py-2 text-right bg-white focus:outline-none focus:ring-1 focus:ring-blue-400 rounded-sm"
+                            onKeyDown={handleKeyDown}
+                          />
                         </td>
 
-                        {/* Cash Expense Out */}
-                        <td className="px-3 py-1.5 border-b border-slate-200 text-right text-gray-700">
-                          {isEditing(e._id, 'cashExpenseOut') ? (
-                            <input
-                              autoFocus
-                              type="number"
-                              value={editValue}
-                              onChange={(ev) => setEditValue(ev.target.value)}
-                              onBlur={() => finishEdit(e._id, 'cashExpenseOut')}
-                              onKeyDown={handleKeyDown}
-                              className="w-full text-right bg-transparent border-none outline-none p-0 m-0"
-                            />
-                          ) : (
-                            <span
-                              className="block w-full cursor-text"
-                              onDoubleClick={() =>
-                                isToday &&
-                                startEdit(
-                                  e._id,
-                                  'cashExpenseOut',
-                                  e.cashExpenseOut != null
-                                    ? e.cashExpenseOut.toString()
-                                    : '',
-                                )
-                              }
-                            >
-                              {e.cashExpenseOutDisplay || '\u00A0'}
-                            </span>
-                          )}
+                        <td className="px-3 py-2 border-t border-slate-300 text-right bg-white">
+                          <input
+                            ref={cashExpenseRef}
+                            type="number"
+                            placeholder="0.00"
+                            className="w-full px-3 py-2 text-right bg-white focus:outline-none focus:ring-1 focus:ring-blue-400 rounded-sm"
+                            onKeyDown={handleKeyDown}
+                          />
                         </td>
 
-                        {/* Cash Deposit Bank */}
-                        <td className="px-3 py-1.5 border-b border-slate-200 text-right text-gray-700">
-                          {isEditing(e._id, 'cashDepositBank') ? (
-                            <input
-                              autoFocus
-                              type="number"
-                              value={editValue}
-                              onChange={(ev) => setEditValue(ev.target.value)}
-                              onBlur={() => finishEdit(e._id, 'cashDepositBank')}
-                              onKeyDown={handleKeyDown}
-                              className="w-full text-right bg-transparent border-none outline-none p-0 m-0"
-                            />
-                          ) : (
-                            <span
-                              className="block w-full cursor-text"
-                              onDoubleClick={() =>
-                                isToday &&
-                                startEdit(
-                                  e._id,
-                                  'cashDepositBank',
-                                  e.cashDepositBank != null
-                                    ? e.cashDepositBank.toString()
-                                    : '',
-                                )
-                              }
-                            >
-                              {e.cashDepositBankDisplay || '\u00A0'}
-                            </span>
-                          )}
+                        <td className="px-3 py-2 border-t border-slate-300 text-right bg-white">
+                          <input
+                            ref={cashDepositRef}
+                            type="number"
+                            placeholder="0.00"
+                            className="w-full px-3 py-2 text-right bg-white focus:outline-none focus:ring-1 focus:ring-blue-400 rounded-sm"
+                            onKeyDown={handleKeyDown}
+                          />
                         </td>
+                        <td></td>
 
-                        {/* Cash On Hand */}
-                        <td className="px-3 py-1.5 border-b border-slate-200 text-right font-medium text-gray-800">
-                          {e.cashOnHandSafeDisplay}
-                        </td>
-
-                        {/* Actions */}
-                        <td className="px-3 py-1.5 border-b border-slate-200 text-center">
-                          <div className="flex justify-center">
-                          {e.cashDepositBank > 0 &&
-                            (!e.photo ? (
-                              <Button
-                                size="sm"
-                                variant="outline"
-                                onClick={() => openCameraForEntry(e._id)}
-                                className="flex items-center gap-2 px-3 py-1.5 rounded-md border-blue-500 text-blue-600 hover:bg-blue-50"
-                              >
-                                <ImagePlus className="w-4 h-4" />
-                                {/* <span className="text-xs font-medium">Add Photo</span> */}
-                              </Button>
-                            ) : (
-                              // Photo exists → Show "View Photo"
-                              <Button
-                                size="sm"
-                                variant="default"
-                                onClick={() => window.open(`/cdn/download/${e.photo}`, '_blank')}
-                                className="flex items-center gap-2 px-3 py-1.5 bg-green-600 hover:bg-green-700 text-white rounded-md"
-                              >
-                                <ImageIcon className="w-4 h-4" />
-                                {/* <span className="text-xs font-medium">View</span> */}
-                              </Button>
-                            ))}</div>
+                        <td className="px-3 py-2 border-t border-slate-300 text-right">
+                          <Button size="sm" onClick={handleAddEntry} className="text-sm h-8 px-3">
+                            Add
+                          </Button>
                         </td>
                       </tr>
-                    )
-                  })}
-
-                  {/* ADD NEW ROW */}
-                  <tr className="bg-slate-50">
-                    <td className="px-3 py-2 text-gray-400 border-t border-slate-300">
-                      {ymdFixed(new Date())}
-                      {/* or: new Intl.DateTimeFormat('en-CA', { timeZone: 'UTC' }).format(new Date()) */}
-                    </td>
-
-                    <td className="px-3 py-2 border-t border-slate-300 bg-white">
-                      <input
-                        ref={descRef}
-                        type="text"
-                        placeholder="Description"
-                        className="w-full px-3 py-2 bg-white focus:outline-none focus:ring-1 focus:ring-blue-400 rounded-sm"
-                        onKeyDown={handleKeyDown}
-                      />
-                    </td>
-
-                    <td className="px-3 py-2 border-t border-slate-300 text-right bg-white">
-                      <input
-                        ref={cashInRef}
-                        type="number"
-                        placeholder="0.00"
-                        className="w-full px-3 py-2 text-right bg-white focus:outline-none focus:ring-1 focus:ring-blue-400 rounded-sm"
-                        onKeyDown={handleKeyDown}
-                      />
-                    </td>
-
-                    <td className="px-3 py-2 border-t border-slate-300 text-right bg-white">
-                      <input
-                        ref={cashExpenseRef}
-                        type="number"
-                        placeholder="0.00"
-                        className="w-full px-3 py-2 text-right bg-white focus:outline-none focus:ring-1 focus:ring-blue-400 rounded-sm"
-                        onKeyDown={handleKeyDown}
-                      />
-                    </td>
-
-                    <td className="px-3 py-2 border-t border-slate-300 text-right bg-white">
-                      <input
-                        ref={cashDepositRef}
-                        type="number"
-                        placeholder="0.00"
-                        className="w-full px-3 py-2 text-right bg-white focus:outline-none focus:ring-1 focus:ring-blue-400 rounded-sm"
-                        onKeyDown={handleKeyDown}
-                      />
-                    </td>
-                    <td></td>
-
-                    <td className="px-3 py-2 border-t border-slate-300 text-right">
-                      <Button size="sm" onClick={handleAddEntry} className="text-sm h-8 px-3">
-                        Add
-                      </Button>
-                    </td>
-                  </tr>
-                </tbody>
-              </table>
+                    </tbody>
+                  </table>
+                </div>
+              )}
             </div>
           )}
+
+          {/* HIDDEN CAMERA INPUT */}
+          <input
+            ref={cameraInputRef}
+            type="file"
+            accept="image/*"
+            capture="environment"
+            className="hidden"
+            onChange={handleCameraUpload}
+          />
         </div>
       )}
-
-      {/* HIDDEN CAMERA INPUT */}
-      <input
-        ref={cameraInputRef}
-        type="file"
-        accept="image/*"
-        capture="environment"
-        className="hidden"
-        onChange={handleCameraUpload}
-      />
-    </div>
+    </>
   )
 }
