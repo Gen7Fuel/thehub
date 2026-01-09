@@ -227,7 +227,8 @@ function RouteComponent() {
                         >
                           PDF
                         </Button>
-                        {access?.fuelRec?.requestAgain && (
+
+                        {access?.accounting?.fuelRec?.requestAgain && (
                           <Button
                             variant="outline"
                             onClick={() => requestAgain(e)}
