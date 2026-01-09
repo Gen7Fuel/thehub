@@ -1,6 +1,9 @@
 import jwt from "jsonwebtoken";
 import User from "../models/User.js";
 import chalk from "chalk";
+// import getPermissionMap from "../utils/permissionStore.js";
+import pkg from "../utils/permissionStore.js";
+const { getPermissionMap } = pkg;
 
 /**
  * Traverse the nested permission tree automatically respecting `value`
@@ -29,6 +32,31 @@ const checkPermission = (accessTree, keyPath) => {
   }
 
   return true; // all nodes in path exist and have value === true
+};
+/**
+ * New checkPermission logic: Direct Map + Array lookup
+ * @param {Object} user - The user document (from DB)
+ * @param {Object} role - The populated role document
+ * @param {Number} permId - The ID we found from the Global Map
+ */
+const hasEffectiveAccess = (user, role, permId) => {
+  // 1. Priority 1: User Custom Overrides
+  // We check if the user has a specific personal override for this ID
+  const userOverride = user.customPermissionsArray?.find(p => p.permId === permId);
+  
+  if (userOverride !== undefined) {
+    return userOverride.value;
+  }
+
+  // 2. Priority 2: Role Permissions
+  // If no user override exists, fall back to the Role's default
+  if (role && role.permissionsArray) {
+    const roleSetting = role.permissionsArray.find(p => p.permId === permId);
+    return roleSetting ? roleSetting.value : false;
+  }
+
+  // 3. Priority 3: Default Deny
+  return false;
 };
 
 
@@ -67,7 +95,9 @@ const auth = async (req, res, next) => {
       return res.status(401).json({ message: "Token is not valid" });
     }
 
-    const user = await User.findById(decoded.id).select("-password");
+    // const user = await User.findById(decoded.id).select("-password");
+    // if (!user) return res.status(401).json({ message: "User not found" });
+    const user = await User.findById(decoded.id).populate('role').select("-password");
     if (!user) return res.status(401).json({ message: "User not found" });
 
     // const chalkPromise = import('chalk').catch(() => null)
@@ -116,13 +146,34 @@ const auth = async (req, res, next) => {
     // }
 
     // Check for permission from header
-    const requiredPermission = req.header("X-Required-Permission");
-    if (requiredPermission) {
-      const hasPermission = checkPermission(decoded.permissions, requiredPermission);
-      if (!hasPermission) {
-        return res
-          .status(403)
-          .json({ message: `Access denied for ${requiredPermission}` });
+    // const requiredPermission = req.header("X-Required-Permission");
+    // if (requiredPermission) {
+    //   const hasPermission = checkPermission(decoded.permissions, requiredPermission);
+    //   if (!hasPermission) {
+    //     return res
+    //       .status(403)
+    //       .json({ message: `Access denied for ${requiredPermission}` });
+    //   }
+    // }
+    const requiredPermissionName = req.header("X-Required-Permission");
+
+    if (requiredPermissionName) {
+      // 3. Translate "cycleCount.lookup" -> 5004 using our Global Map
+      const permissionMap = getPermissionMap();
+      const permId = permissionMap.get(requiredPermissionName);
+
+      if (!permId) {
+        console.error(`❌ Permission name not found in Global Map: ${requiredPermissionName}`);
+        return res.status(403).json({ message: "Invalid permission configuration" });
+      }
+
+      // 4. Run the effective access check
+      const isAllowed = hasEffectiveAccess(user, user.role, permId);
+
+      if (!isAllowed) {
+        return res.status(403).json({ 
+          message: `Access denied for ${requiredPermissionName}` 
+        });
       }
     }
 

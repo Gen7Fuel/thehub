@@ -263,32 +263,44 @@ router.put("/:userId/permissions", async (req, res) => {
     const flattenedIncoming = flattenHydratedTree(mergedPermissions);
 
     // 3. Identify custom overrides with "Parent Guarantee" logic
+    // 3. Identify custom overrides with "Parent Guarantee" logic
     const customPermissionsArray = [];
+
+    // Helper to add or update an override in the array (prevents duplicates)
+    const setOverride = (permId, value) => {
+      const existingIdx = customPermissionsArray.findIndex(p => p.permId === permId);
+      if (existingIdx > -1) {
+        customPermissionsArray[existingIdx].value = value;
+      } else {
+        customPermissionsArray.push({ permId, value });
+      }
+    };
 
     flattenedIncoming.forEach(uPerm => {
       const roleValue = roleMap.get(uPerm.permId);
 
-      // Basic difference check
-      let isDifferent = uPerm.value !== roleValue || roleValue === undefined;
-
-      // THE FIX: If child is true, force all ancestors to be true in the override list
-      if (uPerm.value === true) {
-        let currentParentId = parentMap.get(uPerm.permId);
-        while (currentParentId) {
-          // If the role would have disabled this parent, we must explicitly enable it
-          if (roleMap.get(currentParentId) === false) {
-            if (!customPermissionsArray.find(p => p.permId === currentParentId)) {
-              customPermissionsArray.push({ permId: currentParentId, value: true });
-            }
-          }
-          currentParentId = parentMap.get(currentParentId);
-        }
+      // A: If the user setting differs from the Role setting, it's an override
+      if (uPerm.value !== roleValue) {
+        setOverride(uPerm.permId, uPerm.value);
       }
 
-      // Add the actual permission if it was different
-      if (isDifferent) {
-        if (!customPermissionsArray.find(p => p.permId === uPerm.permId)) {
-          customPermissionsArray.push(uPerm);
+      // B: PARENT GUARANTEE
+      // If this permission is TRUE, we must climb the tree and ensure 
+      // every ancestor is also TRUE in the final calculated state.
+      if (uPerm.value === true) {
+        let currentParentId = parentMap.get(uPerm.permId);
+
+        while (currentParentId) {
+          const parentRoleValue = roleMap.get(currentParentId);
+
+          // If the role has this parent as FALSE or it's MISSING (undefined),
+          // we MUST force a custom override to TRUE so the child is visible.
+          if (parentRoleValue !== true) {
+            setOverride(currentParentId, true);
+          }
+
+          // Move up to the next ancestor (grandparent, etc.)
+          currentParentId = parentMap.get(currentParentId);
         }
       }
     });

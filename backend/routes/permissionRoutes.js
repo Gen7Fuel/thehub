@@ -3,6 +3,7 @@ const router = express.Router();
 const Permission = require("../models/Permission");
 const User = require('../models/User');
 const Role = require("../models/Role");
+const { initializePermissionMap } = require("../utils/permissionStore.js");
 
 // For normalising permission names and structure
 // const normalizeStructure = (nodes = []) => {
@@ -195,6 +196,8 @@ router.post("/", async (req, res) => {
         } 
       }
     );
+    // 🔥 REFRESH THE IN-MEMORY MAP
+    await initializePermissionMap();
 
     /**
      * NOTE: We do NOT need to update User customPermissionsArray here.
@@ -457,6 +460,8 @@ router.put("/:id", async (req, res) => {
     });
 
     await Promise.all([...rolePromises, ...userPromises]);
+    // 🔥 REFRESH THE IN-MEMORY MAP
+    await initializePermissionMap();
 
     res.status(200).json({
       message: "Permission and associated Roles/Users synced successfully",

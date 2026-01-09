@@ -161,7 +161,7 @@ function App() {
 
         {/* Inventory Section */}
         {/* {(access.module_order_rec || access.module_cycle_count) && ( //markpoint */}
-        {(access?.orderRec?.value || access?.cycleCount?.value) && (
+        {(access?.orderRec?.value || access?.cycleCount?.value || access?.vendor || access?.category) && (
           <Section title="Inventory">
             <div className="flex flex-wrap gap-4">
               {/* Order Rec button: goes to upload or list based on access */}

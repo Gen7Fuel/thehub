@@ -1,6 +1,7 @@
 // Simply clones the frontend permission tree for that module
 const _ = require("lodash");
 const Role = require("../models/Role");
+const Permission = require("../models/Permission");
 
 // rolePermissions: permissions from frontend (for this module)
 // templatePermissions: full template structure (only for structure reference)
@@ -102,4 +103,34 @@ function flattenHydratedTree(nodes, result = []) {
   return result;
 }
 
-module.exports = { getMergedPermissions, hydrateTreeValues, flattenHydratedTree };
+async function getMergedPermissionsTreeArray(user) {
+  // 1. Fetch data
+  const [allMasterPermissions, role] = await Promise.all([
+    Permission.find({}).sort({ module_name: 1 }),
+    user.role ? Role.findById(user.role).lean() : Promise.resolve(null)
+  ]);
+
+  const mergedValuesMap = new Map();
+
+  // 2. Map Role values
+  if (role && role.permissionsArray) {
+    role.permissionsArray.forEach(p => mergedValuesMap.set(p.permId, p.value));
+  }
+
+  // 3. Map User Overrides
+  if (user.customPermissionsArray && user.customPermissionsArray.length > 0) {
+    user.customPermissionsArray.forEach(p => mergedValuesMap.set(p.permId, p.value));
+  }
+
+  // 4. Hydrate into the tree format the frontend expects
+  const mergedPermissionsTree = allMasterPermissions.map(module => ({
+    name: module.module_name,
+    permId: module.module_permId, // Extra info, won't break the frontend
+    value: mergedValuesMap.get(module.module_permId) ?? false,
+    children: hydrateTreeValues(module.structure, mergedValuesMap)
+  }));
+
+  return mergedPermissionsTree;
+}
+
+module.exports = { getMergedPermissions, hydrateTreeValues, flattenHydratedTree, getMergedPermissionsTreeArray };
