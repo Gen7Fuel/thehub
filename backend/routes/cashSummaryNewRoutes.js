@@ -749,10 +749,16 @@ router.post('/submit/to/safesheet', async (req, res) => {
           }
 
           if (depositSlip) attachments.push(depositSlip)
+          
+          let cc = ['mohammad@gen7fuel.com', 'JDzyngel@gen7fuel.com', 'ana@gen7fuel.com']
+
+          if (site === 'Oliver' || site === 'Osoyoos') {
+            cc.push('ZBaptiste@oib.ca');
+          }
 
           await sendEmail({
             to: CASH_SUMMARY_EMAILS.join(','),
-            cc: ['mohammad@gen7fuel.com', 'JDzyngel@gen7fuel.com', 'ana@gen7fuel.com'],
+            cc,
             // to: 'daksh@gen7fuel.com',
             subject: `Daily Report – ${site} – ${date}`,
             text: `Attached are the Cash Summary${shiftReportsPdf ? ', Shift Reports' : ''}${depositSlip ? ' and Bank Deposit Slip' : ''} for ${site} on ${date}.`,
