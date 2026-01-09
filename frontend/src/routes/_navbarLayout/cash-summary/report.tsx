@@ -232,7 +232,7 @@ function RouteComponent() {
       : '—'
 
   const overShort =
-    (totals?.canadian_cash_collected ?? 0) - (totals?.report_canadian_cash ?? 0)
+    (totals?.canadian_cash_collected ?? 0) - (totals?.report_canadian_cash ?? 0) + (handheldDebit ?? 0) + (unsettledPrepays ?? 0)
 
   const osColor =
     overShort > 0 ? 'text-green-600' : overShort < 0 ? 'text-red-600' : 'text-muted-foreground'
