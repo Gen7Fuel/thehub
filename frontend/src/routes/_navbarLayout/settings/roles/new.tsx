@@ -8,6 +8,7 @@ import axios from "axios";
 
 export interface PermissionNode {
   name: string;
+  permId: number;
   value?: boolean;
   children?: PermissionNode[];
 }
@@ -15,6 +16,7 @@ export interface PermissionNode {
 export interface PermissionTemplate {
   _id: string;
   module_name: string;
+  module_permId: number;
   structure: PermissionNode[];
 }
 
@@ -46,6 +48,7 @@ export function RouteComponent() {
   const mapPermissionNodes = (nodes: any[]): PermissionNode[] =>
     nodes.map((node) => ({
       name: node.name,
+      permId: node.permId,
       value: node.value ?? false,
       children: node.children ? mapPermissionNodes(node.children) : [],
     }));
@@ -53,6 +56,7 @@ export function RouteComponent() {
   const mapPermissionsToRole = (permissions: PermissionTemplate[]): PermissionNode[] =>
     permissions.map((module) => ({
       name: module.module_name,
+      permId: module.module_permId,
       value: false,
       children: mapPermissionNodes(module.structure),
     }));

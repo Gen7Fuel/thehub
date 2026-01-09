@@ -4,7 +4,8 @@ const bcrypt = require("bcryptjs");
 const User = require('../models/User');
 const _ = require("lodash");
 const Role = require("../models/Role");
-const getMergedPermissions = require("../utils/mergePermissionObjects")
+const Permission = require("../models/Permission");
+const { getMergedPermissions, hydrateTreeValues, flattenHydratedTree } = require("../utils/mergePermissionObjects")
 
 // Compare frontend permissions with role.permissions to find overrides for saving them as custom permissions in users
 // const getOverrides = (roleNodes = [], userNodes = []) => {
@@ -45,9 +46,9 @@ const getOverrides = (roleNodes = [], userNodes = []) => {
     userNodes.map((uNode) => {
       // Find matching node in the CURRENT role structure
       const rNode = roleNodes.find(r => r.name === uNode.name);
-      
+
       // If the node no longer exists in the role, discard this override branch
-      if (!rNode) return null; 
+      if (!rNode) return null;
 
       let hasOverride = false;
       let childrenOverrides = [];
@@ -79,6 +80,21 @@ const getOverrides = (roleNodes = [], userNodes = []) => {
   );
 };
 
+function buildParentMap(modules, map = new Map()) {
+  modules.forEach(module => {
+    if (module.structure) {
+      const traverse = (nodes, parentId) => {
+        nodes.forEach(node => {
+          map.set(node.permId, parentId);
+          if (node.children) traverse(node.children, node.permId);
+        });
+      };
+      traverse(module.structure, module.module_permId);
+    }
+  });
+  return map;
+}
+
 // GET route to fetch all users
 router.get('/', async (req, res) => {
   try {
@@ -91,20 +107,6 @@ router.get('/', async (req, res) => {
 });
 
 // GET route to fetch a single user by userId
-// router.get('/:userId', async (req, res) => {
-//   const { userId } = req.params;
-
-//   try {
-//     const user = await User.findById(userId); // Find user by ID
-//     if (!user) {
-//       return res.status(404).json({ error: 'User not found' }); // Return 404 if user doesn't exist
-//     }
-//     res.status(200).json(user); // Send the user as a JSON response
-//   } catch (error) {
-//     console.error('Error fetching user:', error);
-//     res.status(500).json({ error: 'Internal server error' });
-//   }
-// });
 router.get("/:userId", async (req, res) => {
   const { userId } = req.params;
 
@@ -112,25 +114,80 @@ router.get("/:userId", async (req, res) => {
     const user = await User.findById(userId).lean();
     if (!user) return res.status(404).json({ error: "User not found" });
 
-    // Get role details
-    const role = user.role ? await Role.findById(user.role).lean() : null;
-    const roleData = role ? { _id: role._id, role_name: role.role_name } : null;
+    // 1. Fetch necessary data for merging
+    const [allMasterPermissions, role] = await Promise.all([
+      Permission.find({}).sort({ module_name: 1 }),
+      user.role ? Role.findById(user.role).lean() : Promise.resolve(null)
+    ]);
 
-    // Merge role + custom permissions
-    const mergedPermissions = await getMergedPermissions(user);
+    // 2. Initialize the Merged Map
+    const mergedValuesMap = new Map();
 
+    // 3. Layer 1: Apply Role Permissions
+    if (role && role.permissionsArray) {
+      role.permissionsArray.forEach(p => {
+        mergedValuesMap.set(p.permId, p.value);
+      });
+    }
+
+    // 4. Layer 2: Apply User Overrides (Overwrites role values if permId matches)
+    if (user.customPermissionsArray && user.customPermissionsArray.length > 0) {
+      user.customPermissionsArray.forEach(p => {
+        mergedValuesMap.set(p.permId, p.value);
+      });
+    }
+
+    // 5. Construct the hydrated tree using the existing utility
+    const mergedPermissionsTree = allMasterPermissions.map(module => {
+      return {
+        name: module.module_name,
+        permId: module.module_permId,
+        value: mergedValuesMap.get(module.module_permId) ?? false,
+        // Call your utility function here
+        children: hydrateTreeValues(module.structure, mergedValuesMap)
+      };
+    });
+
+    // 6. Respond
     res.status(200).json({
       ...user,
-      role: roleData,
-      merged_permissions: mergedPermissions,
+      role: role ? { _id: role._id, role_name: role.role_name } : null,
+      merged_permissions: mergedPermissionsTree,
       is_logged_in: user.is_loggedIn,
       last_login: user.lastLoginDate
     });
+
   } catch (error) {
     console.error("Error fetching user with merged permissions:", error);
     res.status(500).json({ error: "Internal server error" });
   }
 });
+// router.get("/:userId", async (req, res) => {
+//   const { userId } = req.params;
+
+//   try {
+//     const user = await User.findById(userId).lean();
+//     if (!user) return res.status(404).json({ error: "User not found" });
+
+//     // Get role details
+//     const role = user.role ? await Role.findById(user.role).lean() : null;
+//     const roleData = role ? { _id: role._id, role_name: role.role_name } : null;
+
+//     // Merge role + custom permissions
+//     const mergedPermissions = await getMergedPermissions(user);
+
+//     res.status(200).json({
+//       ...user,
+//       role: roleData,
+//       merged_permissions: mergedPermissions,
+//       is_logged_in: user.is_loggedIn,
+//       last_login: user.lastLoginDate
+//     });
+//   } catch (error) {
+//     console.error("Error fetching user with merged permissions:", error);
+//     res.status(500).json({ error: "Internal server error" });
+//   }
+// });
 
 // Update a user role
 router.put("/:userId/role", async (req, res) => {
@@ -180,57 +237,6 @@ router.put("/:userId/site-access", async (req, res) => {
 
 
 // PUT route to update the 'access' attribute of a user by _id
-// router.put('/:userId', async (req, res) => {
-//   const { userId } = req.params;
-//   const { access } = req.body; // Extract the 'access' object from the request body
-
-//   if (!access || typeof access !== 'object') {
-//     return res.status(400).json({ error: 'Invalid or missing access object' });
-//   }
-
-//   try {
-//     const updatedUser = await User.findByIdAndUpdate(
-//       userId, // Find the user by _id
-//       { $set: { access } }, // Update the 'access' attribute
-//       { new: true } // Return the updated document
-//     );
-
-//     if (!updatedUser) {
-//       return res.status(404).json({ error: 'User not found' }); // Return 404 if user doesn't exist
-//     }
-
-//     res.status(200).json(updatedUser); // Send the updated user as a JSON response
-//   } catch (error) {
-//     console.error('Error updating user access:', error);
-//     res.status(500).json({ error: 'Internal server error' });
-//   }
-// });
-
-// router.put('/:userId', async (req, res) => {
-//   const { userId } = req.params;
-//   const { access, is_admin, is_inOffice } = req.body;
-
-//   try {
-//     const updatedUser = await User.findByIdAndUpdate(
-//       userId,
-//       {
-//         $set: {
-//           access: access || {},
-//           is_admin: is_admin ?? false,
-//           is_inOffice: is_inOffice ?? false,
-//         },
-//       },
-//       { new: true }
-//     );
-
-//     if (!updatedUser) return res.status(404).json({ error: 'User not found' });
-
-//     res.status(200).json(updatedUser);
-//   } catch (err) {
-//     console.error('Error updating user:', err);
-//     res.status(500).json({ error: 'Internal server error' });
-//   }
-// });
 router.put("/:userId/permissions", async (req, res) => {
   const { userId } = req.params;
   const { mergedPermissions, roleId } = req.body;
@@ -243,25 +249,106 @@ router.put("/:userId/permissions", async (req, res) => {
     const user = await User.findById(userId);
     if (!user) return res.status(404).json({ error: "User not found" });
 
-    const role = await Role.findById(roleId);
+    // 1. Fetch BOTH the role and the Master Permissions structure
+    const [role, allMasterPermissions] = await Promise.all([
+      Role.findById(roleId).lean(),
+      Permission.find({}).lean() // <--- THIS WAS MISSING
+    ]);
+
     if (!role) return res.status(404).json({ error: "Role not found" });
 
-    const customPermissions = getOverrides(role.permissions, mergedPermissions);
+    // 2. Build the helper maps
+    const parentMap = buildParentMap(allMasterPermissions);
+    const roleMap = new Map((role.permissionsArray || []).map(p => [p.permId, p.value]));
+    const flattenedIncoming = flattenHydratedTree(mergedPermissions);
 
-    // Update user
-    user.custom_permissions = customPermissions;
+    // 3. Identify custom overrides with "Parent Guarantee" logic
+    const customPermissionsArray = [];
+
+    flattenedIncoming.forEach(uPerm => {
+      const roleValue = roleMap.get(uPerm.permId);
+
+      // Basic difference check
+      let isDifferent = uPerm.value !== roleValue || roleValue === undefined;
+
+      // THE FIX: If child is true, force all ancestors to be true in the override list
+      if (uPerm.value === true) {
+        let currentParentId = parentMap.get(uPerm.permId);
+        while (currentParentId) {
+          // If the role would have disabled this parent, we must explicitly enable it
+          if (roleMap.get(currentParentId) === false) {
+            if (!customPermissionsArray.find(p => p.permId === currentParentId)) {
+              customPermissionsArray.push({ permId: currentParentId, value: true });
+            }
+          }
+          currentParentId = parentMap.get(currentParentId);
+        }
+      }
+
+      // Add the actual permission if it was different
+      if (isDifferent) {
+        if (!customPermissionsArray.find(p => p.permId === uPerm.permId)) {
+          customPermissionsArray.push(uPerm);
+        }
+      }
+    });
+
+    // 4. Save to User
+    user.customPermissionsArray = customPermissionsArray;
+    // Mark modified if using Mixed types or just to be safe
+    user.markModified('customPermissionsArray');
+
     await user.save();
+
+    // 5. Emit socket update
     const io = req.app.get("io");
     if (io) {
       io.to(userId).emit("permissions-updated");
     }
 
-    res.json({ success: true, custom_permissions: customPermissions });
+    res.json({
+      success: true,
+      overrideCount: customPermissionsArray.length,
+      customPermissionsArray
+    });
+
   } catch (err) {
-    console.error("Error updating custom permissions:", err);
+    console.error("Error updating user permissions:", err);
     res.status(500).json({ error: "Internal server error" });
   }
 });
+
+// router.put("/:userId/permissions", async (req, res) => {
+//   const { userId } = req.params;
+//   const { mergedPermissions, roleId } = req.body;
+
+//   if (!mergedPermissions || !roleId) {
+//     return res.status(400).json({ error: "Missing permissions or role ID" });
+//   }
+
+//   try {
+//     const user = await User.findById(userId);
+//     if (!user) return res.status(404).json({ error: "User not found" });
+
+//     const role = await Role.findById(roleId);
+//     if (!role) return res.status(404).json({ error: "Role not found" });
+
+//     const customPermissions = getOverrides(role.permissions, mergedPermissions);
+
+//     // Update user
+//     user.custom_permissions = customPermissions;
+//     await user.save();
+//     const io = req.app.get("io");
+//     if (io) {
+//       io.to(userId).emit("permissions-updated");
+//     }
+
+//     res.json({ success: true, custom_permissions: customPermissions });
+//   } catch (err) {
+//     console.error("Error updating custom permissions:", err);
+//     res.status(500).json({ error: "Internal server error" });
+//   }
+// });
 
 // PATCH /api/users/:id/active 
 // handles users active and inactive status

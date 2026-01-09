@@ -151,7 +151,7 @@ async function migrateRoles(permissionMap) {
       // Re-package the module as a node to include it in the flat array
       const moduleNode = {
         name: moduleTree.name,
-        value: true, // Typically, if a role has the module, the root node is true
+        value: moduleTree.value ?? false, // Typically, if a role has the module, the root node is true
         children: moduleTree.children || [],
       };
 
@@ -179,7 +179,7 @@ async function migrateUsers(permissionMap) {
     for (const moduleTree of user.custom_permissions) {
       const moduleNode = {
         name: moduleTree.name,
-        value: true,
+        value: moduleTree.value ?? false,
         children: moduleTree.children || [],
       };
       flattenPermissionTree(moduleNode, permissionMap, "", flattened);

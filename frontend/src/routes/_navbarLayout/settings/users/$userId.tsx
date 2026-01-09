@@ -33,6 +33,7 @@ export const Route = createFileRoute("/_navbarLayout/settings/users/$userId")({
 
 export interface PermissionNode {
   name: string;
+  permId: number;
   value?: boolean;
   children?: PermissionNode[];
 }

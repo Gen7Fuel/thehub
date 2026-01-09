@@ -98,45 +98,118 @@ router.get("/:id", async (req, res) => {
 //     });
 //   }
 // });
+// router.post("/", async (req, res) => {
+//   try {
+//     let { module_name, structure } = req.body;
+//     // module_name = module_name.trim().toLowerCase().replace(/\s+/g, "-");
+//     // structure = normalizeStructure(structure);
+
+//     const exists = await Permission.findOne({ module_name });
+//     if (exists) {
+//       return res.status(400).json({ message: "Module name already exists" });
+//     }
+
+//     const newPermission = new Permission({ module_name, structure });
+//     await newPermission.save();
+
+//     // ---- Merge into all existing roles ----
+//     const allRoles = await Role.find({});
+//     for (const role of allRoles) {
+//       // find existing module node
+//       const existingModule = role.permissions.find(p => p.name === module_name);
+
+//       if (existingModule) {
+//         // merge structure preserving values
+//         existingModule.children = mergePermissions(structure, existingModule.children || []);
+//       } else {
+//         // new module entirely
+//         role.permissions.push({
+//           name: module_name,
+//           value: false,
+//           children: mergePermissions(structure, [])
+//         });
+//       }
+
+//       await role.save();
+//     }
+
+//     res.status(201).json(newPermission);
+//   } catch (error) {
+//     console.error("Error creating permission:", error);
+//     res.status(500).json({ message: "Server error creating permission" });
+//   }
+// });
+
 router.post("/", async (req, res) => {
   try {
     let { module_name, structure } = req.body;
-    // module_name = module_name.trim().toLowerCase().replace(/\s+/g, "-");
-    // structure = normalizeStructure(structure);
 
+    // 1️⃣ Check if module already exists
     const exists = await Permission.findOne({ module_name });
     if (exists) {
       return res.status(400).json({ message: "Module name already exists" });
     }
 
-    const newPermission = new Permission({ module_name, structure });
+    // 2️⃣ Calculate the next module_permId (5000 series logic)
+    // We look for the highest module_permId currently in the database
+    const lastModule = await Permission.findOne().sort({ module_permId: -1 });
+    
+    // If no modules exist, start at 5000. Otherwise, add 5000 to the last base.
+    const nextModuleId = lastModule ? lastModule.module_permId + 5000 : 5000;
+
+    // 3️⃣ Create the new Permission Module
+    const newPermission = new Permission({ 
+      module_name, 
+      structure, 
+      module_permId: nextModuleId 
+    });
+
+    // The pre-validate hook in Permission model will now trigger 
+    // and assign permIds to the children based on this nextModuleId.
     await newPermission.save();
 
-    // ---- Merge into all existing roles ----
-    const allRoles = await Role.find({});
-    for (const role of allRoles) {
-      // find existing module node
-      const existingModule = role.permissions.find(p => p.name === module_name);
+    // 4️⃣ Extract all newly generated permIds from the saved structure
+    const newPermIds = [];
+    newPermIds.push(newPermission.module_permId); // Add the root ID
 
-      if (existingModule) {
-        // merge structure preserving values
-        existingModule.children = mergePermissions(structure, existingModule.children || []);
-      } else {
-        // new module entirely
-        role.permissions.push({
-          name: module_name,
-          value: false,
-          children: mergePermissions(structure, [])
-        });
+    const extractIds = (nodes) => {
+      for (const node of nodes) {
+        if (node.permId) newPermIds.push(node.permId);
+        if (node.children?.length) extractIds(node.children);
       }
+    };
+    extractIds(newPermission.structure);
 
-      await role.save();
-    }
+    // 5️⃣ Update all existing Roles to include these new IDs
+    // New permissions default to 'false' for all existing roles
+    const newRoleEntries = newPermIds.map(id => ({
+      permId: id,
+      value: false
+    }));
 
-    res.status(201).json(newPermission);
+    await Role.updateMany(
+      {}, 
+      { 
+        $push: { 
+          permissionsArray: { $each: newRoleEntries } 
+        } 
+      }
+    );
+
+    /**
+     * NOTE: We do NOT need to update User customPermissionsArray here.
+     * Users only store overrides. Since the module is brand new, 
+     * no user could have an override for it yet.
+     */
+
+    res.status(201).json({
+      message: "Module created and synced with roles",
+      data: newPermission
+    });
+
   } catch (error) {
     console.error("Error creating permission:", error);
-    res.status(500).json({ message: "Server error creating permission" });
+    res.status(500).json({ message: "Server error creating permission", error: error.message });
   }
 });
 
