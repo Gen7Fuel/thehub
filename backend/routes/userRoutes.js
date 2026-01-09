@@ -279,27 +279,24 @@ router.put("/:userId/permissions", async (req, res) => {
     flattenedIncoming.forEach(uPerm => {
       const roleValue = roleMap.get(uPerm.permId);
 
-      // A: If the user setting differs from the Role setting, it's an override
+      // A: Standard Difference Check
       if (uPerm.value !== roleValue) {
         setOverride(uPerm.permId, uPerm.value);
       }
 
-      // B: PARENT GUARANTEE
-      // If this permission is TRUE, we must climb the tree and ensure 
-      // every ancestor is also TRUE in the final calculated state.
+      // B: THE FUTURE-PROOF PARENT GUARANTEE
+      // If this permission is TRUE, we force the entire path to the root 
+      // to be saved as TRUE in the customPermissionsArray.
       if (uPerm.value === true) {
         let currentParentId = parentMap.get(uPerm.permId);
 
         while (currentParentId) {
-          const parentRoleValue = roleMap.get(currentParentId);
+          // 🔥 FORCE save the parent as TRUE in overrides.
+          // This way, even if the Role changes the parent to FALSE later,
+          // this User's specific override will keep their access active.
+          setOverride(currentParentId, true);
 
-          // If the role has this parent as FALSE or it's MISSING (undefined),
-          // we MUST force a custom override to TRUE so the child is visible.
-          if (parentRoleValue !== true) {
-            setOverride(currentParentId, true);
-          }
-
-          // Move up to the next ancestor (grandparent, etc.)
+          // Move up to the next ancestor
           currentParentId = parentMap.get(currentParentId);
         }
       }
