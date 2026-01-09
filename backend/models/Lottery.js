@@ -24,12 +24,14 @@ const LotterySchema = new mongoose.Schema(
     instantLottTotal: { type: Number, default: null },
     // Number of scratch free tickets reported by the site (user-entered)
     scratchFreeTickets: { type: Number, default: null },
+    oldScratchTickets: { type: Number, default: null },
     // New online adjustments entered by user
     onlineCancellations: { type: Number, default: null },
     onlineDiscounts: { type: Number, default: null },
 
     // Filenames stored by CDN upload (e.g., ["bol-2025-12-10-1.jpg", ...])
-    images: { type: [String], default: [] },
+    images: { type: [String], default: [] }, // general field for lotto slips
+    datawaveImages: { type: [String], default: [] }, // separate field for datawave slips
   },
   { timestamps: true }
 )
@@ -42,6 +44,11 @@ LotterySchema.pre('save', function (next) {
   if (Array.isArray(this.images)) {
     this.images = Array.from(
       new Set(this.images.map((s) => String(s || '').trim()).filter(Boolean))
+    )
+  }
+  if (Array.isArray(this.datawaveImages)) {
+    this.datawaveImages = Array.from(
+      new Set(this.datawaveImages.map((s) => String(s || '').trim()).filter(Boolean))
     )
   }
   next()
