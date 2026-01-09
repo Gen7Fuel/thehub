@@ -443,6 +443,7 @@ router.post('/', async (req, res) => {
       afdDebit: numOrUndef(parsed.afdDebit),
       kioskCredit: numOrUndef(parsed.kioskCredit),
       kioskDebit: numOrUndef(parsed.kioskDebit),
+      afdGiftCard: numOrUndef(parsed.afdGiftCard),
       kioskGiftCard: numOrUndef(parsed.kioskGiftCard),
       totalPos: numOrUndef(parsed.totalPos),
       arIncurred: numOrUndef(parsed.arIncurred),

@@ -7,7 +7,7 @@ const transporter = nodemailer.createTransport({
   secure: false, // true for 465, false for other ports
   auth: {
     user: 'noreply@gen7fuel.com',
-    pass: 'GQnbu197'
+    pass: process.env.NOREPLY_PASS
   },
   tls: {
     ciphers: 'SSLv3'

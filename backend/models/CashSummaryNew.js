@@ -28,6 +28,8 @@ const CashSummarySchema = new mongoose.Schema(
     afdDebit: { type: Number },
     kioskCredit: { type: Number },
     kioskDebit: { type: Number },
+    // NEW: AFD Gift Card parsed value
+    afdGiftCard: { type: Number },
     kioskGiftCard: { type: Number },
     totalPos: { type: Number },
     arIncurred: { type: Number },

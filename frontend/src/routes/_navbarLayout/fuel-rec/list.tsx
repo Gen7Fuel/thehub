@@ -5,6 +5,8 @@ import type { DateRange } from 'react-day-picker'
 import { SitePicker } from '@/components/custom/sitePicker'
 import { DatePickerWithRange } from '@/components/custom/datePickerWithRange'
 import { pdf, Document, Page, Image as PdfImage, StyleSheet } from '@react-pdf/renderer'
+import { Button } from '@/components/ui/button'
+import { useAuth } from '@/context/AuthContext'
 
 type Search = { site: string; from: string; to: string }
 type BOLPhoto = {
@@ -61,6 +63,9 @@ export const Route = createFileRoute('/_navbarLayout/fuel-rec/list')({
 })
 
 function RouteComponent() {
+  const { user } = useAuth();
+  const access = user?.access || {}
+
   const { site, from, to, data } = useLoaderData({ from: Route.id }) as {
     site: string
     from: string
@@ -102,6 +107,36 @@ function RouteComponent() {
       reader.onerror = reject
       reader.readAsDataURL(blob)
     })
+  }
+
+  // Track in-flight requests per entry
+  const [pending, setPending] = React.useState<Set<string>>(() => new Set())
+
+  const requestAgain = async (e: BOLPhoto) => {
+    try {
+      setPending((prev) => new Set(prev).add(e._id))
+      const res = await fetch('/api/fuel-rec/request-again', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${localStorage.getItem('token') || ''}`,
+        },
+        body: JSON.stringify({ site: e.site, date: e.date }),
+      })
+      if (!res.ok) {
+        const msg = await res.text().catch(() => '')
+        throw new Error(msg || `HTTP ${res.status}`)
+      }
+      alert(`Retake request sent for ${e.site} on ${e.date}.`)
+    } catch (err) {
+      alert(`Retake request failed: ${err instanceof Error ? err.message : String(err)}`)
+    } finally {
+      setPending((prev) => {
+        const next = new Set(prev)
+        next.delete(e._id)
+        return next
+      })
+    }
   }
 
   const downloadPdfForEntry = async (e: BOLPhoto) => {
@@ -179,14 +214,29 @@ function RouteComponent() {
                       </td>
                       {/* <td className="px-2 py-2">{e.createdAt ? format(new Date(e.createdAt), 'yyyy-MM-dd HH:mm') : '—'}</td> */}
                       <td className="px-2 py-2 space-x-3">
-                        <a download={true} href={`/cdn/download/${e.filename}`}>Image</a>
-                        <button
+                        {/* <a download={true} href={`/cdn/download/${e.filename}`}>Image</a> */}
+                        {/* <button
                           type="button"
                           className="underline text-blue-600 hover:text-blue-800"
                           onClick={() => downloadPdfForEntry(e)}
                         >
                           PDF
-                        </button>
+                        </button> */}
+                        <Button
+                          onClick={() => downloadPdfForEntry(e)}
+                        >
+                          PDF
+                        </Button>
+
+                        {access?.accounting?.fuelRec?.requestAgain && (
+                          <Button
+                            variant="outline"
+                            onClick={() => requestAgain(e)}
+                            disabled={pending.has(e._id)}
+                          >
+                            {pending.has(e._id) ? 'Sending…' : 'Request Again'}
+                          </Button>
+                        )}
                       </td>
                     </tr>
                   ))}
