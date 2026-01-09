@@ -2,6 +2,20 @@ import { createFileRoute, useNavigate } from '@tanstack/react-router'
 import { useMemo, useState, useEffect } from 'react'
 import { SitePicker } from '@/components/custom/sitePicker'
 import { Button } from '@/components/ui/button';
+import { Info } from 'lucide-react'
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from "@/components/ui/dialog"
+
+interface CardProps {
+  title: React.ReactNode
+  value: React.ReactNode
+  dialogContent?: React.ReactNode
+}
 // import { domain } from '@/lib/constants'
 
 type Search = { site: string; date: string }
@@ -67,6 +81,36 @@ export const Route = createFileRoute('/_navbarLayout/cash-summary/report')({
     return { report, error: null }
   },
 })
+
+export function Card({ title, value, dialogContent }: CardProps) {
+  const [open, setOpen] = useState(false)
+
+  return (
+    <div className="border rounded-md p-4 bg-card">
+      <div className="flex items-center gap-1 text-xs text-muted-foreground mb-1">
+        {title}
+        {dialogContent && (
+          <Dialog open={open} onOpenChange={setOpen}>
+            <DialogTrigger asChild>
+              <button>
+                <Info className="h-3 w-3 cursor-pointer text-muted-foreground hover:text-foreground" />
+              </button>
+            </DialogTrigger>
+            <DialogContent className="max-w-xs text-xs leading-relaxed">
+              <DialogHeader>
+                <DialogTitle>{title} Details</DialogTitle>
+              </DialogHeader>
+              {dialogContent}
+            </DialogContent>
+          </Dialog>
+        )}
+      </div>
+
+      <div className="text-base">{value}</div>
+    </div>
+  )
+}
+
 
 function RouteComponent() {
   const { site, date } = Route.useSearch()
@@ -226,6 +270,21 @@ function RouteComponent() {
     fetchLottery()
   }, [site, date])
 
+  const safeBullock = bullock ?? {
+    onlineSales: 0,
+    scratchSales: 0,
+    payouts: 0,
+  }
+
+  const safeLottery = lottery ?? {
+    onlineLottoTotal: 0,
+    onlineCancellations: 0,
+    onlineDiscounts: 0,
+    instantLottTotal: 0,
+    scratchFreeTickets: 0,
+    lottoPayout: 0,
+  }
+
   const fmtNum = (n?: number) =>
     typeof n === 'number'
       ? n.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })
@@ -234,8 +293,42 @@ function RouteComponent() {
   const overShort =
     (totals?.canadian_cash_collected ?? 0) - (totals?.report_canadian_cash ?? 0)
 
+  const baseReportedCash = totals?.report_canadian_cash || 0
+
+  const onlineOverShort =
+    (safeBullock.onlineSales || 0) -
+    ((safeLottery.onlineLottoTotal ?? 0) -
+      (safeLottery.onlineCancellations || 0) -
+      (safeLottery.onlineDiscounts || 0))
+
+  const scratchOverShort =
+    (safeBullock.scratchSales || 0) -
+    ((safeLottery.instantLottTotal ?? 0) +
+      (safeLottery.scratchFreeTickets ?? 0) +
+      (safeLottery.oldScratchTickets ?? 0))
+
+  const payoutOverShort =
+    (safeBullock.payouts || 0) -
+    ((safeLottery.lottoPayout ?? 0) +
+      (safeLottery.scratchFreeTickets ?? 0))
+
+  const adjustedReportedCash =
+    baseReportedCash + onlineOverShort + scratchOverShort
+
+  const adjustedItemSales =
+    (totals?.item_sales || 0) + onlineOverShort + scratchOverShort
+
+  const adjustedPayouts =
+    (totals?.payouts || 0) + payoutOverShort
+
+  const adjustedOverShort =
+    (totals?.canadian_cash_collected ?? 0) - // total cash collected
+    (adjustedReportedCash ?? 0)                 // adjusted reported cash
+
   const osColor =
     overShort > 0 ? 'text-green-600' : overShort < 0 ? 'text-red-600' : 'text-muted-foreground'
+  const adjustedOsColor =
+    adjustedOverShort > 0 ? 'text-green-600' : adjustedOverShort < 0 ? 'text-red-600' : 'text-muted-foreground'
 
   const skeletonCards = useMemo(
     () => Array.from({ length: 9 }).map((_, i) => (
@@ -318,6 +411,54 @@ function RouteComponent() {
                 </div>
               </div>
 
+              {lottery && (
+                <div className="rounded-lg bg-gray-100 p-4 shadow-sm">
+                  <h3 className="text-sm font-semibold mb-4">Adjusted Totals (After Lottery)</h3>
+                  <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+
+                    <Card
+                      title={<span className="font-bold text-black">Total Canadian Cash Counted</span>}
+                      value={<span className="font-semibold">{fmtNum(totals?.canadian_cash_collected)}</span>}
+                    />
+
+                    <Card
+                      title={<span className="font-bold text-black">Final Canadian Cash Reported</span>}
+                      value={<span className="font-semibold">{fmtNum(adjustedReportedCash)}</span>}
+                      dialogContent={
+                        <div className="whitespace-pre-line text-sm leading-relaxed">
+                          Adjusted Reported Cash = Bulloch Reported Cash + (Online Lottery Sales Over/Short + Scratch Lottery Sales Over/Short)
+                        </div>
+                      }
+                    />
+
+                    <Card
+                      title={<span className="font-bold text-black">Final Over/Short</span>}
+                      value={<span className={`font-bold ${adjustedOsColor}`}>{fmtNum(adjustedOverShort)}</span>}
+                    />
+
+                    <Card
+                      title={<span className="font-bold text-black">Final Item Sales</span>}
+                      value={<span className="font-semibold">{fmtNum(adjustedItemSales)}</span>}
+                      dialogContent={
+                        <div className="whitespace-pre-line text-sm leading-relaxed">
+                          Adjusted Item Sales = Bulloch Item Sales + (Online Lottery Sales Over/Short + Scratch Lottery Sales Over/Short)
+                        </div>
+                      }
+                    />
+
+                    <Card
+                      title={<span className="font-bold text-black">Final Payouts</span>}
+                      value={<span className="font-semibold">{fmtNum(adjustedPayouts)}</span>}
+                      dialogContent={
+                        <div className="whitespace-pre-line text-sm leading-relaxed">
+                          Adjusted Payouts = Bulloch Payouts + Lottery Payout Over/Short
+                        </div>
+                      }
+                    />
+
+                  </div>
+                </div>
+              )}
               <div>
                 <h3 className="text-sm font-semibold mb-2">Adjustments</h3>
                 <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
@@ -439,11 +580,13 @@ function RouteComponent() {
                                 className={
                                   ((bullock.scratchSales || 0) -
                                     ((lottery.instantLottTotal ?? 0) +
-                                      (lottery.scratchFreeTickets ?? 0))) > 0
+                                      (lottery.scratchFreeTickets ?? 0) +
+                                      (lottery.oldScratchTickets ?? 0))) > 0
                                     ? 'text-green-600'
                                     : ((bullock.scratchSales || 0) -
                                       ((lottery.instantLottTotal ?? 0) +
-                                        (lottery.scratchFreeTickets ?? 0))) < 0
+                                        (lottery.scratchFreeTickets ?? 0) +
+                                        (lottery.oldScratchTickets ?? 0))) < 0
                                       ? 'text-red-600'
                                       : 'text-muted-foreground'
                                 }
@@ -452,7 +595,8 @@ function RouteComponent() {
                                 {Number(
                                   (bullock.scratchSales || 0) -
                                   ((lottery.instantLottTotal ?? 0) +
-                                    (lottery.scratchFreeTickets ?? 0)),
+                                    (lottery.scratchFreeTickets ?? 0) +
+                                    (lottery.oldScratchTickets ?? 0)),
                                 ).toFixed(2)}
                               </span>
                             ) : '—'}
@@ -464,6 +608,17 @@ function RouteComponent() {
                           <td className="px-3 py-2">
                             {lottery.scratchFreeTickets != null
                               ? `$${Number(lottery.scratchFreeTickets).toFixed(2)}`
+                              : '—'}
+                          </td>
+                          <td className="px-3 py-2">—</td>
+                          <td className="px-3 py-2">—</td>
+                        </tr>
+
+                        <tr className="border-t bg-gray-50">
+                          <td className="px-3 py-2 pl-4">Old Scratch Tickets</td>
+                          <td className="px-3 py-2">
+                            {lottery.oldScratchTickets != null
+                              ? `$${Number(lottery.oldScratchTickets).toFixed(2)}`
                               : '—'}
                           </td>
                           <td className="px-3 py-2">—</td>
@@ -619,14 +774,39 @@ function RouteComponent() {
   )
 }
 
-function Card({ title, value }: { title: string; value: React.ReactNode }) {
-  return (
-    <div className="border rounded-md p-4 bg-card">
-      <div className="text-xs text-muted-foreground mb-1">{title}</div>
-      <div className="text-base">{value}</div>
-    </div>
-  )
-}
+
+// function Card({ title, value }: { title: string; value: React.ReactNode }) {
+//   return (
+//     <div className="border rounded-md p-4 bg-card">
+//       <div className="text-xs text-muted-foreground mb-1">{title}</div>
+//       <div className="text-base">{value}</div>
+//     </div>
+//   )
+// }
+// function Card({ title, value, tooltip }: CardProps) {
+//   return (
+//     <div className="border rounded-md p-4 bg-card">
+//       <div className="flex items-center gap-1 text-xs text-muted-foreground mb-1">
+//         <span>{title}</span>
+
+//         {tooltip && (
+//           <TooltipProvider>
+//             <Tooltip>
+//               <TooltipTrigger asChild>
+//                 <Info className="h-3 w-3 cursor-pointer text-muted-foreground hover:text-foreground" />
+//               </TooltipTrigger>
+//               <TooltipContent className="max-w-xs text-xs leading-relaxed">
+//                 {tooltip}
+//               </TooltipContent>
+//             </Tooltip>
+//           </TooltipProvider>
+//         )}
+//       </div>
+
+//       <div className="text-base">{value}</div>
+//     </div>
+//   )
+// }
 
 function KV({ k, v }: { k: string; v: React.ReactNode }) {
   return (
