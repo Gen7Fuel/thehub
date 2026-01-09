@@ -145,6 +145,7 @@ jobs:
             export SFTP_OSOYOOS_PASS=${{ secrets.SFTP_OSOYOOS_PASS }}
             export AZURE_STORAGE_CONNECTION_STRING=${{ secrets.AZURE_STORAGE_CONNECTION_STRING }}
             export AZURE_CONTAINER=${{ secrets.AZURE_CONTAINER }}
+            export NOREPLY_PASS=${{ secrets.NOREPLY_PASS }}
 
             # ---- Backend rolling update ----
             docker compose up -d --build --no-deps --wait backend
