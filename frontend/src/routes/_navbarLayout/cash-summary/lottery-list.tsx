@@ -526,16 +526,16 @@ function RouteComponent() {
                 <td className="px-4 py-2">
                   {bullock ? (
                     <span
-                      className={`${((bullock.scratchSales || 0) - ((lottery.instantLottTotal ?? 0) + (lottery.scratchFreeTickets ?? 0))) > 0
+                      className={`${((bullock.scratchSales || 0) - ((lottery.instantLottTotal ?? 0) + (lottery.scratchFreeTickets ?? 0) + (lottery.oldScratchTickets ?? 0))) > 0
                         ? 'text-green-600'
-                        : ((bullock.scratchSales || 0) - ((lottery.instantLottTotal ?? 0) + (lottery.scratchFreeTickets ?? 0))) < 0
+                        : ((bullock.scratchSales || 0) - ((lottery.instantLottTotal ?? 0) + (lottery.scratchFreeTickets ?? 0) + (lottery.oldScratchTickets ?? 0))) < 0
                           ? 'text-red-600'
                           : 'text-muted-foreground'
                         }`}
                     >
                       $
                       {Number(
-                        ((bullock.scratchSales || 0) - ((lottery.instantLottTotal ?? 0) + (lottery.scratchFreeTickets ?? 0))),
+                        ((bullock.scratchSales || 0) - ((lottery.instantLottTotal ?? 0) + (lottery.scratchFreeTickets ?? 0) + (lottery.oldScratchTickets ?? 0 ))),
                       ).toFixed(2)}
                     </span>
                   ) : (
@@ -547,6 +547,14 @@ function RouteComponent() {
                 <td className="px-4 py-2 pl-8">Scratch Free Tickets</td>
                 <td className="px-4 py-2">
                   {lottery.scratchFreeTickets != null ? `$${Number(lottery.scratchFreeTickets).toFixed(2)}` : '-'}
+                </td>
+                <td className="px-4 py-2">-</td>
+                <td className="px-4 py-2">-</td>
+              </tr>
+              <tr className="border-t bg-gray-50">
+                <td className="px-4 py-2 pl-8">Old Scratch Tickets</td>
+                <td className="px-4 py-2">
+                  {lottery.oldScratchTickets != null ? `$${Number(lottery.oldScratchTickets).toFixed(2)}` : '-'}
                 </td>
                 <td className="px-4 py-2">-</td>
                 <td className="px-4 py-2">-</td>
@@ -624,13 +632,24 @@ function RouteComponent() {
               </tr>
               <tr className="border-t">
                 <td className="px-4 py-2 font-semibold">Images</td>
-                <td className="px-4 py-2">
+                {/* <td className="px-4 py-2">
                   {Array.isArray(lottery.images) ? lottery.images.length : 0} image(s)
+                </td> */}
+                <td className="px-4 py-2">
+                  <div className="flex gap-3 text-sm">
+                    <span>
+                      <strong>{Array.isArray(lottery.images) ? lottery.images.length : 0}</strong> Lottery
+                    </span>
+                    <span className="text-gray-500">/</span>
+                    <span>
+                      <strong>{Array.isArray(lottery.datawaveImages) ? lottery.datawaveImages.length : 0}</strong> DataWave
+                    </span>
+                  </div>
                 </td>
               </tr>
               <tr className="border-t">
                 <td className="px-4 py-2 font-semibold">Actions</td>
-                <td className="px-4 py-2">
+                {/* <td className="px-4 py-2">
                   <div className="flex gap-2">
                     <Button size="sm" variant="outline" onClick={() => viewImages(lottery.images || [])}>
                       <Eye className="h-4 w-4" /> View Images
@@ -649,6 +668,31 @@ function RouteComponent() {
                         <ExternalLink className="h-4 w-4 mr-1" /> Open First
                       </Button>
                     )}
+                  </div>
+                </td> */}
+                <td className="px-4 py-2">
+                  <div className="flex gap-2 flex-wrap">
+                    {/* Lottery images */}
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      disabled={!Array.isArray(lottery.images) || lottery.images.length === 0}
+                      onClick={() => viewImages(lottery.images || [])}
+                    >
+                      <Eye className="h-4 w-4 mr-1" />
+                      Lottery Images
+                    </Button>
+
+                    {/* DataWave images */}
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      disabled={!Array.isArray(lottery.datawaveImages) || lottery.datawaveImages.length === 0}
+                      onClick={() => viewImages(lottery.datawaveImages || [])}
+                    >
+                      <Eye className="h-4 w-4 mr-1" />
+                      DataWave Images
+                    </Button>
                   </div>
                 </td>
               </tr>

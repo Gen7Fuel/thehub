@@ -555,9 +555,11 @@ router.get('/lottery', async (req, res) => {
         onlineDiscounts: lotteryDoc.onlineDiscounts,
         instantLottTotal: lotteryDoc.instantLottTotal,
         scratchFreeTickets: lotteryDoc.scratchFreeTickets,
+        oldScratchTickets: lotteryDoc.oldScratchTickets,
         dataWave: lotteryDoc.dataWave,
         feeDataWave: lotteryDoc.feeDataWave,
         images: Array.isArray(lotteryDoc.images) ? lotteryDoc.images : [],
+        datawaveImages: Array.isArray(lotteryDoc.datawaveImages) ? lotteryDoc.datawaveImages : [],
       })
       // append raw CashSummary rows (they may include parsed lottery fields but frontend will prefer the saved lottery)
       rows.push(...csRows)
@@ -571,9 +573,11 @@ router.get('/lottery', async (req, res) => {
         delete copy.onlineDiscounts
         delete copy.instantLottTotal
         delete copy.scratchFreeTickets
+        delete copy.oldScratchTickets
         delete copy.dataWave
         delete copy.feeDataWave
         delete copy.images
+        delete copy.datawaveImages
         return copy
       })
     }
@@ -600,7 +604,7 @@ router.get('/lottery', async (req, res) => {
 // Create or update a saved Lottery entry for a site+date
 router.post('/lottery', async (req, res) => {
   try {
-    const { site, date, values, images } = req.body || {}
+    const { site, date, values, images, datawaveImages } = req.body || {}
     if (!site) return res.status(400).json({ error: 'site is required' })
     if (!date || !/^\d{4}-\d{2}-\d{2}$/.test(String(date))) {
       return res.status(400).json({ error: 'date (YYYY-MM-DD) is required' })
@@ -615,9 +619,11 @@ router.post('/lottery', async (req, res) => {
       onlineDiscounts: (values && typeof values.onlineDiscounts === 'number') ? values.onlineDiscounts : null,
       instantLottTotal: (values && typeof values.scratchSales === 'number') ? values.scratchSales : null,
       scratchFreeTickets: (values && typeof values.scratchFreeTickets === 'number') ? values.scratchFreeTickets : null,
+      oldScratchTickets: (values && typeof values.oldScratchTickets === 'number') ? values.oldScratchTickets : null,
       dataWave: (values && typeof values.datawaveValue === 'number') ? values.datawaveValue : null,
       feeDataWave: (values && typeof values.datawaveFee === 'number') ? values.datawaveFee : null,
       images: Array.isArray(images) ? images.map(String) : [],
+      datawaveImages: Array.isArray(datawaveImages) ? datawaveImages.map(String) : [],
     }
 
     const updated = await Lottery.findOneAndUpdate(
@@ -728,7 +734,7 @@ router.post('/submit/to/safesheet', async (req, res) => {
 
           if (lotteryImagesPdf) {
             attachments.push({
-              filename: `Lottery-Images-${site}-${date}.pdf`,
+              filename: `Lottery-Datawave-Images-${site}-${date}.pdf`,
               content: lotteryImagesPdf,
               contentType: 'application/pdf',
             })
@@ -743,10 +749,17 @@ router.post('/submit/to/safesheet', async (req, res) => {
           }
 
           if (depositSlip) attachments.push(depositSlip)
+          
+          let cc = ['mohammad@gen7fuel.com', 'JDzyngel@gen7fuel.com', 'ana@gen7fuel.com']
+
+          if (site === 'Oliver' || site === 'Osoyoos') {
+            cc.push('ZBaptiste@oib.ca');
+          }
 
           await sendEmail({
             to: CASH_SUMMARY_EMAILS.join(','),
-            cc: ['mohammad@gen7fuel.com', 'JDzyngel@gen7fuel.com', 'ana@gen7fuel.com'],
+            cc,
+            // to: 'daksh@gen7fuel.com',
             subject: `Daily Report – ${site} – ${date}`,
             text: `Attached are the Cash Summary${shiftReportsPdf ? ', Shift Reports' : ''}${depositSlip ? ' and Bank Deposit Slip' : ''} for ${site} on ${date}.`,
             attachments,
