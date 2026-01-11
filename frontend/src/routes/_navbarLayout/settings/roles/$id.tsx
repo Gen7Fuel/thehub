@@ -143,6 +143,7 @@ import { createFileRoute, useNavigate } from "@tanstack/react-router";
 
 interface PermissionNode {
   name: string;
+  permId: number;
   children?: PermissionNode[];
 }
 

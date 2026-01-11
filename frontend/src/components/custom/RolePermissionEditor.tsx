@@ -242,6 +242,7 @@ import _ from "lodash";
 interface PermissionNode {
   name: string;
   value?: boolean;
+  permId: number;
   children?: PermissionNode[];
   collapsed?: boolean;
 }

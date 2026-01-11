@@ -6,7 +6,7 @@ const Permission = require("../models/Permission");
 const Location = require("../models/Location"); // Add this at the top with other requires
 const router = express.Router();
 const Role = require("../models/Role");
-const getMergedPermissions = require("../utils/mergePermissionObjects");
+const { getMergedPermissions, getMergedPermissionsTreeArray } = require("../utils/mergePermissionObjects");
 
 const { auth } = require("../middleware/authMiddleware.js");
 
@@ -174,7 +174,8 @@ router.post("/login", async (req, res) => {
     await user.save({ timestamps: false });
 
     // Get merged permissions (role + custom)
-    const mergedPermissions = await getMergedPermissions(user);
+    // const mergedPermissions = await getMergedPermissions(user);
+    const mergedPermissions = await getMergedPermissionsTreeArray(user);
 
     // Fetch location & timezone
     let timezone = null;
@@ -326,7 +327,8 @@ router.post("/refresh-token", async (req, res) => {
     if (!user) return res.status(404).json({ message: "User not found" });
 
     // Rebuild permissions / timezone / access if needed
-    const mergedPermissions = await getMergedPermissions(user);
+    // const mergedPermissions = await getMergedPermissions(user);
+    const mergedPermissions = await getMergedPermissionsTreeArray(user);
     let timezone = null;
     if (user.stationName) {
       const location = await Location.findOne({ stationName: user.stationName });

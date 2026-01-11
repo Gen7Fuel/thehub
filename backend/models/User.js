@@ -70,6 +70,19 @@ const permissionNodeSchema = new mongoose.Schema({
   value: { type: Boolean, default: false },
   children: { type: [this], default: [] },
 }, { _id: false });
+const userPermissionSchema = new mongoose.Schema(
+  {
+    permId: {
+      type: Number,
+      required: true,
+    },
+    value: {
+      type: Boolean,
+      required: true,
+    },
+  },
+  { _id: false }
+);
 
 const userSchema = new mongoose.Schema({
   email: { type: String, required: true, unique: true },
@@ -95,6 +108,10 @@ const userSchema = new mongoose.Schema({
 
   custom_permissions: {
     type: [permissionNodeSchema],
+    default: [],
+  },
+  customPermissionsArray: {
+    type: [userPermissionSchema],
     default: [],
   },
 
