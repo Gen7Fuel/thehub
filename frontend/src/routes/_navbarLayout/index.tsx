@@ -72,7 +72,7 @@ function App() {
 
         {/* Accounts Payable Section */}
         {/* {access.module_payables && ( //markpoint */}
-        {access?.payables?.value && (
+        {access?.payables && (
           <Section title="Accounts Payable">
             <div className="flex flex-wrap gap-4">
               <Link to="/payables">
