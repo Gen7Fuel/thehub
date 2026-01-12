@@ -87,7 +87,7 @@ function App() {
         {access?.accounting?.value && (
           <Section title="Accounting">
             <div className="flex flex-wrap gap-4">
-              {access?.accounting?.cashSummary && (
+              {access?.accounting?.cashSummary.value && (
                 <Link to="/cash-summary" search={{ site: user?.location }}>
                   <Button className="w-32 h-32 flex items-center justify-center break-words whitespace-normal text-center">
                     Cash Summary
