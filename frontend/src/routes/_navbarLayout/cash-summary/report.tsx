@@ -2,7 +2,8 @@ import { createFileRoute, useNavigate } from '@tanstack/react-router'
 import { useMemo, useState, useEffect } from 'react'
 import { SitePicker } from '@/components/custom/sitePicker'
 import { Button } from '@/components/ui/button';
-import { Info } from 'lucide-react'
+import { Info, RefreshCw } from 'lucide-react'
+import { useAuth } from '@/context/AuthContext'
 import {
   Dialog,
   DialogContent,
@@ -113,6 +114,8 @@ export function Card({ title, value, dialogContent }: CardProps) {
 
 
 function RouteComponent() {
+  const { user } = useAuth()
+  const access = user?.access || {}
   const { site, date } = Route.useSearch()
   const { report, error } = Route.useLoaderData() as { report: ReportData | null; error: string | null }
   const navigate = useNavigate({ from: Route.fullPath })
@@ -126,6 +129,7 @@ function RouteComponent() {
   const handheldDebit = report?.report?.handheldDebit ?? undefined
 
   const [noteText, setNoteText] = useState('')
+  const [fetching, setFetching] = useState(false)
 
   useEffect(() => {
     setNoteText(notes)
@@ -217,6 +221,41 @@ function RouteComponent() {
       console.error(e)
       alert('Failed to submit.')
       setSubmitState('idle')
+    }
+  }
+
+  const onFetch = async () => {
+    if (fetching) return
+    if (!site || !date) return
+    const ids = (report?.rows || []).map((r) => r._id).filter(Boolean)
+    if (ids.length === 0) return
+    setFetching(true)
+    try {
+      const token = localStorage.getItem('token') || ''
+      for (const id of ids) {
+        try {
+          const res = await fetch(`/api/cash-summary/${encodeURIComponent(id)}`, {
+            method: 'PUT',
+            headers: {
+              'Content-Type': 'application/json',
+              Authorization: `Bearer ${token}`,
+            },
+            body: JSON.stringify({ refetch: true }),
+          })
+          // Continue even if one fails; surface minimal feedback
+          if (!res.ok) {
+            // eslint-disable-next-line no-console
+            console.warn('Refetch failed for id', id)
+          }
+        } catch (e) {
+          // eslint-disable-next-line no-console
+          console.warn('Refetch error for id', id, e)
+        }
+      }
+      await navigate({ search: (prev: Search) => ({ ...prev }) })
+      await onSubmitClick()
+    } finally {
+      setFetching(false)
     }
   }
 
@@ -372,9 +411,21 @@ function RouteComponent() {
                 {submitLabel}
               </Button>
             )}
-            <Button type="button" variant="outline" onClick={() => window.print()}>
+            {/* <Button type="button" variant="outline" onClick={() => window.print()}>
               Export PDF
-            </Button>
+            </Button> */}
+            {access?.accounting?.cashSummary?.fetchAgain && (
+              <Button
+                type="button"
+                variant="outline"
+                onClick={onFetch}
+                disabled={fetching}
+                title="Refetch shifts and submit"
+                aria-label="Refetch shifts and submit"
+              >
+                <RefreshCw className={`h-4 w-4 ${fetching ? 'animate-spin' : ''}`} />
+              </Button>
+            )}
           </div>
         </div>
 
