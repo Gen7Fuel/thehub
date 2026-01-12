@@ -173,7 +173,11 @@ function RouteComponent() {
 
 
   const onSubmitClick = async () => {
-    if (submitState !== 'idle' || !site || !date) return
+    console.log('[CashSummary] onSubmitClick invoked', { submitState, site, date })
+    if (submitState !== 'idle' || !site || !date) {
+      console.log('[CashSummary] onSubmitClick early-exit', { submitState, site, date })
+      return
+    }
 
     // If this site sells lottery, ensure a saved Lottery entry exists for this date
     try {
@@ -183,6 +187,7 @@ function RouteComponent() {
         const locs = await locResp.json()
         const found = Array.isArray(locs) ? locs.find((l: any) => l.stationName === site) : null
         if (found && found.sellsLottery) {
+          console.log('[CashSummary] onSubmitClick site sellsLottery; lottery present?', !!lottery)
           // lottery state was loaded earlier; if missing, block submit
           if (!lottery) {
             alert('You need to add lottery values to submit this report. Redirecting to Lottery entry page.')
@@ -199,11 +204,13 @@ function RouteComponent() {
     const proceed = window.confirm(
       'An email will be sent to Accounting with a copy of the Cash Summary Report.\n\nDo you want to continue?'
     )
+    console.log('[CashSummary] onSubmitClick confirm result', proceed)
     if (!proceed) return
 
     // console.log('submitted')
     try {
       setSubmitState('submitting')
+      console.log('[CashSummary] onSubmitClick submitting POST', { site, date })
       const r = await fetch('/api/cash-summary/submit/to/safesheet', {
         method: 'POST',
         headers: {
@@ -212,10 +219,12 @@ function RouteComponent() {
         },
         body: JSON.stringify({ site, date }),
       })
+      console.log('[CashSummary] onSubmitClick response status', r.status)
       if (!r.ok) {
         const msg = await r.text().catch(() => 'Submit failed')
         throw new Error(msg || 'Submit failed')
       }
+      console.log('[CashSummary] onSubmitClick submit success')
       setSubmitState('submitted')
     } catch (e) {
       console.error(e)
@@ -225,15 +234,17 @@ function RouteComponent() {
   }
 
   const onFetch = async () => {
+    console.log('[CashSummary] onFetch invoked', { fetching, site, date, rows: report?.rows?.length })
     setSubmitState('idle')
 
-    if (fetching) return
-    if (!site || !date) return
+    if (fetching) { console.log('[CashSummary] onFetch early-exit: already fetching'); return }
+    if (!site || !date) { console.log('[CashSummary] onFetch early-exit: missing site/date', { site, date }); return }
     const ids = (report?.rows || []).map((r) => r._id).filter(Boolean)
-    if (ids.length === 0) return
+    if (ids.length === 0) { console.log('[CashSummary] onFetch early-exit: no ids to refetch'); return }
     setFetching(true)
     try {
       const token = localStorage.getItem('token') || ''
+      console.log('[CashSummary] onFetch refetching ids', ids)
       for (const id of ids) {
         try {
           const res = await fetch(`/api/cash-summary/${encodeURIComponent(id)}`, {
@@ -248,16 +259,22 @@ function RouteComponent() {
           if (!res.ok) {
             // eslint-disable-next-line no-console
             console.warn('Refetch failed for id', id)
+          } else {
+            console.log('[CashSummary] onFetch refetch success', { id, status: res.status })
           }
         } catch (e) {
           // eslint-disable-next-line no-console
           console.warn('Refetch error for id', id, e)
         }
       }
+      console.log('[CashSummary] onFetch refreshing loader data')
       await navigate({ search: (prev: Search) => ({ ...prev }) })
+      console.log('[CashSummary] onFetch calling onSubmitClick')
       await onSubmitClick()
+      console.log('[CashSummary] onFetch onSubmitClick returned')
     } finally {
       setFetching(false)
+      console.log('[CashSummary] onFetch finished')
     }
   }
 
