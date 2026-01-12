@@ -139,205 +139,453 @@ async function upsertDailyDepositForSiteDate(site, dateInput) {
   }
 }
 
+// router.get('/over-short', async (req, res) => {
+//   try {
+//     const { site } = req.query
+//     if (!site) {
+//       return res.status(400).json({ error: 'site is required' })
+//     }
+
+//     // 1️⃣ Date range: past 7 days (normalized)
+//     const end = new Date()
+//     end.setHours(0, 0, 0, 0)
+
+//     const start = new Date(end)
+//     start.setDate(start.getDate() - 20) // today + previous 20 days
+
+//     // 2️⃣ Fetch submitted reports for site
+//     const reports = await CashSummaryReport.find({
+//       site,
+//       submitted: true,
+//       date: { $gte: start, $lte: end },
+//     })
+//       .sort({ date: 1 })
+//       .lean()
+
+//     if (!reports.length) {
+//       return res.json([])
+//     }
+
+//     // 3️⃣ Fetch shifts for all those report dates
+//     const dayRanges = reports.map(r => ({
+//       date: {
+//         $gte: r.date,
+//         $lt: new Date(r.date.getTime() + 24 * 60 * 60 * 1000),
+//       },
+//     }))
+
+//     const shifts = await CashSummary.find({
+//       site,
+//       $or: dayRanges,
+//     }).lean()
+
+
+//     // 4️⃣ Group shifts by date (day start time)
+//     const byDate = {}
+
+//     for (const shift of shifts) {
+//       const d = new Date(shift.date)
+//       d.setHours(0, 0, 0, 0)
+//       const key = d.toISOString()
+
+//       if (!byDate[key]) {
+//         byDate[key] = {
+//           canadian_cash_collected: 0,
+//           report_canadian_cash: 0,
+//           shifts: 0,
+//         }
+//       }
+
+//       byDate[key].canadian_cash_collected += shift.canadian_cash_collected || 0
+//       byDate[key].report_canadian_cash += shift.report_canadian_cash || 0
+//       byDate[key].shifts += 1
+//     }
+
+//     // 5️⃣ Build final chart data
+//     const data = reports.map(r => {
+//       const key = r.date.toISOString()
+//       const totals = byDate[key] || {
+//         canadian_cash_collected: 0,
+//         report_canadian_cash: 0,
+//         shifts: 0,
+//       }
+
+//       const overShort =
+//         totals.canadian_cash_collected - totals.report_canadian_cash
+
+//       return {
+//         date: r.date.toISOString().slice(0, 10), // YYYY-MM-DD
+//         overShort,
+//         canadian_cash_collected: totals.canadian_cash_collected,
+//         report_canadian_cash: totals.report_canadian_cash,
+//         shifts: totals.shifts,
+//         notes: r.notes || '',
+//       }
+//     })
+
+//     res.json(data)
+//   } catch (err) {
+//     console.error('Over/Short report error:', err)
+//     res.status(500).json({ error: 'Failed to fetch over/short data' })
+//   }
+// })
 router.get('/over-short', async (req, res) => {
   try {
-    const { site } = req.query
-    if (!site) {
-      return res.status(400).json({ error: 'site is required' })
-    }
+    const { site } = req.query;
+    if (!site) return res.status(400).json({ error: 'site is required' });
 
-    // 1️⃣ Date range: past 7 days (normalized)
-    const end = new Date()
-    end.setHours(0, 0, 0, 0)
+    // 1️⃣ Check if site sells lottery
+    const location = await Location.findOne({ stationName: site }).lean();
+    const sellsLottery = location?.sellsLottery || false;
 
-    const start = new Date(end)
-    start.setDate(start.getDate() - 20) // today + previous 20 days
+    // 2️⃣ Date range setup
+    const end = new Date();
+    end.setHours(0, 0, 0, 0);
+    const start = new Date(end);
+    start.setDate(start.getDate() - 20);
 
-    // 2️⃣ Fetch submitted reports for site
+    // 3️⃣ Fetch submitted reports (Contains unsettledPrepays and handheldDebit)
     const reports = await CashSummaryReport.find({
       site,
       submitted: true,
       date: { $gte: start, $lte: end },
-    })
-      .sort({ date: 1 })
-      .lean()
+    }).sort({ date: 1 }).lean();
 
-    if (!reports.length) {
-      return res.json([])
-    }
+    if (!reports.length) return res.json([]);
 
-    // 3️⃣ Fetch shifts for all those report dates
-    const dayRanges = reports.map(r => ({
-      date: {
-        $gte: r.date,
-        $lt: new Date(r.date.getTime() + 24 * 60 * 60 * 1000),
-      },
-    }))
-
+    // 4️⃣ Fetch all shifts for these dates to get the "Bullock" totals
     const shifts = await CashSummary.find({
       site,
-      $or: dayRanges,
-    }).lean()
+      date: { $gte: start, $lte: new Date(end.getTime() + 24 * 60 * 60 * 1000) },
+    }).lean();
 
+    // 5️⃣ Fetch Lottery docs if applicable
+    let lotteryMap = {};
+    if (sellsLottery) {
+      const lotteryDocs = await Lottery.find({
+        site,
+        date: {
+          $gte: start.toISOString().split('T')[0],
+          $lte: end.toISOString().split('T')[0]
+        }
+      }).lean();
+      lotteryMap = lotteryDocs.reduce((acc, curr) => {
+        acc[curr.date] = curr;
+        return acc;
+      }, {});
+    }
 
-    // 4️⃣ Group shifts by date (day start time)
-    const byDate = {}
-
+    // 6️⃣ Group Shift Totals by Date
+    const byDate = {};
     for (const shift of shifts) {
-      const d = new Date(shift.date)
-      d.setHours(0, 0, 0, 0)
-      const key = d.toISOString()
+      const d = new Date(shift.date);
+      d.setHours(0, 0, 0, 0);
+      const key = d.toISOString();
 
       if (!byDate[key]) {
         byDate[key] = {
           canadian_cash_collected: 0,
           report_canadian_cash: 0,
+          shiftOnlineTotal: 0,
+          shiftInstantTotal: 0,
           shifts: 0,
-        }
+        };
       }
 
-      byDate[key].canadian_cash_collected += shift.canadian_cash_collected || 0
-      byDate[key].report_canadian_cash += shift.report_canadian_cash || 0
-      byDate[key].shifts += 1
+      byDate[key].canadian_cash_collected += shift.canadian_cash_collected || 0;
+      byDate[key].report_canadian_cash += shift.report_canadian_cash || 0;
+      byDate[key].shiftOnlineTotal += shift.onlineLottoTotal || 0;
+      byDate[key].shiftInstantTotal += shift.instantLottTotal || 0;
+      byDate[key].shifts += 1;
     }
 
-    // 5️⃣ Build final chart data
+    // 7️⃣ Final Calculation logic
     const data = reports.map(r => {
-      const key = r.date.toISOString()
-      const totals = byDate[key] || {
+      const isoKey = r.date.toISOString();
+      const dateStr = isoKey.split('T')[0];
+      const totals = byDate[isoKey] || {
         canadian_cash_collected: 0,
         report_canadian_cash: 0,
-        shifts: 0,
-      }
+        shiftOnlineTotal: 0,
+        shiftInstantTotal: 0,
+        shifts: 0
+      };
 
-      const overShort =
-        totals.canadian_cash_collected - totals.report_canadian_cash
+      // A. Calculate Adjusted Collected Cash (Actual)
+      // We add manual adjustments from the report to the physical cash collected in shifts
+      const adjustedCollected =
+        totals.canadian_cash_collected +
+        (r.unsettledPrepays || 0) +
+        (r.handheldDebit || 0);
+
+      // B. Calculate Adjusted Reported Cash (Expected)
+      let adjustedReported = totals.report_canadian_cash;
+
+      if (sellsLottery && lotteryMap[dateStr]) {
+        const lotto = lotteryMap[dateStr];
+
+        const onlineOverShort = (totals.shiftOnlineTotal || 0) - (
+          (lotto.onlineLottoTotal ?? 0) -
+          (lotto.onlineCancellations || 0) -
+          (lotto.onlineDiscounts || 0)
+        );
+
+        const scratchOverShort = (totals.shiftInstantTotal || 0) - (
+          (lotto.instantLottTotal ?? 0) +
+          (lotto.scratchFreeTickets ?? 0) +
+          (lotto.oldScratchTickets ?? 0)
+        );
+
+        adjustedReported = totals.report_canadian_cash + onlineOverShort + scratchOverShort;
+      }
 
       return {
-        date: r.date.toISOString().slice(0, 10), // YYYY-MM-DD
-        overShort,
-        canadian_cash_collected: totals.canadian_cash_collected,
-        report_canadian_cash: totals.report_canadian_cash,
+        date: dateStr,
+        // Calculation: (Physical Cash + Manual Adjustments) - (System Reported + Lottery Variances)
+        overShort: adjustedCollected - adjustedReported,
+        canadian_cash_collected: adjustedCollected,
+        report_canadian_cash: adjustedReported,
         shifts: totals.shifts,
         notes: r.notes || '',
-      }
-    })
+      };
+    });
 
-    res.json(data)
+    res.json(data);
   } catch (err) {
-    console.error('Over/Short report error:', err)
-    res.status(500).json({ error: 'Failed to fetch over/short data' })
+    console.error('Over/Short report error:', err);
+    res.status(500).json({ error: 'Internal Server Error' });
   }
-})
+});
 
-// for payout comparision on dashboard
+// // for payout comparision on dashboard
+// router.get('/payables-comparison', async (req, res) => {
+//   try {
+//     const { site } = req.query
+//     if (!site) {
+//       return res.status(400).json({ error: 'site is required' })
+//     }
+
+//     // 1️⃣ Date range: past 10 days (normalized)
+//     const end = new Date()
+//     end.setHours(0, 0, 0, 0)
+
+//     const start = new Date(end)
+//     start.setDate(start.getDate() - 20)
+
+//     // 2️⃣ Fetch submitted reports for site
+//     const reports = await CashSummaryReport.find({
+//       site,
+//       submitted: true,
+//       date: { $gte: start, $lte: end },
+//     })
+//       .sort({ date: 1 })
+//       .lean()
+
+//     if (!reports.length) {
+//       return res.json([])
+//     }
+
+//     // 3️⃣ Build day ranges for querying shifts & payables
+//     const dayRanges = reports.map(r => ({
+//       start: r.date,
+//       end: new Date(r.date.getTime() + 24 * 60 * 60 * 1000),
+//     }))
+
+//     // 4️⃣ Fetch POS shifts (CashSummary)
+//     const shifts = await CashSummary.find({
+//       site,
+//       $or: dayRanges.map(r => ({
+//         date: { $gte: r.start, $lt: r.end },
+//       })),
+//     }).lean()
+
+//     // 5️⃣ Fetch internal payables
+//     // 1️⃣ Get location for site (1:1 mapping)
+//     const location = await Location.findOne({ stationName: site }, { _id: 1 }).lean()
+//     if (!location) {
+//       return res.json([]) // or throw error if this should never happen
+//     }
+
+//     // 2️⃣ Fetch internal till payables for that location
+//     const payables = await Payable.find({
+//       location: location._id,
+//       paymentMethod: 'till',
+//       createdAt: {
+//         $gte: start,
+//         $lt: new Date(end.getTime() + 24 * 60 * 60 * 1000),
+//       },
+//     }).lean()
+
+
+//     // 6️⃣ Aggregate POS payouts by date
+//     const posByDate = {}
+//     for (const shift of shifts) {
+//       const d = new Date(shift.date)
+//       d.setHours(0, 0, 0, 0)
+//       const key = d.toISOString()
+
+//       if (!posByDate[key]) posByDate[key] = 0
+//       posByDate[key] += shift.payouts || 0
+//     }
+
+//     // 7️⃣ Aggregate internal payables by date (TILL ONLY)
+//     const internalByDate = {}
+
+//     for (const p of payables) {
+//       if (p.paymentMethod !== 'till') continue
+
+//       const d = new Date(p.createdAt)
+//       d.setHours(0, 0, 0, 0)
+//       const key = d.toISOString()
+
+//       if (!internalByDate[key]) {
+//         internalByDate[key] = 0
+//       }
+
+//       internalByDate[key] += p.amount || 0
+//     }
+
+//     // 8️⃣ Build final chart data
+//     const data = reports.map(r => {
+//       const key = r.date.toISOString()
+
+//       const posPayout = posByDate[key] || 0
+//       const internalPayout = internalByDate[key] || 0
+
+//       return {
+//         date: r.date.toISOString().slice(0, 10), // YYYY-MM-DD
+//         posPayout,
+//         internalPayout,
+//         difference: internalPayout - posPayout,
+//       }
+//     })
+//     res.json(data)
+//   } catch (err) {
+//     console.error('Payables comparison error:', err)
+//     res.status(500).json({ error: 'Failed to fetch payables comparison data' })
+//   }
+// })
+
 router.get('/payables-comparison', async (req, res) => {
   try {
-    const { site } = req.query
-    if (!site) {
-      return res.status(400).json({ error: 'site is required' })
-    }
+    const { site } = req.query;
+    if (!site) return res.status(400).json({ error: 'site is required' });
 
-    // 1️⃣ Date range: past 10 days (normalized)
-    const end = new Date()
-    end.setHours(0, 0, 0, 0)
+    // 1️⃣ Check if site sells lottery
+    const locationInfo = await Location.findOne({ stationName: site }).lean();
+    const sellsLottery = locationInfo?.sellsLottery || false;
 
-    const start = new Date(end)
-    start.setDate(start.getDate() - 20)
+    // 2️⃣ Date range: past 20 days
+    const end = new Date();
+    end.setHours(0, 0, 0, 0);
+    const start = new Date(end);
+    start.setDate(start.getDate() - 20);
 
-    // 2️⃣ Fetch submitted reports for site
+    // 3️⃣ Fetch submitted reports
     const reports = await CashSummaryReport.find({
       site,
       submitted: true,
       date: { $gte: start, $lte: end },
-    })
-      .sort({ date: 1 })
-      .lean()
+    }).sort({ date: 1 }).lean();
 
-    if (!reports.length) {
-      return res.json([])
-    }
-
-    // 3️⃣ Build day ranges for querying shifts & payables
-    const dayRanges = reports.map(r => ({
-      start: r.date,
-      end: new Date(r.date.getTime() + 24 * 60 * 60 * 1000),
-    }))
+    if (!reports.length) return res.json([]);
 
     // 4️⃣ Fetch POS shifts (CashSummary)
+    // We use the same date range logic to ensure we catch all shifts for the reporting days
     const shifts = await CashSummary.find({
       site,
-      $or: dayRanges.map(r => ({
-        date: { $gte: r.start, $lt: r.end },
-      })),
-    }).lean()
+      date: { $gte: start, $lt: new Date(end.getTime() + 24 * 60 * 60 * 1000) },
+    }).lean();
 
-    // 5️⃣ Fetch internal payables
-    // 1️⃣ Get location for site (1:1 mapping)
-    const location = await Location.findOne({ stationName: site }, { _id: 1 }).lean()
-    if (!location) {
-      return res.json([]) // or throw error if this should never happen
-    }
-
-    // 2️⃣ Fetch internal till payables for that location
+    // 5️⃣ Fetch Internal Payables (Till Only)
     const payables = await Payable.find({
-      location: location._id,
+      location: locationInfo?._id,
       paymentMethod: 'till',
-      createdAt: {
-        $gte: start,
-        $lt: new Date(end.getTime() + 24 * 60 * 60 * 1000),
-      },
-    }).lean()
+      createdAt: { $gte: start, $lt: new Date(end.getTime() + 24 * 60 * 60 * 1000) },
+    }).lean();
 
+    // 6️⃣ Fetch Lottery Data (if applicable)
+    let lotteryMap = {};
+    if (sellsLottery) {
+      const lotteryDocs = await Lottery.find({
+        site,
+        date: {
+          $gte: start.toISOString().split('T')[0],
+          $lte: end.toISOString().split('T')[0]
+        }
+      }).lean();
+      lotteryMap = lotteryDocs.reduce((acc, curr) => {
+        acc[curr.date] = curr;
+        return acc;
+      }, {});
+    }
 
-    // 6️⃣ Aggregate POS payouts by date
-    const posByDate = {}
+    // 7️⃣ Aggregate POS shift data by date
+    const shiftDataByDate = {};
     for (const shift of shifts) {
-      const d = new Date(shift.date)
-      d.setHours(0, 0, 0, 0)
-      const key = d.toISOString()
+      const d = new Date(shift.date);
+      d.setHours(0, 0, 0, 0);
+      const key = d.toISOString();
 
-      if (!posByDate[key]) posByDate[key] = 0
-      posByDate[key] += shift.payouts || 0
-    }
-
-    // 7️⃣ Aggregate internal payables by date (TILL ONLY)
-    const internalByDate = {}
-
-    for (const p of payables) {
-      if (p.paymentMethod !== 'till') continue
-
-      const d = new Date(p.createdAt)
-      d.setHours(0, 0, 0, 0)
-      const key = d.toISOString()
-
-      if (!internalByDate[key]) {
-        internalByDate[key] = 0
+      if (!shiftDataByDate[key]) {
+        shiftDataByDate[key] = {
+          totalPayouts: 0,      // Total payouts (general)
+          lottoPayoutSum: 0     // Specifically lotto payouts from Bullock
+        };
       }
-
-      internalByDate[key] += p.amount || 0
+      shiftDataByDate[key].totalPayouts += shift.payouts || 0;
+      shiftDataByDate[key].lottoPayoutSum += shift.lottoPayout || 0;
     }
 
-    // 8️⃣ Build final chart data
-    const data = reports.map(r => {
-      const key = r.date.toISOString()
+    // 8️⃣ Aggregate Internal Payables by date
+    const internalByDate = {};
+    for (const p of payables) {
+      const d = new Date(p.createdAt);
+      d.setHours(0, 0, 0, 0);
+      const key = d.toISOString();
+      internalByDate[key] = (internalByDate[key] || 0) + (p.amount || 0);
+    }
 
-      const posPayout = posByDate[key] || 0
-      const internalPayout = internalByDate[key] || 0
+    // 9️⃣ Build final chart data with adjusted POS Payouts
+    const data = reports.map(r => {
+      const isoKey = r.date.toISOString();
+      const dateStr = isoKey.split('T')[0];
+
+      const shiftTotals = shiftDataByDate[isoKey] || { totalPayouts: 0, lottoPayoutSum: 0 };
+      const internalPayout = internalByDate[isoKey] || 0;
+
+      let adjustedPosPayout = shiftTotals.totalPayouts;
+
+      // Lottery Payout Adjustment Logic
+      if (sellsLottery && lotteryMap[dateStr]) {
+        const lotto = lotteryMap[dateStr];
+
+        /**
+         * payoutOverShort = (Sum of lotto payouts in shifts) - (Lottery Doc Actuals)
+         * Actuals = lottoPayout + scratchFreeTickets
+         */
+        const payoutOverShort = (shiftTotals.lottoPayoutSum || 0) - (
+          (lotto.lottoPayout ?? 0) + (lotto.scratchFreeTickets ?? 0)
+        );
+
+        // Final Adjusted Payout = (Original Total Payouts) + Payout Over/Short
+        adjustedPosPayout = shiftTotals.totalPayouts + payoutOverShort;
+      }
 
       return {
-        date: r.date.toISOString().slice(0, 10), // YYYY-MM-DD
-        posPayout,
+        date: dateStr,
+        posPayout: adjustedPosPayout,
         internalPayout,
-        difference: internalPayout - posPayout,
-      }
-    })
-    res.json(data)
+        difference: internalPayout - adjustedPosPayout,
+      };
+    });
+
+    res.json(data);
   } catch (err) {
-    console.error('Payables comparison error:', err)
-    res.status(500).json({ error: 'Failed to fetch payables comparison data' })
+    console.error('Payables comparison error:', err);
+    res.status(500).json({ error: 'Failed to fetch payables comparison data' });
   }
-})
+});
 
 router.post('/', async (req, res) => {
   try {
@@ -729,7 +977,11 @@ router.post('/submit/to/safesheet', async (req, res) => {
 
           const lotteryImagesPdf = await generateLotteryImagesPdf({ site, date, origin })
           const attachments = [
-            { filename: `Cash-Summary-${site}-${date}.pdf`, content: cashSummaryPdf, contentType: 'application/pdf' },
+            { 
+              filename: `Cash-Summary-${site}-${date}.pdf`, 
+              content: cashSummaryPdf, 
+              contentType: 'application/pdf', 
+            }
           ]
 
           if (lotteryImagesPdf) {
@@ -749,13 +1001,12 @@ router.post('/submit/to/safesheet', async (req, res) => {
           }
 
           if (depositSlip) attachments.push(depositSlip)
-          
+
           let cc = ['mohammad@gen7fuel.com', 'JDzyngel@gen7fuel.com', 'ana@gen7fuel.com']
 
           if (site === 'Oliver' || site === 'Osoyoos') {
             cc.push('ZBaptiste@oib.ca');
           }
-
           await sendEmail({
             to: CASH_SUMMARY_EMAILS.join(','),
             cc,
