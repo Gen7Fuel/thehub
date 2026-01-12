@@ -225,6 +225,8 @@ function RouteComponent() {
   }
 
   const onFetch = async () => {
+    setSubmitState('idle')
+
     if (fetching) return
     if (!site || !date) return
     const ids = (report?.rows || []).map((r) => r._id).filter(Boolean)
