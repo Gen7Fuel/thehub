@@ -98,6 +98,7 @@ type EntriesResponse = {
   totalReceivablesAmount?: number
   bankStmtTrans?: number
   bankRec?: number
+  balanceCheck?: number
 }
 
 type EntriesRow = { date: string; data: EntriesResponse | null }
@@ -306,15 +307,7 @@ function RouteComponent() {
                         (data?.cashSummary?.unsettledPrepays ?? 0)
                       )}
                     </td>
-                    <td className="px-2 py-2 text-right">{fmt2(
-                      (data?.cashSummary?.totals.totalPos ?? 0) +
-                      (data?.cashSummary?.totals.report_canadian_cash ?? 0) +
-                      (data?.cashSummary?.totals.couponsAccepted ?? 0) +
-                      (data?.cashSummary?.totals.payouts ?? 0) -
-                      // (data?.cashSummary?.totals.cpl_bulloch ?? 0) -
-                      (data?.cashSummary?.totals.totalSales ?? 0) +
-                      (data?.totalReceivablesAmount ?? 0)
-                    )}</td>
+                    <td className="px-2 py-2 text-right">{fmt2(data?.balanceCheck)}</td>
                     <td className="px-2 py-2 text-right">{fmt2(data?.bankStmtTrans)}</td>
                     <td className="px-2 py-2 text-right">{fmt2(data?.bankRec)}</td>
                   </tr>
