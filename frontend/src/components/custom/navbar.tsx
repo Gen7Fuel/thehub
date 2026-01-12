@@ -122,7 +122,7 @@ export default function Navbar() {
     if (isAudit) return 'Station Audits'
     if (isDashboard) return 'Dashboard'
     if (isSupport) return 'Support'
-    if (isSafesheet) return 'Safe Sheet'
+    if (isSafesheet) return 'Safesheet'
     if (isCashRec) return 'Cash Rec'
     if (isFuelRec) return 'Fuel Rec'
     return ''
