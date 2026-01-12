@@ -1,5 +1,5 @@
 import { createFileRoute, useNavigate } from '@tanstack/react-router'
-import { useMemo, useState, useEffect } from 'react'
+import { useMemo, useState, useEffect, useRef } from 'react'
 import { SitePicker } from '@/components/custom/sitePicker'
 import { Button } from '@/components/ui/button';
 import { Info, RefreshCw } from 'lucide-react'
@@ -123,6 +123,10 @@ function RouteComponent() {
   const [submitState, setSubmitState] = useState<'idle' | 'submitting' | 'submitted'>(
     report?.report?.submitted === true ? 'submitted' : 'idle'
   )
+  const submitStateRef = useRef<'idle' | 'submitting' | 'submitted'>(submitState)
+  useEffect(() => {
+    submitStateRef.current = submitState
+  }, [submitState])
   const notes = report?.report?.notes ?? ''
   const submitted = report?.report?.submitted === true
   const unsettledPrepays = report?.report?.unsettledPrepays ?? undefined
@@ -173,9 +177,7 @@ function RouteComponent() {
 
 
   const onSubmitClick = async () => {
-    console.log('[CashSummary] onSubmitClick invoked', { submitState, site, date })
-    if (submitState !== 'idle' || !site || !date) {
-      console.log('[CashSummary] onSubmitClick early-exit', { submitState, site, date })
+    if (submitStateRef.current !== 'idle' || !site || !date) {
       return
     }
 
@@ -197,20 +199,17 @@ function RouteComponent() {
         }
       }
     } catch (e) {
-      console.warn('Could not verify site sellsLottery', e)
       // if we cannot verify, allow submit to proceed
     }
 
     const proceed = window.confirm(
       'An email will be sent to Accounting with a copy of the Cash Summary Report.\n\nDo you want to continue?'
     )
-    console.log('[CashSummary] onSubmitClick confirm result', proceed)
     if (!proceed) return
 
     // console.log('submitted')
     try {
       setSubmitState('submitting')
-      console.log('[CashSummary] onSubmitClick submitting POST', { site, date })
       const r = await fetch('/api/cash-summary/submit/to/safesheet', {
         method: 'POST',
         headers: {
@@ -219,32 +218,28 @@ function RouteComponent() {
         },
         body: JSON.stringify({ site, date }),
       })
-      console.log('[CashSummary] onSubmitClick response status', r.status)
       if (!r.ok) {
         const msg = await r.text().catch(() => 'Submit failed')
         throw new Error(msg || 'Submit failed')
       }
-      console.log('[CashSummary] onSubmitClick submit success')
       setSubmitState('submitted')
     } catch (e) {
-      console.error(e)
       alert('Failed to submit.')
       setSubmitState('idle')
     }
   }
 
   const onFetch = async () => {
-    console.log('[CashSummary] onFetch invoked', { fetching, site, date, rows: report?.rows?.length })
+    submitStateRef.current = 'idle'
     setSubmitState('idle')
 
-    if (fetching) { console.log('[CashSummary] onFetch early-exit: already fetching'); return }
-    if (!site || !date) { console.log('[CashSummary] onFetch early-exit: missing site/date', { site, date }); return }
+    if (fetching) { return }
+    if (!site || !date) { return }
     const ids = (report?.rows || []).map((r) => r._id).filter(Boolean)
-    if (ids.length === 0) { console.log('[CashSummary] onFetch early-exit: no ids to refetch'); return }
+    if (ids.length === 0) { return }
     setFetching(true)
     try {
       const token = localStorage.getItem('token') || ''
-      console.log('[CashSummary] onFetch refetching ids', ids)
       for (const id of ids) {
         try {
           const res = await fetch(`/api/cash-summary/${encodeURIComponent(id)}`, {
@@ -257,24 +252,16 @@ function RouteComponent() {
           })
           // Continue even if one fails; surface minimal feedback
           if (!res.ok) {
-            // eslint-disable-next-line no-console
-            console.warn('Refetch failed for id', id)
-          } else {
-            console.log('[CashSummary] onFetch refetch success', { id, status: res.status })
+            // ignore refetch failures silently
           }
         } catch (e) {
-          // eslint-disable-next-line no-console
-          console.warn('Refetch error for id', id, e)
+          // ignore refetch errors silently
         }
       }
-      console.log('[CashSummary] onFetch refreshing loader data')
       await navigate({ search: (prev: Search) => ({ ...prev }) })
-      console.log('[CashSummary] onFetch calling onSubmitClick')
       await onSubmitClick()
-      console.log('[CashSummary] onFetch onSubmitClick returned')
     } finally {
       setFetching(false)
-      console.log('[CashSummary] onFetch finished')
     }
   }
 
