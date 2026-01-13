@@ -471,17 +471,14 @@ router.get('/payables-comparison', async (req, res) => {
     const { site } = req.query;
     if (!site) return res.status(400).json({ error: 'site is required' });
 
-    // 1️⃣ Check if site sells lottery
     const locationInfo = await Location.findOne({ stationName: site }).lean();
     const sellsLottery = locationInfo?.sellsLottery || false;
 
-    // 2️⃣ Date range: past 20 days
     const end = new Date();
     end.setHours(0, 0, 0, 0);
     const start = new Date(end);
     start.setDate(start.getDate() - 20);
 
-    // 3️⃣ Fetch submitted reports
     const reports = await CashSummaryReport.find({
       site,
       submitted: true,
@@ -490,21 +487,17 @@ router.get('/payables-comparison', async (req, res) => {
 
     if (!reports.length) return res.json([]);
 
-    // 4️⃣ Fetch POS shifts (CashSummary)
-    // We use the same date range logic to ensure we catch all shifts for the reporting days
     const shifts = await CashSummary.find({
       site,
       date: { $gte: start, $lt: new Date(end.getTime() + 24 * 60 * 60 * 1000) },
     }).lean();
 
-    // 5️⃣ Fetch Internal Payables (Till Only)
     const payables = await Payable.find({
       location: locationInfo?._id,
       paymentMethod: 'till',
       createdAt: { $gte: start, $lt: new Date(end.getTime() + 24 * 60 * 60 * 1000) },
     }).lean();
 
-    // 6️⃣ Fetch Lottery Data (if applicable)
     let lotteryMap = {};
     if (sellsLottery) {
       const lotteryDocs = await Lottery.find({
@@ -520,63 +513,44 @@ router.get('/payables-comparison', async (req, res) => {
       }, {});
     }
 
-    // 7️⃣ Aggregate POS shift data by date
-    const shiftDataByDate = {};
+    // 1️⃣ Aggregate Raw POS Payouts (Direct from shifts)
+    const posByDate = {};
     for (const shift of shifts) {
       const d = new Date(shift.date);
       d.setHours(0, 0, 0, 0);
       const key = d.toISOString();
-
-      if (!shiftDataByDate[key]) {
-        shiftDataByDate[key] = {
-          totalPayouts: 0,      // Total payouts (general)
-          lottoPayoutSum: 0     // Specifically lotto payouts from Bullock
-        };
-      }
-      shiftDataByDate[key].totalPayouts += shift.payouts || 0;
-      shiftDataByDate[key].lottoPayoutSum += shift.lottoPayout || 0;
+      posByDate[key] = (posByDate[key] || 0) + (shift.payouts || 0);
     }
 
-    // 8️⃣ Aggregate Internal Payables by date
-    const internalByDate = {};
+    // 2️⃣ Aggregate Payables Module entries
+    const payablesModuleByDate = {};
     for (const p of payables) {
       const d = new Date(p.createdAt);
       d.setHours(0, 0, 0, 0);
       const key = d.toISOString();
-      internalByDate[key] = (internalByDate[key] || 0) + (p.amount || 0);
+      payablesModuleByDate[key] = (payablesModuleByDate[key] || 0) + (p.amount || 0);
     }
 
-    // 9️⃣ Build final chart data with adjusted POS Payouts
+    // 3️⃣ Build Final Data
     const data = reports.map(r => {
       const isoKey = r.date.toISOString();
       const dateStr = isoKey.split('T')[0];
 
-      const shiftTotals = shiftDataByDate[isoKey] || { totalPayouts: 0, lottoPayoutSum: 0 };
-      const internalPayout = internalByDate[isoKey] || 0;
+      const rawPosPayout = posByDate[isoKey] || 0;
+      let internalTotal = payablesModuleByDate[isoKey] || 0;
 
-      let adjustedPosPayout = shiftTotals.totalPayouts;
-
-      // Lottery Payout Adjustment Logic
+      // Add Lottery Actuals to the Internal side
       if (sellsLottery && lotteryMap[dateStr]) {
         const lotto = lotteryMap[dateStr];
-
-        /**
-         * payoutOverShort = (Sum of lotto payouts in shifts) - (Lottery Doc Actuals)
-         * Actuals = lottoPayout + scratchFreeTickets
-         */
-        const payoutOverShort = (shiftTotals.lottoPayoutSum || 0) - (
-          (lotto.lottoPayout ?? 0) + (lotto.scratchFreeTickets ?? 0)
-        );
-
-        // Final Adjusted Payout = (Original Total Payouts) + Payout Over/Short
-        adjustedPosPayout = shiftTotals.totalPayouts + payoutOverShort;
+        // Internal Records = (Payables Module) + (Lotto Payouts) + (Scratch Free Tickets)
+        internalTotal += (lotto.lottoPayout || 0) + (lotto.scratchFreeTickets || 0);
       }
 
       return {
         date: dateStr,
-        posPayout: adjustedPosPayout,
-        internalPayout,
-        difference: internalPayout - adjustedPosPayout,
+        posPayout: rawPosPayout,
+        internalPayout: internalTotal,
+        difference: internalTotal - rawPosPayout, // Reverted to your original formula
       };
     });
 
