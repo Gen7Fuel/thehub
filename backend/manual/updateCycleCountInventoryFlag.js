@@ -404,7 +404,11 @@ async function syncCycleCountWithCurrentInventory() {
           bulkOps.push({
             updateOne: {
               filter: { _id: cc._id },
-              update: { $set: { inventoryExists: false } }
+              update: { 
+                $set: { inventoryExists: false },
+                // Clear the display dates so it disappears from today's frontend list
+                $unset: { displayDate: "", flaggedDisplayDate: "" }
+              }
             }
           });
 
