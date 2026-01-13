@@ -25,6 +25,78 @@ router.get('/category-options', async (req, res) => {
   }
 });
 
+router.get('/station-stats', async (req, res) => {
+  try {
+    const { site, periodKeys } = req.query;
+    const pKeys = JSON.parse(periodKeys);
+
+    // 1. Find all templates where this site is listed in the sites array
+    const templates = await AuditTemplate.find({ sites: site });
+
+    const summary = {
+      daily: { total: 0, completed: 0, issues: 0 },
+      weekly: { total: 0, completed: 0, issues: 0 },
+      monthly: { total: 0, completed: 0, issues: 0 }
+    };
+
+    const checklists = await Promise.all(templates.map(async (temp) => {
+      // Only items specifically assigned to this site
+      const siteSpecificItems = temp.items.filter(item => 
+        item.assignedSites.some(as => as.site === site && as.assigned === true)
+      );
+
+      const stats = {};
+
+      for (const freq of ['daily', 'weekly', 'monthly']) {
+        const expectedItems = siteSpecificItems.filter(i => i.frequency === freq);
+        
+        const instance = await AuditInstance.findOne({
+          template: temp._id, 
+          site: site, 
+          frequency: freq, 
+          periodKey: pKeys[freq], 
+          type: 'store'
+        });
+
+        let completedCount = 0;
+        let issueCount = 0;
+        let pendingNames = expectedItems.map(i => i.item);
+
+        if (instance) {
+          const actualItems = await AuditItem.find({ instance: instance._id });
+          
+          const checkedItems = actualItems.filter(i => i.checked);
+          completedCount = checkedItems.length;
+          issueCount = actualItems.filter(i => i.issueRaised).length;
+          
+          const checkedNames = checkedItems.map(i => i.item);
+          pendingNames = expectedItems
+            .filter(i => !checkedNames.includes(i.item))
+            .map(i => i.item);
+        }
+
+        stats[freq] = {
+          total: expectedItems.length,
+          completed: completedCount,
+          issues: issueCount,
+          pendingItems: pendingNames
+        };
+
+        // Update Global Totals
+        summary[freq].total += expectedItems.length;
+        summary[freq].completed += completedCount;
+        summary[freq].issues += issueCount;
+      }
+
+      return { templateName: temp.name, stats };
+    }));
+
+    res.json({ summary, checklists });
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+});
+
 // --- Template CRUD ---
 
 // Create a new template
@@ -917,8 +989,8 @@ router.post('/instance', async (req, res) => {
                       </div>
                     </div>
                   `;
-                  const cc = ["daksh@gen7fuel.com", "ana@gen7fuel.com", "JDzyngel@gen7fuel.com", "kporter@gen7fuel.com", "michelle@gen7fuel.com"];
-                  // const cc = ["daksh@gen7fuel.com"];
+                  // const cc = ["daksh@gen7fuel.com", "ana@gen7fuel.com", "JDzyngel@gen7fuel.com", "kporter@gen7fuel.com", "michelle@gen7fuel.com"];
+                  const cc = ["daksh@gen7fuel.com"];
                   await emailQueue.add("sendIssueEmail", { to, subject, text, html, cc });
                   console.log(`📨 Email queued for ${to}`);
                 } else {

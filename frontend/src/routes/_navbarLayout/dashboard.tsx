@@ -35,6 +35,8 @@ import { FuelSparkline } from "@/components/custom/dashboard/fuelSparkLine";
 import { useAuth } from "@/context/AuthContext";
 import { getOrderRecStatusColor } from '@/lib/utils';
 import { PasswordProtection } from "@/components/custom/PasswordProtection";
+import { AuditSummaryChart } from "@/components/custom/dashboard/auditCharts"
+import { getPeriodKey } from '../_navbarLayout/audit/checklist/$id'
 
 // Define the dashboard route using TanStack Router
 export const Route = createFileRoute('/_navbarLayout/dashboard')({
@@ -308,6 +310,7 @@ function RouteComponent() {
   const [top10Bistro, setTop10Bistro] = useState<Top10Bistro[]>([]);
   // Safe balance (end-of-day) data
   const [safeBalanceRaw, setSafeBalanceRaw] = useState<any[]>([]);
+  const [auditStats, setAuditStats] = useState<any[]>([]);
 
 
   const [salesData, setSalesData] = useState<SalesData | null>(null);
@@ -324,6 +327,7 @@ function RouteComponent() {
   const [endDate,] = useState(today.toISOString().slice(0, 10));
   const [safeMaxBalance, setSafeMaxBalance] = useState<number>(25_000);
   const [payablesComparisonData, setPayablesComparisonData] = useState([]);
+  const [currentDate] = useState(new Date());
 
   const [showPasswordDialog, setShowPasswordDialog] = useState(false);
   const [hasAccess, setHasAccess] = useState(false);
@@ -335,6 +339,12 @@ function RouteComponent() {
     percent: number;
   } | null>(null);
   const navigate = useNavigate({ from: Route.fullPath })
+  // Constructing period keys for the query
+  const pKeys = {
+    daily: getPeriodKey("daily", currentDate),
+    weekly: getPeriodKey("weekly", currentDate),
+    monthly: getPeriodKey("monthly", currentDate),
+  };
 
   // Rendering passcode dialog for manager access 
   useEffect(() => {
@@ -471,6 +481,34 @@ function RouteComponent() {
           setPayablesComparisonData(data);
         } catch (error) {
           console.error("Error fetching payables comparison data:", error);
+        }
+
+        // ---- Audit Stats & Progress ----
+        try {
+
+          const auditRes = await fetch(
+            `/api/audit/station-stats?site=${encodeURIComponent(site)}&periodKeys=${encodeURIComponent(JSON.stringify(pKeys))}`,
+            {
+              headers: {
+                Authorization: `Bearer ${localStorage.getItem("token")}`,
+                "X-Required-Permission": "dashboard", // adjust permission as needed
+              },
+            }
+          );
+
+          if (auditRes.status === 403) {
+            navigate({ to: "/no-access" });
+            return;
+          }
+
+          if (!auditRes.ok) {
+            throw new Error("Failed to fetch audit stats");
+          }
+
+          const auditData = await auditRes.json();
+          setAuditStats(auditData);
+        } catch (error) {
+          console.error("Error fetching audit stats:", error);
         }
 
         // const today = new Date();
@@ -1480,83 +1518,89 @@ function RouteComponent() {
                 {/* ======================= */}
                 {/*     INVENTORY SECTION   */}
                 {/* ======================= */}
-                {site !== "Jocko Point" && site !== "Sarnia" && (
-                  <section aria-labelledby="inventory-heading" className="mb-10">
-                    <h2 id="inventory-heading" className="text-2xl font-bold mb-4 pl-4">Inventory</h2>
+                {/* {site !== "Jocko Point" && site !== "Sarnia" && ( */}
+                <section aria-labelledby="inventory-heading" className="mb-10">
+                  <h2 id="inventory-heading" className="text-2xl font-bold mb-4 pl-4">
+                    {site !== "Jocko Point" && site !== "Sarnia"
+                      ? "Inventory & Audits"
+                      : "Station Audits"}
+                  </h2>
 
-                    {/* Responsive grid: 1 col mobile, 2 col tablet, 3 col desktop */}
-                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                      {/* Vendor Status (Inventory) */}
-                      <Card className="min-h-[365px] flex flex-col col-span-1">
-                        <CardHeader className="space-y-2">
-                          {/* Title + Description */}
-                          <div>
-                            <CardTitle>Vendor Status</CardTitle>
-                            <CardDescription>Order Status (This Week)</CardDescription>
-                          </div>
 
-                          {/* Legend */}
-                          <div className="w-full flex flex-wrap items-center gap-3 text-xs">
-                            {["Created", "Completed", "Not Placed", "Placed", "Delivered", "Invoice Received"].map((status) => (
-                              <div
-                                key={status}
-                                className="flex items-center gap-1.5 whitespace-nowrap"
-                              >
+                  {/* Responsive grid: 1 col mobile, 2 col tablet, 3 col desktop */}
+                  < div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                    {site !== "Jocko Point" && site !== "Sarnia" && (
+                      <>                   {/* Vendor Status (Inventory) */}
+                        <Card className="min-h-[365px] flex flex-col col-span-1">
+                          <CardHeader className="space-y-2">
+                            {/* Title + Description */}
+                            <div>
+                              <CardTitle>Vendor Status</CardTitle>
+                              <CardDescription>Order Status (This Week)</CardDescription>
+                            </div>
+
+                            {/* Legend */}
+                            <div className="w-full flex flex-wrap items-center gap-3 text-xs">
+                              {["Created", "Completed", "Not Placed", "Placed", "Delivered", "Invoice Received"].map((status) => (
                                 <div
-                                  className="h-2 w-2 rounded-[2px] shrink-0"
-                                  style={{ backgroundColor: getOrderRecStatusColor(status) }}
-                                />
-                                <span className="text-xs font-medium text-black">{status}</span>
-                              </div>
-                            ))}
-                          </div>
-                        </CardHeader>
+                                  key={status}
+                                  className="flex items-center gap-1.5 whitespace-nowrap"
+                                >
+                                  <div
+                                    className="h-2 w-2 rounded-[2px] shrink-0"
+                                    style={{ backgroundColor: getOrderRecStatusColor(status) }}
+                                  />
+                                  <span className="text-xs font-medium text-black">{status}</span>
+                                </div>
+                              ))}
+                            </div>
+                          </CardHeader>
 
 
-                        <CardContent className="flex-1 overflow-y-auto max-h-60">
-                          <ul className="divide-y divide-gray-200">
-                            {vendorStatus.map((vendor) => (
-                              <li
-                                key={vendor._id}
-                                className="px-2 py-1 font-medium rounded mb-1"
-                                style={{
-                                  backgroundColor: vendor.orderRec
-                                    ? getOrderRecStatusColor(vendor.orderRec.currentStatus)
-                                    : "#F3F3F3",
-                                }}
-                              >
-                                {vendor.orderRec ? (
-                                  <Link
-                                    to="/order-rec/$id"
-                                    params={{ id: vendor.orderRec.orderRecId }}
-                                    className="underline"
-                                    style={{ color: "inherit" }}
-                                  >
-                                    {vendor.name}
-                                  </Link>
-                                ) : (
-                                  vendor.name
-                                )}
-                              </li>
-                            ))}
-                          </ul>
-                        </CardContent>
-                      </Card>
+                          <CardContent className="flex-1 overflow-y-auto max-h-60">
+                            <ul className="divide-y divide-gray-200">
+                              {vendorStatus.map((vendor) => (
+                                <li
+                                  key={vendor._id}
+                                  className="px-2 py-1 font-medium rounded mb-1"
+                                  style={{
+                                    backgroundColor: vendor.orderRec
+                                      ? getOrderRecStatusColor(vendor.orderRec.currentStatus)
+                                      : "#F3F3F3",
+                                  }}
+                                >
+                                  {vendor.orderRec ? (
+                                    <Link
+                                      to="/order-rec/$id"
+                                      params={{ id: vendor.orderRec.orderRecId }}
+                                      className="underline"
+                                      style={{ color: "inherit" }}
+                                    >
+                                      {vendor.name}
+                                    </Link>
+                                  ) : (
+                                    vendor.name
+                                  )}
+                                </li>
+                              ))}
+                            </ul>
+                          </CardContent>
+                        </Card>
 
-                      {/* Cycle Counts (Inventory) */}
-                      <Card className="col-span-1">
-                        <CardHeader>
-                          <CardTitle>Cycle Counts</CardTitle>
-                          <CardDescription>Daily cycle count entries for {site}</CardDescription>
-                        </CardHeader>
-                        <CardContent>
-                          <ChartContainer config={chartConfig}>
-                            <BarChart accessibilityLayer data={chartData}>
-                              <CartesianGrid vertical={false} />
-                              <XAxis dataKey="day" tickLine={false} axisLine={false} tickMargin={10} />
-                              <YAxis axisLine={false} tickLine={false} />
-                              {/* <Tooltip content={<CycleCountTooltip />} /> */}
-                              {/* <Bar
+                        {/* Cycle Counts (Inventory) */}
+                        <Card className="col-span-1">
+                          <CardHeader>
+                            <CardTitle>Cycle Counts</CardTitle>
+                            <CardDescription>Daily cycle count entries for {site}</CardDescription>
+                          </CardHeader>
+                          <CardContent>
+                            <ChartContainer config={chartConfig}>
+                              <BarChart accessibilityLayer data={chartData}>
+                                <CartesianGrid vertical={false} />
+                                <XAxis dataKey="day" tickLine={false} axisLine={false} tickMargin={10} />
+                                <YAxis axisLine={false} tickLine={false} />
+                                {/* <Tooltip content={<CycleCountTooltip />} /> */}
+                                {/* <Bar
                               dataKey="count"
                               fill="var(--color-count)"
                               radius={8}
@@ -1567,51 +1611,53 @@ function RouteComponent() {
                             >
                               <LabelList position="top" offset={12} className="fill-foreground" fontSize={12} />
                             </Bar> */}
-                              <Bar
-                                dataKey="count"
-                                radius={8}
-                                onClick={(data) => {
-                                  setSelectedDay(data.payload as CycleCountDayData);
-                                  setIsModalOpen(true);
-                                }}
-                              >
-                                {chartData.map((entry, index) => (
-                                  <Cell
-                                    key={`cell-${index}`}
-                                    fill={entry.count === 20 ? "#22c55e" : "var(--color-count)"}
+                                <Bar
+                                  dataKey="count"
+                                  radius={8}
+                                  onClick={(data) => {
+                                    setSelectedDay(data.payload as CycleCountDayData);
+                                    setIsModalOpen(true);
+                                  }}
+                                >
+                                  {chartData.map((entry, index) => (
+                                    <Cell
+                                      key={`cell-${index}`}
+                                      fill={entry.count === 20 ? "#22c55e" : "var(--color-count)"}
+                                    />
+                                  ))}
+
+                                  <LabelList
+                                    position="top"
+                                    offset={12}
+                                    className="fill-foreground"
+                                    fontSize={12}
                                   />
-                                ))}
+                                </Bar>
 
-                                <LabelList
-                                  position="top"
-                                  offset={12}
-                                  className="fill-foreground"
-                                  fontSize={12}
-                                />
-                              </Bar>
+                              </BarChart>
 
-                            </BarChart>
-
-                          </ChartContainer>
-                        </CardContent>
-                        <CardFooter className="flex-col items-start gap-2 text-sm">
-                          <div className="text-muted-foreground leading-none">
-                            Showing cycle count entries per day for the selected range
-                          </div>
-                        </CardFooter>
-                      </Card>
-                      <ChartBarModal
-                        data={selectedDay}
-                        isOpen={isModalOpen}
-                        onClose={() => setIsModalOpen(false)}
-                      />
-
-                      {/* Empty slot / placeholder: keeps grid balanced on larger screens.
+                            </ChartContainer>
+                          </CardContent>
+                          <CardFooter className="flex-col items-start gap-2 text-sm">
+                            <div className="text-muted-foreground leading-none">
+                              Showing cycle count entries per day for the selected range
+                            </div>
+                          </CardFooter>
+                        </Card>
+                        <ChartBarModal
+                          data={selectedDay}
+                          isOpen={isModalOpen}
+                          onClose={() => setIsModalOpen(false)}
+                        />
+                      </>
+                    )}
+                    {/* Empty slot / placeholder: keeps grid balanced on larger screens.
                       Remove or replace with another inventory widget later. */}
-                      <div className="col-span-1" />
+                    <div className="col-span-1" >
+                      <AuditSummaryChart auditStats={auditStats} periodKeys={pKeys} />
                     </div>
-                  </section>
-                )}
+                  </div>
+                </section>
 
                 {/* ======================= */}
                 {/*        Catgory SECTION    */}
@@ -1889,8 +1935,9 @@ function RouteComponent() {
               </>
             )}
           </div>
-        </div>
-      )}
+        </div >
+      )
+      }
     </>
   );
 

@@ -368,7 +368,7 @@ function RouteComponent() {
 
   const adjustedOverShort =
     (totals?.canadian_cash_collected ?? 0) - // total cash collected
-    (adjustedReportedCash ?? 0)                 // adjusted reported cash
+    (adjustedReportedCash ?? 0) + (handheldDebit ?? 0) + (unsettledPrepays ?? 0)          // adjusted reported cash
 
   const osColor =
     overShort > 0 ? 'text-green-600' : overShort < 0 ? 'text-red-600' : 'text-muted-foreground'

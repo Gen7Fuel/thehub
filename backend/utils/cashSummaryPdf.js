@@ -225,7 +225,7 @@ function LotteryTable({ lottery, bullock }) {
   );
 }
 
-function AdjustedTotalsCards({ totals, lottery, bullock }) {
+function AdjustedTotalsCards({ totals, lottery, bullock, unsettledPrepays, handheldDebit }) {
   const h = React.createElement;
   if (!lottery) return null;
 
@@ -242,7 +242,7 @@ function AdjustedTotalsCards({ totals, lottery, bullock }) {
   const adjReported = (totals.report_canadian_cash || 0) + onlineOS + scratchOS;
   const adjItemSales = (totals.item_sales || 0) + onlineOS + scratchOS;
   const adjPayouts = (totals.payouts || 0) + payoutOS;
-  const adjOS = (totals.canadian_cash_collected || 0) - adjReported;
+  const adjOS = (totals.canadian_cash_collected || 0) - adjReported + (unsettledPrepays || 0) + (handheldDebit || 0);
 
   // Column 1: Cash flow (3 cards)
   const col1 = [
@@ -442,7 +442,7 @@ const styles = StyleSheet.create({
 })
 
 function TotalsCards({ totals, unsettledPrepays, handheldDebit }) {
-  const overShort = Number((totals.canadian_cash_collected || 0) - (totals.report_canadian_cash || 0))
+  const overShort = Number((totals.canadian_cash_collected || 0) - (totals.report_canadian_cash || 0) + (unsettledPrepays || 0) + (handheldDebit || 0))
   const h = React.createElement
   const cards = [
     { label: 'Total Canadian Cash Counted', value: currency(totals.canadian_cash_collected) },
@@ -652,7 +652,7 @@ function ReportDoc({ site, date, rows, totals, notes, lottery, bullock, unsettle
       // 2. Adjusted Totals Section
       lottery && h(React.Fragment, null,
         h(Text, { style: styles.sectionTitle }, 'Adjusted Totals (After Lottery)'),
-        h(AdjustedTotalsCards, { totals, lottery, bullock })
+        h(AdjustedTotalsCards, { totals, lottery, bullock, unsettledPrepays, handheldDebit })
       ),
 
       // --- CONDITIONAL PAGE BREAK ---
