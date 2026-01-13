@@ -491,6 +491,14 @@ router.get('/entries', async (req, res) => {
 
     const bankRec = endingBalance - bankStmtTrans - totalPos - kardpollSales + kioskGC + afdGC + kardpollAr - handheldDebit
 
+    // Compute Balance Check (moved from frontend):
+    // totalPos + report_canadian_cash + couponsAccepted + payouts - totalSales + totalReceivablesAmount
+    const reportCanadianCash = Number(cashSummary?.totals?.report_canadian_cash) || 0
+    const couponsAccepted = Number(cashSummary?.totals?.couponsAccepted) || 0
+    const payouts = Number(cashSummary?.totals?.payouts) || 0
+    const totalSalesNum = Number(cashSummary?.totals?.totalSales) || 0
+    const balanceCheck = totalPos + reportCanadianCash + couponsAccepted + payouts - totalSalesNum + (Number(totalReceivablesAmount) || 0)
+
     return res.json({
       kardpoll: kardpoll || null,
       bank: bank || null,
@@ -498,6 +506,7 @@ router.get('/entries', async (req, res) => {
       totalReceivablesAmount,
       bankStmtTrans,
       bankRec,
+      balanceCheck,
     })
   } catch (err) {
     console.error('cashRecRoutes.entries error:', err)

@@ -89,6 +89,7 @@ type EntriesResponse = {
   totalReceivablesAmount?: number
   bankStmtTrans?: number
   bankRec?: number
+  balanceCheck?: number
 }
 
 const isYmd = (s: string) => /^\d{4}-\d{2}-\d{2}$/.test(s)
@@ -201,8 +202,8 @@ function RouteComponent() {
             const tillOverShort = canadianCashCollected - reportedCanadianCash + hhDebit + unsettledPrepays
             const gcRedemption = afdGiftCard + kioskGiftCard
             const loyalty = loyaltyCoupons
-            const bankRec = 0
-            const balanceCheck = 0
+            const bankRec = data.bankRec || 0
+            const balanceCheck = data.balanceCheck ?? 0
 
             return (
               <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
