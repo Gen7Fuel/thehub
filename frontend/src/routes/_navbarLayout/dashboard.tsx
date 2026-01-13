@@ -345,6 +345,7 @@ function RouteComponent() {
     weekly: getPeriodKey("weekly", currentDate),
     monthly: getPeriodKey("monthly", currentDate),
   };
+  const [siteTimezone, setSiteTimezone] = useState("UTC");
 
   // Rendering passcode dialog for manager access 
   useEffect(() => {
@@ -550,7 +551,7 @@ function RouteComponent() {
         const timezone = await fetchLocation(site).then(loc => loc.timezone || "UTC");
         const dailyCountsRes = await fetchDailyCounts(site, sevenDaysAgo.toISOString().slice(0, 10), today.toISOString().slice(0, 10), timezone);
         // const dailyCountsRes = await fetchDailyCounts(site, startDate, endDate, timezone);
-
+        setSiteTimezone(timezone);
 
 
         // Vendor names
@@ -1654,7 +1655,7 @@ function RouteComponent() {
                     {/* Empty slot / placeholder: keeps grid balanced on larger screens.
                       Remove or replace with another inventory widget later. */}
                     <div className="col-span-1" >
-                      <AuditSummaryChart auditStats={auditStats} periodKeys={pKeys} />
+                      <AuditSummaryChart auditStats={auditStats} periodKeys={pKeys} timezone={siteTimezone} />
                     </div>
                   </div>
                 </section>
