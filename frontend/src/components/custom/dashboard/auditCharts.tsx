@@ -4,14 +4,22 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 
 // Helper for Urgency Color
-const getUrgencyColor = (freq: string, percent: number) => {
+const getUrgencyColor = (freq: string, percent: number, timezone: string) => {
   if (percent === 100) return "#22c55e"; // Success Green
-  const now = new Date();
-  const hour = now.getHours();
-  const day = now.getDay();
-  if (freq === "daily" && hour >= 16) return "#ffa047";
-  if (freq === "weekly" && day >= 4) return "#ffa047";
-  return "#3b82f6";
+
+  // 1. Get the current time adjusted to the site's timezone
+  const siteDateString = new Date().toLocaleString("en-US", { timeZone: timezone });
+  const siteDate = new Date(siteDateString);
+
+  // 2. Extract hour and day from the site-specific date
+  const hour = siteDate.getHours();
+  const day = siteDate.getDay(); // 0 (Sun) to 6 (Sat)
+
+  // 3. Logic based on site time
+  if (freq === "daily" && hour >= 16) return "#ffa047"; // Orange alert after 4 PM site time
+  if (freq === "weekly" && day >= 4) return "#ffa047";  // Orange alert Thursday onwards site time
+
+  return "#3b82f6"; // Default Blue
 };
 
 const getReadablePeriod = (freq: string, periodKey: string) => {
@@ -67,7 +75,7 @@ const getReadablePeriod = (freq: string, periodKey: string) => {
 };
 
 // Pass periodKeys as an object: { daily: "2024-W10", ... }
-export function AuditSummaryChart({ auditStats, periodKeys }: { auditStats: any, periodKeys: any }) {
+export function AuditSummaryChart({ auditStats, periodKeys, timezone }: { auditStats: any, periodKeys: any, timezone: any }) {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [selectedFreq, setSelectedFreq] = useState<string | null>(null);
 
@@ -141,7 +149,7 @@ export function AuditSummaryChart({ auditStats, periodKeys }: { auditStats: any,
             {/* Segments - No longer need individual onClicks */}
             <Bar dataKey="clean" stackId="a" barSize={45}>
               {chartData.map((entry, index) => (
-                <Cell key={`cell-${index}`} fill={getUrgencyColor(entry.freq, entry.percentage)} />
+                <Cell key={`cell-${index}`} fill={getUrgencyColor(entry.freq, entry.percentage, timezone)} />
               ))}
             </Bar>
 
