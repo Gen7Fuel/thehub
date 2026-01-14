@@ -989,8 +989,8 @@ router.post('/instance', async (req, res) => {
                       </div>
                     </div>
                   `;
-                  // const cc = ["daksh@gen7fuel.com", "ana@gen7fuel.com", "JDzyngel@gen7fuel.com", "kporter@gen7fuel.com", "michelle@gen7fuel.com"];
-                  const cc = ["daksh@gen7fuel.com"];
+                  const cc = ["daksh@gen7fuel.com", "ana@gen7fuel.com", "JDzyngel@gen7fuel.com", "kporter@gen7fuel.com", "michelle@gen7fuel.com"];
+                  // const cc = ["daksh@gen7fuel.com"];
                   await emailQueue.add("sendIssueEmail", { to, subject, text, html, cc });
                   console.log(`📨 Email queued for ${to}`);
                 } else {
