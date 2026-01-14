@@ -685,7 +685,7 @@ export default function RouteComponent() {
                             placeholder="0.00"
                             className="w-full px-3 py-2 text-right bg-white focus:outline-none focus:ring-1 focus:ring-blue-400 rounded-sm"
                             onKeyDown={handleKeyDown}
-                            disabled
+                            // disabled
                           />
                         </td>
 
