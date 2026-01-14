@@ -161,7 +161,7 @@ function App() {
 
         {/* Inventory Section */}
         {/* {(access.module_order_rec || access.module_cycle_count) && ( //markpoint */}
-        {(access?.orderRec?.value || access?.cycleCount?.value || access?.vendor || access?.category) && (
+        {(access?.orderRec?.value || access?.cycleCount?.value || access?.vendor || access?.category || access?.writeOff) && (
           <Section title="Inventory">
             <div className="flex flex-wrap gap-4">
               {/* Order Rec button: goes to upload or list based on access */}
@@ -204,6 +204,13 @@ function App() {
                 <Link to="/category">
                   <Button className="w-32 h-32 flex items-center justify-center break-words whitespace-normal text-center">
                     Category Management
+                  </Button>
+                </Link>
+              )}
+              {access?.writeOff && (
+                <Link to="/write-off">
+                  <Button className="w-32 h-32 flex items-center justify-center break-words whitespace-normal text-center">
+                    Write Offs
                   </Button>
                 </Link>
               )}

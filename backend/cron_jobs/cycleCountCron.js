@@ -43,25 +43,25 @@ const updateCycleCountCSO = async () => {
       if (!items.length) continue;
 
       // Prepare UPC list
-      const upcs = items.map((i) => i.upc_barcode).filter(Boolean);
-      if (!upcs.length) continue;
+      const gtins = items.map((i) => i.gtin).filter(Boolean);
+      if (!gtins.length) continue;
 
       // Fetch bulk on-hand quantities from SQL
-      const csoData = await getBulkOnHandQtyCSO(siteName, upcs);
+      const csoData = await getBulkOnHandQtyCSO(siteName, gtins);
 
       // Update cycle count records in bulk
       const bulkOps = [];
 
       // For items WITH SQL data
       items
-        .filter((i) => i.upc_barcode && csoData[i.upc_barcode] !== undefined)
+        .filter((i) => i.gtin && csoData[i.gtin] !== undefined)
         .forEach((i) => {
           bulkOps.push({
             updateOne: {
               filter: { _id: i._id },
               update: {
                 $set: {
-                  onHandCSO: csoData[i.upc_barcode],
+                  onHandCSO: csoData[i.gtin],
                   comments: [] // always clear comments
                 }
               },
@@ -71,7 +71,7 @@ const updateCycleCountCSO = async () => {
 
       // For items WITHOUT SQL data
       items
-        .filter((i) => i.upc_barcode && csoData[i.upc_barcode] === undefined)
+        .filter((i) => i.gtin && csoData[i.gtin] === undefined)
         .forEach((i) => {
           bulkOps.push({
             updateOne: {

@@ -185,23 +185,23 @@ async function getInventoryCategories(site) {
   }
 }
 
-async function getBulkOnHandQtyCSO(site, upcs = []) {
-  if (!upcs.length) return {};
+async function getBulkOnHandQtyCSO(site, gtins = []) {
+  if (!gtins.length) return {};
   try {
     const pool = await getPool();
-    const list = upcs.map(u => `'${u}'`).join(",");
+    const list = gtins.map(u => `'${u}'`).join(",");
 
     const query = `
-      SELECT [UPC-A (12 digits)] AS UPC, [On Hand Qty] AS qty
+      SELECT [GTIN] AS gtin, [On Hand Qty] AS qty
       FROM [CSO].[Current_Inventory]
-      WHERE [Station] = '${site}' AND [UPC-A (12 digits)] IN (${list})
+      WHERE [Station] = '${site}' AND [GTIN] IN (${list})
     `;
 
     const result = await pool.request().query(query);
     // Convert array → dictionary
     const data = {};
     for (const row of result.recordset) {
-      data[row.UPC] = row.qty;
+      data[row.gtin] = row.qty;
     }
 
     return data;
