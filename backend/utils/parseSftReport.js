@@ -91,15 +91,24 @@ const pickLastMoney = (labelPattern, text) => {
   return toNumber(moneyMatches[moneyMatches.length - 1][1])
 }
 
-// Capture the $ amount on the line immediately following the label line
+// Capture the $ amount on one of the next few lines following the label line (tolerate blank spacer lines)
 const pickNextLineMoney = (labelPattern, text) => {
-  // Match the label line, then the next line containing a $ amount (right-aligned)
-  const re = new RegExp(
-    `^\\s*${labelPattern}.*\n[^\n]*\\$\\s*([-\\d.,]+)`,
-    'mi'
-  )
-  const m = text.match(re)
-  return m ? toNumber(m[1]) : null
+  const lines = text.split(/\r?\n/)
+  const labelRe = new RegExp(`^\n?\t?\s*${labelPattern}\\b`, 'i')
+  for (let i = 0; i < lines.length; i++) {
+    if (labelRe.test(lines[i])) {
+      for (let j = i + 1; j <= i + 4 && j < lines.length; j++) {
+        const line = lines[j]
+        if (!line || /^\s*$/.test(line)) continue
+        const mDollar = line.match(/\$\s*([-\d.,]+)/)
+        if (mDollar) return toNumber(mDollar[1])
+        const mPlain = line.match(/(^|\s)([-\d]{1,3}(?:,\d{3})*(?:\.\d{2})?)\s*$/)
+        if (mPlain) return toNumber(mPlain[2])
+      }
+      break
+    }
+  }
+  return null
 }
 
 // Capture the trailing integer on the label line (e.g., count at far right)
