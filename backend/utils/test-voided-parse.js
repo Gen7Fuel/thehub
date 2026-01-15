@@ -22,3 +22,12 @@ const result = parseSftReport(sample);
 console.log('Parsed metrics:', JSON.stringify(result, null, 2));
 console.log('Voided Transactions Amount:', result.voidedTransactionsAmount);
 console.log('Voided Transactions Count:', result.voidedTransactionsCount);
+
+// Extra test: handle an optional blank line between label and amount
+const sampleWithBlank = `
+Voided Transactions................... 5
+
+                              $   123.45
+`;
+const result2 = parseSftReport(sampleWithBlank);
+console.log('Voided (blank line) Amount:', result2.voidedTransactionsAmount, 'Count:', result2.voidedTransactionsCount);
