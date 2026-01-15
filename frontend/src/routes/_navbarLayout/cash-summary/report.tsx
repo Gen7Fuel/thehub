@@ -468,7 +468,17 @@ function RouteComponent() {
                   <Card title="Payouts" value={fmtNum(totals?.payouts)} />
                   <Card
                     title={<span className="font-bold text-black">Voided Transactions</span>}
-                    value={<span className="font-semibold text-red-600">{fmtNum(totals?.voidedTransactionsAmount)}</span>}
+                    value={
+                      <span
+                        className={`font-semibold ${
+                          typeof totals?.voidedTransactionsAmount === 'number' && totals.voidedTransactionsAmount !== 0
+                            ? 'text-red-600'
+                            : ''
+                        }`}
+                      >
+                        {fmtNum(totals?.voidedTransactionsAmount)}
+                      </span>
+                    }
                   />
                 </div>
               </div>
