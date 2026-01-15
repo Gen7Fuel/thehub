@@ -48,6 +48,7 @@ type ReportData = {
     exempted_tax: number
     report_canadian_cash: number
     payouts: number
+    voidedTransactionsAmount?: number
   }
   report?: { notes?: string; submitted?: boolean; unsettledPrepays?: number; handheldDebit?: number }
 }
@@ -465,6 +466,10 @@ function RouteComponent() {
                   <Card title="Loyalty" value={fmtNum(totals?.loyalty)} />
                   <Card title="Exempted Tax" value={fmtNum(totals?.exempted_tax)} />
                   <Card title="Payouts" value={fmtNum(totals?.payouts)} />
+                  <Card
+                    title={<span className="font-bold text-black">Voided Transactions</span>}
+                    value={<span className="font-semibold text-red-600">{fmtNum(totals?.voidedTransactionsAmount)}</span>}
+                  />
                 </div>
               </div>
 

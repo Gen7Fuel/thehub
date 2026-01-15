@@ -16,6 +16,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog"
 
+
 // Navbar component for the application
 export default function Navbar() {
   // Initialize navigation and route matching hooks
