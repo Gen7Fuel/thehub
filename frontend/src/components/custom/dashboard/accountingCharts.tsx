@@ -600,6 +600,115 @@ export function PayablesDiscrepancyChart({ data }: { data: PayablesComparisonDat
   );
 }
 
+// export function PayablesDiscrepancyTable({
+//   data,
+// }: {
+//   data: PayablesComparisonDatum[];
+// }) {
+//   if (!data || data.length === 0) {
+//     return (
+//       <Card className="w-full">
+//         <CardHeader>
+//           <CardTitle>Payout Discrepancy Report</CardTitle>
+//           <CardDescription>Last 20 days (End of Day)</CardDescription>
+//         </CardHeader>
+//         <CardContent className="text-sm text-muted-foreground">
+//           No payout data available.
+//         </CardContent>
+//       </Card>
+//     );
+//   }
+
+//   // ✅ Sort newest → oldest (YYYY-MM-DD is lexicographically safe)
+//   const sortedData = [...data].sort(
+//     (a, b) => b.date.localeCompare(a.date)
+//   );
+
+//   return (
+//     <Card className="w-full">
+//       <CardHeader>
+//         <CardTitle>Payout Discrepancy Report</CardTitle>
+//         <CardDescription>Last 20 days (End of Day)</CardDescription>
+//       </CardHeader>
+
+//       <CardContent className="p-0">
+//         {/* Table header */}
+//         <div className="border-b">
+//           <table className="w-full text-xs">
+//             <thead className="bg-background">
+//               <tr className="text-muted-foreground">
+//                 <th className="py-2 px-3 text-left">Date</th>
+//                 <th className="py-2 px-3 pl-10 text-right">Bulloch Payouts</th>
+//                 <th className="py-2 px-3 text-right">Hub Payouts (Till)</th>
+//                 <th className="py-2 px-3 text-right">Difference</th>
+//               </tr>
+//             </thead>
+//           </table>
+//         </div>
+
+//         {/* Scrollable body */}
+//         <div className="max-h-[220px] overflow-y-auto">
+//           <table className="w-full text-sm border-collapse">
+//             <tbody>
+//               {sortedData.map(row => {
+//                 const rowClass = clsx(
+//                   "border-b last:border-b-0",
+//                   row.difference === 0 && "bg-green-50 text-green-700",
+//                   row.difference > 0 && "bg-red-50 text-red-700",
+//                   row.difference < 0 && "bg-orange-50 text-orange-700"
+//                 );
+
+//                 return (
+//                   <tr key={row.date} className={rowClass}>
+//                     <td className="py-2 px-3 font-medium">
+//                       {row.date}
+//                     </td>
+
+//                     <td className="py-2 px-3 pr-20 text-right">
+//                       ${row.posPayout.toFixed(2)}
+//                     </td>
+
+//                     <td className="py-2 px-3 pr-8 text-center">
+//                       ${row.internalPayout.toFixed(2)}
+//                     </td>
+
+//                     <td className="py-2 px-3 text-right font-semibold">
+//                       {row.difference > 0 && "+"}
+//                       ${row.difference.toFixed(2)}
+//                     </td>
+//                   </tr>
+//                 );
+//               })}
+//             </tbody>
+//           </table>
+//         </div>
+//         {/* ------------------ Discrepancy Legend ------------------ */}
+//         <div className="flex flex-wrap items-center justify-center gap-4 pt-3">
+//           <div className="flex items-center gap-1.5">
+//             <div className="h-2 w-2 rounded-[2px] bg-green-50 border border-green-300" />
+//             <span className="text-xs font-medium text-black">
+//               Balanced (Bulloch Payouts = Hub Payouts)
+//             </span>
+//           </div>
+
+//           <div className="flex items-center gap-1.5">
+//             <div className="h-2 w-2 rounded-[2px] bg-red-50 border border-red-300" />
+//             <span className="text-xs font-medium text-black">
+//               Hub Payouts &gt; Bulloch Payouts
+//             </span>
+//           </div>
+
+//           <div className="flex items-center gap-1.5">
+//             <div className="h-2 w-2 rounded-[2px] bg-orange-50 border border-orange-300" />
+//             <span className="text-xs font-medium text-black">
+//               Bulloch Payouts &gt; Hub Payouts
+//             </span>
+//           </div>
+//         </div>
+//       </CardContent>
+//     </Card>
+//   );
+// }
 export function PayablesDiscrepancyTable({
   data,
 }: {
@@ -619,10 +728,7 @@ export function PayablesDiscrepancyTable({
     );
   }
 
-  // ✅ Sort newest → oldest (YYYY-MM-DD is lexicographically safe)
-  const sortedData = [...data].sort(
-    (a, b) => b.date.localeCompare(a.date)
-  );
+  const sortedData = [...data].sort((a, b) => b.date.localeCompare(a.date));
 
   return (
     <Card className="w-full">
@@ -631,78 +737,71 @@ export function PayablesDiscrepancyTable({
         <CardDescription>Last 20 days (End of Day)</CardDescription>
       </CardHeader>
 
-      <CardContent className="p-0">
-        {/* Table header */}
-        <div className="border-b">
-          <table className="w-full text-xs">
-            <thead className="bg-background">
-              <tr className="text-muted-foreground">
-                <th className="py-2 px-3 text-left">Date</th>
-                <th className="py-2 px-3 pl-10 text-right">Bulloch Payouts</th>
-                <th className="py-2 px-3 text-right">Hub Payouts (Till)</th>
-                <th className="py-2 px-3 text-right">Difference</th>
+<CardContent className="p-0">
+        <div className="w-full overflow-x-auto">
+          {/* Header Table */}
+          <table className="w-full table-fixed text-[11px] md:text-xs border-collapse">
+            <thead>
+              <tr className="bg-muted/50 text-muted-foreground border-b whitespace-nowrap">
+                {/* Adjusted widths to prevent wrapping: 15% for Date, more for payout columns */}
+                <th className="py-3 px-3 text-left font-semibold w-[18%]">Date</th>
+                <th className="py-3 px-3 text-right font-semibold w-[30%]">Bulloch Payouts</th>
+                <th className="py-3 px-3 text-right font-semibold w-[27%]">Hub Payouts (Till)</th>
+                <th className="py-3 px-3 text-right font-semibold w-[25%]">Difference</th>
               </tr>
             </thead>
           </table>
+
+          {/* Body Table */}
+          <div className="max-h-[250px] overflow-y-auto">
+            <table className="w-full table-fixed text-sm border-collapse">
+              <tbody>
+                {sortedData.map((row) => {
+                  const rowClass = clsx(
+                    "border-b last:border-b-0 whitespace-nowrap",
+                    row.difference === 0 && "bg-green-50 text-green-800",
+                    row.difference > 0 && "bg-red-50 text-red-800",
+                    row.difference < 0 && "bg-orange-50 text-orange-800"
+                  );
+
+                  return (
+                    <tr key={row.date} className={rowClass}>
+                      <td className="py-2.5 px-3 font-medium w-[18%] text-xs">
+                        {row.date}
+                      </td>
+                      <td className="py-2.5 px-3 text-right w-[30%]">
+                        ${row.posPayout.toFixed(2)}
+                      </td>
+                      <td className="py-2.5 px-3 text-right w-[27%]">
+                        ${row.internalPayout.toFixed(2)}
+                      </td>
+                      <td className="py-2.5 px-3 text-right font-bold w-[25%]">
+                        {row.difference > 0 && "+"}
+                        ${row.difference.toFixed(2)}
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
         </div>
 
-        {/* Scrollable body */}
-        <div className="max-h-[220px] overflow-y-auto">
-          <table className="w-full text-sm border-collapse">
-            <tbody>
-              {sortedData.map(row => {
-                const rowClass = clsx(
-                  "border-b last:border-b-0",
-                  row.difference === 0 && "bg-green-50 text-green-700",
-                  row.difference > 0 && "bg-red-50 text-red-700",
-                  row.difference < 0 && "bg-orange-50 text-orange-700"
-                );
-
-                return (
-                  <tr key={row.date} className={rowClass}>
-                    <td className="py-2 px-3 font-medium">
-                      {row.date}
-                    </td>
-
-                    <td className="py-2 px-3 pr-20 text-right">
-                      ${row.posPayout.toFixed(2)}
-                    </td>
-
-                    <td className="py-2 px-3 pr-8 text-center">
-                      ${row.internalPayout.toFixed(2)}
-                    </td>
-
-                    <td className="py-2 px-3 text-right font-semibold">
-                      {row.difference > 0 && "+"}
-                      ${row.difference.toFixed(2)}
-                    </td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
-        </div>
-        {/* ------------------ Discrepancy Legend ------------------ */}
-        <div className="flex flex-wrap items-center justify-center gap-4 pt-3">
-          <div className="flex items-center gap-1.5">
-            <div className="h-2 w-2 rounded-[2px] bg-green-50 border border-green-300" />
-            <span className="text-xs font-medium text-black">
-              Balanced (Bulloch Payouts = Hub Payouts)
-            </span>
+        {/* ------------------ Legend (Slightly improved padding/spacing) ------------------ */}
+        <div className="flex flex-wrap items-center justify-center gap-6 p-4 border-t bg-muted/5">
+          <div className="flex items-center gap-2">
+            <div className="h-3 w-3 rounded-sm bg-green-50 border border-green-300" />
+            <span className="text-xs text-muted-foreground">Balanced</span>
           </div>
 
-          <div className="flex items-center gap-1.5">
-            <div className="h-2 w-2 rounded-[2px] bg-red-50 border border-red-300" />
-            <span className="text-xs font-medium text-black">
-              Hub Payouts &gt; Bulloch Payouts
-            </span>
+          <div className="flex items-center gap-2">
+            <div className="h-3 w-3 rounded-sm bg-red-50 border border-red-300" />
+            <span className="text-xs text-muted-foreground">Hub &gt; Bulloch</span>
           </div>
 
-          <div className="flex items-center gap-1.5">
-            <div className="h-2 w-2 rounded-[2px] bg-orange-50 border border-orange-300" />
-            <span className="text-xs font-medium text-black">
-              Bulloch Payouts &gt; Hub Payouts
-            </span>
+          <div className="flex items-center gap-2">
+            <div className="h-3 w-3 rounded-sm bg-orange-50 border border-orange-300" />
+            <span className="text-xs text-muted-foreground">Bulloch &gt; Hub</span>
           </div>
         </div>
       </CardContent>

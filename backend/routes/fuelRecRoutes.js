@@ -1,5 +1,6 @@
 const express = require('express')
 const router = express.Router()
+const { emailQueue } = require('../queues/emailQueue');
 
 // JSON body parsing
 router.use(express.json({ limit: '1mb' }))
@@ -144,12 +145,90 @@ router.post('/request-again', async (req, res) => {
       return res.status(400).json({ error: 'Location has no email configured' })
     }
 
-    const sendEmail = await getSendEmail()
-    await sendEmail({
-      to: 'mohammad@gen7fuel.com',
-      subject: `BOL Photo Retake Requested – ${location.stationName} – ${date}`,
-      text: `A new photo for the BOL was requested for the date of ${date}. Reason: Image not clear.`,
-    })
+    // const sendEmail = await getSendEmail()
+    // await sendEmail({
+    //   to: 'mohammad@gen7fuel.com',
+    //   subject: `BOL Photo Retake Requested – ${location.stationName} – ${date}`,
+    //   text: `A new photo for the BOL was requested for the date of ${date}. Reason: Image not clear.`,
+    // })
+    // 1. Construct the redirect URL
+    const redirectUrl = `https://app.gen7fuel.com/fuel-rec?site=${encodeURIComponent(location.stationName)}&date=${date}`;
+
+    // 2. Define the Subject
+    const subject = `📸 BOL Photo Retake Requested – ${location.stationName} – ${date}`;
+
+    // 3. Define Plain Text version
+    const text = `A photo retake for the Bill of Lading (BOL) has been requested for ${location.stationName} on ${date}. 
+      Reason: Image not clear / Blur.
+      Please re-upload here: ${redirectUrl}`;
+
+    // 4. Define HTML version
+    const html = `
+      <div style="font-family: 'Segoe UI', Arial, sans-serif; background-color: #f4f7f6; padding: 30px;">
+        <div style="max-width: 600px; margin: 0 auto; background-color: #ffffff; border-radius: 12px; box-shadow: 0 4px 12px rgba(0,0,0,0.1); overflow: hidden;">
+          
+          <div style="background-color: #bd33fd; color: #ffffff; text-align: center; padding: 20px 0;">
+            <h1 style="margin: 0; font-size: 22px;">📸 BOL Photo Retake Requested</h1>
+          </div>
+
+          <div style="padding: 30px;">
+            <p style="font-size: 16px; color: #444; line-height: 1.6;">
+              A request has been made to <strong>retake and re-upload</strong> the Bill of Lading (BOL) document for the following delivery:
+            </p>
+
+            <table style="width: 100%; border-collapse: collapse; margin: 20px 0; background-color: #fdfdfd; border-radius: 8px;">
+              <tr>
+                <td style="padding: 12px; font-weight: bold; color: #555; border-bottom: 1px solid #f0f0f0;">🏪 Station:</td>
+                <td style="padding: 12px; color: #222; border-bottom: 1px solid #f0f0f0;">${location.stationName}</td>
+              </tr>
+              <tr>
+                <td style="padding: 12px; font-weight: bold; color: #555; border-bottom: 1px solid #f0f0f0;">📅 Delivery Date:</td>
+                <td style="padding: 12px; color: #222; border-bottom: 1px solid #f0f0f0;">${date}</td>
+              </tr>
+              <tr>
+                <td style="padding: 12px; font-weight: bold; color: #d32f2f;">❓ Reason:</td>
+                <td style="padding: 12px; color: #d32f2f; font-weight: 500;">Image not clear / Blur reported.</td>
+              </tr>
+            </table>
+
+            <div style="
+              margin-top: 24px;
+              background-color: #f5ddfc;
+              border-left: 6px solid #fa5df2;
+              padding: 16px;
+              border-radius: 8px;
+            ">
+              <p style="margin: 0; color: #c609ff; font-size: 15px;">
+                Please ensure the new photo is well-lit and all text on the document is clearly legible before submitting.
+              </p>
+            </div>
+
+            <div style="text-align: center; margin: 35px 0;">
+              <a href="${redirectUrl}" 
+                style="background-color: #333333; color: #ffffff; padding: 14px 28px; text-decoration: none; font-weight: 600; border-radius: 6px; display: inline-block; font-size: 16px;">
+                📤 Re-upload BOL Document
+              </a>
+            </div>
+
+            <p style="color: #888; font-size: 12px; margin-top: 30px; text-align: center; border-top: 1px solid #eee; padding-top: 20px;">
+              Gen7 Fuel Hub - Fuel Reconciliation System<br>
+              <em>This is an automated request. Please use the link above to fulfill the request.</em>
+            </p>
+          </div>
+        </div>
+      </div>
+      `;
+
+    // 5. Add to Email Queue
+    await emailQueue.add("sendBOLRequestEmail", {
+      to,
+      cc: ['daksh@gen7fuel.com', 'mohammad@gen7fuel.com'],
+      subject,
+      text,
+      html
+    });
+
+    console.log(`📨 BOL Retake request queued for ${location.stationName}`);
 
     return res.status(200).json({ sent: true })
   } catch (e) {

@@ -89,7 +89,7 @@ const pad2 = (n: number) => String(n).padStart(2, "0");
 const formatLocalYMD = (d: Date) =>
   `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}`;
 
-function getPeriodKey(frequency: AuditFrequency, date: Date = new Date()) {
+export function getPeriodKey(frequency: AuditFrequency, date: Date = new Date()) {
   const d = new Date(date);
   d.setHours(0, 0, 0, 0); // local midnight
 
