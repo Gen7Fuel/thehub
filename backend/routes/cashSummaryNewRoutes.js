@@ -677,6 +677,9 @@ router.post('/', async (req, res) => {
       parsedPayouts: numOrUndef(parsed.payouts),
       safedropsCount: numOrUndef(parsed.safedrops?.count),
       safedropsAmount: numOrUndef(parsed.safedrops?.amount),
+      // SHIFT STATISTICS: Voided Transactions
+      voidedTransactionsAmount: numOrUndef(parsed.voidedTransactionsAmount),
+      voidedTransactionsCount: numOrUndef(parsed.voidedTransactionsCount),
       // Lottery / Bulloch parsed values
       lottoPayout: numOrUndef(parsed.lottoPayout),
       onlineLottoTotal: numOrUndef(parsed.onlineLottoTotal),
@@ -1041,6 +1044,7 @@ router.get('/report', async (req, res) => {
       exempted_tax: sum('exempted_tax'),
       report_canadian_cash: sum('report_canadian_cash'),
       payouts: rows.reduce((a, r) => a + (r.payouts || 0), 0),
+      voidedTransactionsAmount: sum('voidedTransactionsAmount'),
     }
 
     // Fetch or create the single report for site+day (normalized date)

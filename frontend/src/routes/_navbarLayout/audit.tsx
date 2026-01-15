@@ -35,7 +35,7 @@ function RouteComponent() {
         {[
           { key: 'template', label: 'Templates', to: '/audit/templates', isActive: isCreateActive },
           { key: 'checklist', label: 'Checklist', to: '/audit/checklist', isActive: isChecklistActive },
-          { key: 'visitor', label: 'Visitors Audit', to: '/audit/visitor', isActive: isVisitorActive },
+          { key: 'visitor', label: 'Visitor\'s Audit', to: '/audit/visitor', isActive: isVisitorActive },
           { key: 'interface', label: 'Interface', to: '/audit/interface', isActive: isInterfaceActive },
         ]
           .filter(btn => access?.stationAudit?.[btn.key]) // Only keep buttons with permission
