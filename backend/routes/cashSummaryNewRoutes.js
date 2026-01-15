@@ -1193,6 +1193,9 @@ router.put('/:id', async (req, res) => {
               instantLottTotal: parsed.instantLottTotal,
               dataWave: parsed.dataWave,
               feeDataWave: parsed.feeDataWave,
+              // SHIFT STATISTICS: Voided Transactions parsed fields
+              voidedTransactionsAmount: parsed.voidedTransactionsAmount,
+              voidedTransactionsCount: parsed.voidedTransactionsCount,
             }
           }
         } else {
@@ -1225,6 +1228,9 @@ router.put('/:id', async (req, res) => {
       instantLottTotal: norm(req.body.instantLottTotal ?? enrichedValues.instantLottTotal ?? existing.instantLottTotal),
       dataWave: norm(req.body.dataWave ?? enrichedValues.dataWave ?? existing.dataWave),
       feeDataWave: norm(req.body.feeDataWave ?? enrichedValues.feeDataWave ?? existing.feeDataWave),
+      // SHIFT STATISTICS: Voided Transactions
+      voidedTransactionsAmount: norm(req.body.voidedTransactionsAmount ?? enrichedValues.voidedTransactionsAmount ?? existing.voidedTransactionsAmount),
+      voidedTransactionsCount: norm(req.body.voidedTransactionsCount ?? enrichedValues.voidedTransactionsCount ?? existing.voidedTransactionsCount),
     }
 
     // 5️⃣ Update and return
