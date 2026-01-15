@@ -7,7 +7,7 @@ import { getSocket } from "@/lib/websocket";
 import { syncPendingActions } from "@/lib/utils"
 import { isActuallyOnline } from "@/lib/network";
 import { useAuth } from "@/context/AuthContext";
-import { HelpCircle, LogOut, Settings as SettingsIcon, LayoutDashboard, Home as HomeIcon } from 'lucide-react'
+import { HelpCircle, LogOut, Settings as SettingsIcon, LayoutDashboard, Home as HomeIcon, KeyRound } from 'lucide-react'
 import { clearLocalDB } from "@/lib/orderRecIndexedDB";
 import {
   Dialog,
@@ -151,6 +151,10 @@ export default function Navbar() {
   // Handles navigation to the settings page
   const handleSettings = () => {
     navigate({ to: '/settings' })
+  }
+
+  const handlePasswordReset = () => {
+    navigate({ to: '/reset-password' })
   }
 
   // Get access permissions from localStorage
@@ -308,6 +312,12 @@ export default function Navbar() {
           {access?.settings && (
             <Button variant="outline" onClick={handleSettings}>
               <SettingsIcon className="h-5 w-5" />
+            </Button>
+          )}
+          {/* Reset Password Button */}
+          {access?.passwordReset && (
+            <Button variant="outline" title="Reset Password" onClick={handlePasswordReset}>
+              <KeyRound className="h-5 w-5" />
             </Button>
           )}
           {/* Logout button */}
