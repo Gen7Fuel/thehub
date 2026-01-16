@@ -41,6 +41,9 @@ const CashSummarySchema = new mongoose.Schema(
     parsedPayouts: { type: Number },
     safedropsCount: { type: Number },
     safedropsAmount: { type: Number },
+    // SHIFT STATISTICS: Voided Transactions (parsed)
+    voidedTransactionsAmount: { type: Number },
+    voidedTransactionsCount: { type: Number },
     // Lottery / Bulloch parsed fields
     lottoPayout: { type: Number },
     onlineLottoTotal: { type: Number },
