@@ -192,7 +192,7 @@ router.post("/", async (req, res) => {
 // Update role and role permissions along with safely merging with user permission
 router.put("/:id", async (req, res) => {
   try {
-    const { role_name, description, permissions } = req.body;
+    const { role_name, description, permissions, inStoreAccount } = req.body;
     const role = await Role.findById(req.params.id);
     
     if (!role) return res.status(404).json({ message: "Role not found" });
@@ -200,6 +200,11 @@ router.put("/:id", async (req, res) => {
     // 1. Update basic fields
     role.role_name = role_name || role.role_name;
     role.description = description || role.description;
+
+    // We check if it's undefined to allow the frontend to send "false"
+    if (typeof inStoreAccount !== 'undefined') {
+      role.inStoreAccount = inStoreAccount;
+    }
 
     // 2. Handle Permission Sync
     if (permissions && Array.isArray(permissions)) {

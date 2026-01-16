@@ -5,6 +5,11 @@ import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Input } from "@/components/ui/input";
+import {
+  InputOTP,
+  InputOTPGroup,
+  InputOTPHiddenSlot,
+} from "@/components/custom/input-otp-masked";
 import { RolePermissionEditor } from "@/components/custom/RolePermissionEditor";
 import { Card, CardHeader, CardTitle, CardContent, CardFooter } from "@/components/ui/card";
 
@@ -53,6 +58,7 @@ export function RouteComponent() {
       _id: string;
       firstName: string;
       lastName: string;
+      email: string;
       access: Record<string, any>;
       is_admin: boolean;
       is_inOffice: boolean;
@@ -77,7 +83,7 @@ export function RouteComponent() {
   const [showConfirmDialog, setShowConfirmDialog] = useState(false);
   const [password, setPassword] = useState("");
   const [newPassword, setNewPassword] = useState("");
-  const [_ , setResetStatus] = useState<null | string>(null);
+  const [_, setResetStatus] = useState<null | string>(null);
 
   const [mergedPermissions, setMergedPermissions] = useState<PermissionNode[]>([]);
 
@@ -106,6 +112,24 @@ export function RouteComponent() {
     };
     fetchLocations();
   }, [user?._id, user?.site_access]);
+
+  const [isTargetStoreAccount, setIsTargetStoreAccount] = useState<boolean | null>(null);
+
+  // Identify target user's account type
+  useEffect(() => {
+    const checkTargetType = async () => {
+      if (!user?.email) return;
+      try {
+        // Use the email of the user being viewed, not the admin's email
+        const res = await axios.post("/api/auth/identify", { email: user.email });
+        setIsTargetStoreAccount(res.data.inStoreAccount);
+      } catch (err) {
+        console.error("Identity check failed", err);
+        setIsTargetStoreAccount(false); // Fallback to password
+      }
+    };
+    checkTargetType();
+  }, [user?.email]);
 
   const toggleSiteAccess = (site: string) => {
     setSiteAccess((prev) => ({
@@ -303,7 +327,7 @@ export function RouteComponent() {
 
           <CardContent>
             {/* Password Reset */}
-            <form onSubmit={handlePasswordReset} className="flex items-center gap-3 flex-wrap mb-6">
+            {/* <form onSubmit={handlePasswordReset} className="flex items-center gap-3 flex-wrap mb-6">
               <Input
                 type="password"
                 placeholder="New password"
@@ -313,6 +337,41 @@ export function RouteComponent() {
                 className="flex-1 min-w-[200px]"
               />
               <Button type="submit" className="bg-orange-600 text-white hover:bg-red-500">
+                Reset Password
+              </Button>
+            </form> */}
+            {/* Password/Passcode Reset Form */}
+            <form onSubmit={handlePasswordReset} className="flex items-center gap-3 flex-wrap mb-6">
+              <div className="flex-1 min-w-[200px] space-y-1.5">
+              {isTargetStoreAccount ? (
+                <InputOTP
+                  maxLength={6}
+                  value={newPassword}
+                  onChange={setNewPassword}
+                  inputMode="numeric"
+                >
+                  <InputOTPGroup className="bg-white">
+                    {[...Array(6)].map((_, i) => (
+                      <InputOTPHiddenSlot key={i} index={i} />
+                    ))}
+                  </InputOTPGroup>
+                </InputOTP>
+              ) : (
+                <Input
+                  type="password"
+                  placeholder="Enter new password"
+                  value={newPassword}
+                  onChange={(e) => setNewPassword(e.target.value)}
+                  required
+                  className="bg-white"
+                />
+              )}
+              </div>
+
+              <Button
+                type="submit"
+                className="bg-orange-600 text-white hover:bg-orange-700 h-10 shadow-sm"
+              >
                 Reset Password
               </Button>
             </form>
@@ -513,7 +572,7 @@ export function RouteComponent() {
                   await axios.post(
                     `/api/users/${user._id}/logout`,
                     {},
-                    { headers: { Authorization: `Bearer ${token}`,"X-Required-Permission": "settings" } }
+                    { headers: { Authorization: `Bearer ${token}`, "X-Required-Permission": "settings" } }
                   );
                   setShowLogoutConfirmDialog(false)
                   alert("User logged out successfully!");

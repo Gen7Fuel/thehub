@@ -60,6 +60,7 @@ const rolePermissionSchema = new mongoose.Schema(
 const roleSchema = new mongoose.Schema({
   role_name: { type: String, required: true, unique: true },
   description: { type: String },
+  inStoreAccount: { type: Boolean, default: false },
   permissions: {
     type: [permissionNodeSchema],
     default: [],
