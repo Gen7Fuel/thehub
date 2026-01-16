@@ -458,6 +458,85 @@ function RouteComponent() {
               </div>
             )
           })()}
+
+          {(() => {
+            const bank = data.bank
+            const fmt2 = (v: number) =>
+              Number.isFinite(v)
+                ? (v < 0
+                    ? `(${Math.abs(v).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })})`
+                    : v.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 }))
+                : ''
+
+            if (!bank) {
+              return (
+                <div className="border rounded">
+                  <div className="px-3 py-2 font-semibold border-b">Bank Statement Details</div>
+                  <div className="px-3 py-3 text-sm text-muted-foreground">No bank statement found.</div>
+                </div>
+              )
+            }
+
+            const openingBalance = Number(bank.balanceForward) || 0
+            const miscDebits = Array.isArray(bank.miscDebits) ? bank.miscDebits : []
+            const miscCredits = Array.isArray((bank as any).miscCredits) ? (bank as any).miscCredits : []
+
+            return (
+              <div className="border rounded">
+                <div className="px-3 py-2 font-semibold border-b">Bank Statement Details</div>
+                <table className="min-w-full text-sm">
+                  <thead>
+                    <tr className="border-b">
+                      <th className="px-3 py-2 text-left">Date</th>
+                      <th className="px-3 py-2 text-left">Description</th>
+                      <th className="px-3 py-2 text-right">Amount</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    <tr>
+                      <td className="px-3 py-2">—</td>
+                      <td className="px-3 py-2 font-medium">Opening Balance</td>
+                      <td className="px-3 py-2 text-right">${fmt2(openingBalance)}</td>
+                    </tr>
+
+                    <tr className="border-t">
+                      <td className="px-3 py-2" colSpan={3}><span className="font-medium">Misc Debits</span></td>
+                    </tr>
+                    {miscDebits.length === 0 ? (
+                      <tr>
+                        <td className="px-3 py-2 text-muted-foreground" colSpan={3}>None</td>
+                      </tr>
+                    ) : (
+                      miscDebits.map((d, idx) => (
+                        <tr key={idx} className="border-b">
+                          <td className="px-3 py-2">{d.date || '-'}</td>
+                          <td className="px-3 py-2">{d.description || '-'}</td>
+                          <td className="px-3 py-2 text-right">${fmt2(Number(d.amount) || 0)}</td>
+                        </tr>
+                      ))
+                    )}
+
+                    <tr className="border-t">
+                      <td className="px-3 py-2" colSpan={3}><span className="font-medium">Misc Credits</span></td>
+                    </tr>
+                    {miscCredits.length === 0 ? (
+                      <tr>
+                        <td className="px-3 py-2 text-muted-foreground" colSpan={3}>None</td>
+                      </tr>
+                    ) : (
+                      miscCredits.map((c: any, idx: number) => (
+                        <tr key={idx} className="border-b">
+                          <td className="px-3 py-2">{c.date || '-'}</td>
+                          <td className="px-3 py-2">{c.description || '-'}</td>
+                          <td className="px-3 py-2 text-right">${fmt2(Number(c.amount) || 0)}</td>
+                        </tr>
+                      ))
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            )
+          })()}
         </div>
       )}
     </div>
