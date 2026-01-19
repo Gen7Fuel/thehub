@@ -724,6 +724,36 @@ router.get('/inventory-categories', async (req, res) => {
   }
 });
 
+// Example Express Route: /api/cycle-count/search
+router.get('/search', async (req, res) => {
+  try {
+    const { site, q } = req.query;
+
+    if (!site || !q) {
+      return res.json([]);
+    }
+
+    // Use a case-insensitive regex for the name and an exact or prefix match for UPC
+    const query = {
+      site: site, // Must match the site format in your DB
+      $or: [
+        { upc_barcode: { $regex: `^${q}`, $options: 'i' } }, // Prefix match for UPC is faster
+        { name: { $regex: q, $options: 'i' } }
+      ]
+    };
+
+    const items = await CycleCount.find(query)
+      .select('name upc_barcode gtin onHandCSO') // Only fetch needed fields
+      .limit(10)
+      .lean(); // Faster execution
+
+    res.json(items);
+  } catch (err) {
+    console.error('Search Error:', err);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
 //dummy route
 // router.get('/inventory-categories', async (req, res) => {
 //   try {

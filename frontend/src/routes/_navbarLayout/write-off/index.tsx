@@ -7,20 +7,21 @@ export const Route = createFileRoute('/_navbarLayout/write-off/')({
 })
 
 function RouteComponent() {
-    const navigate = useNavigate();
-    const { user } = useAuth();
-  
-    // Redirect to /cycle-count/count on mount
-    useEffect(() => {
-      if (user?.access?.writeOff?.create) {
-        navigate({ to: "/write-off/create" });
-      } else if (user?.access?.writeOff?.requests) {
-        navigate({ to: "/write-off/requests" });
-      } else {
-        navigate({ to: "/no-access" }); // Redirect to home or an appropriate page if no access
-      }
-    }, [navigate]);
-  
-    // The rest of the component is not needed
-    return null;
+  const navigate = useNavigate();
+  const { user } = useAuth();
+
+  useEffect(() => {
+    // Determine the path
+    let targetPath = "/no-access";
+    if (user?.access?.writeOff?.create) targetPath = "/write-off/create";
+    else if (user?.access?.writeOff?.requests) targetPath = "/write-off/requests";
+
+    // Navigate and preserve user location if possible
+    navigate({
+      to: targetPath,
+      search: user?.location ? { site: user.location } : undefined
+    });
+  }, [user, navigate]);
+
+  return null;
 }
