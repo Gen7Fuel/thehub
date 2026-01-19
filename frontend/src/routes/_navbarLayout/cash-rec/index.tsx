@@ -286,8 +286,16 @@ function RouteComponent() {
               ? data.payablesRows.reduce((a: number, p: any) => a + (Number(p?.amount) || 0), 0)
               : 0
 
+            // Sum of misc debits whose description contains "debit" (case-insensitive)
+            const miscDebitDescTotal = Array.isArray(data.bank?.miscDebits)
+              ? data.bank!.miscDebits.reduce((sum, tx) => {
+                  const desc = typeof tx.description === 'string' ? tx.description : ''
+                  return desc.toLowerCase().includes('debit') ? sum + (Number(tx.amount) || 0) : sum
+                }, 0)
+              : 0
+
             const finalTotal =
-              totalDollarSales - cashSafeDeposited + tillOverShort - gcRedemption - loyalty + unsettledPrepays + bankRec - arTotal - payTotal
+              totalDollarSales - cashSafeDeposited + tillOverShort - gcRedemption - loyalty + unsettledPrepays + bankRec - arTotal - payTotal + miscDebitDescTotal
 
             return (
               <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
