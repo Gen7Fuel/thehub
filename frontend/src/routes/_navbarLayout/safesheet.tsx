@@ -157,6 +157,15 @@ export default function RouteComponent() {
     }).format(v)
   }
 
+  // dedicated formatter that shows zero (for Cash On Hand only)
+  const fmtNumberShowZero = (v?: number | null) => {
+    if (v === null || v === undefined) return ''
+    return new Intl.NumberFormat(undefined, {
+      minimumFractionDigits: 2,
+      maximumFractionDigits: 2,
+    }).format(v)
+  }
+
   // fetch sheet
   useEffect(() => {
     if (!site || !from || !to) {
@@ -410,7 +419,7 @@ export default function RouteComponent() {
         cashInDisplay: fmtNumber(e.cashIn),
         cashExpenseOutDisplay: fmtNumber(e.cashExpenseOut),
         cashDepositBankDisplay: fmtNumber(e.cashDepositBank),
-        cashOnHandSafeDisplay: fmtNumber(e.cashOnHandSafe ?? 0),
+        cashOnHandSafeDisplay: fmtNumberShowZero(e.cashOnHandSafe ?? 0),
       }
     })
   }, [sheet])

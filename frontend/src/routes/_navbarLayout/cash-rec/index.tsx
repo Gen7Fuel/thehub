@@ -273,6 +273,22 @@ function RouteComponent() {
             const bankRec = data.bankRec || 0
             const balanceCheck = data.balanceCheck ?? 0
 
+            // Totals from AR and Payables for the final calculation
+            const arTotal = (
+              (Array.isArray(data.kardpollEntriesRows)
+                ? data.kardpollEntriesRows.reduce((a, r) => a + (Number(r.amount) || 0), 0)
+                : 0) +
+              (Array.isArray(data.receivablesRows)
+                ? data.receivablesRows.reduce((a: number, r: any) => a + (Number(r?.amount) || 0), 0)
+                : 0)
+            )
+            const payTotal = Array.isArray(data.payablesRows)
+              ? data.payablesRows.reduce((a: number, p: any) => a + (Number(p?.amount) || 0), 0)
+              : 0
+
+            const finalTotal =
+              totalDollarSales - cashSafeDeposited + tillOverShort - gcRedemption - loyalty + unsettledPrepays + bankRec - arTotal - payTotal
+
             return (
               <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
                 <div className="border rounded">
@@ -346,6 +362,10 @@ function RouteComponent() {
                       <tr>
                         <td className="px-3 py-2">Balance Check</td>
                         <td className="px-3 py-2 text-right">${fmt2(balanceCheck)}</td>
+                      </tr>
+                      <tr className="border-t">
+                        <td className="px-3 py-2 font-medium">Total</td>
+                        <td className="px-3 py-2 text-right font-medium">${fmt2(finalTotal)}</td>
                       </tr>
                     </tbody>
                   </table>
