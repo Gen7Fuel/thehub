@@ -210,7 +210,7 @@ function App() {
               {access?.writeOff && (
                 <Link to="/write-off">
                   <Button className="w-32 h-32 flex items-center justify-center break-words whitespace-normal text-center">
-                    Write Offs
+                    Write Offs & Markdowns
                   </Button>
                 </Link>
               )}

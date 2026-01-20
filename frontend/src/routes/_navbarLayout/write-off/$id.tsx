@@ -241,19 +241,6 @@ function WriteOffDetailsPage() {
               <tbody className="divide-y divide-slate-100">
                 {writeOff.items.map((item: any) => (
                   <tr key={item._id}
-                    onClick={() => {
-                      // 1. If the list is locked (submitted), do nothing
-                      if (isLocked) return;
-
-                      // 2. If the item is checked, show alert and prevent edit
-                      if (item.completed) {
-                        alert("This item is already checked. Please uncheck it if you need to edit the quantity or reason.");
-                        return;
-                      }
-
-                      // 3. Otherwise, open edit dialog
-                      setEditItem(item);
-                    }}
                     className={`transition-colors cursor-pointer ${isLocked ? 'cursor-default' : 'hover:bg-slate-50'
                       } ${item.completed ? 'bg-slate-50/30' : ''}`}
                   >
@@ -273,9 +260,39 @@ function WriteOffDetailsPage() {
                     <td className="px-6 py-4 text-sm text-blue-600 underline" onClick={(e) => { e.stopPropagation(); setBarcodeValue(item.upc_barcode); }}>
                       {item.upc_barcode}
                     </td>
-                    <td className="px-6 py-4 text-center font-bold text-slate-700">{item.qty}</td>
+                    <td className="px-6 py-4 text-center font-bold text-slate-700"
+                      onClick={() => {
+                        // 1. If the list is locked (submitted), do nothing
+                        if (isLocked) return;
+
+                        // 2. If the item is checked, show alert and prevent edit
+                        if (item.completed) {
+                          alert("This item is already checked. Please uncheck it if you need to edit the quantity or reason.");
+                          return;
+                        }
+
+                        // 3. Otherwise, open edit dialog
+                        setEditItem(item);
+                      }}
+                    >
+                      {item.qty}
+                    </td>
                     <td className="px-6 py-4 text-center font-bold text-slate-400">{item.onHandAtWriteOff}</td>
-                    <td className="px-6 py-4 text-center">
+                    <td className="px-6 py-4 text-center"
+                      onClick={() => {
+                        // 1. If the list is locked (submitted), do nothing
+                        if (isLocked) return;
+
+                        // 2. If the item is checked, show alert and prevent edit
+                        if (item.completed) {
+                          alert("This item is already checked. Please uncheck it if you need to edit the quantity or reason.");
+                          return;
+                        }
+
+                        // 3. Otherwise, open edit dialog
+                        setEditItem(item);
+                      }}
+                    >
                       <span className={`px-2.5 py-1 rounded text-[10px] font-bold uppercase border ${item.markdownAction === 'Marked Down' ? 'bg-green-100 border-green-200 text-green-700' :
                         item.markdownAction === 'No Markdown Needed' ? 'bg-slate-100 border-slate-200 text-slate-600' : 'bg-slate-50 text-slate-400 italic'
                         }`}>
@@ -321,19 +338,6 @@ function WriteOffDetailsPage() {
                 {writeOff.items.map((item: any) => (
                   <tr
                     key={item._id}
-                    onClick={() => {
-                      // 1. If the list is locked (submitted), do nothing
-                      if (isLocked) return;
-
-                      // 2. If the item is checked, show alert and prevent edit
-                      if (item.completed) {
-                        alert("This item is already checked. Please uncheck it if you need to edit the quantity or reason.");
-                        return;
-                      }
-
-                      // 3. Otherwise, open edit dialog
-                      setEditItem(item);
-                    }}
                     className={`transition-colors cursor-pointer ${isLocked ? 'cursor-default' : 'hover:bg-slate-50'
                       } ${item.completed ? 'bg-slate-50/30' : ''}`}
                   >
@@ -355,7 +359,21 @@ function WriteOffDetailsPage() {
                       <span className="text-sm">{item.upc_barcode}</span>
                     </td>
 
-                    <td className="px-6 py-4 text-center">
+                    <td className="px-6 py-4 text-center"
+                      onClick={() => {
+                        // 1. If the list is locked (submitted), do nothing
+                        if (isLocked) return;
+
+                        // 2. If the item is checked, show alert and prevent edit
+                        if (item.completed) {
+                          alert("This item is already checked. Please uncheck it if you need to edit the quantity or reason.");
+                          return;
+                        }
+
+                        // 3. Otherwise, open edit dialog
+                        setEditItem(item);
+                      }}
+                    >
                       <div className="inline-flex flex-col items-center gap-1">
                         <span className={`inline-flex items-center justify-center px-3 py-1 rounded-lg text-sm font-bold 
                         ${item.isEdited ? 'bg-slate-800 text-white' : 'bg-slate-100 text-slate-700'}`}>
@@ -373,7 +391,21 @@ function WriteOffDetailsPage() {
                       </div>
                     </td>
 
-                    <td className="px-6 py-4">
+                    <td className="px-6 py-4"
+                      onClick={() => {
+                        // 1. If the list is locked (submitted), do nothing
+                        if (isLocked) return;
+
+                        // 2. If the item is checked, show alert and prevent edit
+                        if (item.completed) {
+                          alert("This item is already checked. Please uncheck it if you need to edit the quantity or reason.");
+                          return;
+                        }
+
+                        // 3. Otherwise, open edit dialog
+                        setEditItem(item);
+                      }}
+                    >
                       <div className="flex flex-col gap-1 items-start">
                         <span className={`px-2.5 py-0.5 rounded-full text-[10px] font-bold uppercase border 
                         ${REASON_COLORS[item.reason]} ${item.isEdited ? 'ring-1 ring-slate-800 ring-offset-1' : ''}`}>

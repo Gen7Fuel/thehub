@@ -109,8 +109,10 @@ router.post('/', async (req, res) => {
 
     // --- EMAIL QUEUE PLACEHOLDER ---
     // Logic for adding to email queue will go here later
+    // here need seperate email templates if the list has write off items then only it will be sent to the category teams
+    // else no email to category team and manager email if both then 2 links if one the one link
     // --------------------------------
-    
+
     res.status(201).json({
       success: true,
       lists: createdLists

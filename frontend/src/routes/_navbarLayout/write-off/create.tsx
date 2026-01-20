@@ -274,16 +274,30 @@ function RouteComponent() {
                   {/* Conditional Expiry Date Picker */}
                   {formData.reason === 'About to Expire' && (
                     <div className="space-y-1 animate-in fade-in slide-in-from-top-1">
-                      <label className="text-[8.5px] font-semibold uppercase tracking-wide text-orange-600 font-bold">
-                        Select Expiry Date (5-20 days from now)
+                      <label className="text-[10px] font-semibold uppercase tracking-wide text-orange-600 font-bold">
+                        Select Expiry Date
                       </label>
-                      <DatePicker
+                      {/* <DatePicker
                         date={expiryDate}
                         setDate={(date: any) => {
                           if (date && (date < minExpiry || date > maxExpiry)) {
                             alert("Please select a date between 5 and 20 days from today.");
                             return;
                           }
+                          setExpiryDate(date);
+                        }}
+                      /> */}
+                      <DatePicker
+                        date={expiryDate}
+                        setDate={(date: any) => {
+                          // Get today's date at midnight for a clean comparison
+                          today.setHours(0, 0, 0, 0);
+
+                          if (date && date < today) {
+                            alert("Please select a date in the future.");
+                            return;
+                          }
+
                           setExpiryDate(date);
                         }}
                       />
