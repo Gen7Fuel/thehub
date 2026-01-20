@@ -200,6 +200,10 @@ function RouteComponent() {
   // const fmt0 = (v: number | undefined | null) =>
   //   typeof v === 'number' && Number.isFinite(v) ? v.toLocaleString(undefined, { maximumFractionDigits: 0 }) : ''
 
+  // Column visibility based on site
+  const showLottery = site === 'Oliver' || site === 'Osoyoos'
+  const showKardpoll = !(site === 'Sarnia' || site === 'Walpole')
+
   return (
     <div className="px-4 pb-0 space-y-4 w-full max-w-[100vw] overflow-x-hidden flex flex-col">
       <div className="flex w-full flex-col sm:flex-row items-center justify-center gap-4 rounded">
@@ -240,9 +244,13 @@ function RouteComponent() {
               <tr className="bg-muted/50">
                 <th className="px-1 py-1 text-center align-bottom h-24">Date</th>
                 {/* Kardpoll group */}
-                <th className="px-1 py-1 text-center align-bottom h-24 bg-emerald-50">Litres Sold</th>
-                <th className="px-1 py-1 text-center align-bottom h-24 bg-emerald-50">Sales</th>
-                <th className="px-1 py-1 text-center align-bottom h-24 bg-emerald-50">AR</th>
+                {showKardpoll && (
+                  <>
+                    <th className="px-1 py-1 text-center align-bottom h-24 bg-emerald-50">Litres Sold</th>
+                    <th className="px-1 py-1 text-center align-bottom h-24 bg-emerald-50">Sales</th>
+                    <th className="px-1 py-1 text-center align-bottom h-24 bg-emerald-50">AR</th>
+                  </>
+                )}
                 {/* Cash Summary group */}
                 <th className="px-1 py-1 text-center align-bottom h-24 bg-violet-50">DealGroup CPL Discounts</th>
                 <th className="px-1 py-1 text-center align-bottom h-24 bg-violet-50">Unsettled Prepays</th>
@@ -259,9 +267,13 @@ function RouteComponent() {
                 <th className="px-1 py-1 text-center align-bottom h-24 bg-violet-50">Cash Back</th>
                 <th className="px-1 py-1 text-center align-bottom h-24 bg-violet-50">CDN Cash</th>
 
-                {/* Move Lottery before Handheld Debit and use same header background */}
-                <th className="px-1 py-1 text-center align-bottom h-24 bg-amber-50">Lottery Sales</th>
-                <th className="px-1 py-1 text-center align-bottom h-24 bg-amber-50">Lottery Payouts</th>
+                {/* Lottery before Handheld Debit (only for Oliver/Osoyoos) */}
+                {showLottery && (
+                  <>
+                    <th className="px-1 py-1 text-center align-bottom h-24 bg-amber-50">Lottery Sales</th>
+                    <th className="px-1 py-1 text-center align-bottom h-24 bg-amber-50">Lottery Payouts</th>
+                  </>
+                )}
 
                 <th className="px-1 py-1 text-center align-bottom h-24 bg-amber-50">Handheld Debit</th>
                 <th className="px-1 py-1 text-center align-bottom h-24 bg-amber-50">Bank Slip</th>
@@ -282,9 +294,13 @@ function RouteComponent() {
                   <tr className="border-t odd:bg-gray-50 even:bg-white" key={date}>
                     <td className="px-2 py-2">{displayDate}</td>
                     {/* Kardpoll values */}
-                    <td className="px-2 py-2 text-right">{fmt2(data?.kardpoll?.litresSold)}</td>
-                    <td className="px-2 py-2 text-right">{fmt2(data?.kardpoll?.sales)}</td>
-                    <td className="px-2 py-2 text-right">{fmt2(data?.kardpoll?.ar)}</td>
+                    {showKardpoll && (
+                      <>
+                        <td className="px-2 py-2 text-right">{fmt2(data?.kardpoll?.litresSold)}</td>
+                        <td className="px-2 py-2 text-right">{fmt2(data?.kardpoll?.sales)}</td>
+                        <td className="px-2 py-2 text-right">{fmt2(data?.kardpoll?.ar)}</td>
+                      </>
+                    )}
                     {/* Cash Summary totals */}
                     <td className="px-2 py-2 text-right">{fmt2(data?.cashSummary?.totals.dealGroupCplDiscounts)}</td>
                     <td className="px-2 py-2 text-right">{fmt2(data?.cashSummary?.unsettledPrepays)}</td>
@@ -302,14 +318,18 @@ function RouteComponent() {
                     <td className="px-2 py-2 text-right">{fmt2(data?.cashSummary?.totals.cash_back)}</td>
                     <td className="px-2 py-2 text-right">{fmt2(data?.cashSummary?.totals.report_canadian_cash)}</td>
 
-                    {/* Lottery moved before Handheld Debit */}
-                    <td className="px-2 py-2 text-right">
-                      {fmt2(
-                        (data?.cashSummary?.totals.onlineLottoTotal ?? 0) +
-                        (data?.cashSummary?.totals.instantLottTotal ?? 0)
-                      )}
-                    </td>
-                    <td className="px-2 py-2 text-right">{fmt2(data?.cashSummary?.totals.lottoPayout)}</td>
+                    {/* Lottery moved before Handheld Debit (only for Oliver/Osoyoos) */}
+                    {showLottery && (
+                      <>
+                        <td className="px-2 py-2 text-right">
+                          {fmt2(
+                            (data?.cashSummary?.totals.onlineLottoTotal ?? 0) +
+                            (data?.cashSummary?.totals.instantLottTotal ?? 0)
+                          )}
+                        </td>
+                        <td className="px-2 py-2 text-right">{fmt2(data?.cashSummary?.totals.lottoPayout)}</td>
+                      </>
+                    )}
 
                     <td className="px-2 py-2 text-right">{fmt2(data?.cashSummary?.handheldDebit)}</td>
                     <td className="px-2 py-2 text-right">{fmt2(data?.cashSummary?.totals.canadian_cash_collected)}</td>
