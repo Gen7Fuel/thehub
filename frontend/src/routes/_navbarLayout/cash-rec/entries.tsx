@@ -259,11 +259,12 @@ function RouteComponent() {
                 <th className="px-1 py-1 text-center align-bottom h-24 bg-violet-50">Cash Back</th>
                 <th className="px-1 py-1 text-center align-bottom h-24 bg-violet-50">CDN Cash</th>
 
+                {/* Move Lottery before Handheld Debit and use same header background */}
+                <th className="px-1 py-1 text-center align-bottom h-24 bg-amber-50">Lottery Sales</th>
+                <th className="px-1 py-1 text-center align-bottom h-24 bg-amber-50">Lottery Payouts</th>
+
                 <th className="px-1 py-1 text-center align-bottom h-24 bg-amber-50">Handheld Debit</th>
                 <th className="px-1 py-1 text-center align-bottom h-24 bg-amber-50">Bank Slip</th>
-
-                <th className="px-1 py-1 text-center align-bottom h-24 bg-sky-50">Lottery Sales</th>
-                <th className="px-1 py-1 text-center align-bottom h-24 bg-sky-50">Lottery Payouts</th>
 
                 <th className="px-1 py-1 text-center align-bottom h-24 bg-sky-50">Daily Bank Stmt Balance</th>
                 {/* <th className="px-1 py-1 text-center align-bottom h-24 bg-sky-50">Cash Deposited Date</th> */}
@@ -301,9 +302,7 @@ function RouteComponent() {
                     <td className="px-2 py-2 text-right">{fmt2(data?.cashSummary?.totals.cash_back)}</td>
                     <td className="px-2 py-2 text-right">{fmt2(data?.cashSummary?.totals.report_canadian_cash)}</td>
 
-                    <td className="px-2 py-2 text-right">{fmt2(data?.cashSummary?.handheldDebit)}</td>
-                    <td className="px-2 py-2 text-right">{fmt2(data?.cashSummary?.totals.canadian_cash_collected)}</td>
-
+                    {/* Lottery moved before Handheld Debit */}
                     <td className="px-2 py-2 text-right">
                       {fmt2(
                         (data?.cashSummary?.totals.onlineLottoTotal ?? 0) +
@@ -311,6 +310,9 @@ function RouteComponent() {
                       )}
                     </td>
                     <td className="px-2 py-2 text-right">{fmt2(data?.cashSummary?.totals.lottoPayout)}</td>
+
+                    <td className="px-2 py-2 text-right">{fmt2(data?.cashSummary?.handheldDebit)}</td>
+                    <td className="px-2 py-2 text-right">{fmt2(data?.cashSummary?.totals.canadian_cash_collected)}</td>
 
                     <td className="px-2 py-2 text-right">{fmt2(data?.bank?.endingBalance)}</td>
                     {/* <td className="px-2 py-2"></td> */}
