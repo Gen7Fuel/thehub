@@ -6,20 +6,18 @@ const { getBulkOnHandQtyCSO } = require('../services/sqlService');
 
 // GET /api/write-off/list?site=RANKIN
 router.get('/list', async (req, res) => {
-  const { site } = req.query;
+  const { site, listType } = req.query; // Accept listType (WO or ATE)
 
-  if (!site) {
-    return res.status(400).json({ error: "Site parameter is required" });
-  }
+  if (!site) return res.status(400).json({ error: "Site is required" });
 
   try {
-    // 1. Fetch lists for the specific site
-    const lists = await WriteOff.find({ site })
-      .select('listNumber status submittedBy items createdAt') // Only fetch what we need for the cards
+    const query = { site };
+    if (listType) query.listType = listType;
+
+    const lists = await WriteOff.find(query)
+      .select('listNumber status submittedBy items createdAt listType')
       .lean();
 
-    // 2. Sort Logic: Incomplete first, then Partial, then Complete. 
-    // Within those groups, newest created date first.
     const statusPriority = { 'Incomplete': 1, 'Partial': 2, 'Complete': 3 };
 
     const sortedLists = lists.sort((a, b) => {
@@ -31,7 +29,6 @@ router.get('/list', async (req, res) => {
 
     res.json(sortedLists);
   } catch (error) {
-    console.error("Error fetching write-off lists:", error);
     res.status(500).json({ error: "Internal server error" });
   }
 });
@@ -41,7 +38,7 @@ router.get('/:id', async (req, res) => {
   try {
     const record = await WriteOff.findById(req.params.id);
     if (!record) return res.status(404).json({ error: "Record not found" });
-    
+
     res.json(record);
   } catch (error) {
     res.status(500).json({ error: "Error fetching record details" });
@@ -50,73 +47,184 @@ router.get('/:id', async (req, res) => {
 
 // Create a new write-off list
 router.post('/', async (req, res) => {
-  const { listNumber, site, submittedBy, items } = req.body;
+  const { site, submittedBy, items, timestamp } = req.body;
+  const siteCode = site?.toUpperCase() || 'NA';
 
   try {
-    // 1. Extract unique GTINs for the SQL lookup (ignore manual entries)
-    const gtinsToLookup = [
-      ...new Set(items.filter(i => !i.isManualEntry && i.gtin).map(i => i.gtin))
-    ];
+    // 1. Extract unique GTINs for bulk lookup
+    const gtins = [...new Set(items.map(i => i.gtin).filter(Boolean))];
 
-    // 2. Fetch live SQL On-Hand Data
-    const sqlInventory = await getBulkOnHandQtyCSO(site, gtinsToLookup);
-    console.log('SQL Inventory Snapshot:', sqlInventory);
+    // 2. Fetch Bulk Stock Levels from SQL
+    const stockMap = await getBulkOnHandQtyCSO(site, gtins);
 
-    // 3. Map SQL values back to items before saving to MongoDB
-    const finalizedItems = items.map(item => {
-      // If we found a match in SQL, update the field
-      if (item.gtin && sqlInventory[item.gtin] !== undefined) {
-        return {
-          ...item,
-          onHandAtWriteOff: sqlInventory[item.gtin]
-        };
-      }
-      return item;
+    // 3. Attach the fresh stock levels to each item
+    const processedItems = items.map(item => {
+      // If item has a GTIN and exists in SQL results, use that. 
+      // Otherwise, fallback to what the frontend sent or 0.
+      const freshQty = item.gtin && stockMap[item.gtin] !== undefined 
+        ? stockMap[item.gtin] 
+        : (item.onHandAtWriteOff || 0);
+
+      return {
+        ...item,
+        onHandAtWriteOff: freshQty
+      };
     });
 
-    // 4. Create and Save the record in MongoDB
-    const newWriteOff = new WriteOff({
-      listNumber,
-      site,
-      submittedBy,
-      items: finalizedItems,
-      createdAt: new Date()
+    // 4. Split items into two categories
+    const standardItems = processedItems.filter(i => i.reason !== 'About to Expire');
+    const ateItems = processedItems.filter(i => i.reason === 'About to Expire');
+
+    const createdLists = [];
+
+    // 5. Save Standard Write-Off List
+    if (standardItems.length > 0) {
+      const woList = new WriteOff({
+        listNumber: `WO-${siteCode}-${timestamp}`,
+        listType: 'WO',
+        site,
+        submittedBy,
+        items: standardItems,
+        status: 'Incomplete',
+        submitted: false
+      });
+      await woList.save();
+      createdLists.push(woList.listNumber);
+    }
+
+    // 6. Save About to Expire List
+    if (ateItems.length > 0) {
+      const ateList = new WriteOff({
+        listNumber: `ATE-${siteCode}-${timestamp}`,
+        listType: 'ATE',
+        site,
+        submittedBy,
+        items: ateItems,
+        status: 'Incomplete',
+        submitted: false
+      });
+      await ateList.save();
+      createdLists.push(ateList.listNumber);
+    }
+
+    // --- EMAIL QUEUE PLACEHOLDER ---
+    // Logic for adding to email queue will go here later
+    // --------------------------------
+    
+    res.status(201).json({
+      success: true,
+      lists: createdLists
     });
 
-    await newWriteOff.save();
-
-    res.status(201).json({ 
-      message: 'Write-off submitted with live inventory snapshots', 
-      listNumber 
-    });
-
-  } catch (error) {
-    console.error('Submission Error:', error);
-    res.status(500).json({ error: 'Failed to process write-off submission' });
+  } catch (err) {
+    console.error("Creation Error:", err);
+    res.status(500).json({ error: "Server failed to process write-off lists" });
   }
 });
 
-router.patch('/:id/items/:itemId', async (req, res) => {
-  const { completed } = req.body;
-  
+// PATCH /api/write-off/:id/items/:itemId/details
+router.patch('/:id/items/:itemId/details', async (req, res) => {
+  const { qty, reason, markdownAction } = req.body; // Add markdownAction here
+
   try {
     const list = await WriteOff.findById(req.params.id);
+    if (!list) return res.status(404).json({ error: "List not found" });
+
     const item = list.items.id(req.params.itemId);
-    item.completed = completed;
+    if (!item) return res.status(404).json({ error: "Item not found" });
 
-    // Recalculate Master Status
-    const totalItems = list.items.length;
-    const completedItems = list.items.filter(i => i.completed).length;
+    // Update common fields
+    item.qty = qty;
+    item.isEdited = true;
 
-    if (completedItems === 0) list.status = 'Incomplete';
-    else if (completedItems === totalItems) list.status = 'Complete';
-    else list.status = 'Partial';
+    // Conditionally update based on List Type
+    if (list.listType === 'ATE') {
+      item.markdownAction = markdownAction;
+    } else {
+      item.reason = reason;
+    }
 
     await list.save();
     res.json(list);
   } catch (err) {
+    console.error("Patch Error:", err);
     res.status(500).json({ error: err.message });
   }
 });
+
+// PATCH /api/write-off/:id/items/:itemId
+router.patch('/:id/items/:itemId', async (req, res) => {
+  const { completed } = req.body;
+
+  try {
+    const list = await WriteOff.findById(req.params.id);
+    if (!list) return res.status(404).json({ error: "List not found" });
+
+    // Find index instead of using .id() helper to be safer with string vs ObjectId
+    const itemIndex = list.items.findIndex(i => i._id.toString() === req.params.itemId);
+
+    if (itemIndex === -1) {
+      return res.status(404).json({ error: "Item not found in this list" });
+    }
+
+    // Update the item
+    list.items[itemIndex].completed = completed;
+
+    // Recalculate Master Status
+    const totalItems = list.items.length;
+    const completedCount = list.items.filter(i => i.completed).length;
+
+    if (completedCount === 0) {
+      list.status = 'Incomplete';
+    } else if (completedCount === totalItems) {
+      list.status = 'Complete';
+    } else {
+      list.status = 'Partial';
+    }
+
+    // Mark as modified (Mongoose sometimes needs this for subdocument arrays)
+    list.markModified('items');
+
+    const updatedList = await list.save();
+    res.json(updatedList);
+
+  } catch (err) {
+    console.error("PATCH ERROR:", err); // Look at your terminal for this!
+    res.status(500).json({
+      error: err.message,
+      stack: process.env.NODE_ENV === 'development' ? err.stack : undefined
+    });
+  }
+});
+
+// PATCH /api/write-off/:id/finalize
+router.patch('/:id/finalize', async (req, res) => {
+  try {
+    const list = await WriteOff.findById(req.params.id);
+    if (!list) return res.status(404).json({ error: "List not found" });
+
+    if (list.submitted) {
+      return res.status(400).json({ error: "This list has already been submitted." });
+    }
+
+    // 1. Mark as submitted and ensure status is Complete
+    list.submitted = true;
+    list.status = 'Complete';
+
+    // 2. Save the document
+    const finalizedList = await list.save();
+
+    // --- EMAIL QUEUE PLACEHOLDER ---
+    // Logic for adding to email queue will go here later
+    // --------------------------------
+
+    console.log(`List ${list.listNumber} finalized by ${req.user.email}`);
+    res.json(finalizedList);
+  } catch (err) {
+    console.error("Finalize Error:", err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
 
 module.exports = router;

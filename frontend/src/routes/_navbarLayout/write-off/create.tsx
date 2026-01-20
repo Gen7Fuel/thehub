@@ -9,6 +9,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { PlusCircle, Search, Trash2 } from 'lucide-react';
 import axios from 'axios';
+import { DatePicker } from '@/components/custom/datePicker';
 
 export const Route = createFileRoute('/_navbarLayout/write-off/create')({
   component: RouteComponent,
@@ -25,11 +26,12 @@ interface WriteOffItem {
   reason: string;
   isManualEntry?: boolean;
   tempId: number;
+  expiryDate?: Date;
 }
 
-const REASONS = ['Breakage', 'Spoilage', 'Store Use', 'Deli', 'Stolen', 'Damaged', 'Expired', 'Donation'];
+export const REASONS = ['Breakage', 'Spoilage', 'Store Use', 'Deli', 'Stolen', 'Damaged', 'Expired', 'Donation', 'About to Expire'];
 
-const REASON_COLORS: Record<string, string> = {
+export const REASON_COLORS: Record<string, string> = {
   Breakage: 'bg-amber-100 text-amber-700 border-amber-200',
   Spoilage: 'bg-orange-100 text-orange-700 border-orange-200',
   'Store Use': 'bg-blue-100 text-blue-700 border-blue-200',
@@ -38,6 +40,7 @@ const REASON_COLORS: Record<string, string> = {
   Damaged: 'bg-rose-100 text-rose-700 border-rose-200',
   Expired: 'bg-purple-100 text-purple-700 border-purple-200',
   Donation: 'bg-emerald-100 text-emerald-700 border-emerald-200',
+  'About to Expire': 'bg-indigo-100 text-indigo-700 border-indigo-200',
 };
 
 function RouteComponent() {
@@ -56,6 +59,15 @@ function RouteComponent() {
     qty: 1,
     reason: 'Damaged'
   });
+
+  const [expiryDate, setExpiryDate] = useState<Date | undefined>(undefined);
+
+  // Define Date Constraints
+  const today = new Date();
+  const minExpiry = new Date();
+  minExpiry.setDate(today.getDate() + 5); // 5 days from now
+  const maxExpiry = new Date();
+  maxExpiry.setDate(today.getDate() + 20); // 20 days from now
 
   useEffect(() => {
     if (!site && user?.location) {
@@ -105,21 +117,28 @@ function RouteComponent() {
   const addItemToList = () => {
     if (!formData.name || !formData.upc_barcode) return;
 
+    // Validation for ATE items
+    if (formData.reason === 'About to Expire' && !expiryDate) {
+      alert("Please select an expiry date for this item.");
+      return;
+    }
+
     setDraftList([
       {
+        ...formData as WriteOffItem,
         name: formData.name!,
         upc_barcode: formData.upc_barcode!,
         qty: formData.qty || 1,
         reason: formData.reason || 'Damaged',
-        gtin: formData.gtin,
-        onHandAtWriteOff: formData.onHandAtWriteOff,
+        expiryDate: formData.reason === 'About to Expire' ? expiryDate : undefined, // Attach date
         tempId: Math.random(),
-        isManualEntry: !formData.gtin
       },
       ...draftList
     ]);
 
+    // Reset
     setFormData({ name: '', upc_barcode: '', qty: 1, reason: 'Damaged' });
+    setExpiryDate(undefined);
     setIsDialogOpen(false);
   };
 
@@ -132,16 +151,12 @@ function RouteComponent() {
   const submitWriteOff = async () => {
     if (!draftList.length) return;
 
-    const timestamp = Date.now();
-    const listNumber = `WO-${site?.toUpperCase() || 'NA'}-${timestamp}`;
-
     try {
-      await axios.post('/api/write-off', {
-        listNumber,
+      const res = await axios.post('/api/write-off', {
         site,
         submittedBy: user?.email,
-        items: draftList,
-        timestamp
+        items: draftList, // Backend will split these
+        timestamp: Date.now()
       }, {
         headers: {
           Authorization: `Bearer ${localStorage.getItem('token')}`,
@@ -149,8 +164,13 @@ function RouteComponent() {
         }
       });
 
-      alert(`List ${listNumber} Submitted Successfully!`);
+      // res.data.lists will be an array like ["WO-SITE-123", "ATE-SITE-123"]
+      const listNames = res.data.lists.join(" and ");
+      alert(`Successfully created: ${listNames}`);
+
       setDraftList([]);
+      // Optional: navigate to the dashboard to see the new lists
+      navigate({ to: '/write-off' });
     } catch (e: any) {
       if (e.response?.status === 403) navigate({ to: "/no-access" });
       alert("Submission failed. Please try again.");
@@ -250,6 +270,25 @@ function RouteComponent() {
                       </SelectContent>
                     </Select>
                   </div>
+
+                  {/* Conditional Expiry Date Picker */}
+                  {formData.reason === 'About to Expire' && (
+                    <div className="space-y-1 animate-in fade-in slide-in-from-top-1">
+                      <label className="text-[8.5px] font-semibold uppercase tracking-wide text-orange-600 font-bold">
+                        Select Expiry Date (5-20 days from now)
+                      </label>
+                      <DatePicker
+                        date={expiryDate}
+                        setDate={(date: any) => {
+                          if (date && (date < minExpiry || date > maxExpiry)) {
+                            alert("Please select a date between 5 and 20 days from today.");
+                            return;
+                          }
+                          setExpiryDate(date);
+                        }}
+                      />
+                    </div>
+                  )}
                 </div>
               </div>
 
@@ -288,6 +327,14 @@ function RouteComponent() {
                       </div>
 
                       <div className="flex items-center gap-6">
+                        {item.reason === 'About to Expire' && item.expiryDate && (
+                          <div className="text-right border-r pr-4 border-slate-200">
+                            <p className="text-[10px] text-indigo-500 uppercase font-bold">Expires On</p>
+                            <p className="text-sm font-bold text-slate-900">
+                              {new Date(item.expiryDate).toLocaleDateString()}
+                            </p>
+                          </div>
+                        )}
                         <span className={`px-2.5 py-0.5 rounded-full text-[10px] font-semibold uppercase border ${REASON_COLORS[item.reason]}`}>
                           {item.reason}
                         </span>
