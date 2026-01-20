@@ -14,6 +14,7 @@ type BOLPhoto = {
   site: string
   date: string // YYYY-MM-DD
   filename: string
+  bolNumber?: string
   createdAt?: string
   updatedAt?: string
 }
@@ -155,7 +156,9 @@ function RouteComponent() {
       const url = URL.createObjectURL(blob)
       a.href = url
       const base = e.filename.replace(/\.[^.]+$/, '')
-      a.download = `${base}.pdf`
+      const bol = (e.bolNumber || '').trim().replace(/\s+/g, '-')
+      const suffix = bol ? `-${bol}` : ''
+      a.download = `${base}${suffix}.pdf`
       document.body.appendChild(a)
       a.click()
       a.remove()
@@ -194,6 +197,7 @@ function RouteComponent() {
                   <tr className="text-left border-b">
                     <th className="px-2 py-2">Date</th>
                     <th className="px-2 py-2">Filename</th>
+                    <th className="px-2 py-2">BOL Number</th>
                     <th className="px-2 py-2">Preview</th>
                     {/* <th className="px-2 py-2">Created</th> */}
                     <th className="px-2 py-2">Action</th>
@@ -204,6 +208,7 @@ function RouteComponent() {
                     <tr key={e._id} className="border-b">
                       <td className="px-2 py-2 font-mono">{e.date}</td>
                       <td className="px-2 py-2">{e.filename}</td>
+                      <td className="px-2 py-2">{e.bolNumber || '—'}</td>
                       <td className="px-2 py-2">
                         <img 
                           src={`/cdn/download/${e.filename}`} 

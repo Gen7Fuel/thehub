@@ -16,6 +16,8 @@ const BOLPhotoSchema = new mongoose.Schema(
     },
     // Stored filename returned by your upload API
     filename: { type: String, required: true },
+    // Bill of Lading (BOL) number provided by user
+    bolNumber: { type: String, required: true, trim: true },
   },
   { timestamps: true }
 )
@@ -38,6 +40,7 @@ BOLPhotoSchema.statics.fromPayload = function (payload = {}) {
     site: String(payload.site || '').trim(),
     date: toYmd(payload.date),
     filename: String(payload.filename || '').trim(),
+    bolNumber: String(payload.bolNumber || '').trim(),
   })
 }
 
