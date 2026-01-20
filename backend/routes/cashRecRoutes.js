@@ -403,6 +403,10 @@ router.get('/entries', async (req, res) => {
       'parsedPayouts',
       'safedropsCount',
       'safedropsAmount',
+      // Lotto fields
+      'onlineLottoTotal',
+      'instantLottTotal',
+      'lottoPayout',
     ]
 
     const groupStage = numericFields.reduce(
