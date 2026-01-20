@@ -80,6 +80,10 @@ type CashSummaryTotals = {
   parsedPayouts: number
   safedropsCount: number
   safedropsAmount: number
+  // Lotto fields
+  onlineLottoTotal?: number
+  instantLottTotal?: number
+  lottoPayout?: number
 }
 
 type CashSummaryAgg = {
@@ -258,8 +262,11 @@ function RouteComponent() {
                 <th className="px-1 py-1 text-center align-bottom h-24 bg-amber-50">Handheld Debit</th>
                 <th className="px-1 py-1 text-center align-bottom h-24 bg-amber-50">Bank Slip</th>
 
+                <th className="px-1 py-1 text-center align-bottom h-24 bg-sky-50">Lottery Sales</th>
+                <th className="px-1 py-1 text-center align-bottom h-24 bg-sky-50">Lottery Payouts</th>
+
                 <th className="px-1 py-1 text-center align-bottom h-24 bg-sky-50">Daily Bank Stmt Balance</th>
-                <th className="px-1 py-1 text-center align-bottom h-24 bg-sky-50">Cash Deposited Date</th>
+                {/* <th className="px-1 py-1 text-center align-bottom h-24 bg-sky-50">Cash Deposited Date</th> */}
                 <th className="px-1 py-1 text-center align-bottom h-24 bg-sky-50">Till</th>
                 <th className="px-1 py-1 text-center align-bottom h-24 bg-sky-50">Balance Check</th>
                 <th className="px-1 py-1 text-center align-bottom h-24 bg-sky-50">Bank Stmt Trans</th>
@@ -297,8 +304,16 @@ function RouteComponent() {
                     <td className="px-2 py-2 text-right">{fmt2(data?.cashSummary?.handheldDebit)}</td>
                     <td className="px-2 py-2 text-right">{fmt2(data?.cashSummary?.totals.canadian_cash_collected)}</td>
 
+                    <td className="px-2 py-2 text-right">
+                      {fmt2(
+                        (data?.cashSummary?.totals.onlineLottoTotal ?? 0) +
+                        (data?.cashSummary?.totals.instantLottTotal ?? 0)
+                      )}
+                    </td>
+                    <td className="px-2 py-2 text-right">{fmt2(data?.cashSummary?.totals.lottoPayout)}</td>
+
                     <td className="px-2 py-2 text-right">{fmt2(data?.bank?.endingBalance)}</td>
-                    <td className="px-2 py-2"></td>
+                    {/* <td className="px-2 py-2"></td> */}
                     <td className="px-2 py-2">
                       {fmt2(
                         (data?.cashSummary?.totals.canadian_cash_collected ?? 0) -
