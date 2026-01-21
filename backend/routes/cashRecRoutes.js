@@ -403,6 +403,10 @@ router.get('/entries', async (req, res) => {
       'parsedPayouts',
       'safedropsCount',
       'safedropsAmount',
+      // Lotto fields
+      'onlineLottoTotal',
+      'instantLottTotal',
+      'lottoPayout',
     ]
 
     const groupStage = numericFields.reduce(
@@ -473,11 +477,11 @@ router.get('/entries', async (req, res) => {
       return sum + (amt > 0 ? amt : 0)
     }, 0)
     const bankStmtTrans =
-      (Number(bank?.balanceForward) || 0) -
-      miscDebitsTotal -
-      gblDebitsTotal -
-      (Number(bank?.merchantFees) || 0) +
-      miscCreditsTotal
+      (Number(bank?.balanceForward) || 0)
+      - miscDebitsTotal
+      - gblDebitsTotal
+      - (Number(bank?.merchantFees) || 0)
+      + miscCreditsTotal
 
     // Compute Bank Rec:
     // Ending Balance - Bank Stmt Trans - Total POS - Kardpoll Sales + Kiosk GC + AFD GC + Kardpoll AR - Handheld Debit

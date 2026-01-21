@@ -31,7 +31,8 @@ const transactionSchema = new mongoose.Schema({
   vehicleMakeModel: { type: String, required: false },  
   poNumber: {
     type: String,
-    required: false // optional new field for PO
+    required: false, // optional new field for PO
+    trim: true
   },
   quantity: { 
     type: Number, 
@@ -59,6 +60,20 @@ const transactionSchema = new mongoose.Schema({
     required: false // Optional: Base64-encoded receipt image
   },
 });
+
+// Ensure uniqueness of PO number scoped to station for PO-sourced docs with non-empty values
+// Allows multiple docs without poNumber or with source !== 'PO'
+transactionSchema.index(
+  { stationName: 1, poNumber: 1 },
+  {
+    unique: true,
+    partialFilterExpression: {
+      source: 'PO',
+      stationName: { $exists: true, $ne: '' },
+      poNumber: { $exists: true, $ne: '' },
+    },
+  }
+)
 
 // Export the Transaction model based on the schema
 module.exports = mongoose.model("Transaction", transactionSchema);

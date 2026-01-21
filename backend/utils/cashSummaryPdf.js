@@ -305,6 +305,7 @@ async function loadReportData(site, date) {
     exempted_tax: sum('exempted_tax'),
     report_canadian_cash: sum('report_canadian_cash'),
     payouts: sum('payouts'),
+    voidedTransactionsAmount: sum('voidedTransactionsAmount'),
   }
 
   return { rows, totals }
@@ -457,6 +458,7 @@ function TotalsCards({ totals, unsettledPrepays, handheldDebit }) {
     { label: 'Loyalty', value: currency(totals.loyalty) },
     { label: 'Exempted Tax', value: currency(totals.exempted_tax) },
     { label: 'Payouts', value: currency(totals.payouts) },
+    { label: 'Voided Transactions', value: currency(totals.voidedTransactionsAmount), color: (totals.voidedTransactionsAmount || 0) > 0 ? styles.valueBad : undefined },
   ]
 
   if (typeof unsettledPrepays === 'number' && !Number.isNaN(unsettledPrepays)) {

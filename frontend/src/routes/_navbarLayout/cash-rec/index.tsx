@@ -87,6 +87,10 @@ type EntriesResponse = {
   bank: BankStatementResp | null
   cashSummary: CashSummaryAgg | null
   totalReceivablesAmount?: number
+  receivablesRows?: Array<{ amount?: number; quantity?: number; [key: string]: any }>
+  totalPayablesAmount?: number
+  payablesRows?: Array<{ amount?: number; paymentMethod?: string; vendorName?: string; createdAt?: string; location?: { stationName?: string } ; [key: string]: any }>
+  kardpollEntriesRows?: Array<{ customer?: string; card?: string; amount?: number; quantity?: number; price_per_litre?: number; [key: string]: any }>
   bankStmtTrans?: number
   bankRec?: number
   balanceCheck?: number
@@ -124,7 +128,71 @@ export const Route = createFileRoute('/_navbarLayout/cash-rec/')({
       throw new Error(msg || `HTTP ${res.status}`)
     }
     const data = (await res.json()) as EntriesResponse
-    return { site, date, data }
+
+    // Also fetch receivables for the same site/date like receivables.tsx
+    let receivablesRows: Array<{ amount?: number; quantity?: number }> | undefined
+    let totalReceivablesAmount: number | undefined
+    try {
+      const params: Record<string, string> = { startDate: date, endDate: date }
+      if (site) params.stationName = site
+      const qs = new URLSearchParams(params).toString()
+      const rcv = await fetch(`/api/purchase-orders?${qs}`, {
+        headers: { Authorization: `Bearer ${localStorage.getItem('token') || ''}` },
+      })
+      if (rcv.ok) {
+        const rows: Array<{ amount?: number; quantity?: number }> = await rcv.json()
+        receivablesRows = rows
+        totalReceivablesAmount = rows.reduce((a, r) => a + (Number(r.amount) || 0), 0)
+      }
+    } catch (_) {
+      // Ignore receivables fetch errors; still return base data
+    }
+
+    // Also fetch payables (payouts) for the same date, filter by site
+    let payablesRows: Array<{ amount?: number; paymentMethod?: string; vendorName?: string; createdAt?: string; location?: { stationName?: string } }> | undefined
+    let totalPayablesAmount: number | undefined
+    try {
+      const qs = new URLSearchParams({ from: date, to: date }).toString()
+      const resp = await fetch(`/api/payables?${qs}`, {
+        headers: { Authorization: `Bearer ${localStorage.getItem('token') || ''}` },
+      })
+      if (resp.ok) {
+        const all: Array<{ amount?: number; location?: { stationName?: string } }> = await resp.json()
+        const filtered = site ? all.filter(p => p.location?.stationName === site) : all
+        payablesRows = filtered
+        totalPayablesAmount = filtered.reduce((a, p) => a + (Number(p.amount) || 0), 0)
+      }
+    } catch (_) {
+      // Ignore payables fetch errors
+    }
+
+    // Fetch Kardpoll entries (ar_rows) for site+date
+    let kardpollEntriesRows: Array<{ customer?: string; card?: string; amount?: number; quantity?: number; price_per_litre?: number }> | undefined
+    try {
+      const resp = await fetch(`/api/cash-rec/kardpoll-entries?site=${encodeURIComponent(site)}&date=${encodeURIComponent(date)}`, {
+        headers: { Authorization: `Bearer ${localStorage.getItem('token') || ''}` },
+      })
+      if (resp.ok) {
+        const doc = await resp.json()
+        const rows = Array.isArray(doc?.ar_rows) ? doc.ar_rows : []
+        kardpollEntriesRows = rows
+      }
+    } catch (_) {
+      // Ignore kardpoll fetch errors
+    }
+
+    return {
+      site,
+      date,
+      data: {
+        ...data,
+        ...(totalReceivablesAmount != null ? { totalReceivablesAmount } : {}),
+        ...(receivablesRows ? { receivablesRows } : {}),
+        ...(totalPayablesAmount != null ? { totalPayablesAmount } : {}),
+        ...(payablesRows ? { payablesRows } : {}),
+        ...(kardpollEntriesRows ? { kardpollEntriesRows } : {}),
+      },
+    }
   },
   component: RouteComponent,
 })
@@ -205,6 +273,30 @@ function RouteComponent() {
             const bankRec = data.bankRec || 0
             const balanceCheck = data.balanceCheck ?? 0
 
+            // Totals from AR and Payables for the final calculation
+            const arTotal = (
+              (Array.isArray(data.kardpollEntriesRows)
+                ? data.kardpollEntriesRows.reduce((a, r) => a + (Number(r.amount) || 0), 0)
+                : 0) +
+              (Array.isArray(data.receivablesRows)
+                ? data.receivablesRows.reduce((a: number, r: any) => a + (Number(r?.amount) || 0), 0)
+                : 0)
+            )
+            const payTotal = Array.isArray(data.payablesRows)
+              ? data.payablesRows.reduce((a: number, p: any) => a + (Number(p?.amount) || 0), 0)
+              : 0
+
+            // Sum of misc debits whose description contains "debit" (case-insensitive)
+            const miscDebitDescTotal = Array.isArray(data.bank?.miscDebits)
+              ? data.bank!.miscDebits.reduce((sum, tx) => {
+                  const desc = typeof tx.description === 'string' ? tx.description : ''
+                  return desc.toLowerCase().includes('debit') ? sum + (Number(tx.amount) || 0) : sum
+                }, 0)
+              : 0
+
+            const finalTotal =
+              totalDollarSales - cashSafeDeposited + tillOverShort - gcRedemption - loyalty + unsettledPrepays + bankRec - arTotal - payTotal + miscDebitDescTotal
+
             return (
               <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
                 <div className="border rounded">
@@ -279,9 +371,197 @@ function RouteComponent() {
                         <td className="px-3 py-2">Balance Check</td>
                         <td className="px-3 py-2 text-right">${fmt2(balanceCheck)}</td>
                       </tr>
+                      <tr className="border-t">
+                        <td className="px-3 py-2 font-medium">Total</td>
+                        <td className="px-3 py-2 text-right font-medium">${fmt2(finalTotal)}</td>
+                      </tr>
                     </tbody>
                   </table>
                 </div>
+              </div>
+            )
+          })()}
+
+          {(() => {
+            const arFromKardpoll = Array.isArray(data.kardpollEntriesRows)
+              ? data.kardpollEntriesRows.map((r) => ({
+                  source: 'Kardpoll',
+                  customer: (r.customer as string) || (r.customerName as string) || '-',
+                  poNumber: (r.card as string) || '-',
+                  amount: Number(r.amount) || 0,
+                }))
+              : []
+            const arFromPO = Array.isArray(data.receivablesRows)
+              ? data.receivablesRows.map((r: any) => ({
+                  source: 'Purchase Order',
+                  customer: (r.customerName as string) || '-',
+                  poNumber: (r.poNumber as string) || '-',
+                  amount: Number(r.amount) || 0,
+                }))
+              : []
+            const arRows = [...arFromKardpoll, ...arFromPO]
+            const arTotal = arRows.reduce((a, r) => a + (Number(r.amount) || 0), 0)
+
+            const payRows = Array.isArray(data.payablesRows)
+              ? data.payablesRows.map((p: any) => ({
+                  vendor: (p.vendorName as string) || (p.vendor as string) || '-',
+                  type: (p.paymentMethod as string) || (p.transactionType as string) || '-',
+                  amount: Number(p.amount) || 0,
+                  notes: (p.notes as string) || (p.description as string) || '',
+                }))
+              : []
+            const payTotal = payRows.reduce((a, r) => a + (Number(r.amount) || 0), 0)
+
+            const fmt2 = (v: number) =>
+              Number.isFinite(v)
+                ? (v < 0
+                    ? `(${Math.abs(v).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })})`
+                    : v.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 }))
+                : ''
+
+            return (
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                <div className="border rounded">
+                  <div className="px-3 py-2 font-semibold border-b">AR Transactions</div>
+                  {arRows.length === 0 ? (
+                    <div className="px-3 py-3 text-sm text-muted-foreground">No AR transactions found.</div>
+                  ) : (
+                    <table className="min-w-full text-sm">
+                      <thead>
+                        <tr className="border-b">
+                          <th className="px-3 py-2 text-left">Customer</th>
+                          <th className="px-3 py-2 text-left">PO Number</th>
+                          <th className="px-3 py-2 text-right">Amount</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {arRows.map((row, idx) => (
+                          <tr key={idx} className="border-b">
+                            <td className="px-3 py-2">{row.customer || '-'}</td>
+                            <td className="px-3 py-2">{row.poNumber || '-'}</td>
+                            <td className="px-3 py-2 text-right">${fmt2(row.amount)}</td>
+                          </tr>
+                        ))}
+                        <tr className="border-t">
+                          <td className="px-3 py-2 font-medium" colSpan={2}>Total</td>
+                          <td className="px-3 py-2 text-right font-medium">${fmt2(arTotal)}</td>
+                        </tr>
+                      </tbody>
+                    </table>
+                  )}
+                </div>
+
+                <div className="border rounded">
+                  <div className="px-3 py-2 font-semibold border-b">Payables</div>
+                  {payRows.length === 0 ? (
+                    <div className="px-3 py-3 text-sm text-muted-foreground">No payables found.</div>
+                  ) : (
+                    <table className="min-w-full text-sm">
+                      <thead>
+                        <tr className="border-b">
+                          <th className="px-3 py-2 text-left">Vendor</th>
+                          <th className="px-3 py-2 text-left">Transaction Type</th>
+                          <th className="px-3 py-2 text-right">Amount</th>
+                          <th className="px-3 py-2 text-left">Description</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {payRows.map((row, idx) => (
+                          <tr key={idx} className="border-b">
+                            <td className="px-3 py-2">{row.vendor || '-'}</td>
+                            <td className="px-3 py-2">{row.type || '-'}</td>
+                            <td className="px-3 py-2 text-right">${fmt2(row.amount)}</td>
+                            <td className="px-3 py-2">{row.notes || ''}</td>
+                          </tr>
+                        ))}
+                        <tr className="border-t">
+                          <td className="px-3 py-2 font-medium" colSpan={2}>Total</td>
+                          <td className="px-3 py-2 text-right font-medium">${fmt2(payTotal)}</td>
+                          <td className="px-3 py-2"></td>
+                        </tr>
+                      </tbody>
+                    </table>
+                  )}
+                </div>
+              </div>
+            )
+          })()}
+
+          {(() => {
+            const bank = data.bank
+            const fmt2 = (v: number) =>
+              Number.isFinite(v)
+                ? (v < 0
+                    ? `(${Math.abs(v).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })})`
+                    : v.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 }))
+                : ''
+
+            if (!bank) {
+              return (
+                <div className="border rounded">
+                  <div className="px-3 py-2 font-semibold border-b">Bank Statement Details</div>
+                  <div className="px-3 py-3 text-sm text-muted-foreground">No bank statement found.</div>
+                </div>
+              )
+            }
+
+            const openingBalance = Number(bank.balanceForward) || 0
+            const miscDebits = Array.isArray(bank.miscDebits) ? bank.miscDebits : []
+            const miscCredits = Array.isArray((bank as any).miscCredits) ? (bank as any).miscCredits : []
+
+            return (
+              <div className="border rounded">
+                <div className="px-3 py-2 font-semibold border-b">Bank Statement Details</div>
+                <table className="min-w-full text-sm">
+                  <thead>
+                    <tr className="border-b">
+                      <th className="px-3 py-2 text-left">Date</th>
+                      <th className="px-3 py-2 text-left">Description</th>
+                      <th className="px-3 py-2 text-right">Amount</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    <tr>
+                      <td className="px-3 py-2">—</td>
+                      <td className="px-3 py-2 font-medium">Opening Balance</td>
+                      <td className="px-3 py-2 text-right">${fmt2(openingBalance)}</td>
+                    </tr>
+
+                    <tr className="border-t">
+                      <td className="px-3 py-2" colSpan={3}><span className="font-medium">Misc Debits</span></td>
+                    </tr>
+                    {miscDebits.length === 0 ? (
+                      <tr>
+                        <td className="px-3 py-2 text-muted-foreground" colSpan={3}>None</td>
+                      </tr>
+                    ) : (
+                      miscDebits.map((d, idx) => (
+                        <tr key={idx} className="border-b">
+                          <td className="px-3 py-2">{d.date || '-'}</td>
+                          <td className="px-3 py-2">{d.description || '-'}</td>
+                          <td className="px-3 py-2 text-right">${fmt2(Number(d.amount) || 0)}</td>
+                        </tr>
+                      ))
+                    )}
+
+                    <tr className="border-t">
+                      <td className="px-3 py-2" colSpan={3}><span className="font-medium">Misc Credits</span></td>
+                    </tr>
+                    {miscCredits.length === 0 ? (
+                      <tr>
+                        <td className="px-3 py-2 text-muted-foreground" colSpan={3}>None</td>
+                      </tr>
+                    ) : (
+                      miscCredits.map((c: any, idx: number) => (
+                        <tr key={idx} className="border-b">
+                          <td className="px-3 py-2">{c.date || '-'}</td>
+                          <td className="px-3 py-2">{c.description || '-'}</td>
+                          <td className="px-3 py-2 text-right">${fmt2(Number(c.amount) || 0)}</td>
+                        </tr>
+                      ))
+                    )}
+                  </tbody>
+                </table>
               </div>
             )
           })()}

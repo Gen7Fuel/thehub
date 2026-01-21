@@ -4,6 +4,7 @@ import { Input } from '@/components/ui/input'
 import { InputOTP, InputOTPGroup, InputOTPSeparator, InputOTPSlot } from '@/components/ui/input-otp'
 import { Select, SelectContent, SelectGroup, SelectItem, SelectLabel, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { createFileRoute, Link } from '@tanstack/react-router'
+import { useAuth } from '@/context/AuthContext'
 import { useFormStore } from '@/store'
 import axios from 'axios'
 import { DatePicker } from '@/components/custom/datePicker';
@@ -38,6 +39,7 @@ export const Route = createFileRoute('/_navbarLayout/po/')({
 })
 
 function RouteComponent() {
+  const { user } = useAuth()
   const [numberType, setNumberType] = useState<'fleet' | 'po'>('po') // dropdown selection
 
   const fleetCardNumber = useFormStore((state) => state.fleetCardNumber)
@@ -68,6 +70,8 @@ function RouteComponent() {
   const setFuelType = useFormStore((state) => state.setFuelType)
 
   const data = Route.useLoaderData()
+  const stationName = user?.location || ''
+  const [poError, setPoError] = useState<string>('')
 
   const handleBlur = async () => {
     if (numberType !== 'fleet') return // only for fleet cards
@@ -92,6 +96,23 @@ function RouteComponent() {
   useEffect(() => {
     console.log("PO index mounted");
   }, []);
+
+  // Helpers for 5-digit numeric PO input
+  const toFiveDigits = (s: string) => {
+    // keep only digits, max length 5 without regex to avoid parser quirks
+    let out = ''
+    for (let i = 0; i < s.length && out.length < 5; i++) {
+      const ch = s[i]
+      const code = ch.charCodeAt(0)
+      if (code >= 48 && code <= 57) out += ch
+    }
+    return out
+  }
+  const padFive = (s: string) => {
+    const d = toFiveDigits(s)
+    if (d.length >= 5) return d.slice(0, 5)
+    return ('00000' + d).slice(-5)
+  }
 
 
   return (
@@ -151,13 +172,48 @@ function RouteComponent() {
       ) : (
         <div className="space-y-2">
           <h2 className="text-lg font-bold">PO Number</h2>
-          <Input
-            type="text"
+          <InputOTP
+            maxLength={5}
             name="poNumber"
-            placeholder="Enter PO Number"
-            value={poNumber}
-            onChange={(e) => setPoNumber(e.target.value)}
-          />
+            value={toFiveDigits(poNumber)}
+            onChange={(value) => {
+              setPoNumber(toFiveDigits(value))
+              if (poError) setPoError('')
+            }}
+            onBlur={async () => {
+              const padded = padFive(poNumber)
+              setPoNumber(padded)
+              if (!stationName || !padded) return
+              try {
+                const res = await axios.get('/api/purchase-orders/unique', {
+                  params: { stationName, poNumber: padded },
+                  headers: {
+                    Authorization: `Bearer ${localStorage.getItem('token') || ''}`,
+                    'X-Required-Permission': 'po',
+                  },
+                })
+                if (res.data && res.data.unique === false) {
+                  setPoError('This PO number has already been used for this site.')
+                } else {
+                  setPoError('')
+                }
+              } catch (e: any) {
+                // non-fatal; show message and allow save to handle server-side conflict
+                setPoError(e?.response?.data?.message || 'Could not validate PO number uniqueness')
+              }
+            }}
+          >
+            <InputOTPGroup>
+              {[0, 1, 2, 3, 4].map((i) => (
+                <InputOTPSlot key={i} index={i} />
+              ))}
+            </InputOTPGroup>
+          </InputOTP>
+          {poError ? (
+            <div className="text-xs text-red-600">{poError}</div>
+          ) : (
+            <div className="text-xs text-muted-foreground">Five digits. Will auto-pad with leading zeros.</div>
+          )}
         </div>
       )}
 
@@ -245,7 +301,13 @@ function RouteComponent() {
       {/* Navigation */}
       <div className="flex justify-end">
         <Link to="/po/receipt">
-          <Button variant="outline">Next</Button>
+          <Button
+            variant="outline"
+            onClick={() => setPoNumber(padFive(poNumber))}
+            disabled={!!poError}
+          >
+            Next
+          </Button>
         </Link>
       </div>
     </div>

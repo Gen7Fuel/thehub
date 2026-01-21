@@ -15,6 +15,28 @@ function escapeRegExp(str) {
   return String(str).replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
 
+// POST /api/auth/identify
+// identify if a user's role belongs to store account or office account
+router.post("/identify", async (req, res) => {
+  try {
+    const inputEmail = String(req.body.email || '').trim();
+    const user = await User.findOne({
+      email: new RegExp(`^${escapeRegExp(inputEmail)}$`, 'i')
+    }).populate("role");
+
+    // If user exists, tell the frontend the truth
+    if (user && user.role) {
+      return res.json({ inStoreAccount: user.role.inStoreAccount });
+    }
+
+    // If user doesn't exist, return 404. 
+    // The frontend will catch this and default to Passcode view.
+    res.status(404).json({ message: "Identity hidden" });
+  } catch (err) {
+    res.status(500).json({ message: "Server error" });
+  }
+});
+
 // router.post("/register", async (req, res) => {
 //   const { email, password, firstName, lastName, stationName } = req.body;
 
@@ -200,7 +222,7 @@ router.post("/login", async (req, res) => {
     // Sign JWT
     const expiresInSeconds = getSecondsUntilNext9AMUTC();
 
-    const token = jwt.sign(payload, process.env.JWT_SECRET, {expiresIn: expiresInSeconds});
+    const token = jwt.sign(payload, process.env.JWT_SECRET, { expiresIn: expiresInSeconds });
 
     // Send response
     res.json({ token });
@@ -251,6 +273,46 @@ router.post("/logout", auth, async (req, res) => {
   } catch (err) {
     console.error("Logout error:", err);
     res.status(500).json({ message: "Server error" });
+  }
+});
+
+// user self-serve reset password
+router.post('/change-password-self', auth, async (req, res) => {
+  const { currentPassword, newPassword } = req.body;
+  const userId = req.user.id; // From auth middleware
+
+  try {
+    const user = await User.findById(userId).populate("role");
+    if (!user) return res.status(404).json({ error: 'User not found.' });
+
+    // 1. Verify Current Credentials
+    const isMatch = await bcrypt.compare(currentPassword, user.password);
+    if (!isMatch) {
+      return res.status(400).json({
+        error: 'The current credentials you entered are incorrect. If you have forgotten them, please contact your system administrator to reset your account.'
+      });
+    }
+
+    // 2. Hash and Update
+    const cleanNewPassword = String(newPassword).trim();
+
+    // const hashed = await bcrypt.hash(cleanNewPassword, 10);
+    user.password = cleanNewPassword;
+
+    // 3. Security: Force logout (optional but recommended)
+    user.is_loggedIn = false;
+    await user.save();
+
+    const io = req.app.get("io");
+    if (io) {
+      io.to(userId.toString()).emit("force-logout", {
+        message: "Your password was changed. Please log in again.",
+      });
+    }
+
+    res.json({ success: true });
+  } catch (err) {
+    res.status(500).json({ error: 'Server error during password reset.' });
   }
 });
 

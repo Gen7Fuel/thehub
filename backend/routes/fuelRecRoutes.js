@@ -35,21 +35,22 @@ async function getBOLPhoto() {
 const isYmd = (s) => typeof s === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(s)
 
 // POST /api/fuel-rec/capture
-// body: { site: string, date: 'YYYY-MM-DD', photo: string }  // photo = filename from CDN
+// body: { site: string, date: 'YYYY-MM-DD', photo: string, bolNumber: string }  // photo = filename from CDN
 router.post('/capture', async (req, res) => {
   const site = String(req.body?.site || '').trim()
   const date = String(req.body?.date || '').trim()
   const filename = String(req.body?.photo || '').trim()
+  const bolNumber = String(req.body?.bolNumber || '').trim()
 
-  if (!site || !isYmd(date) || !filename) {
-    return res.status(400).json({ error: 'site, date (YYYY-MM-DD) and photo filename are required' })
+  if (!site || !isYmd(date) || !filename || !bolNumber) {
+    return res.status(400).json({ error: 'site, date (YYYY-MM-DD), photo filename and bolNumber are required' })
   }
 
   try {
     const BOLPhoto = await getBOLPhoto()
     const saved = await BOLPhoto.findOneAndUpdate(
       { site, date, filename },
-      { $setOnInsert: { site, date, filename } },
+      { $setOnInsert: { site, date, filename }, $set: { bolNumber } },
       { new: true, upsert: true }
     ).lean()
 
@@ -234,6 +235,23 @@ router.post('/request-again', async (req, res) => {
   } catch (e) {
     console.error('fuelRec.request-again error:', e)
     return res.status(500).json({ error: 'Failed to send retake request email' })
+  }
+})
+
+// DELETE /api/fuel-rec/:id
+router.delete('/:id', async (req, res) => {
+  try {
+    const id = String(req.params.id || '').trim()
+    if (!id) return res.status(400).json({ error: 'id is required' })
+
+    const BOLPhoto = await getBOLPhoto()
+    const deleted = await BOLPhoto.findByIdAndDelete(id).lean()
+    if (!deleted) return res.status(404).json({ error: 'Entry not found' })
+
+    return res.json({ deleted: true, id })
+  } catch (e) {
+    console.error('fuelRec.delete error:', e)
+    return res.status(500).json({ error: 'Failed to delete BOL photo' })
   }
 })
 

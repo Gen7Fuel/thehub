@@ -1,4 +1,4 @@
-import mongoose from 'mongoose'
+const mongoose = require('mongoose')
 
 // Schema to store a captured BOL photo reference per site and date
 const BOLPhotoSchema = new mongoose.Schema(
@@ -16,6 +16,8 @@ const BOLPhotoSchema = new mongoose.Schema(
     },
     // Stored filename returned by your upload API
     filename: { type: String, required: true },
+    // Bill of Lading (BOL) number provided by user
+    bolNumber: { type: String, required: true, trim: true },
   },
   { timestamps: true }
 )
@@ -38,10 +40,10 @@ BOLPhotoSchema.statics.fromPayload = function (payload = {}) {
     site: String(payload.site || '').trim(),
     date: toYmd(payload.date),
     filename: String(payload.filename || '').trim(),
+    bolNumber: String(payload.bolNumber || '').trim(),
   })
 }
 
-export const BOLPhoto =
-  mongoose.models.BOLPhoto || mongoose.model('BOLPhoto', BOLPhotoSchema)
+const BOLPhoto = mongoose.models.BOLPhoto || mongoose.model('BOLPhoto', BOLPhotoSchema)
 
-export default BOLPhoto
+module.exports = BOLPhoto

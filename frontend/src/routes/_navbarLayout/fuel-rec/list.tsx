@@ -7,6 +7,7 @@ import { DatePickerWithRange } from '@/components/custom/datePickerWithRange'
 import { pdf, Document, Page, Image as PdfImage, StyleSheet } from '@react-pdf/renderer'
 import { Button } from '@/components/ui/button'
 import { useAuth } from '@/context/AuthContext'
+import { Trash2 } from 'lucide-react'
 
 type Search = { site: string; from: string; to: string }
 type BOLPhoto = {
@@ -14,6 +15,7 @@ type BOLPhoto = {
   site: string
   date: string // YYYY-MM-DD
   filename: string
+  bolNumber?: string
   createdAt?: string
   updatedAt?: string
 }
@@ -111,6 +113,11 @@ function RouteComponent() {
 
   // Track in-flight requests per entry
   const [pending, setPending] = React.useState<Set<string>>(() => new Set())
+  // Local entries state for optimistic delete updates
+  const [entries, setEntries] = React.useState<BOLPhoto[]>(() => data?.entries || [])
+  React.useEffect(() => {
+    setEntries(data?.entries || [])
+  }, [data])
 
   const requestAgain = async (e: BOLPhoto) => {
     try {
@@ -139,6 +146,39 @@ function RouteComponent() {
     }
   }
 
+  const sanitizeSegment = (s?: string) => {
+    var n = (s ?? '').toString()
+    var invalid = '<>:"/\\|?*'
+    var out = ''
+    var prevSpace = false
+    for (var i = 0; i < n.length; i++) {
+      var ch = n[i]
+      var code = ch.charCodeAt(0)
+      var isInvalid = (invalid.indexOf(ch) !== -1) || (code < 32)
+      var mapped = isInvalid ? ' ' : ch
+      var isSpace = mapped === ' '
+      if (isSpace) {
+        if (!prevSpace && out.length > 0) {
+          out += ' '
+        }
+        prevSpace = true
+      } else {
+        out += mapped
+        prevSpace = false
+      }
+    }
+    if (out.endsWith(' ')) out = out.slice(0, -1)
+    return out
+  }
+
+  const formatDesiredName = (e: BOLPhoto) => {
+    const date = (e.date || '').trim()
+    const site = sanitizeSegment(e.site)
+    const bol = sanitizeSegment(e.bolNumber || '')
+    const parts = [date, site, bol].filter(Boolean)
+    return parts.join(' - ')
+  }
+
   const downloadPdfForEntry = async (e: BOLPhoto) => {
     try {
       const imgUrl = `/cdn/download/${e.filename}`
@@ -154,8 +194,10 @@ function RouteComponent() {
       const a = document.createElement('a')
       const url = URL.createObjectURL(blob)
       a.href = url
-      const base = e.filename.replace(/\.[^.]+$/, '')
-      a.download = `${base}.pdf`
+      const dot = e.filename.lastIndexOf('.')
+      const base = dot > 0 ? e.filename.slice(0, dot) : e.filename
+      const desired = formatDesiredName(e) || base
+      a.download = `${desired}.pdf`
       document.body.appendChild(a)
       a.click()
       a.remove()
@@ -165,6 +207,34 @@ function RouteComponent() {
     }
   }
 
+  const deleteEntry = async (e: BOLPhoto) => {
+    if (!access?.accounting?.fuelRec?.delete) return
+    const ok = window.confirm(`Delete entry for ${e.site} on ${e.date}? This cannot be undone.`)
+    if (!ok) return
+    try {
+      setPending((prev) => new Set(prev).add(e._id))
+      const res = await fetch(`/api/fuel-rec/${encodeURIComponent(e._id)}`, {
+        method: 'DELETE',
+        headers: {
+          Authorization: `Bearer ${localStorage.getItem('token') || ''}`,
+          'X-Required-Permission': 'accounting.fuelRec.delete',
+        },
+      })
+      if (!res.ok) {
+        const msg = await res.text().catch(() => '')
+        throw new Error(msg || `HTTP ${res.status}`)
+      }
+      setEntries((prev) => prev.filter((x) => x._id !== e._id))
+    } catch (err) {
+      alert(`Delete failed: ${err instanceof Error ? err.message : String(err)}`)
+    } finally {
+      setPending((prev) => {
+        const next = new Set(prev)
+        next.delete(e._id)
+        return next
+      })
+    }
+  }
   return (
     <div className="p-4 space-y-4">
       <div className="flex flex-col sm:flex-row items-center gap-4">
@@ -183,9 +253,9 @@ function RouteComponent() {
       {data && (
         <div className="space-y-2">
           <div className="text-sm text-muted-foreground">
-            Showing {data.count} entr{data.count === 1 ? 'y' : 'ies'} for {data.site} from {data.from} to {data.to}
+            Showing {entries.length} entr{entries.length === 1 ? 'y' : 'ies'} for {data.site} from {data.from} to {data.to}
           </div>
-          {data.entries.length === 0 ? (
+          {entries.length === 0 ? (
             <div className="text-sm text-muted-foreground">No entries found.</div>
           ) : (
             <div className="overflow-x-auto">
@@ -193,17 +263,17 @@ function RouteComponent() {
                 <thead>
                   <tr className="text-left border-b">
                     <th className="px-2 py-2">Date</th>
-                    <th className="px-2 py-2">Filename</th>
+                    <th className="px-2 py-2">BOL Number</th>
                     <th className="px-2 py-2">Preview</th>
                     {/* <th className="px-2 py-2">Created</th> */}
                     <th className="px-2 py-2">Action</th>
                   </tr>
                 </thead>
                 <tbody>
-                  {data.entries.map((e) => (
+                  {entries.map((e) => (
                     <tr key={e._id} className="border-b">
                       <td className="px-2 py-2 font-mono">{e.date}</td>
-                      <td className="px-2 py-2">{e.filename}</td>
+                      <td className="px-2 py-2">{e.bolNumber || '—'}</td>
                       <td className="px-2 py-2">
                         <img 
                           src={`/cdn/download/${e.filename}`} 
@@ -235,6 +305,20 @@ function RouteComponent() {
                             disabled={pending.has(e._id)}
                           >
                             {pending.has(e._id) ? 'Sending…' : 'Request Again'}
+                          </Button>
+                        )}
+
+                        {access?.accounting?.fuelRec?.delete && (
+                          <Button
+                            variant="destructive"
+                            size="icon"
+                            onClick={() => deleteEntry(e)}
+                            disabled={pending.has(e._id)}
+                            title="Delete"
+                            aria-label="Delete"
+                          >
+                            <Trash2 className="h-4 w-4" />
+                            <span className="sr-only">Delete</span>
                           </Button>
                         )}
                       </td>

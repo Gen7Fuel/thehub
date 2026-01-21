@@ -91,6 +91,36 @@ const pickLastMoney = (labelPattern, text) => {
   return toNumber(moneyMatches[moneyMatches.length - 1][1])
 }
 
+// Capture the $ amount on one of the next few lines following the label line (tolerate blank spacer lines)
+const pickNextLineMoney = (labelPattern, text) => {
+  const lines = text.split(/\r?\n/)
+  const labelRe = new RegExp(`^\n?\t?\s*${labelPattern}\\b`, 'i')
+  for (let i = 0; i < lines.length; i++) {
+    if (labelRe.test(lines[i])) {
+      for (let j = i + 1; j <= i + 4 && j < lines.length; j++) {
+        const line = lines[j]
+        if (!line || /^\s*$/.test(line)) continue
+        const mDollar = line.match(/\$\s*([-\d.,]+)/)
+        if (mDollar) return toNumber(mDollar[1])
+        const mPlain = line.match(/(^|\s)([-\d]{1,3}(?:,\d{3})*(?:\.\d{2})?)\s*$/)
+        if (mPlain) return toNumber(mPlain[2])
+      }
+      break
+    }
+  }
+  return null
+}
+
+// Capture the trailing integer on the label line (e.g., count at far right)
+const pickTrailingInt = (labelPattern, text) => {
+  const lineRe = new RegExp(`^\\s*${labelPattern}\\b.*$`, 'gmi')
+  const lines = text.match(lineRe)
+  if (!lines || !lines.length) return null
+  const line = lines[lines.length - 1]
+  const m = line.match(/(\d+)\s*$/)
+  return m ? Number(m[1]) : null
+}
+
 function parseSftReport(text) {
   const metrics = {
     fuelSales: pickNum(/^\s*Fuel sales\s+([-\d.,]+)\s*$/mi, text),
@@ -146,6 +176,10 @@ function parseSftReport(text) {
       )
       return m ? toNumber(m[1]) : null
     })(),
+
+    // SHIFT STATISTICS: Voided Transactions amount appears on the next line
+    voidedTransactionsAmount: pickNextLineMoney('Voided\\s*Transactions', text),
+    voidedTransactionsCount: pickTrailingInt('Voided\\s*Transactions', text),
   }
 
   const sd = text.match(/^\s*Safedrops\s+(\d+)\s+([-\d.,]+)\s*$/mi)

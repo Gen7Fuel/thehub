@@ -243,17 +243,17 @@ router.get('/daily-items', async (req, res) => {
     // SQL CSO FETCH + BULKWRITE UPDATE
     // ----------------------------------------------------
 
-    const allUPCs = [
-      ...flaggedSelected.map(i => i.upc_barcode),
-      ...regularSelected.map(i => i.upc_barcode)
+    const allGTINs = [
+      ...flaggedSelected.map(i => i.gtin),
+      ...regularSelected.map(i => i.gtin)
     ];
-    const uniqueUPCs = [...new Set(allUPCs)];
-    const csoQtyMap = await getBulkOnHandQtyCSO(site, uniqueUPCs);
+    const uniqueGTINs = [...new Set(allGTINs)];
+    const csoQtyMap = await getBulkOnHandQtyCSO(site, uniqueGTINs);
 
     const bulkOps = [];
 
     for (const item of [...flaggedSelected, ...regularSelected]) {
-      const qty = csoQtyMap[item.upc_barcode] ?? 0;
+      const qty = csoQtyMap[item.gtin] ?? 0;
 
       bulkOps.push({
         updateOne: {
