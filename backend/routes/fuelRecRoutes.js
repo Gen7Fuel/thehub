@@ -238,4 +238,21 @@ router.post('/request-again', async (req, res) => {
   }
 })
 
+// DELETE /api/fuel-rec/:id
+router.delete('/:id', async (req, res) => {
+  try {
+    const id = String(req.params.id || '').trim()
+    if (!id) return res.status(400).json({ error: 'id is required' })
+
+    const BOLPhoto = await getBOLPhoto()
+    const deleted = await BOLPhoto.findByIdAndDelete(id).lean()
+    if (!deleted) return res.status(404).json({ error: 'Entry not found' })
+
+    return res.json({ deleted: true, id })
+  } catch (e) {
+    console.error('fuelRec.delete error:', e)
+    return res.status(500).json({ error: 'Failed to delete BOL photo' })
+  }
+})
+
 module.exports = router
