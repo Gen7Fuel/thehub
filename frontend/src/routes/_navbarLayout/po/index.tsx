@@ -209,10 +209,8 @@ function RouteComponent() {
               ))}
             </InputOTPGroup>
           </InputOTP>
-          {poError ? (
+          {poError && (
             <div className="text-xs text-red-600">{poError}</div>
-          ) : (
-            <div className="text-xs text-muted-foreground">Five digits. Will auto-pad with leading zeros.</div>
           )}
         </div>
       )}
