@@ -140,6 +140,39 @@ function RouteComponent() {
     }
   }
 
+  const sanitizeSegment = (s?: string) => {
+    var n = (s ?? '').toString()
+    var invalid = '<>:"/\\|?*'
+    var out = ''
+    var prevSpace = false
+    for (var i = 0; i < n.length; i++) {
+      var ch = n[i]
+      var code = ch.charCodeAt(0)
+      var isInvalid = (invalid.indexOf(ch) !== -1) || (code < 32)
+      var mapped = isInvalid ? ' ' : ch
+      var isSpace = mapped === ' '
+      if (isSpace) {
+        if (!prevSpace && out.length > 0) {
+          out += ' '
+        }
+        prevSpace = true
+      } else {
+        out += mapped
+        prevSpace = false
+      }
+    }
+    if (out.endsWith(' ')) out = out.slice(0, -1)
+    return out
+  }
+
+  const formatDesiredName = (e: BOLPhoto) => {
+    const date = (e.date || '').trim()
+    const site = sanitizeSegment(e.site)
+    const bol = sanitizeSegment(e.bolNumber || '')
+    const parts = [date, site, bol].filter(Boolean)
+    return parts.join(' - ')
+  }
+
   const downloadPdfForEntry = async (e: BOLPhoto) => {
     try {
       const imgUrl = `/cdn/download/${e.filename}`
@@ -155,10 +188,10 @@ function RouteComponent() {
       const a = document.createElement('a')
       const url = URL.createObjectURL(blob)
       a.href = url
-      const base = e.filename.replace(/\.[^.]+$/, '')
-      const bol = (e.bolNumber || '').trim().replace(/\s+/g, '-')
-      const suffix = bol ? `-${bol}` : ''
-      a.download = `${base}${suffix}.pdf`
+      const dot = e.filename.lastIndexOf('.')
+      const base = dot > 0 ? e.filename.slice(0, dot) : e.filename
+      const desired = formatDesiredName(e) || base
+      a.download = `${desired}.pdf`
       document.body.appendChild(a)
       a.click()
       a.remove()
@@ -167,7 +200,6 @@ function RouteComponent() {
       alert(`PDF download failed: ${err instanceof Error ? err.message : String(err)}`)
     }
   }
-
   return (
     <div className="p-4 space-y-4">
       <div className="flex flex-col sm:flex-row items-center gap-4">
@@ -196,7 +228,6 @@ function RouteComponent() {
                 <thead>
                   <tr className="text-left border-b">
                     <th className="px-2 py-2">Date</th>
-                    <th className="px-2 py-2">Filename</th>
                     <th className="px-2 py-2">BOL Number</th>
                     <th className="px-2 py-2">Preview</th>
                     {/* <th className="px-2 py-2">Created</th> */}
@@ -207,7 +238,6 @@ function RouteComponent() {
                   {data.entries.map((e) => (
                     <tr key={e._id} className="border-b">
                       <td className="px-2 py-2 font-mono">{e.date}</td>
-                      <td className="px-2 py-2">{e.filename}</td>
                       <td className="px-2 py-2">{e.bolNumber || '—'}</td>
                       <td className="px-2 py-2">
                         <img 

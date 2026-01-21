@@ -1,4 +1,4 @@
-import mongoose from 'mongoose'
+const mongoose = require('mongoose')
 
 // Schema to store a captured BOL photo reference per site and date
 const BOLPhotoSchema = new mongoose.Schema(
@@ -44,7 +44,6 @@ BOLPhotoSchema.statics.fromPayload = function (payload = {}) {
   })
 }
 
-export const BOLPhoto =
-  mongoose.models.BOLPhoto || mongoose.model('BOLPhoto', BOLPhotoSchema)
+const BOLPhoto = mongoose.models.BOLPhoto || mongoose.model('BOLPhoto', BOLPhotoSchema)
 
-export default BOLPhoto
+module.exports = BOLPhoto

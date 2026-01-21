@@ -50,7 +50,7 @@ router.post('/capture', async (req, res) => {
     const BOLPhoto = await getBOLPhoto()
     const saved = await BOLPhoto.findOneAndUpdate(
       { site, date, filename },
-      { $setOnInsert: { site, date, filename, bolNumber }, $set: { bolNumber } },
+      { $setOnInsert: { site, date, filename }, $set: { bolNumber } },
       { new: true, upsert: true }
     ).lean()
 
