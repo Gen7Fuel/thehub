@@ -8,6 +8,7 @@ import { LocationPicker } from '@/components/custom/locationPicker'
 import PurchaseOrderPDF from '@/components/custom/poForm'
 import { pdf } from '@react-pdf/renderer'
 import { Button } from '@/components/ui/button'
+import { Trash2 } from 'lucide-react'
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog'
 import { Label } from '@/components/ui/label'
 import { getStartAndEndOfToday } from '@/lib/utils'
@@ -137,6 +138,35 @@ function RouteComponent() {
   // const access = user?.access || '{}' //markpoint
   const access = user?.access || {}
 
+  // Track delete requests
+  const [pendingDelete, setPendingDelete] = React.useState<Set<string>>(() => new Set())
+
+  const deleteOrder = async (order: any) => {
+    if (!access?.po?.delete) return
+    const ok = window.confirm(`Delete PO entry dated ${new Date(order.date).toLocaleDateString()}? This cannot be undone.`)
+    if (!ok) return
+    try {
+      setPendingDelete(prev => new Set(prev).add(order._id))
+      await axios.delete(`/api/purchase-orders/${order._id}`, {
+        headers: {
+          Authorization: `Bearer ${localStorage.getItem('token') || ''}`,
+          'X-Required-Permission': 'po.delete',
+        },
+      })
+      setPurchaseOrders(prev => prev.filter((o: any) => o._id !== order._id))
+    } catch (error: any) {
+      if (error.response?.status === 403) navigate({ to: '/no-access' })
+      const msg = error.response?.data?.message || error.message || 'Delete failed'
+      alert(msg)
+    } finally {
+      setPendingDelete(prev => {
+        const next = new Set(prev)
+        next.delete(order._id)
+        return next
+      })
+    }
+  }
+
   // Change Date dialog state
   const [changeDateOpen, setChangeDateOpen] = React.useState(false)
   const [selectedOrder, setSelectedOrder] = React.useState<any | null>(null)
@@ -205,7 +235,7 @@ function RouteComponent() {
             <th className="border-dashed border-b border-gray-300 px-4 py-2">Driver Name</th>
             <th className="border-dashed border-b border-gray-300 px-4 py-2">Quantity</th>
             <th className="border-dashed border-b border-gray-300 px-4 py-2">Amount</th>
-            {(access?.po?.pdf || access?.po?.changeDate) && (
+            {(access?.po?.pdf || access?.po?.changeDate || access?.po?.delete) && (
               <th className="border-dashed border-b border-gray-300 px-4 py-2">Actions</th>
             )}
           </tr>
@@ -220,13 +250,26 @@ function RouteComponent() {
                 <td className="border-dashed border-t border-gray-300 px-4 py-2">{order.driverName}</td>
                 <td className="border-dashed border-t border-gray-300 px-4 py-2">{order.quantity}</td>
                 <td className="border-dashed border-t border-gray-300 px-4 py-2">{order.amount.toFixed(2)}</td>
-                  {(access?.po?.pdf || access?.po?.changeDate) && (
+                  {(access?.po?.pdf || access?.po?.changeDate || access?.po?.delete) && (
                     <td className="border-dashed border-t border-gray-300 px-4 py-2 space-x-2">
                       {access?.po?.pdf && (
                         <Button onClick={() => generatePDF(order)}>PDF</Button>
                       )}
                       {access?.po?.changeDate && (
                         <Button variant="outline" onClick={() => onChangeDateClick(order)}>Change Date</Button>
+                      )}
+                      {access?.po?.delete && (
+                        <Button
+                          variant="destructive"
+                          size="icon"
+                          onClick={() => deleteOrder(order)}
+                          disabled={pendingDelete.has(order._id || '')}
+                          title="Delete"
+                          aria-label="Delete"
+                        >
+                          <Trash2 className="h-4 w-4" />
+                          <span className="sr-only">Delete</span>
+                        </Button>
                       )}
                     </td>
                   )}

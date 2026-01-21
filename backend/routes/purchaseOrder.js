@@ -67,6 +67,9 @@ router.post("/", async (req, res) => {
     const savedOrder = await newOrder.save();
     res.status(201).json(savedOrder);
   } catch (err) {
+    if (err && err.code === 11000 && err.keyPattern && err.keyPattern.poNumber) {
+      return res.status(409).json({ message: "PO number already exists." })
+    }
     console.error(err);
     res.status(500).json({ message: "Failed to create purchase order." });
   }
@@ -161,6 +164,9 @@ router.put("/:id", express.json(), async (req, res) => {
 
     return res.status(200).json(updatedOrder)
   } catch (err) {
+    if (err && err.code === 11000 && err.keyPattern && err.keyPattern.poNumber) {
+      return res.status(409).json({ message: "PO number already exists." })
+    }
     console.error('PUT /api/purchase-orders/:id failed:', err)
     return res.status(500).json({ message: "Failed to update purchase order." })
   }
@@ -349,5 +355,22 @@ router.get("/:id", async (req, res) => {
     res.status(500).json({ message: "Failed to fetch purchase order." });
   }
 });
+
+// Delete a purchase order by ID
+router.delete('/:id', async (req, res) => {
+  try {
+    const { id } = req.params
+    if (!id) return res.status(400).json({ message: 'ID is required' })
+
+    const deleted = await Transaction.findByIdAndDelete(id)
+    if (!deleted) {
+      return res.status(404).json({ message: 'Purchase order not found.' })
+    }
+    return res.status(200).json({ deleted: true, id })
+  } catch (err) {
+    console.error('DELETE /api/purchase-orders/:id failed:', err)
+    return res.status(500).json({ message: 'Failed to delete purchase order.' })
+  }
+})
 
 module.exports = router;
