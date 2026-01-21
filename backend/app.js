@@ -20,7 +20,6 @@ const locationRoutes = require("./routes/location");
 const purchaseOrderRoutes = require("./routes/purchaseOrder");
 const payablesRoutes = require("./routes/payablesRoute");
 const shiftWorksheetRoutes = require("./routes/shiftWorksheetRoutes");
-// const cashSummaryRoutes = require("./routes/cashSummaryRoutes");
 const cashSummaryRoutes = require("./routes/cashSummaryNewRoutes");
 const payPointRoutes = require("./routes/payPointRoutes");
 const kardpollTransactionsRoutes = require("./routes/kardpollTransactions");
@@ -41,10 +40,8 @@ const productCategoryRoutes = require("./routes/productCategoryRoutes");
 const logsRoute = require("./routes/logsRoute");
 
 const { auth } = require("./middleware/authMiddleware");
-// const { authSocket } = require("./middleware/authMiddleware");
-// const setupSupportSocket = require('./socket/supportSocket');
 
-const cycleCountNewRoutes = require('./routes/cycleCountRoutes');
+const cycleCountRoutes = require('./routes/cycleCountRoutes');
 const permissionRoutes = require("./routes/permissionRoutes");
 const selectTemplateRoutes = require("./routes/audit/selectTemplateRoutes");
 const supportRoutes = require('./routes/supportRoutes');
@@ -83,11 +80,8 @@ app.use("/api/fleet", fleetRoutes);
 app.use("/api/fleet-customers", fleetCustomers);
 app.use("/api/order-rec", orderRecRoutes);
 app.use("/api/vendors", vendorRoutes);
-// app.use("/api/cycle-counts", cycleCountRoutes);
-app.use("/api/cycle-count", cycleCountNewRoutes);
-// app.use("/api/cycle-count-new", CycleCountNewRoutes);
+app.use("/api/cycle-count", cycleCountRoutes);
 app.use("/api/audit/select-templates", selectTemplateRoutes);
-// app.use("/api/audit/follow-up-templates", followUpTemplateRoutes);
 app.use("/api/audit", auditRoutes);
 app.use("/api/permissions", permissionRoutes);
 app.use("/api/roles", roleRoutes);
@@ -113,7 +107,7 @@ const io = setupSocket(server);
 app.set("io", io);
 
 const PORT = process.env.PORT || 5000;
-// server.listen(PORT, "0.0.0.0", () => console.log(`Server running on port ${PORT}`));
+
 // Create an async start function
 const startServer = async () => {
   try {
