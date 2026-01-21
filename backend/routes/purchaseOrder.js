@@ -67,7 +67,7 @@ router.post("/", async (req, res) => {
     const savedOrder = await newOrder.save();
     res.status(201).json(savedOrder);
   } catch (err) {
-    if (err && err.code === 11000 && err.keyPattern && err.keyPattern.poNumber) {
+    if (err && err.code === 11000 && err.keyPattern && (err.keyPattern.poNumber || err.keyPattern.stationName)) {
       return res.status(409).json({ message: "PO number already exists." })
     }
     console.error(err);
@@ -164,7 +164,7 @@ router.put("/:id", express.json(), async (req, res) => {
 
     return res.status(200).json(updatedOrder)
   } catch (err) {
-    if (err && err.code === 11000 && err.keyPattern && err.keyPattern.poNumber) {
+    if (err && err.code === 11000 && err.keyPattern && (err.keyPattern.poNumber || err.keyPattern.stationName)) {
       return res.status(409).json({ message: "PO number already exists." })
     }
     console.error('PUT /api/purchase-orders/:id failed:', err)
@@ -355,6 +355,27 @@ router.get("/:id", async (req, res) => {
     res.status(500).json({ message: "Failed to fetch purchase order." });
   }
 });
+
+// Validate uniqueness of a PO number for a station
+// GET /api/purchase-orders/unique?stationName=...&poNumber=...
+router.get('/unique', async (req, res) => {
+  try {
+    const stationNameRaw = (req.query.stationName || '').toString()
+    const poNumberRaw = (req.query.poNumber || '').toString()
+    const stationName = stationNameRaw.trim()
+    const poNumber = poNumberRaw.trim()
+
+    if (!stationName || !poNumber) {
+      return res.status(400).json({ message: 'stationName and poNumber are required' })
+    }
+
+    const existing = await Transaction.findOne({ source: 'PO', stationName, poNumber }).select('_id').lean()
+    return res.json({ unique: !existing })
+  } catch (err) {
+    console.error('GET /api/purchase-orders/unique failed:', err)
+    return res.status(500).json({ message: 'Failed to validate PO uniqueness' })
+  }
+})
 
 // Delete a purchase order by ID
 router.delete('/:id', async (req, res) => {

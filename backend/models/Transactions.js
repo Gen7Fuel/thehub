@@ -61,11 +61,18 @@ const transactionSchema = new mongoose.Schema({
   },
 });
 
-// Ensure PO number uniqueness for PO-sourced docs with a non-empty value
+// Ensure uniqueness of PO number scoped to station for PO-sourced docs with non-empty values
 // Allows multiple docs without poNumber or with source !== 'PO'
 transactionSchema.index(
-  { poNumber: 1 },
-  { unique: true, partialFilterExpression: { source: 'PO', poNumber: { $exists: true, $ne: '' } } }
+  { stationName: 1, poNumber: 1 },
+  {
+    unique: true,
+    partialFilterExpression: {
+      source: 'PO',
+      stationName: { $exists: true, $ne: '' },
+      poNumber: { $exists: true, $ne: '' },
+    },
+  }
 )
 
 // Export the Transaction model based on the schema
