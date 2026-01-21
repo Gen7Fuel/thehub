@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { useAuth } from "@/context/AuthContext"
-import { createFileRoute } from '@tanstack/react-router'
+import { createFileRoute, useNavigate } from '@tanstack/react-router'
 import { getStatusStyles } from "./requests"
 import { REASON_COLORS, REASONS } from './create'
 import { Button } from '@/components/ui/button'
@@ -27,6 +27,7 @@ function WriteOffDetailsPage() {
   const data = Route.useLoaderData()
   const [writeOff, setWriteOff] = useState(data)
   const [barcodeValue, setBarcodeValue] = useState<string | null>(null)
+  const navigate = useNavigate();
 
   // Inside WriteOffDetailsPage component
   const [editItem, setEditItem] = useState<any | null>(null);
@@ -55,12 +56,18 @@ function WriteOffDetailsPage() {
           author,
           text
         },
-        { headers: { Authorization: `Bearer ${token}` } }
+        {
+          headers: {
+            Authorization: `Bearer ${token}`,
+            "X-Required-Permission": "writeOff.requests"
+          }
+        }
       );
 
       // Update the local state with the returned list data
       setWriteOff(res.data);
-    } catch (err) {
+    } catch (err: any) {
+      if (err.response?.status === 403) return navigate({ to: "/no-access" });
       console.error("Failed to add comment", err);
       alert("Could not save comment. Please try again.");
     }
@@ -83,12 +90,18 @@ function WriteOffDetailsPage() {
       const res = await axios.patch(
         `/api/write-off/${writeOff._id}/items/${editItem._id}/details`,
         payload,
-        { headers: { Authorization: `Bearer ${localStorage.getItem('token')}` } }
+        {
+          headers: {
+            Authorization: `Bearer ${localStorage.getItem('token')}`,
+            "X-Required-Permission": "writeOff.requests"
+          }
+        }
       );
 
       setWriteOff(res.data);
       setEditItem(null);
-    } catch (err) {
+    } catch (err: any) {
+      if (err.response?.status === 403) return navigate({ to: "/no-access" });
       console.error("Update failed", err);
       alert("Failed to update item details.");
     }
@@ -99,10 +112,16 @@ function WriteOffDetailsPage() {
       const res = await axios.patch(
         `/api/write-off/${writeOff._id}/items/${itemId}`,
         { completed: !currentVal },
-        { headers: { Authorization: `Bearer ${localStorage.getItem('token')}` } }
+        {
+          headers: {
+            Authorization: `Bearer ${localStorage.getItem('token')}`,
+            "X-Required-Permission": "writeOff.requests"
+          }
+        }
       );
       setWriteOff(res.data);
     } catch (err: any) {
+      if (err.response?.status === 403) return navigate({ to: "/no-access" });
       // This will now show the actual error message from the backend
       console.error("Failed to update item:", err.response?.data || err.message);
     }
@@ -115,11 +134,17 @@ function WriteOffDetailsPage() {
       const res = await axios.patch(
         `/api/write-off/${writeOff._id}/finalize`,
         {},
-        { headers: { Authorization: `Bearer ${localStorage.getItem('token')}` } }
+        {
+          headers: {
+            Authorization: `Bearer ${localStorage.getItem('token')}`,
+            "X-Required-Permission": "writeOff.requests"
+          }
+        }
       );
       setWriteOff(res.data);
       // Optional: add a success toast notification here
-    } catch (err) {
+    } catch (err: any) {
+      if (err.response?.status === 403) return navigate({ to: "/no-access" });
       console.error("Finalization failed", err);
     }
   };
