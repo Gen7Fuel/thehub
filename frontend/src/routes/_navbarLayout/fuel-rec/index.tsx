@@ -33,6 +33,7 @@ function RouteComponent() {
 
   const webcamRef = React.useRef<Webcam>(null)
   const [photo, setPhoto] = React.useState<string>('')
+  const [bolNumber, setBolNumber] = React.useState<string>('')
 
   // Disable Save after click and show spinner
   const [saving, setSaving] = React.useState(false)
@@ -132,7 +133,7 @@ function RouteComponent() {
   const retry = () => setPhoto('')
 
   const save = async () => {
-    if (!photo || !site || !date || saving) return
+    if (!photo || !site || !date || saving || !bolNumber.trim()) return
     setSaving(true)
     try {
       const { filename } = await uploadBase64Image(photo, `fuel-rec-${site}-${date}.jpg`)
@@ -142,7 +143,7 @@ function RouteComponent() {
           'Content-Type': 'application/json',
           Authorization: `Bearer ${localStorage.getItem('token') || ''}`,
         },
-        body: JSON.stringify({ site, date, photo: filename }),
+        body: JSON.stringify({ site, date, photo: filename, bolNumber: bolNumber.trim() }),
       })
       if (!res.ok) throw new Error(await res.text().catch(() => `HTTP ${res.status}`))
       navigate({ to: '/fuel-rec/list', search: { site } })
@@ -199,6 +200,19 @@ function RouteComponent() {
       </div>
 
       <div className="space-y-3">
+        {/* BOL Number input required before capture/save */}
+        <div className="flex items-center gap-3">
+          <label htmlFor="bolNumber" className="text-sm font-medium">BOL Number</label>
+          <input
+            id="bolNumber"
+            type="text"
+            value={bolNumber}
+            onChange={(e) => setBolNumber(e.target.value)}
+            placeholder="Enter BOL Number"
+            className="flex-1 px-3 py-2 border rounded-md focus:outline-none focus:ring-1 focus:ring-blue-400"
+          />
+        </div>
+
         {!photo ? (
           <div
             className="border border-dashed border-gray-300 rounded-md"
@@ -236,7 +250,7 @@ function RouteComponent() {
 
         <div className="flex gap-2">
           {!photo ? (
-            <Button onClick={capture} disabled={!site || !date}>
+            <Button onClick={capture} disabled={!site || !date || !bolNumber.trim()}>
               Capture
             </Button>
           ) : (
@@ -244,7 +258,7 @@ function RouteComponent() {
               <Button variant="secondary" onClick={retry}>
                 Retry
               </Button>
-              <Button onClick={save} disabled={saving || !site || !date}>
+              <Button onClick={save} disabled={saving || !site || !date || !bolNumber.trim()}>
                 {saving && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
                 Save
               </Button>
