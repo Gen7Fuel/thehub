@@ -7,6 +7,7 @@ import { DatePickerWithRange } from '@/components/custom/datePickerWithRange'
 import { pdf, Document, Page, Image as PdfImage, StyleSheet } from '@react-pdf/renderer'
 import { Button } from '@/components/ui/button'
 import { useAuth } from '@/context/AuthContext'
+import { Trash2 } from 'lucide-react'
 
 type Search = { site: string; from: string; to: string }
 type BOLPhoto = {
@@ -112,6 +113,11 @@ function RouteComponent() {
 
   // Track in-flight requests per entry
   const [pending, setPending] = React.useState<Set<string>>(() => new Set())
+  // Local entries state for optimistic delete updates
+  const [entries, setEntries] = React.useState<BOLPhoto[]>(() => data?.entries || [])
+  React.useEffect(() => {
+    setEntries(data?.entries || [])
+  }, [data])
 
   const requestAgain = async (e: BOLPhoto) => {
     try {
@@ -200,6 +206,35 @@ function RouteComponent() {
       alert(`PDF download failed: ${err instanceof Error ? err.message : String(err)}`)
     }
   }
+
+  const deleteEntry = async (e: BOLPhoto) => {
+    if (!access?.accounting?.fuelRec?.delete) return
+    const ok = window.confirm(`Delete entry for ${e.site} on ${e.date}? This cannot be undone.`)
+    if (!ok) return
+    try {
+      setPending((prev) => new Set(prev).add(e._id))
+      const res = await fetch(`/api/fuel-rec/${encodeURIComponent(e._id)}`, {
+        method: 'DELETE',
+        headers: {
+          Authorization: `Bearer ${localStorage.getItem('token') || ''}`,
+          'X-Required-Permission': 'accounting.fuelRec.delete',
+        },
+      })
+      if (!res.ok) {
+        const msg = await res.text().catch(() => '')
+        throw new Error(msg || `HTTP ${res.status}`)
+      }
+      setEntries((prev) => prev.filter((x) => x._id !== e._id))
+    } catch (err) {
+      alert(`Delete failed: ${err instanceof Error ? err.message : String(err)}`)
+    } finally {
+      setPending((prev) => {
+        const next = new Set(prev)
+        next.delete(e._id)
+        return next
+      })
+    }
+  }
   return (
     <div className="p-4 space-y-4">
       <div className="flex flex-col sm:flex-row items-center gap-4">
@@ -218,9 +253,9 @@ function RouteComponent() {
       {data && (
         <div className="space-y-2">
           <div className="text-sm text-muted-foreground">
-            Showing {data.count} entr{data.count === 1 ? 'y' : 'ies'} for {data.site} from {data.from} to {data.to}
+            Showing {entries.length} entr{entries.length === 1 ? 'y' : 'ies'} for {data.site} from {data.from} to {data.to}
           </div>
-          {data.entries.length === 0 ? (
+          {entries.length === 0 ? (
             <div className="text-sm text-muted-foreground">No entries found.</div>
           ) : (
             <div className="overflow-x-auto">
@@ -235,7 +270,7 @@ function RouteComponent() {
                   </tr>
                 </thead>
                 <tbody>
-                  {data.entries.map((e) => (
+                  {entries.map((e) => (
                     <tr key={e._id} className="border-b">
                       <td className="px-2 py-2 font-mono">{e.date}</td>
                       <td className="px-2 py-2">{e.bolNumber || '—'}</td>
@@ -270,6 +305,20 @@ function RouteComponent() {
                             disabled={pending.has(e._id)}
                           >
                             {pending.has(e._id) ? 'Sending…' : 'Request Again'}
+                          </Button>
+                        )}
+
+                        {access?.accounting?.fuelRec?.delete && (
+                          <Button
+                            variant="destructive"
+                            size="icon"
+                            onClick={() => deleteEntry(e)}
+                            disabled={pending.has(e._id)}
+                            title="Delete"
+                            aria-label="Delete"
+                          >
+                            <Trash2 className="h-4 w-4" />
+                            <span className="sr-only">Delete</span>
                           </Button>
                         )}
                       </td>
