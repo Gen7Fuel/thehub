@@ -311,6 +311,27 @@ router.get("/", async (req, res) => {
   }
 });
 
+// Validate uniqueness of a PO number for a station
+// GET /api/purchase-orders/unique?stationName=...&poNumber=...
+router.get('/unique', async (req, res) => {
+  try {
+    const stationNameRaw = (req.query.stationName || '').toString()
+    const poNumberRaw = (req.query.poNumber || '').toString()
+    const stationName = stationNameRaw.trim()
+    const poNumber = poNumberRaw.trim()
+
+    if (!stationName || !poNumber) {
+      return res.status(400).json({ message: 'stationName and poNumber are required' })
+    }
+
+    const existing = await Transaction.findOne({ source: 'PO', stationName, poNumber }).select('_id').lean()
+    return res.json({ unique: !existing })
+  } catch (err) {
+    console.error('GET /api/purchase-orders/unique failed:', err)
+    return res.status(500).json({ message: 'Failed to validate PO uniqueness' })
+  }
+})
+
 // Get a single purchase order by ID
 router.get("/:id", async (req, res) => {
   const { id } = req.params;
@@ -322,8 +343,7 @@ router.get("/:id", async (req, res) => {
     const order = await Transaction.findById(id).select('fleetCardNumber productCode quantity amount signature');
 
     if (!order) {
-      console.log("Order not found");
-      return null;
+      return res.status(404).json({ message: "Purchase order not found." });
     }
 
     // Fetch fleet details
@@ -345,9 +365,7 @@ router.get("/:id", async (req, res) => {
       fleetId: fleet?._id || null,
     };
 
-    if (!orderWithDetails) {
-      return res.status(404).json({ message: "Purchase order not found." });
-    }
+    // orderWithDetails will always exist here since `order` was found above
 
     res.status(200).json(orderWithDetails);
   } catch (err) {
@@ -355,27 +373,6 @@ router.get("/:id", async (req, res) => {
     res.status(500).json({ message: "Failed to fetch purchase order." });
   }
 });
-
-// Validate uniqueness of a PO number for a station
-// GET /api/purchase-orders/unique?stationName=...&poNumber=...
-router.get('/unique', async (req, res) => {
-  try {
-    const stationNameRaw = (req.query.stationName || '').toString()
-    const poNumberRaw = (req.query.poNumber || '').toString()
-    const stationName = stationNameRaw.trim()
-    const poNumber = poNumberRaw.trim()
-
-    if (!stationName || !poNumber) {
-      return res.status(400).json({ message: 'stationName and poNumber are required' })
-    }
-
-    const existing = await Transaction.findOne({ source: 'PO', stationName, poNumber }).select('_id').lean()
-    return res.json({ unique: !existing })
-  } catch (err) {
-    console.error('GET /api/purchase-orders/unique failed:', err)
-    return res.status(500).json({ message: 'Failed to validate PO uniqueness' })
-  }
-})
 
 // Delete a purchase order by ID
 router.delete('/:id', async (req, res) => {
