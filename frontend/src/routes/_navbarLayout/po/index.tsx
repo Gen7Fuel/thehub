@@ -93,6 +93,23 @@ function RouteComponent() {
     console.log("PO index mounted");
   }, []);
 
+  // Helpers for 5-digit numeric PO input
+  const toFiveDigits = (s: string) => {
+    // keep only digits, max length 5 without regex to avoid parser quirks
+    let out = ''
+    for (let i = 0; i < s.length && out.length < 5; i++) {
+      const ch = s[i]
+      const code = ch.charCodeAt(0)
+      if (code >= 48 && code <= 57) out += ch
+    }
+    return out
+  }
+  const padFive = (s: string) => {
+    const d = toFiveDigits(s)
+    if (d.length >= 5) return d.slice(0, 5)
+    return ('00000' + d).slice(-5)
+  }
+
 
   return (
     <div className="p-4 border border-dashed border-gray-300 rounded-md space-y-6">
@@ -151,13 +168,19 @@ function RouteComponent() {
       ) : (
         <div className="space-y-2">
           <h2 className="text-lg font-bold">PO Number</h2>
-          <Input
-            type="text"
+          <InputOTP
+            maxLength={5}
             name="poNumber"
-            placeholder="Enter PO Number"
-            value={poNumber}
-            onChange={(e) => setPoNumber(e.target.value)}
-          />
+            value={toFiveDigits(poNumber)}
+            onChange={(value) => setPoNumber(toFiveDigits(value))}
+            onBlur={() => setPoNumber(padFive(poNumber))}
+          >
+            <InputOTPGroup>
+              {[0, 1, 2, 3, 4].map((i) => (
+                <InputOTPSlot key={i} index={i} />
+              ))}
+            </InputOTPGroup>
+          </InputOTP>
         </div>
       )}
 
@@ -245,7 +268,12 @@ function RouteComponent() {
       {/* Navigation */}
       <div className="flex justify-end">
         <Link to="/po/receipt">
-          <Button variant="outline">Next</Button>
+          <Button
+            variant="outline"
+            onClick={() => setPoNumber(padFive(poNumber))}
+          >
+            Next
+          </Button>
         </Link>
       </div>
     </div>
