@@ -1,5 +1,12 @@
 const mongoose = require('mongoose');
 
+const CommentSchema = new mongoose.Schema({
+  initials: { type: String, required: true },
+  author: { type: String, required: true },
+  text: { type: String, required: true },
+  createdAt: { type: Date, default: Date.now },
+});
+
 const WriteOffItemSchema = new mongoose.Schema({
   gtin: { type: String },
   upc_barcode: { type: String, required: true },
@@ -20,7 +27,8 @@ const WriteOffItemSchema = new mongoose.Schema({
     type: String,
     enum: ['Marked Down', 'No Markdown Needed', null],
     default: null
-  }
+  },
+  comments: { type: [CommentSchema], default: [] }, // Comments Schema
 });
 
 const WriteOffListSchema = new mongoose.Schema({

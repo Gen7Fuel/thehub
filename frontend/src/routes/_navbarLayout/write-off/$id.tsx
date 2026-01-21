@@ -1,9 +1,11 @@
 import { useState } from 'react'
+import { useAuth } from "@/context/AuthContext"
 import { createFileRoute } from '@tanstack/react-router'
 import { getStatusStyles } from "./requests"
 import { REASON_COLORS, REASONS } from './create'
 import { Button } from '@/components/ui/button'
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog"
+import { MessageSquareText, MessageSquarePlus } from "lucide-react";
+import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { Calendar, Package, CheckCircle2, CheckSquare, Square, Minus, Plus } from 'lucide-react'
 import Barcode from 'react-barcode'
 import axios from 'axios'
@@ -21,6 +23,7 @@ export const Route = createFileRoute('/_navbarLayout/write-off/$id')({
 })
 
 function WriteOffDetailsPage() {
+  const { user } = useAuth();
   const data = Route.useLoaderData()
   const [writeOff, setWriteOff] = useState(data)
   const [barcodeValue, setBarcodeValue] = useState<string | null>(null)
@@ -29,6 +32,39 @@ function WriteOffDetailsPage() {
   const [editItem, setEditItem] = useState<any | null>(null);
 
   const isATE = writeOff.listType === 'ATE';
+
+  // State for Comments
+  const [viewCommentsItemId, setViewCommentsItemId] = useState<string | null>(null);
+  const [addEditCommentItemId, setAddEditCommentItemId] = useState<string | null>(null);
+  const [commentText, setCommentText] = useState("");
+
+  // Derived: Get comments for the currently viewed item
+  const currentComments = writeOff.items.find((i: any) => i._id === viewCommentsItemId)?.comments || [];
+
+  const handleComment = async (itemId: string, text: string) => {
+    try {
+      const token = localStorage.getItem('token');
+      // Assuming 'user' is available in your component's scope (from context or props)
+      const initials = user?.initials || '';
+      const author = user?.name || '';
+
+      const res = await axios.post(
+        `/api/write-off/${writeOff._id}/items/${itemId}/comments`,
+        {
+          initials,
+          author,
+          text
+        },
+        { headers: { Authorization: `Bearer ${token}` } }
+      );
+
+      // Update the local state with the returned list data
+      setWriteOff(res.data);
+    } catch (err) {
+      console.error("Failed to add comment", err);
+      alert("Could not save comment. Please try again.");
+    }
+  };
 
   const handleUpdateDetails = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -235,6 +271,7 @@ function WriteOffDetailsPage() {
                   <th className="px-6 py-4 text-xs font-bold text-indigo-900 uppercase text-center">ATE Qty</th>
                   <th className="px-6 py-4 text-xs font-bold text-indigo-900 uppercase text-center">Current On Hand</th>
                   <th className="px-6 py-4 text-xs font-bold text-indigo-900 uppercase text-center">Action</th>
+                  <th className="px-6 py-4 text-xs font-bold text-indigo-900 uppercase text-center">Comments</th>
                   <th className="px-6 py-4 text-xs font-bold text-indigo-900 uppercase text-right">Reviewed</th>
                 </tr>
               </thead>
@@ -247,8 +284,8 @@ function WriteOffDetailsPage() {
                     <td className="px-6 py-4">
                       <div className="flex flex-col">
                         <span className="text-sm font-semibold text-slate-800">{item.name}</span>
-                        <span className="text-[10px] font-bold text-indigo-400">
-                          {new Date(item.expiryDate).toLocaleDateString('en-US', {
+                        <span className="text-xs font-bold text-indigo-400">
+                          EXP: {new Date(item.expiryDate).toLocaleDateString('en-US', {
                             weekday: 'short',
                             month: 'short',
                             day: 'numeric',
@@ -257,7 +294,18 @@ function WriteOffDetailsPage() {
                         </span>
                       </div>
                     </td>
-                    <td className="px-6 py-4 text-sm text-blue-600 underline" onClick={(e) => { e.stopPropagation(); setBarcodeValue(item.upc_barcode); }}>
+                    <td
+                      className="px-6 py-4 text-sm text-blue-600 underline cursor-pointer"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        // New check:
+                        if (item.completed) {
+                          alert("This item is already checked. Please uncheck it to view barcode.");
+                          return;
+                        }
+                        setBarcodeValue(item.upc_barcode);
+                      }}
+                    >
                       {item.upc_barcode}
                     </td>
                     <td className="px-6 py-4 text-center font-bold text-slate-700"
@@ -298,6 +346,44 @@ function WriteOffDetailsPage() {
                         }`}>
                         {item.markdownAction || 'Pending Review'}
                       </span>
+                    </td>
+                    {/* COMMENT COLUMN */}
+                    <td className="px-6 py-4 text-center">
+                      <div className="flex items-center justify-center gap-2">
+                        {/* Add Comment Button */}
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          className="h-8 w-8 p-0 border border-slate-200"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            // New check:
+                            if (item.completed) {
+                              alert("This item is already checked. Please uncheck it to add a comment.");
+                              return;
+                            }
+                            setAddEditCommentItemId(item._id);
+                          }}
+                        >
+                          <MessageSquarePlus className="w-4 h-4 text-slate-400" />
+                        </Button>
+
+                        {/* View Comment Count Button */}
+                        {item.comments && item.comments.length > 0 && (
+                          <Button
+                            variant="secondary"
+                            size="sm"
+                            className="h-8 px-2 text-[10px] font-bold bg-indigo-50 text-indigo-600 border border-indigo-100"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setViewCommentsItemId(item._id);
+                            }}
+                          >
+                            <MessageSquareText className="w-3 h-3 mr-1" />
+                            {item.comments.length}
+                          </Button>
+                        )}
+                      </div>
                     </td>
                     <td className="px-6 py-4 text-right">
                       <button onClick={(e) => { e.stopPropagation(); !isLocked && handleToggleItem(item._id, item.completed); }}>
@@ -354,7 +440,15 @@ function WriteOffDetailsPage() {
 
                     <td
                       className="px-6 py-4 text-blue-600 cursor-pointer underline hover:text-blue-800"
-                      onClick={() => setBarcodeValue(item.upc_barcode)}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        // New check:
+                        if (item.completed) {
+                          alert("This item is already checked. Please uncheck it to view barcode.");
+                          return;
+                        }
+                        setBarcodeValue(item.upc_barcode)
+                      }}
                     >
                       <span className="text-sm">{item.upc_barcode}</span>
                     </td>
@@ -379,7 +473,7 @@ function WriteOffDetailsPage() {
                         ${item.isEdited ? 'bg-slate-800 text-white' : 'bg-slate-100 text-slate-700'}`}>
                           {item.qty}
                         </span>
-                        {item.isEdited && <span className="text-[8px] font-bold uppercase text-slate-500">Edited</span>}
+                        {/* {item.isEdited && <span className="text-[8px] font-bold uppercase text-slate-500">Edited</span>} */}
                       </div>
                     </td>
                     <td className="px-6 py-4 text-center">
@@ -552,6 +646,76 @@ function WriteOffDetailsPage() {
           )}
         </DialogContent>
       </Dialog>
-    </div >
+      {/* View Comments Dialog */}
+      <Dialog open={!!viewCommentsItemId} onOpenChange={() => setViewCommentsItemId(null)}>
+        <DialogContent className="sm:max-w-[400px]">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <MessageSquareText className="w-5 h-5 text-indigo-500" />
+              Item Comments
+            </DialogTitle>
+          </DialogHeader>
+          <div className="flex flex-col gap-3 max-h-[300px] overflow-y-auto my-4 pr-2">
+            {currentComments.length > 0 ? (
+              currentComments.map((c: any, idx: number) => (
+                <div key={idx} className="p-3 bg-slate-50 rounded-lg border border-slate-100">
+                  <div className="flex justify-between items-center mb-1">
+                    <span className="font-bold text-xs text-indigo-600">{c.initials}</span>
+                    <span className="text-[10px] text-slate-400">
+                      {new Date(c.createdAt).toLocaleDateString()}
+                    </span>
+                  </div>
+                  <p className="text-sm text-slate-700 leading-relaxed">{c.text}</p>
+                </div>
+              ))
+            ) : (
+              <div className="text-center py-8 text-slate-400 text-sm italic">No comments yet</div>
+            )}
+          </div>
+          <DialogFooter>
+            <Button className="w-full font-bold" onClick={() => setViewCommentsItemId(null)}>Close</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Add Comment Dialog */}
+      <Dialog open={!!addEditCommentItemId} onOpenChange={() => setAddEditCommentItemId(null)}>
+        <DialogContent className="sm:max-w-[400px]">
+          <DialogHeader>
+            <DialogTitle>Add Note to Item</DialogTitle>
+          </DialogHeader>
+          <div className="py-4">
+            <Input
+              value={commentText}
+              onChange={(e: any) => setCommentText(e.target.value)}
+              placeholder="e.g., Markdown label damaged, item moved to clearance..."
+              className="font-medium"
+              onKeyDown={(e) => {
+                if (e.key === 'Enter' && commentText.trim()) {
+                  handleComment(addEditCommentItemId!, commentText.trim());
+                  setCommentText("");
+                  setAddEditCommentItemId(null);
+                }
+              }}
+            />
+          </div>
+          <DialogFooter className="gap-2 sm:gap-0">
+            <Button variant="ghost" className="font-bold" onClick={() => setAddEditCommentItemId(null)}>Cancel</Button>
+            <Button
+              className="bg-indigo-600 hover:bg-indigo-700 text-white font-bold"
+              onClick={() => {
+                if (addEditCommentItemId && commentText.trim()) {
+                  handleComment(addEditCommentItemId, commentText.trim());
+                  setCommentText("");
+                  setAddEditCommentItemId(null);
+                }
+              }}
+            >
+              Save Note
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    </div>
   )
 }

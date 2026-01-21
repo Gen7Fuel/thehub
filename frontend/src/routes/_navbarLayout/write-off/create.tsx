@@ -7,7 +7,7 @@ import { Button } from '@/components/ui/button';
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/components/ui/accordion';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
-import { PlusCircle, Search, Trash2 } from 'lucide-react';
+import { AlertTriangle, PlusCircle, Search, Trash2 } from 'lucide-react';
 import axios from 'axios';
 import { DatePicker } from '@/components/custom/datePicker';
 
@@ -37,7 +37,7 @@ export const REASON_COLORS: Record<string, string> = {
   'Store Use': 'bg-blue-100 text-blue-700 border-blue-200',
   Deli: 'bg-pink-100 text-pink-700 border-pink-200',
   Stolen: 'bg-red-100 text-red-700 border-red-200',
-  Damaged: 'bg-rose-100 text-rose-700 border-rose-200',
+  Damaged: 'bg-cyan-100 text-cyan-700 border-cyan-200',
   Expired: 'bg-purple-100 text-purple-700 border-purple-200',
   Donation: 'bg-emerald-100 text-emerald-700 border-emerald-200',
   'About to Expire': 'bg-indigo-100 text-indigo-700 border-indigo-200',
@@ -64,6 +64,7 @@ function RouteComponent() {
 
   // Define Date Constraints
   const today = new Date();
+  today.setHours(0, 0, 0, 0);
   const minExpiry = new Date();
   minExpiry.setDate(today.getDate() + 5); // 5 days from now
   const maxExpiry = new Date();
@@ -150,6 +151,7 @@ function RouteComponent() {
 
   const submitWriteOff = async () => {
     if (!draftList.length) return;
+    if (!window.confirm("Are you sure you want to submit this write-off? The list cannot be edited after submission and the page will be reloaded.")) return;
 
     try {
       const res = await axios.post('/api/write-off', {
@@ -181,103 +183,121 @@ function RouteComponent() {
     <div className="min-w-2xl mx-auto p-6 flex flex-col h-[calc(100vh-100px)] space-y-6 antialiased font-sans">
 
       {/* Header */}
-      <div className="flex items-center justify-between bg-white p-4 rounded-xl border border-slate-200 shadow-sm">
-        <SitePicker value={site} onValueChange={(s) => navigate({ search: { site: s } })} />
+      <div className="flex items-center justify-between bg-white p-4 rounded-xl border border-slate-200 shadow-sm gap-4">
+        {/* Site Picker pinned to the left */}
+        <div className="shrink-0">
+          <SitePicker value={site} onValueChange={(s) => navigate({ search: { site: s } })} />
+        </div>
 
-        <Dialog open={isDialogOpen} onOpenChange={(o) => { setIsDialogOpen(o); if (!o) setFormQuery(''); }}>
-          <DialogTrigger asChild>
-            <Button className="gap-2">
-              <PlusCircle className="w-4 h-4" />
-              Add Item
-            </Button>
-          </DialogTrigger>
+        {/* Warning Message centered with equal gaps */}
+        {draftList.length > 0 && (
+          <div className="flex-1 max-w-md mx-auto px-4 py-2 rounded-lg bg-amber-50 border border-amber-200 flex items-center gap-3">
+            <div className="bg-amber-100 p-1.5 rounded-full shrink-0">
+              <AlertTriangle className="w-4 h-4 text-amber-600" />
+            </div>
+            <p className="text-[11px] text-amber-800 leading-tight">
+              <strong className="font-semibold">Unsaved Progress:</strong> Your list is currently
+              stored locally. You must <strong>Submit Write-Off Request</strong> to save these
+              items. Refreshing or leaving this page will result in loss of work.
+            </p>
+          </div>
+        )}
+        {/* Add Item Button pinned to the right */}
+        <div className="shrink-0">
+          <Dialog open={isDialogOpen} onOpenChange={(o) => { setIsDialogOpen(o); if (!o) setFormQuery(''); }}>
+            <DialogTrigger asChild>
+              <Button className="gap-2">
+                <PlusCircle className="w-4 h-4" />
+                Add Item
+              </Button>
+            </DialogTrigger>
 
-          <DialogContent className="sm:max-w-[460px]">
-            <DialogHeader>
-              <DialogTitle className="text-base font-semibold tracking-tight">
-                Add Item for Write-Off
-              </DialogTitle>
-            </DialogHeader>
+            <DialogContent className="sm:max-w-[460px]">
+              <DialogHeader>
+                <DialogTitle className="text-base font-semibold tracking-tight">
+                  Add Item for Write-Off
+                </DialogTitle>
+              </DialogHeader>
 
-            <div className="space-y-4 pt-2">
-              {/* Search */}
-              <div className="relative">
-                <Search className="absolute left-3 top-3 h-4 w-4 text-slate-400" />
-                <Input
-                  className="pl-9"
-                  placeholder="Search by product name or barcode…"
-                  value={formQuery}
-                  onChange={(e) => setFormQuery(e.target.value)}
-                />
-                {isSearching && (
-                  <div className="absolute right-3 top-3 h-4 w-4 animate-spin rounded-full border-2 border-primary border-t-transparent" />
-                )}
+              <div className="space-y-4 pt-2">
+                {/* Search */}
+                <div className="relative">
+                  <Search className="absolute left-3 top-3 h-4 w-4 text-slate-400" />
+                  <Input
+                    className="pl-9"
+                    placeholder="Search by product name or barcode…"
+                    value={formQuery}
+                    onChange={(e) => setFormQuery(e.target.value)}
+                  />
+                  {isSearching && (
+                    <div className="absolute right-3 top-3 h-4 w-4 animate-spin rounded-full border-2 border-primary border-t-transparent" />
+                  )}
 
-                {formResults.length > 0 && (
-                  <div className="absolute z-50 mt-1 w-full rounded-md border bg-white shadow-lg max-h-48 overflow-y-auto">
-                    {formResults.map((item: any) => (
-                      <div
-                        key={item._id}
-                        onClick={() => selectFromSearch(item)}
-                        className="px-3 py-2 text-sm hover:bg-slate-50 cursor-pointer border-b last:border-0"
-                      >
-                        <p className="font-medium text-slate-900">{item.name}</p>
-                        <p className="text-xs text-slate-400 font-mono">{item.upc_barcode}</p>
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </div>
+                  {formResults.length > 0 && (
+                    <div className="absolute z-50 mt-1 w-full rounded-md border bg-white shadow-lg max-h-48 overflow-y-auto">
+                      {formResults.map((item: any) => (
+                        <div
+                          key={item._id}
+                          onClick={() => selectFromSearch(item)}
+                          className="px-3 py-2 text-sm hover:bg-slate-50 cursor-pointer border-b last:border-0"
+                        >
+                          <p className="font-medium text-slate-900">{item.name}</p>
+                          <p className="text-xs text-slate-400 font-mono">{item.upc_barcode}</p>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
 
-              {/* Form */}
-              <div className="rounded-lg border bg-slate-50 p-4 space-y-3">
-                {[
-                  ['Product Name', 'name'],
-                  ['UPC Barcode', 'upc_barcode']
-                ].map(([label, field]) => (
-                  <div key={field} className="space-y-1">
-                    <label className="text-[10px] font-semibold uppercase tracking-wide text-slate-500">
-                      {label}
-                    </label>
-                    <Input
-                      value={(formData as any)[field]}
-                      onChange={(e) => setFormData({ ...formData, [field]: e.target.value })}
-                    />
-                  </div>
-                ))}
-
-                <div className="grid grid-cols-2 gap-4">
-                  <div className="space-y-1">
-                    <label className="text-[10px] font-semibold uppercase tracking-wide text-slate-500">
-                      Qty
-                    </label>
-                    <Input
-                      type="number"
-                      min="1"
-                      value={formData.qty}
-                      onChange={(e) => setFormData({ ...formData, qty: Number(e.target.value) })}
-                    />
-                  </div>
-
-                  <div className="space-y-1">
-                    <label className="text-[10px] font-semibold uppercase tracking-wide text-slate-500">
-                      Reason
-                    </label>
-                    <Select value={formData.reason} onValueChange={(v) => setFormData({ ...formData, reason: v })}>
-                      <SelectTrigger><SelectValue /></SelectTrigger>
-                      <SelectContent>
-                        {REASONS.map(r => <SelectItem key={r} value={r}>{r}</SelectItem>)}
-                      </SelectContent>
-                    </Select>
-                  </div>
-
-                  {/* Conditional Expiry Date Picker */}
-                  {formData.reason === 'About to Expire' && (
-                    <div className="space-y-1 animate-in fade-in slide-in-from-top-1">
-                      <label className="text-[10px] font-semibold uppercase tracking-wide text-orange-600 font-bold">
-                        Select Expiry Date
+                {/* Form */}
+                <div className="rounded-lg border bg-slate-50 p-4 space-y-3">
+                  {[
+                    ['Product Name', 'name'],
+                    ['UPC Barcode', 'upc_barcode']
+                  ].map(([label, field]) => (
+                    <div key={field} className="space-y-1">
+                      <label className="text-[10px] font-semibold uppercase tracking-wide text-slate-500">
+                        {label}
                       </label>
-                      {/* <DatePicker
+                      <Input
+                        value={(formData as any)[field]}
+                        onChange={(e) => setFormData({ ...formData, [field]: e.target.value })}
+                      />
+                    </div>
+                  ))}
+
+                  <div className="grid grid-cols-2 gap-4">
+                    <div className="space-y-1">
+                      <label className="text-[10px] font-semibold uppercase tracking-wide text-slate-500">
+                        Qty
+                      </label>
+                      <Input
+                        type="number"
+                        min="1"
+                        value={formData.qty}
+                        onChange={(e) => setFormData({ ...formData, qty: Number(e.target.value) })}
+                      />
+                    </div>
+
+                    <div className="space-y-1">
+                      <label className="text-[10px] font-semibold uppercase tracking-wide text-slate-500">
+                        Reason
+                      </label>
+                      <Select value={formData.reason} onValueChange={(v) => setFormData({ ...formData, reason: v })}>
+                        <SelectTrigger><SelectValue /></SelectTrigger>
+                        <SelectContent>
+                          {REASONS.map(r => <SelectItem key={r} value={r}>{r}</SelectItem>)}
+                        </SelectContent>
+                      </Select>
+                    </div>
+
+                    {/* Conditional Expiry Date Picker */}
+                    {formData.reason === 'About to Expire' && (
+                      <div className="space-y-1 animate-in fade-in slide-in-from-top-1">
+                        <label className="text-[10px] font-semibold uppercase tracking-wide text-orange-600 font-bold">
+                          Select Expiry Date
+                        </label>
+                        {/* <DatePicker
                         date={expiryDate}
                         setDate={(date: any) => {
                           if (date && (date < minExpiry || date > maxExpiry)) {
@@ -287,31 +307,31 @@ function RouteComponent() {
                           setExpiryDate(date);
                         }}
                       /> */}
-                      <DatePicker
-                        date={expiryDate}
-                        setDate={(date: any) => {
-                          // Get today's date at midnight for a clean comparison
-                          today.setHours(0, 0, 0, 0);
+                        <DatePicker
+                          date={expiryDate}
+                          setDate={(date: any) => {
+                            // Get today's date at midnight for a clean comparison
 
-                          if (date && date < today) {
-                            alert("Please select a date in the future.");
-                            return;
-                          }
+                            if (date && date <= today) {
+                              alert("Please select a date in the future.");
+                              return;
+                            }
 
-                          setExpiryDate(date);
-                        }}
-                      />
-                    </div>
-                  )}
+                            setExpiryDate(date);
+                          }}
+                        />
+                      </div>
+                    )}
+                  </div>
                 </div>
-              </div>
 
-              <Button className="w-full h-11 font-semibold" onClick={addItemToList} disabled={!formData.name}>
-                Add to Write-Off List
-              </Button>
-            </div>
-          </DialogContent>
-        </Dialog>
+                <Button className="w-full h-11 font-semibold" onClick={addItemToList} disabled={!formData.name}>
+                  Add to Write-Off List
+                </Button>
+              </div>
+            </DialogContent>
+          </Dialog>
+        </div>
       </div>
 
       {/* Draft List */}
