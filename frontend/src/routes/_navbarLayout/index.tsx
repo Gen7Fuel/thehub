@@ -161,7 +161,7 @@ function App() {
 
         {/* Inventory Section */}
         {/* {(access.module_order_rec || access.module_cycle_count) && ( //markpoint */}
-        {(access?.orderRec?.value || access?.cycleCount?.value || access?.vendor || access?.category || access?.writeOff) && (
+        {(access?.orderRec?.value || access?.cycleCount?.value || access?.vendor || access?.category || access?.writeOff?.value) && (
           <Section title="Inventory">
             <div className="flex flex-wrap gap-4">
               {/* Order Rec button: goes to upload or list based on access */}
@@ -207,7 +207,7 @@ function App() {
                   </Button>
                 </Link>
               )}
-              {access?.writeOff && (
+              {access?.writeOff?.value && (
                 <Link to="/write-off">
                   <Button className="w-32 h-32 flex items-center justify-center break-words whitespace-normal text-center">
                     Write Offs & Markdowns
