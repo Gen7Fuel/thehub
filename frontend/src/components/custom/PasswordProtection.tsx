@@ -35,11 +35,14 @@ export function PasswordProtection({
     e.preventDefault();
     setLoading(true);
     setError("");
+    
+    const token = localStorage.getItem("token");
+    if (!token) return;
 
     try {
       const res = await fetch("/api/locations/check-code", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
         body: JSON.stringify({ location: userLocation, code: otp }),
       });
 
