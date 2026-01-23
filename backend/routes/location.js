@@ -4,6 +4,7 @@ const Permission = require("../models/Permission");
 const Role = require("../models/Role");
 const User = require('../models/User');
 const router = express.Router();
+const { auth } = require("../middleware/authMiddleware");
 
 // Create a new location
 // router.post("/", async (req, res) => {
@@ -48,6 +49,23 @@ router.get("/", async (req, res) => {
   }
 });
 
+// PUBLIC: Get location by station name
+router.get("/name/:stationName", async (req, res) => {
+  const { stationName } = req.params;
+
+  try {
+    const location = await Location.findOne({ stationName });
+    if (location) {
+      res.status(200).json(location);
+    } else {
+      res.status(404).json({ message: "Location not found." });
+    }
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ message: "Failed to fetch location." });
+  }
+});
+
 //--GET LOCATION BY ID--
 router.get("/:id", async (req, res) => {
   const { id } = req.params;
@@ -64,6 +82,9 @@ router.get("/:id", async (req, res) => {
     res.status(500).json({ message: "Failed to fetch location." });
   }
 });
+
+// Protect everything below; only GET /, GET /name/:stationName and GET /:id are public
+router.use(auth)
 
 // UPDATE LOCATION
 router.put("/:id", async (req, res) => {
@@ -141,24 +162,6 @@ router.post("/", async (req, res) => {
   } catch (err) {
     console.error("Error creating location:", err);
     res.status(500).json({ message: "Failed to create location." });
-  }
-});
-
-// FOR THE ERROR OF PRODUCTION CALLING /api/locations/undefined
-// Get stationName by _id
-router.get("/name/:stationName", async (req, res) => {
-  const { stationName } = req.params;
-
-  try {
-    const location = await Location.findOne({ stationName });
-    if (location) {
-      res.status(200).json(location);
-    } else {
-      res.status(404).json({ message: "Location not found." });
-    }
-  } catch (err) {
-    console.error(err);
-    res.status(500).json({ message: "Failed to fetch location." });
   }
 });
 
