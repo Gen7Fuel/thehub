@@ -425,6 +425,11 @@ function RouteComponent() {
       }
     }
 
+    // Make sure orderRec.completed is true before notifying
+    if (orderRec?.completed !== 'Complete') {
+      alert('Please make sure all line items are checked before notifying.');
+      return; // stay on page, do nothing else
+    }
     // Default notify logic for other users (mark as completed and notify)
     const confirmed = window.confirm('Are you sure you want to notify that this order rec has been reconciled?');
     if (!confirmed) return;

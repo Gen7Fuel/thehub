@@ -44,6 +44,7 @@ const { auth } = require("./middleware/authMiddleware");
 const cycleCountRoutes = require('./routes/cycleCountRoutes');
 const permissionRoutes = require("./routes/permissionRoutes");
 const selectTemplateRoutes = require("./routes/audit/selectTemplateRoutes");
+const writeOffRoutes = require("./routes/writeOffRoutes");
 const supportRoutes = require('./routes/supportRoutes');
 const { initializePermissionMap } = require("./utils/permissionStore");
 const setupSocket = require("./socket");
@@ -99,6 +100,7 @@ app.use('/api/sftp', sftpRoutes);
 app.use('/api/cash-rec', cashRecRoutes);
 app.use("/api/fuel-rec", fuelRecRoutes);
 app.use('/api/product-category', productCategoryRoutes);
+app.use('/api/write-off', writeOffRoutes);
 
 // Misc
 app.use('/api', emailRoutes);
