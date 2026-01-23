@@ -42,7 +42,7 @@ router.get('/station-stats', async (req, res) => {
     const checklists = await Promise.all(templates.map(async (temp) => {
       // Only items specifically assigned to this site
       const siteSpecificItems = temp.items.filter(item => 
-        item.assignedSites.some(as => as.site === site && as.assigned === true)
+        item.assignedSites.some(as => as.site === site && as.assigned === true && as.issueRaised === false)
       );
 
       const stats = {};
