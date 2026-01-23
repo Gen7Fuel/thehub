@@ -683,6 +683,27 @@ async function getTop10Bistro(pool,csoCode) {
   }
 }
 
+async function getRefundTransactions(csoCode, date) {
+  try {
+    const pool = await getPool();
+    const result = await pool.request().query(`
+      SELECT [Transaction ID], [Transaction Line], [Event Start Time], 
+        [GTIN], [UPC], [Category], [Item Name], 
+        [Actual Sales Amount]
+      FROM [CSO].[SalesTransactionCRJ]
+      WHERE [Status] LIKE '%Refund%' AND 
+        [Station_SK] = ${csoCode} AND 
+        [Date] = ${date}
+      ORDER BY [Event Start Time]
+    `);
+    // await sql.close();
+    return result.recordset;
+  } catch (err) {
+    console.error('SQL error:', err);
+    return [];
+  }
+}
+
 function formatDateForDB(dateString) {
   // input: "2025-11-14"
   // output: "20251114"
@@ -772,4 +793,5 @@ module.exports = {
   getTop10Bistro,
   getInventoryOnHandForActiveUPCsAndStation,
   getPool,
+  getRefundTransactions
 };
