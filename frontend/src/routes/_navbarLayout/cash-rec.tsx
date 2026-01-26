@@ -13,8 +13,8 @@ function RouteComponent() {
   const isReportActive = matchRoute({ to: '/cash-rec' })
   const isEntriesActive = matchRoute({ to: '/cash-rec/entries' })
   const isBankActive = matchRoute({ to: '/cash-rec/bank' })
-  const isReceivablesActive = matchRoute({ to: '/cash-rec/receivables' })
-  const isPayoutsActive = matchRoute({ to: '/cash-rec/payouts' })
+  // const isReceivablesActive = matchRoute({ to: '/cash-rec/receivables' })
+  // const isPayoutsActive = matchRoute({ to: '/cash-rec/payouts' })
 
   return (
     <div className="pt-16 flex flex-col items-center">
