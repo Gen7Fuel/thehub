@@ -32,12 +32,12 @@ function RouteComponent() {
         </Link>
 
         <Link to="/cash-rec/bank" activeOptions={{ exact: true }} search={(prev: any) => ({ ...prev, site: prev?.site })}>
-          <Button {...(!isBankActive && { variant: 'outline' } as object)} className="rounded-none">
+          <Button {...(!isBankActive && { variant: 'outline' } as object)} className="rounded-l-none">
             Bank
           </Button>
         </Link>
 
-        <Link to="/cash-rec/receivables" activeOptions={{ exact: true }} search={(prev: any) => ({ ...prev, site: prev?.site })}>
+        {/* <Link to="/cash-rec/receivables" activeOptions={{ exact: true }} search={(prev: any) => ({ ...prev, site: prev?.site })}>
           <Button {...(!isReceivablesActive && { variant: 'outline' } as object)} className="rounded-none">
             Receivables
           </Button>
@@ -47,7 +47,7 @@ function RouteComponent() {
           <Button {...(!isPayoutsActive && { variant: 'outline' } as object)} className="rounded-l-none">
             Payouts
           </Button>
-        </Link>
+        </Link> */}
       </div>
 
       <Outlet />

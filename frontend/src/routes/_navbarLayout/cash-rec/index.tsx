@@ -236,7 +236,7 @@ function RouteComponent() {
 
       {site && data && (
         <div className="space-y-3">
-          <div className="text-sm text-muted-foreground">Report for {site} on {date}</div>
+          {/* <div className="text-sm text-muted-foreground">Report for {site} on {date}</div> */}
 
           {(() => {
             const totals = data.cashSummary?.totals || ({} as any)
