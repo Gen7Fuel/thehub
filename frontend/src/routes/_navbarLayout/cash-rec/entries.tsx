@@ -303,7 +303,7 @@ function RouteComponent() {
                     )}
                     {/* Cash Summary totals */}
                     <td className="px-2 py-2 text-right">{fmt2(data?.cashSummary?.totals.dealGroupCplDiscounts)}</td>
-                    <td className="px-2 py-2 text-right">{fmt2(data?.cashSummary?.unsettledPrepays)}</td>
+                    <td className="px-2 py-2 text-right">{data?.cashSummary?.unsettledPrepays == null ? '-' : fmt2(data?.cashSummary?.unsettledPrepays)}</td>
                     <td className="px-2 py-2 text-right">{fmt2(data?.cashSummary?.totals.item_sales)}</td>
                     <td className="px-2 py-2 text-right">{fmt2(data?.cashSummary?.totals.totalSales)}</td>
                     <td className="px-2 py-2 text-right">{fmt2((data?.cashSummary?.totals.totalSales ?? 0) - (data?.cashSummary?.totals.item_sales ?? 0))}</td>
@@ -331,12 +331,12 @@ function RouteComponent() {
                       </>
                     )}
 
-                    <td className="px-2 py-2 text-right">{fmt2(data?.cashSummary?.handheldDebit)}</td>
+                    <td className="px-2 py-2 text-right">{data?.cashSummary?.handheldDebit == null ? '-' : fmt2(data?.cashSummary?.handheldDebit)}</td>
                     <td className="px-2 py-2 text-right">{fmt2(data?.cashSummary?.totals.canadian_cash_collected)}</td>
 
                     <td className="px-2 py-2 text-right">{fmt2(data?.bank?.endingBalance)}</td>
                     {/* <td className="px-2 py-2"></td> */}
-                    <td className="px-2 py-2">
+                    <td className="px-2 py-2 text-right">
                       {fmt2(
                         (data?.cashSummary?.totals.canadian_cash_collected ?? 0) -
                         (data?.cashSummary?.totals.report_canadian_cash ?? 0) +
