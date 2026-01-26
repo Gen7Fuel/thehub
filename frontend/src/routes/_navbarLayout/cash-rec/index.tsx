@@ -421,7 +421,7 @@ function RouteComponent() {
                 : ''
 
             return (
-              <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 typewriter-font">
                 <div className="border rounded">
                   <div className="px-3 py-2 font-semibold border-b">AR Transactions</div>
                   {arRows.length === 0 ? (
@@ -499,7 +499,7 @@ function RouteComponent() {
 
             if (!bank) {
               return (
-                <div className="border rounded">
+                <div className="border rounded typewriter-font">
                   <div className="px-3 py-2 font-semibold border-b">Bank Statement Details</div>
                   <div className="px-3 py-3 text-sm text-muted-foreground">No bank statement found.</div>
                 </div>
@@ -511,7 +511,7 @@ function RouteComponent() {
             const miscCredits = Array.isArray((bank as any).miscCredits) ? (bank as any).miscCredits : []
 
             return (
-              <div className="border rounded">
+              <div className="border rounded typewriter-font">
                 <div className="px-3 py-2 font-semibold border-b">Bank Statement Details</div>
                 <table className="min-w-full text-sm">
                   <thead>
