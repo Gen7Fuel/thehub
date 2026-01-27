@@ -266,6 +266,39 @@ function RouteComponent() {
     }
   }
 
+  const [voidedDetails, setVoidedDetails] = useState<any[]>([]);
+  const [loadingVoided, setLoadingVoided] = useState(false);
+
+  const fetchVoidedDetails = async () => {
+    // Only fetch if we don't already have data for this specific report
+    if (voidedDetails.length > 0 || loadingVoided) return;
+
+    setLoadingVoided(true);
+    try {
+      const token = localStorage.getItem('token');
+      const resp = await fetch(
+        `/api/cash-summary/voided-transactions-details?site=${encodeURIComponent(site)}&date=${encodeURIComponent(date)}`,
+        { headers: token ? { Authorization: `Bearer ${token}` } : {} }
+      );
+
+      if (resp.ok) {
+        const data = await resp.json();
+        setVoidedDetails(data);
+      }
+    } catch (e) {
+      console.error('Failed to fetch voided details', e);
+    } finally {
+      setLoadingVoided(false);
+    }
+  };
+
+  // We still need this to "reset" when the user changes the main report site/date
+  useEffect(() => {
+    setVoidedDetails([]);
+  }, [site, date]);
+
+  console.log('Site/date report:', site, date, voidedDetails)
+
   const submitDisabled = submitState !== 'idle'
   const submitLabel =
     submitState === 'idle' ? 'Submit' : submitState === 'submitting' ? 'Submitting...' : 'Submitted'
@@ -469,15 +502,113 @@ function RouteComponent() {
                   <Card
                     title={<span className="font-bold text-black">Voided Transactions</span>}
                     value={
-                      <span
-                        className={`font-semibold ${
-                          typeof totals?.voidedTransactionsAmount === 'number' && totals.voidedTransactionsAmount !== 0
+                      <div className="flex items-center gap-1">
+                        <span
+                          className={`font-semibold ${typeof totals?.voidedTransactionsAmount === 'number' && totals.voidedTransactionsAmount !== 0
                             ? 'text-red-600'
                             : ''
-                        }`}
-                      >
-                        {fmtNum(totals?.voidedTransactionsAmount)}
-                      </span>
+                            }`}
+                        >
+                          {fmtNum(totals?.voidedTransactionsAmount)}
+                        </span>
+
+                        {/* Only show the icon if the amount is greater than 0 */}
+                        {(totals?.voidedTransactionsAmount ?? 0) > 0 && (
+                          <Dialog onOpenChange={(open) => open && fetchVoidedDetails()}>
+                            <DialogTrigger asChild>
+                              <button className="p-1 rounded-full hover:bg-gray-100 transition-colors inline-flex items-center outline-none">
+                                <Info className="h-4 w-4 cursor-pointer text-muted-foreground hover:text-blue-600" />
+                              </button>
+                            </DialogTrigger>
+                            <DialogContent className="max-w-4xl max-h-[80vh] flex flex-col">
+                              <DialogHeader>
+                                <DialogTitle>Voided Transactions Summary</DialogTitle>
+                              </DialogHeader>
+
+                              <div className="flex-1 overflow-y-auto mt-4">
+                                {loadingVoided ? (
+                                  <div className="py-20 text-center animate-pulse">Loading summary...</div>
+                                ) : voidedDetails.length > 0 ? (
+                                  <table className="w-full text-sm">
+                                    <thead className="bg-muted sticky top-0">
+                                      <tr>
+                                        <th className="p-3 text-left">Transaction ID</th>
+                                        <th className="p-3 text-left">Time</th>
+                                        <th className="p-3 text-left">Items</th>
+                                        <th className="p-3 text-right">Total Refunded</th>
+                                      </tr>
+                                    </thead>
+                                    <tbody className="divide-y">
+                                      {voidedDetails.map((tx) => (
+                                        <tr key={tx.transactionId} className="hover:bg-muted/30">
+                                          <td className="p-3 font-mono text-sm">{tx.transactionId}</td>
+                                          <td className="p-3 text-muted-foreground">
+                                            {/* Extracts the time portion (HH:mm:ss) from the ISO string without timezone conversion */}
+                                            {tx.eventStartTime?.toString().split('T')[1]?.substring(0, 5) || tx.eventStartTime}
+                                          </td>
+                                          <td className="p-3">
+                                            <Dialog>
+                                              <DialogTrigger asChild>
+                                                <button className="text-blue-600 underline hover:text-blue-800 font-medium cursor-pointer">
+                                                  {tx.items.length} {tx.items.length === 1 ? 'Item' : 'Items'}
+                                                </button>
+                                              </DialogTrigger>
+                                              <DialogContent className="max-w-2xl">
+                                                <DialogHeader>
+                                                  <DialogTitle>Transaction Details: {tx.transactionId} ({tx.eventStartTime?.toString().split('T')[1]?.substring(0, 5)})</DialogTitle>
+                                                </DialogHeader>
+                                                <div className="mt-4 border rounded-md overflow-hidden">
+                                                  <table className="w-full text-xs">
+                                                    <thead className="bg-slate-50 border-b">
+                                                      <tr>
+                                                        <th className="p-2 text-left">Line</th>
+                                                        <th className="p-2 text-left">Item Name</th>
+                                                        <th className="p-2 text-left">UPC/GTIN</th>
+                                                        <th className="p-2 text-right">Amount</th>
+                                                      </tr>
+                                                    </thead>
+                                                    <tbody className="divide-y">
+                                                      {tx.items.map((item: any, i: number) => (
+                                                        <tr key={i}>
+                                                          <td className="p-2 text-muted-foreground">{item.transactionLine}</td>
+                                                          <td className="p-2 font-medium">
+                                                            {item.itemName === 'NoMap' ? (
+                                                              <span className="italic text-slate-400">Item Details Not Found</span>
+                                                            ) : (
+                                                              item.itemName
+                                                            )}
+                                                          </td>
+                                                          <td className="p-2 text-muted-foreground font-mono">
+                                                            {item.upc?.toString().startsWith('99999') || item.gtin?.toString().startsWith('99999') ? (
+                                                              <span className="text-slate-300">N/A</span>
+                                                            ) : (
+                                                              item.upc || item.gtin || '—'
+                                                            )}
+                                                          </td>
+                                                          <td className="p-2 text-right">{fmtNum(item.amount)}</td>
+                                                        </tr>
+                                                      ))}
+                                                    </tbody>
+                                                  </table>
+                                                </div>
+                                              </DialogContent>
+                                            </Dialog>
+                                          </td>
+                                          <td className="p-3 text-right font-bold text-red-600">
+                                            {fmtNum(tx.totalAmount)}
+                                          </td>
+                                        </tr>
+                                      ))}
+                                    </tbody>
+                                  </table>
+                                ) : (
+                                  <div className="py-20 text-center text-muted-foreground">No records found.</div>
+                                )}
+                              </div>
+                            </DialogContent>
+                          </Dialog>
+                        )}
+                      </div>
                     }
                   />
                 </div>
