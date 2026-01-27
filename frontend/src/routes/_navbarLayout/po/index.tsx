@@ -283,14 +283,14 @@ function RouteComponent() {
         <Input
           type="number"
           name="quantity"
-          placeholder="Quantity"
+          placeholder="Quantity (Liters)"
           value={quantity === 0 ? '' : quantity}
           onChange={(e) => setQuantity(e.target.value === '' ? 0 : Number(e.target.value))}
         />
         <Input
           type="number"
           name="amount"
-          placeholder="Amount"
+          placeholder="Amount (CAD)"
           value={amount === 0 ? '' : amount}
           onChange={(e) => setAmount(e.target.value === '' ? 0 : Number(e.target.value))}
         />
