@@ -431,7 +431,7 @@ function RouteComponent() {
                       <thead>
                         <tr className="border-b">
                           <th className="px-3 py-2 text-left">Customer</th>
-                          <th className="px-3 py-2 text-left">PO Number</th>
+                          <th className="px-3 py-2 text-left">Fleet Card/PO Number</th>
                           <th className="px-3 py-2 text-right">Amount</th>
                         </tr>
                       </thead>
