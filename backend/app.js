@@ -10,6 +10,7 @@ const requestId = require("./middleware/requestId");
 require("./queues/emailQueue"); // Just runs the worker
 require('./cron_jobs/cycleCountCron'); //cron job for getting cso on hands for cyclecount
 require('./cron_jobs/fuelInventoryReportCron'); //cron job for getting fuel inventory report and email to kellie
+require('./cron_jobs/auditIssueReportCron'); //cron job for getting previous months audit issue report and email to Ana
 // require('./cron_jobs/productCategoryMappingCron'); //cron job for normalising the product categories
 
 // Route imports

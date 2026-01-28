@@ -11,6 +11,7 @@ const { sendEmail } = require('../utils/emailService')
 const { generateCashSummaryPdf } = require('../utils/cashSummaryPdf')
 const { generateShiftReportsPdf } = require('../utils/shiftReportsPdf')
 const { generateLotteryImagesPdf } = require('../utils/lotteryImagesPdf')
+const { getRefundTransactions } = require('../services/sqlService');
 
 const path = require('path')
 
@@ -229,6 +230,58 @@ async function upsertDailyDepositForSiteDate(site, dateInput) {
 //     res.status(500).json({ error: 'Failed to fetch over/short data' })
 //   }
 // })
+
+router.get('/voided-transactions-details', async (req, res) => {
+  try {
+    const { site, date } = req.query;
+
+    if (!site || !date) {
+      return res.status(400).json({ error: 'Site and Date are required' });
+    }
+
+    const location = await Location.findOne({ stationName: site });
+    if (!location || !location.csoCode) {
+      return res.status(404).json({ error: 'Location or CSO Code not found' });
+    }
+
+    // Grouping logic: Transform rows into a nested structure
+    const rawRows = await getRefundTransactions(location.csoCode, date);
+
+    const groupedTransactions = rawRows.reduce((acc, row) => {
+      const txId = row['Transaction ID'];
+      // Ensure we work with positive numbers for display
+      const absAmount = Math.abs(row['Actual Sales Amount'] || 0);
+
+      if (!acc[txId]) {
+        acc[txId] = {
+          transactionId: txId,
+          eventStartTime: row['Event Start Time'],
+          totalAmount: 0,
+          items: []
+        };
+      }
+
+      acc[txId].items.push({
+        transactionLine: row['Transaction Line'],
+        gtin: row['GTIN'],
+        upc: row['UPC'],
+        category: row['Category'],
+        itemName: row['Item Name'],
+        amount: absAmount // Store as positive
+      });
+
+      acc[txId].totalAmount += absAmount;
+
+      return acc;
+    }, {});
+
+    return res.json(Object.values(groupedTransactions));
+  } catch (err) {
+    console.error('Error fetching voided details:', err);
+    res.status(500).json({ error: 'Internal Server Error' });
+  }
+});
+
 router.get('/over-short', async (req, res) => {
   try {
     const { site } = req.query;
@@ -954,10 +1007,10 @@ router.post('/submit/to/safesheet', async (req, res) => {
 
           const lotteryImagesPdf = await generateLotteryImagesPdf({ site, date, origin })
           const attachments = [
-            { 
-              filename: `Cash-Summary-${site}-${date}.pdf`, 
-              content: cashSummaryPdf, 
-              contentType: 'application/pdf', 
+            {
+              filename: `Cash-Summary-${site}-${date}.pdf`,
+              content: cashSummaryPdf,
+              contentType: 'application/pdf',
             }
           ]
 

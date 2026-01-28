@@ -711,6 +711,7 @@ async function generateCashSummaryPdf({ site, date, notes = '' }) {
     exempted_tax: sum('exempted_tax'),
     report_canadian_cash: sum('report_canadian_cash'),
     payouts: sum('payouts'),
+    voidedTransactionsAmount: sum('voidedTransactionsAmount'),
   }
 
   // const instance = pdf(React.createElement(ReportDoc, { site, date, rows, totals, notes }))
