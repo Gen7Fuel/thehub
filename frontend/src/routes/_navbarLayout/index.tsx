@@ -115,6 +115,13 @@ function App() {
                   </Button>
                 </Link>
               )}
+              {access?.accounting?.infonetReport && (
+                <Link to="/infonet-report" search={{ site: user?.location }}>
+                  <Button className="w-32 h-32 flex items-center justify-center break-words whitespace-normal text-center">
+                    Infonet Tax Report
+                  </Button>
+                </Link>
+              )}
               {/* {access?.accounting.sftp && (
                 <Link to="/sftp" search={{ site: user?.location }}>
                   <Button className="w-32 h-32 flex items-center justify-center break-words whitespace-normal text-center">

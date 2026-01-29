@@ -140,96 +140,85 @@ async function upsertDailyDepositForSiteDate(site, dateInput) {
   }
 }
 
-// router.get('/over-short', async (req, res) => {
-//   try {
-//     const { site } = req.query
-//     if (!site) {
-//       return res.status(400).json({ error: 'site is required' })
-//     }
+router.get('/tax-exempt-report', async (req, res) => {
+  try {
+    const { site, from, to } = req.query;
+    if (!site || !from || !to) {
+      return res.status(400).json({ error: 'site, from, and to dates are required' });
+    }
 
-//     // 1️⃣ Date range: past 7 days (normalized)
-//     const end = new Date()
-//     end.setHours(0, 0, 0, 0)
+    const startDate = new Date(from);
+    const endDate = new Date(to);
+    // Ensure endDate covers the full day
+    endDate.setHours(23, 59, 59, 999);
 
-//     const start = new Date(end)
-//     start.setDate(start.getDate() - 20) // today + previous 20 days
+    // 1. Fetch all shifts in range
+    const shifts = await CashSummary.find({
+      site,
+      date: { $gte: startDate, $lte: endDate }
+    }).sort({ date: 1 }).lean();
 
-//     // 2️⃣ Fetch submitted reports for site
-//     const reports = await CashSummaryReport.find({
-//       site,
-//       submitted: true,
-//       date: { $gte: start, $lte: end },
-//     })
-//       .sort({ date: 1 })
-//       .lean()
+    // 2. Fetch submission status from CashSummaryReport
+    const reports = await CashSummaryReport.find({
+      site,
+      date: { $gte: startDate, $lte: endDate }
+    }).lean();
 
-//     if (!reports.length) {
-//       return res.json([])
-//     }
+    const reportMap = reports.reduce((acc, r) => {
+      const dateKey = new Date(r.date).toISOString().split('T')[0];
+      acc[dateKey] = r.submitted;
+      return acc;
+    }, {});
 
-//     // 3️⃣ Fetch shifts for all those report dates
-//     const dayRanges = reports.map(r => ({
-//       date: {
-//         $gte: r.date,
-//         $lt: new Date(r.date.getTime() + 24 * 60 * 60 * 1000),
-//       },
-//     }))
+    // 3. Aggregate Shifts by Date
+    const dailyData = {};
 
-//     const shifts = await CashSummary.find({
-//       site,
-//       $or: dayRanges,
-//     }).lean()
+    shifts.forEach(shift => {
+      const dateKey = new Date(shift.date).toISOString().split('T')[0];
 
+      if (!dailyData[dateKey]) {
+        dailyData[dateKey] = {
+          date: dateKey,
+          totalExemptedTax: 0,
+          totalItemSales: 0,
+          shiftNumbers: [],
+          isSubmitted: !!reportMap[dateKey]
+        };
+      }
 
-//     // 4️⃣ Group shifts by date (day start time)
-//     const byDate = {}
+      dailyData[dateKey].totalExemptedTax += (shift.exempted_tax || 0);
+      dailyData[dateKey].totalItemSales += (shift.item_sales || 0);
+      if (shift.shift_number) {
+        dailyData[dateKey].shiftNumbers.push(shift.shift_number);
+      }
+    });
 
-//     for (const shift of shifts) {
-//       const d = new Date(shift.date)
-//       d.setHours(0, 0, 0, 0)
-//       const key = d.toISOString()
+    // 4. Ensure every date in the range exists in the response
+    const results = [];
+    let current = new Date(startDate);
+    while (current <= endDate) {
+      const key = current.toISOString().split('T')[0];
+      if (dailyData[key]) {
+        results.push(dailyData[key]);
+      } else {
+        // Entry for days with no shift data yet
+        results.push({
+          date: key,
+          totalExemptedTax: 0,
+          totalItemSales: 0,
+          shiftNumbers: [],
+          isSubmitted: !!reportMap[key]
+        });
+      }
+      current.setDate(current.getDate() + 1);
+    }
 
-//       if (!byDate[key]) {
-//         byDate[key] = {
-//           canadian_cash_collected: 0,
-//           report_canadian_cash: 0,
-//           shifts: 0,
-//         }
-//       }
-
-//       byDate[key].canadian_cash_collected += shift.canadian_cash_collected || 0
-//       byDate[key].report_canadian_cash += shift.report_canadian_cash || 0
-//       byDate[key].shifts += 1
-//     }
-
-//     // 5️⃣ Build final chart data
-//     const data = reports.map(r => {
-//       const key = r.date.toISOString()
-//       const totals = byDate[key] || {
-//         canadian_cash_collected: 0,
-//         report_canadian_cash: 0,
-//         shifts: 0,
-//       }
-
-//       const overShort =
-//         totals.canadian_cash_collected - totals.report_canadian_cash
-
-//       return {
-//         date: r.date.toISOString().slice(0, 10), // YYYY-MM-DD
-//         overShort,
-//         canadian_cash_collected: totals.canadian_cash_collected,
-//         report_canadian_cash: totals.report_canadian_cash,
-//         shifts: totals.shifts,
-//         notes: r.notes || '',
-//       }
-//     })
-
-//     res.json(data)
-//   } catch (err) {
-//     console.error('Over/Short report error:', err)
-//     res.status(500).json({ error: 'Failed to fetch over/short data' })
-//   }
-// })
+    res.json(results);
+  } catch (err) {
+    console.error('Tax Exempt Report Error:', err);
+    res.status(500).json({ error: 'Internal Server Error' });
+  }
+});
 
 router.get('/voided-transactions-details', async (req, res) => {
   try {
