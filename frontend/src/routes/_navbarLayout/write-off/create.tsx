@@ -41,6 +41,7 @@ export const REASON_COLORS: Record<string, string> = {
   Expired: 'bg-purple-100 text-purple-700 border-purple-200',
   Donation: 'bg-emerald-100 text-emerald-700 border-emerald-200',
   'About to Expire': 'bg-indigo-100 text-indigo-700 border-indigo-200',
+  Bistro: 'bg-green-100 text-green-800 border-green-200',
 };
 
 function RouteComponent() {
@@ -59,6 +60,7 @@ function RouteComponent() {
     qty: 1,
     reason: 'Damaged'
   });
+  const [entryMode, setEntryMode] = useState<'regular' | 'bistro'>('regular');
 
   const [expiryDate, setExpiryDate] = useState<Date | undefined>(undefined);
 
@@ -211,7 +213,6 @@ function RouteComponent() {
                 Add Item
               </Button>
             </DialogTrigger>
-
             <DialogContent className="sm:max-w-[460px]">
               <DialogHeader>
                 <DialogTitle className="text-base font-semibold tracking-tight">
@@ -219,52 +220,86 @@ function RouteComponent() {
                 </DialogTitle>
               </DialogHeader>
 
+              {/* Mode Selector Tabs */}
+              <div className="flex p-1 bg-slate-100 rounded-lg mb-4">
+                <button
+                  onClick={() => {
+                    setEntryMode('regular');
+                    setFormData({ ...formData, reason: 'Damaged' });
+                  }}
+                  className={`flex-1 py-1.5 text-xs font-medium rounded-md transition-all ${entryMode === 'regular' ? 'bg-white shadow-sm' : 'text-slate-500 hover:text-slate-700'
+                    }`}
+                >
+                  Regular Product
+                </button>
+                <button
+                  onClick={() => {
+                    setEntryMode('bistro');
+                    setFormData({ ...formData, name: '', upc_barcode: 'Bistro', reason: 'Spoilage' });
+                  }}
+                  className={`flex-1 py-1.5 text-xs font-medium rounded-md transition-all ${entryMode === 'bistro' ? 'bg-white shadow-sm' : 'text-slate-500 hover:text-slate-700'
+                    }`}
+                >
+                  Bistro Item
+                </button>
+              </div>
+
               <div className="space-y-4 pt-2">
-                {/* Search */}
-                <div className="relative">
-                  <Search className="absolute left-3 top-3 h-4 w-4 text-slate-400" />
-                  <Input
-                    className="pl-9"
-                    placeholder="Search by product name or barcode…"
-                    value={formQuery}
-                    onChange={(e) => setFormQuery(e.target.value)}
-                  />
-                  {isSearching && (
-                    <div className="absolute right-3 top-3 h-4 w-4 animate-spin rounded-full border-2 border-primary border-t-transparent" />
-                  )}
+                {/* Search - Only show for Regular mode */}
+                {entryMode === 'regular' && (
+                  <div className="relative">
+                    <Search className="absolute left-3 top-3 h-4 w-4 text-slate-400" />
+                    <Input
+                      className="pl-9"
+                      placeholder="Search by product name or barcode…"
+                      value={formQuery}
+                      onChange={(e) => setFormQuery(e.target.value)}
+                    />
+                    {isSearching && (
+                      <div className="absolute right-3 top-3 h-4 w-4 animate-spin rounded-full border-2 border-primary border-t-transparent" />
+                    )}
+                    {formResults.length > 0 && (
+                      <div className="absolute z-50 mt-1 w-full rounded-md border bg-white shadow-lg max-h-48 overflow-y-auto">
+                        {formResults.map((item: any) => (
+                          <div
+                            key={item._id}
+                            onClick={() => selectFromSearch(item)}
+                            className="px-3 py-2 text-sm hover:bg-slate-50 cursor-pointer border-b last:border-0"
+                          >
+                            <p className="font-medium text-slate-900">{item.name}</p>
+                            <p className="text-xs text-slate-400 font-mono">{item.upc_barcode}</p>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                )}
 
-                  {formResults.length > 0 && (
-                    <div className="absolute z-50 mt-1 w-full rounded-md border bg-white shadow-lg max-h-48 overflow-y-auto">
-                      {formResults.map((item: any) => (
-                        <div
-                          key={item._id}
-                          onClick={() => selectFromSearch(item)}
-                          className="px-3 py-2 text-sm hover:bg-slate-50 cursor-pointer border-b last:border-0"
-                        >
-                          <p className="font-medium text-slate-900">{item.name}</p>
-                          <p className="text-xs text-slate-400 font-mono">{item.upc_barcode}</p>
-                        </div>
-                      ))}
-                    </div>
-                  )}
-                </div>
-
-                {/* Form */}
+                {/* Form Fields */}
                 <div className="rounded-lg border bg-slate-50 p-4 space-y-3">
-                  {[
-                    ['Product Name', 'name'],
-                    ['UPC Barcode', 'upc_barcode']
-                  ].map(([label, field]) => (
-                    <div key={field} className="space-y-1">
+                  <div className="space-y-1">
+                    <label className="text-[10px] font-semibold uppercase tracking-wide text-slate-500">
+                      Product Name
+                    </label>
+                    <Input
+                      placeholder={entryMode === 'bistro' ? "e.g., Tomatoes, Onions, etc" : ""}
+                      value={formData.name}
+                      onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+                    />
+                  </div>
+
+                  {/* UPC - Only show for Regular mode */}
+                  {entryMode === 'regular' && (
+                    <div className="space-y-1">
                       <label className="text-[10px] font-semibold uppercase tracking-wide text-slate-500">
-                        {label}
+                        UPC Barcode
                       </label>
                       <Input
-                        value={(formData as any)[field]}
-                        onChange={(e) => setFormData({ ...formData, [field]: e.target.value })}
+                        value={formData.upc_barcode}
+                        onChange={(e) => setFormData({ ...formData, upc_barcode: e.target.value })}
                       />
                     </div>
-                  ))}
+                  )}
 
                   <div className="grid grid-cols-2 gap-4">
                     <div className="space-y-1">
@@ -279,54 +314,53 @@ function RouteComponent() {
                       />
                     </div>
 
+                    {/* Reason - Hidden or Disabled for Bistro */}
                     <div className="space-y-1">
                       <label className="text-[10px] font-semibold uppercase tracking-wide text-slate-500">
                         Reason
                       </label>
-                      <Select value={formData.reason} onValueChange={(v) => setFormData({ ...formData, reason: v })}>
+                      <Select
+                        value={formData.reason}
+                        onValueChange={(v) => setFormData({ ...formData, reason: v })}
+                      >
                         <SelectTrigger><SelectValue /></SelectTrigger>
                         <SelectContent>
-                          {REASONS.map(r => <SelectItem key={r} value={r}>{r}</SelectItem>)}
+                          {REASONS
+                            // Filter out "About to Expire" if it's a Bistro item
+                            .filter(r => entryMode === 'bistro' ? r !== 'About to Expire' : true)
+                            .map(r => <SelectItem key={r} value={r}>{r}</SelectItem>)
+                          }
                         </SelectContent>
                       </Select>
                     </div>
+                  </div>
 
-                    {/* Conditional Expiry Date Picker */}
-                    {formData.reason === 'About to Expire' && (
-                      <div className="space-y-1 animate-in fade-in slide-in-from-top-1">
-                        <label className="text-[10px] font-semibold uppercase tracking-wide text-orange-600 font-bold">
-                          Select Expiry Date
-                        </label>
-                        {/* <DatePicker
-                        date={expiryDate}
-                        setDate={(date: any) => {
-                          if (date && (date < minExpiry || date > maxExpiry)) {
-                            alert("Please select a date between 5 and 20 days from today.");
-                            return;
-                          }
-                          setExpiryDate(date);
-                        }}
-                      /> */}
+
+                  {/* Conditional Expiry Date Picker Fix */}
+                  {formData.reason === 'About to Expire' && (
+                    <div className="space-y-1 pt-1 animate-in fade-in slide-in-from-top-1 w-full">
+                      <label className="text-[10px] font-semibold uppercase tracking-wide text-orange-600 block">
+                        Select Expiry Date
+                      </label>
+                      {/* Wrapping in a div to ensure the DatePicker doesn't flex-row with the label */}
+                      <div className="w-full">
                         <DatePicker
                           date={expiryDate}
                           setDate={(date: any) => {
-                            // Get today's date at midnight for a clean comparison
-
                             if (date && date <= today) {
                               alert("Please select a date in the future.");
                               return;
                             }
-
                             setExpiryDate(date);
                           }}
                         />
                       </div>
-                    )}
-                  </div>
+                    </div>
+                  )}
                 </div>
 
                 <Button className="w-full h-11 font-semibold" onClick={addItemToList} disabled={!formData.name}>
-                  Add to Write-Off List
+                  Add {entryMode === 'bistro' ? 'Bistro Item' : 'to Write-Off List'}
                 </Button>
               </div>
             </DialogContent>

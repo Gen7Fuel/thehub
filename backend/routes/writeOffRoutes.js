@@ -164,21 +164,87 @@ router.get('/:id', async (req, res) => {
 });
 
 // Create a new write-off list
+// router.post('/', async (req, res) => {
+//   const { site, submittedBy, items, timestamp } = req.body;
+//   const siteCode = site?.toUpperCase() || 'NA';
+
+//   try {
+//     // 1. Extract unique GTINs for bulk lookup
+//     const gtins = [...new Set(items.map(i => i.gtin).filter(Boolean))];
+
+//     // 2. Fetch Bulk Stock Levels from SQL
+//     const stockMap = await getBulkOnHandQtyCSO(site, gtins);
+
+//     // 3. Attach the fresh stock levels to each item
+//     const processedItems = items.map(item => {
+//       // If item has a GTIN and exists in SQL results, use that. 
+//       // Otherwise, fallback to what the frontend sent or 0.
+//       const freshQty = item.gtin && stockMap[item.gtin] !== undefined
+//         ? stockMap[item.gtin]
+//         : (item.onHandAtWriteOff || 0);
+
+//       return {
+//         ...item,
+//         onHandAtWriteOff: freshQty
+//       };
+//     });
+
+//     // 4. Split items into two categories
+//     const standardItems = processedItems.filter(i => i.reason !== 'About to Expire');
+//     const ateItems = processedItems.filter(i => i.reason === 'About to Expire');
+
+//     const createdLists = [];
+//     let woMongoId = null;
+//     let ateMongoId = null;
+
+//     // 5. Save Standard Write-Off List
+//     if (standardItems.length > 0) {
+//       const woList = new WriteOff({
+//         listNumber: `WO-${siteCode}-${timestamp}`,
+//         listType: 'WO',
+//         site,
+//         submittedBy,
+//         items: standardItems,
+//         status: 'Incomplete',
+//         submitted: false
+//       });
+//       const savedWO = await woList.save();
+//       woMongoId = savedWO._id; // Capture the MongoDB Object ID
+//       createdLists.push(woList.listNumber);
+//     }
+
+//     // 6. Save About to Expire List
+//     if (ateItems.length > 0) {
+//       const ateList = new WriteOff({
+//         listNumber: `ATE-${siteCode}-${timestamp}`,
+//         listType: 'ATE',
+//         site,
+//         submittedBy,
+//         items: ateItems,
+//         status: 'Incomplete',
+//         submitted: false
+//       });
+//       const savedATE = await ateList.save();
+//       ateMongoId = savedATE._id; // Capture the MongoDB Object ID
+//       createdLists.push(ateList.listNumber);
+//     }
 router.post('/', async (req, res) => {
   const { site, submittedBy, items, timestamp } = req.body;
   const siteCode = site?.toUpperCase() || 'NA';
 
   try {
-    // 1. Extract unique GTINs for bulk lookup
-    const gtins = [...new Set(items.map(i => i.gtin).filter(Boolean))];
+    // 1. Extract unique GTINs for bulk lookup (exclude "Bistro" string)
+    const gtins = [...new Set(
+      items
+        .filter(i => i.upc_barcode !== "Bistro" && i.gtin)
+        .map(i => i.gtin)
+    )];
 
     // 2. Fetch Bulk Stock Levels from SQL
     const stockMap = await getBulkOnHandQtyCSO(site, gtins);
 
-    // 3. Attach the fresh stock levels to each item
+    // 3. Attach fresh stock levels
     const processedItems = items.map(item => {
-      // If item has a GTIN and exists in SQL results, use that. 
-      // Otherwise, fallback to what the frontend sent or 0.
       const freshQty = item.gtin && stockMap[item.gtin] !== undefined
         ? stockMap[item.gtin]
         : (item.onHandAtWriteOff || 0);
@@ -189,15 +255,20 @@ router.post('/', async (req, res) => {
       };
     });
 
-    // 4. Split items into two categories
-    const standardItems = processedItems.filter(i => i.reason !== 'About to Expire');
-    const ateItems = processedItems.filter(i => i.reason === 'About to Expire');
+    // 4. Split items into THREE categories
+    // Logic: Bistro items go to BT list, others split by "About to Expire"
+    const bistroItems = processedItems.filter(i => i.upc_barcode === 'Bistro');
+    const nonBistroItems = processedItems.filter(i => i.upc_barcode !== 'Bistro');
+
+    const standardItems = nonBistroItems.filter(i => i.reason !== 'About to Expire');
+    const ateItems = nonBistroItems.filter(i => i.reason === 'About to Expire');
 
     const createdLists = [];
     let woMongoId = null;
     let ateMongoId = null;
+    let btMongoId = null;
 
-    // 5. Save Standard Write-Off List
+    // 5. Save Standard Write-Off List (WO)
     if (standardItems.length > 0) {
       const woList = new WriteOff({
         listNumber: `WO-${siteCode}-${timestamp}`,
@@ -209,11 +280,11 @@ router.post('/', async (req, res) => {
         submitted: false
       });
       const savedWO = await woList.save();
-      woMongoId = savedWO._id; // Capture the MongoDB Object ID
+      woMongoId = savedWO._id;
       createdLists.push(woList.listNumber);
     }
 
-    // 6. Save About to Expire List
+    // 6. Save About to Expire List (ATE)
     if (ateItems.length > 0) {
       const ateList = new WriteOff({
         listNumber: `ATE-${siteCode}-${timestamp}`,
@@ -225,8 +296,24 @@ router.post('/', async (req, res) => {
         submitted: false
       });
       const savedATE = await ateList.save();
-      ateMongoId = savedATE._id; // Capture the MongoDB Object ID
+      ateMongoId = savedATE._id;
       createdLists.push(ateList.listNumber);
+    }
+
+    // 7. Save Bistro List (BT)
+    if (bistroItems.length > 0) {
+      const btList = new WriteOff({
+        listNumber: `BT-${siteCode}-${timestamp}`,
+        listType: 'BT',
+        site,
+        submittedBy,
+        items: bistroItems,
+        status: 'Incomplete',
+        submitted: false
+      });
+      const savedBT = await btList.save();
+      btMongoId = savedBT._id;
+      createdLists.push(btList.listNumber);
     }
 
     // --- EMAIL QUEUE PLACEHOLDER ---
@@ -238,55 +325,55 @@ router.post('/', async (req, res) => {
     const location = await Location.findOne({ stationName: site });
     const storeEmail = location?.email;
 
-    if (!storeEmail) {
-      console.error(`No email found for site: ${site}. Email skipped.`);
-    } else {
-      const siteInitials = siteCode;
+    // if (!storeEmail) {
+    //   console.error(`No email found for site: ${site}. Email skipped.`);
+    // } else {
+    //   const siteInitials = siteCode;
 
-      // RECIPIENTS CONFIG
-      const emailRecipients = {
-        store: storeEmail,
-        primaryCC: ["daksh@gen7fuel.com", "grayson@gen7fuel.com"],
-        categoryTeam: ["daksh@gen7fuel.com", "vasu@gen7fuel.com", "Pablo@gen7fuel.com", 
-                    "Saeid@gen7fuel.com", "zyannic@bosservicesltd.com", "grayson@gen7fuel.com"]
-      };
-      // SCENARIO 1: Both Lists Generated
-      if (woMongoId && ateMongoId) {
-        // Email 1: Mixed format to Store (No CC)
-        await emailQueue.add("sendWriteOffEmail", {
-          to: emailRecipients.store,
-          subject: `Inventory Lists Created: ${site}`,
-          html: generateEmailHTML(site, woMongoId, ateMongoId), // Use Mongo IDs for links
-          cc: emailRecipients.primaryCC
-        });
+    //   // RECIPIENTS CONFIG
+    //   const emailRecipients = {
+    //     store: storeEmail,
+    //     primaryCC: ["daksh@gen7fuel.com", "grayson@gen7fuel.com"],
+    //     categoryTeam: ["daksh@gen7fuel.com", "vasu@gen7fuel.com", "Pablo@gen7fuel.com",
+    //       "Saeid@gen7fuel.com", "zyannic@bosservicesltd.com", "grayson@gen7fuel.com"]
+    //   };
+    //   // SCENARIO 1: Both Lists Generated
+    //   if (woMongoId && ateMongoId) {
+    //     // Email 1: Mixed format to Store (No CC)
+    //     await emailQueue.add("sendWriteOffEmail", {
+    //       to: emailRecipients.store,
+    //       subject: `Inventory Lists Created: ${site}`,
+    //       html: generateEmailHTML(site, woMongoId, ateMongoId), // Use Mongo IDs for links
+    //       cc: emailRecipients.primaryCC
+    //     });
 
-        // Email 2: ATE only to Category Team (Multiple CCs)
-        await emailQueue.add("sendWriteOffEmail", {
-          to: "grayson@gen7fuel.com",
-          subject: `ATE Review Required: ${site}`,
-          html: generateEmailHTML(site, null, ateMongoId), // Only ATE link
-          cc: emailRecipients.categoryTeam.filter(e => e !== "grayson@gen7fuel.com")
-        });
-      }
-      // SCENARIO 2: Only ATE List
-      else if (ateMongoId) {
-        await emailQueue.add("sendWriteOffEmail", {
-          to: emailRecipients.store,
-          subject: `ATE Review Required: ${site}`,
-          html: generateEmailHTML(site, null, ateMongoId),
-          cc: emailRecipients.categoryTeam
-        });
-      }
-      // SCENARIO 3: Only WO List
-      else if (woMongoId) {
-        await emailQueue.add("sendWriteOffEmail", {
-          to: emailRecipients.store,
-          subject: `Write-Off List Generated: ${site} (${siteInitials})`,
-          html: generateEmailHTML(site, woMongoId, null),
-          cc: emailRecipients.primaryCC
-        });
-      }
-    }
+    //     // Email 2: ATE only to Category Team (Multiple CCs)
+    //     await emailQueue.add("sendWriteOffEmail", {
+    //       to: "grayson@gen7fuel.com",
+    //       subject: `ATE Review Required: ${site}`,
+    //       html: generateEmailHTML(site, null, ateMongoId), // Only ATE link
+    //       cc: emailRecipients.categoryTeam.filter(e => e !== "grayson@gen7fuel.com")
+    //     });
+    //   }
+    //   // SCENARIO 2: Only ATE List
+    //   else if (ateMongoId) {
+    //     await emailQueue.add("sendWriteOffEmail", {
+    //       to: emailRecipients.store,
+    //       subject: `ATE Review Required: ${site}`,
+    //       html: generateEmailHTML(site, null, ateMongoId),
+    //       cc: emailRecipients.categoryTeam
+    //     });
+    //   }
+    //   // SCENARIO 3: Only WO List
+    //   else if (woMongoId) {
+    //     await emailQueue.add("sendWriteOffEmail", {
+    //       to: emailRecipients.store,
+    //       subject: `Write-Off List Generated: ${site} (${siteInitials})`,
+    //       html: generateEmailHTML(site, woMongoId, null),
+    //       cc: emailRecipients.primaryCC
+    //     });
+    //   }
+    // }
 
     res.status(201).json({
       success: true,
@@ -412,8 +499,8 @@ router.patch('/:id/finalize', async (req, res) => {
     // 3. Email Queue Logic
     const emailRecipients = {
       primaryTo: "grayson@gen7fuel.com", // Primary CC from previous logic becomes the 'To'
-      categoryTeam: ["daksh@gen7fuel.com", "vasu@gen7fuel.com", "Pablo@gen7fuel.com", 
-                    "Saeid@gen7fuel.com", "zyannic@bosservicesltd.com"]
+      categoryTeam: ["daksh@gen7fuel.com", "vasu@gen7fuel.com", "Pablo@gen7fuel.com",
+        "Saeid@gen7fuel.com", "zyannic@bosservicesltd.com"]
     };
 
     await emailQueue.add("sendWriteOffEmail", {
