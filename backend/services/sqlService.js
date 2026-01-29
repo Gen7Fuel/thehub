@@ -694,7 +694,7 @@ async function getRefundTransactions(csoCode, date) {
           [GTIN], [UPC], [Category], [Item Name], 
           [Actual Sales Amount]
         FROM [CSO].[SalesTransactionCRJ]
-        WHERE [Status] LIKE '%Refund%' AND 
+        WHERE [Status] = 'RefundEvent' AND 
           [Station_SK] = @csoCode AND 
           [Date] = @targetDate
         ORDER BY [Event Start Time]
