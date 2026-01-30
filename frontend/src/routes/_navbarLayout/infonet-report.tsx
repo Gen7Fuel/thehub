@@ -143,7 +143,7 @@ function RouteComponent() {
               {/* 2. Grand Total Summary Section */}
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-6">
                 <div className="bg-blue-600 text-white p-6 rounded-xl shadow-md border border-blue-700">
-                  <p className="text-blue-100 text-sm font-medium uppercase tracking-wider">Total Infonet Tax Exempt Expected</p>
+                  <p className="text-blue-100 text-sm font-medium uppercase tracking-wider">Total Infonet Tax Rebate Expected</p>
                   <p className="text-3xl font-bold mt-1">
                     C${grandTotals.taxExempt.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                   </p>

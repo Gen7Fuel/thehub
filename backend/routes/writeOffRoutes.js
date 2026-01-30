@@ -6,120 +6,118 @@ const { getBulkOnHandQtyCSO } = require('../services/sqlService');
 const { emailQueue } = require('../queues/emailQueue');
 
 // Helper function to generate email HTML content
-function generateEmailHTML(site, woMongoId, ateMongoId) {
-  const isBoth = woMongoId && ateMongoId;
-  const headerTitle = isBoth ? "New WO & ATE Lists" : (woMongoId ? "Write-Off List" : "ATE Review List");
+function generateEmailHTML(site, woMongoId, ateMongoId, btMongoId) {
+  const ids = [
+    { id: woMongoId, label: "Standard Write-Off", btn: "📂 View WO List", color: "#333333", sub: "Warehouse" },
+    { id: ateMongoId, label: "About to Expire", btn: "📅 View ATE List", color: "#3f51b5", sub: "Expiry Review" },
+    { id: btMongoId, label: "Bistro Write-Off", btn: "🍔 View Bistro List", color: "#e67e22", sub: "Bistro Workflow" }
+  ].filter(item => item.id);
+
+  const headerTitle = ids.length > 1 ? "Multiple Inventory Write Off Lists Generated" : ids[0]?.label || "Inventory List";
   const bannerColor = "#283593";
 
-  // Dynamic style based on count
-  // If only one button, make it block/full-width. If two, keep them inline-block.
-  const buttonStyle = isBoth
-    ? "display: inline-block; width: 85%;"
-    : "display: block; width: 95%;";
-
+  // Generate the table cells for buttons
   let linksHTML = '';
+  ids.forEach((item, index) => {
+    // If it's the 3rd item in a set of 3, make it full width
+    const isFullWidth = ids.length === 3 && index === 2;
+    const width = isFullWidth ? '100%' : (ids.length === 1 ? '100%' : '50%');
 
-  if (woMongoId) {
     linksHTML += `
-      <td align="center" style="padding: 10px; width: ${isBoth ? '50%' : '100%'};">
-        <p style="margin: 0 0 10px 0; font-size: 13px; color: #666; font-weight: 500;">Standard Write-Off</p>
-        <a href="https://app.gen7fuel.com/write-off/${woMongoId}" 
-           style="background-color: #333333; color: #ffffff; padding: 14px 0; text-decoration: none; font-weight: 600; border-radius: 6px; ${buttonStyle} font-size: 15px; text-align: center;">
-           📂 View WO List
+      <td align="center" style="padding: 10px; width: ${width}; display: ${isFullWidth ? 'block' : 'table-cell'};">
+        <p style="margin: 0 0 10px 0; font-size: 13px; color: #666; font-weight: 500;">${item.label}</p>
+        <a href="https://app.gen7fuel.com/write-off/${item.id}" 
+           style="background-color: ${item.color}; color: #ffffff; padding: 14px 10px; text-decoration: none; font-weight: 600; border-radius: 6px; display: block; font-size: 14px; text-align: center;">
+           ${item.btn}
         </a>
       </td>`;
-  }
 
-  if (ateMongoId) {
-    linksHTML += `
-      <td align="center" style="padding: 10px; width: ${isBoth ? '50%' : '100%'};">
-        <p style="margin: 0 0 10px 0; font-size: 13px; color: #666; font-weight: 500;">About to Expire</p>
-        <a href="https://app.gen7fuel.com/write-off/${ateMongoId}" 
-           style="background-color: #3f51b5; color: #ffffff; padding: 14px 0; text-decoration: none; font-weight: 600; border-radius: 6px; ${buttonStyle} font-size: 15px; text-align: center;">
-           📅 View ATE List
-        </a>
-      </td>`;
-  }
+    // Add a table row break if we have 2 items and more are coming
+    if (index === 1 && ids.length === 3) {
+      linksHTML += '</tr><tr>';
+    }
+  });
 
   return `
     <div style="font-family: 'Segoe UI', Arial, sans-serif; background-color: #f0f2f5; padding: 30px;">
       <div style="max-width: 600px; margin: 0 auto; background-color: #ffffff; border-radius: 8px; overflow: hidden; box-shadow: 0 2px 10px rgba(0,0,0,0.05);">
-        
         <div style="background-color: ${bannerColor}; color: #ffffff; text-align: center; padding: 25px;">
           <h2 style="margin: 0; font-size: 22px; letter-spacing: 0.5px;">${headerTitle}</h2>
           <p style="margin: 5px 0 0 0; opacity: 0.9; font-size: 15px;">Site: ${site}</p>
         </div>
-
         <div style="padding: 30px;">
           <p style="font-size: 16px; color: #444; line-height: 1.6;">
-            Hello Store Team,<br><br>
-            A new list has been generated. Please use the link(s) below to process the item(s).
+            Hello Team,<br><br>
+            The following inventory lists have been generated for your review.
           </p>
-
           <table width="100%" border="0" cellspacing="0" cellpadding="0" style="margin-top: 25px; background-color: #f8f9fa; border-radius: 8px; padding: 15px;">
-            <tr>
-              ${linksHTML}
-            </tr>
+            <tr>${linksHTML}</tr>
           </table>
-
           <div style="margin-top: 30px; border-top: 1px solid #eee; padding-top: 20px;">
             <p style="font-size: 12px; color: #888; text-align: center; line-height: 1.4;">
-              This is an automated message from the Gen7Fuel Hub. Please do not reply to this email.
+              This is an automated message from the Gen7Fuel Hub.
             </p>
           </div>
         </div>
       </div>
-    </div>
-  `;
+    </div>`;
 }
 
-function generateFinalizedEmailHTML(site, listNumber, hubLink, csoLink) {
-  const bannerColor = "#1b5e20"; // Dark Green to signify Completion/Finalization
+function generateFinalizedEmailHTML(site, listNumber, hubLink, csoLink, listType) {
+  const isBT = listType === 'BT';
+  const bannerColor = isBT ? "#e67e22" : "#1b5e20"; // Orange for Bistro, Green for WO
+  const headerTitle = isBT ? "Bistro Write-Off Approved" : "Write-Off Finalized";
+  
+  // Text content based on type
+  const mainMessage = isBT 
+    ? `The Station Manager has <strong>approved</strong> the Bistro Write-Off request for <strong>${site}</strong>. Please review the items in the Hub.`
+    : `The Station Manager has finalized the Write-Off request for <strong>${site}</strong>. Please review the details in the Hub and accept the corresponding ticket in CStoreOffice.`;
+
+  // Dynamic Button Layout
+  let buttonsHTML = '';
+  if (csoLink) {
+    // TWO BUTTONS (For WO)
+    buttonsHTML = `
+      <td align="center" style="padding: 10px; width: 50%;">
+        <p style="margin: 0 0 10px 0; font-size: 12px; color: #666; font-weight: bold; text-transform: uppercase;">Review Details</p>
+        <a href="${hubLink}" style="background-color: #333333; color: #ffffff; padding: 14px 0; text-decoration: none; font-weight: 600; border-radius: 6px; display: block; width: 90%; font-size: 14px; text-align: center;">📂 View in Hub</a>
+      </td>
+      <td align="center" style="padding: 10px; width: 50%;">
+        <p style="margin: 0 0 10px 0; font-size: 12px; color: #666; font-weight: bold; text-transform: uppercase;">Inventory System</p>
+        <a href="${csoLink}" style="background-color: #2e7d32; color: #ffffff; padding: 14px 0; text-decoration: none; font-weight: 600; border-radius: 6px; display: block; width: 90%; font-size: 14px; text-align: center;">✅ Accept in CSO</a>
+      </td>`;
+  } else {
+    // ONE BUTTON (For BT)
+    buttonsHTML = `
+      <td align="center" style="padding: 10px; width: 100%;">
+        <p style="margin: 0 0 10px 0; font-size: 12px; color: #666; font-weight: bold; text-transform: uppercase;">Review Details</p>
+        <a href="${hubLink}" style="background-color: #e67e22; color: #ffffff; padding: 14px 0; text-decoration: none; font-weight: 600; border-radius: 6px; display: block; width: 95%; font-size: 14px; text-align: center;">📂 View Approved Bistro List</a>
+      </td>`;
+  }
 
   return `
     <div style="font-family: 'Segoe UI', Arial, sans-serif; background-color: #f0f2f5; padding: 30px;">
       <div style="max-width: 600px; margin: 0 auto; background-color: #ffffff; border-radius: 8px; overflow: hidden; box-shadow: 0 2px 10px rgba(0,0,0,0.05);">
-        
         <div style="background-color: ${bannerColor}; color: #ffffff; text-align: center; padding: 25px;">
-          <h2 style="margin: 0; font-size: 20px; letter-spacing: 0.5px;">Write-Off Finalized</h2>
+          <h2 style="margin: 0; font-size: 20px; letter-spacing: 0.5px;">${headerTitle}</h2>
           <p style="margin: 5px 0 0 0; opacity: 0.9; font-size: 14px;">List: ${listNumber} | Site: ${site}</p>
         </div>
-
         <div style="padding: 30px;">
           <p style="font-size: 15px; color: #444; line-height: 1.6;">
             Hello Team,<br><br>
-            The Station Manager has finalized the Write-Off request for <strong>${site}</strong>. 
-            Please review the details in the Hub and accept the corresponding ticket in CStoreOffice.
+            ${mainMessage}
           </p>
-
           <table width="100%" border="0" cellspacing="0" cellpadding="0" style="margin-top: 25px; background-color: #f8f9fa; border-radius: 8px; padding: 15px;">
-            <tr>
-              <td align="center" style="padding: 10px; width: 50%;">
-                <p style="margin: 0 0 10px 0; font-size: 12px; color: #666; font-weight: bold; text-transform: uppercase;">Review Details</p>
-                <a href="${hubLink}" 
-                   style="background-color: #333333; color: #ffffff; padding: 14px 0; text-decoration: none; font-weight: 600; border-radius: 6px; display: block; width: 90%; font-size: 14px; text-align: center;">
-                   📂 View in Hub
-                </a>
-              </td>
-              <td align="center" style="padding: 10px; width: 50%;">
-                <p style="margin: 0 0 10px 0; font-size: 12px; color: #666; font-weight: bold; text-transform: uppercase;">Inventory System</p>
-                <a href="${csoLink}" 
-                   style="background-color: #2e7d32; color: #ffffff; padding: 14px 0; text-decoration: none; font-weight: 600; border-radius: 6px; display: block; width: 90%; font-size: 14px; text-align: center;">
-                   ✅ Accept in CSO
-                </a>
-              </td>
-            </tr>
+            <tr>${buttonsHTML}</tr>
           </table>
-
           <div style="margin-top: 30px; border-top: 1px solid #eee; padding-top: 20px;">
             <p style="font-size: 12px; color: #888; text-align: center; line-height: 1.4;">
-              This is an automated message from the Gen7Fuel Hub. Please do not reply to this email.
+              This is an automated message from the Gen7Fuel Hub.
             </p>
           </div>
         </div>
       </div>
-    </div>
-  `;
+    </div>`;
 }
 
 // GET /api/write-off/list?site=RANKIN
@@ -325,56 +323,41 @@ router.post('/', async (req, res) => {
     const location = await Location.findOne({ stationName: site });
     const storeEmail = location?.email;
 
-    // if (!storeEmail) {
-    //   console.error(`No email found for site: ${site}. Email skipped.`);
-    // } else {
-    //   const siteInitials = siteCode;
+    if (!storeEmail) {
+      console.error(`No email found for site: ${site}. Email skipped.`);
+    } else {
 
-    //   // RECIPIENTS CONFIG
-    //   const emailRecipients = {
-    //     store: storeEmail,
-    //     primaryCC: ["daksh@gen7fuel.com", "grayson@gen7fuel.com"],
-    //     categoryTeam: ["daksh@gen7fuel.com", "vasu@gen7fuel.com", "Pablo@gen7fuel.com",
-    //       "Saeid@gen7fuel.com", "zyannic@bosservicesltd.com", "grayson@gen7fuel.com"]
-    //   };
-    //   // SCENARIO 1: Both Lists Generated
-    //   if (woMongoId && ateMongoId) {
-    //     // Email 1: Mixed format to Store (No CC)
-    //     await emailQueue.add("sendWriteOffEmail", {
-    //       to: emailRecipients.store,
-    //       subject: `Inventory Lists Created: ${site}`,
-    //       html: generateEmailHTML(site, woMongoId, ateMongoId), // Use Mongo IDs for links
-    //       cc: emailRecipients.primaryCC
-    //     });
+      const emailRecipients = {
+        store: storeEmail,
+        primaryCC: ["daksh@gen7fuel.com", "grayson@gen7fuel.com"],
+        categoryTeam: ["daksh@gen7fuel.com", "vasu@gen7fuel.com", "Pablo@gen7fuel.com", "Saeid@gen7fuel.com", "zyannic@bosservicesltd.com", "grayson@gen7fuel.com"]
+      };
+      // --- LOGIC FOR STORE (Receives Combined WO, ATE, BT) ---
+      if (woMongoId || ateMongoId || btMongoId) {
+        await emailQueue.add("sendWriteOffEmail", {
+          to: emailRecipients.store,
+          subject: `Inventory Lists Generated: ${site}`,
+          html: generateEmailHTML(site, woMongoId, ateMongoId, btMongoId),
+          cc: emailRecipients.primaryCC
+        });
+      }
 
-    //     // Email 2: ATE only to Category Team (Multiple CCs)
-    //     await emailQueue.add("sendWriteOffEmail", {
-    //       to: "grayson@gen7fuel.com",
-    //       subject: `ATE Review Required: ${site}`,
-    //       html: generateEmailHTML(site, null, ateMongoId), // Only ATE link
-    //       cc: emailRecipients.categoryTeam.filter(e => e !== "grayson@gen7fuel.com")
-    //     });
-    //   }
-    //   // SCENARIO 2: Only ATE List
-    //   else if (ateMongoId) {
-    //     await emailQueue.add("sendWriteOffEmail", {
-    //       to: emailRecipients.store,
-    //       subject: `ATE Review Required: ${site}`,
-    //       html: generateEmailHTML(site, null, ateMongoId),
-    //       cc: emailRecipients.categoryTeam
-    //     });
-    //   }
-    //   // SCENARIO 3: Only WO List
-    //   else if (woMongoId) {
-    //     await emailQueue.add("sendWriteOffEmail", {
-    //       to: emailRecipients.store,
-    //       subject: `Write-Off List Generated: ${site} (${siteInitials})`,
-    //       html: generateEmailHTML(site, woMongoId, null),
-    //       cc: emailRecipients.primaryCC
-    //     });
-    //   }
-    // }
+      // --- LOGIC FOR CATEGORY TEAM (Receives ONLY ATE and BT) ---
+      // We trigger this only if at least one of them exists
+      if (ateMongoId || btMongoId) {
+        const catSubject = (ateMongoId && btMongoId)
+          ? `Bistro & ATE Review Required: ${site}`
+          : (ateMongoId ? `ATE Review Required: ${site}` : `Bistro Approval Required: ${site}`);
 
+        await emailQueue.add("sendWriteOffEmail", {
+          // to: "daksh@gen7fuel.com", // Primary contact
+          to: "grayson@gen7fuel.com", // Primary contact
+          subject: catSubject,
+          html: generateEmailHTML(site, null, ateMongoId, btMongoId), // woMongoId is explicitly null
+          cc: emailRecipients.categoryTeam.filter(e => e !== "grayson@gen7fuel.com")
+        });
+      }
+    }
     res.status(201).json({
       success: true,
       lists: createdLists
@@ -471,46 +454,45 @@ router.patch('/:id/finalize', async (req, res) => {
       return res.status(400).json({ error: "This list has already been submitted." });
     }
 
+    const isBT = list.listType === 'BT';
+
     // 1. Mark as submitted and ensure status is Complete
     list.submitted = true;
     list.status = 'Complete';
-
-    // 2. Save the document
     const finalizedList = await list.save();
 
-    // 2. Fetch Location for CSO Link
-    // 2. Fetch Location for CSO Code
-    const location = await Location.findOne({ stationName: list.site });
-    const csoCode = location?.csoCode || '0';
+    // 2. Fetch Location for CSO (Only if not BT)
+    let csoLink = null;
+    if (!isBT) {
+      const location = await Location.findOne({ stationName: list.site });
+      const csoCode = location?.csoCode || '0';
+      const dateObj = new Date(list.createdAt);
+      const formattedDate = dateObj.toLocaleDateString('en-US', {
+        month: '2-digit', day: '2-digit', year: 'numeric'
+      });
+      csoLink = `https://03.cstoreoffice.com/daily-store-spoilage.php?Station=${csoCode}&date_form=${formattedDate}`;
+    }
 
-    // 3. Format the Date for CSO Link (MM/DD/YYYY)
-    // We use the list's createdAt date
-    const dateObj = new Date(list.createdAt);
-    const formattedDate = dateObj.toLocaleDateString('en-US', {
-      month: '2-digit',
-      day: '2-digit',
-      year: 'numeric'
-    });
-
-    // 4. Construct Links
-    const csoLink = `https://03.cstoreoffice.com/daily-store-spoilage.php?Station=${csoCode}&date_form=${formattedDate}`;
     const hubLink = `https://app.gen7fuel.com/write-off/${list._id}`;
 
-    // 3. Email Queue Logic
+    // 3. Email Config
     const emailRecipients = {
-      primaryTo: "grayson@gen7fuel.com", // Primary CC from previous logic becomes the 'To'
-      categoryTeam: ["daksh@gen7fuel.com", "vasu@gen7fuel.com", "Pablo@gen7fuel.com",
-        "Saeid@gen7fuel.com", "zyannic@bosservicesltd.com"]
+      primaryTo: "grayson@gen7fuel.com",
+      categoryTeam: ["daksh@gen7fuel.com", "vasu@gen7fuel.com", "Pablo@gen7fuel.com", "Saeid@gen7fuel.com", "zyannic@bosservicesltd.com"]
     };
+
+    // Subject logic
+    const subject = isBT 
+      ? `Approved by Station Manager: Bistro Items - ${list.site} (${list.listNumber})`
+      : `Finalized: Write-Off List - ${list.site} (${list.listNumber})`;
 
     await emailQueue.add("sendWriteOffEmail", {
       to: emailRecipients.primaryTo,
-      subject: `Finalized: Write-Off List - ${list.site} (${list.listNumber})`,
-      html: generateFinalizedEmailHTML(list.site, list.listNumber, hubLink, csoLink),
+      subject: subject,
+      html: generateFinalizedEmailHTML(list.site, list.listNumber, hubLink, csoLink, list.listType),
       cc: emailRecipients.categoryTeam
     });
 
-    console.log(`List ${list.listNumber} finalized by ${req.user.email}`);
     res.json(finalizedList);
   } catch (err) {
     console.error("Finalize Error:", err);

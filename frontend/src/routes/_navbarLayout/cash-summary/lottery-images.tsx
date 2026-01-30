@@ -34,8 +34,14 @@ function RouteComponent() {
         const resp = await fetch(`/api/cash-summary/lottery?site=${encodeURIComponent(lotterySite)}&date=${encodeURIComponent(ymd)}`, {
           headers: {
             ...(token ? { Authorization: `Bearer ${token}` } : {}),
+            "X-Required-Permission": "accounting.cashSummary.lottery",
           },
         })
+        if (resp.status === 403) {
+          console.warn("Lottery permission denied")
+          navigate({ to: "/no-access" }) // optional but recommended
+          return
+        }
         if (!resp.ok) return
         const j = await resp.json()
         const existing = j?.lottery?.images || []

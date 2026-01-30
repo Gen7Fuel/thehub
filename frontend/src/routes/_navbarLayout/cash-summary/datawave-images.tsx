@@ -38,8 +38,14 @@ function RouteComponent() {
         const resp = await fetch(`/api/cash-summary/lottery?site=${encodeURIComponent(lotterySite)}&date=${encodeURIComponent(ymd)}`, {
           headers: {
             ...(token ? { Authorization: `Bearer ${token}` } : {}),
+          "X-Required-Permission": "accounting.cashSummary.lottery",
           },
         })
+        if (resp.status === 403) {
+          console.warn("Lottery permission denied")
+          navigate({ to: "/no-access" }) // optional but recommended
+          return
+        }
         if (!resp.ok) return
         const j = await resp.json()
         const existing = j?.lottery?.datawaveImages || []
@@ -99,7 +105,7 @@ function RouteComponent() {
     prefix: 'lottery' | 'datawave'
   ): Promise<string[]> => {
     const uploaded: string[] = []
-  
+
     for (let i = 0; i < images.length; i++) {
       const img = images[i]
 
@@ -171,7 +177,7 @@ function RouteComponent() {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          ...(token ? { Authorization: `Bearer ${token}`, "X-Required-Permission": "accounting.lottery" } : {}),
+          ...(token ? { Authorization: `Bearer ${token}`, "X-Required-Permission": "accounting.cashSummary.lottery" } : {}),
         },
         body: JSON.stringify({ site: lotterySite, date: ymd, values: lotteryValues, images: uploadedLotteryImages, datawaveImages: uploadedDatawaveImages }),
       })

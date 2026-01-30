@@ -7,7 +7,7 @@ import { Button } from '@/components/ui/button';
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/components/ui/accordion';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
-import { AlertTriangle, PlusCircle, Search, Trash2 } from 'lucide-react';
+import { AlertTriangle, Info, PlusCircle, Search, Trash2 } from 'lucide-react';
 import axios from 'axios';
 import { DatePicker } from '@/components/custom/datePicker';
 
@@ -247,34 +247,60 @@ function RouteComponent() {
               <div className="space-y-4 pt-2">
                 {/* Search - Only show for Regular mode */}
                 {entryMode === 'regular' && (
-                  <div className="relative">
-                    <Search className="absolute left-3 top-3 h-4 w-4 text-slate-400" />
-                    <Input
-                      className="pl-9"
-                      placeholder="Search by product name or barcode…"
-                      value={formQuery}
-                      onChange={(e) => setFormQuery(e.target.value)}
-                    />
-                    {isSearching && (
-                      <div className="absolute right-3 top-3 h-4 w-4 animate-spin rounded-full border-2 border-primary border-t-transparent" />
-                    )}
-                    {formResults.length > 0 && (
-                      <div className="absolute z-50 mt-1 w-full rounded-md border bg-white shadow-lg max-h-48 overflow-y-auto">
-                        {formResults.map((item: any) => (
-                          <div
-                            key={item._id}
-                            onClick={() => selectFromSearch(item)}
-                            className="px-3 py-2 text-sm hover:bg-slate-50 cursor-pointer border-b last:border-0"
-                          >
-                            <p className="font-medium text-slate-900">{item.name}</p>
-                            <p className="text-xs text-slate-400 font-mono">{item.upc_barcode}</p>
+                  <> {/* <--- ADD THIS FRAGMENT START */}
+                    {/* Guidelines Callout */}
+                    <div className="bg-blue-50 border border-blue-100 rounded-lg p-3 mb-4">
+                      <div className="flex items-center gap-2 mb-2">
+                        <Info className="w-4 h-4 text-blue-600" />
+                        <span className="text-xs font-bold text-blue-900 uppercase tracking-tight">
+                          Write-Off Guidelines (About to Expire)
+                        </span>
+                      </div>
+                      <div className="grid grid-cols-2 gap-x-4 gap-y-1">
+                        {[
+                          { cat: "Deli / Fresh Food", days: "1–3 days" },
+                          { cat: "Dairy", days: "5–7 days" },
+                          { cat: "Bakery Items", days: "1–2 days" },
+                          { cat: "Packaged Grocery", days: "14–30 days" },
+                          { cat: "Beverages", days: "14–30 days" },
+                        ].map((row) => (
+                          <div key={row.cat} className="flex justify-between text-[11px] border-b border-blue-100/50 pb-0.5">
+                            <span className="text-slate-600">{row.cat}</span>
+                            <span className="font-bold text-blue-700">{row.days}</span>
                           </div>
                         ))}
                       </div>
-                    )}
-                  </div>
-                )}
+                    </div>
 
+                    {/* Search Input Group */}
+                    <div className="relative">
+                      <Search className="absolute left-3 top-3 h-4 w-4 text-slate-400" />
+                      <Input
+                        className="pl-9"
+                        placeholder="Search by product name or barcode…"
+                        value={formQuery}
+                        onChange={(e) => setFormQuery(e.target.value)}
+                      />
+                      {isSearching && (
+                        <div className="absolute right-3 top-3 h-4 w-4 animate-spin rounded-full border-2 border-primary border-t-transparent" />
+                      )}
+                      {formResults.length > 0 && (
+                        <div className="absolute z-50 mt-1 w-full rounded-md border bg-white shadow-lg max-h-48 overflow-y-auto">
+                          {formResults.map((item: any) => (
+                            <div
+                              key={item._id}
+                              onClick={() => selectFromSearch(item)}
+                              className="px-3 py-2 text-sm hover:bg-slate-50 cursor-pointer border-b last:border-0"
+                            >
+                              <p className="font-medium text-slate-900">{item.name}</p>
+                              <p className="text-xs text-slate-400 font-mono">{item.upc_barcode}</p>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  </> 
+                )}
                 {/* Form Fields */}
                 <div className="rounded-lg border bg-slate-50 p-4 space-y-3">
                   <div className="space-y-1">
@@ -453,6 +479,6 @@ function RouteComponent() {
           </div>
         )}
       </div>
-    </div>
+    </div >
   );
 }

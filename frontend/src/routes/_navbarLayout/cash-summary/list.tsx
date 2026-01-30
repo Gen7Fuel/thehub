@@ -1,5 +1,5 @@
 import { createFileRoute, useNavigate } from '@tanstack/react-router'
-import { useMemo } from 'react'
+import { useEffect, useMemo } from 'react'
 import { SitePicker } from '@/components/custom/sitePicker'
 
 type CashSummarySearch = { site: string }
@@ -26,24 +26,51 @@ export const Route = createFileRoute('/_navbarLayout/cash-summary/list')({
   }),
   loaderDeps: ({ search: { site } }) => ({ site }),
   loader: async ({ deps: { site } }) => {
-    if (!site) return { summaries: [] as CashSummaryDoc[] }
-    const res = await fetch(`/api/cash-summary?site=${encodeURIComponent(site)}`, {
-      headers: { Authorization: `Bearer ${localStorage.getItem('token') || ''}` },
-    })
-    if (!res.ok) throw new Error('Failed to load cash summaries')
-    const data = await res.json()
-    // Expecting array; adjust if API shape differs
-    return { summaries: data }
+    if (!site) return { summaries: [] as CashSummaryDoc[], accessDenied: false };
+
+    try {
+      const res = await fetch(`/api/cash-summary?site=${encodeURIComponent(site)}`, {
+        headers: {
+          Authorization: `Bearer ${localStorage.getItem('token') || ''}`,
+          "X-Required-Permission": "accounting.cashSummary.list"
+        },
+      });
+
+      if (!res.ok) {
+        if (res.status === 403) {
+          return { summaries: [], accessDenied: true };
+        }
+        throw new Error('Failed to load cash summaries');
+      }
+
+      const data = await res.json();
+      return { summaries: data, accessDenied: false };
+
+    } catch {
+      return { summaries: [], accessDenied: false };
+    }
   },
-})
+});
 
 function RouteComponent() {
   const { site } = Route.useSearch()
-  const { summaries } = Route.useLoaderData() as { summaries: CashSummaryDoc[] }
+  // const { summaries } = Route.useLoaderData() as { summaries: CashSummaryDoc[] }
   const navigate = useNavigate({ from: Route.fullPath })
+  const { summaries, accessDenied } = Route.useLoaderData() as {
+    summaries: CashSummaryDoc[];
+    accessDenied: boolean;
+  };
+
+  useEffect(() => {
+    if (accessDenied) {
+      navigate({ to: "/no-access" });
+    }
+  }, [accessDenied, navigate]);
+
+  if (accessDenied) return null;
 
   const onRowClick = (id: string) => {
-    navigate({ to: '/cash-summary', search: { site, id } })
+    navigate({ to: '/cash-summary/form', search: { site, id } })
   }
 
   const updateSite = (newSite: string) => {
@@ -92,56 +119,56 @@ function RouteComponent() {
             {!site && <span className="text-xs text-muted-foreground">Select a site to view entries</span>}
           </div>
 
-            {site && sorted.length === 0 && (
-              <div className="p-4 text-sm text-muted-foreground">No summaries found for this site.</div>
-            )}
+          {site && sorted.length === 0 && (
+            <div className="p-4 text-sm text-muted-foreground">No summaries found for this site.</div>
+          )}
 
-            {site && sorted.length > 0 && (
-              <div className="overflow-x-auto">
-                <table className="min-w-full text-xs">
-                  <thead className="bg-muted">
-                    <tr className="text-left">
-                      <th className="px-3 py-2">Shift</th>
-                      <th className="px-3 py-2">Date</th>
-                      <th className="px-3 py-2">Canadian Cash</th>
-                      <th className="px-3 py-2">Item Sales</th>
-                      <th className="px-3 py-2">Cash Back</th>
-                      <th className="px-3 py-2">Loyalty</th>
-                      <th className="px-3 py-2">CPL Bulloch</th>
-                      <th className="px-3 py-2">Exempted Tax</th>
-                      <th className="px-3 py-2">Created</th>
+          {site && sorted.length > 0 && (
+            <div className="overflow-x-auto">
+              <table className="min-w-full text-xs">
+                <thead className="bg-muted">
+                  <tr className="text-left">
+                    <th className="px-3 py-2">Shift</th>
+                    <th className="px-3 py-2">Date</th>
+                    <th className="px-3 py-2">Canadian Cash</th>
+                    <th className="px-3 py-2">Item Sales</th>
+                    <th className="px-3 py-2">Cash Back</th>
+                    <th className="px-3 py-2">Loyalty</th>
+                    <th className="px-3 py-2">CPL Bulloch</th>
+                    <th className="px-3 py-2">Exempted Tax</th>
+                    <th className="px-3 py-2">Created</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {sorted.map((row) => (
+                    <tr
+                      key={row._id}
+                      role="button"
+                      tabIndex={0}
+                      onClick={() => onRowClick(row._id)}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter' || e.key === ' ') {
+                          e.preventDefault()
+                          onRowClick(row._id)
+                        }
+                      }}
+                      className="cursor-pointer odd:bg-background even:bg-muted/30 hover:bg-primary/10 transition"
+                    >
+                      <td className="px-3 py-2 font-medium">{row.shift_number}</td>
+                      <td className="px-3 py-2">{fmtDateOnly(row.date)}</td>
+                      <td className="px-3 py-2">{fmtNum(row.canadian_cash_collected)}</td>
+                      <td className="px-3 py-2">{fmtNum(row.item_sales)}</td>
+                      <td className="px-3 py-2">{fmtNum(row.cash_back)}</td>
+                      <td className="px-3 py-2">{fmtNum(row.loyalty)}</td>
+                      <td className="px-3 py-2">{fmtNum(row.cpl_bulloch)}</td>
+                      <td className="px-3 py-2">{fmtNum(row.exempted_tax)}</td>
+                      <td className="px-3 py-2">{fmtDate(row.createdAt)}</td>
                     </tr>
-                  </thead>
-                  <tbody>
-                    {sorted.map((row) => (
-                      <tr
-                        key={row._id}
-                        role="button"
-                        tabIndex={0}
-                        onClick={() => onRowClick(row._id)}
-                        onKeyDown={(e) => {
-                          if (e.key === 'Enter' || e.key === ' ') {
-                            e.preventDefault()
-                            onRowClick(row._id)
-                          }
-                        }}
-                        className="cursor-pointer odd:bg-background even:bg-muted/30 hover:bg-primary/10 transition"
-                      >
-                        <td className="px-3 py-2 font-medium">{row.shift_number}</td>
-                        <td className="px-3 py-2">{fmtDateOnly(row.date)}</td>
-                        <td className="px-3 py-2">{fmtNum(row.canadian_cash_collected)}</td>
-                        <td className="px-3 py-2">{fmtNum(row.item_sales)}</td>
-                        <td className="px-3 py-2">{fmtNum(row.cash_back)}</td>
-                        <td className="px-3 py-2">{fmtNum(row.loyalty)}</td>
-                        <td className="px-3 py-2">{fmtNum(row.cpl_bulloch)}</td>
-                        <td className="px-3 py-2">{fmtNum(row.exempted_tax)}</td>
-                        <td className="px-3 py-2">{fmtDate(row.createdAt)}</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            )}
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
         </div>
       </div>
     </div>
