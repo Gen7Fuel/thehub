@@ -11,6 +11,7 @@ const { sendEmail } = require('../utils/emailService')
 const { generateCashSummaryPdf } = require('../utils/cashSummaryPdf')
 const { generateShiftReportsPdf } = require('../utils/shiftReportsPdf')
 const { generateLotteryImagesPdf } = require('../utils/lotteryImagesPdf')
+const { getRefundTransactions } = require('../services/sqlService');
 
 const path = require('path')
 
@@ -140,96 +141,137 @@ async function upsertDailyDepositForSiteDate(site, dateInput) {
   }
 }
 
-// router.get('/over-short', async (req, res) => {
-//   try {
-//     const { site } = req.query
-//     if (!site) {
-//       return res.status(400).json({ error: 'site is required' })
-//     }
+router.get('/tax-exempt-report', async (req, res) => {
+  try {
+    const { site, from, to } = req.query;
+    if (!site || !from || !to) {
+      return res.status(400).json({ error: 'site, from, and to dates are required' });
+    }
 
-//     // 1️⃣ Date range: past 7 days (normalized)
-//     const end = new Date()
-//     end.setHours(0, 0, 0, 0)
+    const startDate = new Date(from);
+    const endDate = new Date(to);
+    // Ensure endDate covers the full day
+    endDate.setHours(23, 59, 59, 999);
 
-//     const start = new Date(end)
-//     start.setDate(start.getDate() - 20) // today + previous 20 days
+    // 1. Fetch all shifts in range
+    const shifts = await CashSummary.find({
+      site,
+      date: { $gte: startDate, $lte: endDate }
+    }).sort({ date: 1 }).lean();
 
-//     // 2️⃣ Fetch submitted reports for site
-//     const reports = await CashSummaryReport.find({
-//       site,
-//       submitted: true,
-//       date: { $gte: start, $lte: end },
-//     })
-//       .sort({ date: 1 })
-//       .lean()
+    // 2. Fetch submission status from CashSummaryReport
+    const reports = await CashSummaryReport.find({
+      site,
+      date: { $gte: startDate, $lte: endDate }
+    }).lean();
 
-//     if (!reports.length) {
-//       return res.json([])
-//     }
+    const reportMap = reports.reduce((acc, r) => {
+      const dateKey = new Date(r.date).toISOString().split('T')[0];
+      acc[dateKey] = r.submitted;
+      return acc;
+    }, {});
 
-//     // 3️⃣ Fetch shifts for all those report dates
-//     const dayRanges = reports.map(r => ({
-//       date: {
-//         $gte: r.date,
-//         $lt: new Date(r.date.getTime() + 24 * 60 * 60 * 1000),
-//       },
-//     }))
+    // 3. Aggregate Shifts by Date
+    const dailyData = {};
 
-//     const shifts = await CashSummary.find({
-//       site,
-//       $or: dayRanges,
-//     }).lean()
+    shifts.forEach(shift => {
+      const dateKey = new Date(shift.date).toISOString().split('T')[0];
 
+      if (!dailyData[dateKey]) {
+        dailyData[dateKey] = {
+          date: dateKey,
+          totalExemptedTax: 0,
+          totalItemSales: 0,
+          shiftNumbers: [],
+          isSubmitted: !!reportMap[dateKey]
+        };
+      }
 
-//     // 4️⃣ Group shifts by date (day start time)
-//     const byDate = {}
+      dailyData[dateKey].totalExemptedTax += (shift.exempted_tax || 0);
+      dailyData[dateKey].totalItemSales += (shift.item_sales || 0);
+      if (shift.shift_number) {
+        dailyData[dateKey].shiftNumbers.push(shift.shift_number);
+      }
+    });
 
-//     for (const shift of shifts) {
-//       const d = new Date(shift.date)
-//       d.setHours(0, 0, 0, 0)
-//       const key = d.toISOString()
+    // 4. Ensure every date in the range exists in the response
+    const results = [];
+    let current = new Date(startDate);
+    while (current <= endDate) {
+      const key = current.toISOString().split('T')[0];
+      if (dailyData[key]) {
+        results.push(dailyData[key]);
+      } else {
+        // Entry for days with no shift data yet
+        results.push({
+          date: key,
+          totalExemptedTax: 0,
+          totalItemSales: 0,
+          shiftNumbers: [],
+          isSubmitted: !!reportMap[key]
+        });
+      }
+      current.setDate(current.getDate() + 1);
+    }
 
-//       if (!byDate[key]) {
-//         byDate[key] = {
-//           canadian_cash_collected: 0,
-//           report_canadian_cash: 0,
-//           shifts: 0,
-//         }
-//       }
+    res.json(results);
+  } catch (err) {
+    console.error('Tax Exempt Report Error:', err);
+    res.status(500).json({ error: 'Internal Server Error' });
+  }
+});
 
-//       byDate[key].canadian_cash_collected += shift.canadian_cash_collected || 0
-//       byDate[key].report_canadian_cash += shift.report_canadian_cash || 0
-//       byDate[key].shifts += 1
-//     }
+router.get('/voided-transactions-details', async (req, res) => {
+  try {
+    const { site, date } = req.query;
 
-//     // 5️⃣ Build final chart data
-//     const data = reports.map(r => {
-//       const key = r.date.toISOString()
-//       const totals = byDate[key] || {
-//         canadian_cash_collected: 0,
-//         report_canadian_cash: 0,
-//         shifts: 0,
-//       }
+    if (!site || !date) {
+      return res.status(400).json({ error: 'Site and Date are required' });
+    }
 
-//       const overShort =
-//         totals.canadian_cash_collected - totals.report_canadian_cash
+    const location = await Location.findOne({ stationName: site });
+    if (!location || !location.csoCode) {
+      return res.status(404).json({ error: 'Location or CSO Code not found' });
+    }
 
-//       return {
-//         date: r.date.toISOString().slice(0, 10), // YYYY-MM-DD
-//         overShort,
-//         canadian_cash_collected: totals.canadian_cash_collected,
-//         report_canadian_cash: totals.report_canadian_cash,
-//         shifts: totals.shifts,
-//         notes: r.notes || '',
-//       }
-//     })
+    // Grouping logic: Transform rows into a nested structure
+    const rawRows = await getRefundTransactions(location.csoCode, date);
 
-//     res.json(data)
-//   } catch (err) {
-//     console.error('Over/Short report error:', err)
-//     res.status(500).json({ error: 'Failed to fetch over/short data' })
-//   }
-// })
+    const groupedTransactions = rawRows.reduce((acc, row) => {
+      const txId = row['Transaction ID'];
+      // Ensure we work with positive numbers for display
+      const absAmount = Math.abs(row['Actual Sales Amount'] || 0);
+
+      if (!acc[txId]) {
+        acc[txId] = {
+          transactionId: txId,
+          eventStartTime: row['Event Start Time'],
+          totalAmount: 0,
+          items: []
+        };
+      }
+
+      acc[txId].items.push({
+        transactionLine: row['Transaction Line'],
+        gtin: row['GTIN'],
+        upc: row['UPC'],
+        category: row['Category'],
+        itemName: row['Item Name'],
+        amount: absAmount // Store as positive
+      });
+
+      acc[txId].totalAmount += absAmount;
+
+      return acc;
+    }, {});
+
+    return res.json(Object.values(groupedTransactions));
+  } catch (err) {
+    console.error('Error fetching voided details:', err);
+    res.status(500).json({ error: 'Internal Server Error' });
+  }
+});
+
 router.get('/over-short', async (req, res) => {
   try {
     const { site } = req.query;
@@ -955,10 +997,10 @@ router.post('/submit/to/safesheet', async (req, res) => {
 
           const lotteryImagesPdf = await generateLotteryImagesPdf({ site, date, origin })
           const attachments = [
-            { 
-              filename: `Cash-Summary-${site}-${date}.pdf`, 
-              content: cashSummaryPdf, 
-              contentType: 'application/pdf', 
+            {
+              filename: `Cash-Summary-${site}-${date}.pdf`,
+              content: cashSummaryPdf,
+              contentType: 'application/pdf',
             }
           ]
 

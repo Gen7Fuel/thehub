@@ -623,15 +623,15 @@ async function getAllTransactionsData(pool, csoCode, startDate, endDate) {
   }
 }
 
-async function getWeeklyBistroSales(pool,csoCode) {
+async function getWeeklyBistroSales(pool, csoCode) {
   try {
     // await sql.connect(sqlConfig);
     // const result = await sql.query(`SELECT TOP (10) * from [CSO].[Sales]`);
     // const result = await sql.query(`
     // const pool = await getPool();
     const result = await pool.request()
-    .input("csoCode", sql.Int, csoCode)
-    .query(`
+      .input("csoCode", sql.Int, csoCode)
+      .query(`
       SELECT *
       FROM [CSO].[BistroSales]
       WHERE [Station_Code] = @csoCode
@@ -645,15 +645,15 @@ async function getWeeklyBistroSales(pool,csoCode) {
   }
 }
 
-async function getTop10Bistro(pool,csoCode) {
+async function getTop10Bistro(pool, csoCode) {
   try {
     // await sql.connect(sqlConfig);
     // const result = await sql.query(`SELECT TOP (10) * from [CSO].[Sales]`);
     // const result = await sql.query(`
     // const pool = await getPool();
     const result = await pool.request()
-    .input("csoCode", sql.Int, csoCode)
-    .query(`
+      .input("csoCode", sql.Int, csoCode)
+      .query(`
       DECLARE @EndDate DATE = CAST(GETDATE() - 1 AS DATE);
       DECLARE @StartDate DATE = DATEADD(DAY, -30, @EndDate);
 
@@ -675,6 +675,30 @@ async function getTop10Bistro(pool,csoCode) {
       ORDER BY
           UnitsSold DESC;
     `);
+    // await sql.close();
+    return result.recordset;
+  } catch (err) {
+    console.error('SQL error:', err);
+    return [];
+  }
+}
+
+async function getRefundTransactions(csoCode, date) {
+  try {
+    const pool = await getPool();
+    const result = await pool.request()
+      .input('csoCode', sql.Int, csoCode)
+      .input('targetDate', sql.VarChar, date) // or sql.Date
+      .query(`
+        SELECT [Transaction ID], [Transaction Line], [Event Start Time], 
+          [GTIN], [UPC], [Category], [Item Name], 
+          [Actual Sales Amount]
+        FROM [CSO].[SalesTransactionCRJ]
+        WHERE [Status] = 'RefundEvent' AND 
+          [Station_SK] = @csoCode AND 
+          [Date] = @targetDate
+        ORDER BY [Event Start Time]
+      `);
     // await sql.close();
     return result.recordset;
   } catch (err) {
@@ -772,4 +796,5 @@ module.exports = {
   getTop10Bistro,
   getInventoryOnHandForActiveUPCsAndStation,
   getPool,
+  getRefundTransactions
 };
