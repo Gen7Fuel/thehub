@@ -808,7 +808,7 @@ export default function RouteComponent() {
                           <input
                             ref={cashInRef}
                             type="number"
-                            placeholder="0.00"
+                            placeholder=""
                             className="w-full px-3 py-2 text-right bg-white focus:outline-none focus:ring-1 focus:ring-blue-400 rounded-sm"
                             onKeyDown={handleKeyDown}
                             disabled
