@@ -106,6 +106,7 @@ async function upsertDailyDepositForSiteDate(site, dateInput) {
       { $group: { _id: null, total: { $sum: { $ifNull: ['$canadian_cash_collected', 0] } } } },
     ])
     const total = Number(agg[0]?.total || 0)
+    const roundedTotal = Math.round(total * 100) / 100
 
     // Find or create Safesheet
     let sheet = await Safesheet.findOne({ site })
@@ -126,10 +127,10 @@ async function upsertDailyDepositForSiteDate(site, dateInput) {
     if (idx >= 0) {
       sheet.entries[idx].date = entryDate
       sheet.entries[idx].description = 'Daily Deposit'
-      sheet.entries[idx].cashIn = total
+      sheet.entries[idx].cashIn = roundedTotal
       sheet.entries[idx].updatedAt = new Date()
     } else {
-      sheet.entries.push({ date: entryDate, description: 'Daily Deposit', cashIn: total })
+      sheet.entries.push({ date: entryDate, description: 'Daily Deposit', cashIn: roundedTotal })
     }
 
     await sheet.save()
@@ -923,7 +924,7 @@ router.post('/submit/to/safesheet', async (req, res) => {
       { $match: { site, date: { $gte: start, $lt: end } } },
       { $group: { _id: null, total: { $sum: { $ifNull: ['$canadian_cash_collected', 0] } } } },
     ])
-    const totalCanadianCashCollected = Number(agg[0]?.total || 0)
+    const totalCanadianCashCollected = Math.round(Number(agg[0]?.total || 0) * 100) / 100
 
     // Mark summaries as submitted (optional)
     await CashSummary.updateMany(
