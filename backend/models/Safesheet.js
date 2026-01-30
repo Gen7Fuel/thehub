@@ -1,6 +1,14 @@
 const mongoose = require('mongoose');
 const { Schema } = mongoose;
 
+// Helpers to prevent float drift
+const round2 = (v) => {
+  const n = Number(v || 0);
+  if (!Number.isFinite(n)) return 0;
+  return Math.round(n * 100) / 100;
+};
+const toCents = (v) => Math.round(Number(v || 0) * 100);
+
 /**
  * Entry subdocument - represents a single row in the safe/cash sheet.
  */
@@ -22,6 +30,19 @@ const SafesheetSchema = new Schema({
   initialBalance: { type: Number, default: 0 }, // starting safe balance before entries
   entries: { type: [EntrySchema], default: [] },
 }, { timestamps: true });
+
+// Normalize money fields on every save
+SafesheetSchema.pre('save', function normalizeMoney(next) {
+  this.initialBalance = round2(this.initialBalance);
+  if (Array.isArray(this.entries)) {
+    this.entries.forEach((e) => {
+      e.cashIn = round2(e.cashIn);
+      e.cashExpenseOut = round2(e.cashExpenseOut);
+      e.cashDepositBank = round2(e.cashDepositBank);
+    });
+  }
+  next();
+});
 
 /**
  * Instance method:
@@ -60,14 +81,13 @@ SafesheetSchema.methods.getEntriesWithRunningBalance = function () {
     return a.i - b.i
   })
 
-  // Recompute running balance in the sorted order
-  let running = Number(this.initialBalance || 0)
+  // Recompute running balance using integer cents to avoid float drift
+  let cents = toCents(this.initialBalance || 0)
   return rows.map((e) => {
-    const ci = Number(e.cashIn || 0)
-    const ce = Number(e.cashExpenseOut || 0)
-    const cb = Number(e.cashDepositBank || 0)
-    running = Number((running + ci - ce - cb).toFixed(2))
-    return { ...e, cashOnHandSafe: running }
+    cents += toCents(e.cashIn)
+    cents -= toCents(e.cashExpenseOut)
+    cents -= toCents(e.cashDepositBank)
+    return { ...e, cashOnHandSafe: cents / 100 }
   })
 }
 // SafesheetSchema.methods.getEntriesWithRunningBalance = function () {
