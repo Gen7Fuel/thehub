@@ -6,6 +6,9 @@ const CashSummarySchema = new mongoose.Schema(
     site: { type: String, required: true },
     shift_number: { type: String, required: true, index: true },
     date: { type: Date, required: true },
+    // Station times parsed from SFT header (stored as raw strings "YYYY-MM-DD HH:mm")
+    stationStart: { type: String },
+    stationEnd: { type: String },
     canadian_cash_collected: { type: Number },
     item_sales: { type: Number },
     cash_back: { type: Number },
