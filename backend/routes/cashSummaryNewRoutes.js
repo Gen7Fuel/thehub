@@ -723,6 +723,9 @@ router.post('/', async (req, res) => {
       // SHIFT STATISTICS: Voided Transactions
       voidedTransactionsAmount: numOrUndef(parsed.voidedTransactionsAmount),
       voidedTransactionsCount: numOrUndef(parsed.voidedTransactionsCount),
+      // Station times (strings) if present
+      ...(typeof parsed.stationStart === 'string' ? { stationStart: parsed.stationStart } : {}),
+      ...(typeof parsed.stationEnd === 'string' ? { stationEnd: parsed.stationEnd } : {}),
       // Lottery / Bulloch parsed values
       lottoPayout: numOrUndef(parsed.lottoPayout),
       onlineLottoTotal: numOrUndef(parsed.onlineLottoTotal),
@@ -1230,6 +1233,9 @@ router.put('/:id', async (req, res) => {
               loyalty: parsed.couponsAccepted,
               cpl_bulloch: parsed.fuelPriceOverrides,
               report_canadian_cash: parsed.canadianCash,
+              // station times parsed from SFT header (strings)
+              stationStart: parsed.stationStart,
+              stationEnd: parsed.stationEnd,
               // include lottery parsed fields for enrichment on update
               lottoPayout: parsed.lottoPayout,
               onlineLottoTotal: parsed.onlineLottoTotal,
@@ -1257,6 +1263,10 @@ router.put('/:id', async (req, res) => {
       date: new Date(date),
 
       canadian_cash_collected: norm(canadian_cash_collected),
+
+      // Preserve existing if not provided or parsed
+      stationStart: (typeof req.body.stationStart === 'string' ? req.body.stationStart : undefined) ?? enrichedValues.stationStart ?? existing.stationStart,
+      stationEnd: (typeof req.body.stationEnd === 'string' ? req.body.stationEnd : undefined) ?? enrichedValues.stationEnd ?? existing.stationEnd,
 
       item_sales: norm(item_sales ?? enrichedValues.item_sales ?? existing.item_sales),
       cash_back: norm(cash_back ?? enrichedValues.cash_back ?? existing.cash_back),

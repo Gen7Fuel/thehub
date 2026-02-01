@@ -182,6 +182,17 @@ function parseSftReport(text) {
     voidedTransactionsCount: pickTrailingInt('Voided\\s*Transactions', text),
   }
 
+  // Station times (strings in format "YYYY-MM-DD HH:mm"); if missing, leave undefined
+  const pickStationDateTimeString = (label, t) => {
+    const re = new RegExp(`^\\s*${label}\\s*:\\s*(\\d{4}-\\d{2}-\\d{2})\\s+(\\d{2}:\\d{2})\\s*$`, 'mi')
+    const m = t.match(re)
+    return m ? `${m[1]} ${m[2]}` : undefined
+  }
+  const startStr = pickStationDateTimeString('Start', text)
+  const endStr = pickStationDateTimeString('End', text)
+  if (startStr) metrics.stationStart = startStr
+  if (endStr) metrics.stationEnd = endStr
+
   const sd = text.match(/^\s*Safedrops\s+(\d+)\s+([-\d.,]+)\s*$/mi)
   if (sd) {
     metrics.safedrops = { count: Number(sd[1]), amount: toNumber(sd[2]) }
