@@ -426,7 +426,7 @@ export const Route = createFileRoute('/_navbarLayout/cash-summary/lottery')({
         {
           headers: {
             ...(token ? { Authorization: `Bearer ${token}` } : {}),
-            'X-Required-Permission': 'accounting.lottery',
+            'X-Required-Permission': 'accounting.cashSummary.lottery',
           },
         },
       )
@@ -456,7 +456,6 @@ function RouteComponent() {
 
   const { site: siteFromUrl, date: dateFromUrl } = Route.useSearch()
   const { sellsLottery, totals, rows, count, status, error } = Route.useLoaderData() as LoaderData
-
   // Global store
   const date = useFormStore((s) => s.date)
   const setDate = useFormStore((s) => s.setDate)
@@ -464,6 +463,12 @@ function RouteComponent() {
   const setLotteryValues = useFormStore((s) => s.setLotteryValues)
   const setLotterySite = useFormStore((s) => s.setLotterySite)
   const setLotteryImages = useFormStore((s) => s.setLotteryImages)
+
+  useEffect(() => {
+    if (status === 403) {
+      navigate({ to: "/no-access" })
+    }
+  }, [status, navigate])
 
   // Default site/date via search once when missing
   useEffect(() => {
@@ -589,6 +594,10 @@ function RouteComponent() {
     })
     // Reset init key to allow re-init on site change
     initKeyRef.current = ''
+  }
+  
+  if (status === 403) {
+    return null
   }
 
   return (

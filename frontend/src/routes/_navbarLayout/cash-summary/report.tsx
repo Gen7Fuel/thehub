@@ -70,18 +70,38 @@ export const Route = createFileRoute('/_navbarLayout/cash-summary/report')({
   },
   loaderDeps: ({ search: { site, date } }) => ({ site, date }),
   loader: async ({ deps: { site, date } }) => {
-    if (!site || !date) return { report: null as ReportData | null, error: null as string | null }
-    const res = await fetch(
-      `/api/cash-summary/report?site=${encodeURIComponent(site)}&date=${encodeURIComponent(date)}`,
-      { headers: { Authorization: `Bearer ${localStorage.getItem('token') || ''}` } }
-    )
-    if (!res.ok) {
-      const msg = await res.text().catch(() => 'Failed to load')
-      return { report: null, error: msg || 'Failed to load' }
+    if (!site || !date) {
+      return { report: null as ReportData | null, error: null as string | null, accessDenied: false }
     }
-    const report = (await res.json()) as ReportData
-    return { report, error: null }
-  },
+
+    try {
+      const res = await fetch(
+        `/api/cash-summary/report?site=${encodeURIComponent(site)}&date=${encodeURIComponent(date)}`,
+        {
+          headers: {
+            Authorization: `Bearer ${localStorage.getItem('token') || ''}`,
+            "X-Required-Permission": "accounting.cashSummary.report",
+          },
+        }
+      )
+
+      // ✅ Permission denied
+      if (res.status === 403) {
+        return { report: null, error: null, accessDenied: true }
+      }
+
+      if (!res.ok) {
+        const msg = await res.text().catch(() => 'Failed to load')
+        return { report: null, error: msg || 'Failed to load', accessDenied: false }
+      }
+
+      const report = (await res.json()) as ReportData
+      return { report, error: null, accessDenied: false }
+
+    } catch (err) {
+      return { report: null, error: 'Network error', accessDenied: false }
+    }
+  }
 })
 
 export function Card({ title, value, dialogContent }: CardProps) {
@@ -118,16 +138,17 @@ function RouteComponent() {
   const { user } = useAuth()
   const access = user?.access || {}
   const { site, date } = Route.useSearch()
-  const { report, error } = Route.useLoaderData() as { report: ReportData | null; error: string | null }
+  // const { report, error } = Route.useLoaderData() as { report: ReportData | null; error: string | null }
+  const { report, error, accessDenied } = Route.useLoaderData() as {
+    report: ReportData | null
+    error: string | null
+    accessDenied: boolean
+  }
   const navigate = useNavigate({ from: Route.fullPath })
   // const [submitState, setSubmitState] = useState<'idle' | 'submitting' | 'submitted'>('idle')
   const [submitState, setSubmitState] = useState<'idle' | 'submitting' | 'submitted'>(
     report?.report?.submitted === true ? 'submitted' : 'idle'
   )
-  const submitStateRef = useRef<'idle' | 'submitting' | 'submitted'>(submitState)
-  useEffect(() => {
-    submitStateRef.current = submitState
-  }, [submitState])
   const notes = report?.report?.notes ?? ''
   const submitted = report?.report?.submitted === true
   const unsettledPrepays = report?.report?.unsettledPrepays ?? undefined
@@ -136,37 +157,130 @@ function RouteComponent() {
   const [noteText, setNoteText] = useState('')
   const [fetching, setFetching] = useState(false)
 
+  const [voidedDetails, setVoidedDetails] = useState<any[]>([]);
+  const [loadingVoided, setLoadingVoided] = useState(false);
+
+  // Lottery saved entry for this site/date (for report print)
+  const [lottery, setLottery] = useState<any | null>(null)
+  const [bullock, setBullock] = useState<any | null>(null)
+  const [_, setLotteryLoading] = useState(false)
+
+  const skeletonCards = useMemo(
+    () => Array.from({ length: 9 }).map((_, i) => (
+      <div key={i} className="border rounded-md p-4 bg-muted/30 animate-pulse h-24" />
+    )),
+    []
+  )
+
+  const submitStateRef = useRef<'idle' | 'submitting' | 'submitted'>(submitState)
+  useEffect(() => {
+    submitStateRef.current = submitState
+  }, [submitState])
+
+  // ✅ Redirect on permission failure
+  useEffect(() => {
+    if (accessDenied) {
+      navigate({ to: "/no-access" })
+    }
+  }, [accessDenied, navigate])
+
+
   useEffect(() => {
     setNoteText(notes)
   }, [notes])
 
+  // const saveNotes = async (text: string) => {
+  //   if (!site || !date || submitted || !text.trim()) return
+  //   await fetch('/api/cash-summary/report', {
+  //     method: 'PUT',
+  //     headers: {
+  //       'Content-Type': 'application/json',
+  //       Authorization: `Bearer ${localStorage.getItem('token') || ''}`,
+  //     },
+  //     body: JSON.stringify({ site, date, notes: text }),
+  //   }).catch(() => { })
+  //   // Optionally refetch route loader:
+  //   // navigate({ search: (prev: Search) => ({ ...prev }) })
+  // }
   const saveNotes = async (text: string) => {
     if (!site || !date || submitted || !text.trim()) return
-    await fetch('/api/cash-summary/report', {
-      method: 'PUT',
-      headers: {
-        'Content-Type': 'application/json',
-        Authorization: `Bearer ${localStorage.getItem('token') || ''}`,
-      },
-      body: JSON.stringify({ site, date, notes: text }),
-    }).catch(() => { })
-    // Optionally refetch route loader:
-    // navigate({ search: (prev: Search) => ({ ...prev }) })
+
+    try {
+      const res = await fetch('/api/cash-summary/report', {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${localStorage.getItem('token') || ''}`,
+          'X-Required-Permission': 'accounting.cashSummary.report',
+        },
+        body: JSON.stringify({ site, date, notes: text }),
+      })
+
+      // ✅ Permission denied → redirect
+      if (res.status === 403) {
+        navigate({ to: "/no-access" })
+        return
+      }
+
+      if (!res.ok) {
+        console.warn('Failed to save notes')
+        return
+      }
+
+      // Optional: refetch loader
+      // navigate({ search: (prev: Search) => ({ ...prev }) })
+
+    } catch {
+      console.warn('Failed to save notes (network)')
+    }
   }
 
+  // const saveField = async (key: 'unsettledPrepays' | 'handheldDebit', value: string) => {
+  //   if (!site || !date || submitted) return
+  //   const num = Number(value)
+  //   if (!Number.isFinite(num)) return
+  //   await fetch('/api/cash-summary/report', {
+  //     method: 'PUT',
+  //     headers: {
+  //       'Content-Type': 'application/json',
+  //       Authorization: `Bearer ${localStorage.getItem('token') || ''}`,
+  //     },
+  //     body: JSON.stringify({ site, date, [key]: num }),
+  //   }).catch(() => { })
+  // }
   const saveField = async (key: 'unsettledPrepays' | 'handheldDebit', value: string) => {
     if (!site || !date || submitted) return
+
     const num = Number(value)
     if (!Number.isFinite(num)) return
-    await fetch('/api/cash-summary/report', {
-      method: 'PUT',
-      headers: {
-        'Content-Type': 'application/json',
-        Authorization: `Bearer ${localStorage.getItem('token') || ''}`,
-      },
-      body: JSON.stringify({ site, date, [key]: num }),
-    }).catch(() => { })
+
+    try {
+      const res = await fetch('/api/cash-summary/report', {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${localStorage.getItem('token') || ''}`,
+          'X-Required-Permission': 'accounting.cashSummary.report',
+        },
+        body: JSON.stringify({ site, date, [key]: num }),
+      })
+
+      // ✅ Permission denied → redirect
+      if (res.status === 403) {
+        navigate({ to: "/no-access" })
+        return
+      }
+
+      if (!res.ok) {
+        console.warn(`Failed to save field: ${key}`)
+        return
+      }
+
+    } catch {
+      console.warn(`Failed to save field (network): ${key}`)
+    }
   }
+
 
   useEffect(() => {
     if (report?.report?.submitted === true) {
@@ -216,9 +330,14 @@ function RouteComponent() {
         headers: {
           'Content-Type': 'application/json',
           Authorization: `Bearer ${localStorage.getItem('token') || ''}`,
+          'X-Required-Permission': 'accounting.cashSummary.report',
         },
         body: JSON.stringify({ site, date }),
       })
+      if (r.status === 403) {
+        navigate({ to: "/no-access" })
+        return
+      }
       if (!r.ok) {
         const msg = await r.text().catch(() => 'Submit failed')
         throw new Error(msg || 'Submit failed')
@@ -241,6 +360,7 @@ function RouteComponent() {
     setFetching(true)
     try {
       const token = localStorage.getItem('token') || ''
+      let permissionDenied = false
       for (const id of ids) {
         try {
           const res = await fetch(`/api/cash-summary/${encodeURIComponent(id)}`, {
@@ -248,9 +368,14 @@ function RouteComponent() {
             headers: {
               'Content-Type': 'application/json',
               Authorization: `Bearer ${token}`,
+              'X-Required-Permission': 'accounting.cashSummary.report.fetchAgain',
             },
             body: JSON.stringify({ refetch: true }),
           })
+          if (res.status === 403) {
+            permissionDenied = true
+            break
+          }
           // Continue even if one fails; surface minimal feedback
           if (!res.ok) {
             // ignore refetch failures silently
@@ -259,15 +384,17 @@ function RouteComponent() {
           // ignore refetch errors silently
         }
       }
+      // ✅ Redirect if permission failed
+      if (permissionDenied) {
+        navigate({ to: "/no-access" })
+        return
+      }
       await navigate({ search: (prev: Search) => ({ ...prev }) })
       await onSubmitClick()
     } finally {
       setFetching(false)
     }
   }
-
-  const [voidedDetails, setVoidedDetails] = useState<any[]>([]);
-  const [loadingVoided, setLoadingVoided] = useState(false);
 
   const fetchVoidedDetails = async () => {
     // Only fetch if we don't already have data for this specific report
@@ -278,9 +405,12 @@ function RouteComponent() {
       const token = localStorage.getItem('token');
       const resp = await fetch(
         `/api/cash-summary/voided-transactions-details?site=${encodeURIComponent(site)}&date=${encodeURIComponent(date)}`,
-        { headers: token ? { Authorization: `Bearer ${token}` } : {} }
+        { headers: token ? { Authorization: `Bearer ${token}`, 'X-Required-Permission': 'accounting.cashSummary.report' } : {}, }
       );
-
+      if (resp.status === 403) {
+        navigate({ to: "/no-access" })
+        return
+      }
       if (resp.ok) {
         const data = await resp.json();
         setVoidedDetails(data);
@@ -312,11 +442,6 @@ function RouteComponent() {
   const totals = report?.totals
   const hasRows = rows.length > 0
 
-  // Lottery saved entry for this site/date (for report print)
-  const [lottery, setLottery] = useState<any | null>(null)
-  const [bullock, setBullock] = useState<any | null>(null)
-  const [_, setLotteryLoading] = useState(false)
-
   useEffect(() => {
     const fetchLottery = async () => {
       if (!site || !date) {
@@ -328,8 +453,14 @@ function RouteComponent() {
       try {
         const token = localStorage.getItem('token')
         const resp = await fetch(`/api/cash-summary/lottery?site=${encodeURIComponent(site)}&date=${encodeURIComponent(date)}`, {
-          headers: token ? { Authorization: `Bearer ${token}` } : {},
+          headers: token ? { Authorization: `Bearer ${token}`, 'X-Required-Permission': 'accounting.cashSummary.report' } : {},
         })
+        if (resp.status === 403) {
+          setLottery(null)
+          setBullock(null)
+          navigate({ to: "/no-access" })
+          return
+        }
         if (!resp.ok) {
           setLottery(null)
           setBullock(null)
@@ -409,12 +540,7 @@ function RouteComponent() {
   const adjustedOsColor =
     adjustedOverShort > 0 ? 'text-green-600' : adjustedOverShort < 0 ? 'text-red-600' : 'text-muted-foreground'
 
-  const skeletonCards = useMemo(
-    () => Array.from({ length: 9 }).map((_, i) => (
-      <div key={i} className="border rounded-md p-4 bg-muted/30 animate-pulse h-24" />
-    )),
-    []
-  )
+  if (accessDenied) return null
 
   return (
     <div className="pt-2 w-full flex flex-col items-center">
@@ -454,7 +580,7 @@ function RouteComponent() {
             {/* <Button type="button" variant="outline" onClick={() => window.print()}>
               Export PDF
             </Button> */}
-            {access?.accounting?.cashSummary?.fetchAgain && (
+            {access?.accounting?.cashSummary?.report?.fetchAgain && (
               <Button
                 type="button"
                 variant="outline"

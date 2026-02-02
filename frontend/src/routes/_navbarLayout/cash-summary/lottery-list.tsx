@@ -341,7 +341,7 @@ export const Route = createFileRoute('/_navbarLayout/cash-summary/lottery-list')
       const resp = await fetch(`/api/cash-summary/lottery?site=${encodeURIComponent(site)}&date=${encodeURIComponent(date)}`, {
         headers: {
           ...(token ? { Authorization: `Bearer ${token}` } : {}),
-          'X-Required-Permission': 'accounting.lotteryList',
+          'X-Required-Permission': 'accounting.cashSummary.lotteryList',
         },
       })
 
@@ -373,6 +373,19 @@ function RouteComponent() {
   const { site: siteFromUrl, date: dateFromUrl } = Route.useSearch()
   const { lottery, totals: bullock, error, status } = Route.useLoaderData() as LoaderData
 
+  // Image modal state
+  const [imageModal, setImageModal] = useState<{
+    isOpen: boolean
+    images: string[]
+    currentIndex: number
+  }>({ isOpen: false, images: [], currentIndex: 0 })
+
+  useEffect(() => {
+    if (status === 403) {
+      navigate({ to: "/no-access" })
+    }
+  }, [status, navigate])
+
   // Default site from user.location if missing
   useEffect(() => {
     if (!siteFromUrl && user?.location) {
@@ -401,13 +414,6 @@ function RouteComponent() {
 
   const dateAsDate = parseYmdToDate(dateFromUrl)
 
-  // Image modal state
-  const [imageModal, setImageModal] = useState<{
-    isOpen: boolean
-    images: string[]
-    currentIndex: number
-  }>({ isOpen: false, images: [], currentIndex: 0 })
-
   const viewImages = (images: string[]) => {
     if (!images || images.length === 0) {
       alert('No images attached')
@@ -424,6 +430,10 @@ function RouteComponent() {
       ...prev,
       currentIndex: prev.currentIndex === 0 ? prev.images.length - 1 : prev.currentIndex - 1,
     }))
+
+  if (status === 403) {
+    return null
+  }
 
   return (
     <div className="p-4">
@@ -535,7 +545,7 @@ function RouteComponent() {
                     >
                       $
                       {Number(
-                        ((bullock.scratchSales || 0) - ((lottery.instantLottTotal ?? 0) + (lottery.scratchFreeTickets ?? 0) + (lottery.oldScratchTickets ?? 0 ))),
+                        ((bullock.scratchSales || 0) - ((lottery.instantLottTotal ?? 0) + (lottery.scratchFreeTickets ?? 0) + (lottery.oldScratchTickets ?? 0))),
                       ).toFixed(2)}
                     </span>
                   ) : (

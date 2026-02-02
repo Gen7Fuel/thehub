@@ -15,7 +15,7 @@ function RouteComponent() {
   const isListActive = matchRoute({ to: '/cash-summary/list' })
   const isLotteryActive = matchRoute({ to: '/cash-summary/lottery' })
   const isLotteryListActive = matchRoute({ to: '/cash-summary/lottery-list' })
-  const isFormActive = matchRoute({ to: '/cash-summary' })
+  const isFormActive = matchRoute({ to: '/cash-summary/form' })
 
   const fallbackSite = user?.location
   const access = user?.access || {}
@@ -24,40 +24,45 @@ function RouteComponent() {
     <div className="pt-16 flex flex-col items-center">
       <div className="flex mb-4">
         {/* Keep existing site if present; else use user?.location */}
-        <Link
-          to="/cash-summary"
-          search={(prev: any) => {
-            const { id, date, ...rest } = prev || {}
-            return { ...rest, site: rest?.site ?? fallbackSite }
-          }}
-          activeOptions={{ exact: true }}
-        >
-          <Button
-            {...(!isFormActive && { variant: 'outline' } as object)}
-            className="rounded-r-none"
+        
+        {access?.accounting?.cashSummary?.form && (
+          <Link
+            to="/cash-summary/form"
+            search={(prev: any) => {
+              const { id, date, ...rest } = prev || {}
+              return { ...rest, site: rest?.site ?? fallbackSite }
+            }}
+            activeOptions={{ exact: true }}
           >
-            Form
-          </Button>
-        </Link>
+            <Button
+              {...(!isFormActive && { variant: 'outline' } as object)}
+              className="rounded-r-none"
+            >
+              Form
+            </Button>
+          </Link>
+        )}
 
-        <Link
-          to="/cash-summary/list"
-          // search={(prev: any) => {
-          //   const { id, date, ...rest } = prev || {}
-          //   return { ...rest, site: rest?.site ?? fallbackSite }
-          // }}
-          search={(prev: any) => ({ ...prev})}
-          activeOptions={{ exact: true }}
-        >
-          <Button
-            {...(!isListActive && { variant: 'outline' } as object)}
-            className="rounded-none"
+        {access?.accounting?.cashSummary?.list && (
+          <Link
+            to="/cash-summary/list"
+            // search={(prev: any) => {
+            //   const { id, date, ...rest } = prev || {}
+            //   return { ...rest, site: rest?.site ?? fallbackSite }
+            // }}
+            search={(prev: any) => ({ ...prev})}
+            activeOptions={{ exact: true }}
           >
-            List
-          </Button>
-        </Link>
+            <Button
+              {...(!isListActive && { variant: 'outline' } as object)}
+              className="rounded-none"
+            >
+              List
+            </Button>
+          </Link>
+        )}
 
-        {access?.accounting?.lottery && (
+        {access?.accounting?.cashSummary?.lottery && (
           <Link
             to="/cash-summary/lottery"
             // search={(prev: any) => {
@@ -75,7 +80,7 @@ function RouteComponent() {
             </Button>
           </Link>
         )}
-        {access?.accounting?.lotteryList && (
+        {access?.accounting?.cashSummary?.lotteryList && (
           <Link
             to="/cash-summary/lottery-list"
             // search={(prev: any) => {
@@ -93,18 +98,20 @@ function RouteComponent() {
             </Button>
           </Link>
         )}
-        <Link
-          to="/cash-summary/report"
-          search={(prev: any) => ({ ...prev})}
-          activeOptions={{ exact: true }}
-        >
-          <Button
-            {...(!isSummaryActive && { variant: 'outline' } as object)}
-            className="rounded-l-none"
+        {access?.accounting?.cashSummary?.report?.value && (
+          <Link
+            to="/cash-summary/report"
+            search={(prev: any) => ({ ...prev})}
+            activeOptions={{ exact: true }}
           >
-            Report
-          </Button>
-        </Link>
+            <Button
+              {...(!isSummaryActive && { variant: 'outline' } as object)}
+              className="rounded-l-none"
+            >
+              Report
+            </Button>
+          </Link>
+        )}
       </div>
       <Outlet />
     </div>

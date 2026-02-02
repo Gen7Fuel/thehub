@@ -13,7 +13,10 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Input } from '@/components/ui/input';
 
 export const Route = createFileRoute('/_navbarLayout/write-off/$id')({
-  component: WriteOffDetailsPage,
+  component: RouteComponent,
+  // This ensures the loader runs every time you visit the page
+  staleTime: 0, 
+  gcTime: 0,
   loader: async ({ params }) => {
     const res = await axios.get(`/api/write-off/${params.id}`, {
       headers: { Authorization: `Bearer ${localStorage.getItem('token')}` }
@@ -22,7 +25,7 @@ export const Route = createFileRoute('/_navbarLayout/write-off/$id')({
   }
 })
 
-function WriteOffDetailsPage() {
+function RouteComponent() {
   const { user } = useAuth();
   const data = Route.useLoaderData()
   const [writeOff, setWriteOff] = useState(data)
@@ -33,6 +36,7 @@ function WriteOffDetailsPage() {
   const [editItem, setEditItem] = useState<any | null>(null);
 
   const isATE = writeOff.listType === 'ATE';
+  const isBT = writeOff.listType === 'BT';
 
   // State for Comments
   const [viewCommentsItemId, setViewCommentsItemId] = useState<string | null>(null);
@@ -128,8 +132,11 @@ function WriteOffDetailsPage() {
   };
 
   const handleFinalize = async () => {
-    if (!window.confirm("Are you sure you want to finalize this write-off? This will lock the record.")) return;
+    const confirmMessage = isBT
+      ? "Are you sure you want to approve this Bistro write-off? This will lock the record."
+      : "Are you sure you want to finalize this write-off? This will lock the record.";
 
+    if (!window.confirm(confirmMessage)) return;
     try {
       const res = await axios.patch(
         `/api/write-off/${writeOff._id}/finalize`,
@@ -254,27 +261,32 @@ function WriteOffDetailsPage() {
 
           <div className="flex items-center">
             <Button
+              // Button is disabled if:
+              // 1. The overall list status isn't 'Complete' (meaning items are still pending)
+              // 2. OR the list is already locked/submitted
               disabled={writeOff.status !== 'Complete' || isLocked}
               onClick={handleFinalize}
               className={`h-12 px-8 rounded-xl font-bold text-xs uppercase tracking-wide transition-all shadow-lg 
-          ${isLocked
+              ${isLocked
                   ? 'bg-slate-200 text-slate-500 shadow-none cursor-not-allowed'
                   : writeOff.status === 'Complete'
-                    ? 'bg-green-600 hover:bg-green-700 text-white shadow-green-200'
-                    : 'bg-slate-100 text-slate-400 shadow-none'
+                    ? isBT
+                      ? 'bg-orange-600 hover:bg-orange-700 text-white shadow-orange-200' // Bistro Success Color
+                      : 'bg-green-600 hover:bg-green-700 text-white shadow-green-200'   // Standard Success Color
+                    : 'bg-slate-100 text-slate-400 shadow-none' // Pending state
                 }`}
             >
               {isLocked ? (
                 <>
                   <CheckCircle2 className="w-4 h-4 mr-2 stroke-[3px]" />
-                  Write off Finalised
+                  {isBT ? 'Write Off Approved' : 'Write Off Finalised'}
                 </>
               ) : (
                 <>
                   {writeOff.status === 'Complete' && (
                     <CheckCircle2 className="w-4 h-4 mr-2 stroke-[3px]" />
                   )}
-                  Finalize Write-Off
+                  {isBT ? 'Approve Write-Off' : 'Finalize Write-Off'}
                 </>
               )}
             </Button>
@@ -286,7 +298,67 @@ function WriteOffDetailsPage() {
       {/* Main Table */}
       <div className="flex-1 bg-white border border-slate-200 rounded-2xl shadow-sm flex flex-col overflow-hidden">
         <div className="overflow-x-auto overflow-y-auto">
-          {isATE ? (
+          {isBT ? (
+            <table className="w-full text-left border-collapse min-w-[800px]">
+              <thead className="sticky top-0 bg-orange-50 z-10 border-b border-orange-200">
+                <tr>
+                  <th className="px-6 py-4 text-xs font-semibold text-orange-900 uppercase tracking-wide">Item Name</th>
+                  <th className="px-6 py-4 text-xs font-semibold text-orange-900 uppercase tracking-wide">Type</th>
+                  <th className="px-6 py-4 text-xs font-semibold text-orange-900 uppercase tracking-wide text-center">Qty</th>
+                  <th className="px-6 py-4 text-xs font-semibold text-orange-900 uppercase tracking-wide">Reason</th>
+                  <th className="px-6 py-4 text-xs font-semibold text-orange-900 uppercase tracking-wide text-right">Approved</th>
+                </tr>
+              </thead>
+
+              <tbody className="divide-y divide-slate-100">
+                {writeOff.items.map((item: any) => (
+                  <tr
+                    key={item._id}
+                    className={`transition-colors ${isLocked ? 'cursor-default' : 'hover:bg-orange-50/30'} ${item.completed ? 'bg-slate-50/30' : ''}`}
+                  >
+                    {/* Item Name (No GTIN) */}
+                    <td className="px-6 py-4">
+                      <span className="text-sm font-semibold text-slate-800">{item.name}</span>
+                    </td>
+
+                    {/* Barcode column (Static text) */}
+                    <td className="px-6 py-4 text-sm text-slate-500">
+                      Bistro Return
+                    </td>
+
+                    {/* Qty (Editable via dialog) */}
+                    <td className="px-6 py-4 text-center" onClick={() => !isLocked && !item.completed && setEditItem(item)}>
+                      <span className="inline-flex items-center justify-center px-3 py-1 rounded-lg text-sm font-bold bg-slate-100 text-slate-700">
+                        {item.qty}
+                      </span>
+                    </td>
+
+                    {/* Reason */}
+                    <td className="px-6 py-4" onClick={() => !isLocked && !item.completed && setEditItem(item)}>
+                      <span className={`px-2.5 py-0.5 rounded-full text-[10px] font-bold uppercase border ${REASON_COLORS[item.reason]}`}>
+                        {item.reason}
+                      </span>
+                    </td>
+
+                    {/* Action/Reviewed Checkbox */}
+                    <td className="px-6 py-4 text-right">
+                      <button
+                        type="button"
+                        disabled={isLocked}
+                        onClick={() => handleToggleItem(item._id, item.completed)}
+                      >
+                        {item.completed ? (
+                          <CheckSquare size={28} className="text-orange-600 fill-orange-50" strokeWidth={2.5} />
+                        ) : (
+                          <Square size={28} className="text-slate-300" strokeWidth={2} />
+                        )}
+                      </button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          ) : isATE ? (
             /* NEW ATE TABLE */
             <table className="w-full text-left border-collapse min-w-[800px]">
               <thead className="sticky top-0 bg-indigo-50/50 z-10 border-b border-indigo-100">

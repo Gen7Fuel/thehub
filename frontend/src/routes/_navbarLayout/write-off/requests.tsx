@@ -158,16 +158,18 @@ import axios from 'axios';
 // 1. Define the Search Interface to fix the TypeScript 'type' error
 interface WriteOffSearch {
   site: string;
-  type?: 'WO' | 'ATE';
+  type?: 'WO' | 'ATE' | 'BT';
 }
 
 export const Route = createFileRoute('/_navbarLayout/write-off/requests')({
   component: RouteComponent,
   validateSearch: (search: Record<string, unknown>): WriteOffSearch => ({
     site: (search.site as string) || '',
-    type: (search.type as 'WO' | 'ATE') || 'WO',
+    type: (search.type as 'WO' | 'ATE' | 'BT') || 'WO',
   }),
   loaderDeps: ({ search: { site, type } }) => ({ site, type }),
+  staleTime: 0, 
+  gcTime: 0,
   loader: async ({ deps: { site, type } }) => {
     if (!site) return { data: [], accessDenied: false };
 
@@ -198,7 +200,7 @@ export const getStatusStyles = (status: string) => {
 function RouteComponent() {
   const { user } = useAuth();
   // Destructuring site and type now works thanks to the Search interface above
-  const { site, type } = Route.useSearch(); 
+  const { site, type } = Route.useSearch();
   const navigate = useNavigate({ from: Route.fullPath });
   const { data, accessDenied } = Route.useLoaderData() as any;
 
@@ -222,54 +224,64 @@ function RouteComponent() {
     });
   }, [data]);
 
-  const setListType = (newType: 'WO' | 'ATE') => {
+  const setListType = (newType: 'WO' | 'ATE' | 'BT') => {
     navigate({ search: (prev: any) => ({ ...prev, type: newType }) });
   };
 
+  // Helper for dynamic colors based on type
+  const getTypeStyles = (currentType: string) => {
+    switch (currentType) {
+      case 'ATE': return { border: 'border-indigo-600', text: 'text-indigo-600', bg: 'bg-indigo-50', icon: 'text-indigo-400' };
+      case 'BT': return { border: 'border-orange-500', text: 'text-orange-500', bg: 'bg-orange-50', icon: 'text-orange-400' };
+      default: return { border: 'border-primary', text: 'text-primary', bg: 'bg-slate-100', icon: 'text-slate-400' };
+    }
+  };
+
+  const theme = getTypeStyles(type || 'WO');
+
   return (
     <div className="min-w-2xl mx-auto p-6 h-[calc(100vh-120px)] flex flex-col antialiased font-sans">
-      
+
       {/* Site Picker */}
       <div className="flex justify-center mb-8">
-        <SitePicker 
-          value={site} 
-          onValueChange={(s) => navigate({ search: (prev: any) => ({ ...prev, site: s }) })} 
+        <SitePicker
+          value={site}
+          onValueChange={(s) => navigate({ search: (prev: any) => ({ ...prev, site: s }) })}
         />
       </div>
 
       {/* Container */}
       <div className="flex-1 bg-white border border-slate-200 rounded-2xl shadow-sm flex flex-col overflow-hidden">
-        
-        {/* Header with Tabs */}
+
+        {/* Header with 3 Tabs */}
         <div className="border-b border-slate-100 flex items-center justify-between bg-slate-50/50">
           <div className="flex">
-            <button 
+            <button
               onClick={() => setListType('WO')}
-              className={`px-8 py-4 text-sm font-bold transition-all border-b-2 ${
-                type === 'WO' 
-                ? 'border-primary text-primary bg-white' 
-                : 'border-transparent text-slate-400 hover:text-slate-600'
-              }`}
+              className={`px-6 py-4 text-sm font-bold transition-all border-b-2 ${type === 'WO' ? 'border-primary text-primary bg-white' : 'border-transparent text-slate-400 hover:text-slate-600'
+                }`}
             >
               Write Off List
             </button>
-            <button 
+            <button
               onClick={() => setListType('ATE')}
-              className={`px-8 py-4 text-sm font-bold transition-all border-b-2 ${
-                type === 'ATE' 
-                ? 'border-indigo-600 text-indigo-600 bg-white' 
-                : 'border-transparent text-slate-400 hover:text-slate-600'
-              }`}
+              className={`px-6 py-4 text-sm font-bold transition-all border-b-2 ${type === 'ATE' ? 'border-indigo-600 text-indigo-600 bg-white' : 'border-transparent text-slate-400 hover:text-slate-600'
+                }`}
             >
               About to Expire List
             </button>
+            <button
+              onClick={() => setListType('BT')}
+              className={`px-6 py-4 text-sm font-bold transition-all border-b-2 ${type === 'BT' ? 'border-orange-500 text-orange-500 bg-white' : 'border-transparent text-slate-400 hover:text-slate-600'
+                }`}
+            >
+              Bistro Write-Off List
+            </button>
           </div>
-          
+
           <div className="px-6">
-            <span className={`px-2.5 py-1 rounded-md text-[11px] font-bold uppercase tracking-wide ${
-              type === 'ATE' ? 'bg-indigo-50 text-indigo-600' : 'bg-slate-100 text-slate-600'
-            }`}>
-              {sortedData.length} {type === 'ATE' ? 'ATE' : 'WO'} Records
+            <span className={`px-2.5 py-1 rounded-md text-[11px] font-bold uppercase tracking-wide ${theme.bg} ${theme.text}`}>
+              {sortedData.length} {type === 'BT' ? 'Bistro' : type} Records
             </span>
           </div>
         </div>
@@ -278,9 +290,9 @@ function RouteComponent() {
         <div className="flex-1 overflow-y-auto">
           {sortedData.length === 0 ? (
             <div className="h-full flex flex-col items-center justify-center text-center py-20">
-              <Package className={`w-10 h-10 mb-3 ${type === 'ATE' ? 'text-indigo-200' : 'text-slate-200'}`} />
-              <p className="text-sm font-bold text-slate-400 tracking-normal">
-                No {type === 'ATE' ? 'expiry' : 'write-off'} items for this site.
+              <Package className={`w-10 h-10 mb-3 ${theme.icon} opacity-30`} />
+              <p className="text-sm font-bold text-slate-400">
+                No {type === 'BT' ? 'bistro' : type === 'ATE' ? 'expiry' : 'write-off'} items found.
               </p>
             </div>
           ) : (
@@ -293,7 +305,7 @@ function RouteComponent() {
                 >
                   <div className="flex flex-col gap-1">
                     <div className="flex items-center gap-3">
-                      <span className="text-sm font-bold text-slate-900 tracking-normal group-hover:text-primary">
+                      <span className="text-sm font-bold text-slate-900 group-hover:text-primary">
                         {new Date(wo.createdAt).toLocaleDateString('en-US', {
                           month: 'short', day: 'numeric', year: 'numeric'
                         })}
@@ -301,19 +313,22 @@ function RouteComponent() {
                           at {new Date(wo.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                         </span>
                       </span>
-                      <span className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wide border ${getStatusStyles(wo.status)}`}>
+
+                      <span className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase border ${getStatusStyles(wo.status)}`}>
                         {wo.status}
                       </span>
                     </div>
+
                     <div className="flex items-center gap-2 text-[12px] text-slate-400 font-bold uppercase tracking-wide">
-                      <Package className={`w-3.5 h-3.5 ${type === 'ATE' ? 'text-indigo-400' : ''}`} />
-                      {wo.items.length} Items to Review
+                      <Package className={`w-3.5 h-3.5 ${theme.icon}`} />
+                      {/* Change label text for Bistro mode */}
+                      {wo.items.length} {type === 'BT' ? 'Bistro Items To Approve' : 'Items to Review'}
                     </div>
                   </div>
 
                   <div className="flex items-center gap-2">
                     <div className="p-2 rounded-full group-hover:bg-slate-100 transition-colors">
-                      <ChevronRight className={`w-4 h-4 text-slate-300 ${type === 'ATE' ? 'group-hover:text-indigo-600' : 'group-hover:text-primary'}`} />
+                      <ChevronRight className={`w-4 h-4 text-slate-300 group-hover:${theme.text}`} />
                     </div>
                   </div>
                 </li>
