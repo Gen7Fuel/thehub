@@ -8,6 +8,7 @@ import type { DateRange } from 'react-day-picker'
 import { getStartAndEndOfToday } from '@/lib/utils'
 import { PasswordProtection } from "@/components/custom/PasswordProtection";
 import { useAuth } from "@/context/AuthContext";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog'
 
 type Entry = {
   _id: string
@@ -133,6 +134,13 @@ export default function RouteComponent() {
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
+  // Add Cash In dialog state
+  const [showAddCashIn, setShowAddCashIn] = useState(false)
+  const [addCashInAmount, setAddCashInAmount] = useState<string>('')
+  const [addCashInDesc, setAddCashInDesc] = useState('')
+  const [addCashInLoading, setAddCashInLoading] = useState(false)
+  const [addCashInError, setAddCashInError] = useState<string | null>(null)
+
   // refs for inputs
   const descRef = useRef<HTMLInputElement>(null)
   const cashInRef = useRef<HTMLInputElement>(null)
@@ -230,6 +238,81 @@ export default function RouteComponent() {
     })
   }
 
+  // Add Cash In via dialog
+  const submitAddCashIn = async () => {
+    setAddCashInError(null)
+    if (!site) {
+      setAddCashInError('Select a site first')
+      return
+    }
+
+    const amount = Number(addCashInAmount.replace(/,/g, '').trim())
+    if (!isFinite(amount) || amount <= 0) {
+      setAddCashInError('Enter a positive amount')
+      return
+    }
+
+    // Use the current timestamp to avoid timezone drift from YYYY-MM-DD parsing
+    const entryBody = {
+      date: new Date().toISOString(),
+      description: addCashInDesc.trim(),
+      cashIn: amount,
+      cashExpenseOut: 0,
+      cashDepositBank: 0,
+    }
+
+    try {
+      setAddCashInLoading(true)
+      const res = await fetch(`/api/safesheets/site/${encodeURIComponent(site)}/entries`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${localStorage.getItem('token')}`,
+          'X-Required-Permission': 'accounting.safesheet',
+        },
+        body: JSON.stringify(entryBody),
+      })
+
+      if (res.status === 403) {
+        navigate({ to: '/no-access' })
+        return
+      }
+
+      const body = await res.json().catch(() => null)
+      if (!res.ok) throw new Error(body?.error || 'Failed to add entry')
+
+      // Refresh safesheet for the current range to avoid showing out-of-range entries
+      if (site && from && to) {
+        try {
+          const ref = await fetch(
+            `/api/safesheets/site/${encodeURIComponent(site)}?from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}`,
+            {
+              headers: {
+                Authorization: `Bearer ${localStorage.getItem('token')}`,
+                'X-Required-Permission': 'accounting.safesheet',
+              },
+            },
+          )
+          if (!ref.ok) throw new Error('Failed to refresh safesheet')
+          const refreshed: SafeSheet = await ref.json()
+          setSheet(refreshed)
+        } catch (refreshErr) {
+          console.error(refreshErr)
+        }
+      }
+
+      // close and reset dialog
+      setShowAddCashIn(false)
+      setAddCashInAmount('')
+      setAddCashInDesc('')
+    } catch (err: any) {
+      console.error(err)
+      setAddCashInError(err.message || 'Add entry failed')
+    } finally {
+      setAddCashInLoading(false)
+    }
+  }
+
   // ADD ENTRY
   const handleAddEntry = async () => {
     if (!site || !sheet) return
@@ -266,9 +349,24 @@ export default function RouteComponent() {
       const body = await res.json().catch(() => null)
       if (!res.ok) throw new Error(body?.error || 'Failed to add entry')
 
-      if (body?.entries) {
-        const updated = recomputeCashOnHand(body.entries, sheet.initialBalance)
-        setSheet((prev) => (prev ? { ...prev, entries: updated } : prev))
+      // Refresh safesheet for the current range to avoid showing out-of-range entries
+      if (site && from && to) {
+        try {
+          const ref = await fetch(
+            `/api/safesheets/site/${encodeURIComponent(site)}?from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}`,
+            {
+              headers: {
+                Authorization: `Bearer ${localStorage.getItem('token')}`,
+                'X-Required-Permission': 'accounting.safesheet',
+              },
+            },
+          )
+          if (!ref.ok) throw new Error('Failed to refresh safesheet')
+          const refreshed: SafeSheet = await ref.json()
+          setSheet(refreshed)
+        } catch (refreshErr) {
+          console.error(refreshErr)
+        }
       }
 
       // clear inputs
@@ -313,16 +411,24 @@ export default function RouteComponent() {
       const body = await res.json().catch(() => null)
       if (!res.ok) throw new Error(body?.error || 'Failed to update entry')
 
-      // 🔥 Use backend entries to avoid losing fields like photo
-      if (body?.entries) {
-        setSheet((prev) =>
-          prev
-            ? {
-              ...prev,
-              entries: recomputeCashOnHand(body.entries, prev.initialBalance),
-            }
-            : prev,
-        )
+      // Refresh safesheet for the current range to keep entries scoped
+      if (site && from && to) {
+        try {
+          const ref = await fetch(
+            `/api/safesheets/site/${encodeURIComponent(site)}?from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}`,
+            {
+              headers: {
+                Authorization: `Bearer ${localStorage.getItem('token')}`,
+                'X-Required-Permission': 'accounting.safesheet',
+              },
+            },
+          )
+          if (!ref.ok) throw new Error('Failed to refresh safesheet')
+          const refreshed: SafeSheet = await ref.json()
+          setSheet(refreshed)
+        } catch (refreshErr) {
+          console.error(refreshErr)
+        }
       }
     } catch (err: any) {
       console.error(err)
@@ -437,7 +543,7 @@ export default function RouteComponent() {
 
       {hasAccess && (
         <div className="pt-14 flex flex-col items-center">
-          <div className="my-4 flex flex-row items-center gap-4">
+          <div className="my-4 flex flex-row items-center gap-4 w-full max-w-5xl px-2 sm:px-4">
             <SitePicker
               value={site}
               // onValueChange={updateSearch}
@@ -455,6 +561,17 @@ export default function RouteComponent() {
                 setSearch({ from: ymd(next.from), to: ymd(next.to) })
               }}
             />
+            <Button
+              className="ml-auto"
+              size="sm"
+              onClick={() => {
+                setAddCashInError(null)
+                setShowAddCashIn(true)
+              }}
+              disabled={!site}
+            >
+              Add Cash In
+            </Button>
           </div>
 
           {!site && (
@@ -691,10 +808,10 @@ export default function RouteComponent() {
                           <input
                             ref={cashInRef}
                             type="number"
-                            placeholder="0.00"
+                            placeholder=""
                             className="w-full px-3 py-2 text-right bg-white focus:outline-none focus:ring-1 focus:ring-blue-400 rounded-sm"
                             onKeyDown={handleKeyDown}
-                            // disabled
+                            disabled
                           />
                         </td>
 
@@ -744,6 +861,72 @@ export default function RouteComponent() {
           />
         </div>
       )}
+
+      {/* Add Cash In Dialog */}
+      <Dialog
+        open={showAddCashIn}
+        onOpenChange={(open) => {
+          setShowAddCashIn(open)
+          if (!open) {
+            setAddCashInAmount('')
+            setAddCashInDesc('')
+            setAddCashInError(null)
+          }
+        }}
+      >
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Add Cash In</DialogTitle>
+          </DialogHeader>
+
+          {addCashInError && (
+            <p className="text-red-600 text-sm">{addCashInError}</p>
+          )}
+
+          <div className="space-y-3">
+            <input
+              type="text"
+              value={addCashInDesc}
+              onChange={(e) => setAddCashInDesc(e.target.value)}
+              placeholder="Description"
+              className="w-full px-3 py-2 bg-white border border-slate-300 rounded-sm focus:outline-none focus:ring-1 focus:ring-blue-400"
+              onKeyDown={handleKeyDown}
+            />
+            <input
+              type="number"
+              inputMode="decimal"
+              step="0.01"
+              value={addCashInAmount}
+              onChange={(e) => setAddCashInAmount(e.target.value)}
+              placeholder="0.00"
+              className="w-full px-3 py-2 text-right bg-white border border-slate-300 rounded-sm focus:outline-none focus:ring-1 focus:ring-blue-400"
+              onKeyDown={handleKeyDown}
+            />
+          </div>
+
+          <DialogFooter className="gap-2">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => {
+                setShowAddCashIn(false)
+                setAddCashInAmount('')
+                setAddCashInDesc('')
+                setAddCashInError(null)
+              }}
+            >
+              Cancel
+            </Button>
+            <Button
+              size="sm"
+              onClick={submitAddCashIn}
+              disabled={addCashInLoading || !site}
+            >
+              {addCashInLoading ? 'Adding...' : 'Add'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </>
   )
 }
