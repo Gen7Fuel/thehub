@@ -682,6 +682,32 @@ async function getTop10Bistro(pool, csoCode) {
     return [];
   }
 }
+async function getShiftTransactionTimings(pool, csoCode, startDate, endDate) {
+  try {
+    const dbStartDate = formatDateForDB(startDate);
+    const dbEndDate = formatDateForDB(endDate);
+    const result = await pool.request()
+      .input("csoCode", sql.VarChar, csoCode)
+      .input("startDateSK", sql.VarChar, dbStartDate) // e.g., '20260124'
+      .input("endDateSK", sql.VarChar, dbEndDate)   // e.g., '20260131'
+      .query(`
+        SELECT 
+            [Date_SK],
+            MIN(CASE WHEN [Station] NOT LIKE '%Cardlock%' THEN [DateTime] END) as firstRegTrans,
+            MAX(CASE WHEN [Station] NOT LIKE '%Cardlock%' THEN [DateTime] END) as lastRegTrans,
+            MIN(CASE WHEN [Station] LIKE '%Cardlock%' THEN [DateTime] END) as firstCardlockTrans,
+            MAX(CASE WHEN [Station] LIKE '%Cardlock%' THEN [DateTime] END) as lastCardlockTrans
+        FROM [CSO].[Stg_CashRegisterJournal]
+        WHERE [Date_SK] BETWEEN @startDateSK AND @endDateSK
+        AND [Station_SK] = @csoCode
+        GROUP BY [Date_SK]
+      `);
+    return result.recordset;
+  } catch (err) {
+    console.error('SQL Transaction Timing Error:', err);
+    return [];
+  }
+}
 
 async function getRefundTransactions(csoCode, date) {
   try {
@@ -756,6 +782,7 @@ async function getAllSQLData(csoCode, dates) {
     salesStart, salesEnd,
     fuelStart, fuelEnd,
     transStart, transEnd,
+    shiftStart, shiftEnd
   } = dates;
 
   const results = await Promise.allSettled([
@@ -764,6 +791,7 @@ async function getAllSQLData(csoCode, dates) {
     retry(() => getAllTransactionsData(pool, csoCode, transStart, transEnd)),
     retry(() => getAllPeriodData(pool, csoCode, transStart, transEnd)), // unified
     retry(() => getAllTendorData(pool, csoCode, transStart, transEnd)),
+    retry(() => getShiftTransactionTimings(pool, csoCode, shiftStart, shiftEnd)),
     retry(() => getWeeklyBistroSales(pool, csoCode)),
     retry(() => getTop10Bistro(pool, csoCode)),
   ]);
@@ -774,8 +802,9 @@ async function getAllSQLData(csoCode, dates) {
     transactions: results[2].status === "fulfilled" ? results[2].value.transactions : [],
     timePeriodTransactions: results[3].status === "fulfilled" ? results[3].value.timePeriodTransactions : [],
     tenderTransactions: results[4].status === "fulfilled" ? results[4].value.tenderTransactions : [],
-    bistroWoWSales: results[5].status === "fulfilled" ? results[5].value : [],
-    top10Bistro: results[6].status === "fulfilled" ? results[6].value : [],
+    shiftTransactionTimings: results[5].status === "fulfilled" ? results[5].value : [],
+    bistroWoWSales: results[6].status === "fulfilled" ? results[6].value : [],
+    top10Bistro: results[7].status === "fulfilled" ? results[7].value : [],
   };
 }
 
@@ -796,5 +825,6 @@ module.exports = {
   getTop10Bistro,
   getInventoryOnHandForActiveUPCsAndStation,
   getPool,
-  getRefundTransactions
+  getRefundTransactions,
+  getShiftTransactionTimings,
 };
