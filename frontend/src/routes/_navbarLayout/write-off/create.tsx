@@ -225,7 +225,7 @@ function RouteComponent() {
                 <button
                   onClick={() => {
                     setEntryMode('regular');
-                    setFormData({ ...formData, reason: 'Damaged' });
+                    setFormData({ ...formData, name: '', upc_barcode: '', reason: 'Damaged' });
                   }}
                   className={`flex-1 py-1.5 text-xs font-medium rounded-md transition-all ${entryMode === 'regular' ? 'bg-white shadow-sm' : 'text-slate-500 hover:text-slate-700'
                     }`}

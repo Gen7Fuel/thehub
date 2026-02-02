@@ -306,7 +306,7 @@ function RouteComponent() {
                   <th className="px-6 py-4 text-xs font-semibold text-orange-900 uppercase tracking-wide">Type</th>
                   <th className="px-6 py-4 text-xs font-semibold text-orange-900 uppercase tracking-wide text-center">Qty</th>
                   <th className="px-6 py-4 text-xs font-semibold text-orange-900 uppercase tracking-wide">Reason</th>
-                  <th className="px-6 py-4 text-xs font-semibold text-orange-900 uppercase tracking-wide text-right">Reviewed</th>
+                  <th className="px-6 py-4 text-xs font-semibold text-orange-900 uppercase tracking-wide text-right">Approved</th>
                 </tr>
               </thead>
 
