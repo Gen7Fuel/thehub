@@ -68,8 +68,8 @@ import {
   DialogDescription,
 } from "@/components/ui/dialog";
 import { OverShortSparkline, SafeBalanceTrendChart, PayablesDiscrepancyTable } from '@/components/custom/dashboard/accountingCharts';
-import { Button } from '@/components/ui/button';
-// import OperationalTimelineCard from '@/components/custom/dashboard/operationalTimelineChart';
+// import { Button } from '@/components/ui/button';
+import OperationalTimelineCard from '@/components/custom/dashboard/operationalTimelineChart';
 // import { PayablesDiscrepancyChart, OverShortChart } from '@/components/custom/dashboard/accountingCharts';
 
 interface CycleCountItem {
@@ -1555,6 +1555,17 @@ function RouteComponent() {
                   </div>
                 </section>
 
+                {/* ======================= */}
+                {/*     Station Shift Activity SECTION   */}
+                {/* ======================= */}
+                <section aria-labelledby="activity-heading" className="mb-10">
+                  <h2 id="activity-heading" className="text-2xl font-bold mb-4 pl-4">Station Shift Activity</h2>
+
+                  <div className="grid grid-cols-1 md:grid-cols-1 lg:grid-cols-1 gap-6">
+                    {/* 1. NEW Operational Timeline Chart (First Position) */}
+                    <OperationalTimelineCard data={operationalTimings} />
+                  </div>
+                </section>
 
                 {/* ======================= */}
                 {/*     INVENTORY SECTION   */}
@@ -1920,9 +1931,6 @@ function RouteComponent() {
                     <h2 id="activity-heading" className="text-2xl font-bold mb-4 pl-4">Store Activity Trend</h2>
 
                     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-
-                      {/* 1. NEW Operational Timeline Chart (First Position) */}
-                      <OperationalTimelineCard data={operationalTimings} />
 
                       {/* 2. Transactions Line Chart (Second Position) */}
                       <TransactionsLineChart
@@ -2404,110 +2412,110 @@ const getCurrentWeekRange = () => {
 //     </Card>
 //   );
 // };
-const OperationalTimelineCard = ({ data }: { data: OperationalTiming[] }) => {
-  const [currentIndex, setCurrentIndex] = useState(data.length - 1);
-  const day = data[currentIndex];
+// const OperationalTimelineCard = ({ data }: { data: OperationalTiming[] }) => {
+//   const [currentIndex, setCurrentIndex] = useState(data.length - 1);
+//   const day = data[currentIndex];
 
-  if (!day) return <div className="p-8 text-center text-xl">Waiting for data...</div>;
+//   if (!day) return <div className="p-8 text-center text-xl">Waiting for data...</div>;
 
-  const goToPrev = () => setCurrentIndex((prev) => Math.max(0, prev - 1));
-  const goToNext = () => setCurrentIndex((prev) => Math.min(data.length - 1, prev + 1));
+//   const goToPrev = () => setCurrentIndex((prev) => Math.max(0, prev - 1));
+//   const goToNext = () => setCurrentIndex((prev) => Math.min(data.length - 1, prev + 1));
 
-  // Helper to place the "Flag" on the ruler
-  const getPos = (min: number | null) => (min !== null ? (min / 1440) * 100 : 0);
+//   // Helper to place the "Flag" on the ruler
+//   const getPos = (min: number | null) => (min !== null ? (min / 1440) * 100 : 0);
 
-  return (
-    <Card className="col-span-1 lg:col-span-3 border-4 border-gray-100 shadow-xl">
-      <CardHeader className="bg-gray-50 border-b-2">
-        <div className="flex items-center justify-between py-2">
-          <Button onClick={goToPrev} disabled={currentIndex === 0} className="h-16 px-8 text-xl font-bold bg-white border-2 text-blue-700 shadow-sm">
-            ← PREVIOUS DAY
-          </Button>
+//   return (
+//     <Card className="col-span-1 lg:col-span-3 border-4 border-gray-100 shadow-xl">
+//       <CardHeader className="bg-gray-50 border-b-2">
+//         <div className="flex items-center justify-between py-2">
+//           <Button onClick={goToPrev} disabled={currentIndex === 0} className="h-16 px-8 text-xl font-bold bg-white border-2 text-blue-700 shadow-sm">
+//             ← PREVIOUS DAY
+//           </Button>
           
-          <div className="text-center">
-            <h2 className="text-4xl font-black text-blue-900 leading-none">
-              {new Date(day.date + 'T00:00:00').toLocaleDateString('en-US', { weekday: 'long' })}
-            </h2>
-            <p className="text-xl font-bold text-gray-500 mt-1">
-              {new Date(day.date + 'T00:00:00').toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })}
-            </p>
-          </div>
+//           <div className="text-center">
+//             <h2 className="text-4xl font-black text-blue-900 leading-none">
+//               {new Date(day.date + 'T00:00:00').toLocaleDateString('en-US', { weekday: 'long' })}
+//             </h2>
+//             <p className="text-xl font-bold text-gray-500 mt-1">
+//               {new Date(day.date + 'T00:00:00').toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })}
+//             </p>
+//           </div>
 
-          <Button onClick={goToNext} disabled={currentIndex === data.length - 1} className="h-16 px-8 text-xl font-bold bg-white border-2 text-blue-700 shadow-sm">
-            NEXT DAY →
-          </Button>
-        </div>
-      </CardHeader>
+//           <Button onClick={goToNext} disabled={currentIndex === data.length - 1} className="h-16 px-8 text-xl font-bold bg-white border-2 text-blue-700 shadow-sm">
+//             NEXT DAY →
+//           </Button>
+//         </div>
+//       </CardHeader>
 
-      <CardContent className="pt-12 pb-16 px-10">
-        <div className="relative h-48 flex items-center">
+//       <CardContent className="pt-12 pb-16 px-10">
+//         <div className="relative h-48 flex items-center">
           
-          {/* THE RULER (Background) */}
-          <div className="absolute inset-0 flex justify-between px-0 pointer-events-none">
-            {[0, 3, 6, 9, 12, 15, 18, 21, 24].map((hour) => (
-              <div key={hour} className="flex flex-col items-center">
-                <div className="h-48 w-0.5 bg-gray-200"></div>
-                <span className="mt-4 text-sm font-black text-gray-400">
-                  {hour === 12 ? 'NOON' : hour === 0 || hour === 24 ? 'MIDNIGHT' : `${hour > 12 ? hour - 12 : hour}${hour >= 12 ? 'PM' : 'AM'}`}
-                </span>
-              </div>
-            ))}
-          </div>
+//           {/* THE RULER (Background) */}
+//           <div className="absolute inset-0 flex justify-between px-0 pointer-events-none">
+//             {[0, 3, 6, 9, 12, 15, 18, 21, 24].map((hour) => (
+//               <div key={hour} className="flex flex-col items-center">
+//                 <div className="h-48 w-0.5 bg-gray-200"></div>
+//                 <span className="mt-4 text-sm font-black text-gray-400">
+//                   {hour === 12 ? 'NOON' : hour === 0 || hour === 24 ? 'MIDNIGHT' : `${hour > 12 ? hour - 12 : hour}${hour >= 12 ? 'PM' : 'AM'}`}
+//                 </span>
+//               </div>
+//             ))}
+//           </div>
 
-          {/* 1. STORE OPEN TAPE (Light Blue Background) */}
-          {day.chartMetrics.openMin !== null && (
-            <div 
-              className="absolute h-24 bg-blue-100 rounded-lg border-2 border-blue-200 opacity-60"
-              style={{ 
-                left: `${getPos(day.chartMetrics.openMin)}%`, 
-                width: `${getPos(day.chartMetrics.closeMin) - getPos(day.chartMetrics.openMin)}%` 
-              }}
-            />
-          )}
+//           {/* 1. STORE OPEN TAPE (Light Blue Background) */}
+//           {day.chartMetrics.openMin !== null && (
+//             <div 
+//               className="absolute h-24 bg-blue-100 rounded-lg border-2 border-blue-200 opacity-60"
+//               style={{ 
+//                 left: `${getPos(day.chartMetrics.openMin)}%`, 
+//                 width: `${getPos(day.chartMetrics.closeMin) - getPos(day.chartMetrics.openMin)}%` 
+//               }}
+//             />
+//           )}
 
-          {/* 2. SALES ACTIVITY TAPE (Dark Blue Bold) */}
-          {day.chartMetrics.regStartMin !== null && (
-            <div 
-              className="absolute h-10 bg-blue-800 rounded shadow-md flex items-center justify-center text-white text-[10px] font-bold"
-              style={{ 
-                left: `${getPos(day.chartMetrics.regStartMin)}%`, 
-                width: `${getPos(day.chartMetrics.regEndMin) - getPos(day.chartMetrics.regStartMin)}%` 
-              }}
-            >
-              SALES ACTIVE
-            </div>
-          )}
+//           {/* 2. SALES ACTIVITY TAPE (Dark Blue Bold) */}
+//           {day.chartMetrics.regStartMin !== null && (
+//             <div 
+//               className="absolute h-10 bg-blue-800 rounded shadow-md flex items-center justify-center text-white text-[10px] font-bold"
+//               style={{ 
+//                 left: `${getPos(day.chartMetrics.regStartMin)}%`, 
+//                 width: `${getPos(day.chartMetrics.regEndMin) - getPos(day.chartMetrics.regStartMin)}%` 
+//               }}
+//             >
+//               SALES ACTIVE
+//             </div>
+//           )}
 
-          {/* 3. FIRST SALE FLAG (The Indicator) */}
-          {day.chartMetrics.regStartMin !== null && (
-            <div className="absolute top-[-30px] flex flex-col items-center" style={{ left: `${getPos(day.chartMetrics.regStartMin)}%` }}>
-               <div className="bg-blue-900 text-white text-xs px-2 py-1 rounded-t font-black">FIRST SALE</div>
-               <div className="w-1 h-32 bg-blue-900"></div>
-               <div className="text-sm font-black text-blue-900 mt-1">
-                  {new Date(day.firstRegTrans!).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-               </div>
-            </div>
-          )}
-        </div>
+//           {/* 3. FIRST SALE FLAG (The Indicator) */}
+//           {day.chartMetrics.regStartMin !== null && (
+//             <div className="absolute top-[-30px] flex flex-col items-center" style={{ left: `${getPos(day.chartMetrics.regStartMin)}%` }}>
+//                <div className="bg-blue-900 text-white text-xs px-2 py-1 rounded-t font-black">FIRST SALE</div>
+//                <div className="w-1 h-32 bg-blue-900"></div>
+//                <div className="text-sm font-black text-blue-900 mt-1">
+//                   {new Date(day.firstRegTrans!).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+//                </div>
+//             </div>
+//           )}
+//         </div>
 
-        {/* SUMMARY SECTION */}
-        <div className="mt-20 grid grid-cols-2 gap-8 bg-gray-50 p-6 rounded-2xl border-2 border-dashed">
-            <div className="space-y-1">
-                <p className="text-sm font-black text-gray-400 uppercase">Store Hours Today</p>
-                <p className="text-3xl font-black text-gray-800">
-                    {day.stationOpen ? new Date(day.stationOpen).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : "Not Logged"} 
-                    <span className="mx-2 text-gray-300">to</span>
-                    {day.stationClose ? new Date(day.stationClose).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : "Open"}
-                </p>
-            </div>
-            <div className="space-y-1 border-l-2 pl-8">
-                <p className="text-sm font-black text-gray-400 uppercase">Customer Activity</p>
-                <p className="text-3xl font-black text-emerald-600">
-                    {day.firstRegTrans ? "First sale at " + new Date(day.firstRegTrans).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : "No customers found"}
-                </p>
-            </div>
-        </div>
-      </CardContent>
-    </Card>
-  );
-};
+//         {/* SUMMARY SECTION */}
+//         <div className="mt-20 grid grid-cols-2 gap-8 bg-gray-50 p-6 rounded-2xl border-2 border-dashed">
+//             <div className="space-y-1">
+//                 <p className="text-sm font-black text-gray-400 uppercase">Store Hours Today</p>
+//                 <p className="text-3xl font-black text-gray-800">
+//                     {day.stationOpen ? new Date(day.stationOpen).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : "Not Logged"} 
+//                     <span className="mx-2 text-gray-300">to</span>
+//                     {day.stationClose ? new Date(day.stationClose).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : "Open"}
+//                 </p>
+//             </div>
+//             <div className="space-y-1 border-l-2 pl-8">
+//                 <p className="text-sm font-black text-gray-400 uppercase">Customer Activity</p>
+//                 <p className="text-3xl font-black text-emerald-600">
+//                     {day.firstRegTrans ? "First sale at " + new Date(day.firstRegTrans).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : "No customers found"}
+//                 </p>
+//             </div>
+//         </div>
+//       </CardContent>
+//     </Card>
+//   );
+// };

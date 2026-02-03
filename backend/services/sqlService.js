@@ -699,7 +699,7 @@ async function getShiftTransactionTimings(pool, csoCode, startDate, endDate) {
             MAX(CASE WHEN [Station] LIKE '%Cardlock%' THEN [DateTime] END) as lastCardlockTrans
         FROM [CSO].[Stg_CashRegisterJournal]
         WHERE [Date_SK] BETWEEN @startDateSK AND @endDateSK
-        AND [Station_SK] = @csoCode
+        AND [Station_SK] LIKE CONCAT(@csoCode, '%')
         GROUP BY [Date_SK]
       `);
     return result.recordset;
