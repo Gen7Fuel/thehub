@@ -1030,14 +1030,14 @@ router.post('/submit/to/safesheet', async (req, res) => {
           if (site === 'Oliver' || site === 'Osoyoos') {
             cc.push('ZBaptiste@oib.ca');
           }
-          // await sendEmail({
-          //   to: CASH_SUMMARY_EMAILS.join(','),
-          //   cc,
-          //   // to: 'daksh@gen7fuel.com',
-          //   subject: `Daily Report – ${site} – ${date}`,
-          //   text: `Attached are the Cash Summary${shiftReportsPdf ? ', Shift Reports' : ''}${depositSlip ? ' and Bank Deposit Slip' : ''} for ${site} on ${date}.`,
-          //   attachments,
-          // })
+          await sendEmail({
+            to: CASH_SUMMARY_EMAILS.join(','),
+            cc,
+            // to: 'daksh@gen7fuel.com',
+            subject: `Daily Report – ${site} – ${date}`,
+            text: `Attached are the Cash Summary${shiftReportsPdf ? ', Shift Reports' : ''}${depositSlip ? ' and Bank Deposit Slip' : ''} for ${site} on ${date}.`,
+            attachments,
+          })
 
           console.log(
             'Cash Summary email sent:',
