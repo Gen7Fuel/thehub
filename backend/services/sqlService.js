@@ -690,17 +690,53 @@ async function getShiftTransactionTimings(pool, csoCode, startDate, endDate) {
       .input("csoCode", sql.VarChar, csoCode)
       .input("startDateSK", sql.VarChar, dbStartDate) // e.g., '20260124'
       .input("endDateSK", sql.VarChar, dbEndDate)   // e.g., '20260131'
+      // .query(`
+      //   SELECT 
+      //       [Date_SK],
+      //       MIN(CASE WHEN [Station] NOT LIKE '%Cardlock%' THEN [DateTime] END) as firstRegTrans,
+      //       MAX(CASE WHEN [Station] NOT LIKE '%Cardlock%' THEN [DateTime] END) as lastRegTrans,
+      //       MIN(CASE WHEN [Station] LIKE '%Cardlock%' THEN [DateTime] END) as firstCardlockTrans,
+      //       MAX(CASE WHEN [Station] LIKE '%Cardlock%' THEN [DateTime] END) as lastCardlockTrans
+      //   FROM [CSO].[Stg_CashRegisterJournal]
+      //   WHERE [Date_SK] BETWEEN @startDateSK AND @endDateSK
+      //   AND [Station_SK] LIKE CONCAT(@csoCode, '%')
+      //   GROUP BY [Date_SK]
+      // `);
       .query(`
-        SELECT 
+        WITH TransactionData AS (
+          SELECT 
             [Date_SK],
             MIN(CASE WHEN [Station] NOT LIKE '%Cardlock%' THEN [DateTime] END) as firstRegTrans,
             MAX(CASE WHEN [Station] NOT LIKE '%Cardlock%' THEN [DateTime] END) as lastRegTrans,
             MIN(CASE WHEN [Station] LIKE '%Cardlock%' THEN [DateTime] END) as firstCardlockTrans,
             MAX(CASE WHEN [Station] LIKE '%Cardlock%' THEN [DateTime] END) as lastCardlockTrans
-        FROM [CSO].[Stg_CashRegisterJournal]
-        WHERE [Date_SK] BETWEEN @startDateSK AND @endDateSK
-        AND [Station_SK] LIKE CONCAT(@csoCode, '%')
-        GROUP BY [Date_SK]
+          FROM [CSO].[Stg_CashRegisterJournal]
+          WHERE [Date_SK] BETWEEN @startDateSK AND @endDateSK
+              AND [Station_SK] LIKE CONCAT(@csoCode, '%')
+          GROUP BY [Date_SK]
+          ),
+        TimesheetData AS (
+          SELECT 
+            CONVERT(CHAR(8), [startDate], 112) as [Date_SK],
+            MIN([startDate]) as firstShiftLogin,
+            MAX([endDate]) as lastShiftLogout
+          FROM [Payworks].[Timesheets]
+          WHERE [Station_SK] = @csoCode
+              AND CONVERT(CHAR(8), [startDate], 112) BETWEEN @startDateSK AND @endDateSK
+              AND [position] NOT LIKE '%Manager%'
+          GROUP BY CONVERT(CHAR(8), [startDate], 112)
+        )
+        SELECT 
+          COALESCE(t.[Date_SK], ts.[Date_SK]) as Date_SK,
+          t.firstRegTrans,
+          t.lastRegTrans,
+          t.firstCardlockTrans,
+          t.lastCardlockTrans,
+          ts.firstShiftLogin,
+          ts.lastShiftLogout
+        FROM TransactionData t
+        FULL OUTER JOIN TimesheetData ts ON t.[Date_SK] = ts.[Date_SK]
+        ORDER BY Date_SK DESC;
       `);
     return result.recordset;
   } catch (err) {

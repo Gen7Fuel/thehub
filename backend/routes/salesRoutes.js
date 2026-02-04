@@ -176,6 +176,8 @@ router.get('/all-data', async (req, res) => {
         lastRegTrans: sqlRow.lastRegTrans || null,
         firstCardlockTrans: sqlRow.firstCardlockTrans || null,
         lastCardlockTrans: sqlRow.lastCardlockTrans || null,
+        firstShiftLogin: sqlRow.firstShiftLogin || null,
+        lastShiftLogout: sqlRow.lastShiftLogout || null,
         isSubmitted: reportEntry ? reportEntry.submitted : false,
         
         // Metrics added back for "Store Activity Trend" section

@@ -106,6 +106,8 @@ interface OperationalTiming {
   lastRegTrans: string | null;
   firstCardlockTrans: string | null;
   lastCardlockTrans: string | null;
+  firstShiftLogin: string | null;
+  lastShiftLogout: string | null;
   isSubmitted: boolean;
   chartMetrics: {
     openMin: number | null;
