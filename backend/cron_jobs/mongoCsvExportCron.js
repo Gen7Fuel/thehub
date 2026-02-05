@@ -2,76 +2,66 @@ const { Transform } = require('json2csv');
 const { BlobServiceClient } = require("@azure/storage-blob");
 const { PassThrough } = require('stream');
 const mongoose = require('mongoose');
+const AuditTemplate = require("../models/audit/auditTemplate");
+const AuditInstance = require("../models/audit/auditInstance");
+const AuditItem = require("../models/audit/auditItem");
+const { CashSummary, CashSummaryReport } = require('../models/CashSummaryNew')
+const Safesheet = require('../models/Safesheet')
+const Lottery = require('../models/Lottery')
+const Location = require('../models/Location')
+const Payable = require('../models/Payables');
+const CycleCount = require('../models/CycleCount');
+const OrderRec = require('../models/OrderRec');
+const Vendor = require('../models/Vendor');
+const Transaction = require("../models/Transactions");
+const SelectTemplate = require("../models/audit/selectTemplate");
+const WriteOff = require("../models/writeOff");
 
-/**
- * Transforms multi-dimensional objects into a flat structure
- * e.g. { a: { b: 1 } } -> { "a.b": 1 }
- */
-// const flattenData = (doc) => {
-//     const flattened = {};
-//     const worker = (obj, prefix = '') => {
-//         for (const key in obj) {
-//             const propName = prefix ? `${prefix}_${key}` : key;
-//             if (typeof obj[key] === 'object' && obj[key] !== null && !Array.isArray(obj[key])) {
-//                 worker(obj[key], propName);
-//             } else if (Array.isArray(obj[key])) {
-//                 flattened[propName] = obj[key].join('|'); // SQL friendly array string
-//             } else {
-//                 flattened[propName] = obj[key];
-//             }
-//         }
-//     };
-//     worker(doc);
-//     return flattened;
-// };
 
-/**
- * A truly generalized flattener that works for any collection
- */
 const generalizedFlattener = (doc) => {
-    const flattened = {};
+  const flattened = {};
 
-    const worker = (obj, prefix = '') => {
-        // Handle null/undefined immediately
-        if (obj === null || obj === undefined) return;
+  const worker = (obj, prefix = '') => {
+    // Handle null/undefined immediately
+    if (obj === null || obj === undefined) return;
 
-        Object.keys(obj).forEach(key => {
-            // 1. Skip internal Mongoose versioning
-            if (key === '__v') return;
+    Object.keys(obj).forEach(key => {
+      // 1. Skip internal Mongoose versioning
+      if (key === '__v') return;
 
-            const value = obj[key];
-            const propName = prefix ? `${prefix}_${key}` : key;
+      const value = obj[key];
+      const propName = prefix ? `${prefix}_${key}` : key;
 
-            // 2. Handle Special MongoDB Types (The "Fix")
-            if (value instanceof mongoose.Types.ObjectId || (value && value._bsontype === 'ObjectID')) {
-                flattened[propName] = value.toString();
-            } 
-            else if (value instanceof Date) {
-                flattened[propName] = value.toISOString();
-            }
-            // 3. Handle Nested Objects (Recursion)
-            // We check if it's a "plain" object and not a special type
-            else if (typeof value === 'object' && value !== null && !Array.isArray(value)) {
-                worker(value, propName);
-            } 
-            // 4. Handle Arrays
-            else if (Array.isArray(value)) {
-                // Check if array contains objects; if so, stringify it
-                if (value.length > 0 && typeof value[0] === 'object') {
-                    flattened[propName] = JSON.stringify(value);
-                } else {
-                    flattened[propName] = value.join('|');
-                }
-            } 
-            // 5. Primitives (String, Number, Boolean)
-            else {
-                flattened[propName] = value;
-            }
-        });
-    };
+      // 2. Handle Special MongoDB Types (The "Fix")
+      if (value instanceof mongoose.Types.ObjectId || (value && value._bsontype === 'ObjectID')) {
+        flattened[propName] = value.toString();
+      }
+      else if (value instanceof Date) {
+        flattened[propName] = value.toISOString();
+      }
+      // 3. Handle Nested Objects (Recursion)
+      // We check if it's a "plain" object and not a special type
+      else if (typeof value === 'object' && value !== null && !Array.isArray(value)) {
+        worker(value, propName);
+      }
+      // 4. Handle Arrays
+      else if (Array.isArray(value)) {
+        // Check if array contains objects; if so, stringify it
+        if (value.length > 0 && typeof value[0] === 'object') {
+          flattened[propName] = JSON.stringify(value);
+        } else {
+          flattened[propName] = value.join('|');
+        }
+      }
+      // 5. Primitives (String, Number, Boolean)
+      else {
+        flattened[propName] = value;
+      }
+    });
+  };
 
-    worker(doc);
-    return flattened;
+  worker(doc);
+  return flattened;
 };
 
 async function exportToAzureCSV(model, collectionName) {
@@ -116,41 +106,70 @@ async function exportToAzureCSV(model, collectionName) {
 
 // 1. Define exactly which collections to export
 const exportConfig = [
-    { modelName: 'Location', fileName: 'locations_master' },
-    { modelName: 'User', fileName: 'users_master' },
-    { modelName: 'AuditIssue', fileName: 'audit_report_master' },
-    // Add more as needed...
+  { modelName: 'Location', collectionName: 'locations' },
+  { modelName: 'AuditTemplate', collectionName: 'audit_template' },
+  { modelName: 'AuditInstance', collectionName: 'audit_instance' },
+  { modelName: 'AuditItem', collectionName: 'audit_item' },
+  { modelName: 'CashSummary', collectionName: 'cash_summary' },
+  { modelName: 'CashSummaryReport', collectionName: 'cash_summary_report' },
+  { modelName: 'CycleCount', collectionName: 'cycle_count' },
+  { modelName: 'Lottery', collectionName: 'lottery' },
+  { modelName: 'OrderReconciliation', collectionName: 'order_reconciliation' },
+  { modelName: 'Payable', collectionName: 'payable' },
+  { modelName: 'Transaction', collectionName: 'transaction' },
+  { modelName: 'Safesheet', collectionName: 'safesheet' },
+  { modelName: 'SelectTemplate', collectionName: 'select_template' },
+  { modelName: 'Vendor', collectionName: 'vendor' },
+  { modelName: 'WriteOff', collectionName: 'write_off' }
 ];
 
-async function runSelectedExports() {
-    let hadError = false;
+async function runSelectedExports(Model, collectionName) {
+  let hadError = false;
 
-    try {
-        console.log(`🚀 Starting targeted export for ${exportConfig.length} collections...`);
+  try {
+    console.log(`➤ Processing: ${Model.modelName} -> ${collectionName}.csv`);
 
-        for (const config of exportConfig) {
-            // Get the model from Mongoose's registry
-            const Model = mongoose.model(config.modelName);
-            
-            if (!Model) {
-                console.error(`⚠️ Model ${config.modelName} not found. Skipping...`);
-                continue;
-            }
+    // Call the export function with our custom filename
+    const blobName = await exportToAzureCSV(Model, collectionName);
 
-            console.log(`➤ Processing: ${config.modelName} -> ${config.fileName}.csv`);
+    console.log(`✔ Successfully uploaded ${collectionName} to ${blobName}`);
+    return blobName;
 
-            // Call the export function with our custom filename
-            await exportToAzureCSV(Model, config.fileName);
-            
-            console.log(`✔ Successfully uploaded ${config.fileName}`);
-        }
 
-    } catch (err) {
-        hadError = true;
-        console.error('❌ Batch Export Failed:', err);
-    }
-    
-    return hadError;
+  } catch (err) {
+    hadError = true;
+    console.error('❌ Batch Export Failed:', err);
+  }
+
+  return hadError;
 }
 
-module.exports = { exportToAzureCSV };
+async function runMongoCsvExport() {
+  let hadError = false;
+
+  try {
+    console.log(`🚀 Starting targeted export for ${exportConfig.length} collections...`);
+    for (const config of exportConfig) {
+      // Get the model from Mongoose's registry
+      const Model = mongoose.model(config.modelName);
+
+      if (!Model) {
+        console.error(`⚠️ Model ${config.modelName} not found. Skipping...`);
+        continue;
+      }
+      // You can loop through multiple models here if needed
+      const blobName = await runSelectedExports(Model, config.collectionName);
+      console.log(`✔ Export successful! File stored at: ${blobName}`);
+    }
+  } catch (err) {
+    hadError = true;
+    console.error('❌ Export Failed:', err);
+  } finally {
+    try {
+      console.log('Export Completed.');
+    } catch (e) { }
+    process.exit(hadError ? 1 : 0);
+  }
+}
+
+module.exports = { runMongoCsvExport };
