@@ -386,7 +386,7 @@ function VerticalTimelineView({ day }: { day: Day }) {
           <div className="flex flex-col">
             <p className="text-amber-900 text-sm font-black uppercase tracking-tight">Shift Details Not Available</p>
             <p className="text-amber-700 text-[11px] font-bold leading-relaxed">
-              Kindly provide {formatDateSafe(day.date, { month: 'long', day: 'numeric', year: 'numeric' })} summaries.
+              Kindly provide Cash Summaries for {formatDateSafe(day.date, { month: 'long', day: 'numeric', year: 'numeric' })}
             </p>
           </div>
         </div>

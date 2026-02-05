@@ -724,6 +724,7 @@ async function getShiftTransactionTimings(pool, csoCode, startDate, endDate) {
           WHERE [Station_SK] = @csoCode
               AND CONVERT(CHAR(8), [startDate], 112) BETWEEN @startDateSK AND @endDateSK
               AND [position] NOT LIKE '%Manager%'
+              AND [status] = 'Approved'
           GROUP BY CONVERT(CHAR(8), [startDate], 112)
         )
         SELECT 
