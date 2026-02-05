@@ -154,7 +154,7 @@ const TableWithInputs: React.FC<TableWithInputsProps> = ({
   return (
     <div className="overflow-x-auto touch-pan-x select-none p-4 rounded-xl bg-white shadow-sm border border-gray-200">
       <Dialog open={!!barcodeValue} onOpenChange={(open) => !open && setBarcodeValue(null)}>
-        <div className="overflow-hidden rounded-lg border border-gray-300">
+        <div className="overflow-auto rounded-lg border border-gray-300">
           <table className={`min-w-full text-sm border-collapse ${tableClassName}`}>
             <thead>
               <tr className={`bg-gray-50 text-gray-700 ${headerClassName}`}>
