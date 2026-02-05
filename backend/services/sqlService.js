@@ -395,9 +395,22 @@ async function getFuelInventoryReportCurrentDay() {
   try {
     const pool = await getPool();
     const result = await pool.request().query(`
-      SELECT [Station_SK], [Fuel_Grade], [Volume] as 'Stick_L'
-      FROM [CSO].[CurrentFuelInv]
-      WHERE [Date_SK]=TRY_CONVERT(CHAR(8),GETDATE(),112)
+      WITH RankedInventory AS (
+        SELECT 
+            [Station_SK], 
+            [Fuel_Grade], 
+            [Volume] AS [Stick_L],
+            [Time],
+            ROW_NUMBER() OVER (
+                PARTITION BY [Station_SK], [Fuel_Grade] 
+                ORDER BY [Time] DESC
+            ) AS rnk
+        FROM [CSO].[CurrentFuelInv]
+        WHERE [Date_SK] = TRY_CONVERT(CHAR(8), GETDATE(), 112)
+      )
+      SELECT [Station_SK], [Fuel_Grade], [Stick_L]
+      FROM RankedInventory
+      WHERE rnk = 1;
     `);
     await sql.close();
     return result.recordset;
