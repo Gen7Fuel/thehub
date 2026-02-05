@@ -1855,7 +1855,7 @@ function RouteComponent() {
                 {/*     Accounting SECTION   */}
                 {/* ======================= */}
 
-                {!["Sarnia"].includes(site) && (
+                {/* {!["Sarnia"].includes(site) && ( */}
                   <section aria-labelledby="accounting-heading" className="mb-10">
                     <h2 id="accounting-heading" className="text-2xl font-bold mb-4 pl-4">
                       Accounting
@@ -1869,7 +1869,7 @@ function RouteComponent() {
                       <PayablesDiscrepancyTable data={payablesComparisonData} />
                     </div>
                   </section>
-                )}
+                {/* )} */}
 
 
                 {/* ======================= */}
