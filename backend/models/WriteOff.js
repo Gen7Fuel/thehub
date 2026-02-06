@@ -42,4 +42,5 @@ const WriteOffListSchema = new mongoose.Schema({
   listType: { type: String, enum: ['WO', 'ATE', 'BT'], default: 'WO' }
 });
 
-module.exports = mongoose.model('WriteOff', WriteOffListSchema);
+// module.exports = mongoose.model('WriteOff', WriteOffListSchema);
+module.exports = mongoose.models.WriteOff || mongoose.model('WriteOff', WriteOffListSchema);
