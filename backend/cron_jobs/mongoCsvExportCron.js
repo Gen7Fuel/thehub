@@ -16,7 +16,7 @@ const OrderRec = require('../models/OrderRec');
 const Vendor = require('../models/Vendor');
 const Transaction = require("../models/Transactions");
 const SelectTemplate = require("../models/audit/selectTemplate");
-const WriteOff = require("../models/writeOff");
+// const WriteOff = require("../models/writeOff");
 
 
 const generalizedFlattener = (doc) => {
@@ -121,7 +121,7 @@ const exportConfig = [
   { modelName: 'Safesheet', collectionName: 'safesheet' },
   { modelName: 'SelectTemplate', collectionName: 'select_template' },
   { modelName: 'Vendor', collectionName: 'vendor' },
-  { modelName: 'WriteOff', collectionName: 'write_off' }
+  // { modelName: 'WriteOff', collectionName: 'write_off' }
 ];
 
 async function runMongoCsvExport() {
