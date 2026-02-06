@@ -310,7 +310,7 @@ export default function Navbar() {
           )}
           {/* Settings button, shown if user has access */}
           {/* {access.component_settings && ( //markpoint */}
-          {access?.settings && (
+          {access?.settings?.value && (
             <Button variant="outline" onClick={handleSettings}>
               <SettingsIcon className="h-5 w-5" />
             </Button>

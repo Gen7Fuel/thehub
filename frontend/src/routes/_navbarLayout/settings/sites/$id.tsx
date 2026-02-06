@@ -332,7 +332,7 @@ function RouteComponent() {
   useEffect(() => {
     const fetchLocation = async () => {
       // Check frontend permission first
-      if (!access?.settings) {
+      if (!access?.settings?.value) {
         setLocation(null); // clear location
         navigate({ to: '/no-access' });
         return;
@@ -355,7 +355,7 @@ function RouteComponent() {
     };
 
     fetchLocation();
-  }, [id, access?.settings, navigate]);
+  }, [id, access?.settings?.value, navigate]);
 
   const [otp, setOtp] = useState(""); // controlled OTP string
 
@@ -451,7 +451,7 @@ function RouteComponent() {
   // Fetch location
   useEffect(() => {
     const fetchLocation = async () => {
-      if (!access?.settings) {
+      if (!access?.settings?.value) {
         setLocation(null);
         navigate({ to: '/no-access' });
         return;
@@ -481,7 +481,7 @@ function RouteComponent() {
     };
 
     fetchLocation();
-  }, [id, access?.settings, navigate]);
+  }, [id, access?.settings?.value, navigate]);
 
   // 🧩 Function to create safesheet
   const handleGenerateSafesheet = async () => {

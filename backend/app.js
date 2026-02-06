@@ -48,6 +48,7 @@ const permissionRoutes = require("./routes/permissionRoutes");
 const selectTemplateRoutes = require("./routes/audit/selectTemplateRoutes");
 const writeOffRoutes = require("./routes/writeOffRoutes");
 const supportRoutes = require('./routes/supportRoutes');
+const maintenanceRoutes = require('./routes/maintenanceRoutes');
 const { initializePermissionMap } = require("./utils/permissionStore");
 const setupSocket = require("./socket");
 
@@ -103,6 +104,7 @@ app.use('/api/cash-rec', cashRecRoutes);
 app.use("/api/fuel-rec", fuelRecRoutes);
 app.use('/api/product-category', productCategoryRoutes);
 app.use('/api/write-off', writeOffRoutes);
+app.use('/api/maintenance', maintenanceRoutes);
 
 // Misc
 app.use('/api', emailRoutes);
