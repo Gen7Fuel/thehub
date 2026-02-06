@@ -1,6 +1,7 @@
 const { Transform } = require('json2csv');
 const { BlobServiceClient } = require("@azure/storage-blob");
 const { PassThrough } = require('stream');
+const cron = require("node-cron");
 const mongoose = require('mongoose');
 const AuditTemplate = require("../models/audit/auditTemplate");
 const AuditInstance = require("../models/audit/auditInstance");
@@ -123,32 +124,13 @@ const exportConfig = [
   { modelName: 'WriteOff', collectionName: 'write_off' }
 ];
 
-async function runSelectedExports(Model, collectionName) {
-  let hadError = false;
-
-  try {
-    console.log(`➤ Processing: ${Model.modelName} -> ${collectionName}.csv`);
-
-    // Call the export function with our custom filename
-    const blobName = await exportToAzureCSV(Model, collectionName);
-
-    console.log(`✔ Successfully uploaded ${collectionName} to ${blobName}`);
-    return blobName;
-
-
-  } catch (err) {
-    hadError = true;
-    console.error('❌ Batch Export Failed:', err);
-  }
-
-  return hadError;
-}
-
 async function runMongoCsvExport() {
   let hadError = false;
 
+
   try {
     console.log(`🚀 Starting targeted export for ${exportConfig.length} collections...`);
+
     for (const config of exportConfig) {
       // Get the model from Mongoose's registry
       const Model = mongoose.model(config.modelName);
@@ -157,9 +139,12 @@ async function runMongoCsvExport() {
         console.error(`⚠️ Model ${config.modelName} not found. Skipping...`);
         continue;
       }
-      // You can loop through multiple models here if needed
-      const blobName = await runSelectedExports(Model, config.collectionName);
-      console.log(`✔ Export successful! File stored at: ${blobName}`);
+      console.log(`➤ Processing: ${Model.modelName} -> ${config.collectionName}.csv`);
+
+      // Call the export function with our custom filename
+      const blobName = await exportToAzureCSV(Model, config.collectionName);
+
+      console.log(`✔ Successfully uploaded ${config.collectionName} to ${blobName}`);
     }
   } catch (err) {
     hadError = true;
@@ -171,5 +156,27 @@ async function runMongoCsvExport() {
     process.exit(hadError ? 1 : 0);
   }
 }
+
+/**
+ * CRON SCHEDULER
+ * Runs daily at 10:00 AM EST/EDT
+ * 0  - Minute (0)
+ * 10 - Hour (10 AM)
+ * * - Day of Month (Every)
+ * * - Month (Every)
+ * * - Day of Week (Every)
+ */
+cron.schedule("* 6 * * *", async () => {
+    console.log(`[${new Date().toISOString()}] ⏰ Starting Scheduled Daily Export...`);
+    try {
+        await runMongoCsvExport();
+        console.log(`[${new Date().toISOString()}] ✅ Scheduled Export Completed Successfully.`);
+    } catch (err) {
+        console.error(`[${new Date().toISOString()}] ❌ Scheduled Export Failed:`, err);
+    }
+}, {
+    scheduled: true,
+    timezone: "America/New_York" // Handles Daylight Savings (EST/EDT) automatically
+});
 
 module.exports = { runMongoCsvExport };
