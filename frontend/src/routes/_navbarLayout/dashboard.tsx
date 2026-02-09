@@ -605,6 +605,7 @@ function RouteComponent() {
         // const fmt = (d: Date) => d.toISOString().slice(0, 10)
         // const salesStartDate = fmt(start)
         // const salesEndDate = fmt(end)
+        // const salesEndDate = fmt(end)
 
         // ------------------------------------------------------------
         // 1️⃣ CHECK INDEXEDDB FIRST
