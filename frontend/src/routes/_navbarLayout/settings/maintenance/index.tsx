@@ -1,7 +1,7 @@
 import { createFileRoute, useNavigate } from '@tanstack/react-router'
 import { useState, useEffect } from 'react'
 import axios from 'axios'
-import { Plus, ChevronDown, ChevronUp, Clock, User, Info } from 'lucide-react'
+import { Plus, ChevronDown, ChevronUp, Clock, User } from 'lucide-react'
 import { Button } from "@/components/ui/button" // Assuming you use a UI library
 import { Badge } from "@/components/ui/badge"
 
