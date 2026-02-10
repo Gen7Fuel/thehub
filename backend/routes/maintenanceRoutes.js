@@ -1,6 +1,7 @@
 const express = require('express');
 const router = express.Router();
 const Maintenance = require('../models/Maintenance'); 
+const User = require('../models/User');
 
 // 1. POST: Create a new maintenance schedule
 router.post('/', async (req, res) => {
