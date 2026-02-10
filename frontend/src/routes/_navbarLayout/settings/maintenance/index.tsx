@@ -56,8 +56,10 @@ function RouteComponent() {
   const fetchMaintenance = async () => {
     try {
       const response = await axios.get('/api/maintenance', {
-        headers: { Authorization: `Bearer ${localStorage.getItem('token') || ''}`, 
-                    'X-Required-Permission': 'settings.maintenance' }
+        headers: {
+          Authorization: `Bearer ${localStorage.getItem('token') || ''}`,
+          'X-Required-Permission': 'settings.maintenance'
+        }
       });
       // Map the response to include an open state for accordion logic if needed locally
       setMaintenanceList(response.data);
@@ -72,7 +74,33 @@ function RouteComponent() {
     setOpenId(openId === id ? null : id);
   };
 
-  const formatDate = (date: string) => new Date(date).toLocaleString();
+  // const formatDate = (date: string) => new Date(date).toLocaleString();
+  // This helper correctly converts the UTC DB string back to User's Local Time
+  const formatDate = (dateString: string) => {
+    if (!dateString) return '—';
+    const date = new Date(dateString);
+    return date.toLocaleString(undefined, {
+      year: 'numeric',
+      month: 'short',
+      day: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit',
+    });
+  };
+
+  const handleStartMaintenance = async (id: string) => {
+    if (!window.confirm("Are you sure you want to start this maintenance? The app will become inaccessible to all users immediately.")) return;
+    try {
+      await axios.put(`/api/maintenance/${id}`, {
+        status: 'ongoing'
+      }, {
+        headers: { Authorization: `Bearer ${localStorage.getItem('token') || ''}`, 'X-Required-Permission': 'settings.maintenance' }
+      });
+      fetchMaintenance(); // Refresh the list
+    } catch (err) {
+      alert("Failed to start maintenance.");
+    }
+  };
 
   const handleEndMaintenance = async (id: string) => {
     if (!window.confirm("Are you sure you want to end this maintenance early? The app will become accessible to all users immediately.")) return;
@@ -81,7 +109,7 @@ function RouteComponent() {
       await axios.put(`/api/maintenance/${id}`, {
         status: 'completed'
       }, {
-        headers: { 'X-Required-Permission': 'maintenance.manage' }
+        headers: { Authorization: `Bearer ${localStorage.getItem('token') || ''}`, 'X-Required-Permission': 'settings.maintenance' }
       });
       fetchMaintenance(); // Refresh the list
     } catch (err) {
@@ -187,7 +215,7 @@ function RouteComponent() {
                         </div>
                         <div className="flex justify-between">
                           <span className="text-gray-500">Started By:</span>
-                          <span>{item.startedBy ? `${item.startedBy.firstName}` : 'Auto'}</span>
+                          <span>{item.startedBy ? `${item.startedBy.firstName}` : '-'}</span>
                         </div>
                       </div>
                     </div>
@@ -197,7 +225,7 @@ function RouteComponent() {
                   <div className="mt-6 pt-4 border-t flex gap-3">
                     <Button
                       variant="outline"
-                      onClick={() => navigate({ to: `/settings/maintenance/edit/${item._id}` })}
+                      onClick={() => navigate({ to: `/settings/maintenance/${item._id}` })}
                     >
                       Edit Schedule
                     </Button>
@@ -207,6 +235,14 @@ function RouteComponent() {
                         onClick={() => handleEndMaintenance(item._id)}
                       >
                         End Maintenance Now
+                      </Button>
+                    )}
+                    {item.status === 'scheduled' && (
+                      <Button
+                        variant="secondary"
+                        onClick={() => handleStartMaintenance(item._id)}
+                      >
+                        Start Maintenance Now
                       </Button>
                     )}
                   </div>
