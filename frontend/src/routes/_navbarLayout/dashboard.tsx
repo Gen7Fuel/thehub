@@ -1770,7 +1770,7 @@ function RouteComponent() {
                 {/*     BISTRO SECTION   */}
                 {/* ======================= */}
 
-                {["Rankin", "Couchiching", "Silver Grizzly"].includes(site) && (
+                {["Rankin", "Couchiching", "Silver Grizzly", "Oliver", "Osoyoos"].includes(site) && (
                   <section aria-labelledby="bistro-heading" className="mb-10">
                     <h2 id="bistro-heading" className="text-2xl font-bold mb-4 pl-4">
                       Bistro
