@@ -291,13 +291,6 @@ function RouteComponent() {
                           >
                             Start Maintenance Now
                           </Button>
-                          <Button
-                            variant="ghost"
-                            className="text-red-500 hover:bg-red-50 hover:text-red-700"
-                            onClick={() => handleCancelMaintenance(item._id)}
-                          >
-                            Cancel Schedule
-                          </Button>
                         </>
                       )}
                       {item.status === 'scheduled' && !item.notificationSent && (
@@ -307,6 +300,15 @@ function RouteComponent() {
                           onClick={() => handleNotifyUsers(item._id)}
                         >
                           📧 Notify Users
+                        </Button>
+                      )}
+                      {item.status === 'scheduled' && (
+                        <Button
+                          variant="ghost"
+                          className="text-red-500 hover:bg-red-50 hover:text-red-700"
+                          onClick={() => handleCancelMaintenance(item._id)}
+                        >
+                          Cancel Schedule
                         </Button>
                       )}
                     </div>

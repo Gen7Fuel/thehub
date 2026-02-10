@@ -131,7 +131,7 @@ function CreateMaintenance() {
 
           <div className="bg-blue-50 border border-blue-100 p-4 rounded-lg">
             <p className="text-sm text-blue-800">
-              <strong>Note:</strong> Once saved, this maintenance window will appear as a banner for all users 48 hours prior to start. Emails will be queued immediately.
+              <strong>Note:</strong> Once saved, this maintenance window will appear as a banner for all users 6 hours prior to start. Notifications can be sent out via emails to all users from the List Page.
             </p>
           </div>
 
