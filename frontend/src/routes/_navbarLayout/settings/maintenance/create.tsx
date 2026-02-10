@@ -74,7 +74,7 @@ function CreateMaintenance() {
 
       <div className="bg-white border rounded-xl shadow-sm p-8">
         <h2 className="text-2xl font-bold mb-2">Schedule Maintenance</h2>
-        <p className="text-gray-500 mb-8 border-b pb-4">Set up a new downtime window. Notifications will be sent to all users.</p>
+        <p className="text-gray-500 mb-8 border-b pb-4">Set up a new downtime window.</p>
 
         <form onSubmit={handleSubmit} className="space-y-6">
           <div className="space-y-2">
@@ -84,7 +84,7 @@ function CreateMaintenance() {
             <input
               required
               className="w-full p-3 border rounded-lg focus:ring-2 focus:ring-blue-500 outline-none"
-              placeholder="e.g., Monthly Database Optimization"
+              placeholder="e.g., Monthly Database Optimization (This will be included in the notification emails)"
               value={formData.name}
               onChange={(e) => setFormData({ ...formData, name: e.target.value })}
             />
@@ -93,7 +93,7 @@ function CreateMaintenance() {
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
             <div className="space-y-2">
               <label className="text-sm font-semibold flex items-center gap-2">
-                <Calendar size={16} /> Start Date & Time
+                <Calendar size={16} /> Start Date & Time (LocalTime)
               </label>
               <input
                 required
@@ -105,7 +105,7 @@ function CreateMaintenance() {
             </div>
             <div className="space-y-2">
               <label className="text-sm font-semibold flex items-center gap-2">
-                <Calendar size={16} /> Expected End Date & Time
+                <Calendar size={16} /> Expected End Date & Time (LocalTime)
               </label>
               <input
                 required
@@ -123,7 +123,7 @@ function CreateMaintenance() {
               required
               rows={4}
               className="w-full p-3 border rounded-lg focus:ring-2 focus:ring-blue-500 outline-none"
-              placeholder="Describe what will be affected..."
+              placeholder="Describe what will be affected...(This description will be included in the notification emails)"
               value={formData.description}
               onChange={(e) => setFormData({ ...formData, description: e.target.value })}
             />
