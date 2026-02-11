@@ -20,7 +20,7 @@ function RouteComponent() {
   const isListActive = matchRoute({ to: '/fleet/list' })
 
   return (
-    <div className="pt-16 flex flex-col items-center">
+    <div className="pt-5 flex flex-col items-center">
       {/* Grouped navigation buttons for fleet sections */}
       <div className="flex mb-4">
         {/* Create tab button */}

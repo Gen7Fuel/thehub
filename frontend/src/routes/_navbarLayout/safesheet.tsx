@@ -542,7 +542,7 @@ export default function RouteComponent() {
       )}
 
       {hasAccess && (
-        <div className="pt-14 flex flex-col items-center">
+        <div className="pt-5 flex flex-col items-center">
           <div className="my-4 flex flex-row items-center gap-4 w-full max-w-5xl px-2 sm:px-4">
             <SitePicker
               value={site}

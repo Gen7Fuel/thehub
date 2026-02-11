@@ -34,7 +34,7 @@ function RouteComponent() {
   ]
 
   return (
-    <div className='flex pt-15 mx-auto'>
+    <div className='flex pt-5 mx-auto'>
       {/* Sidebar navigation for settings */}
       <aside className='flex flex-col w-1/4 p-4 border-r border-gray-300 border-dashed justify-start items-end'>
         {links.map((link) => (

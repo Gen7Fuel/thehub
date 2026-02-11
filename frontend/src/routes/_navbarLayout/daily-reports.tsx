@@ -12,7 +12,7 @@ function RouteComponent() {
   const isCashSummaryActive = matchRoute({ to: '/daily-reports/cash-summary', fuzzy: true });
 
   return (
-    <div className="pt-16 flex flex-col items-center">
+    <div className="pt-5 flex flex-col items-center">
       {/* Grouped buttons */}
       <div className="flex mb-4">
         <Link to="/daily-reports/shift-worksheet" activeOptions={{ exact: true }}>

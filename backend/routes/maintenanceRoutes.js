@@ -122,6 +122,8 @@ router.post('/', async (req, res) => {
     });
 
     const saved = await maintenance.save();
+    const io = req.app.get("io");
+    if (io) io.emit("maintenanceUpdated");
     res.status(201).json(saved);
   } catch (err) {
     res.status(400).json({ message: "Failed to create schedule", error: err.message });
@@ -215,6 +217,8 @@ router.post('/:id/cancel', async (req, res) => {
         html: generateCancellationEmailHTML(maintenance),
       });
     }
+    const io = req.app.get("io");
+    if (io) io.emit("maintenanceUpdated");
 
     res.json({ message: "Maintenance cancelled successfully." });
   } catch (err) {
@@ -245,6 +249,8 @@ router.put('/:id', async (req, res) => {
     );
 
     if (!updated) return res.status(404).json({ message: "Record not found" });
+    const io = req.app.get("io");
+    if (io) io.emit("maintenanceUpdated");
     res.json(updated);
   } catch (err) {
     res.status(400).json({ message: "Update failed", error: err.message });

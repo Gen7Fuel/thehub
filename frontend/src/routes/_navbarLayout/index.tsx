@@ -17,7 +17,7 @@ function App() {
 
   return (
     <div className="flex items-center justify-center min-h-screen bg-gray-50">
-      <div className="flex flex-col gap-8 w-full max-w-3xl px-4 pt-16 pb-8">
+      <div className="flex flex-col gap-8 w-full max-w-3xl px-4 pt-5 pb-8">
         {/* Audits Section */}
         {access?.stationAudit?.value && (
           <Section title="Audits">
