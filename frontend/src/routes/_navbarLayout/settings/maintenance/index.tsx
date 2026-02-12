@@ -69,7 +69,10 @@ function RouteComponent() {
     }
   };
 
-  const filteredList = maintenanceList.filter(item => item.status === filter);
+  // const filteredList = maintenanceList.filter(item => item.status === filter);
+  const filteredList = maintenanceList
+    .filter(item => item.status === filter)
+    .sort((a, b) => new Date(a.scheduleStart).getTime() - new Date(b.scheduleStart).getTime());
 
   const toggleAccordion = (id: string) => {
     setOpenId(openId === id ? null : id);
@@ -132,7 +135,7 @@ function RouteComponent() {
   };
 
   const handleCancelMaintenance = async (id: string) => {
-    if (!window.confirm("Are you sure you want to cancel this maintenance? Users will be notified via email.")) return;
+    if (!window.confirm("Are you sure you want to cancel this maintenance? Users will be notified via email if they were already informed about it.")) return;
     try {
       await axios.post(`/api/maintenance/${id}/cancel`, {}, {
         headers: {
@@ -140,7 +143,7 @@ function RouteComponent() {
           'X-Required-Permission': 'settings.maintenance'
         }
       });
-      alert("Maintenance cancelled and users notified.");
+      alert("Maintenance cancelled successfully.");
       fetchMaintenance();
     } catch (err) {
       alert("Failed to cancel maintenance.");
@@ -197,21 +200,39 @@ function RouteComponent() {
                   className="w-full px-5 py-4 flex justify-between items-center bg-gray-50 hover:bg-gray-100 transition-colors"
                 >
                   <div className="flex flex-col items-start gap-1">
-                    <span className="font-bold text-gray-700 text-lg">{item.name}</span>
+                    <div className="flex items-center gap-3">
+                      <span className="font-bold text-gray-700 text-lg">{item.name}</span>
+
+                      {/* DYNAMIC TIMERS */}
+                      {item.status === 'scheduled' && (
+                        <MaintenanceTimer targetDate={item.scheduleStart} label="STARTS IN" />
+                      )}
+                      {item.status === 'ongoing' && (
+                        <div className="flex items-center">
+                          <MaintenanceTimer targetDate={item.scheduleClose} label="ENDS IN" />
+                        </div>
+                      )}
+                    </div>
+
                     <div className="flex gap-4 text-xs text-gray-500">
-                      <span className="flex items-center gap-1"><Clock size={14} /> {formatDate(item.scheduleStart)} — {formatDate(item.scheduleClose)}</span>
-                      <span className="flex items-center gap-1"><User size={14} /> {item.createdBy?.firstName} {item.createdBy?.lastName}</span>
+                      <span className="flex items-center gap-1">
+                        <Clock size={14} /> {formatDate(item.scheduleStart)} — {formatDate(item.scheduleClose)}
+                      </span>
+                      <span className="flex items-center gap-1">
+                        <User size={14} /> {item.createdBy?.firstName} {item.createdBy?.lastName}
+                      </span>
                     </div>
                   </div>
+
                   <div className="flex items-center gap-4">
                     <Badge
                       className={`
-                      ${item.status === 'ongoing' ? 'bg-red-500 hover:bg-red-600' : ''}
-                      ${item.status === 'scheduled' ? 'bg-blue-500 hover:bg-blue-600' : ''}
-                      ${item.status === 'completed' ? 'bg-green-600 hover:bg-green-700' : ''}
-                      ${item.status === 'cancelled' ? 'bg-orange-500 hover:bg-orange-600' : ''}
-                      capitalize text-white border-none
-                    `}
+                        ${item.status === 'ongoing' ? 'bg-red-500 hover:bg-red-600' : ''}
+                        ${item.status === 'scheduled' ? 'bg-blue-500 hover:bg-blue-600' : ''}
+                        ${item.status === 'completed' ? 'bg-green-600 hover:bg-green-700' : ''}
+                        ${item.status === 'cancelled' ? 'bg-orange-500 hover:bg-orange-600' : ''}
+                        capitalize text-white border-none
+                      `}
                     >
                       {item.status}
                     </Badge>
@@ -320,5 +341,37 @@ function RouteComponent() {
         </div>
       </div>
     </div>
+  );
+}
+
+function MaintenanceTimer({ targetDate, label }: { targetDate: string, label: string }) {
+  const [timeLeft, setTimeLeft] = useState("");
+
+  useEffect(() => {
+    const calculateTime = () => {
+      const difference = new Date(targetDate).getTime() - new Date().getTime();
+
+      if (difference <= 0) {
+        setTimeLeft("Soon...");
+        return;
+      }
+
+      const hours = Math.floor((difference / (1000 * 60 * 60)));
+      const minutes = Math.floor((difference % (1000 * 60 * 60)) / (1000 * 60));
+      const seconds = Math.floor((difference % (1000 * 60)) / 1000);
+
+      setTimeLeft(`${hours}h ${minutes}m ${seconds}s`);
+    };
+
+    calculateTime();
+    const timer = setInterval(calculateTime, 1000);
+    return () => clearInterval(timer);
+  }, [targetDate]);
+
+  return (
+    <span className="flex items-center gap-1.5 bg-gray-200 px-2 py-0.5 rounded text-[10px] font-mono font-bold text-gray-700">
+      <Clock size={12} className="animate-pulse" />
+      {label}: {timeLeft}
+    </span>
   );
 }

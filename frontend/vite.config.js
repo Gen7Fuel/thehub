@@ -40,6 +40,7 @@ export default defineConfig({
     proxy: isDocker 
   ? {
       '/api': 'http://backend:5000',
+      '/auth': 'http://auth-backend:5005',
       '/socket.io': {
         target: 'http://backend:5000',
         ws: true,  // Add WebSocket support
@@ -54,6 +55,7 @@ export default defineConfig({
     }
   : {
       '/api': 'http://localhost:5000',
+      '/auth': 'http://localhost:5005',
       '/socket.io': {
         target: 'http://localhost:5000',
         ws: true,  // Add WebSocket support

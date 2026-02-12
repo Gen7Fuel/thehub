@@ -19,26 +19,39 @@ export default function MaintenanceBanner() {
       const twentyFourHoursFromNow = new Date(now.getTime() + 24 * 60 * 60 * 1000);
 
       const potentialMaintenances = data.filter((m: any) => {
-        // 1. Ongoing: Always show
+
+        // 1. Ongoing
         if (m.status === 'ongoing') return true;
 
-        // 2. Completed: Show for 1 hour after actualEnd
+        // 2. Completed (within 1 hour)
         if (m.status === 'completed' && m.actualEnd) {
           return new Date(m.actualEnd) > oneHourAgo;
         }
 
-        // 3. Cancelled: Show for 1 hour after updatedAt
+        // 3. Refined Cancelled Logic
         if (m.status === 'cancelled') {
-          return new Date(m.updatedAt) > oneHourAgo;
+          const updatedAt = new Date(m.updatedAt);
+          const startDate = new Date(m.scheduleStart);
+
+          // Condition A: Was it cancelled within the last hour?
+          const isRecentCancellation = updatedAt > oneHourAgo;
+
+          // Condition B: Was the maintenance relevant? 
+          // (Scheduled for today/next 24h OR the users were already notified)
+          const wasRelevant = startDate <= twentyFourHoursFromNow || m.notificationSent === true;
+
+          return isRecentCancellation && wasRelevant;
         }
 
-        // 4. Scheduled: Show if starting within 24 hours
+        // 4. Scheduled (within 24 hours)
         if (m.status === 'scheduled') {
           const startDate = new Date(m.scheduleStart);
           return startDate > now && startDate <= twentyFourHoursFromNow;
         }
+
         return false;
       });
+
 
       const sorted = potentialMaintenances.sort((a: any, b: any) => {
         const priority: Record<string, number> = {
@@ -47,7 +60,7 @@ export default function MaintenanceBanner() {
           completed: 3,
           cancelled: 4
         };
-        
+
         if (priority[a.status] !== priority[b.status]) {
           return priority[a.status] - priority[b.status];
         }
@@ -113,11 +126,11 @@ function BannerContent({ activeMaintenance, timeLeft }: any) {
   const status = activeMaintenance.status;
 
   const formatDate = (date: string) => {
-    return new Date(date).toLocaleString([], { 
-      month: 'short', 
-      day: 'numeric', 
-      hour: '2-digit', 
-      minute: '2-digit' 
+    return new Date(date).toLocaleString([], {
+      month: 'short',
+      day: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit'
     });
   };
 

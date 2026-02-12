@@ -134,7 +134,7 @@ function RouteComponent() {
     setError(null)
 
     try {
-      const res = await axios.post(`${domain}/api/auth/identify`, {
+      const res = await axios.post(`/auth/identify`, {
         email: email.trim().toLowerCase()
       })
       // If found, set the specific type
@@ -162,7 +162,8 @@ function RouteComponent() {
     setLoading(true)
 
     try {
-      const response = await axios.post(`${domain}/api/auth/login`, {
+      const response = await axios.post(`/auth/login`, {
+      // const response = await axios.post(`${domain}/api/auth/login`, {
         email: email.trim().toLowerCase(),
         password: passToSubmit
       })
