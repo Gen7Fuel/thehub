@@ -6,6 +6,7 @@ const Permission = require("../models/Permission");
 const Location = require("../models/Location"); // Add this at the top with other requires
 const router = express.Router();
 const Role = require("../models/Role");
+const Maintenance = require("../models/Maintenance");
 const { getMergedPermissions, getMergedPermissionsTreeArray } = require("../utils/mergePermissionObjects");
 
 // const { auth } = require("../middleware/authMiddleware.js");
@@ -15,8 +16,54 @@ function escapeRegExp(str) {
   return String(str).replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
 
+/**
+ * Recursively searches for a permission value by its name path in your Tree Array.
+ * path example: ["settings", "maintenance"]
+ */
+const checkPermissionByPath = (tree, path) => {
+  if (!path || path.length === 0 || !tree) return false;
+
+  const [currentSegment, ...remainingPath] = path;
+
+  // Find the node (Module or Child) in the current array
+  const node = tree.find(n => n.name === currentSegment);
+
+  if (!node) return false;
+
+  // If this was the last name in our path, return its boolean value
+  if (remainingPath.length === 0) {
+    return !!node.value;
+  }
+
+  // Otherwise, if there are children, search the next segment in the children array
+  if (node.children && Array.isArray(node.children)) {
+    return checkPermissionByPath(node.children, remainingPath);
+  }
+
+  return false;
+};
+
 // POST /api/auth/identify
 // identify if a user's role belongs to store account or office account
+// router.post("/identify", async (req, res) => {
+//   try {
+//     const inputEmail = String(req.body.email || '').trim();
+//     const user = await User.findOne({
+//       email: new RegExp(`^${escapeRegExp(inputEmail)}$`, 'i')
+//     }).populate("role");
+
+//     // If user exists, tell the frontend the truth
+//     if (user && user.role) {
+//       return res.json({ inStoreAccount: user.role.inStoreAccount });
+//     }
+
+//     // If user doesn't exist, return 404. 
+//     // The frontend will catch this and default to Passcode view.
+//     res.status(404).json({ message: "Identity hidden" });
+//   } catch (err) {
+//     res.status(500).json({ message: "Server error" });
+//   }
+// });
 router.post("/identify", async (req, res) => {
   try {
     const inputEmail = String(req.body.email || '').trim();
@@ -24,14 +71,21 @@ router.post("/identify", async (req, res) => {
       email: new RegExp(`^${escapeRegExp(inputEmail)}$`, 'i')
     }).populate("role");
 
-    // If user exists, tell the frontend the truth
-    if (user && user.role) {
-      return res.json({ inStoreAccount: user.role.inStoreAccount });
-    }
+    // Check for maintenance status
+    const ongoing = await Maintenance.findOne({ status: "ongoing" });
 
-    // If user doesn't exist, return 404. 
-    // The frontend will catch this and default to Passcode view.
-    res.status(404).json({ message: "Identity hidden" });
+    // If user exists, provide account type + maintenance info
+    if (user && user.role) {
+      return res.json({
+        inStoreAccount: user.role.inStoreAccount,
+        maintenance: ongoing ? { active: true, endTime: ongoing.scheduleClose } : null
+      });
+    }
+    // Security: Silent default for non-existent users
+    res.status(404).json({
+      message: "Identity hidden",
+      maintenance: ongoing ? { active: true, endTime: ongoing.scheduleClose } : null
+    });
   } catch (err) {
     res.status(500).json({ message: "Server error" });
   }
@@ -86,6 +140,14 @@ router.post("/identify", async (req, res) => {
 //   }
 // });
 router.post("/register", async (req, res) => {
+  // 1. Check maintenance first (no need for user checks here)
+  const ongoing = await Maintenance.findOne({ status: "ongoing" });
+
+  if (ongoing) {
+    return res.status(503).json({
+      message: "Registration is temporarily disabled during system maintenance."
+    });
+  }
   const { email, password, firstName, lastName, stationName } = req.body;
 
   try {
@@ -187,6 +249,28 @@ router.post("/login", async (req, res) => {
 
     const isMatch = await bcrypt.compare(password, user.password);
     if (!isMatch) return res.status(400).json({ message: "Invalid credentials" });
+
+    // --- MAINTENANCE CHECK ---
+    const ongoing = await Maintenance.findOne({ status: "ongoing" });
+
+    if (ongoing) {
+      // Generate the merged tree using your existing utility
+      const mergedTree = await getMergedPermissionsTreeArray(user);
+
+      // Check the path: Module "settings" -> Permission "maintenance"
+      const canBypass = checkPermissionByPath(mergedTree, ["settings", "maintenance"]);
+
+      if (!canBypass) {
+        return res.status(503).json({
+          message: "The system is currently undergoing maintenance.",
+          endTime: ongoing.scheduleClose,
+          maintenanceActive: true
+        });
+      }
+
+      console.log(`[Admin Access] ${user.email} bypassed maintenance lockdown.`);
+    }
+    // --- END MAINTENANCE CHECK ---
 
     // Update login flags
     user.lastLoginDate = new Date();

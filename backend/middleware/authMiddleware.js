@@ -1,5 +1,6 @@
 import jwt from "jsonwebtoken";
 import User from "../models/User.js";
+import Maintenance from "../models/Maintenance.js";
 import chalk from "chalk";
 // import getPermissionMap from "../utils/permissionStore.js";
 import pkg from "../utils/permissionStore.js";
@@ -43,7 +44,7 @@ const hasEffectiveAccess = (user, role, permId) => {
   // 1. Priority 1: User Custom Overrides
   // We check if the user has a specific personal override for this ID
   const userOverride = user.customPermissionsArray?.find(p => p.permId === permId);
-  
+
   if (userOverride !== undefined) {
     return userOverride.value;
   }
@@ -103,6 +104,35 @@ const auth = async (req, res, next) => {
     // const chalkPromise = import('chalk').catch(() => null)
 
     req.user = user;
+
+    // --- NEW: INTEGRATED MAINTENANCE CHECK ---
+    const ongoing = await Maintenance.findOne({ status: "ongoing" });
+
+    if (ongoing) {
+      // Allow the maintenance status route to pass through so the frontend can show the overlay
+      const isMaintenanceStatusRoute = req.originalUrl.includes('/api/maintenance');
+
+      const permissionMap = getPermissionMap();
+      const maintPermId = permissionMap.get("settings.maintenance");
+
+      // Check if user has the specific bypass permission
+      const canBypass = hasEffectiveAccess(user, user.role, maintPermId);
+
+      // BLOCK if: It's NOT the maintenance route AND the user CANNOT bypass
+      if (!isMaintenanceStatusRoute && !canBypass) {
+        return res.status(503).json({
+          message: "System is under maintenance",
+          endTime: ongoing.scheduleClose,
+          maintenanceActive: true
+        });
+      }
+
+      // If we reach here, either it's the maintenance route or an Admin bypass
+      if (canBypass) {
+        console.log(chalk.bgRed.white(" ADMIN BYPASS ") + ` ${user.firstName} is accessing during maintenance.`);
+      }
+    }
+
     // Timestamp: 2025-12-09 14:23 (UTC)
     const pad = (n) => String(n).padStart(2, '0')
     const now = new Date()
@@ -113,12 +143,12 @@ const auth = async (req, res, next) => {
       req.method === 'POST'
         ? chalk.bgRed.white(` ${req.method} `)
         : req.method === 'PUT'
-        ? chalk.bgMagenta.white(` ${req.method} `)
-        : req.method === 'PATCH'
-        ? chalk.bgCyan.black(` ${req.method} `)
-        : req.method === 'DELETE'
-        ? chalk.bgBlack.white(` ${req.method} `)
-        : chalk.bgYellow.black(` ${req.method} `)
+          ? chalk.bgMagenta.white(` ${req.method} `)
+          : req.method === 'PATCH'
+            ? chalk.bgCyan.black(` ${req.method} `)
+            : req.method === 'DELETE'
+              ? chalk.bgBlack.white(` ${req.method} `)
+              : chalk.bgYellow.black(` ${req.method} `)
 
     // console.log(`[${ts}] 🧑‍💻 ${req.user.firstName}: ${req.method} ${req.originalUrl}`);
 
@@ -137,7 +167,7 @@ const auth = async (req, res, next) => {
       methodBadge,
       coloredUrl
     )
-    
+
     // const chalk = (await chalkPromise)?.default
     // if (chalk) {
     //   console.log(chalk.green(`[${ts}]`), `🧑‍💻 ${req.user.firstName}:`, chalk.yellow(`${req.method} ${req.originalUrl}`))
@@ -171,8 +201,8 @@ const auth = async (req, res, next) => {
       const isAllowed = hasEffectiveAccess(user, user.role, permId);
 
       if (!isAllowed) {
-        return res.status(403).json({ 
-          message: `Access denied for ${requiredPermissionName}` 
+        return res.status(403).json({
+          message: `Access denied for ${requiredPermissionName}`
         });
       }
     }
