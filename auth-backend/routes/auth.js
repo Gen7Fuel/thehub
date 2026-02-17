@@ -1,6 +1,7 @@
 const express = require("express");
 const bcrypt = require("bcryptjs");
 const jwt = require("jsonwebtoken");
+// const User = require("../../backend/models/User")
 const User = require("../models/User");
 const Permission = require("../models/Permission");
 const Location = require("../models/Location"); // Add this at the top with other requires
@@ -145,7 +146,7 @@ router.post("/register", async (req, res) => {
 
   if (ongoing) {
     return res.status(503).json({
-      message: "Registration is temporarily disabled during system maintenance."
+      message: "Registration is temporarily disabled due to current ongoing system maintenance."
     });
   }
   const { email, password, firstName, lastName, stationName } = req.body;
@@ -234,6 +235,8 @@ router.post("/register", async (req, res) => {
 
 // Route with new permissions
 router.post("/login", async (req, res) => {
+  console.log("Login attempt from auth backend for email:", req.body.email);
+ 
   const { email, password } = req.body;
 
   try {

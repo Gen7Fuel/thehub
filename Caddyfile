@@ -23,6 +23,11 @@
         reverse_proxy backend:5000
     }
 
+    # === AUTH routes ===
+    handle /auth/* {
+        reverse_proxy auth-backend:5005
+    }
+
     # === CDN routes ===
     handle /cdn/* {
         reverse_proxy cdn:5001

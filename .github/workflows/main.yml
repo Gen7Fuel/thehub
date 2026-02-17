@@ -147,6 +147,9 @@ jobs:
             export AZURE_CONTAINER=${{ secrets.AZURE_CONTAINER }}
             export NOREPLY_PASS=${{ secrets.NOREPLY_PASS }}
 
+            # ---- Deploy Auth-Backend ----
+            docker compose up -d --build --no-deps --wait auth-backend
+            
             # ---- Backend rolling update ----
             docker compose up -d --build --no-deps --wait backend
 

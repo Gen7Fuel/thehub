@@ -289,6 +289,27 @@ services:
       retries: 5
     restart: always
 
+  auth-backend:
+    container_name: auth-backend
+    build: ./auth-backend
+    expose:
+      - "5005"
+    environment:
+      - MONGO_URI=${MONGO_URI}
+      - JWT_SECRET=${JWT_SECRET}
+      - FORCE_COLOR=1
+    volumes:
+      - ./backend/models:/app/models:ro
+    depends_on:
+      - mongo
+    healthcheck:
+      # Matches the app.get('/auth/health') route you added
+      test: ["CMD", "curl", "-f", "http://localhost:5005/auth/health"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+    restart: always
+
   cdn:
     container_name: cdn
     build: ./cdn
@@ -321,6 +342,8 @@ services:
     depends_on:
       backend:
         condition: service_healthy
+      auth-backend:                    
+        condition: service_started
     restart: always
 
 volumes:

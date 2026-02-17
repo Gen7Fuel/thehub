@@ -58,7 +58,7 @@ function RouteComponent() {
     }
 
     try {
-      const response = await axios.post(`/api/auth/register`, {
+      const response = await axios.post(`/auth/register`, {
         email,
         password,
         firstName,
@@ -71,7 +71,11 @@ function RouteComponent() {
         navigate({ to: "/login" });
       }
     } catch (err: any) {
-      setError("Registration failed! Please try again.");
+      if (err.response?.data?.message) {
+        setError(err.response.data.message);
+      } else {
+        setError("Registration failed! Please try again.");
+      }
       console.error(err.response?.data || err.message);
     }
   };
