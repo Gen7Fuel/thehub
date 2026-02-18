@@ -339,7 +339,7 @@ services:
     volumes:
       - ./Caddyfile:/etc/caddy/Caddyfile
       - /var/www/thehub:/usr/share/caddy
-      - ./sage_static:/usr/share/caddy/sage
+      - ./sage_static:/usr/share/caddy/dist_current/sage
     depends_on:
       backend:
         condition: service_healthy
