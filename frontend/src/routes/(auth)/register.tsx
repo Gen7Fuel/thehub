@@ -58,7 +58,7 @@ function RouteComponent() {
     }
 
     try {
-      const response = await axios.post(`/auth/register`, {
+      const response = await axios.post(`/login-auth/register`, {
         email,
         password,
         firstName,
