@@ -9,10 +9,10 @@
     file_server
 
     # === AUTH routes ===
-    handle /auth/* {
+    handle /login-auth/* {
         reverse_proxy auth-backend:5005
     }
-    
+
     # === WebSocket routes (Socket.IO) ===
     handle /socket.io/* {
         reverse_proxy backend:5000
