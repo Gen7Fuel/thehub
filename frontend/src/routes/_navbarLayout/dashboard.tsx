@@ -605,6 +605,7 @@ function RouteComponent() {
         // const fmt = (d: Date) => d.toISOString().slice(0, 10)
         // const salesStartDate = fmt(start)
         // const salesEndDate = fmt(end)
+        // const salesEndDate = fmt(end)
 
         // ------------------------------------------------------------
         // 1️⃣ CHECK INDEXEDDB FIRST
@@ -1769,7 +1770,7 @@ function RouteComponent() {
                 {/*     BISTRO SECTION   */}
                 {/* ======================= */}
 
-                {["Rankin", "Couchiching", "Silver Grizzly"].includes(site) && (
+                {["Rankin", "Couchiching", "Silver Grizzly", "Oliver", "Osoyoos"].includes(site) && (
                   <section aria-labelledby="bistro-heading" className="mb-10">
                     <h2 id="bistro-heading" className="text-2xl font-bold mb-4 pl-4">
                       Bistro
