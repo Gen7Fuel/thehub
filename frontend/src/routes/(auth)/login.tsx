@@ -243,7 +243,7 @@ function RouteComponent() {
                 <div>
                   <p className="text-xs font-bold text-amber-900 uppercase tracking-tight">System Maintenance</p>
                   <p className="text-[11px] text-amber-800 leading-tight mt-0.5">
-                    The Hub is currently undergoing updates. Users won't be able to log in right now.
+                    The Hub is currently undergoing updates. User's won't be able to log in currently.
                     Estimated completion: {new Date(maintInfo.endTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                   </p>
                 </div>
