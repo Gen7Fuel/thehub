@@ -3,7 +3,8 @@ const express = require('express')
 const router = express.Router()
 
 // Office API base (server-to-server HTTP)
-const OFFICE_SFTP_API_BASE = 'http://24.141.32.206:5002'
+// const OFFICE_SFTP_API_BASE = 'http://24.141.32.206:5002'
+const OFFICE_SFTP_API_BASE = 'http://24.50.55.130:5000'
 
 async function fetchWithTimeout(url, opts = {}, ms = 15000) {
   const controller = new AbortController()
