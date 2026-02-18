@@ -338,7 +338,8 @@ services:
       - "3000:3000"
     volumes:
       - ./Caddyfile:/etc/caddy/Caddyfile
-      - /var/www/thehub:/usr/share/caddy
+      # - /var/www/thehub:/usr/share/caddy
+      - ./dist_current:/usr/share/caddy/dist_current
       - ./sage_static:/usr/share/caddy/dist_current/sage
     depends_on:
       backend:
