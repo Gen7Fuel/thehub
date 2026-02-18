@@ -303,8 +303,8 @@ services:
     depends_on:
       - mongo
     healthcheck:
-      # Matches the app.get('/login-auth/health') route you added
-      test: ["CMD", "curl", "-f", "http://localhost:5005/login-auth/health"]
+      # Matches the app.get('/auth/health') route you added
+      test: ["CMD", "curl", "-f", "http://localhost:5005/auth/health"]
       interval: 10s
       timeout: 3s
       retries: 5
@@ -338,14 +338,12 @@ services:
       - "3000:3000"
     volumes:
       - ./Caddyfile:/etc/caddy/Caddyfile
-      # - /var/www/thehub:/usr/share/caddy
-      - ./dist_current:/usr/share/caddy/dist_current
-      - ./sage_static:/usr/share/caddy/dist_current/sage
+      - /var/www/thehub:/usr/share/caddy
     depends_on:
       backend:
         condition: service_healthy
       auth-backend:                    
-        condition: service_healthy
+        condition: service_started
     restart: always
 
 volumes:
