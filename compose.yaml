@@ -292,8 +292,8 @@ services:
   auth-backend:
     container_name: auth-backend
     build: ./auth-backend
-    expose:
-      - "5005"
+    ports:
+      - "5005:5005"
     environment:
       - MONGO_URI=${MONGO_URI}
       - JWT_SECRET=${JWT_SECRET}

@@ -8,6 +8,11 @@
     root * /usr/share/caddy/dist_current
     file_server
 
+    # === AUTH routes ===
+    handle /auth/* {
+        reverse_proxy auth-backend:5005
+    }
+    
     # === WebSocket routes (Socket.IO) ===
     handle /socket.io/* {
         reverse_proxy backend:5000
@@ -21,11 +26,6 @@
     # === API routes ===
     handle /api/* {
         reverse_proxy backend:5000
-    }
-
-    # === AUTH routes ===
-    handle /auth/* {
-        reverse_proxy auth-backend:5005
     }
 
     # === CDN routes ===
