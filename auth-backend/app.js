@@ -24,6 +24,11 @@ app.use(express.json({ limit: '10mb' }));
 app.get('/auth/health', (req, res) => res.send('OK'));
 app.use("/auth", authRoutes);
 
-app.listen(port, "0.0.0.0", () => {
+app.use((req, res, next) => {
+  console.log(`📡 Incoming Request: ${req.method} ${req.url}`);
+  next();
+});
+
+server.listen(port, "0.0.0.0", () => {
   console.log(`🚀 Server running on port ${port}`);
 });
