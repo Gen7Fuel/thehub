@@ -1399,7 +1399,7 @@ function RouteComponent() {
       )}
 
       {hasAccess && (
-        <div className="pt-16 flex flex-col items-center">
+        <div className="pt-5 flex flex-col items-center">
           {/* Filters */}
           <div className="flex gap-4">
             <LocationPicker setStationName={setSite} value="stationName" defaultValue={site} />

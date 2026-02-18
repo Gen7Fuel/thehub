@@ -1,22 +1,70 @@
 const express = require("express");
 const bcrypt = require("bcryptjs");
 const jwt = require("jsonwebtoken");
+// const User = require("../../backend/models/User")
 const User = require("../models/User");
 const Permission = require("../models/Permission");
 const Location = require("../models/Location"); // Add this at the top with other requires
 const router = express.Router();
 const Role = require("../models/Role");
+const Maintenance = require("../models/Maintenance");
 const { getMergedPermissions, getMergedPermissionsTreeArray } = require("../utils/mergePermissionObjects");
 
-const { auth } = require("../middleware/authMiddleware.js");
+// const { auth } = require("../middleware/authMiddleware.js");
 
 // Escape input for use in RegExp to avoid injection
 function escapeRegExp(str) {
   return String(str).replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
 
+/**
+ * Recursively searches for a permission value by its name path in your Tree Array.
+ * path example: ["settings", "maintenance"]
+ */
+const checkPermissionByPath = (tree, path) => {
+  if (!path || path.length === 0 || !tree) return false;
+
+  const [currentSegment, ...remainingPath] = path;
+
+  // Find the node (Module or Child) in the current array
+  const node = tree.find(n => n.name === currentSegment);
+
+  if (!node) return false;
+
+  // If this was the last name in our path, return its boolean value
+  if (remainingPath.length === 0) {
+    return !!node.value;
+  }
+
+  // Otherwise, if there are children, search the next segment in the children array
+  if (node.children && Array.isArray(node.children)) {
+    return checkPermissionByPath(node.children, remainingPath);
+  }
+
+  return false;
+};
+
 // POST /api/auth/identify
 // identify if a user's role belongs to store account or office account
+// router.post("/identify", async (req, res) => {
+//   try {
+//     const inputEmail = String(req.body.email || '').trim();
+//     const user = await User.findOne({
+//       email: new RegExp(`^${escapeRegExp(inputEmail)}$`, 'i')
+//     }).populate("role");
+
+//     // If user exists, tell the frontend the truth
+//     if (user && user.role) {
+//       return res.json({ inStoreAccount: user.role.inStoreAccount });
+//     }
+
+//     // If user doesn't exist, return 404. 
+//     // The frontend will catch this and default to Passcode view.
+//     res.status(404).json({ message: "Identity hidden" });
+//   } catch (err) {
+//     res.status(500).json({ message: "Server error" });
+//   }
+// });
 router.post("/identify", async (req, res) => {
   try {
     const inputEmail = String(req.body.email || '').trim();
@@ -24,14 +72,21 @@ router.post("/identify", async (req, res) => {
       email: new RegExp(`^${escapeRegExp(inputEmail)}$`, 'i')
     }).populate("role");
 
-    // If user exists, tell the frontend the truth
-    if (user && user.role) {
-      return res.json({ inStoreAccount: user.role.inStoreAccount });
-    }
+    // Check for maintenance status
+    const ongoing = await Maintenance.findOne({ status: "ongoing" });
 
-    // If user doesn't exist, return 404. 
-    // The frontend will catch this and default to Passcode view.
-    res.status(404).json({ message: "Identity hidden" });
+    // If user exists, provide account type + maintenance info
+    if (user && user.role) {
+      return res.json({
+        inStoreAccount: user.role.inStoreAccount,
+        maintenance: ongoing ? { active: true, endTime: ongoing.scheduleClose } : null
+      });
+    }
+    // Security: Silent default for non-existent users
+    res.status(404).json({
+      message: "Identity hidden",
+      maintenance: ongoing ? { active: true, endTime: ongoing.scheduleClose } : null
+    });
   } catch (err) {
     res.status(500).json({ message: "Server error" });
   }
@@ -86,6 +141,14 @@ router.post("/identify", async (req, res) => {
 //   }
 // });
 router.post("/register", async (req, res) => {
+  // 1. Check maintenance first (no need for user checks here)
+  const ongoing = await Maintenance.findOne({ status: "ongoing" });
+
+  if (ongoing) {
+    return res.status(503).json({
+      message: "Registration is temporarily disabled due to current ongoing system maintenance."
+    });
+  }
   const { email, password, firstName, lastName, stationName } = req.body;
 
   try {
@@ -172,7 +235,8 @@ router.post("/register", async (req, res) => {
 
 // Route with new permissions
 router.post("/login", async (req, res) => {
-  console.log("Login attempt from backend for email:", req.body.email);
+  console.log("Login attempt from auth backend for email:", req.body.email);
+ 
   const { email, password } = req.body;
 
   try {
@@ -188,6 +252,28 @@ router.post("/login", async (req, res) => {
 
     const isMatch = await bcrypt.compare(password, user.password);
     if (!isMatch) return res.status(400).json({ message: "Invalid credentials" });
+
+    // --- MAINTENANCE CHECK ---
+    const ongoing = await Maintenance.findOne({ status: "ongoing" });
+
+    if (ongoing) {
+      // Generate the merged tree using your existing utility
+      const mergedTree = await getMergedPermissionsTreeArray(user);
+
+      // Check the path: Module "settings" -> Permission "maintenance"
+      const canBypass = checkPermissionByPath(mergedTree, ["settings", "maintenance"]);
+
+      if (!canBypass) {
+        return res.status(503).json({
+          message: "The system is currently undergoing maintenance.",
+          endTime: ongoing.scheduleClose,
+          maintenanceActive: true
+        });
+      }
+
+      console.log(`[Admin Access] ${user.email} bypassed maintenance lockdown.`);
+    }
+    // --- END MAINTENANCE CHECK ---
 
     // Update login flags
     user.lastLoginDate = new Date();
@@ -259,124 +345,6 @@ function getInitials(firstName, lastName) {
   const lastInitial = lastName?.trim()?.[0]?.toUpperCase() || '';
   return firstInitial + lastInitial;
 }
-
-//logout user
-router.post("/logout", auth, async (req, res) => {
-  try {
-    const userId = req.user.id; // from JWT middleware
-    console.log('user id:', userId);
-
-    await User.findByIdAndUpdate(userId, {
-      is_loggedIn: false
-    }, { timestamps: false });
-
-    res.json({ message: "Logged out successfully" });
-  } catch (err) {
-    console.error("Logout error:", err);
-    res.status(500).json({ message: "Server error" });
-  }
-});
-
-// user self-serve reset password
-router.post('/change-password-self', auth, async (req, res) => {
-  const { currentPassword, newPassword } = req.body;
-  const userId = req.user.id; // From auth middleware
-
-  try {
-    const user = await User.findById(userId).populate("role");
-    if (!user) return res.status(404).json({ error: 'User not found.' });
-
-    // 1. Verify Current Credentials
-    const isMatch = await bcrypt.compare(currentPassword, user.password);
-    if (!isMatch) {
-      return res.status(400).json({
-        error: 'The current credentials you entered are incorrect. If you have forgotten them, please contact your system administrator to reset your account.'
-      });
-    }
-
-    // 2. Hash and Update
-    const cleanNewPassword = String(newPassword).trim();
-
-    // const hashed = await bcrypt.hash(cleanNewPassword, 10);
-    user.password = cleanNewPassword;
-
-    // 3. Security: Force logout (optional but recommended)
-    user.is_loggedIn = false;
-    await user.save();
-
-    const io = req.app.get("io");
-    if (io) {
-      io.to(userId.toString()).emit("force-logout", {
-        message: "Your password was changed. Please log in again.",
-      });
-    }
-
-    res.json({ success: true });
-  } catch (err) {
-    res.status(500).json({ error: 'Server error during password reset.' });
-  }
-});
-
-
-router.post('/reset-password', auth, async (req, res) => {
-  const { userId, newPassword } = req.body;
-  if (!userId || !newPassword) return res.status(400).json({ error: 'Missing fields.' });
-
-  const hashed = await bcrypt.hash(newPassword, 10);
-
-  const user = await User.findByIdAndUpdate(userId, { password: hashed });
-
-  // Emit force-logout if user is logged in
-  if (user.is_loggedIn) {
-    const io = req.app.get("io");
-    if (io) {
-      io.to(userId).emit("force-logout", {
-        message: "Your account information has changed. Please log in again.",
-      });
-    }
-    // Also mark user as logged out
-    user.is_loggedIn = false;
-    await user.save();
-  }
-
-  if (!user) return res.status(404).json({ error: 'User not found.' });
-  res.json({ success: true });
-});
-
-// Verify Password against all users with Admin role
-router.post("/verify-password", auth, async (req, res) => {
-  const { password } = req.body;
-
-  try {
-    // Find the Admin role
-    const adminRole = await Role.findOne({ role_name: "Admin" });
-    if (!adminRole) return res.status(404).json({ error: "Admin role not found" });
-
-    // Get all users who have the Admin role
-    const adminUsers = await User.find({ role: adminRole._id });
-    if (!adminUsers || adminUsers.length === 0)
-      return res.status(404).json({ error: "No users with Admin role found" });
-
-    // Check password against all admin users
-    let verified = false;
-    for (const user of adminUsers) {
-      const isMatch = await bcrypt.compare(password, user.password);
-      console.log(user.firstName);
-      if (isMatch) {
-        console.log("Match");
-        verified = true;
-        break;
-      }
-    }
-
-    if (!verified) return res.status(400).json({ error: "Invalid password" });
-
-    res.json({ success: true });
-  } catch (err) {
-    console.error("Error verifying password:", err);
-    res.status(500).json({ error: "Internal server error" });
-  }
-});
 
 router.post("/refresh-token", async (req, res) => {
   try {

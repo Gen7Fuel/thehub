@@ -1,4 +1,5 @@
 import { createFileRoute, Link, Outlet } from '@tanstack/react-router'
+import { useAuth } from "@/context/AuthContext";
 
 // Define the route for the Settings section using TanStack Router
 export const Route = createFileRoute('/_navbarLayout/settings')({
@@ -12,6 +13,12 @@ export const Route = createFileRoute('/_navbarLayout/settings')({
  * The main area renders the selected settings page via <Outlet />.
  */
 function RouteComponent() {
+
+  const { user } = useAuth();
+
+  // Retrieve access permissions from Auth provider
+  // const access = user?.access || "{}" //markpoint
+  const access = user?.access || {}
   // Props to apply to the active link for highlighting
   const activeProps = {
     className: 'bg-gray-100 rounded-md',
@@ -27,7 +34,7 @@ function RouteComponent() {
   ]
 
   return (
-    <div className='flex pt-15 mx-auto'>
+    <div className='flex pt-5 mx-auto'>
       {/* Sidebar navigation for settings */}
       <aside className='flex flex-col w-1/4 p-4 border-r border-gray-300 border-dashed justify-start items-end'>
         {links.map((link) => (
@@ -35,6 +42,11 @@ function RouteComponent() {
             {link.label}
           </Link>
         ))}
+        {access?.settings?.maintenance && (
+          <Link key='/settings/maintenance' className='p-2' to='/settings/maintenance' activeProps={activeProps}>
+            Maintenance
+          </Link>
+        )}
       </aside>
       {/* Main content area for the selected settings page */}
       <main className='w-3/4'>

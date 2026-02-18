@@ -17,7 +17,7 @@ function RouteComponent() {
   // const isPayoutsActive = matchRoute({ to: '/cash-rec/payouts' })
 
   return (
-    <div className="pt-16 flex flex-col items-center">
+    <div className="pt-5 flex flex-col items-center">
       <div className="flex mb-4">
         <Link to="/cash-rec" activeOptions={{ exact: true }} search={(prev: any) => ({ ...prev, site: prev?.site })}>
           <Button {...(!isReportActive && { variant: 'outline' } as object)} className="rounded-r-none">

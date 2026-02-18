@@ -31,7 +31,7 @@ function RouteComponent() {
   const access = user?.access || {}
 
   return (
-    <div className="pt-16 flex flex-col items-center">
+    <div className="pt-5 flex flex-col items-center">
       {/* Navigation buttons for cycle count sections */}
       <div className="flex mb-4">
         {/* Input tab button */}
