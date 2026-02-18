@@ -53,7 +53,7 @@ app.get('/login-auth/health', (req, res) => res.send('OK'));
 //     res.status(500).json({ message: "Server error" });
 //   }
 // });
-app.use("/login-auth", authRoutes);
+app.use("/login-auth/v1", authRoutes);
 
 app.use((req, res) => {
   console.log(`⚠️ Unhandled Request: ${req.method} ${req.url}`);
