@@ -29,7 +29,7 @@ app.use(express.json({ limit: '10mb' }));
 app.get('/login-auth/health', (req, res) => res.send('OK'));
 
 // Mount at root so /login-auth/* routes are handled as expected
-app.use("/", authRoutes);
+app.use("/login-auth", authRoutes);
 
 app.use((req, res) => {
   console.log(`⚠️ Unhandled Request: ${req.method} ${req.url}`);
