@@ -19,7 +19,7 @@ const router = express.Router()
 
 const CDN_BASE_URL = process.env.CDN_BASE_URL || process.env.PUBLIC_CDN_BASE_URL || 'http://cdn:5001'
 // const OFFICE_SFTP_API_BASE = 'http://24.50.55.130:5000' // Old direct SFTP proxy (deprecated)
-const OFFICE_SFTP_API_BASE = 'http://24.141.32.206:5002'
+const OFFICE_SFTP_API_BASE = 'http://24.50.55.130:5000'
 const CASH_SUMMARY_EMAILS = (process.env.CASH_SUMMARY_EMAILS || 'reports@bosservicesltd.com')
   .split(',')
   .map(e => e.trim())
