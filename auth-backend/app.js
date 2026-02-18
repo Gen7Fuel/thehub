@@ -27,33 +27,9 @@ app.use(express.json({ limit: '10mb' }));
 
 // Health check
 app.get('/login-auth/health', (req, res) => res.send('OK'));
-// app.post("/login-auth/identify", async (req, res) => {
-//   try {
-//     const inputEmail = String(req.body.email || '').trim();
-//     const user = await User.findOne({
-//       email: new RegExp(`^${escapeRegExp(inputEmail)}$`, 'i')
-//     }).populate("role");
 
-//     // Check for maintenance status
-//     const ongoing = await Maintenance.findOne({ status: "ongoing" });
-
-//     // If user exists, provide account type + maintenance info
-//     if (user && user.role) {
-//       return res.json({
-//         inStoreAccount: user.role.inStoreAccount,
-//         maintenance: ongoing ? { active: true, endTime: ongoing.scheduleClose } : null
-//       });
-//     }
-//     // Security: Silent default for non-existent users
-//     res.status(404).json({
-//       message: "Identity hidden",
-//       maintenance: ongoing ? { active: true, endTime: ongoing.scheduleClose } : null
-//     });
-//   } catch (err) {
-//     res.status(500).json({ message: "Server error" });
-//   }
-// });
-app.use("/login-auth/v1", authRoutes);
+// Mount at root so /login-auth/* routes are handled as expected
+app.use("/", authRoutes);
 
 app.use((req, res) => {
   console.log(`⚠️ Unhandled Request: ${req.method} ${req.url}`);
