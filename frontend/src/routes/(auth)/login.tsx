@@ -142,7 +142,7 @@ function RouteComponent() {
       // --- TESTING REDIRECT LOGIC ---
       if (testEmails.includes(formattedEmail)) {
         console.log("🧪 Test account detected: Routing to NEW Auth Backend");
-        res = await axios.post(`/auth/identify`, { email: formattedEmail });
+        res = await axios.post(`/login-auth/identify`, { email: formattedEmail });
       } else {
         console.log("🏠 Standard account: Routing to EXISTING Backend");
         res = await axios.post(`${domain}/api/auth/identify`, { email: formattedEmail });
@@ -183,7 +183,7 @@ function RouteComponent() {
     try {
       let response;
       if (testEmails.includes(formattedEmail)) {
-        response = await axios.post(`/auth/login`, {
+        response = await axios.post(`/login-auth/login`, {
           email: email.trim().toLowerCase(),
           password: passToSubmit
         })
