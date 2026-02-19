@@ -102,7 +102,7 @@ import {
   InputOTPHiddenSlot,
 } from "@/components/custom/input-otp-masked";
 import axios from 'axios'
-import { domain } from '@/lib/constants'
+// import { domain } from '@/lib/constants'
 import { clearLocalDB } from "@/lib/orderRecIndexedDB";
 import { clearDashboardDB } from '@/lib/dashboardIndexedDB';
 import { useAuth } from '@/context/AuthContext';
@@ -127,8 +127,8 @@ function RouteComponent() {
   const navigate = useNavigate()
   const { refreshAuth } = useAuth();
   const [maintInfo, setMaintInfo] = useState<{ active: boolean; endTime: string } | null>(null);
-  const testEmails = ['daksh@gen7fuel.com', 'demo@demo.com'];
-  
+  // const testEmails = ['daksh@gen7fuel.com', 'demo@demo.com'];
+
   const handleIdentify = async (e?: React.FormEvent) => {
     e?.preventDefault()
     if (!email) return
@@ -140,13 +140,12 @@ function RouteComponent() {
     try {
       let res;
       // --- TESTING REDIRECT LOGIC ---
-      if (testEmails.includes(formattedEmail)) {
-        console.log("🧪 Test account detected: Routing to NEW Auth Backend");
-        res = await axios.post(`/login-auth/identify`, { email: formattedEmail });
-      } else {
-        console.log("🏠 Standard account: Routing to EXISTING Backend");
-        res = await axios.post(`${domain}/api/auth/identify`, { email: formattedEmail });
-      }
+      // if (testEmails.includes(formattedEmail)) {
+      res = await axios.post(`/login-auth/identify`, { email: formattedEmail });
+      // } else {
+      //   console.log("🏠 Standard account: Routing to EXISTING Backend");
+      //   res = await axios.post(`${domain}/api/auth/identify`, { email: formattedEmail });
+      // }
       setIsStoreAccount(res.data.inStoreAccount);
 
       // Set maintenance info if returned
@@ -178,21 +177,21 @@ function RouteComponent() {
     const passToSubmit = finalPassword || password
     setError(null)
     setLoading(true)
-    const formattedEmail = email.trim().toLowerCase();
+    // const formattedEmail = email.trim().toLowerCase();
 
     try {
       let response;
-      if (testEmails.includes(formattedEmail)) {
-        response = await axios.post(`/login-auth/login`, {
-          email: email.trim().toLowerCase(),
-          password: passToSubmit
-        })
-      } else {
-        response = await axios.post(`${domain}/api/auth/login`, {
-          email: email.trim().toLowerCase(),
-          password: passToSubmit
-        })
-      }
+      // if (testEmails.includes(formattedEmail)) {
+      response = await axios.post(`/login-auth/login`, {
+        email: email.trim().toLowerCase(),
+        password: passToSubmit
+      })
+      // } else {
+      //   response = await axios.post(`${domain}/api/auth/login`, {
+      //     email: email.trim().toLowerCase(),
+      //     password: passToSubmit
+      //   })
+      // }
       localStorage.setItem('token', response.data.token)
       clearLocalDB();
       clearDashboardDB();
