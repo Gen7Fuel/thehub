@@ -80,6 +80,7 @@ function RouteComponent() {
     const token = localStorage.getItem('token')
     const response = await axios.get(`${domain}/api/fleet/getByCardNumber/${fleetCardNumber}`, {
       headers: { Authorization: `Bearer ${token}` },
+      params: { stationName },
     })
     const data = response.data
 
