@@ -28,23 +28,20 @@ router.post('/token', async (req, res) => {
     }
 
     const tokenUrl = 'https://api.intacct.com/ia/api/v1/oauth2/token';
-    const params = new URLSearchParams();
-    params.append('grant_type', 'authorization_code');
-    params.append('code', code);
-    params.append('redirect_uri', CALLBACK_URL);
-    params.append('client_id', CLIENT_ID);
-    params.append('client_secret', CLIENT_SECRET);
+    const params = new URLSearchParams({
+      grant_type: 'authorization_code',
+      code,
+      redirect_uri: CALLBACK_URL,
+      client_id: CLIENT_ID,
+      client_secret: CLIENT_SECRET,
+    });
 
     const tokenResp = await fetch(tokenUrl, {
       method: 'POST',
-      body: {
-        grant_type: 'authorization_code',
-        code,
-        redirect_uri: CALLBACK_URL,
-        client_id: CLIENT_ID,
-        client_secret: CLIENT_SECRET,
-      },
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: params.toString(),
     });
+
 
     const data = await tokenResp.json();
 
