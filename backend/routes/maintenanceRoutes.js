@@ -5,12 +5,23 @@ const User = require('../models/User');
 const { emailQueue } = require('../queues/emailQueue');
 
 function generateMaintenanceEmailHTML(maintenance) {
-  const start = new Date(maintenance.scheduleStart).toLocaleString();
-  const end = new Date(maintenance.scheduleClose).toLocaleString();
+  // We force America/Toronto to ensure Eastern Time (EST/EDT)
+  const dateOptions = {
+    weekday: 'short',
+    month: 'short',
+    day: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+    timeZone: 'America/Toronto',
+    timeZoneName: 'short'
+  };
+
+  const start = new Date(maintenance.scheduleStart).toLocaleString('en-CA', dateOptions);
+  const end = new Date(maintenance.scheduleClose).toLocaleString('en-CA', dateOptions);
 
   return `
     <div style="font-family: 'Segoe UI', Arial, sans-serif; background-color: #f4f7f9; padding: 40px 20px;">
-      <div style="max-width: 600px; margin: 0 auto; background-color: #ffffff; border-radius: 12px; shadow: 0 4px 12px rgba(0,0,0,0.1); overflow: hidden;">
+      <div style="max-width: 600px; margin: 0 auto; background-color: #ffffff; border-radius: 12px; box-shadow: 0 4px 12px rgba(0,0,0,0.1); overflow: hidden;">
         <div style="background-color: #1a237e; color: #ffffff; text-align: center; padding: 25px;">
           <h1 style="margin: 0; font-size: 24px;">🛠️ System Maintenance Notice</h1>
         </div>
@@ -31,6 +42,9 @@ function generateMaintenanceEmailHTML(maintenance) {
                 <td style="padding: 5px 0; color: #000;">${end} (Estimated)</td>
               </tr>
             </table>
+            <p style="margin: 10px 0 0 0; font-size: 11px; color: #777; font-style: italic;">
+              * Times are shown in Eastern Time (ET).
+            </p>
           </div>
 
           <p style="font-size: 15px; color: #d32f2f; font-weight: bold;">
@@ -48,7 +62,7 @@ function generateMaintenanceEmailHTML(maintenance) {
             </p>
           </div>
 
-          <p style="color: #777; font-size: 12px; margin-top: 30px; text-align: center; border-top: 1px solid #eee; pt: 20px;">
+          <p style="color: #777; font-size: 12px; margin-top: 30px; text-align: center; border-top: 1px solid #eee; padding-top: 20px;">
             This is an automated operational message. Thank you for your patience.
           </p>
         </div>
@@ -59,22 +73,19 @@ function generateMaintenanceEmailHTML(maintenance) {
 
 // Cancellation Email Template
 function generateCancellationEmailHTML(maintenance) {
-  // Format the dates for the user's clarity
-  const start = new Date(maintenance.scheduleStart).toLocaleString('en-US', {
+  // Use 'en-CA' and force Eastern Time for consistency across BCC recipients
+  const dateOptions = {
     weekday: 'short',
     month: 'short',
     day: 'numeric',
     hour: '2-digit',
     minute: '2-digit',
-  });
+    timeZone: 'America/Toronto',
+    timeZoneName: 'short'
+  };
 
-  const end = new Date(maintenance.scheduleClose).toLocaleString('en-US', {
-    weekday: 'short',
-    month: 'short',
-    day: 'numeric',
-    hour: '2-digit',
-    minute: '2-digit',
-  });
+  const start = new Date(maintenance.scheduleStart).toLocaleString('en-CA', dateOptions);
+  const end = new Date(maintenance.scheduleClose).toLocaleString('en-CA', dateOptions);
 
   return `
     <div style="font-family: 'Segoe UI', Arial, sans-serif; background-color: #f4f7f9; padding: 40px 20px;">
@@ -90,6 +101,9 @@ function generateCancellationEmailHTML(maintenance) {
             <p style="margin: 0 0 10px 0; font-size: 13px; color: #666; font-weight: bold; text-transform: uppercase;">Original Schedule Detail:</p>
             <p style="margin: 4px 0; font-size: 14px; color: #444;"><strong>📅 Start:</strong> ${start}</p>
             <p style="margin: 4px 0; font-size: 14px; color: #444;"><strong>🏁 End:</strong> ${end}</p>
+            <p style="margin: 10px 0 0 0; font-size: 11px; color: #777; font-style: italic;">
+              * Times are shown in Eastern Time (ET).
+            </p>
           </div>
           
           <div style="margin: 25px 0; padding: 20px; background-color: #fdecea; border-radius: 8px; display: inline-block; width: 85%;">
@@ -166,10 +180,9 @@ router.post('/:id/notify', async (req, res) => {
     if (!maintenance) return res.status(404).json({ message: "Schedule not found" });
 
     // 1. Fetch all active user emails
-    // const users = await User.find({ is_active: true }, 'email');
-    // const emailList = users.map(u => u.email);
-    const bccEmailList = ['vasu@gen7fuel.com'] // Example email list
-    const ccEmailList = ['vasu@gen7fuel.com'] // Example email list
+    const users = await User.find({ is_active: true }, 'email');
+    const bccEmailList = users.map(u => u.email);
+    const ccEmailList = ['mohammad@gen7fuel.com', 'kellie@gen7fuel.com']// Example email list
 
     // 2. Prepare Email Content (Template helper below)
     const emailHtml = generateMaintenanceEmailHTML(maintenance);
@@ -187,7 +200,7 @@ router.post('/:id/notify', async (req, res) => {
     maintenance.notificationSent = true;
     await maintenance.save();
 
-    res.json({ message: `Notification queued for ${emailList.length} users.` });
+    res.json({ message: `Notification queued for ${bccEmailList.length} users.` });
   } catch (err) {
     res.status(500).json({ message: "Failed to queue emails", error: err.message });
   }
@@ -205,9 +218,10 @@ router.post('/:id/cancel', async (req, res) => {
     // If notifications were previously sent, we MUST notify them of the cancellation
     if (maintenance.notificationSent) {
       const users = await User.find({ is_active: true }, 'email');
-      // const emailList = users.map(u => u.email);
-      const bccEmailList = ['vasu@gen7fuel.com'] // Example email list
-      const ccEmailList = ['vasu@gen7fuel.com'] // Example email list
+      const bccEmailList = users.map(u => u.email);
+      // const bccEmailList = ['vasu@gen7fuel.com']
+      const ccEmailList = ['mohammad@gen7fuel.com', 'kellie@gen7fuel.com'] 
+      // const ccEmailList = ['mohammad@gen7fuel.com'] // Example email list
 
       await emailQueue.add("sendMaintenanceAlert", {
         to: "daksh@gen7fuel.com",

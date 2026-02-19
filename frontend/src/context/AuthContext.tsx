@@ -352,7 +352,7 @@ import { createContext, useContext, useState, useEffect, useRef } from "react";
 import { jwtDecode } from "jwt-decode";
 // import { getSocket } from "@/lib/websocket";
 import axios from "axios";
-import { domain } from '@/lib/constants'
+// import { domain } from '@/lib/constants'
 
 /* -----------------------------------------------------
    Flatten Permissions (underscore + nested)
@@ -475,7 +475,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
       if (!userId) throw new Error("User ID missing in token");
 
       const response = await axios.post(
-        `${domain}/api/auth/refresh-token`,
+        `/login-auth/refresh-token`,
         { userId } // 🔥 send userId explicitly in body
       );
 
