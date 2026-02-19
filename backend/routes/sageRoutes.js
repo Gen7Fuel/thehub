@@ -37,7 +37,13 @@ router.post('/token', async (req, res) => {
 
     const tokenResp = await fetch(tokenUrl, {
       method: 'POST',
-      body: params,
+      body: {
+        grant_type: 'authorization_code',
+        code,
+        redirect_uri: CALLBACK_URL,
+        client_id: CLIENT_ID,
+        client_secret: CLIENT_SECRET,
+      },
     });
 
     const data = await tokenResp.json();
