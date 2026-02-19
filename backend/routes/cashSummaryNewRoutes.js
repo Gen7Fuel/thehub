@@ -830,6 +830,9 @@ router.get('/lottery', async (req, res) => {
         oldScratchTickets: lotteryDoc.oldScratchTickets,
         dataWave: lotteryDoc.dataWave,
         feeDataWave: lotteryDoc.feeDataWave,
+        onDemandFreeTickets: lotteryDoc.onDemandFreeTickets,
+        onDemandCashPayout: lotteryDoc.onDemandCashPayout,
+        scratchCashPayout: lotteryDoc.scratchCashPayout,
         images: Array.isArray(lotteryDoc.images) ? lotteryDoc.images : [],
         datawaveImages: Array.isArray(lotteryDoc.datawaveImages) ? lotteryDoc.datawaveImages : [],
       })
@@ -850,6 +853,9 @@ router.get('/lottery', async (req, res) => {
         delete copy.feeDataWave
         delete copy.images
         delete copy.datawaveImages
+        delete copy.onDemandFreeTickets
+        delete copy.onDemandCashPayout
+        delete copy.scratchCashPayout
         return copy
       })
     }
@@ -863,7 +869,7 @@ router.get('/lottery', async (req, res) => {
       // note: scratchFreeTickets is a user-entered field and not part of Bullock totals
       payouts: sum('lottoPayout'),
       dataWave: sum('dataWave'),
-      dataWaveFee: sum('feeDataWave'),
+      feeDataWave: sum('feeDataWave'),
     }
 
     res.json({ site, date, rows, totals, lottery: lotteryDoc || null })
@@ -892,8 +898,11 @@ router.post('/lottery', async (req, res) => {
       instantLottTotal: (values && typeof values.scratchSales === 'number') ? values.scratchSales : null,
       scratchFreeTickets: (values && typeof values.scratchFreeTickets === 'number') ? values.scratchFreeTickets : null,
       oldScratchTickets: (values && typeof values.oldScratchTickets === 'number') ? values.oldScratchTickets : null,
-      dataWave: (values && typeof values.datawaveValue === 'number') ? values.datawaveValue : null,
-      feeDataWave: (values && typeof values.datawaveFee === 'number') ? values.datawaveFee : null,
+      onDemandFreeTickets: (values && typeof values.onDemandFreeTickets === 'number') ? values.onDemandFreeTickets : null,
+      onDemandCashPayout: (values && typeof values.onDemandCashPayout === 'number') ? values.onDemandCashPayout : null,
+      scratchCashPayout: (values && typeof values.scratchCashPayout === 'number') ? values.scratchCashPayout : null,
+      dataWave: (values && typeof values.dataWave === 'number') ? values.dataWave : null,
+      feeDataWave: (values && typeof values.feeDataWave === 'number') ? values.feeDataWave : null,
       images: Array.isArray(images) ? images.map(String) : [],
       datawaveImages: Array.isArray(datawaveImages) ? datawaveImages.map(String) : [],
     }

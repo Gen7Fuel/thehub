@@ -23,7 +23,10 @@ const LotterySchema = new mongoose.Schema(
     onlineLottoTotal: { type: Number, default: null },
     instantLottTotal: { type: Number, default: null },
     // Number of scratch free tickets reported by the site (user-entered)
-    scratchFreeTickets: { type: Number, default: null },
+    scratchFreeTickets: { type: Number, default: null }, // snw FT sale
+    scratchCashPayout: { type: Number, default: null }, // snw cash payout
+    onDemandFreeTickets: { type: Number, default: null }, // online FT sale
+    onDemandCashPayout: { type: Number, default: null }, // online cash payout
     oldScratchTickets: { type: Number, default: null },
     // New online adjustments entered by user
     onlineCancellations: { type: Number, default: null },
