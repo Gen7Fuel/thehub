@@ -44,10 +44,14 @@ function CallbackPage() {
         const tokenUrl = BASE_URL + VERSION + TOKEN_ENDPOINT;
         const inputBody = new URLSearchParams();
         inputBody.append('grant_type', 'authorization_code');
-        inputBody.append('code', code!); // code is guaranteed to be string after null check
+        inputBody.append('code', code!); // code is guaranteed to be string
         inputBody.append('redirect_uri', CALLBACK_URL);
         inputBody.append('client_id', CLIENT_ID);
         inputBody.append('client_secret', CLIENT_SECRET);
+
+        // Debug: log token URL and params
+        console.log('Token URL:', tokenUrl);
+        console.log('Token request body:', Object.fromEntries(inputBody.entries()));
 
         const tokenResp = await fetch(tokenUrl, {
           method: 'POST',
@@ -73,6 +77,9 @@ function CallbackPage() {
 
         // Fetch vendor data
         const vendorUrl = BASE_URL + VERSION + VENDOR_ENDPOINT;
+        // Debug: log vendor URL
+        console.log('Vendor URL:', vendorUrl);
+
         const vendorResp = await fetch(vendorUrl, {
           method: 'GET',
           headers: {
@@ -94,6 +101,8 @@ function CallbackPage() {
         });
       } catch (err: any) {
         setError('Unexpected error: ' + (err?.message || String(err)));
+        // Debug: log full error object
+        console.error('Fetch error details:', err);
       }
     }
 
