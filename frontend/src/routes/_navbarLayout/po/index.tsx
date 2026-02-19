@@ -8,6 +8,7 @@ import { useAuth } from '@/context/AuthContext'
 import { useFormStore } from '@/store'
 import axios from 'axios'
 import { DatePicker } from '@/components/custom/datePicker';
+import { LocationPicker } from '@/components/custom/locationPicker';
 import { domain } from '@/lib/constants'
 
 interface Product {
@@ -70,7 +71,7 @@ function RouteComponent() {
   const setFuelType = useFormStore((state) => state.setFuelType)
 
   const data = Route.useLoaderData()
-  const stationName = user?.location || ''
+  const [stationName, setStationName] = useState(user?.location || '');
   const [poError, setPoError] = useState<string>('')
 
   const handleBlur = async () => {
@@ -215,20 +216,29 @@ function RouteComponent() {
         </div>
       )}
 
-      <div className="space-y-2">
-        <h2 className="text-lg font-bold">Date</h2>
-        <DatePicker
-          date={date}
-          setDate={(value) => {
-            if (typeof value === 'function') {
-              // Call the function with current date
-              const newDate = value(date);
-              if (newDate) setDate(newDate);
-            } else {
-              setDate(value);
-            }
-          }}
-        />
+      <div className="flex flex-row items-end gap-4">
+        <div className="space-y-2">
+          <h2 className="text-lg font-bold">Date</h2>
+          <DatePicker
+            date={date}
+            setDate={(value) => {
+              if (typeof value === 'function') {
+                const newDate = value(date);
+                if (newDate) setDate(newDate);
+              } else {
+                setDate(value);
+              }
+            }}
+          />
+        </div>
+        <div className="space-y-2">
+          <h2 className="text-lg font-bold">Station</h2>
+          <LocationPicker
+            setStationName={setStationName}
+            value="stationName"
+            defaultValue={stationName}
+          />
+        </div>
       </div>
 
       {/* Customer and Driver Info */}
