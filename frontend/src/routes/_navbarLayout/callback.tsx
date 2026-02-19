@@ -44,7 +44,7 @@ function CallbackPage() {
         const tokenUrl = BASE_URL + VERSION + TOKEN_ENDPOINT;
         const inputBody = new URLSearchParams();
         inputBody.append('grant_type', 'authorization_code');
-        inputBody.append('code', code); // code is guaranteed to be string
+        inputBody.append('code', code!); // code is guaranteed to be string
         inputBody.append('redirect_uri', CALLBACK_URL);
         inputBody.append('client_id', CLIENT_ID);
         inputBody.append('client_secret', CLIENT_SECRET);
