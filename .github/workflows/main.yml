@@ -146,6 +146,9 @@ jobs:
             export AZURE_STORAGE_CONNECTION_STRING=${{ secrets.AZURE_STORAGE_CONNECTION_STRING }}
             export AZURE_CONTAINER=${{ secrets.AZURE_CONTAINER }}
             export NOREPLY_PASS=${{ secrets.NOREPLY_PASS }}
+            export INTACCT_CLIENT_ID=${{ secrets.INTACCT_CLIENT_ID }}
+            export INTACCT_CLIENT_SECRET=${{ secrets.INTACCT_CLIENT_SECRET }}
+            export INTACCT_CALLBACK_URL=${{ secrets.INTACCT_CALLBACK_URL }}
 
             # ---- Deploy Auth-Backend ----
             docker compose up -d --build --no-deps --wait auth-backend

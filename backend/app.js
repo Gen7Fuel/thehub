@@ -14,6 +14,7 @@ require('./cron_jobs/auditIssueReportCron'); //cron job for getting previous mon
 require('./cron_jobs/mongoCsvExportCron'); //cron job for exporting mongo data to azure in csv
 // require('./cron_jobs/productCategoryMappingCron'); //cron job for normalising the product categories
 
+
 // Route imports
 const authRoutes = require("./routes/auth");
 const userRoutes = require("./routes/userRoutes");
@@ -40,6 +41,7 @@ const cashRecRoutes = require("./routes/cashRecRoutes");
 const fuelRecRoutes = require("./routes/fuelRecRoutes");
 const productCategoryRoutes = require("./routes/productCategoryRoutes");
 const logsRoute = require("./routes/logsRoute");
+const sageRoutes = require("./routes/sageRoutes");
 
 const { auth } = require("./middleware/authMiddleware");
 
@@ -62,8 +64,10 @@ app.use(cors());
 app.use(express.json({ limit: '200mb' }));
 app.use(requestId());
 
+
 // Health check
 app.get('/api/health', (req, res) => res.send('OK'));
+app.use("/api/sage", sageRoutes); // Publicly accessible
 app.use("/api/auth", authRoutes);
 app.use("/api/locations", locationRoutes);
 

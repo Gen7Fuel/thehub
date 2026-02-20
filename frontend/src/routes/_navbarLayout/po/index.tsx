@@ -48,6 +48,7 @@ function RouteComponent() {
   const date = useFormStore((state) => state.date)
   const setDate = useFormStore((state) => state.setDate)
 
+  // Removed LocationPicker and stationName state
   const poNumber = useFormStore((state) => state.poNumber) // new state for PO number
   const setPoNumber = useFormStore((state) => state.setPoNumber)
 
@@ -70,7 +71,8 @@ function RouteComponent() {
   const setFuelType = useFormStore((state) => state.setFuelType)
 
   const data = Route.useLoaderData()
-  const stationName = user?.location || ''
+  const [stationName, _] = useState(user?.location || '');
+
   const [poError, setPoError] = useState<string>('')
 
   const handleBlur = async () => {
@@ -79,6 +81,7 @@ function RouteComponent() {
     const token = localStorage.getItem('token')
     const response = await axios.get(`${domain}/api/fleet/getByCardNumber/${fleetCardNumber}`, {
       headers: { Authorization: `Bearer ${token}` },
+      params: { stationName },
     })
     const data = response.data
 
@@ -215,20 +218,21 @@ function RouteComponent() {
         </div>
       )}
 
-      <div className="space-y-2">
-        <h2 className="text-lg font-bold">Date</h2>
-        <DatePicker
-          date={date}
-          setDate={(value) => {
-            if (typeof value === 'function') {
-              // Call the function with current date
-              const newDate = value(date);
-              if (newDate) setDate(newDate);
-            } else {
-              setDate(value);
-            }
-          }}
-        />
+      <div className="flex flex-row items-end gap-4">
+        <div className="space-y-2">
+          <h2 className="text-lg font-bold">Date</h2>
+          <DatePicker
+            date={date}
+            setDate={(value) => {
+              if (typeof value === 'function') {
+                const newDate = value(date);
+                if (newDate) setDate(newDate);
+              } else {
+                setDate(value);
+              }
+            }}
+          />
+        </div>
       </div>
 
       {/* Customer and Driver Info */}
