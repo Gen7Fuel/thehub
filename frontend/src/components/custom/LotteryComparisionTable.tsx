@@ -185,7 +185,7 @@ export function LotteryComparisonTable({
 
           <tr className="border-t bg-gray-50">
             <td className="px-4 py-2 pl-8 flex items-center">
-              SNW Free Tickets <InfoDialog title="SNW Free Tickets" imageName="scratch_ft_sales" />
+              Scratch and Win (S&W) Free Tickets <InfoDialog title="SNW Free Tickets" imageName="scratch_ft_sales" />
             </td>
             <DataCell
               field="scratchFreeTickets"
@@ -216,7 +216,7 @@ export function LotteryComparisonTable({
 
           <tr className="border-t bg-gray-50">
             <td className="px-4 py-2 pl-8 flex items-center">
-              On Demand Free Tickets <InfoDialog title="On Demand Free Tickets" imageName="online_ft_sales" />
+              On Demand (Online) Free Tickets <InfoDialog title="On Demand Free Tickets" imageName="online_ft_sales" />
             </td>
             <DataCell field="onDemandFreeTickets" lottery={lottery} isReadOnly={isReadOnly} />
             <td colSpan={2} />
@@ -224,7 +224,7 @@ export function LotteryComparisonTable({
 
           <tr className="border-t bg-gray-50">
             <td className="px-4 py-2 pl-8 flex items-center">
-              On Demand Cash Payout <InfoDialog title="On Demand Cash Payout" imageName="online_cash_payout" />
+              On Demand (Online) Cash Payout <InfoDialog title="On Demand Cash Payout" imageName="online_cash_payout" />
             </td>
             <DataCell
               field="onDemandCashPayout"
@@ -241,7 +241,7 @@ export function LotteryComparisonTable({
 
           <tr className="border-t bg-gray-50">
             <td className="px-4 py-2 pl-8 flex items-center">
-              SNW Free Tickets <InfoDialog title="SNW Free Tickets" imageName="scratch_ft_sales" />
+              Scratch and Win (S&W) Free Tickets <InfoDialog title="SNW Free Tickets" imageName="scratch_ft_sales" />
             </td>
             <DataCell
               field="scratchFreeTickets"
@@ -258,7 +258,7 @@ export function LotteryComparisonTable({
 
           <tr className="border-t bg-gray-50">
             <td className="px-4 py-2 pl-8 flex items-center">
-              SNW Cash Payout <InfoDialog title="SNW Cash Payout" imageName="scratch_cash_payout" />
+              Scratch and Win (S&W) Cash Payout <InfoDialog title="SNW Cash Payout" imageName="scratch_cash_payout" />
             </td>
             <DataCell
               field="scratchCashPayout"

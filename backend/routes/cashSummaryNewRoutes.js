@@ -586,8 +586,8 @@ router.get('/payables-comparison', async (req, res) => {
       // Add Lottery Actuals to the Internal side
       if (sellsLottery && lotteryMap[dateStr]) {
         const lotto = lotteryMap[dateStr];
-        // Internal Records = (Payables Module) + (Lotto Payouts) + (Scratch Free Tickets)
-        internalTotal += (lotto.lottoPayout || 0) + (lotto.scratchFreeTickets || 0);
+        // Internal Records = (Payables Module) + (Lotto Payouts)
+        internalTotal += (lotto.lottoPayout || 0);
       }
 
       return {
