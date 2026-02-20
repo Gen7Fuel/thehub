@@ -27,9 +27,7 @@ const InfoDialog = ({ title, imageName }: { title: string; imageName: string }) 
         <div className="flex flex-col items-center gap-6 py-4">
           <div className="border rounded-lg shadow-sm overflow-hidden bg-white w-full">
             <img
-              // Note: If you moved files to public, the path should usually be 
-              // `/lotto_max_reports/${imageName}.png` (omit the word 'public')
-              src={`/public/lotto_max_reports/${imageName}.png`}
+              src={`/lotto_max_reports/${imageName}.png`}
               alt={title}
               className="w-full h-auto object-contain"
             />
