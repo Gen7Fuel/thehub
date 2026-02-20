@@ -30,182 +30,75 @@ function aggregateBullock(rows) {
     scratchSales: sum('instantLottTotal'),
     payouts: sum('lottoPayout'),
     dataWave: sum('dataWave'),
-    dataWaveFee: sum('feeDataWave'),
+    feeDataWave: sum('feeDataWave'), // Fixed naming to match model and frontend
   }
 }
 
-// function LotteryTable({ lottery, bullock }) {
-//   if (!lottery) return null
-//   const h = React.createElement
-
-//   const money = (n) => (n != null ? `$${Number(n).toFixed(2)}` : '—')
-
-//   const diff = (a, b) =>
-//     typeof a === 'number' && typeof b === 'number' ? a - b : null
-
-//   const DiffCell = ({ value }) =>
-//     value == null
-//       ? h(Text, { style: styles.muted }, '—')
-//       : h(
-//         Text,
-//         { style: value > 0 ? styles.pos : value < 0 ? styles.neg : styles.muted },
-//         `$${value.toFixed(2)}`
-//       )
-
-//   const rows = [
-//     {
-//       label: 'Online Sales',
-//       lotto: lottery.onlineLottoTotal,
-//       bullock: bullock?.onlineSales,
-//       diff:
-//         (bullock?.onlineSales ?? 0) -
-//         ((lottery.onlineLottoTotal ?? 0) -
-//           (lottery.onlineCancellations ?? 0) -
-//           (lottery.onlineDiscounts ?? 0)),
-//       bold: true,
-//     },
-//     {
-//       label: 'Lotto Cancellations',
-//       lotto: lottery.onlineCancellations,
-//       indent: true,
-//       alt: true,
-//     },
-//     {
-//       label: 'Lotto Discounts',
-//       lotto: lottery.onlineDiscounts,
-//       indent: true,
-//       alt: true,
-//     },
-//     {
-//       label: 'Scratch Sales',
-//       lotto: lottery.instantLottTotal,
-//       bullock: bullock?.scratchSales,
-//       diff:
-//         (bullock?.scratchSales ?? 0) -
-//         ((lottery.instantLottTotal ?? 0) +
-//           (lottery.scratchFreeTickets ?? 0)),
-//       bold: true,
-//     },
-//     {
-//       label: 'Scratch Free Tickets',
-//       lotto: lottery.scratchFreeTickets,
-//       indent: true,
-//       alt: true,
-//     },
-//     {
-//       label: 'Payouts',
-//       lotto: lottery.lottoPayout,
-//       bullock: bullock?.payouts,
-//       diff:
-//         (bullock?.payouts ?? 0) -
-//         ((lottery.lottoPayout ?? 0) +
-//           (lottery.scratchFreeTickets ?? 0)),
-//       bold: true,
-//     },
-//     {
-//       label: 'Scratch Free Tickets Payouts',
-//       lotto: lottery.scratchFreeTickets,
-//       indent: true,
-//       alt: true,
-//     },
-//     {
-//       label: 'Datawave Value',
-//       lotto: lottery.dataWave,
-//       bullock: bullock?.dataWave,
-//       diff: diff(bullock?.dataWave, lottery.dataWave),
-//       bold: true,
-//     },
-//     {
-//       label: 'Datawave Fee',
-//       lotto: lottery.feeDataWave,
-//       bullock: bullock?.dataWaveFee,
-//       diff: diff(bullock?.dataWaveFee, lottery.feeDataWave),
-//       indent: true,
-//       alt: true,
-//     },
-//   ]
-
-//   return h(
-//     View,
-//     { style: styles.table },
-//     h(
-//       View,
-//       { style: styles.tableHeader },
-//       h(Text, { style: [styles.th, styles.colDesc] }, 'Description'),
-//       h(Text, { style: [styles.th, styles.col] }, 'Lottery'),
-//       h(Text, { style: [styles.th, styles.col] }, 'Bulloch'),
-//       h(Text, { style: [styles.th, styles.col] }, 'Over / Short')
-//     ),
-//     ...rows.map((r, i) =>
-//       h(
-//         View,
-//         { key: i, style: [styles.tableRow, r.alt && styles.tableRowAlt] },
-//         h(
-//           Text,
-//           { style: [styles.td, styles.colDesc, r.indent && styles.indent, r.bold && styles.rowValue] },
-//           r.label
-//         ),
-//         h(Text, { style: [styles.td, styles.col] }, money(r.lotto)),
-//         h(Text, { style: [styles.td, styles.col] }, money(r.bullock)),
-//         h(View, { style: [styles.td, styles.col] }, r.diff != null ? h(DiffCell, { value: r.diff }) : h(Text, {}, '—'))
-//       )
-//     )
-//   )
-// }
 // 1. Restored the diff helper function
-const diff = (a, b) => 
+const diff = (a, b) =>
   (typeof a === 'number' && typeof b === 'number') ? a - b : null;
 
 function LotteryTable({ lottery, bullock }) {
   if (!lottery) return null;
   const h = React.createElement;
 
+  // Ensure Bullock naming matches the aggregateBullock keys
+  const b = bullock || {};
+
   const rows = [
     {
       label: 'Online Sales',
       lotto: lottery.onlineLottoTotal,
-      bullock: bullock?.onlineSales,
-      diff: (bullock?.onlineSales ?? 0) -
+      bullock: b.onlineSales,
+      // Logic: Bullock - (Lotto - Cancellations - Discounts)
+      diff: (b.onlineSales ?? 0) -
         ((lottery.onlineLottoTotal ?? 0) - (lottery.onlineCancellations ?? 0) - (lottery.onlineDiscounts ?? 0)),
       bold: true,
     },
     { label: 'Lotto Cancellations', lotto: lottery.onlineCancellations, indent: true, alt: true },
     { label: 'Lotto Discounts', lotto: lottery.onlineDiscounts, indent: true, alt: true },
+
     {
       label: 'Scratch Sales',
       lotto: lottery.instantLottTotal,
-      bullock: bullock?.scratchSales,
-      diff: (bullock?.scratchSales ?? 0) -
+      bullock: b.scratchSales,
+      // Logic: Bullock - (Lotto + FreeTickets + OldTickets)
+      diff: (b.scratchSales ?? 0) -
         ((lottery.instantLottTotal ?? 0) + (lottery.scratchFreeTickets ?? 0) + (lottery.oldScratchTickets ?? 0)),
       bold: true,
     },
-    { label: 'Scratch Free Tickets', lotto: lottery.scratchFreeTickets, indent: true, alt: true },
+    { label: 'Scratch and Win (S&W) Free Tickets', lotto: lottery.scratchFreeTickets, indent: true, alt: true },
     { label: 'Old Scratch Tickets', lotto: lottery.oldScratchTickets, indent: true, alt: true },
+
     {
-      label: 'Payouts',
-      lotto: lottery.lottoPayout,
-      bullock: bullock?.payouts,
-      diff: (bullock?.payouts ?? 0) - ((lottery.lottoPayout ?? 0) + (lottery.scratchFreeTickets ?? 0)),
+      label: 'Total Payouts (Calculated)',
+      lotto: lottery.payouts,
+      bullock: b.payouts,
+      diff: (b.payouts ?? 0) - (lottery.payouts ?? 0),
       bold: true,
     },
+    { label: 'On Demand (Online) Free Tickets', lotto: lottery.onDemandFreeTickets, indent: true, alt: true },
+    { label: 'On Demand (Online) Cash Payout', lotto: lottery.onDemandCashPayout, indent: true, alt: true },
+    { label: 'Scratch and Win (S&W) Free Tickets', lotto: lottery.scratchFreeTickets, indent: true, alt: true },
+    { label: 'Scratch and Win (S&W) Cash Payout', lotto: lottery.scratchCashPayout, indent: true, alt: true },
+
     {
       label: 'Datawave Value',
       lotto: lottery.dataWave,
-      bullock: bullock?.dataWave,
-      diff: diff(bullock?.dataWave, lottery.dataWave), // Using restored diff
+      bullock: b.dataWave,
+      diff: (b.dataWave ?? 0) - (lottery.dataWave ?? 0),
       bold: true,
     },
     {
-      label: 'Datawave Fee', // Restored Datawave Fee
+      label: 'Datawave Fee',
       lotto: lottery.feeDataWave,
-      bullock: bullock?.dataWaveFee,
-      diff: diff(bullock?.dataWaveFee, lottery.feeDataWave),
+      bullock: b.feeDataWave, // Fixed key name
+      diff: (b.feeDataWave ?? 0) - (lottery.feeDataWave ?? 0),
       indent: true,
       alt: true,
     },
   ];
 
-  // ... (rest of LotteryTable render logic is the same)
   return h(View, { style: styles.table },
     h(View, { style: styles.tableHeader },
       h(Text, { style: [styles.th, styles.colDesc] }, 'Description'),
@@ -218,8 +111,13 @@ function LotteryTable({ lottery, bullock }) {
         h(Text, { style: [styles.td, styles.colDesc, r.indent && styles.indent, r.bold && styles.rowValue] }, r.label),
         h(Text, { style: [styles.td, styles.col] }, currency(r.lotto)),
         h(Text, { style: [styles.td, styles.col] }, r.bullock != null ? currency(r.bullock) : '—'),
-        h(Text, { style: [styles.td, styles.col, r.diff > 0 ? styles.pos : r.diff < 0 ? styles.neg : styles.muted] }, 
-          r.diff != null ? currency(r.diff) : '—')
+        h(Text, {
+          style: [
+            styles.td,
+            styles.col,
+            r.diff > 0.01 ? styles.pos : r.diff < -0.01 ? styles.neg : styles.muted
+          ]
+        }, r.diff != null ? currency(r.diff) : '—')
       )
     )
   );
@@ -230,14 +128,13 @@ function AdjustedTotalsCards({ totals, lottery, bullock, unsettledPrepays, handh
   if (!lottery) return null;
 
   // Calculation Logic
-  const onlineOS = (bullock?.onlineSales || 0) - 
+  const onlineOS = (bullock?.onlineSales || 0) -
     ((lottery.onlineLottoTotal ?? 0) - (lottery.onlineCancellations || 0) - (lottery.onlineDiscounts || 0));
-  
-  const scratchOS = (bullock?.scratchSales || 0) - 
+
+  const scratchOS = (bullock?.scratchSales || 0) -
     ((lottery.instantLottTotal ?? 0) + (lottery.scratchFreeTickets || 0) + (lottery.oldScratchTickets || 0));
 
-  const payoutOS = (bullock?.payouts || 0) - 
-    ((lottery.lottoPayout ?? 0) + (lottery.scratchFreeTickets || 0));
+  const payoutOS = (bullock?.payouts || 0) - (lottery.lottoPayout ?? 0);
 
   const adjReported = (totals.report_canadian_cash || 0) + onlineOS + scratchOS;
   const adjItemSales = (totals.item_sales || 0) + onlineOS + scratchOS;
@@ -257,25 +154,25 @@ function AdjustedTotalsCards({ totals, lottery, bullock, unsettledPrepays, handh
     { label: 'Final Payouts', value: currency(adjPayouts) },
   ];
 
-  const renderCard = (c, i) => 
+  const renderCard = (c, i) =>
     h(View, { key: i, style: [styles.card, { width: '100%', marginBottom: 6, backgroundColor: '#fff' }] },
       h(Text, { style: styles.label }, c.label),
       h(Text, { style: [styles.value, c.color] }, c.value)
     );
 
   return h(
-    View, 
-    { 
-      style: { 
-        flexDirection: 'row', 
+    View,
+    {
+      style: {
+        flexDirection: 'row',
         backgroundColor: '#f9fafb', // Light grey background
-        borderWidth: 1, 
+        borderWidth: 1,
         borderColor: '#e5e7eb',    // Grey border
-        borderRadius: 8, 
-        padding: 12, 
+        borderRadius: 8,
+        padding: 12,
         marginTop: 5,
-        gap: 12 
-      } 
+        gap: 12
+      }
     },
     // Left Column
     h(View, { style: { flex: 1 } }, col1.map(renderCard)),
@@ -489,42 +386,6 @@ function TotalsCards({ totals, unsettledPrepays, handheldDebit }) {
   )
 }
 
-// function AdjustedTotalsCards({ totals, lottery, bullock }) {
-//   const h = React.createElement
-//   if (!lottery) return null
-
-//   // Calculations based on your provided logic
-//   const onlineOverShort = (bullock?.onlineSales || 0) - 
-//     ((lottery.onlineLottoTotal ?? 0) - (lottery.onlineCancellations || 0) - (lottery.onlineDiscounts || 0))
-  
-//   const scratchOverShort = (bullock?.scratchSales || 0) - 
-//     ((lottery.instantLottTotal ?? 0) + (lottery.scratchFreeTickets || 0) + (lottery.oldScratchTickets || 0))
-
-//   const payoutOverShort = (bullock?.payouts || 0) - 
-//     ((lottery.lottoPayout ?? 0) + (lottery.scratchFreeTickets || 0))
-
-//   const adjReportedCash = (totals.report_canadian_cash || 0) + onlineOverShort + scratchOverShort
-//   const adjItemSales = (totals.item_sales || 0) + onlineOverShort + scratchOverShort
-//   const adjPayouts = (totals.payouts || 0) + payoutOverShort
-//   const adjOverShort = (totals.canadian_cash_collected || 0) - adjReportedCash
-
-//   const cards = [
-//     { label: 'Final Canadian Cash Reported', value: currency(adjReportedCash) },
-//     { label: 'Final Over/Short', value: currency(adjOverShort), color: adjOverShort >= 0 ? styles.valueOk : styles.valueBad },
-//     { label: 'Final Item Sales', value: currency(adjItemSales) },
-//     { label: 'Final Payouts', value: currency(adjPayouts) },
-//   ]
-
-//   return h(View, { style: [styles.grid, { backgroundColor: '#f3f4f6', padding: 8, borderRadius: 6, marginTop: 5 }] },
-//     ...cards.map((c, i) =>
-//       h(View, { key: i, style: [styles.card, { backgroundColor: '#fff' }] },
-//         h(Text, { style: styles.label }, c.label),
-//         h(Text, { style: [styles.value, c.color] }, c.value)
-//       )
-//     )
-//   )
-// }
-
 function ShiftsList({ rows }) {
   const h = React.createElement
 
@@ -576,69 +437,38 @@ function NotesSection({ notes }) {
 }
 
 // Render optional daily adjustments when values exist
-function ExtrasSection({ unsettledPrepays, handheldDebit }) {
-  const h = React.createElement
-  const hasUnsettled = typeof unsettledPrepays === 'number' && !Number.isNaN(unsettledPrepays)
-  const hasHandheld = typeof handheldDebit === 'number' && !Number.isNaN(handheldDebit)
-  if (!hasUnsettled && !hasHandheld) return null
-
-  return h(
-    View,
-    { style: styles.notesBlock },
-    hasUnsettled &&
-      h(
-        View,
-        { style: styles.row },
-        h(Text, { style: styles.rowLabel }, 'Unsettled Prepays'),
-        h(Text, { style: styles.rowValue }, currency(unsettledPrepays))
-      ),
-    hasHandheld &&
-      h(
-        View,
-        { style: styles.row },
-        h(Text, { style: styles.rowLabel }, 'Handheld Debit'),
-        h(Text, { style: styles.rowValue }, currency(handheldDebit))
-      )
-  )
-}
-
-// function ReportDoc({ site, date, rows, totals, notes }) {
-// function ReportDoc({ site, date, rows, totals, notes, lottery, bullock, unsettledPrepays, handheldDebit }) {
+// function ExtrasSection({ unsettledPrepays, handheldDebit }) {
 //   const h = React.createElement
+//   const hasUnsettled = typeof unsettledPrepays === 'number' && !Number.isNaN(unsettledPrepays)
+//   const hasHandheld = typeof handheldDebit === 'number' && !Number.isNaN(handheldDebit)
+//   if (!hasUnsettled && !hasHandheld) return null
+
 //   return h(
-//     Document,
-//     null,
-//     h(
-//       Page,
-//       { size: 'A4', style: styles.page },
+//     View,
+//     { style: styles.notesBlock },
+//     hasUnsettled &&
 //       h(
 //         View,
-//         { style: styles.titleRow },
-//         h(Text, { style: styles.title }, `Cash Summary — ${site} — ${date}`)
+//         { style: styles.row },
+//         h(Text, { style: styles.rowLabel }, 'Unsettled Prepays'),
+//         h(Text, { style: styles.rowValue }, currency(unsettledPrepays))
 //       ),
-//       h(Text, { style: styles.sectionTitle }, 'Totals'),
-//       h(TotalsCards, { totals, unsettledPrepays, handheldDebit }),
-//       // No separate Adjustments section/cards; handled in TotalsCards
-//       lottery &&
+//     hasHandheld &&
 //       h(
-//         React.Fragment,
-//         null,
-//         h(Text, { style: styles.sectionTitle }, 'Lottery'),
-//         h(LotteryTable, { lottery, bullock })
-//       ),
-//       h(Text, { style: styles.sectionTitle }, 'Shifts'),
-//       h(View, { wrap: false }, h(ShiftsList, { rows })),
-//       h(Text, { style: styles.sectionTitle }, 'Notes'),
-//       h(NotesSection, { notes })
-//     )
+//         View,
+//         { style: styles.row },
+//         h(Text, { style: styles.rowLabel }, 'Handheld Debit'),
+//         h(Text, { style: styles.rowValue }, currency(handheldDebit))
+//       )
 //   )
 // }
+
 function ReportDoc({ site, date, rows, totals, notes, lottery, bullock, unsettledPrepays, handheldDebit }) {
   const h = React.createElement;
 
   // Check if we have extra cards that might push content too far down
-  const hasExtras = (typeof unsettledPrepays === 'number' && !Number.isNaN(unsettledPrepays)) || 
-                    (typeof handheldDebit === 'number' && !Number.isNaN(handheldDebit));
+  const hasExtras = (typeof unsettledPrepays === 'number' && !Number.isNaN(unsettledPrepays)) ||
+    (typeof handheldDebit === 'number' && !Number.isNaN(handheldDebit));
 
   return h(Document, null,
     h(Page, { size: 'A4', style: styles.page },
