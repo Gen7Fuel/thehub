@@ -15,7 +15,7 @@ interface VendorPickerProps {
   disabled?: boolean
 }
 
-async function fetchVendors(location?: string): Promise<Vendor[]> {
+export async function fetchVendors(location?: string): Promise<Vendor[]> {
   const params = location ? `?location=${encodeURIComponent(location)}` : '';
   const res = await axios.get(`/api/vendors${params}`, {
     headers: {
