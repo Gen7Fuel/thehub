@@ -53,6 +53,7 @@ const CashSummarySchema = new mongoose.Schema(
     instantLottTotal: { type: Number },
     dataWave: { type: Number },
     feeDataWave: { type: Number },
+    createdBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User'},
   },
   { timestamps: true }
 )
@@ -73,6 +74,7 @@ const CashSummaryReportSchema = new mongoose.Schema(
     handheldDebit: { type: Number },
     submitted: { type: Boolean, default: false },
     submittedAt: { type: Date },
+    submittedBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User'},
   },
   { timestamps: true }
 )

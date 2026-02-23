@@ -444,7 +444,6 @@ function RouteComponent() {
         const categories = Array.from(new Set(data.map((v: any) => v.category).filter(Boolean)));
         setUniqueCategories(categories);
 
-        console.log("Unique categories:", categories);
       } catch (err) {
         console.error("Failed to fetch vendors:", err);
       }

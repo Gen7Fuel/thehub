@@ -1,4 +1,5 @@
 const express = require('express');
+const mongoose = require('mongoose');
 const router = express.Router();
 const OrderRec = require('../models/OrderRec');
 const Vendor = require('../models/Vendor');
@@ -200,7 +201,21 @@ router.put('/:id/item/:catIdx/:itemIdx', async (req, res) => {
     }
 
     const site = orderRec.site;
-    if (category.number !== "5001" && item.completed && item.gtin) {
+
+    // temposrary patch for PCG order not flagging these items in cyclecount module
+    let vendorName = "";
+    if (mongoose.isValidObjectId(orderRec.vendor)) {
+      const vendorDoc = await Vendor.findById(orderRec.vendor);
+      vendorName = vendorDoc ? vendorDoc.name : "";
+    }
+
+    // 2. Define the exclusion logic
+    const isPCGVendor = vendorName === "Proulx Commercial Growers";
+    
+    
+    if (category.number !== "5001" && !isPCGVendor && item.completed && item.gtin) {
+    // if (category.number !== "5001" && item.completed && item.gtin) {
+
       let cycleCount = await CycleCount.findOne({ site, gtin: item.gtin });
 
       // 🔧 Helper: get UPC/barcode from SQL

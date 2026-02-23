@@ -607,6 +607,12 @@ router.get('/payables-comparison', async (req, res) => {
 
 router.post('/', async (req, res) => {
   try {
+
+    const userId = req.user._id;
+    if (!userId) {
+      return res.status(401).json({ error: 'User identification missing' });
+    }
+
     const {
       site,
       shift_number,
@@ -686,6 +692,7 @@ router.post('/', async (req, res) => {
       site,
       shift_number: String(shift_number),
       date: new Date(date),
+      createdBy: userId,
 
       // existing primary fields (now enriched)
       canadian_cash_collected: values.canadian_cash_collected,
@@ -922,6 +929,10 @@ router.post('/lottery', async (req, res) => {
 
 router.post('/submit/to/safesheet', async (req, res) => {
   try {
+    const userId = req.user._id;
+    if (!userId) {
+      return res.status(401).json({ error: 'User identification missing' });
+    }
     const { site, date } = req.body || {}
     if (!site) return res.status(400).json({ error: 'site is required' })
     if (!date || !/^\d{4}-\d{2}-\d{2}$/.test(String(date))) {
@@ -982,7 +993,7 @@ router.post('/submit/to/safesheet', async (req, res) => {
 
     await CashSummaryReport.findOneAndUpdate(
       { site, date: start }, // normalized day start
-      { $set: { site, date: start, submitted: true, submittedAt: new Date() } },
+      { $set: { site, date: start, submitted: true, submittedAt: new Date(), submittedBy: userId } },
       { upsert: true, new: true, setDefaultsOnInsert: true }
     )
 
