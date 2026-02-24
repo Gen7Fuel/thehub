@@ -32,9 +32,22 @@ const InfoDialog = ({ title, imageName }: { title: string; imageName: string }) 
               className="w-full h-auto object-contain"
             />
           </div>
-          <p className="text-base text-center text-muted-foreground font-medium bg-slate-50 p-4 rounded-md border w-full">
-            Please follow the image and fill in the values from the above mentioned sections for this field.
-          </p>
+          {/* <p className="text-base text-center text-muted-foreground font-medium bg-slate-50 p-4 rounded-md border w-full">
+            Kindly find the section mentioned in the Red Box on your Report and enter the corresponding value mentioned in the Green Box. (Note: The images are for reference only and may not exactly match your report, but the highlighted sections will guide you to the correct values.)
+          </p> */}
+          <div className="text-sm md:text-base text-muted-foreground font-medium bg-slate-50 p-5 rounded-md border w-full">
+            <ul className="list-none space-y-2">
+              <li>
+                <span className="text-red-600">●</span> <strong>Step 1:</strong> Locate the section marked by the <strong>Red Box</strong> on your Lotto Report.
+              </li>
+              <li>
+                <span className="text-green-600">●</span> <strong>Step 2:</strong> Enter the corresponding value found inside the <strong>Green Box</strong>.
+              </li>
+            </ul>
+            <p className="mt-3 text-xs font-normal opacity-70 italic text-center">
+              Note: The images are for reference only and actual values may differ, but the highlighted sections will guide you to the correct values.
+            </p>
+          </div>
         </div>
       </DialogContent>
     </Dialog>
@@ -231,7 +244,7 @@ export function LotteryComparisonTable({
                 onDemandCashPayout: val,
                 payouts: val + (lottery.scratchCashPayout || 0) + (lottery.scratchFreeTickets || 0)
               })}
-              lottery={lottery} 
+              lottery={lottery}
               isReadOnly={isReadOnly}
             />
             <td colSpan={2} />
@@ -248,7 +261,7 @@ export function LotteryComparisonTable({
                 scratchFreeTickets: val,
                 payouts: (lottery.onDemandCashPayout || 0) + (lottery.scratchCashPayout || 0) + val
               })}
-              lottery={lottery} 
+              lottery={lottery}
               isReadOnly={isReadOnly}
             />
             <td colSpan={2} />
@@ -265,7 +278,7 @@ export function LotteryComparisonTable({
                 scratchCashPayout: val,
                 payouts: (lottery.onDemandCashPayout || 0) + val + (lottery.scratchFreeTickets || 0)
               })}
-              lottery={lottery} 
+              lottery={lottery}
               isReadOnly={isReadOnly}
             />
             <td colSpan={2} />
