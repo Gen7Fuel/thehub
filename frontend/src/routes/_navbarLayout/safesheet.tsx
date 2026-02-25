@@ -1,14 +1,16 @@
+import { Calendar } from '@/components/ui/calendar';
 import { createFileRoute, useNavigate } from '@tanstack/react-router'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { SitePicker } from '@/components/custom/sitePicker'
 import { Button } from '@/components/ui/button'
-import { ImagePlus, Image as ImageIcon } from "lucide-react";
+import { ImagePlus, Image as ImageIcon, CalendarDaysIcon } from "lucide-react";
 import { DatePickerWithRange } from '@/components/custom/datePickerWithRange'
 import type { DateRange } from 'react-day-picker'
 import { getStartAndEndOfToday } from '@/lib/utils'
 import { PasswordProtection } from "@/components/custom/PasswordProtection";
 import { useAuth } from "@/context/AuthContext";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog'
+import { Switch } from '@/components/ui/switch';
 
 type Entry = {
   _id: string
@@ -21,6 +23,7 @@ type Entry = {
   createdAt?: string
   updatedAt?: string
   photo?: string | null
+  assignedDate?: string
 }
 
 type SafeSheet = {
@@ -67,6 +70,9 @@ const parseYmd = (s?: string) => {
 }
 
 export default function RouteComponent() {
+  // State for calendar modal
+  const [showCalendarModal, setShowCalendarModal] = useState(false);
+  const [calendarModalEntryId, setCalendarModalEntryId] = useState<string | null>(null);
   // const { site } = Route.useSearch() as { site?: string }
   const { user } = useAuth();
   const { site, from, to } = Route.useSearch() as { site?: string; from?: string; to?: string }
@@ -140,6 +146,9 @@ export default function RouteComponent() {
   const [addCashInDesc, setAddCashInDesc] = useState('')
   const [addCashInLoading, setAddCashInLoading] = useState(false)
   const [addCashInError, setAddCashInError] = useState<string | null>(null)
+
+  // Switch state for UI extensibility
+  const [switchValue, setSwitchValue] = useState(false);
 
   // refs for inputs
   const descRef = useRef<HTMLInputElement>(null)
@@ -511,24 +520,59 @@ export default function RouteComponent() {
     setPhotoTargetEntry(null)
   }
 
-  // format display entries
+  // format and sort display entries
   const formattedEntries = useMemo(() => {
-    if (!sheet) return []
-    return sheet.entries.map((e) => {
-      const d = new Date(e.date)
+    if (!sheet) return [];
+    const entries = sheet.entries.map((e, idx) => {
+      const d = new Date(e.date);
       return {
         ...e,
-        // Option A: ISO YMD
+        _originalIndex: idx,
         dateDisplay: ymdFixed(d),
-        // Option B: fixed locale (Canadian style YYYY-MM-DD)
-        // dateDisplay: new Intl.DateTimeFormat('en-CA', { timeZone: 'UTC' }).format(d),
         cashInDisplay: fmtNumber(e.cashIn),
         cashExpenseOutDisplay: fmtNumber(e.cashExpenseOut),
         cashDepositBankDisplay: fmtNumber(e.cashDepositBank),
         cashOnHandSafeDisplay: fmtNumberShowZero(e.cashOnHandSafe ?? 0),
+      };
+    });
+
+    if (!switchValue) return entries;
+
+    // Helper: get sort key
+    const getSortKey = (entry) => {
+      if (entry.assignedDate && /^\d{4}-\d{2}-\d{2}$/.test(entry.assignedDate)) {
+        return entry.assignedDate;
       }
-    })
-  }, [sheet])
+      // fallback to date
+      const x = new Date(entry.date);
+      const y = x.getFullYear();
+      const m = String(x.getMonth() + 1).padStart(2, '0');
+      const day = String(x.getDate()).padStart(2, '0');
+      return `${y}-${m}-${day}`;
+    };
+
+    // Helper: type rank
+    const typeRank = (e) => {
+      const ci = Number(e.cashIn || 0);
+      const ce = Number(e.cashExpenseOut || 0);
+      const cb = Number(e.cashDepositBank || 0);
+      if (ci > 0) return 0;
+      if (ce > 0) return 1;
+      if (cb > 0) return 2;
+      return 3;
+    };
+
+    // Sort by sort key, then by type rank, then by original index
+    return [...entries].sort((a, b) => {
+      const ka = getSortKey(a);
+      const kb = getSortKey(b);
+      if (ka !== kb) return ka.localeCompare(kb);
+      const ra = typeRank(a);
+      const rb = typeRank(b);
+      if (ra !== rb) return ra - rb;
+      return a._originalIndex - b._originalIndex;
+    });
+  }, [sheet, switchValue]);
 
   return (
     <>
@@ -546,13 +590,11 @@ export default function RouteComponent() {
           <div className="my-4 flex flex-row items-center gap-4 w-full max-w-5xl px-2 sm:px-4">
             <SitePicker
               value={site}
-              // onValueChange={updateSearch}
               onValueChange={(v) => setSearch({ site: v })}
               placeholder="Pick a site"
               label="Site"
               className="w-[220px]"
             />
-            {/* Adapt DatePicker setDate (it expects a setState dispatcher) */}
             <DatePickerWithRange
               date={date}
               setDate={(val) => {
@@ -561,8 +603,13 @@ export default function RouteComponent() {
                 setSearch({ from: ymd(next.from), to: ymd(next.to) })
               }}
             />
+            {/* Switch for UI extensibility */}
+            <div className="flex items-center ml-auto mr-2">
+              <span className="mr-2 text-sm text-gray-700">Sort</span>
+              {/* Import Switch from shadcn/ui if not already */}
+              <Switch checked={switchValue} onCheckedChange={setSwitchValue} />
+            </div>
             <Button
-              className="ml-auto"
               size="sm"
               onClick={() => {
                 setAddCashInError(null)
@@ -758,7 +805,7 @@ export default function RouteComponent() {
 
                             {/* Actions */}
                             <td className="px-3 py-1.5 border-b border-slate-200 text-center">
-                              <div className="flex justify-center">
+                              <div className="flex justify-center gap-2">
                                 {e.cashDepositBank > 0 &&
                                   (!e.photo ? (
                                     <Button
@@ -781,7 +828,102 @@ export default function RouteComponent() {
                                       <ImageIcon className="w-4 h-4" />
                                       {/* <span className="text-xs font-medium">View</span> */}
                                     </Button>
-                                  ))}</div>
+                                  ))}
+
+                                  {e.cashDepositBank > 0 && (
+                                    e.assignedDate ? (
+                                      <Button
+                                        size="sm"
+                                        variant="outline"
+                                        onClick={() => {
+                                          setCalendarModalEntryId(e._id);
+                                          setShowCalendarModal(true);
+                                        }}
+                                        className="flex items-center justify-center rounded-md border-blue-500 text-blue-600"
+                                        style={{ width: 38, height: 33, minWidth: 38, minHeight: 33, padding: 0 }}
+                                      >
+                                        {(() => {
+                                          // Parse YYYY-MM-DD as local date
+                                          const parseLocalYMD = (s: string) => {
+                                            if (!s || !/^\d{4}-\d{2}-\d{2}$/.test(s)) return null;
+                                            const [y, m, d] = s.split('-').map(Number);
+                                            return new Date(y, m - 1, d);
+                                          };
+                                          const d = parseLocalYMD(e.assignedDate);
+                                          const day = d ? d.getDate() : '';
+                                          const month = d ? d.toLocaleString('en-US', { month: 'short' }).toUpperCase() : '';
+                                          return (
+                                            <span style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', lineHeight: 1 }}>
+                                              <span style={{ fontSize: '0.5em', fontWeight: 500 }}>{month}</span>
+                                              <span style={{ fontSize: '1em', fontWeight: 700 }}>{day}</span>
+                                            </span>
+                                          );
+                                        })()}
+                                      </Button>
+                                    ) : (
+                                      <Button
+                                        size="sm"
+                                        variant="outline"
+                                        onClick={() => {
+                                          setCalendarModalEntryId(e._id);
+                                          setShowCalendarModal(true);
+                                        }}
+                                        className="flex items-center gap-2 px-3 py-1.5 rounded-md border-blue-500 text-blue-600 hover:bg-blue-50"
+                                      >
+                                        <CalendarDaysIcon className="w-4 h-4" />
+                                      </Button>
+                                    )
+                                  )}
+                                    {/* Calendar Modal */}
+                                    <Dialog
+                                      open={showCalendarModal}
+                                      onOpenChange={(open) => {
+                                        setShowCalendarModal(open);
+                                        if (!open) setCalendarModalEntryId(null);
+                                      }}
+                                    >
+                                      <DialogContent className="sm:max-w-xs">
+                                        <Calendar
+                                          mode="single"
+                                          onSelect={async (date) => {
+                                            if (!date || !calendarModalEntryId) return;
+                                            // Format as YYYY-MM-DD (local date only)
+                                            const d = new Date(date);
+                                            const dateStr = `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+                                            try {
+                                              const body = { assignedDate: dateStr };
+                                              const res = await fetch(`/api/safesheets/site/${site}/entries/${calendarModalEntryId}`, {
+                                                method: 'PUT',
+                                                headers: {
+                                                  'Content-Type': 'application/json',
+                                                  Authorization: `Bearer ${localStorage.getItem('token')}`,
+                                                  'X-Required-Permission': 'accounting.safesheet',
+                                                },
+                                                body: JSON.stringify(body),
+                                              });
+                                              if (res.ok) {
+                                                setSheet((prev) => {
+                                                  if (!prev) return prev;
+                                                  return {
+                                                    ...prev,
+                                                    entries: prev.entries.map(entry =>
+                                                      entry._id === calendarModalEntryId
+                                                        ? { ...entry, assignedDate: dateStr }
+                                                        : entry
+                                                    )
+                                                  };
+                                                });
+                                              }
+                                            } catch (err) {
+                                              console.error('Failed to update assigned date', err);
+                                            }
+                                            setShowCalendarModal(false);
+                                            setCalendarModalEntryId(null);
+                                        }}
+                                        />
+                                      </DialogContent>
+                                    </Dialog>
+                              </div>
                             </td>
                           </tr>
                         )

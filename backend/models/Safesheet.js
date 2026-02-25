@@ -19,6 +19,7 @@ const EntrySchema = new Schema({
   cashExpenseOut: { type: Number, default: 0 },
   cashDepositBank: { type: Number, default: 0 },
   photo: { type: String, default: '' },
+  assignedDate: { type: String }, // Store as local string, not Date
 }, { timestamps: true });
 
 /**
