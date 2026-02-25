@@ -840,6 +840,7 @@ router.get('/lottery', async (req, res) => {
         onDemandFreeTickets: lotteryDoc.onDemandFreeTickets,
         onDemandCashPayout: lotteryDoc.onDemandCashPayout,
         scratchCashPayout: lotteryDoc.scratchCashPayout,
+        vouchersRedeemed: lotteryDoc.vouchersRedeemed,
         images: Array.isArray(lotteryDoc.images) ? lotteryDoc.images : [],
         datawaveImages: Array.isArray(lotteryDoc.datawaveImages) ? lotteryDoc.datawaveImages : [],
       })
@@ -863,6 +864,7 @@ router.get('/lottery', async (req, res) => {
         delete copy.onDemandFreeTickets
         delete copy.onDemandCashPayout
         delete copy.scratchCashPayout
+        delete copy.vouchersRedeemed
         return copy
       })
     }
@@ -902,6 +904,7 @@ router.post('/lottery', async (req, res) => {
       onlineLottoTotal: (values && typeof values.onlineSales === 'number') ? values.onlineSales : null,
       onlineCancellations: (values && typeof values.onlineCancellations === 'number') ? values.onlineCancellations : null,
       onlineDiscounts: (values && typeof values.onlineDiscounts === 'number') ? values.onlineDiscounts : null,
+      vouchersRedeemed: (values && typeof values.vouchersRedeemed === 'number') ? values.vouchersRedeemed : null,
       instantLottTotal: (values && typeof values.scratchSales === 'number') ? values.scratchSales : null,
       scratchFreeTickets: (values && typeof values.scratchFreeTickets === 'number') ? values.scratchFreeTickets : null,
       oldScratchTickets: (values && typeof values.oldScratchTickets === 'number') ? values.oldScratchTickets : null,

@@ -1012,7 +1012,7 @@ router.post('/instance', async (req, res) => {
           { $set: updateFields },
           { upsert: true }
         );
-        console.log(`AuditItem updated: ${item.item}, issueRaised=${item.issueRaised}`);
+        // console.log(`AuditItem updated: ${item.item}, issueRaised=${item.issueRaised}`);
 
         // Track lastChecked per item
         let lastCheckedValue = null;

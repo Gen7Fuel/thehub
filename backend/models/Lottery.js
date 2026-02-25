@@ -22,6 +22,7 @@ const LotterySchema = new mongoose.Schema(
     feeDataWave: { type: Number, default: null },
     onlineLottoTotal: { type: Number, default: null },
     instantLottTotal: { type: Number, default: null },
+    vouchersRedeemed: { type: Number, default: null },
     // Number of scratch free tickets reported by the site (user-entered)
     scratchFreeTickets: { type: Number, default: null }, // snw FT sale
     scratchCashPayout: { type: Number, default: null }, // snw cash payout
