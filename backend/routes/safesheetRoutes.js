@@ -133,12 +133,20 @@ router.get('/site/:site', async (req, res) => {
     const sheet = await Safesheet.findOne({ site })
     if (!sheet) return res.status(404).json({ error: 'Safesheet not found for site' })
 
-    // Use model method to compute running balance, then filter by range
-    const allEntries = sheet.getEntriesWithRunningBalance()
+    // Use alternate sorting if sortAssigned=true
+    let allEntries;
+    if (req.query.sortAssigned === 'true') {
+      allEntries = sheet.getEntriesWithAssignedDateGrouping();
+    } else {
+      allEntries = sheet.getEntriesWithRunningBalance();
+    }
     const inRange = allEntries.filter(e => {
-      const d = new Date(e.date)
-      return d >= start && d <= end
-    })
+      // Use assignedDate for range if sorting by assignedDate
+      const d = (req.query.sortAssigned === 'true' && e.assignedDate && /^\d{4}-\d{2}-\d{2}$/.test(e.assignedDate))
+        ? new Date(e.assignedDate)
+        : new Date(e.date);
+      return d >= start && d <= end;
+    });
 
     const payload = {
       _id: sheet._id,

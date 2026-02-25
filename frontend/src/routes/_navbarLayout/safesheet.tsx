@@ -186,49 +186,47 @@ export default function RouteComponent() {
   // fetch sheet
   useEffect(() => {
     if (!site || !from || !to) {
-      setSheet(null)
-      setError(null)
-      return
+      setSheet(null);
+      setError(null);
+      return;
     }
-    let mounted = true
+    let mounted = true;
     const fetchSheet = async () => {
-      setLoading(true)
-      setError(null)
+      setLoading(true);
+      setError(null);
       try {
+        const sortAssigned = switchValue ? 'true' : 'false';
         const res = await fetch(
-          `/api/safesheets/site/${encodeURIComponent(site)}?from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}`,
+          `/api/safesheets/site/${encodeURIComponent(site)}?from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}&sortAssigned=${sortAssigned}`,
           {
             headers: {
               Authorization: `Bearer ${localStorage.getItem('token')}`,
               'X-Required-Permission': 'accounting.safesheet',
             },
-          })
-
+          }
+        );
         if (res.status === 403) {
-          navigate({ to: '/no-access' })
-          return
+          navigate({ to: '/no-access' });
+          return;
         }
-
         if (!res.ok) {
-          const body = await res.json().catch(() => ({}))
-          throw new Error(body?.error || 'Failed to fetch safesheet')
+          const body = await res.json().catch(() => ({}));
+          throw new Error(body?.error || 'Failed to fetch safesheet');
         }
-
-        const data: SafeSheet = await res.json()
-        if (mounted) setSheet(data)
+        const data: SafeSheet = await res.json();
+        if (mounted) setSheet(data);
       } catch (err: any) {
-        console.error(err)
-        if (mounted) setError(err.message || 'Unknown error')
+        console.error(err);
+        if (mounted) setError(err.message || 'Unknown error');
       } finally {
-        if (mounted) setLoading(false)
+        if (mounted) setLoading(false);
       }
-    }
-
-    fetchSheet()
+    };
+    fetchSheet();
     return () => {
-      mounted = false
-    }
-  }, [site, from, to])
+      mounted = false;
+    };
+  }, [site, from, to, switchValue]);
 
   // read numeric value
   const readEditableNumber = (el?: HTMLInputElement | null) => {
@@ -539,7 +537,7 @@ export default function RouteComponent() {
     if (!switchValue) return entries;
 
     // Helper: get sort key
-    const getSortKey = (entry) => {
+    const getSortKey = (entry: { _originalIndex?: number; dateDisplay?: string; cashInDisplay?: string; cashExpenseOutDisplay?: string; cashDepositBankDisplay?: string; cashOnHandSafeDisplay?: string; _id?: string; date: any; description?: string | undefined; cashIn?: number; cashExpenseOut?: number; cashDepositBank?: number; cashOnHandSafe?: number | undefined; createdAt?: string | undefined; updatedAt?: string | undefined; photo?: string | null | undefined; assignedDate?: string; }) => {
       if (entry.assignedDate && /^\d{4}-\d{2}-\d{2}$/.test(entry.assignedDate)) {
         return entry.assignedDate;
       }
@@ -552,7 +550,7 @@ export default function RouteComponent() {
     };
 
     // Helper: type rank
-    const typeRank = (e) => {
+    const typeRank = (e: { _originalIndex?: number; dateDisplay?: string; cashInDisplay?: string; cashExpenseOutDisplay?: string; cashDepositBankDisplay?: string; cashOnHandSafeDisplay?: string; _id?: string; date?: string; description?: string | undefined; cashIn: any; cashExpenseOut: any; cashDepositBank: any; cashOnHandSafe?: number | undefined; createdAt?: string | undefined; updatedAt?: string | undefined; photo?: string | null | undefined; assignedDate?: string | undefined; }) => {
       const ci = Number(e.cashIn || 0);
       const ce = Number(e.cashExpenseOut || 0);
       const cb = Number(e.cashDepositBank || 0);
