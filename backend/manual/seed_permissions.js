@@ -264,11 +264,6 @@ const allPermissions = [
     "module_permId": 70000
   },
   {
-    "module_name": "safesheet",
-    "structure": [],
-    "module_permId": 75000
-  },
-  {
     "module_name": "category",
     "structure": [],
     "module_permId": 85000
