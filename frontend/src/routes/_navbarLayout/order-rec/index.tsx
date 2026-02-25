@@ -8,8 +8,9 @@ import Papa from 'papaparse'
 import axios from 'axios'
 import { Toaster, toast } from 'sonner'
 import { LocationPicker } from '@/components/custom/locationPicker'
-import { VendorPicker } from '@/components/custom/vendorPicker'
+import { VendorPicker, fetchVendors } from '@/components/custom/vendorPicker'
 import { useAuth } from "@/context/AuthContext";
+import { useQuery } from '@tanstack/react-query'
 
 export const Route = createFileRoute('/_navbarLayout/order-rec/')({
   component: RouteComponent,
@@ -25,6 +26,7 @@ interface ItemData {
   gtin: string
   vin: string
   itemName: string
+  strainName?: string // New field for PCG CSVs
   size: string
   onHandQty: number
   forecast: number
@@ -32,6 +34,69 @@ interface ItemData {
   itemsToOrder: number
   unitInCase: number
   casesToOrder: number
+}
+
+// temporary validation function for PCG order rec CSVs
+function isValidPCGFormat(csvContent: string): boolean {
+  const lines = csvContent.split('\n').map(line => line.trim()).filter(Boolean);
+  const headerLine = lines[0] || '';
+  console.log("PCG CSV Header Line:", headerLine);
+  // Check for the unique Strain column header
+  return headerLine.includes('Strain Name') && headerLine.includes('Category');
+}
+
+// temporrary parsing function for PCG order rec CSVs - looks for 'Category' column to identify category rows, and uses 'Strain Name' column for item name instead of 'Item Name'
+function parsePCGCSV(csvContent: string): CategoryData[] {
+  // Use PapaParse to handle CSV quotes and commas correctly
+  const results = Papa.parse(csvContent, {
+    header: true,
+    skipEmptyLines: 'greedy',
+    transformHeader: (h) => h.trim() // Clean up any whitespace in headers
+  });
+
+  const data = results.data as any[];
+  const categoryMap: Record<string, CategoryData> = {};
+
+  data.forEach(row => {
+    // 1. Extract and clean the GTIN
+    const rawGtin = row['GTIN']?.toString().replace(/\D/g, '') || '';
+    console.log("Processing row with GTIN:", rawGtin);
+
+    // 2. CRITICAL FIX: Skip the row if GTIN is missing.
+    // This prevents the backend validation error "Path gtin is required"
+    if (!rawGtin) {
+      return; 
+    }
+    // Column 1 (Category ID)
+    // Column 2 is Category Name.
+    const catName = row['Category'] || 'Uncategorized';
+    const catNumber = row['Category ID'] || '0';
+
+    // We use the Name as the key since IDs are ignored/handled by backend
+    if (!categoryMap[catName]) {
+      categoryMap[catName] = {
+        number: catNumber,
+        name: catName,
+        items: []
+      };
+    }
+
+    categoryMap[catName].items.push({
+      gtin: rawGtin,
+      vin: row['VIN'] || '',
+      itemName: row['Item Name'] || '',
+      strainName: row['Strain Name'] || '', // New field
+      size: row['Size'] || '',
+      onHandQty: parseInt(row['On Hand']) || 0,
+      forecast: parseInt(row['Forecast']) || 0,
+      minStock: parseInt(row['Min Stock']) || 0,
+      itemsToOrder: parseInt(row['Items to Order']) || 0,
+      unitInCase: parseInt(row['Units in Case']) || 0, // New mapping
+      casesToOrder: parseInt(row['Cases to Order']) || 0
+    });
+  });
+
+  return Object.values(categoryMap);
 }
 
 function isValidOrderRecCSV(csvContent: string): boolean {
@@ -144,6 +209,16 @@ function RouteComponent() {
   const [includeStationSupplies, setIncludeStationSupplies] = useState(false);
   const navigate = useNavigate()
 
+  // 1. Fetch vendors here so we can "see" the names associated with the IDs
+  const { data: vendors } = useQuery({
+    queryKey: ['vendors', site],
+    queryFn: () => fetchVendors(site),
+    enabled: !!site
+  });
+
+  // 2. Identify if the currently selected ID belongs to "ABC"
+  const isPCGVendor = vendors?.find(v => v._id === vendor)?.name === "Proulx Commercial Growers";
+
   const onDrop = useCallback(async (acceptedFiles: File[]) => {
     const file = acceptedFiles[0]
     if (file && file.type === 'text/csv') {
@@ -152,7 +227,12 @@ function RouteComponent() {
 
       try {
         const csvContent = await file.text()
-        if (!isValidOrderRecCSV(csvContent)) {
+        // if (!isValidOrderRecCSV(csvContent)) {
+        // temporary patch for PCG orders
+        const isValid = isPCGVendor
+          ? isValidPCGFormat(csvContent)
+          : isValidOrderRecCSV(csvContent);
+        if (!isValid) {
           setError('This CSV file does not match the expected OrderRec format.')
           toast.error('This CSV file does not match the expected OrderRec format.', {
             style: {
@@ -180,7 +260,7 @@ function RouteComponent() {
         setIsProcessing(false)
       }
     }
-  }, [])
+  }, [isPCGVendor]);
 
   const { getRootProps, getInputProps, isDragActive } = useDropzone({
     onDrop,
@@ -198,7 +278,11 @@ function RouteComponent() {
 
     try {
       const csvContent = await uploadedFile.text();
-      const categories = parseOrderRecCSV(csvContent);
+      // const categories = parseOrderRecCSV(csvContent);
+      //temporary patch for PCG orders
+      const categories = (isPCGVendor)
+        ? parsePCGCSV(csvContent)
+        : parseOrderRecCSV(csvContent);
       const filteredCategories = categories.filter(cat => cat.items.length > 0);
 
       const response = await axios.post(
@@ -289,11 +373,10 @@ function RouteComponent() {
           {!uploadedFile ? (
             <div
               {...getRootProps()}
-              className={`border-2 border-dashed rounded-lg p-8 text-center cursor-pointer transition-colors ${
-                isDragActive
-                  ? 'border-primary bg-primary/5'
-                  : 'border-gray-300 hover:border-gray-400'
-              }`}
+              className={`border-2 border-dashed rounded-lg p-8 text-center cursor-pointer transition-colors ${isDragActive
+                ? 'border-primary bg-primary/5'
+                : 'border-gray-300 hover:border-gray-400'
+                }`}
             >
               <input {...getInputProps()} />
               <Upload className="mx-auto h-12 w-12 text-gray-400 mb-4" />

@@ -288,7 +288,7 @@ function RouteComponent() {
                     type="password"
                     autoComplete="current-password"
                     autoFocus
-                    placeholder="••••••••"
+                    placeholder="Enter your password"
                     value={password}
                     onChange={(e) => setPassword(e.target.value)}
                   />
