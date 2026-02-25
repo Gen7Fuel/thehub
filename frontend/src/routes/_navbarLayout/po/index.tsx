@@ -8,6 +8,7 @@ import { useAuth } from '@/context/AuthContext'
 import { useFormStore } from '@/store'
 import axios from 'axios'
 import { DatePicker } from '@/components/custom/datePicker';
+import { LocationPicker } from '@/components/custom/locationPicker';
 import { domain } from '@/lib/constants'
 
 interface Product {
@@ -71,7 +72,8 @@ function RouteComponent() {
   const setFuelType = useFormStore((state) => state.setFuelType)
 
   const data = Route.useLoaderData()
-  const [stationName, _] = useState(user?.location || '');
+  const stationName = useFormStore((state) => state.stationName)
+  const setStationName = useFormStore((state) => state.setStationName)
 
   const [poError, setPoError] = useState<string>('')
 
@@ -120,6 +122,17 @@ function RouteComponent() {
 
   return (
     <div className="p-4 border border-dashed border-gray-300 rounded-md space-y-6">
+      {/* Location Picker */}
+      <div className="space-y-2">
+        <h2 className="text-lg font-bold">Select Site</h2>
+        <LocationPicker
+          setStationName={(value) => setStationName(typeof value === 'string' ? value : '')}
+          value="stationName"
+          defaultValue={stationName}
+        />
+        <div className="text-sm text-gray-600">Currently selected: <span className="font-semibold">{stationName || 'None'}</span></div>
+      </div>
+
       {/* Number Type Dropdown */}
       <div className="space-y-2">
         <h2 className="text-lg font-bold">Select Number Type</h2>
