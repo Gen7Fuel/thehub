@@ -99,8 +99,15 @@ function RouteComponent() {
   }
 
   useEffect(() => {
-    console.log("PO index mounted");
-  }, []);
+    if (!stationName && user?.location) {
+      setStationName(user.location);
+    }
+    // Set default fuel type to 'Regular' if not already set
+    if (!fuelType && data.products && data.products.length > 0) {
+      const regular = data.products.find((p: { description: string }) => p.description.toLowerCase().includes('regular'));
+      if (regular) setFuelType(regular.code);
+    }
+  }, [stationName, user?.location, setStationName, fuelType, setFuelType, data.products]);
 
   // Helpers for 5-digit numeric PO input
   const toFiveDigits = (s: string) => {
@@ -128,9 +135,8 @@ function RouteComponent() {
         <LocationPicker
           setStationName={(value) => setStationName(typeof value === 'string' ? value : '')}
           value="stationName"
-          defaultValue={stationName}
+            defaultValue={user?.location}
         />
-        <div className="text-sm text-gray-600">Currently selected: <span className="font-semibold">{stationName || 'None'}</span></div>
       </div>
 
       {/* Number Type Dropdown */}
