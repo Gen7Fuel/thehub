@@ -133,10 +133,8 @@ export function LocationPicker({
     .filter(([_, hasAccess]) => hasAccess)
     .map(([siteName]) => siteName);
 
-  // Always include the user's own location
-  const allAllowedSites = Array.from(
-    new Set([user?.location, ...permittedSites].filter(Boolean))
-  );
+  // Only include explicitly permitted sites
+  const allAllowedSites = permittedSites;
 
   // Filter available locations to allowed ones
   const filteredLocations = locations?.filter((loc: Location) =>
