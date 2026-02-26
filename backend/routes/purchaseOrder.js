@@ -31,7 +31,7 @@ const Product = require("../models/Product");
 //   }
 // });
 router.post("/", async (req, res) => {
-  const {
+  let {
     fleetCardNumber,
     poNumber,
     date,
@@ -48,12 +48,18 @@ router.post("/", async (req, res) => {
   } = req.body;
 
   try {
+    // Auto-numbering logic for Charlie's site only if both fields are missing
+    const isCharlies = stationName && stationName.trim().toLowerCase() === "charlie's";
+    if (isCharlies && (!poNumber || poNumber === '' || poNumber === '00000') && (!fleetCardNumber || fleetCardNumber === '')) {
+      poNumber = await Transaction.getNextPoNumberForSite(stationName);
+    }
+
     const newOrder = new Transaction({
       source,
       date,
       stationName,
-      fleetCardNumber: fleetCardNumber || '', // if empty, save as ''
-      poNumber: poNumber || '',              // if empty, save as ''
+      fleetCardNumber: fleetCardNumber || '',
+      poNumber: poNumber || '',
       quantity,
       amount,
       productCode,
