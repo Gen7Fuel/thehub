@@ -275,18 +275,34 @@ router.get('/voided-transactions-details', async (req, res) => {
 
 router.get('/over-short', async (req, res) => {
   try {
-    const { site } = req.query;
+    // const { site } = req.query;
+    const { site, from, to } = req.query; // Extract from/to for date range filtering
     if (!site) return res.status(400).json({ error: 'site is required' });
 
     // 1️⃣ Check if site sells lottery
     const location = await Location.findOne({ stationName: site }).lean();
     const sellsLottery = location?.sellsLottery || false;
 
-    // 2️⃣ Date range setup
-    const end = new Date();
-    end.setHours(0, 0, 0, 0);
-    const start = new Date(end);
-    start.setDate(start.getDate() - 20);
+    // const end = new Date();
+    // end.setHours(0, 0, 0, 0);
+    // const start = new Date(end);
+    // start.setDate(start.getDate() - 20);
+    // 2️⃣ Date range setup - NEW LOGIC
+    let start, end;
+    if (from && to) {
+      start = new Date(from);
+      end = new Date(to);
+    } else {
+      // Fallback to your original default
+      end = new Date();
+      end.setHours(0, 0, 0, 0);
+      start = new Date(end);
+      start.setDate(start.getDate() - 20);
+    }
+
+    // Set hours to ensure full day coverage
+    start.setHours(0, 0, 0, 0);
+    end.setHours(23, 59, 59, 999);
 
     // 3️⃣ Fetch submitted reports (Contains unsettledPrepays and handheldDebit)
     const reports = await CashSummaryReport.find({
