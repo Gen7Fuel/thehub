@@ -346,7 +346,7 @@ services:
       backend:
         condition: service_healthy
       auth-backend:                    
-        condition: service_started
+        condition: service_healthy
     restart: always
 
 volumes:
