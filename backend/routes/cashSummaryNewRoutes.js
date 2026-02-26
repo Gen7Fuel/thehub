@@ -18,6 +18,7 @@ const path = require('path')
 const router = express.Router()
 
 const CDN_BASE_URL = process.env.CDN_BASE_URL || process.env.PUBLIC_CDN_BASE_URL || 'http://cdn:5001'
+// const OFFICE_SFTP_API_BASE = 'http://24.50.55.130:5000' // Old direct SFTP proxy (deprecated)
 const OFFICE_SFTP_API_BASE = 'http://24.50.55.130:5000'
 const CASH_SUMMARY_EMAILS = (process.env.CASH_SUMMARY_EMAILS || 'reports@bosservicesltd.com')
   .split(',')
@@ -585,8 +586,8 @@ router.get('/payables-comparison', async (req, res) => {
       // Add Lottery Actuals to the Internal side
       if (sellsLottery && lotteryMap[dateStr]) {
         const lotto = lotteryMap[dateStr];
-        // Internal Records = (Payables Module) + (Lotto Payouts) + (Scratch Free Tickets)
-        internalTotal += (lotto.lottoPayout || 0) + (lotto.scratchFreeTickets || 0);
+        // Internal Records = (Payables Module) + (Lotto Payouts)
+        internalTotal += (lotto.lottoPayout || 0);
       }
 
       return {
@@ -606,6 +607,12 @@ router.get('/payables-comparison', async (req, res) => {
 
 router.post('/', async (req, res) => {
   try {
+
+    const userId = req.user._id;
+    if (!userId) {
+      return res.status(401).json({ error: 'User identification missing' });
+    }
+
     const {
       site,
       shift_number,
@@ -685,6 +692,7 @@ router.post('/', async (req, res) => {
       site,
       shift_number: String(shift_number),
       date: new Date(date),
+      createdBy: userId,
 
       // existing primary fields (now enriched)
       canadian_cash_collected: values.canadian_cash_collected,
@@ -714,7 +722,7 @@ router.post('/', async (req, res) => {
       arIncurred: numOrUndef(parsed.arIncurred),
       grandTotal: numOrUndef(parsed.grandTotal),
       couponsAccepted: numOrUndef(parsed.couponsAccepted),
-      canadianCash: numOrUndef(parsed.canadianCash),
+      canadianCash: numOrUndef((parsed.canadianCash || 0) + (parsed.usCash || 0)),
       cashOnHand: numOrUndef(parsed.cashOnHand),
       parsedCashBack: numOrUndef(parsed.cashBack),
       parsedPayouts: numOrUndef(parsed.payouts),
@@ -829,6 +837,9 @@ router.get('/lottery', async (req, res) => {
         oldScratchTickets: lotteryDoc.oldScratchTickets,
         dataWave: lotteryDoc.dataWave,
         feeDataWave: lotteryDoc.feeDataWave,
+        onDemandFreeTickets: lotteryDoc.onDemandFreeTickets,
+        onDemandCashPayout: lotteryDoc.onDemandCashPayout,
+        scratchCashPayout: lotteryDoc.scratchCashPayout,
         images: Array.isArray(lotteryDoc.images) ? lotteryDoc.images : [],
         datawaveImages: Array.isArray(lotteryDoc.datawaveImages) ? lotteryDoc.datawaveImages : [],
       })
@@ -849,6 +860,9 @@ router.get('/lottery', async (req, res) => {
         delete copy.feeDataWave
         delete copy.images
         delete copy.datawaveImages
+        delete copy.onDemandFreeTickets
+        delete copy.onDemandCashPayout
+        delete copy.scratchCashPayout
         return copy
       })
     }
@@ -862,7 +876,7 @@ router.get('/lottery', async (req, res) => {
       // note: scratchFreeTickets is a user-entered field and not part of Bullock totals
       payouts: sum('lottoPayout'),
       dataWave: sum('dataWave'),
-      dataWaveFee: sum('feeDataWave'),
+      feeDataWave: sum('feeDataWave'),
     }
 
     res.json({ site, date, rows, totals, lottery: lotteryDoc || null })
@@ -891,8 +905,11 @@ router.post('/lottery', async (req, res) => {
       instantLottTotal: (values && typeof values.scratchSales === 'number') ? values.scratchSales : null,
       scratchFreeTickets: (values && typeof values.scratchFreeTickets === 'number') ? values.scratchFreeTickets : null,
       oldScratchTickets: (values && typeof values.oldScratchTickets === 'number') ? values.oldScratchTickets : null,
-      dataWave: (values && typeof values.datawaveValue === 'number') ? values.datawaveValue : null,
-      feeDataWave: (values && typeof values.datawaveFee === 'number') ? values.datawaveFee : null,
+      onDemandFreeTickets: (values && typeof values.onDemandFreeTickets === 'number') ? values.onDemandFreeTickets : null,
+      onDemandCashPayout: (values && typeof values.onDemandCashPayout === 'number') ? values.onDemandCashPayout : null,
+      scratchCashPayout: (values && typeof values.scratchCashPayout === 'number') ? values.scratchCashPayout : null,
+      dataWave: (values && typeof values.dataWave === 'number') ? values.dataWave : null,
+      feeDataWave: (values && typeof values.feeDataWave === 'number') ? values.feeDataWave : null,
       images: Array.isArray(images) ? images.map(String) : [],
       datawaveImages: Array.isArray(datawaveImages) ? datawaveImages.map(String) : [],
     }
@@ -912,6 +929,10 @@ router.post('/lottery', async (req, res) => {
 
 router.post('/submit/to/safesheet', async (req, res) => {
   try {
+    const userId = req.user._id;
+    if (!userId) {
+      return res.status(401).json({ error: 'User identification missing' });
+    }
     const { site, date } = req.body || {}
     if (!site) return res.status(400).json({ error: 'site is required' })
     if (!date || !/^\d{4}-\d{2}-\d{2}$/.test(String(date))) {
@@ -972,7 +993,7 @@ router.post('/submit/to/safesheet', async (req, res) => {
 
     await CashSummaryReport.findOneAndUpdate(
       { site, date: start }, // normalized day start
-      { $set: { site, date: start, submitted: true, submittedAt: new Date() } },
+      { $set: { site, date: start, submitted: true, submittedAt: new Date(), submittedBy: userId } },
       { upsert: true, new: true, setDefaultsOnInsert: true }
     )
 

@@ -8,6 +8,7 @@ import { useAuth } from '@/context/AuthContext'
 import { useFormStore } from '@/store'
 import axios from 'axios'
 import { DatePicker } from '@/components/custom/datePicker';
+import { LocationPicker } from '@/components/custom/locationPicker';
 import { domain } from '@/lib/constants'
 
 interface Product {
@@ -48,6 +49,7 @@ function RouteComponent() {
   const date = useFormStore((state) => state.date)
   const setDate = useFormStore((state) => state.setDate)
 
+  // Removed LocationPicker and stationName state
   const poNumber = useFormStore((state) => state.poNumber) // new state for PO number
   const setPoNumber = useFormStore((state) => state.setPoNumber)
 
@@ -70,7 +72,9 @@ function RouteComponent() {
   const setFuelType = useFormStore((state) => state.setFuelType)
 
   const data = Route.useLoaderData()
-  const stationName = user?.location || ''
+  const stationName = useFormStore((state) => state.stationName)
+  const setStationName = useFormStore((state) => state.setStationName)
+
   const [poError, setPoError] = useState<string>('')
 
   const handleBlur = async () => {
@@ -79,6 +83,7 @@ function RouteComponent() {
     const token = localStorage.getItem('token')
     const response = await axios.get(`${domain}/api/fleet/getByCardNumber/${fleetCardNumber}`, {
       headers: { Authorization: `Bearer ${token}` },
+      params: { stationName },
     })
     const data = response.data
 
@@ -94,8 +99,15 @@ function RouteComponent() {
   }
 
   useEffect(() => {
-    console.log("PO index mounted");
-  }, []);
+    if (!stationName && user?.location) {
+      setStationName(user.location);
+    }
+    // Set default fuel type to 'Regular' if not already set
+    if (!fuelType && data.products && data.products.length > 0) {
+      const regular = data.products.find((p: { description: string }) => p.description.toLowerCase().includes('regular'));
+      if (regular) setFuelType(regular.code);
+    }
+  }, [stationName, user?.location, setStationName, fuelType, setFuelType, data.products]);
 
   // Helpers for 5-digit numeric PO input
   const toFiveDigits = (s: string) => {
@@ -115,120 +127,139 @@ function RouteComponent() {
   }
 
 
+
+  // Only show number type and PO/fleet fields if not Charlie's
+  const isCharlies = stationName && stationName.trim().toLowerCase() === "charlie's";
+
   return (
     <div className="p-4 border border-dashed border-gray-300 rounded-md space-y-6">
-      {/* Number Type Dropdown */}
+      {/* Location Picker */}
       <div className="space-y-2">
-        <h2 className="text-lg font-bold">Select Number Type</h2>
-        <Select value={numberType} onValueChange={(value) => setNumberType(value as 'fleet' | 'po')}>
-          <SelectTrigger className="w-[180px]">
-            <SelectValue placeholder="Select Type" />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectGroup>
-              <SelectLabel>Number Type</SelectLabel>
-              <SelectItem value="fleet">Fleet Card Number</SelectItem>
-              <SelectItem value="po">PO Number</SelectItem>
-            </SelectGroup>
-          </SelectContent>
-        </Select>
+        <h2 className="text-lg font-bold">Select Site</h2>
+        <LocationPicker
+          setStationName={(value) => setStationName(typeof value === 'string' ? value : '')}
+          value="stationName"
+          defaultValue={user?.location}
+        />
       </div>
-      {/* Conditional Number Input */}
-      {numberType === 'fleet' ? (
-        <div className="space-y-2">
-          <h2 className="text-lg font-bold">Fleet Card Number</h2>
-          <InputOTP
-            maxLength={16}
-            name="fleetCardNumber"
-            value={fleetCardNumber}
-            onChange={(value) => setFleetCardNumber(value)}
-            onBlur={handleBlur}
-          >
-            <InputOTPGroup>
-              {[0, 1, 2, 3].map((i) => (
-                <InputOTPSlot key={i} index={i} />
-              ))}
-            </InputOTPGroup>
-            <InputOTPSeparator />
-            <InputOTPGroup>
-              {[4, 5, 6, 7].map((i) => (
-                <InputOTPSlot key={i} index={i} />
-              ))}
-            </InputOTPGroup>
-            <InputOTPSeparator />
-            <InputOTPGroup>
-              {[8, 9, 10, 11].map((i) => (
-                <InputOTPSlot key={i} index={i} />
-              ))}
-            </InputOTPGroup>
-            <InputOTPSeparator />
-            <InputOTPGroup>
-              {[12, 13, 14, 15].map((i) => (
-                <InputOTPSlot key={i} index={i} />
-              ))}
-            </InputOTPGroup>
-          </InputOTP>
-        </div>
-      ) : (
-        <div className="space-y-2">
-          <h2 className="text-lg font-bold">PO Number</h2>
-          <InputOTP
-            maxLength={5}
-            name="poNumber"
-            value={toFiveDigits(poNumber)}
-            onChange={(value) => {
-              setPoNumber(toFiveDigits(value))
-              if (poError) setPoError('')
-            }}
-            onBlur={async () => {
-              const padded = padFive(poNumber)
-              setPoNumber(padded)
-              if (!stationName || !padded) return
-              try {
-                const res = await axios.get('/api/purchase-orders/unique', {
-                  params: { stationName, poNumber: padded },
-                  headers: {
-                    Authorization: `Bearer ${localStorage.getItem('token') || ''}`,
-                    'X-Required-Permission': 'po',
-                  },
-                })
-                if (res.data && res.data.unique === false) {
-                  setPoError('This PO number has already been used for this site.')
-                } else {
-                  setPoError('')
-                }
-              } catch (e: any) {
-                // non-fatal; show message and allow save to handle server-side conflict
-                setPoError(e?.response?.data?.message || 'Could not validate PO number uniqueness')
-              }
-            }}
-          >
-            <InputOTPGroup>
-              {[0, 1, 2, 3, 4].map((i) => (
-                <InputOTPSlot key={i} index={i} />
-              ))}
-            </InputOTPGroup>
-          </InputOTP>
-          {poError && (
-            <div className="text-xs text-red-600">{poError}</div>
+
+      {/* Only show number type and PO/fleet fields if not Charlie's */}
+      {!isCharlies && (
+        <>
+          <div className="space-y-2">
+            <h2 className="text-lg font-bold">Select Number Type</h2>
+            <Select value={numberType} onValueChange={(value) => setNumberType(value as 'fleet' | 'po')}>
+              <SelectTrigger className="w-[180px]">
+                <SelectValue placeholder="Select Type" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectGroup>
+                  <SelectLabel>Number Type</SelectLabel>
+                  <SelectItem value="fleet">Fleet Card Number</SelectItem>
+                  <SelectItem value="po">PO Number</SelectItem>
+                </SelectGroup>
+              </SelectContent>
+            </Select>
+          </div>
+          {/* Conditional Number Input */}
+          {numberType === 'fleet' ? (
+            <div className="space-y-2">
+              <h2 className="text-lg font-bold">Fleet Card Number</h2>
+              <InputOTP
+                maxLength={16}
+                name="fleetCardNumber"
+                value={fleetCardNumber}
+                onChange={(value) => setFleetCardNumber(value)}
+                onBlur={handleBlur}
+              >
+                <InputOTPGroup>
+                  {[0, 1, 2, 3].map((i) => (
+                    <InputOTPSlot key={i} index={i} />
+                  ))}
+                </InputOTPGroup>
+                <InputOTPSeparator />
+                <InputOTPGroup>
+                  {[4, 5, 6, 7].map((i) => (
+                    <InputOTPSlot key={i} index={i} />
+                  ))}
+                </InputOTPGroup>
+                <InputOTPSeparator />
+                <InputOTPGroup>
+                  {[8, 9, 10, 11].map((i) => (
+                    <InputOTPSlot key={i} index={i} />
+                  ))}
+                </InputOTPGroup>
+                <InputOTPSeparator />
+                <InputOTPGroup>
+                  {[12, 13, 14, 15].map((i) => (
+                    <InputOTPSlot key={i} index={i} />
+                  ))}
+                </InputOTPGroup>
+              </InputOTP>
+            </div>
+          ) : (
+            <div className="space-y-2">
+              <h2 className="text-lg font-bold">PO Number</h2>
+              <InputOTP
+                maxLength={5}
+                name="poNumber"
+                value={toFiveDigits(poNumber)}
+                onChange={(value) => {
+                  setPoNumber(toFiveDigits(value))
+                  if (poError) setPoError('')
+                }}
+                onBlur={async () => {
+                  const padded = padFive(poNumber)
+                  setPoNumber(padded)
+                  if (!stationName || !padded) return
+                  try {
+                    const res = await axios.get('/api/purchase-orders/unique', {
+                      params: { stationName, poNumber: padded },
+                      headers: {
+                        Authorization: `Bearer ${localStorage.getItem('token') || ''}`,
+                        'X-Required-Permission': 'po',
+                      },
+                    })
+                    if (res.data && res.data.unique === false) {
+                      setPoError('This PO number has already been used for this site.')
+                    } else {
+                      setPoError('')
+                    }
+                  } catch (e: any) {
+                    // non-fatal; show message and allow save to handle server-side conflict
+                    setPoError(e?.response?.data?.message || 'Could not validate PO number uniqueness')
+                  }
+                }}
+              >
+                <InputOTPGroup>
+                  {[0, 1, 2, 3, 4].map((i) => (
+                    <InputOTPSlot key={i} index={i} />
+                  ))}
+                </InputOTPGroup>
+              </InputOTP>
+              {poError && (
+                <div className="text-xs text-red-600">{poError}</div>
+              )}
+            </div>
           )}
-        </div>
+        </>
       )}
 
-      <div className="space-y-2">
-        <h2 className="text-lg font-bold">Date</h2>
-        <DatePicker
-          date={date}
-          setDate={(value) => {
-            if (typeof value === 'function') {
-              // Call the function with current date
-              const newDate = value(date);
-              if (newDate) setDate(newDate);
-            } else {
-              setDate(value);
-            }
-          }}
-        />
+      <div className="flex flex-row items-end gap-4">
+        <div className="space-y-2">
+          <h2 className="text-lg font-bold">Date</h2>
+          <DatePicker
+            date={date}
+            setDate={(value) => {
+              if (typeof value === 'function') {
+                const newDate = value(date);
+                if (newDate) setDate(newDate);
+              } else {
+                setDate(value);
+              }
+            }}
+          />
+        </div>
       </div>
 
       {/* Customer and Driver Info */}
@@ -301,8 +332,10 @@ function RouteComponent() {
         <Link to="/po/receipt">
           <Button
             variant="outline"
-            onClick={() => setPoNumber(padFive(poNumber))}
-            disabled={!!poError}
+            onClick={() => {
+              if (!isCharlies) setPoNumber(padFive(poNumber));
+            }}
+            disabled={!isCharlies && !!poError}
           >
             Next
           </Button>

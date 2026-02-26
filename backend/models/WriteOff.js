@@ -43,3 +43,4 @@ const WriteOffListSchema = new mongoose.Schema({
 });
 
 module.exports = mongoose.model('WriteOff', WriteOffListSchema);
+// module.exports = mongoose.models.WriteOff || mongoose.model('WriteOff', WriteOffListSchema);

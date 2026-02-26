@@ -11,6 +11,7 @@ import {
   DialogTitle,
   DialogTrigger,
 } from "@/components/ui/dialog"
+import { LotteryComparisonTable } from '@/components/custom/LotteryComparisionTable'
 
 interface CardProps {
   title: React.ReactNode
@@ -518,9 +519,7 @@ function RouteComponent() {
       (safeLottery.oldScratchTickets ?? 0))
 
   const payoutOverShort =
-    (safeBullock.payouts || 0) -
-    ((safeLottery.lottoPayout ?? 0) +
-      (safeLottery.scratchFreeTickets ?? 0))
+    (safeBullock.payouts || 0) - (safeLottery.lottoPayout ?? 0)
 
   const adjustedReportedCash =
     baseReportedCash + onlineOverShort + scratchOverShort
@@ -823,242 +822,16 @@ function RouteComponent() {
 
               {/* Lottery summary (only show when a saved Lottery exists for this site/date)
                   Rendered between Totals and Shifts. Images are excluded from this report view. */}
+              {/* Integrated Lottery Comparison Table */}
               {lottery && (
-                <div className="mb-4 border rounded p-3 bg-card">
-                  <h4 className="text-sm font-semibold mb-2">Lottery</h4>
-                  <div className="overflow-x-auto">
-                    <table className="min-w-full table-auto">
-                      <thead className="bg-gray-50">
-                        <tr>
-                          <th className="px-3 py-2 text-left">Description</th>
-                          <th className="px-3 py-2 text-left">Lottery</th>
-                          <th className="px-3 py-2 text-left">Bulloch</th>
-                          <th className="px-3 py-2 text-left">Over / Short</th>
-                        </tr>
-                      </thead>
-
-                      <tbody>
-                        {/* ================= ONLINE SALES ================= */}
-                        <tr className="border-t font-semibold">
-                          <td className="px-3 py-2">Online Sales</td>
-                          <td className="px-3 py-2">
-                            ${Number(lottery.onlineLottoTotal ?? 0).toFixed(2)}
-                          </td>
-                          <td className="px-3 py-2">
-                            {bullock ? `$${Number(bullock.onlineSales || 0).toFixed(2)}` : '—'}
-                          </td>
-                          <td className="px-3 py-2">
-                            {bullock ? (
-                              <span
-                                className={
-                                  ((bullock.onlineSales || 0) -
-                                    ((lottery.onlineLottoTotal ?? 0) -
-                                      (lottery.onlineCancellations || 0) -
-                                      (lottery.onlineDiscounts || 0))) > 0
-                                    ? 'text-green-600'
-                                    : ((bullock.onlineSales || 0) -
-                                      ((lottery.onlineLottoTotal ?? 0) -
-                                        (lottery.onlineCancellations || 0) -
-                                        (lottery.onlineDiscounts || 0))) < 0
-                                      ? 'text-red-600'
-                                      : 'text-muted-foreground'
-                                }
-                              >
-                                $
-                                {Number(
-                                  (bullock.onlineSales || 0) -
-                                  ((lottery.onlineLottoTotal ?? 0) -
-                                    (lottery.onlineCancellations || 0) -
-                                    (lottery.onlineDiscounts || 0)),
-                                ).toFixed(2)}
-                              </span>
-                            ) : '—'}
-                          </td>
-                        </tr>
-
-                        <tr className="border-t bg-gray-50">
-                          <td className="px-3 py-2 pl-4">Lotto Cancellations</td>
-                          <td className="px-3 py-2">
-                            ${Number(lottery.onlineCancellations ?? 0).toFixed(2)}
-                          </td>
-                          <td className="px-3 py-2">—</td>
-                          <td className="px-3 py-2">—</td>
-                        </tr>
-
-                        <tr className="border-t bg-gray-50">
-                          <td className="px-3 py-2 pl-4">Lotto Discounts</td>
-                          <td className="px-3 py-2">
-                            ${Number(lottery.onlineDiscounts ?? 0).toFixed(2)}
-                          </td>
-                          <td className="px-3 py-2">—</td>
-                          <td className="px-3 py-2">—</td>
-                        </tr>
-
-                        {/* ================= SCRATCH SALES ================= */}
-                        <tr className="border-t font-semibold">
-                          <td className="px-3 py-2">Scratch Sales</td>
-                          <td className="px-3 py-2">
-                            ${Number(lottery.instantLottTotal ?? 0).toFixed(2)}
-                          </td>
-                          <td className="px-3 py-2">
-                            {bullock ? `$${Number(bullock.scratchSales || 0).toFixed(2)}` : '—'}
-                          </td>
-                          <td className="px-3 py-2">
-                            {bullock ? (
-                              <span
-                                className={
-                                  ((bullock.scratchSales || 0) -
-                                    ((lottery.instantLottTotal ?? 0) +
-                                      (lottery.scratchFreeTickets ?? 0) +
-                                      (lottery.oldScratchTickets ?? 0))) > 0
-                                    ? 'text-green-600'
-                                    : ((bullock.scratchSales || 0) -
-                                      ((lottery.instantLottTotal ?? 0) +
-                                        (lottery.scratchFreeTickets ?? 0) +
-                                        (lottery.oldScratchTickets ?? 0))) < 0
-                                      ? 'text-red-600'
-                                      : 'text-muted-foreground'
-                                }
-                              >
-                                $
-                                {Number(
-                                  (bullock.scratchSales || 0) -
-                                  ((lottery.instantLottTotal ?? 0) +
-                                    (lottery.scratchFreeTickets ?? 0) +
-                                    (lottery.oldScratchTickets ?? 0)),
-                                ).toFixed(2)}
-                              </span>
-                            ) : '—'}
-                          </td>
-                        </tr>
-
-                        <tr className="border-t bg-gray-50">
-                          <td className="px-3 py-2 pl-4">Scratch Free Tickets</td>
-                          <td className="px-3 py-2">
-                            {lottery.scratchFreeTickets != null
-                              ? `$${Number(lottery.scratchFreeTickets).toFixed(2)}`
-                              : '—'}
-                          </td>
-                          <td className="px-3 py-2">—</td>
-                          <td className="px-3 py-2">—</td>
-                        </tr>
-
-                        <tr className="border-t bg-gray-50">
-                          <td className="px-3 py-2 pl-4">Old Scratch Tickets</td>
-                          <td className="px-3 py-2">
-                            {lottery.oldScratchTickets != null
-                              ? `$${Number(lottery.oldScratchTickets).toFixed(2)}`
-                              : '—'}
-                          </td>
-                          <td className="px-3 py-2">—</td>
-                          <td className="px-3 py-2">—</td>
-                        </tr>
-
-                        {/* ================= PAYOUTS ================= */}
-                        <tr className="border-t font-semibold">
-                          <td className="px-3 py-2">Payouts</td>
-                          <td className="px-3 py-2">
-                            ${Number(lottery.lottoPayout ?? 0).toFixed(2)}
-                          </td>
-                          <td className="px-3 py-2">
-                            {bullock ? `$${Number(bullock.payouts || 0).toFixed(2)}` : '—'}
-                          </td>
-                          <td className="px-3 py-2">
-                            {bullock ? (
-                              <span
-                                className={
-                                  ((bullock.payouts || 0) -
-                                    ((lottery.lottoPayout ?? 0) +
-                                      (lottery.scratchFreeTickets ?? 0))) > 0
-                                    ? 'text-green-600'
-                                    : ((bullock.payouts || 0) -
-                                      ((lottery.lottoPayout ?? 0) +
-                                        (lottery.scratchFreeTickets ?? 0))) < 0
-                                      ? 'text-red-600'
-                                      : 'text-muted-foreground'
-                                }
-                              >
-                                $
-                                {Number(
-                                  (bullock.payouts || 0) -
-                                  ((lottery.lottoPayout ?? 0) +
-                                    (lottery.scratchFreeTickets ?? 0)),
-                                ).toFixed(2)}
-                              </span>
-                            ) : '—'}
-                          </td>
-                        </tr>
-
-                        <tr className="border-t bg-gray-50">
-                          <td className="px-3 py-2 pl-4">Scratch Free Tickets Payouts</td>
-                          <td className="px-3 py-2">
-                            {lottery.scratchFreeTickets != null
-                              ? `$${Number(lottery.scratchFreeTickets).toFixed(2)}`
-                              : '—'}
-                          </td>
-                          <td className="px-3 py-2">—</td>
-                          <td className="px-3 py-2">—</td>
-                        </tr>
-
-                        {/* ================= DATAWAVE ================= */}
-                        <tr className="border-t font-semibold">
-                          <td className="px-3 py-2">Datawave Value</td>
-                          <td className="px-3 py-2">
-                            ${Number(lottery.dataWave ?? 0).toFixed(2)}
-                          </td>
-                          <td className="px-3 py-2">
-                            {bullock ? `$${Number(bullock.dataWave || 0).toFixed(2)}` : '—'}
-                          </td>
-                          <td className="px-3 py-2">
-                            {bullock ? (
-                              <span
-                                className={
-                                  ((bullock.dataWave || 0) - (lottery.dataWave ?? 0)) > 0
-                                    ? 'text-green-600'
-                                    : ((bullock.dataWave || 0) - (lottery.dataWave ?? 0)) < 0
-                                      ? 'text-red-600'
-                                      : 'text-muted-foreground'
-                                }
-                              >
-                                $
-                                {Number(
-                                  (bullock.dataWave || 0) - (lottery.dataWave ?? 0),
-                                ).toFixed(2)}
-                              </span>
-                            ) : '—'}
-                          </td>
-                        </tr>
-
-                        <tr className="border-t bg-gray-50">
-                          <td className="px-3 py-2 pl-4">Datawave Fee</td>
-                          <td className="px-3 py-2">
-                            ${Number(lottery.feeDataWave ?? 0).toFixed(2)}
-                          </td>
-                          <td className="px-3 py-2">
-                            {bullock ? `$${Number(bullock.dataWaveFee || 0).toFixed(2)}` : '—'}
-                          </td>
-                          <td className="px-3 py-2">
-                            {bullock ? (
-                              <span
-                                className={
-                                  ((bullock.dataWaveFee || 0) - (lottery.feeDataWave ?? 0)) > 0
-                                    ? 'text-green-600'
-                                    : ((bullock.dataWaveFee || 0) - (lottery.feeDataWave ?? 0)) < 0
-                                      ? 'text-red-600'
-                                      : 'text-muted-foreground'
-                                }
-                              >
-                                $
-                                {Number(
-                                  (bullock.dataWaveFee || 0) - (lottery.feeDataWave ?? 0),
-                                ).toFixed(2)}
-                              </span>
-                            ) : '—'}
-                          </td>
-                        </tr>
-                      </tbody>
-                    </table>
-                  </div>
+                <div className="space-y-2">
+                  <h3 className="text-sm font-semibold px-1">Lottery Reconciliation</h3>
+                  <LotteryComparisonTable
+                    lotteryData={lottery}
+                    bullockData={bullock}
+                    isReadOnly={true}
+                    showImages={false} // Set to false for the report view
+                  />
                 </div>
               )}
 

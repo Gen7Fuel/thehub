@@ -19,7 +19,7 @@ function NewSiteRouteComponent() {
   const { user } = useAuth();
   const navigate = useNavigate();
   const access = user?.access || {}
-  if (!access?.settings) {
+  if (!access?.settings?.value) {
     navigate({ to: "/no-access" });
     return;
   }

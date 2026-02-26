@@ -279,7 +279,7 @@ export default function Navbar() {
 
   return (
     // Navbar container
-    <div className="absolute top-0 left-0 w-full bg-white border-b border-dashed border-gray-300 z-10">
+    <div className="sticky top-0 left-0 w-full bg-white border-b border-dashed border-gray-300 z-10">
       <div className="max-w-7xl mx-auto flex justify-between items-center p-2 relative">
         {/* Logo/Home link */}
         <Link to="/">
@@ -310,7 +310,7 @@ export default function Navbar() {
           )}
           {/* Settings button, shown if user has access */}
           {/* {access.component_settings && ( //markpoint */}
-          {access?.settings && (
+          {access?.settings?.value && (
             <Button variant="outline" onClick={handleSettings}>
               <SettingsIcon className="h-5 w-5" />
             </Button>

@@ -3,7 +3,6 @@ import { useMutation } from "@tanstack/react-query";
 import { uploadBase64Image } from "@/lib/utils";
 import { domain } from "@/lib/constants";
 import { Loader2 } from "lucide-react";
-import { useAuth } from "@/context/AuthContext";
 import { useEffect } from 'react'
 import { useNavigate } from '@tanstack/react-router'
 import { createFileRoute, Link } from '@tanstack/react-router'
@@ -19,7 +18,6 @@ export const Route = createFileRoute('/_navbarLayout/po/receipt')({
 function RouteComponent() {
   const navigate = useNavigate();
   const webcamRef = useRef<Webcam>(null);
-  const { user } = useAuth();
 
   const setReceipt = useFormStore((state) => state.setReceipt);
   const receipt = useFormStore((state) => state.receipt);
@@ -33,6 +31,7 @@ function RouteComponent() {
   const amount = useFormStore((state) => state.amount);
   const fuelType = useFormStore((state) => state.fuelType);
   const date = useFormStore((state) => state.date);
+  const stationName = useFormStore((state) => state.stationName);
 
   useEffect(() => {
     if (!date || !customerName || !driverName || !vehicleInfo || !fuelType || quantity === 0 || amount === 0) {
@@ -119,7 +118,8 @@ function RouteComponent() {
         }
       }
 
-      const stationName = user?.location || "Rankin";
+      // Use selected stationName from store, fallback to 'Rankin' if empty
+      const selectedStation = stationName || "Rankin";
 
       // ---- Submit PO without signature ----
       const poResponse = await authAxios(() =>
@@ -128,7 +128,7 @@ function RouteComponent() {
           {
             source: "PO",
             date,
-            stationName,
+            stationName: selectedStation,
             fleetCardNumber: fleetCardNumber || "",
             poNumber: poNumber || "",
             quantity,

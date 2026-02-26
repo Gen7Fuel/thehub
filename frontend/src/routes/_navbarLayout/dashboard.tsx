@@ -639,6 +639,7 @@ function RouteComponent() {
         // const fmt = (d: Date) => d.toISOString().slice(0, 10)
         // const salesStartDate = fmt(start)
         // const salesEndDate = fmt(end)
+        // const salesEndDate = fmt(end)
 
         // ------------------------------------------------------------
         // 1️⃣ CHECK INDEXEDDB FIRST
@@ -1440,7 +1441,7 @@ function RouteComponent() {
       )}
 
       {hasAccess && (
-        <div className="pt-16 flex flex-col items-center">
+        <div className="pt-5 flex flex-col items-center">
           {/* Filters */}
           <div className="flex gap-4">
             <LocationPicker setStationName={setSite} value="stationName" defaultValue={site} />
@@ -1822,7 +1823,7 @@ function RouteComponent() {
                 {/*     BISTRO SECTION   */}
                 {/* ======================= */}
 
-                {["Rankin", "Couchiching", "Silver Grizzly"].includes(site) && (
+                {["Rankin", "Couchiching", "Silver Grizzly", "Oliver", "Osoyoos"].includes(site) && (
                   <section aria-labelledby="bistro-heading" className="mb-10">
                     <h2 id="bistro-heading" className="text-2xl font-bold mb-4 pl-4">
                       Bistro
@@ -1908,7 +1909,7 @@ function RouteComponent() {
                 {/*     Accounting SECTION   */}
                 {/* ======================= */}
 
-                {!["Sarnia"].includes(site) && (
+                {/* {!["Sarnia"].includes(site) && ( */}
                   <section aria-labelledby="accounting-heading" className="mb-10">
                     <h2 id="accounting-heading" className="text-2xl font-bold mb-4 pl-4">
                       Accounting
@@ -1922,7 +1923,7 @@ function RouteComponent() {
                       <PayablesDiscrepancyTable data={payablesComparisonData} />
                     </div>
                   </section>
-                )}
+                {/* )} */}
 
 
                 {/* ======================= */}

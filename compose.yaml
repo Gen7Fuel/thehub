@@ -279,11 +279,35 @@ services:
       - AZURE_STORAGE_CONNECTION_STRING=${AZURE_STORAGE_CONNECTION_STRING}
       - AZURE_CONTAINER=${AZURE_CONTAINER}
       - NOREPLY_PASS=${NOREPLY_PASS}
+      - INTACCT_CLIENT_ID=${INTACCT_CLIENT_ID}
+      - INTACCT_CLIENT_SECRET=${INTACCT_CLIENT_SECRET}
+      - INTACCT_CALLBACK_URL=${INTACCT_CALLBACK_URL}
     depends_on:
       - mongo
       - redis
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:5000/api/health"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+    restart: always
+
+  auth-backend:
+    container_name: auth-backend
+    build: ./auth-backend
+    ports:
+      - "5005:5005"
+    environment:
+      - MONGO_URI=${MONGO_URI}
+      - JWT_SECRET=${JWT_SECRET}
+      - FORCE_COLOR=1
+    volumes:
+      - ./backend/models:/app/models:ro
+    depends_on:
+      - mongo
+    healthcheck:
+      # Matches the app.get('/login-auth/health') route you added
+      test: ["CMD", "curl", "-f", "http://localhost:5005/login-auth/health"]
       interval: 10s
       timeout: 3s
       retries: 5
@@ -321,6 +345,8 @@ services:
     depends_on:
       backend:
         condition: service_healthy
+      auth-backend:                    
+        condition: service_started
     restart: always
 
 volumes:

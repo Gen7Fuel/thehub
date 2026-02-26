@@ -1,0 +1,76 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8"/>
+    <title>JavaScript REST authorization example</title>
+    <script src="../credentials.js"></script>
+    <script>
+        const base_url = 'https://api.intacct.com/ia/api/'
+        const version = 'v1/'
+        const token_endpoint = 'oauth2/token'
+    </script>
+</head>
+<body>
+<script>
+    async function authorize(code) {
+
+        // build endpoint
+        let token_url = base_url + version + token_endpoint
+
+        // build authentication request
+        const inputBody = new URLSearchParams();
+        inputBody.append('grant_type', 'authorization_code');
+        inputBody.append('code', code);
+        inputBody.append('redirect_uri', CALLBACK_URL);
+        inputBody.append('client_id', CLIENT_ID);
+        inputBody.append('client_secret', CLIENT_SECRET);
+        inputBody.append('Content-Type', 'application/json');
+
+        // send request to authenticate
+        myresponse = await fetch(token_url,
+            {
+                method: 'POST',
+                body: inputBody
+            })
+        // wait for response, then extract access token
+        if (myresponse.ok) {
+            let responseBody = await myresponse.json();
+            token = new URLSearchParams(responseBody).get('access_token')
+        } else console.error('Error:', error)
+
+        //query for vendor key 33 in my company
+
+        // build endpoint
+        const request_url = base_url + version + 'objects/accounts-payable/vendor/33'
+
+        const requestHeaders = {
+            'Authorization': 'Bearer ' + token
+        }
+
+        myresponse = await fetch(request_url,
+            {
+                method: 'GET',
+                headers: requestHeaders
+            })
+
+        // wait for response, then extract vendor data
+        if (myresponse.ok) {
+            let responseResult = await myresponse.json();
+            with (responseResult['ia::result']) {
+                document.write("Vendor key: " + key + "<br />")
+                document.write("Vendor id: " + id + "<br />")
+                document.write("Vendor name: " + name + "<br />")
+            }
+        } else console.error('Error:', error)
+
+        // Display the token for use in subsequent tutorials
+        document.write("Access token: " + token)
+    }
+
+    // extract code from the authorization response and begin authorization
+    const code = new URLSearchParams(window.location.search).get('code')
+    authorize(code)
+
+</script>
+</body>
+</html>

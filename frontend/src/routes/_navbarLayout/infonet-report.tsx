@@ -107,7 +107,7 @@ function RouteComponent() {
     fetchReport()
   }, [site, from, to])
   return (
-    <div className="pt-14 flex flex-col items-center min-h-screen bg-slate-50 pb-10">
+    <div className="pt-5 flex flex-col items-center min-h-screen bg-slate-50 pb-10">
       <div className="my-4 flex flex-row items-center gap-4 bg-white p-4 rounded-xl shadow-sm border border-slate-200">
         <SitePicker
           value={site}

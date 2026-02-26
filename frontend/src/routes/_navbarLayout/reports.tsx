@@ -12,7 +12,7 @@ function RouteComponent() {
   const isOtherActive = matchRoute({ to: '/reports/other', fuzzy: true });
 
   return (
-    <div className="p-16">
+    <div className="p-5">
       <div className="flex flex-col items-center">
         {/* Grouped buttons */}
         <div className="flex mb-4">

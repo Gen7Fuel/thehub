@@ -8,6 +8,7 @@ const ItemSchema = new mongoose.Schema({
   gtin: { type: String, required: true },           // Global Trade Item Number
   vin: { type: String, default: '' },               // Vendor Item Number
   itemName: { type: String, default: '' },          // Name of the item
+  strainName: { type: String, default: '' },        // Strain name (only for pcg items)
   size: { type: String, default: '' },              // Size/packaging of the item
   onHandQty: { type: Number, default: 0 },          // Current on-hand quantity
   onHandQtyOld: { type: Number, default: 0 },       // Previous on-hand quantity

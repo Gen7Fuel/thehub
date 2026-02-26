@@ -172,6 +172,7 @@ router.post("/register", async (req, res) => {
 
 // Route with new permissions
 router.post("/login", async (req, res) => {
+  console.log("Login attempt from backend for email:", req.body.email);
   const { email, password } = req.body;
 
   try {

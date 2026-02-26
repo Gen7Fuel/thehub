@@ -379,30 +379,64 @@ function RouteComponent() {
   };
 
   // getWeekStart remains the same
+  // const getWeekStart = (date: Date) => {
+  //   const d = new Date(date);
+  //   const day = d.getDay(); // 0 = Sunday, 1 = Monday, ..., 6 = Saturday
+  //   const diff = d.getDate() - (day === 0 ? 6 : day - 1); // shift so Monday is start
+  //   d.setDate(diff);
+  //   d.setHours(0, 0, 0, 0);
+  //   return d;
+  // };
   const getWeekStart = (date: Date) => {
     const d = new Date(date);
-    const day = d.getDay(); // 0 = Sunday, 1 = Monday, ..., 6 = Saturday
-    const diff = d.getDate() - (day === 0 ? 6 : day - 1); // shift so Monday is start
-    d.setDate(diff);
-    d.setHours(0, 0, 0, 0);
+    // Use getUTCDay() instead of getDay()
+    const day = d.getUTCDay();
+
+    // Logic: 0 (Sun), 1 (Mon), ..., 6 (Sat)
+    // To make Monday = 0, we adjust Sunday to be 7
+    const dayAdjusted = day === 0 ? 7 : day;
+
+    // Set to the most recent Monday at 00:00:00 UTC
+    d.setUTCDate(d.getUTCDate() - (dayAdjusted - 1));
+    d.setUTCHours(0, 0, 0, 0);
+
     return d;
   };
 
   const filteredOrders = orderRecs
+    // .filter((rec) => {
+    //   if (!selectedWeek) return true;
+
+    //   // Week range based on selectedWeek (Monday)
+    //   const selectedMonday = new Date(selectedWeek);
+    //   selectedMonday.setHours(0, 0, 0, 0);
+
+    //   const weekStart = new Date(selectedMonday);
+    //   const weekEnd = new Date(selectedMonday);
+    //   weekEnd.setDate(weekEnd.getDate() + 7); // Sunday
+    //   console.log(`Filtering orders for week: ${weekStart} - ${weekEnd}`);
+
+    //   const recDate = new Date(rec.createdAt);
+    //   return recDate >= weekStart && recDate <= weekEnd;
+    // })
     .filter((rec) => {
       if (!selectedWeek) return true;
 
-      // Week range based on selectedWeek (Monday)
-      const selectedMonday = new Date(selectedWeek);
-      selectedMonday.setHours(0, 0, 0, 0);
+      // 1. Create start of week at EXACTLY 00:00:00.000 UTC
+      // Using the Date.UTC constructor is the safest way to avoid local shifts
+      const [year, month, day] = selectedWeek.split('-').map(Number);
+      const weekStartTimestamp = Date.UTC(year, month - 1, day, 0, 0, 0, 0);
 
-      const weekStart = new Date(selectedMonday);
-      const weekEnd = new Date(selectedMonday);
-      weekEnd.setDate(weekEnd.getDate() + 6); // Sunday
+      // 2. End of week is exactly 7 days later in milliseconds
+      const sevenDaysInMs = 7 * 24 * 60 * 60 * 1000;
+      const weekEndTimestamp = weekStartTimestamp + sevenDaysInMs;
 
-      const recDate = new Date(rec.createdAt);
-      return recDate >= weekStart && recDate <= weekEnd;
-    }).filter((rec) => {
+      // 3. Convert record date to UTC timestamp
+      const recDateTimestamp = new Date(rec.createdAt).getTime();
+
+      return recDateTimestamp >= weekStartTimestamp && recDateTimestamp < weekEndTimestamp;
+    })
+    .filter((rec) => {
       // Filter by selected category
       if (!selectedCategory || selectedCategory === "All") return true;
 
@@ -630,27 +664,42 @@ function RouteComponent() {
                       const vendorMeta = vendorObjs[0];
 
                       // Week range
-                      const weekStart = new Date(selectedWeek);
-                      const weekEnd = new Date(weekStart);
-                      weekEnd.setDate(weekEnd.getDate() + 6);
+                      // const weekStart = new Date(selectedWeek);
+                      // const weekEnd = new Date(weekStart);
+                      // weekEnd.setDate(weekEnd.getDate() + 6);
 
-                      // All orders between this store + vendor historically
-                      const allOrders = orderRecs.filter(
-                        r =>
-                          r.site === store.stationName &&
-                          vendorObjs.some(
-                            vo =>
-                              vo._id ===
-                              (typeof r.vendor === "object" ? r.vendor._id : r.vendor)
-                          )
+                      // // All orders between this store + vendor historically
+                      // const allOrders = orderRecs.filter(
+                      //   r =>
+                      //     r.site === store.stationName &&
+                      //     vendorObjs.some(
+                      //       vo =>
+                      //         vo._id ===
+                      //         (typeof r.vendor === "object" ? r.vendor._id : r.vendor)
+                      //     )
+                      // );
+
+                      // // Orders in the selected week
+                      // const rec = allOrders.find(
+                      //   r =>
+                      //     new Date(r.createdAt) >= weekStart &&
+                      //     new Date(r.createdAt) <= weekEnd
+                      // );
+                      // ✅ USE THE ATOMIC UTC FIX HERE TOO
+                      const [year, month, day] = selectedWeek.split('-').map(Number);
+                      const weekStartTs = Date.UTC(year, month - 1, day, 0, 0, 0, 0);
+                      const weekEndTs = weekStartTs + (7 * 24 * 60 * 60 * 1000); // Full 7 days
+
+                      const allOrders = orderRecs.filter(r =>
+                        r.site === store.stationName &&
+                        vendorObjs.some(vo => vo._id === (typeof r.vendor === "object" ? r.vendor._id : r.vendor))
                       );
 
-                      // Orders in the selected week
-                      const rec = allOrders.find(
-                        r =>
-                          new Date(r.createdAt) >= weekStart &&
-                          new Date(r.createdAt) <= weekEnd
-                      );
+                      // ✅ Find the record using the UTC timestamps
+                      const rec = allOrders.find(r => {
+                        const time = new Date(r.createdAt).getTime();
+                        return time >= weekStartTs && time < weekEndTs;
+                      });
 
                       return (
                         <td

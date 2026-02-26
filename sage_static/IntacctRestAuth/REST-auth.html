@@ -1,0 +1,27 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8"/>
+    <title>JavaScript REST authorization example</title>
+    <script src="../credentials.js"></script>
+    <script>
+        const base_url = 'https://api.intacct.com/ia/api/'
+        const version = 'v1/'
+        const auth_endpoint = 'oauth2/authorize'
+    </script>
+</head>
+<body>
+<script>
+    // build endpoint
+    auth_url = base_url + version + auth_endpoint
+
+    myurl = auth_url + "?"
+        + "state=123456"
+        + "&response_type=code"
+        + "&client_id=" + CLIENT_ID
+        + "&redirect_uri=" + CALLBACK_URL
+
+    document.write('<a href="' + myurl + '">Authorize application</a>')
+</script>
+</body>
+</html>

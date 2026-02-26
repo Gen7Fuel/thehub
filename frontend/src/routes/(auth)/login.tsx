@@ -102,11 +102,11 @@ import {
   InputOTPHiddenSlot,
 } from "@/components/custom/input-otp-masked";
 import axios from 'axios'
-import { domain } from '@/lib/constants'
+// import { domain } from '@/lib/constants'
 import { clearLocalDB } from "@/lib/orderRecIndexedDB";
 import { clearDashboardDB } from '@/lib/dashboardIndexedDB';
 import { useAuth } from '@/context/AuthContext';
-import { Loader2, ArrowRight } from "lucide-react"
+import { Loader2, ArrowRight, AlertTriangle } from "lucide-react"
 
 export const Route = createFileRoute('/(auth)/login')({
   loader: () => {
@@ -126,6 +126,8 @@ function RouteComponent() {
   const [error, setError] = useState<string | null>(null)
   const navigate = useNavigate()
   const { refreshAuth } = useAuth();
+  const [maintInfo, setMaintInfo] = useState<{ active: boolean; endTime: string } | null>(null);
+  // const testEmails = ['daksh@gen7fuel.com', 'demo@demo.com'];
 
   const handleIdentify = async (e?: React.FormEvent) => {
     e?.preventDefault()
@@ -133,19 +135,34 @@ function RouteComponent() {
     setLoading(true)
     setError(null)
 
+    const formattedEmail = email.trim().toLowerCase();
+
     try {
-      const res = await axios.post(`${domain}/api/auth/identify`, {
-        email: email.trim().toLowerCase()
-      })
-      // If found, set the specific type
-      setIsStoreAccount(res.data.inStoreAccount)
+      let res;
+      // --- TESTING REDIRECT LOGIC ---
+      // if (testEmails.includes(formattedEmail)) {
+      res = await axios.post(`/login-auth/identify`, { email: formattedEmail });
+      // } else {
+      //   console.log("🏠 Standard account: Routing to EXISTING Backend");
+      //   res = await axios.post(`${domain}/api/auth/identify`, { email: formattedEmail });
+      // }
+      setIsStoreAccount(res.data.inStoreAccount);
+
+      // Set maintenance info if returned
+      if (res.data.maintenance?.active) {
+        setMaintInfo(res.data.maintenance);
+      } else {
+        setMaintInfo(null);
+      }
     } catch (err: any) {
-      // SECURITY: If email not found (404), we stay silent and 
-      // default to the Passcode view (isStoreAccount is already true)
-      setIsStoreAccount(true)
+      // If 404, we still check if maintenance info was attached to the error response
+      if (err.response?.data?.maintenance?.active) {
+        setMaintInfo(err.response.data.maintenance);
+      }
+      setIsStoreAccount(true);
     } finally {
-      setStep('authenticate')
-      setLoading(false)
+      setStep('authenticate');
+      setLoading(false);
     }
   }
 
@@ -160,12 +177,21 @@ function RouteComponent() {
     const passToSubmit = finalPassword || password
     setError(null)
     setLoading(true)
+    // const formattedEmail = email.trim().toLowerCase();
 
     try {
-      const response = await axios.post(`${domain}/api/auth/login`, {
+      let response;
+      // if (testEmails.includes(formattedEmail)) {
+      response = await axios.post(`/login-auth/login`, {
         email: email.trim().toLowerCase(),
         password: passToSubmit
       })
+      // } else {
+      //   response = await axios.post(`${domain}/api/auth/login`, {
+      //     email: email.trim().toLowerCase(),
+      //     password: passToSubmit
+      //   })
+      // }
       localStorage.setItem('token', response.data.token)
       clearLocalDB();
       clearDashboardDB();
@@ -210,6 +236,18 @@ function RouteComponent() {
           </form>
         ) : (
           <div className="space-y-4">
+            {maintInfo?.active && (
+              <div className="bg-amber-50 border border-amber-200 rounded-lg p-3 flex items-start gap-3 animate-in fade-in slide-in-from-top-2 duration-300">
+                <AlertTriangle className="text-amber-600 w-5 h-5 shrink-0 mt-0.5" />
+                <div>
+                  <p className="text-xs font-bold text-amber-900 uppercase tracking-tight">System Maintenance</p>
+                  <p className="text-[11px] text-amber-800 leading-tight mt-0.5">
+                    The Hub is currently undergoing updates. User's won't be able to log in currently.
+                    Estimated completion: {new Date(maintInfo.endTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                  </p>
+                </div>
+              </div>
+            )}
             {isStoreAccount ? (
               <div className="flex flex-col items-center space-y-4">
                 <label className="text-sm font-medium">Enter 6-Digit Passcode</label>
@@ -250,7 +288,7 @@ function RouteComponent() {
                     type="password"
                     autoComplete="current-password"
                     autoFocus
-                    placeholder="••••••••"
+                    placeholder="Enter your password"
                     value={password}
                     onChange={(e) => setPassword(e.target.value)}
                   />

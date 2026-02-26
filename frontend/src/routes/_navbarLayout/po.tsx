@@ -24,7 +24,7 @@ function RouteComponent() {
   const isListActive = matchRoute({ to: '/po/list' })
 
   return (
-    <div className="pt-16 flex flex-col items-center">
+    <div className="pt-5 flex flex-col items-center">
       {/* Grouped navigation buttons for PO sections */}
       <div className="flex mb-4">
         {/* Create tab button (active for /po, /po/receipt, /po/signature) */}

@@ -23,6 +23,12 @@ jobs:
         run: |
           docker compose -f compose.yaml build
 
+      # 3. Build Auth Backend (npm install only)
+      - name: Build Auth Backend
+        run: |
+          cd auth-backend
+          npm install
+
       # 4. Build backend (npm install only)
       - name: Build backend
         run: |

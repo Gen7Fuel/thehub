@@ -747,17 +747,107 @@ function RouteComponent() {
     setEditItem({ catIdx, itemIdx });
   };
 
+  // async function exportOrderRecToExcel(orderRec: any) {
+  //   const workbook = new ExcelJS.Workbook();
+  //   const worksheet = workbook.addWorksheet('Order Reconciliation');
+
+  //   let currentRow = 1;
+
+  //   // Add column headers
+  //   const headers = [
+  //     'GTIN', 'VIN', 'Item Name', 'Size', 'On Hand Qty', 'Forecast', 'Min Stock',
+  //     'Items To Order', 'Unit In Case', 'Cases To Order'
+  //   ];
+  //   headers.forEach((header, index) => {
+  //     const headerCell = worksheet.getCell(currentRow, index + 1);
+  //     headerCell.value = header;
+  //     headerCell.font = { bold: true };
+  //     headerCell.fill = {
+  //       type: 'pattern',
+  //       pattern: 'solid',
+  //       fgColor: { argb: 'FFE2EFDA' }
+  //     };
+  //   });
+  //   currentRow++;
+
+  //   for (const category of orderRec.categories) {
+  //     // Add category header
+  //     const categoryCell = worksheet.getCell(currentRow, 1);
+  //     categoryCell.value = `${category.number} | ${category.name}`;
+  //     categoryCell.font = { bold: true, color: { argb: 'FFFFFFFF' } };
+  //     categoryCell.fill = {
+  //       type: 'pattern',
+  //       pattern: 'solid',
+  //       fgColor: { argb: 'FF4472C4' }
+  //     };
+  //     worksheet.mergeCells(currentRow, 1, currentRow, 10);
+  //     currentRow++;
+
+  //     // Add items
+  //     for (const item of category.items) {
+  //       if (Number(item.casesToOrder) === 0) continue; // <-- Skip if casesToOrder is 0
+  //       const row = worksheet.getRow(currentRow);
+  //       row.height = 22.5;
+  //       row.getCell(1).value = item.gtin;
+  //       row.getCell(2).value = item.vin;
+  //       row.getCell(3).value = item.itemName;
+  //       if (item.strainName) {
+  //         row.getCell(4).value = item.strainName;
+  //         row.getCell(5).value = item.size;
+  //         row.getCell(6).value = item.onHandQty;
+  //         row.getCell(7).value = item.forecast;
+  //         row.getCell(8).value = item.minStock;
+  //         row.getCell(9).value = item.itemsToOrder;
+  //         row.getCell(10).value = item.casesToOrder;
+  //       }
+  //       row.getCell(4).value = item.size;
+  //       row.getCell(5).value = item.onHandQty;
+  //       row.getCell(6).value = item.forecast;
+  //       row.getCell(7).value = item.minStock;
+  //       row.getCell(8).value = item.itemsToOrder;
+  //       row.getCell(9).value = item.unitInCase;
+  //       row.getCell(10).value = item.casesToOrder;
+
+  //       for (let colIndex = 1; colIndex <= 10; colIndex++) {
+  //         row.getCell(colIndex).alignment = { vertical: 'middle' };
+  //       }
+  //       row.getCell(1).numFmt = '@';
+  //       row.getCell(2).numFmt = '@';
+  //       for (let colIndex = 5; colIndex <= 10; colIndex++) {
+  //         row.getCell(colIndex).numFmt = '#,##0';
+  //       }
+  //       currentRow++;
+  //     }
+  //     currentRow++; // Empty row between categories
+  //   }
+
+  //   worksheet.columns.forEach(column => {
+  //     column.width = 15;
+  //   });
+
+  //   const buffer = await workbook.xlsx.writeBuffer();
+  //   return new Blob([buffer], {
+  //     type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+  //   });
+  // }
   async function exportOrderRecToExcel(orderRec: any) {
     const workbook = new ExcelJS.Workbook();
     const worksheet = workbook.addWorksheet('Order Reconciliation');
 
     let currentRow = 1;
 
-    // Add column headers
-    const headers = [
-      'GTIN', 'VIN', 'Item Name', 'Size', 'On Hand Qty', 'Forecast', 'Min Stock',
-      'Items To Order', 'Unit In Case', 'Cases To Order'
-    ];
+    // 1. Determine if ANY item in the order has a strainName
+    const hasStrain = orderRec.categories.some((cat: any) =>
+      cat.items.some((item: any) => item.strainName)
+    );
+
+    // 2. Build Headers dynamically
+    const headers = ['GTIN', 'VIN', 'Item Name'];
+    if (hasStrain) headers.push('Strain');
+    headers.push('Size', 'On Hand Qty', 'Forecast', 'Min Stock', 'Items To Order', 'Unit In Case', 'Cases To Order');
+
+    const totalCols = headers.length;
+
     headers.forEach((header, index) => {
       const headerCell = worksheet.getCell(currentRow, index + 1);
       headerCell.value = header;
@@ -780,40 +870,56 @@ function RouteComponent() {
         pattern: 'solid',
         fgColor: { argb: 'FF4472C4' }
       };
-      worksheet.mergeCells(currentRow, 1, currentRow, 10);
+      worksheet.mergeCells(currentRow, 1, currentRow, totalCols);
       currentRow++;
 
       // Add items
       for (const item of category.items) {
-        if (Number(item.casesToOrder) === 0) continue; // <-- Skip if casesToOrder is 0
+        if (Number(item.casesToOrder) === 0) continue;
+
         const row = worksheet.getRow(currentRow);
         row.height = 22.5;
+
+        // Column 1, 2, 3 are fixed
         row.getCell(1).value = item.gtin;
         row.getCell(2).value = item.vin;
         row.getCell(3).value = item.itemName;
-        row.getCell(4).value = item.size;
-        row.getCell(5).value = item.onHandQty;
-        row.getCell(6).value = item.forecast;
-        row.getCell(7).value = item.minStock;
-        row.getCell(8).value = item.itemsToOrder;
-        row.getCell(9).value = item.unitInCase;
-        row.getCell(10).value = item.casesToOrder;
 
-        for (let colIndex = 1; colIndex <= 10; colIndex++) {
-          row.getCell(colIndex).alignment = { vertical: 'middle' };
+        // 3. Logic to handle the offset if Strain exists
+        let colOffset = 0;
+        if (hasStrain) {
+          row.getCell(4).value = item.strainName || '';
+          colOffset = 1; // Shift subsequent columns by 1
         }
+
+        row.getCell(4 + colOffset).value = item.size;
+        row.getCell(5 + colOffset).value = item.onHandQty;
+        row.getCell(6 + colOffset).value = item.forecast;
+        row.getCell(7 + colOffset).value = item.minStock;
+        row.getCell(8 + colOffset).value = item.itemsToOrder;
+        row.getCell(9 + colOffset).value = item.unitInCase;
+        row.getCell(10 + colOffset).value = item.casesToOrder;
+
+        // Formatting
+        row.eachCell((cell) => {
+          cell.alignment = { vertical: 'middle' };
+        });
+
         row.getCell(1).numFmt = '@';
         row.getCell(2).numFmt = '@';
-        for (let colIndex = 5; colIndex <= 10; colIndex++) {
-          row.getCell(colIndex).numFmt = '#,##0';
+
+        // Format numeric columns (from On Hand to Cases To Order)
+        for (let i = 5 + colOffset; i <= 10 + colOffset; i++) {
+          row.getCell(i).numFmt = '#,##0';
         }
+
         currentRow++;
       }
-      currentRow++; // Empty row between categories
+      currentRow++;
     }
 
     worksheet.columns.forEach(column => {
-      column.width = 15;
+      column.width = 18;
     });
 
     const buffer = await workbook.xlsx.writeBuffer();
@@ -1067,6 +1173,10 @@ function RouteComponent() {
                       {/* <th className="sticky top-0 bg-white z-10 px-4 py-3">GTIN</th>
                       <th className="sticky top-0 bg-white z-10 px-4 py-3">VIN</th> */}
                       <th className="sticky top-0 bg-white z-10 px-4 py-3">Item</th>
+                      {/* DYNAMIC STRAIN HEADER */}
+                      {cat.items.some((item: any) => item.strainName) && (
+                        <th className="sticky top-0 bg-white z-10 px-4 py-3">Strain</th>
+                      )}
                       <th className="sticky top-0 bg-white z-10 px-4 py-3">Size</th>
                       <th className="sticky top-0 bg-white z-10 px-4 py-3">On Hand Qty</th>
                       {cat.name !== "Station Supplies" && (
@@ -1130,8 +1240,14 @@ function RouteComponent() {
                         <td className="px-4 py-3 flex flex-col">
                           <span>{item.gtin}</span>
                           <span>{item.vin}</span>
-                          <span>{item.itemName}</span>
+                          <span className='font-bold'>{item.itemName}</span>
                         </td>
+                        {/* DYNAMIC STRAIN CELL */}
+                        {cat.items.some((i: any) => i.strainName) && (
+                          <td className="px-4 py-3 italic text-blue-600">
+                            {item.strainName || "-"}
+                          </td>
+                        )}
                         <td className="px-4 py-3 text-center">{item.size}</td>
                         <td className="px-4 py-3 text-center bg-cyan-100">
                           {item.onHandQtyOld !== undefined && item.onHandQty !== item.onHandQtyOld ? (
