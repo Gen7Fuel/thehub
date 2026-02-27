@@ -216,28 +216,79 @@ export default function MaintenanceBanner({ onStatusChange }: MaintenanceBannerP
       setActiveMaintenance(topPriority);
 
       // --- LOCKDOWN & BYPASS LOGIC ---
-      if (topPriority?.status === 'ongoing') {
-        // Store beacon for resilience (as discussed)
-        localStorage.setItem('hub_maint_beacon', topPriority.scheduleClose);
+      // if (topPriority?.status === 'ongoing') {
+      //   // Store beacon for resilience (as discussed)
+      //   localStorage.setItem('hub_maint_beacon', topPriority.scheduleClose);
 
-        // Check permission: settings -> maintenance
+      //   // Check permission: settings -> maintenance
+      //   const canBypass = user?.access?.settings?.maintenance === true;
+
+      //   if (canBypass) {
+      //     onStatusChange?.(false); // Admin: show banner but NO overlay
+      //   } else {
+      //     onStatusChange?.(true, topPriority); // Regular User: Show overlay
+      //   }
+      // } else {
+      //   localStorage.removeItem('hub_maint_beacon');
+      //   onStatusChange?.(false);
+      // }
+
+      // --- LOCKDOWN & BYPASS LOGIC ---
+      if (topPriority?.status === 'ongoing') {
         const canBypass = user?.access?.settings?.maintenance === true;
 
         if (canBypass) {
-          onStatusChange?.(false); // Admin: show banner but NO overlay
+          // Admin: Store privileged flag, remove regular lock
+          localStorage.setItem('hub_maint_privileged', 'admin');
+          localStorage.removeItem('hub_maint_beacon');
+          onStatusChange?.(false);
         } else {
-          onStatusChange?.(true, topPriority); // Regular User: Show overlay
+          // Regular User: Store regular lock, remove privileged flag (safety)
+          localStorage.setItem('hub_maint_beacon', topPriority.scheduleClose);
+          localStorage.removeItem('hub_maint_privileged');
+          onStatusChange?.(true, topPriority);
         }
       } else {
+        // Clear everything when maintenance is officially over
         localStorage.removeItem('hub_maint_beacon');
+        localStorage.removeItem('hub_maint_privileged');
         onStatusChange?.(false);
       }
+
+      // } catch (err: any) {
+      //   console.error("Banner fetch error:", err);
+
+      //   // If the server explicitly told us it's maintenance (503)
+      //   if (err.response?.status === 503) {
+      //     const maintData = err.response.data;
+      //     onStatusChange?.(true, {
+      //       status: 'ongoing',
+      //       scheduleClose: maintData.endTime
+      //     });
+      //     return;
+      //   }
+
+      //   // Fallback to local beacon if the server is unreachable
+      //   const beacon = localStorage.getItem('hub_maint_beacon');
+      //   if (beacon && new Date() < new Date(beacon)) {
+      //     onStatusChange?.(true);
+      //   }
+      // }
     } catch (err: any) {
       console.error("Banner fetch error:", err);
 
-      // If the server explicitly told us it's maintenance (503)
+      // === NEW: Admin Bypass Check ===
+      // If this local machine is flagged as admin, do not trigger the beacon loop
+      if (localStorage.getItem('hub_maint_privileged') === 'admin') {
+        onStatusChange?.(false);
+        return; // Exit catch block immediately
+      }
+
+      // 1. Priority: If server explicitly says 503 Maintenance
       if (err.response?.status === 503) {
         const maintData = err.response.data;
+        // Re-set beacon just in case they deleted it
+        localStorage.setItem('hub_maint_beacon', maintData.endTime);
         onStatusChange?.(true, {
           status: 'ongoing',
           scheduleClose: maintData.endTime
@@ -245,10 +296,32 @@ export default function MaintenanceBanner({ onStatusChange }: MaintenanceBannerP
         return;
       }
 
-      // Fallback to local beacon if the server is unreachable
-      const beacon = localStorage.getItem('hub_maint_beacon');
-      if (beacon && new Date() < new Date(beacon)) {
-        onStatusChange?.(true);
+      // 2. Resilience: Handle missing or expired beacons
+      let beacon = localStorage.getItem('hub_maint_beacon');
+
+      if (!beacon) {
+        // SCENARIO C: Smart user deleted the beacon or it's a new session
+        // We create a "safety beacon" for 5 mins from now to force a re-lock
+        const safetyTime = new Date(Date.now() + 5 * 60 * 1000).toISOString();
+        localStorage.setItem('hub_maint_beacon', safetyTime);
+        beacon = safetyTime;
+      }
+
+      const now = new Date();
+      const estimatedEnd = new Date(beacon);
+
+      if (now < estimatedEnd) {
+        // SCENARIO A: Still within the (potentially new) window
+        onStatusChange?.(true, {
+          status: 'ongoing',
+          scheduleClose: beacon
+        });
+      } else {
+        // SCENARIO B: Past the estimate (the "taking longer" state)
+        onStatusChange?.(true, {
+          status: 'ongoing',
+          scheduleClose: null
+        });
       }
     }
   }, [user, onStatusChange]);
