@@ -94,7 +94,7 @@ function App() {
                   </Button>
                 </Link>
               )}
-              {access?.accounting?.safesheet && (
+              {access?.accounting?.safesheet?.value && (
                 <Link to="/safesheet" search={{ site: user?.location }}>
                   <Button className="w-32 h-32 flex items-center justify-center break-words whitespace-normal text-center">
                     Safesheet

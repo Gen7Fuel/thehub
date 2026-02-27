@@ -19,6 +19,7 @@ const EntrySchema = new Schema({
   cashExpenseOut: { type: Number, default: 0 },
   cashDepositBank: { type: Number, default: 0 },
   photo: { type: String, default: '' },
+  assignedDate: { type: String }, // Store as local string, not Date
 }, { timestamps: true });
 
 /**
@@ -32,6 +33,54 @@ const SafesheetSchema = new Schema({
 }, { timestamps: true });
 
 // Normalize money fields on every save
+/**
+ * Alternate sorting: group by assignedDate if present, else by date, then recompute running balances.
+ */
+SafesheetSchema.methods.getEntriesWithAssignedDateGrouping = function () {
+  const rows = (this.entries || []).map((e, i) => ({ i, ...(e.toObject?.() ?? e) }));
+
+  // Grouping key: assignedDate if present, else date (YYYY-MM-DD)
+  const getGroupingKey = (e) => {
+    if (e.assignedDate && /^\d{4}-\d{2}-\d{2}$/.test(e.assignedDate)) {
+      return e.assignedDate;
+    }
+    const x = new Date(e.date);
+    const y = x.getFullYear();
+    const m = String(x.getMonth() + 1).padStart(2, '0');
+    const day = String(x.getDate()).padStart(2, '0');
+    return `${y}-${m}-${day}`;
+  };
+
+  const typeRank = (e) => {
+    const ci = Number(e.cashIn || 0);
+    const ce = Number(e.cashExpenseOut || 0);
+    const cb = Number(e.cashDepositBank || 0);
+    if (ci > 0) return 0;
+    if (ce > 0) return 1;
+    if (cb > 0) return 2;
+    return 3;
+  };
+
+  // Sort by grouping key, then by type rank, then by original index
+  rows.sort((a, b) => {
+    const ka = getGroupingKey(a);
+    const kb = getGroupingKey(b);
+    if (ka !== kb) return ka.localeCompare(kb);
+    const ra = typeRank(a);
+    const rb = typeRank(b);
+    if (ra !== rb) return ra - rb;
+    return a.i - b.i;
+  });
+
+  // Recompute running balance using integer cents to avoid float drift
+  let cents = toCents(this.initialBalance || 0);
+  return rows.map((e) => {
+    cents += toCents(e.cashIn);
+    cents -= toCents(e.cashExpenseOut);
+    cents -= toCents(e.cashDepositBank);
+    return { ...e, cashOnHandSafe: cents / 100 };
+  });
+};
 SafesheetSchema.pre('save', function normalizeMoney(next) {
   this.initialBalance = round2(this.initialBalance);
   if (Array.isArray(this.entries)) {
