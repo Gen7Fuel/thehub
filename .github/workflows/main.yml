@@ -207,25 +207,28 @@ jobs:
             # 5. Reload Caddy
             # docker exec webserver caddy reload --config /etc/caddy/Caddyfile
             
-            # ---- 5. Safe Caddy Update with Mandatory Cleanup ----
+            # ---- 5. Safe Caddy Update ----
             echo "Validating new Caddyfile..."
 
-            # 1. Push to a temporary file
+            # 1. Push to a temporary file inside the container
             docker exec -i webserver sh -c "cat > /etc/caddy/Caddyfile.new" < /home/gen7fuel/thehub/Caddyfile
 
             # 2. Validate the temporary file
             if docker exec webserver caddy validate --config /etc/caddy/Caddyfile.new; then
                 echo "Validation passed. Applying new config..."
-                # Overwrite the real file and reload
-                docker exec webserver sh -c "mv /etc/caddy/Caddyfile.new /etc/caddy/Caddyfile"
+                
+                # USE CAT TO OVERWRITE (Avoids 'Resource busy' error)
+                docker exec webserver sh -c "cat /etc/caddy/Caddyfile.new > /etc/caddy/Caddyfile"
+                
+                # Reload Caddy
                 docker exec webserver caddy reload --config /etc/caddy/Caddyfile
+                
+                # Cleanup
+                docker exec webserver rm /etc/caddy/Caddyfile.new
                 echo "Caddy reloaded successfully."
-                # We don't need to 'rm' here because 'mv' already moved/renamed it
             else
                 echo "FATAL: New Caddyfile has syntax errors!"
-                # Cleanup the failed file
                 docker exec webserver rm /etc/caddy/Caddyfile.new
-                echo "Temporary files cleaned up. Keeping old configuration."
                 exit 1
             fi
 
