@@ -446,8 +446,13 @@ function RouteComponent() {
                 setCommentPending(true);
                 setCommentError(null);
                 try {
-                  // Replace with actual API endpoint
-                  const res = await fetch(`/api/fuel-rec/${encodeURIComponent(commentModal.entry._id)}/comment`, {
+                  const entryId = commentModal.entry._id;
+                  if (!entryId) {
+                    setCommentError('Entry ID missing.');
+                    setCommentPending(false);
+                    return;
+                  }
+                  const res = await fetch(`/api/fuel-rec/${encodeURIComponent(entryId)}/comment`, {
                     method: 'POST',
                     headers: {
                       'Content-Type': 'application/json',
@@ -463,13 +468,14 @@ function RouteComponent() {
                   const result = await res.json();
                   if (!result.comments) throw new Error('No comments returned');
                   setEntries(prev => prev.map(x =>
-                    x._id === commentModal.entry._id
+                    x._id === entryId
                       ? { ...x, comments: result.comments }
                       : x
                   ));
-                  setCommentModal(cm => cm.entry ? {
-                    entry: { ...cm.entry, comments: result.comments }
-                  } : cm);
+                  setCommentModal(cm => cm.entry
+                    ? { entry: { ...cm.entry, comments: result.comments } }
+                    : cm
+                  );
                   setCommentText('');
                 } catch (err) {
                   setCommentError(err instanceof Error ? err.message : String(err));
