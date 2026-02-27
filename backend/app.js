@@ -6,7 +6,7 @@ const http = require("http");
 const { Server } = require("socket.io");
 const requestId = require("./middleware/requestId");
 
-throw new Error("ROLLBACK_TEST_CRASH");
+// throw new Error("ROLLBACK_TEST_CRASH");
 
 //BullMQ for background email processing running
 require("./queues/emailQueue"); // Just runs the worker
@@ -68,10 +68,10 @@ app.use(requestId());
 
 
 // Health check
-// app.get('/api/health', (req, res) => res.send('OK'));
-app.get('/api/health', (req, res) => {
-  res.status(500).send('FORCED_FAILURE_FOR_TESTING');
-});
+app.get('/api/health', (req, res) => res.send('OK'));
+// app.get('/api/health', (req, res) => {
+//   res.status(500).send('FORCED_FAILURE_FOR_TESTING');
+// });
 app.use("/api/sage", sageRoutes); // Publicly accessible
 app.use("/api/auth", authRoutes);
 app.use("/api/locations", locationRoutes);
