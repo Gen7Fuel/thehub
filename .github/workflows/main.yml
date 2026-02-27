@@ -151,10 +151,35 @@ jobs:
             export INTACCT_CALLBACK_URL=${{ secrets.INTACCT_CALLBACK_URL }}
 
             # ---- Deploy Auth-Backend ----
-            docker compose up -d --build --no-deps --wait auth-backend
+            # docker compose up -d --build --no-deps --wait auth-backend
             
             # ---- Backend rolling update ----
-            docker compose up -d --build --no-deps --wait backend
+            # docker compose up -d --build --no-deps --wait backend
+
+            # ---- 1. Deploy Auth-Backend with Safety ----
+            echo "Deploying auth-backend..."
+            if docker compose up -d --build --no-deps --wait auth-backend; then
+                echo "SUCCESS: Auth-backend is healthy."
+            else
+                echo "FATAL: Auth-backend failed health check!"
+                docker logs auth-backend --tail 50
+                echo "Rolling back auth-backend..."
+                docker compose up -d auth-backend
+                exit 1
+            fi
+
+            # ---- 2. Deploy Main Backend with Safety ----
+            echo "Deploying backend..."
+            if docker compose up -d --build --no-deps --wait backend; then
+                echo "SUCCESS: Backend is healthy."
+            else
+                echo "FATAL: Backend failed health check!"
+                # This captures the 'Module Not Found' or 'Mongoose' errors
+                docker logs backend --tail 50
+                echo "Rolling back main backend..."
+                docker compose up -d backend
+                exit 1
+            fi
 
             # ---- Frontend zero-downtime update ----
             VERSION=${{ env.VERSION }}
@@ -180,7 +205,29 @@ jobs:
             sudo ln -sfn $VERSION dist_current
 
             # 5. Reload Caddy
-            docker exec webserver caddy reload --config /etc/caddy/Caddyfile
+            # docker exec webserver caddy reload --config /etc/caddy/Caddyfile
+            
+            # ---- 5. Safe Caddy Update with Mandatory Cleanup ----
+            echo "Validating new Caddyfile..."
+
+            # 1. Push to a temporary file
+            docker exec -i webserver sh -c "cat > /etc/caddy/Caddyfile.new" < /home/gen7fuel/thehub/Caddyfile
+
+            # 2. Validate the temporary file
+            if docker exec webserver caddy validate --config /etc/caddy/Caddyfile.new; then
+                echo "Validation passed. Applying new config..."
+                # Overwrite the real file and reload
+                docker exec webserver sh -c "mv /etc/caddy/Caddyfile.new /etc/caddy/Caddyfile"
+                docker exec webserver caddy reload --config /etc/caddy/Caddyfile
+                echo "Caddy reloaded successfully."
+                # We don't need to 'rm' here because 'mv' already moved/renamed it
+            else
+                echo "FATAL: New Caddyfile has syntax errors!"
+                # Cleanup the failed file
+                docker exec webserver rm /etc/caddy/Caddyfile.new
+                echo "Temporary files cleaned up. Keeping old configuration."
+                exit 1
+            fi
 
             # ---- Cleanup ----
             # Keep only the 3 most recent versions
