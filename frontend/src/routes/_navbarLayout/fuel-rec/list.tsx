@@ -439,6 +439,10 @@ function RouteComponent() {
               onSubmit={async (e) => {
                 e.preventDefault();
                 if (!commentText.trim()) return;
+                if (!commentModal.entry) {
+                  setCommentError('No entry selected for commenting.');
+                  return;
+                }
                 setCommentPending(true);
                 setCommentError(null);
                 try {
@@ -459,7 +463,7 @@ function RouteComponent() {
                   const result = await res.json();
                   if (!result.comments) throw new Error('No comments returned');
                   setEntries(prev => prev.map(x =>
-                    x._id === commentModal.entry!._id
+                    x._id === commentModal.entry._id
                       ? { ...x, comments: result.comments }
                       : x
                   ));
