@@ -275,18 +275,34 @@ router.get('/voided-transactions-details', async (req, res) => {
 
 router.get('/over-short', async (req, res) => {
   try {
-    const { site } = req.query;
+    // const { site } = req.query;
+    const { site, from, to } = req.query; // Extract from/to for date range filtering
     if (!site) return res.status(400).json({ error: 'site is required' });
 
     // 1️⃣ Check if site sells lottery
     const location = await Location.findOne({ stationName: site }).lean();
     const sellsLottery = location?.sellsLottery || false;
 
-    // 2️⃣ Date range setup
-    const end = new Date();
-    end.setHours(0, 0, 0, 0);
-    const start = new Date(end);
-    start.setDate(start.getDate() - 20);
+    // const end = new Date();
+    // end.setHours(0, 0, 0, 0);
+    // const start = new Date(end);
+    // start.setDate(start.getDate() - 20);
+    // 2️⃣ Date range setup - NEW LOGIC
+    let start, end;
+    if (from && to) {
+      start = new Date(from);
+      end = new Date(to);
+    } else {
+      // Fallback to your original default
+      end = new Date();
+      end.setHours(0, 0, 0, 0);
+      start = new Date(end);
+      start.setDate(start.getDate() - 20);
+    }
+
+    // Set hours to ensure full day coverage
+    start.setHours(0, 0, 0, 0);
+    end.setHours(23, 59, 59, 999);
 
     // 3️⃣ Fetch submitted reports (Contains unsettledPrepays and handheldDebit)
     const reports = await CashSummaryReport.find({
@@ -840,6 +856,7 @@ router.get('/lottery', async (req, res) => {
         onDemandFreeTickets: lotteryDoc.onDemandFreeTickets,
         onDemandCashPayout: lotteryDoc.onDemandCashPayout,
         scratchCashPayout: lotteryDoc.scratchCashPayout,
+        vouchersRedeemed: lotteryDoc.vouchersRedeemed,
         images: Array.isArray(lotteryDoc.images) ? lotteryDoc.images : [],
         datawaveImages: Array.isArray(lotteryDoc.datawaveImages) ? lotteryDoc.datawaveImages : [],
       })
@@ -863,6 +880,7 @@ router.get('/lottery', async (req, res) => {
         delete copy.onDemandFreeTickets
         delete copy.onDemandCashPayout
         delete copy.scratchCashPayout
+        delete copy.vouchersRedeemed
         return copy
       })
     }
@@ -902,6 +920,7 @@ router.post('/lottery', async (req, res) => {
       onlineLottoTotal: (values && typeof values.onlineSales === 'number') ? values.onlineSales : null,
       onlineCancellations: (values && typeof values.onlineCancellations === 'number') ? values.onlineCancellations : null,
       onlineDiscounts: (values && typeof values.onlineDiscounts === 'number') ? values.onlineDiscounts : null,
+      vouchersRedeemed: (values && typeof values.vouchersRedeemed === 'number') ? values.vouchersRedeemed : null,
       instantLottTotal: (values && typeof values.scratchSales === 'number') ? values.scratchSales : null,
       scratchFreeTickets: (values && typeof values.scratchFreeTickets === 'number') ? values.scratchFreeTickets : null,
       oldScratchTickets: (values && typeof values.oldScratchTickets === 'number') ? values.oldScratchTickets : null,
