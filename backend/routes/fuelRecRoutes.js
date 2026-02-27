@@ -255,4 +255,33 @@ router.delete('/:id', async (req, res) => {
   }
 })
 
+// POST /api/fuel-rec/:id/comment
+router.post('/:id/comment', async (req, res) => {
+  try {
+    const id = String(req.params.id || '').trim()
+    const text = String(req.body?.text || '').trim()
+    if (!id || !text) return res.status(400).json({ error: 'id and text are required' })
+
+    // User info from auth middleware
+    const user = (req.user && (req.user.name || req.user.email)) || 'Unknown'
+
+    const BOLPhoto = await getBOLPhoto()
+    const update = {
+      $push: {
+        comments: {
+          text,
+          createdAt: new Date(),
+          user,
+        },
+      },
+    }
+    const updated = await BOLPhoto.findByIdAndUpdate(id, update, { new: true, lean: true })
+    if (!updated) return res.status(404).json({ error: 'Entry not found' })
+    return res.json({ ok: true, comments: updated.comments })
+  } catch (e) {
+    console.error('fuelRec.comment error:', e)
+    return res.status(500).json({ error: 'Failed to add comment' })
+  }
+})
+
 module.exports = router

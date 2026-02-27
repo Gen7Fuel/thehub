@@ -1,4 +1,5 @@
 import * as React from 'react'
+import { useEffect, useRef } from 'react'
 import { createFileRoute, useLoaderData, useNavigate } from '@tanstack/react-router'
 import { format, subDays } from 'date-fns'
 import type { DateRange } from 'react-day-picker'
@@ -7,9 +8,9 @@ import { DatePickerWithRange } from '@/components/custom/datePickerWithRange'
 import { pdf, Document, Page, Image as PdfImage, StyleSheet } from '@react-pdf/renderer'
 import { Button } from '@/components/ui/button'
 import { useAuth } from '@/context/AuthContext'
-import { Trash2 } from 'lucide-react'
+import { Trash2, MessageSquareText, RefreshCcw } from 'lucide-react'
 
-type Search = { site: string; from: string; to: string }
+
 type BOLPhoto = {
   _id: string
   site: string
@@ -18,7 +19,9 @@ type BOLPhoto = {
   bolNumber?: string
   createdAt?: string
   updatedAt?: string
+  comments?: Array<{ text: string; createdAt: string; user?: string }>
 }
+type Search = { site: string; from: string; to: string }
 type ListResponse = {
   site: string
   from: string | null
@@ -118,6 +121,29 @@ function RouteComponent() {
   React.useEffect(() => {
     setEntries(data?.entries || [])
   }, [data])
+
+  // Modal state for image preview
+  const [modalImg, setModalImg] = React.useState<string | null>(null)
+  const modalRef = useRef<HTMLDivElement | null>(null)
+
+  // Comment modal state
+  const [commentModal, setCommentModal] = React.useState<{ entry: BOLPhoto | null }>(() => ({ entry: null }))
+  const [commentText, setCommentText] = React.useState('')
+  const [commentPending, setCommentPending] = React.useState(false)
+  const [commentError, setCommentError] = React.useState<string | null>(null)
+
+  // Close modal on ESC
+  useEffect(() => {
+    if (!modalImg && !commentModal.entry) return;
+    const handler = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        setModalImg(null);
+        setCommentModal({ entry: null });
+      }
+    };
+    window.addEventListener('keydown', handler);
+    return () => window.removeEventListener('keydown', handler);
+  }, [modalImg, commentModal.entry]);
 
   const requestAgain = async (e: BOLPhoto) => {
     try {
@@ -275,36 +301,53 @@ function RouteComponent() {
                       <td className="px-2 py-2 font-mono">{e.date}</td>
                       <td className="px-2 py-2">{e.bolNumber || '—'}</td>
                       <td className="px-2 py-2">
-                        <img 
-                          src={`/cdn/download/${e.filename}`} 
+                        <img
+                          src={`/cdn/download/${e.filename}`}
                           alt={`${e.date} preview`}
-                          className="w-16 h-16 object-cover rounded border"
+                          className="w-16 h-16 object-cover rounded border cursor-pointer"
                           loading="lazy"
+                          onClick={() => setModalImg(`/cdn/download/${e.filename}`)}
                         />
                       </td>
-                      {/* <td className="px-2 py-2">{e.createdAt ? format(new Date(e.createdAt), 'yyyy-MM-dd HH:mm') : '—'}</td> */}
+                      {/* ...existing code... */}
                       <td className="px-2 py-2 space-x-3">
-                        {/* <a download={true} href={`/cdn/download/${e.filename}`}>Image</a> */}
-                        {/* <button
-                          type="button"
-                          className="underline text-blue-600 hover:text-blue-800"
-                          onClick={() => downloadPdfForEntry(e)}
-                        >
-                          PDF
-                        </button> */}
                         <Button
                           onClick={() => downloadPdfForEntry(e)}
                         >
                           PDF
                         </Button>
 
+                        <Button
+                          variant="outline"
+                          size="icon"
+                          onClick={() => setCommentModal({ entry: e })}
+                          title="Comments"
+                          aria-label="Comments"
+                          className="relative"
+                        >
+                          <MessageSquareText className="h-4 w-4" />
+                          <span className="sr-only">Comments</span>
+                          {e.comments && e.comments.length > 0 && (
+                            <span className="absolute -top-1 -right-1 bg-red-600 text-white text-xs rounded-full px-1.5 min-w-[1.25rem] h-5 flex items-center justify-center border border-white">
+                              {e.comments.length}
+                            </span>
+                          )}
+                        </Button>
+
                         {access?.accounting?.fuelRec?.requestAgain && (
                           <Button
                             variant="outline"
+                            size="icon"
                             onClick={() => requestAgain(e)}
                             disabled={pending.has(e._id)}
+                            title="Request Again"
+                            aria-label="Request Again"
                           >
-                            {pending.has(e._id) ? 'Sending…' : 'Request Again'}
+                            {pending.has(e._id) ? (
+                              <span className="text-xs">…</span>
+                            ) : (
+                              <RefreshCcw className="h-4 w-4" />
+                            )}
                           </Button>
                         )}
 
@@ -328,6 +371,135 @@ function RouteComponent() {
               </table>
             </div>
           )}
+        </div>
+      )}
+
+      {/* Modal for image preview */}
+      {modalImg && (
+        <div
+          ref={modalRef}
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-90"
+          onClick={() => setModalImg(null)}
+          tabIndex={-1}
+        >
+          <img
+            src={modalImg}
+            alt="Full preview"
+            className="w-full h-full object-contain absolute top-0 left-0"
+            style={{ zIndex: 51 }}
+            onClick={e => e.stopPropagation()}
+          />
+          <button
+            className="absolute top-4 right-4 px-4 py-2 bg-gray-700 text-white rounded hover:bg-gray-900 z-60"
+            onClick={() => setModalImg(null)}
+            autoFocus
+          >
+            Close
+          </button>
+        </div>
+      )}
+
+      {/* Modal for comments */}
+      {commentModal.entry && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-60"
+          onClick={() => setCommentModal({ entry: null })}
+          tabIndex={-1}
+        >
+          <div
+            className="relative bg-white rounded shadow-lg p-4 max-w-lg w-full flex flex-col"
+            onClick={e => e.stopPropagation()}
+          >
+            <div className="flex justify-between items-center mb-2">
+              <div className="font-semibold text-lg">Comments</div>
+              <button
+                className="px-2 py-1 bg-gray-700 text-white rounded hover:bg-gray-900"
+                onClick={() => setCommentModal({ entry: null })}
+              >
+                Close
+              </button>
+            </div>
+            {/* Previous comments */}
+            <div className="mb-4 max-h-48 overflow-y-auto">
+              {commentModal.entry.comments && commentModal.entry.comments.length > 0 ? (
+                commentModal.entry.comments.map((c, idx) => (
+                  <div key={idx} className="mb-2 p-2 border rounded bg-gray-50">
+                    <div className="text-xs text-muted-foreground mb-1">
+                      {c.user ? `${c.user} • ` : ''}{new Date(c.createdAt).toLocaleString()}
+                    </div>
+                    <div className="text-sm">{c.text}</div>
+                  </div>
+                ))
+              ) : (
+                <div className="text-sm text-muted-foreground">No comments yet.</div>
+              )}
+            </div>
+            {/* New comment input */}
+            <form
+              onSubmit={async (e) => {
+                e.preventDefault();
+                if (!commentText.trim()) return;
+                if (!commentModal.entry) {
+                  setCommentError('No entry selected for commenting.');
+                  return;
+                }
+                setCommentPending(true);
+                setCommentError(null);
+                try {
+                  const entryId = commentModal.entry._id;
+                  if (!entryId) {
+                    setCommentError('Entry ID missing.');
+                    setCommentPending(false);
+                    return;
+                  }
+                  const res = await fetch(`/api/fuel-rec/${encodeURIComponent(entryId)}/comment`, {
+                    method: 'POST',
+                    headers: {
+                      'Content-Type': 'application/json',
+                      Authorization: `Bearer ${localStorage.getItem('token') || ''}`,
+                    },
+                    body: JSON.stringify({ text: commentText }),
+                  });
+                  if (!res.ok) {
+                    const msg = await res.text().catch(() => '');
+                    throw new Error(msg || `HTTP ${res.status}`);
+                  }
+                  // Update local state with returned comments array
+                  const result = await res.json();
+                  if (!result.comments) throw new Error('No comments returned');
+                  setEntries(prev => prev.map(x =>
+                    x._id === entryId
+                      ? { ...x, comments: result.comments }
+                      : x
+                  ));
+                  setCommentModal(cm => cm.entry
+                    ? { entry: { ...cm.entry, comments: result.comments } }
+                    : cm
+                  );
+                  setCommentText('');
+                } catch (err) {
+                  setCommentError(err instanceof Error ? err.message : String(err));
+                } finally {
+                  setCommentPending(false);
+                }
+              }}
+              className="flex flex-col gap-2"
+            >
+              <textarea
+                className="border rounded p-2 text-sm resize-none"
+                rows={3}
+                placeholder="Add a comment..."
+                value={commentText}
+                onChange={e => setCommentText(e.target.value)}
+                disabled={commentPending}
+                autoFocus
+              />
+              {commentError && <div className="text-xs text-red-600">{commentError}</div>}
+              <Button type="submit" disabled={commentPending || !commentText.trim()}>
+                {commentPending ? 'Submitting…' : 'Submit'}
+              </Button>
+            </form>
+          </div>
         </div>
       )}
     </div>
