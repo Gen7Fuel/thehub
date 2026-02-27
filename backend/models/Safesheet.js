@@ -215,7 +215,13 @@ SafesheetSchema.statics.computeRunning = function (entries, initialBalance = 0) 
 /**
  * Returns end-of-day balances and bank deposits for last N days
  */
-SafesheetSchema.methods.getDailyBalances = function (days = 10) {
+/**
+ * Returns end-of-day balances and bank deposits filtered by a specific date range
+ * @param {string} from - YYYY-MM-DD
+ * @param {string} to - YYYY-MM-DD
+ */
+SafesheetSchema.methods.getDailyBalances = function (from, to) {
+  // Get all entries with computed running balances
   const entries = this.getEntriesWithRunningBalance();
 
   const dayKey = (d) => {
@@ -231,6 +237,10 @@ SafesheetSchema.methods.getDailyBalances = function (days = 10) {
   for (const e of entries) {
     const key = dayKey(e.date);
 
+    // FILTER: Only process entries within the requested range
+    if (from && key < from) continue;
+    if (to && key > to) continue;
+
     if (!dailyMap.has(key)) {
       dailyMap.set(key, {
         date: key,
@@ -239,14 +249,13 @@ SafesheetSchema.methods.getDailyBalances = function (days = 10) {
       });
     } else {
       const d = dailyMap.get(key);
+      // The last entry processed for a day will represent the end-of-day balance
       d.endOfDayBalance = e.cashOnHandSafe;
       d.bankDepositTotal += Number(e.cashDepositBank || 0);
     }
   }
 
-  return Array.from(dailyMap.values())
-    .sort((a, b) => a.date.localeCompare(b.date))
-    .slice(-days);
+  return Array.from(dailyMap.values()).sort((a, b) => a.date.localeCompare(b.date));
 };
 
 
