@@ -1,4 +1,4 @@
-import { Link, useMatchRoute, useNavigate } from '@tanstack/react-router'
+import { Link, useLocation, useMatchRoute, useNavigate } from '@tanstack/react-router'
 import { Button } from '../ui/button'
 import { useEffect, useState } from 'react'
 import { isTokenExpired } from '../../lib/utils'
@@ -7,7 +7,7 @@ import { getSocket } from "@/lib/websocket";
 import { syncPendingActions } from "@/lib/utils"
 import { isActuallyOnline } from "@/lib/network";
 import { useAuth } from "@/context/AuthContext";
-import { HelpCircle, LogOut, Settings as SettingsIcon, LayoutDashboard, Home as HomeIcon, KeyRound } from 'lucide-react'
+import { HelpCircle, LogOut, Settings as SettingsIcon, LayoutDashboard, Home as HomeIcon, KeyRound, ExternalLink } from 'lucide-react'
 import { clearLocalDB } from "@/lib/orderRecIndexedDB";
 import {
   Dialog,
@@ -215,67 +215,49 @@ export default function Navbar() {
     }
   }, [forceLogoutMessage]);
 
+  // 1. Define base URL
+  const DOCS_BASE_URL = "https://docs.gen7fuel.com/share";
 
+  // 1. TanStack's hook (e.g., "/infonet-report")
+  const location = useLocation();
 
-  let module_slug = window.location.href.split('/')[3]
+  // 2. Extract the module slug from the URL (e.g., "infonet-report")
+  const module_slug = location.pathname.split('/').filter(Boolean)[0] || '';
 
-  let help
+  const getDocContent = (slug: string) => {
+    switch (slug) {
+      case 'audit':
+        return { title: 'Station Audits', url: `${DOCS_BASE_URL}/9b0j5ary4m/p/station-audits-22uoVYgRfG` };
+      case 'po':
+        return { title: 'Purchase Orders', url: `${DOCS_BASE_URL}/9b0j5ary4m/p/purchase-order-Jjf8hbmjcT` };
+      case 'payables':
+        return { title: 'Payables & Payouts', url: `${DOCS_BASE_URL}/9b0j5ary4m/p/payables-and-payouts-zlNABR1hBI` };
+      case 'cash-summary':
+        return { title: 'Cash Summary', url: `${DOCS_BASE_URL}/9b0j5ary4m/p/cash-summary-Sm6CWBVpgi` };
+      case 'safesheet':
+        return { title: 'Safesheet Guide', url: `${DOCS_BASE_URL}/9b0j5ary4m/p/safesheet-NasYIFjhzC` };
+      case 'cash-rec':
+        return { title: 'Cash Reconciliation', url: `${DOCS_BASE_URL}/9b0j5ary4m/p/cash-rec-eUeiKLLjg6` };
+      case 'fuel-rec':
+        return { title: 'Fuel Reconciliation', url: `${DOCS_BASE_URL}/9b0j5ary4m/p/fuel-rec-Z4kivBO3Tg` };
+      case 'order-rec':
+        return { title: 'Order Reconciliation', url: `${DOCS_BASE_URL}/9b0j5ary4m/p/order-rec-5985gQP73S` };
+      case 'cycle-count':
+        return { title: 'Cycle Counting', url: `${DOCS_BASE_URL}/9b0j5ary4m/p/cycle-count-psiNrrRMeS` };
+      case 'vendor':
+        return { title: 'Vendor Management', url: `${DOCS_BASE_URL}/9b0j5ary4m/p/vendor-management-xXFLPVRW5c` };
+      case 'category':
+        return { title: 'Category Management', url: `${DOCS_BASE_URL}/9b0j5ary4m/p/category-management-G7GY640Yrd` };
+      case 'write-off':
+        return { title: 'Write-offs & Markdowns', url: `${DOCS_BASE_URL}/9b0j5ary4m/p/write-offs-and-markdowns-jqHcm9CCbD` };
+      case 'infonet-report':
+        return { title: 'Infonet Tax Report', url: `${DOCS_BASE_URL}/9b0j5ary4m/p/infonet-tax-report-bNWL7qOUTA` };
+      default:
+        return { title: 'The Hub User Guide', url: `${DOCS_BASE_URL}/9b0j5ary4m/p/the-hub-user-guide-JX89JyLv77` };
+    }
+  };
 
-  // Generate help text based on module_slug
-  switch (module_slug) {
-    case 'cycle-count':
-      help = (
-        <div className="space-y-3">
-          <p className="text-sm text-gray-700">
-            Enter your count directly in the Cycle Count form.
-          </p>
-          <div className="space-y-2 text-sm text-gray-700">
-            <div className="flex gap-2">
-              <span className="text-blue-600 font-semibold">•</span>
-              <span>Updates sync in real time for all users working on the same count.</span>
-            </div>
-            <div className="flex gap-2">
-              <span className="text-blue-600 font-semibold">•</span>
-              <span>When finished, click <strong>Save</strong> to record your entries.</span>
-            </div>
-          </div>
-        </div>
-      )
-      break
-    case 'order-rec':
-      help = (
-        <div className="space-y-3">
-          <p className="text-sm text-gray-700">
-            View all Order Recs with file name, upload date, uploader, item categories, and status.
-          </p>
-          <div className="space-y-2 text-sm text-gray-700">
-            <div className="flex gap-2">
-              <span className="text-blue-600 font-semibold">•</span>
-              <span>Click an Order Rec to open its details. Categories are collapsed — tap to expand.</span>
-            </div>
-            <div className="flex gap-2">
-              <span className="text-blue-600 font-semibold">•</span>
-              <span>Click an item row to edit <strong>On Hand Qty</strong> or <strong>Cases to Order</strong>, then Save.</span>
-            </div>
-            <div className="flex gap-2">
-              <span className="text-blue-600 font-semibold">•</span>
-              <span>Check items as done — when all items in a category are checked, it's marked complete.</span>
-            </div>
-            <div className="flex gap-2">
-              <span className="text-blue-600 font-semibold">•</span>
-              <span>Add notes in the text box at the top and Save to store them.</span>
-            </div>
-            <div className="flex gap-2">
-              <span className="text-blue-600 font-semibold">•</span>
-              <span>When all categories are done, click <strong>Notify</strong> to alert the back office.</span>
-            </div>
-          </div>
-        </div>
-      )
-      break
-    default:
-      help = 'No help available for this page.'
-  }
+  const { title, url } = getDocContent(module_slug);
 
   return (
     // Navbar container
@@ -327,19 +309,37 @@ export default function Navbar() {
           </Button>
         </span>
       </div>
-
       {/* Help Modal */}
       <Dialog open={isHelpOpen} onOpenChange={setIsHelpOpen}>
-        <DialogContent className="sm:max-w-lg">
-          <DialogHeader>
-            <DialogTitle>Help</DialogTitle>
-          </DialogHeader>
-          <div className="space-y-4">
-            <div>
-              <p className="text-sm text-gray-700 whitespace-pre-line">
-                {help}
-              </p>
+        <DialogContent className="max-w-[95vw] md:max-w-5xl h-[90vh] flex flex-col p-0 overflow-hidden gap-0">
+          <DialogHeader className="p-4 border-b bg-gray-50 flex flex-row items-center justify-between space-y-0">
+            <div className="flex items-center gap-2">
+              <HelpCircle className="h-5 w-5 text-blue-600" />
+              <DialogTitle className="text-lg font-semibold">{title}</DialogTitle>
             </div>
+
+            {/* Optional: Open in New Tab Button */}
+            <Button
+              variant="ghost"
+              size="sm"
+              className="mr-6 hidden md:flex items-center gap-2 text-gray-500 hover:text-gray-900"
+              onClick={() => window.open(url, '_blank')}
+            >
+              <span className="text-xs">Open in New Tab</span>
+              <ExternalLink className="h-4 w-4" />
+            </Button>
+          </DialogHeader>
+
+          <div className="flex-1 w-full bg-white relative">
+            {/* The Iframe Implementation */}
+            <iframe
+              src={url}
+              title={title}
+              className="w-full h-full border-none"
+              loading="lazy"
+              // Ensure "allow-forms" is added if your docs have search bars/contact forms
+              sandbox="allow-same-origin allow-scripts allow-popups allow-forms"
+            />
           </div>
         </DialogContent>
       </Dialog>
