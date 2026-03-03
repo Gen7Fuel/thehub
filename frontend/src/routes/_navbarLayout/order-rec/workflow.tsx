@@ -712,103 +712,101 @@ function RouteComponent() {
                       });
 
                       return (
-                        <td
-                          key={vendorName}
-                          className="border border-gray-300 bg-white w-80 p-0 items-center"
-                        >
+                        <td key={vendorName} className="border border-gray-300 bg-white w-80 p-0 items-center">
                           <div className="w-full h-full flex items-center justify-center p-2">
-                            {/* {allOrders.length === 0 ? ( */}
-                            {/* CASE 1: No history in the Vendor Meta at all */}
-                            {!vendorMeta?.lastPlacedOrder ? (
-                              // Case 1: no orders at all
-                              (<div className="w-80 h-40 flex items-center justify-center rounded-2xl bg-gray-100 text-gray-500 text-sm">No Past Orders</div>)
-                            ) : rec ? (
-                              // Case 2: order exists this week → render normal card
-                              (<OrderCard
-                                key={rec._id}
-                                id={rec._id}
-                                filename={rec.filename}
-                                site={rec.site}
-                                currentStatus={rec.currentStatus}
-                                statusHistory={rec.statusHistory}
-                                comments={rec.comments}
-                                getPercentile={getPercentile}
-                                getRedColor={getRedColor}
-                                getStatusColor={getOrderRecStatusColor}
-                                onUpdateStatus={() => {
-                                  setUpdateStatusOrderId(rec._id);
-                                  setNewStatus(rec.currentStatus);
-                                }}
-                                lastPlacedOrder={vendorMeta?.lastPlacedOrder || undefined}
-                                leadTime={vendorMeta?.leadTime}
-                                vendor_order_frequency={
-                                  vendorMeta?.vendor_order_frequency
-                                    ? Number(vendorMeta.vendor_order_frequency)
-                                    : undefined
-                                }
-                                onViewOrder={id =>
-                                  navigate({
-                                    to: '/order-rec/$id',
-                                    params: { id },
-                                  })}
-                                onViewComments={id => {
-                                  const recData = orderRecs.find(r => r._id === id);
-                                  setCurrentComments(recData?.comments || []);
-                                  setViewCommentsOrderId(id);
-                                }}
-                                onAddEditComment={(id, lastComment) => {
-                                  setCommentText(lastComment || "");
-                                  setAddEditCommentOrderId(id);
-                                }}
-                              />)
-                            ) : (
-                              // Case 3: orders in history but none this week
-                              // (<Card className="w-80 overflow-hidden rounded-2xl border border-gray-300 shadow-sm">
-                              (<Card className="relative w-80 overflow-hidden rounded-2xl border border-gray-300 shadow-sm">
-                                {/* LT badge (top-right) */}
-                                {vendorMeta?.leadTime != null && (
-                                  <div className="absolute top-2 right-2 text-xs font-semibold text-gray-700 bg-white/90 px-2 py-0.5 rounded-md border shadow-sm">
-                                    LT: {vendorMeta.leadTime.toFixed(0)} d
-                                  </div>
-                                )}
-                                {/* Top Section */}
-                                <div className="flex flex-col p-4 h-full justify-between bg-gray-50">
-                                  <div className="text-sm font-semibold text-gray-800 text-center">
-                                    No Orders Created This Week
-                                  </div>
+                            {(() => {
+                              // 1. First, check if there's an order for THIS WEEK
+                              if (rec) {
+                                return (
+                                  <OrderCard
+                                    key={rec._id}
+                                    id={rec._id}
+                                    filename={rec.filename}
+                                    site={rec.site}
+                                    currentStatus={rec.currentStatus}
+                                    statusHistory={rec.statusHistory}
+                                    comments={rec.comments}
+                                    getPercentile={getPercentile}
+                                    getRedColor={getRedColor}
+                                    getStatusColor={getOrderRecStatusColor}
+                                    onUpdateStatus={() => {
+                                      setUpdateStatusOrderId(rec._id);
+                                      setNewStatus(rec.currentStatus);
+                                    }}
+                                    lastPlacedOrder={vendorMeta?.lastPlacedOrder || undefined}
+                                    leadTime={vendorMeta?.leadTime}
+                                    vendor_order_frequency={
+                                      vendorMeta?.vendor_order_frequency
+                                        ? Number(vendorMeta.vendor_order_frequency)
+                                        : undefined
+                                    }
+                                    onViewOrder={(id) => navigate({ to: '/order-rec/$id', params: { id } })}
+                                    onViewComments={(id) => {
+                                      const recData = orderRecs.find((r) => r._id === id);
+                                      setCurrentComments(recData?.comments || []);
+                                      setViewCommentsOrderId(id);
+                                    }}
+                                    onAddEditComment={(id, lastComment) => {
+                                      setCommentText(lastComment || "");
+                                      setAddEditCommentOrderId(id);
+                                    }}
+                                  />
+                                );
+                              }
+
+                              // 2. If NO order this week, check if vendor has ANY historical lastPlacedOrder
+                              if (vendorMeta?.lastPlacedOrder) {
+                                return (
+                                  <Card className="relative w-80 overflow-hidden rounded-2xl border border-gray-300 shadow-sm">
+                                    {/* LT badge (top-right) */}
+                                    {vendorMeta?.leadTime != null && (
+                                      <div className="absolute top-2 right-2 text-xs font-semibold text-gray-700 bg-white/90 px-2 py-0.5 rounded-md border shadow-sm">
+                                        LT: {vendorMeta.leadTime.toFixed(0)} d
+                                      </div>
+                                    )}
+
+                                    {/* Top Section */}
+                                    <div className="flex flex-col p-4 h-full justify-between bg-gray-50">
+                                      <div className="text-sm font-semibold text-gray-800 text-center">
+                                        No Orders Created This Week
+                                      </div>
+                                    </div>
+
+                                    {/* Bottom Section */}
+                                    <div
+                                      className="flex flex-col items-center justify-center p-2 bg-gray-100"
+                                      style={{
+                                        backgroundColor: getRedColor?.(
+                                          getPercentile?.(
+                                            vendorMeta.lastPlacedOrder,
+                                            vendorMeta.vendor_order_frequency
+                                              ? Number(vendorMeta.vendor_order_frequency)
+                                              : undefined
+                                          ) ?? 0,
+                                          vendorMeta.lastPlacedOrder
+                                        ) ?? "#f3f4f6",
+                                      }}
+                                    >
+                                      <div className="text-sm text-gray-700 font-semibold mt-1">
+                                        {new Date(vendorMeta.lastPlacedOrder).toLocaleString("en-CA", {
+                                          year: "numeric",
+                                          month: "short",
+                                          day: "numeric",
+                                          hour: "2-digit",
+                                          minute: "2-digit",
+                                        })}
+                                      </div>
+                                    </div>
+                                  </Card>
+                                );
+                              }
+                              // 3. Finally, if no order this week AND no history, show the empty state
+                              return (
+                                <div className="w-80 h-40 flex items-center justify-center rounded-2xl bg-gray-100 text-gray-500 text-sm italic">
+                                  No Past Orders
                                 </div>
-                                {/* Bottom Section */}
-                                <div
-                                  className="flex flex-col items-center justify-center p-2 bg-gray-100"
-                                  style={{
-                                    backgroundColor:
-                                      getRedColor?.(
-                                        getPercentile?.(
-                                          vendorMeta.lastPlacedOrder,
-                                          vendorMeta.vendor_order_frequency
-                                            ? Number(vendorMeta.vendor_order_frequency)
-                                            : undefined
-                                        ) ?? 0,
-                                        vendorMeta.lastPlacedOrder
-                                      ) ?? "#f3f4f6",
-                                  }}
-                                >
-                                  <div className="text-sm text-gray-700 font-semibold mt-1">
-                                    {vendorMeta?.lastPlacedOrder
-                                      ? new Date(
-                                        vendorMeta.lastPlacedOrder
-                                      ).toLocaleString("en-CA", {
-                                        year: "numeric",
-                                        month: "short",
-                                        day: "numeric",
-                                        hour: "2-digit",
-                                        minute: "2-digit",
-                                      })
-                                      : "No record for previous order placed"}
-                                  </div>
-                                </div>
-                              </Card>)
-                            )}
+                              );
+                            })()}
                           </div>
                         </td>
                       )
