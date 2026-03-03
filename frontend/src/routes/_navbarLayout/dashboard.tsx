@@ -69,7 +69,7 @@ import {
 } from "@/components/ui/dialog";
 import { OverShortSparkline, SafeBalanceTrendChart, PayablesDiscrepancyTable } from '@/components/custom/dashboard/accountingCharts';
 // import { Button } from '@/components/ui/button';
-import OperationalTimelineCard from '@/components/custom/dashboard/operationalTimelineChart';
+// import OperationalTimelineCard from '@/components/custom/dashboard/operationalTimelineChart';
 // import { PayablesDiscrepancyChart, OverShortChart } from '@/components/custom/dashboard/accountingCharts';
 
 interface CycleCountItem {
@@ -98,29 +98,29 @@ interface TransactionData {
   avgBasket: number;
 }
 
-interface OperationalTiming {
-  date: string;
-  stationOpen: string | null;
-  stationClose: string | null;
-  firstRegTrans: string | null;
-  lastRegTrans: string | null;
-  firstCardlockTrans: string | null;
-  lastCardlockTrans: string | null;
-  firstShiftLogin: string | null;
-  lastShiftLogout: string | null;
-  isSubmitted: boolean;
-  chartMetrics: {
-    openMin: number | null;
-    closeMin: number | null;
-    regStartMin: number | null;
-    regEndMin: number | null;
-    clStartMin: number | null;
-    clEndMin: number | null;
-    isZombieShift: boolean;
-    isMissingClose: boolean;
-    hasActivityBeforeOpen: boolean;
-  };
-}
+// interface OperationalTiming {
+//   date: string;
+//   stationOpen: string | null;
+//   stationClose: string | null;
+//   firstRegTrans: string | null;
+//   lastRegTrans: string | null;
+//   firstCardlockTrans: string | null;
+//   lastCardlockTrans: string | null;
+//   firstShiftLogin: string | null;
+//   lastShiftLogout: string | null;
+//   isSubmitted: boolean;
+//   chartMetrics: {
+//     openMin: number | null;
+//     closeMin: number | null;
+//     regStartMin: number | null;
+//     regEndMin: number | null;
+//     clStartMin: number | null;
+//     clEndMin: number | null;
+//     isZombieShift: boolean;
+//     isMissingClose: boolean;
+//     hasActivityBeforeOpen: boolean;
+//   };
+// }
 
 type TxType = "Fuel" | "C-Store" | "Both";
 
@@ -334,7 +334,7 @@ function RouteComponent() {
   const [tenderTransactions, setTenderTransactions] = useState<TenderTransaction[]>([]);
   const [bistroWoWSales, setBistroWoWSales] = useState<BistroWowSales[]>([]);
   const [top10Bistro, setTop10Bistro] = useState<Top10Bistro[]>([]);
-  const [operationalTimings, setOperationalTimings] = useState<OperationalTiming[]>([]);
+  // const [operationalTimings, setOperationalTimings] = useState<OperationalTiming[]>([]);
   // Safe balance (end-of-day) data
   const [safeBalanceRaw, setSafeBalanceRaw] = useState<any[]>([]);
   const [auditStats, setAuditStats] = useState<any[]>([]);
@@ -754,7 +754,7 @@ function RouteComponent() {
         setTimePeriodData(timePeriodTransactions);
         setBistroWoWSales(sqlBistroWoWSales);
         setTop10Bistro(sqlTop10Bistro);
-        setOperationalTimings(sqlShiftTimeDetails || []);
+        // setOperationalTimings(sqlShiftTimeDetails || []);
 
       } catch (err) {
         console.error("Error fetching dashboard data:", err);
@@ -1561,14 +1561,13 @@ function RouteComponent() {
                 {/* ======================= */}
                 {/*     Station Shift Activity SECTION   */}
                 {/* ======================= */}
-                <section aria-labelledby="activity-heading" className="mb-10">
+                {/* <section aria-labelledby="activity-heading" className="mb-10">
                   <h2 id="activity-heading" className="text-2xl font-bold mb-4 pl-4">Station Shift Activity</h2>
 
                   <div className="grid grid-cols-1 md:grid-cols-1 lg:grid-cols-1 gap-6">
-                    {/* 1. NEW Operational Timeline Chart (First Position) */}
                     <OperationalTimelineCard data={operationalTimings} />
                   </div>
-                </section>
+                </section> */}
 
                 {/* ======================= */}
                 {/*     INVENTORY SECTION   */}
