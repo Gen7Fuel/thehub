@@ -305,7 +305,7 @@ function RouteComponent() {
     const fetchMetadata = async () => {
 
       buildWeeks();
-      
+
       const [vendorsRes, storesRes] = await Promise.all([
         fetch("/api/vendors", { headers: { Authorization: `Bearer ${localStorage.getItem("token")}` } }),
         fetch("/api/locations", { headers: { Authorization: `Bearer ${localStorage.getItem("token")}` } }),
@@ -717,7 +717,9 @@ function RouteComponent() {
                           className="border border-gray-300 bg-white w-80 p-0 items-center"
                         >
                           <div className="w-full h-full flex items-center justify-center p-2">
-                            {allOrders.length === 0 ? (
+                            {/* {allOrders.length === 0 ? ( */}
+                            {/* CASE 1: No history in the Vendor Meta at all */}
+                            {!vendorMeta?.lastPlacedOrder ? (
                               // Case 1: no orders at all
                               (<div className="w-80 h-40 flex items-center justify-center rounded-2xl bg-gray-100 text-gray-500 text-sm">No Past Orders</div>)
                             ) : rec ? (
