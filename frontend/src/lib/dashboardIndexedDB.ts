@@ -11,6 +11,7 @@ export const STORES = {
   TENDER_TRANS: "dashboard_tender_transactions",
   BISTRO_WOW_SALES: "dashboard_bistro_wow_sales",
   TOP_10_BISTRO: "dashboard_top_10_bistro",
+  SHIFT_TIME_DETAILS: "dashboard_shift_time_details",
 };
 
 export const getDashboardDB = async () => {

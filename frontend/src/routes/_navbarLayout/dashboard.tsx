@@ -68,6 +68,8 @@ import {
   DialogDescription,
 } from "@/components/ui/dialog";
 import { OverShortSparkline, SafeBalanceTrendChart, PayablesDiscrepancyTable } from '@/components/custom/dashboard/accountingCharts';
+// import { Button } from '@/components/ui/button';
+// import OperationalTimelineCard from '@/components/custom/dashboard/operationalTimelineChart';
 // import { PayablesDiscrepancyChart, OverShortChart } from '@/components/custom/dashboard/accountingCharts';
 
 interface CycleCountItem {
@@ -95,6 +97,30 @@ interface TransactionData {
   visits: number;
   avgBasket: number;
 }
+
+// interface OperationalTiming {
+//   date: string;
+//   stationOpen: string | null;
+//   stationClose: string | null;
+//   firstRegTrans: string | null;
+//   lastRegTrans: string | null;
+//   firstCardlockTrans: string | null;
+//   lastCardlockTrans: string | null;
+//   firstShiftLogin: string | null;
+//   lastShiftLogout: string | null;
+//   isSubmitted: boolean;
+//   chartMetrics: {
+//     openMin: number | null;
+//     closeMin: number | null;
+//     regStartMin: number | null;
+//     regEndMin: number | null;
+//     clStartMin: number | null;
+//     clEndMin: number | null;
+//     isZombieShift: boolean;
+//     isMissingClose: boolean;
+//     hasActivityBeforeOpen: boolean;
+//   };
+// }
 
 type TxType = "Fuel" | "C-Store" | "Both";
 
@@ -308,6 +334,7 @@ function RouteComponent() {
   const [tenderTransactions, setTenderTransactions] = useState<TenderTransaction[]>([]);
   const [bistroWoWSales, setBistroWoWSales] = useState<BistroWowSales[]>([]);
   const [top10Bistro, setTop10Bistro] = useState<Top10Bistro[]>([]);
+  // const [operationalTimings, setOperationalTimings] = useState<OperationalTiming[]>([]);
   // Safe balance (end-of-day) data
   const [safeBalanceRaw, setSafeBalanceRaw] = useState<any[]>([]);
   const [auditStats, setAuditStats] = useState<any[]>([]);
@@ -547,6 +574,13 @@ function RouteComponent() {
         const transStartDate = transStart.toISOString().slice(0, 10);
         const transEndDate = end.toISOString().slice(0, 10);
 
+        // ------------------- SHIFT -------------------
+        const shiftStart = new Date(end);
+        shiftStart.setDate(shiftStart.getDate() - 7);
+
+        const shiftStartDate = shiftStart.toISOString().slice(0, 10);
+        const shiftEndDate = end.toISOString().slice(0, 10);
+
         // ------------------- SALES -------------------
         const salesStart = new Date(end);
         salesStart.setDate(salesStart.getDate() - 59);
@@ -629,6 +663,7 @@ function RouteComponent() {
         const tenderCached = await getDashboardData(STORES.TENDER_TRANS, site);
         const bistroWowSalesCached = await getDashboardData(STORES.BISTRO_WOW_SALES, site);
         const top10BistroCached = await getDashboardData(STORES.TOP_10_BISTRO, site);
+        // const shiftTimeDetailsCached = await getDashboardData(STORES.SHIFT_TIME_DETAILS, site);
         let sqlSales = salesCached;
         let sqlFuel = fuelCached;
         let sqlTrans = transCached;
@@ -636,6 +671,7 @@ function RouteComponent() {
         let sqlTenderTrans = tenderCached;
         let sqlBistroWoWSales = bistroWowSalesCached;
         let sqlTop10Bistro = top10BistroCached;
+        // let sqlShiftTimeDetails = shiftTimeDetailsCached;
 
         if (
           !sqlSales?.length ||
@@ -644,7 +680,8 @@ function RouteComponent() {
           !sqlTimePeriodTrans?.length ||
           !sqlTenderTrans?.length ||
           !sqlBistroWoWSales?.length ||
-          !sqlTop10Bistro?.length
+          !sqlTop10Bistro?.length 
+          // || !sqlShiftTimeDetails?.length
         ) {
           console.log("📡 No cache → Calling SQL backend...");
 
@@ -657,7 +694,9 @@ function RouteComponent() {
             fuelStartDate,
             fuelEndDate,
             transStartDate,
-            transEndDate
+            transEndDate,
+            shiftStartDate,
+            shiftEndDate
           );
 
           sqlSales = data.sales;
@@ -667,6 +706,7 @@ function RouteComponent() {
           sqlTenderTrans = data.tenderTransactions;
           sqlBistroWoWSales = data.bistroWoWSales;
           sqlTop10Bistro = data.top10Bistro;
+          // sqlShiftTimeDetails = data.operationalTimings;
 
           // Save to IDB
           await saveDashboardData(STORES.SALES, site, sqlSales);
@@ -676,6 +716,7 @@ function RouteComponent() {
           await saveDashboardData(STORES.TENDER_TRANS, site, sqlTenderTrans);
           await saveDashboardData(STORES.BISTRO_WOW_SALES, site, sqlBistroWoWSales);
           await saveDashboardData(STORES.TOP_10_BISTRO, site, sqlTop10Bistro);
+          // await saveDashboardData(STORES.SHIFT_TIME_DETAILS, site, data.operationalTimings);
         } else {
           console.log("⚡ Using cached dashboard SQL data");
         }
@@ -725,6 +766,7 @@ function RouteComponent() {
         setTimePeriodData(timePeriodTransactions);
         setBistroWoWSales(sqlBistroWoWSales);
         setTop10Bistro(sqlTop10Bistro);
+        // setOperationalTimings(sqlShiftTimeDetails || []);
 
       } catch (err) {
         console.error("Error fetching dashboard data:", err);
@@ -1528,6 +1570,16 @@ function RouteComponent() {
                   </div>
                 </section>
 
+                {/* ======================= */}
+                {/*     Station Shift Activity SECTION   */}
+                {/* ======================= */}
+                {/* <section aria-labelledby="activity-heading" className="mb-10">
+                  <h2 id="activity-heading" className="text-2xl font-bold mb-4 pl-4">Station Shift Activity</h2>
+
+                  <div className="grid grid-cols-1 md:grid-cols-1 lg:grid-cols-1 gap-6">
+                    <OperationalTimelineCard data={operationalTimings} />
+                  </div>
+                </section> */}
 
                 {/* ======================= */}
                 {/*     INVENTORY SECTION   */}
@@ -1886,20 +1938,21 @@ function RouteComponent() {
 
 
                 {/* ======================= */}
-                {/*     Store Activity Section   */}
+                {/* Store Activity Section   */}
                 {/* ======================= */}
-                {/* {false && ( */}
                 {site !== "Jocko Point" && site !== "Sarnia" && (
-                  <section aria-labelledby="fuel-heading" className="mb-10">
-                    <h2 id="fuel-heading" className="text-2xl font-bold mb-4 pl-4">Store Activity Trend</h2>
+                  <section aria-labelledby="activity-heading" className="mb-10">
+                    <h2 id="activity-heading" className="text-2xl font-bold mb-4 pl-4">Store Activity Trend</h2>
 
                     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
 
+                      {/* 2. Transactions Line Chart (Second Position) */}
                       <TransactionsLineChart
                         data={transactionChartData}
                         config={transactionChartConfig}
                       />
 
+                      {/* 3. Avg Transactions by Hour (Third Position - End of Row 1) */}
                       <Card className="col-span-1">
                         <CardHeader>
                           <CardTitle>Avg Transactions by Hour</CardTitle>
@@ -1925,13 +1978,12 @@ function RouteComponent() {
                         </CardFooter>
                       </Card>
 
-
+                      {/* 4. Tender Breakdown (Fourth Position - Starts Row 2) */}
                       <Card className="col-span-1">
                         <CardHeader>
                           <CardTitle>Tender Breakdown (%)</CardTitle>
                           <CardDescription>Tender share by Transactions</CardDescription>
                         </CardHeader>
-
                         <CardContent>
                           {tenderChartData.length > 0 ? (
                             <PieTenderChart data={tenderChartData} config={tenderConfig} />
@@ -1943,6 +1995,7 @@ function RouteComponent() {
                           Cumulative from last 14 days ending Yesterday
                         </CardFooter>
                       </Card>
+
                     </div>
                   </section>
                 )}
@@ -2236,7 +2289,8 @@ const fetchAllSqlData = async (
   csoCode: string,
   salesStart: string, salesEnd: string,
   fuelStart: string, fuelEnd: string,
-  transStart: string, transEnd: string
+  transStart: string, transEnd: string,
+  shiftStart: string, shiftEnd: string
 ) => {
   const params = new URLSearchParams({
     csoCode,
@@ -2248,7 +2302,10 @@ const fetchAllSqlData = async (
     fuelEnd,
 
     transStart,
-    transEnd
+    transEnd,
+
+    shiftStart,
+    shiftEnd
   });
 
   const res = await fetch(`/api/sql/all-data?${params}`, {
@@ -2281,3 +2338,198 @@ const getCurrentWeekRange = () => {
   const sunday = new Date(monday); sunday.setDate(monday.getDate() + 6); sunday.setHours(23, 59, 59, 999);
   return { startDate: monday.toISOString().slice(0, 10), endDate: sunday.toISOString().slice(0, 10) };
 };
+
+// const OperationalTimelineCard = ({ data }: { data: OperationalTiming[] }) => {
+//   // Take last 7 days only
+//   const displayData = data.slice(-7);
+
+//   return (
+//     <Card className="col-span-1">
+//       <CardHeader>
+//         <CardTitle>7-Day Operational Flow</CardTitle>
+//         <CardDescription>Shift timing vs. Actual transaction activity</CardDescription>
+//       </CardHeader>
+//       <CardContent className="space-y-4">
+//         {/* Simple Legend */}
+//         <div className="flex gap-4 mb-2">
+//           <div className="flex items-center gap-1.5 text-[10px] font-medium uppercase text-muted-foreground">
+//             <div className="w-3 h-3 bg-blue-100 rounded-sm border border-blue-200"></div> Shift
+//           </div>
+//           <div className="flex items-center gap-1.5 text-[10px] font-medium uppercase text-muted-foreground">
+//             <div className="w-3 h-3 bg-blue-600 rounded-sm"></div> Sales
+//           </div>
+//           <div className="flex items-center gap-1.5 text-[10px] font-medium uppercase text-muted-foreground">
+//             <div className="w-3 h-3 bg-emerald-500 rounded-sm"></div> Fuel
+//           </div>
+//         </div>
+
+//         <div className="space-y-3">
+//           {displayData.map((day) => (
+//             <div key={day.date} className="space-y-1">
+//               <div className="flex justify-between items-center px-1">
+//                 <span className="text-[10px] font-bold text-muted-foreground uppercase">
+//                   {new Date(day.date + 'T00:00:00').toLocaleDateString('en-US', { weekday: 'short', month: 'numeric', day: 'numeric' })}
+//                 </span>
+//                 {day.chartMetrics.isZombieShift && (
+//                   <span className="text-[9px] font-black text-red-500 animate-pulse">ZOMBIE SHIFT</span>
+//                 )}
+//               </div>
+
+//               <div className="relative h-6 bg-muted/30 rounded-md border border-border overflow-hidden group">
+//                 {/* 24h Grid Markers (Optional - 6am, 12pm, 6pm) */}
+//                 <div className="absolute inset-0 flex justify-between px-[25%] pointer-events-none opacity-20">
+//                   <div className="w-px h-full bg-foreground"></div>
+//                   <div className="w-px h-full bg-foreground"></div>
+//                   <div className="w-px h-full bg-foreground"></div>
+//                 </div>
+
+//                 {/* 1. Shift Window (Base) */}
+//                 {day.chartMetrics.openMin !== null && day.chartMetrics.closeMin !== null && (
+//                   <div
+//                     className={`absolute h-full transition-colors ${day.chartMetrics.isZombieShift ? 'bg-red-200/50' : 'bg-blue-100/60'}`}
+//                     style={{
+//                       left: `${Math.max(0, (day.chartMetrics.openMin / 1440) * 100)}%`,
+//                       width: `${((day.chartMetrics.closeMin - day.chartMetrics.openMin) / 1440) * 100}%`
+//                     }}
+//                   />
+//                 )}
+
+//                 {/* 2. Regular Transactions (Darker middle bar) */}
+//                 {day.chartMetrics.regStartMin !== null && day.chartMetrics.regEndMin !== null && (
+//                   <div
+//                     className="absolute h-2 top-2 bg-blue-600 rounded-full shadow-sm z-10"
+//                     style={{
+//                       left: `${(day.chartMetrics.regStartMin / 1440) * 100}%`,
+//                       width: `${((day.chartMetrics.regEndMin - day.chartMetrics.regStartMin) / 1440) * 100}%`
+//                     }}
+//                   />
+//                 )}
+
+//                 {/* 3. Fuel/Cardlock Activity (Bottom thin bar) */}
+//                 {day.chartMetrics.clStartMin !== null && day.chartMetrics.clEndMin !== null && (
+//                   <div
+//                     className="absolute h-1 bottom-0 bg-emerald-500 z-10"
+//                     style={{
+//                       left: `${(day.chartMetrics.clStartMin / 1440) * 100}%`,
+//                       width: `${((day.chartMetrics.clEndMin - day.chartMetrics.clStartMin) / 1440) * 100}%`
+//                     }}
+//                   />
+//                 )}
+//               </div>
+//             </div>
+//           ))}
+//         </div>
+//       </CardContent>
+//       <CardFooter className="text-[10px] text-muted-foreground italic">
+//         Visualizing 00:00 to 23:59. Red indicates shifts spanning multiple days.
+//       </CardFooter>
+//     </Card>
+//   );
+// };
+// const OperationalTimelineCard = ({ data }: { data: OperationalTiming[] }) => {
+//   const [currentIndex, setCurrentIndex] = useState(data.length - 1);
+//   const day = data[currentIndex];
+
+//   if (!day) return <div className="p-8 text-center text-xl">Waiting for data...</div>;
+
+//   const goToPrev = () => setCurrentIndex((prev) => Math.max(0, prev - 1));
+//   const goToNext = () => setCurrentIndex((prev) => Math.min(data.length - 1, prev + 1));
+
+//   // Helper to place the "Flag" on the ruler
+//   const getPos = (min: number | null) => (min !== null ? (min / 1440) * 100 : 0);
+
+//   return (
+//     <Card className="col-span-1 lg:col-span-3 border-4 border-gray-100 shadow-xl">
+//       <CardHeader className="bg-gray-50 border-b-2">
+//         <div className="flex items-center justify-between py-2">
+//           <Button onClick={goToPrev} disabled={currentIndex === 0} className="h-16 px-8 text-xl font-bold bg-white border-2 text-blue-700 shadow-sm">
+//             ← PREVIOUS DAY
+//           </Button>
+          
+//           <div className="text-center">
+//             <h2 className="text-4xl font-black text-blue-900 leading-none">
+//               {new Date(day.date + 'T00:00:00').toLocaleDateString('en-US', { weekday: 'long' })}
+//             </h2>
+//             <p className="text-xl font-bold text-gray-500 mt-1">
+//               {new Date(day.date + 'T00:00:00').toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })}
+//             </p>
+//           </div>
+
+//           <Button onClick={goToNext} disabled={currentIndex === data.length - 1} className="h-16 px-8 text-xl font-bold bg-white border-2 text-blue-700 shadow-sm">
+//             NEXT DAY →
+//           </Button>
+//         </div>
+//       </CardHeader>
+
+//       <CardContent className="pt-12 pb-16 px-10">
+//         <div className="relative h-48 flex items-center">
+          
+//           {/* THE RULER (Background) */}
+//           <div className="absolute inset-0 flex justify-between px-0 pointer-events-none">
+//             {[0, 3, 6, 9, 12, 15, 18, 21, 24].map((hour) => (
+//               <div key={hour} className="flex flex-col items-center">
+//                 <div className="h-48 w-0.5 bg-gray-200"></div>
+//                 <span className="mt-4 text-sm font-black text-gray-400">
+//                   {hour === 12 ? 'NOON' : hour === 0 || hour === 24 ? 'MIDNIGHT' : `${hour > 12 ? hour - 12 : hour}${hour >= 12 ? 'PM' : 'AM'}`}
+//                 </span>
+//               </div>
+//             ))}
+//           </div>
+
+//           {/* 1. STORE OPEN TAPE (Light Blue Background) */}
+//           {day.chartMetrics.openMin !== null && (
+//             <div 
+//               className="absolute h-24 bg-blue-100 rounded-lg border-2 border-blue-200 opacity-60"
+//               style={{ 
+//                 left: `${getPos(day.chartMetrics.openMin)}%`, 
+//                 width: `${getPos(day.chartMetrics.closeMin) - getPos(day.chartMetrics.openMin)}%` 
+//               }}
+//             />
+//           )}
+
+//           {/* 2. SALES ACTIVITY TAPE (Dark Blue Bold) */}
+//           {day.chartMetrics.regStartMin !== null && (
+//             <div 
+//               className="absolute h-10 bg-blue-800 rounded shadow-md flex items-center justify-center text-white text-[10px] font-bold"
+//               style={{ 
+//                 left: `${getPos(day.chartMetrics.regStartMin)}%`, 
+//                 width: `${getPos(day.chartMetrics.regEndMin) - getPos(day.chartMetrics.regStartMin)}%` 
+//               }}
+//             >
+//               SALES ACTIVE
+//             </div>
+//           )}
+
+//           {/* 3. FIRST SALE FLAG (The Indicator) */}
+//           {day.chartMetrics.regStartMin !== null && (
+//             <div className="absolute top-[-30px] flex flex-col items-center" style={{ left: `${getPos(day.chartMetrics.regStartMin)}%` }}>
+//                <div className="bg-blue-900 text-white text-xs px-2 py-1 rounded-t font-black">FIRST SALE</div>
+//                <div className="w-1 h-32 bg-blue-900"></div>
+//                <div className="text-sm font-black text-blue-900 mt-1">
+//                   {new Date(day.firstRegTrans!).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+//                </div>
+//             </div>
+//           )}
+//         </div>
+
+//         {/* SUMMARY SECTION */}
+//         <div className="mt-20 grid grid-cols-2 gap-8 bg-gray-50 p-6 rounded-2xl border-2 border-dashed">
+//             <div className="space-y-1">
+//                 <p className="text-sm font-black text-gray-400 uppercase">Store Hours Today</p>
+//                 <p className="text-3xl font-black text-gray-800">
+//                     {day.stationOpen ? new Date(day.stationOpen).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : "Not Logged"} 
+//                     <span className="mx-2 text-gray-300">to</span>
+//                     {day.stationClose ? new Date(day.stationClose).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : "Open"}
+//                 </p>
+//             </div>
+//             <div className="space-y-1 border-l-2 pl-8">
+//                 <p className="text-sm font-black text-gray-400 uppercase">Customer Activity</p>
+//                 <p className="text-3xl font-black text-emerald-600">
+//                     {day.firstRegTrans ? "First sale at " + new Date(day.firstRegTrans).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : "No customers found"}
+//                 </p>
+//             </div>
+//         </div>
+//       </CardContent>
+//     </Card>
+//   );
+// };
