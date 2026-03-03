@@ -122,58 +122,6 @@ function RouteComponent() {
     }
   }
 
-  // const handleUpdateStatus = async () => {
-  //   if (!updateStatusOrderId || !newStatus) return;
-
-  //   // 1. SPECIAL CASE: Not Placed → comment only
-  //   if (pendingStatusAfterComment === "Not Placed") {
-  //     setPendingStatusOrderId(updateStatusOrderId);
-  //     setUpdateStatusOrderId(null);
-  //     setCommentText("");
-  //     setAddEditCommentOrderId(updateStatusOrderId);
-  //     return;
-  //   }
-
-  //   try {
-  //     const res = await fetch(`/api/order-rec/${updateStatusOrderId}/status`, {
-  //       method: "PUT",
-  //       headers: {
-  //         "Content-Type": "application/json",
-  //         Authorization: `Bearer ${localStorage.getItem(`token`)}`,
-  //         "X-Required-Permission": "orderRec.workflow"
-  //       },
-  //       body: JSON.stringify({ status: newStatus }),
-  //     });
-  //     if (res.status == 403) {
-  //       navigate({ to: "/no-access" })
-  //       return;
-  //     }
-  //     if (!res.ok) throw new Error("Failed to update status");
-  //     const updated = await res.json();
-  //     setOrderRecs((prev) => prev.map((r) => (r._id === updated._id ? updated : r)));
-
-  //     const vendorsRes = await fetch("/api/vendors", {
-  //       headers: { Authorization: `Bearer ${localStorage.getItem(`token`)}` },
-  //     });
-  //     if (vendorsRes.ok) {
-  //       const vendorsData: Vendor[] = await vendorsRes.json();
-
-  //       // Rebuild grouped vendors for table display
-  //       const grouped = vendorsData.reduce((acc: Record<string, Vendor[]>, v: Vendor) => {
-  //         const key = `${v.name.trim().toLowerCase()}::${v.location}`;
-  //         if (!acc[key]) acc[key] = [];
-  //         acc[key].push(v);
-  //         return acc;
-  //       }, {});
-
-  //       setUniqueVendors(grouped);
-  //     }
-
-  //     setUpdateStatusOrderId(null);
-  //   } catch (err) {
-  //     console.error("Error updating status:", err);
-  //   }
-  // };
   const handleUpdateStatus = async () => {
     // 1. If this is triggered after adding a "Not Placed" comment, restore updateStatusOrderId
     const orderIdToUpdate = pendingStatusAfterComment === "Not Placed"
@@ -277,26 +225,100 @@ function RouteComponent() {
   };
 
 
-  useEffect(() => {
-    const fetchData = async () => {
-      setLoading(true)
-      const [recsRes, vendorsRes, storesRes] = await Promise.all([
-        fetch("/api/order-rec", { headers: { Authorization: `Bearer ${localStorage.getItem("token")}`, "X-Required-Permission": "orderRec.workflow" } }),
-        fetch("/api/vendors", { headers: { Authorization: `Bearer ${localStorage.getItem("token")}`, "X-Required-Permission": "orderRec.workflow" } }),
-        fetch("/api/locations", { headers: { Authorization: `Bearer ${localStorage.getItem("token")}`, "X-Required-Permission": "orderRec.workflow" } }),
-      ])
+  // useEffect(() => {
+  //   const fetchData = async () => {
+  //     setLoading(true)
+  //     const [recsRes, vendorsRes, storesRes] = await Promise.all([
+  //       fetch("/api/order-rec", { headers: { Authorization: `Bearer ${localStorage.getItem("token")}`, "X-Required-Permission": "orderRec.workflow" } }),
+  //       fetch("/api/vendors", { headers: { Authorization: `Bearer ${localStorage.getItem("token")}`, "X-Required-Permission": "orderRec.workflow" } }),
+  //       fetch("/api/locations", { headers: { Authorization: `Bearer ${localStorage.getItem("token")}`, "X-Required-Permission": "orderRec.workflow" } }),
+  //     ])
 
-      if ([recsRes, vendorsRes, storesRes].some(r => r.status === 403)) {
+  //     if ([recsRes, vendorsRes, storesRes].some(r => r.status === 403)) {
+  //       navigate({ to: "/no-access" });
+  //       return;
+  //     }
+
+  //     if (recsRes.ok && vendorsRes.ok && storesRes.ok) {
+  //       const recsData = await recsRes.json()
+  //       const vendorsData = await vendorsRes.json()
+  //       const storesData = await storesRes.json()
+
+  //       // setVendors(vendorsData)
+
+  //       const grouped = vendorsData.reduce((acc: Record<string, Vendor[]>, v: Vendor) => {
+  //         const key = `${v.name.trim().toLowerCase()}::${v.location}`;
+  //         if (!acc[key]) acc[key] = [];
+  //         acc[key].push(v);
+  //         return acc;
+  //       }, {});
+
+
+  //       setUniqueVendors(grouped);
+
+  //       setOrderRecs(recsData)
+  //       setStores(storesData)
+  //       buildWeeks(recsData); // always generates current week + previous weeks
+  //     }
+  //     setLoading(false)
+  //   }
+  //   fetchData()
+
+  //   // WebSocket listeners
+  //   socket.on("connect", () => {
+  //     // console.log("Connected to WS server", socket.id);
+  //   });
+
+  //   socket.on("orderUpdated", (updatedOrder: any) => {
+  //     // console.log("📡 Order updated:", updatedOrder);
+  //     setOrderRecs((prev) =>
+  //       prev.map((r) => (r._id === updatedOrder._id ? updatedOrder : r))
+  //     );
+  //   });
+
+  //   socket.on("orderCreated", (newOrder: any) => {
+  //     // console.log("📡 Order created:", newOrder);
+  //     setOrderRecs((prev) => [...prev, newOrder]);
+  //   });
+
+  //   socket.on("orderDeleted", (deletedOrder: any) => {
+  //     // console.log("📡 Order deleted:", deletedOrder);
+  //     setOrderRecs((prev) => prev.filter((r) => r._id !== deletedOrder._id));
+  //   });
+
+  //   socket.on("connect_error", (err: any) => {
+  //     console.error("❌ WS connection error:", err.message);
+  //   });
+
+  //   return () => {
+  //     // cleanup listeners ONLY
+  //     socket.off("orderUpdated");
+  //     socket.off("orderCreated");
+  //     socket.off("orderDeleted");
+  //     socket.off("connect");
+  //     socket.off("connect_error");
+  //   };
+  // }, []);
+
+  // separate useEffect for static metadata
+  useEffect(() => {
+    const fetchMetadata = async () => {
+
+      buildWeeks();
+
+      const [vendorsRes, storesRes] = await Promise.all([
+        fetch("/api/vendors", { headers: { Authorization: `Bearer ${localStorage.getItem("token")}` } }),
+        fetch("/api/locations", { headers: { Authorization: `Bearer ${localStorage.getItem("token")}` } }),
+      ]);
+
+      if ([vendorsRes, storesRes].some(r => r.status === 403)) {
         navigate({ to: "/no-access" });
         return;
       }
 
-      if (recsRes.ok && vendorsRes.ok && storesRes.ok) {
-        const recsData = await recsRes.json()
-        const vendorsData = await vendorsRes.json()
-        const storesData = await storesRes.json()
-
-        // setVendors(vendorsData)
+      if (vendorsRes.ok && storesRes.ok) {
+        const vendorsData = await vendorsRes.json();
+        const storesData = await storesRes.json();
 
         const grouped = vendorsData.reduce((acc: Record<string, Vendor[]>, v: Vendor) => {
           const key = `${v.name.trim().toLowerCase()}::${v.location}`;
@@ -307,86 +329,132 @@ function RouteComponent() {
 
 
         setUniqueVendors(grouped);
-
-        setOrderRecs(recsData)
-        setStores(storesData)
-        buildWeeks(recsData); // always generates current week + previous weeks
+        setStores(storesData);
       }
-      setLoading(false)
-    }
-    fetchData()
+    };
+    fetchMetadata();
+  }, []); // Empty dependency array: Only runs on page load
 
-    // WebSocket listeners
-    socket.on("connect", () => {
-      // console.log("Connected to WS server", socket.id);
+  useEffect(() => {
+    const fetchWeekData = async () => {
+      if (!selectedWeek) return;
+      setLoading(true);
+
+      try {
+        const res = await fetch(`/api/order-rec/workflow?week=${selectedWeek}`, {
+          headers: {
+            Authorization: `Bearer ${localStorage.getItem("token")}`,
+            "X-Required-Permission": "orderRec.workflow"
+          }
+        });
+
+        if (res.status === 403) {
+          navigate({ to: "/no-access" });
+          return;
+        }
+
+        if (res.ok) {
+          const data = await res.json();
+          setOrderRecs(data);
+        }
+      } catch (err) {
+        console.error("Error fetching week data:", err);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchWeekData();
+  }, [selectedWeek]); // Only refetch when the week changes
+
+  useEffect(() => {
+    const isInCurrentWeek = (dateString: string) => {
+      const [year, month, day] = selectedWeek.split('-').map(Number);
+      const start = Date.UTC(year, month - 1, day, 0, 0, 0, 0);
+      const end = start + (7 * 24 * 60 * 60 * 1000);
+      const time = new Date(dateString).getTime();
+      return time >= start && time < end;
+    };
+
+    socket.on("orderUpdated", (updated) => {
+      setOrderRecs((prev) => {
+        const exists = prev.some(r => r._id === updated._id);
+        if (exists) return prev.map(r => r._id === updated._id ? updated : r);
+        if (isInCurrentWeek(updated.createdAt)) return [updated, ...prev];
+        return prev;
+      });
     });
 
-    socket.on("orderUpdated", (updatedOrder: any) => {
-      // console.log("📡 Order updated:", updatedOrder);
-      setOrderRecs((prev) =>
-        prev.map((r) => (r._id === updatedOrder._id ? updatedOrder : r))
-      );
+    socket.on("orderCreated", (newOrder) => {
+      if (isInCurrentWeek(newOrder.createdAt)) {
+        setOrderRecs((prev) => [newOrder, ...prev]);
+      }
     });
 
-    socket.on("orderCreated", (newOrder: any) => {
-      // console.log("📡 Order created:", newOrder);
-      setOrderRecs((prev) => [...prev, newOrder]);
-    });
-
-    socket.on("orderDeleted", (deletedOrder: any) => {
-      // console.log("📡 Order deleted:", deletedOrder);
-      setOrderRecs((prev) => prev.filter((r) => r._id !== deletedOrder._id));
-    });
-
-    socket.on("connect_error", (err: any) => {
-      console.error("❌ WS connection error:", err.message);
+    socket.on("orderDeleted", (deleted) => {
+      setOrderRecs((prev) => prev.filter(r => r._id !== deleted._id));
     });
 
     return () => {
-      // cleanup listeners ONLY
       socket.off("orderUpdated");
       socket.off("orderCreated");
       socket.off("orderDeleted");
-      socket.off("connect");
-      socket.off("connect_error");
     };
-  }, []);
+  }, [selectedWeek]); // Re-bind whenever week changes to keep closure fresh
 
-  const buildWeeks = (data: any[]) => {
+  // const buildWeeks = (data: any[]) => {
+  //   const weekSet = new Set<string>();
+
+  //   // 1️⃣ Add all weeks from existing orders
+  //   data.forEach((rec) => {
+  //     const created = new Date(rec.createdAt);
+  //     const monday = getWeekStart(created);
+  //     weekSet.add(monday.toISOString().split("T")[0]);
+  //   });
+
+  //   // 2️⃣ Add current week (in case no orders exist yet for this week)
+  //   const today = new Date();
+  //   const currentMonday = getWeekStart(today);
+  //   weekSet.add(currentMonday.toISOString().split("T")[0]);
+
+  //   // Sort descending (latest week first)
+  //   const weekList = Array.from(weekSet).sort(
+  //     (a, b) => new Date(b).getTime() - new Date(a).getTime()
+  //   );
+
+  //   setWeeks(weekList);
+
+  //   // default to latest week
+  //   if (weekList.length > 0) setSelectedWeek(weekList[0]);
+  // };
+  const buildWeeks = () => {
     const weekSet = new Set<string>();
+    const startDate = new Date("2025-08-11T00:00:00Z"); // Your specified floor date
+    // const today = new Date();
 
-    // 1️⃣ Add all weeks from existing orders
-    data.forEach((rec) => {
-      const created = new Date(rec.createdAt);
-      const monday = getWeekStart(created);
-      weekSet.add(monday.toISOString().split("T")[0]);
-    });
+    // Get the Monday of the start date
+    let current = getWeekStart(startDate);
+    const now = new Date();
 
-    // 2️⃣ Add current week (in case no orders exist yet for this week)
-    const today = new Date();
-    const currentMonday = getWeekStart(today);
-    weekSet.add(currentMonday.toISOString().split("T")[0]);
+    // Generate every Monday from start until now
+    while (current <= now) {
+      weekSet.add(current.toISOString().split("T")[0]);
+      current.setUTCDate(current.getUTCDate() + 7);
+    }
 
-    // Sort descending (latest week first)
+    // Convert to array and sort descending (Newest first)
     const weekList = Array.from(weekSet).sort(
       (a, b) => new Date(b).getTime() - new Date(a).getTime()
     );
 
     setWeeks(weekList);
 
-    // default to latest week
-    if (weekList.length > 0) setSelectedWeek(weekList[0]);
+    // Default to latest week if none selected
+    if (weekList.length > 0 && !selectedWeek) {
+      setSelectedWeek(weekList[0]);
+    }
   };
 
-  // getWeekStart remains the same
-  // const getWeekStart = (date: Date) => {
-  //   const d = new Date(date);
-  //   const day = d.getDay(); // 0 = Sunday, 1 = Monday, ..., 6 = Saturday
-  //   const diff = d.getDate() - (day === 0 ? 6 : day - 1); // shift so Monday is start
-  //   d.setDate(diff);
-  //   d.setHours(0, 0, 0, 0);
-  //   return d;
-  // };
   const getWeekStart = (date: Date) => {
     const d = new Date(date);
     // Use getUTCDay() instead of getDay()
@@ -403,51 +471,48 @@ function RouteComponent() {
     return d;
   };
 
-  const filteredOrders = orderRecs
-    // .filter((rec) => {
-    //   if (!selectedWeek) return true;
+  // const filteredOrders = orderRecs
+  //   .filter((rec) => {
+  //     if (!selectedWeek) return true;
 
-    //   // Week range based on selectedWeek (Monday)
-    //   const selectedMonday = new Date(selectedWeek);
-    //   selectedMonday.setHours(0, 0, 0, 0);
+  //     // 1. Create start of week at EXACTLY 00:00:00.000 UTC
+  //     // Using the Date.UTC constructor is the safest way to avoid local shifts
+  //     const [year, month, day] = selectedWeek.split('-').map(Number);
+  //     const weekStartTimestamp = Date.UTC(year, month - 1, day, 0, 0, 0, 0);
 
-    //   const weekStart = new Date(selectedMonday);
-    //   const weekEnd = new Date(selectedMonday);
-    //   weekEnd.setDate(weekEnd.getDate() + 7); // Sunday
-    //   console.log(`Filtering orders for week: ${weekStart} - ${weekEnd}`);
+  //     // 2. End of week is exactly 7 days later in milliseconds
+  //     const sevenDaysInMs = 7 * 24 * 60 * 60 * 1000;
+  //     const weekEndTimestamp = weekStartTimestamp + sevenDaysInMs;
 
-    //   const recDate = new Date(rec.createdAt);
-    //   return recDate >= weekStart && recDate <= weekEnd;
-    // })
-    .filter((rec) => {
-      if (!selectedWeek) return true;
+  //     // 3. Convert record date to UTC timestamp
+  //     const recDateTimestamp = new Date(rec.createdAt).getTime();
 
-      // 1. Create start of week at EXACTLY 00:00:00.000 UTC
-      // Using the Date.UTC constructor is the safest way to avoid local shifts
-      const [year, month, day] = selectedWeek.split('-').map(Number);
-      const weekStartTimestamp = Date.UTC(year, month - 1, day, 0, 0, 0, 0);
+  //     return recDateTimestamp >= weekStartTimestamp && recDateTimestamp < weekEndTimestamp;
+  //   })
+  //   .filter((rec) => {
+  //     // Filter by selected category
+  //     if (!selectedCategory || selectedCategory === "All") return true;
 
-      // 2. End of week is exactly 7 days later in milliseconds
-      const sevenDaysInMs = 7 * 24 * 60 * 60 * 1000;
-      const weekEndTimestamp = weekStartTimestamp + sevenDaysInMs;
+  //     const vendorId = typeof rec.vendor === "object" ? rec.vendor._id : rec.vendor;
+  //     const vendorMeta = Object.values(uniquevendors)
+  //       .flat()
+  //       .find((v) => v._id === vendorId);
 
-      // 3. Convert record date to UTC timestamp
-      const recDateTimestamp = new Date(rec.createdAt).getTime();
+  //     // Only include if vendor category matches
+  //     return vendorMeta?.category === selectedCategory;
+  //   });
+  const filteredOrders = orderRecs.filter((rec) => {
+    if (!selectedCategory || selectedCategory === "All") return true;
 
-      return recDateTimestamp >= weekStartTimestamp && recDateTimestamp < weekEndTimestamp;
-    })
-    .filter((rec) => {
-      // Filter by selected category
-      if (!selectedCategory || selectedCategory === "All") return true;
+    const vendorId = typeof rec.vendor === "object" ? rec.vendor._id : rec.vendor;
 
-      const vendorId = typeof rec.vendor === "object" ? rec.vendor._id : rec.vendor;
-      const vendorMeta = Object.values(uniquevendors)
-        .flat()
-        .find((v) => v._id === vendorId);
+    // Flatten uniquevendors and find the matching vendor to check category
+    const vendorMeta = Object.values(uniquevendors)
+      .flat()
+      .find((v) => v._id === vendorId);
 
-      // Only include if vendor category matches
-      return vendorMeta?.category === selectedCategory;
-    });
+    return vendorMeta?.category === selectedCategory;
+  });
 
 
 
@@ -464,21 +529,6 @@ function RouteComponent() {
     ? orderRecs.find(r => r._id === updateStatusOrderId)?.currentStatus || ""
     : "";
 
-  // let allowedStatuses: string[] = [];
-  // let infoMessage = "";
-
-  // if (currentStatus === "Created") {
-  //   // Cannot update until "Completed" from other end
-  //   allowedStatuses = [];
-  //   infoMessage = "The store has not yet completed the Order Rec";
-  // } else if (currentStatus) {
-  //   const currentIndex = STATUS_HIERARCHY.indexOf(currentStatus);
-  //   if (currentIndex < STATUS_HIERARCHY.length - 1) {
-  //     allowedStatuses = [STATUS_HIERARCHY[currentIndex + 1]]; // only next status
-  //   } else {
-  //     allowedStatuses = []; // Already at final status
-  //   }
-  // }
   let allowedStatuses: string[] = [];
   let infoMessage = "";
 
@@ -541,24 +591,6 @@ function RouteComponent() {
             ))}
           </SelectContent>
         </Select>
-        {/* Right side: Status Legend */}
-        {/* <div className="flex space-x-4 items-center">
-          {STATUS_HIERARCHY.map(status => (
-            <div key={status} className="flex items-center space-x-1">
-              <div
-                className="w-4 h-4 rounded-sm"
-                style={{ backgroundColor: getOrderRecStatusColor(status) }}
-              ></div>
-              <span className="text-xs text-gray-700">{status}</span>
-            </div>
-          ))}
-          <div className="flex items-center space-x-1">
-            <div
-              className="w-4 h-4 rounded-sm bg-white-300 flex items-center justify-center text-xs font-semibold text-gray-700"
-            > LT </div>
-            <span className="text-xs text-gray-700"> - Average Lead Time</span>
-          </div>
-        </div> */}
         <TooltipProvider delayDuration={300}>
           <div className="flex space-x-4 items-center">
             {STATUS_HIERARCHY.map(status => (
@@ -664,28 +696,6 @@ function RouteComponent() {
                       const vendorMeta = vendorObjs[0];
 
                       // Week range
-                      // const weekStart = new Date(selectedWeek);
-                      // const weekEnd = new Date(weekStart);
-                      // weekEnd.setDate(weekEnd.getDate() + 6);
-
-                      // // All orders between this store + vendor historically
-                      // const allOrders = orderRecs.filter(
-                      //   r =>
-                      //     r.site === store.stationName &&
-                      //     vendorObjs.some(
-                      //       vo =>
-                      //         vo._id ===
-                      //         (typeof r.vendor === "object" ? r.vendor._id : r.vendor)
-                      //     )
-                      // );
-
-                      // // Orders in the selected week
-                      // const rec = allOrders.find(
-                      //   r =>
-                      //     new Date(r.createdAt) >= weekStart &&
-                      //     new Date(r.createdAt) <= weekEnd
-                      // );
-                      // ✅ USE THE ATOMIC UTC FIX HERE TOO
                       const [year, month, day] = selectedWeek.split('-').map(Number);
                       const weekStartTs = Date.UTC(year, month - 1, day, 0, 0, 0, 0);
                       const weekEndTs = weekStartTs + (7 * 24 * 60 * 60 * 1000); // Full 7 days
@@ -707,7 +717,9 @@ function RouteComponent() {
                           className="border border-gray-300 bg-white w-80 p-0 items-center"
                         >
                           <div className="w-full h-full flex items-center justify-center p-2">
-                            {allOrders.length === 0 ? (
+                            {/* {allOrders.length === 0 ? ( */}
+                            {/* CASE 1: No history in the Vendor Meta at all */}
+                            {!vendorMeta?.lastPlacedOrder ? (
                               // Case 1: no orders at all
                               (<div className="w-80 h-40 flex items-center justify-center rounded-2xl bg-gray-100 text-gray-500 text-sm">No Past Orders</div>)
                             ) : rec ? (
@@ -936,32 +948,6 @@ function RouteComponent() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
-
-      {/* View Comments Dialog */}
-      {/* <Dialog open={!!viewCommentsOrderId} onOpenChange={() => setViewCommentsOrderId(null)}>
-        <DialogContent className="w-[400px] max-w-full">
-          <DialogHeader>
-            <DialogTitle>Comments</DialogTitle>
-          </DialogHeader>
-          <div className="flex flex-col gap-2 max-h-[300px] overflow-y-auto mt-2">
-            {currentComments.length > 0 ? (
-              currentComments.map((c, idx) => (
-                <div key={idx} className="text-sm text-gray-700">
-                  <span className="text-xs text-gray-400 mr-1">
-                    ({new Date(c.timestamp).toLocaleString("en-US", { month: "short", day: "numeric" })})
-                  </span>
-                  <span className="font-medium">{c.author}:</span> {c.text}
-                </div>
-              ))
-            ) : (
-              <div className="text-gray-400 text-sm">No comments yet</div>
-            )}
-          </div>
-          <DialogFooter>
-            <Button onClick={() => setViewCommentsOrderId(null)}>Close</Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog> */}
     </div>
   )
 }
