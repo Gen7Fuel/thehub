@@ -164,14 +164,6 @@ interface Role {
   permissions: PermissionNode[];
 }
 
-interface User {
-  _id: string;
-  firstName: string;
-  lastName: string;
-  email: string;
-  role?: { _id: string };
-}
-
 export const Route = createFileRoute("/_navbarLayout/settings/roles/$id")({
   component: RouteComponent,
 });
@@ -185,92 +177,55 @@ export function RouteComponent() {
   const [loading, setLoading] = useState(true);
 
   // For assign users dialog
-  const [users, setUsers] = useState<User[]>([]);
+  const [users, setUsers] = useState<any[]>([]);
   const [selectedUsers, setSelectedUsers] = useState<string[]>([]);
   const [dialogOpen, setDialogOpen] = useState(false);
+  const [isSaving, _] = useState(false);
   const [typeDialogOpen, setTypeDialogOpen] = useState(false); // New Dialog State
 
-  // useEffect(() => {
-  //   const fetchData = async () => {
-  //     try {
-  //       const token = localStorage.getItem("token");
+  // Combined Fetching Logic
+  const fetchInitialData = async () => {
+    try {
+      const token = localStorage.getItem("token");
+      const headers = {
+        Authorization: `Bearer ${token}`,
+        "X-Required-Permission": "settings"
+      };
 
-  //       // Fetch role and users in parallel
-  //       const [roleRes, usersRes] = await Promise.all([
-  //         axios.get<Role>(`/api/roles/${id}`, {
-  //           headers: {
-  //             Authorization: `Bearer ${token}`,
-  //             "X-Required-Permission": "settings",
-  //           },
-  //         }),
-  //         axios.get<User[]>("/api/users", {
-  //           headers: {
-  //             Authorization: `Bearer ${token}`,
-  //             "X-Required-Permission": "settings",
-  //           },
-  //         }),
-  //       ]);
+      // Fetch Role and Users in parallel
+      const [roleRes, usersRes] = await Promise.all([
+        axios.get(`/api/roles/${id}`, { headers }),
+        axios.get("/api/users/populate-roles", { headers })
+      ]);
 
-  //       setRole(roleRes.data);
-  //       setUsers(usersRes.data);
+      const fetchedRole = roleRes.data;
+      const allUsers = usersRes.data;
 
-  //       // Compute assigned users
-  //       const assignedIds = usersRes.data
-  //         .filter((u) => u.role?._id === id)
-  //         .map((u) => u._id);
-  //       setSelectedUsers(assignedIds);
+      setRole(fetchedRole);
+      setUsers(allUsers);
 
-  //       setLoading(false);
-  //     } catch (err: any) {
-  //       console.error(err);
-  //       setLoading(false);
+      // Determine who is currently assigned to this role
+      const currentlyAssigned = allUsers
+        .filter((u: any) => {
+          const userRoleId = typeof u.role === 'object' ? u.role?._id : u.role;
+          return userRoleId === id;
+        })
+        .map((u: any) => u._id);
 
-  //       // Handle 403 specifically
-  //       if (axios.isAxiosError(err) && err.response?.status === 403) {
-  //         navigate({ to: "/no-access" });
-  //       }
-  //     }
-  //   };
-
-  //   fetchData();
-  // }, [id]);
-  useEffect(() => {
-    const fetchData = async () => {
-      try {
-        const token = localStorage.getItem("token");
-        const [roleRes, usersRes] = await Promise.all([
-          axios.get<Role>(`/api/roles/${id}`, {
-            headers: { Authorization: `Bearer ${token}`, "X-Required-Permission": "settings" },
-          }),
-          axios.get<User[]>("/api/users", {
-            headers: { Authorization: `Bearer ${token}`, "X-Required-Permission": "settings" },
-          }),
-        ]);
-
-        setRole(roleRes.data);
-        setUsers(usersRes.data);
-
-        // FIX: Improved filtering logic
-        const assignedIds = usersRes.data
-          .filter((u) => {
-            // Check if role is an object with _id OR just a string ID
-            const userRoleId = typeof u.role === 'object' ? u.role?._id : u.role;
-            return userRoleId === id;
-          })
-          .map((u) => u._id);
-
-        setSelectedUsers(assignedIds);
-        setLoading(false);
-      } catch (err: any) {
-        console.error(err);
-        setLoading(false);
-        if (axios.isAxiosError(err) && err.response?.status === 403) {
-          navigate({ to: "/no-access" });
-        }
+      setSelectedUsers(currentlyAssigned);
+    } catch (err: any) {
+      console.error("Error fetching data:", err);
+      if (err.response?.status === 403) {
+        navigate({ to: "/no-access" });
       }
-    };
+    } finally {
+      // THIS IS THE KEY: Ensure loading ends regardless of success/fail (if role exists)
+      setLoading(false);
+    }
+  };
 
-    fetchData();
+  useEffect(() => {
+    fetchInitialData();
   }, [id]);
 
 
@@ -349,6 +304,20 @@ export function RouteComponent() {
     }
   };
 
+  // const assignedUserCount = useMemo(() => {
+  //   return users.filter(u => {
+  //     const userRoleId = typeof u.role === 'object' ? u.role?._id : u.role;
+  //     return userRoleId === id;
+  //   }).length;
+  // }, [users, id]);
+  const toggleUserSelection = (userId: string, isActive: boolean) => {
+    if (!isActive) return; // Prevent checking/unchecking inactive users
+    setSelectedUsers(prev =>
+      prev.includes(userId) ? prev.filter(i => i !== userId) : [...prev, userId]
+    );
+  };
+
+  // Memoized count for the button
   const assignedUserCount = useMemo(() => {
     return users.filter(u => {
       const userRoleId = typeof u.role === 'object' ? u.role?._id : u.role;
@@ -356,40 +325,36 @@ export function RouteComponent() {
     }).length;
   }, [users, id]);
 
-  // Open assign users dialog
+  // Use the refined openAssignUsersDialog to refresh user list when dialog opens
   const openAssignUsersDialog = async () => {
     setDialogOpen(true);
     try {
-      const res = await axios.get<User[]>("/api/users", {
-        headers: { Authorization: `Bearer ${localStorage.getItem('token')}`, "X-Required-Permission": "settings", }
+      const token = localStorage.getItem("token");
+      const res = await axios.get("/api/users/populate-roles", {
+        headers: { Authorization: `Bearer ${token}`, "X-Required-Permission": "settings" }
       });
+      setUsers(res.data);
 
-      setUsers(res.data); // update state for rendering
-
-      // Compute assigned users using the fetched data directly
       const assignedIds = res.data
-        .filter(u => u.role?.toString() === id)
-        .map(u => u._id);
+        .filter((u: any) => {
+          const userRoleId = typeof u.role === 'object' ? u.role?._id : u.role;
+          return userRoleId === id;
+        })
+        .map((u: any) => u._id);
       setSelectedUsers(assignedIds);
-
-    } catch (err: any) {
-      if (err.response?.status === 403) {
-        // Redirect to no-access page
-        navigate({ to: "/no-access" });
-      } else {
-        console.error(err);
-      }
+    } catch (err) {
+      console.error("Failed to refresh users list", err);
     }
   };
 
 
-  const toggleUserSelection = (userId: string) => {
-    setSelectedUsers(prev =>
-      prev.includes(userId)
-        ? prev.filter(id => id !== userId)
-        : [...prev, userId]
-    );
-  };
+  // const toggleUserSelection = (userId: string) => {
+  //   setSelectedUsers(prev =>
+  //     prev.includes(userId)
+  //       ? prev.filter(id => id !== userId)
+  //       : [...prev, userId]
+  //   );
+  // };
 
   const saveUserAssignments = async () => {
     try {
@@ -410,7 +375,8 @@ export function RouteComponent() {
     }
   };
 
-  if (loading || !role) return <div>Loading...</div>;
+  if (loading) return <div className="p-10 text-center text-gray-500">Loading Role Details...</div>;
+  if (!role) return <div className="p-10 text-center text-red-500">Role not found.</div>;
 
   return (
     <div className="p-6 space-y-6 max-w-4xl mx-auto">
@@ -463,27 +429,65 @@ export function RouteComponent() {
 
       {/* Assign Users Dialog */}
       <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
-        <DialogContent className="max-w-md">
+        <DialogContent className="max-w-3xl h-[80vh] flex flex-col">
           <DialogHeader>
-            <DialogTitle>Assign Users to Role</DialogTitle>
+            <DialogTitle className="text-2xl">Assign Users to Role: {role?.role_name}</DialogTitle>
           </DialogHeader>
 
-          <div className="space-y-2 max-h-80 overflow-y-auto mt-2">
-            {users.map(u => (
-              <label key={u._id} className="flex items-center space-x-2">
-                <input
-                  type="checkbox"
-                  checked={selectedUsers.includes(u._id)}
-                  onChange={() => toggleUserSelection(u._id)}
-                />
-                <span>{u.firstName} {u.lastName} ({u.email})</span>
-              </label>
-            ))}
+          <div className="flex-1 overflow-y-auto mt-4 pr-2">
+            <div className="grid grid-cols-1 gap-2">
+              {users.map((u) => {
+                const isActive = u.is_active !== false;
+                const currentRoleName = u.role?.role_name || "No Role";
+
+                return (
+                  <div
+                    key={u._id}
+                    className={`flex items-center justify-between p-4 border rounded-xl transition-all ${isActive
+                      ? "hover:bg-slate-50 border-slate-200"
+                      : "bg-slate-100 border-slate-200 opacity-60 cursor-not-allowed"
+                      }`}
+                  >
+                    <div className="flex flex-col">
+                      <span className={`font-semibold text-lg ${!isActive && "text-slate-500"}`}>
+                        {u.firstName} {u.lastName}
+                      </span>
+                      <span className="text-sm text-muted-foreground flex items-center gap-2">
+                        {u.email}
+                        <span className={`font-mono px-2 py-0.5 rounded text-xs uppercase ${isActive
+                          ? "text-blue-600 bg-blue-50 border border-blue-100"
+                          : "text-red-600 bg-red-50 border border-red-100 font-bold"
+                          }`}>
+                          {!isActive ? "INACTIVE" : `Current: ${currentRoleName}`}
+                        </span>
+                      </span>
+                    </div>
+
+                    <input
+                      type="checkbox"
+                      disabled={!isActive}
+                      className={`h-6 w-6 rounded-md border-gray-300 text-primary focus:ring-primary ${isActive ? "cursor-pointer" : "cursor-not-allowed"
+                        }`}
+                      checked={selectedUsers.includes(u._id)}
+                      onChange={() => toggleUserSelection(u._id, isActive)}
+                    />
+                  </div>
+                );
+              })}
+            </div>
           </div>
 
-          <DialogFooter className="mt-4 flex justify-end space-x-2">
-            <Button variant="secondary" onClick={() => setDialogOpen(false)}>Cancel</Button>
-            <Button onClick={saveUserAssignments}>Save</Button>
+          <DialogFooter className="pt-4 border-t mt-4 flex justify-end space-x-2">
+            <Button variant="outline" onClick={() => setDialogOpen(false)}>
+              Cancel
+            </Button>
+            <Button
+              onClick={saveUserAssignments}
+              disabled={isSaving}
+              className="min-w-[120px]"
+            >
+              {isSaving ? "Saving..." : "Save Changes"}
+            </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
