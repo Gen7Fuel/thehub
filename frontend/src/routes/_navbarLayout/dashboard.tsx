@@ -663,7 +663,7 @@ function RouteComponent() {
         const tenderCached = await getDashboardData(STORES.TENDER_TRANS, site);
         const bistroWowSalesCached = await getDashboardData(STORES.BISTRO_WOW_SALES, site);
         const top10BistroCached = await getDashboardData(STORES.TOP_10_BISTRO, site);
-        const shiftTimeDetailsCached = await getDashboardData(STORES.SHIFT_TIME_DETAILS, site);
+        // const shiftTimeDetailsCached = await getDashboardData(STORES.SHIFT_TIME_DETAILS, site);
         let sqlSales = salesCached;
         let sqlFuel = fuelCached;
         let sqlTrans = transCached;
@@ -671,7 +671,7 @@ function RouteComponent() {
         let sqlTenderTrans = tenderCached;
         let sqlBistroWoWSales = bistroWowSalesCached;
         let sqlTop10Bistro = top10BistroCached;
-        let sqlShiftTimeDetails = shiftTimeDetailsCached;
+        // let sqlShiftTimeDetails = shiftTimeDetailsCached;
 
         if (
           !sqlSales?.length ||
@@ -680,8 +680,8 @@ function RouteComponent() {
           !sqlTimePeriodTrans?.length ||
           !sqlTenderTrans?.length ||
           !sqlBistroWoWSales?.length ||
-          !sqlTop10Bistro?.length ||
-          !sqlShiftTimeDetails?.length
+          !sqlTop10Bistro?.length 
+          // || !sqlShiftTimeDetails?.length
         ) {
           console.log("📡 No cache → Calling SQL backend...");
 
@@ -706,7 +706,7 @@ function RouteComponent() {
           sqlTenderTrans = data.tenderTransactions;
           sqlBistroWoWSales = data.bistroWoWSales;
           sqlTop10Bistro = data.top10Bistro;
-          sqlShiftTimeDetails = data.operationalTimings;
+          // sqlShiftTimeDetails = data.operationalTimings;
 
           // Save to IDB
           await saveDashboardData(STORES.SALES, site, sqlSales);
@@ -716,7 +716,7 @@ function RouteComponent() {
           await saveDashboardData(STORES.TENDER_TRANS, site, sqlTenderTrans);
           await saveDashboardData(STORES.BISTRO_WOW_SALES, site, sqlBistroWoWSales);
           await saveDashboardData(STORES.TOP_10_BISTRO, site, sqlTop10Bistro);
-          await saveDashboardData(STORES.SHIFT_TIME_DETAILS, site, data.operationalTimings);
+          // await saveDashboardData(STORES.SHIFT_TIME_DETAILS, site, data.operationalTimings);
         } else {
           console.log("⚡ Using cached dashboard SQL data");
         }
