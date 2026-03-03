@@ -7,9 +7,10 @@ import { DatePickerWithRange } from '@/components/custom/datePickerWithRange'
 import { pdf, Document, Page, Image as PdfImage, StyleSheet } from '@react-pdf/renderer'
 import { Button } from '@/components/ui/button'
 import { useAuth } from '@/context/AuthContext'
-import { Trash2 } from 'lucide-react'
+import { Trash2, MessageSquareText, RefreshCcw, ExternalLink } from 'lucide-react'
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 
-type Search = { site: string; from: string; to: string }
+
 type BOLPhoto = {
   _id: string
   site: string
@@ -18,7 +19,9 @@ type BOLPhoto = {
   bolNumber?: string
   createdAt?: string
   updatedAt?: string
+  comments?: Array<{ text: string; createdAt: string; user?: string }>
 }
+type Search = { site: string; from: string; to: string }
 type ListResponse = {
   site: string
   from: string | null
@@ -118,6 +121,12 @@ function RouteComponent() {
   React.useEffect(() => {
     setEntries(data?.entries || [])
   }, [data])
+
+  // Modal States
+  const [selectedImg, setSelectedImg] = React.useState<string | null>(null)
+  const [activeCommentEntry, setActiveCommentEntry] = React.useState<BOLPhoto | null>(null)
+  const [commentText, setCommentText] = React.useState('')
+  const [commentPending, setCommentPending] = React.useState(false)
 
   const requestAgain = async (e: BOLPhoto) => {
     try {
@@ -235,6 +244,34 @@ function RouteComponent() {
       })
     }
   }
+
+  const handleCommentSave = async () => {
+    if (!commentText.trim() || !activeCommentEntry) return
+    setCommentPending(true)
+    try {
+      const res = await fetch(`/api/fuel-rec/${encodeURIComponent(activeCommentEntry._id)}/comment`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${localStorage.getItem('token') || ''}`,
+        },
+        body: JSON.stringify({ text: commentText }),
+      })
+
+      if (!res.ok) throw new Error('Failed to save')
+
+      const result = await res.json()
+      // Update the main table list
+      setEntries(prev => prev.map(x => x._id === activeCommentEntry._id ? { ...x, comments: result.comments } : x))
+      // Update the currently open modal data
+      setActiveCommentEntry({ ...activeCommentEntry, comments: result.comments })
+      setCommentText('')
+    } catch (err) {
+      alert("Failed to add comment")
+    } finally {
+      setCommentPending(false)
+    }
+  }
   return (
     <div className="p-4 space-y-4">
       <div className="flex flex-col sm:flex-row items-center gap-4">
@@ -275,36 +312,55 @@ function RouteComponent() {
                       <td className="px-2 py-2 font-mono">{e.date}</td>
                       <td className="px-2 py-2">{e.bolNumber || '—'}</td>
                       <td className="px-2 py-2">
-                        <img 
-                          src={`/cdn/download/${e.filename}`} 
+                        <img
+                          src={`/cdn/download/${e.filename}`}
                           alt={`${e.date} preview`}
-                          className="w-16 h-16 object-cover rounded border"
+                          className="w-16 h-16 object-cover rounded border cursor-pointer"
                           loading="lazy"
+                          // onClick={() => setModalImg(`/cdn/download/${e.filename}`)}
+                          onClick={() => setSelectedImg('/cdn/download/' + e.filename)}
                         />
                       </td>
-                      {/* <td className="px-2 py-2">{e.createdAt ? format(new Date(e.createdAt), 'yyyy-MM-dd HH:mm') : '—'}</td> */}
+                      {/* ...existing code... */}
                       <td className="px-2 py-2 space-x-3">
-                        {/* <a download={true} href={`/cdn/download/${e.filename}`}>Image</a> */}
-                        {/* <button
-                          type="button"
-                          className="underline text-blue-600 hover:text-blue-800"
-                          onClick={() => downloadPdfForEntry(e)}
-                        >
-                          PDF
-                        </button> */}
                         <Button
                           onClick={() => downloadPdfForEntry(e)}
                         >
                           PDF
                         </Button>
 
+                        <Button
+                          variant="outline"
+                          size="icon"
+                          // onClick={() => setCommentModal({ entry: e })}
+                          onClick={() => setActiveCommentEntry(e)}
+                          title="Comments"
+                          aria-label="Comments"
+                          className="relative"
+                        >
+                          <MessageSquareText className="h-4 w-4" />
+                          <span className="sr-only">Comments</span>
+                          {e.comments && e.comments.length > 0 && (
+                            <span className="absolute -top-1 -right-1 bg-red-600 text-white text-xs rounded-full px-1.5 min-w-[1.25rem] h-5 flex items-center justify-center border border-white">
+                              {e.comments.length}
+                            </span>
+                          )}
+                        </Button>
+
                         {access?.accounting?.fuelRec?.requestAgain && (
                           <Button
                             variant="outline"
+                            size="icon"
                             onClick={() => requestAgain(e)}
                             disabled={pending.has(e._id)}
+                            title="Request Again"
+                            aria-label="Request Again"
                           >
-                            {pending.has(e._id) ? 'Sending…' : 'Request Again'}
+                            {pending.has(e._id) ? (
+                              <span className="text-xs">…</span>
+                            ) : (
+                              <RefreshCcw className="h-4 w-4" />
+                            )}
                           </Button>
                         )}
 
@@ -330,6 +386,74 @@ function RouteComponent() {
           )}
         </div>
       )}
+
+
+      {/* 1. Image Viewer Dialog */}
+      <Dialog open={!!selectedImg} onOpenChange={() => setSelectedImg(null)}>
+        <DialogContent className="max-w-4xl max-h-[95vh] overflow-hidden flex flex-col">
+          <DialogHeader>
+            <DialogTitle>BOL Preview</DialogTitle>
+          </DialogHeader>
+          <div className="flex-1 bg-gray-100 rounded-md overflow-hidden flex items-center justify-center">
+            <img 
+              src={selectedImg || ''} 
+              className="max-w-full max-h-[70vh] object-contain" 
+              alt="BOL Preview" 
+            />
+          </div>
+          <div className="flex justify-end gap-2 pt-4">
+            <Button variant="outline" onClick={() => window.open(selectedImg || '', '_blank')}>
+              <ExternalLink className="h-4 w-4 mr-2" /> Open in New Tab
+            </Button>
+            <Button variant="secondary" onClick={() => setSelectedImg(null)}>Close</Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* 2. Comments Dialog */}
+      <Dialog open={!!activeCommentEntry} onOpenChange={() => setActiveCommentEntry(null)}>
+        <DialogContent className="sm:max-w-[500px]">
+          <DialogHeader>
+            <DialogTitle>Comments - {activeCommentEntry?.date}</DialogTitle>
+          </DialogHeader>
+          
+          <div className="flex flex-col gap-4">
+            {/* Scrollable List of Existing Comments */}
+            <div className="max-h-[300px] overflow-y-auto space-y-3 pr-2 border-b pb-4">
+              {activeCommentEntry?.comments && activeCommentEntry.comments.length > 0 ? (
+                activeCommentEntry.comments.map((c, i) => (
+                  <div key={i} className="p-3 rounded-lg bg-slate-50 border border-slate-100 text-sm">
+                    <div className="flex justify-between text-[11px] text-slate-500 mb-1">
+                      <span className="font-bold text-slate-700">{c.user || 'User'}</span>
+                      <span>{format(new Date(c.createdAt), 'MMM d, h:mm a')}</span>
+                    </div>
+                    <p className="text-slate-800 leading-relaxed">{c.text}</p>
+                  </div>
+                ))
+              ) : (
+                <p className="text-center text-slate-400 text-sm py-10">No comments on this record yet.</p>
+              )}
+            </div>
+
+            {/* Input for New Comment */}
+            <div className="space-y-3">
+              <textarea
+                className="w-full border rounded-md p-2 text-sm focus:ring-2 focus:ring-blue-500 outline-none resize-none"
+                rows={3}
+                placeholder="Write a comment..."
+                value={commentText}
+                onChange={(e) => setCommentText(e.target.value)}
+              />
+              <div className="flex justify-end gap-2">
+                <Button variant="ghost" onClick={() => setActiveCommentEntry(null)}>Cancel</Button>
+                <Button onClick={handleCommentSave} disabled={commentPending || !commentText.trim()}>
+                  {commentPending ? "Adding..." : "Add Comment"}
+                </Button>
+              </div>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }

@@ -73,7 +73,7 @@ router.get("/:id", async (req, res) => {
   try {
     const location = await Location.findById(id);
     if (location) {
-      res.status(200).json({location});
+      res.status(200).json({ location });
     } else {
       res.status(404).json({ message: "Location not found." });
     }
@@ -85,6 +85,41 @@ router.get("/:id", async (req, res) => {
 
 // Protect everything below; only GET /, GET /name/:stationName and GET /:id are public
 router.use(auth)
+
+router.post('/:id/assign-users', async (req, res) => {
+  try {
+    const { userIds, stationName } = req.body;
+    const io = req.app.get("io");
+
+    // Identify users losing access for socket notification
+    const previouslyAssigned = await User.find({
+      [`site_access.${stationName}`]: true
+    }).select('_id');
+    const previouslyAssignedIds = previouslyAssigned.map(u => u._id.toString());
+
+    // Update Access
+    await User.updateMany(
+      { _id: { $nin: userIds }, [`site_access.${stationName}`]: true },
+      { $set: { [`site_access.${stationName}`]: false } }
+    );
+    await User.updateMany(
+      { _id: { $in: userIds } },
+      { $set: { [`site_access.${stationName}`]: true } }
+    );
+
+    // Notify all affected users via Socket
+    if (io) {
+      const allAffected = [...new Set([...userIds, ...previouslyAssignedIds])];
+      allAffected.forEach(id => {
+        io.to(id).emit("permissions-updated");
+      });
+    }
+
+    res.json({ success: true });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
 
 // UPDATE LOCATION
 router.put("/:id", async (req, res) => {
@@ -107,7 +142,7 @@ router.put("/:id", async (req, res) => {
 // POST /api/locations
 router.post("/", async (req, res) => {
   try {
-    const { type, stationName,  legalName, INDNumber, kardpollCode,   csoCode,  timezone,  email, managerCode, sellsLottery } = req.body;
+    const { type, stationName, legalName, INDNumber, kardpollCode, csoCode, timezone, email, managerCode, sellsLottery } = req.body;
 
     // Basic validation
     if (!type || !stationName || !legalName || !INDNumber || !csoCode || !timezone || !email || !managerCode) {

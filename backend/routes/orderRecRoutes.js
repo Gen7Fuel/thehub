@@ -32,6 +32,29 @@ router.get('/', async (req, res) => {
   }
 });
 
+// GET /api/order-rec/workflow
+router.get('/workflow', async (req, res) => {
+  try {
+    const { week } = req.query;
+    const query = {};
+
+    if (week) {
+      const start = new Date(week); 
+      start.setUTCHours(0, 0, 0, 0);
+      
+      const end = new Date(start);
+      end.setUTCDate(start.getUTCDate() + 7); 
+      
+      query.createdAt = { $gte: start, $lt: end };
+    }
+
+    const orderRecs = await OrderRec.find(query).sort({ createdAt: -1 });
+    res.json(orderRecs);
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+});
+
 // Get all with optional startDate and endDate filtering
 router.get('/range', async (req, res) => {
   try {

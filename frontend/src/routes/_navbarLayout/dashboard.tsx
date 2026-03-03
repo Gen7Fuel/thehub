@@ -400,6 +400,12 @@ function RouteComponent() {
       try {
         const params = new URLSearchParams({ site, startDate, endDate });
 
+        const today = new Date();
+
+        // ------------------- END (yesterday) -------------------
+        const end = new Date(today);
+        end.setDate(end.getDate() - 1);
+
         // Order recs
         let orderRecsRes: any = []
         try {
@@ -428,10 +434,22 @@ function RouteComponent() {
         }
 
         // ----------------------------
-        // Safe balance – last 10 days
+        // Safe balance – last 20 days
         // ----------------------------
+        const pad = (n: number) => String(n).padStart(2, '0')
+        const ymd = (d: Date) => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`
+        // --- START (20 days before yesterday) ---
+        const start = new Date(end); // start from the end date
+        start.setDate(start.getDate() - 20); // go back 20 more days
+
+        // Convert to strings
+        const fromStr = ymd(start); // e.g., 2026-02-05
+        const toStr = ymd(end);     // e.g., 2026-02-25 (yesterday)
+
+        // Build query
+        const safeQuery = new URLSearchParams({ from: fromStr, to: toStr }).toString();
         try {
-          const res = await fetch(`/api/safesheets/site/${encodeURIComponent(site)}/daily-balances?days=20`, {
+          const res = await fetch(`/api/safesheets/site/${encodeURIComponent(site)}/daily-balances?${safeQuery}`, {
             headers: {
               Authorization: `Bearer ${localStorage.getItem("token")}`,
               "X-Required-Permission": "dashboard",
@@ -541,12 +559,6 @@ function RouteComponent() {
 
         // const today = new Date();
         // const end = new Date(today);
-
-        const today = new Date();
-
-        // ------------------- END (yesterday) -------------------
-        const end = new Date(today);
-        end.setDate(end.getDate() - 1);
 
         // ------------------- FUEL -------------------
         const fuelStart = new Date(end);
@@ -1909,19 +1921,19 @@ function RouteComponent() {
                 {/* ======================= */}
 
                 {/* {!["Sarnia"].includes(site) && ( */}
-                  <section aria-labelledby="accounting-heading" className="mb-10">
-                    <h2 id="accounting-heading" className="text-2xl font-bold mb-4 pl-4">
-                      Accounting
-                    </h2>
+                <section aria-labelledby="accounting-heading" className="mb-10">
+                  <h2 id="accounting-heading" className="text-2xl font-bold mb-4 pl-4">
+                    Accounting
+                  </h2>
 
-                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                      {/* <OverShortChart data={processOverShortData(overShortData)} /> */}
-                      <OverShortSparkline data={processOverShortData(overShortData)} />
-                      <SafeBalanceTrendChart data={safeBalanceChartData} maxBalance={safeMaxBalance} />
-                      {/* <PayablesDiscrepancyChart data={payablesComparisonData} /> */}
-                      <PayablesDiscrepancyTable data={payablesComparisonData} />
-                    </div>
-                  </section>
+                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                    {/* <OverShortChart data={processOverShortData(overShortData)} /> */}
+                    <OverShortSparkline data={processOverShortData(overShortData)} />
+                    <SafeBalanceTrendChart data={safeBalanceChartData} maxBalance={safeMaxBalance} />
+                    {/* <PayablesDiscrepancyChart data={payablesComparisonData} /> */}
+                    <PayablesDiscrepancyTable data={payablesComparisonData} />
+                  </div>
+                </section>
                 {/* )} */}
 
 

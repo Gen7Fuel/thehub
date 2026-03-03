@@ -130,6 +130,7 @@ export function LotteryComparisonTable({
     onlineSales: lotteryData.onlineSales ?? lotteryData.onlineLottoTotal ?? 0,
     onlineCancellations: lotteryData.onlineCancellations ?? 0,
     onlineDiscounts: lotteryData.onlineDiscounts ?? 0,
+    vouchersRedeemed: lotteryData.vouchersRedeemed ?? 0,
     scratchSales: lotteryData.scratchSales ?? lotteryData.instantLottTotal ?? 0,
     scratchFreeTickets: lotteryData.scratchFreeTickets ?? 0,
     oldScratchTickets: lotteryData.oldScratchTickets ?? 0,
@@ -184,6 +185,23 @@ export function LotteryComparisonTable({
             <td colSpan={2} />
           </tr>
 
+          <tr className="border-t bg-gray-50">
+            <td className="px-4 py-2 pl-8 flex items-center">
+              Vouchers Redeemed <InfoDialog title="Vouchers Redeemed" imageName="vouchers_redeemed" />
+            </td>
+            <DataCell
+              field="vouchersRedeemed"
+              isPayoutCalc={true}
+              extraLogic={(val) => useFormStore.getState().setLotteryValues({
+                vouchersRedeemed: val,
+                payouts: (lottery.onDemandCashPayout || 0) + (lottery.scratchCashPayout || 0) + val + (lottery.scratchFreeTickets || 0)
+              })}
+              lottery={lottery}
+              isReadOnly={isReadOnly}
+            />
+            <td colSpan={2} />
+          </tr>
+
           {/* SCRATCH SALES */}
           <tr className="border-t font-semibold">
             <td className="px-4 py-2 flex items-center">
@@ -203,7 +221,7 @@ export function LotteryComparisonTable({
               isPayoutCalc={true}
               extraLogic={(val) => useFormStore.getState().setLotteryValues({
                 scratchFreeTickets: val,
-                payouts: (lottery.onDemandCashPayout || 0) + (lottery.scratchCashPayout || 0) + val
+                payouts: (lottery.onDemandCashPayout || 0) + (lottery.scratchCashPayout || 0) + val + (lottery.vouchersRedeemed || 0)
               })}
               lottery={lottery}
               isReadOnly={isReadOnly}
@@ -242,7 +260,7 @@ export function LotteryComparisonTable({
               isPayoutCalc={true}
               extraLogic={(val) => useFormStore.getState().setLotteryValues({
                 onDemandCashPayout: val,
-                payouts: val + (lottery.scratchCashPayout || 0) + (lottery.scratchFreeTickets || 0)
+                payouts: val + (lottery.scratchCashPayout || 0) + (lottery.scratchFreeTickets || 0) + (lottery.vouchersRedeemed || 0)
               })}
               lottery={lottery}
               isReadOnly={isReadOnly}
@@ -259,7 +277,7 @@ export function LotteryComparisonTable({
               isPayoutCalc={true}
               extraLogic={(val) => useFormStore.getState().setLotteryValues({
                 scratchFreeTickets: val,
-                payouts: (lottery.onDemandCashPayout || 0) + (lottery.scratchCashPayout || 0) + val
+                payouts: (lottery.onDemandCashPayout || 0) + (lottery.scratchCashPayout || 0) + val + (lottery.vouchersRedeemed || 0)
               })}
               lottery={lottery}
               isReadOnly={isReadOnly}
@@ -276,7 +294,7 @@ export function LotteryComparisonTable({
               isPayoutCalc
               extraLogic={(val) => useFormStore.getState().setLotteryValues({
                 scratchCashPayout: val,
-                payouts: (lottery.onDemandCashPayout || 0) + val + (lottery.scratchFreeTickets || 0)
+                payouts: (lottery.onDemandCashPayout || 0) + val + (lottery.scratchFreeTickets || 0) + (lottery.vouchersRedeemed || 0)
               })}
               lottery={lottery}
               isReadOnly={isReadOnly}

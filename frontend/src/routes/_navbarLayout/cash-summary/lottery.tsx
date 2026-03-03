@@ -850,6 +850,7 @@ function RouteComponent() {
         onDemandFreeTickets: Number(found.onDemandFreeTickets ?? 0),
         onDemandCashPayout: Number(found.onDemandCashPayout ?? 0),
         scratchCashPayout: Number(found.scratchCashPayout ?? 0),
+        vouchersRedeemed: Number(found.vouchersRedeemed ?? 0),
       }
       : {
         onlineSales: 0,
@@ -864,6 +865,7 @@ function RouteComponent() {
         dataWave: 0,
         feeDataWave: 0,
         oldScratchTickets: 0,
+        vouchersRedeemed: 0,
       }
 
     setLotteryValues(nextValues)

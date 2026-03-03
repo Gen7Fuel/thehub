@@ -106,6 +106,18 @@ router.get('/', async (req, res) => {
   }
 });
 
+// New route to get users with role names specifically for the settings UI
+router.get('/populate-roles', async (req, res) => {
+  try {
+    const users = await User.find()
+      .populate('role', 'role_name') 
+      .select('firstName lastName email site_access role is_active'); // Added is_active
+    res.status(200).json(users);
+  } catch (error) {
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
 // GET route to fetch a single user by userId
 router.get("/:userId", async (req, res) => {
   const { userId } = req.params;

@@ -494,6 +494,7 @@ function RouteComponent() {
     instantLottTotal: 0,
     scratchFreeTickets: 0,
     lottoPayout: 0,
+    vouchersRedeemed: 0,
   }
 
   const fmtNum = (n?: number) =>

@@ -18,6 +18,14 @@ const BOLPhotoSchema = new mongoose.Schema(
     filename: { type: String, required: true },
     // Bill of Lading (BOL) number provided by user
     bolNumber: { type: String, required: true, trim: true },
+    // Comments array
+    comments: [
+      {
+        text: { type: String, required: true },
+        createdAt: { type: Date, default: Date.now },
+        user: { type: String, required: true }, // store name or email
+      },
+    ],
   },
   { timestamps: true }
 )

@@ -1,5 +1,6 @@
 const express = require('express')
 const router = express.Router()
+const Location = require("../models/Location");
 const { emailQueue } = require('../queues/emailQueue');
 
 // JSON body parsing
@@ -103,22 +104,6 @@ router.get('/list', async (req, res) => {
   }
 })
 
-// Bridge to Location model (CJS) and email service (CJS)
-let _Location
-async function getLocation() {
-  if (_Location) return _Location
-  const mod = await import('../models/Location.js')
-  _Location = mod.default || mod.Location
-  return _Location
-}
-
-let _sendEmail
-async function getSendEmail() {
-  if (_sendEmail) return _sendEmail
-  const mod = await import('../utils/emailService.js')
-  _sendEmail = mod.sendEmail || (mod.default && mod.default.sendEmail)
-  return _sendEmail
-}
 
 // POST /api/fuel-rec/request-again
 // body: { site: string, date: 'YYYY-MM-DD' }
@@ -126,12 +111,18 @@ router.post('/request-again', async (req, res) => {
   const site = String(req.body?.site || '').trim()
   const date = String(req.body?.date || '').trim()
 
+  const userEmailMiddleware = req.user.email;
+  if (!userEmailMiddleware) {
+    return res.status(401).json({ error: 'User identification missing' });
+  }
+
+  const userEmail = String(userEmailMiddleware).trim();
+
   if (!site || !isYmd(date)) {
     return res.status(400).json({ error: 'site and date (YYYY-MM-DD) are required' })
   }
 
   try {
-    const Location = await getLocation()
     const location = await Location.findOne(
       { stationName: site },
       { email: 1, stationName: 1 }
@@ -146,12 +137,6 @@ router.post('/request-again', async (req, res) => {
       return res.status(400).json({ error: 'Location has no email configured' })
     }
 
-    // const sendEmail = await getSendEmail()
-    // await sendEmail({
-    //   to: 'mohammad@gen7fuel.com',
-    //   subject: `BOL Photo Retake Requested – ${location.stationName} – ${date}`,
-    //   text: `A new photo for the BOL was requested for the date of ${date}. Reason: Image not clear.`,
-    // })
     // 1. Construct the redirect URL
     const redirectUrl = `https://app.gen7fuel.com/fuel-rec?site=${encodeURIComponent(location.stationName)}&date=${date}`;
 
@@ -223,13 +208,11 @@ router.post('/request-again', async (req, res) => {
     // 5. Add to Email Queue
     await emailQueue.add("sendBOLRequestEmail", {
       to,
-      cc: ['daksh@gen7fuel.com', 'mohammad@gen7fuel.com'],
+      cc: ['daksh@gen7fuel.com', 'mohammad@gen7fuel.com', userEmail],
       subject,
       text,
       html
     });
-
-    console.log(`📨 BOL Retake request queued for ${location.stationName}`);
 
     return res.status(200).json({ sent: true })
   } catch (e) {
@@ -252,6 +235,35 @@ router.delete('/:id', async (req, res) => {
   } catch (e) {
     console.error('fuelRec.delete error:', e)
     return res.status(500).json({ error: 'Failed to delete BOL photo' })
+  }
+})
+
+// POST /api/fuel-rec/:id/comment
+router.post('/:id/comment', async (req, res) => {
+  try {
+    const id = String(req.params.id || '').trim()
+    const text = String(req.body?.text || '').trim()
+    if (!id || !text) return res.status(400).json({ error: 'id and text are required' })
+
+    // User info from auth middleware
+    const user = (req.user && (req.user.name || req.user.email)) || 'Unknown'
+
+    const BOLPhoto = await getBOLPhoto()
+    const update = {
+      $push: {
+        comments: {
+          text,
+          createdAt: new Date(),
+          user,
+        },
+      },
+    }
+    const updated = await BOLPhoto.findByIdAndUpdate(id, update, { new: true, lean: true })
+    if (!updated) return res.status(404).json({ error: 'Entry not found' })
+    return res.json({ ok: true, comments: updated.comments })
+  } catch (e) {
+    console.error('fuelRec.comment error:', e)
+    return res.status(500).json({ error: 'Failed to add comment' })
   }
 })
 

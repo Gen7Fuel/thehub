@@ -84,12 +84,12 @@ function RouteComponent() {
 
       <div className="flex flex-col flex-1">
         {/* We pass the state setter to the banner */}
-        <MaintenanceBanner onStatusChange={handleStatusChange}/>
+        <MaintenanceBanner onStatusChange={handleStatusChange} />
 
         <main className="flex-1">
           <Outlet />
         </main>
-        
+
       </div>
       {/* --- FULL SCREEN LOCKDOWN OVERLAY --- */}
       {isLocked && (
@@ -110,7 +110,7 @@ function RouteComponent() {
               To protect your data, all interactions are paused until the update is complete.
             </p>
 
-            {/* Estimated Time Card */}
+            {/* Estimated Time Card
             {maintDetails?.scheduleClose && (
               <div className="bg-slate-100 dark:bg-slate-800/50 rounded-2xl p-5 flex items-center justify-center gap-4 mb-8 border border-slate-200 dark:border-slate-700">
                 <Clock className="text-slate-400 w-6 h-6" />
@@ -122,6 +122,31 @@ function RouteComponent() {
                     {new Date(maintDetails.scheduleClose).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                   </p>
                 </div>
+              </div>
+            )} */}
+            {/* --- Updated Estimated Time Card Logic --- */}
+            {maintDetails?.scheduleClose ? (
+              <div className="bg-slate-100 dark:bg-slate-800/50 rounded-2xl p-5 flex items-center justify-center gap-4 mb-8 border border-slate-200 dark:border-slate-700">
+                <Clock className="text-slate-400 w-6 h-6" />
+                <div className="text-left">
+                  <p className="text-[10px] uppercase font-bold tracking-widest text-slate-500">
+                    Estimated Availability
+                  </p>
+                  <p className="font-mono text-xl font-bold text-slate-800 dark:text-slate-200">
+                    {new Date(maintDetails.scheduleClose).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                  </p>
+                </div>
+              </div>
+            ) : (
+              /* This displays when the backend is unreachable AND we are past the beacon time */
+              <div className="bg-amber-50 dark:bg-amber-900/20 rounded-2xl p-6 mb-8 border border-amber-200 dark:border-amber-800/50">
+                <div className="flex items-center justify-center gap-3 text-amber-700 dark:text-amber-500 mb-2">
+                  <Clock className="w-5 h-5 animate-pulse" />
+                  <span className="font-bold">Almost there!</span>
+                </div>
+                <p className="text-sm text-amber-800/80 dark:text-amber-400/80">
+                  The update is taking slightly longer than expected. We are finalizing the system and will be back online shortly.
+                </p>
               </div>
             )}
 

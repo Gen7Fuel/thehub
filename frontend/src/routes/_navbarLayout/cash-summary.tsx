@@ -1,6 +1,7 @@
 import { createFileRoute, Link, Outlet, useMatchRoute } from '@tanstack/react-router'
 import { Button } from '@/components/ui/button'
 import { useAuth } from '@/context/AuthContext'
+import { TrendingUp } from 'lucide-react'
 
 // Define the base route
 export const Route = createFileRoute('/_navbarLayout/cash-summary')({
@@ -16,6 +17,7 @@ function RouteComponent() {
   const isLotteryActive = matchRoute({ to: '/cash-summary/lottery' })
   const isLotteryListActive = matchRoute({ to: '/cash-summary/lottery-list' })
   const isFormActive = matchRoute({ to: '/cash-summary/form' })
+  const isOverShortReportActive = matchRoute({ to: '/cash-summary/over-short-report' })
 
   const fallbackSite = user?.location
   const access = user?.access || {}
@@ -24,7 +26,7 @@ function RouteComponent() {
     <div className="pt-5 flex flex-col items-center">
       <div className="flex mb-4">
         {/* Keep existing site if present; else use user?.location */}
-        
+
         {access?.accounting?.cashSummary?.form && (
           <Link
             to="/cash-summary/form"
@@ -50,7 +52,7 @@ function RouteComponent() {
             //   const { id, date, ...rest } = prev || {}
             //   return { ...rest, site: rest?.site ?? fallbackSite }
             // }}
-            search={(prev: any) => ({ ...prev})}
+            search={(prev: any) => ({ ...prev })}
             activeOptions={{ exact: true }}
           >
             <Button
@@ -69,7 +71,7 @@ function RouteComponent() {
             //   const { id, ...rest } = prev || {}
             //   return { ...rest, site: rest?.site, date: rest?.date }
             // }}
-            search={(prev: any) => ({ ...prev})}
+            search={(prev: any) => ({ ...prev })}
             activeOptions={{ exact: true }}
           >
             <Button
@@ -87,7 +89,7 @@ function RouteComponent() {
             //   const { id, ...rest } = prev || {}
             //   return { ...rest, site: rest?.site, date: rest?.date }
             // }}
-            search={(prev: any) => ({ ...prev})}
+            search={(prev: any) => ({ ...prev })}
             activeOptions={{ exact: true }}
           >
             <Button
@@ -101,7 +103,7 @@ function RouteComponent() {
         {access?.accounting?.cashSummary?.report?.value && (
           <Link
             to="/cash-summary/report"
-            search={(prev: any) => ({ ...prev})}
+            search={(prev: any) => ({ ...prev })}
             activeOptions={{ exact: true }}
           >
             <Button
@@ -109,6 +111,22 @@ function RouteComponent() {
               className="rounded-l-none"
             >
               Report
+            </Button>
+          </Link>
+        )}
+        {access?.accounting?.cashSummary?.overShortReport && (
+          <Link
+            to="/cash-summary/over-short-report"
+            search={(prev: any) => ({ ...prev })}
+            activeOptions={{ exact: true }}
+          >
+            <Button
+              {...(!isOverShortReportActive && { variant: 'outline' } as object)}
+              className="ml-6 rounded-md"
+            >
+              {/* Over/Short Report */}
+              <TrendingUp className="h-4 w-4" />
+              <span>Over/Short Report</span>
             </Button>
           </Link>
         )}

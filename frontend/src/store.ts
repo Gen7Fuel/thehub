@@ -75,6 +75,7 @@ type FormStore = {
         onDemandFreeTickets: number;
         onDemandCashPayout: number;
         scratchCashPayout: number;
+        vouchersRedeemed: number;
     };
     setLotteryValues: (vals: Partial<{
         onlineSales: number;
@@ -89,6 +90,7 @@ type FormStore = {
         onDemandFreeTickets: number;
         onDemandCashPayout: number;
         scratchCashPayout: number;
+        vouchersRedeemed: number;
     }>) => void;
 
     lotteryImages: string[];
@@ -184,6 +186,7 @@ export const useFormStore = create<FormStore>((set) => ({
         onDemandFreeTickets: 0,
         onDemandCashPayout: 0,
         scratchCashPayout: 0,
+        vouchersRedeemed: 0,
     },
     setLotteryValues: (vals) =>
         set((state) => ({ lotteryValues: { ...state.lotteryValues, ...vals } })),
@@ -208,6 +211,7 @@ export const useFormStore = create<FormStore>((set) => ({
             onDemandFreeTickets: 0,
             onDemandCashPayout: 0,
             scratchCashPayout: 0,
+            vouchersRedeemed: 0,
         },
         lotteryImages: [],
         datawaveImages: [],
