@@ -2,12 +2,12 @@ import axios from "axios";
 import { useMutation } from "@tanstack/react-query";
 import { uploadBase64Image } from "@/lib/utils";
 import { domain } from "@/lib/constants";
-import { Loader2 } from "lucide-react";
+import { Camera, Loader2 } from "lucide-react";
 import { useEffect } from 'react'
 import { useNavigate } from '@tanstack/react-router'
 import { createFileRoute, Link } from '@tanstack/react-router'
 import { useRef } from 'react'
-import Webcam from "react-webcam"
+// import Webcam from "react-webcam"
 import { useFormStore } from '@/store'
 import { Button } from '@/components/ui/button'
 
@@ -17,7 +17,8 @@ export const Route = createFileRoute('/_navbarLayout/po/receipt')({
 
 function RouteComponent() {
   const navigate = useNavigate();
-  const webcamRef = useRef<Webcam>(null);
+  // const webcamRef = useRef<Webcam>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null)
 
   const setReceipt = useFormStore((state) => state.setReceipt);
   const receipt = useFormStore((state) => state.receipt);
@@ -39,19 +40,29 @@ function RouteComponent() {
     }
   }, [date, customerName, driverName, vehicleInfo, fuelType, quantity, amount]);
 
-  const capture = () => {
-    if (webcamRef.current) {
-      const imageSrc = webcamRef.current.getScreenshot();
-      if (imageSrc) setReceipt(imageSrc);
+  // const capture = () => {
+  //   if (webcamRef.current) {
+  //     const imageSrc = webcamRef.current.getScreenshot();
+  //     if (imageSrc) setReceipt(imageSrc);
+  //   }
+  // };
+
+  // const handleRetry = () => setReceipt("");
+
+  // const videoConstraints = {
+  //   height: 640,
+  //   facingMode: "environment",
+  // };
+
+  // Triggered by the "Retry" button
+  const handleRetryCapture = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    if (file) {
+      const reader = new FileReader()
+      reader.onloadend = () => setReceipt(reader.result as string)
+      reader.readAsDataURL(file)
     }
-  };
-
-  const handleRetry = () => setReceipt("");
-
-  const videoConstraints = {
-    height: 640,
-    facingMode: "environment",
-  };
+  }
 
   // ---------------------------------------------------------
   // 🚀 SAME SUBMIT LOGIC FROM SIGNATURE PAGE (signature = "")
@@ -162,50 +173,124 @@ function RouteComponent() {
   // ---------------------------------------------------------
   // UI
   // ---------------------------------------------------------
+  // return (
+  //   <div className="p-4 border border-dashed border-gray-300 rounded-md space-y-6">
+  //     <div className="space-y-2">
+  //       <h2 className="text-lg font-bold">Capture Receipt</h2>
+  //       <div className="space-y-4">
+  //         <Webcam
+  //           ref={webcamRef}
+  //           screenshotFormat="image/jpeg"
+  //           videoConstraints={videoConstraints}
+  //           className={`border border-dashed border-gray-300 rounded-md ${receipt ? "hidden" : "block"}`}
+  //         />
+
+  //         {receipt && (
+  //           <img src={receipt} alt="Captured" className="border border-dashed border-gray-300 rounded-md" />
+  //         )}
+
+  //         {receipt ? (
+  //           <Button onClick={handleRetry} variant="secondary">
+  //             Retry
+  //           </Button>
+  //         ) : (
+  //           <Button onClick={capture} variant="destructive">
+  //             Capture
+  //           </Button>
+  //         )}
+  //       </div>
+  //     </div>
+
+  //     <hr className="border-t border-dashed border-gray-300" />
+
+  //     <div className="flex justify-between">
+  //       <Link to="/po">
+  //         <Button variant="outline">Back</Button>
+  //       </Link>
+
+  //       {/* 🚀 NEW SUBMIT BUTTON HERE */}
+  //       <Button onClick={() => submitMutation.mutate()} disabled={submitMutation.isPending}>
+  //         {submitMutation.isPending ? (
+  //           <>
+  //             <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+  //             Submitting...
+  //           </>
+  //         ) : (
+  //           "Submit"
+  //         )}
+  //       </Button>
+  //     </div>
+  //   </div>
+  // );
   return (
-    <div className="p-4 border border-dashed border-gray-300 rounded-md space-y-6">
-      <div className="space-y-2">
-        <h2 className="text-lg font-bold">Capture Receipt</h2>
-        <div className="space-y-4">
-          <Webcam
-            ref={webcamRef}
-            screenshotFormat="image/jpeg"
-            videoConstraints={videoConstraints}
-            className={`border border-dashed border-gray-300 rounded-md ${receipt ? "hidden" : "block"}`}
-          />
+    <div className="p-4 border border-dashed border-gray-300 rounded-md space-y-4 max-w-md mx-auto">
+      <input
+        type="file"
+        accept="image/*"
+        capture="environment"
+        className="hidden"
+        ref={fileInputRef}
+        onChange={handleRetryCapture}
+      />
 
+      <div className="space-y-3">
+        <div className="flex justify-between items-center">
+          <h2 className="text-lg font-bold">Receipt Preview</h2>
           {receipt && (
-            <img src={receipt} alt="Captured" className="border border-dashed border-gray-300 rounded-md" />
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => fileInputRef.current?.click()}
+            >
+              <Camera className="mr-2 h-3 w-3" />
+              Retake
+            </Button>
           )}
+        </div>
 
+        {/* Constrained Preview Area */}
+        <div className="relative w-full h-[50vh] bg-slate-100 rounded-lg border overflow-hidden flex items-center justify-center">
           {receipt ? (
-            <Button onClick={handleRetry} variant="secondary">
-              Retry
-            </Button>
+            <div className="w-full h-full overflow-auto">
+              <img
+                src={receipt}
+                alt="Captured Receipt"
+                className="w-full h-auto min-h-full object-contain bg-slate-900"
+              />
+            </div>
           ) : (
-            <Button onClick={capture} variant="destructive">
-              Capture
-            </Button>
+            <div className="text-center p-6">
+              <p className="text-slate-500 text-sm mb-4">No receipt image found.</p>
+              <Button onClick={() => fileInputRef.current?.click()}>
+                Capture Now
+              </Button>
+            </div>
           )}
         </div>
       </div>
 
-      <hr className="border-t border-dashed border-gray-300" />
+      <div className="bg-blue-50 p-3 rounded-md border border-blue-100">
+        <p className="text-[11px] text-blue-700 font-medium uppercase tracking-wider">PO Summary</p>
+        <div className="flex justify-between text-sm pt-1">
+          <span className="font-bold">{customerName || 'N/A'}</span>
+          <span className="text-slate-600">{quantity}L • C${amount}</span>
+        </div>
+      </div>
 
-      <div className="flex justify-between">
-        <Link to="/po">
-          <Button variant="outline">Back</Button>
+      <div className="flex gap-3 pt-2">
+        <Link to="/po" className="flex-none">
+          <Button variant="outline">Edit Info</Button>
         </Link>
 
-        {/* 🚀 NEW SUBMIT BUTTON HERE */}
-        <Button onClick={() => submitMutation.mutate()} disabled={submitMutation.isPending}>
+        <Button
+          onClick={() => submitMutation.mutate()}
+          disabled={submitMutation.isPending || !receipt}
+          className="flex-1 bg-green-700 hover:bg-green-800 shadow-md"
+        >
           {submitMutation.isPending ? (
-            <>
-              <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-              Submitting...
-            </>
+            <><Loader2 className="mr-2 h-4 w-4 animate-spin" /> Saving...</>
           ) : (
-            "Submit"
+            "Finalize & Submit"
           )}
         </Button>
       </div>
