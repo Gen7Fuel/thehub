@@ -59,7 +59,7 @@ async function run() {
     console.log('Starting Site Replicator...\n');
 
     // Run the function: Copy from 'A' to 'B'
-    await syncSiteInventory('A', 'B');
+    await syncSiteInventory('Silver Grizzly', 'Charlies');
 
     console.log('Sync completed successfully.');
   } catch (err) {
@@ -70,3 +70,7 @@ async function run() {
     process.exit(hadError ? 1 : 0);
   }
 }
+
+
+if (require.main === module) run();
+module.exports = { run };
