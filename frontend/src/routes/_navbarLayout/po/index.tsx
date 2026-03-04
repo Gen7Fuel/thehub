@@ -1,15 +1,16 @@
 import { Button } from '@/components/ui/button'
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { Input } from '@/components/ui/input'
 import { InputOTP, InputOTPGroup, InputOTPSeparator, InputOTPSlot } from '@/components/ui/input-otp'
 import { Select, SelectContent, SelectGroup, SelectItem, SelectLabel, SelectTrigger, SelectValue } from '@/components/ui/select'
-import { createFileRoute, Link } from '@tanstack/react-router'
+import { createFileRoute, Link, useNavigate } from '@tanstack/react-router'
 import { useAuth } from '@/context/AuthContext'
 import { useFormStore } from '@/store'
 import axios from 'axios'
 import { DatePicker } from '@/components/custom/datePicker';
 import { LocationPicker } from '@/components/custom/locationPicker';
 import { domain } from '@/lib/constants'
+import { Camera, ExternalLink } from 'lucide-react'
 
 interface Product {
   _id: string
@@ -71,6 +72,9 @@ function RouteComponent() {
   const fuelType = useFormStore((state) => state.fuelType)
   const setFuelType = useFormStore((state) => state.setFuelType)
 
+  const receipt = useFormStore((state) => state.receipt)
+  const setReceipt = useFormStore((state) => state.setReceipt)
+
   const data = Route.useLoaderData()
   const stationName = useFormStore((state) => state.stationName)
   const setStationName = useFormStore((state) => state.setStationName)
@@ -126,10 +130,23 @@ function RouteComponent() {
     return ('00000' + d).slice(-5)
   }
 
+  const fileInputRef = useRef<HTMLInputElement>(null)
+  const navigate = useNavigate()
 
+  const handleCapture = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      const reader = new FileReader();
+      reader.onloadend = () => {
+        setReceipt(reader.result as string);
+        navigate({ to: '/po/receipt' });
+      };
+      reader.readAsDataURL(file);
+    }
+  };
 
   // Only show number type and PO/fleet fields if not Charlie's
-  const isCharlies = stationName && stationName.trim().toLowerCase() === "charlie's";
+  const isCharlies = stationName && stationName.trim().toLowerCase() === "charlies";
 
   return (
     <div className="p-4 border border-dashed border-gray-300 rounded-md space-y-6">
@@ -327,7 +344,7 @@ function RouteComponent() {
         />
       </div>
 
-      {/* Navigation */}
+      {/* Navigation
       <div className="flex justify-end">
         <Link to="/po/receipt">
           <Button
@@ -340,6 +357,39 @@ function RouteComponent() {
             Next
           </Button>
         </Link>
+      </div> */}
+      <div className="flex justify-end">
+        <input
+          type="file"
+          accept="image/*"
+          capture="environment"
+          className="hidden"
+          ref={fileInputRef}
+          onChange={handleCapture}
+        />
+
+        {receipt ? (
+          // If image exists, just go to preview
+          <Link to="/po/receipt">
+            <Button className="bg-slate-800 hover:bg-slate-900 text-white">
+              <ExternalLink className="mr-2 h-4 w-4" />
+              View Captured Receipt
+            </Button>
+          </Link>
+        ) : (
+          // If no image, trigger camera
+          <Button
+            className="bg-blue-600 hover:bg-blue-700 text-white"
+            onClick={() => {
+              if (!isCharlies) setPoNumber(padFive(poNumber));
+              fileInputRef.current?.click();
+            }}
+            disabled={(!isCharlies && !!poError) || !customerName || !driverName || quantity === 0}
+          >
+            <Camera className="mr-2 h-4 w-4" />
+            Upload Receipt
+          </Button>
+        )}
       </div>
     </div>
   )
