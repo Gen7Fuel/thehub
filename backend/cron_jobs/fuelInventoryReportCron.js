@@ -172,12 +172,12 @@ async function runFuelInventoryReportJobCurrentDay() {
 
 // CRON SCHEDULER — runs daily at 5 am est/edt
 cron.schedule("0 5 * * *", runFuelInventoryReportJobPreviousDay, {
-  timezone: "America/New_York" // will automatically handle EST/EDT
+  timezone: "America/Toronto" // will automatically handle EST/EDT
 });
 
 // CRON SCHEDULER - runs at 3 pm est/edt
 cron.schedule("0 15 * * *", runFuelInventoryReportJobCurrentDay, {
-  timezone: "America/New_York"
+  timezone: "America/Toronto"
 });
 
 

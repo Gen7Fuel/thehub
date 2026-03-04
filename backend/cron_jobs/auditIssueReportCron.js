@@ -170,9 +170,20 @@ async function processAndSendReport() {
 
 // --- CRON SCHEDULE ---
 // Runs at 10:00 UTC (6 AM ET) on the 1st day of every month
-cron.schedule("0 10 1 * *", () => {
+// cron.schedule("0 10 1 * *", () => {
+//   console.log("Triggering Monthly Audit Issue Report...");
+//   processAndSendReport();
+// });
+
+
+// --- UPDATED CRON SCHEDULE ---
+// Runs at 06:00 AM America/Toronto time on the 1st day of every month
+cron.schedule("0 6 1 * *", () => {
   console.log("Triggering Monthly Audit Issue Report...");
   processAndSendReport();
+}, {
+  scheduled: true,
+  timezone: "America/Toronto"
 });
 
 module.exports = { processAndSendReport };
