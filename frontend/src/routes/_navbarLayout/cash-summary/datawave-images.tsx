@@ -127,6 +127,18 @@ function RouteComponent() {
     setDatawaveImages(datawaveImages.filter((_, i) => i !== index))
   }
 
+  const handleRemoveDatawaveImage = (idx: number) => {
+    // If we are deleting the very last image in the store, close the dialog
+    if (datawaveImages.length <= 1) {
+      setGalleryIndex(null);
+    }
+    // If we are deleting the current image and it's the last in the array, move index back
+    else if (galleryIndex === datawaveImages.length - 1) {
+      setGalleryIndex(datawaveImages.length - 2);
+    }
+    removeImage(idx); // Your store's remove function
+  };
+
   // const startCapture = () => {
   //   setIsCapturing(true)
   //   setCurrentCapture('')
@@ -328,28 +340,32 @@ function RouteComponent() {
         </div>
       </div>
 
+      {/* Saved DataWave Images Grid */}
       {datawaveImages.length > 0 && (
         <div className="space-y-3">
-          <h3 className="text-sm font-semibold text-slate-700">Saved DataWave Images ({datawaveImages.length})</h3>
-          <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-6 gap-3">
+          <h3 className="text-sm font-semibold text-slate-700">
+            Saved DataWave Images ({datawaveImages.length})
+          </h3>
+          <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-6 gap-4">
             {datawaveImages.map((img, idx) => (
-              <div key={idx} className="relative group aspect-square">
+              <div key={idx} className="relative aspect-square">
                 <img
                   src={getImgSrc(img)}
                   alt={`DataWave report ${idx + 1}`}
-                  className="w-full h-full object-cover rounded-lg border border-slate-200 cursor-pointer hover:ring-2 hover:ring-primary transition-all"
+                  className="w-full h-full object-cover rounded-lg border border-slate-200 cursor-pointer shadow-sm active:scale-95 transition-transform"
                   onClick={() => setGalleryIndex(idx)}
                 />
                 <Button
                   variant="destructive"
                   size="icon"
-                  className="absolute -top-1 -right-1 h-5 w-5 rounded-full opacity-0 group-hover:opacity-100 transition-opacity"
+                  // Always enabled because these images are optional
+                  className="absolute -top-2 -right-2 h-7 w-7 rounded-full shadow-lg border-2 border-white z-10"
                   onClick={(e) => {
                     e.stopPropagation();
-                    removeImage(idx);
+                    handleRemoveDatawaveImage(idx);
                   }}
                 >
-                  <X className="h-3 w-3" />
+                  <X className="h-4 w-4" />
                 </Button>
               </div>
             ))}
@@ -390,7 +406,24 @@ function RouteComponent() {
                 <Button onClick={nextImage} variant="outline" size="sm">Next <ChevronRight className="h-4 w-4 ml-1" /></Button>
               </div>
             )}
-            <Button variant="secondary" className="w-full sm:w-auto" onClick={() => setGalleryIndex(null)}>Close</Button>
+            <div className="flex flex-col sm:flex-row gap-2 w-full justify-center pt-2">
+              <Button
+                variant="destructive"
+                className="flex-1 sm:flex-none sm:min-w-[120px]"
+                onClick={() => galleryIndex !== null && handleRemoveDatawaveImage(galleryIndex)}
+              >
+                <X className="mr-2 h-4 w-4" />
+                Remove Image
+              </Button>
+
+              <Button
+                variant="secondary"
+                className="flex-1 sm:flex-none sm:min-w-[120px]"
+                onClick={() => setGalleryIndex(null)}
+              >
+                Close
+              </Button>
+            </div>
           </div>
         </DialogContent>
       </Dialog>
