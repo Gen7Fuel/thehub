@@ -98,8 +98,18 @@ const updateCycleCountCSO = async () => {
 };
 
 // Schedule cron at 6 AM ET → 10:00 UTC
-cron.schedule("0 10 * * *", () => {
+// cron.schedule("0 10 * * *", () => {
+//   updateCycleCountCSO();
+// });
+
+// Schedule cron at 6 AM local (America/Toronto)
+// This will stay at 6 AM even after the clocks changes!
+cron.schedule("0 6 * * *", () => {
+  console.log("Running updateCycleCountCSO...");
   updateCycleCountCSO();
+}, {
+  scheduled: true,
+  timezone: "America/Toronto"
 });
 
 // cron_jobs/cycleCountCron.js

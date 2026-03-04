@@ -557,9 +557,9 @@ function scheduleWeeklyCron() {
   // cron.schedule("0 6 * * 0", () => {
   //   console.log('Scheduled categoryProductMapping job triggered by cron.');
   //   runAndEmailReport().catch(err => console.error('Scheduled run failed:', err));
-  // }, { timezone: "America/New_York" });
+  // }, { timezone: "America/Toronto" });
 
-  console.log('CategoryProductMapping cron scheduled: Sundays at 06:00 America/New_York');
+  console.log('CategoryProductMapping cron scheduled: Sundays at 06:00 America/Toronto');
 }
 
 // Auto-schedule when this module is loaded

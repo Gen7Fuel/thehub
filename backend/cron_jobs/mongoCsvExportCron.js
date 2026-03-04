@@ -161,7 +161,7 @@ async function runMongoCsvExport() {
  * CRON SCHEDULER
  * Runs daily at 10:00 AM EST/EDT
  * 0  - Minute (0)
- * 10 - Hour (10 AM)
+ * 6 - Hour (6 AM)
  * * - Day of Month (Every)
  * * - Month (Every)
  * * - Day of Week (Every)
@@ -176,7 +176,7 @@ cron.schedule("* 6 * * *", async () => {
     }
 }, {
     scheduled: true,
-    timezone: "America/New_York" // Handles Daylight Savings (EST/EDT) automatically
+    timezone: "America/Toronto" // Handles Daylight Savings (EST/EDT) automatically
 });
 
 module.exports = { runMongoCsvExport };
