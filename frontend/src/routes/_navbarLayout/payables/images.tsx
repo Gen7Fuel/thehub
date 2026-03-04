@@ -263,35 +263,29 @@ function RouteComponent() {
         </div>
       </div>
 
-      {/* Existing Saved Images Grid */}
-      {payableImages.length > 0 && (
-        <div className="space-y-3">
-          <h3 className="text-sm font-semibold text-slate-700">Captured Invoices ({payableImages.length})</h3>
-          <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-6 gap-3">
-            {payableImages.map((img, idx) => (
-              <div key={idx} className="relative group aspect-square">
-                <img
-                  src={getImgSrc(img)}
-                  alt={`Invoice ${idx + 1}`}
-                  className="w-full h-full object-cover rounded-lg border border-slate-200 cursor-pointer hover:ring-2 hover:ring-primary transition-all"
-                  onClick={() => setGalleryIndex(idx)}
-                />
-                <Button
-                  variant="destructive"
-                  size="icon"
-                  className="absolute -top-1 -right-1 h-5 w-5 rounded-full opacity-0 group-hover:opacity-100 transition-opacity"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    removeImage(idx);
-                  }}
-                >
-                  <X className="h-3 w-3" />
-                </Button>
-              </div>
-            ))}
+      <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-6 gap-4">
+        {payableImages.map((img, idx) => (
+          <div key={idx} className="relative aspect-square">
+            <img
+              src={getImgSrc(img)}
+              alt={`Invoice ${idx + 1}`}
+              className="w-full h-full object-cover rounded-lg border border-slate-200 cursor-pointer shadow-sm active:scale-95 transition-transform"
+              onClick={() => setGalleryIndex(idx)}
+            />
+            <Button
+              variant="destructive"
+              size="icon"
+              className="absolute -top-2 -right-2 h-7 w-7 rounded-full shadow-lg border-2 border-white z-10"
+              onClick={(e) => {
+                e.stopPropagation();
+                removeImage(idx);
+              }}
+            >
+              <X className="h-4 w-4" />
+            </Button>
           </div>
-        </div>
-      )}
+        ))}
+      </div>
 
       <hr className="border-t border-dashed border-gray-300" />
 
@@ -300,11 +294,20 @@ function RouteComponent() {
         <Link to="/payables">
           <Button variant="outline">Back</Button>
         </Link>
-        <Link to="/payables/review">
-          <Button variant="outline">
-            Review
-          </Button>
-        </Link>
+
+        <Button
+          variant="default"
+          className="bg-blue-600 hover:bg-blue-700"
+          onClick={() => {
+            if (payableImages.length === 0) {
+              alert("At least one invoice image is required to proceed to review.");
+              return;
+            }
+            navigate({ to: '/payables/review' });
+          }}
+        >
+          Review
+        </Button>
       </div>
 
       {/* Image Viewer Dialog (Gallery) */}
@@ -327,6 +330,7 @@ function RouteComponent() {
               )}
             </div>
 
+            {/* Navigation Controls */}
             {payableImages.length > 1 && (
               <div className="flex items-center gap-6">
                 <Button onClick={prevImage} variant="outline" size="sm" className="h-9 px-4">
@@ -341,16 +345,44 @@ function RouteComponent() {
               </div>
             )}
 
-            <Button
-              variant="secondary"
-              className="w-full sm:w-auto"
-              onClick={() => setGalleryIndex(null)}
-            >
-              Close Preview
-            </Button>
+            {/* Action Buttons */}
+            <div className="flex flex-col sm:flex-row gap-2 w-full justify-center">
+              <Button
+                variant="destructive"
+                className="flex-1 sm:flex-none sm:min-w-[120px]"
+                // Inside the Remove Image Button in the Dialog
+                onClick={() => {
+                  if (galleryIndex !== null) {
+                    const indexToRemove = galleryIndex;
+
+                    // Logic: If this is the last image left in the store, close the dialog
+                    if (payableImages.length <= 1) {
+                      setGalleryIndex(null);
+                    }
+                    // Otherwise, if we are removing the last item in the list, shift the view back
+                    else if (galleryIndex === payableImages.length - 1) {
+                      setGalleryIndex(galleryIndex - 1);
+                    }
+
+                    removeImage(indexToRemove);
+                  }
+                }}
+              >
+                <X className="mr-2 h-4 w-4" />
+                Remove Image
+              </Button>
+
+              <Button
+                variant="secondary"
+                className="flex-1 sm:flex-none sm:min-w-[120px]"
+                onClick={() => setGalleryIndex(null)}
+              >
+                Close Preview
+              </Button>
+            </div>
           </div>
         </DialogContent>
       </Dialog>
-    </div>
+    </div >
   )
 }

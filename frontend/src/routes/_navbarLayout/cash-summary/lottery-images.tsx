@@ -107,6 +107,17 @@ function RouteComponent() {
   const removeImage = (index: number) => {
     setLotteryImages(lotteryImages.filter((_, i) => i !== index))
   }
+  const handleRemoveImage = (idx: number) => {
+    // If this is the last image being deleted, close the gallery
+    if (lotteryImages.length <= 1) {
+      setGalleryIndex(null);
+    }
+    // If we are deleting the current image and it's the last one in the list, move back
+    else if (galleryIndex === lotteryImages.length - 1) {
+      setGalleryIndex((prev) => (prev !== null ? prev - 1 : null));
+    }
+    removeImage(idx);
+  };
 
   // const startCapture = () => {
   //   setIsCapturing(true)
@@ -318,25 +329,26 @@ function RouteComponent() {
       {lotteryImages.length > 0 && (
         <div className="space-y-3">
           <h3 className="text-sm font-semibold text-slate-700">Captured Reports ({lotteryImages.length})</h3>
-          <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-6 gap-3">
+          <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-6 gap-4">
             {lotteryImages.map((img, idx) => (
-              <div key={idx} className="relative group aspect-square">
+              <div key={idx} className="relative aspect-square">
                 <img
                   src={getImgSrc(img)}
                   alt={`Lotto report ${idx + 1}`}
-                  className="w-full h-full object-cover rounded-lg border border-slate-200 cursor-pointer hover:ring-2 hover:ring-primary transition-all"
+                  className="w-full h-full object-cover rounded-lg border border-slate-200 cursor-pointer shadow-sm active:scale-95 transition-transform"
                   onClick={() => setGalleryIndex(idx)}
                 />
                 <Button
                   variant="destructive"
                   size="icon"
-                  className="absolute -top-1 -right-1 h-5 w-5 rounded-full opacity-0 group-hover:opacity-100 transition-opacity"
+                  // Button is always visible now for better mobile UX
+                  className="absolute -top-2 -right-2 h-7 w-7 rounded-full shadow-lg border-2 border-white z-10"
                   onClick={(e) => {
                     e.stopPropagation();
-                    removeImage(idx);
+                    handleRemoveImage(idx);
                   }}
                 >
-                  <X className="h-3 w-3" />
+                  <X className="h-4 w-4" />
                 </Button>
               </div>
             ))}
@@ -350,16 +362,28 @@ function RouteComponent() {
         <Link to="/cash-summary/lottery" search={(prev: any) => ({ ...prev })}>
           <Button variant="outline">Back</Button>
         </Link>
-        <Link to="/cash-summary/datawave-images" search={(prev: any) => ({ ...prev })}>
-          <Button>Next</Button>
-        </Link>
+
+        <Button
+          onClick={() => {
+            if (lotteryImages.length === 0) {
+              alert("Please capture at least one Lottery Report image before proceeding.");
+              return;
+            }
+            navigate({
+              to: "/cash-summary/datawave-images",
+              search: (prev: any) => ({ ...prev })
+            });
+          }}
+        >
+          Next
+        </Button>
       </div>
       {/* Gallery Viewer Dialog */}
       <Dialog open={galleryIndex !== null} onOpenChange={() => setGalleryIndex(null)}>
-        <DialogContent className="max-w-3xl max-h-[95vh] flex flex-col">
+        <DialogContent className="max-w-3xl max-h-[95vh] flex flex-col p-4">
           <DialogHeader>
-            <DialogTitle className="flex justify-between items-center pr-8">
-              <span>Report Image {galleryIndex !== null ? galleryIndex + 1 : 0} of {lotteryImages.length}</span>
+            <DialogTitle className="text-sm font-medium">
+              Report Image {galleryIndex !== null ? galleryIndex + 1 : 0} of {lotteryImages.length}
             </DialogTitle>
           </DialogHeader>
 
@@ -377,26 +401,34 @@ function RouteComponent() {
             {/* Navigation Controls */}
             {lotteryImages.length > 1 && (
               <div className="flex items-center gap-6">
-                <Button onClick={prevImage} variant="outline" size="sm" className="h-8">
-                  <ChevronLeft className="h-4 w-4 mr-1" /> Previous
+                <Button onClick={prevImage} variant="outline" size="sm" className="h-9 px-4">
+                  <ChevronLeft className="h-4 w-4 mr-1" /> Prev
                 </Button>
-                <span className="text-xs font-medium tabular-nums">
+                <span className="text-xs font-semibold tabular-nums">
                   {galleryIndex !== null ? galleryIndex + 1 : 0} / {lotteryImages.length}
                 </span>
-                <Button onClick={nextImage} variant="outline" size="sm" className="h-8">
+                <Button onClick={nextImage} variant="outline" size="sm" className="h-9 px-4">
                   Next <ChevronRight className="h-4 w-4 ml-1" />
                 </Button>
               </div>
             )}
 
-            <div className="flex gap-2 w-full sm:w-auto">
+            <div className="flex flex-col sm:flex-row gap-2 w-full justify-center">
               <Button
-                className="flex-1 sm:flex-none"
+                variant="destructive"
+                className="flex-1 sm:flex-none sm:min-w-[120px]"
+                onClick={() => galleryIndex !== null && handleRemoveImage(galleryIndex)}
+              >
+                <X className="mr-2 h-4 w-4" />
+                Remove Image
+              </Button>
+
+              <Button
                 variant="secondary"
-                size="sm"
+                className="flex-1 sm:flex-none sm:min-w-[120px]"
                 onClick={() => setGalleryIndex(null)}
               >
-                Close
+                Close Preview
               </Button>
             </div>
           </div>
