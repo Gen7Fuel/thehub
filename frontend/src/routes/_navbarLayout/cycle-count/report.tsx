@@ -27,6 +27,7 @@ interface CycleCountItem {
   boh: number;
   onHandCSO: number;
   totalQty: number;
+  unitPrice?: number;
   comments?: [];
 }
 
@@ -208,7 +209,8 @@ function RouteComponent() {
                     <th className="px-3 py-2">FOH</th>
                     <th className="px-3 py-2">Total</th>
                     <th className="px-3 py-2">On Hand CSO</th>
-                    <th className="px-3 py-2">Variance</th>
+                    <th className="px-3 py-2">Variance (Units)</th>
+                    <th className="px-3 py-2">Variance (C$)</th>
                     <th className="px-3 py-2">Actions</th>
                   </tr>
                 </thead>
@@ -230,71 +232,83 @@ function RouteComponent() {
                     </tr>
                   )}
 
-                  {!loading &&
-                    items.map((item) => {
-                      const hasCSO = item.onHandCSO !== undefined && item.onHandCSO !== null;
-                      const variance = hasCSO ? item.totalQty - item.onHandCSO : 0;
+                  {!loading && items.map((item) => {
+                    const hasCSO = item.onHandCSO !== undefined && item.onHandCSO !== null;
+                    const variance = hasCSO ? item.totalQty - item.onHandCSO : 0;
 
-                      return (
-                        <tr key={item._id} className="border-b hover:bg-gray-50">
-                          <td className="px-3 py-2">{item.name}</td>
-                          <td
-                            className=" px-3 py-2 text-blue-600 cursor-pointer underline hover:text-blue-800"
-                            onClick={() => setBarcodeValue(item.upc_barcode)}
-                          >
-                            {item.upc_barcode}
-                          </td>
-                          <td className="px-3 py-2">{item.boh}</td>
-                          <td className="px-3 py-2">{item.foh}</td>
-                          <td className="px-3 py-2 text-center">{item.totalQty}</td>
-                          <td className="px-3 py-2 text-center">{hasCSO ? item.onHandCSO : "-"}</td>
+                    // Calculate Dollar Variance
+                    // Check if unitPrice exists and is greater than 0
+                    const hasPrice = item.unitPrice !== undefined && item.unitPrice !== null && item.unitPrice > 0;
+                    const dollarVariance = hasPrice ? variance * (item.unitPrice || 0) : 0;
 
-                          {/* Variance column */}
-                          <td className="px-3 py-2 text-center align-middle">
-                            {hasCSO ? (
-                              variance === 0 ? (
-                                <span className="text-gray-600">0</span>
-                              ) : (
-                                <span className="inline-flex items-center gap-1">
-                                  <span className={variance > 0 ? "text-green-600 font-semibold" : "text-red-600 font-semibold"}>
-                                    {variance > 0 ? `+${variance}` : variance}
-                                  </span>
-                                  {variance > 0 ? (
-                                    <ArrowUp className="text-green-600 w-3 h-3" />
-                                  ) : (
-                                    <ArrowDown className="text-red-600 w-3 h-3" />
-                                  )}
-                                </span>
-                              )
-                            ) : (
-                              <span className="text-gray-400">-</span>
-                            )}
-                          </td>
+                    // Currency Formatter
+                    const formatCurrency = (val: any) =>
+                      new Intl.NumberFormat('en-CA', { style: 'currency', currency: 'CAD' }).format(val);
 
-                          {/* Actions column */}
-                          <td className="px-3 py-2 align-middle whitespace-nowrap">
-                            <div className="inline-flex items-center gap-1">
+                    return (
+                      <tr key={item._id} className="border-b hover:bg-gray-50">
+                        <td className="px-3 py-2">{item.name}</td>
+                        <td
+                          className=" px-3 py-2 text-blue-600 cursor-pointer underline hover:text-blue-800"
+                          onClick={() => setBarcodeValue(item.upc_barcode)}
+                        >
+                          {item.upc_barcode}
+                        </td>
+                        <td className="px-3 py-2">{item.boh}</td>
+                        <td className="px-3 py-2">{item.foh}</td>
+                        <td className="px-3 py-2 text-center">{item.totalQty}</td>
+                        <td className="px-3 py-2 text-center">{hasCSO ? item.onHandCSO : "-"}</td>
+
+                        {/* Variance (Units) */}
+                        <td className="px-3 py-2 text-center align-middle">
+                          {hasCSO ? (
+                            <span className={`inline-flex items-center gap-1 font-semibold ${variance === 0 ? "text-gray-600" : variance > 0 ? "text-green-600" : "text-red-600"
+                              }`}>
+                              {variance > 0 ? `+${variance}` : variance}
+                              {variance > 0 && <ArrowUp className="w-3 h-3" />}
+                              {variance < 0 && <ArrowDown className="w-3 h-3" />}
+                            </span>
+                          ) : (
+                            <span className="text-gray-400">-</span>
+                          )}
+                        </td>
+
+                        {/* Variance (C$) - New Column */}
+                        <td className="px-3 py-2 text-center align-middle">
+                          {!hasCSO || !hasPrice ? (
+                            <span className="text-gray-400">-</span>
+                          ) : dollarVariance === 0 ? (
+                            <span className="text-gray-600">$0.00</span>
+                          ) : (
+                            <span className={`font-semibold ${dollarVariance > 0 ? "text-green-600" : "text-red-600"}`}>
+                              {dollarVariance > 0 ? `+${formatCurrency(dollarVariance)}` : formatCurrency(dollarVariance)}
+                            </span>
+                          )}
+                        </td>
+
+                        {/* Actions column */}
+                        <td className="px-3 py-2 align-middle whitespace-nowrap">
+                          <div className="inline-flex items-center gap-1">
+                            <Button
+                              className="flex items-center justify-center py-1 px-2 text-sm bg-gray-50 hover:bg-gray-100 text-gray-700 border border-gray-300 rounded-md"
+                              onClick={() => handleAddEditComment(item._id)}
+                            >
+                              <MessageSquarePlus className="w-2 h-2 text-gray-400" />
+                            </Button>
+                            {item.comments && item.comments.length > 0 && (
                               <Button
-                                className="flex items-center justify-center py-1 px-2 text-sm bg-gray-50 hover:bg-gray-100 text-gray-700 border border-gray-300 rounded-md"
-                                onClick={() => handleAddEditComment(item._id)}
+                                className="flex items-center justify-center py-1 px-2 text-sm bg-gray-100 hover:bg-gray-200 text-gray-700 border border-gray-300 rounded-md"
+                                onClick={() => handleViewComments(item._id)}
                               >
-                                <MessageSquarePlus className="w-2 h-2 text-gray-400" />
+                                <MessageSquareText className="w-2 h-2 text-gray-400 mr-1" />
+                                {item.comments.length}
                               </Button>
-                              {item.comments && item.comments.length > 0 && (
-                                <Button
-                                  className="flex items-center justify-center py-1 px-2 text-sm bg-gray-100 hover:bg-gray-200 text-gray-700 border border-gray-300 rounded-md"
-                                  onClick={() => handleViewComments(item._id)}
-                                >
-                                  <MessageSquareText className="w-2 h-2 text-gray-400 mr-1" />
-                                  {item.comments.length}
-                                </Button>
-                              )}
-                            </div>
-                          </td>
-                        </tr>
-                      );
-                    })}
-
+                            )}
+                          </div>
+                        </td>
+                      </tr>
+                    );
+                  })}
                 </tbody>
               </table>
             </div>

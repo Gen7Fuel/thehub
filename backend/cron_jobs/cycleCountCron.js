@@ -3,7 +3,7 @@ const { DateTime } = require("luxon");
 
 const CycleCount = require("../models/CycleCount");
 const Location = require("../models/Location");
-const { getBulkOnHandQtyCSO } = require('../services/sqlService');
+const { getBulkCSOData } = require('../services/sqlService');
 
 // Helper: get yesterday range in a specific timezone
 const getYesterdayRange = (timezone) => {
@@ -46,61 +46,54 @@ const updateCycleCountCSO = async () => {
       const gtins = items.map((i) => i.gtin).filter(Boolean);
       if (!gtins.length) continue;
 
-      // Fetch bulk on-hand quantities from SQL
-      const csoData = await getBulkOnHandQtyCSO(siteName, gtins);
+      // 2. Fetch Qty and Retail from SQL (Single Table)
+      const csoDataMap = await getBulkCSOData(siteName, gtins);
 
-      // Update cycle count records in bulk
-      const bulkOps = [];
+      const bulkOps = items.map((item) => {
+        const sqlData = csoDataMap[item.gtin];
 
-      // For items WITH SQL data
-      items
-        .filter((i) => i.gtin && csoData[i.gtin] !== undefined)
-        .forEach((i) => {
-          bulkOps.push({
-            updateOne: {
-              filter: { _id: i._id },
-              update: {
-                $set: {
-                  onHandCSO: csoData[i.gtin],
-                  comments: [] // always clear comments
-                }
-              },
-            },
-          });
-        });
+        // Base update: Always clear comments per your requirement
+        const updateFields = { comments: [] };
 
-      // For items WITHOUT SQL data
-      items
-        .filter((i) => i.gtin && csoData[i.gtin] === undefined)
-        .forEach((i) => {
-          bulkOps.push({
-            updateOne: {
-              filter: { _id: i._id },
-              update: {
-                $set: {
-                  comments: []  // clear comments even though onHandCSO isn't updated
-                },
-              },
-            },
-          });
-        });
+        if (sqlData) {
+          // Update On Hand Qty if it exists in SQL
+          if (sqlData.qty !== undefined) {
+            updateFields.onHandCSO = sqlData.qty;
+          }
+
+          // Update Unit Price only if:
+          // - It's not null/undefined
+          // - It's greater than 0
+          // - It's different from the existing price in MongoDB
+          if (
+            sqlData.unitPrice != null &&
+            sqlData.unitPrice > 0 &&
+            sqlData.unitPrice !== item.unitPrice
+          ) {
+            updateFields.unitPrice = sqlData.unitPrice;
+          }
+        }
+
+        return {
+          updateOne: {
+            filter: { _id: item._id },
+            update: { $set: updateFields },
+          },
+        };
+      });
 
       if (bulkOps.length) {
+        // { timestamps: false } ensures 'updatedAt' isn't changed, 
+        // preserving your sorting order on the frontend.
         await CycleCount.bulkWrite(bulkOps, { timestamps: false });
         console.log(`Updated ${bulkOps.length} items for site ${siteName}`);
       }
     }
-
-    console.log("Cycle count CSO cron finished:", new Date().toISOString());
+    console.log("Cycle count CSO cron finished.");
   } catch (err) {
     console.error("Error in cycle count cron:", err);
   }
 };
-
-// Schedule cron at 6 AM ET → 10:00 UTC
-// cron.schedule("0 10 * * *", () => {
-//   updateCycleCountCSO();
-// });
 
 // Schedule cron at 6 AM local (America/Toronto)
 // This will stay at 6 AM even after the clocks changes!

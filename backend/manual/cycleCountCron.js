@@ -13,7 +13,7 @@ async function run() {
 
     await updateCycleCountCSO();
 
-    console.log("Done updating onHandCSO for yesterday.");
+    console.log("Done updating onHandCSO and unit prices for yesterday.");
     process.exit(0);
   } catch (err) {
     console.error("Error:", err);

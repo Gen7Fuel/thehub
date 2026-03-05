@@ -211,6 +211,70 @@ async function getBulkOnHandQtyCSO(site, gtins = []) {
   }
 }
 
+async function getBulkCSOData(site, gtins = []) {
+  if (!gtins.length) return {};
+  try {
+    const pool = await getPool();
+    const list = gtins.map(u => `'${u}'`).join(",");
+
+    const query = `
+      SELECT 
+          [GTIN] AS gtin, 
+          [On Hand Qty] AS qty,
+          [Retail] AS unitPrice
+      FROM [CSO].[Current_Inventory]
+      WHERE [Station] = '${site}' 
+        AND [GTIN] IN (${list})
+    `;
+
+    const result = await pool.request().query(query);
+
+    // Map results: { "gtin": { qty: 10, unitPrice: 5.99 } }
+    const data = {};
+    for (const row of result.recordset) {
+      data[row.gtin] = {
+        qty: row.qty,
+        unitPrice: row.unitPrice
+      };
+    }
+    return data;
+  } catch (err) {
+    console.error("SQL error in getBulkCSOData:", err);
+    return {};
+  }
+}
+
+
+async function getBulkUnitPriceCSO(site, gtins = []) {
+  if (!gtins.length) return {};
+  try {
+    const pool = await getPool();
+    const list = gtins.map(u => `'${u}'`).join(",");
+
+    const query = `
+      SELECT 
+          [GTIN] AS gtin, 
+          [Retail] AS unitPrice
+      FROM [CSO].[Master_Item]
+      WHERE [Station_SK] = '${site}' 
+        AND [GTIN] IN (${list})
+        AND [Retail] IS NOT NULL 
+        AND [Retail] > 0;
+    `;
+    const result = await pool.request().query(query);
+    // Convert array → dictionary
+    const data = {};
+    for (const row of result.recordset) {
+      data[row.gtin] = row.unitPrice;
+    }
+
+    return data;
+  } catch (err) {
+    console.error("SQL error:", err);
+    return {};
+  }
+}
+
 
 // let pool;
 
@@ -877,4 +941,6 @@ module.exports = {
   getPool,
   getRefundTransactions,
   getShiftTransactionTimings,
+  getBulkUnitPriceCSO,
+  getBulkCSOData,
 };
