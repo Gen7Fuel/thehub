@@ -3,7 +3,7 @@ import { useContext, useEffect, useState } from "react";
 import axios from "axios";
 import { RouteContext } from "../interface";
 import { OpenIssueCard } from "@/components/custom/OpenIssueCard";
-import {Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from "@/components/ui/select";
+import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { useAuth } from "@/context/AuthContext";
@@ -32,6 +32,20 @@ interface SelectTemplate {
   name: string;
   options: SelectOption[];
 }
+
+export const statusFlow: Record<string, string[]> = {
+  Created: ["In Progress"],
+  "In Progress": ["On Hold", "Resolved"],
+  "On Hold": ["In Progress", "Resolved"],
+  Resolved: [], // End of the line
+};
+
+export const STATUS_PRIORITY: Record<string, number> = {
+  "Created": 1,
+  "In Progress": 2,
+  "On Hold": 3,
+  "Resolved": 4,
+};
 
 export const Route = createFileRoute("/_navbarLayout/audit/interface/open-issues")({
   component: OpenIssuesPage,
@@ -166,11 +180,11 @@ export function OpenIssuesPage() {
         prev.map((it) =>
           it._id === selectedIssueId
             ? {
-                ...it,
-                currentIssueStatus: data.item.currentIssueStatus,
-                lastUpdated: new Date().toISOString(),
-                issueRaised: data.item.issueRaised,
-              }
+              ...it,
+              currentIssueStatus: data.item.currentIssueStatus,
+              lastUpdated: new Date().toISOString(),
+              issueRaised: data.item.issueRaised,
+            }
             : it
         )
       );
@@ -181,13 +195,6 @@ export function OpenIssuesPage() {
       console.error("Error updating status:", err);
     }
   };
-
-  const statusFlow: Record<string, string | null> = {
-    Created: "In Progress",
-    "In Progress": "Resolved",
-    Resolved: null,
-  };
-
 
   return (
     <div className="flex flex-col items-center p-4">
@@ -237,15 +244,27 @@ export function OpenIssuesPage() {
         <div className="text-center mt-8">No open issues found.</div>
       ) : (
         <div className="w-full max-w-3xl flex flex-col gap-4">
-          {openIssues.map((issue) => (
-            <OpenIssueCard
-              key={issue._id}
-              issue={issue}
-              mode="interface"
-              borderColor={categoryColorMap[issue.category || ""]?.border}
-              onUpdateClick={handleStatusUpdateClick} // use centralized handler
-            />
-          ))}
+          {/* Sort issues by status priority before rendering */}
+          {[...openIssues]
+            .sort((a, b) => {
+              const priorityA = STATUS_PRIORITY[a.currentIssueStatus || "Created"] ?? 99;
+              const priorityB = STATUS_PRIORITY[b.currentIssueStatus || "Created"] ?? 99;
+
+              if (priorityA !== priorityB) {
+                return priorityA - priorityB;
+              }
+
+              // If status is the same, sort by most recently updated
+              return new Date(b.lastUpdated || 0).getTime() - new Date(a.lastUpdated || 0).getTime();
+            }).map((issue) => (
+              <OpenIssueCard
+                key={issue._id}
+                issue={issue}
+                mode="interface"
+                borderColor={categoryColorMap[issue.category || ""]?.border}
+                onUpdateClick={handleStatusUpdateClick} // use centralized handler
+              />
+            ))}
         </div>
       )}
 
@@ -257,26 +276,31 @@ export function OpenIssuesPage() {
           </DialogHeader>
           <div className="mt-3">
             {selectedIssueId && (
-              <select
-                value={newStatus}
-                onChange={(e) => setNewStatus(e.target.value)}
-                className="border rounded px-2 py-1 w-full"
-              >
-                {/* Always include the current status */}
-                <option value={newStatus}>{newStatus}</option>
+              <div className="flex flex-col gap-2">
+                <label className="text-sm font-medium text-gray-500">Select New Status</label>
+                <select
+                  value={newStatus}
+                  onChange={(e) => setNewStatus(e.target.value)}
+                  className="border rounded px-3 py-2 w-full bg-white focus:ring-2 focus:ring-blue-500 outline-none"
+                >
+                  {/* Find the original status of the issue to keep it as an option */}
+                  <option value={newStatus}>{newStatus} (Current)</option>
 
-                {/* Show only the next step if it exists */}
-                {statusFlow[newStatus] && (
-                  <option value={statusFlow[newStatus]!}>{statusFlow[newStatus]}</option>
-                )}
-              </select>
+                  {/* Map through all possible next steps defined in statusFlow */}
+                  {(statusFlow[newStatus] || []).map((status) => (
+                    <option key={status} value={status}>
+                      {status}
+                    </option>
+                  ))}
+                </select>
+              </div>
             )}
           </div>
-          <DialogFooter>
+          <DialogFooter className="gap-2 sm:gap-0">
             <Button onClick={() => setStatusDialogOpen(false)} variant="outline">
               Cancel
             </Button>
-            <Button onClick={handleSaveStatus}>Save</Button>
+            <Button onClick={handleSaveStatus}>Update Status</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>

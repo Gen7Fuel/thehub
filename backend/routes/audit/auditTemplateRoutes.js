@@ -594,7 +594,7 @@ router.put('/issues/:id/status', async (req, res) => {
     const { id } = req.params;
     const { status } = req.body;
 
-    if (!["Created", "In Progress", "Resolved"].includes(status)) {
+    if (!["Created", "In Progress", "On Hold", "Resolved"].includes(status)) {
       return res.status(400).json({ error: "Invalid status" });
     }
 

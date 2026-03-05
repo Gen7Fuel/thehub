@@ -5,6 +5,7 @@ import { OpenIssueCard } from "@/components/custom/OpenIssueCard";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { useAuth } from "@/context/AuthContext";
+import { STATUS_PRIORITY, statusFlow } from "../interface/open-issues";
 
 
 interface OpenIssue {
@@ -14,10 +15,10 @@ interface OpenIssue {
   checked?: boolean;
   issueRaised?: boolean;
   currentIssueStatus?: string;
-  lastUpdated?: string;  
+  lastUpdated?: string;
   assignedTo?: string;
-  comment?: string;       
-  photos?: string[];     
+  comment?: string;
+  photos?: string[];
   status?: string;
 }
 
@@ -37,11 +38,11 @@ export function OpenIssuesPage() {
   const navigate = useNavigate()
 
   const [openIssues, setOpenIssues] = useState<OpenIssue[]>([]);
-  
+
   const [statusDialogOpen, setStatusDialogOpen] = useState(false);
   const [selectedIssueId, setSelectedIssueId] = useState<string | null>(null);
   const [newStatus, setNewStatus] = useState("Created");
-  
+
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -91,9 +92,9 @@ export function OpenIssuesPage() {
   ];
 
   const categoryColorMap: Record<string, { border: string; bg: string }> = {};
-    categories.forEach((cat, idx) => {
-      const key = cat ?? "unknown";
-      categoryColorMap[key] = CATEGORY_COLOR_CLASSES[idx % CATEGORY_COLOR_CLASSES.length];
+  categories.forEach((cat, idx) => {
+    const key = cat ?? "unknown";
+    categoryColorMap[key] = CATEGORY_COLOR_CLASSES[idx % CATEGORY_COLOR_CLASSES.length];
   });
 
   // Trigger dialog for selected issue
@@ -132,11 +133,11 @@ export function OpenIssuesPage() {
         prev.map((it) =>
           it._id === selectedIssueId
             ? {
-                ...it,
-                currentIssueStatus: data.item.currentIssueStatus,
-                lastUpdated: new Date().toISOString(),
-                issueRaised: data.item.issueRaised,
-              }
+              ...it,
+              currentIssueStatus: data.item.currentIssueStatus,
+              lastUpdated: new Date().toISOString(),
+              issueRaised: data.item.issueRaised,
+            }
             : it
         )
       );
@@ -146,46 +147,49 @@ export function OpenIssuesPage() {
     } catch (err) {
       console.error("Error updating status:", err);
     }
-};
-
-
-  const statusFlow: Record<string, string | null> = {
-    Created: "In Progress",
-    "In Progress": "Resolved",
-    Resolved: null,
   };
-
 
   if (loading) return <div className="text-center mt-8">Loading...</div>;
   if (!openIssues.length) return <div className="text-center mt-8">No open issues found.</div>;
 
   return (
     <div className="flex flex-col items-center p-4">
-        {/* Categories Legend */}
-        <div className="flex gap-4 mb-4 flex-wrap">
+      {/* Categories Legend */}
+      <div className="flex gap-4 mb-4 flex-wrap">
         {categories.filter((cat): cat is string => !!cat).map((cat) => {
-            const { border, bg } = categoryColorMap[cat];
-            return (
+          const { border, bg } = categoryColorMap[cat];
+          return (
             <div key={cat} className={`flex items-center gap-1 px-2 py-1 rounded border ${border}`}>
-                <div className={`w-4 h-4 ${bg} rounded-sm`}></div>
-                <span className="text-sm">{cat}</span>
+              <div className={`w-4 h-4 ${bg} rounded-sm`}></div>
+              <span className="text-sm">{cat}</span>
             </div>
-            );
+          );
         })}
-        </div>
+      </div>
 
       <div className="w-full max-w-3xl flex flex-col gap-4">
-        {openIssues.map((issue, idx) => (
-          <OpenIssueCard
-            key={idx}
-            issue={issue}
-            mode="station"
-            onUpdateClick={handleStatusUpdateClick}
-            borderColor={categoryColorMap[issue.category || ""]?.border} // pass the string
-          />
-        ))}
+        {[...openIssues]
+          .sort((a, b) => {
+            const priorityA = STATUS_PRIORITY[a.currentIssueStatus || "Created"] ?? 99;
+            const priorityB = STATUS_PRIORITY[b.currentIssueStatus || "Created"] ?? 99;
+
+            if (priorityA !== priorityB) {
+              return priorityA - priorityB;
+            }
+
+            // If status is the same, sort by most recently updated
+            return new Date(b.lastUpdated || 0).getTime() - new Date(a.lastUpdated || 0).getTime();
+          }).map((issue, idx) => (
+            <OpenIssueCard
+              key={idx}
+              issue={issue}
+              mode="station"
+              onUpdateClick={handleStatusUpdateClick}
+              borderColor={categoryColorMap[issue.category || ""]?.border} // pass the string
+            />
+          ))}
       </div>
-      
+
       {/* Status update dialog */}
       <Dialog open={statusDialogOpen} onOpenChange={setStatusDialogOpen}>
         <DialogContent>
@@ -194,26 +198,31 @@ export function OpenIssuesPage() {
           </DialogHeader>
           <div className="mt-3">
             {selectedIssueId && (
-              <select
-                value={newStatus}
-                onChange={(e) => setNewStatus(e.target.value)}
-                className="border rounded px-2 py-1 w-full"
-              >
-                {/* Always include the current status */}
-                <option value={newStatus}>{newStatus}</option>
-      
-                  {/* Show only the next step if it exists */}
-                  {statusFlow[newStatus] && (
-                    <option value={statusFlow[newStatus]!}>{statusFlow[newStatus]}</option>
-                  )}
-              </select>
+              <div className="flex flex-col gap-2">
+                <label className="text-sm font-medium text-gray-500">Select New Status</label>
+                <select
+                  value={newStatus}
+                  onChange={(e) => setNewStatus(e.target.value)}
+                  className="border rounded px-3 py-2 w-full bg-white focus:ring-2 focus:ring-blue-500 outline-none"
+                >
+                  {/* Find the original status of the issue to keep it as an option */}
+                  <option value={newStatus}>{newStatus} (Current)</option>
+
+                  {/* Map through all possible next steps defined in statusFlow */}
+                  {(statusFlow[newStatus] || []).map((status) => (
+                    <option key={status} value={status}>
+                      {status}
+                    </option>
+                  ))}
+                </select>
+              </div>
             )}
           </div>
-          <DialogFooter>
+          <DialogFooter className="gap-2 sm:gap-0">
             <Button onClick={() => setStatusDialogOpen(false)} variant="outline">
-                Cancel
+              Cancel
             </Button>
-            <Button onClick={handleSaveStatus}>Save</Button>
+            <Button onClick={handleSaveStatus}>Update Status</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>

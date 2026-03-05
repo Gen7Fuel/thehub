@@ -39,6 +39,8 @@ export function OpenIssueCard({ issue, borderColor, mode = "station", onUpdateCl
         return "bg-red-200 hover:bg-red-300";
       case "in progress":
         return "bg-blue-200 hover:bg-blue-300";
+      case "on hold":
+        return "bg-gray-200 hover:bg-gray-300";
       case "resolved":
         return "bg-green-200 hover:bg-green-300";
       default:
