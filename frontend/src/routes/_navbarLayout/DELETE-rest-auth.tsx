@@ -23,7 +23,7 @@ function buildAuthUrl() {
   );
 }
 
-export const Route = createFileRoute('/_navbarLayout/rest-auth')({
+export const Route = createFileRoute('/_navbarLayout/DELETE-rest-auth')({
   component: RestAuthPage,
 });
 
