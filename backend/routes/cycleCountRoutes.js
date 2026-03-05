@@ -491,6 +491,7 @@ router.get('/daily-counts', async (req, res) => {
           foh: e.foh ?? 0,
           boh: e.boh ?? 0,
           onHandCSO: e.onHandCSO ?? null,
+          unitPrice: e.unitPrice ?? null,
           comments: e.comments ?? [],
         })),
       };
