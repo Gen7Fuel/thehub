@@ -254,40 +254,25 @@ export default function MaintenanceBanner({ onStatusChange }: MaintenanceBannerP
         localStorage.removeItem('hub_maint_privileged');
         onStatusChange?.(false);
       }
-
-      // } catch (err: any) {
-      //   console.error("Banner fetch error:", err);
-
-      //   // If the server explicitly told us it's maintenance (503)
-      //   if (err.response?.status === 503) {
-      //     const maintData = err.response.data;
-      //     onStatusChange?.(true, {
-      //       status: 'ongoing',
-      //       scheduleClose: maintData.endTime
-      //     });
-      //     return;
-      //   }
-
-      //   // Fallback to local beacon if the server is unreachable
-      //   const beacon = localStorage.getItem('hub_maint_beacon');
-      //   if (beacon && new Date() < new Date(beacon)) {
-      //     onStatusChange?.(true);
-      //   }
-      // }
     } catch (err: any) {
       console.error("Banner fetch error:", err);
 
-      // === NEW: Admin Bypass Check ===
-      // If this local machine is flagged as admin, do not trigger the beacon loop
+      // === FIX: Don't lock the screen for Auth errors ===
+      // If the token is expired (401) or unauthorized (403), let the 
+      // Auth system handle the redirect. Do NOT trigger a maintenance lock.
+      if (err.response?.status === 401 || err.response?.status === 403) {
+        return;
+      }
+
+      // === Admin Bypass Check ===
       if (localStorage.getItem('hub_maint_privileged') === 'admin') {
         onStatusChange?.(false);
-        return; // Exit catch block immediately
+        return;
       }
 
       // 1. Priority: If server explicitly says 503 Maintenance
       if (err.response?.status === 503) {
         const maintData = err.response.data;
-        // Re-set beacon just in case they deleted it
         localStorage.setItem('hub_maint_beacon', maintData.endTime);
         onStatusChange?.(true, {
           status: 'ongoing',
@@ -296,32 +281,25 @@ export default function MaintenanceBanner({ onStatusChange }: MaintenanceBannerP
         return;
       }
 
-      // 2. Resilience: Handle missing or expired beacons
-      let beacon = localStorage.getItem('hub_maint_beacon');
+      // 2. Resilience: Handle network errors (Backend Down)
+      // Only trigger this if it's a network error (no response) or 5xx server error
+      if (!err.response || err.response.status >= 500) {
+        let beacon = localStorage.getItem('hub_maint_beacon');
 
-      if (!beacon) {
-        // SCENARIO C: Smart user deleted the beacon or it's a new session
-        // We create a "safety beacon" for 5 mins from now to force a re-lock
-        const safetyTime = new Date(Date.now() + 5 * 60 * 1000).toISOString();
-        localStorage.setItem('hub_maint_beacon', safetyTime);
-        beacon = safetyTime;
-      }
+        if (!beacon) {
+          const safetyTime = new Date(Date.now() + 5 * 60 * 1000).toISOString();
+          localStorage.setItem('hub_maint_beacon', safetyTime);
+          beacon = safetyTime;
+        }
 
-      const now = new Date();
-      const estimatedEnd = new Date(beacon);
+        const now = new Date();
+        const estimatedEnd = new Date(beacon);
 
-      if (now < estimatedEnd) {
-        // SCENARIO A: Still within the (potentially new) window
-        onStatusChange?.(true, {
-          status: 'ongoing',
-          scheduleClose: beacon
-        });
-      } else {
-        // SCENARIO B: Past the estimate (the "taking longer" state)
-        onStatusChange?.(true, {
-          status: 'ongoing',
-          scheduleClose: null
-        });
+        if (now < estimatedEnd) {
+          onStatusChange?.(true, { status: 'ongoing', scheduleClose: beacon });
+        } else {
+          onStatusChange?.(true, { status: 'ongoing', scheduleClose: null });
+        }
       }
     }
   }, [user, onStatusChange]);
