@@ -150,10 +150,7 @@ async function runMongoCsvExport() {
     hadError = true;
     console.error('❌ Export Failed:', err);
   } finally {
-    try {
-      console.log('Export Completed.');
-    } catch (e) { }
-    process.exit(hadError ? 1 : 0);
+    console.log('Export Completed.');
   }
 }
 
@@ -166,17 +163,17 @@ async function runMongoCsvExport() {
  * * - Month (Every)
  * * - Day of Week (Every)
  */
-cron.schedule("* 6 * * *", async () => {
-    console.log(`[${new Date().toISOString()}] ⏰ Starting Scheduled Daily Export...`);
-    try {
-        await runMongoCsvExport();
-        console.log(`[${new Date().toISOString()}] ✅ Scheduled Export Completed Successfully.`);
-    } catch (err) {
-        console.error(`[${new Date().toISOString()}] ❌ Scheduled Export Failed:`, err);
-    }
+cron.schedule("0 6 * * *", async () => {
+  console.log(`[${new Date().toISOString()}] ⏰ Starting Scheduled Daily Export...`);
+  try {
+    await runMongoCsvExport();
+    console.log(`[${new Date().toISOString()}] ✅ Scheduled Export Completed Successfully.`);
+  } catch (err) {
+    console.error(`[${new Date().toISOString()}] ❌ Scheduled Export Failed:`, err);
+  }
 }, {
-    scheduled: true,
-    timezone: "America/Toronto" // Handles Daylight Savings (EST/EDT) automatically
+  scheduled: true,
+  timezone: "America/Toronto" // Handles Daylight Savings (EST/EDT) automatically
 });
 
 module.exports = { runMongoCsvExport };
