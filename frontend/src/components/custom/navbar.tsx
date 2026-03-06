@@ -7,7 +7,7 @@ import { getSocket } from "@/lib/websocket";
 import { syncPendingActions } from "@/lib/utils"
 import { isActuallyOnline } from "@/lib/network";
 import { useAuth } from "@/context/AuthContext";
-import { HelpCircle, LogOut, Settings as SettingsIcon, LayoutDashboard, Home as HomeIcon, KeyRound, ExternalLink } from 'lucide-react'
+import { HelpCircle, LogOut, Settings as SettingsIcon, LayoutDashboard, Home as HomeIcon, KeyRound, ExternalLink, Bell } from 'lucide-react'
 import { clearLocalDB } from "@/lib/orderRecIndexedDB";
 import {
   Dialog,
@@ -24,6 +24,7 @@ export default function Navbar() {
   const matchRoute = useMatchRoute()
   const [isHelpOpen, setIsHelpOpen] = useState(false)
   const [forceLogoutMessage, setForceLogoutMessage] = useState<string | null>(null);
+  const [unreadCount, setUnreadCount] = useState(5);
 
   useEffect(() => {
     const token = localStorage.getItem('token');
@@ -279,6 +280,20 @@ export default function Navbar() {
 
         {/* Right-side navigation buttons */}
         <span className="flex gap-4">
+          {/* Notification Button */}
+          <Button
+            variant="outline"
+            size="icon"
+            className="relative"
+            onClick={() => navigate({ to: '/notification' })}
+          >
+            <Bell className="h-5 w-5" />
+            {unreadCount > 0 && (
+              <span className="absolute -top-1 -right-1 flex h-4 w-4 items-center justify-center rounded-full bg-red-600 text-[10px] font-medium text-white">
+                {unreadCount}
+              </span>
+            )}
+          </Button>
           <Button variant="outline" size="icon" onClick={() => setIsHelpOpen(true)}>
             <HelpCircle className="h-5 w-5" />
           </Button>
