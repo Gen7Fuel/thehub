@@ -24,7 +24,34 @@ export default function Navbar() {
   const matchRoute = useMatchRoute()
   const [isHelpOpen, setIsHelpOpen] = useState(false)
   const [forceLogoutMessage, setForceLogoutMessage] = useState<string | null>(null);
-  const [unreadCount, setUnreadCount] = useState(5);
+  // Inside your Navbar Component
+  const [unreadCount, setUnreadCount] = useState(0);
+
+  useEffect(() => {
+    const fetchUnreadCount = async () => {
+      try {
+        const token = localStorage.getItem('token');
+        const res = await axios.get('/api/notification', {
+          headers: { Authorization: `Bearer ${token || ''}` }
+        });
+        // Count only unread items from the list
+        const count = res.data.filter((n: any) => !n.isRead).length;
+        setUnreadCount(count);
+      } catch (err) {
+        console.error("Error fetching unread count", err);
+      }
+    };
+
+    fetchUnreadCount();
+
+    // Listen for the 'notificationRead' event from the Notification Page
+    const handleRead = () => {
+      setUnreadCount((prev) => Math.max(0, prev - 1));
+    };
+
+    window.addEventListener('notificationRead', handleRead);
+    return () => window.removeEventListener('notificationRead', handleRead);
+  }, []);
 
   useEffect(() => {
     const token = localStorage.getItem('token');
@@ -174,6 +201,12 @@ export default function Navbar() {
   useEffect(() => {
     const socket = getSocket();
 
+    // Define the handler for new notifications
+    const handleNewNotification = () => {
+      console.log("🔔 Socket: New notification received");
+      setUnreadCount((prev) => prev + 1);
+    };
+
     socket.on("connect", () => {
       if (user?.id) {
         socket.emit("join-room", user?.id);
@@ -181,6 +214,9 @@ export default function Navbar() {
       // console.log("socket from auth ", socket.id);
     });
     // console.log("Listeners now:", socket.listeners("permissions-updated"));
+
+    // Add the notification listener
+    socket.on("new-notification", handleNewNotification);
 
     socket.on("permissions-updated", handlePermissionsUpdated);
 

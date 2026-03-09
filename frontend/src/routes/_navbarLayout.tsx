@@ -44,11 +44,15 @@
 //     </div>
 //   )
 // }
-import { useState, useCallback } from 'react'
+import { useState, useCallback, useEffect } from 'react'
 import { AlertTriangle, Clock, RefreshCw } from "lucide-react"
 import Navbar from '@/components/custom/navbar'
 import MaintenanceBanner from '@/components/custom/MaintenanceBanner'
-import { createFileRoute, Outlet, redirect } from '@tanstack/react-router'
+import NotificationPopup from '@/components/custom/NotificationPopup'
+import { getSocket } from "@/lib/websocket";
+import axios from 'axios'
+
+import { createFileRoute, Outlet, redirect, useNavigate } from '@tanstack/react-router'
 import { Button } from '@/components/ui/button'
 
 export const Route = createFileRoute('/_navbarLayout')({
@@ -65,6 +69,9 @@ export const Route = createFileRoute('/_navbarLayout')({
 function RouteComponent() {
   const [isLocked, setIsLocked] = useState(false);
   const [maintDetails, setMaintDetails] = useState<any>(null);
+  const [showPopup, setShowPopup] = useState(false);
+  const [unreadCount, setUnreadCount] = useState(0);
+  const navigate = useNavigate();
   // to avoid needing isLocked in the dependency array.
   const handleStatusChange = useCallback((locked: boolean, details?: any) => {
     setIsLocked((prev) => {
@@ -77,10 +84,62 @@ function RouteComponent() {
     }
   }, []);
 
+  // --- SOCKET LISTENER ---
+  const fetchUnreadSummary = useCallback(async () => {
+    try {
+      const token = localStorage.getItem('token');
+      const res = await axios.get('/api/notification/unread-summary', {
+        headers: { Authorization: `Bearer ${token || ''}` }
+      });
+
+      const count = res.data.unreadCount;
+      if (count > 0) {
+        setUnreadCount(count);
+        setShowPopup(true);
+      } else {
+        setShowPopup(false);
+      }
+    } catch (err) {
+      console.error("Error fetching unread summary", err);
+    }
+  }, []);
+
+  // Check on initial mount
+  useEffect(() => {
+    fetchUnreadSummary();
+  }, [fetchUnreadSummary]);
+
+  // Socket Listener
+  useEffect(() => {
+    const socket = getSocket();
+
+    const handleNewNotification = () => {
+      // Whenever ANY new notification hits, refresh the smart count
+      fetchUnreadSummary();
+      // Also update the navbar count
+      window.dispatchEvent(new Event('notificationRead'));
+    };
+
+    socket.on("new-notification", handleNewNotification);
+    return () => { socket.off("new-notification", handleNewNotification); };
+  }, [fetchUnreadSummary]);
+
   return (
     <div className="flex flex-col min-h-screen relative">
       {/* Navbar stays visible but is covered by the overlay if isLocked is true */}
       <Navbar />
+
+      {/* --- NOTIFICATION POPUP OVERLAY --- */}
+      {showPopup && (
+        <NotificationPopup
+          message={`You have ${unreadCount} unread notification${unreadCount > 1 ? 's' : ''} on the Hub.`}
+          onClose={() => setShowPopup(false)}
+          onView={() => {
+            setShowPopup(false);
+            navigate({ to: '/notification' });
+          }}
+        />
+      )}
 
       <div className="flex flex-col flex-1">
         {/* We pass the state setter to the banner */}

@@ -45,6 +45,7 @@ const fuelRecRoutes = require("./routes/fuelRecRoutes");
 const productCategoryRoutes = require("./routes/productCategoryRoutes");
 const logsRoute = require("./routes/logsRoute");
 const sageRoutes = require("./routes/sageRoutes");
+const notificationRoutes = require("./routes/notificationRoutes");
 
 const { auth } = require("./middleware/authMiddleware");
 
@@ -100,6 +101,7 @@ app.use("/api/audit", auditRoutes);
 app.use("/api/permissions", permissionRoutes);
 app.use("/api/roles", roleRoutes);
 app.use("/api/logs", logsRoute);
+app.use("/api/notification", notificationRoutes);
 
 // Reporting
 app.use("/api/sales-summary", salesSummaryRoutes);

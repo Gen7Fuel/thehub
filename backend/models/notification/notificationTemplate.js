@@ -15,4 +15,13 @@ const notificationTemplateSchema = new mongoose.Schema({
   contentLayout: { type: String, required: true }
 }, { timestamps: true });
 
-module.exports = mongoose.model('NotificationTemplate', notificationTemplateSchema);
+// module.exports = mongoose.models.NotificationTemplate || mongoose.model('NotificationTemplate', notificationTemplateSchema);
+
+let NotificationTemplate;
+try {
+  NotificationTemplate = mongoose.model("NotificationTemplate");
+} catch (error) {
+  NotificationTemplate = mongoose.model("NotificationTemplate", notificationTemplateSchema);
+}
+
+module.exports = NotificationTemplate;

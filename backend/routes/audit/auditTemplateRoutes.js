@@ -10,8 +10,7 @@ const Location = require('../../models/Location');
 const SelectTemplate = require('../../models/audit/selectTemplate');
 const { emailQueue } = require('../../queues/emailQueue');
 const User = require('../../models/User');
-
-
+const { pushNotification } = require("../../services/notificationService");
 // GET /api/audit/category-options
 router.get('/category-options', async (req, res) => {
   try {
@@ -41,7 +40,7 @@ router.get('/station-stats', async (req, res) => {
 
     const checklists = await Promise.all(templates.map(async (temp) => {
       // Only items specifically assigned to this site
-      const siteSpecificItems = temp.items.filter(item => 
+      const siteSpecificItems = temp.items.filter(item =>
         item.assignedSites.some(as => as.site === site && as.assigned === true && as.issueRaised === false)
       );
 
@@ -49,12 +48,12 @@ router.get('/station-stats', async (req, res) => {
 
       for (const freq of ['daily', 'weekly', 'monthly']) {
         const expectedItems = siteSpecificItems.filter(i => i.frequency === freq);
-        
+
         const instance = await AuditInstance.findOne({
-          template: temp._id, 
-          site: site, 
-          frequency: freq, 
-          periodKey: pKeys[freq], 
+          template: temp._id,
+          site: site,
+          frequency: freq,
+          periodKey: pKeys[freq],
           type: 'store'
         });
 
@@ -64,11 +63,11 @@ router.get('/station-stats', async (req, res) => {
 
         if (instance) {
           const actualItems = await AuditItem.find({ instance: instance._id });
-          
+
           const checkedItems = actualItems.filter(i => i.checked);
           completedCount = checkedItems.length;
           issueCount = actualItems.filter(i => i.issueRaised).length;
-          
+
           const checkedNames = checkedItems.map(i => i.item);
           pendingNames = expectedItems
             .filter(i => !checkedNames.includes(i.item))
@@ -766,8 +765,8 @@ router.post('/instance', async (req, res) => {
           commentRequired: item.commentRequired,
           // currentIssueStatus: item.issueRaised === true ? "Created" : undefined,
           currentIssueStatus: (item.issueRaised && !["Resolved", "In Progress"].includes(existingItem?.currentIssueStatus))
-                            ? "Created"
-                            : existingItem?.currentIssueStatus,
+            ? "Created"
+            : existingItem?.currentIssueStatus,
         };
 
         // Only set checkedAt when it goes from unchecked → checked
@@ -887,111 +886,130 @@ router.post('/instance', async (req, res) => {
                     console.warn("No email found for assignedTo:", match?.text);
                     return;
                   }
-                  const subject = `⚠️ Issue Raised for Site ${site}`;
-                  const text = `An issue has been raised for site ${site}.
-                  Checklist: ${item.item}
-                  Category: ${item.category}
-                  Status Selected: ${item.status}
-                  Comment: ${item.comment}
+                  // const subject = `⚠️ Issue Raised for Site ${site}`;
+                  // const text = `An issue has been raised for site ${site}.
+                  // Checklist: ${item.item}
+                  // Category: ${item.category}
+                  // Status Selected: ${item.status}
+                  // Comment: ${item.comment}
 
-                  Please review the issue in the Hub under Station Audit Interface.`;
+                  // Please review the issue in the Hub under Station Audit Interface.`;
 
-                  const html = `
-                    <div style="
-                      font-family: 'Segoe UI', Arial, sans-serif;
-                      background-color: #f7f9fc;
-                      padding: 30px;
-                    ">
-                      <div style="
-                        max-width: 600px;
-                        margin: 0 auto;
-                        background-color: #ffffff;
-                        border-radius: 12px;
-                        box-shadow: 0 4px 8px rgba(0,0,0,0.08);
-                        overflow: hidden;
-                      ">
-                        <!-- Header -->
-                        <div style="
-                          background-color: #d32f2f;
-                          color: #ffffff;
-                          text-align: center;
-                          padding: 16px 0;
-                        ">
-                          <h1 style="margin: 0; font-size: 22px;">🚨 Issue Raised Alert</h1>
-                        </div>
+                  // const html = `
+                  //   <div style="
+                  //     font-family: 'Segoe UI', Arial, sans-serif;
+                  //     background-color: #f7f9fc;
+                  //     padding: 30px;
+                  //   ">
+                  //     <div style="
+                  //       max-width: 600px;
+                  //       margin: 0 auto;
+                  //       background-color: #ffffff;
+                  //       border-radius: 12px;
+                  //       box-shadow: 0 4px 8px rgba(0,0,0,0.08);
+                  //       overflow: hidden;
+                  //     ">
+                  //       <!-- Header -->
+                  //       <div style="
+                  //         background-color: #d32f2f;
+                  //         color: #ffffff;
+                  //         text-align: center;
+                  //         padding: 16px 0;
+                  //       ">
+                  //         <h1 style="margin: 0; font-size: 22px;">🚨 Issue Raised Alert</h1>
+                  //       </div>
 
-                        <!-- Body -->
-                        <div style="padding: 24px 30px;">
-                          <p style="font-size: 16px; color: #333;">
-                            An issue has been raised for the following site:
-                          </p>
+                  //       <!-- Body -->
+                  //       <div style="padding: 24px 30px;">
+                  //         <p style="font-size: 16px; color: #333;">
+                  //           An issue has been raised for the following site:
+                  //         </p>
 
-                          <table style="width: 100%; border-collapse: collapse; margin-top: 10px;">
-                            <tr>
-                              <td style="padding: 8px; font-weight: bold; color: #555;">🏪 Site:</td>
-                              <td style="padding: 8px; color: #222;">${site}</td>
-                            </tr>
-                            <tr>
-                              <td style="padding: 8px; font-weight: bold; color: #555;">🧾 Checklist:</td>
-                              <td style="padding: 8px; color: #222;">${item.item}</td>
-                            </tr>
-                            <tr>
-                              <td style="padding: 8px; font-weight: bold; color: #555;">📂 Category:</td>
-                              <td style="padding: 8px; color: #222;">${item.category}</td>
-                            </tr>
-                            <tr>
-                              <td style="padding: 8px; font-weight: bold; color: #555;">⚡ Status Selected:</td>
-                              <td style="padding: 8px; color: #222;">
-                                ${item.status && item.status.trim() !== "" ? item.status : "No Status Selected"}
-                              </td>
-                            </tr>
-                            <tr>
-                              <td style="padding: 8px; font-weight: bold; color: #555;">📝 Comment:</td>
-                              <td style="padding: 8px; color: #222;">
-                                ${item.comment && item.comment.trim() !== "" ? item.comment : "No Comment Provided"}
-                              </td>
-                            </tr>
-                          </table>
+                  //         <table style="width: 100%; border-collapse: collapse; margin-top: 10px;">
+                  //           <tr>
+                  //             <td style="padding: 8px; font-weight: bold; color: #555;">🏪 Site:</td>
+                  //             <td style="padding: 8px; color: #222;">${site}</td>
+                  //           </tr>
+                  //           <tr>
+                  //             <td style="padding: 8px; font-weight: bold; color: #555;">🧾 Checklist:</td>
+                  //             <td style="padding: 8px; color: #222;">${item.item}</td>
+                  //           </tr>
+                  //           <tr>
+                  //             <td style="padding: 8px; font-weight: bold; color: #555;">📂 Category:</td>
+                  //             <td style="padding: 8px; color: #222;">${item.category}</td>
+                  //           </tr>
+                  //           <tr>
+                  //             <td style="padding: 8px; font-weight: bold; color: #555;">⚡ Status Selected:</td>
+                  //             <td style="padding: 8px; color: #222;">
+                  //               ${item.status && item.status.trim() !== "" ? item.status : "No Status Selected"}
+                  //             </td>
+                  //           </tr>
+                  //           <tr>
+                  //             <td style="padding: 8px; font-weight: bold; color: #555;">📝 Comment:</td>
+                  //             <td style="padding: 8px; color: #222;">
+                  //               ${item.comment && item.comment.trim() !== "" ? item.comment : "No Comment Provided"}
+                  //             </td>
+                  //           </tr>
+                  //         </table>
 
-                          <div style="
-                            margin-top: 24px;
-                            background-color: #fff3cd;
-                            border-left: 6px solid #ffc107;
-                            padding: 16px;
-                            border-radius: 8px;
-                          ">
-                            <p style="margin: 0; color: #856404; font-size: 15px;">
-                              ⚠️ Please review this issue in the <strong>Hub → Station Audit Interface</strong> as soon as possible.
-                            </p>
-                          </div>
+                  //         <div style="
+                  //           margin-top: 24px;
+                  //           background-color: #fff3cd;
+                  //           border-left: 6px solid #ffc107;
+                  //           padding: 16px;
+                  //           border-radius: 8px;
+                  //         ">
+                  //           <p style="margin: 0; color: #856404; font-size: 15px;">
+                  //             ⚠️ Please review this issue in the <strong>Hub → Station Audit Interface</strong> as soon as possible.
+                  //           </p>
+                  //         </div>
 
-                          <div style="text-align: center; margin-top: 30px;">
-                            <a href="https://app.gen7fuel.com/audit/interface/open-issues" 
-                              style="
-                                background-color: #1976d2;
-                                color: #ffffff;
-                                padding: 12px 22px;
-                                text-decoration: none;
-                                font-weight: 600;
-                                border-radius: 6px;
-                                display: inline-block;
-                                font-size: 15px;
-                              ">
-                              🔗 Open Station Audit Interface
-                            </a>
-                          </div>
+                  //         <div style="text-align: center; margin-top: 30px;">
+                  //           <a href="https://app.gen7fuel.com/audit/interface/open-issues" 
+                  //             style="
+                  //               background-color: #1976d2;
+                  //               color: #ffffff;
+                  //               padding: 12px 22px;
+                  //               text-decoration: none;
+                  //               font-weight: 600;
+                  //               border-radius: 6px;
+                  //               display: inline-block;
+                  //               font-size: 15px;
+                  //             ">
+                  //             🔗 Open Station Audit Interface
+                  //           </a>
+                  //         </div>
 
-                          <p style="color: #777; font-size: 13px; margin-top: 32px; text-align: center;">
-                            This is an automated message from the Gen7Fuel Hub Audit System.<br>
-                            Please do not reply to this email.
-                          </p>
-                        </div>
-                      </div>
-                    </div>
-                  `;
-                  const cc = ["daksh@gen7fuel.com", "ana@gen7fuel.com", "JDzyngel@gen7fuel.com", "kporter@gen7fuel.com", "michelle@gen7fuel.com"];
-                  // const cc = ["daksh@gen7fuel.com"];
-                  await emailQueue.add("sendIssueEmail", { to, subject, text, html, cc });
+                  //         <p style="color: #777; font-size: 13px; margin-top: 32px; text-align: center;">
+                  //           This is an automated message from the Gen7Fuel Hub Audit System.<br>
+                  //           Please do not reply to this email.
+                  //         </p>
+                  //       </div>
+                  //     </div>
+                  //   </div>
+                  // `;
+                  // const cc = ["daksh@gen7fuel.com", "ana@gen7fuel.com", "JDzyngel@gen7fuel.com", "kporter@gen7fuel.com", "michelle@gen7fuel.com"];
+                  const cc = ["daksh@gen7fuel.com"];
+                  // await emailQueue.add("sendIssueEmail", { to, subject, text, html, cc });
+                  to = "vasu@gen7fuel.com"
+                  // Data to be stored in the Notification 'fieldValues' Map
+                  const issueData = {
+                    site: site,
+                    checklist: item.item,
+                    category: item.category,
+                    status: item.status || "No Status Selected",
+                    comment: item.comment || "No Comment Provided"
+                  };
+
+                  const io = req.app.get("io"); // Get it from the request here
+                  await pushNotification({
+                    io, // Pass it to the service
+                    recipientEmails: [to, ...cc],
+                    slug: "issue-raised-alert", // Must match the slug in your NotificationTemplate collection
+                    subject: `⚠️ Issue Raised for Site ${site}`,
+                    fieldValues: issueData,
+                    type: 'system'
+                  });
                   console.log(`📨 Email queued for ${to}`);
                 } else {
                   console.warn(
