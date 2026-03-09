@@ -75,12 +75,6 @@ router.get('/:id', async (req, res) => {
       const regex = new RegExp(`{{${key}}}`, 'g');
       finalHtml = finalHtml.replace(regex, fieldValues[key] || '');
     });
-    const io = req.app.get("io");
-
-    notification.recipientIds.forEach(id => {
-      // Emit specifically to that user's room
-      io.to(id.toString()).emit("new-notification");
-    });
 
     res.json({
       ...notification._doc,
