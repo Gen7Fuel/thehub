@@ -319,4 +319,51 @@ router.put('/site/:site/entries/:entryId', async (req, res) => {
   }
 });
 
+/**
+ * Delete a specific entry by its _id
+ * DELETE /api/safesheets/site/:site/entries/:entryId
+ */
+router.delete('/site/:site/entries/:entryId', async (req, res) => {
+  try {
+    const { site, entryId } = req.params;
+
+    const sheet = await Safesheet.findOne({ site });
+    if (!sheet) return res.status(404).json({ error: 'Safesheet not found for site' });
+
+    const entry = sheet.entries.id(entryId);
+    if (!entry) return res.status(404).json({ error: 'Entry not found' });
+
+    const beforeEntry = entry.toObject();
+
+    sheet.entries.pull({ _id: entryId });
+    await sheet.save();
+
+    const entriesWithRunning = sheet.getEntriesWithRunningBalance();
+
+    try {
+      await logAction(req, {
+        action: 'delete',
+        resourceType: 'safesheet',
+        resourceId: sheet._id,
+        success: true,
+        statusCode: 200,
+        message: `Safesheet entry deleted for site: ${site}`,
+        before: {
+          entryId: beforeEntry._id,
+          entryDate: beforeEntry.date,
+          description: beforeEntry.description,
+          cashIn: beforeEntry.cashIn,
+          cashExpenseOut: beforeEntry.cashExpenseOut,
+          cashDepositBank: beforeEntry.cashDepositBank,
+        },
+      });
+    } catch (e) { }
+
+    return res.json({ entries: entriesWithRunning });
+  } catch (err) {
+    try { await logAction(req, { action: 'delete', resourceType: 'safesheet', success: false, statusCode: 500, message: err.message }); } catch (_) { }
+    return res.status(500).json({ error: err.message });
+  }
+});
+
 module.exports = router;
