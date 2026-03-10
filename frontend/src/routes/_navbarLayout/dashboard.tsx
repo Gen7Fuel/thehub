@@ -450,28 +450,26 @@ function RouteComponent() {
         const { startDate: weekStart, endDate: weekEnd } = getCurrentWeekRange();
 
         // ────────────────────────────────────────────────────────
-        // GROUP A — Fire ALL independent calls in parallel
+        // FAST TRACK — IDB reads + csoCode (~100ms, no heavy DB)
+        // Await this first so SQL can start before slow Mongo calls.
         // ────────────────────────────────────────────────────────
-        const [
-          orderRecResult,
-          safeBalanceResult,
-          locationResult,
-          overShortResult,
-          payablesResult,
-          auditResult,
-          csoCodeResult,
-          vendorsResult,
-          weekOrderRecsResult,
-          // IndexedDB cache reads
-          salesCachedResult,
-          fuelCachedResult,
-          transCachedResult,
-          timePeriodCachedResult,
-          tenderCachedResult,
-          bistroCachedResult,
-          top10CachedResult,
-        ] = await Promise.allSettled([
-          // API calls
+        const fastTrackPromise = Promise.allSettled([
+          getCsoCodeByStationName(site),                    // idx 0
+          getDashboardData(STORES.SALES, site),             // idx 1
+          getDashboardData(STORES.FUEL, site),              // idx 2
+          getDashboardData(STORES.TRANS, site),             // idx 3
+          getDashboardData(STORES.TIME_PERIOD_TRANS, site), // idx 4
+          getDashboardData(STORES.TENDER_TRANS, site),      // idx 5
+          getDashboardData(STORES.BISTRO_WOW_SALES, site),  // idx 6
+          getDashboardData(STORES.TOP_10_BISTRO, site),     // idx 7
+        ]);
+
+        // ────────────────────────────────────────────────────────
+        // SLOW TRACK — MongoDB API calls (~1-2s each)
+        // Fire all in parallel but DON'T await yet — SQL must
+        // not wait for these.
+        // ────────────────────────────────────────────────────────
+        const slowTrackPromise = Promise.allSettled([
           fetch(`/api/order-rec/range?${params}`, { headers: authHeaders }).then(async (res) => {
             if (res.status === 403) throw { is403: true };
             if (!res.ok) throw new Error(`Failed to fetch order records: ${res.statusText}`);
@@ -498,42 +496,73 @@ function RouteComponent() {
             if (!res.ok) throw new Error('Failed to fetch audit stats');
             return res.json();
           }),
-          getCsoCodeByStationName(site),
           fetchVendors(site),
           fetchOrderRecs(site, weekStart, weekEnd),
-          // IndexedDB cache reads
-          getDashboardData(STORES.SALES, site),
-          getDashboardData(STORES.FUEL, site),
-          getDashboardData(STORES.TRANS, site),
-          getDashboardData(STORES.TIME_PERIOD_TRANS, site),
-          getDashboardData(STORES.TENDER_TRANS, site),
-          getDashboardData(STORES.BISTRO_WOW_SALES, site),
-          getDashboardData(STORES.TOP_10_BISTRO, site),
         ]);
 
+        // ── Await fast track only (~100ms) ──
+        const [csoCodeResult, ...idbResults] = await fastTrackPromise;
         if (cancelled) return;
 
-        // Check for 403 in any result → navigate immediately
-        const allResults = [orderRecResult, safeBalanceResult, overShortResult, payablesResult, auditResult];
-        for (const r of allResults) {
-          if (r.status === 'rejected' && r.reason?.is403) {
+        const csoCode = csoCodeResult.status === 'fulfilled' ? csoCodeResult.value : '';
+        const [salesCached, fuelCached, transCached, timePeriodCached, tenderCached, bistroCached, top10Cached] =
+          idbResults.map(r => (r.status === 'fulfilled' ? r.value : null));
+
+        const needsSqlFetch =
+          !salesCached?.length || !fuelCached?.length || !transCached?.length ||
+          !timePeriodCached?.length || !tenderCached?.length ||
+          !bistroCached?.length || !top10Cached?.length;
+
+        // ── Start SQL immediately — overlaps with ongoing slow-track Mongo calls ──
+        const sqlPromise = needsSqlFetch
+          ? (async () => {
+              console.log('📡 No cache → Calling SQL backend...');
+              const data = await fetchAllSqlData(
+                csoCode ?? '', site, salesStartDate, salesEndDate,
+                fuelStartDate, fuelEndDate, transStartDate, transEndDate,
+                shiftStartDate, shiftEndDate,
+              );
+              saveDashboardData(STORES.SALES, site, data.sales);
+              saveDashboardData(STORES.FUEL, site, data.fuel);
+              saveDashboardData(STORES.TRANS, site, data.transactions);
+              saveDashboardData(STORES.TIME_PERIOD_TRANS, site, data.timePeriodTransactions);
+              saveDashboardData(STORES.TENDER_TRANS, site, data.tenderTransactions);
+              saveDashboardData(STORES.BISTRO_WOW_SALES, site, data.bistroWoWSales);
+              saveDashboardData(STORES.TOP_10_BISTRO, site, data.top10Bistro);
+              return data;
+            })()
+          : Promise.resolve({
+              sales: salesCached, fuel: fuelCached, transactions: transCached,
+              timePeriodTransactions: timePeriodCached, tenderTransactions: tenderCached,
+              bistroWoWSales: bistroCached, top10Bistro: top10Cached,
+            });
+
+        // ── Now await slow-track MongoDB results (~2s, already running) ──
+        const [
+          orderRecResult, safeBalanceResult, locationResult,
+          overShortResult, payablesResult, auditResult,
+          vendorsResult, weekOrderRecsResult,
+        ] = await slowTrackPromise;
+        if (cancelled) return;
+
+        // Check for 403
+        for (const r of [orderRecResult, safeBalanceResult, overShortResult, payablesResult, auditResult]) {
+          if (r.status === 'rejected' && (r.reason as any)?.is403) {
             navigate({ to: '/no-access' });
             return;
           }
         }
 
-        // Extract values (default to empty on failure)
-        const orderRecsRes = orderRecResult.status === 'fulfilled' ? orderRecResult.value : [];
-        const safeBalanceJson = safeBalanceResult.status === 'fulfilled' ? safeBalanceResult.value : {};
-        const locationData = locationResult.status === 'fulfilled' ? locationResult.value : {};
-        const overShortRes = overShortResult.status === 'fulfilled' ? overShortResult.value : [];
-        const payablesRes = payablesResult.status === 'fulfilled' ? payablesResult.value : [];
-        const auditRes = auditResult.status === 'fulfilled' ? auditResult.value : [];
-        const csoCode = csoCodeResult.status === 'fulfilled' ? csoCodeResult.value : '';
-        const vendorsArr = vendorsResult.status === 'fulfilled' ? vendorsResult.value : [];
-        const orderRecsArr = weekOrderRecsResult.status === 'fulfilled' ? weekOrderRecsResult.value : [];
+        const orderRecsRes    = orderRecResult.status === 'fulfilled'      ? orderRecResult.value      : [];
+        const safeBalanceJson = safeBalanceResult.status === 'fulfilled'   ? safeBalanceResult.value   : {};
+        const locationData    = locationResult.status === 'fulfilled'      ? locationResult.value      : {};
+        const overShortRes    = overShortResult.status === 'fulfilled'     ? overShortResult.value     : [];
+        const payablesRes     = payablesResult.status === 'fulfilled'      ? payablesResult.value      : [];
+        const auditRes        = auditResult.status === 'fulfilled'         ? auditResult.value         : [];
+        const vendorsArr      = vendorsResult.status === 'fulfilled'       ? vendorsResult.value       : [];
+        const orderRecsArr    = weekOrderRecsResult.status === 'fulfilled' ? weekOrderRecsResult.value : [];
 
-        // ── Set accounting data immediately (Group A is done) ──
+        // ── Accounting section data is ready ──
         setSafeBalanceRaw(safeBalanceJson.data || []);
         setSafeMaxBalance(locationData.safeMaxBalance ?? 25_000);
         setOverShortData(overShortRes);
@@ -541,7 +570,7 @@ function RouteComponent() {
         setAuditStats(auditRes);
         if (!cancelled) setLoadingAccounting(false);
 
-        // ── Set inventory data that's ready (vendors + audit) ──
+        // ── Vendor / order rec state ──
         const vendorOrderMap: Record<string, { orderRecId: string; currentStatus: string; date: string }> = {};
         for (const rec of orderRecsArr) {
           if (!rec.vendor) continue;
@@ -567,107 +596,41 @@ function RouteComponent() {
         if (cancelled) return;
         setVendorNames(vendorNamesObj);
 
-        // ────────────────────────────────────────────────────────
-        // GROUP B — Dependent calls (need location/csoCode/cache)
-        // ────────────────────────────────────────────────────────
+        // ── Kick off cycle counts now that we have timezone ──
         const timezone = locationData.timezone || 'UTC';
         setSiteTimezone(timezone);
+        const dailyCountsPromise = fetchDailyCounts(
+          site, sevenDaysAgo.toISOString().slice(0, 10), today.toISOString().slice(0, 10), timezone,
+        );
 
-        // Fire cycle counts + SQL data in parallel
-        const dailyCountsPromise = fetchDailyCounts(site, sevenDaysAgo.toISOString().slice(0, 10), today.toISOString().slice(0, 10), timezone);
-
-        // Check IndexedDB cache
-        const salesCached = salesCachedResult.status === 'fulfilled' ? salesCachedResult.value : null;
-        const fuelCached = fuelCachedResult.status === 'fulfilled' ? fuelCachedResult.value : null;
-        const transCached = transCachedResult.status === 'fulfilled' ? transCachedResult.value : null;
-        const timePeriodCached = timePeriodCachedResult.status === 'fulfilled' ? timePeriodCachedResult.value : null;
-        const tenderCached = tenderCachedResult.status === 'fulfilled' ? tenderCachedResult.value : null;
-        const bistroCached = bistroCachedResult.status === 'fulfilled' ? bistroCachedResult.value : null;
-        const top10Cached = top10CachedResult.status === 'fulfilled' ? top10CachedResult.value : null;
-
-        let sqlSales = salesCached;
-        let sqlFuel = fuelCached;
-        let sqlTrans = transCached;
-        let sqlTimePeriodTrans = timePeriodCached;
-        let sqlTenderTrans = tenderCached;
-        let sqlBistroWoWSales = bistroCached;
-        let sqlTop10Bistro = top10Cached;
-
-        const needsSqlFetch =
-          !sqlSales?.length || !sqlFuel?.length || !sqlTrans?.length ||
-          !sqlTimePeriodTrans?.length || !sqlTenderTrans?.length ||
-          !sqlBistroWoWSales?.length || !sqlTop10Bistro?.length;
-
-        // Build the SQL fetch promise (or resolve immediately if cached)
-        const sqlPromise = needsSqlFetch
-          ? (async () => {
-              console.log('📡 No cache → Calling SQL backend...');
-              const data = await fetchAllSqlData(
-                csoCode ?? '', salesStartDate, salesEndDate,
-                fuelStartDate, fuelEndDate, transStartDate, transEndDate,
-                shiftStartDate, shiftEndDate,
-              );
-              // Save to IDB (fire and forget)
-              saveDashboardData(STORES.SALES, site, data.sales);
-              saveDashboardData(STORES.FUEL, site, data.fuel);
-              saveDashboardData(STORES.TRANS, site, data.transactions);
-              saveDashboardData(STORES.TIME_PERIOD_TRANS, site, data.timePeriodTransactions);
-              saveDashboardData(STORES.TENDER_TRANS, site, data.tenderTransactions);
-              saveDashboardData(STORES.BISTRO_WOW_SALES, site, data.bistroWoWSales);
-              saveDashboardData(STORES.TOP_10_BISTRO, site, data.top10Bistro);
-              return data;
-            })()
-          : (async () => {
-              console.log('⚡ Using cached dashboard SQL data');
-              return {
-                sales: sqlSales, fuel: sqlFuel, transactions: sqlTrans,
-                timePeriodTransactions: sqlTimePeriodTrans, tenderTransactions: sqlTenderTrans,
-                bistroWoWSales: sqlBistroWoWSales, top10Bistro: sqlTop10Bistro,
-              };
-            })();
-
-        // Run cycle counts + SQL data in parallel
-        const [dailyCountsRes, sqlData] = await Promise.all([dailyCountsPromise, sqlPromise]);
+        // ── SQL was already running — wait for it + cycle counts together ──
+        const [sqlData, dailyCountsRes] = await Promise.all([sqlPromise, dailyCountsPromise]);
         if (cancelled) return;
 
-        // Set cycle counts → inventory section done
         setDailyCounts(dailyCountsRes.data ?? []);
         setLoadingInventory(false);
 
-        // ────────────────────────────────────────────────────────
-        // GROUP C — CPU-only transforms (fast, no network)
-        // ────────────────────────────────────────────────────────
-        sqlSales = sqlData.sales;
-        sqlFuel = sqlData.fuel;
-        sqlTrans = sqlData.transactions;
-        sqlTimePeriodTrans = sqlData.timePeriodTransactions;
-        sqlTenderTrans = sqlData.tenderTransactions;
-        sqlBistroWoWSales = sqlData.bistroWoWSales;
-        sqlTop10Bistro = sqlData.top10Bistro;
-
-        const { cleaned: cleanedFuelData, fullFuelData } = await fetchFuelData(sqlFuel);
+        // ── CPU-only transforms ──
+        const { cleaned: cleanedFuelData, fullFuelData } = await fetchFuelData(sqlData.fuel);
         const stats = await fetchFuelMonthToMonth(fullFuelData);
-        const salesDataRes = await fetchSalesData(sqlSales);
+        const salesDataRes = await fetchSalesData(sqlData.sales);
 
-        const transactionModChartData = sqlTrans.map((t: any) => {
+        const transactionModChartData = sqlData.transactions.map((t: any) => {
           const dayFull = t.Date;
-          const dayLabel = dayFull.slice(5, 10);
-          return { dayFull, day: dayLabel, transactions: t.transactions, visits: t.visits, avgBasket: t.bucket_size };
+          return { dayFull, day: dayFull.slice(5, 10), transactions: t.transactions, visits: t.visits, avgBasket: t.bucket_size };
         });
 
         if (cancelled) return;
 
-        // Set all remaining states
         setSalesData(salesDataRes);
         setFuelData(cleanedFuelData);
         setFuelMonthStats(stats);
         setTransactionChartData(transactionModChartData);
-        setTenderTransactions(sqlTenderTrans);
-        setTimePeriodData(sqlTimePeriodTrans);
-        setBistroWoWSales(sqlBistroWoWSales);
-        setTop10Bistro(sqlTop10Bistro);
+        setTenderTransactions(sqlData.tenderTransactions);
+        setTimePeriodData(sqlData.timePeriodTransactions);
+        setBistroWoWSales(sqlData.bistroWoWSales);
+        setTop10Bistro(sqlData.top10Bistro);
 
-        // Overview and SQL-dependent sections done
         setLoadingOverview(false);
         setLoadingSql(false);
 
@@ -2261,6 +2224,7 @@ const fetchFuelData = async (rows: any) => {
 
 const fetchAllSqlData = async (
   csoCode: string,
+  site: string,
   salesStart: string, salesEnd: string,
   fuelStart: string, fuelEnd: string,
   transStart: string, transEnd: string,
@@ -2268,16 +2232,13 @@ const fetchAllSqlData = async (
 ) => {
   const params = new URLSearchParams({
     csoCode,
-
+    site,
     salesStart,
     salesEnd,
-
     fuelStart,
     fuelEnd,
-
     transStart,
     transEnd,
-
     shiftStart,
     shiftEnd
   });
