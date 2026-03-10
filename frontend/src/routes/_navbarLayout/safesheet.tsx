@@ -887,7 +887,7 @@ export default function RouteComponent() {
                                     </Button>
                                   ))}
 
-                                  {e.cashDepositBank > 0 && user?.access?.['accounting.safesheet.setAssignedDate'] === true && (
+                                  {e.cashDepositBank > 0 && user?.access?.accounting.safesheet.setAssignedDate && (
                                     e.assignedDate ? (
                                       <Button
                                         size="sm"
@@ -982,7 +982,7 @@ export default function RouteComponent() {
                                     </Dialog>
 
                                 {/* Delete button — requires accounting.safesheet.deleteEntry */}
-                                {user?.access?.['accounting.safesheet.deleteEntry'] === true && (
+                                {user?.access?.accounting.safesheet.deleteEntry && (
                                   <Button
                                     size="sm"
                                     variant="outline"
