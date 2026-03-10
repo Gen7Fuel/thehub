@@ -586,7 +586,14 @@ function RouteComponent() {
         setVendors(updatedVendors);
         setVendorStatus(updatedVendors);
 
-        // Vendor names (parallel resolution)
+        // ── Start cycle counts immediately — only needs timezone, no SQL dependency ──
+        const timezone = locationData.timezone || 'UTC';
+        setSiteTimezone(timezone);
+        const dailyCountsPromise = fetchDailyCounts(
+          site, sevenDaysAgo.toISOString().slice(0, 10), today.toISOString().slice(0, 10), timezone,
+        );
+
+        // Vendor names (runs in parallel with cycle counts + SQL)
         const vendorIds = [...new Set(STATUS_KEYS.flatMap(key => (orderRecsRes[key] ?? []).map((r: any) => String(r.vendor))))];
         const vendorNamesObj: Record<string, string> = {};
         await Promise.all(vendorIds.map(async (id: string) => {
@@ -596,19 +603,15 @@ function RouteComponent() {
         if (cancelled) return;
         setVendorNames(vendorNamesObj);
 
-        // ── Kick off cycle counts now that we have timezone ──
-        const timezone = locationData.timezone || 'UTC';
-        setSiteTimezone(timezone);
-        const dailyCountsPromise = fetchDailyCounts(
-          site, sevenDaysAgo.toISOString().slice(0, 10), today.toISOString().slice(0, 10), timezone,
-        );
-
-        // ── SQL was already running — wait for it + cycle counts together ──
-        const [sqlData, dailyCountsRes] = await Promise.all([sqlPromise, dailyCountsPromise]);
+        // ── Inventory ready as soon as cycle counts finish — no SQL needed ──
+        const dailyCountsRes = await dailyCountsPromise;
         if (cancelled) return;
-
         setDailyCounts(dailyCountsRes.data ?? []);
         setLoadingInventory(false);
+
+        // ── SQL sections hydrate when SQL resolves (~5s cold start, runs in background) ──
+        const sqlData = await sqlPromise;
+        if (cancelled) return;
 
         // ── CPU-only transforms ──
         const { cleaned: cleanedFuelData, fullFuelData } = await fetchFuelData(sqlData.fuel);
