@@ -11,6 +11,17 @@ import { PasswordProtection } from "@/components/custom/PasswordProtection";
 import { useAuth } from "@/context/AuthContext";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog'
 import { Switch } from '@/components/ui/switch';
+import {
+  pad,
+  ymd,
+  ymdFixed,
+  parseYmd,
+  fmtNumber,
+  fmtNumberShowZero,
+  recomputeCashOnHand,
+  typeRank,
+  getSortKey,
+} from '@/lib/safesheetUtils'
 
 type Entry = {
   _id: string
@@ -58,16 +69,7 @@ export const Route = createFileRoute('/_navbarLayout/safesheet')({
 //   loaderDeps: ({ search: { site } }) => ({ site })
 // })
 
-// Helpers for YYYY-MM-DD
-const pad = (n: number) => String(n).padStart(2, '0')
-const ymdFixed = (d: Date) =>
-  `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`
-const ymd = (d: Date) => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`
-const parseYmd = (s?: string) => {
-  if (!s || !/^\d{4}-\d{2}-\d{2}$/.test(s)) return undefined
-  const [y, m, d] = s.split('-').map(Number)
-  return new Date(y, m - 1, d, 0, 0, 0, 0)
-}
+// Date helpers and formatters are imported from @/lib/safesheetUtils
 
 export default function RouteComponent() {
   // State for calendar modal
@@ -170,23 +172,7 @@ export default function RouteComponent() {
     cameraInputRef.current?.click()
   }
 
-  // number formatter
-  const fmtNumber = (v?: number | null) => {
-    if (v === null || v === undefined || v === 0) return ''
-    return new Intl.NumberFormat(undefined, {
-      minimumFractionDigits: 2,
-      maximumFractionDigits: 2,
-    }).format(v)
-  }
-
-  // dedicated formatter that shows zero (for Cash On Hand only)
-  const fmtNumberShowZero = (v?: number | null) => {
-    if (v === null || v === undefined) return ''
-    return new Intl.NumberFormat(undefined, {
-      minimumFractionDigits: 2,
-      maximumFractionDigits: 2,
-    }).format(v)
-  }
+  // fmtNumber and fmtNumberShowZero are imported from @/lib/safesheetUtils
 
   // fetch sheet
   useEffect(() => {
@@ -241,14 +227,7 @@ export default function RouteComponent() {
     return isNaN(n) ? 0 : n
   }
 
-  // recompute running cash
-  const recomputeCashOnHand = (entries: Entry[], initialBalance: number) => {
-    let balance = initialBalance
-    return entries.map((entry) => {
-      balance = balance + entry.cashIn - entry.cashExpenseOut - entry.cashDepositBank
-      return { ...entry, cashOnHandSafe: balance }
-    })
-  }
+  // recomputeCashOnHand is imported from @/lib/safesheetUtils
 
   // Add Cash In via dialog
   const submitAddCashIn = async () => {
@@ -595,30 +574,7 @@ export default function RouteComponent() {
 
     if (!switchValue) return entries;
 
-    // Helper: get sort key
-    const getSortKey = (entry: { _originalIndex?: number; dateDisplay?: string; cashInDisplay?: string; cashExpenseOutDisplay?: string; cashDepositBankDisplay?: string; cashOnHandSafeDisplay?: string; _id?: string; date: any; description?: string | undefined; cashIn?: number; cashExpenseOut?: number; cashDepositBank?: number; cashOnHandSafe?: number | undefined; createdAt?: string | undefined; updatedAt?: string | undefined; photo?: string | null | undefined; assignedDate?: string; }) => {
-      if (entry.assignedDate && /^\d{4}-\d{2}-\d{2}$/.test(entry.assignedDate)) {
-        return entry.assignedDate;
-      }
-      // fallback to date
-      const x = new Date(entry.date);
-      const y = x.getFullYear();
-      const m = String(x.getMonth() + 1).padStart(2, '0');
-      const day = String(x.getDate()).padStart(2, '0');
-      return `${y}-${m}-${day}`;
-    };
-
-    // Helper: type rank
-    const typeRank = (e: { _originalIndex?: number; dateDisplay?: string; cashInDisplay?: string; cashExpenseOutDisplay?: string; cashDepositBankDisplay?: string; cashOnHandSafeDisplay?: string; _id?: string; date?: string; description?: string | undefined; cashIn: any; cashExpenseOut: any; cashDepositBank: any; cashOnHandSafe?: number | undefined; createdAt?: string | undefined; updatedAt?: string | undefined; photo?: string | null | undefined; assignedDate?: string | undefined; }) => {
-      const ci = Number(e.cashIn || 0);
-      const ce = Number(e.cashExpenseOut || 0);
-      const cb = Number(e.cashDepositBank || 0);
-      if (ci > 0) return 0;
-      if (ce > 0) return 1;
-      if (cb > 0) return 2;
-      return 3;
-    };
-
+    // getSortKey and typeRank are imported from @/lib/safesheetUtils
     // Sort by sort key, then by type rank, then by original index
     return [...entries].sort((a, b) => {
       const ka = getSortKey(a);
