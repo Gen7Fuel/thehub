@@ -18,7 +18,7 @@ router.get('/unread-summary', async (req, res) => {
       createdAt: { $gte: lastLogin },
       "readReceipts.userId": { $ne: req.user._id } // Not read by this user
     });
-    console.log(`User ${req.user.email} has ${unreadCount} unread notifications since last login at ${lastLogin}`);
+    // console.log(`User ${req.user.email} has ${unreadCount} unread notifications since last login at ${lastLogin}`);
     res.json({ unreadCount });
   } catch (err) {
     res.status(500).json({ message: err.message });

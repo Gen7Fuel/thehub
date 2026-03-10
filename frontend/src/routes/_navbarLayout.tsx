@@ -44,7 +44,7 @@
 //     </div>
 //   )
 // }
-import { useState, useCallback, useEffect } from 'react'
+import { useState, useCallback, useEffect, useRef } from 'react'
 import { AlertTriangle, Clock, RefreshCw } from "lucide-react"
 import Navbar from '@/components/custom/navbar'
 import MaintenanceBanner from '@/components/custom/MaintenanceBanner'
@@ -84,6 +84,16 @@ function RouteComponent() {
     }
   }, []);
 
+  // Create a reference to the audio file
+  const notificationSound = useRef<HTMLAudioElement | null>(null);
+
+  useEffect(() => {
+    // Initialize the audio object once
+    notificationSound.current = new Audio('/assets/sounds/notification1.mp3');
+    // Optional: lower the volume so it's not startling
+    notificationSound.current.volume = 0.5;
+  }, []);
+
   // --- SOCKET LISTENER ---
   const fetchUnreadSummary = useCallback(async () => {
     try {
@@ -96,6 +106,13 @@ function RouteComponent() {
       if (count > 0) {
         setUnreadCount(count);
         setShowPopup(true);
+        // --- PLAY SOUND HERE ---
+        if (notificationSound.current) {
+          notificationSound.current.play().catch(err => {
+            // Browsers might block audio if no user interaction has happened yet
+            console.warn("Audio play blocked by browser:", err);
+          });
+        }
       } else {
         setShowPopup(false);
       }
@@ -114,6 +131,7 @@ function RouteComponent() {
     const socket = getSocket();
 
     const handleNewNotification = () => {
+      console.log("🔔 New Notification Socket Hit");
       // Whenever ANY new notification hits, refresh the smart count
       fetchUnreadSummary();
       // Also update the navbar count
@@ -132,7 +150,7 @@ function RouteComponent() {
       {/* --- NOTIFICATION POPUP OVERLAY --- */}
       {showPopup && (
         <NotificationPopup
-          message={`You have ${unreadCount} unread notification${unreadCount > 1 ? 's' : ''} on the Hub.`}
+          message={`You have ${unreadCount} new notification${unreadCount > 1 ? 's' : ''} on the Hub.`}
           onClose={() => setShowPopup(false)}
           onView={() => {
             setShowPopup(false);

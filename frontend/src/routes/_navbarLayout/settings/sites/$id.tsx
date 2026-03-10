@@ -36,6 +36,8 @@ function RouteComponent() {
   const [showDialog, setShowDialog] = useState(false); // 🧩 NEW
   const [initialBalance, setInitialBalance] = useState(""); // 🧩 NEW
   const [hasSafesheet, setHasSafesheet] = useState(false); // 🧩 NEW
+  const [managerEmails, setManagerEmails] = useState<string[]>([]); // Current selected emails
+  const [managerDialogOpen, setManagerDialogOpen] = useState(false);
   const { id } = Route.useParams();
   const navigate = useNavigate();
   const { user } = useAuth();
@@ -52,6 +54,7 @@ function RouteComponent() {
     email: string;
     managerCode: number;
     sellsLottery?: boolean;
+    managerEmails: string[];
   } | null>(null);
 
   const [loading, setLoading] = useState(true);
@@ -101,6 +104,7 @@ function RouteComponent() {
     timezone: string;
     email: string;
     sellsLottery?: boolean;
+    managerEmails: string[];
   }
 
   const [formData, setFormData] = useState<LocationForm>({
@@ -113,6 +117,7 @@ function RouteComponent() {
     timezone: "",
     email: "",
     sellsLottery: false,
+    managerEmails: []
   });
 
   const [timezones, setTimezones] = useState<string[]>([]);
@@ -150,7 +155,9 @@ function RouteComponent() {
         email: location.email || "",
         timezone: location.timezone || timezones[0], // default if missing
         sellsLottery: !!location.sellsLottery,
+        managerEmails: location.managerEmails || [],
       });
+      setManagerEmails(location.managerEmails || []);
       setOtp(location.managerCode?.toString() || "");
     }
   }, [location, timezones]);
@@ -373,7 +380,7 @@ function RouteComponent() {
             </div>
 
             {/* TEXT INPUT FIELDS */}
-            {[
+            {/* {[
               { label: "Station Name", name: "stationName" },
               { label: "Legal Name", name: "legalName" },
               { label: "IND Number", name: "INDNumber" },
@@ -396,6 +403,54 @@ function RouteComponent() {
                   className="border border-gray-300 rounded-md px-3 py-2 w-full focus:ring-2 focus:ring-blue-500 focus:outline-none"
                   required={["stationName", "legalName", "INDNumber", "csoCode", "email"].includes(field.name)}
                 />
+              </div>
+            ))} */}
+            {/* TEXT INPUT FIELDS */}
+            {[
+              { label: "Station Name", name: "stationName" },
+              { label: "Legal Name", name: "legalName" },
+              { label: "IND Number", name: "INDNumber" },
+              { label: "Kardpoll Code", name: "kardpollCode" },
+              { label: "CSO Code", name: "csoCode" },
+              { label: "Station Email", name: "email" }, // Changed label slightly for clarity
+            ].map((field) => (
+              <div key={field.name}>
+                <Label className="block font-medium mb-1">{field.label}</Label>
+
+                <div className="flex gap-2">
+                  <input
+                    type="text"
+                    name={field.name}
+                    value={String(formData[field.name as keyof LocationForm] ?? "")}
+                    onChange={(e) =>
+                      setFormData({
+                        ...formData,
+                        [field.name as keyof LocationForm]: e.target.value,
+                      })
+                    }
+                    className="border border-gray-300 rounded-md px-3 py-2 w-full focus:ring-2 focus:ring-blue-500 focus:outline-none"
+                    required={["stationName", "legalName", "INDNumber", "csoCode", "email"].includes(field.name)}
+                  />
+
+                  {/* 🧩 NEW: Add "Manage Managers" button specifically for the email field */}
+                  {field.name === "email" && (
+                    <Button
+                      type="button"
+                      variant="outline"
+                      className="whitespace-nowrap border-blue-500 text-blue-600 hover:bg-blue-50"
+                      onClick={() => setManagerDialogOpen(true)}
+                    >
+                      Manage Managers ({managerEmails.length})
+                    </Button>
+                  )}
+                </div>
+
+                {/* Optional: Show a small list of assigned managers under the email field */}
+                {field.name === "email" && managerEmails.length > 0 && (
+                  <p className="text-[11px] text-gray-500 mt-1 italic">
+                    Notifications also CC'd to: {managerEmails.join(", ")}
+                  </p>
+                )}
               </div>
             ))}
 
@@ -478,8 +533,8 @@ function RouteComponent() {
                   <div
                     key={u._id}
                     className={`flex items-center justify-between p-4 border rounded-xl transition-all ${isActive
-                        ? "hover:bg-slate-50 border-slate-200"
-                        : "bg-slate-100 border-slate-200 opacity-60 cursor-not-allowed"
+                      ? "hover:bg-slate-50 border-slate-200"
+                      : "bg-slate-100 border-slate-200 opacity-60 cursor-not-allowed"
                       }`}
                   >
                     <div className="flex flex-col">
@@ -489,8 +544,8 @@ function RouteComponent() {
                       <span className="text-sm text-muted-foreground">
                         {u.email}
                         <span className={`ml-2 font-mono px-2 py-0.5 rounded text-xs uppercase ${isActive
-                            ? "text-blue-600 bg-blue-50"
-                            : "text-red-600 bg-red-50 font-bold"
+                          ? "text-blue-600 bg-blue-50"
+                          : "text-red-600 bg-red-50 font-bold"
                           }`}>
                           [{!isActive ? "INACTIVE" : (u.role?.role_name || 'No Role')}]
                         </span>
@@ -521,6 +576,65 @@ function RouteComponent() {
               className="min-w-[120px]"
             >
               {isSavingUsers ? "Saving..." : "Save Changes"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+
+      {/* --- MANAGER EMAIL ASSIGNMENT DIALOG --- */}
+      <Dialog open={managerDialogOpen} onOpenChange={setManagerDialogOpen}>
+        <DialogContent className="max-w-3xl h-[80vh] flex flex-col">
+          <DialogHeader>
+            <DialogTitle className="text-2xl">Assign Manager Notifications: {location?.stationName}</DialogTitle>
+            <p className="text-sm text-muted-foreground">
+              Selected users will receive manager-level alerts (Audits, Order Recs) in their personal Hub inbox.
+            </p>
+          </DialogHeader>
+
+          <div className="flex-1 overflow-y-auto mt-4 pr-2">
+            <div className="grid grid-cols-1 gap-2">
+              {users.map((u) => {
+                const isActive = u.is_active !== false;
+                return (
+                  <div
+                    key={u._id}
+                    className={`flex items-center justify-between p-4 border rounded-xl transition-all ${isActive ? "hover:bg-slate-50 border-slate-200" : "bg-slate-100 opacity-60"
+                      }`}
+                  >
+                    <div className="flex flex-col">
+                      <span className="font-semibold text-lg">{u.firstName} {u.lastName}</span>
+                      <span className="text-sm text-muted-foreground">{u.email}</span>
+                    </div>
+
+                    <input
+                      type="checkbox"
+                      disabled={!isActive}
+                      className="h-6 w-6 rounded-md cursor-pointer"
+                      checked={managerEmails.includes(u.email)}
+                      onChange={() => {
+                        setManagerEmails(prev =>
+                          prev.includes(u.email)
+                            ? prev.filter(e => e !== u.email)
+                            : [...prev, u.email]
+                        );
+                      }}
+                    />
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+
+          <DialogFooter className="pt-4 border-t mt-4">
+            <Button variant="outline" onClick={() => setManagerDialogOpen(false)}>Cancel</Button>
+            <Button
+              onClick={() => {
+                setFormData({ ...formData, managerEmails: managerEmails });
+                setManagerDialogOpen(false);
+              }}
+            >
+              Confirm Selection
             </Button>
           </DialogFooter>
         </DialogContent>

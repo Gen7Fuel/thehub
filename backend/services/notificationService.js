@@ -73,10 +73,10 @@ async function pushNotification({
     `;
 
     // Push to the existing BullMQ emailQueue
-    await emailQueue.add("sendAlertEmail", {
+    await emailQueue.add("sendUpdateEmail", {
       to: recipientEmails[0],
       cc: recipientEmails.slice(1),
-      subject: `Hub Alert: ${subject}`,
+      subject: `Hub Update: ${subject}`,
       html: alertHtml,
       text: `New Hub Notification: ${subject}. Login at https://app.gen7fuel.com/notification to view.`
     });

@@ -277,14 +277,281 @@ function RouteComponent() {
   //     setNotifying(false)
   //   }
   // }
+  // const handleNotify = async () => {
+  //   const userEmail = user?.email;
+  //   // Get the site value from the order rec
+  //   const site = orderRec?.site;
+  //   interface Vendor {
+  //     name: string;
+  //   }
+  //   // make a call to /api/vendors/:id to get the vendor name
+  //   const response = await axios.get(`/api/vendors/${orderRec?.vendor}`, {
+  //     headers: {
+  //       Authorization: `Bearer ${localStorage.getItem('token')}`
+  //     }
+  //   });
+
+  //   const vendor: Vendor = response.data;
+  //   const vendorName = vendor.name || 'Unknown';
+  //   // If the uploader is the current user, notify the store only (do NOT mark as completed)
+  //   if (userEmail === orderRec?.email) {
+  //     const confirmed = window.confirm(
+  //       "Are you sure you want to notify the store that a new order rec has been uploaded?"
+  //     );
+  //     if (!confirmed) return;
+
+  //     try {
+  //       // Fetch the store email from the location API
+  //       const locationRes = await axios.get(`/api/locations?stationName=${encodeURIComponent(site)}`, {
+  //         headers: {
+  //           Authorization: `Bearer ${localStorage.getItem('token')}`
+  //         }
+  //       });
+  //       const storeEmail = locationRes.data?.email;
+
+  //       if (!storeEmail) {
+  //         alert("Store email not found for this site.");
+  //         return;
+  //       }
+
+  //       const subjectCreated = `📦 New Order Recommendation for Site ${site}`;
+  //       const textCreated = `A new order recommendation has been uploaded for site ${site}.
+  //       Vendor: ${vendorName}
+  //       File: ${orderRec?.filename}
+
+  //       Please review it in The Hub: https://app.gen7fuel.com/order-rec/${orderRec?._id}`;
+
+  //       const htmlCreated = `
+  //       <div style="
+  //         font-family: 'Segoe UI', Arial, sans-serif;
+  //         background-color: #f7f9fc;
+  //         padding: 30px;
+  //       ">
+  //         <div style="
+  //           max-width: 600px;
+  //           margin: 0 auto;
+  //           background-color: #ffffff;
+  //           border-radius: 12px;
+  //           box-shadow: 0 4px 8px rgba(0,0,0,0.08);
+  //           overflow: hidden;
+  //         ">
+  //           <!-- Header -->
+  //           <div style="
+  //             background-color: #2563eb;
+  //             color: #ffffff;
+  //             text-align: center;
+  //             padding: 16px 0;
+  //           ">
+  //             <h1 style="margin: 0; font-size: 22px;">📦 New Order Recommendation Uploaded</h1>
+  //           </div>
+
+  //           <!-- Body -->
+  //           <div style="padding: 24px 30px;">
+  //             <p style="font-size: 16px; color: #333;">
+  //               A new order recommendation has been uploaded for the following site:
+  //             </p>
+
+  //             <table style="width: 100%; border-collapse: collapse; margin-top: 10px;">
+  //               <tr>
+  //                 <td style="padding: 8px; font-weight: bold; color: #555;">🏪 Site:</td>
+  //                 <td style="padding: 8px; color: #222;">${site}</td>
+  //               </tr>
+  //               <tr>
+  //                 <td style="padding: 8px; font-weight: bold; color: #555;">🧾 Vendor:</td>
+  //                 <td style="padding: 8px; color: #222;">${vendorName}</td>
+  //               </tr>
+  //               <tr>
+  //                 <td style="padding: 8px; font-weight: bold; color: #555;">📄 File:</td>
+  //                 <td style="padding: 8px; color: #222;">${orderRec.filename}</td>
+  //               </tr>
+  //             </table>
+
+  //             <div style="
+  //               margin-top: 24px;
+  //               background-color: #e0f7fa;
+  //               border-left: 6px solid #00acc1;
+  //               padding: 16px;
+  //               border-radius: 8px;
+  //             ">
+  //               <p style="margin: 0; color: #006064; font-size: 15px;">
+  //                 ℹ️ Please review this order in <strong>The Hub → Order Recommendations</strong> and proceed as needed.
+  //               </p>
+  //             </div>
+
+  //             <div style="text-align: center; margin-top: 30px;">
+  //               <a href="https://app.gen7fuel.com/order-rec/${orderRec._id}" 
+  //                 style="
+  //                   background-color: #2563eb;
+  //                   color: #ffffff;
+  //                   padding: 12px 22px;
+  //                   text-decoration: none;
+  //                   font-weight: 600;
+  //                   border-radius: 6px;
+  //                   display: inline-block;
+  //                   font-size: 15px;
+  //                 ">
+  //                 🔗 View Order Recommendation
+  //               </a>
+  //             </div>
+
+  //             <p style="color: #777; font-size: 13px; margin-top: 32px; text-align: center;">
+  //               This is an automated message from the Gen7Fuel Hub.<br>
+  //               Please do not reply to this email.
+  //             </p>
+  //           </div>
+  //         </div>
+  //       </div>
+  //       `;
+  //       // Send the email
+  //       await axios.post("/api/send-email", {
+  //         to: storeEmail,
+  //         cc: ["grayson@gen7fuel.com", userEmail, "daksh@gen7fuel.com"],
+  //         subject: subjectCreated,
+  //         text: textCreated,
+  //         html: htmlCreated,
+  //         isHtml: true,
+  //       }, {
+  //         headers: {
+  //           Authorization: `Bearer ${localStorage.getItem('token')}`
+  //         }
+  //       });
+
+  //       alert("Notification email sent to the store.");
+  //       // Do NOT mark as completed
+  //       return;
+  //     } catch (err) {
+  //       alert('Failed to send notification.');
+  //       return;
+  //     }
+  //   }
+
+  //   // Make sure orderRec.completed is true before notifying
+  //   if (orderRec?.completed !== 'Complete') {
+  //     alert('Please make sure all line items are checked before notifying.');
+  //     return; // stay on page, do nothing else
+  //   }
+  //   // Default notify logic for other users (mark as completed and notify)
+  //   const confirmed = window.confirm('Are you sure you want to notify that this order rec has been reconciled?');
+  //   if (!confirmed) return;
+  //   setNotifying(true);
+  //   const subjectCompleted = `✅ Order Reconciliation Completed for Site ${site}`;
+  //   const textCompleted = `The order reconciliation for site ${site} has been completed.
+  //     Vendor: ${vendorName}
+  //     File: ${orderRec.filename}
+
+  //     You can now review and proceed with placing the order in The Hub: https://app.gen7fuel.com/order-rec/${orderRec._id}`;
+
+  //   const htmlCompleted = `
+  //     <div style="
+  //       font-family: 'Segoe UI', Arial, sans-serif;
+  //       background-color: #f7f9fc;
+  //       padding: 30px;
+  //     ">
+  //       <div style="
+  //         max-width: 600px;
+  //         margin: 0 auto;
+  //         background-color: #ffffff;
+  //         border-radius: 12px;
+  //         box-shadow: 0 4px 8px rgba(0,0,0,0.08);
+  //         overflow: hidden;
+  //       ">
+  //         <!-- Header -->
+  //         <div style="
+  //           background-color: #22c55e;
+  //           color: #ffffff;
+  //           text-align: center;
+  //           padding: 16px 0;
+  //         ">
+  //           <h1 style="margin: 0; font-size: 22px;">✅ Order Reconciliation Completed</h1>
+  //         </div>
+
+  //         <!-- Body -->
+  //         <div style="padding: 24px 30px;">
+  //           <p style="font-size: 16px; color: #333;">
+  //             The order reconciliation has been completed for the following site:
+  //           </p>
+
+  //           <table style="width: 100%; border-collapse: collapse; margin-top: 10px;">
+  //             <tr>
+  //               <td style="padding: 8px; font-weight: bold; color: #555;">🏪 Site:</td>
+  //               <td style="padding: 8px; color: #222;">${site}</td>
+  //             </tr>
+  //             <tr>
+  //               <td style="padding: 8px; font-weight: bold; color: #555;">🧾 Vendor:</td>
+  //               <td style="padding: 8px; color: #222;">${vendorName}</td>
+  //             </tr>
+  //             <tr>
+  //               <td style="padding: 8px; font-weight: bold; color: #555;">📄 File:</td>
+  //               <td style="padding: 8px; color: #222;">${orderRec.filename}</td>
+  //             </tr>
+  //           </table>
+
+  //           <div style="
+  //             margin-top: 24px;
+  //             background-color: #d1fae5;
+  //             border-left: 6px solid #10b981;
+  //             padding: 16px;
+  //             border-radius: 8px;
+  //           ">
+  //             <p style="margin: 0; color: #065f46; font-size: 15px;">
+  //               ✅ The order is ready for review and processing in <strong>The Hub → Order Recommendations</strong>.
+  //             </p>
+  //           </div>
+
+  //           <div style="text-align: center; margin-top: 30px;">
+  //             <a href="https://app.gen7fuel.com/order-rec/${orderRec._id}" 
+  //               style="
+  //                 background-color: #22c55e;
+  //                 color: #ffffff;
+  //                 padding: 12px 22px;
+  //                 text-decoration: none;
+  //                 font-weight: 600;
+  //                 border-radius: 6px;
+  //                 display: inline-block;
+  //                 font-size: 15px;
+  //               ">
+  //               🔗 View Completed Order
+  //             </a>
+  //           </div>
+
+  //           <p style="color: #777; font-size: 13px; margin-top: 32px; text-align: center;">
+  //             This is an automated message from the Gen7Fuel Hub.<br>
+  //             Please do not reply to this email.
+  //           </p>
+  //         </div>
+  //       </div>
+  //     </div>
+  //     `;
+  //   try {
+  //     await axios.post('/api/send-email', {
+  //       to: orderRec.email,
+  //       cc: ['grayson@gen7fuel.com', 'daksh@gen7fuel.com'],
+  //       subject: subjectCompleted,
+  //       text: textCompleted,
+  //       html: htmlCompleted,
+  //       isHtml: true
+  //     }, {
+  //       headers: {
+  //         Authorization: `Bearer ${localStorage.getItem('token')}`
+  //       }
+  //     });
+  //     alert('Notification sent!');
+  //     // Optionally mark as completed here if needed
+  //   } catch (err) {
+  //     alert('Failed to send notification.');
+  //   } finally {
+  //     setNotifying(false);
+  //   }
+  // };
   const handleNotify = async () => {
     const userEmail = user?.email;
-    // Get the site value from the order rec
     const site = orderRec?.site;
+
     interface Vendor {
       name: string;
     }
-    // make a call to /api/vendors/:id to get the vendor name
+
+    // 1. Fetch Vendor Name
     const response = await axios.get(`/api/vendors/${orderRec?.vendor}`, {
       headers: {
         Authorization: `Bearer ${localStorage.getItem('token')}`
@@ -293,7 +560,8 @@ function RouteComponent() {
 
     const vendor: Vendor = response.data;
     const vendorName = vendor.name || 'Unknown';
-    // If the uploader is the current user, notify the store only (do NOT mark as completed)
+
+    // --- LOGIC PATH A: UPLOADER NOTIFYING STORE ---
     if (userEmail === orderRec?.email) {
       const confirmed = window.confirm(
         "Are you sure you want to notify the store that a new order rec has been uploaded?"
@@ -301,7 +569,7 @@ function RouteComponent() {
       if (!confirmed) return;
 
       try {
-        // Fetch the store email from the location API
+        // Fetch the store email
         const locationRes = await axios.get(`/api/locations?stationName=${encodeURIComponent(site)}`, {
           headers: {
             Authorization: `Bearer ${localStorage.getItem('token')}`
@@ -314,102 +582,18 @@ function RouteComponent() {
           return;
         }
 
-        const subjectCreated = `📦 New Order Recommendation for Site ${site}`;
-        const textCreated = `A new order recommendation has been uploaded for site ${site}.
-        Vendor: ${vendorName}
-        File: ${orderRec?.filename}
-
-        Please review it in The Hub: https://app.gen7fuel.com/order-rec/${orderRec?._id}`;
-
-        const htmlCreated = `
-        <div style="
-          font-family: 'Segoe UI', Arial, sans-serif;
-          background-color: #f7f9fc;
-          padding: 30px;
-        ">
-          <div style="
-            max-width: 600px;
-            margin: 0 auto;
-            background-color: #ffffff;
-            border-radius: 12px;
-            box-shadow: 0 4px 8px rgba(0,0,0,0.08);
-            overflow: hidden;
-          ">
-            <!-- Header -->
-            <div style="
-              background-color: #2563eb;
-              color: #ffffff;
-              text-align: center;
-              padding: 16px 0;
-            ">
-              <h1 style="margin: 0; font-size: 22px;">📦 New Order Recommendation Uploaded</h1>
-            </div>
-
-            <!-- Body -->
-            <div style="padding: 24px 30px;">
-              <p style="font-size: 16px; color: #333;">
-                A new order recommendation has been uploaded for the following site:
-              </p>
-
-              <table style="width: 100%; border-collapse: collapse; margin-top: 10px;">
-                <tr>
-                  <td style="padding: 8px; font-weight: bold; color: #555;">🏪 Site:</td>
-                  <td style="padding: 8px; color: #222;">${site}</td>
-                </tr>
-                <tr>
-                  <td style="padding: 8px; font-weight: bold; color: #555;">🧾 Vendor:</td>
-                  <td style="padding: 8px; color: #222;">${vendorName}</td>
-                </tr>
-                <tr>
-                  <td style="padding: 8px; font-weight: bold; color: #555;">📄 File:</td>
-                  <td style="padding: 8px; color: #222;">${orderRec.filename}</td>
-                </tr>
-              </table>
-
-              <div style="
-                margin-top: 24px;
-                background-color: #e0f7fa;
-                border-left: 6px solid #00acc1;
-                padding: 16px;
-                border-radius: 8px;
-              ">
-                <p style="margin: 0; color: #006064; font-size: 15px;">
-                  ℹ️ Please review this order in <strong>The Hub → Order Recommendations</strong> and proceed as needed.
-                </p>
-              </div>
-
-              <div style="text-align: center; margin-top: 30px;">
-                <a href="https://app.gen7fuel.com/order-rec/${orderRec._id}" 
-                  style="
-                    background-color: #2563eb;
-                    color: #ffffff;
-                    padding: 12px 22px;
-                    text-decoration: none;
-                    font-weight: 600;
-                    border-radius: 6px;
-                    display: inline-block;
-                    font-size: 15px;
-                  ">
-                  🔗 View Order Recommendation
-                </a>
-              </div>
-
-              <p style="color: #777; font-size: 13px; margin-top: 32px; text-align: center;">
-                This is an automated message from the Gen7Fuel Hub.<br>
-                Please do not reply to this email.
-              </p>
-            </div>
-          </div>
-        </div>
-        `;
-        // Send the email
-        await axios.post("/api/send-email", {
+        // Call the updated backend route
+        await axios.post("/api/send-orderec-email", {
           to: storeEmail,
           cc: ["grayson@gen7fuel.com", userEmail, "daksh@gen7fuel.com"],
-          subject: subjectCreated,
-          text: textCreated,
-          html: htmlCreated,
-          isHtml: true,
+          subject: `📦 New Order Recommendation for Site ${site}`,
+          slug: "order-rec-uploaded", // <--- Matches MongoDB Slug
+          fieldValues: {
+            site: site,
+            vendorName: vendorName,
+            filename: orderRec.filename,
+            orderRecId: orderRec._id
+          }
         }, {
           headers: {
             Authorization: `Bearer ${localStorage.getItem('token')}`
@@ -417,7 +601,6 @@ function RouteComponent() {
         });
 
         alert("Notification email sent to the store.");
-        // Do NOT mark as completed
         return;
       } catch (err) {
         alert('Failed to send notification.');
@@ -425,118 +608,38 @@ function RouteComponent() {
       }
     }
 
-    // Make sure orderRec.completed is true before notifying
+    // --- LOGIC PATH B: RECONCILER COMPLETING ORDER ---
+
+    // Validation: Check if complete
     if (orderRec?.completed !== 'Complete') {
       alert('Please make sure all line items are checked before notifying.');
-      return; // stay on page, do nothing else
+      return;
     }
-    // Default notify logic for other users (mark as completed and notify)
+
     const confirmed = window.confirm('Are you sure you want to notify that this order rec has been reconciled?');
     if (!confirmed) return;
+
     setNotifying(true);
-    const subjectCompleted = `✅ Order Reconciliation Completed for Site ${site}`;
-    const textCompleted = `The order reconciliation for site ${site} has been completed.
-      Vendor: ${vendorName}
-      File: ${orderRec.filename}
 
-      You can now review and proceed with placing the order in The Hub: https://app.gen7fuel.com/order-rec/${orderRec._id}`;
-
-    const htmlCompleted = `
-      <div style="
-        font-family: 'Segoe UI', Arial, sans-serif;
-        background-color: #f7f9fc;
-        padding: 30px;
-      ">
-        <div style="
-          max-width: 600px;
-          margin: 0 auto;
-          background-color: #ffffff;
-          border-radius: 12px;
-          box-shadow: 0 4px 8px rgba(0,0,0,0.08);
-          overflow: hidden;
-        ">
-          <!-- Header -->
-          <div style="
-            background-color: #22c55e;
-            color: #ffffff;
-            text-align: center;
-            padding: 16px 0;
-          ">
-            <h1 style="margin: 0; font-size: 22px;">✅ Order Reconciliation Completed</h1>
-          </div>
-
-          <!-- Body -->
-          <div style="padding: 24px 30px;">
-            <p style="font-size: 16px; color: #333;">
-              The order reconciliation has been completed for the following site:
-            </p>
-
-            <table style="width: 100%; border-collapse: collapse; margin-top: 10px;">
-              <tr>
-                <td style="padding: 8px; font-weight: bold; color: #555;">🏪 Site:</td>
-                <td style="padding: 8px; color: #222;">${site}</td>
-              </tr>
-              <tr>
-                <td style="padding: 8px; font-weight: bold; color: #555;">🧾 Vendor:</td>
-                <td style="padding: 8px; color: #222;">${vendorName}</td>
-              </tr>
-              <tr>
-                <td style="padding: 8px; font-weight: bold; color: #555;">📄 File:</td>
-                <td style="padding: 8px; color: #222;">${orderRec.filename}</td>
-              </tr>
-            </table>
-
-            <div style="
-              margin-top: 24px;
-              background-color: #d1fae5;
-              border-left: 6px solid #10b981;
-              padding: 16px;
-              border-radius: 8px;
-            ">
-              <p style="margin: 0; color: #065f46; font-size: 15px;">
-                ✅ The order is ready for review and processing in <strong>The Hub → Order Recommendations</strong>.
-              </p>
-            </div>
-
-            <div style="text-align: center; margin-top: 30px;">
-              <a href="https://app.gen7fuel.com/order-rec/${orderRec._id}" 
-                style="
-                  background-color: #22c55e;
-                  color: #ffffff;
-                  padding: 12px 22px;
-                  text-decoration: none;
-                  font-weight: 600;
-                  border-radius: 6px;
-                  display: inline-block;
-                  font-size: 15px;
-                ">
-                🔗 View Completed Order
-              </a>
-            </div>
-
-            <p style="color: #777; font-size: 13px; margin-top: 32px; text-align: center;">
-              This is an automated message from the Gen7Fuel Hub.<br>
-              Please do not reply to this email.
-            </p>
-          </div>
-        </div>
-      </div>
-      `;
     try {
-      await axios.post('/api/send-email', {
+      await axios.post('/api/send-orderec-email', {
         to: orderRec.email,
         cc: ['grayson@gen7fuel.com', 'daksh@gen7fuel.com'],
-        subject: subjectCompleted,
-        text: textCompleted,
-        html: htmlCompleted,
-        isHtml: true
+        subject: `✅ Order Reconciliation Completed for Site ${site}`,
+        slug: "order-rec-completed", // <--- Matches MongoDB Slug
+        fieldValues: {
+          site: site,
+          vendorName: vendorName,
+          filename: orderRec.filename,
+          orderRecId: orderRec._id
+        }
       }, {
         headers: {
           Authorization: `Bearer ${localStorage.getItem('token')}`
         }
       });
+
       alert('Notification sent!');
-      // Optionally mark as completed here if needed
     } catch (err) {
       alert('Failed to send notification.');
     } finally {
