@@ -3,7 +3,7 @@ import { createFileRoute, useNavigate } from '@tanstack/react-router'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { SitePicker } from '@/components/custom/sitePicker'
 import { Button } from '@/components/ui/button'
-import { ImagePlus, Image as ImageIcon, CalendarDaysIcon } from "lucide-react";
+import { ImagePlus, Image as ImageIcon, CalendarDaysIcon, Trash2 } from "lucide-react";
 import { DatePickerWithRange } from '@/components/custom/datePickerWithRange'
 import type { DateRange } from 'react-day-picker'
 import { getStartAndEndOfToday } from '@/lib/utils'
@@ -146,6 +146,11 @@ export default function RouteComponent() {
   const [addCashInDesc, setAddCashInDesc] = useState('')
   const [addCashInLoading, setAddCashInLoading] = useState(false)
   const [addCashInError, setAddCashInError] = useState<string | null>(null)
+
+  // Delete entry dialog state
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false)
+  const [deleteTargetEntry, setDeleteTargetEntry] = useState<(typeof formattedEntries)[0] | null>(null)
+  const [deleteLoading, setDeleteLoading] = useState(false)
 
   // Switch state for UI extensibility
   const [switchValue, setSwitchValue] = useState(false);
@@ -440,6 +445,60 @@ export default function RouteComponent() {
     } catch (err: any) {
       console.error(err)
       setError(err.message || 'Update failed')
+    }
+  }
+
+  // DELETE ENTRY
+  const handleDeleteEntry = async (entryId: string) => {
+    if (!site) return
+    setDeleteLoading(true)
+    try {
+      const res = await fetch(
+        `/api/safesheets/site/${encodeURIComponent(site)}/entries/${entryId}`,
+        {
+          method: 'DELETE',
+          headers: {
+            Authorization: `Bearer ${localStorage.getItem('token')}`,
+            'X-Required-Permission': 'accounting.safesheet.deleteEntry',
+          },
+        },
+      )
+
+      if (res.status === 403) {
+        navigate({ to: '/no-access' })
+        return
+      }
+
+      const body = await res.json().catch(() => null)
+      if (!res.ok) throw new Error(body?.error || 'Failed to delete entry')
+
+      // Refresh safesheet for the current range
+      if (site && from && to) {
+        try {
+          const ref = await fetch(
+            `/api/safesheets/site/${encodeURIComponent(site)}?from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}&sortAssigned=${switchValue ? 'true' : 'false'}`,
+            {
+              headers: {
+                Authorization: `Bearer ${localStorage.getItem('token')}`,
+                'X-Required-Permission': 'accounting.safesheet',
+              },
+            },
+          )
+          if (!ref.ok) throw new Error('Failed to refresh safesheet')
+          const refreshed: SafeSheet = await ref.json()
+          setSheet(refreshed)
+        } catch (refreshErr) {
+          console.error(refreshErr)
+        }
+      }
+
+      setShowDeleteConfirm(false)
+      setDeleteTargetEntry(null)
+    } catch (err: any) {
+      console.error(err)
+      setError(err.message || 'Delete failed')
+    } finally {
+      setDeleteLoading(false)
     }
   }
 
@@ -828,7 +887,7 @@ export default function RouteComponent() {
                                     </Button>
                                   ))}
 
-                                  {e.cashDepositBank > 0 && (
+                                  {e.cashDepositBank > 0 && user?.access?.['accounting.safesheet.setAssignedDate'] === true && (
                                     e.assignedDate ? (
                                       <Button
                                         size="sm"
@@ -921,6 +980,21 @@ export default function RouteComponent() {
                                         />
                                       </DialogContent>
                                     </Dialog>
+
+                                {/* Delete button — requires accounting.safesheet.deleteEntry */}
+                                {user?.access?.['accounting.safesheet.deleteEntry'] === true && (
+                                  <Button
+                                    size="sm"
+                                    variant="outline"
+                                    onClick={() => {
+                                      setDeleteTargetEntry(e)
+                                      setShowDeleteConfirm(true)
+                                    }}
+                                    className="flex items-center gap-1 px-2 py-1.5 rounded-md border-red-400 text-red-600 hover:bg-red-50"
+                                  >
+                                    <Trash2 className="w-4 h-4" />
+                                  </Button>
+                                )}
                               </div>
                             </td>
                           </tr>
@@ -1063,6 +1137,79 @@ export default function RouteComponent() {
               disabled={addCashInLoading || !site}
             >
               {addCashInLoading ? 'Adding...' : 'Add'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Delete Entry Confirmation Dialog */}
+      <Dialog
+        open={showDeleteConfirm}
+        onOpenChange={(open) => {
+          setShowDeleteConfirm(open)
+          if (!open) setDeleteTargetEntry(null)
+        }}
+      >
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Delete Entry</DialogTitle>
+          </DialogHeader>
+
+          {deleteTargetEntry && (
+            <div className="space-y-2 text-sm text-gray-700">
+              <p>Are you sure you want to permanently delete this entry?</p>
+              <div className="border border-slate-200 rounded-md p-3 bg-slate-50 space-y-1">
+                <div className="flex justify-between">
+                  <span className="text-muted-foreground">Date</span>
+                  <span className="font-medium">{deleteTargetEntry.dateDisplay}</span>
+                </div>
+                {deleteTargetEntry.description && (
+                  <div className="flex justify-between">
+                    <span className="text-muted-foreground">Description</span>
+                    <span className="font-medium">{deleteTargetEntry.description}</span>
+                  </div>
+                )}
+                {deleteTargetEntry.cashIn > 0 && (
+                  <div className="flex justify-between">
+                    <span className="text-muted-foreground">Cash In</span>
+                    <span className="font-medium">{deleteTargetEntry.cashInDisplay}</span>
+                  </div>
+                )}
+                {deleteTargetEntry.cashExpenseOut > 0 && (
+                  <div className="flex justify-between">
+                    <span className="text-muted-foreground">Cash Expense Out</span>
+                    <span className="font-medium">{deleteTargetEntry.cashExpenseOutDisplay}</span>
+                  </div>
+                )}
+                {deleteTargetEntry.cashDepositBank > 0 && (
+                  <div className="flex justify-between">
+                    <span className="text-muted-foreground">Cash Deposit Bank</span>
+                    <span className="font-medium">{deleteTargetEntry.cashDepositBankDisplay}</span>
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+
+          <DialogFooter className="gap-2">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => {
+                setShowDeleteConfirm(false)
+                setDeleteTargetEntry(null)
+              }}
+              disabled={deleteLoading}
+            >
+              Cancel
+            </Button>
+            <Button
+              size="sm"
+              variant="destructive"
+              onClick={() => deleteTargetEntry && handleDeleteEntry(deleteTargetEntry._id)}
+              disabled={deleteLoading || !deleteTargetEntry}
+            >
+              {deleteLoading ? 'Deleting...' : 'Delete'}
             </Button>
           </DialogFooter>
         </DialogContent>
