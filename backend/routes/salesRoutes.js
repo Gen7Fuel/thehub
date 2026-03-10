@@ -83,6 +83,7 @@ const getMinutesFromMidnight = (input, referenceDateStr) => {
 router.get('/all-data', async (req, res) => {
   const {
     csoCode,
+    site: siteParam,  // sent by client to skip the Location lookup
     salesStart, salesEnd,
     fuelStart, fuelEnd,
     transStart, transEnd,
@@ -90,40 +91,21 @@ router.get('/all-data', async (req, res) => {
   } = req.query;
 
   try {
-    // 1. Resolve site name from Location collection
-    const location = await Location.findOne({ csoCode }).lean();
-    if (!location) {
-      return res.status(404).json({ error: `Location not found for CSO Code: ${csoCode}` });
-    }
-    const site = location.stationName;
-
-    // 2. Fetch SQL data using your existing aggregator
-    const sqlResponse = await getAllSQLData(csoCode, {
-      salesStart, salesEnd,
-      fuelStart, fuelEnd,
-      transStart, transEnd,
-      shiftStart, shiftEnd
-    });
-
-    // 3. Normalize Dates for MongoDB query range
     const startDate = new Date(shiftStart);
-    startDate.setHours(0, 0, 0, 0); 
+    startDate.setHours(0, 0, 0, 0);
     const endDate = new Date(shiftEnd);
     endDate.setHours(23, 59, 59, 999);
 
-    // 4. Fetch MongoDB Data (Reports and Individual Shifts)
-    const [reports, shifts] = await Promise.all([
-      CashSummaryReport.find({
-        site,
-        date: { $gte: startDate, $lte: endDate }
-      }).lean(),
-      CashSummary.find({
-        site,
-        date: { $gte: startDate, $lte: endDate }
-      }).lean()
+    // Run SQL queries AND MongoDB shift queries in parallel — no sequential dependency
+    const [sqlResponse, reports, shifts] = await Promise.all([
+      getAllSQLData(csoCode, { salesStart, salesEnd, fuelStart, fuelEnd, transStart, transEnd, shiftStart, shiftEnd }),
+      CashSummaryReport.find({ site: siteParam, date: { $gte: startDate, $lte: endDate } }).lean(),
+      CashSummary.find({ site: siteParam, date: { $gte: startDate, $lte: endDate } }).lean(),
     ]);
 
-    // 5. Aggregate Mongo Shifts: Find Absolute Min Start / Max End per day
+    const site = siteParam;
+
+    // Aggregate Mongo Shifts: Find Absolute Min Start / Max End per day
     const mongoDailyTimings = {};
     shifts.forEach(s => {
       const dayKey = new Date(s.date).toISOString().split('T')[0];
@@ -143,7 +125,7 @@ router.get('/all-data', async (req, res) => {
       }
     });
 
-    // 6. Final Merge, Normalization & Metrics Calculation
+    // Final Merge, Normalization & Metrics Calculation
     const operationalTimings = [];
     let current = new Date(startDate);
 
@@ -196,7 +178,7 @@ router.get('/all-data', async (req, res) => {
 
       current.setDate(current.getDate() + 1);
     }
-    // 7. Final Combined Response
+    // Final Combined Response
     res.json({
       ...sqlResponse, 
       operationalTimings 

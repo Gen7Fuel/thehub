@@ -3,7 +3,7 @@ import { createFileRoute, useNavigate } from '@tanstack/react-router'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { SitePicker } from '@/components/custom/sitePicker'
 import { Button } from '@/components/ui/button'
-import { ImagePlus, Image as ImageIcon, CalendarDaysIcon } from "lucide-react";
+import { ImagePlus, Image as ImageIcon, CalendarDaysIcon, Trash2 } from "lucide-react";
 import { DatePickerWithRange } from '@/components/custom/datePickerWithRange'
 import type { DateRange } from 'react-day-picker'
 import { getStartAndEndOfToday } from '@/lib/utils'
@@ -11,6 +11,17 @@ import { PasswordProtection } from "@/components/custom/PasswordProtection";
 import { useAuth } from "@/context/AuthContext";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog'
 import { Switch } from '@/components/ui/switch';
+import {
+  pad,
+  ymd,
+  ymdFixed,
+  parseYmd,
+  fmtNumber,
+  fmtNumberShowZero,
+  recomputeCashOnHand,
+  typeRank,
+  getSortKey,
+} from '@/lib/safesheetUtils'
 
 type Entry = {
   _id: string
@@ -58,16 +69,7 @@ export const Route = createFileRoute('/_navbarLayout/safesheet')({
 //   loaderDeps: ({ search: { site } }) => ({ site })
 // })
 
-// Helpers for YYYY-MM-DD
-const pad = (n: number) => String(n).padStart(2, '0')
-const ymdFixed = (d: Date) =>
-  `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`
-const ymd = (d: Date) => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`
-const parseYmd = (s?: string) => {
-  if (!s || !/^\d{4}-\d{2}-\d{2}$/.test(s)) return undefined
-  const [y, m, d] = s.split('-').map(Number)
-  return new Date(y, m - 1, d, 0, 0, 0, 0)
-}
+// Date helpers and formatters are imported from @/lib/safesheetUtils
 
 export default function RouteComponent() {
   // State for calendar modal
@@ -147,6 +149,11 @@ export default function RouteComponent() {
   const [addCashInLoading, setAddCashInLoading] = useState(false)
   const [addCashInError, setAddCashInError] = useState<string | null>(null)
 
+  // Delete entry dialog state
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false)
+  const [deleteTargetEntry, setDeleteTargetEntry] = useState<(typeof formattedEntries)[0] | null>(null)
+  const [deleteLoading, setDeleteLoading] = useState(false)
+
   // Switch state for UI extensibility
   const [switchValue, setSwitchValue] = useState(false);
 
@@ -165,23 +172,7 @@ export default function RouteComponent() {
     cameraInputRef.current?.click()
   }
 
-  // number formatter
-  const fmtNumber = (v?: number | null) => {
-    if (v === null || v === undefined || v === 0) return ''
-    return new Intl.NumberFormat(undefined, {
-      minimumFractionDigits: 2,
-      maximumFractionDigits: 2,
-    }).format(v)
-  }
-
-  // dedicated formatter that shows zero (for Cash On Hand only)
-  const fmtNumberShowZero = (v?: number | null) => {
-    if (v === null || v === undefined) return ''
-    return new Intl.NumberFormat(undefined, {
-      minimumFractionDigits: 2,
-      maximumFractionDigits: 2,
-    }).format(v)
-  }
+  // fmtNumber and fmtNumberShowZero are imported from @/lib/safesheetUtils
 
   // fetch sheet
   useEffect(() => {
@@ -236,14 +227,7 @@ export default function RouteComponent() {
     return isNaN(n) ? 0 : n
   }
 
-  // recompute running cash
-  const recomputeCashOnHand = (entries: Entry[], initialBalance: number) => {
-    let balance = initialBalance
-    return entries.map((entry) => {
-      balance = balance + entry.cashIn - entry.cashExpenseOut - entry.cashDepositBank
-      return { ...entry, cashOnHandSafe: balance }
-    })
-  }
+  // recomputeCashOnHand is imported from @/lib/safesheetUtils
 
   // Add Cash In via dialog
   const submitAddCashIn = async () => {
@@ -443,6 +427,60 @@ export default function RouteComponent() {
     }
   }
 
+  // DELETE ENTRY
+  const handleDeleteEntry = async (entryId: string) => {
+    if (!site) return
+    setDeleteLoading(true)
+    try {
+      const res = await fetch(
+        `/api/safesheets/site/${encodeURIComponent(site)}/entries/${entryId}`,
+        {
+          method: 'DELETE',
+          headers: {
+            Authorization: `Bearer ${localStorage.getItem('token')}`,
+            'X-Required-Permission': 'accounting.safesheet.deleteEntry',
+          },
+        },
+      )
+
+      if (res.status === 403) {
+        navigate({ to: '/no-access' })
+        return
+      }
+
+      const body = await res.json().catch(() => null)
+      if (!res.ok) throw new Error(body?.error || 'Failed to delete entry')
+
+      // Refresh safesheet for the current range
+      if (site && from && to) {
+        try {
+          const ref = await fetch(
+            `/api/safesheets/site/${encodeURIComponent(site)}?from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}&sortAssigned=${switchValue ? 'true' : 'false'}`,
+            {
+              headers: {
+                Authorization: `Bearer ${localStorage.getItem('token')}`,
+                'X-Required-Permission': 'accounting.safesheet',
+              },
+            },
+          )
+          if (!ref.ok) throw new Error('Failed to refresh safesheet')
+          const refreshed: SafeSheet = await ref.json()
+          setSheet(refreshed)
+        } catch (refreshErr) {
+          console.error(refreshErr)
+        }
+      }
+
+      setShowDeleteConfirm(false)
+      setDeleteTargetEntry(null)
+    } catch (err: any) {
+      console.error(err)
+      setError(err.message || 'Delete failed')
+    } finally {
+      setDeleteLoading(false)
+    }
+  }
+
   // cell editing
   const [editingCell, setEditingCell] = useState<{ id: string; field: string } | null>(null)
   const [editValue, setEditValue] = useState('')
@@ -536,30 +574,7 @@ export default function RouteComponent() {
 
     if (!switchValue) return entries;
 
-    // Helper: get sort key
-    const getSortKey = (entry: { _originalIndex?: number; dateDisplay?: string; cashInDisplay?: string; cashExpenseOutDisplay?: string; cashDepositBankDisplay?: string; cashOnHandSafeDisplay?: string; _id?: string; date: any; description?: string | undefined; cashIn?: number; cashExpenseOut?: number; cashDepositBank?: number; cashOnHandSafe?: number | undefined; createdAt?: string | undefined; updatedAt?: string | undefined; photo?: string | null | undefined; assignedDate?: string; }) => {
-      if (entry.assignedDate && /^\d{4}-\d{2}-\d{2}$/.test(entry.assignedDate)) {
-        return entry.assignedDate;
-      }
-      // fallback to date
-      const x = new Date(entry.date);
-      const y = x.getFullYear();
-      const m = String(x.getMonth() + 1).padStart(2, '0');
-      const day = String(x.getDate()).padStart(2, '0');
-      return `${y}-${m}-${day}`;
-    };
-
-    // Helper: type rank
-    const typeRank = (e: { _originalIndex?: number; dateDisplay?: string; cashInDisplay?: string; cashExpenseOutDisplay?: string; cashDepositBankDisplay?: string; cashOnHandSafeDisplay?: string; _id?: string; date?: string; description?: string | undefined; cashIn: any; cashExpenseOut: any; cashDepositBank: any; cashOnHandSafe?: number | undefined; createdAt?: string | undefined; updatedAt?: string | undefined; photo?: string | null | undefined; assignedDate?: string | undefined; }) => {
-      const ci = Number(e.cashIn || 0);
-      const ce = Number(e.cashExpenseOut || 0);
-      const cb = Number(e.cashDepositBank || 0);
-      if (ci > 0) return 0;
-      if (ce > 0) return 1;
-      if (cb > 0) return 2;
-      return 3;
-    };
-
+    // getSortKey and typeRank are imported from @/lib/safesheetUtils
     // Sort by sort key, then by type rank, then by original index
     return [...entries].sort((a, b) => {
       const ka = getSortKey(a);
@@ -828,7 +843,7 @@ export default function RouteComponent() {
                                     </Button>
                                   ))}
 
-                                  {e.cashDepositBank > 0 && (
+                                  {e.cashDepositBank > 0 && user?.access?.accounting.safesheet.setAssignedDate && (
                                     e.assignedDate ? (
                                       <Button
                                         size="sm"
@@ -921,6 +936,21 @@ export default function RouteComponent() {
                                         />
                                       </DialogContent>
                                     </Dialog>
+
+                                {/* Delete button — requires accounting.safesheet.deleteEntry */}
+                                {user?.access?.accounting.safesheet.deleteEntry && (
+                                  <Button
+                                    size="sm"
+                                    variant="outline"
+                                    onClick={() => {
+                                      setDeleteTargetEntry(e)
+                                      setShowDeleteConfirm(true)
+                                    }}
+                                    className="flex items-center gap-1 px-2 py-1.5 rounded-md border-red-400 text-red-600 hover:bg-red-50"
+                                  >
+                                    <Trash2 className="w-4 h-4" />
+                                  </Button>
+                                )}
                               </div>
                             </td>
                           </tr>
@@ -1063,6 +1093,79 @@ export default function RouteComponent() {
               disabled={addCashInLoading || !site}
             >
               {addCashInLoading ? 'Adding...' : 'Add'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Delete Entry Confirmation Dialog */}
+      <Dialog
+        open={showDeleteConfirm}
+        onOpenChange={(open) => {
+          setShowDeleteConfirm(open)
+          if (!open) setDeleteTargetEntry(null)
+        }}
+      >
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Delete Entry</DialogTitle>
+          </DialogHeader>
+
+          {deleteTargetEntry && (
+            <div className="space-y-2 text-sm text-gray-700">
+              <p>Are you sure you want to permanently delete this entry?</p>
+              <div className="border border-slate-200 rounded-md p-3 bg-slate-50 space-y-1">
+                <div className="flex justify-between">
+                  <span className="text-muted-foreground">Date</span>
+                  <span className="font-medium">{deleteTargetEntry.dateDisplay}</span>
+                </div>
+                {deleteTargetEntry.description && (
+                  <div className="flex justify-between">
+                    <span className="text-muted-foreground">Description</span>
+                    <span className="font-medium">{deleteTargetEntry.description}</span>
+                  </div>
+                )}
+                {deleteTargetEntry.cashIn > 0 && (
+                  <div className="flex justify-between">
+                    <span className="text-muted-foreground">Cash In</span>
+                    <span className="font-medium">{deleteTargetEntry.cashInDisplay}</span>
+                  </div>
+                )}
+                {deleteTargetEntry.cashExpenseOut > 0 && (
+                  <div className="flex justify-between">
+                    <span className="text-muted-foreground">Cash Expense Out</span>
+                    <span className="font-medium">{deleteTargetEntry.cashExpenseOutDisplay}</span>
+                  </div>
+                )}
+                {deleteTargetEntry.cashDepositBank > 0 && (
+                  <div className="flex justify-between">
+                    <span className="text-muted-foreground">Cash Deposit Bank</span>
+                    <span className="font-medium">{deleteTargetEntry.cashDepositBankDisplay}</span>
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+
+          <DialogFooter className="gap-2">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => {
+                setShowDeleteConfirm(false)
+                setDeleteTargetEntry(null)
+              }}
+              disabled={deleteLoading}
+            >
+              Cancel
+            </Button>
+            <Button
+              size="sm"
+              variant="destructive"
+              onClick={() => deleteTargetEntry && handleDeleteEntry(deleteTargetEntry._id)}
+              disabled={deleteLoading || !deleteTargetEntry}
+            >
+              {deleteLoading ? 'Deleting...' : 'Delete'}
             </Button>
           </DialogFooter>
         </DialogContent>
