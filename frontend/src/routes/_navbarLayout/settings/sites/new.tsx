@@ -1,6 +1,6 @@
 import { createFileRoute, useNavigate, useRouter } from '@tanstack/react-router';
 import axios from "axios";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -10,6 +10,13 @@ import {
   InputOTPSlot,
 } from "@/components/ui/input-otp";
 import { useAuth } from "@/context/AuthContext"
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogFooter,
+} from "@/components/ui/dialog"; 
 
 export const Route = createFileRoute('/_navbarLayout/settings/sites/new')({
   component: NewSiteRouteComponent,
@@ -33,10 +40,31 @@ function NewSiteRouteComponent() {
     timezone: "America/Toronto", // default timezone
     email: "",
     sellsLottery: false,
+    managerEmails: [] as string[],
   });
   const [managerCode, setManagerCode] = useState("");
   const [loading, setLoading] = useState(false);
   const router = useRouter(); // ✅ get router instance here
+
+  const [users, setUsers] = useState<any[]>([]);
+  const [managerDialogOpen, setManagerDialogOpen] = useState(false);
+
+  // --- EFFECTS ---
+  useEffect(() => {
+    // Fetch users so we can pick managers even for a new site
+    const fetchUsers = async () => {
+      try {
+        const token = localStorage.getItem('token');
+        const res = await axios.get('/api/users/populate-roles', {
+          headers: { Authorization: `Bearer ${token}` }
+        });
+        setUsers(res.data);
+      } catch (err) {
+        console.error("Failed to load users", err);
+      }
+    };
+    fetchUsers();
+  }, []);
 
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
@@ -132,9 +160,36 @@ function NewSiteRouteComponent() {
           </select>
         </div>
 
-        <div>
+        {/* <div>
           <Label>Email</Label>
           <Input type="email" name="email" value={formData.email} onChange={handleChange} required />
+        </div> */}
+        {/* Updated Email Field with Button */}
+        <div>
+          <Label>Station Email</Label>
+          <div className="flex gap-2">
+            <Input
+              type="email"
+              name="email"
+              value={formData.email}
+              onChange={handleChange}
+              required
+              className="flex-1"
+            />
+            <Button
+              type="button"
+              variant="outline"
+              className="whitespace-nowrap border-blue-500 text-blue-600 hover:bg-blue-50"
+              onClick={() => setManagerDialogOpen(true)}
+            >
+              Add Managers ({formData.managerEmails.length})
+            </Button>
+          </div>
+          {formData.managerEmails.length > 0 && (
+            <p className="text-[11px] text-gray-500 mt-1 italic">
+              Manager alerts: {formData.managerEmails.join(", ")}
+            </p>
+          )}
         </div>
         <div className="flex items-center gap-3">
           <span className="text-sm">Sells Lottery</span>
@@ -166,6 +221,40 @@ function NewSiteRouteComponent() {
           {loading ? "Creating..." : "Create Site"}
         </Button>
       </form>
+      {/* --- MANAGER SELECTION DIALOG --- */}
+      <Dialog open={managerDialogOpen} onOpenChange={setManagerDialogOpen}>
+        <DialogContent className="max-w-2xl h-[70vh] flex flex-col">
+          <DialogHeader>
+            <DialogTitle>Assign Manager Email Notifications</DialogTitle>
+          </DialogHeader>
+          <div className="flex-1 overflow-y-auto py-4">
+            <div className="space-y-2">
+              {users.map((u) => (
+                <div key={u._id} className="flex items-center justify-between p-3 border rounded-lg">
+                  <div>
+                    <p className="font-medium">{u.firstName} {u.lastName}</p>
+                    <p className="text-sm text-gray-500">{u.email}</p>
+                  </div>
+                  <input
+                    type="checkbox"
+                    className="h-5 w-5 cursor-pointer"
+                    checked={formData.managerEmails.includes(u.email)}
+                    onChange={() => {
+                      const emails = formData.managerEmails.includes(u.email)
+                        ? formData.managerEmails.filter(e => e !== u.email)
+                        : [...formData.managerEmails, u.email];
+                      setFormData({ ...formData, managerEmails: emails });
+                    }}
+                  />
+                </div>
+              ))}
+            </div>
+          </div>
+          <DialogFooter>
+            <Button onClick={() => setManagerDialogOpen(false)}>Done</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

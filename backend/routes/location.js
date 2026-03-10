@@ -142,7 +142,7 @@ router.put("/:id", async (req, res) => {
 // POST /api/locations
 router.post("/", async (req, res) => {
   try {
-    const { type, stationName, legalName, INDNumber, kardpollCode, csoCode, timezone, email, managerCode, sellsLottery } = req.body;
+    const { type, stationName, legalName, INDNumber, kardpollCode, csoCode, timezone, email, managerCode, sellsLottery, managerEmails } = req.body;
 
     // Basic validation
     if (!type || !stationName || !legalName || !INDNumber || !csoCode || !timezone || !email || !managerCode) {
@@ -161,6 +161,7 @@ router.post("/", async (req, res) => {
       email,
       managerCode,
       sellsLottery: !!sellsLottery,
+      managerEmails: managerEmails || [],
     });
 
     await location.save();
