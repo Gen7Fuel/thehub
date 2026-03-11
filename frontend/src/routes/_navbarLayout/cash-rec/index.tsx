@@ -360,11 +360,11 @@ function RouteComponent() {
                         <td className="px-3 py-2 text-right">${fmt2(cashSafeDeposited)}</td>
                       </tr>
                       <tr>
-                        <td className="px-3 py-2">Till Over/Short (55501)</td>
+                        <td className="px-3 py-2">Till Over/Short (55050)</td>
                         <td className="px-3 py-2 text-right">${fmt2(tillOverShort)}</td>
                       </tr>
                       <tr>
-                        <td className="px-3 py-2">GiftCard Redemption (2250)</td>
+                        <td className="px-3 py-2">GiftCard Redemption (52250)</td>
                         <td className="px-3 py-2 text-right">${fmt2(gcRedemption)}</td>
                       </tr>
                       <tr>
@@ -376,7 +376,7 @@ function RouteComponent() {
                         <td className="px-3 py-2 text-right">${fmt2(unsettledPrepays)}</td>
                       </tr>
                       <tr>
-                        <td className="px-3 py-2">Bank Rec (45500)</td>
+                        <td className="px-3 py-2">Bank Rec (55050)</td>
                         <td className="px-3 py-2 text-right">${fmt2(bankRec)}</td>
                       </tr>
                       <tr>

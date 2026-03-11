@@ -737,6 +737,8 @@ router.post('/', async (req, res) => {
       totalPos: numOrUndef(parsed.totalPos),
       arIncurred: numOrUndef(parsed.arIncurred),
       grandTotal: numOrUndef(parsed.grandTotal),
+      // Native cpl miss
+      missedCpl: numOrUndef(parsed.missedCpl),
       couponsAccepted: numOrUndef(parsed.couponsAccepted),
       giftCertificates: numOrUndef(parsed.giftCertificates),
       canadianCash: numOrUndef((parsed.canadianCash || 0) + (parsed.usCash || 0)),
