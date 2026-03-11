@@ -1,8 +1,10 @@
 const express = require("express");
 const router = express.Router();
+const { DateTime } = require("luxon");
 const Transaction = require("../models/Transactions");
 const Fleet = require("../models/Fleet");
 const Product = require("../models/Product");
+const TIMEZONE = "America/Toronto";
 // const Location = require("../models/Location");
 
 // Create a purchase order
@@ -267,9 +269,13 @@ router.get("/", async (req, res) => {
   const filter = { source: "PO", stationName };
 
   if (startDate && endDate) {
-    const start = new Date(startDate);
-    const end = new Date(endDate);
-    end.setDate(end.getDate() + 1);
+    const isYmd = (s) => /^\d{4}-\d{2}-\d{2}$/.test(s);
+    const start = isYmd(startDate)
+      ? DateTime.fromISO(`${startDate}T00:00:00`, { zone: TIMEZONE }).toJSDate()
+      : new Date(startDate);
+    const end = isYmd(endDate)
+      ? DateTime.fromISO(`${endDate}T00:00:00`, { zone: TIMEZONE }).plus({ days: 1 }).toJSDate()
+      : new Date(new Date(endDate).setDate(new Date(endDate).getDate() + 1));
     filter.date = { $gte: start, $lt: end };
   }
 
