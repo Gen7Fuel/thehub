@@ -397,6 +397,7 @@ router.get('/entries', async (req, res) => {
       'grandTotal',
       'missedCpl',
       'couponsAccepted',
+      'giftCertificates',
       'canadianCash',
       'cashOnHand',
       'parsedCashBack',
