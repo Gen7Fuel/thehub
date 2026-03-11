@@ -1,8 +1,11 @@
 const express = require('express')
 const multer = require('multer')
+const { DateTime } = require('luxon')
 const { BankStatement, KardpollReport } = require('../models/CashRec')
 const CashSummary = require('../models/CashSummaryNew')
 const Transactions = require('../models/Transactions')
+
+const TIMEZONE = 'America/Toronto'
 
 const router = express.Router()
 const upload = multer({
@@ -339,14 +342,10 @@ const addDaysYmd = (ymd, days) => {
   dt.setUTCDate(dt.getUTCDate() + days)
   return toYmdUtc(dt)
 }
-const startOfUtcDay = (ymd) => {
-  const [y, m, d] = ymd.split('-').map(Number)
-  return new Date(Date.UTC(y, m - 1, d, 0, 0, 0, 0))
-}
-const endOfUtcDay = (ymd) => {
-  const [y, m, d] = ymd.split('-').map(Number)
-  return new Date(Date.UTC(y, m - 1, d, 23, 59, 59, 999))
-}
+const startOfUtcDay = (ymd) =>
+  DateTime.fromISO(`${ymd}T00:00:00`, { zone: TIMEZONE }).toJSDate()
+const endOfUtcDay = (ymd) =>
+  DateTime.fromISO(`${ymd}T00:00:00`, { zone: TIMEZONE }).plus({ days: 1 }).minus({ milliseconds: 1 }).toJSDate()
 
 router.get('/entries', async (req, res) => {
   try {
@@ -500,9 +499,11 @@ router.get('/entries', async (req, res) => {
     // totalPos + report_canadian_cash + couponsAccepted + payouts - totalSales + totalReceivablesAmount
     const reportCanadianCash = Number(cashSummary?.totals?.report_canadian_cash) || 0
     const couponsAccepted = Number(cashSummary?.totals?.couponsAccepted) || 0
+    const giftCertificates = Number(cashSummary?.totals?.giftCertificates) || 0
     const payouts = Number(cashSummary?.totals?.payouts) || 0
     const totalSalesNum = Number(cashSummary?.totals?.totalSales) || 0
-    const balanceCheck = totalPos + reportCanadianCash + couponsAccepted + payouts - totalSalesNum + (Number(totalReceivablesAmount) || 0)
+    // Include both couponsAccepted and giftCertificates in balanceCheck
+    const balanceCheck = totalPos + reportCanadianCash + couponsAccepted + giftCertificates + payouts - totalSalesNum + (Number(totalReceivablesAmount) || 0)
 
     return res.json({
       kardpoll: kardpoll || null,
