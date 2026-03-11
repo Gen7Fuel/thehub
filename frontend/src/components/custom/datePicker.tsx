@@ -72,7 +72,6 @@ export function DatePicker({ date, setDate, restrictToPast = false }: DatePicker
 
   return (
     <Popover>
-      {/* keep this exactly as you had it before */}
       <PopoverTrigger>
         <Button
           variant={"outline"}
@@ -91,8 +90,10 @@ export function DatePicker({ date, setDate, restrictToPast = false }: DatePicker
           mode="single"
           selected={date}
           onSelect={setDate}
-          disabled={disabledRules}   // <- only active when restrictToPast=true
+          disabled={disabledRules}
           initialFocus
+          month={date}
+          defaultMonth={date}
         />
       </PopoverContent>
     </Popover>
