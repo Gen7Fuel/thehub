@@ -575,17 +575,28 @@ function RouteComponent() {
             Authorization: `Bearer ${localStorage.getItem('token')}`
           }
         });
-        const storeEmail = locationRes.data?.email;
+        const locationData = locationRes.data;
+        const storeEmail = locationData?.email;
+        // Get the new managerEmails array, default to empty if not found
+        const managerEmails = locationData?.managerEmails || [];
 
         if (!storeEmail) {
           alert("Store email not found for this site.");
           return;
         }
 
+        // 2. Build the CC list
+        // We combine your hardcoded team emails + the uploader + the specific site managers
+        const baseCC = ["grayson@gen7fuel.com", userEmail, "daksh@gen7fuel.com"];
+
+        // Use a Set to ensure we don't send duplicate notifications if a manager 
+        // is already in the baseCC list (like if Grayson or Daksh is listed as a manager)
+        const combinedCC = Array.from(new Set([...baseCC, ...managerEmails]));
+
         // Call the updated backend route
         await axios.post("/api/send-orderec-email", {
           to: storeEmail,
-          cc: ["grayson@gen7fuel.com", userEmail, "daksh@gen7fuel.com"],
+          cc: combinedCC,
           subject: `📦 New Order Recommendation for Site ${site}`,
           slug: "order-rec-uploaded", // <--- Matches MongoDB Slug
           fieldValues: {
@@ -622,9 +633,22 @@ function RouteComponent() {
     setNotifying(true);
 
     try {
+      // 1. Prepare the base CC list
+      let ccList = ['grayson@gen7fuel.com', 'daksh@gen7fuel.com'];
+
+      // 2. Logic for System-Generated Orders (Department Email)
+      // Check if the order was sent to the department email
+      if (orderRec.email === 'orders@gen7fuel.com') {
+        const extraRecipients = ["julie@gen7fuel.com", "ana@gen7fuel.com"]; // Add any additional recipients for department orders here
+
+        // Add them to CC so they get the email and the Hub alert
+        ccList = [...ccList, ...extraRecipients];
+      }
+
+      // 3. Call the backend
       await axios.post('/api/send-orderec-email', {
         to: orderRec.email,
-        cc: ['grayson@gen7fuel.com', 'daksh@gen7fuel.com'],
+        cc: ccList,
         subject: `✅ Order Reconciliation Completed for Site ${site}`,
         slug: "order-rec-completed", // <--- Matches MongoDB Slug
         fieldValues: {

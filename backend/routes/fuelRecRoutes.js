@@ -2,6 +2,7 @@ const express = require('express')
 const router = express.Router()
 const Location = require("../models/Location");
 const { emailQueue } = require('../queues/emailQueue');
+const { pushNotification } = require("../services/notificationService");
 
 // JSON body parsing
 router.use(express.json({ limit: '1mb' }))
@@ -107,119 +108,164 @@ router.get('/list', async (req, res) => {
 
 // POST /api/fuel-rec/request-again
 // body: { site: string, date: 'YYYY-MM-DD' }
+// router.post('/request-again', async (req, res) => {
+//   const site = String(req.body?.site || '').trim()
+//   const date = String(req.body?.date || '').trim()
+
+//   const userEmailMiddleware = req.user.email;
+//   if (!userEmailMiddleware) {
+//     return res.status(401).json({ error: 'User identification missing' });
+//   }
+
+//   const userEmail = String(userEmailMiddleware).trim();
+
+//   if (!site || !isYmd(date)) {
+//     return res.status(400).json({ error: 'site and date (YYYY-MM-DD) are required' })
+//   }
+
+//   try {
+//     const location = await Location.findOne(
+//       { stationName: site },
+//       { email: 1, stationName: 1 }
+//     ).lean()
+
+//     if (!location) {
+//       return res.status(404).json({ error: `Location not found for stationName '${site}'` })
+//     }
+
+//     const to = String(location.email || '').trim()
+//     if (!to) {
+//       return res.status(400).json({ error: 'Location has no email configured' })
+//     }
+
+//     // 1. Construct the redirect URL
+//     const redirectUrl = `https://app.gen7fuel.com/fuel-rec?site=${encodeURIComponent(location.stationName)}&date=${date}`;
+
+//     // 2. Define the Subject
+//     const subject = `📸 BOL Photo Retake Requested – ${location.stationName} – ${date}`;
+
+//     // 3. Define Plain Text version
+//     const text = `A photo retake for the Bill of Lading (BOL) has been requested for ${location.stationName} on ${date}. 
+//       Reason: Image not clear / Blur.
+//       Please re-upload here: ${redirectUrl}`;
+
+//     // 4. Define HTML version
+//     const html = `
+//       <div style="font-family: 'Segoe UI', Arial, sans-serif; background-color: #f4f7f6; padding: 30px;">
+//         <div style="max-width: 600px; margin: 0 auto; background-color: #ffffff; border-radius: 12px; box-shadow: 0 4px 12px rgba(0,0,0,0.1); overflow: hidden;">
+
+//           <div style="background-color: #bd33fd; color: #ffffff; text-align: center; padding: 20px 0;">
+//             <h1 style="margin: 0; font-size: 22px;">📸 BOL Photo Retake Requested</h1>
+//           </div>
+
+//           <div style="padding: 30px;">
+//             <p style="font-size: 16px; color: #444; line-height: 1.6;">
+//               A request has been made to <strong>retake and re-upload</strong> the Bill of Lading (BOL) document for the following delivery:
+//             </p>
+
+//             <table style="width: 100%; border-collapse: collapse; margin: 20px 0; background-color: #fdfdfd; border-radius: 8px;">
+//               <tr>
+//                 <td style="padding: 12px; font-weight: bold; color: #555; border-bottom: 1px solid #f0f0f0;">🏪 Station:</td>
+//                 <td style="padding: 12px; color: #222; border-bottom: 1px solid #f0f0f0;">${location.stationName}</td>
+//               </tr>
+//               <tr>
+//                 <td style="padding: 12px; font-weight: bold; color: #555; border-bottom: 1px solid #f0f0f0;">📅 Delivery Date:</td>
+//                 <td style="padding: 12px; color: #222; border-bottom: 1px solid #f0f0f0;">${date}</td>
+//               </tr>
+//               <tr>
+//                 <td style="padding: 12px; font-weight: bold; color: #d32f2f;">❓ Reason:</td>
+//                 <td style="padding: 12px; color: #d32f2f; font-weight: 500;">Image not clear / Blur reported.</td>
+//               </tr>
+//             </table>
+
+//             <div style="
+//               margin-top: 24px;
+//               background-color: #f5ddfc;
+//               border-left: 6px solid #fa5df2;
+//               padding: 16px;
+//               border-radius: 8px;
+//             ">
+//               <p style="margin: 0; color: #c609ff; font-size: 15px;">
+//                 Please ensure the new photo is well-lit and all text on the document is clearly legible before submitting.
+//               </p>
+//             </div>
+
+//             <div style="text-align: center; margin: 35px 0;">
+//               <a href="${redirectUrl}" 
+//                 style="background-color: #333333; color: #ffffff; padding: 14px 28px; text-decoration: none; font-weight: 600; border-radius: 6px; display: inline-block; font-size: 16px;">
+//                 📤 Re-upload BOL Document
+//               </a>
+//             </div>
+
+//             <p style="color: #888; font-size: 12px; margin-top: 30px; text-align: center; border-top: 1px solid #eee; padding-top: 20px;">
+//               Gen7 Fuel Hub - Fuel Reconciliation System<br>
+//               <em>This is an automated request. Please use the link above to fulfill the request.</em>
+//             </p>
+//           </div>
+//         </div>
+//       </div>
+//       `;
+
+//     // 5. Add to Email Queue
+//     await emailQueue.add("sendBOLRequestEmail", {
+//       to,
+//       cc: ['daksh@gen7fuel.com', 'mohammad@gen7fuel.com', userEmail],
+//       subject,
+//       text,
+//       html
+//     });
+
+//     return res.status(200).json({ sent: true })
+//   } catch (e) {
+//     console.error('fuelRec.request-again error:', e)
+//     return res.status(500).json({ error: 'Failed to send retake request email' })
+//   }
+// })
 router.post('/request-again', async (req, res) => {
-  const site = String(req.body?.site || '').trim()
-  const date = String(req.body?.date || '').trim()
-
-  const userEmailMiddleware = req.user.email;
-  if (!userEmailMiddleware) {
-    return res.status(401).json({ error: 'User identification missing' });
-  }
-
-  const userEmail = String(userEmailMiddleware).trim();
-
-  if (!site || !isYmd(date)) {
-    return res.status(400).json({ error: 'site and date (YYYY-MM-DD) are required' })
-  }
+  const site = String(req.body?.site || '').trim();
+  const date = String(req.body?.date || '').trim();
 
   try {
     const location = await Location.findOne(
       { stationName: site },
-      { email: 1, stationName: 1 }
-    ).lean()
+      { email: 1, stationName: 1, managerEmails: 1 }
+    ).lean();
 
-    if (!location) {
-      return res.status(404).json({ error: `Location not found for stationName '${site}'` })
-    }
+    if (!location) return res.status(404).json({ error: 'Location not found' });
 
-    const to = String(location.email || '').trim()
-    if (!to) {
-      return res.status(400).json({ error: 'Location has no email configured' })
-    }
+    // Identify Recipients
+    const managerEmails = location.managerEmails || [];
+    const primaryRecipients = managerEmails.length > 0 ? managerEmails : [location.email];
+    const internalCCs = ['daksh@gen7fuel.com', 'mohammad@gen7fuel.com'];
 
-    // 1. Construct the redirect URL
+    // Dynamic data for the template placeholders
     const redirectUrl = `https://app.gen7fuel.com/fuel-rec?site=${encodeURIComponent(location.stationName)}&date=${date}`;
 
-    // 2. Define the Subject
-    const subject = `📸 BOL Photo Retake Requested – ${location.stationName} – ${date}`;
+    const fieldValues = {
+      site: location.stationName,
+      date: date,
+      reason: "Image not clear / Blur reported.",
+      redirectUrl: redirectUrl
+    };
 
-    // 3. Define Plain Text version
-    const text = `A photo retake for the Bill of Lading (BOL) has been requested for ${location.stationName} on ${date}. 
-      Reason: Image not clear / Blur.
-      Please re-upload here: ${redirectUrl}`;
+    const io = req.app.get("io");
 
-    // 4. Define HTML version
-    const html = `
-      <div style="font-family: 'Segoe UI', Arial, sans-serif; background-color: #f4f7f6; padding: 30px;">
-        <div style="max-width: 600px; margin: 0 auto; background-color: #ffffff; border-radius: 12px; box-shadow: 0 4px 12px rgba(0,0,0,0.1); overflow: hidden;">
-          
-          <div style="background-color: #bd33fd; color: #ffffff; text-align: center; padding: 20px 0;">
-            <h1 style="margin: 0; font-size: 22px;">📸 BOL Photo Retake Requested</h1>
-          </div>
-
-          <div style="padding: 30px;">
-            <p style="font-size: 16px; color: #444; line-height: 1.6;">
-              A request has been made to <strong>retake and re-upload</strong> the Bill of Lading (BOL) document for the following delivery:
-            </p>
-
-            <table style="width: 100%; border-collapse: collapse; margin: 20px 0; background-color: #fdfdfd; border-radius: 8px;">
-              <tr>
-                <td style="padding: 12px; font-weight: bold; color: #555; border-bottom: 1px solid #f0f0f0;">🏪 Station:</td>
-                <td style="padding: 12px; color: #222; border-bottom: 1px solid #f0f0f0;">${location.stationName}</td>
-              </tr>
-              <tr>
-                <td style="padding: 12px; font-weight: bold; color: #555; border-bottom: 1px solid #f0f0f0;">📅 Delivery Date:</td>
-                <td style="padding: 12px; color: #222; border-bottom: 1px solid #f0f0f0;">${date}</td>
-              </tr>
-              <tr>
-                <td style="padding: 12px; font-weight: bold; color: #d32f2f;">❓ Reason:</td>
-                <td style="padding: 12px; color: #d32f2f; font-weight: 500;">Image not clear / Blur reported.</td>
-              </tr>
-            </table>
-
-            <div style="
-              margin-top: 24px;
-              background-color: #f5ddfc;
-              border-left: 6px solid #fa5df2;
-              padding: 16px;
-              border-radius: 8px;
-            ">
-              <p style="margin: 0; color: #c609ff; font-size: 15px;">
-                Please ensure the new photo is well-lit and all text on the document is clearly legible before submitting.
-              </p>
-            </div>
-
-            <div style="text-align: center; margin: 35px 0;">
-              <a href="${redirectUrl}" 
-                style="background-color: #333333; color: #ffffff; padding: 14px 28px; text-decoration: none; font-weight: 600; border-radius: 6px; display: inline-block; font-size: 16px;">
-                📤 Re-upload BOL Document
-              </a>
-            </div>
-
-            <p style="color: #888; font-size: 12px; margin-top: 30px; text-align: center; border-top: 1px solid #eee; padding-top: 20px;">
-              Gen7 Fuel Hub - Fuel Reconciliation System<br>
-              <em>This is an automated request. Please use the link above to fulfill the request.</em>
-            </p>
-          </div>
-        </div>
-      </div>
-      `;
-
-    // 5. Add to Email Queue
-    await emailQueue.add("sendBOLRequestEmail", {
-      to,
-      cc: ['daksh@gen7fuel.com', 'mohammad@gen7fuel.com', userEmail],
-      subject,
-      text,
-      html
+    // Push Notification handles deduplication, DB save, Sockets, and Email Queueing
+    await pushNotification({
+      io,
+      recipientEmails: [...primaryRecipients, ...internalCCs],
+      slug: "bol-retake-requested",
+      subject: `📸 BOL Photo Retake Requested – ${location.stationName} – ${date}`,
+      fieldValues: fieldValues,
+      type: 'system'
     });
 
-    return res.status(200).json({ sent: true })
+    return res.status(200).json({ sent: true });
   } catch (e) {
-    console.error('fuelRec.request-again error:', e)
-    return res.status(500).json({ error: 'Failed to send retake request email' })
+    console.error('BOL Request Error:', e);
+    return res.status(500).json({ error: 'Failed to send request' });
   }
-})
+});
 
 // DELETE /api/fuel-rec/:id
 router.delete('/:id', async (req, res) => {

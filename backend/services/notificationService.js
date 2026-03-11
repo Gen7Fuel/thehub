@@ -15,6 +15,15 @@ async function pushNotification({
   subject,       // The title to show in the Hub/Email subject
   type = 'system'
 }) {
+  // Filter(Boolean) removes nulls/undefined; Set removes duplicates
+  const uniqueEmails = Array.from(new Set(
+    (recipientEmails || []).map(email => email?.toLowerCase().trim()).filter(Boolean)
+  ));
+
+  if (uniqueEmails.length === 0) {
+    console.warn("No recipient emails provided to pushNotification. Aborting.");
+    return null;
+  }
   try {
     // 1. Fetch the Template from DB
     const template = await NotificationTemplate.findOne({ slug });
