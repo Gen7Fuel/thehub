@@ -148,6 +148,7 @@ function parseSftReport(text) {
     missedCpl: pickNum(/^\s*Native cpl miss\s+([-\d.,]+)\s*$/mi, text),
 
     couponsAccepted: pickNum(/^\s*Coupons Accepted\s+([-\d.,]+)\s*$/mi, text),
+    giftCertificates: pickNum(/^\s*Gift Certificates\s+([-\d.,]+)\s*$/mi, text),
     canadianCash: pickNum(/^\s*Canadian Cash\s+([-\d.,]+)\s*$/mi, text),
     usCash: pickNum(/^\s*U\.?S\.?\s*Cash\s+([-\d.,]+)\s*$/mi, text),
     cashOnHand: pickNum(/^\s*Cash On Hand\s+([-\d.,]+)\s*$/mi, text),
