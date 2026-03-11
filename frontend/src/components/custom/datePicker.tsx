@@ -70,8 +70,19 @@ export function DatePicker({ date, setDate, restrictToPast = false }: DatePicker
   // Only apply disabled rules when explicitly asked
   const disabledRules = restrictToPast ? { after: yesterday } : undefined
 
+  // State for visible month in calendar
+  const [visibleMonth, setVisibleMonth] = React.useState<Date | undefined>(date)
+  const [open, setOpen] = React.useState(false)
+
+  // When popover opens, set visibleMonth to selected date (or today)
+  React.useEffect(() => {
+    if (open) {
+      setVisibleMonth(date || today)
+    }
+  }, [open, date, today])
+
   return (
-    <Popover>
+    <Popover open={open} onOpenChange={setOpen}>
       <PopoverTrigger>
         <Button
           variant={"outline"}
@@ -92,8 +103,8 @@ export function DatePicker({ date, setDate, restrictToPast = false }: DatePicker
           onSelect={setDate}
           disabled={disabledRules}
           initialFocus
-          month={date}
-          defaultMonth={date}
+          month={visibleMonth}
+          onMonthChange={setVisibleMonth}
         />
       </PopoverContent>
     </Popover>
