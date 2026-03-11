@@ -289,15 +289,25 @@ function RouteComponent() {
               : 0
 
             // Sum of misc debits whose description contains "debit" (case-insensitive)
-            const miscDebitDescTotal = Array.isArray(data.bank?.miscDebits)
-              ? data.bank!.miscDebits.reduce((sum, tx) => {
-                  const desc = typeof tx.description === 'string' ? tx.description : ''
-                  return desc.toLowerCase().includes('debit') ? sum + (Number(tx.amount) || 0) : sum
+            // const miscDebitDescTotal = Array.isArray(data.bank?.miscDebits)
+            //   ? data.bank!.miscDebits.reduce((sum, tx) => {
+            //       const desc = typeof tx.description === 'string' ? tx.description : ''
+            //       return desc.toLowerCase().includes('debit') ? sum + (Number(tx.amount) || 0) : sum
+            //     }, 0)
+            //   : 0
+
+            // Sum of misc credits whose description contains "credit" or "tns" (case-insensitive)
+            const miscCreditDescTotal = Array.isArray((data.bank as any)?.miscCredits)
+              ? (data.bank as any).miscCredits.reduce((sum: number, tx: any) => {
+                  const desc = typeof tx.description === 'string' ? tx.description.toLowerCase() : ''
+                  return (desc.includes('credit') || desc.includes('tns'))
+                    ? sum + (Number(tx.amount) || 0)
+                    : sum
                 }, 0)
               : 0
 
             const finalTotal =
-              totalDollarSales - cashSafeDeposited + tillOverShort - gcRedemption - loyalty + unsettledPrepays + bankRec - arTotal - payTotal + miscDebitDescTotal
+              totalDollarSales - cashSafeDeposited + tillOverShort - gcRedemption - loyalty + unsettledPrepays + bankRec - arTotal - payTotal + miscCreditDescTotal
 
             return (
               <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 typewriter-font">
