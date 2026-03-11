@@ -1,8 +1,11 @@
 const express = require('express')
 const multer = require('multer')
+const { DateTime } = require('luxon')
 const { BankStatement, KardpollReport } = require('../models/CashRec')
 const CashSummary = require('../models/CashSummaryNew')
 const Transactions = require('../models/Transactions')
+
+const TIMEZONE = 'America/Toronto'
 
 const router = express.Router()
 const upload = multer({
@@ -339,14 +342,10 @@ const addDaysYmd = (ymd, days) => {
   dt.setUTCDate(dt.getUTCDate() + days)
   return toYmdUtc(dt)
 }
-const startOfUtcDay = (ymd) => {
-  const [y, m, d] = ymd.split('-').map(Number)
-  return new Date(Date.UTC(y, m - 1, d, 0, 0, 0, 0))
-}
-const endOfUtcDay = (ymd) => {
-  const [y, m, d] = ymd.split('-').map(Number)
-  return new Date(Date.UTC(y, m - 1, d, 23, 59, 59, 999))
-}
+const startOfUtcDay = (ymd) =>
+  DateTime.fromISO(`${ymd}T00:00:00`, { zone: TIMEZONE }).toJSDate()
+const endOfUtcDay = (ymd) =>
+  DateTime.fromISO(`${ymd}T00:00:00`, { zone: TIMEZONE }).plus({ days: 1 }).minus({ milliseconds: 1 }).toJSDate()
 
 router.get('/entries', async (req, res) => {
   try {
@@ -397,6 +396,7 @@ router.get('/entries', async (req, res) => {
       'grandTotal',
       'missedCpl',
       'couponsAccepted',
+      'giftCertificates',
       'canadianCash',
       'cashOnHand',
       'parsedCashBack',
@@ -495,13 +495,30 @@ router.get('/entries', async (req, res) => {
 
     const bankRec = endingBalance - bankStmtTrans - totalPos - kardpollSales + kioskGC + afdGC + kardpollAr - handheldDebit
 
+
+    // Compute miscCreditDescTotal: sum of miscCredits where description contains 'credit' or 'tns' (case-insensitive)
+    const miscCreditDescTotal = Array.isArray(bank?.miscCredits)
+      ? bank.miscCredits.reduce((sum, tx) => {
+          const desc = typeof tx.description === 'string' ? tx.description.toLowerCase() : ''
+          return (desc.includes('credit') || desc.includes('tns'))
+            ? sum + (Number(tx.amount) || 0)
+            : sum
+        }, 0)
+      : 0
+
     // Compute Balance Check (moved from frontend):
-    // totalPos + report_canadian_cash + couponsAccepted + payouts - totalSales + totalReceivablesAmount
+    // totalPos + report_canadian_cash + couponsAccepted + giftCertificates + payouts - totalSales + totalReceivablesAmount
     const reportCanadianCash = Number(cashSummary?.totals?.report_canadian_cash) || 0
     const couponsAccepted = Number(cashSummary?.totals?.couponsAccepted) || 0
+    const giftCertificates = Number(cashSummary?.totals?.giftCertificates) || 0
     const payouts = Number(cashSummary?.totals?.payouts) || 0
     const totalSalesNum = Number(cashSummary?.totals?.totalSales) || 0
-    const balanceCheck = totalPos + reportCanadianCash + couponsAccepted + payouts - totalSalesNum + (Number(totalReceivablesAmount) || 0)
+    // Include both couponsAccepted and giftCertificates in balanceCheck
+    const balanceCheck = totalPos + reportCanadianCash + couponsAccepted + giftCertificates + payouts - totalSalesNum + (Number(totalReceivablesAmount) || 0)
+
+    // Compute finalTotal (deduction summary): replace miscDebitDescTotal with miscCreditDescTotal
+    // finalTotal = totalDollarSales - cashSafeDeposited + tillOverShort - gcRedemption - loyaltyCoupons + unsettledPrepays + bankRec - arTotal - payTotal + miscCreditDescTotal
+    // (all variables except miscCreditDescTotal are frontend-only or require additional context)
 
     return res.json({
       kardpoll: kardpoll || null,

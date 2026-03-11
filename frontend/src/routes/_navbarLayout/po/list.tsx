@@ -244,7 +244,11 @@ function RouteComponent() {
           {purchaseOrders.length > 0 ? (
             purchaseOrders.map((order, index) => (
               <tr key={index} className="hover:bg-gray-50">
-                <td className="border-dashed border-t border-gray-300 px-4 py-2">{new Date(order.date).toLocaleDateString()}</td>
+                <td className="border-dashed border-t border-gray-300 px-4 py-2">{
+                  DateTime.fromISO(order.date, { zone: 'utc' })
+                    .setZone(timezone)
+                    .toFormat('yyyy-MM-dd')
+                }</td>
                 <td className="border-dashed border-t border-gray-300 px-4 py-2">{formatFleetCardNumber(order.fleetCardNumber) || order.poNumber}</td>
                 <td className="border-dashed border-t border-gray-300 px-4 py-2">{order.customerName}</td>
                 <td className="border-dashed border-t border-gray-300 px-4 py-2">{order.driverName}</td>

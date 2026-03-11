@@ -68,6 +68,7 @@ import {
   DialogDescription,
 } from "@/components/ui/dialog";
 import { OverShortSparkline, SafeBalanceTrendChart, PayablesDiscrepancyTable } from '@/components/custom/dashboard/accountingCharts';
+import { Skeleton } from '@/components/ui/skeleton';
 // import { Button } from '@/components/ui/button';
 // import OperationalTimelineCard from '@/components/custom/dashboard/operationalTimelineChart';
 // import { PayablesDiscrepancyChart, OverShortChart } from '@/components/custom/dashboard/accountingCharts';
@@ -342,8 +343,13 @@ function RouteComponent() {
 
   const [salesData, setSalesData] = useState<SalesData | null>(null);
   const [vendorStatus, setVendorStatus] = useState<any[]>([]);
-  const [loading, setLoading] = useState(true);
   const [timePeriodData, setTimePeriodData] = useState<TimePeriodTransaction[]>([]);
+
+  // Per-section loading flags for progressive rendering
+  const [loadingOverview, setLoadingOverview] = useState(true);
+  const [loadingInventory, setLoadingInventory] = useState(true);
+  const [loadingAccounting, setLoadingAccounting] = useState(true);
+  const [loadingSql, setLoadingSql] = useState(true);
 
 
   const today = new Date();
@@ -394,225 +400,177 @@ function RouteComponent() {
   // Fetch dashboard data whenever site/date changes
   // ----------------------------
   useEffect(() => {
-    setLoading(true);
+    // Reset all section loading flags
+    setLoadingOverview(true);
+    setLoadingInventory(true);
+    setLoadingAccounting(true);
+    setLoadingSql(true);
+
+    let cancelled = false;
 
     const fetchAllData = async () => {
       try {
         const params = new URLSearchParams({ site, startDate, endDate });
+        const authHeaders = {
+          Authorization: `Bearer ${localStorage.getItem("token")}`,
+          "X-Required-Permission": "dashboard",
+        };
 
         const today = new Date();
-
-        // ------------------- END (yesterday) -------------------
         const end = new Date(today);
-        end.setDate(end.getDate() - 1);
+        end.setDate(end.getDate() - 1); // yesterday
 
-        // Order recs
-        let orderRecsRes: any = []
-        try {
-          const res = await fetch(`/api/order-rec/range?${params}`, {
-            headers: {
-              Authorization: `Bearer ${localStorage.getItem("token")}`,
-              "X-Required-Permission": "dashboard",
-            },
-          });
-
-          if (res.status === 403) {
-            // Redirect to no-access page
-            navigate({ to: "/no-access" });
-            return;
-          }
-
-          if (!res.ok) {
-            throw new Error(`Failed to fetch order records: ${res.statusText}`);
-          }
-
-          orderRecsRes = await res.json();
-          // Use orderRecsRes as needed
-        } catch (error: any) {
-          console.error("Error fetching order records:", error);
-          // Optionally handle other errors here
-        }
-
-        // ----------------------------
-        // Safe balance – last 20 days
-        // ----------------------------
-        const pad = (n: number) => String(n).padStart(2, '0')
-        const ymd = (d: Date) => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`
-        // --- START (20 days before yesterday) ---
-        const start = new Date(end); // start from the end date
-        start.setDate(start.getDate() - 20); // go back 20 more days
-
-        // Convert to strings
-        const fromStr = ymd(start); // e.g., 2026-02-05
-        const toStr = ymd(end);     // e.g., 2026-02-25 (yesterday)
-
-        // Build query
-        const safeQuery = new URLSearchParams({ from: fromStr, to: toStr }).toString();
-        try {
-          const res = await fetch(`/api/safesheets/site/${encodeURIComponent(site)}/daily-balances?${safeQuery}`, {
-            headers: {
-              Authorization: `Bearer ${localStorage.getItem("token")}`,
-              "X-Required-Permission": "dashboard",
-            },
-          });
-
-          if (res.status === 403) {
-            navigate({ to: "/no-access" });
-            return;
-          }
-
-          if (!res.ok) {
-            throw new Error(`Failed to fetch safe balance data: ${res.statusText}`);
-          }
-
-          const json = await res.json();
-          setSafeBalanceRaw(json.data || []);
-        } catch (error) {
-          console.error("Error fetching safe balance data:", error);
-          setSafeBalanceRaw([]);
-        }
-
-        // setSafeMaxBalance(await fetchLocation(site).then(loc => loc.safeMaxBalance || 25_000));
-        setSafeMaxBalance(await fetchLocation(site).then(loc => loc.safeMaxBalance));
-
-        // ---- Over / Short ----
-        try {
-          const res = await fetch(
-            `/api/cash-summary/over-short?site=${encodeURIComponent(site)}`,
-            {
-              headers: {
-                Authorization: `Bearer ${localStorage.getItem("token")}`,
-                "X-Required-Permission": "dashboard",
-              },
-            }
-          );
-
-          if (res.status === 403) {
-            navigate({ to: "/no-access" });
-            return;
-          }
-
-          if (!res.ok) {
-            throw new Error(`Failed to fetch over/short data`);
-          }
-
-          const data = await res.json();
-          setOverShortData(data);
-        } catch (error) {
-          console.error("Error fetching over/short data:", error);
-        }
-
-        // ---- Payables Comparison ----
-        try {
-          const res = await fetch(
-            `/api/cash-summary/payables-comparison?site=${encodeURIComponent(site)}`,
-            {
-              headers: {
-                Authorization: `Bearer ${localStorage.getItem("token")}`,
-                "X-Required-Permission": "dashboard",
-              },
-            }
-          );
-
-          if (res.status === 403) {
-            navigate({ to: "/no-access" });
-            return;
-          }
-
-          if (!res.ok) {
-            throw new Error("Failed to fetch payables comparison data");
-          }
-
-          const data = await res.json();
-          setPayablesComparisonData(data);
-        } catch (error) {
-          console.error("Error fetching payables comparison data:", error);
-        }
-
-        // ---- Audit Stats & Progress ----
-        try {
-
-          const auditRes = await fetch(
-            `/api/audit/station-stats?site=${encodeURIComponent(site)}&periodKeys=${encodeURIComponent(JSON.stringify(pKeys))}`,
-            {
-              headers: {
-                Authorization: `Bearer ${localStorage.getItem("token")}`,
-                "X-Required-Permission": "dashboard", // adjust permission as needed
-              },
-            }
-          );
-
-          if (auditRes.status === 403) {
-            navigate({ to: "/no-access" });
-            return;
-          }
-
-          if (!auditRes.ok) {
-            throw new Error("Failed to fetch audit stats");
-          }
-
-          const auditData = await auditRes.json();
-          setAuditStats(auditData);
-        } catch (error) {
-          console.error("Error fetching audit stats:", error);
-        }
-
-        // const today = new Date();
-        // const end = new Date(today);
-
-        // ------------------- FUEL -------------------
-        const fuelStart = new Date(end);
-        fuelStart.setDate(fuelStart.getDate() - 60);
-
-        const fuelStartDate = fuelStart.toISOString().slice(0, 10);
-        const fuelEndDate = end.toISOString().slice(0, 10);
-
-        // ------------------- TRANSACTIONS -------------------
-        const transStart = new Date(end);
-        transStart.setDate(transStart.getDate() - 14);
-
-        const transStartDate = transStart.toISOString().slice(0, 10);
-        const transEndDate = end.toISOString().slice(0, 10);
-
-        // ------------------- SHIFT -------------------
-        const shiftStart = new Date(end);
-        shiftStart.setDate(shiftStart.getDate() - 7);
-
-        const shiftStartDate = shiftStart.toISOString().slice(0, 10);
-        const shiftEndDate = end.toISOString().slice(0, 10);
-
-        // ------------------- SALES -------------------
-        const salesStart = new Date(end);
-        salesStart.setDate(salesStart.getDate() - 59);
-        salesStart.setHours(0, 0, 0, 0);
-
-        const salesEnd = new Date(end);
-        salesEnd.setHours(23, 59, 59, 999);
-
+        // Date range helpers
+        const pad = (n: number) => String(n).padStart(2, '0');
+        const ymd = (d: Date) => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
         const fmt = (d: Date) => d.toISOString().slice(0, 10);
+
+        // Safe balance date range (20 days before yesterday)
+        const safeStart = new Date(end);
+        safeStart.setDate(safeStart.getDate() - 20);
+        const safeQuery = new URLSearchParams({ from: ymd(safeStart), to: ymd(end) }).toString();
+
+        // SQL date ranges
+        const fuelStart = new Date(end); fuelStart.setDate(fuelStart.getDate() - 60);
+        const transStart = new Date(end); transStart.setDate(transStart.getDate() - 14);
+        const shiftStart = new Date(end); shiftStart.setDate(shiftStart.getDate() - 7);
+        const salesStart = new Date(end); salesStart.setDate(salesStart.getDate() - 59); salesStart.setHours(0, 0, 0, 0);
+        const salesEnd = new Date(end); salesEnd.setHours(23, 59, 59, 999);
+
+        const fuelStartDate = fmt(fuelStart);
+        const fuelEndDate = fmt(end);
+        const transStartDate = fmt(transStart);
+        const transEndDate = fmt(end);
+        const shiftStartDate = fmt(shiftStart);
+        const shiftEndDate = fmt(end);
         const salesStartDate = fmt(salesStart);
         const salesEndDate = fmt(salesEnd);
 
-        // Cycle counts
-        const timezone = await fetchLocation(site).then(loc => loc.timezone || "UTC");
-        const dailyCountsRes = await fetchDailyCounts(site, sevenDaysAgo.toISOString().slice(0, 10), today.toISOString().slice(0, 10), timezone);
-        // const dailyCountsRes = await fetchDailyCounts(site, startDate, endDate, timezone);
-        setSiteTimezone(timezone);
-
-
-        // Vendor names
-        const vendorIds = [...new Set(STATUS_KEYS.flatMap(key => (orderRecsRes[key] ?? []).map((r: any) => String(r.vendor))))];
-        const vendorNamesObj: Record<string, string> = {};
-        await Promise.all(vendorIds.map(async (id: string) => {
-          const name = await getVendorNameById(id);
-          if (name) vendorNamesObj[id] = name;
-        }));
-
-        // Current week vendors
+        // Vendor week range
         const { startDate: weekStart, endDate: weekEnd } = getCurrentWeekRange();
-        const vendorsArr = await fetchVendors(site);
-        const orderRecsArr = await fetchOrderRecs(site, weekStart, weekEnd);
 
+        // ────────────────────────────────────────────────────────
+        // FAST TRACK — IDB reads + csoCode (~100ms, no heavy DB)
+        // Await this first so SQL can start before slow Mongo calls.
+        // ────────────────────────────────────────────────────────
+        const fastTrackPromise = Promise.allSettled([
+          getCsoCodeByStationName(site),                    // idx 0
+          getDashboardData(STORES.SALES, site),             // idx 1
+          getDashboardData(STORES.FUEL, site),              // idx 2
+          getDashboardData(STORES.TRANS, site),             // idx 3
+          getDashboardData(STORES.TIME_PERIOD_TRANS, site), // idx 4
+          getDashboardData(STORES.TENDER_TRANS, site),      // idx 5
+          getDashboardData(STORES.BISTRO_WOW_SALES, site),  // idx 6
+          getDashboardData(STORES.TOP_10_BISTRO, site),     // idx 7
+        ]);
+
+        // ────────────────────────────────────────────────────────
+        // SLOW TRACK — MongoDB API calls (~1-2s each)
+        // Fire all in parallel but DON'T await yet — SQL must
+        // not wait for these.
+        // ────────────────────────────────────────────────────────
+        const slowTrackPromise = Promise.allSettled([
+          fetch(`/api/order-rec/range?${params}`, { headers: authHeaders }).then(async (res) => {
+            if (res.status === 403) throw { is403: true };
+            if (!res.ok) throw new Error(`Failed to fetch order records: ${res.statusText}`);
+            return res.json();
+          }),
+          fetch(`/api/safesheets/site/${encodeURIComponent(site)}/daily-balances?${safeQuery}`, { headers: authHeaders }).then(async (res) => {
+            if (res.status === 403) throw { is403: true };
+            if (!res.ok) throw new Error(`Failed to fetch safe balance data: ${res.statusText}`);
+            return res.json();
+          }),
+          fetchLocation(site),
+          fetch(`/api/cash-summary/over-short?site=${encodeURIComponent(site)}`, { headers: authHeaders }).then(async (res) => {
+            if (res.status === 403) throw { is403: true };
+            if (!res.ok) throw new Error('Failed to fetch over/short data');
+            return res.json();
+          }),
+          fetch(`/api/cash-summary/payables-comparison?site=${encodeURIComponent(site)}`, { headers: authHeaders }).then(async (res) => {
+            if (res.status === 403) throw { is403: true };
+            if (!res.ok) throw new Error('Failed to fetch payables comparison data');
+            return res.json();
+          }),
+          fetch(`/api/audit/station-stats?site=${encodeURIComponent(site)}&periodKeys=${encodeURIComponent(JSON.stringify(pKeys))}`, { headers: authHeaders }).then(async (res) => {
+            if (res.status === 403) throw { is403: true };
+            if (!res.ok) throw new Error('Failed to fetch audit stats');
+            return res.json();
+          }),
+          fetchVendors(site),
+          fetchOrderRecs(site, weekStart, weekEnd),
+        ]);
+
+        // ── Await fast track only (~100ms) ──
+        const [csoCodeResult, ...idbResults] = await fastTrackPromise;
+        if (cancelled) return;
+
+        const csoCode = csoCodeResult.status === 'fulfilled' ? csoCodeResult.value : '';
+        const [salesCached, fuelCached, transCached, timePeriodCached, tenderCached, bistroCached, top10Cached] =
+          idbResults.map(r => (r.status === 'fulfilled' ? r.value : null));
+
+        const needsSqlFetch =
+          !salesCached?.length || !fuelCached?.length || !transCached?.length ||
+          !timePeriodCached?.length || !tenderCached?.length ||
+          !bistroCached?.length || !top10Cached?.length;
+
+        // ── Start SQL immediately — overlaps with ongoing slow-track Mongo calls ──
+        const sqlPromise = needsSqlFetch
+          ? (async () => {
+              console.log('📡 No cache → Calling SQL backend...');
+              const data = await fetchAllSqlData(
+                csoCode ?? '', site, salesStartDate, salesEndDate,
+                fuelStartDate, fuelEndDate, transStartDate, transEndDate,
+                shiftStartDate, shiftEndDate,
+              );
+              saveDashboardData(STORES.SALES, site, data.sales);
+              saveDashboardData(STORES.FUEL, site, data.fuel);
+              saveDashboardData(STORES.TRANS, site, data.transactions);
+              saveDashboardData(STORES.TIME_PERIOD_TRANS, site, data.timePeriodTransactions);
+              saveDashboardData(STORES.TENDER_TRANS, site, data.tenderTransactions);
+              saveDashboardData(STORES.BISTRO_WOW_SALES, site, data.bistroWoWSales);
+              saveDashboardData(STORES.TOP_10_BISTRO, site, data.top10Bistro);
+              return data;
+            })()
+          : Promise.resolve({
+              sales: salesCached, fuel: fuelCached, transactions: transCached,
+              timePeriodTransactions: timePeriodCached, tenderTransactions: tenderCached,
+              bistroWoWSales: bistroCached, top10Bistro: top10Cached,
+            });
+
+        // ── Now await slow-track MongoDB results (~2s, already running) ──
+        const [
+          orderRecResult, safeBalanceResult, locationResult,
+          overShortResult, payablesResult, auditResult,
+          vendorsResult, weekOrderRecsResult,
+        ] = await slowTrackPromise;
+        if (cancelled) return;
+
+        // Check for 403
+        for (const r of [orderRecResult, safeBalanceResult, overShortResult, payablesResult, auditResult]) {
+          if (r.status === 'rejected' && (r.reason as any)?.is403) {
+            navigate({ to: '/no-access' });
+            return;
+          }
+        }
+
+        const orderRecsRes    = orderRecResult.status === 'fulfilled'      ? orderRecResult.value      : [];
+        const safeBalanceJson = safeBalanceResult.status === 'fulfilled'   ? safeBalanceResult.value   : {};
+        const locationData    = locationResult.status === 'fulfilled'      ? locationResult.value      : {};
+        const overShortRes    = overShortResult.status === 'fulfilled'     ? overShortResult.value     : [];
+        const payablesRes     = payablesResult.status === 'fulfilled'      ? payablesResult.value      : [];
+        const auditRes        = auditResult.status === 'fulfilled'         ? auditResult.value         : [];
+        const vendorsArr      = vendorsResult.status === 'fulfilled'       ? vendorsResult.value       : [];
+        const orderRecsArr    = weekOrderRecsResult.status === 'fulfilled' ? weekOrderRecsResult.value : [];
+
+        // ── Accounting section data is ready ──
+        setSafeBalanceRaw(safeBalanceJson.data || []);
+        setSafeMaxBalance(locationData.safeMaxBalance ?? 25_000);
+        setOverShortData(overShortRes);
+        setPayablesComparisonData(payablesRes);
+        setAuditStats(auditRes);
+        if (!cancelled) setLoadingAccounting(false);
+
+        // ── Vendor / order rec state ──
         const vendorOrderMap: Record<string, { orderRecId: string; currentStatus: string; date: string }> = {};
         for (const rec of orderRecsArr) {
           if (!rec.vendor) continue;
@@ -620,162 +578,79 @@ function RouteComponent() {
             vendorOrderMap[rec.vendor] = { orderRecId: rec._id, currentStatus: rec.currentStatus, date: rec.createdAt };
           }
         }
-
         const updatedVendors = vendorsArr.map((vendor: any) => ({
           ...vendor,
           orderRec: vendorOrderMap[vendor._id] ?? null,
         }));
-
-
-        // end.setDate(today.getDate() - 1); // yesterday
-
-        // const start = new Date(end);
-        // start.setDate(end.getDate() - 60); // last 60 days
-
-        // const fuelStartDate = start.toISOString().slice(0, 10)
-        // const fuelEndDate = end.toISOString().slice(0, 10)
-
-        // start.setDate(end.getDate() - 14); // last 14 days
-
-        // const transStartDate = start.toISOString().slice(0, 10)
-        // const transEndDate = end.toISOString().slice(0, 10)
-
-        // // Sales data
-        // // start.setDate(end.getDate() - 35); // last 35 days
-
-        // end.setHours(23, 59, 59, 999)
-
-        // start.setDate(start.getDate() - (60 - 1)) // 60 days window
-        // start.setHours(0, 0, 0, 0)
-
-        // const fmt = (d: Date) => d.toISOString().slice(0, 10)
-        // const salesStartDate = fmt(start)
-        // const salesEndDate = fmt(end)
-        // const salesEndDate = fmt(end)
-
-        // ------------------------------------------------------------
-        // 1️⃣ CHECK INDEXEDDB FIRST
-        // ------------------------------------------------------------
-        const salesCached = await getDashboardData(STORES.SALES, site);
-        const fuelCached = await getDashboardData(STORES.FUEL, site);
-        const transCached = await getDashboardData(STORES.TRANS, site);
-        const timePeriodCached = await getDashboardData(STORES.TIME_PERIOD_TRANS, site);
-        const tenderCached = await getDashboardData(STORES.TENDER_TRANS, site);
-        const bistroWowSalesCached = await getDashboardData(STORES.BISTRO_WOW_SALES, site);
-        const top10BistroCached = await getDashboardData(STORES.TOP_10_BISTRO, site);
-        // const shiftTimeDetailsCached = await getDashboardData(STORES.SHIFT_TIME_DETAILS, site);
-        let sqlSales = salesCached;
-        let sqlFuel = fuelCached;
-        let sqlTrans = transCached;
-        let sqlTimePeriodTrans = timePeriodCached;
-        let sqlTenderTrans = tenderCached;
-        let sqlBistroWoWSales = bistroWowSalesCached;
-        let sqlTop10Bistro = top10BistroCached;
-        // let sqlShiftTimeDetails = shiftTimeDetailsCached;
-
-        if (
-          !sqlSales?.length ||
-          !sqlFuel?.length ||
-          !sqlTrans?.length ||
-          !sqlTimePeriodTrans?.length ||
-          !sqlTenderTrans?.length ||
-          !sqlBistroWoWSales?.length ||
-          !sqlTop10Bistro?.length 
-          // || !sqlShiftTimeDetails?.length
-        ) {
-          console.log("📡 No cache → Calling SQL backend...");
-
-          const csoCode = await getCsoCodeByStationName(site);
-
-          const data = await fetchAllSqlData(
-            csoCode ?? "",
-            salesStartDate,
-            salesEndDate,
-            fuelStartDate,
-            fuelEndDate,
-            transStartDate,
-            transEndDate,
-            shiftStartDate,
-            shiftEndDate
-          );
-
-          sqlSales = data.sales;
-          sqlFuel = data.fuel;
-          sqlTrans = data.transactions;
-          sqlTimePeriodTrans = data.timePeriodTransactions;
-          sqlTenderTrans = data.tenderTransactions;
-          sqlBistroWoWSales = data.bistroWoWSales;
-          sqlTop10Bistro = data.top10Bistro;
-          // sqlShiftTimeDetails = data.operationalTimings;
-
-          // Save to IDB
-          await saveDashboardData(STORES.SALES, site, sqlSales);
-          await saveDashboardData(STORES.FUEL, site, sqlFuel);
-          await saveDashboardData(STORES.TRANS, site, sqlTrans);
-          await saveDashboardData(STORES.TIME_PERIOD_TRANS, site, sqlTimePeriodTrans);
-          await saveDashboardData(STORES.TENDER_TRANS, site, sqlTenderTrans);
-          await saveDashboardData(STORES.BISTRO_WOW_SALES, site, sqlBistroWoWSales);
-          await saveDashboardData(STORES.TOP_10_BISTRO, site, sqlTop10Bistro);
-          // await saveDashboardData(STORES.SHIFT_TIME_DETAILS, site, data.operationalTimings);
-        } else {
-          console.log("⚡ Using cached dashboard SQL data");
-        }
-
-        // Fuel processing
-        const { cleaned: cleanedFuelData, fullFuelData } = await fetchFuelData(sqlFuel);
-        const stats = await fetchFuelMonthToMonth(fullFuelData);
-
-        // Sales
-        const salesDataRes = await fetchSalesData(sqlSales);
-
-        // Transactions
-        const transactions = sqlTrans;
-        const timePeriodTransactions = sqlTimePeriodTrans;
-        const tenderTransactions = sqlTenderTrans;
-
-        // const transactionModChartData = transactions.map((t: any) => ({
-        //   day: t.Date.slice(5, 10),   // X-axis key
-        //   transactions: t.transactions,
-        //   visits: t.visits,
-        //   avgBasket: t.bucket_size,
-        // }));
-        const transactionModChartData = transactions.map((t: any) => {
-          const dayFull = t.Date; // 'YYYY-MM-DD' from SQL
-          const dayLabel = dayFull.slice(5, 10); // 'MM-DD' for chart
-
-          return {
-            dayFull,     // for calculations
-            day: dayLabel, // X-axis
-            transactions: t.transactions,
-            visits: t.visits,
-            avgBasket: t.bucket_size,
-          };
-        });
-
-        // Set states
         setOrderRecs(orderRecsRes);
-        setVendorNames(vendorNamesObj);
-        setDailyCounts(dailyCountsRes.data ?? []);
-        setSalesData(salesDataRes);
         setVendors(updatedVendors);
         setVendorStatus(updatedVendors);
+
+        // ── Start cycle counts immediately — only needs timezone, no SQL dependency ──
+        const timezone = locationData.timezone || 'UTC';
+        setSiteTimezone(timezone);
+        const dailyCountsPromise = fetchDailyCounts(
+          site, sevenDaysAgo.toISOString().slice(0, 10), today.toISOString().slice(0, 10), timezone,
+        );
+
+        // Vendor names (runs in parallel with cycle counts + SQL)
+        const vendorIds = [...new Set(STATUS_KEYS.flatMap(key => (orderRecsRes[key] ?? []).map((r: any) => String(r.vendor))))];
+        const vendorNamesObj: Record<string, string> = {};
+        await Promise.all(vendorIds.map(async (id: string) => {
+          const name = await getVendorNameById(id);
+          if (name) vendorNamesObj[id] = name;
+        }));
+        if (cancelled) return;
+        setVendorNames(vendorNamesObj);
+
+        // ── Inventory ready as soon as cycle counts finish — no SQL needed ──
+        const dailyCountsRes = await dailyCountsPromise;
+        if (cancelled) return;
+        setDailyCounts(dailyCountsRes.data ?? []);
+        setLoadingInventory(false);
+
+        // ── SQL sections hydrate when SQL resolves (~5s cold start, runs in background) ──
+        const sqlData = await sqlPromise;
+        if (cancelled) return;
+
+        // ── CPU-only transforms ──
+        const { cleaned: cleanedFuelData, fullFuelData } = await fetchFuelData(sqlData.fuel);
+        const stats = await fetchFuelMonthToMonth(fullFuelData);
+        const salesDataRes = await fetchSalesData(sqlData.sales);
+
+        const transactionModChartData = sqlData.transactions.map((t: any) => {
+          const dayFull = t.Date;
+          return { dayFull, day: dayFull.slice(5, 10), transactions: t.transactions, visits: t.visits, avgBasket: t.bucket_size };
+        });
+
+        if (cancelled) return;
+
+        setSalesData(salesDataRes);
         setFuelData(cleanedFuelData);
         setFuelMonthStats(stats);
         setTransactionChartData(transactionModChartData);
-        setTenderTransactions(tenderTransactions);
-        setTimePeriodData(timePeriodTransactions);
-        setBistroWoWSales(sqlBistroWoWSales);
-        setTop10Bistro(sqlTop10Bistro);
-        // setOperationalTimings(sqlShiftTimeDetails || []);
+        setTenderTransactions(sqlData.tenderTransactions);
+        setTimePeriodData(sqlData.timePeriodTransactions);
+        setBistroWoWSales(sqlData.bistroWoWSales);
+        setTop10Bistro(sqlData.top10Bistro);
+
+        setLoadingOverview(false);
+        setLoadingSql(false);
 
       } catch (err) {
-        console.error("Error fetching dashboard data:", err);
-      } finally {
-        setLoading(false);
+        console.error('Error fetching dashboard data:', err);
+        // On unexpected error, stop all spinners to avoid infinite loading
+        if (!cancelled) {
+          setLoadingOverview(false);
+          setLoadingInventory(false);
+          setLoadingAccounting(false);
+          setLoadingSql(false);
+        }
       }
     };
 
     fetchAllData();
+    return () => { cancelled = true; };
   }, [site, startDate, endDate]);
 
   // build past 7 days fuel chart data
@@ -1462,13 +1337,23 @@ function RouteComponent() {
 
           {/* Main container */}
           <div className="mt-8 w-full max-w-7xl">
-            {loading ? (
-              <div className="text-center py-8">Loading...</div>
-            ) : (
-              <>
                 {/* ======================= */}
                 {/*     CARD SECTION   */}
                 {/* ======================= */}
+                {loadingOverview ? (
+                  <section className="mb-10">
+                    <h2 className="text-2xl font-bold mb-4 pl-4">Overview</h2>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-6">
+                      {[1, 2, 3, 4].map((i) => (
+                        <div key={i} className="bg-white rounded-xl shadow p-4 flex flex-col gap-2">
+                          <Skeleton className="h-4 w-32" />
+                          <Skeleton className="h-7 w-24" />
+                          <Skeleton className="h-4 w-40" />
+                        </div>
+                      ))}
+                    </div>
+                  </section>
+                ) : (
                 <section aria-labelledby="overview-heading" className="mb-10">
                   <h2 id="overview-heading" className="text-2xl font-bold mb-4 pl-4">Overview</h2>
 
@@ -1569,6 +1454,7 @@ function RouteComponent() {
                     )}
                   </div>
                 </section>
+                )}
 
                 {/* ======================= */}
                 {/*     Station Shift Activity SECTION   */}
@@ -1585,6 +1471,19 @@ function RouteComponent() {
                 {/*     INVENTORY SECTION   */}
                 {/* ======================= */}
                 {/* {site !== "Jocko Point" && site !== "Sarnia" && ( */}
+                {loadingInventory ? (
+                  <section className="mb-10">
+                    <h2 className="text-2xl font-bold mb-4 pl-4">Inventory &amp; Audits</h2>
+                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                      {[1, 2, 3].map((i) => (
+                        <div key={i} className="bg-white rounded-xl shadow p-6 flex flex-col gap-3">
+                          <Skeleton className="h-5 w-36" />
+                          <Skeleton className="h-[200px] w-full" />
+                        </div>
+                      ))}
+                    </div>
+                  </section>
+                ) : (
                 <section aria-labelledby="inventory-heading" className="mb-10">
                   <h2 id="inventory-heading" className="text-2xl font-bold mb-4 pl-4">
                     {site !== "Jocko Point" && site !== "Sarnia"
@@ -1724,10 +1623,24 @@ function RouteComponent() {
                     </div>
                   </div>
                 </section>
+                )}
 
                 {/* ======================= */}
                 {/*        Catgory SECTION    */}
                 {/* ======================= */}
+                {loadingSql ? (
+                  <section className="mb-10">
+                    <h2 className="text-2xl font-bold mb-4 pl-4">Category</h2>
+                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                      {[1, 2, 3].map((i) => (
+                        <div key={i} className="bg-white rounded-xl shadow p-6 flex flex-col gap-3">
+                          <Skeleton className="h-5 w-36" />
+                          <Skeleton className="h-[200px] w-full" />
+                        </div>
+                      ))}
+                    </div>
+                  </section>
+                ) : (
                 <section aria-labelledby="sales-heading" className="mb-10">
                   <h2 id="sales-heading" className="text-2xl font-bold mb-4 pl-4">Category</h2>
 
@@ -1830,11 +1743,12 @@ function RouteComponent() {
 
                   </div>
                 </section>
+                )}
                 {/* ======================= */}
                 {/*     BISTRO SECTION   */}
                 {/* ======================= */}
 
-                {["Rankin", "Couchiching", "Silver Grizzly", "Oliver", "Osoyoos"].includes(site) && (
+                {!loadingSql && ["Rankin", "Couchiching", "Silver Grizzly", "Oliver", "Osoyoos"].includes(site) && (
                   <section aria-labelledby="bistro-heading" className="mb-10">
                     <h2 id="bistro-heading" className="text-2xl font-bold mb-4 pl-4">
                       Bistro
@@ -1850,6 +1764,19 @@ function RouteComponent() {
                 {/* ======================= */}
                 {/*     FUEL SECTION   */}
                 {/* ======================= */}
+                {loadingSql ? (
+                  <section className="mb-10">
+                    <h2 className="text-2xl font-bold mb-4 pl-4">Fuel</h2>
+                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                      {[1, 2, 3].map((i) => (
+                        <div key={i} className="bg-white rounded-xl shadow p-6 flex flex-col gap-3">
+                          <Skeleton className="h-5 w-24" />
+                          <Skeleton className="h-[200px] w-full" />
+                        </div>
+                      ))}
+                    </div>
+                  </section>
+                ) : (
                 <section aria-labelledby="fuel-heading" className="mb-10">
                   <h2 id="fuel-heading" className="text-2xl font-bold mb-4 pl-4">Fuel</h2>
 
@@ -1915,12 +1842,26 @@ function RouteComponent() {
 
                   </div>
                 </section>
+                )}
 
                 {/* ======================= */}
                 {/*     Accounting SECTION   */}
                 {/* ======================= */}
 
                 {/* {!["Sarnia"].includes(site) && ( */}
+                {loadingAccounting ? (
+                  <section className="mb-10">
+                    <h2 className="text-2xl font-bold mb-4 pl-4">Accounting</h2>
+                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                      {[1, 2, 3].map((i) => (
+                        <div key={i} className="bg-white rounded-xl shadow p-6 flex flex-col gap-3">
+                          <Skeleton className="h-5 w-28" />
+                          <Skeleton className="h-[200px] w-full" />
+                        </div>
+                      ))}
+                    </div>
+                  </section>
+                ) : (
                 <section aria-labelledby="accounting-heading" className="mb-10">
                   <h2 id="accounting-heading" className="text-2xl font-bold mb-4 pl-4">
                     Accounting
@@ -1934,13 +1875,14 @@ function RouteComponent() {
                     <PayablesDiscrepancyTable data={payablesComparisonData} />
                   </div>
                 </section>
+                )}
                 {/* )} */}
 
 
                 {/* ======================= */}
                 {/* Store Activity Section   */}
                 {/* ======================= */}
-                {site !== "Jocko Point" && site !== "Sarnia" && (
+                {!loadingSql && site !== "Jocko Point" && site !== "Sarnia" && (
                   <section aria-labelledby="activity-heading" className="mb-10">
                     <h2 id="activity-heading" className="text-2xl font-bold mb-4 pl-4">Store Activity Trend</h2>
 
@@ -1999,8 +1941,6 @@ function RouteComponent() {
                     </div>
                   </section>
                 )}
-              </>
-            )}
           </div>
         </div >
       )
@@ -2287,6 +2227,7 @@ const fetchFuelData = async (rows: any) => {
 
 const fetchAllSqlData = async (
   csoCode: string,
+  site: string,
   salesStart: string, salesEnd: string,
   fuelStart: string, fuelEnd: string,
   transStart: string, transEnd: string,
@@ -2294,16 +2235,13 @@ const fetchAllSqlData = async (
 ) => {
   const params = new URLSearchParams({
     csoCode,
-
+    site,
     salesStart,
     salesEnd,
-
     fuelStart,
     fuelEnd,
-
     transStart,
     transEnd,
-
     shiftStart,
     shiftEnd
   });
