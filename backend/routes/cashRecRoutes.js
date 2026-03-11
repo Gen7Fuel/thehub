@@ -495,8 +495,19 @@ router.get('/entries', async (req, res) => {
 
     const bankRec = endingBalance - bankStmtTrans - totalPos - kardpollSales + kioskGC + afdGC + kardpollAr - handheldDebit
 
+
+    // Compute miscCreditDescTotal: sum of miscCredits where description contains 'credit' or 'tns' (case-insensitive)
+    const miscCreditDescTotal = Array.isArray(bank?.miscCredits)
+      ? bank.miscCredits.reduce((sum, tx) => {
+          const desc = typeof tx.description === 'string' ? tx.description.toLowerCase() : ''
+          return (desc.includes('credit') || desc.includes('tns'))
+            ? sum + (Number(tx.amount) || 0)
+            : sum
+        }, 0)
+      : 0
+
     // Compute Balance Check (moved from frontend):
-    // totalPos + report_canadian_cash + couponsAccepted + payouts - totalSales + totalReceivablesAmount
+    // totalPos + report_canadian_cash + couponsAccepted + giftCertificates + payouts - totalSales + totalReceivablesAmount
     const reportCanadianCash = Number(cashSummary?.totals?.report_canadian_cash) || 0
     const couponsAccepted = Number(cashSummary?.totals?.couponsAccepted) || 0
     const giftCertificates = Number(cashSummary?.totals?.giftCertificates) || 0
@@ -504,6 +515,10 @@ router.get('/entries', async (req, res) => {
     const totalSalesNum = Number(cashSummary?.totals?.totalSales) || 0
     // Include both couponsAccepted and giftCertificates in balanceCheck
     const balanceCheck = totalPos + reportCanadianCash + couponsAccepted + giftCertificates + payouts - totalSalesNum + (Number(totalReceivablesAmount) || 0)
+
+    // Compute finalTotal (deduction summary): replace miscDebitDescTotal with miscCreditDescTotal
+    // finalTotal = totalDollarSales - cashSafeDeposited + tillOverShort - gcRedemption - loyaltyCoupons + unsettledPrepays + bankRec - arTotal - payTotal + miscCreditDescTotal
+    // (all variables except miscCreditDescTotal are frontend-only or require additional context)
 
     return res.json({
       kardpoll: kardpoll || null,
