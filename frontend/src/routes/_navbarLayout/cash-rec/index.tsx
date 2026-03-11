@@ -300,7 +300,7 @@ function RouteComponent() {
             const miscCreditDescTotal = Array.isArray((data.bank as any)?.miscCredits)
               ? (data.bank as any).miscCredits.reduce((sum: number, tx: any) => {
                   const desc = typeof tx.description === 'string' ? tx.description.toLowerCase() : ''
-                  return (desc.includes('credit') || desc.includes('tns'))
+                  return (desc.includes('deposit') || desc.includes('tns'))
                     ? sum + (Number(tx.amount) || 0)
                     : sum
                 }, 0)
