@@ -408,7 +408,9 @@ function RouteComponent() {
               </div>
             )
           })()}
+          </div>
 
+          <div className="space-y-3 cash-rec-p1">
           {(() => {
             const arFromKardpoll = Array.isArray(data.kardpollEntriesRows)
               ? data.kardpollEntriesRows.map((r) => ({
@@ -525,7 +527,6 @@ function RouteComponent() {
             const merchantFees = typeof data.bank?.merchantFees === 'number' ? data.bank.merchantFees : null
             return (
               <div className="border rounded typewriter-font">
-                <div className="px-3 py-2 font-semibold border-b">Merchant Fees</div>
                 <table className="min-w-full text-sm">
                   <tbody>
                     <tr>
