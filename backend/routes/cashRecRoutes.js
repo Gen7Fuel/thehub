@@ -347,6 +347,59 @@ const startOfUtcDay = (ymd) =>
 const endOfUtcDay = (ymd) =>
   DateTime.fromISO(`${ymd}T00:00:00`, { zone: TIMEZONE }).plus({ days: 1 }).minus({ milliseconds: 1 }).toJSDate()
 
+async function computeBankRecForDate(site, date) {
+  const kardpoll = await KardpollReport.findOne({ site, date }).lean()
+  const nextDate = addDaysYmd(date, 1)
+  const bank = nextDate ? await BankStatement.findOne({ site, date: nextDate }).lean() : null
+
+  const start = startOfUtcDay(date)
+  const end = endOfUtcDay(date)
+  const [agg] = await CashSummary.aggregate([
+    { $match: { site, date: { $gte: start, $lte: end } } },
+    {
+      $group: {
+        _id: null,
+        totalPos: { $sum: { $ifNull: ['$totalPos', 0] } },
+        kioskGiftCard: { $sum: { $ifNull: ['$kioskGiftCard', 0] } },
+        afdGiftCard: { $sum: { $ifNull: ['$afdGiftCard', 0] } },
+      },
+    },
+  ])
+
+  let handheldDebit = 0
+  try {
+    const { CashSummaryReport } = require('../models/CashSummaryNew')
+    const report = await CashSummaryReport.findOne({ site, date: start }).lean()
+    if (report && typeof report.handheldDebit === 'number') {
+      handheldDebit = report.handheldDebit
+    }
+  } catch (e) {}
+
+  const miscDebitsTotal = (bank?.miscDebits || []).reduce((sum, x) => {
+    const amt = Number(x?.amount) || 0
+    return sum + (amt > 0 ? amt : 0)
+  }, 0)
+  const gblDebitsTotal = (bank?.gblDebits || []).reduce((sum, x) => {
+    const amt = Number(x?.amount) || 0
+    return sum + (amt > 0 ? amt : 0)
+  }, 0)
+  const miscCreditsTotal = (bank?.miscCredits || []).reduce((sum, x) => {
+    const amt = Number(x?.amount) || 0
+    return sum + (amt > 0 ? amt : 0)
+  }, 0)
+  const bankStmtTrans =
+    (Number(bank?.balanceForward) || 0) - miscDebitsTotal - gblDebitsTotal - (Number(bank?.merchantFees) || 0) + miscCreditsTotal
+
+  const endingBalance = Number(bank?.endingBalance) || 0
+  const totalPos = Number(agg?.totalPos) || 0
+  const kioskGC = Number(agg?.kioskGiftCard) || 0
+  const afdGC = Number(agg?.afdGiftCard) || 0
+  const kardpollSales = Number(kardpoll?.sales) || 0
+  const kardpollAr = Number(kardpoll?.ar) || 0
+
+  return endingBalance - bankStmtTrans - totalPos - kardpollSales + kioskGC + afdGC + kardpollAr - handheldDebit
+}
+
 router.get('/entries', async (req, res) => {
   try {
     const site = String(req.query.site || '').trim()
@@ -493,7 +546,19 @@ router.get('/entries', async (req, res) => {
     const kardpollAr = Number(kardpoll?.ar) || 0
     const handheldDebit = Number(cashSummary?.handheldDebit) || 0
 
-    const bankRec = endingBalance - bankStmtTrans - totalPos - kardpollSales + kioskGC + afdGC + kardpollAr - handheldDebit
+    let bankRec = endingBalance - bankStmtTrans - totalPos - kardpollSales + kioskGC + afdGC + kardpollAr - handheldDebit
+
+    // On Sundays, aggregate bankRec across Friday, Saturday, and Sunday
+    const [yr, mo, dy] = date.split('-').map(Number)
+    if (new Date(Date.UTC(yr, mo - 1, dy)).getUTCDay() === 0) {
+      const fridayDate = addDaysYmd(date, -2)
+      const saturdayDate = addDaysYmd(date, -1)
+      const [fridayRec, saturdayRec] = await Promise.all([
+        computeBankRecForDate(site, fridayDate),
+        computeBankRecForDate(site, saturdayDate),
+      ])
+      bankRec = fridayRec + saturdayRec + bankRec
+    }
 
 
     // Compute miscCreditDescTotal: sum of miscCredits where description contains 'credit' or 'tns' (case-insensitive)
