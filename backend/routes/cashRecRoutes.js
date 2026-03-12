@@ -546,7 +546,8 @@ router.get('/entries', async (req, res) => {
     const kardpollAr = Number(kardpoll?.ar) || 0
     const handheldDebit = Number(cashSummary?.handheldDebit) || 0
 
-    let bankRec = endingBalance - bankStmtTrans - totalPos - kardpollSales + kioskGC + afdGC + kardpollAr - handheldDebit
+    const bankRecDay = endingBalance - bankStmtTrans - totalPos - kardpollSales + kioskGC + afdGC + kardpollAr - handheldDebit
+    let bankRec = bankRecDay
 
     // On Sundays, aggregate bankRec across Friday, Saturday, and Sunday
     const [yr, mo, dy] = date.split('-').map(Number)
@@ -557,7 +558,7 @@ router.get('/entries', async (req, res) => {
         computeBankRecForDate(site, fridayDate),
         computeBankRecForDate(site, saturdayDate),
       ])
-      bankRec = fridayRec + saturdayRec + bankRec
+      bankRec = fridayRec + saturdayRec + bankRecDay
     }
 
 
@@ -592,6 +593,7 @@ router.get('/entries', async (req, res) => {
       totalReceivablesAmount,
       bankStmtTrans,
       bankRec,
+      bankRecDay,
       balanceCheck,
     })
   } catch (err) {
