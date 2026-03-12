@@ -217,14 +217,15 @@ function RouteComponent() {
   }
 
   return (
-    <div className="px-4 space-y-4 w-full max-w-[100vw] overflow-x-hidden flex flex-col">
+    <div className="px-4 space-y-6 w-full max-w-[100vw] overflow-x-hidden flex flex-col">
       <style>{`
         @media print {
           .cash-rec-no-print { display: none !important; }
           .cash-rec-p1 { break-after: page; }
+          * { -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }
         }
       `}</style>
-      <div className="relative flex w-full flex-col sm:flex-row items-center justify-center gap-4 rounded cash-rec-no-print">
+      <div className="relative flex w-full flex-col sm:flex-row items-center justify-center gap-4 cash-rec-no-print">
         <SitePicker
           value={site}
           onValueChange={(val) =>
@@ -240,8 +241,11 @@ function RouteComponent() {
         {site && data && (
           <button
             onClick={() => window.print()}
-            className="sm:absolute sm:right-0 px-3 py-1.5 text-sm border rounded bg-white hover:bg-gray-50"
+            className="sm:absolute sm:right-0 inline-flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium border border-gray-200 rounded-lg bg-white hover:bg-gray-50 shadow-sm transition-colors"
           >
+            <svg xmlns="http://www.w3.org/2000/svg" className="w-4 h-4 text-gray-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5M16.5 12L12 16.5m0 0L7.5 12m4.5 4.5V3" />
+            </svg>
             Export PDF
           </button>
         )}
@@ -250,10 +254,9 @@ function RouteComponent() {
       {!site && <div className="text-xs text-muted-foreground cash-rec-no-print">Pick a site to view report.</div>}
 
       {site && data && (
-        <div className="space-y-3">
-          {/* <div className="text-sm text-muted-foreground">Report for {site} on {date}</div> */}
+        <div className="space-y-6">
 
-          <div className="space-y-3 cash-rec-p1">
+          <div className="space-y-6 cash-rec-p1">
           {(() => {
             const totals = data.cashSummary?.totals || ({} as any)
             const num = (v: any) => (typeof v === 'number' && Number.isFinite(v) ? v : 0)
@@ -326,81 +329,87 @@ function RouteComponent() {
 
             return (
               <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 typewriter-font">
-                <div className="border rounded">
-                  <div className="px-3 py-2 font-semibold border-b">Sales Summary</div>
+                <div className="rounded-xl border border-gray-200 shadow-sm overflow-hidden">
+                  <div className="px-4 py-3 bg-gray-50 border-b border-gray-200 flex items-center gap-2">
+                    <span className="w-2 h-2 rounded-full bg-emerald-500 flex-shrink-0" />
+                    <span className="text-xs font-semibold text-gray-600 uppercase tracking-wider">Sales Summary</span>
+                  </div>
                   <table className="min-w-full text-sm">
                     <tbody>
-                      <tr>
-                        <td className="px-3 py-2">GBL/Moneris Fuel Sales (40010)</td>
-                        <td className="px-3 py-2 text-right">${fmt2(gblMonerisFuelSales)}</td>
+                      <tr className="border-b border-gray-100">
+                        <td className="px-4 py-2.5 text-gray-600">GBL/Moneris Fuel Sales (40010)</td>
+                        <td className="px-4 py-2.5 text-right font-medium text-gray-900">${fmt2(gblMonerisFuelSales)}</td>
                       </tr>
-                      <tr>
-                        <td className="px-3 py-2">Canadian Cash (40010)</td>
-                        <td className="px-3 py-2 text-right">${fmt2(canadianCash)}</td>
+                      <tr className="border-b border-gray-100">
+                        <td className="px-4 py-2.5 text-gray-600">Canadian Cash (40010)</td>
+                        <td className="px-4 py-2.5 text-right font-medium text-gray-900">${fmt2(canadianCash)}</td>
                       </tr>
-                      <tr>
-                        <td className="px-3 py-2">Kardpoll Sales (40010)</td>
-                        <td className="px-3 py-2 text-right">${fmt2(kardpollSales)}</td>
+                      <tr className="border-b border-gray-100">
+                        <td className="px-4 py-2.5 text-gray-600">Kardpoll Sales (40010)</td>
+                        <td className="px-4 py-2.5 text-right font-medium text-gray-900">${fmt2(kardpollSales)}</td>
                       </tr>
-                      <tr>
-                        <td className="px-3 py-2">Store Sales (40200)</td>
-                        <td className="px-3 py-2 text-right">${fmt2(storeSales)}</td>
+                      <tr className="border-b border-gray-100">
+                        <td className="px-4 py-2.5 text-gray-600">Store Sales (40200)</td>
+                        <td className="px-4 py-2.5 text-right font-medium text-gray-900">${fmt2(storeSales)}</td>
                       </tr>
-                      <tr>
-                        <td className="px-3 py-2">Lottery Sales (20440)</td>
-                        <td className="px-3 py-2 text-right">${fmt2(lotterySales)}</td>
+                      <tr className="border-b border-gray-100">
+                        <td className="px-4 py-2.5 text-gray-600">Lottery Sales (20440)</td>
+                        <td className="px-4 py-2.5 text-right font-medium text-gray-900">${fmt2(lotterySales)}</td>
                       </tr>
-                      <tr>
-                        <td className="px-3 py-2">Lottery Payouts (20440)</td>
-                        <td className="px-3 py-2 text-right">${fmt2(lotteryPayouts)}</td>
+                      <tr className="border-b border-gray-100">
+                        <td className="px-4 py-2.5 text-gray-600">Lottery Payouts (20440)</td>
+                        <td className="px-4 py-2.5 text-right font-medium text-gray-900">${fmt2(lotteryPayouts)}</td>
                       </tr>
-                      <tr className="border-t">
-                        <td className="px-3 py-2 font-medium">Total Dollar Sales</td>
-                        <td className="px-3 py-2 text-right font-medium">${fmt2(totalDollarSales)}</td>
+                      <tr className="bg-gray-50">
+                        <td className="px-4 py-2.5 font-semibold text-gray-900">Total Dollar Sales</td>
+                        <td className="px-4 py-2.5 text-right font-semibold text-gray-900">${fmt2(totalDollarSales)}</td>
                       </tr>
-                      <tr>
-                        <td className="px-3 py-2">HH Debit</td>
-                        <td className="px-3 py-2 text-right">${fmt2(hhDebit)}</td>
+                      <tr className="border-t border-gray-100">
+                        <td className="px-4 py-2.5 text-gray-600">HH Debit</td>
+                        <td className="px-4 py-2.5 text-right font-medium text-gray-900">${fmt2(hhDebit)}</td>
                       </tr>
                     </tbody>
                   </table>
                 </div>
 
-                <div className="border rounded">
-                  <div className="px-3 py-2 font-semibold border-b">Deduction Summary</div>
+                <div className="rounded-xl border border-gray-200 shadow-sm overflow-hidden">
+                  <div className="px-4 py-3 bg-gray-50 border-b border-gray-200 flex items-center gap-2">
+                    <span className="w-2 h-2 rounded-full bg-blue-500 flex-shrink-0" />
+                    <span className="text-xs font-semibold text-gray-600 uppercase tracking-wider">Deduction Summary</span>
+                  </div>
                   <table className="min-w-full text-sm">
                     <tbody>
-                      <tr>
-                        <td className="px-3 py-2">Cash Safe Deposited (10011)</td>
-                        <td className="px-3 py-2 text-right">${fmt2(cashSafeDeposited)}</td>
+                      <tr className="border-b border-gray-100">
+                        <td className="px-4 py-2.5 text-gray-600">Cash Safe Deposited (10011)</td>
+                        <td className="px-4 py-2.5 text-right font-medium text-gray-900">${fmt2(cashSafeDeposited)}</td>
                       </tr>
-                      <tr>
-                        <td className="px-3 py-2">Till Over/Short (55050)</td>
-                        <td className="px-3 py-2 text-right">${fmt2(tillOverShort)}</td>
+                      <tr className="border-b border-gray-100">
+                        <td className="px-4 py-2.5 text-gray-600">Till Over/Short (55050)</td>
+                        <td className="px-4 py-2.5 text-right font-medium text-gray-900">${fmt2(tillOverShort)}</td>
                       </tr>
-                      <tr>
-                        <td className="px-3 py-2">GiftCard Redemption (52250)</td>
-                        <td className="px-3 py-2 text-right">${fmt2(gcRedemption)}</td>
+                      <tr className="border-b border-gray-100">
+                        <td className="px-4 py-2.5 text-gray-600">GiftCard Redemption (52250)</td>
+                        <td className="px-4 py-2.5 text-right font-medium text-gray-900">${fmt2(gcRedemption)}</td>
                       </tr>
-                      <tr>
-                        <td className="px-3 py-2">Loyalty (52175)</td>
-                        <td className="px-3 py-2 text-right">${fmt2(loyalty)}</td>
+                      <tr className="border-b border-gray-100">
+                        <td className="px-4 py-2.5 text-gray-600">Loyalty (52175)</td>
+                        <td className="px-4 py-2.5 text-right font-medium text-gray-900">${fmt2(loyalty)}</td>
                       </tr>
-                      <tr>
-                        <td className="px-3 py-2">Unsettled Prepays (40010)</td>
-                        <td className="px-3 py-2 text-right">${fmt2(unsettledPrepays)}</td>
+                      <tr className="border-b border-gray-100">
+                        <td className="px-4 py-2.5 text-gray-600">Unsettled Prepays (40010)</td>
+                        <td className="px-4 py-2.5 text-right font-medium text-gray-900">${fmt2(unsettledPrepays)}</td>
                       </tr>
-                      <tr>
-                        <td className="px-3 py-2">Bank Rec (55050)</td>
-                        <td className="px-3 py-2 text-right">${fmt2(bankRec)}</td>
+                      <tr className="border-b border-gray-100">
+                        <td className="px-4 py-2.5 text-gray-600">Bank Rec (55050)</td>
+                        <td className="px-4 py-2.5 text-right font-medium text-gray-900">${fmt2(bankRec)}</td>
                       </tr>
-                      <tr>
-                        <td className="px-3 py-2">Balance Check</td>
-                        <td className="px-3 py-2 text-right">${fmt2(balanceCheck)}</td>
+                      <tr className="border-b border-gray-100">
+                        <td className="px-4 py-2.5 text-gray-600">Balance Check</td>
+                        <td className="px-4 py-2.5 text-right font-medium text-gray-900">${fmt2(balanceCheck)}</td>
                       </tr>
-                      <tr className="border-t">
-                        <td className="px-3 py-2 font-medium">Total</td>
-                        <td className="px-3 py-2 text-right font-medium">${fmt2(finalTotal)}</td>
+                      <tr className="bg-gray-50">
+                        <td className="px-4 py-2.5 font-semibold text-gray-900">Total</td>
+                        <td className="px-4 py-2.5 text-right font-semibold text-gray-900">${fmt2(finalTotal)}</td>
                       </tr>
                     </tbody>
                   </table>
@@ -408,7 +417,9 @@ function RouteComponent() {
               </div>
             )
           })()}
+          </div>
 
+          <div className="space-y-6 cash-rec-p1">
           {(() => {
             const arFromKardpoll = Array.isArray(data.kardpollEntriesRows)
               ? data.kardpollEntriesRows.map((r) => ({
@@ -448,63 +459,69 @@ function RouteComponent() {
 
             return (
               <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 typewriter-font">
-                <div className="border rounded">
-                  <div className="px-3 py-2 font-semibold border-b">AR Transactions</div>
+                <div className="rounded-xl border border-gray-200 shadow-sm overflow-hidden">
+                  <div className="px-4 py-3 bg-gray-50 border-b border-gray-200 flex items-center gap-2">
+                    <span className="w-2 h-2 rounded-full bg-violet-500 flex-shrink-0" />
+                    <span className="text-xs font-semibold text-gray-600 uppercase tracking-wider">AR Transactions</span>
+                  </div>
                   {arRows.length === 0 ? (
-                    <div className="px-3 py-3 text-sm text-muted-foreground">No AR transactions found.</div>
+                    <div className="px-4 py-3 text-sm text-gray-400">No AR transactions found.</div>
                   ) : (
                     <table className="min-w-full text-sm">
                       <thead>
-                        <tr className="border-b">
-                          <th className="px-3 py-2 text-left">Customer</th>
-                          <th className="px-3 py-2 text-left">Fleet Card/PO Number</th>
-                          <th className="px-3 py-2 text-right">Amount</th>
+                        <tr className="border-b border-gray-200 bg-gray-50/50">
+                          <th className="px-4 py-2 text-left text-xs font-semibold text-gray-500 uppercase tracking-wide">Customer</th>
+                          <th className="px-4 py-2 text-left text-xs font-semibold text-gray-500 uppercase tracking-wide">Fleet Card / PO #</th>
+                          <th className="px-4 py-2 text-right text-xs font-semibold text-gray-500 uppercase tracking-wide">Amount</th>
                         </tr>
                       </thead>
                       <tbody>
                         {arRows.map((row, idx) => (
-                          <tr key={idx} className="border-b">
-                            <td className="px-3 py-2">{row.customer || '-'}</td>
-                            <td className="px-3 py-2">{row.poNumber || '-'}</td>
-                            <td className="px-3 py-2 text-right">${fmt2(row.amount)}</td>
+                          <tr key={idx} className="border-b border-gray-100">
+                            <td className="px-4 py-2.5 text-gray-700">{row.customer || '-'}</td>
+                            <td className="px-4 py-2.5 text-gray-700">{row.poNumber || '-'}</td>
+                            <td className="px-4 py-2.5 text-right font-medium text-gray-900">${fmt2(row.amount)}</td>
                           </tr>
                         ))}
-                        <tr className="border-t">
-                          <td className="px-3 py-2 font-medium" colSpan={2}>Total</td>
-                          <td className="px-3 py-2 text-right font-medium">${fmt2(arTotal)}</td>
+                        <tr className="bg-gray-50">
+                          <td className="px-4 py-2.5 font-semibold text-gray-900" colSpan={2}>Total</td>
+                          <td className="px-4 py-2.5 text-right font-semibold text-gray-900">${fmt2(arTotal)}</td>
                         </tr>
                       </tbody>
                     </table>
                   )}
                 </div>
 
-                <div className="border rounded">
-                  <div className="px-3 py-2 font-semibold border-b">Payables</div>
+                <div className="rounded-xl border border-gray-200 shadow-sm overflow-hidden">
+                  <div className="px-4 py-3 bg-gray-50 border-b border-gray-200 flex items-center gap-2">
+                    <span className="w-2 h-2 rounded-full bg-rose-500 flex-shrink-0" />
+                    <span className="text-xs font-semibold text-gray-600 uppercase tracking-wider">Payables</span>
+                  </div>
                   {payRows.length === 0 ? (
-                    <div className="px-3 py-3 text-sm text-muted-foreground">No payables found.</div>
+                    <div className="px-4 py-3 text-sm text-gray-400">No payables found.</div>
                   ) : (
                     <table className="min-w-full text-sm">
                       <thead>
-                        <tr className="border-b">
-                          <th className="px-3 py-2 text-left">Vendor</th>
-                          <th className="px-3 py-2 text-left">Transaction Type</th>
-                          <th className="px-3 py-2 text-right">Amount</th>
-                          <th className="px-3 py-2 text-left">Description</th>
+                        <tr className="border-b border-gray-200 bg-gray-50/50">
+                          <th className="px-4 py-2 text-left text-xs font-semibold text-gray-500 uppercase tracking-wide">Vendor</th>
+                          <th className="px-4 py-2 text-left text-xs font-semibold text-gray-500 uppercase tracking-wide">Type</th>
+                          <th className="px-4 py-2 text-right text-xs font-semibold text-gray-500 uppercase tracking-wide">Amount</th>
+                          <th className="px-4 py-2 text-left text-xs font-semibold text-gray-500 uppercase tracking-wide">Description</th>
                         </tr>
                       </thead>
                       <tbody>
                         {payRows.map((row, idx) => (
-                          <tr key={idx} className="border-b">
-                            <td className="px-3 py-2">{row.vendor || '-'}</td>
-                            <td className="px-3 py-2">{row.type || '-'}</td>
-                            <td className="px-3 py-2 text-right">${fmt2(row.amount)}</td>
-                            <td className="px-3 py-2">{row.notes || ''}</td>
+                          <tr key={idx} className="border-b border-gray-100">
+                            <td className="px-4 py-2.5 text-gray-700">{row.vendor || '-'}</td>
+                            <td className="px-4 py-2.5 text-gray-700">{row.type || '-'}</td>
+                            <td className="px-4 py-2.5 text-right font-medium text-gray-900">${fmt2(row.amount)}</td>
+                            <td className="px-4 py-2.5 text-gray-600">{row.notes || ''}</td>
                           </tr>
                         ))}
-                        <tr className="border-t">
-                          <td className="px-3 py-2 font-medium" colSpan={2}>Total</td>
-                          <td className="px-3 py-2 text-right font-medium">${fmt2(payTotal)}</td>
-                          <td className="px-3 py-2"></td>
+                        <tr className="bg-gray-50">
+                          <td className="px-4 py-2.5 font-semibold text-gray-900" colSpan={2}>Total</td>
+                          <td className="px-4 py-2.5 text-right font-semibold text-gray-900">${fmt2(payTotal)}</td>
+                          <td className="px-4 py-2.5" />
                         </tr>
                       </tbody>
                     </table>
@@ -524,13 +541,12 @@ function RouteComponent() {
                 : ''
             const merchantFees = typeof data.bank?.merchantFees === 'number' ? data.bank.merchantFees : null
             return (
-              <div className="border rounded typewriter-font">
-                <div className="px-3 py-2 font-semibold border-b">Merchant Fees</div>
+              <div className="rounded-xl border border-gray-200 shadow-sm overflow-hidden typewriter-font">
                 <table className="min-w-full text-sm">
                   <tbody>
                     <tr>
-                      <td className="px-3 py-2">Merchant Fees</td>
-                      <td className="px-3 py-2 text-right">{merchantFees !== null ? `$${fmt2(merchantFees)}` : '-'}</td>
+                      <td className="px-4 py-2.5 text-gray-600">Merchant Fees</td>
+                      <td className="px-4 py-2.5 text-right font-medium text-gray-900">{merchantFees !== null ? `$${fmt2(merchantFees)}` : '-'}</td>
                     </tr>
                   </tbody>
                 </table>
@@ -549,9 +565,12 @@ function RouteComponent() {
 
             if (!bank) {
               return (
-                <div className="border rounded typewriter-font">
-                  <div className="px-3 py-2 font-semibold border-b">Bank Statement Details</div>
-                  <div className="px-3 py-3 text-sm text-muted-foreground">No bank statement found.</div>
+                <div className="rounded-xl border border-gray-200 shadow-sm overflow-hidden typewriter-font">
+                  <div className="px-4 py-3 bg-gray-50 border-b border-gray-200 flex items-center gap-2">
+                    <span className="w-2 h-2 rounded-full bg-gray-400 flex-shrink-0" />
+                    <span className="text-xs font-semibold text-gray-600 uppercase tracking-wider">Bank Statement Details</span>
+                  </div>
+                  <div className="px-4 py-3 text-sm text-gray-400">No bank statement found.</div>
                 </div>
               )
             }
@@ -561,53 +580,60 @@ function RouteComponent() {
             const miscCredits = Array.isArray((bank as any).miscCredits) ? (bank as any).miscCredits : []
 
             return (
-              <div className="border rounded typewriter-font">
-                <div className="px-3 py-2 font-semibold border-b">Bank Statement Details</div>
+              <div className="rounded-xl border border-gray-200 shadow-sm overflow-hidden typewriter-font">
+                <div className="px-4 py-3 bg-gray-50 border-b border-gray-200 flex items-center gap-2">
+                  <span className="w-2 h-2 rounded-full bg-gray-400 flex-shrink-0" />
+                  <span className="text-xs font-semibold text-gray-600 uppercase tracking-wider">Bank Statement Details</span>
+                </div>
                 <table className="min-w-full text-sm">
                   <thead>
-                    <tr className="border-b">
-                      <th className="px-3 py-2 text-left">Date</th>
-                      <th className="px-3 py-2 text-left">Description</th>
-                      <th className="px-3 py-2 text-right">Amount</th>
+                    <tr className="border-b border-gray-200 bg-gray-50/50">
+                      <th className="px-4 py-2 text-left text-xs font-semibold text-gray-500 uppercase tracking-wide">Date</th>
+                      <th className="px-4 py-2 text-left text-xs font-semibold text-gray-500 uppercase tracking-wide">Description</th>
+                      <th className="px-4 py-2 text-right text-xs font-semibold text-gray-500 uppercase tracking-wide">Amount</th>
                     </tr>
                   </thead>
                   <tbody>
-                    <tr>
-                      <td className="px-3 py-2">—</td>
-                      <td className="px-3 py-2 font-medium">Opening Balance</td>
-                      <td className="px-3 py-2 text-right">${fmt2(openingBalance)}</td>
+                    <tr className="border-b border-gray-100">
+                      <td className="px-4 py-2.5 text-gray-500">—</td>
+                      <td className="px-4 py-2.5 font-medium text-gray-900">Opening Balance</td>
+                      <td className="px-4 py-2.5 text-right font-medium text-gray-900">${fmt2(openingBalance)}</td>
                     </tr>
 
-                    <tr className="border-t">
-                      <td className="px-3 py-2" colSpan={3}><span className="font-medium">Misc Debits</span></td>
+                    <tr className="border-t border-gray-200 bg-gray-50/50">
+                      <td className="px-4 py-2" colSpan={3}>
+                        <span className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Misc Debits</span>
+                      </td>
                     </tr>
                     {miscDebits.length === 0 ? (
                       <tr>
-                        <td className="px-3 py-2 text-muted-foreground" colSpan={3}>None</td>
+                        <td className="px-4 py-2.5 text-gray-400" colSpan={3}>None</td>
                       </tr>
                     ) : (
                       miscDebits.map((d, idx) => (
-                        <tr key={idx} className="border-b">
-                          <td className="px-3 py-2">{d.date || '-'}</td>
-                          <td className="px-3 py-2">{d.description || '-'}</td>
-                          <td className="px-3 py-2 text-right">${fmt2(Number(d.amount) || 0)}</td>
+                        <tr key={idx} className="border-b border-gray-100">
+                          <td className="px-4 py-2.5 text-gray-600">{d.date || '-'}</td>
+                          <td className="px-4 py-2.5 text-gray-700">{d.description || '-'}</td>
+                          <td className="px-4 py-2.5 text-right font-medium text-gray-900">${fmt2(Number(d.amount) || 0)}</td>
                         </tr>
                       ))
                     )}
 
-                    <tr className="border-t">
-                      <td className="px-3 py-2" colSpan={3}><span className="font-medium">Misc Credits</span></td>
+                    <tr className="border-t border-gray-200 bg-gray-50/50">
+                      <td className="px-4 py-2" colSpan={3}>
+                        <span className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Misc Credits</span>
+                      </td>
                     </tr>
                     {miscCredits.length === 0 ? (
                       <tr>
-                        <td className="px-3 py-2 text-muted-foreground" colSpan={3}>None</td>
+                        <td className="px-4 py-2.5 text-gray-400" colSpan={3}>None</td>
                       </tr>
                     ) : (
                       miscCredits.map((c: any, idx: number) => (
-                        <tr key={idx} className="border-b">
-                          <td className="px-3 py-2">{c.date || '-'}</td>
-                          <td className="px-3 py-2">{c.description || '-'}</td>
-                          <td className="px-3 py-2 text-right">${fmt2(Number(c.amount) || 0)}</td>
+                        <tr key={idx} className="border-b border-gray-100">
+                          <td className="px-4 py-2.5 text-gray-600">{c.date || '-'}</td>
+                          <td className="px-4 py-2.5 text-gray-700">{c.description || '-'}</td>
+                          <td className="px-4 py-2.5 text-right font-medium text-gray-900">${fmt2(Number(c.amount) || 0)}</td>
                         </tr>
                       ))
                     )}
