@@ -579,8 +579,9 @@ router.get('/entries', async (req, res) => {
     const giftCertificates = Number(cashSummary?.totals?.giftCertificates) || 0
     const payouts = Number(cashSummary?.totals?.payouts) || 0
     const totalSalesNum = Number(cashSummary?.totals?.totalSales) || 0
+    const missedCpl = Number(cashSummary?.totals?.missedCpl) || 0
     // Include both couponsAccepted and giftCertificates in balanceCheck
-    const balanceCheck = totalPos + reportCanadianCash + couponsAccepted + giftCertificates + payouts - totalSalesNum + (Number(totalReceivablesAmount) || 0)
+    const balanceCheck = totalPos + reportCanadianCash + couponsAccepted + giftCertificates + payouts - totalSalesNum + (Number(totalReceivablesAmount) || 0) + missedCpl
 
     // Compute finalTotal (deduction summary): replace miscDebitDescTotal with miscCreditDescTotal
     // finalTotal = totalDollarSales - cashSafeDeposited + tillOverShort - gcRedemption - loyaltyCoupons + unsettledPrepays + bankRec - arTotal - payTotal + miscCreditDescTotal

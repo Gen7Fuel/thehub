@@ -341,27 +341,27 @@ function RouteComponent() {
                   </div>
                   <table className="min-w-full text-sm">
                     <tbody>
-                      <tr className="border-b border-gray-100">
+                      <tr className="border-b border-gray-100 bg-emerald-50">
                         <td className="px-4 py-2.5 text-gray-600">GBL/Moneris Fuel Sales (40010)</td>
                         <td className="px-4 py-2.5 text-right font-medium text-gray-900">${fmt2(gblMonerisFuelSales)}</td>
                       </tr>
-                      <tr className="border-b border-gray-100">
+                      <tr className="border-b border-gray-100 bg-emerald-50">
                         <td className="px-4 py-2.5 text-gray-600">Canadian Cash (40010)</td>
                         <td className="px-4 py-2.5 text-right font-medium text-gray-900">${fmt2(canadianCash)}</td>
                       </tr>
-                      <tr className="border-b border-gray-100">
+                      <tr className="border-b border-gray-100 bg-emerald-50">
                         <td className="px-4 py-2.5 text-gray-600">Kardpoll Sales (40010)</td>
                         <td className="px-4 py-2.5 text-right font-medium text-gray-900">${fmt2(kardpollSales)}</td>
                       </tr>
-                      <tr className="border-b border-gray-100">
+                      <tr className="border-b border-gray-100 bg-emerald-50">
                         <td className="px-4 py-2.5 text-gray-600">Store Sales (40200)</td>
                         <td className="px-4 py-2.5 text-right font-medium text-gray-900">${fmt2(storeSales)}</td>
                       </tr>
-                      <tr className="border-b border-gray-100">
+                      <tr className="border-b border-gray-100 bg-emerald-50">
                         <td className="px-4 py-2.5 text-gray-600">Lottery Sales (20440)</td>
                         <td className="px-4 py-2.5 text-right font-medium text-gray-900">${fmt2(lotterySales)}</td>
                       </tr>
-                      <tr className="border-b border-gray-100">
+                      <tr className="border-b border-gray-100 bg-emerald-50">
                         <td className="px-4 py-2.5 text-gray-600">Lottery Payouts (20440)</td>
                         <td className="px-4 py-2.5 text-right font-medium text-gray-900">${fmt2(lotteryPayouts)}</td>
                       </tr>
@@ -384,31 +384,31 @@ function RouteComponent() {
                   </div>
                   <table className="min-w-full text-sm">
                     <tbody>
-                      <tr className="border-b border-gray-100">
+                      <tr className="border-b border-gray-100 bg-red-50">
                         <td className="px-4 py-2.5 text-gray-600">Cash Safe Deposited (10011)</td>
                         <td className="px-4 py-2.5 text-right font-medium text-gray-900">${fmt2(cashSafeDeposited)}</td>
                       </tr>
-                      <tr className="border-b border-gray-100">
+                      <tr className="border-b border-gray-100 bg-amber-50">
                         <td className="px-4 py-2.5 text-gray-600">Till Over/Short (55050)</td>
                         <td className="px-4 py-2.5 text-right font-medium text-gray-900">${fmt2(tillOverShort)}</td>
                       </tr>
-                      <tr className="border-b border-gray-100">
+                      <tr className="border-b border-gray-100 bg-red-50">
                         <td className="px-4 py-2.5 text-gray-600">GiftCard Redemption (52250)</td>
                         <td className="px-4 py-2.5 text-right font-medium text-gray-900">${fmt2(gcRedemption)}</td>
                       </tr>
-                      <tr className="border-b border-gray-100">
+                      <tr className="border-b border-gray-100 bg-red-50">
                         <td className="px-4 py-2.5 text-gray-600">Loyalty (52175)</td>
                         <td className="px-4 py-2.5 text-right font-medium text-gray-900">${fmt2(loyalty)}</td>
                       </tr>
-                      <tr className="border-b border-gray-100">
+                      <tr className="border-b border-gray-100 bg-amber-50">
                         <td className="px-4 py-2.5 text-gray-600">Unsettled Prepays (40010)</td>
                         <td className="px-4 py-2.5 text-right font-medium text-gray-900">${fmt2(unsettledPrepays)}</td>
                       </tr>
-                      <tr className="border-b border-gray-100">
+                      <tr className="border-b border-gray-100 bg-amber-50">
                         <td className="px-4 py-2.5 text-gray-600">Bank Rec (55050)</td>
                         <td className="px-4 py-2.5 text-right font-medium text-gray-900">${fmt2(bankRec)}</td>
                       </tr>
-                      <tr className="border-b border-gray-100">
+                      <tr className="border-b border-gray-100 bg-amber-50">
                         <td className="px-4 py-2.5 text-gray-600">Balance Check</td>
                         <td className="px-4 py-2.5 text-right font-medium text-gray-900">${fmt2(balanceCheck)}</td>
                       </tr>
