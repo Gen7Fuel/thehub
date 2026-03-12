@@ -10,18 +10,22 @@ require('dotenv').config();
 async function pushNotification({
   io,
   recipientEmails,
+  bccEmails = [], // Optional BCC list
   slug,          // Template slug (e.g., 'issue-raised')
   fieldValues,   // Object containing values for the template fields
   subject,       // The title to show in the Hub/Email subject
   type = 'system'
 }) {
   // Filter(Boolean) removes nulls/undefined; Set removes duplicates
-  const uniqueEmails = Array.from(new Set(
-    (recipientEmails || []).map(email => email?.toLowerCase().trim()).filter(Boolean)
-  ));
+  // Normalize all lists
+  const cleanToCC = (recipientEmails || []).map(e => e?.toLowerCase().trim()).filter(Boolean);
+  const cleanBCC = (bccEmails || []).map(e => e?.toLowerCase().trim()).filter(Boolean);
 
-  if (uniqueEmails.length === 0) {
-    console.warn("No recipient emails provided to pushNotification. Aborting.");
+  // Combine ALL for the Hub Database & Socket (Total Audience)
+  const allUniqueEmails = Array.from(new Set([...cleanToCC, ...cleanBCC]));
+
+  if (allUniqueEmails.length === 0) {
+    console.warn("No recipients provided. Aborting.");
     return null;
   }
   try {
@@ -39,21 +43,24 @@ async function pushNotification({
       console.warn("No valid users found for provided emails. Skipping DB save.");
     }
 
-    // 3. Save to Notification Database
-    const newNotification = await Notification.create({
-      templateId: template._id,
-      recipientIds,
-      subject,
-      fieldValues, // Stores the dynamic data (site, category, etc.)
-      notificationType: type,
-      status: 'sent'
-    });
-
-    // 4. Trigger Real-time Socket (Smart Popup)
-    if (io) {
-      recipientIds.forEach(id => {
-        io.to(id.toString()).emit("new-notification");
+    // 2. Save to DB & Trigger Socket
+    let newNotification = null;
+    if (recipientIds.length > 0) {
+      newNotification = await Notification.create({
+        templateId: template._id,
+        recipientIds,
+        subject,
+        fieldValues,
+        notificationType: type,
+        status: 'sent'
       });
+
+      // 4. Trigger Real-time Socket (Smart Popup)
+      if (io) {
+        recipientIds.forEach(id => {
+          io.to(id.toString()).emit("new-notification");
+        });
+      }
     }
 
     // 5. Queue the Lightweight "Call to Action" Email
@@ -83,8 +90,9 @@ async function pushNotification({
 
     // Push to the existing BullMQ emailQueue
     await emailQueue.add("sendUpdateEmail", {
-      to: recipientEmails[0],
-      cc: recipientEmails.slice(1),
+      to: cleanToCC[0] || cleanBCC[0], // Primary recipient
+      cc: cleanToCC.slice(1),          // Public CCs
+      bcc: cleanBCC,                   // 🧩 Mass BCC list
       subject: `Hub Update: ${subject}`,
       html: alertHtml,
       text: `New Hub Notification: ${subject}. Login at https://app.gen7fuel.com/notification to view.`

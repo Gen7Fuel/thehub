@@ -156,7 +156,91 @@ function NotificationPage() {
         .catch(err => console.error(err));
     }
   }, [selectedId]);
-  
+  // Master Styling Effect for Dynamic HTML
+  // useEffect(() => {
+  //   if (!selectedNotif) return;
+
+  //   const styleNotifications = () => {
+  //     console.log("Applying dynamic styles for slug:", selectedNotif.slug);
+
+  //     // --- CASE 1: Write-Off Finalized (Bistro Styling) ---
+  //     if (selectedNotif.slug === 'write-off-finalized') {
+  //       const container = document.querySelector('[data-listtype]');
+  //       const listType = container?.getAttribute('data-listtype');
+
+  //       if (listType === 'BT' && container) {
+  //         const header = container.querySelector('[id^="header-"]') as HTMLElement;
+  //         const csoCell = container.querySelector('[id^="cso-cell-"]') as HTMLElement;
+  //         const hubCell = container.querySelector('[id^="hub-cell-"]') as HTMLElement;
+  //         const hubBtn = hubCell?.querySelector('a') as HTMLElement;
+
+  //         if (header) header.style.setProperty('background-color', '#e67e22', 'important');
+  //         if (csoCell) csoCell.style.display = 'none';
+  //         if (hubCell) hubCell.style.width = '100%';
+  //         if (hubBtn) {
+  //           hubBtn.style.setProperty('background-color', '#e67e22', 'important');
+  //           hubBtn.innerText = '🍔 View Approved Bistro List';
+  //         }
+  //       }
+  //     }
+
+  //     // --- CASE 2: Write-Off Generated (Hide empty button cells) ---
+  //     if (selectedNotif.slug === 'write-off-generated') {
+  //       // Find all cells ending in -cell-gen
+  //       const btnCells = document.querySelectorAll('[id$="-cell-gen"]');
+
+  //       btnCells.forEach((cell: any) => {
+  //         const link = cell.querySelector('a');
+  //         const href = link?.getAttribute('href') || "";
+
+  //         // If the ID is missing (ends in /) or is literally the word "null"
+  //         if (href.endsWith('/undefined') || href.endsWith('/null') || href.endsWith('/')) {
+  //           cell.style.display = 'none';
+  //         } else {
+  //           cell.style.display = 'table-cell';
+  //         }
+  //       });
+  //     }
+  //   };
+
+  //   // Run twice to ensure the DOM is painted
+  //   styleNotifications();
+  //   const timer = setTimeout(styleNotifications, 150);
+
+  //   return () => clearTimeout(timer);
+  // }, [selectedNotif]);
+
+  // 3. Effect to handle dynamic time conversion in rendered HTML
+  useEffect(() => {
+    if (selectedNotif) {
+      // Small delay to ensure the DOM is painted by React
+      const timer = setTimeout(() => {
+        const elements = document.querySelectorAll('.local-time');
+        elements.forEach((el: any) => {
+          const utcStr = el.getAttribute('data-utc');
+          if (utcStr && utcStr !== 'undefined') {
+            try {
+              const localTime = new Date(utcStr).toLocaleString(undefined, {
+                weekday: 'short',
+                month: 'short',
+                day: 'numeric',
+                hour: '2-digit',
+                minute: '2-digit',
+                timeZoneName: 'short'
+              });
+              el.innerText = localTime;
+            } catch (e) {
+              console.error("Date conversion failed", e);
+            }
+          }
+        });
+      }, 50);
+      return () => clearTimeout(timer);
+    }
+  }, [selectedNotif]);
+
+
+
   return (
     <div className="flex h-[calc(100vh-65px)] overflow-hidden bg-white">
       {/* LEFT SIDE: List */}
