@@ -159,8 +159,10 @@ export const Route = createFileRoute('/_navbarLayout/cash-rec/')({
         headers: { Authorization: `Bearer ${localStorage.getItem('token') || ''}` },
       })
       if (resp.ok) {
-        const all: Array<{ amount?: number; location?: { stationName?: string } }> = await resp.json()
-        const filtered = site ? all.filter(p => p.location?.stationName === site) : all
+        const all: Array<{ amount?: number; paymentMethod?: string; location?: { stationName?: string } }> = await resp.json()
+        const filtered = all
+          .filter(p => !site || p.location?.stationName === site)
+          .filter(p => p.paymentMethod === 'till')
         payablesRows = filtered
         totalPayablesAmount = filtered.reduce((a, p) => a + (Number(p.amount) || 0), 0)
       }
