@@ -1,7 +1,10 @@
 {
   "permissions": {
     "allow": [
-      "Bash(find /c/Users/MohammadHasan/workspace/thehub/backend -type f \\\\\\(-name *.js -o -name *.ts \\\\\\))"
+      "Bash(find /c/Users/MohammadHasan/workspace/thehub/backend -type f \\\\\\(-name *.js -o -name *.ts \\\\\\))",
+      "Bash(find /c/Users/MohammadHasan/workspace/thehub -type f -name *payable*)",
+      "Bash(npm test:*)",
+      "Bash(npx vitest:*)"
     ]
   }
 }
