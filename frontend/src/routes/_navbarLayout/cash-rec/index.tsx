@@ -219,9 +219,12 @@ function RouteComponent() {
   return (
     <div className="px-4 space-y-6 w-full max-w-[100vw] overflow-x-hidden flex flex-col">
       <style>{`
+        @page { margin: 0; }
+        @page { margin-top: 2cm; }
         @media print {
           .cash-rec-no-print { display: none !important; }
           .cash-rec-p1 { break-after: page; }
+          .sticky { display: none !important; }
           * { -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }
         }
       `}</style>
