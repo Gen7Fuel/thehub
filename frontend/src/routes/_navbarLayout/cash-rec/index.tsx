@@ -500,6 +500,29 @@ function RouteComponent() {
           })()}
 
           {(() => {
+            const fmt2 = (v: number) =>
+              Number.isFinite(v)
+                ? (v < 0
+                    ? `(${Math.abs(v).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })})`
+                    : v.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 }))
+                : ''
+            const merchantFees = typeof data.bank?.merchantFees === 'number' ? data.bank.merchantFees : null
+            return (
+              <div className="border rounded typewriter-font">
+                <div className="px-3 py-2 font-semibold border-b">Merchant Fees</div>
+                <table className="min-w-full text-sm">
+                  <tbody>
+                    <tr>
+                      <td className="px-3 py-2">Merchant Fees</td>
+                      <td className="px-3 py-2 text-right">{merchantFees !== null ? `$${fmt2(merchantFees)}` : '-'}</td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+            )
+          })()}
+
+          {(() => {
             const bank = data.bank
             const fmt2 = (v: number) =>
               Number.isFinite(v)
