@@ -103,6 +103,7 @@ type EntriesResponse = {
   totalReceivablesAmount?: number
   bankStmtTrans?: number
   bankRec?: number
+  bankRecDay?: number
   balanceCheck?: number
 }
 
@@ -347,7 +348,7 @@ function RouteComponent() {
                     </td>
                     <td className="px-2 py-2 text-right">{fmt2(data?.balanceCheck)}</td>
                     <td className="px-2 py-2 text-right">{fmt2(data?.bankStmtTrans)}</td>
-                    <td className="px-2 py-2 text-right">{fmt2(data?.bankRec)}</td>
+                    <td className="px-2 py-2 text-right">{fmt2(data?.bankRecDay ?? data?.bankRec)}</td>
                   </tr>
                 )
               })}
