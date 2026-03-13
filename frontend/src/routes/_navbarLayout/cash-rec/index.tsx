@@ -210,6 +210,10 @@ function RouteComponent() {
   const navigate = useNavigate({ from: Route.fullPath })
   const search = useSearch({ from: Route.id }) as Search
 
+  const [merchantFeesEdit, setMerchantFeesEdit] = React.useState<boolean>(false)
+  const [merchantFeesValue, setMerchantFeesValue] = React.useState<string>('')
+  const [merchantFeesSaved, setMerchantFeesSaved] = React.useState<number | null>(null)
+
   const dateObj = React.useMemo(() => parseYmd(date), [date])
   const setDate: React.Dispatch<React.SetStateAction<Date | undefined>> = (next) => {
     const current = dateObj
@@ -547,14 +551,61 @@ function RouteComponent() {
                     ? `(${Math.abs(v).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })})`
                     : v.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 }))
                 : ''
-            const merchantFees = typeof data.bank?.merchantFees === 'number' ? data.bank.merchantFees : null
+            const bankMerchantFees = typeof data.bank?.merchantFees === 'number' ? data.bank.merchantFees : null
+            const displayFees = merchantFeesSaved !== null ? merchantFeesSaved : bankMerchantFees
+
+            const startEdit = () => {
+              setMerchantFeesValue(displayFees !== null ? String(displayFees) : '')
+              setMerchantFeesEdit(true)
+            }
+
+            const saveFees = async () => {
+              const parsed = parseFloat(merchantFeesValue)
+              if (!Number.isFinite(parsed)) { setMerchantFeesEdit(false); return }
+              try {
+                await fetch('/api/cash-rec/bank-statement/merchant-fees', {
+                  method: 'PATCH',
+                  headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${localStorage.getItem('token') || ''}`,
+                  },
+                  body: JSON.stringify({ site, date, merchantFees: parsed }),
+                })
+                setMerchantFeesSaved(parsed)
+              } catch (e) {
+                console.error('Failed to save merchant fees', e)
+              }
+              setMerchantFeesEdit(false)
+            }
+
             return (
               <div className="rounded-xl border border-gray-200 shadow-sm overflow-hidden typewriter-font">
                 <table className="min-w-full text-sm">
                   <tbody>
                     <tr>
                       <td className="px-4 py-2.5 text-gray-600">Merchant Fees</td>
-                      <td className="px-4 py-2.5 text-right font-medium text-gray-900">{merchantFees !== null ? `$${fmt2(merchantFees)}` : '-'}</td>
+                      <td className="px-4 py-2.5 text-right font-medium text-gray-900">
+                        {merchantFeesEdit ? (
+                          <input
+                            autoFocus
+                            type="number"
+                            step="0.01"
+                            value={merchantFeesValue}
+                            onChange={e => setMerchantFeesValue(e.target.value)}
+                            onBlur={saveFees}
+                            onKeyDown={e => { if (e.key === 'Enter') saveFees(); if (e.key === 'Escape') setMerchantFeesEdit(false) }}
+                            className="w-28 text-right border border-blue-400 rounded px-1 py-0.5 focus:outline-none focus:ring-1 focus:ring-blue-500"
+                          />
+                        ) : (
+                          <span
+                            onDoubleClick={startEdit}
+                            title="Double-click to edit"
+                            className="cursor-pointer hover:bg-blue-50 rounded px-1"
+                          >
+                            {displayFees !== null ? `$${fmt2(displayFees)}` : '-'}
+                          </span>
+                        )}
+                      </td>
                     </tr>
                   </tbody>
                 </table>
