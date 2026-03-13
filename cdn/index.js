@@ -83,16 +83,37 @@ app.post('/cdn/upload-base64', (req, res) => {
   });
 });
 
-// Admin: list all uploaded files with name, size, and last-modified date
-
-app.get('/cdn/files', requireAdminToken, (_req, res) => {
+// Admin: list all uploaded files with pagination
+app.get('/cdn/files', requireAdminToken, (req, res) => {
   const uploadsDir = path.join(__dirname, 'uploads');
   try {
-    const files = fs.readdirSync(uploadsDir).map((filename) => {
+    const allFiles = fs.readdirSync(uploadsDir).map((filename) => {
       const stat = fs.statSync(path.join(uploadsDir, filename));
       return { filename, size: stat.size, lastModified: stat.mtime };
     });
-    res.json(files);
+
+    // Sort files by last modified date, newest first
+    allFiles.sort((a, b) => b.lastModified.getTime() - a.lastModified.getTime());
+
+    const page = parseInt(req.query.page, 10) || 1;
+    const pageSize = 100;
+    const totalFiles = allFiles.length;
+    const totalPages = Math.ceil(totalFiles / pageSize);
+    const startIndex = (page - 1) * pageSize;
+    const endIndex = Math.min(startIndex + pageSize, totalFiles);
+
+    if (page > totalPages && totalPages > 0) {
+      return res.status(404).json({ error: `Invalid page number. Maximum page is ${totalPages}` });
+    }
+
+    const paginatedFiles = allFiles.slice(startIndex, endIndex);
+
+    res.json({
+      files: paginatedFiles,
+      totalFiles,
+      totalPages,
+      currentPage: page,
+    });
   } catch (err) {
     console.error('Error listing files:', err);
     res.status(500).json({ error: 'Failed to list files' });
