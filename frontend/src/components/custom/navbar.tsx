@@ -1,6 +1,6 @@
 import { Link, useLocation, useMatchRoute, useNavigate } from '@tanstack/react-router'
 import { Button } from '../ui/button'
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import { isTokenExpired } from '../../lib/utils'
 import axios from 'axios'
 import { getSocket } from "@/lib/websocket";
@@ -198,13 +198,39 @@ export default function Navbar() {
     await refreshTokenFromBackend();
     // console.log("After update:",localStorage.getItem('token'));
   };
+
+  // 1. Function to fetch the actual count from the server
+  const refreshUnreadCount = useCallback(async () => {
+    try {
+      const token = localStorage.getItem('token');
+      // Note: I recommend a generic "all unread" count for the Bell icon 
+      // vs the "since last login" count for the Popup.
+      const res = await axios.get('/api/notification/unread-count', {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      setUnreadCount(res.data.count);
+    } catch (err) {
+      console.error("Error syncing count", err);
+    }
+  }, []);
+
+  // 2. Initial load and Event Listener
+  useEffect(() => {
+    refreshUnreadCount();
+
+    // Listen for the "Read" event from the Notification Page
+    window.addEventListener('notificationRead', refreshUnreadCount);
+
+    return () => window.removeEventListener('notificationRead', refreshUnreadCount);
+  }, [refreshUnreadCount]);
+
   useEffect(() => {
     const socket = getSocket();
 
     // Define the handler for new notifications
     const handleNewNotification = () => {
       console.log("🔔 Socket: New notification received");
-      setUnreadCount((prev) => prev + 1);
+      refreshUnreadCount();
     };
 
     socket.on("connect", () => {
@@ -236,6 +262,7 @@ export default function Navbar() {
     return () => {
       socket.off("permissions-updated", handlePermissionsUpdated);
       socket.off("force-logout");
+      socket.off("new-notification", handleNewNotification);
     };
   }, [user])
 

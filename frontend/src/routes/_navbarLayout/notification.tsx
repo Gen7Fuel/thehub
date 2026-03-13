@@ -99,6 +99,7 @@ import { createFileRoute } from '@tanstack/react-router';
 import { ChevronLeft, Inbox, Bell } from 'lucide-react';
 import { Button } from "@/components/ui/button";
 import axios from 'axios';
+import { getSocket } from '@/lib/websocket';
 
 export const Route = createFileRoute('/_navbarLayout/notification')({
   component: NotificationPage,
@@ -128,6 +129,49 @@ function NotificationPage() {
     fetchList();
   }, []);
 
+  // socket integration for real-time updates
+  useEffect(() => {
+    const socket = getSocket();
+
+    const handleSocketNewNotification = (data?: any) => {
+      console.log("🔔 Socket: New Notification received", data);
+
+      if (data && data.notification) {
+        // 1. Add to the top of the list immediately
+        setNotifications(prev => {
+          // Prevent duplicate if the socket fires twice
+          const exists = prev.find(n => n._id === data.notification._id);
+          if (exists) return prev;
+          return [data.notification, ...prev];
+        });
+
+        // 2. Optional: If no notification is selected, you could auto-select it
+        // if (!selectedId) setSelectedId(data.notification._id);
+
+      } else {
+        // Fallback: If for some reason data is missing, fetch the list
+        refreshList();
+      }
+    };
+
+    const refreshList = async () => {
+      try {
+        const token = localStorage.getItem('token');
+        const res = await axios.get('/api/notification', {
+          headers: { Authorization: `Bearer ${token || ''}` }
+        });
+        setNotifications(res.data);
+      } catch (err) {
+        console.error("Error refreshing list", err);
+      }
+    };
+
+    socket.on("new-notification", handleSocketNewNotification);
+    return () => {
+      socket.off("new-notification", handleSocketNewNotification);
+    };
+  }, [selectedId]); // Added selectedId dependency if you use auto-select logic
+
   // Inside NotificationPage.tsx -> useEffect for [selectedId]
   useEffect(() => {
     if (selectedId) {
@@ -150,66 +194,14 @@ function NotificationPage() {
             );
 
             // 2. Broadcast to Navbar to decrease count
-            window.dispatchEvent(new Event('notificationRead'));
+            setTimeout(() => {
+              window.dispatchEvent(new Event('notificationRead'));
+            }, 10);
           }
         })
         .catch(err => console.error(err));
     }
   }, [selectedId]);
-  // Master Styling Effect for Dynamic HTML
-  // useEffect(() => {
-  //   if (!selectedNotif) return;
-
-  //   const styleNotifications = () => {
-  //     console.log("Applying dynamic styles for slug:", selectedNotif.slug);
-
-  //     // --- CASE 1: Write-Off Finalized (Bistro Styling) ---
-  //     if (selectedNotif.slug === 'write-off-finalized') {
-  //       const container = document.querySelector('[data-listtype]');
-  //       const listType = container?.getAttribute('data-listtype');
-
-  //       if (listType === 'BT' && container) {
-  //         const header = container.querySelector('[id^="header-"]') as HTMLElement;
-  //         const csoCell = container.querySelector('[id^="cso-cell-"]') as HTMLElement;
-  //         const hubCell = container.querySelector('[id^="hub-cell-"]') as HTMLElement;
-  //         const hubBtn = hubCell?.querySelector('a') as HTMLElement;
-
-  //         if (header) header.style.setProperty('background-color', '#e67e22', 'important');
-  //         if (csoCell) csoCell.style.display = 'none';
-  //         if (hubCell) hubCell.style.width = '100%';
-  //         if (hubBtn) {
-  //           hubBtn.style.setProperty('background-color', '#e67e22', 'important');
-  //           hubBtn.innerText = '🍔 View Approved Bistro List';
-  //         }
-  //       }
-  //     }
-
-  //     // --- CASE 2: Write-Off Generated (Hide empty button cells) ---
-  //     if (selectedNotif.slug === 'write-off-generated') {
-  //       // Find all cells ending in -cell-gen
-  //       const btnCells = document.querySelectorAll('[id$="-cell-gen"]');
-
-  //       btnCells.forEach((cell: any) => {
-  //         const link = cell.querySelector('a');
-  //         const href = link?.getAttribute('href') || "";
-
-  //         // If the ID is missing (ends in /) or is literally the word "null"
-  //         if (href.endsWith('/undefined') || href.endsWith('/null') || href.endsWith('/')) {
-  //           cell.style.display = 'none';
-  //         } else {
-  //           cell.style.display = 'table-cell';
-  //         }
-  //       });
-  //     }
-  //   };
-
-  //   // Run twice to ensure the DOM is painted
-  //   styleNotifications();
-  //   const timer = setTimeout(styleNotifications, 150);
-
-  //   return () => clearTimeout(timer);
-  // }, [selectedNotif]);
-
   // 3. Effect to handle dynamic time conversion in rendered HTML
   useEffect(() => {
     if (selectedNotif) {
@@ -238,8 +230,6 @@ function NotificationPage() {
       return () => clearTimeout(timer);
     }
   }, [selectedNotif]);
-
-
 
   return (
     <div className="flex h-[calc(100vh-65px)] overflow-hidden bg-white">

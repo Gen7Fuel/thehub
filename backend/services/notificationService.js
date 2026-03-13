@@ -36,7 +36,7 @@ async function pushNotification({
     }
 
     // 2. Find Users based on emails
-    const recipients = await User.find({ email: { $in: recipientEmails } }).select('_id email');
+    const recipients = await User.find({ email: { $in: allUniqueEmails } }).select('_id email');
     const recipientIds = recipients.map(u => u._id);
 
     if (recipientIds.length === 0) {
@@ -56,9 +56,13 @@ async function pushNotification({
       });
 
       // 4. Trigger Real-time Socket (Smart Popup)
-      if (io) {
+      // 4. Trigger Real-time Socket (Smart Popup)
+      if (io && newNotification) {
         recipientIds.forEach(id => {
-          io.to(id.toString()).emit("new-notification");
+          // Send the actual notification object instead of just a ping
+          io.to(id.toString()).emit("new-notification", {
+            notification: newNotification
+          });
         });
       }
     }

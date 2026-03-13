@@ -142,6 +142,24 @@ function RouteComponent() {
     return () => { socket.off("new-notification", handleNewNotification); };
   }, [fetchUnreadSummary]);
 
+  const handleDismiss = useCallback(async () => {
+    setShowPopup(false);
+    try {
+      const token = localStorage.getItem('token');
+      await axios.post('/api/notification/dismiss-summary', {}, {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+    } catch (err) {
+      console.error("Error updating summary marker:", err);
+    }
+  }, []);
+
+  // Update the View handler
+  const handleView = () => {
+    handleDismiss(); // Silence the popup
+    navigate({ to: '/notification' }); // Redirect
+  };
+
   return (
     <div className="flex flex-col min-h-screen relative">
       {/* Navbar stays visible but is covered by the overlay if isLocked is true */}
@@ -151,11 +169,8 @@ function RouteComponent() {
       {showPopup && (
         <NotificationPopup
           message={`You have ${unreadCount} new notification${unreadCount > 1 ? 's' : ''} on the Hub.`}
-          onClose={() => setShowPopup(false)}
-          onView={() => {
-            setShowPopup(false);
-            navigate({ to: '/notification' });
-          }}
+          onClose={handleDismiss} // Corrected: Uses the DB update logic
+          onView={handleView}       // Corrected: Uses the DB update + Navigate logic
         />
       )}
 

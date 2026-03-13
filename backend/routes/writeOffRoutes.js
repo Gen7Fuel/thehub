@@ -320,38 +320,54 @@ router.post('/', async (req, res) => {
       storeTo = location.email;
     }
 
-    // const emailRecipients = {
-    //   primaryCC: ["daksh@gen7fuel.com", "grayson@gen7fuel.com"],
-    //   categoryTeam: ["daksh@gen7fuel.com", "vasu@gen7fuel.com", "Pablo@gen7fuel.com", "Saeid@gen7fuel.com", "zyannic@bosservicesltd.com", "grayson@gen7fuel.com"]
-    // };
     const emailRecipients = {
-      primaryCC: "daksh@gen7fuel.com",
-      categoryTeam: ["vasu@gen7fuel.com"]
+      primaryCC: ["daksh@gen7fuel.com", "grayson@gen7fuel.com"],
+      categoryTeam: ["daksh@gen7fuel.com", "vasu@gen7fuel.com", "Pablo@gen7fuel.com", "Saeid@gen7fuel.com", "zyannic@bosservicesltd.com", "grayson@gen7fuel.com"]
     };
-
-
     // --- NOTIFICATION TRIGGER LOGIC ---
     const io = req.app.get("io");
 
-    // Helper to determine which slug to use and what field values to send
-    const getNotificationData = (wo, ate, bt) => {
-      const activeIds = [wo, ate, bt].filter(id => id);
-      const count = activeIds.length;
+    const ids = [
+      { id: woMongoId, label: "Standard Write-Off", btn: "📂 View WO List", color: "#333333", sub: "Warehouse" },
+      { id: ateMongoId, label: "About to Expire", btn: "📅 View ATE List", color: "#3f51b5", sub: "Expiry Review" },
+      { id: btMongoId, label: "Bistro Write-Off", btn: "🍔 View Bistro List", color: "#e67e22", sub: "Bistro Workflow" }
+    ].filter(item => item.id);
 
-      return {
-        slug: `write-off-generated-${count}`,
-        fieldValues: {
-          site: site,
-          woId: wo?.toString() || "",
-          ateId: ate?.toString() || "",
-          btId: bt?.toString() || ""
-        }
-      };
-    };
+    const headerTitle = ids.length > 1 ? "Multiple Inventory Write Off Lists Generated" : ids[0]?.label || "Inventory List";
+    const bannerColor = "#283593";
+
+    // Generate the table cells for buttons
+    let linksHTML = '';
+    ids.forEach((item, index) => {
+      // If it's the 3rd item in a set of 3, make it full width
+      const isFullWidth = ids.length === 3 && index === 2;
+      const width = isFullWidth ? '100%' : (ids.length === 1 ? '100%' : '50%');
+
+      linksHTML += `
+      <td align="center" style="padding: 10px; width: ${width}; display: ${isFullWidth ? 'block' : 'table-cell'};">
+        <p style="margin: 0 0 10px 0; font-size: 13px; color: #666; font-weight: 500;">${item.label}</p>
+        <a href="https://app.gen7fuel.com/write-off/${item.id}" 
+           style="background-color: ${item.color}; color: #ffffff; padding: 14px 10px; text-decoration: none; font-weight: 600; border-radius: 6px; display: block; font-size: 14px; text-align: center;">
+           ${item.btn}
+        </a>
+      </td>`;
+
+      // Add a table row break if we have 2 items and more are coming
+      if (index === 1 && ids.length === 3) {
+        linksHTML += '</tr><tr>';
+      }
+    });
 
     // TRIGGER FOR STORE (Standard, ATE, and/or BT)
     if (woMongoId || ateMongoId || btMongoId) {
-      const { slug, fieldValues } = getNotificationData(woMongoId, ateMongoId, btMongoId);
+      // const { slug, fieldValues } = getNotificationData(woMongoId, ateMongoId, btMongoId);
+      const slug = `write-off-generated`;
+      const fieldValues = {
+        site: site,
+        bannerColor: bannerColor,
+        headerTitle: headerTitle,
+        linksHTML: linksHTML,
+      };
       await pushNotification({
         io,
         recipientEmails: [storeTo, ...storeCC, ...emailRecipients.primaryCC],
@@ -363,7 +379,14 @@ router.post('/', async (req, res) => {
 
     // TRIGGER FOR CATEGORY TEAM (ATE and BT ONLY - WO is filtered out)
     if (ateMongoId || btMongoId) {
-      const { slug, fieldValues } = getNotificationData(null, ateMongoId, btMongoId);
+      // const { slug, fieldValues } = getNotificationData(null, ateMongoId, btMongoId);
+      const slug = `write-off-generated`;
+      const fieldValues = {
+        site: site,
+        bannerColor: bannerColor,
+        headerTitle: headerTitle,
+        linksHTML: linksHTML,
+      };
       const catSubject = (ateMongoId && btMongoId)
         ? `Bistro & ATE Review Required: ${site}`
         : (ateMongoId ? `ATE Review Required: ${site}` : `Bistro Approval Required: ${site}`);
@@ -544,19 +567,49 @@ router.patch('/:id/finalize', async (req, res) => {
       csoLink = `https://03.cstoreoffice.com/daily-store-spoilage.php?Station=${csoCode}&date_form=${formattedDate}`;
     }
 
+    const hubLink = `https://app.gen7fuel.com/write-off/${list._id}`;
+
+
     // 3. Notification Config
-    // const emailRecipients = {
-    //   primaryTo: "grayson@gen7fuel.com",
-    //   categoryTeam: ["daksh@gen7fuel.com", "vasu@gen7fuel.com", "Pablo@gen7fuel.com", "Saeid@gen7fuel.com", "zyannic@bosservicesltd.com"]
-    // };
     const emailRecipients = {
-      primaryTo: "daksh@gen7fuel.com",
-      categoryTeam: ["vasu@gen7fuel.com"]
+      primaryTo: "grayson@gen7fuel.com",
+      categoryTeam: ["daksh@gen7fuel.com", "vasu@gen7fuel.com", "Pablo@gen7fuel.com", "Saeid@gen7fuel.com", "zyannic@bosservicesltd.com"]
     };
 
     const subject = isBT
       ? `Approved by Station Manager: Bistro Items - ${list.site} (${list.listNumber})`
       : `Finalized: Write-Off List - ${list.site} (${list.listNumber})`;
+
+    // const isBT = listType === 'BT';
+    const bannerColor = isBT ? "#e67e22" : "#1b5e20"; // Orange for Bistro, Green for WO
+    const headerTitle = isBT ? "Bistro Write-Off Approved" : "Write-Off Finalized";
+
+    // Text content based on type
+    const mainMessage = isBT
+      ? `The Station Manager has <strong>approved</strong> the Bistro Write-Off request for <strong>${list.site}</strong>. Please review the items in the Hub.`
+      : `The Station Manager has finalized the Write-Off request for <strong>${list.site}</strong>. Please review the details in the Hub and accept the corresponding ticket in CStoreOffice.`;
+
+    // Dynamic Button Layout
+    let buttonsHTML = '';
+    if (csoLink) {
+      // TWO BUTTONS (For WO)
+      buttonsHTML = `
+      <td align="center" style="padding: 10px; width: 50%;">
+        <p style="margin: 0 0 10px 0; font-size: 12px; color: #666; font-weight: bold; text-transform: uppercase;">Review Details</p>
+        <a href="${hubLink}" style="background-color: #333333; color: #ffffff; padding: 14px 0; text-decoration: none; font-weight: 600; border-radius: 6px; display: block; width: 90%; font-size: 14px; text-align: center;">📂 View in Hub</a>
+      </td>
+      <td align="center" style="padding: 10px; width: 50%;">
+        <p style="margin: 0 0 10px 0; font-size: 12px; color: #666; font-weight: bold; text-transform: uppercase;">Inventory System</p>
+        <a href="${csoLink}" style="background-color: #2e7d32; color: #ffffff; padding: 14px 0; text-decoration: none; font-weight: 600; border-radius: 6px; display: block; width: 90%; font-size: 14px; text-align: center;">✅ Accept in CSO</a>
+      </td>`;
+    } else {
+      // ONE BUTTON (For BT)
+      buttonsHTML = `
+      <td align="center" style="padding: 10px; width: 100%;">
+        <p style="margin: 0 0 10px 0; font-size: 12px; color: #666; font-weight: bold; text-transform: uppercase;">Review Details</p>
+        <a href="${hubLink}" style="background-color: #e67e22; color: #ffffff; padding: 14px 0; text-decoration: none; font-weight: 600; border-radius: 6px; display: block; width: 95%; font-size: 14px; text-align: center;">📂 View Approved Bistro List</a>
+      </td>`;
+    }
 
     // 4. Trigger Hub Notification & Email Queue
     await pushNotification({
@@ -567,9 +620,10 @@ router.patch('/:id/finalize', async (req, res) => {
       fieldValues: {
         site: list.site,
         listNumber: list.listNumber,
-        listId: list._id.toString(),
-        csoLink: csoLink, // Will be empty for BT
-        listType: list.listType
+        bannerColor: bannerColor,
+        headerTitle: headerTitle,
+        mainMessage: mainMessage,
+        buttonsHTML: buttonsHTML,
       }
     });
 

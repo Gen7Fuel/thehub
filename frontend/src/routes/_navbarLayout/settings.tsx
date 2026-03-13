@@ -47,6 +47,11 @@ function RouteComponent() {
             Maintenance
           </Link>
         )}
+        {access?.settings?.notification && (
+          <Link key='/settings/notification' className='p-2' to='/settings/notification' activeProps={activeProps}>
+            Notifications
+          </Link>
+        )}
       </aside>
       {/* Main content area for the selected settings page */}
       <main className='w-3/4'>
