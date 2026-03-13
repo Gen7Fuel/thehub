@@ -299,6 +299,26 @@ router.post('/bank-statement', express.json({ limit: '1mb' }), async (req, res) 
   }
 })
 
+router.patch('/bank-statement/merchant-fees', express.json(), async (req, res) => {
+  try {
+    const { site, date, merchantFees } = req.body || {}
+    if (!site || !date) return res.status(400).json({ error: 'site and date are required' })
+    if (typeof merchantFees !== 'number') return res.status(400).json({ error: 'merchantFees must be a number' })
+    // Bank statements are stored under nextDate (date + 1), matching the entries endpoint convention
+    const nextDate = addDaysYmd(date, 1)
+    if (!nextDate) return res.status(400).json({ error: 'Invalid date' })
+    const saved = await BankStatement.findOneAndUpdate(
+      { site, date: nextDate },
+      { $set: { merchantFees } },
+      { new: true, upsert: true, setDefaultsOnInsert: true }
+    ).lean()
+    return res.json({ saved: true, statement: saved })
+  } catch (e) {
+    console.error('cashRecRoutes.update-merchant-fees error:', e)
+    res.status(500).json({ error: 'Failed to update merchant fees' })
+  }
+})
+
 router.get('/kardpoll-entries', async (req, res) => {
   try {
     const site = String(req.query.site || '').trim()
