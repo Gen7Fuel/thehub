@@ -98,6 +98,8 @@ services:
       - uploads:/app/uploads
     ports:
       - "5001:5001"
+    environment:
+      - CDN_ADMIN_TOKEN=${CDN_ADMIN_TOKEN}
     depends_on:
       - mongo
     restart: always
