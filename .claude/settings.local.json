@@ -4,7 +4,12 @@
       "Bash(find /c/Users/MohammadHasan/workspace/thehub/backend -type f \\\\\\(-name *.js -o -name *.ts \\\\\\))",
       "Bash(find /c/Users/MohammadHasan/workspace/thehub -type f -name *payable*)",
       "Bash(npm test:*)",
-      "Bash(npx vitest:*)"
+      "Bash(npx vitest:*)",
+      "Bash(find c:/Users/MohammadHasan/workspace/thehub/backend -name *middleware* -o -name *auth*)",
+      "Bash(ls -la c:/Users/MohammadHasan/workspace/thehub/frontend/*.config.*)",
+      "Bash(find c:/Users/MohammadHasan/workspace/thehub/frontend/src -name *route* -o -name *router*)",
+      "Bash(find c:/Users/MohammadHasan/workspace/thehub -name *.test.* -o -name *.spec.*)",
+      "Bash(find c:/Users/MohammadHasan/workspace/thehub/frontend/src -name *.test.* -o -name *.spec.*)"
     ]
   }
 }

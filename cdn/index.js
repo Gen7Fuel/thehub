@@ -25,9 +25,24 @@ const storage = multer.diskStorage({
 
 const upload = multer({ storage: storage });    //Multer helps in multipart/form-data uploads when the uploads are coming from a form.
 
+// Admin auth middleware — set CDN_ADMIN_TOKEN in your container's environment variables
+const ADMIN_TOKEN = process.env.CDN_ADMIN_TOKEN;
+
+function requireAdminToken(req, res, next) {
+  if (!ADMIN_TOKEN) {
+    return res.status(503).json({ error: 'Admin token not configured on server' });
+  }
+  const auth = req.headers['authorization'] || '';
+  const token = auth.startsWith('Bearer ') ? auth.slice(7) : '';
+  if (!token || token !== ADMIN_TOKEN) {
+    return res.status(401).json({ error: 'Unauthorized' });
+  }
+  next();
+}
+
 //Testing route /cdn/ for checking server's downtime
 
-app.get('/cdn', (req, res) => { 
+app.get('/cdn', (req, res) => {
   res.send('Upload service running');
 });
 
@@ -65,6 +80,37 @@ app.post('/cdn/upload-base64', (req, res) => {
 
     const fileInfo = { filename: `${uniqueSuffix}${fileExtension}` };
     res.json(fileInfo);  // Return file info with ID
+  });
+});
+
+// Admin: list all uploaded files with name, size, and last-modified date
+
+app.get('/cdn/files', requireAdminToken, (_req, res) => {
+  const uploadsDir = path.join(__dirname, 'uploads');
+  try {
+    const files = fs.readdirSync(uploadsDir).map((filename) => {
+      const stat = fs.statSync(path.join(uploadsDir, filename));
+      return { filename, size: stat.size, lastModified: stat.mtime };
+    });
+    res.json(files);
+  } catch (err) {
+    console.error('Error listing files:', err);
+    res.status(500).json({ error: 'Failed to list files' });
+  }
+});
+
+// Admin: delete a file by filename
+
+app.delete('/cdn/delete/:id', requireAdminToken, (req, res) => {
+  const filename = path.basename(req.params.id);  // basename prevents path traversal
+  const filePath = path.join(__dirname, 'uploads', filename);
+  fs.unlink(filePath, (err) => {
+    if (err) {
+      if (err.code === 'ENOENT') return res.status(404).json({ error: 'File not found' });
+      console.error('Error deleting file:', err);
+      return res.status(500).json({ error: 'Failed to delete file' });
+    }
+    res.json({ deleted: filename });
   });
 });
 
