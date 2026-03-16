@@ -138,7 +138,7 @@ router.post('/introduction', async (req, res) => {
     const syncTime = new Date();
     await User.updateMany(
       { is_active: true },
-      { $set: { unreadSummaryDate: new Date(syncTime.getTime() - 1000) } }, // 1 second ago to be safe
+      { $set: { unreadSummaryDate: new Date(syncTime.getTime() - 60000) } }, // 1 minute ago to be safe
       { timestamps: false }
     );
 
