@@ -18,7 +18,7 @@ function RouteComponent() {
 
   return (
     <div className="pt-5 flex flex-col items-center">
-      <div className="flex mb-4">
+      <div className="flex mb-4 cash-rec-no-print">
         <Link to="/cash-rec" activeOptions={{ exact: true }} search={(prev: any) => ({ ...prev, site: prev?.site })}>
           <Button {...(!isReportActive && { variant: 'outline' } as object)} className="rounded-r-none">
             Report

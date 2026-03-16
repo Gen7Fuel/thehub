@@ -121,6 +121,7 @@ const userSchema = new mongoose.Schema({
   // },
 
   lastLoginDate: { type: Date, default: null },
+  unreadSummaryDate: { type: Date, default: null },
 
   is_loggedIn: { type: Boolean, default: false },
 

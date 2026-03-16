@@ -74,6 +74,7 @@ type CashSummaryTotals = {
   grandTotal: number
   missedCpl?: number
   couponsAccepted: number
+  giftCertificates?: number
   canadianCash: number
   cashOnHand: number
   parsedCashBack: number
@@ -102,6 +103,7 @@ type EntriesResponse = {
   totalReceivablesAmount?: number
   bankStmtTrans?: number
   bankRec?: number
+  bankRecDay?: number
   balanceCheck?: number
 }
 
@@ -314,7 +316,7 @@ function RouteComponent() {
                     <td className="px-2 py-2 text-right">{fmt2(data?.cashSummary?.totals.payouts)}</td>
                     {/* <td className="px-2 py-2 text-right">{fmt2(data?.cashSummary?.totals.cpl_bulloch)}</td> */}
                     <td className="px-2 py-2 text-right">{fmt2(data?.cashSummary?.totals.missedCpl)}</td>
-                    <td className="px-2 py-2 text-right">{fmt2(data?.cashSummary?.totals.couponsAccepted)}</td>
+                    <td className="px-2 py-2 text-right">{fmt2((data?.cashSummary?.totals.couponsAccepted ?? 0) + (data?.cashSummary?.totals.giftCertificates ?? 0))}</td>
                     <td className="px-2 py-2 text-right">{fmt2(data?.cashSummary?.totals.cash_back)}</td>
                     <td className="px-2 py-2 text-right">{fmt2(data?.cashSummary?.totals.report_canadian_cash)}</td>
 
@@ -346,7 +348,7 @@ function RouteComponent() {
                     </td>
                     <td className="px-2 py-2 text-right">{fmt2(data?.balanceCheck)}</td>
                     <td className="px-2 py-2 text-right">{fmt2(data?.bankStmtTrans)}</td>
-                    <td className="px-2 py-2 text-right">{fmt2(data?.bankRec)}</td>
+                    <td className="px-2 py-2 text-right">{fmt2(data?.bankRecDay ?? data?.bankRec)}</td>
                   </tr>
                 )
               })}

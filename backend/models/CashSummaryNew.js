@@ -37,7 +37,10 @@ const CashSummarySchema = new mongoose.Schema(
     totalPos: { type: Number },
     arIncurred: { type: Number },
     grandTotal: { type: Number },
+    // Native cpl miss (persisted)
+    missedCpl: { type: Number },
     couponsAccepted: { type: Number },
+    giftCertificates: { type: Number },
     canadianCash: { type: Number },
     cashOnHand: { type: Number },
     parsedCashBack: { type: Number },
