@@ -299,6 +299,26 @@ router.post('/bank-statement', express.json({ limit: '1mb' }), async (req, res) 
   }
 })
 
+router.patch('/bank-statement/merchant-fees', express.json(), async (req, res) => {
+  try {
+    const { site, date, merchantFees } = req.body || {}
+    if (!site || !date) return res.status(400).json({ error: 'site and date are required' })
+    if (typeof merchantFees !== 'number') return res.status(400).json({ error: 'merchantFees must be a number' })
+    // Bank statements are stored under nextDate (date + 1), matching the entries endpoint convention
+    const nextDate = addDaysYmd(date, 1)
+    if (!nextDate) return res.status(400).json({ error: 'Invalid date' })
+    const saved = await BankStatement.findOneAndUpdate(
+      { site, date: nextDate },
+      { $set: { merchantFees } },
+      { new: true, upsert: true, setDefaultsOnInsert: true }
+    ).lean()
+    return res.json({ saved: true, statement: saved })
+  } catch (e) {
+    console.error('cashRecRoutes.update-merchant-fees error:', e)
+    res.status(500).json({ error: 'Failed to update merchant fees' })
+  }
+})
+
 router.get('/kardpoll-entries', async (req, res) => {
   try {
     const site = String(req.query.site || '').trim()
@@ -346,6 +366,59 @@ const startOfUtcDay = (ymd) =>
   DateTime.fromISO(`${ymd}T00:00:00`, { zone: TIMEZONE }).toJSDate()
 const endOfUtcDay = (ymd) =>
   DateTime.fromISO(`${ymd}T00:00:00`, { zone: TIMEZONE }).plus({ days: 1 }).minus({ milliseconds: 1 }).toJSDate()
+
+async function computeBankRecForDate(site, date) {
+  const kardpoll = await KardpollReport.findOne({ site, date }).lean()
+  const nextDate = addDaysYmd(date, 1)
+  const bank = nextDate ? await BankStatement.findOne({ site, date: nextDate }).lean() : null
+
+  const start = startOfUtcDay(date)
+  const end = endOfUtcDay(date)
+  const [agg] = await CashSummary.aggregate([
+    { $match: { site, date: { $gte: start, $lte: end } } },
+    {
+      $group: {
+        _id: null,
+        totalPos: { $sum: { $ifNull: ['$totalPos', 0] } },
+        kioskGiftCard: { $sum: { $ifNull: ['$kioskGiftCard', 0] } },
+        afdGiftCard: { $sum: { $ifNull: ['$afdGiftCard', 0] } },
+      },
+    },
+  ])
+
+  let handheldDebit = 0
+  try {
+    const { CashSummaryReport } = require('../models/CashSummaryNew')
+    const report = await CashSummaryReport.findOne({ site, date: start }).lean()
+    if (report && typeof report.handheldDebit === 'number') {
+      handheldDebit = report.handheldDebit
+    }
+  } catch (e) {}
+
+  const miscDebitsTotal = (bank?.miscDebits || []).reduce((sum, x) => {
+    const amt = Number(x?.amount) || 0
+    return sum + (amt > 0 ? amt : 0)
+  }, 0)
+  const gblDebitsTotal = (bank?.gblDebits || []).reduce((sum, x) => {
+    const amt = Number(x?.amount) || 0
+    return sum + (amt > 0 ? amt : 0)
+  }, 0)
+  const miscCreditsTotal = (bank?.miscCredits || []).reduce((sum, x) => {
+    const amt = Number(x?.amount) || 0
+    return sum + (amt > 0 ? amt : 0)
+  }, 0)
+  const bankStmtTrans =
+    (Number(bank?.balanceForward) || 0) - miscDebitsTotal - gblDebitsTotal - (Number(bank?.merchantFees) || 0) + miscCreditsTotal
+
+  const endingBalance = Number(bank?.endingBalance) || 0
+  const totalPos = Number(agg?.totalPos) || 0
+  const kioskGC = Number(agg?.kioskGiftCard) || 0
+  const afdGC = Number(agg?.afdGiftCard) || 0
+  const kardpollSales = Number(kardpoll?.sales) || 0
+  const kardpollAr = Number(kardpoll?.ar) || 0
+
+  return endingBalance - bankStmtTrans - totalPos - kardpollSales + kioskGC + afdGC + kardpollAr - handheldDebit
+}
 
 router.get('/entries', async (req, res) => {
   try {
@@ -493,7 +566,20 @@ router.get('/entries', async (req, res) => {
     const kardpollAr = Number(kardpoll?.ar) || 0
     const handheldDebit = Number(cashSummary?.handheldDebit) || 0
 
-    const bankRec = endingBalance - bankStmtTrans - totalPos - kardpollSales + kioskGC + afdGC + kardpollAr - handheldDebit
+    const bankRecDay = endingBalance - bankStmtTrans - totalPos - kardpollSales + kioskGC + afdGC + kardpollAr - handheldDebit
+    let bankRec = bankRecDay
+
+    // On Sundays, aggregate bankRec across Friday, Saturday, and Sunday
+    const [yr, mo, dy] = date.split('-').map(Number)
+    if (new Date(Date.UTC(yr, mo - 1, dy)).getUTCDay() === 0) {
+      const fridayDate = addDaysYmd(date, -2)
+      const saturdayDate = addDaysYmd(date, -1)
+      const [fridayRec, saturdayRec] = await Promise.all([
+        computeBankRecForDate(site, fridayDate),
+        computeBankRecForDate(site, saturdayDate),
+      ])
+      bankRec = fridayRec + saturdayRec + bankRecDay
+    }
 
 
     // Compute miscCreditDescTotal: sum of miscCredits where description contains 'credit' or 'tns' (case-insensitive)
@@ -513,8 +599,9 @@ router.get('/entries', async (req, res) => {
     const giftCertificates = Number(cashSummary?.totals?.giftCertificates) || 0
     const payouts = Number(cashSummary?.totals?.payouts) || 0
     const totalSalesNum = Number(cashSummary?.totals?.totalSales) || 0
+    const missedCpl = Number(cashSummary?.totals?.missedCpl) || 0
     // Include both couponsAccepted and giftCertificates in balanceCheck
-    const balanceCheck = totalPos + reportCanadianCash + couponsAccepted + giftCertificates + payouts - totalSalesNum + (Number(totalReceivablesAmount) || 0)
+    const balanceCheck = totalPos + reportCanadianCash + couponsAccepted + giftCertificates + payouts - totalSalesNum + (Number(totalReceivablesAmount) || 0) + missedCpl
 
     // Compute finalTotal (deduction summary): replace miscDebitDescTotal with miscCreditDescTotal
     // finalTotal = totalDollarSales - cashSafeDeposited + tillOverShort - gcRedemption - loyaltyCoupons + unsettledPrepays + bankRec - arTotal - payTotal + miscCreditDescTotal
@@ -527,6 +614,7 @@ router.get('/entries', async (req, res) => {
       totalReceivablesAmount,
       bankStmtTrans,
       bankRec,
+      bankRecDay,
       balanceCheck,
     })
   } catch (err) {
