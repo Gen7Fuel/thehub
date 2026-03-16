@@ -236,7 +236,7 @@ router.post("/register", async (req, res) => {
 // Route with new permissions
 router.post("/login", async (req, res) => {
   console.log("Login attempt from auth backend for email:", req.body.email);
- 
+
   const { email, password } = req.body;
 
   try {
@@ -276,10 +276,15 @@ router.post("/login", async (req, res) => {
     // --- END MAINTENANCE CHECK ---
 
     // Update login flags
-    user.lastLoginDate = new Date();
-    user.is_loggedIn = true;
+    const now = new Date();
 
-    // MUST disable timestamps so updatedAt doesn't change unnecessarily
+    // 1. Move the old "current" login to "previous"
+    user.unreadSummaryDate = user.lastLoginDate;
+
+    // 2. Set the "current" login to now
+    user.lastLoginDate = now;
+
+    user.is_loggedIn = true;
     await user.save({ timestamps: false });
 
     // Get merged permissions (role + custom)

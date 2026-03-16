@@ -170,16 +170,16 @@ jobs:
             fi
 
             # ---- 2. Deploy CDN with Safety ----
-            echo "Deploying cdn..."
-            if docker compose up -d --build --no-deps --wait cdn; then
-                echo "SUCCESS: cdn is healthy."
-            else
-                echo "FATAL: cdn failed health check!"
-                docker logs cdn --tail 50
-                echo "Rolling back cdn..."
-                docker compose up -d cdn
-                exit 1
-            fi
+            # echo "Deploying cdn..."
+            # if docker compose up -d --build --no-deps --wait cdn; then
+            #     echo "SUCCESS: cdn is healthy."
+            # else
+            #     echo "FATAL: cdn failed health check!"
+            #     docker logs cdn --tail 50
+            #     echo "Rolling back cdn..."
+            #     docker compose up -d cdn
+            #     exit 1
+            # fi
 
             # ---- 3. Deploy Main Backend with Safety ----
             echo "Deploying backend..."

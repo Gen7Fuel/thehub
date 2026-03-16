@@ -1,13 +1,13 @@
 import { Link, useLocation, useMatchRoute, useNavigate } from '@tanstack/react-router'
 import { Button } from '../ui/button'
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import { isTokenExpired } from '../../lib/utils'
 import axios from 'axios'
 import { getSocket } from "@/lib/websocket";
 import { syncPendingActions } from "@/lib/utils"
 import { isActuallyOnline } from "@/lib/network";
 import { useAuth } from "@/context/AuthContext";
-import { HelpCircle, LogOut, Settings as SettingsIcon, LayoutDashboard, Home as HomeIcon, KeyRound, ExternalLink } from 'lucide-react'
+import { HelpCircle, LogOut, Settings as SettingsIcon, LayoutDashboard, Home as HomeIcon, KeyRound, ExternalLink, Bell } from 'lucide-react'
 import { clearLocalDB } from "@/lib/orderRecIndexedDB";
 import {
   Dialog,
@@ -24,6 +24,34 @@ export default function Navbar() {
   const matchRoute = useMatchRoute()
   const [isHelpOpen, setIsHelpOpen] = useState(false)
   const [forceLogoutMessage, setForceLogoutMessage] = useState<string | null>(null);
+  // Inside your Navbar Component
+  const [unreadCount, setUnreadCount] = useState(0);
+
+  useEffect(() => {
+    const fetchUnreadCount = async () => {
+      try {
+        const token = localStorage.getItem('token');
+        const res = await axios.get('/api/notification', {
+          headers: { Authorization: `Bearer ${token || ''}` }
+        });
+        // Count only unread items from the list
+        const count = res.data.filter((n: any) => !n.isRead).length;
+        setUnreadCount(count);
+      } catch (err) {
+        console.error("Error fetching unread count", err);
+      }
+    };
+
+    fetchUnreadCount();
+
+    // Listen for the 'notificationRead' event from the Notification Page
+    const handleRead = () => {
+      setUnreadCount((prev) => Math.max(0, prev - 1));
+    };
+
+    window.addEventListener('notificationRead', handleRead);
+    return () => window.removeEventListener('notificationRead', handleRead);
+  }, []);
 
   useEffect(() => {
     const token = localStorage.getItem('token');
@@ -170,8 +198,40 @@ export default function Navbar() {
     await refreshTokenFromBackend();
     // console.log("After update:",localStorage.getItem('token'));
   };
+
+  // 1. Function to fetch the actual count from the server
+  const refreshUnreadCount = useCallback(async () => {
+    try {
+      const token = localStorage.getItem('token');
+      // Note: I recommend a generic "all unread" count for the Bell icon 
+      // vs the "since last login" count for the Popup.
+      const res = await axios.get('/api/notification/unread-count', {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      setUnreadCount(res.data.count);
+    } catch (err) {
+      console.error("Error syncing count", err);
+    }
+  }, []);
+
+  // 2. Initial load and Event Listener
+  useEffect(() => {
+    refreshUnreadCount();
+
+    // Listen for the "Read" event from the Notification Page
+    window.addEventListener('notificationRead', refreshUnreadCount);
+
+    return () => window.removeEventListener('notificationRead', refreshUnreadCount);
+  }, [refreshUnreadCount]);
+
   useEffect(() => {
     const socket = getSocket();
+
+    // Define the handler for new notifications
+    const handleNewNotification = () => {
+      console.log("🔔 Socket: New notification received");
+      refreshUnreadCount();
+    };
 
     socket.on("connect", () => {
       if (user?.id) {
@@ -180,6 +240,9 @@ export default function Navbar() {
       // console.log("socket from auth ", socket.id);
     });
     // console.log("Listeners now:", socket.listeners("permissions-updated"));
+
+    // Add the notification listener
+    socket.on("new-notification", handleNewNotification);
 
     socket.on("permissions-updated", handlePermissionsUpdated);
 
@@ -199,6 +262,7 @@ export default function Navbar() {
     return () => {
       socket.off("permissions-updated", handlePermissionsUpdated);
       socket.off("force-logout");
+      socket.off("new-notification", handleNewNotification);
     };
   }, [user])
 
@@ -279,6 +343,20 @@ export default function Navbar() {
 
         {/* Right-side navigation buttons */}
         <span className="flex gap-4">
+          {/* Notification Button */}
+          <Button
+            variant="outline"
+            size="icon"
+            className="relative"
+            onClick={() => navigate({ to: '/notification' })}
+          >
+            <Bell className="h-5 w-5" />
+            {unreadCount > 0 && (
+              <span className="absolute -top-1 -right-1 flex h-4 w-4 items-center justify-center rounded-full bg-red-600 text-[10px] font-medium text-white">
+                {unreadCount}
+              </span>
+            )}
+          </Button>
           <Button variant="outline" size="icon" onClick={() => setIsHelpOpen(true)}>
             <HelpCircle className="h-5 w-5" />
           </Button>

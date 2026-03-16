@@ -278,7 +278,7 @@ function RouteComponent() {
                 <input
                   className="border px-2 py-1 flex-1"
                   placeholder="Email address"
-                  type="email"
+                  type="text"
                   value={option.email}
                   onChange={e => handleOptionChange(idx, "email", e.target.value)}
                 />

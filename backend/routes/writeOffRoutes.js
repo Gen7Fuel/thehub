@@ -4,6 +4,7 @@ const WriteOff = require('../models/WriteOff');
 const Location = require('../models/Location');
 const { getBulkOnHandQtyCSO } = require('../services/sqlService');
 const { emailQueue } = require('../queues/emailQueue');
+const { pushNotification } = require('../services/notificationService');
 
 // Helper function to generate email HTML content
 function generateEmailHTML(site, woMongoId, ateMongoId, btMongoId) {
@@ -67,9 +68,9 @@ function generateFinalizedEmailHTML(site, listNumber, hubLink, csoLink, listType
   const isBT = listType === 'BT';
   const bannerColor = isBT ? "#e67e22" : "#1b5e20"; // Orange for Bistro, Green for WO
   const headerTitle = isBT ? "Bistro Write-Off Approved" : "Write-Off Finalized";
-  
+
   // Text content based on type
-  const mainMessage = isBT 
+  const mainMessage = isBT
     ? `The Station Manager has <strong>approved</strong> the Bistro Write-Off request for <strong>${site}</strong>. Please review the items in the Hub.`
     : `The Station Manager has finalized the Write-Off request for <strong>${site}</strong>. Please review the details in the Hub and accept the corresponding ticket in CStoreOffice.`;
 
@@ -161,71 +162,6 @@ router.get('/:id', async (req, res) => {
   }
 });
 
-// Create a new write-off list
-// router.post('/', async (req, res) => {
-//   const { site, submittedBy, items, timestamp } = req.body;
-//   const siteCode = site?.toUpperCase() || 'NA';
-
-//   try {
-//     // 1. Extract unique GTINs for bulk lookup
-//     const gtins = [...new Set(items.map(i => i.gtin).filter(Boolean))];
-
-//     // 2. Fetch Bulk Stock Levels from SQL
-//     const stockMap = await getBulkOnHandQtyCSO(site, gtins);
-
-//     // 3. Attach the fresh stock levels to each item
-//     const processedItems = items.map(item => {
-//       // If item has a GTIN and exists in SQL results, use that. 
-//       // Otherwise, fallback to what the frontend sent or 0.
-//       const freshQty = item.gtin && stockMap[item.gtin] !== undefined
-//         ? stockMap[item.gtin]
-//         : (item.onHandAtWriteOff || 0);
-
-//       return {
-//         ...item,
-//         onHandAtWriteOff: freshQty
-//       };
-//     });
-
-//     // 4. Split items into two categories
-//     const standardItems = processedItems.filter(i => i.reason !== 'About to Expire');
-//     const ateItems = processedItems.filter(i => i.reason === 'About to Expire');
-
-//     const createdLists = [];
-//     let woMongoId = null;
-//     let ateMongoId = null;
-
-//     // 5. Save Standard Write-Off List
-//     if (standardItems.length > 0) {
-//       const woList = new WriteOff({
-//         listNumber: `WO-${siteCode}-${timestamp}`,
-//         listType: 'WO',
-//         site,
-//         submittedBy,
-//         items: standardItems,
-//         status: 'Incomplete',
-//         submitted: false
-//       });
-//       const savedWO = await woList.save();
-//       woMongoId = savedWO._id; // Capture the MongoDB Object ID
-//       createdLists.push(woList.listNumber);
-//     }
-
-//     // 6. Save About to Expire List
-//     if (ateItems.length > 0) {
-//       const ateList = new WriteOff({
-//         listNumber: `ATE-${siteCode}-${timestamp}`,
-//         listType: 'ATE',
-//         site,
-//         submittedBy,
-//         items: ateItems,
-//         status: 'Incomplete',
-//         submitted: false
-//       });
-//       const savedATE = await ateList.save();
-//       ateMongoId = savedATE._id; // Capture the MongoDB Object ID
-//       createdLists.push(ateList.listNumber);
-//     }
 router.post('/', async (req, res) => {
   const { site, submittedBy, items, timestamp } = req.body;
   const siteCode = site?.toUpperCase() || 'NA';
@@ -314,54 +250,157 @@ router.post('/', async (req, res) => {
       createdLists.push(btList.listNumber);
     }
 
-    // --- EMAIL QUEUE PLACEHOLDER ---
-    // Logic for adding to email queue will go here later
-    // here need seperate email templates if the list has write off items then only it will be sent to the category teams
-    // else no email to category team and manager email if both then 2 links if one the one link
-    // --------------------------------
+    //     // --- EMAIL QUEUE PLACEHOLDER ---
+    //     // Logic for adding to email queue will go here later
+    //     // here need seperate email templates if the list has write off items then only it will be sent to the category teams
+    //     // else no email to category team and manager email if both then 2 links if one the one link
+    //     // --------------------------------
 
+    //     const location = await Location.findOne({ stationName: site });
+    //     const storeEmail = location?.email;
+
+    //     if (!storeEmail) {
+    //       console.error(`No email found for site: ${site}. Email skipped.`);
+    //     } else {
+
+    //       const emailRecipients = {
+    //         store: storeEmail,
+    //         primaryCC: ["daksh@gen7fuel.com", "grayson@gen7fuel.com"],
+    //         categoryTeam: ["daksh@gen7fuel.com", "vasu@gen7fuel.com", "Pablo@gen7fuel.com", "Saeid@gen7fuel.com", "zyannic@bosservicesltd.com", "grayson@gen7fuel.com"]
+    //       };
+    //       // --- LOGIC FOR STORE (Receives Combined WO, ATE, BT) ---
+    //       if (woMongoId || ateMongoId || btMongoId) {
+    //         await emailQueue.add("sendWriteOffEmail", {
+    //           to: emailRecipients.store,
+    //           subject: `Inventory Lists Generated: ${site}`,
+    //           html: generateEmailHTML(site, woMongoId, ateMongoId, btMongoId),
+    //           cc: emailRecipients.primaryCC
+    //         });
+    //       }
+
+    //       // --- LOGIC FOR CATEGORY TEAM (Receives ONLY ATE and BT) ---
+    //       // We trigger this only if at least one of them exists
+    //       if (ateMongoId || btMongoId) {
+    //         const catSubject = (ateMongoId && btMongoId)
+    //           ? `Bistro & ATE Review Required: ${site}`
+    //           : (ateMongoId ? `ATE Review Required: ${site}` : `Bistro Approval Required: ${site}`);
+
+    //         await emailQueue.add("sendWriteOffEmail", {
+    //           // to: "daksh@gen7fuel.com", // Primary contact
+    //           to: "grayson@gen7fuel.com", // Primary contact
+    //           subject: catSubject,
+    //           html: generateEmailHTML(site, null, ateMongoId, btMongoId), // woMongoId is explicitly null
+    //           cc: emailRecipients.categoryTeam.filter(e => e !== "grayson@gen7fuel.com")
+    //         });
+    //       }
+    //     }
+    //     res.status(201).json({
+    //       success: true,
+    //       lists: createdLists
+    //     });
+
+    //   } catch (err) {
+    //     console.error("Creation Error:", err);
+    //     res.status(500).json({ error: "Server failed to process write-off lists" });
+    //   }
+    // });
+    // 8. Fetch Location for Manager Emails
     const location = await Location.findOne({ stationName: site });
-    const storeEmail = location?.email;
 
-    if (!storeEmail) {
-      console.error(`No email found for site: ${site}. Email skipped.`);
-    } else {
+    // 🧩 Logic: Fallback to store email if manager list is empty
+    let storeTo = "grayson@gen7fuel.com"; // Absolute fallback
+    let storeCC = ["daksh@gen7fuel.com"];
 
-      const emailRecipients = {
-        store: storeEmail,
-        primaryCC: ["daksh@gen7fuel.com", "grayson@gen7fuel.com"],
-        categoryTeam: ["daksh@gen7fuel.com", "vasu@gen7fuel.com", "Pablo@gen7fuel.com", "Saeid@gen7fuel.com", "zyannic@bosservicesltd.com", "grayson@gen7fuel.com"]
-      };
-      // --- LOGIC FOR STORE (Receives Combined WO, ATE, BT) ---
-      if (woMongoId || ateMongoId || btMongoId) {
-        await emailQueue.add("sendWriteOffEmail", {
-          to: emailRecipients.store,
-          subject: `Inventory Lists Generated: ${site}`,
-          html: generateEmailHTML(site, woMongoId, ateMongoId, btMongoId),
-          cc: emailRecipients.primaryCC
-        });
+    if (location?.managerEmails && location.managerEmails.length > 0) {
+      storeTo = location.managerEmails[0];
+      if (location.managerEmails.length > 1) {
+        storeCC = [...storeCC, ...location.managerEmails.slice(1)];
       }
-
-      // --- LOGIC FOR CATEGORY TEAM (Receives ONLY ATE and BT) ---
-      // We trigger this only if at least one of them exists
-      if (ateMongoId || btMongoId) {
-        const catSubject = (ateMongoId && btMongoId)
-          ? `Bistro & ATE Review Required: ${site}`
-          : (ateMongoId ? `ATE Review Required: ${site}` : `Bistro Approval Required: ${site}`);
-
-        await emailQueue.add("sendWriteOffEmail", {
-          // to: "daksh@gen7fuel.com", // Primary contact
-          to: "grayson@gen7fuel.com", // Primary contact
-          subject: catSubject,
-          html: generateEmailHTML(site, null, ateMongoId, btMongoId), // woMongoId is explicitly null
-          cc: emailRecipients.categoryTeam.filter(e => e !== "grayson@gen7fuel.com")
-        });
-      }
+    } else if (location?.email) {
+      storeTo = location.email;
     }
-    res.status(201).json({
-      success: true,
-      lists: createdLists
+
+    const emailRecipients = {
+      primaryCC: ["daksh@gen7fuel.com", "grayson@gen7fuel.com"],
+      categoryTeam: ["daksh@gen7fuel.com", "vasu@gen7fuel.com", "Pablo@gen7fuel.com", "Saeid@gen7fuel.com", "zyannic@bosservicesltd.com", "grayson@gen7fuel.com"]
+    };
+    // --- NOTIFICATION TRIGGER LOGIC ---
+    const io = req.app.get("io");
+
+    const ids = [
+      { id: woMongoId, label: "Standard Write-Off", btn: "📂 View WO List", color: "#333333", sub: "Warehouse" },
+      { id: ateMongoId, label: "About to Expire", btn: "📅 View ATE List", color: "#3f51b5", sub: "Expiry Review" },
+      { id: btMongoId, label: "Bistro Write-Off", btn: "🍔 View Bistro List", color: "#e67e22", sub: "Bistro Workflow" }
+    ].filter(item => item.id);
+
+    const headerTitle = ids.length > 1 ? "Multiple Inventory Write Off Lists Generated" : ids[0]?.label || "Inventory List";
+    const bannerColor = "#283593";
+
+    // Generate the table cells for buttons
+    let linksHTML = '';
+    ids.forEach((item, index) => {
+      // If it's the 3rd item in a set of 3, make it full width
+      const isFullWidth = ids.length === 3 && index === 2;
+      const width = isFullWidth ? '100%' : (ids.length === 1 ? '100%' : '50%');
+
+      linksHTML += `
+      <td align="center" style="padding: 10px; width: ${width}; display: ${isFullWidth ? 'block' : 'table-cell'};">
+        <p style="margin: 0 0 10px 0; font-size: 13px; color: #666; font-weight: 500;">${item.label}</p>
+        <a href="https://app.gen7fuel.com/write-off/${item.id}" 
+           style="background-color: ${item.color}; color: #ffffff; padding: 14px 10px; text-decoration: none; font-weight: 600; border-radius: 6px; display: block; font-size: 14px; text-align: center;">
+           ${item.btn}
+        </a>
+      </td>`;
+
+      // Add a table row break if we have 2 items and more are coming
+      if (index === 1 && ids.length === 3) {
+        linksHTML += '</tr><tr>';
+      }
     });
+
+    // TRIGGER FOR STORE (Standard, ATE, and/or BT)
+    if (woMongoId || ateMongoId || btMongoId) {
+      // const { slug, fieldValues } = getNotificationData(woMongoId, ateMongoId, btMongoId);
+      const slug = `write-off-generated`;
+      const fieldValues = {
+        site: site,
+        bannerColor: bannerColor,
+        headerTitle: headerTitle,
+        linksHTML: linksHTML,
+      };
+      await pushNotification({
+        io,
+        recipientEmails: [storeTo, ...storeCC, ...emailRecipients.primaryCC],
+        slug: slug,
+        subject: `Inventory Lists Generated: ${site}`,
+        fieldValues
+      });
+    }
+
+    // TRIGGER FOR CATEGORY TEAM (ATE and BT ONLY - WO is filtered out)
+    if (ateMongoId || btMongoId) {
+      // const { slug, fieldValues } = getNotificationData(null, ateMongoId, btMongoId);
+      const slug = `write-off-generated`;
+      const fieldValues = {
+        site: site,
+        bannerColor: bannerColor,
+        headerTitle: headerTitle,
+        linksHTML: linksHTML,
+      };
+      const catSubject = (ateMongoId && btMongoId)
+        ? `Bistro & ATE Review Required: ${site}`
+        : (ateMongoId ? `ATE Review Required: ${site}` : `Bistro Approval Required: ${site}`);
+
+      await pushNotification({
+        io,
+        recipientEmails: emailRecipients.categoryTeam,
+        slug: slug,
+        subject: catSubject,
+        fieldValues
+      });
+    }
+
+    res.status(201).json({ success: true, lists: createdLists });
 
   } catch (err) {
     console.error("Creation Error:", err);
@@ -445,6 +484,61 @@ router.patch('/:id/items/:itemId', async (req, res) => {
 });
 
 // PATCH /api/write-off/:id/finalize
+// router.patch('/:id/finalize', async (req, res) => {
+//   try {
+//     const list = await WriteOff.findById(req.params.id);
+//     if (!list) return res.status(404).json({ error: "List not found" });
+
+//     if (list.submitted) {
+//       return res.status(400).json({ error: "This list has already been submitted." });
+//     }
+
+//     const isBT = list.listType === 'BT';
+
+//     // 1. Mark as submitted and ensure status is Complete
+//     list.submitted = true;
+//     list.status = 'Complete';
+//     const finalizedList = await list.save();
+
+//     // 2. Fetch Location for CSO (Only if not BT)
+//     let csoLink = null;
+//     if (!isBT) {
+//       const location = await Location.findOne({ stationName: list.site });
+//       const csoCode = location?.csoCode || '0';
+//       const dateObj = new Date(list.createdAt);
+//       const formattedDate = dateObj.toLocaleDateString('en-US', {
+//         month: '2-digit', day: '2-digit', year: 'numeric'
+//       });
+//       csoLink = `https://03.cstoreoffice.com/daily-store-spoilage.php?Station=${csoCode}&date_form=${formattedDate}`;
+//     }
+
+//     const hubLink = `https://app.gen7fuel.com/write-off/${list._id}`;
+
+//     // 3. Email Config
+//     const emailRecipients = {
+//       primaryTo: "grayson@gen7fuel.com",
+//       categoryTeam: ["daksh@gen7fuel.com", "vasu@gen7fuel.com", "Pablo@gen7fuel.com", "Saeid@gen7fuel.com", "zyannic@bosservicesltd.com"]
+//     };
+
+//     // Subject logic
+//     const subject = isBT
+//       ? `Approved by Station Manager: Bistro Items - ${list.site} (${list.listNumber})`
+//       : `Finalized: Write-Off List - ${list.site} (${list.listNumber})`;
+
+//     await emailQueue.add("sendWriteOffEmail", {
+//       to: emailRecipients.primaryTo,
+//       subject: subject,
+//       html: generateFinalizedEmailHTML(list.site, list.listNumber, hubLink, csoLink, list.listType),
+//       cc: emailRecipients.categoryTeam
+//     });
+
+//     res.json(finalizedList);
+//   } catch (err) {
+//     console.error("Finalize Error:", err);
+//     res.status(500).json({ error: err.message });
+//   }
+// });
+
 router.patch('/:id/finalize', async (req, res) => {
   try {
     const list = await WriteOff.findById(req.params.id);
@@ -456,13 +550,13 @@ router.patch('/:id/finalize', async (req, res) => {
 
     const isBT = list.listType === 'BT';
 
-    // 1. Mark as submitted and ensure status is Complete
+    // 1. Mark as submitted
     list.submitted = true;
     list.status = 'Complete';
     const finalizedList = await list.save();
 
-    // 2. Fetch Location for CSO (Only if not BT)
-    let csoLink = null;
+    // 2. Fetch Location for CSO Link (Only if not Bistro)
+    let csoLink = "";
     if (!isBT) {
       const location = await Location.findOne({ stationName: list.site });
       const csoCode = location?.csoCode || '0';
@@ -475,22 +569,62 @@ router.patch('/:id/finalize', async (req, res) => {
 
     const hubLink = `https://app.gen7fuel.com/write-off/${list._id}`;
 
-    // 3. Email Config
+
+    // 3. Notification Config
     const emailRecipients = {
       primaryTo: "grayson@gen7fuel.com",
       categoryTeam: ["daksh@gen7fuel.com", "vasu@gen7fuel.com", "Pablo@gen7fuel.com", "Saeid@gen7fuel.com", "zyannic@bosservicesltd.com"]
     };
 
-    // Subject logic
-    const subject = isBT 
+    const subject = isBT
       ? `Approved by Station Manager: Bistro Items - ${list.site} (${list.listNumber})`
       : `Finalized: Write-Off List - ${list.site} (${list.listNumber})`;
 
-    await emailQueue.add("sendWriteOffEmail", {
-      to: emailRecipients.primaryTo,
+    // const isBT = listType === 'BT';
+    const bannerColor = isBT ? "#e67e22" : "#1b5e20"; // Orange for Bistro, Green for WO
+    const headerTitle = isBT ? "Bistro Write-Off Approved" : "Write-Off Finalized";
+
+    // Text content based on type
+    const mainMessage = isBT
+      ? `The Station Manager has <strong>approved</strong> the Bistro Write-Off request for <strong>${list.site}</strong>. Please review the items in the Hub.`
+      : `The Station Manager has finalized the Write-Off request for <strong>${list.site}</strong>. Please review the details in the Hub and accept the corresponding ticket in CStoreOffice.`;
+
+    // Dynamic Button Layout
+    let buttonsHTML = '';
+    if (csoLink) {
+      // TWO BUTTONS (For WO)
+      buttonsHTML = `
+      <td align="center" style="padding: 10px; width: 50%;">
+        <p style="margin: 0 0 10px 0; font-size: 12px; color: #666; font-weight: bold; text-transform: uppercase;">Review Details</p>
+        <a href="${hubLink}" style="background-color: #333333; color: #ffffff; padding: 14px 0; text-decoration: none; font-weight: 600; border-radius: 6px; display: block; width: 90%; font-size: 14px; text-align: center;">📂 View in Hub</a>
+      </td>
+      <td align="center" style="padding: 10px; width: 50%;">
+        <p style="margin: 0 0 10px 0; font-size: 12px; color: #666; font-weight: bold; text-transform: uppercase;">Inventory System</p>
+        <a href="${csoLink}" style="background-color: #2e7d32; color: #ffffff; padding: 14px 0; text-decoration: none; font-weight: 600; border-radius: 6px; display: block; width: 90%; font-size: 14px; text-align: center;">✅ Accept in CSO</a>
+      </td>`;
+    } else {
+      // ONE BUTTON (For BT)
+      buttonsHTML = `
+      <td align="center" style="padding: 10px; width: 100%;">
+        <p style="margin: 0 0 10px 0; font-size: 12px; color: #666; font-weight: bold; text-transform: uppercase;">Review Details</p>
+        <a href="${hubLink}" style="background-color: #e67e22; color: #ffffff; padding: 14px 0; text-decoration: none; font-weight: 600; border-radius: 6px; display: block; width: 95%; font-size: 14px; text-align: center;">📂 View Approved Bistro List</a>
+      </td>`;
+    }
+
+    // 4. Trigger Hub Notification & Email Queue
+    await pushNotification({
+      io: req.app.get("io"),
+      recipientEmails: [emailRecipients.primaryTo, ...emailRecipients.categoryTeam],
+      slug: "write-off-finalized",
       subject: subject,
-      html: generateFinalizedEmailHTML(list.site, list.listNumber, hubLink, csoLink, list.listType),
-      cc: emailRecipients.categoryTeam
+      fieldValues: {
+        site: list.site,
+        listNumber: list.listNumber,
+        bannerColor: bannerColor,
+        headerTitle: headerTitle,
+        mainMessage: mainMessage,
+        buttonsHTML: buttonsHTML,
+      }
     });
 
     res.json(finalizedList);
