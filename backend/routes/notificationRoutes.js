@@ -39,6 +39,27 @@ router.get('/unread-count', async (req, res) => {
   }
 });
 
+// GET /api/notification/sent
+router.get('/sent', async (req, res) => {
+  try {
+    const sentNotifications = await Notification.find({ senderId: req.user._id })
+      .sort({ createdAt: -1 })
+      .populate('templateId', 'name')
+      .lean();
+
+    // Map to include total recipient count for the UI
+    const result = sentNotifications.map(n => ({
+      ...n,
+      recipientCount: n.recipientIds ? n.recipientIds.length : 0,
+      isRead: true // Sent items don't have an "unread" state for the sender
+    }));
+
+    res.json(result);
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+});
+
 // 1. GET ALL NOTIFICATIONS
 router.get('/', async (req, res) => {
   try {
@@ -64,7 +85,6 @@ router.get('/', async (req, res) => {
   }
 });
 
-// 2. GET SINGLE NOTIFICATION
 router.get('/:id', async (req, res) => {
   try {
     const { id } = req.params;
@@ -74,14 +94,25 @@ router.get('/:id', async (req, res) => {
 
     if (!notification) return res.status(404).json({ message: "Not found" });
 
-    // Mark as read if not already present
-    const alreadyRead = notification.readReceipts.some(r => r.userId.toString() === userId.toString());
-    if (!alreadyRead) {
-      notification.readReceipts.push({ userId, readAt: new Date() });
-      await notification.save();
+    // 1. Determine the user's relationship to this notification
+    const isSender = notification.senderId?.toString() === userId.toString();
+    const isRecipient = notification.recipientIds.some(r => r.toString() === userId.toString());
+
+    // Security Check: Only the sender or a recipient should view this
+    if (!isSender && !isRecipient) {
+      return res.status(403).json({ message: "You do not have permission to view this notification" });
     }
 
-    // Process Template
+    // 2. Mark as read ONLY if the user is a recipient (not just the sender viewing sent items)
+    if (isRecipient) {
+      const alreadyRead = notification.readReceipts.some(r => r.userId.toString() === userId.toString());
+      if (!alreadyRead) {
+        notification.readReceipts.push({ userId, readAt: new Date() });
+        await notification.save();
+      }
+    }
+
+    // 3. Process Template
     let finalHtml = notification.templateId.contentLayout;
     const fieldValues = Object.fromEntries(notification.fieldValues || new Map());
 
@@ -93,7 +124,8 @@ router.get('/:id', async (req, res) => {
     res.json({
       ...notification._doc,
       html: finalHtml,
-      isRead: true
+      // For the UI: 'isRead' is true if the user is the sender OR if they are in the readReceipts
+      isRead: isSender ? true : notification.readReceipts.some(r => r.userId.toString() === userId.toString())
     });
   } catch (err) {
     res.status(500).json({ message: err.message });
