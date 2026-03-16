@@ -25,7 +25,12 @@ export function getSocket(): Socket {
     
     socket = io(socketUrl, {
       path: "/socket.io",
-      auth: { token },
+      // Socket.io allows auth to be a function! 
+      // This ensures the LATEST token is sent on every reconnect attempt.
+      auth: (cb) => {
+        cb({ token: localStorage.getItem("token") });
+      },
+      // auth: { token },
       transports: ["websocket", "polling"],
       autoConnect: true,
       timeout: 20000,
