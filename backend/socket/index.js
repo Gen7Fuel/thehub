@@ -35,15 +35,25 @@ function setupSocket(server) {
   io.on("connection", (socket) => {
     console.log("✅ New connection:", socket.id);
 
-  // After authSocket middleware has verified the user
-  const userId = socket.user?._id.toString(); // or socket.user.id depending on your schema
-
-  socket.on("join-room", (userId) => {
-    if (userId) {
+    // 1. AUTOMATIC JOIN (The "Safety Net")
+    // Since authSocket runs first, socket.user is already populated
+    if (socket.user && socket.user._id) {
+      const userId = socket.user._id.toString();
       socket.join(userId);
-      console.log(`📦 ${socket.id} joined room: ${userId}`);
+      console.log(`✅ Auto-joined room on connection: ${userId}`);
+    } else {
+      console.warn(`⚠️ Socket connected (${socket.id}) but no user found on socket object.`);
     }
-  });
+
+    // 2. MANUAL JOIN (The "Backup")
+    // without refreshing the whole socket connection.
+
+    socket.on("join-room", (userId) => {
+      if (userId) {
+        socket.join(userId);
+        console.log(`📦 ${socket.id} joined room: ${userId}`);
+      }
+    });
 
     // Register per-socket modules
     setupCycleCountSocket(io, socket);

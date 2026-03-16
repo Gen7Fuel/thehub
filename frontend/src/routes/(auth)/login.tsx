@@ -94,6 +94,7 @@
 // }
 import { createFileRoute, useNavigate, redirect } from '@tanstack/react-router'
 import { useState } from 'react'
+import { getSocket } from '@/lib/websocket';
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import {
@@ -196,6 +197,11 @@ function RouteComponent() {
       clearLocalDB();
       clearDashboardDB();
       refreshAuth()
+
+      const socket = getSocket();
+      socket.auth = { token: response.data.token }; // Update the token manually
+      socket.disconnect().connect();               // Force a fresh handshake with the new token
+
       navigate({ to: '/' })
     } catch (err: any) {
       setError(err.response?.data?.message || 'Invalid credentials');

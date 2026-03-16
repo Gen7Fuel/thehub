@@ -224,47 +224,83 @@ export default function Navbar() {
     return () => window.removeEventListener('notificationRead', refreshUnreadCount);
   }, [refreshUnreadCount]);
 
+  // useEffect(() => {
+  //   const socket = getSocket();
+
+  //   // Define the handler for new notifications
+  //   const handleNewNotification = () => {
+  //     console.log("🔔 Socket: New notification received");
+  //     refreshUnreadCount();
+  //   };
+
+  //   socket.on("connect", () => {
+  //     if (user?.id) {
+  //       socket.emit("join-room", user?.id);
+  //     }
+  //     // console.log("socket from auth ", socket.id);
+  //   });
+  //   // console.log("Listeners now:", socket.listeners("permissions-updated"));
+
+  //   // Add the notification listener
+  //   socket.on("new-notification", handleNewNotification);
+
+  //   socket.on("permissions-updated", handlePermissionsUpdated);
+
+  //   // socket.on("force-logout", (data) => {
+  //   //   alert(data.message || "You have been logged out by an admin.");
+
+  //   //   localStorage.removeItem("token");
+  //   //   clearLocalDB();
+
+  //   //   navigate({ to: "/login" });
+  //   // });
+  //   socket.on("force-logout", (data) => {
+  //     setForceLogoutMessage(data.message || "You have been logged out by an admin.");
+  //   });
+
+
+  //   return () => {
+  //     socket.off("permissions-updated", handlePermissionsUpdated);
+  //     socket.off("force-logout");
+  //     socket.off("new-notification", handleNewNotification);
+  //   };
+  // }, [user])
+
   useEffect(() => {
     const socket = getSocket();
 
-    // Define the handler for new notifications
+    const joinRoom = () => {
+      if (user?.id) {
+        console.log("📤 Emitting join-room for:", user.id);
+        socket.emit("join-room", user.id);
+      }
+    };
+
+    // 1. If already connected, join immediately
+    if (socket.connected) {
+      joinRoom();
+    }
+
+    // 2. Also listen for the connect event (for refreshes/reconnects)
+    socket.on("connect", joinRoom);
+
     const handleNewNotification = () => {
-      console.log("🔔 Socket: New notification received");
       refreshUnreadCount();
     };
 
-    socket.on("connect", () => {
-      if (user?.id) {
-        socket.emit("join-room", user?.id);
-      }
-      // console.log("socket from auth ", socket.id);
-    });
-    // console.log("Listeners now:", socket.listeners("permissions-updated"));
-
-    // Add the notification listener
     socket.on("new-notification", handleNewNotification);
-
     socket.on("permissions-updated", handlePermissionsUpdated);
-
-    // socket.on("force-logout", (data) => {
-    //   alert(data.message || "You have been logged out by an admin.");
-
-    //   localStorage.removeItem("token");
-    //   clearLocalDB();
-
-    //   navigate({ to: "/login" });
-    // });
     socket.on("force-logout", (data) => {
       setForceLogoutMessage(data.message || "You have been logged out by an admin.");
     });
 
-
     return () => {
+      socket.off("connect", joinRoom);
       socket.off("permissions-updated", handlePermissionsUpdated);
       socket.off("force-logout");
       socket.off("new-notification", handleNewNotification);
     };
-  }, [user])
+  }, [user]); // Re-run when user changes
 
   useEffect(() => {
     if (forceLogoutMessage) {
