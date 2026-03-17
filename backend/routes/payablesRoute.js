@@ -147,13 +147,13 @@ router.post('/', async (req, res) => {
 // PUT update payable
 router.put('/:id', async (req, res) => {
   try {
-    const { vendorName, location, notes, paymentMethod, amount, images } = req.body;
-    
+    const { vendorName, location, notes, paymentMethod, amount, images, createdAt } = req.body;
+
     // Validation
     if (amount !== undefined && amount < 0) {
       return res.status(400).json({ error: 'Amount must be non-negative' });
     }
-    
+
     const updateData = {};
     if (vendorName !== undefined) updateData.vendorName = vendorName;
     if (location !== undefined) updateData.location = location;
@@ -161,6 +161,7 @@ router.put('/:id', async (req, res) => {
     if (paymentMethod !== undefined) updateData.paymentMethod = paymentMethod;
     if (amount !== undefined) updateData.amount = amount;
     if (images !== undefined) updateData.images = images;
+    if (createdAt !== undefined) updateData.createdAt = new Date(createdAt);
     
     const before = await Payable.findById(req.params.id).lean();
 

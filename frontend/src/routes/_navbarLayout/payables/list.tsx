@@ -7,12 +7,14 @@ import { Button } from '@/components/ui/button'
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { getStartAndEndOfToday, toUTC } from '@/lib/utils'
 import { domain } from '@/lib/constants'
-import { Eye, ChevronLeft, ChevronRight, ExternalLink } from 'lucide-react'
+import { Eye, ChevronLeft, ChevronRight, ExternalLink, CalendarIcon } from 'lucide-react'
 import axios from "axios"
 import { useAuth } from "@/context/AuthContext";
 import { FileDown } from 'lucide-react'
 import PayablePDF from '@/components/custom/PayablePDF'
 import { pdf } from '@react-pdf/renderer'
+import { Calendar } from '@/components/ui/calendar'
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
 
 interface Payable {
   _id: string
@@ -57,6 +59,35 @@ function RouteComponent() {
     images: [],
     currentIndex: 0
   })
+
+  // Date edit popover state
+  const [dateEditPopover, setDateEditPopover] = useState<{
+    payableId: string | null
+    open: boolean
+  }>({ payableId: null, open: false })
+
+  const updatePayableDate = async (payableId: string, newDate: Date) => {
+    try {
+      const token = localStorage.getItem('token')
+      await axios.put(`${domain}/api/payables/${payableId}`, { createdAt: newDate.toISOString() }, {
+        headers: {
+          Authorization: `Bearer ${token}`,
+          'X-Required-Permission': 'payables',
+        },
+      })
+      setPayables(prev =>
+        prev.map(p => p._id === payableId ? { ...p, createdAt: newDate.toISOString() } : p)
+      )
+      setDateEditPopover({ payableId: null, open: false })
+    } catch (error: any) {
+      if (error.response?.status === 403) {
+        navigate({ to: '/no-access' })
+        return
+      }
+      console.error('Error updating payable date:', error)
+      alert('Failed to update date')
+    }
+  }
 
   async function fetchImageDataUri(filename: string): Promise<string> {
     try {
@@ -318,6 +349,28 @@ function RouteComponent() {
                       >
                         <FileDown className="h-4 w-4" />
                       </Button>
+                      <Popover
+                        open={dateEditPopover.payableId === payable._id && dateEditPopover.open}
+                        onOpenChange={(open) =>
+                          setDateEditPopover({ payableId: open ? payable._id : null, open })
+                        }
+                      >
+                        <PopoverTrigger asChild>
+                          <Button size="sm" variant="outline" title="Change date">
+                            <CalendarIcon className="h-4 w-4" />
+                          </Button>
+                        </PopoverTrigger>
+                        <PopoverContent className="w-auto p-0" align="end">
+                          <Calendar
+                            mode="single"
+                            selected={new Date(payable.createdAt)}
+                            onSelect={(day) => {
+                              if (day) updatePayableDate(payable._id, day)
+                            }}
+                            initialFocus
+                          />
+                        </PopoverContent>
+                      </Popover>
                     </div>
                   </td>
                 </tr>
