@@ -39,6 +39,27 @@ router.get('/unread-count', async (req, res) => {
   }
 });
 
+// 1. GET ALL TEMPLATES (For the List view)
+router.get('/template', async (req, res) => {
+  try {
+    const templates = await NotificationTemplate.find().sort({ createdAt: -1 });
+    res.json(templates);
+  } catch (err) {
+    res.status(500).json({ message: "Error fetching templates: " + err.message });
+  }
+});
+
+// GET single template for editing
+router.get('/template/:id', async (req, res) => {
+  try {
+    const template = await NotificationTemplate.findById(req.params.id);
+    if (!template) return res.status(404).json({ message: "Template not found" });
+    res.json(template);
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+});
+
 // GET /api/notification/sent
 router.get('/sent', async (req, res) => {
   try {
@@ -67,8 +88,8 @@ router.get('/', async (req, res) => {
 
     const notifications = await Notification.find({ recipientIds: userId })
       .sort({ createdAt: -1 })
-      .select('subject status createdAt readReceipts notificationType');
-
+      .select('subject status createdAt readReceipts notificationType senderId')
+      .populate('senderId', 'firstName lastName email');
     // Transform data to include a boolean 'isRead' for the frontend
     const formattedNotifications = notifications.map(n => {
       const isRead = n.readReceipts.some(r => r.userId.toString() === userId.toString());
@@ -90,20 +111,21 @@ router.get('/:id', async (req, res) => {
     const { id } = req.params;
     const userId = req.user._id;
 
-    const notification = await Notification.findById(id).populate('templateId');
+    // POPULATE: Added recipientIds and senderId
+    const notification = await Notification.findById(id)
+      .populate('templateId')
+      .populate('senderId', 'firstName lastName email')
+      .populate('recipientIds', 'firstName lastName email');
 
     if (!notification) return res.status(404).json({ message: "Not found" });
 
-    // 1. Determine the user's relationship to this notification
-    const isSender = notification.senderId?.toString() === userId.toString();
-    const isRecipient = notification.recipientIds.some(r => r.toString() === userId.toString());
+    const isSender = notification.senderId?._id?.toString() === userId.toString();
+    const isRecipient = notification.recipientIds.some(r => r._id.toString() === userId.toString());
 
-    // Security Check: Only the sender or a recipient should view this
     if (!isSender && !isRecipient) {
-      return res.status(403).json({ message: "You do not have permission to view this notification" });
+      return res.status(403).json({ message: "Access Denied" });
     }
 
-    // 2. Mark as read ONLY if the user is a recipient (not just the sender viewing sent items)
     if (isRecipient) {
       const alreadyRead = notification.readReceipts.some(r => r.userId.toString() === userId.toString());
       if (!alreadyRead) {
@@ -112,10 +134,8 @@ router.get('/:id', async (req, res) => {
       }
     }
 
-    // 3. Process Template
     let finalHtml = notification.templateId.contentLayout;
     const fieldValues = Object.fromEntries(notification.fieldValues || new Map());
-
     Object.keys(fieldValues).forEach(key => {
       const regex = new RegExp(`{{${key}}}`, 'g');
       finalHtml = finalHtml.replace(regex, fieldValues[key] || '');
@@ -124,9 +144,56 @@ router.get('/:id', async (req, res) => {
     res.json({
       ...notification._doc,
       html: finalHtml,
-      // For the UI: 'isRead' is true if the user is the sender OR if they are in the readReceipts
       isRead: isSender ? true : notification.readReceipts.some(r => r.userId.toString() === userId.toString())
     });
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+});
+
+router.post('/', async (req, res) => {
+  try {
+    const {
+      templateId,
+      recipientIds = [],
+      bccUserIds = [], // New field for BCC
+      subject,
+      fieldValues,
+      slug: manualSlug
+    } = req.body;
+
+    // 1. Resolve Slug
+    let finalSlug = manualSlug;
+    if (!finalSlug && templateId) {
+      const template = await NotificationTemplate.findById(templateId);
+      finalSlug = template?.slug;
+    }
+
+    // 2. Resolve Emails for both lists
+    const allIds = [...new Set([...recipientIds, ...bccUserIds])];
+    const users = await User.find({ _id: { $in: allIds } }).select('email');
+
+    const recipientEmails = users
+      .filter(u => recipientIds.includes(u._id.toString()))
+      .map(u => u.email);
+
+    const bccEmails = users
+      .filter(u => bccUserIds.includes(u._id.toString()))
+      .map(u => u.email);
+
+    // 3. Call the Core Service
+    const notification = await pushNotification({
+      io: req.app.get('socketio'),
+      senderId: req.user._id,
+      recipientEmails,
+      bccEmails, // Pass separately to the service
+      slug: finalSlug,
+      fieldValues,
+      subject,
+      type: 'manual'
+    });
+
+    res.status(201).json({ message: "Notification queued", notification });
   } catch (err) {
     res.status(500).json({ message: err.message });
   }
@@ -146,6 +213,60 @@ router.post('/dismiss-summary', async (req, res) => {
     res.status(200).json({ message: "Summary dismissed" });
   } catch (err) {
     res.status(500).json({ message: err.message });
+  }
+});
+
+// 2. CREATE OR UPDATE TEMPLATE
+router.post('/template', async (req, res) => {
+  try {
+    const { name, slug, description, fields, contentLayout, type, _id } = req.body;
+
+    // Basic Validation
+    if (!name || !slug || !contentLayout) {
+      return res.status(400).json({ message: "Name, Slug, and Content Layout are required." });
+    }
+
+    let template;
+
+    if (_id) {
+      // Update existing
+      template = await NotificationTemplate.findByIdAndUpdate(
+        _id,
+        { name, slug, description, fields, contentLayout, type },
+        { new: true, runValidators: true }
+      );
+    } else {
+      // Check if slug already exists before creating
+      const existing = await NotificationTemplate.findOne({ slug });
+      if (existing) {
+        return res.status(400).json({ message: "A template with this slug already exists." });
+      }
+
+      template = new NotificationTemplate({
+        name,
+        slug,
+        description,
+        fields,
+        type: type || 'system', // Default to 'system' if not provided
+        contentLayout
+      });
+      await template.save();
+    }
+
+    res.status(201).json(template);
+  } catch (err) {
+    console.error("Template Save Error:", err);
+    res.status(500).json({ message: "Server Error: " + err.message });
+  }
+});
+
+// 3. DELETE TEMPLATE
+router.delete('/template/:id', async (req, res) => {
+  try {
+    await NotificationTemplate.findByIdAndDelete(req.params.id);
+    res.json({ message: "Template deleted successfully" });
+  } catch (err) {
+    res.status(500).json({ message: "Error deleting template" });
   }
 });
 

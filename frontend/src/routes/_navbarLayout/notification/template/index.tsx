@@ -6,23 +6,68 @@ import { Textarea } from "@/components/ui/textarea";
 import { Info, Eye, Plus, Trash2, HelpCircle } from 'lucide-react';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
+import { useNavigate } from '@tanstack/react-router';
 import axios from 'axios';
+// import { useSearch, useLoaderData } from '@tanstack/react-router';
+import { useEffect } from 'react';
+
+// Define the search params type
+type TemplateSearch = {
+  editId?: string;
+};
 
 export const Route = createFileRoute('/_navbarLayout/notification/template/')({
+  validateSearch: (search: Record<string, unknown>): TemplateSearch => {
+    return {
+      editId: search.editId as string | undefined,
+    };
+  },
   component: TemplateBuilder,
 });
 
 function TemplateBuilder() {
+  const { editId } = Route.useSearch(); // Get the ID from URL
+  const navigate = useNavigate();
+
   const [formData, setFormData] = useState({
     name: '',
     slug: '',
     description: '',
     contentLayout: '',
+    type: 'system',
     fields: [] as any[]
   });
-  
+
   const [previewValues, setPreviewValues] = useState<Record<string, string>>({});
   const [saving, setSaving] = useState(false);
+  const [loading, setLoading] = useState(false);
+
+  // 1. Fetch Template data if in Edit Mode
+  useEffect(() => {
+    const fetchTemplateForEdit = async () => {
+      if (!editId) return;
+
+      setLoading(true);
+      try {
+        const token = localStorage.getItem('token');
+        const res = await axios.get(`/api/notification/template/${editId}`, {
+          headers: {
+            'Authorization': `Bearer ${token}`,
+            'X-Required-Permission': 'notification.template'
+          }
+        });
+        // Populate the form with existing data
+        setFormData(res.data);
+      } catch (err) {
+        console.error("Error fetching template:", err);
+        alert("Could not load template data.");
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchTemplateForEdit();
+  }, [editId]);
 
   // Field Management
   const addField = () => {
@@ -55,21 +100,41 @@ function TemplateBuilder() {
   const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
     setSaving(true);
+
     try {
-      await axios.post('/api/notification-template', formData);
-      alert("Template Saved Successfully!");
-    } catch (err) {
-      console.error(err);
-      alert("Failed to save template.");
+      const token = localStorage.getItem('token');
+
+      // The backend uses POST for both, but checks for the existence of _id
+      await axios.post(
+        '/api/notification/template',
+        formData, // This now includes _id if in edit mode
+        {
+          headers: {
+            'Authorization': `Bearer ${token}`,
+            'X-Required-Permission': 'notification.template'
+          }
+        }
+      );
+
+      alert(editId ? "Template Updated Successfully!" : "Template Created Successfully!");
+      navigate({ to: '/notification/template/list' });
+
+    } catch (err: any) {
+      console.error("Save Error:", err);
+      alert(err.response?.data?.message || "Failed to save template.");
     } finally {
       setSaving(false);
     }
   };
 
+  if (loading) return <div className="p-10 text-center">Loading template data...</div>;
+
   return (
     <div className="max-w-6xl mx-auto p-6 bg-white border rounded-xl shadow-sm mb-10">
       <div className="flex justify-between items-center mb-6 border-b pb-4">
-        <h2 className="text-2xl font-bold text-gray-800">New Template Builder</h2>
+        <h2 className="text-2xl font-bold text-gray-800">
+          {editId ? `Editing: ${formData.name}` : 'New Template Builder'}
+        </h2>
         <div className="flex gap-2">
           {/* INFO DIALOG */}
           <Dialog>
@@ -84,9 +149,9 @@ function TemplateBuilder() {
                 <p>1. Define a <strong>Key</strong> (e.g., <code>user_name</code>).</p>
                 <p>2. Use that key inside double curly braces in your HTML: <code>{`Hello {{user_name}}!`}</code></p>
                 <div className="bg-gray-900 text-green-400 p-3 rounded font-mono text-xs">
-                  {`<div>`} <br/>
-                  {`  <h1>Update for {{feature_name}}</h1>`} <br/>
-                  {`  <p>{{description}}</p>`} <br/>
+                  {`<div>`} <br />
+                  {`  <h1>Update for {{feature_name}}</h1>`} <br />
+                  {`  <p>{{description}}</p>`} <br />
                   {`</div>`}
                 </div>
               </div>
@@ -106,10 +171,10 @@ function TemplateBuilder() {
                 {formData.fields.map(f => (
                   <div key={f.key}>
                     <label className="text-[10px] font-bold uppercase">{f.label || f.key}</label>
-                    <Input 
-                      placeholder="Value..." 
+                    <Input
+                      placeholder="Value..."
                       className="h-8 text-sm"
-                      onChange={(e) => setPreviewValues(prev => ({...prev, [f.key]: e.target.value}))}
+                      onChange={(e) => setPreviewValues(prev => ({ ...prev, [f.key]: e.target.value }))}
                     />
                   </div>
                 ))}
@@ -126,15 +191,31 @@ function TemplateBuilder() {
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
           <div className="space-y-2">
             <label className="text-sm font-semibold">Template Name</label>
-            <Input required value={formData.name} onChange={e => setFormData({...formData, name: e.target.value})} placeholder="e.g. System Alert" />
+            <Input required value={formData.name} onChange={e => setFormData({ ...formData, name: e.target.value })} placeholder="e.g. System Alert" />
           </div>
           <div className="space-y-2">
             <label className="text-sm font-semibold">Unique Slug</label>
-            <Input required value={formData.slug} onChange={e => setFormData({...formData, slug: e.target.value})} placeholder="system-alert-v1" />
+            <Input required value={formData.slug} onChange={e => setFormData({ ...formData, slug: e.target.value })} placeholder="system-alert-v1" />
+          </div>
+          {/* Template Type Selection */}
+          <div className="space-y-2">
+            <label className="text-sm font-semibold">Template Type</label>
+            <Select
+              value={formData.type}
+              onValueChange={val => setFormData({ ...formData, type: val })}
+            >
+              <SelectTrigger className="h-10">
+                <SelectValue placeholder="Select type" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="system">System (System Notification)</SelectItem>
+                <SelectItem value="custom">Custom (Custom Notification)</SelectItem>
+              </SelectContent>
+            </Select>
           </div>
           <div className="space-y-2">
             <label className="text-sm font-semibold">Short Description</label>
-            <Input value={formData.description} onChange={e => setFormData({...formData, description: e.target.value})} placeholder="Brief internal notes" />
+            <Input value={formData.description} onChange={e => setFormData({ ...formData, description: e.target.value })} placeholder="Brief internal notes" />
           </div>
         </div>
 
@@ -148,7 +229,7 @@ function TemplateBuilder() {
             </h3>
             <Button type="button" size="sm" onClick={addField} variant="secondary">Add Input Field</Button>
           </div>
-          
+
           <div className="space-y-3">
             {formData.fields.map((field, idx) => (
               <div key={idx} className="flex gap-3 items-end bg-gray-50 p-3 rounded-lg border border-dashed">
@@ -188,17 +269,17 @@ function TemplateBuilder() {
             <label className="text-sm font-bold text-gray-700 font-mono">CONTENT LAYOUT (HTML)</label>
             <Info className="h-3 w-3 text-gray-400" />
           </div>
-          <Textarea 
+          <Textarea
             required
-            className="min-h-[350px] font-mono text-sm bg-slate-900 text-slate-100 p-4 border-2 border-slate-700 focus:border-blue-500" 
+            className="min-h-[350px] font-mono text-sm bg-slate-900 text-slate-100 p-4 border-2 border-slate-700 focus:border-blue-500"
             placeholder={`<div class="card">\n  <h1>{{title}}</h1>\n  <p>{{body}}</p>\n</div>`}
             value={formData.contentLayout}
-            onChange={e => setFormData({...formData, contentLayout: e.target.value})}
+            onChange={e => setFormData({ ...formData, contentLayout: e.target.value })}
           />
         </div>
 
         <Button type="submit" className="w-full h-12 text-lg font-bold" disabled={saving}>
-          {saving ? "Publishing..." : "Create Template"}
+          {saving ? "Saving..." : editId ? "Update Template" : "Create Template"}
         </Button>
       </form>
     </div>

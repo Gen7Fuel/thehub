@@ -5,6 +5,7 @@ import { Button } from "@/components/ui/button";
 import axios from 'axios';
 import { getSocket } from '@/lib/websocket';
 import { useAuth } from '@/context/AuthContext';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 
 export const Route = createFileRoute('/_navbarLayout/notification/')({
   component: NotificationPage,
@@ -109,7 +110,7 @@ function NotificationPage() {
           </div>
 
           {/* Admin Actions Group */}
-          {access?.notification?.create && (
+          {access?.notification?.create?.value && (
             <>
               <div className="flex gap-2 mb-4">
                 <Button size="sm" variant="outline" className="flex-1 gap-1 text-[11px] h-8" onClick={() => navigate({ to: '/notification/create' })}>
@@ -164,8 +165,21 @@ function NotificationPage() {
                 <h4 className={`text-sm truncate ${view === 'inbox' && !n.isRead ? 'font-bold text-gray-900' : 'text-gray-600'}`}>
                   {n.subject}
                 </h4>
-                <div className="text-[10px] mt-1 text-gray-400 font-medium uppercase">
-                  {n.notificationType}
+                <div className="text-[10px] mt-1 text-gray-400 font-medium uppercase truncate">
+                  {view === 'sent' ? (
+                    // Show notification type in Sent folder
+                    <span>Type: {n.notificationType}</span>
+                  ) : (
+                    // Show conditional logic in Inbox
+                    n.notificationType === 'system' ? (
+                      <span className="flex items-center gap-1">System Generated</span>
+                    ) : (
+                      <span className="text-blue-600 lowercase">
+                        <strong className="uppercase text-[9px]">From:</strong> {n.senderId?.firstName} {n.senderId?.lastName}
+                        <span className="text-gray-400 ml-1">[{n.senderId?.email}]</span>
+                      </span>
+                    )
+                  )}
                 </div>
               </div>
             ))
@@ -192,11 +206,23 @@ function NotificationPage() {
                       <h1 className="text-2xl font-extrabold text-gray-900 leading-tight">
                         {selectedNotif.subject}
                       </h1>
+                      {/* ... inside the detail view ... */}
                       <p className="text-sm text-gray-500 mt-2 flex items-center gap-2">
                         <span className="w-2 h-2 rounded-full bg-blue-500"></span>
-                        {view === 'inbox'
-                          ? `From: ${selectedNotif.senderId?.firstName || 'System'}`
-                          : `To: ${selectedNotif.recipientIds?.length || 0} Recipients`}
+                        {view === 'inbox' ? (
+                          selectedNotif.notificationType === 'system' ? (
+                            "From: System Generated"
+                          ) : (
+                            <span>
+                              From: <strong>{selectedNotif.senderId?.firstName} {selectedNotif.senderId?.lastName}</strong>
+                              <span className="ml-1 text-xs">[{selectedNotif.senderId?.email}]</span>
+                            </span>
+                          )
+                        ) : (
+                          <span className="flex items-center gap-1">
+                            To: <RecipientListDialog recipients={selectedNotif.recipientIds} />
+                          </span>
+                        )}
                         {' • '}{new Date(selectedNotif.createdAt).toLocaleString()}
                       </p>
                     </div>
@@ -224,6 +250,31 @@ function NotificationPage() {
         )}
       </div>
     </div>
+  );
+}
+
+function RecipientListDialog({ recipients }: { recipients: any[] }) {
+  return (
+    <Dialog>
+      <DialogTrigger asChild>
+        <span className="text-blue-600 underline cursor-pointer hover:text-blue-800 transition-colors">
+          {recipients?.length || 0} Recipients
+        </span>
+      </DialogTrigger>
+      <DialogContent className="max-w-md">
+        <DialogHeader>
+          <DialogTitle>Recipient List</DialogTitle>
+        </DialogHeader>
+        <div className="max-h-[300px] overflow-y-auto space-y-2 mt-4">
+          {recipients?.map((user) => (
+            <div key={user._id} className="flex flex-col border-b pb-2 last:border-0">
+              <span className="text-sm font-semibold">{user.firstName} {user.lastName}</span>
+              <span className="text-xs text-gray-500">{user.email}</span>
+            </div>
+          ))}
+        </div>
+      </DialogContent>
+    </Dialog>
   );
 }
 // import { useState, useEffect } from 'react';

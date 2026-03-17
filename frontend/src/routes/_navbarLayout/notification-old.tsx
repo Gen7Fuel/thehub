@@ -109,7 +109,7 @@ function NotificationPage() {
           </div>
 
           {/* Admin Actions Group */}
-          {access?.notification?.create && (
+          {access?.notification?.create?.value && (
             <>
               <div className="flex gap-2 mb-4">
                 <Button size="sm" variant="outline" className="flex-1 gap-1 text-[11px] h-8" onClick={() => navigate({ to: "/notification/create" })}>

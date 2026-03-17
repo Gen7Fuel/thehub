@@ -11,6 +11,11 @@ const notificationTemplateSchema = new mongoose.Schema({
     fieldType: String, // e.g., "text", "textarea", "date", "url"
     required: { type: Boolean, default: false }
   }],
+  type: { 
+    type: String,
+    enum: ['system', 'custom'],
+    default: 'system'
+  },
   // The raw HTML/Markdown with placeholders like {{feature_name}}
   contentLayout: { type: String, required: true }
 }, { timestamps: true });
