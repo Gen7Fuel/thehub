@@ -42,7 +42,7 @@ function RouteComponent() {
     to: end,
   })
   const { user } = useAuth()
-  // const access = user?.access || {}
+  const access = user?.access || {}
   const navigate = useNavigate()
   const [location, setLocation] = useState<string>(user?.location || "")
   const [_, setTimezone] = useState<string>(user?.timezone || "America/Toronto")
@@ -60,25 +60,25 @@ function RouteComponent() {
     currentIndex: 0
   })
 
-  // Date edit popover state
-  const [dateEditPopover, setDateEditPopover] = useState<{
-    payableId: string | null
-    open: boolean
-  }>({ payableId: null, open: false })
+  // Track which payable's date popover is open (null = none)
+  const [dateEditOpenId, setDateEditOpenId] = useState<string | null>(null)
 
   const updatePayableDate = async (payableId: string, newDate: Date) => {
     try {
       const token = localStorage.getItem('token')
-      await axios.put(`${domain}/api/payables/${payableId}`, { createdAt: newDate.toISOString() }, {
+      const payload = { createdAt: newDate.toISOString() }
+      console.log('[updatePayableDate] PUT', `${domain}/api/payables/${payableId}`, payload)
+      const response = await axios.put(`${domain}/api/payables/${payableId}`, payload, {
         headers: {
           Authorization: `Bearer ${token}`,
           'X-Required-Permission': 'payables',
         },
       })
+      console.log('[updatePayableDate] response:', response.data)
       setPayables(prev =>
         prev.map(p => p._id === payableId ? { ...p, createdAt: newDate.toISOString() } : p)
       )
-      setDateEditPopover({ payableId: null, open: false })
+      setDateEditOpenId(null)
     } catch (error: any) {
       if (error.response?.status === 403) {
         navigate({ to: '/no-access' })
@@ -349,16 +349,14 @@ function RouteComponent() {
                       >
                         <FileDown className="h-4 w-4" />
                       </Button>
-                      <Popover
-                        open={dateEditPopover.payableId === payable._id && dateEditPopover.open}
-                        onOpenChange={(open) =>
-                          setDateEditPopover({ payableId: open ? payable._id : null, open })
-                        }
+                      {access?.payables?.changeDate && <Popover
+                        open={dateEditOpenId === payable._id}
+                        onOpenChange={(open) => setDateEditOpenId(open ? payable._id : null)}
                       >
                         <PopoverTrigger asChild>
-                          <Button size="sm" variant="outline" title="Change date">
+                          <button className="inline-flex items-center justify-center rounded-md border border-input bg-background h-8 w-8 hover:bg-accent hover:text-accent-foreground" title="Change date">
                             <CalendarIcon className="h-4 w-4" />
-                          </Button>
+                          </button>
                         </PopoverTrigger>
                         <PopoverContent className="w-auto p-0" align="end">
                           <Calendar
@@ -370,7 +368,7 @@ function RouteComponent() {
                             initialFocus
                           />
                         </PopoverContent>
-                      </Popover>
+                      </Popover>}
                     </div>
                   </td>
                 </tr>

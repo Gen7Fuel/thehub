@@ -4,6 +4,18 @@ const mongoose = require('mongoose');
 const Payable = require('../models/Payables');
 const Safesheet = require('../models/Safesheet');
 const { logAction } = require('../middleware/actionLogger');
+const { getPermissionMap } = require('../utils/permissionStore');
+
+// Helper: check if a user has effective access to a permId
+function hasEffectiveAccess(user, role, permId) {
+  const userOverride = user.customPermissionsArray?.find(p => p.permId === permId);
+  if (userOverride !== undefined) return userOverride.value;
+  if (role && role.permissionsArray) {
+    const roleSetting = role.permissionsArray.find(p => p.permId === permId);
+    return roleSetting ? roleSetting.value : false;
+  }
+  return false;
+}
 
 // GET all payables
 router.get('/', async (req, res) => {
@@ -154,6 +166,17 @@ router.put('/:id', async (req, res) => {
       return res.status(400).json({ error: 'Amount must be non-negative' });
     }
 
+    console.log('[PUT /payables/:id] body:', req.body);
+
+    // Extra permission check: changing createdAt requires payables.changeDate
+    if (createdAt !== undefined) {
+      const permissionMap = getPermissionMap();
+      const permId = permissionMap.get('payables.changeDate');
+      if (!permId || !hasEffectiveAccess(req.user, req.user.role, permId)) {
+        return res.status(403).json({ message: 'Access denied for payables.changeDate' });
+      }
+    }
+
     const updateData = {};
     if (vendorName !== undefined) updateData.vendorName = vendorName;
     if (location !== undefined) updateData.location = location;
@@ -162,14 +185,33 @@ router.put('/:id', async (req, res) => {
     if (amount !== undefined) updateData.amount = amount;
     if (images !== undefined) updateData.images = images;
     if (createdAt !== undefined) updateData.createdAt = new Date(createdAt);
-    
+
+    console.log('[PUT /payables/:id] updateData:', updateData);
+
     const before = await Payable.findById(req.params.id).lean();
+    console.log('[PUT /payables/:id] before.createdAt:', before?.createdAt);
+
+    const updateOptions = { new: true, runValidators: true };
+    if (createdAt !== undefined) updateOptions.timestamps = false;
+
+    console.log('[PUT /payables/:id] updateOptions:', updateOptions);
+
+    // If createdAt is being updated, bypass Mongoose timestamps via native driver
+    if (createdAt !== undefined) {
+      await Payable.collection.updateOne(
+        { _id: new mongoose.Types.ObjectId(req.params.id) },
+        { $set: { createdAt: new Date(createdAt) } }
+      );
+      delete updateData.createdAt;
+    }
 
     const payable = await Payable.findByIdAndUpdate(
       req.params.id,
       updateData,
-      { new: true, runValidators: true }
+      updateOptions
     ).populate('location', 'stationName csoCode');
+
+    console.log('[PUT /payables/:id] after.createdAt:', payable?.createdAt);
     
     if (!payable) {
       return res.status(404).json({ error: 'Payable not found' });
