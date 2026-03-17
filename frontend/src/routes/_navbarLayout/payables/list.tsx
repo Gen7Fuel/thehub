@@ -42,7 +42,7 @@ function RouteComponent() {
     to: end,
   })
   const { user } = useAuth()
-  // const access = user?.access || {}
+  const access = user?.access || {}
   const navigate = useNavigate()
   const [location, setLocation] = useState<string>(user?.location || "")
   const [_, setTimezone] = useState<string>(user?.timezone || "America/Toronto")
@@ -349,7 +349,7 @@ function RouteComponent() {
                       >
                         <FileDown className="h-4 w-4" />
                       </Button>
-                      <Popover
+                      {access?.payables?.changeDate && <Popover
                         open={dateEditOpenId === payable._id}
                         onOpenChange={(open) => setDateEditOpenId(open ? payable._id : null)}
                       >
@@ -368,7 +368,7 @@ function RouteComponent() {
                             initialFocus
                           />
                         </PopoverContent>
-                      </Popover>
+                      </Popover>}
                     </div>
                   </td>
                 </tr>

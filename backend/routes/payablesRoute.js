@@ -4,6 +4,18 @@ const mongoose = require('mongoose');
 const Payable = require('../models/Payables');
 const Safesheet = require('../models/Safesheet');
 const { logAction } = require('../middleware/actionLogger');
+const { getPermissionMap } = require('../utils/permissionStore');
+
+// Helper: check if a user has effective access to a permId
+function hasEffectiveAccess(user, role, permId) {
+  const userOverride = user.customPermissionsArray?.find(p => p.permId === permId);
+  if (userOverride !== undefined) return userOverride.value;
+  if (role && role.permissionsArray) {
+    const roleSetting = role.permissionsArray.find(p => p.permId === permId);
+    return roleSetting ? roleSetting.value : false;
+  }
+  return false;
+}
 
 // GET all payables
 router.get('/', async (req, res) => {
@@ -155,6 +167,15 @@ router.put('/:id', async (req, res) => {
     }
 
     console.log('[PUT /payables/:id] body:', req.body);
+
+    // Extra permission check: changing createdAt requires payables.changeDate
+    if (createdAt !== undefined) {
+      const permissionMap = getPermissionMap();
+      const permId = permissionMap.get('payables.changeDate');
+      if (!permId || !hasEffectiveAccess(req.user, req.user.role, permId)) {
+        return res.status(403).json({ message: 'Access denied for payables.changeDate' });
+      }
+    }
 
     const updateData = {};
     if (vendorName !== undefined) updateData.vendorName = vendorName;
