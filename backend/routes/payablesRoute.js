@@ -154,6 +154,8 @@ router.put('/:id', async (req, res) => {
       return res.status(400).json({ error: 'Amount must be non-negative' });
     }
 
+    console.log('[PUT /payables/:id] body:', req.body);
+
     const updateData = {};
     if (vendorName !== undefined) updateData.vendorName = vendorName;
     if (location !== undefined) updateData.location = location;
@@ -162,14 +164,33 @@ router.put('/:id', async (req, res) => {
     if (amount !== undefined) updateData.amount = amount;
     if (images !== undefined) updateData.images = images;
     if (createdAt !== undefined) updateData.createdAt = new Date(createdAt);
-    
+
+    console.log('[PUT /payables/:id] updateData:', updateData);
+
     const before = await Payable.findById(req.params.id).lean();
+    console.log('[PUT /payables/:id] before.createdAt:', before?.createdAt);
+
+    const updateOptions = { new: true, runValidators: true };
+    if (createdAt !== undefined) updateOptions.timestamps = false;
+
+    console.log('[PUT /payables/:id] updateOptions:', updateOptions);
+
+    // If createdAt is being updated, bypass Mongoose timestamps via native driver
+    if (createdAt !== undefined) {
+      await Payable.collection.updateOne(
+        { _id: new mongoose.Types.ObjectId(req.params.id) },
+        { $set: { createdAt: new Date(createdAt) } }
+      );
+      delete updateData.createdAt;
+    }
 
     const payable = await Payable.findByIdAndUpdate(
       req.params.id,
       updateData,
-      { new: true, runValidators: true }
+      updateOptions
     ).populate('location', 'stationName csoCode');
+
+    console.log('[PUT /payables/:id] after.createdAt:', payable?.createdAt);
     
     if (!payable) {
       return res.status(404).json({ error: 'Payable not found' });
