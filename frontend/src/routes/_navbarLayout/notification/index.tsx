@@ -29,11 +29,18 @@ function NotificationPage() {
       const token = localStorage.getItem('token');
       const endpoint = view === 'inbox' ? '/api/notification' : '/api/notification/sent';
       const res = await axios.get(endpoint, {
-        headers: { Authorization: `Bearer ${token || ''}` }
+        headers: {
+          Authorization: `Bearer ${token || ''}`,
+          'X-Required-Permission': 'notification'
+        }
       });
       setNotifications(res.data);
-    } catch (err) {
+    } catch (err: any) {
       console.error("Error fetching list", err);
+      // FIX: Check the error response status here
+      if (err.response && err.response.status === 403) {
+        navigate({ to: '/no-access' });
+      }
     } finally {
       setLoading(false);
     }
@@ -102,9 +109,10 @@ function NotificationPage() {
               <Bell className="h-5 w-5 text-blue-600" />
               <h2 className="text-xl font-bold tracking-tight">Notification Center</h2>
             </div>
+            {/* Find this line in your Header Section */}
             {view === 'inbox' && (
               <span className="text-xs bg-blue-100 px-2 py-1 rounded-full text-blue-600 font-bold">
-                {notifications.filter(n => !n.isRead).length} Unread
+                {notifications.filter(n => !n.isRead && n.status !== 'archived').length} Unread
               </span>
             )}
           </div>
@@ -151,41 +159,43 @@ function NotificationPage() {
               <p className="text-sm font-medium">No {view} found</p>
             </div>
           ) : (
-            notifications.map((n) => (
-              <div
-                key={n._id}
-                onClick={() => setSelectedId(n._id)}
-                className={`p-4 border-b cursor-pointer transition-all hover:bg-slate-50 relative ${selectedId === n._id ? 'bg-blue-50 border-l-4 border-l-blue-600' : 'bg-white'}`}
-              >
-                <div className="flex justify-between text-[10px] mb-1 uppercase tracking-wider text-gray-400">
-                  <span>{new Date(n.createdAt).toLocaleDateString()}</span>
-                  {view === 'inbox' && !n.isRead && <span className="h-2 w-2 bg-blue-600 rounded-full animate-pulse"></span>}
-                  {view === 'sent' && <span className="text-blue-500 font-bold">{n.recipientCount || 0} Sent</span>}
-                </div>
-                <h4 className={`text-sm truncate ${view === 'inbox' && !n.isRead ? 'font-bold text-gray-900' : 'text-gray-600'}`}>
-                  {n.subject}
-                </h4>
-                <div className="text-[10px] mt-1 text-gray-400 font-medium uppercase truncate">
-                  {view === 'sent' ? (
-                    // Show notification type in Sent folder
-                    <span>Type: {n.notificationType}</span>
-                  ) : (
-                    // Show conditional logic in Inbox
-                    n.notificationType === 'system' ? (
-                      <span className="flex items-center gap-1">System Generated</span>
+            notifications
+              .filter((n) => n.status !== 'archived')
+              .map((n) => (
+                <div
+                  key={n._id}
+                  onClick={() => setSelectedId(n._id)}
+                  className={`p-4 border-b cursor-pointer transition-all hover:bg-slate-50 relative ${selectedId === n._id ? 'bg-blue-50 border-l-4 border-l-blue-600' : 'bg-white'}`}
+                >
+                  <div className="flex justify-between text-[10px] mb-1 uppercase tracking-wider text-gray-400">
+                    <span>{new Date(n.createdAt).toLocaleString()}</span>
+                    {view === 'inbox' && !n.isRead && <span className="h-2 w-2 bg-blue-600 rounded-full animate-pulse"></span>}
+                    {view === 'sent' && <span className="text-blue-500 font-bold">{n.recipientCount || 0} Sent</span>}
+                  </div>
+                  <h4 className={`text-sm truncate ${view === 'inbox' && !n.isRead ? 'font-bold text-gray-900' : 'text-gray-600'}`}>
+                    {n.subject}
+                  </h4>
+                  <div className="text-[10px] mt-1 text-gray-400 font-medium uppercase truncate">
+                    {view === 'sent' ? (
+                      // Show notification type in Sent folder
+                      <span>Type: {n.notificationType}</span>
                     ) : (
-                      <span className="text-blue-600 lowercase">
-                        <strong className="uppercase text-[9px] mr-1">From:</strong>
-                        <span className="capitalize">
-                          {n.senderId?.firstName} {n.senderId?.lastName}
+                      // Show conditional logic in Inbox
+                      n.notificationType === 'system' ? (
+                        <span className="flex items-center gap-1">System Generated</span>
+                      ) : (
+                        <span className="text-blue-600 lowercase">
+                          <strong className="uppercase text-[9px] mr-1">From:</strong>
+                          <span className="capitalize">
+                            {n.senderId?.firstName} {n.senderId?.lastName}
+                          </span>
+                          <span className="text-gray-400 ml-1">[{n.senderId?.email}]</span>
                         </span>
-                        <span className="text-gray-400 ml-1">[{n.senderId?.email}]</span>
-                      </span>
-                    )
-                  )}
+                      )
+                    )}
+                  </div>
                 </div>
-              </div>
-            ))
+              ))
           )}
         </div>
       </div>
@@ -217,7 +227,7 @@ function NotificationPage() {
                             "From: System Generated"
                           ) : (
                             <span>
-                              From: <strong>{selectedNotif.senderId?.firstName} {selectedNotif.senderId?.lastName}</strong>
+                              From: <strong className="capitalize">{selectedNotif.senderId?.firstName} {selectedNotif.senderId?.lastName}</strong>
                               <span className="ml-1 text-xs">[{selectedNotif.senderId?.email}]</span>
                             </span>
                           )
