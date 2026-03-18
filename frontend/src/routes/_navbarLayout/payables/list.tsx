@@ -7,12 +7,14 @@ import { Button } from '@/components/ui/button'
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { getStartAndEndOfToday, toUTC } from '@/lib/utils'
 import { domain } from '@/lib/constants'
-import { Eye, ChevronLeft, ChevronRight, ExternalLink } from 'lucide-react'
+import { Eye, ChevronLeft, ChevronRight, ExternalLink, CalendarIcon } from 'lucide-react'
 import axios from "axios"
 import { useAuth } from "@/context/AuthContext";
 import { FileDown } from 'lucide-react'
 import PayablePDF from '@/components/custom/PayablePDF'
 import { pdf } from '@react-pdf/renderer'
+import { Calendar } from '@/components/ui/calendar'
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
 
 interface Payable {
   _id: string
@@ -40,7 +42,7 @@ function RouteComponent() {
     to: end,
   })
   const { user } = useAuth()
-  // const access = user?.access || {}
+  const access = user?.access || {}
   const navigate = useNavigate()
   const [location, setLocation] = useState<string>(user?.location || "")
   const [_, setTimezone] = useState<string>(user?.timezone || "America/Toronto")
@@ -57,6 +59,35 @@ function RouteComponent() {
     images: [],
     currentIndex: 0
   })
+
+  // Track which payable's date popover is open (null = none)
+  const [dateEditOpenId, setDateEditOpenId] = useState<string | null>(null)
+
+  const updatePayableDate = async (payableId: string, newDate: Date) => {
+    try {
+      const token = localStorage.getItem('token')
+      const payload = { createdAt: newDate.toISOString() }
+      console.log('[updatePayableDate] PUT', `${domain}/api/payables/${payableId}`, payload)
+      const response = await axios.put(`${domain}/api/payables/${payableId}`, payload, {
+        headers: {
+          Authorization: `Bearer ${token}`,
+          'X-Required-Permission': 'payables',
+        },
+      })
+      console.log('[updatePayableDate] response:', response.data)
+      setPayables(prev =>
+        prev.map(p => p._id === payableId ? { ...p, createdAt: newDate.toISOString() } : p)
+      )
+      setDateEditOpenId(null)
+    } catch (error: any) {
+      if (error.response?.status === 403) {
+        navigate({ to: '/no-access' })
+        return
+      }
+      console.error('Error updating payable date:', error)
+      alert('Failed to update date')
+    }
+  }
 
   async function fetchImageDataUri(filename: string): Promise<string> {
     try {
@@ -318,6 +349,26 @@ function RouteComponent() {
                       >
                         <FileDown className="h-4 w-4" />
                       </Button>
+                      {access?.payables?.changeDate && <Popover
+                        open={dateEditOpenId === payable._id}
+                        onOpenChange={(open) => setDateEditOpenId(open ? payable._id : null)}
+                      >
+                        <PopoverTrigger asChild>
+                          <button className="inline-flex items-center justify-center rounded-md border border-input bg-background h-8 w-8 hover:bg-accent hover:text-accent-foreground" title="Change date">
+                            <CalendarIcon className="h-4 w-4" />
+                          </button>
+                        </PopoverTrigger>
+                        <PopoverContent className="w-auto p-0" align="end">
+                          <Calendar
+                            mode="single"
+                            selected={new Date(payable.createdAt)}
+                            onSelect={(day) => {
+                              if (day) updatePayableDate(payable._id, day)
+                            }}
+                            initialFocus
+                          />
+                        </PopoverContent>
+                      </Popover>}
                     </div>
                   </td>
                 </tr>

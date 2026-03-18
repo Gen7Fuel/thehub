@@ -112,6 +112,16 @@ vi.mock('@/components/custom/PayablePDF', () => ({
   default: () => <div />,
 }))
 
+vi.mock('@/components/ui/calendar', () => ({
+  Calendar: () => <div data-testid="calendar" />,
+}))
+
+vi.mock('@/components/ui/popover', () => ({
+  Popover: ({ children }: any) => <div>{children}</div>,
+  PopoverTrigger: ({ children }: any) => <div>{children}</div>,
+  PopoverContent: ({ children }: any) => <div>{children}</div>,
+}))
+
 vi.mock('@react-pdf/renderer', () => ({
   pdf: vi.fn(() => ({
     updateContainer: vi.fn(),
