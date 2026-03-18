@@ -175,7 +175,10 @@ function NotificationPage() {
                       <span className="flex items-center gap-1">System Generated</span>
                     ) : (
                       <span className="text-blue-600 lowercase">
-                        <strong className="uppercase text-[9px]">From:</strong> {n.senderId?.firstName} {n.senderId?.lastName}
+                        <strong className="uppercase text-[9px] mr-1">From:</strong>
+                        <span className="capitalize">
+                          {n.senderId?.firstName} {n.senderId?.lastName}
+                        </span>
                         <span className="text-gray-400 ml-1">[{n.senderId?.email}]</span>
                       </span>
                     )
