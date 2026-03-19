@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { createFileRoute, useNavigate } from '@tanstack/react-router';
-import { ChevronLeft, Inbox, Bell, PlusCircle, LayoutTemplate, Send } from 'lucide-react';
+import { ChevronLeft, Inbox, Bell, PlusCircle, LayoutTemplate, Send, Info } from 'lucide-react';
 import { Button } from "@/components/ui/button";
 import axios from 'axios';
 import { getSocket } from '@/lib/websocket';
@@ -108,6 +108,37 @@ function NotificationPage() {
             <div className="flex items-center gap-2">
               <Bell className="h-5 w-5 text-blue-600" />
               <h2 className="text-xl font-bold tracking-tight">Notification Center</h2>
+
+              {/* Policy Info Dialog */}
+              <Dialog>
+                <DialogTrigger asChild>
+                  <button className="text-gray-400 hover:text-blue-600 transition-colors">
+                    <Info className="h-4 w-4" />
+                  </button>
+                </DialogTrigger>
+                <DialogContent className="sm:max-w-[425px]">
+                  <DialogHeader>
+                    <DialogTitle className="flex items-center gap-2">
+                      <Bell className="h-5 w-5 text-blue-600" />
+                      Notification Policy
+                    </DialogTitle>
+                  </DialogHeader>
+                  <div className="py-4 space-y-4 text-sm text-gray-600 leading-relaxed">
+                    <div className="flex gap-3 p-3 bg-blue-50 rounded-lg border border-blue-100">
+                      <div className="h-2 w-2 mt-1.5 rounded-full bg-blue-600 shrink-0" />
+                      <p>
+                        <strong>Auto-Archive:</strong> Notifications that have been read by all recipients are automatically moved to archives after <strong>8 days</strong>.
+                      </p>
+                    </div>
+                    <div className="flex gap-3 p-3 bg-amber-50 rounded-lg border border-amber-100">
+                      <div className="h-2 w-2 mt-1.5 rounded-full bg-amber-600 shrink-0" />
+                      <p>
+                        <strong>Permanent Removal:</strong> To keep your workspace clean, all notifications (including unread and archived) are permanently deleted after <strong>30 days</strong>.
+                      </p>
+                    </div>
+                  </div>
+                </DialogContent>
+              </Dialog>
             </div>
             {/* Find this line in your Header Section */}
             {view === 'inbox' && (
