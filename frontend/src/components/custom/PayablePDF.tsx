@@ -141,7 +141,7 @@ export default function PayablePDF({ payable, imageDataUris }: PayablePDFProps) 
           </View>
             <View style={styles.row}>
               <Text style={styles.cellLabel}>Created</Text>
-              <Text style={styles.cellValue}>{new Date(payable.createdAt).toLocaleString()}</Text>
+              <Text style={styles.cellValue}>{new Date(payable.createdAt).toLocaleString('en-US', { timeZone: 'UTC' })}</Text>
             </View>
           <View style={[styles.row, styles.rowLast]}>
             <Text style={styles.cellLabel}>Notes</Text>

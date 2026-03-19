@@ -311,7 +311,7 @@ function RouteComponent() {
               payables.map((payable) => (
                 <tr key={payable._id} className="hover:bg-gray-50">
                   <td className="border-dashed border-t border-gray-300 px-4 py-2">
-                    {new Date(payable.createdAt).toLocaleDateString()}
+                    {new Date(payable.createdAt).toLocaleDateString('en-CA', { timeZone: 'UTC' })}
                   </td>
                   <td className="border-dashed border-t border-gray-300 px-4 py-2">
                     {payable.vendorName}
