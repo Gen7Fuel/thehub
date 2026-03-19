@@ -47,6 +47,7 @@ const productCategoryRoutes = require("./routes/productCategoryRoutes");
 const logsRoute = require("./routes/logsRoute");
 const sageRoutes = require("./routes/sageRoutes");
 const notificationRoutes = require("./routes/notificationRoutes");
+const userGroupRoutes = require("./routes/userGroupRoutes");
 
 const { auth } = require("./middleware/authMiddleware");
 
@@ -103,6 +104,7 @@ app.use("/api/permissions", permissionRoutes);
 app.use("/api/roles", roleRoutes);
 app.use("/api/logs", logsRoute);
 app.use("/api/notification", notificationRoutes);
+app.use("/api/user-groups", userGroupRoutes);
 
 // Reporting
 app.use("/api/sales-summary", salesSummaryRoutes);
