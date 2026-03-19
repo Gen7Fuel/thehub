@@ -248,8 +248,8 @@ function RouteComponent() {
                 {/* Kardpoll group */}
                 {showKardpoll && (
                   <>
-                    <th className="px-1 py-1 text-center align-bottom h-24 bg-emerald-50">Litres Sold</th>
-                    <th className="px-1 py-1 text-center align-bottom h-24 bg-emerald-50">Sales</th>
+                    <th className="px-1 py-1 text-center align-bottom h-24 bg-emerald-50">Kardpoll Litres Sold</th>
+                    <th className="px-1 py-1 text-center align-bottom h-24 bg-emerald-50">Kardpoll Sales</th>
                     <th className="px-1 py-1 text-center align-bottom h-24 bg-emerald-50">AR</th>
                   </>
                 )}

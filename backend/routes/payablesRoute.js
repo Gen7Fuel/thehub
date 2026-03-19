@@ -28,10 +28,6 @@ router.get('/', async (req, res) => {
     if (from && to) {
       const start = new Date(from);
       const end = new Date(to);
-
-      // Make sure end includes the whole day
-      end.setHours(23, 59, 59, 999);
-
       filter.createdAt = { $gte: start, $lte: end }
     }
 
@@ -294,10 +290,10 @@ router.get('/stats/summary', async (req, res) => {
     
     if (date) {
       const startOfDay = new Date(date);
-      startOfDay.setHours(0, 0, 0, 0);
-      
+      startOfDay.setUTCHours(0, 0, 0, 0);
+
       const endOfDay = new Date(date);
-      endOfDay.setHours(23, 59, 59, 999);
+      endOfDay.setUTCHours(23, 59, 59, 999);
       
       matchFilter.createdAt = {
         $gte: startOfDay,

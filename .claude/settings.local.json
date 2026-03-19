@@ -9,7 +9,10 @@
       "Bash(ls -la c:/Users/MohammadHasan/workspace/thehub/frontend/*.config.*)",
       "Bash(find c:/Users/MohammadHasan/workspace/thehub/frontend/src -name *route* -o -name *router*)",
       "Bash(find c:/Users/MohammadHasan/workspace/thehub -name *.test.* -o -name *.spec.*)",
-      "Bash(find c:/Users/MohammadHasan/workspace/thehub/frontend/src -name *.test.* -o -name *.spec.*)"
+      "Bash(find c:/Users/MohammadHasan/workspace/thehub/frontend/src -name *.test.* -o -name *.spec.*)",
+      "Bash(grep -n import.*css C:/Users/MohammadHasan/workspace/thehub/frontend/src/routes/_navbarLayout/cash-summary/*.tsx)",
+      "Bash(node -e \"const {JSDOM} = require\\(''jsdom''\\); const d = new JSDOM\\(''''\\); const f = new d.window.File\\([''test''], ''test.txt''\\); console.log\\(typeof f.text\\);\")",
+      "Bash(find C:UsersMohammadHasanworkspacethehub -name *writeoff* -o -name *write-off* -o -name *write_off*)"
     ]
   }
 }

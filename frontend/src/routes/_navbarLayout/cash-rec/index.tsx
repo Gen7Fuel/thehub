@@ -154,7 +154,9 @@ export const Route = createFileRoute('/_navbarLayout/cash-rec/')({
     let payablesRows: Array<{ amount?: number; paymentMethod?: string; vendorName?: string; createdAt?: string; location?: { stationName?: string } }> | undefined
     let totalPayablesAmount: number | undefined
     try {
-      const qs = new URLSearchParams({ from: date, to: date }).toString()
+      const startOfDay = new Date(`${date}T00:00:00`)
+      const endOfDay = new Date(`${date}T23:59:59.999`)
+      const qs = new URLSearchParams({ from: startOfDay.toISOString(), to: endOfDay.toISOString() }).toString()
       const resp = await fetch(`/api/payables?${qs}`, {
         headers: { Authorization: `Bearer ${localStorage.getItem('token') || ''}` },
       })
