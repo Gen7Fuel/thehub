@@ -9,6 +9,7 @@ require('dotenv').config();
  */
 async function pushNotification({
   io,
+  senderId = null, // Optional: Who is sending this notification (Admin/User ID)
   recipientEmails,
   bccEmails = [], // Optional BCC list
   slug,          // Template slug (e.g., 'issue-raised')
@@ -48,6 +49,7 @@ async function pushNotification({
     if (recipientIds.length > 0) {
       newNotification = await Notification.create({
         templateId: template._id,
+        senderId,
         recipientIds,
         subject,
         fieldValues,

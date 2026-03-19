@@ -32,7 +32,7 @@ const notificationSchema = new mongoose.Schema({
 
   status: {
     type: String,
-    enum: ['draft', 'sent', 'scheduled'],
+    enum: ['draft', 'sent', 'scheduled', 'archived'],
     default: 'sent'
   },
   notificationType: {
