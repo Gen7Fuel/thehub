@@ -17,9 +17,9 @@ function TemplateList() {
   const fetchTemplates = async () => {
     try {
       const res = await axios.get('/api/notification/template', {
-        headers: { 
-            'Authorization': `Bearer ${token}`,
-            'X-Required-Permission': 'notification.template' 
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'X-Required-Permission': 'notification.template'
         }
       });
       setTemplates(res.data);
@@ -34,19 +34,40 @@ function TemplateList() {
 
   const handleDelete = async (id: string) => {
     if (!window.confirm("Are you sure you want to delete this template?")) return;
+
     try {
       await axios.delete(`/api/notification/template/${id}`, {
-        headers: { 
-            'Authorization': `Bearer ${token}`,
-            'X-Required-Permission': 'notification.template' 
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'X-Required-Permission': 'notification.template'
         }
       });
+
+      // If successful, update the local state
       setTemplates(templates.filter((t: any) => t._id !== id));
-    } catch (err) {
-      alert("Error deleting template");
+
+    } catch (err: any) {
+      console.error("Full Error Object:", err); // ADD THIS: Check your browser console
+
+      // Check if we have a response from the server
+      if (err.response) {
+        const status = err.response.status;
+        const errorMessage = err.response.data?.message || "Server Error";
+
+        if (status === 400) {
+          alert(errorMessage); // This will now show your "linked to existing notifications" message
+        } else if (status === 403) {
+          navigate({ to: '/no-access' }); // Redirect to a 403 Forbidden page if the user doesn't have permission
+          return;
+        } else {
+          alert(`Error ${status}: ${errorMessage}`);
+        }
+      } else {
+        // This handles network errors or cases where the server didn't respond
+        alert("Network error: Could not reach the server.");
+      }
     }
   };
-
   if (loading) return <div className="p-10 text-center">Loading templates...</div>;
 
   return (
@@ -75,21 +96,21 @@ function TemplateList() {
                   </span>
                 </td>
                 <td className="p-4 text-right space-x-2">
-                  <Button 
-                    variant="outline" 
-                    size="sm" 
+                  <Button
+                    variant="outline"
+                    size="sm"
                     className="h-8 w-8 p-0"
-                    onClick={() => navigate({ 
-                        to: '/notification/template', 
-                        // We will handle passing the ID for editing in the next step
-                        search: { editId: t._id } 
+                    onClick={() => navigate({
+                      to: '/notification/template',
+                      // We will handle passing the ID for editing in the next step
+                      search: { editId: t._id }
                     })}
                   >
                     <Edit3 className="h-4 w-4" />
                   </Button>
-                  <Button 
-                    variant="outline" 
-                    size="sm" 
+                  <Button
+                    variant="outline"
+                    size="sm"
                     className="h-8 w-8 p-0 text-red-500 hover:text-red-600"
                     onClick={() => handleDelete(t._id)}
                   >

@@ -263,12 +263,35 @@ router.post('/template', async (req, res) => {
 });
 
 // 3. DELETE TEMPLATE
+// router.delete('/template/:id', async (req, res) => {
+//   try {
+//     await NotificationTemplate.findByIdAndDelete(req.params.id);
+//     res.json({ message: "Template deleted successfully" });
+//   } catch (err) {
+//     res.status(500).json({ message: "Error deleting template" });
+//   }
+// });
+// routes/notificationTemplate.js
+
 router.delete('/template/:id', async (req, res) => {
   try {
-    await NotificationTemplate.findByIdAndDelete(req.params.id);
+    const { id } = req.params;
+
+    // Check if any notification is currently using this template
+    const isInUse = await Notification.findOne({ templateId: id });
+
+    if (isInUse) {
+      return res.status(400).json({
+        message: "This template cannot be deleted because it is already linked to existing notifications."
+      });
+    }
+
+    const deletedTemplate = await NotificationTemplate.findByIdAndDelete(id);
+    if (!deletedTemplate) return res.status(404).json({ message: "Template not found" });
+
     res.json({ message: "Template deleted successfully" });
   } catch (err) {
-    res.status(500).json({ message: "Error deleting template" });
+    res.status(500).json({ message: err.message });
   }
 });
 
