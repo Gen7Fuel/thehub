@@ -28,10 +28,6 @@ router.get('/', async (req, res) => {
     if (from && to) {
       const start = new Date(from);
       const end = new Date(to);
-
-      // Make sure end includes the whole day (UTC)
-      end.setUTCHours(23, 59, 59, 999);
-
       filter.createdAt = { $gte: start, $lte: end }
     }
 
