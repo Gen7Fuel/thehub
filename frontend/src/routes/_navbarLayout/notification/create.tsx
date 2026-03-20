@@ -5,7 +5,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
-import { X, Search, Mail, Layout, Info, Send, ArrowLeft, UserPlus, Users } from 'lucide-react';
+import { X, Mail, Layout, Info, Send, ArrowLeft, UserPlus, Users } from 'lucide-react';
 import axios from 'axios';
 import { useAuth } from '@/context/AuthContext';
 import { Link } from '@tanstack/react-router';
@@ -225,16 +225,6 @@ function NotificationCreate() {
                 <Mail className="h-5 w-5 text-blue-500" /> Recipients
               </Label>
               <div className="flex gap-2">
-                {canAddBcc && (
-                  <Button
-                    variant="secondary"
-                    size="sm"
-                    onClick={() => setDialogConfig({ open: true, mode: 'bcc' })}
-                    className="bg-orange-50 text-orange-700 hover:bg-orange-100 border border-orange-200"
-                  >
-                    Add BCC
-                  </Button>
-                )}
                 {canUpdateGroup && (
                   <Button
                     variant="outline"
@@ -243,6 +233,16 @@ function NotificationCreate() {
                     className="gap-2 border-dashed border-slate-300"
                   >
                     <Users className="h-4 w-4" /> Manage Groups
+                  </Button>
+                )}
+                {canAddBcc && (
+                  <Button
+                    variant="secondary"
+                    size="sm"
+                    onClick={() => setDialogConfig({ open: true, mode: 'bcc' })}
+                    className="bg-orange-50 text-orange-700 hover:bg-orange-100 border border-orange-200"
+                  >
+                    Add BCC
                   </Button>
                 )}
                 <Button variant="outline" size="sm" onClick={() => setDialogConfig({ open: true, mode: 'to' })} className="gap-2">
