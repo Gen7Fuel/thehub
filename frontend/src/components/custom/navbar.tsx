@@ -106,7 +106,7 @@ export default function Navbar() {
       } else {
         console.warn("⚠️ Offline during periodic check — skipping sync");
       }
-    }, 60 * 1000); // 1 min
+    }, 15 * 1000); // 15 sec
 
     return () => {
       window.removeEventListener("online", handleOnline);
