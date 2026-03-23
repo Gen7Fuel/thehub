@@ -56,6 +56,7 @@ const CashSummarySchema = new mongoose.Schema(
     instantLottTotal: { type: Number },
     dataWave: { type: Number },
     feeDataWave: { type: Number },
+    unsettledPrepays: { type: Number },
     createdBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User'},
   },
   { timestamps: true }

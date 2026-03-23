@@ -154,6 +154,7 @@ function parseSftReport(text) {
     cashOnHand: pickNum(/^\s*Cash On Hand\s+([-\d.,]+)\s*$/mi, text),
     cashBack: pickNum(/^\s*Cash Back\s+([-\d.,]+)\s*$/mi, text),
     payouts: pickNum(/^\s*Payouts\s+([-\d.,]+)\s*$/mi, text),
+    unsettledPrepays: pickNum(/^\s*Unsettled Prepays\s+([-\d.,]+)\s*$/mi, text),
 
     // NEW: specific lotto/payout fields
     // Case-insensitive; tolerate optional colon/dash and $; allow "payout" or "payouts"

@@ -759,6 +759,7 @@ router.post('/', async (req, res) => {
       instantLottTotal: numOrUndef(parsed.instantLottTotal),
       dataWave: numOrUndef(parsed.dataWave),
       feeDataWave: numOrUndef(parsed.feeDataWave),
+      unsettledPrepays: numOrUndef(parsed.unsettledPrepays),
     })
 
     // const doc = new CashSummary({
@@ -1288,6 +1289,7 @@ router.put('/:id', async (req, res) => {
               // SHIFT STATISTICS: Voided Transactions parsed fields
               voidedTransactionsAmount: parsed.voidedTransactionsAmount,
               voidedTransactionsCount: parsed.voidedTransactionsCount,
+              unsettledPrepays: parsed.unsettledPrepays,
             }
           }
         } else {
@@ -1327,6 +1329,7 @@ router.put('/:id', async (req, res) => {
       // SHIFT STATISTICS: Voided Transactions
       voidedTransactionsAmount: norm(enrichedValues.voidedTransactionsAmount ?? req.body.voidedTransactionsAmount ?? existing.voidedTransactionsAmount),
       voidedTransactionsCount: norm(enrichedValues.voidedTransactionsCount ?? req.body.voidedTransactionsCount ?? existing.voidedTransactionsCount),
+      unsettledPrepays: norm(enrichedValues.unsettledPrepays ?? req.body.unsettledPrepays ?? existing.unsettledPrepays),
     }
 
     // 5️⃣ Update and return
