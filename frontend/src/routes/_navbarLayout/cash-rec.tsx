@@ -13,6 +13,7 @@ function RouteComponent() {
   const isReportActive = matchRoute({ to: '/cash-rec' })
   const isEntriesActive = matchRoute({ to: '/cash-rec/entries' })
   const isBankActive = matchRoute({ to: '/cash-rec/bank' })
+  const isKardpollUploadActive = matchRoute({ to: '/cash-rec/kardpoll-upload' })
   // const isReceivablesActive = matchRoute({ to: '/cash-rec/receivables' })
   // const isPayoutsActive = matchRoute({ to: '/cash-rec/payouts' })
 
@@ -32,8 +33,14 @@ function RouteComponent() {
         </Link>
 
         <Link to="/cash-rec/bank" activeOptions={{ exact: true }} search={(prev: any) => ({ ...prev, site: prev?.site })}>
-          <Button {...(!isBankActive && { variant: 'outline' } as object)} className="rounded-l-none">
+          <Button {...(!isBankActive && { variant: 'outline' } as object)} className="rounded-none">
             Bank
+          </Button>
+        </Link>
+
+        <Link to="/cash-rec/kardpoll-upload" activeOptions={{ exact: true }} search={(prev: any) => ({ ...prev, site: prev?.site })}>
+          <Button {...(!isKardpollUploadActive && { variant: 'outline' } as object)} className="rounded-l-none">
+            Kardpoll
           </Button>
         </Link>
 
