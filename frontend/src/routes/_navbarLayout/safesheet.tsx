@@ -159,6 +159,7 @@ export default function RouteComponent() {
 
   // refs for inputs
   const descRef = useRef<HTMLInputElement>(null)
+  const addCashInDescRef = useRef<HTMLInputElement>(null)
   const cashInRef = useRef<HTMLInputElement>(null)
   const cashExpenseRef = useRef<HTMLInputElement>(null)
   const cashDepositRef = useRef<HTMLInputElement>(null)
@@ -243,6 +244,12 @@ export default function RouteComponent() {
       return
     }
 
+    if (!addCashInDesc.trim()) {
+      alert('Please type the description of the entry.')
+      addCashInDescRef.current?.focus()
+      return
+    }
+
     // Use the current timestamp to avoid timezone drift from YYYY-MM-DD parsing
     const entryBody = {
       date: new Date().toISOString(),
@@ -318,6 +325,12 @@ export default function RouteComponent() {
 
     if (!entryBody.cashIn && !entryBody.cashExpenseOut && !entryBody.cashDepositBank) {
       setError('Please enter an amount in one of the fields')
+      return
+    }
+
+    if (!entryBody.description) {
+      alert('Please type the description of the entry.')
+      descRef.current?.focus()
       return
     }
 
@@ -1055,6 +1068,7 @@ export default function RouteComponent() {
 
           <div className="space-y-3">
             <input
+              ref={addCashInDescRef}
               type="text"
               value={addCashInDesc}
               onChange={(e) => setAddCashInDesc(e.target.value)}
