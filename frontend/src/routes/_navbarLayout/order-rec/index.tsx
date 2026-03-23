@@ -217,7 +217,7 @@ function RouteComponent() {
   });
 
   // 2. Identify if the currently selected ID belongs to "ABC"
-  const isPCGVendor = vendors?.find(v => v._id === vendor)?.name === "Proulx Commercial Growers";
+  const isPCGVendor = vendors?.find(v => v._id === vendor)?.name === "Proulx Commercial Growers" && site === "Silver Grizzly";
 
   const onDrop = useCallback(async (acceptedFiles: File[]) => {
     const file = acceptedFiles[0]

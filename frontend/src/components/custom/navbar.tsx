@@ -35,7 +35,7 @@ export default function Navbar() {
           headers: { Authorization: `Bearer ${token || ''}` }
         });
         // Count only unread items from the list
-        const count = res.data.filter((n: any) => !n.isRead).length;
+        const count = res.data.filter((n: any) => !n.isRead && n.status !== 'archived').length;
         setUnreadCount(count);
       } catch (err) {
         console.error("Error fetching unread count", err);
@@ -106,7 +106,7 @@ export default function Navbar() {
       } else {
         console.warn("⚠️ Offline during periodic check — skipping sync");
       }
-    }, 60 * 1000); // 1 min
+    }, 15 * 1000); // 15 sec
 
     return () => {
       window.removeEventListener("online", handleOnline);
@@ -380,19 +380,21 @@ export default function Navbar() {
         {/* Right-side navigation buttons */}
         <span className="flex gap-4">
           {/* Notification Button */}
-          <Button
-            variant="outline"
-            size="icon"
-            className="relative"
-            onClick={() => navigate({ to: '/notification' })}
-          >
-            <Bell className="h-5 w-5" />
-            {unreadCount > 0 && (
-              <span className="absolute -top-1 -right-1 flex h-4 w-4 items-center justify-center rounded-full bg-red-600 text-[10px] font-medium text-white">
-                {unreadCount}
-              </span>
-            )}
-          </Button>
+          {access?.notification?.value && (
+            <Button
+              variant="outline"
+              size="icon"
+              className="relative"
+              onClick={() => navigate({ to: '/notification' })}
+            >
+              <Bell className="h-5 w-5" />
+              {unreadCount > 0 && (
+                <span className="absolute -top-1 -right-1 flex h-4 w-4 items-center justify-center rounded-full bg-red-600 text-[10px] font-medium text-white">
+                  {unreadCount}
+                </span>
+              )}
+            </Button>
+          )}
           <Button variant="outline" size="icon" onClick={() => setIsHelpOpen(true)}>
             <HelpCircle className="h-5 w-5" />
           </Button>

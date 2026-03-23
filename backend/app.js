@@ -14,6 +14,7 @@ require('./cron_jobs/cycleCountCron'); //cron job for getting cso on hands for c
 require('./cron_jobs/fuelInventoryReportCron'); //cron job for getting fuel inventory report and email to kellie
 require('./cron_jobs/auditIssueReportCron'); //cron job for getting previous months audit issue report and email to Ana
 require('./cron_jobs/mongoCsvExportCron'); //cron job for exporting mongo data to azure in csv
+require('./cron_jobs/archiveOldNotification'); //cron job for archiving/removing old notifications
 require('./cron_jobs/logoutUsersCron'); //cron job for logging out users daily at 9 AM UTC
 // require('./cron_jobs/productCategoryMappingCron'); //cron job for normalising the product categories
 
@@ -46,6 +47,7 @@ const productCategoryRoutes = require("./routes/productCategoryRoutes");
 const logsRoute = require("./routes/logsRoute");
 const sageRoutes = require("./routes/sageRoutes");
 const notificationRoutes = require("./routes/notificationRoutes");
+const userGroupRoutes = require("./routes/userGroupRoutes");
 
 const { auth } = require("./middleware/authMiddleware");
 
@@ -102,6 +104,7 @@ app.use("/api/permissions", permissionRoutes);
 app.use("/api/roles", roleRoutes);
 app.use("/api/logs", logsRoute);
 app.use("/api/notification", notificationRoutes);
+app.use("/api/user-groups", userGroupRoutes);
 
 // Reporting
 app.use("/api/sales-summary", salesSummaryRoutes);

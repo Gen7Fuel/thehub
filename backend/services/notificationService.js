@@ -9,6 +9,7 @@ require('dotenv').config();
  */
 async function pushNotification({
   io,
+  senderId = null, // Optional: Who is sending this notification (Admin/User ID)
   recipientEmails,
   bccEmails = [], // Optional BCC list
   slug,          // Template slug (e.g., 'issue-raised')
@@ -48,6 +49,7 @@ async function pushNotification({
     if (recipientIds.length > 0) {
       newNotification = await Notification.create({
         templateId: template._id,
+        senderId,
         recipientIds,
         subject,
         fieldValues,
@@ -78,11 +80,8 @@ async function pushNotification({
               A new update is available on the Hub: <br>
               <strong style="color: #1976d2;">${subject}</strong>
             </p>
-            <div style="margin-top: 30px;">
-              <a href="https://app.gen7fuel.com/notification" 
-                 style="background-color: #1976d2; color: #ffffff; padding: 14px 28px; text-decoration: none; border-radius: 8px; font-weight: bold; display: inline-block;">
-                 View Details in Notification Center
-              </a>
+            <div style="margin-top: 10px; background-color: #1976d2; color: #ffffff; padding: 14px 28px; text-decoration: none; border-radius: 8px; font-weight: bold; display: inline-block;">    
+              For more details Login into the Hub and visit Notification Center.
             </div>
           </div>
           <div style="background-color: #f8f9fa; padding: 20px; text-align: center; border-top: 1px solid #eee;">
