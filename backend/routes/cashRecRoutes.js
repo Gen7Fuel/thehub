@@ -481,6 +481,7 @@ router.get('/entries', async (req, res) => {
       'onlineLottoTotal',
       'instantLottTotal',
       'lottoPayout',
+      'unsettledPrepays',
     ]
 
     const groupStage = numericFields.reduce(
@@ -505,16 +506,19 @@ router.get('/entries', async (req, res) => {
       totals: agg ? agg : { ...emptyTotals, shiftCount: 0 },
     }
 
-    // Fetch CashSummaryReport for unsettledPrepays and handheldDebit
+    // Use per-shift aggregated unsettledPrepays if available, otherwise fall back to CashSummaryReport
+    const aggUnsettledPrepays = agg?.unsettledPrepays
     try {
       const { CashSummaryReport } = require('../models/CashSummaryNew')
       const report = await CashSummaryReport.findOne({ site, date: start }).lean()
       if (report) {
-        cashSummary.unsettledPrepays = typeof report.unsettledPrepays === 'number' ? report.unsettledPrepays : undefined
+        cashSummary.unsettledPrepays = aggUnsettledPrepays || (typeof report.unsettledPrepays === 'number' ? report.unsettledPrepays : undefined)
         cashSummary.handheldDebit = typeof report.handheldDebit === 'number' ? report.handheldDebit : undefined
+      } else {
+        cashSummary.unsettledPrepays = aggUnsettledPrepays || undefined
       }
     } catch (e) {
-      // ignore errors, just don't include fields
+      cashSummary.unsettledPrepays = aggUnsettledPrepays || undefined
     }
 
     // 4) Receivables total from Transactions (source: 'PO') for stationName/site and day range
