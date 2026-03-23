@@ -1308,25 +1308,25 @@ router.put('/:id', async (req, res) => {
       canadian_cash_collected: norm(canadian_cash_collected),
 
       // Preserve existing if not provided or parsed
-      stationStart: (typeof req.body.stationStart === 'string' ? req.body.stationStart : undefined) ?? enrichedValues.stationStart ?? existing.stationStart,
-      stationEnd: (typeof req.body.stationEnd === 'string' ? req.body.stationEnd : undefined) ?? enrichedValues.stationEnd ?? existing.stationEnd,
+      stationStart: enrichedValues.stationStart ?? (typeof req.body.stationStart === 'string' ? req.body.stationStart : undefined) ?? existing.stationStart,
+      stationEnd: enrichedValues.stationEnd ?? (typeof req.body.stationEnd === 'string' ? req.body.stationEnd : undefined) ?? existing.stationEnd,
 
-      item_sales: norm(item_sales ?? enrichedValues.item_sales ?? existing.item_sales),
-      cash_back: norm(cash_back ?? enrichedValues.cash_back ?? existing.cash_back),
-      loyalty: norm(loyalty ?? enrichedValues.loyalty ?? existing.loyalty),
-      cpl_bulloch: norm(cpl_bulloch ?? enrichedValues.cpl_bulloch ?? existing.cpl_bulloch),
-      report_canadian_cash: norm(report_canadian_cash ?? enrichedValues.report_canadian_cash ?? existing.report_canadian_cash),
+      item_sales: norm(enrichedValues.item_sales ?? item_sales ?? existing.item_sales),
+      cash_back: norm(enrichedValues.cash_back ?? cash_back ?? existing.cash_back),
+      loyalty: norm(enrichedValues.loyalty ?? loyalty ?? existing.loyalty),
+      cpl_bulloch: norm(enrichedValues.cpl_bulloch ?? cpl_bulloch ?? existing.cpl_bulloch),
+      report_canadian_cash: norm(enrichedValues.report_canadian_cash ?? report_canadian_cash ?? existing.report_canadian_cash),
 
       exempted_tax: norm(exempted_tax),
-      // lottery fields (preserve existing if caller doesn't supply)
-      lottoPayout: norm(req.body.lottoPayout ?? enrichedValues.lottoPayout ?? existing.lottoPayout),
-      onlineLottoTotal: norm(req.body.onlineLottoTotal ?? enrichedValues.onlineLottoTotal ?? existing.onlineLottoTotal),
-      instantLottTotal: norm(req.body.instantLottTotal ?? enrichedValues.instantLottTotal ?? existing.instantLottTotal),
-      dataWave: norm(req.body.dataWave ?? enrichedValues.dataWave ?? existing.dataWave),
-      feeDataWave: norm(req.body.feeDataWave ?? enrichedValues.feeDataWave ?? existing.feeDataWave),
+      // lottery fields: enriched SFTP values take priority over form-submitted values
+      lottoPayout: norm(enrichedValues.lottoPayout ?? req.body.lottoPayout ?? existing.lottoPayout),
+      onlineLottoTotal: norm(enrichedValues.onlineLottoTotal ?? req.body.onlineLottoTotal ?? existing.onlineLottoTotal),
+      instantLottTotal: norm(enrichedValues.instantLottTotal ?? req.body.instantLottTotal ?? existing.instantLottTotal),
+      dataWave: norm(enrichedValues.dataWave ?? req.body.dataWave ?? existing.dataWave),
+      feeDataWave: norm(enrichedValues.feeDataWave ?? req.body.feeDataWave ?? existing.feeDataWave),
       // SHIFT STATISTICS: Voided Transactions
-      voidedTransactionsAmount: norm(req.body.voidedTransactionsAmount ?? enrichedValues.voidedTransactionsAmount ?? existing.voidedTransactionsAmount),
-      voidedTransactionsCount: norm(req.body.voidedTransactionsCount ?? enrichedValues.voidedTransactionsCount ?? existing.voidedTransactionsCount),
+      voidedTransactionsAmount: norm(enrichedValues.voidedTransactionsAmount ?? req.body.voidedTransactionsAmount ?? existing.voidedTransactionsAmount),
+      voidedTransactionsCount: norm(enrichedValues.voidedTransactionsCount ?? req.body.voidedTransactionsCount ?? existing.voidedTransactionsCount),
     }
 
     // 5️⃣ Update and return
