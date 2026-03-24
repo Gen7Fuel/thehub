@@ -93,7 +93,7 @@ async function runFuelInventoryReportJobPreviousDay() {
     // 1️⃣ Get DB rows
     // const rows = await getFuelInventoryReportPreviousDay();
     const rows = await getRankedFuelInventory();
-    
+
     // // 2️⃣ Pivot/transform
     // const tableData = await transformFuelInventory(rows, false);
     const tableData = await transformFuelInventory(rows, true);
@@ -106,21 +106,24 @@ async function runFuelInventoryReportJobPreviousDay() {
     // 4️⃣ Generate PDF
     const pdfPath = await generateFuelInventoryPDF(tableData, formattedDate);
 
-    // 5️⃣ Queue email
-    await emailQueue.add("sendFuelInventoryReport", {
-      to: "daksh@gen7fuel.com",
-      // to: "kellie@gen7fuel.com",
-      // cc: ["daksh@gen7fuel.com", "nmiller@gen7fuel.com", "Ryan@gen7fuel.com"],
-      subject: `Fuel Inventory Report End-of-Day (${formattedDate})`,
-      text: "Attached is your daily (End-of-Day) fuel inventory report.",
-      html: "<p>Attached is your daily (End-of-Day) fuel inventory report.</p>",
-      attachments: [
-        {
-          filename: `FuelInventory_EndOfDay_${formattedDate}.pdf`,
-          path: pdfPath
-        }
-      ]
-    });
+    if (process.env.HOST === "VPS") {
+      // 5️⃣ Queue email
+      await emailQueue.add("sendFuelInventoryReport", {
+        to: "kellie@gen7fuel.com",
+        cc: ["daksh@gen7fuel.com", "nmiller@gen7fuel.com", "Ryan@gen7fuel.com"],
+        subject: `Fuel Inventory Report End-of-Day (${formattedDate})`,
+        text: "Attached is your daily (End-of-Day) fuel inventory report.",
+        html: "<p>Attached is your daily (End-of-Day) fuel inventory report.</p>",
+        attachments: [
+          {
+            filename: `FuelInventory_EndOfDay_${formattedDate}.pdf`,
+            path: pdfPath
+          }
+        ]
+      });
+    } else {
+      console.log("Skipping email - not running on VPS host.");
+    }
 
     console.log("Fuel Inventory Email Queued.");
   } catch (err) {
