@@ -1,6 +1,4 @@
 const express = require('express')
-const multer = require('multer')
-const XLSX = require('xlsx')
 const { DateTime } = require('luxon')
 const { BankStatement, KardpollReport } = require('../models/CashRec')
 const CashSummary = require('../models/CashSummaryNew')
@@ -9,10 +7,6 @@ const Transactions = require('../models/Transactions')
 const TIMEZONE = 'America/Toronto'
 
 const router = express.Router()
-const upload = multer({
-  storage: multer.memoryStorage(),
-  limits: { fileSize: 10 * 1024 * 1024 }, // 10 MB
-})
 
 // Number parser (handles commas, currency, parentheses)
 function toNum(s) {
@@ -628,56 +622,14 @@ router.get('/entries', async (req, res) => {
   }
 })
 
-router.post('/parse-kardpoll-excel', upload.single('file'), async (req, res) => {
+router.post('/parse-kardpoll-excel', express.json({ limit: '1mb' }), async (req, res) => {
   try {
-    if (!req.file) return res.status(400).json({ error: 'No file uploaded' })
-
-    const site = String(req.body?.site || '').trim()
-    if (!site) return res.status(400).json({ error: 'site is required' })
-
-    const workbook = XLSX.read(req.file.buffer, { type: 'buffer', cellDates: true })
-    const sheet = workbook.Sheets[workbook.SheetNames[0]]
-    const rows = XLSX.utils.sheet_to_json(sheet, { header: 1, defval: '' })
-
-    // Date from A3 (row index 2, col index 0)
-    const rawDate = rows[2]?.[0]
-    let date = ''
-    if (rawDate instanceof Date) {
-      const y = rawDate.getFullYear()
-      const m = String(rawDate.getMonth() + 1).padStart(2, '0')
-      const d = String(rawDate.getDate()).padStart(2, '0')
-      date = `${y}-${m}-${d}`
-    } else {
-      date = String(rawDate ?? '').trim()
+    const { site, date, totalSales, totalLitres } = req.body || {}
+    if (!site || !date || !totalSales || !totalLitres) {
+      return res.status(400).json({ error: 'site, date, totalSales, and totalLitres are required' })
     }
-
     if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) {
-      return res.status(400).json({ error: `Could not extract a valid date from A3 (got: "${date}")` })
-    }
-
-    let totalSales = ''
-    let totalLitres = ''
-
-    for (let i = rows.length - 1; i >= 0; i--) {
-      const row = rows[i]
-
-      if (!totalSales) {
-        const gCell = String(row[6] ?? '').trim()
-        if (gCell.startsWith('Total Sales:')) {
-          const afterDollar = gCell.split('$')[1]
-          if (afterDollar !== undefined) totalSales = afterDollar.trim()
-        }
-      }
-
-      if (!totalLitres) {
-        const hCell = String(row[7] ?? '').trim()
-        if (hCell.startsWith('Total Volume:')) {
-          const match = hCell.match(/:\s*([\d.]+)L/)
-          if (match) totalLitres = match[1]
-        }
-      }
-
-      if (totalSales && totalLitres) break
+      return res.status(400).json({ error: 'date must be in YYYY-MM-DD format' })
     }
 
     const sales = parseFloat(totalSales) || 0
@@ -698,7 +650,7 @@ router.post('/parse-kardpoll-excel', upload.single('file'), async (req, res) => 
     return res.json({ saved: true, report: saved })
   } catch (e) {
     console.error('cashRecRoutes.parse-kardpoll-excel error:', e)
-    return res.status(500).json({ error: 'Failed to parse Excel file' })
+    return res.status(500).json({ error: 'Failed to save Kardpoll report' })
   }
 })
 
