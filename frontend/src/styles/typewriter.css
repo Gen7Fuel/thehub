@@ -9,3 +9,12 @@
 .typewriter-font {
   font-family: 'BPTypewrite', ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', 'Courier New', monospace;
 }
+
+@keyframes copy-flash {
+  0%   { background-color: rgba(34, 197, 94, 0.35); }
+  100% { background-color: transparent; }
+}
+
+.copy-flash {
+  animation: copy-flash 0.55s ease-out;
+}

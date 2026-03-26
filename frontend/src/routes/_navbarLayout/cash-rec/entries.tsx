@@ -1,3 +1,4 @@
+import * as React from 'react'
 import { createFileRoute, useLoaderData, useNavigate, useSearch } from '@tanstack/react-router'
 import { format } from 'date-fns'
 import { SitePicker } from '@/components/custom/sitePicker'
@@ -199,6 +200,19 @@ function RouteComponent() {
     }
     return '';
   }
+
+  const copyCell = (e: React.MouseEvent<HTMLTableCellElement>) => {
+    const raw = e.currentTarget.textContent?.trim() ?? ''
+    if (!raw || raw === '-') return
+    let val = raw.replace(/\$/g, '').replace(/,/g, '')
+    if (val.startsWith('(') && val.endsWith(')')) val = '-' + val.slice(1, -1)
+    navigator.clipboard.writeText(val)
+    const td = e.currentTarget
+    td.classList.remove('copy-flash')
+    void td.offsetWidth // force reflow so re-clicks restart the animation
+    td.classList.add('copy-flash')
+    td.addEventListener('animationend', () => td.classList.remove('copy-flash'), { once: true })
+  }
   // const fmt0 = (v: number | undefined | null) =>
   //   typeof v === 'number' && Number.isFinite(v) ? v.toLocaleString(undefined, { maximumFractionDigits: 0 }) : ''
 
@@ -298,47 +312,47 @@ function RouteComponent() {
                     {/* Kardpoll values */}
                     {showKardpoll && (
                       <>
-                        <td className="px-2 py-2 text-right">{fmt2(data?.kardpoll?.litresSold)}</td>
-                        <td className="px-2 py-2 text-right">{fmt2(data?.kardpoll?.sales)}</td>
-                        <td className="px-2 py-2 text-right">{fmt2(data?.kardpoll?.ar)}</td>
+                        <td className="px-2 py-2 text-right cursor-copy" onClick={copyCell}>{fmt2(data?.kardpoll?.litresSold)}</td>
+                        <td className="px-2 py-2 text-right cursor-copy" onClick={copyCell}>{fmt2(data?.kardpoll?.sales)}</td>
+                        <td className="px-2 py-2 text-right cursor-copy" onClick={copyCell}>{fmt2(data?.kardpoll?.ar)}</td>
                       </>
                     )}
                     {/* Cash Summary totals */}
-                    <td className="px-2 py-2 text-right">{fmt2(data?.cashSummary?.totals.dealGroupCplDiscounts)}</td>
-                    <td className="px-2 py-2 text-right">{data?.cashSummary?.unsettledPrepays == null ? '-' : fmt2(data?.cashSummary?.unsettledPrepays)}</td>
-                    <td className="px-2 py-2 text-right">{fmt2(data?.cashSummary?.totals.item_sales)}</td>
-                    <td className="px-2 py-2 text-right">{fmt2(data?.cashSummary?.totals.totalSales)}</td>
-                    <td className="px-2 py-2 text-right">{fmt2((data?.cashSummary?.totals.totalSales ?? 0) - (data?.cashSummary?.totals.item_sales ?? 0))}</td>
-                    <td className="px-2 py-2 text-right">{fmt2(data?.cashSummary?.totals.afdGiftCard)}</td>
-                    <td className="px-2 py-2 text-right">{fmt2(data?.cashSummary?.totals.totalPos)}</td>
-                    <td className="px-2 py-2 text-right">{fmt2(data?.cashSummary?.totals.kioskGiftCard)}</td>
-                    <td className="px-2 py-2 text-right">{fmt2(data?.cashSummary?.totals.arIncurred)}</td>
-                    <td className="px-2 py-2 text-right">{fmt2(data?.cashSummary?.totals.payouts)}</td>
-                    {/* <td className="px-2 py-2 text-right">{fmt2(data?.cashSummary?.totals.cpl_bulloch)}</td> */}
-                    <td className="px-2 py-2 text-right">{fmt2(data?.cashSummary?.totals.missedCpl)}</td>
-                    <td className="px-2 py-2 text-right">{fmt2((data?.cashSummary?.totals.couponsAccepted ?? 0) + (data?.cashSummary?.totals.giftCertificates ?? 0))}</td>
-                    <td className="px-2 py-2 text-right">{fmt2(data?.cashSummary?.totals.cash_back)}</td>
-                    <td className="px-2 py-2 text-right">{fmt2(data?.cashSummary?.totals.report_canadian_cash)}</td>
+                    <td className="px-2 py-2 text-right cursor-copy" onClick={copyCell}>{fmt2(data?.cashSummary?.totals.dealGroupCplDiscounts)}</td>
+                    <td className="px-2 py-2 text-right cursor-copy" onClick={copyCell}>{data?.cashSummary?.unsettledPrepays == null ? '-' : fmt2(data?.cashSummary?.unsettledPrepays)}</td>
+                    <td className="px-2 py-2 text-right cursor-copy" onClick={copyCell}>{fmt2(data?.cashSummary?.totals.item_sales)}</td>
+                    <td className="px-2 py-2 text-right cursor-copy" onClick={copyCell}>{fmt2(data?.cashSummary?.totals.totalSales)}</td>
+                    <td className="px-2 py-2 text-right cursor-copy" onClick={copyCell}>{fmt2((data?.cashSummary?.totals.totalSales ?? 0) - (data?.cashSummary?.totals.item_sales ?? 0))}</td>
+                    <td className="px-2 py-2 text-right cursor-copy" onClick={copyCell}>{fmt2(data?.cashSummary?.totals.afdGiftCard)}</td>
+                    <td className="px-2 py-2 text-right cursor-copy" onClick={copyCell}>{fmt2(data?.cashSummary?.totals.totalPos)}</td>
+                    <td className="px-2 py-2 text-right cursor-copy" onClick={copyCell}>{fmt2(data?.cashSummary?.totals.kioskGiftCard)}</td>
+                    <td className="px-2 py-2 text-right cursor-copy" onClick={copyCell}>{fmt2(data?.cashSummary?.totals.arIncurred)}</td>
+                    <td className="px-2 py-2 text-right cursor-copy" onClick={copyCell}>{fmt2(data?.cashSummary?.totals.payouts)}</td>
+                    {/* <td className="px-2 py-2 text-right cursor-copy" onClick={copyCell}>{fmt2(data?.cashSummary?.totals.cpl_bulloch)}</td> */}
+                    <td className="px-2 py-2 text-right cursor-copy" onClick={copyCell}>{fmt2(data?.cashSummary?.totals.missedCpl)}</td>
+                    <td className="px-2 py-2 text-right cursor-copy" onClick={copyCell}>{fmt2((data?.cashSummary?.totals.couponsAccepted ?? 0) + (data?.cashSummary?.totals.giftCertificates ?? 0))}</td>
+                    <td className="px-2 py-2 text-right cursor-copy" onClick={copyCell}>{fmt2(data?.cashSummary?.totals.cash_back)}</td>
+                    <td className="px-2 py-2 text-right cursor-copy" onClick={copyCell}>{fmt2(data?.cashSummary?.totals.report_canadian_cash)}</td>
 
                     {/* Lottery moved before Handheld Debit (only for Oliver/Osoyoos) */}
                     {showLottery && (
                       <>
-                        <td className="px-2 py-2 text-right">
+                        <td className="px-2 py-2 text-right cursor-copy" onClick={copyCell}>
                           {fmt2(
                             (data?.cashSummary?.totals.onlineLottoTotal ?? 0) +
                             (data?.cashSummary?.totals.instantLottTotal ?? 0)
                           )}
                         </td>
-                        <td className="px-2 py-2 text-right">{fmt2(data?.cashSummary?.totals.lottoPayout)}</td>
+                        <td className="px-2 py-2 text-right cursor-copy" onClick={copyCell}>{fmt2(data?.cashSummary?.totals.lottoPayout)}</td>
                       </>
                     )}
 
-                    <td className="px-2 py-2 text-right">{data?.cashSummary?.handheldDebit == null ? '-' : fmt2(data?.cashSummary?.handheldDebit)}</td>
-                    <td className="px-2 py-2 text-right">{fmt2(data?.cashSummary?.totals.canadian_cash_collected)}</td>
+                    <td className="px-2 py-2 text-right cursor-copy" onClick={copyCell}>{data?.cashSummary?.handheldDebit == null ? '-' : fmt2(data?.cashSummary?.handheldDebit)}</td>
+                    <td className="px-2 py-2 text-right cursor-copy" onClick={copyCell}>{fmt2(data?.cashSummary?.totals.canadian_cash_collected)}</td>
 
-                    <td className="px-2 py-2 text-right">{fmt2(data?.bank?.endingBalance)}</td>
+                    <td className="px-2 py-2 text-right cursor-copy" onClick={copyCell}>{fmt2(data?.bank?.endingBalance)}</td>
                     {/* <td className="px-2 py-2"></td> */}
-                    <td className="px-2 py-2 text-right">
+                    <td className="px-2 py-2 text-right cursor-copy" onClick={copyCell}>
                       {fmt2(
                         (data?.cashSummary?.totals.canadian_cash_collected ?? 0) -
                         (data?.cashSummary?.totals.report_canadian_cash ?? 0) +
@@ -346,9 +360,9 @@ function RouteComponent() {
                         (data?.cashSummary?.unsettledPrepays ?? 0)
                       )}
                     </td>
-                    <td className="px-2 py-2 text-right">{fmt2(data?.balanceCheck)}</td>
-                    <td className="px-2 py-2 text-right">{fmt2(data?.bankStmtTrans)}</td>
-                    <td className="px-2 py-2 text-right">{fmt2(data?.bankRecDay ?? data?.bankRec)}</td>
+                    <td className="px-2 py-2 text-right cursor-copy" onClick={copyCell}>{fmt2(data?.balanceCheck)}</td>
+                    <td className="px-2 py-2 text-right cursor-copy" onClick={copyCell}>{fmt2(data?.bankStmtTrans)}</td>
+                    <td className="px-2 py-2 text-right cursor-copy" onClick={copyCell}>{fmt2(data?.bankRecDay ?? data?.bankRec)}</td>
                   </tr>
                 )
               })}
