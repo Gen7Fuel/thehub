@@ -339,7 +339,7 @@ function RouteComponent() {
             const dayOfWeek = dateObj ? dateObj.getDay() : -1  // 5 = Friday, 6 = Saturday
             const finalTotal = (dayOfWeek === 5 || dayOfWeek === 6)
               ? bankRec
-              : totalDollarSales - cashSafeDeposited + tillOverShort - gcRedemption - loyalty + unsettledPrepays + bankRec - arTotal - payTotal + miscCreditDescTotal
+              : totalDollarSales - cashSafeDeposited + tillOverShort - gcRedemption - loyalty - unsettledPrepays + bankRec - arTotal - payTotal + miscCreditDescTotal
 
             return (
               <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 typewriter-font">
@@ -411,7 +411,7 @@ function RouteComponent() {
                       </tr>
                       <tr className="border-b border-gray-100 bg-amber-50">
                         <td className="px-4 py-2.5 text-gray-600">Unsettled Prepays (40010)</td>
-                        <td className="px-4 py-2.5 text-right font-medium text-gray-900">${fmt2(unsettledPrepays)}</td>
+                        <td className="px-4 py-2.5 text-right font-medium text-gray-900">${fmt2(-unsettledPrepays)}</td>
                       </tr>
                       <tr className="border-b border-gray-100 bg-amber-50">
                         <td className="px-4 py-2.5 text-gray-600">Bank Rec (55050)</td>
