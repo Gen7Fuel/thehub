@@ -52,14 +52,33 @@ router.post('/', async (req, res) => {
 // @desc    Update a carrier
 router.put('/:id', async (req, res) => {
   try {
+    // We expect associatedRacks to be an array of IDs in req.body
     const updatedCarrier = await FuelCarrier.findByIdAndUpdate(
       req.params.id,
       req.body,
       { new: true }
-    );
+    ).populate('associatedRacks');
+    
     res.json(updatedCarrier);
   } catch (err) {
     res.status(400).json({ message: err.message });
+  }
+});
+
+// @route   DELETE /api/fuel-carriers/:id
+// @desc    Delete a carrier
+router.delete('/:id', async (req, res) => {
+  try {
+    const carrier = await FuelCarrier.findById(req.params.id);
+    
+    if (!carrier) {
+      return res.status(404).json({ message: 'Carrier not found' });
+    }
+
+    await FuelCarrier.findByIdAndDelete(req.params.id);
+    res.json({ message: 'Carrier deleted successfully' });
+  } catch (err) {
+    res.status(500).json({ message: err.message });
   }
 });
 

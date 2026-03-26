@@ -50,6 +50,8 @@ const notificationRoutes = require("./routes/notificationRoutes");
 const userGroupRoutes = require("./routes/userGroupRoutes");
 const fuelCarrierRoutes = require("./routes/fuel/fuelCarrierRoutes");
 const fuelRackRoutes = require("./routes/fuel/fuelRackRoutes");
+const fuelSupplierRoutes = require("./routes/fuel/fuelSupplierRoutes");
+const fuelStationTankRoutes = require("./routes/fuel/fuelStationTankRoutes");
 
 const { auth } = require("./middleware/authMiddleware");
 
@@ -125,6 +127,8 @@ app.use('/api/maintenance', maintenanceRoutes);
 
 app.use('/api/fuel-carriers', fuelCarrierRoutes);
 app.use('/api/fuel-racks', fuelRackRoutes);
+app.use('/api/fuel-suppliers', fuelSupplierRoutes);
+app.use('/api/fuel-station-tanks', fuelStationTankRoutes);
 
 // Misc
 app.use('/api', emailRoutes);

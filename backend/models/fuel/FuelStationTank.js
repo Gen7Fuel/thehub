@@ -5,8 +5,8 @@ const fuelStationTankSchema = new mongoose.Schema({
   tankNo: { type: Number, required: true },
   grade: { type: String, required: true }, // e.g., "Regular"
   tankCapacity: { type: Number, required: true },
-  maxUllage: { type: Number, required: true }, // Max empty space allowed
-  minUllage: { type: Number, required: true }, // Min empty space allowed
+  maxVolumeCapacity: { type: Number, required: true }, // Max empty space allowed
+  minVolumeCapacity: { type: Number, required: true }, // Min empty space allowed
   currentVolume: { type: Number, default: 0 },
   lastUpdatedVolumeReadingDateTime: { type: Date, default: Date.now },
   historicalVolume: [{                      // Historical ledger for opening/closing tracking

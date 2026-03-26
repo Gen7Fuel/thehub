@@ -48,4 +48,17 @@ router.put('/:id', async (req, res) => {
   }
 });
 
+// @route   DELETE /api/fuel-racks/:id
+router.delete('/:id', async (req, res) => {
+  try {
+    const rack = await FuelRack.findById(req.params.id);
+    if (!rack) return res.status(404).json({ message: 'Rack not found' });
+    
+    await FuelRack.findByIdAndDelete(req.params.id);
+    res.json({ message: 'Rack deleted successfully' });
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+});
+
 module.exports = router;

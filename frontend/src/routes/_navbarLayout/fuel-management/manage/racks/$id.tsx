@@ -1,11 +1,13 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useMemo } from 'react'
 import { createFileRoute, useNavigate } from '@tanstack/react-router'
 import { Input } from '@/components/ui/input'
 import { Button } from '@/components/ui/button'
 import { Checkbox } from '@/components/ui/checkbox'
-import { Save, Trash2, Warehouse, ArrowLeft, Loader2 } from 'lucide-react'
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog"
+import { Save, Trash2, Warehouse, Loader2, Search, Plus, X, Truck, CreditCard, ShieldCheck } from 'lucide-react'
 import axios from 'axios'
-import { useQueryClient } from '@tanstack/react-query'
+import { useQuery, useQueryClient } from '@tanstack/react-query'
 
 export const Route = createFileRoute('/_navbarLayout/fuel-management/manage/racks/$id')({
   component: EditRackComponent,
@@ -17,28 +19,68 @@ function EditRackComponent() {
   const { id } = Route.useParams()
   const navigate = useNavigate()
   const queryClient = useQueryClient()
-  
+
   const [formData, setFormData] = useState<any>(null)
   const [isLoading, setIsLoading] = useState(true)
   const [isSaving, setIsSaving] = useState(false)
+  const [carrierSearch, setCarrierSearch] = useState('')
 
-  // Fetch Rack Data
+  // 1. Fetch Suppliers and Carriers for associations
+  const { data: allSuppliers = [] } = useQuery({
+    queryKey: ['fuel-suppliers'],
+    queryFn: async () => (await axios.get('/api/fuel-suppliers', { headers: { Authorization: `Bearer ${localStorage.getItem('token')}` } })).data
+  })
+
+  const { data: allCarriers = [] } = useQuery({
+    queryKey: ['fuel-carriers'],
+    queryFn: async () => (await axios.get('/api/fuel-carriers', { headers: { Authorization: `Bearer ${localStorage.getItem('token')}` } })).data
+  })
+
   useEffect(() => {
     const fetchRack = async () => {
-      setIsLoading(true)
       try {
         const res = await axios.get(`/api/fuel-racks/${id}`, {
           headers: { Authorization: `Bearer ${localStorage.getItem('token')}` }
         })
         setFormData(res.data)
-      } catch (err) {
-        console.error("Error fetching rack:", err)
-      } finally {
-        setIsLoading(false)
-      }
+      } catch (err) { console.error(err) } finally { setIsLoading(false) }
     }
     fetchRack()
   }, [id])
+
+  // Helper to find default badge of the selected supplier
+  const selectedSupplierData = useMemo(() => {
+    const supplierId = formData?.defaultSupplier?._id || formData?.defaultSupplier
+    const found = allSuppliers.find((s: any) => s._id === supplierId)
+    return {
+      full: found,
+      defaultBadge: found?.supplierBadges?.find((b: any) => b.isDefault)
+    }
+  }, [formData?.defaultSupplier, allSuppliers])
+
+  // 1. Filter suppliers to only show those belonging to THIS rack
+  const rackSpecificSuppliers = useMemo(() => {
+    return allSuppliers.filter((s: any) => {
+      // Handle both populated objects and raw ID strings from the backend
+      const supplierRackId = typeof s.associatedRack === 'string'
+        ? s.associatedRack
+        : s.associatedRack?._id;
+
+      return supplierRackId === id;
+    });
+  }, [allSuppliers, id]);
+
+  const filteredCarriers = useMemo(() => {
+    return allCarriers.filter((c: any) => c.carrierName.toLowerCase().includes(carrierSearch.toLowerCase()))
+  }, [allCarriers, carrierSearch])
+
+  const toggleCarrier = (carrierId: string) => {
+    const current = formData.associatedCarriers.map((c: any) => typeof c === 'string' ? c : c._id)
+    const updated = current.includes(carrierId)
+      ? current.filter((id: string) => id !== carrierId)
+      : [...current, carrierId]
+    setFormData({ ...formData, associatedCarriers: updated })
+  }
 
   const toggleGrade = (grade: string) => {
     const currentGrades = formData.availableGrades || []
@@ -51,106 +93,190 @@ function EditRackComponent() {
   const handleUpdate = async () => {
     setIsSaving(true)
     try {
-      await axios.put(`/api/fuel-racks/${id}`, formData, {
+      const payload = {
+        ...formData,
+        defaultSupplier: formData.defaultSupplier?._id || formData.defaultSupplier,
+        associatedCarriers: formData.associatedCarriers.map((c: any) => typeof c === 'string' ? c : c._id)
+      }
+      await axios.put(`/api/fuel-racks/${id}`, payload, {
         headers: { Authorization: `Bearer ${localStorage.getItem('token')}` }
       })
       queryClient.invalidateQueries({ queryKey: ['fuel-racks'] })
       alert("Rack updated successfully")
-    } catch (err) {
-      alert("Failed to update rack")
-    } finally {
-      setIsSaving(false)
-    }
+    } catch (err) { alert("Update failed") } finally { setIsSaving(false) }
   }
 
-  if (isLoading) return (
-    <div className="h-full flex items-center justify-center">
-      <Loader2 className="h-8 w-8 animate-spin text-primary" />
-    </div>
-  )
+  const handleDelete = async () => {
+    if (!window.confirm("Delete this rack?")) return
+    try {
+      await axios.delete(`/api/fuel-racks/${id}`, { headers: { Authorization: `Bearer ${localStorage.getItem('token')}` } })
+      queryClient.invalidateQueries({ queryKey: ['fuel-racks'] })
+      navigate({ to: '/fuel-management/manage/racks' })
+    } catch (err) { alert("Delete failed") }
+  }
 
-  if (!formData) return <div className="p-8 text-center text-muted-foreground">Rack not found.</div>
+  if (isLoading || !formData) return <div className="h-full flex items-center justify-center"><Loader2 className="animate-spin text-primary" /></div>
 
   return (
-    <div className="p-8 max-w-4xl animate-in fade-in duration-300">
-      {/* Header Area */}
+    <div className="p-8 max-w-5xl animate-in fade-in duration-300">
       <div className="flex items-center justify-between mb-8 border-b pb-6">
         <div className="flex items-center gap-4">
-          <div className="h-12 w-12 rounded-xl bg-orange-100 flex items-center justify-center text-orange-600">
-            <Warehouse className="h-6 w-6" />
-          </div>
+          <div className="h-12 w-12 rounded-xl bg-orange-100 flex items-center justify-center text-orange-600"><Warehouse className="h-6 w-6" /></div>
           <div>
             <h2 className="text-2xl font-bold tracking-tight">{formData.rackName}</h2>
             <p className="text-sm text-muted-foreground uppercase font-semibold">{formData.rackLocation}</p>
           </div>
         </div>
-        <div className="flex items-center gap-2">
-          <Button variant="destructive" size="sm" className="gap-2">
-            <Trash2 className="h-4 w-4" /> Delete
-          </Button>
-        </div>
+        <Button variant="ghost" onClick={handleDelete} className="text-red-500 hover:bg-red-50 hover:text-red-600 gap-2">
+          <Trash2 className="h-4 w-4" /> Delete Rack
+        </Button>
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-        {/* Left Side: General Info */}
-        <div className="space-y-6">
-          <div className="space-y-4 p-6 border rounded-xl bg-white shadow-sm">
-            <h3 className="font-bold text-sm uppercase text-slate-400 tracking-widest">General Details</h3>
-            
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+        {/* Left Column: Basic Info & Grades */}
+        <div className="lg:col-span-1 space-y-6">
+          <div className="p-6 border rounded-xl bg-white shadow-sm space-y-4">
+            <h3 className="text-xs font-bold uppercase text-slate-400 tracking-widest">General Info</h3>
             <div className="space-y-2">
               <label className="text-xs font-bold text-slate-600">Rack Name</label>
-              <Input 
-                value={formData.rackName} 
-                onChange={(e) => setFormData({...formData, rackName: e.target.value})}
-              />
+              <Input value={formData.rackName} onChange={(e) => setFormData({ ...formData, rackName: e.target.value })} />
             </div>
-
             <div className="space-y-2">
-              <label className="text-xs font-bold text-slate-600">Location / Terminal</label>
-              <Input 
-                value={formData.rackLocation} 
-                onChange={(e) => setFormData({...formData, rackLocation: e.target.value})}
-              />
+              <label className="text-xs font-bold text-slate-600">Location</label>
+              <Input value={formData.rackLocation} onChange={(e) => setFormData({ ...formData, rackLocation: e.target.value })} />
             </div>
           </div>
 
-          <div className="flex items-center gap-3">
-            <Button onClick={handleUpdate} disabled={isSaving} className="px-8 gap-2">
-              <Save className="h-4 w-4" /> {isSaving ? "Saving..." : "Save Changes"}
-            </Button>
-          </div>
-        </div>
-
-        {/* Right Side: Grades & Associations */}
-        <div className="space-y-6">
           <div className="p-6 border rounded-xl bg-slate-50/50 space-y-4">
-            <h3 className="font-bold text-sm uppercase text-slate-400 tracking-widest">Supported Grades</h3>
-            <div className="grid grid-cols-1 gap-2">
+            <h3 className="text-xs font-bold uppercase text-slate-400 tracking-widest">Supported Grades</h3>
+            <div className="space-y-2">
               {AVAILABLE_GRADES.map(grade => (
-                <div 
-                  key={grade} 
-                  className={`flex items-center space-x-3 p-3 rounded-lg border transition-colors ${
-                    formData.availableGrades?.includes(grade) ? 'bg-white border-blue-200 ring-1 ring-blue-50' : 'bg-transparent border-transparent'
-                  }`}
-                >
-                  <Checkbox 
-                    id={`edit-${grade}`} 
-                    checked={formData.availableGrades?.includes(grade)}
-                    onCheckedChange={() => toggleGrade(grade)}
-                  />
-                  <label htmlFor={`edit-${grade}`} className="text-sm font-semibold cursor-pointer select-none">
-                    {grade}
-                  </label>
+                <div key={grade} className={`flex items-center space-x-3 p-3 rounded-lg border transition-colors ${formData.availableGrades?.includes(grade) ? 'bg-white border-blue-200' : 'border-transparent'}`}>
+                  <Checkbox checked={formData.availableGrades?.includes(grade)} onCheckedChange={() => toggleGrade(grade)} />
+                  <span className="text-sm font-semibold">{grade}</span>
                 </div>
               ))}
             </div>
           </div>
+          <Button onClick={handleUpdate} disabled={isSaving} className="w-full gap-2">
+            <Save className="h-4 w-4" /> {isSaving ? "Saving..." : "Save All Changes"}
+          </Button>
+        </div>
 
-          <div className="p-6 border rounded-xl bg-white space-y-3">
-             <h3 className="font-bold text-sm uppercase text-slate-400 tracking-widest">Relationships</h3>
-             <div className="text-xs text-muted-foreground p-3 border border-dashed rounded italic">
-               Carriers and Suppliers will be linked here once those modules are complete.
-             </div>
+        {/* Middle Column: Supplier Link & All Badges */}
+        <div className="space-y-6">
+          <div className="p-6 border rounded-xl bg-white shadow-sm space-y-4">
+            <div className="flex items-center justify-between">
+              <h3 className="text-xs font-bold uppercase text-slate-400 tracking-widest">Default Supplier</h3>
+              {rackSpecificSuppliers.length === 0 && (
+                <span className="text-[10px] text-amber-600 font-bold bg-amber-50 px-2 py-0.5 rounded">
+                  No Suppliers found for this Rack
+                </span>
+              )}
+            </div>
+
+            <Select
+              value={formData.defaultSupplier?._id || formData.defaultSupplier || ""}
+              onValueChange={(val) => setFormData({ ...formData, defaultSupplier: val })}
+            >
+              <SelectTrigger className="bg-slate-50 border-none">
+                <SelectValue placeholder={rackSpecificSuppliers.length > 0 ? "Choose Supplier" : "No available suppliers"} />
+              </SelectTrigger>
+              <SelectContent>
+                {rackSpecificSuppliers.map((s: any) => (
+                  <SelectItem key={s._id} value={s._id}>
+                    {s.supplierName}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+
+            {selectedSupplierData.full && (
+              <div className="space-y-3 pt-2">
+                <div className="flex items-center gap-2 text-slate-500 mb-1">
+                  <CreditCard className="h-3.5 w-3.5" />
+                  <span className="text-[10px] font-bold uppercase tracking-tight">Available Rack Badges</span>
+                </div>
+
+                <div className="grid gap-2">
+                  {selectedSupplierData.full.supplierBadges?.length > 0 ? (
+                    selectedSupplierData.full.supplierBadges.map((badge: any, idx: number) => (
+                      <div
+                        key={idx}
+                        className={`relative p-3 rounded-lg border transition-all ${badge.isDefault
+                          ? 'bg-blue-50/50 border-blue-200 ring-1 ring-blue-100'
+                          : 'bg-white border-slate-100'
+                          }`}
+                      >
+                        <div className="flex items-center justify-between">
+                          <div>
+                            <p className="text-sm font-bold text-slate-700">{badge.badgeName}</p>
+                            <p className="text-xs font-mono text-slate-500">#{badge.badgeNumber}</p>
+                          </div>
+
+                          {badge.isDefault && (
+                            <div className="flex items-center gap-1 bg-blue-600 text-white px-2 py-0.5 rounded-full text-[9px] font-bold uppercase">
+                              <ShieldCheck className="h-3 w-3" />
+                              Primary
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    ))
+                  ) : (
+                    <div className="p-4 border border-dashed rounded-lg text-center">
+                      <p className="text-xs italic text-slate-400">No badges registered for this supplier.</p>
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+
+        {/* Right Column: Carriers Multi-select */}
+        <div className="space-y-4">
+          <div className="flex items-center justify-between">
+            <h3 className="text-xs font-bold uppercase text-slate-400 tracking-widest">Authorized Carriers</h3>
+            <Dialog>
+              <DialogTrigger asChild>
+                <Button size="sm" variant="outline" className="h-7 gap-1 text-xs"><Plus className="h-3 w-3" /> Manage</Button>
+              </DialogTrigger>
+              <DialogContent>
+                <DialogHeader><DialogTitle>Authorize Carriers</DialogTitle></DialogHeader>
+                <div className="relative my-4">
+                  <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
+                  <Input placeholder="Search carriers..." className="pl-9" value={carrierSearch} onChange={(e) => setCarrierSearch(e.target.value)} />
+                </div>
+                <div className="max-h-60 overflow-y-auto space-y-1">
+                  {filteredCarriers.map((carrier: any) => {
+                    const isSelected = formData.associatedCarriers.some((c: any) => (typeof c === 'string' ? c : c._id) === carrier._id)
+                    return (
+                      <div key={carrier._id} className="flex items-center justify-between p-3 border rounded-lg cursor-pointer hover:bg-slate-50" onClick={() => toggleCarrier(carrier._id)}>
+                        <span className="text-sm font-medium">{carrier.carrierName}</span>
+                        <Checkbox checked={isSelected} />
+                      </div>
+                    )
+                  })}
+                </div>
+              </DialogContent>
+            </Dialog>
+          </div>
+
+          <div className="grid gap-2">
+            {formData.associatedCarriers.map((carrierRef: any) => {
+              const cId = typeof carrierRef === 'string' ? carrierRef : carrierRef._id
+              const full = allCarriers.find((c: any) => c._id === cId)
+              return (
+                <div key={cId} className="flex items-center justify-between p-3 bg-white border rounded-lg group">
+                  <div className="flex items-center gap-3">
+                    <Truck className="h-4 w-4 text-slate-400" />
+                    <span className="text-sm font-medium">{full?.carrierName || 'Loading...'}</span>
+                  </div>
+                  <Button variant="ghost" size="icon" className="h-7 w-7 opacity-0 group-hover:opacity-100" onClick={() => toggleCarrier(cId)}><X className="h-4 w-4" /></Button>
+                </div>
+              )
+            })}
           </div>
         </div>
       </div>

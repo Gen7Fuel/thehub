@@ -1,8 +1,8 @@
 const mongoose = require("mongoose");
 
 const fuelCarrierSchema = new mongoose.Schema({
-  carrierName: { type: String, required: true },
-  carrierId: { type: String, required: true, unique: true },
+  carrierName: { type: String, required: true, unique: true },
+  carrierId: { type: String, required: true },
   associatedRacks: [{ type: mongoose.Schema.Types.ObjectId, ref: "FuelRack" }]
 });
 
