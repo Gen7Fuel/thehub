@@ -2,6 +2,7 @@ const cron = require("node-cron");
 const { emailQueue } = require("../queues/emailQueue");
 const { getFuelInventoryReportPreviousDay, getFuelInventoryReportCurrentDay } = require("../services/sqlService");
 const { generateFuelInventoryPDF } = require("../utils/pdfGenerator");
+const { getRankedFuelInventory } = require("../services/supaBaseService");
 // const mongoose = require("mongoose");
 // const dotenv = require("dotenv");
 // const connectDB = require("../config/db");
@@ -90,10 +91,12 @@ async function runFuelInventoryReportJobPreviousDay() {
     console.log("Running Fuel Inventory Report Cron Previous Day...");
 
     // 1️⃣ Get DB rows
-    const rows = await getFuelInventoryReportPreviousDay();
+    // const rows = await getFuelInventoryReportPreviousDay();
+    const rows = await getRankedFuelInventory();
 
-    // 2️⃣ Pivot/transform
-    const tableData = await transformFuelInventory(rows, false);
+    // // 2️⃣ Pivot/transform
+    // const tableData = await transformFuelInventory(rows, false);
+    const tableData = await transformFuelInventory(rows, true);
 
     // 3️⃣ Format yesterday's date
     const yesterday = new Date();
@@ -103,20 +106,24 @@ async function runFuelInventoryReportJobPreviousDay() {
     // 4️⃣ Generate PDF
     const pdfPath = await generateFuelInventoryPDF(tableData, formattedDate);
 
-    // 5️⃣ Queue email
-    await emailQueue.add("sendFuelInventoryReport", {
-      to: "kellie@gen7fuel.com",
-      cc: ["daksh@gen7fuel.com", "nmiller@gen7fuel.com", "Ryan@gen7fuel.com"],
-      subject: `Fuel Inventory Report End-of-Day (${formattedDate})`,
-      text: "Attached is your daily (End-of-Day) fuel inventory report.",
-      html: "<p>Attached is your daily (End-of-Day) fuel inventory report.</p>",
-      attachments: [
-        {
-          filename: `FuelInventory_EndOfDay_${formattedDate}.pdf`,
-          path: pdfPath
-        }
-      ]
-    });
+    if (process.env.HOST === "VPS") {
+      // 5️⃣ Queue email
+      await emailQueue.add("sendFuelInventoryReport", {
+        to: "kellie@gen7fuel.com",
+        cc: ["daksh@gen7fuel.com", "nmiller@gen7fuel.com", "Ryan@gen7fuel.com"],
+        subject: `Fuel Inventory Report End-of-Day (${formattedDate})`,
+        text: "Attached is your daily (End-of-Day) fuel inventory report.",
+        html: "<p>Attached is your daily (End-of-Day) fuel inventory report.</p>",
+        attachments: [
+          {
+            filename: `FuelInventory_EndOfDay_${formattedDate}.pdf`,
+            path: pdfPath
+          }
+        ]
+      });
+    } else {
+      console.log("Skipping email - not running on VPS host.");
+    }
 
     console.log("Fuel Inventory Email Queued.");
   } catch (err) {
@@ -130,7 +137,8 @@ async function runFuelInventoryReportJobCurrentDay() {
     console.log("Running Fuel Inventory Report Cron Current Day...");
 
     // 1️⃣ Get DB rows
-    const rows = await getFuelInventoryReportCurrentDay();
+    // const rows = await getFuelInventoryReportCurrentDay();
+    const rows = await getRankedFuelInventory();
 
     // 2️⃣ Pivot/transform
     const tableData = await transformFuelInventory(rows, true);
