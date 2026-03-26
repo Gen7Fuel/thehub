@@ -216,6 +216,20 @@ function RouteComponent() {
   const [merchantFeesValue, setMerchantFeesValue] = React.useState<string>('')
   const [merchantFeesSaved, setMerchantFeesSaved] = React.useState<number | null>(null)
 
+  const copyCell = (e: React.MouseEvent<HTMLTableCellElement>) => {
+    if ((e.target as HTMLElement).tagName === 'INPUT') return
+    const raw = e.currentTarget.textContent?.trim() ?? ''
+    if (!raw || raw === '-') return
+    let val = raw.replace(/\$/g, '').replace(/,/g, '')
+    if (val.startsWith('(') && val.endsWith(')')) val = '-' + val.slice(1, -1)
+    navigator.clipboard.writeText(val)
+    const td = e.currentTarget
+    td.classList.remove('copy-flash')
+    void td.offsetWidth // force reflow so re-clicks restart the animation
+    td.classList.add('copy-flash')
+    td.addEventListener('animationend', () => td.classList.remove('copy-flash'), { once: true })
+  }
+
   const dateObj = React.useMemo(() => parseYmd(date), [date])
   const setDate: React.Dispatch<React.SetStateAction<Date | undefined>> = (next) => {
     const current = dateObj
@@ -352,35 +366,35 @@ function RouteComponent() {
                     <tbody>
                       <tr className="border-b border-gray-100 bg-emerald-50">
                         <td className="px-4 py-2.5 text-gray-600">GBL/Moneris Fuel Sales (40010)</td>
-                        <td className="px-4 py-2.5 text-right font-medium text-gray-900">${fmt2(gblMonerisFuelSales)}</td>
+                        <td className="px-4 py-2.5 text-right font-medium text-gray-900 cursor-copy" onClick={copyCell}>${fmt2(gblMonerisFuelSales)}</td>
                       </tr>
                       <tr className="border-b border-gray-100 bg-emerald-50">
                         <td className="px-4 py-2.5 text-gray-600">Canadian Cash (40010)</td>
-                        <td className="px-4 py-2.5 text-right font-medium text-gray-900">${fmt2(canadianCash)}</td>
+                        <td className="px-4 py-2.5 text-right font-medium text-gray-900 cursor-copy" onClick={copyCell}>${fmt2(canadianCash)}</td>
                       </tr>
                       <tr className="border-b border-gray-100 bg-emerald-50">
                         <td className="px-4 py-2.5 text-gray-600">Kardpoll Sales (40010)</td>
-                        <td className="px-4 py-2.5 text-right font-medium text-gray-900">${fmt2(kardpollSales)}</td>
+                        <td className="px-4 py-2.5 text-right font-medium text-gray-900 cursor-copy" onClick={copyCell}>${fmt2(kardpollSales)}</td>
                       </tr>
                       <tr className="border-b border-gray-100 bg-emerald-50">
                         <td className="px-4 py-2.5 text-gray-600">Store Sales (40200)</td>
-                        <td className="px-4 py-2.5 text-right font-medium text-gray-900">${fmt2(storeSales)}</td>
+                        <td className="px-4 py-2.5 text-right font-medium text-gray-900 cursor-copy" onClick={copyCell}>${fmt2(storeSales)}</td>
                       </tr>
                       <tr className="border-b border-gray-100 bg-emerald-50">
                         <td className="px-4 py-2.5 text-gray-600">Lottery Sales (20440)</td>
-                        <td className="px-4 py-2.5 text-right font-medium text-gray-900">${fmt2(lotterySales)}</td>
+                        <td className="px-4 py-2.5 text-right font-medium text-gray-900 cursor-copy" onClick={copyCell}>${fmt2(lotterySales)}</td>
                       </tr>
                       <tr className="border-b border-gray-100 bg-emerald-50">
                         <td className="px-4 py-2.5 text-gray-600">Lottery Payouts (20440)</td>
-                        <td className="px-4 py-2.5 text-right font-medium text-gray-900">${fmt2(lotteryPayouts)}</td>
+                        <td className="px-4 py-2.5 text-right font-medium text-gray-900 cursor-copy" onClick={copyCell}>${fmt2(lotteryPayouts)}</td>
                       </tr>
                       <tr className="bg-gray-50">
                         <td className="px-4 py-2.5 font-semibold text-gray-900">Total Dollar Sales</td>
-                        <td className="px-4 py-2.5 text-right font-semibold text-gray-900">${fmt2(totalDollarSales)}</td>
+                        <td className="px-4 py-2.5 text-right font-semibold text-gray-900 cursor-copy" onClick={copyCell}>${fmt2(totalDollarSales)}</td>
                       </tr>
                       <tr className="border-t border-gray-100">
                         <td className="px-4 py-2.5 text-gray-600">HH Debit</td>
-                        <td className="px-4 py-2.5 text-right font-medium text-gray-900">${fmt2(hhDebit)}</td>
+                        <td className="px-4 py-2.5 text-right font-medium text-gray-900 cursor-copy" onClick={copyCell}>${fmt2(hhDebit)}</td>
                       </tr>
                     </tbody>
                   </table>
@@ -395,35 +409,35 @@ function RouteComponent() {
                     <tbody>
                       <tr className="border-b border-gray-100 bg-red-50">
                         <td className="px-4 py-2.5 text-gray-600">Cash Safe Deposited (10011)</td>
-                        <td className="px-4 py-2.5 text-right font-medium text-gray-900">${fmt2(cashSafeDeposited)}</td>
+                        <td className="px-4 py-2.5 text-right font-medium text-gray-900 cursor-copy" onClick={copyCell}>${fmt2(cashSafeDeposited)}</td>
                       </tr>
                       <tr className="border-b border-gray-100 bg-amber-50">
                         <td className="px-4 py-2.5 text-gray-600">Till Over/Short (55050)</td>
-                        <td className="px-4 py-2.5 text-right font-medium text-gray-900">${fmt2(tillOverShort)}</td>
+                        <td className="px-4 py-2.5 text-right font-medium text-gray-900 cursor-copy" onClick={copyCell}>${fmt2(tillOverShort)}</td>
                       </tr>
                       <tr className="border-b border-gray-100 bg-red-50">
                         <td className="px-4 py-2.5 text-gray-600">GiftCard Redemption (52250)</td>
-                        <td className="px-4 py-2.5 text-right font-medium text-gray-900">${fmt2(gcRedemption)}</td>
+                        <td className="px-4 py-2.5 text-right font-medium text-gray-900 cursor-copy" onClick={copyCell}>${fmt2(gcRedemption)}</td>
                       </tr>
                       <tr className="border-b border-gray-100 bg-red-50">
                         <td className="px-4 py-2.5 text-gray-600">Loyalty (52175)</td>
-                        <td className="px-4 py-2.5 text-right font-medium text-gray-900">${fmt2(loyalty)}</td>
+                        <td className="px-4 py-2.5 text-right font-medium text-gray-900 cursor-copy" onClick={copyCell}>${fmt2(loyalty)}</td>
                       </tr>
                       <tr className="border-b border-gray-100 bg-amber-50">
                         <td className="px-4 py-2.5 text-gray-600">Unsettled Prepays (40010)</td>
-                        <td className="px-4 py-2.5 text-right font-medium text-gray-900">${fmt2(-unsettledPrepays)}</td>
+                        <td className="px-4 py-2.5 text-right font-medium text-gray-900 cursor-copy" onClick={copyCell}>${fmt2(unsettledPrepays === 0 ? 0 : -unsettledPrepays)}</td>
                       </tr>
                       <tr className="border-b border-gray-100 bg-amber-50">
                         <td className="px-4 py-2.5 text-gray-600">Bank Rec (55050)</td>
-                        <td className="px-4 py-2.5 text-right font-medium text-gray-900">${fmt2(bankRec)}</td>
+                        <td className="px-4 py-2.5 text-right font-medium text-gray-900 cursor-copy" onClick={copyCell}>${fmt2(bankRec)}</td>
                       </tr>
                       <tr className="border-b border-gray-100 bg-amber-50">
                         <td className="px-4 py-2.5 text-gray-600">Balance Check</td>
-                        <td className="px-4 py-2.5 text-right font-medium text-gray-900">${fmt2(balanceCheck)}</td>
+                        <td className="px-4 py-2.5 text-right font-medium text-gray-900 cursor-copy" onClick={copyCell}>${fmt2(balanceCheck)}</td>
                       </tr>
                       <tr className="bg-gray-50">
                         <td className="px-4 py-2.5 font-semibold text-gray-900">Total</td>
-                        <td className="px-4 py-2.5 text-right font-semibold text-gray-900">${fmt2(finalTotal)}</td>
+                        <td className="px-4 py-2.5 text-right font-semibold text-gray-900 cursor-copy" onClick={copyCell}>${fmt2(finalTotal)}</td>
                       </tr>
                     </tbody>
                   </table>
@@ -494,12 +508,12 @@ function RouteComponent() {
                           <tr key={idx} className="border-b border-gray-100">
                             <td className="px-4 py-2.5 text-gray-700">{row.customer || '-'}</td>
                             <td className="px-4 py-2.5 text-gray-700">{row.poNumber || '-'}</td>
-                            <td className="px-4 py-2.5 text-right font-medium text-gray-900">${fmt2(row.amount)}</td>
+                            <td className="px-4 py-2.5 text-right font-medium text-gray-900 cursor-copy" onClick={copyCell}>${fmt2(row.amount)}</td>
                           </tr>
                         ))}
                         <tr className="bg-gray-50">
                           <td className="px-4 py-2.5 font-semibold text-gray-900" colSpan={2}>Total</td>
-                          <td className="px-4 py-2.5 text-right font-semibold text-gray-900">${fmt2(arTotal)}</td>
+                          <td className="px-4 py-2.5 text-right font-semibold text-gray-900 cursor-copy" onClick={copyCell}>${fmt2(arTotal)}</td>
                         </tr>
                       </tbody>
                     </table>
@@ -528,13 +542,13 @@ function RouteComponent() {
                           <tr key={idx} className="border-b border-gray-100">
                             <td className="px-4 py-2.5 text-gray-700">{row.vendor || '-'}</td>
                             <td className="px-4 py-2.5 text-gray-700">{row.type || '-'}</td>
-                            <td className="px-4 py-2.5 text-right font-medium text-gray-900">${fmt2(row.amount)}</td>
+                            <td className="px-4 py-2.5 text-right font-medium text-gray-900 cursor-copy" onClick={copyCell}>${fmt2(row.amount)}</td>
                             <td className="px-4 py-2.5 text-gray-600">{row.notes || ''}</td>
                           </tr>
                         ))}
                         <tr className="bg-gray-50">
                           <td className="px-4 py-2.5 font-semibold text-gray-900" colSpan={2}>Total</td>
-                          <td className="px-4 py-2.5 text-right font-semibold text-gray-900">${fmt2(payTotal)}</td>
+                          <td className="px-4 py-2.5 text-right font-semibold text-gray-900 cursor-copy" onClick={copyCell}>${fmt2(payTotal)}</td>
                           <td className="px-4 py-2.5" />
                         </tr>
                       </tbody>
@@ -586,7 +600,7 @@ function RouteComponent() {
                   <tbody>
                     <tr>
                       <td className="px-4 py-2.5 text-gray-600">Merchant Fees</td>
-                      <td className="px-4 py-2.5 text-right font-medium text-gray-900">
+                      <td className="px-4 py-2.5 text-right font-medium text-gray-900 cursor-copy" onClick={copyCell}>
                         {merchantFeesEdit ? (
                           <input
                             autoFocus
@@ -658,7 +672,7 @@ function RouteComponent() {
                     <tr className="border-b border-gray-100">
                       <td className="px-4 py-2.5 text-gray-500">—</td>
                       <td className="px-4 py-2.5 font-medium text-gray-900">Opening Balance</td>
-                      <td className="px-4 py-2.5 text-right font-medium text-gray-900">${fmt2(openingBalance)}</td>
+                      <td className="px-4 py-2.5 text-right font-medium text-gray-900 cursor-copy" onClick={copyCell}>${fmt2(openingBalance)}</td>
                     </tr>
 
                     <tr className="border-t border-gray-200 bg-gray-50/50">
@@ -675,7 +689,7 @@ function RouteComponent() {
                         <tr key={idx} className="border-b border-gray-100">
                           <td className="px-4 py-2.5 text-gray-600">{d.date || '-'}</td>
                           <td className="px-4 py-2.5 text-gray-700">{d.description || '-'}</td>
-                          <td className="px-4 py-2.5 text-right font-medium text-gray-900">${fmt2(Number(d.amount) || 0)}</td>
+                          <td className="px-4 py-2.5 text-right font-medium text-gray-900 cursor-copy" onClick={copyCell}>${fmt2(Number(d.amount) || 0)}</td>
                         </tr>
                       ))
                     )}
@@ -694,7 +708,7 @@ function RouteComponent() {
                         <tr key={idx} className="border-b border-gray-100">
                           <td className="px-4 py-2.5 text-gray-600">{c.date || '-'}</td>
                           <td className="px-4 py-2.5 text-gray-700">{c.description || '-'}</td>
-                          <td className="px-4 py-2.5 text-right font-medium text-gray-900">${fmt2(Number(c.amount) || 0)}</td>
+                          <td className="px-4 py-2.5 text-right font-medium text-gray-900 cursor-copy" onClick={copyCell}>${fmt2(Number(c.amount) || 0)}</td>
                         </tr>
                       ))
                     )}
