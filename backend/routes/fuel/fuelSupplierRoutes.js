@@ -6,7 +6,15 @@ const FuelRack = require('../../models/fuel/FuelRack');
 // GET all suppliers
 router.get('/', async (req, res) => {
   try {
-    const suppliers = await FuelSupplier.find().populate('associatedRack');
+    const { associatedRack } = req.query;
+
+    // Create a filter object. If associatedRack is provided, 
+    // it filters; otherwise, it stays empty and finds all.
+    const queryFilter = associatedRack ? { associatedRack } : {};
+
+    const suppliers = await FuelSupplier.find(queryFilter)
+      .populate('associatedRack');
+
     res.json(suppliers);
   } catch (err) {
     res.status(500).json({ message: err.message });

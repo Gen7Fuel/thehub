@@ -21,6 +21,7 @@ const locationSchema = new mongoose.Schema({
   sellsLottery: { type: Boolean, default: false },
   safeMaxBalance: { type: Number, default: 25000 }, // Maximum safe balance for the location
   fuelStationNumber: { type: String, required: true, unique: true },
+  fuelCustomerName: { type: String, required: true },
   address: { type: String, required: true },
   defaultFuelRack: { type: mongoose.Schema.Types.ObjectId, ref: "FuelRack" },
   defaultFuelCarrier: { type: mongoose.Schema.Types.ObjectId, ref: "FuelCarrier" },

@@ -17,7 +17,7 @@ function EditCarrierComponent() {
   const navigate = useNavigate()
   const queryClient = useQueryClient()
 
-  const [formData, setFormData] = useState<any>({ carrierName: '', carrierId: '', associatedRacks: [] })
+  const [formData, setFormData] = useState<any>({ carrierName: '', carrierId: '', associatedRacks: [], email: '', contact: '' })
   const [loading, setLoading] = useState(true)
   const [isSaving, setIsSaving] = useState(false)
   const [rackSearch, setRackSearch] = useState('')
@@ -35,15 +35,26 @@ function EditCarrierComponent() {
 
   useEffect(() => {
     const fetchCarrier = async () => {
+      setLoading(true); // Trigger loading state
+      // 1. Reset state immediately so old data doesn't "ghost" 
+      setFormData({ carrierName: '', carrierId: '', associatedRacks: [], email: '', contact: '' });
+
       try {
         const res = await axios.get(`/api/fuel-carriers/${id}`, {
           headers: { Authorization: `Bearer ${localStorage.getItem('token')}` }
-        })
-        setFormData(res.data)
-      } catch (err) { console.error(err) } finally { setLoading(false) }
-    }
-    fetchCarrier()
-  }, [id])
+        });
+
+        setFormData(res.data);
+      } catch (err) {
+        console.error(err);
+        alert("Error loading carrier");
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchCarrier();
+  }, [id]); // Dependencies: only run when ID changes
 
   // Filter racks based on the search in the dialog
   const filteredRacks = useMemo(() => {
@@ -112,6 +123,14 @@ function EditCarrierComponent() {
             <div className="space-y-2">
               <label className="text-xs font-bold text-slate-600 ml-1">System ID</label>
               <Input value={formData.carrierId} onChange={(e) => setFormData({ ...formData, carrierId: e.target.value })} />
+            </div>
+            <div className="space-y-2">
+              <label className="text-xs font-bold text-slate-600 ml-1">Contact</label>
+              <Input value={formData.contact} onChange={(e) => setFormData({ ...formData, contact: e.target.value })} />
+            </div>
+            <div className="space-y-2">
+              <label className="text-xs font-bold text-slate-600 ml-1">Email</label>
+              <Input value={formData.email} onChange={(e) => setFormData({ ...formData, email: e.target.value })} />
             </div>
           </div>
 
@@ -197,6 +216,7 @@ function EditCarrierComponent() {
                       {/* 3. Display the name from fullRackDetails, fallback to 'Unknown Rack' if not found */}
                       <span className="text-sm font-medium">
                         {fullRackDetails ? fullRackDetails.rackName : 'Unknown Rack'}
+                        <p className="text-[10px] text-muted-foreground uppercase">{fullRackDetails.rackLocation}</p>
                       </span>
                     </div>
                     <Button

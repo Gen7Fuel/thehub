@@ -104,7 +104,7 @@ function NewSupplierComponent() {
               </SelectTrigger>
               <SelectContent>
                 {racks.map((rack: any) => (
-                  <SelectItem key={rack._id} value={rack._id}>{rack.rackName}</SelectItem>
+                  <SelectItem key={rack._id} value={rack._id}>{rack.rackName} - {rack.rackLocation}</SelectItem>
                 ))}
               </SelectContent>
             </Select>

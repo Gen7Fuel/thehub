@@ -52,6 +52,7 @@ const fuelCarrierRoutes = require("./routes/fuel/fuelCarrierRoutes");
 const fuelRackRoutes = require("./routes/fuel/fuelRackRoutes");
 const fuelSupplierRoutes = require("./routes/fuel/fuelSupplierRoutes");
 const fuelStationTankRoutes = require("./routes/fuel/fuelStationTankRoutes");
+const fuelOrderRoutes = require("./routes/fuel/fuelOrderRoutes");
 
 const { auth } = require("./middleware/authMiddleware");
 
@@ -129,6 +130,7 @@ app.use('/api/fuel-carriers', fuelCarrierRoutes);
 app.use('/api/fuel-racks', fuelRackRoutes);
 app.use('/api/fuel-suppliers', fuelSupplierRoutes);
 app.use('/api/fuel-station-tanks', fuelStationTankRoutes);
+app.use('/api/fuel-orders', fuelOrderRoutes);
 
 // Misc
 app.use('/api', emailRoutes);

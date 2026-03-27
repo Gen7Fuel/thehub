@@ -20,7 +20,7 @@ function ManageLayout() {
       {/* COLUMN 1: Main Categories */}
       <aside className="w-16 lg:w-64 flex flex-col border-r bg-white p-4 gap-2 shrink-0">
         <div className="mb-4 px-2">
-          <h2 className="text-xs font-bold uppercase text-muted-foreground tracking-tighter">Fuel Meta</h2>
+          <h2 className="text-xs font-bold uppercase text-muted-foreground tracking-tighter">Fuel Configurations</h2>
         </div>
         {links.map((link) => (
           <Link

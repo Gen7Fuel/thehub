@@ -27,7 +27,8 @@ function SupplierListLayout() {
   const filteredSuppliers = useMemo(() => {
     return suppliers.filter((s: any) =>
       s.supplierName.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      s.associatedRack?.rackName?.toLowerCase().includes(searchTerm.toLowerCase())
+      s.associatedRack?.rackName?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      s.associatedRack?.rackLocation?.toLowerCase().includes(searchTerm.toLowerCase())
     )
   }, [suppliers, searchTerm])
 
@@ -74,7 +75,7 @@ function SupplierListLayout() {
                   <div className="overflow-hidden">
                     <p className="font-semibold text-sm truncate">{supplier.supplierName}</p>
                     <p className="text-[10px] font-bold text-blue-600 uppercase tracking-tighter">
-                      Rack: {supplier.associatedRack?.rackName || 'Unlinked'}
+                      Rack: {supplier.associatedRack?.rackName || 'Unlinked'} ({supplier.associatedRack?.rackLocation || 'Unlinked'})
                     </p>
                   </div>
                 </Link>

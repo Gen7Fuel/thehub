@@ -4,7 +4,7 @@ import { useQueryClient } from '@tanstack/react-query' // 1. Import QueryClient
 import { Input } from '@/components/ui/input'
 import { Button } from '@/components/ui/button'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
-import { Save, Loader2, Plus, Trash2, MapPin, Hash, Car, Truck, Zap } from 'lucide-react'
+import { Save, Loader2, Plus, Trash2, MapPin, Hash, Car, Truck, Zap, BookText } from 'lucide-react'
 import axios from 'axios'
 import { useQuery } from '@tanstack/react-query'
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog"
@@ -53,7 +53,8 @@ function LocationFuelComponent() {
       fuelStationNumber: String(locationData.fuelStationNumber),
       address: locationData.address,
       defaultFuelRack: locationData.defaultFuelRack?._id || locationData.defaultFuelRack,
-      defaultFuelCarrier: locationData.defaultFuelCarrier?._id || locationData.defaultFuelCarrier
+      defaultFuelCarrier: locationData.defaultFuelCarrier?._id || locationData.defaultFuelCarrier,
+      fuelCustomerName: locationData.fuelCustomerName?._id || locationData.fuelCustomerName,
     }
 
     try {
@@ -68,7 +69,7 @@ function LocationFuelComponent() {
       await fetchData()
 
       toast.success("Station Updated", {
-        description: `Site ${payload.fuelStationNumber} metadata is now current.`
+        description: `Site ${payload.fuelStationNumber} configurations is now current.`
       })
     } catch (err) {
       toast.error("Update Failed")
@@ -112,36 +113,91 @@ function LocationFuelComponent() {
       </div>
 
       {/* 1. Meta Editor */}
-      <div className="bg-slate-50/50 p-6 rounded-2xl border border-slate-200 shadow-sm flex flex-wrap items-end gap-6">
-        <div className="flex-1 min-w-[120px] space-y-2">
-          <label className="text-[10px] font-bold text-slate-400 uppercase flex items-center gap-1"><Hash className="h-3 w-3" /> Station ID</label>
-          <Input
-            className="bg-white font-mono"
-            value={locationData.fuelStationNumber}
-            onChange={(e) => setLocationData({ ...locationData, fuelStationNumber: e.target.value })}
-          />
+      <div className="bg-slate-50/50 p-6 rounded-3xl border border-slate-200 shadow-sm space-y-6">
+        {/* Row 1: Primary Identifiers */}
+        <div className="grid grid-cols-1 md:grid-cols-12 gap-6 items-end">
+          <div className="md:col-span-2 space-y-2">
+            <label className="text-[10px] font-bold text-slate-400 uppercase flex items-center gap-1">
+              <Hash className="h-3 w-3" /> Station ID
+            </label>
+            <Input
+              className="bg-white font-mono h-10 border-slate-200 rounded-xl"
+              value={locationData.fuelStationNumber || ''}
+              onChange={(e) => setLocationData({ ...locationData, fuelStationNumber: e.target.value })}
+            />
+          </div>
+
+          <div className="md:col-span-4 space-y-2">
+            <label className="text-[10px] font-bold text-slate-400 uppercase flex items-center gap-1">
+              <BookText className="h-3 w-3" /> Customer Name
+            </label>
+            <Input
+              className="bg-white h-10 border-slate-200 rounded-xl"
+              placeholder="Enter Customer Name"
+              value={locationData.fuelCustomerName || ''}
+              onChange={(e) => setLocationData({ ...locationData, fuelCustomerName: e.target.value })}
+            />
+          </div>
+
+          <div className="md:col-span-6 space-y-2">
+            <label className="text-[10px] font-bold text-slate-400 uppercase flex items-center gap-1">
+              <MapPin className="h-3 w-3" /> Site Address
+            </label>
+            <Input
+              className="bg-white h-10 border-slate-200 rounded-xl"
+              value={locationData.address || ''}
+              onChange={(e) => setLocationData({ ...locationData, address: e.target.value })}
+            />
+          </div>
         </div>
-        <div className="flex-[2] min-w-[200px] space-y-2">
-          <label className="text-[10px] font-bold text-slate-400 uppercase flex items-center gap-1"><MapPin className="h-3 w-3" /> Site Address</label>
-          <Input className="bg-white" value={locationData.address} onChange={(e) => setLocationData({ ...locationData, address: e.target.value })} />
+
+        {/* Row 2: Logistics & Action */}
+        <div className="grid grid-cols-1 md:grid-cols-12 gap-6 items-end pt-2 border-t border-slate-100">
+          <div className="md:col-span-4 space-y-2">
+            <label className="text-[10px] font-bold text-slate-400 uppercase">Default Rack</label>
+            <Select
+              value={locationData.defaultFuelRack?._id || locationData.defaultFuelRack || ""}
+              onValueChange={(val) => setLocationData({ ...locationData, defaultFuelRack: val })}
+            >
+              <SelectTrigger className="bg-white h-10 border-slate-200 rounded-xl">
+                <SelectValue placeholder="Select Rack" />
+              </SelectTrigger>
+              <SelectContent className="rounded-xl">
+                {racks.map((r: any) => (
+                  <SelectItem key={r._id} value={r._id}>{r.rackName} — {r.rackLocation}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+
+          <div className="md:col-span-4 space-y-2">
+            <label className="text-[10px] font-bold text-slate-400 uppercase">Default Carrier</label>
+            <Select
+              value={locationData.defaultFuelCarrier?._id || locationData.defaultFuelCarrier || ""}
+              onValueChange={(val) => setLocationData({ ...locationData, defaultFuelCarrier: val })}
+            >
+              <SelectTrigger className="bg-white h-10 border-slate-200 rounded-xl">
+                <SelectValue placeholder="Select Carrier" />
+              </SelectTrigger>
+              <SelectContent className="rounded-xl">
+                {carriers.map((c: any) => (
+                  <SelectItem key={c._id} value={c._id}>{c.carrierName}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+
+          <div className="md:col-span-4">
+            <Button
+              onClick={handleUpdateLocation}
+              disabled={saving}
+              className="w-full h-10 bg-slate-900 hover:bg-blue-600 text-white font-bold rounded-xl transition-all shadow-lg shadow-slate-200 gap-2"
+            >
+              {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
+              Save Station Configuration
+            </Button>
+          </div>
         </div>
-        <div className="flex-[1.5] min-w-[180px] space-y-2">
-          <label className="text-[10px] font-bold text-slate-400 uppercase">Default Rack</label>
-          <Select value={locationData.defaultFuelRack?._id || locationData.defaultFuelRack || ""} onValueChange={(val) => setLocationData({ ...locationData, defaultFuelRack: val })}>
-            <SelectTrigger className="bg-white"><SelectValue placeholder="Select Rack" /></SelectTrigger>
-            <SelectContent>{racks.map((r: any) => <SelectItem key={r._id} value={r._id}>{r.rackName}</SelectItem>)}</SelectContent>
-          </Select>
-        </div>
-        <div className="flex-[1.5] min-w-[180px] space-y-2">
-          <label className="text-[10px] font-bold text-slate-400 uppercase">Default Carrier</label>
-          <Select value={locationData.defaultFuelCarrier?._id || locationData.defaultFuelCarrier || ""} onValueChange={(val) => setLocationData({ ...locationData, defaultFuelCarrier: val })}>
-            <SelectTrigger className="bg-white"><SelectValue placeholder="Select Carrier" /></SelectTrigger>
-            <SelectContent>{carriers.map((c: any) => <SelectItem key={c._id} value={c._id}>{c.carrierName}</SelectItem>)}</SelectContent>
-          </Select>
-        </div>
-        <Button onClick={handleUpdateLocation} disabled={saving} className="h-10 px-8 bg-blue-600 hover:bg-blue-700 shadow-lg shadow-blue-100">
-          {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4 mr-2" />} Update Site
-        </Button>
       </div>
 
       {/* 2. Tanks Grid */}
@@ -390,11 +446,11 @@ function TankCard({ tank, allTanks, onUpdate }: { tank: any, allTanks: any[], on
           <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest">Tank Size</label>
           <Input className="h-9 font-bold bg-white" type="number" value={editData.tankCapacity} onChange={(e) => setEditData({ ...editData, tankCapacity: Number(e.target.value) })} />
         </div>
-        
+
         <div className="space-y-1 p-3 bg-blue-50/50 rounded-xl border border-blue-100/50">
           <label className="text-[9px] font-black text-blue-500 uppercase tracking-tighter">Safe Fill Max</label>
           <Input className="h-9 font-bold bg-white text-blue-700" type="number" value={editData.maxVolumeCapacity} onChange={(e) => setEditData({ ...editData, maxVolumeCapacity: Number(e.target.value) })} />
-        </div>        
+        </div>
         <div className="space-y-1 p-3 bg-red-50/50 rounded-xl border border-red-100/50">
           <label className="text-[9px] font-black text-red-500 uppercase tracking-tighter">Refill Amount</label>
           <Input className="h-9 font-bold bg-white text-red-700" type="number" value={editData.minVolumeCapacity} onChange={(e) => setEditData({ ...editData, minVolumeCapacity: Number(e.target.value) })} />

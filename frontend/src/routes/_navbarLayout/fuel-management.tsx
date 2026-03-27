@@ -76,7 +76,7 @@ function RouteComponent() {
               {...(!isManageActive && { variant: 'outline' } as object)}
               className="rounded-l-none"
             >
-              Manage Meta Data
+              Manage Configuration
             </Button>
           </Link>
         )}

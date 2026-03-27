@@ -2,7 +2,7 @@ import { useState } from 'react'
 import { createFileRoute, useNavigate } from '@tanstack/react-router'
 import { Input } from '@/components/ui/input'
 import { Button } from '@/components/ui/button'
-import { Save, X, Truck } from 'lucide-react'
+import { Save, Truck } from 'lucide-react'
 import axios from 'axios'
 import { useQueryClient } from '@tanstack/react-query'
 
@@ -13,11 +13,13 @@ export const Route = createFileRoute('/_navbarLayout/fuel-management/manage/carr
 function NewCarrierComponent() {
   const navigate = useNavigate()
   const queryClient = useQueryClient()
-  
+
   const [formData, setFormData] = useState({
     carrierName: '',
     carrierId: '',
-    associatedRacks: []
+    associatedRacks: [],
+    contact: '',
+    email: ''
   })
   const [isSubmitting, setIsSubmitting] = useState(false)
 
@@ -29,14 +31,14 @@ function NewCarrierComponent() {
       const res = await axios.post('/api/fuel-carriers', formData, {
         headers: { Authorization: `Bearer ${localStorage.getItem('token')}` }
       })
-      
+
       // Invalidate the list query so the middle column refreshes
       queryClient.invalidateQueries({ queryKey: ['fuel-carriers'] })
-      
+
       // Navigate to the newly created carrier
-      navigate({ 
-        to: '/fuel-management/manage/carriers/$id', 
-        params: { id: res.data._id } 
+      navigate({
+        to: '/fuel-management/manage/carriers/$id',
+        params: { id: res.data._id }
       })
     } catch (err: any) {
       alert(err.response?.data?.message || "Failed to create carrier")
@@ -61,22 +63,44 @@ function NewCarrierComponent() {
         <div className="grid gap-4 p-6 border rounded-xl bg-slate-50/50">
           <div className="space-y-2">
             <label className="text-xs font-bold uppercase text-slate-500 ml-1">Carrier Name</label>
-            <Input 
+            <Input
               required
               placeholder="e.g. Apps Transport"
               value={formData.carrierName}
-              onChange={(e) => setFormData({...formData, carrierName: e.target.value})}
+              onChange={(e) => setFormData({ ...formData, carrierName: e.target.value })}
               className="bg-white"
             />
           </div>
 
           <div className="space-y-2">
             <label className="text-xs font-bold uppercase text-slate-500 ml-1">Carrier ID</label>
-            <Input 
+            <Input
               required
               placeholder="Unique Alpha-numeric ID"
               value={formData.carrierId}
-              onChange={(e) => setFormData({...formData, carrierId: e.target.value})}
+              onChange={(e) => setFormData({ ...formData, carrierId: e.target.value })}
+              className="bg-white"
+            />
+          </div>
+
+          <div className="space-y-2">
+            <label className="text-xs font-bold uppercase text-slate-500 ml-1">Contact</label>
+            <Input
+              required
+              placeholder="Contact Number of the Carrier"
+              value={formData.contact}
+              onChange={(e) => setFormData({ ...formData, contact: e.target.value })}
+              className="bg-white"
+            />
+          </div>
+
+          <div className="space-y-2">
+            <label className="text-xs font-bold uppercase text-slate-500 ml-1">Email</label>
+            <Input
+              required
+              placeholder="Carrier Email ID for Orders"
+              value={formData.email}
+              onChange={(e) => setFormData({ ...formData, email: e.target.value })}
               className="bg-white"
             />
           </div>
@@ -87,9 +111,9 @@ function NewCarrierComponent() {
             {isSubmitting ? "Creating..." : "Create Carrier"}
             <Save className="ml-2 h-4 w-4" />
           </Button>
-          <Button 
-            type="button" 
-            variant="ghost" 
+          <Button
+            type="button"
+            variant="ghost"
             onClick={() => navigate({ to: '/fuel-management/manage/carriers' })}
           >
             Cancel

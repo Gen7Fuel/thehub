@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { createFileRoute, useNavigate } from '@tanstack/react-router'
+import { createFileRoute } from '@tanstack/react-router'
 import { Input } from '@/components/ui/input'
 import { Button } from '@/components/ui/button'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
@@ -13,7 +13,7 @@ export const Route = createFileRoute('/_navbarLayout/fuel-management/manage/supp
 
 function EditSupplierComponent() {
   const { id } = Route.useParams()
-  const navigate = useNavigate()
+  // const navigate = useNavigate()
   const queryClient = useQueryClient()
   
   const [formData, setFormData] = useState<any>(null)
@@ -104,7 +104,7 @@ function EditSupplierComponent() {
           <div>
             <h2 className="text-2xl font-bold tracking-tight">{formData.supplierName}</h2>
             <p className="text-sm text-muted-foreground font-semibold uppercase">
-              Terminal: {formData.associatedRack?.rackName || 'Not Linked'}
+              Rack: {formData.associatedRack?.rackName || 'Not Linked'} - {formData.associatedRack?.rackLocation || 'No Linked Location'}
             </p>
           </div>
         </div>
@@ -134,7 +134,7 @@ function EditSupplierComponent() {
               </SelectTrigger>
               <SelectContent>
                 {racks.map((rack: any) => (
-                  <SelectItem key={rack._id} value={rack._id}>{rack.rackName}</SelectItem>
+                  <SelectItem key={rack._id} value={rack._id}>{rack.rackName} - {rack.rackLocation}</SelectItem>
                 ))}
               </SelectContent>
             </Select>

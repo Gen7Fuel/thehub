@@ -59,11 +59,11 @@ router.get('/location/:id', async (req, res) => {
 // @route   PUT /api/fuel-station-tanks/location/:id
 // @desc    Update only the 4 allowed fuel-related fields for a Location
 router.put('/location/:id', async (req, res) => {
-  const { fuelStationNumber, address, defaultFuelRack, defaultFuelCarrier } = req.body;
+  const { fuelStationNumber, address, defaultFuelRack, defaultFuelCarrier, fuelCustomerName } = req.body;
   try {
     const updated = await Location.findByIdAndUpdate(
       req.params.id,
-      { fuelStationNumber, address, defaultFuelRack, defaultFuelCarrier },
+      { fuelStationNumber, address, defaultFuelRack, defaultFuelCarrier, fuelCustomerName },
       { new: true }
     );
     res.json(updated);
