@@ -741,6 +741,7 @@ router.post('/', async (req, res) => {
       missedCpl: numOrUndef(parsed.missedCpl),
       couponsAccepted: numOrUndef(parsed.couponsAccepted),
       giftCertificates: numOrUndef(parsed.giftCertificates),
+      cashOffCoupons: numOrUndef(parsed.cashOffCoupons),
       canadianCash: numOrUndef((parsed.canadianCash || 0) + (parsed.usCash || 0)),
       cashOnHand: numOrUndef(parsed.cashOnHand),
       parsedCashBack: numOrUndef(parsed.cashBack),

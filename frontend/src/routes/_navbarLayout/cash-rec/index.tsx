@@ -96,6 +96,7 @@ type EntriesResponse = {
   bankStmtTrans?: number
   bankRec?: number
   balanceCheck?: number
+  adjustedOverShort?: number | null
 }
 
 const isYmd = (s: string) => /^\d{4}-\d{2}-\d{2}$/.test(s)
@@ -312,7 +313,9 @@ function RouteComponent() {
             const totalDollarSales = gblMonerisFuelSales + canadianCash + kardpollSales + storeSales + lotterySales + lotteryPayouts
 
             const cashSafeDeposited = canadianCashCollected
-            const tillOverShort = canadianCashCollected - reportedCanadianCash + hhDebit + unsettledPrepays
+            const tillOverShort = data.adjustedOverShort != null
+              ? data.adjustedOverShort
+              : canadianCashCollected - reportedCanadianCash + hhDebit + unsettledPrepays
             const gcRedemption = afdGiftCard + kioskGiftCard
             const loyalty = loyaltyCoupons
             const bankRec = data.bankRec || 0
