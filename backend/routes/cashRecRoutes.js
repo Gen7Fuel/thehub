@@ -3,6 +3,8 @@ const { DateTime } = require('luxon')
 const { BankStatement, KardpollReport } = require('../models/CashRec')
 const CashSummary = require('../models/CashSummaryNew')
 const Transactions = require('../models/Transactions')
+const Lottery = require('../models/Lottery')
+const Location = require('../models/Location')
 
 const TIMEZONE = 'America/Toronto'
 
@@ -465,6 +467,7 @@ router.get('/entries', async (req, res) => {
       'missedCpl',
       'couponsAccepted',
       'giftCertificates',
+      'cashOffCoupons',
       'canadianCash',
       'cashOnHand',
       'parsedCashBack',
@@ -602,9 +605,37 @@ router.get('/entries', async (req, res) => {
     // Include both couponsAccepted and giftCertificates in balanceCheck
     const balanceCheck = totalPos + reportCanadianCash + couponsAccepted + giftCertificates + payouts - totalSalesNum + (Number(totalReceivablesAmount) || 0) + missedCpl
 
-    // Compute finalTotal (deduction summary): replace miscDebitDescTotal with miscCreditDescTotal
-    // finalTotal = totalDollarSales - cashSafeDeposited + tillOverShort - gcRedemption - loyaltyCoupons + unsettledPrepays + bankRec - arTotal - payTotal + miscCreditDescTotal
-    // (all variables except miscCreditDescTotal are frontend-only or require additional context)
+    // Compute adjusted over/short for lottery sites
+    let adjustedOverShort = null
+    try {
+      const location = await Location.findOne({ stationName: site }).lean()
+      if (location?.sellsLottery) {
+        const lotteryDoc = await Lottery.findOne({ site, date }).lean()
+        if (lotteryDoc) {
+          const shiftOnline = Number(cashSummary?.totals?.onlineLottoTotal) || 0
+          const shiftInstant = Number(cashSummary?.totals?.instantLottTotal) || 0
+          const onlineOverShort =
+            shiftOnline -
+            ((Number(lotteryDoc.onlineLottoTotal) || 0) -
+              (Number(lotteryDoc.onlineCancellations) || 0) -
+              (Number(lotteryDoc.onlineDiscounts) || 0))
+          const scratchOverShort =
+            shiftInstant -
+            ((Number(lotteryDoc.instantLottTotal) || 0) +
+              (Number(lotteryDoc.scratchFreeTickets) || 0) +
+              (Number(lotteryDoc.oldScratchTickets) || 0))
+          const adjustedReportedCash = reportCanadianCash + onlineOverShort + scratchOverShort
+          const canadianCashCollected = Number(cashSummary?.totals?.canadian_cash_collected) || 0
+          adjustedOverShort =
+            canadianCashCollected -
+            adjustedReportedCash +
+            (Number(cashSummary?.handheldDebit) || 0) +
+            (Number(cashSummary?.unsettledPrepays) || 0)
+        }
+      }
+    } catch (e) {
+      // silent — fall back to null so frontend uses regular formula
+    }
 
     return res.json({
       kardpoll: kardpoll || null,
@@ -615,6 +646,7 @@ router.get('/entries', async (req, res) => {
       bankRec,
       bankRecDay,
       balanceCheck,
+      adjustedOverShort,
     })
   } catch (err) {
     console.error('cashRecRoutes.entries error:', err)
