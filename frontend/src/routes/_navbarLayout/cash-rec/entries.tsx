@@ -76,6 +76,7 @@ type CashSummaryTotals = {
   missedCpl?: number
   couponsAccepted: number
   giftCertificates?: number
+  cashOffCoupons?: number
   canadianCash: number
   cashOnHand: number
   parsedCashBack: number
@@ -106,6 +107,7 @@ type EntriesResponse = {
   bankRec?: number
   bankRecDay?: number
   balanceCheck?: number
+  adjustedOverShort?: number | null
 }
 
 type EntriesRow = { date: string; data: EntriesResponse | null }
@@ -330,7 +332,7 @@ function RouteComponent() {
                     <td className="px-2 py-2 text-right cursor-copy" onClick={copyCell}>{fmt2(data?.cashSummary?.totals.payouts)}</td>
                     {/* <td className="px-2 py-2 text-right cursor-copy" onClick={copyCell}>{fmt2(data?.cashSummary?.totals.cpl_bulloch)}</td> */}
                     <td className="px-2 py-2 text-right cursor-copy" onClick={copyCell}>{fmt2(data?.cashSummary?.totals.missedCpl)}</td>
-                    <td className="px-2 py-2 text-right cursor-copy" onClick={copyCell}>{fmt2((data?.cashSummary?.totals.couponsAccepted ?? 0) + (data?.cashSummary?.totals.giftCertificates ?? 0))}</td>
+                    <td className="px-2 py-2 text-right cursor-copy" onClick={copyCell}>{fmt2((data?.cashSummary?.totals.couponsAccepted ?? 0) + (data?.cashSummary?.totals.giftCertificates ?? 0) + (data?.cashSummary?.totals.cashOffCoupons ?? 0))}</td>
                     <td className="px-2 py-2 text-right cursor-copy" onClick={copyCell}>{fmt2(data?.cashSummary?.totals.cash_back)}</td>
                     <td className="px-2 py-2 text-right cursor-copy" onClick={copyCell}>{fmt2(data?.cashSummary?.totals.report_canadian_cash)}</td>
 
@@ -354,10 +356,12 @@ function RouteComponent() {
                     {/* <td className="px-2 py-2"></td> */}
                     <td className="px-2 py-2 text-right cursor-copy" onClick={copyCell}>
                       {fmt2(
-                        (data?.cashSummary?.totals.canadian_cash_collected ?? 0) -
-                        (data?.cashSummary?.totals.report_canadian_cash ?? 0) +
-                        (data?.cashSummary?.handheldDebit ?? 0) +
-                        (data?.cashSummary?.unsettledPrepays ?? 0)
+                        data?.adjustedOverShort != null
+                          ? data.adjustedOverShort
+                          : (data?.cashSummary?.totals.canadian_cash_collected ?? 0) -
+                            (data?.cashSummary?.totals.report_canadian_cash ?? 0) +
+                            (data?.cashSummary?.handheldDebit ?? 0) +
+                            (data?.cashSummary?.unsettledPrepays ?? 0)
                       )}
                     </td>
                     <td className="px-2 py-2 text-right cursor-copy" onClick={copyCell}>{fmt2(data?.balanceCheck)}</td>
