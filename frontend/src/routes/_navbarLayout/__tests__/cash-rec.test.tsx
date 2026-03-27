@@ -232,7 +232,7 @@ describe('Bank Upload — bank.tsx', () => {
     )
   })
 
-  it('shows a merchant fees validation error for zero value', async () => {
+  it('accepts zero as a valid merchant fees value', async () => {
     renderWithSuspense(<BankUpload />)
     await waitFor(() => expect(document.getElementById('ttx-input')).toBeInTheDocument(), { timeout: 5000 })
 
@@ -242,7 +242,7 @@ describe('Bank Upload — bank.tsx', () => {
     fireEvent.change(screen.getByPlaceholderText(/e\.g\. 12\.34/i), { target: { value: '0' } })
 
     await waitFor(() =>
-      expect(screen.getByText(/enter a number/i)).toBeInTheDocument()
+      expect(screen.queryByText(/enter a number/i)).not.toBeInTheDocument()
     )
   })
 
