@@ -3,7 +3,8 @@ const { DateTime } = require('luxon')
 const { BankStatement, KardpollReport } = require('../models/CashRec')
 const CashSummary = require('../models/CashSummaryNew')
 const Transactions = require('../models/Transactions')
-const Lottery = require('../models/Lottery')
+const LotteryModule = require('../models/Lottery')
+const Lottery = LotteryModule?.Lottery || LotteryModule?.default || LotteryModule
 const Location = require('../models/Location')
 
 const TIMEZONE = 'America/Toronto'
