@@ -111,6 +111,7 @@ function RouteComponent() {
             <label className="text-sm font-semibold">Date</label>
             <DatePicker
               date={dateObj}
+              restrictToPast
               setDate={(val) => {
                 const next = typeof val === 'function' ? val(dateObj) : val
                 if (next) setSearch({ date: format(next, 'yyyy-MM-dd') })
