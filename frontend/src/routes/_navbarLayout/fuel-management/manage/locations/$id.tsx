@@ -14,6 +14,22 @@ export const Route = createFileRoute('/_navbarLayout/fuel-management/manage/loca
   component: LocationFuelComponent,
 })
 
+// 1. Enhanced Grade Themes (Colors & Icons)
+export const getGradeTheme = (grade: string) => {
+  switch (grade) {
+    case "Regular":
+      return { color: "bg-green-500", label: "text-green-700", icon: Car, raw: "#22c55e" }
+    case "Premium":
+      return { color: "bg-red-500", label: "text-red-700", icon: Zap, raw: "#ef4444" }
+    case "Diesel":
+      return { color: "bg-amber-400", label: "text-amber-700", icon: Truck, raw: "#fbbf24" }
+    case "Dyed Diesel":
+      return { color: "bg-red-800", label: "text-red-950", icon: Truck, raw: "#991b1b" }
+    default:
+      return { color: "bg-slate-600", label: "text-slate-700", icon: Car, raw: "#475569" }
+  }
+}
+
 function LocationFuelComponent() {
   const { id } = Route.useParams()
   const [locationData, setLocationData] = useState<any>(null)
@@ -258,22 +274,6 @@ function TankCard({ tank, allTanks, onUpdate }: { tank: any, allTanks: any[], on
       setIsSaving(false);
     }
   };
-
-  // 1. Enhanced Grade Themes (Colors & Icons)
-  const getGradeTheme = (grade: string) => {
-    switch (grade) {
-      case "Regular":
-        return { color: "bg-green-500", label: "text-green-700", icon: Car, raw: "#22c55e" }
-      case "Premium":
-        return { color: "bg-red-500", label: "text-red-700", icon: Zap, raw: "#ef4444" }
-      case "Diesel":
-        return { color: "bg-amber-400", label: "text-amber-700", icon: Truck, raw: "#fbbf24" }
-      case "Dyed Diesel":
-        return { color: "bg-red-800", label: "text-red-950", icon: Truck, raw: "#991b1b" }
-      default:
-        return { color: "bg-slate-600", label: "text-slate-700", icon: Car, raw: "#475569" }
-    }
-  }
 
   const theme = getGradeTheme(editData.grade)
   const GradeIcon = theme.icon

@@ -1,10 +1,13 @@
-import { useState, useEffect, useMemo } from 'react';
+import {
+  useState,
+  // useEffect, useMemo 
+} from 'react';
 import { createFileRoute } from '@tanstack/react-router';
 import { useQuery } from "@tanstack/react-query"
 import axios from 'axios';
 import {
-  Building2, Calendar, Clock, Truck, Fuel,
-  Hash, Save, RefreshCw, AlertCircle, CheckCircle2
+  Building2, Truck, Fuel, RefreshCw, AlertCircle,
+  // Hash, Save,  CheckCircle2, Calendar, Clock
 } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -50,13 +53,13 @@ interface FuelSupplier {
 
 function CreateFuelOrder() {
   // --- State Management ---
-  const [stations, setStations] = useState<any>(null);
-  // --- State Management ---
   const [racks, setRacks] = useState<any[]>([]);
   const [carriers, setCarriers] = useState<any[]>([]);
 
   // Corrected: Suppliers should be an array of FuelSupplier objects
   const [suppliers, setSuppliers] = useState<FuelSupplier[]>([]);
+  // --- 2. Submit Logic ---
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
   const [formData, setFormData] = useState<FuelOrderFormData>({
     stationId: '',
@@ -227,14 +230,16 @@ function CreateFuelOrder() {
   // };
   const generatePONumber = async (sId: string, oDate: string, dDate: string) => {
     const station = locations.find((s: any) => s._id === sId);
-    if (!station || !oDate) return;
+    // Keep your top-level check
+    if (!station || !oDate || !dDate) return;
 
-    // Format Date to MMDDYY (Fixing the "one day less" issue by using local date parts)
-    const dateObj = new Date(oDate + 'T00:00:00'); // Force local midnight
-    const mm = (dateObj.getMonth() + 1).toString().padStart(2, '0');
-    const dd = dateObj.getDate().toString().padStart(2, '0');
-    const yy = dateObj.getFullYear().toString().slice(-2);
-    const datePart = `${mm}${dd}${yy}`;
+    const getFormattedPart = (dateStr: string) => {
+      const dateObj = new Date(dateStr + 'T00:00:00');
+      const mm = (dateObj.getMonth() + 1).toString().padStart(2, '0');
+      const dd = dateObj.getDate().toString().padStart(2, '0');
+      const yy = dateObj.getFullYear().toString().slice(-2);
+      return `${mm}${dd}${yy}`;
+    };
 
     const stationNum = String(station.fuelStationNumber).padStart(2, '0');
 
@@ -245,38 +250,109 @@ function CreateFuelOrder() {
       );
 
       const { count, existingOrders } = res.data;
-      const nextLoad = count + 1;
-      const newPO = `NSP${datePart}-${stationNum}${nextLoad}`;
 
       // --- Validation Logic ---
-      if (count > 0 && dDate) {
-        // Check if any existing order on this day has a DIFFERENT delivery date
+      if (count > 0) {
+        // Use originalDeliveryDate from the backend objects
         const differentDeliveryDate = existingOrders.find((order: any) => {
-          // Normalize dates for comparison (YYYY-MM-DD)
-          const existingD = new Date(order.deliveryDate).toISOString().split('T')[0];
+          if (!order.originalDeliveryDate) return false;
+          const existingD = new Date(order.originalDeliveryDate).toISOString().split('T')[0];
           return existingD !== dDate;
         });
 
         const sameDeliveryDate = existingOrders.find((order: any) => {
-          const existingD = new Date(order.deliveryDate).toISOString().split('T')[0];
+          if (!order.originalDeliveryDate) return false;
+          const existingD = new Date(order.originalDeliveryDate).toISOString().split('T')[0];
           return existingD === dDate;
         });
 
         if (differentDeliveryDate) {
-          alert(`CRITICAL: There is already an order scheduled with this Order Date (${oDate}) but a different Delivery Date. Please change the Order Date to maintain consistency.`);
-          // Optionally reset the order date here
+          // Logic: Calculate tomorrow's date
+          const tomorrow = new Date(oDate + 'T00:00:00');
+          tomorrow.setDate(tomorrow.getDate() + 1);
+          const tomorrowStr = tomorrow.toISOString().split('T')[0];
+
+          alert(`CRITICAL: An order exists for this date with a different delivery date. To maintain consistency, we are moving this Order Date to tomorrow (${tomorrowStr}).`);
+
+          // Recursive call with the new date
+          setFormData(prev => ({ ...prev, orderDate: tomorrowStr }));
+          generatePONumber(sId, tomorrowStr, dDate);
           return;
         }
 
         if (sameDeliveryDate) {
+          const nextLoad = count + 1;
           const confirm = window.confirm(`Notice: There is already a load scheduled for delivery on ${dDate}. Do you want to create another load (Load #${nextLoad}) for this same day?`);
+
           if (!confirm) return;
+
+          // If confirmed, update PO with the next load number
+          const newPO = `NSP${getFormattedPart(oDate)}-${stationNum}${nextLoad}`;
+          setFormData(prev => ({ ...prev, poNumber: newPO }));
+          return;
         }
       }
 
+      // Default Case (No existing orders or fresh date)
+      const newPO = `NSP${getFormattedPart(oDate)}-${stationNum}${count + 1}`;
       setFormData(prev => ({ ...prev, poNumber: newPO }));
+
     } catch (err) {
       console.error("PO Gen Error", err);
+    }
+  };
+
+  // --- 1. Reset Logic ---
+  const handleReset = () => {
+    setFormData({
+      stationId: '',
+      orderDate: new Date().toISOString().split('T')[0],
+      deliveryDate: '',
+      startTime: '08:00',
+      endTime: '12:00',
+      rackId: '',
+      supplierId: '',
+      badgeNo: '',
+      carrierId: '',
+      poNumber: '',
+      items: []
+    });
+    // Clear the cascading dropdown lists
+    setRacks([]);
+    setCarriers([]);
+    setSuppliers([]);
+  };
+
+  const handleSubmit = async () => {
+    // Validation: Ensure mandatory fields are present
+    if (!formData.stationId || !formData.rackId || !formData.poNumber) {
+      alert("Please select a Station and Rack before submitting.");
+      return;
+    }
+
+    // Validation: Ensure at least one item has liters
+    const hasFuel = formData.items.some(item => (item.ltrs || 0) > 0);
+    if (!hasFuel) {
+      alert("Please enter a quantity for at least one fuel grade.");
+      return;
+    }
+
+    try {
+      setIsSubmitting(true);
+
+      // We send the formData as is; the backend handles mapping to Schema field names
+      const response = await axios.post('/api/fuel-orders', formData, authHeader);
+
+      if (response.status === 201) {
+        alert(`Success! Order ${response.data.poNumber} has been created.`);
+        handleReset(); // Clear the form
+      }
+    } catch (err: any) {
+      const errorMsg = err.response?.data?.message || "Failed to save the order.";
+      alert(errorMsg);
+      console.error("Submission Error:", err);
+    } finally {
+      setIsSubmitting(false);
     }
   };
 
@@ -285,8 +361,28 @@ function CreateFuelOrder() {
       <div className="flex justify-between items-center">
         <h1 className="text-3xl font-bold tracking-tight">Create Fuel Order</h1>
         <div className="flex gap-3">
-          <Button variant="outline" onClick={() => window.location.reload()}>Reset Form</Button>
-          <Button className="bg-blue-600 hover:bg-blue-700">Submit Order</Button>
+          <Button
+            variant="outline"
+            onClick={handleReset}
+            disabled={isSubmitting}
+          >
+            Reset Form
+          </Button>
+
+          <Button
+            className="bg-blue-600 hover:bg-blue-700"
+            onClick={handleSubmit}
+            disabled={isSubmitting}
+          >
+            {isSubmitting ? (
+              <>
+                <RefreshCw className="w-4 h-4 mr-2 animate-spin" />
+                Saving...
+              </>
+            ) : (
+              "Submit Order"
+            )}
+          </Button>
         </div>
       </div>
 

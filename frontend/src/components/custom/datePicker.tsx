@@ -98,3 +98,32 @@ export function DatePicker({ date, setDate, restrictToPast = false }: DatePicker
     </Popover>
   )
 }
+
+// Inside DatePicker.tsx
+export function WorkspaceDatePicker({ date, setDate }: { date: Date, setDate: (d: Date) => void }) {
+  const today = new Date();
+  const maxFuture = new Date();
+  maxFuture.setDate(today.getDate() + 3);
+
+  return (
+    <Popover>
+      <PopoverTrigger asChild>
+        <Button variant="outline" className="w-[240px] justify-start text-left font-bold border-2 border-blue-200 shadow-sm">
+          <CalendarIcon className="mr-2 h-4 w-4 text-blue-600" />
+          {format(date, "PPP")}
+        </Button>
+      </PopoverTrigger>
+      <PopoverContent className="w-auto p-0">
+        <Calendar
+          mode="single"
+          selected={date}
+          onSelect={(d) => d && setDate(d)}
+          className="bg-white rounded-xl"
+          // Disable anything more than 3 days from today
+          disabled={(date) => date > maxFuture}
+          initialFocus
+        />
+      </PopoverContent>
+    </Popover>
+  );
+}
