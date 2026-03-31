@@ -9,6 +9,7 @@ import {
   recomputeCashOnHand,
   typeRank,
   getSortKey,
+  fmtDateDisplay,
   type SafesheetEntry,
 } from '../safesheetUtils'
 
@@ -45,6 +46,20 @@ describe('ymdFixed', () => {
   it('produces the same result as ymd for the same input', () => {
     const d = new Date(2026, 11, 31, 0, 0, 0) // Dec 31
     expect(ymdFixed(d)).toBe('2026-12-31')
+  })
+})
+
+// ─── fmtDateDisplay ───────────────────────────────────────────────────────────
+
+describe('fmtDateDisplay', () => {
+  it("formats a date as 'D Mon 'YY'", () => {
+    const d = new Date(2026, 2, 15, 0, 0, 0) // March 15 2026 local
+    expect(fmtDateDisplay(d)).toBe("15 Mar '26")
+  })
+
+  it('does not zero-pad single-digit days', () => {
+    const d = new Date(2026, 0, 5, 0, 0, 0) // Jan 5
+    expect(fmtDateDisplay(d)).toBe("5 Jan '26")
   })
 })
 

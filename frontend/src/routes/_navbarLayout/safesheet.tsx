@@ -21,6 +21,7 @@ import {
   recomputeCashOnHand,
   typeRank,
   getSortKey,
+  fmtDateDisplay,
 } from '@/lib/safesheetUtils'
 
 type Entry = {
@@ -577,7 +578,7 @@ export default function RouteComponent() {
       return {
         ...e,
         _originalIndex: idx,
-        dateDisplay: ymdFixed(d),
+        dateDisplay: fmtDateDisplay(d),
         cashInDisplay: fmtNumber(e.cashIn),
         cashExpenseOutDisplay: fmtNumber(e.cashExpenseOut),
         cashDepositBankDisplay: fmtNumber(e.cashDepositBank),
@@ -659,11 +660,11 @@ export default function RouteComponent() {
               {error && <p className="text-red-600 text-center">{error}</p>}
 
               {!loading && !error && sheet && (
-                <div className="overflow-x-auto border border-slate-300 rounded-lg shadow-sm bg-white">
+                <div className="overflow-auto max-h-[70vh] border border-slate-300 rounded-lg shadow-sm bg-white scrollbar-thin">
                   <table className="min-w-full text-sm border-collapse table-fixed">
                     <thead className="bg-slate-100 text-slate-700 sticky top-0 z-10">
-                      <tr>
-                        <th className="px-2 py-1 text-left font-medium border-b border-slate-300 w-24">
+                      <tr className="divide-x divide-slate-300">
+                        <th className="px-2 py-1 text-left font-medium border-b border-slate-300 w-32">
                           Date
                         </th>
                         <th className="px-2 py-1 text-left font-medium border-b border-slate-300 w-50">
@@ -702,7 +703,7 @@ export default function RouteComponent() {
                         return (
                           <tr
                             key={e._id}
-                            className="odd:bg-white even:bg-slate-50 hover:bg-blue-50 transition-colors"
+                            className="odd:bg-white even:bg-slate-50 hover:bg-blue-50 transition-colors divide-x divide-slate-200"
                           >
                             <td className="px-3 py-1.5 border-b border-slate-200 text-gray-700">
                               {e.dateDisplay}
@@ -971,9 +972,9 @@ export default function RouteComponent() {
                       })}
 
                       {/* ADD NEW ROW */}
-                      <tr className="bg-slate-50">
+                      <tr className="bg-slate-50 divide-x divide-slate-200">
                         <td className="px-3 py-2 text-gray-400 border-t border-slate-300">
-                          {ymdFixed(new Date())}
+                          {fmtDateDisplay(new Date())}
                           {/* or: new Intl.DateTimeFormat('en-CA', { timeZone: 'UTC' }).format(new Date()) */}
                         </td>
 
