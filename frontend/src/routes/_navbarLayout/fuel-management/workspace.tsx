@@ -1,5 +1,5 @@
 import { useState, useMemo } from 'react';
-import { createFileRoute } from '@tanstack/react-router';
+import { createFileRoute, Link } from '@tanstack/react-router';
 import { useQuery } from '@tanstack/react-query'; // Recommended for fetching
 import axios from 'axios';
 import {
@@ -190,7 +190,7 @@ function WorkspaceComponent() {
       </div>
 
       {/* WORKSPACE STRIPS AREA */}
-      <div className="w-full px-0 py-0 space-y-6">
+      <div className="w-full px-0 py-0 space-y-0">
         {selectedStationIds.length === 0 ? (
           <div className="w-full h-96 border-4 border-dashed rounded-3xl flex flex-col items-center justify-center text-slate-300">
             <Building2 className="h-20 w-20 mb-4 opacity-20" />
@@ -214,7 +214,50 @@ function StationStrip({ location, date }: { location: any, date: Date }) {
     headers: { Authorization: `Bearer ${localStorage.getItem('token')}` }
   };
 
-  // Each strip fetches its own data based on the stationId and globally selected date
+  // 1. Fetch Tank Data (now returns enriched inventory info)
+  const { data: tanks = [], isLoading: isTanksLoading } = useQuery({
+    queryKey: ['station-tanks', location?._id, format(date, 'yyyy-MM-dd')],
+    queryFn: async () => {
+      const res = await axios.get(
+        `/api/fuel-station-tanks/station/${location._id}?date=${date.toISOString()}`,
+        authHeader
+      );
+      return res.data;
+    },
+    enabled: !!location?._id,
+  });
+
+  // 2. Aggregate tanks by grade (handling multiple tanks per grade)
+  const gradeInventory = useMemo(() => {
+    const summary: Record<string, any> = {};
+
+    tanks.forEach((tank: any) => {
+      const gradeKey = tank.grade;
+      if (!summary[gradeKey]) {
+        summary[gradeKey] = {
+          grade: gradeKey,
+          opening: 0,
+          estSales: 0,
+          currentSales: 0,
+          closing: 0
+        };
+      }
+      // Summing values from the enriched backend fields
+      summary[gradeKey].opening += (tank.openingL || 0);
+      summary[gradeKey].estSales += (tank.estSalesL || 0);
+      summary[gradeKey].currentSales += (tank.currentSalesL || 0);
+      summary[gradeKey].closing += (tank.closingL || 0);
+    });
+
+    return Object.values(summary).sort((a: any, b: any) => {
+      const priority: Record<string, number> = {
+        'Regular': 1, 'Premium': 2, 'Diesel': 3, 'Dyed Diesel': 4
+      };
+      return (priority[a.grade] || 99) - (priority[b.grade] || 99);
+    });
+  }, [tanks]);
+
+  // Fetch Orders (Your existing logic)
   const { data: orders = [], isLoading } = useQuery({
     queryKey: ['workspace-orders', location?._id, format(date, 'yyyy-MM-dd')],
     queryFn: async () => {
@@ -224,8 +267,7 @@ function StationStrip({ location, date }: { location: any, date: Date }) {
       );
       return res.data;
     },
-    enabled: !!location?._id, // Only fetch if we have a location
-    staleTime: 1000 * 60 * 5, // Keep data fresh for 5 mins
+    enabled: !!location?._id,
   });
 
   const getStatusColor = (status: string) => {
@@ -236,35 +278,133 @@ function StationStrip({ location, date }: { location: any, date: Date }) {
     }
   };
 
-  return (
-    <Card className="w-full border-2 rounded-2xl overflow-hidden shadow-lg border-slate-200/60 hover:border-blue-300 transition-all duration-300">
-      <CardContent className="p-0 flex flex-col xl:flex-row min-h-[350px]">
+  const gradeMap: Record<string, string> = {
+    'Regular': 'REG',
+    'Premium': 'PUL',
+    'Diesel': 'ULSD',
+    'Dyed Diesel': 'DYED'
+  };
 
-        {/* LEFT SIDE: STATION INFO & INVENTORY */}
-        <div className="w-full xl:w-2/5 p-6 bg-slate-50/50 border-r border-slate-100">
-          <div className="flex items-center gap-3 mb-6">
-            <div className="bg-white p-2 rounded-xl border-2 border-slate-100 shadow-sm font-black text-blue-700 font-mono text-xl">
-              {location?.fuelStationNumber || '00'}
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+
+  const selected = new Date(date);
+  selected.setHours(0, 0, 0, 0);
+
+  const isPast = selected.getTime() < today.getTime();
+  const isToday = selected.getTime() === today.getTime();
+  const isFuture = selected.getTime() > today.getTime();
+
+  return (
+    <Card className="w-full border-2 rounded-2xl gap-0 py-0 overflow-hidden shadow-lg border-slate-200/60 hover:border-blue-300 transition-all duration-300">
+      <CardContent className="p-0 flex flex-col xl:flex-row">
+
+        {/* LEFT SIDE: STATION INFO & INVENTORY - Tightened padding and flex */}
+        <div className="w-full xl:w-2/5 p-3 bg-slate-50/50 border-r border-slate-100 flex flex-col justify-between">
+          <div>
+            <div className="flex items-center gap-3 mb-2"> {/* Reduced margin from mb-6 */}
+              <div className="bg-white p-0 rounded-xl border-2 border-slate-100 shadow-sm font-black text-blue-700 font-mono text-lg">
+                {location?.fuelStationNumber || '00'}
+              </div>
+              <div>
+                <h2 className="text-xl font-black text-slate-800 leading-tight tracking-tight uppercase">
+                  {location?.stationName}
+                </h2>
+                <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wide">
+                  {location?.address}
+                </p>
+              </div>
             </div>
-            <div>
-              <h2 className="text-2xl font-black text-slate-800 leading-tight tracking-tight uppercase">{location?.stationName}</h2>
-              <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wide">{location?.address}</p>
+
+            {/* INVENTORY TABLE - Compact rows */}
+            <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
+              <table className="w-full text-left border-collapse">
+                <thead>
+                  <tr className="bg-slate-100/50 border-b border-slate-200">
+                    <th className="py-1.5 px-3 text-[9px] font-black text-slate-500 uppercase">Grade</th>
+                    <th className="py-1.5 px-3 text-[9px] font-black text-slate-500 uppercase text-right">Opening</th>
+                    {/* Label changes: "Sales" for past, "Est Sales" for now/future */}
+                    <th className="py-1.5 px-3 text-[9px] font-black text-slate-500 uppercase text-right">
+                      {isPast ? 'Sales' : 'Est Sales'}
+                    </th>
+                    {/* Hide Current column if not Today */}
+                    {isToday && (
+                      <th className="py-1.5 px-3 text-[9px] font-black text-slate-500 uppercase text-right">Current</th>
+                    )}
+                    <th className="py-1.5 px-3 text-[9px] font-black text-slate-500 uppercase text-right">
+                      {isPast ? 'Closing' : 'Est Closing'}
+                    </th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-100">
+                  {isTanksLoading ? (
+                    <tr>
+                      {/* Dynamic colspan based on whether Current column is visible */}
+                      <td colSpan={isToday ? 5 : 4} className="p-4 text-center">
+                        <Loader2 className="h-4 w-4 animate-spin mx-auto text-slate-300" />
+                      </td>
+                    </tr>
+                  ) : gradeInventory.map((item: any) => {
+                    const theme = getGradeTheme(item.grade);
+                    return (
+                      <tr key={item.grade} className="hover:bg-slate-50/50 transition-colors">
+                        {/* GRADE LABEL */}
+                        <td className="py-1.5 px-3">
+                          <span
+                            className={`text-[10px] font-black px-1.5 py-0.5 rounded border ${theme.label}`}
+                            style={{ backgroundColor: `${theme.raw}15`, borderColor: `${theme.raw}30` }}
+                          >
+                            {gradeMap[item.grade] || item.grade}
+                          </span>
+                        </td>
+
+                        {/* OPENING */}
+                        <td className="py-1.5 px-3 text-right font-mono text-[11px] font-bold text-slate-600">
+                          {item.opening.toLocaleString()}
+                        </td>
+
+                        {/* SALES (Past) or EST SALES (Now/Future) */}
+                        <td className="py-1.5 px-3 text-right font-mono text-[11px] font-bold text-slate-400">
+                          {item.estSales.toLocaleString()}
+                        </td>
+
+                        {/* CURRENT SALES - Only visible if Today */}
+                        {isToday && (
+                          <td className="py-1.5 px-3 text-right font-mono text-[11px] font-bold text-blue-600">
+                            {item.currentSales.toLocaleString()}
+                          </td>
+                        )}
+
+                        {/* CLOSING (Past) or EST CLOSING (Now/Future) */}
+                        <td className="py-1.5 px-3 text-right font-mono text-[11px] font-black text-slate-800">
+                          {item.closing.toLocaleString()}
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
             </div>
           </div>
 
-          <div className="space-y-4">
-            <div className="p-4 bg-white rounded-xl border border-slate-200 shadow-sm italic text-slate-400 text-sm flex items-center justify-center h-40">
-              Inventory Grades Calculation Placeholder...
-            </div>
-            <Button variant="outline" className="w-full border-dashed border-2 text-blue-600 font-bold">
-              View Volume Analysis
+          {/* VIEW VOLUME ANALYSIS BUTTON - Compact margin */}
+          <div className="mt-2">
+            <Button
+              variant="outline"
+              size="sm" // Added small size
+              className="w-full border-dashed border-2 text-blue-600 font-bold hover:bg-blue-50 transition-all text-xs h-9"
+              asChild
+            >
+              <Link to="/fuel-management/volume" search={{ site: location?.stationName }}>
+                View Current Tanks Volume
+              </Link>
             </Button>
           </div>
         </div>
 
         {/* RIGHT SIDE: ORDERS SCHEDULE */}
-        <div className="flex-1 p-6 bg-white border-t xl:border-t-0 xl:border-l-2 font-sans">
-          <div className="flex items-center justify-between mb-5">
+        <div className="flex-1 p-3 bg-white border-t xl:border-t-0 xl:border-l-2 font-sans">
+          <div className="flex items-center justify-between mb-2">
             <div className="flex items-center gap-2">
               <div className="p-1.5 bg-blue-50 rounded-lg">
                 <Truck className="h-5 w-5 text-blue-600" />
@@ -279,7 +419,7 @@ function StationStrip({ location, date }: { location: any, date: Date }) {
             {isLoading && <Loader2 className="h-4 w-4 animate-spin text-blue-600" />}
           </div>
 
-          <div className="space-y-4">
+          <div className="space-y-2">
             {isLoading ? (
               [1, 2].map((i) => <div key={i} className="h-28 w-full bg-slate-50 animate-pulse rounded-2xl border border-slate-100" />)
             ) : orders.length === 0 ? (
