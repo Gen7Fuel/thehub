@@ -64,11 +64,10 @@ interface DatePickerProps {
 
 export function DatePicker({ date, setDate, restrictToPast = false }: DatePickerProps) {
   const today = new Date()
-  const yesterday = new Date()
-  yesterday.setDate(today.getDate() - 1)
+  today.setHours(0, 0, 0, 0)
 
   // Only apply disabled rules when explicitly asked
-  const disabledRules = restrictToPast ? { after: yesterday } : undefined
+  const disabledRules = restrictToPast ? { after: today } : undefined
 
   return (
     <Popover>

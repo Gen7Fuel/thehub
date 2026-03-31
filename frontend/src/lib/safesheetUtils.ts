@@ -43,6 +43,16 @@ export const parseYmd = (s?: string): Date | undefined => {
   return new Date(y, m - 1, d, 0, 0, 0, 0)
 }
 
+/**
+ * Formats a Date as "15 Mar '26" using local wall-clock values.
+ */
+export const fmtDateDisplay = (d: Date): string => {
+  const day = d.getDate()
+  const month = d.toLocaleString('en-US', { month: 'short' })
+  const year = String(d.getFullYear()).slice(2)
+  return `${day} ${month} '${year}`
+}
+
 // ─── Number formatters ────────────────────────────────────────────────────────
 
 /**
