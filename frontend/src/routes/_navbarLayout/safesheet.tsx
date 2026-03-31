@@ -149,6 +149,13 @@ export default function RouteComponent() {
   const [addCashInLoading, setAddCashInLoading] = useState(false)
   const [addCashInError, setAddCashInError] = useState<string | null>(null)
 
+  // Add Expense dialog state
+  const [showAddExpense, setShowAddExpense] = useState(false)
+  const [addExpenseAmount, setAddExpenseAmount] = useState<string>('')
+  const [addExpenseDesc, setAddExpenseDesc] = useState('')
+  const [addExpenseLoading, setAddExpenseLoading] = useState(false)
+  const [addExpenseError, setAddExpenseError] = useState<string | null>(null)
+
   // Delete entry dialog state
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false)
   const [deleteTargetEntry, setDeleteTargetEntry] = useState<(typeof formattedEntries)[0] | null>(null)
@@ -160,6 +167,7 @@ export default function RouteComponent() {
   // refs for inputs
   const descRef = useRef<HTMLInputElement>(null)
   const addCashInDescRef = useRef<HTMLInputElement>(null)
+  const addExpenseDescRef = useRef<HTMLSelectElement>(null)
   const cashInRef = useRef<HTMLInputElement>(null)
   const cashExpenseRef = useRef<HTMLInputElement>(null)
   const cashDepositRef = useRef<HTMLInputElement>(null)
@@ -172,6 +180,7 @@ export default function RouteComponent() {
     setPhotoTargetEntry(entryId)
     cameraInputRef.current?.click()
   }
+
 
   // fmtNumber and fmtNumberShowZero are imported from @/lib/safesheetUtils
 
@@ -308,6 +317,84 @@ export default function RouteComponent() {
       setAddCashInError(err.message || 'Add entry failed')
     } finally {
       setAddCashInLoading(false)
+    }
+  }
+
+  // Add Expense via dialog
+  const submitAddExpense = async () => {
+    setAddExpenseError(null)
+    if (!site) {
+      setAddExpenseError('Select a site first')
+      return
+    }
+
+    const amount = Number(addExpenseAmount.replace(/,/g, '').trim())
+    if (!isFinite(amount) || amount <= 0) {
+      setAddExpenseError('Enter a positive amount')
+      return
+    }
+
+    if (!addExpenseDesc.trim()) {
+      alert('Please type the description of the entry.')
+      addExpenseDescRef.current?.focus()
+      return
+    }
+
+    const entryBody = {
+      date: new Date().toISOString(),
+      description: addExpenseDesc.trim(),
+      cashIn: 0,
+      cashExpenseOut: amount,
+      cashDepositBank: 0,
+    }
+
+    try {
+      setAddExpenseLoading(true)
+      const res = await fetch(`/api/safesheets/site/${encodeURIComponent(site)}/entries`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${localStorage.getItem('token')}`,
+          'X-Required-Permission': 'accounting.safesheet',
+        },
+        body: JSON.stringify(entryBody),
+      })
+
+      if (res.status === 403) {
+        navigate({ to: '/no-access' })
+        return
+      }
+
+      const body = await res.json().catch(() => null)
+      if (!res.ok) throw new Error(body?.error || 'Failed to add entry')
+
+      if (site && from && to) {
+        try {
+          const ref = await fetch(
+            `/api/safesheets/site/${encodeURIComponent(site)}?from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}`,
+            {
+              headers: {
+                Authorization: `Bearer ${localStorage.getItem('token')}`,
+                'X-Required-Permission': 'accounting.safesheet',
+              },
+            },
+          )
+          if (!ref.ok) throw new Error('Failed to refresh safesheet')
+          const refreshed: SafeSheet = await ref.json()
+          setSheet(refreshed)
+        } catch (refreshErr) {
+          console.error(refreshErr)
+        }
+      }
+
+      setShowAddExpense(false)
+      setAddExpenseAmount('')
+      setAddExpenseDesc('')
+    } catch (err: any) {
+      console.error(err)
+      setAddExpenseError(err.message || 'Add entry failed')
+    } finally {
+      setAddExpenseLoading(false)
     }
   }
 
@@ -645,6 +732,17 @@ export default function RouteComponent() {
             >
               Add Cash In
             </Button>
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={() => {
+                setAddExpenseError(null)
+                setShowAddExpense(true)
+              }}
+              disabled={!site}
+            >
+              Add Expense
+            </Button>
           </div>
 
           {!site && (
@@ -832,7 +930,7 @@ export default function RouteComponent() {
                             {/* Actions */}
                             <td className="px-3 py-1.5 border-b border-slate-200 text-center">
                               <div className="flex justify-center gap-2">
-                                {e.cashDepositBank > 0 &&
+                                {(e.cashDepositBank > 0 || (e.cashExpenseOut > 0 && e.description === 'ATM Load')) &&
                                   (!e.photo ? (
                                     <Button
                                       size="sm"
@@ -844,11 +942,12 @@ export default function RouteComponent() {
                                       {/* <span className="text-xs font-medium">Add Photo</span> */}
                                     </Button>
                                   ) : (
-                                    // Photo exists → Show "View Photo"
+                                    // Photo exists → Show "View Photo" (right-click/long-press to replace)
                                     <Button
                                       size="sm"
                                       variant="default"
                                       onClick={() => window.open(`/cdn/download/${e.photo}`, '_blank')}
+                                      onContextMenu={(ev) => { ev.preventDefault(); openCameraForEntry(e._id) }}
                                       className="flex items-center gap-2 px-3 py-1.5 bg-green-600 hover:bg-green-700 text-white rounded-md"
                                     >
                                       <ImageIcon className="w-4 h-4" />
@@ -1107,6 +1206,73 @@ export default function RouteComponent() {
               disabled={addCashInLoading || !site}
             >
               {addCashInLoading ? 'Adding...' : 'Add'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Add Expense Dialog */}
+      <Dialog
+        open={showAddExpense}
+        onOpenChange={(open) => {
+          setShowAddExpense(open)
+          if (!open) {
+            setAddExpenseAmount('')
+            setAddExpenseDesc('')
+            setAddExpenseError(null)
+          }
+        }}
+      >
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Add Expense</DialogTitle>
+          </DialogHeader>
+
+          {addExpenseError && (
+            <p className="text-red-600 text-sm">{addExpenseError}</p>
+          )}
+
+          <div className="space-y-3">
+            <select
+              ref={addExpenseDescRef}
+              value={addExpenseDesc}
+              onChange={(e) => setAddExpenseDesc(e.target.value)}
+              className="w-full px-3 py-2 bg-white border border-slate-300 rounded-sm focus:outline-none focus:ring-1 focus:ring-blue-400"
+            >
+              <option value="">Select description...</option>
+              <option value="ATM Load">ATM Load</option>
+            </select>
+            <input
+              type="number"
+              inputMode="decimal"
+              step="0.01"
+              value={addExpenseAmount}
+              onChange={(e) => setAddExpenseAmount(e.target.value)}
+              placeholder="0.00"
+              className="w-full px-3 py-2 text-right bg-white border border-slate-300 rounded-sm focus:outline-none focus:ring-1 focus:ring-blue-400"
+              onKeyDown={handleKeyDown}
+            />
+          </div>
+
+          <DialogFooter className="gap-2">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => {
+                setShowAddExpense(false)
+                setAddExpenseAmount('')
+                setAddExpenseDesc('')
+                setAddExpenseError(null)
+              }}
+            >
+              Cancel
+            </Button>
+            <Button
+              size="sm"
+              onClick={submitAddExpense}
+              disabled={addExpenseLoading || !site}
+            >
+              {addExpenseLoading ? 'Adding...' : 'Add'}
             </Button>
           </DialogFooter>
         </DialogContent>
