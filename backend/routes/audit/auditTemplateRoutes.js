@@ -527,12 +527,10 @@ router.get("/open-issues", async (req, res) => {
   try {
     const { site, assignedTo } = req.query;
 
-    if (!site) {
-      return res.status(400).json({ error: "Missing site" });
-    }
-
-    // 1️⃣ Find all instances for the site
-    const instances = await AuditInstance.find({ site, type: "store" }).select("_id").lean();
+    // 1️⃣ Find all instances for the site (or all sites if none specified)
+    const instanceQuery = { type: "store" };
+    if (site) instanceQuery.site = site;
+    const instances = await AuditInstance.find(instanceQuery).select("_id").lean();
     const instanceIds = instances.map((inst) => inst._id);
 
     if (!instanceIds.length) {
