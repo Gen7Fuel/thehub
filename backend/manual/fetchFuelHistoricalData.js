@@ -130,7 +130,7 @@ async function run() {
   try {
     // Ensure your DB connection logic is imported or defined here
     await connectDB();
-    // await syncHistoricalDips();
+    await syncHistoricalDips();
     await syncFuelSales();
   } catch (err) {
     hadError = true;

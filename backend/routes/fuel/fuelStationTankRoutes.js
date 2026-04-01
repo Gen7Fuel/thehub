@@ -100,12 +100,11 @@ router.get('/station/:stationId', async (req, res) => {
       FuelStationTank.find({ stationId }).lean(),
       getAverageSales(stationId, selectedDate),
       FuelOrder.find({
-        stationId,
-        deliveryDate: {
+        station: stationId,
+        estimatedDeliveryDate: {
           $gte: new Date(compareDate),
           $lte: new Date(compareDate.setHours(23, 59, 59, 999))
-        },
-        status: { $in: ['Delivered', 'In-Transit', 'Confirmed'] }
+        }
       }).lean()
     ]);
 
@@ -145,7 +144,7 @@ router.get('/station/:stationId', async (req, res) => {
         openingL = hist?.openingVolume || 0;
         estSalesL = avgSales[tank.grade] || 0;
         currentSalesL = (actualSalesRecord?.isLive) ? (salesEntry?.volume || 0) : 0;
-        closingL = (openingL + gradeOrders) - (isToday && currentSalesL > 0 ? currentSalesL : estSalesL);
+        closingL = (openingL + gradeOrders) - (estSalesL);
       }
       else if (isFuture) {
         estSalesL = avgSales[tank.grade] || 0;
