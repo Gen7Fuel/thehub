@@ -97,6 +97,35 @@ function NotificationPage() {
     }
   }, [selectedId, view]);
 
+  // 3. Effect to handle dynamic time conversion in rendered HTML
+  useEffect(() => {
+    if (selectedNotif) {
+      // Small delay to ensure the DOM is painted by React
+      const timer = setTimeout(() => {
+        const elements = document.querySelectorAll('.local-time');
+        elements.forEach((el: any) => {
+          const utcStr = el.getAttribute('data-utc');
+          if (utcStr && utcStr !== 'undefined') {
+            try {
+              const localTime = new Date(utcStr).toLocaleString(undefined, {
+                weekday: 'short',
+                month: 'short',
+                day: 'numeric',
+                hour: '2-digit',
+                minute: '2-digit',
+                timeZoneName: 'short'
+              });
+              el.innerText = localTime;
+            } catch (e) {
+              console.error("Date conversion failed", e);
+            }
+          }
+        });
+      }, 50);
+      return () => clearTimeout(timer);
+    }
+  }, [selectedNotif]);
+
   return (
     <div className="flex h-[calc(100vh-65px)] overflow-hidden bg-white">
       {/* LEFT SIDE: List */}
