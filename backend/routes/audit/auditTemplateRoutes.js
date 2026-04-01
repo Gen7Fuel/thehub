@@ -650,6 +650,54 @@ router.put('/issues/:id/status', async (req, res) => {
   }
 });
 
+// -- UPDATE ISSUE --
+router.put('/issues/:id', async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { status, assignedTo, assignee, comment, notes } = req.body;
+
+    const item = await AuditItem.findById(id);
+    if (!item) return res.status(404).json({ error: "Item not found" });
+
+    if (status !== undefined) {
+      if (!["Created", "In Progress", "On Hold", "Resolved"].includes(status)) {
+        return res.status(400).json({ error: "Invalid status" });
+      }
+      item.currentIssueStatus = status;
+      let issueStatus = item.issueStatus || [];
+      const existing = issueStatus.find(s => s.status === status);
+      if (existing) {
+        existing.timestamp = new Date();
+      } else {
+        issueStatus.push({ status, timestamp: new Date() });
+      }
+      item.issueStatus = issueStatus;
+
+      if (status === "Resolved" && item.instance) {
+        const instance = await AuditInstance.findById(item.instance).lean();
+        if (instance?.template) {
+          await AuditTemplate.updateOne(
+            { _id: instance.template },
+            { $set: { "items.$[itemElem].assignedSites.$[siteElem].issueRaised": false } },
+            { arrayFilters: [{ "itemElem.item": item.item }, { "siteElem.site": instance.site }] }
+          );
+        }
+      }
+    }
+
+    if (assignedTo !== undefined) item.assignedTo = assignedTo;
+    if (assignee !== undefined) item.assignee = assignee;
+    if (comment !== undefined) item.comment = comment;
+    if (notes !== undefined) item.notes = notes;
+
+    await item.save();
+    res.json({ message: "Issue updated", item });
+  } catch (err) {
+    console.error("Error updating issue:", err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // -- FETCH TEMPLATE FOR EDITING --
 router.get('/:id', async (req, res) => {
   try {
