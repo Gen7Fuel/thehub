@@ -530,8 +530,9 @@ router.get("/open-issues", async (req, res) => {
     // 1️⃣ Find all instances for the site (or all sites if none specified)
     const instanceQuery = { type: "store" };
     if (site) instanceQuery.site = site;
-    const instances = await AuditInstance.find(instanceQuery).select("_id").lean();
+    const instances = await AuditInstance.find(instanceQuery).select("_id site").lean();
     const instanceIds = instances.map((inst) => inst._id);
+    const instanceSiteMap = Object.fromEntries(instances.map((inst) => [inst._id.toString(), inst.site]));
 
     if (!instanceIds.length) {
       return res.json({ items: [] }); // No instances, return empty array
@@ -571,6 +572,7 @@ router.get("/open-issues", async (req, res) => {
         currentIssueStatus: item.currentIssueStatus || "Created",
         lastUpdated,
         instance: item.instance,
+        site: instanceSiteMap[item.instance.toString()],
         frequency: item.frequency,
         assignedTo: item.assignedTo,
         status: item.status,
