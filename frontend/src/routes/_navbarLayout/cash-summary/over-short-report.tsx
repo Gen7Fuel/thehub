@@ -93,7 +93,11 @@ function OverShortReport() {
           date={currentRange}
           setDate={(val: any) => {
             const next = typeof val === 'function' ? val(currentRange) : val
-            if (next?.from && next?.to) setCurrentRange(next)
+            if (next?.from && next?.to) {
+              setCurrentRange(next)
+            } else if (next?.from) {
+              setCurrentRange({ from: next.from, to: undefined })
+            }
           }}
         />
       </div>
