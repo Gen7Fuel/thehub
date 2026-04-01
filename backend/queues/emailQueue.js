@@ -1,15 +1,6 @@
 const { Queue, Worker } = require("bullmq");
-const IORedis = require("ioredis");
 const { sendEmail } = require("../utils/emailService");
-
-// Use environment variable or fallback for local dev
-const redisUrl = process.env.REDIS_URL || "redis://127.0.0.1:6379";
-
-// Create a single shared Redis connection
-const connection = new IORedis(redisUrl, {
-  maxRetriesPerRequest: null, // Required by BullMQ
-  enableReadyCheck: false,    // Speeds up connection in Docker
-});
+const connection = require("../utils/redisClient");
 
 // Initialize the queue for adding jobs
 const emailQueue = new Queue("emailQueue", { connection });
