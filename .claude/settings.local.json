@@ -13,7 +13,9 @@
       "Bash(grep -n import.*css C:/Users/MohammadHasan/workspace/thehub/frontend/src/routes/_navbarLayout/cash-summary/*.tsx)",
       "Bash(node -e \"const {JSDOM} = require\\(''jsdom''\\); const d = new JSDOM\\(''''\\); const f = new d.window.File\\([''test''], ''test.txt''\\); console.log\\(typeof f.text\\);\")",
       "Bash(find C:UsersMohammadHasanworkspacethehub -name *writeoff* -o -name *write-off* -o -name *write_off*)",
-      "Bash(grep -n \"aggregation\\\\|aggregate\\\\|$group\\\\|$sum\" /c/Users/MohammadHasan/workspace/thehub/backend/routes/cashSummaryNewRoutes.js)"
+      "Bash(grep -n \"aggregation\\\\|aggregate\\\\|$group\\\\|$sum\" /c/Users/MohammadHasan/workspace/thehub/backend/routes/cashSummaryNewRoutes.js)",
+      "Bash(find C:\\\\Users\\\\MohammadHasan\\\\workspace\\\\thehub\\\\backend:*)",
+      "Bash(ls:*)"
     ]
   }
 }

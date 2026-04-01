@@ -86,62 +86,35 @@ const sqlConfig = {
 //   }
 // }
 async function getCategorizedSalesData(pool, csoCode, startDate, endDate) {
-  try {
-    // await sql.connect(sqlConfig);
-    // const result = await sql.query(`SELECT TOP (10) * from [CSO].[Sales]`);
-    // const result = await sql.query(`
-    const result = await pool.request().query(`
-      SELECT
-        s.[Date_SK],s.[FN],s.[Quota],s.[Cannabis],s.[GRE],s.[Vapes],s.[Native Gifts],s.[Convenience],s.[Bistro],s.[Total_Sales]
-      FROM [CSO].[TotalSales] s
-      WHERE
-        s.[Station_SK] = ${csoCode}
-        AND s.[Date_SK] BETWEEN '${startDate}' AND '${endDate}'
-      ORDER BY s.[Date_SK]
-    `);
-    // await sql.close();
-    return result.recordset;
-  } catch (err) {
-    console.error('SQL error:', err);
-    return [];
-  }
+  const result = await pool.request().query(`
+    SELECT
+      s.[Date_SK],s.[FN],s.[Quota],s.[Cannabis],s.[GRE],s.[Vapes],s.[Native Gifts],s.[Convenience],s.[Bistro],s.[Total_Sales]
+    FROM [CSO].[TotalSales] s
+    WHERE
+      s.[Station_SK] = ${csoCode}
+      AND s.[Date_SK] BETWEEN '${startDate}' AND '${endDate}'
+    ORDER BY s.[Date_SK]
+  `);
+  return result.recordset;
 }
 
 async function getGradeVolumeFuelData(pool, csoCode, startDate, endDate) {
-  try {
-    // await sql.connect(sqlConfig);
-    // const result = await sql.query(`SELECT TOP (10) * from [CSO].[Sales]`);
-    // const result = await sql.query(`
-    // const result = await pool.request().query(`
-    //   SELECT s.[Station_SK], s.[businessDate], s.[fuelGradeID], s.[fuelGradeSalesVolume], s.[fuelGradeDescription]
-    //   FROM [CSO].[Fuel] s
-    //   WHERE
-    //     s.[Station_SK] = ${csoCode}
-    //     AND s.[businessDate] BETWEEN '${startDate}' AND '${endDate}'
-    //   ORDER BY s.[businessDate]
-    // `);
-    const dbStartDate = formatDateForDB(startDate);
-    const dbEndDate = formatDateForDB(endDate);
-    const result = await pool.request().query(`
-      SELECT s.[Station_SK], s.[Date_SK] as 'businessDate', s.[FuelGradeID] as 'fuelGradeID', s.[Sales_Volume_LTR] as 'fuelGradeSalesVolume', s.[Description] as 'fuelGradeDescription'
-      FROM [CSO].[FuelSummary] s
-      WHERE
-        s.[Station_SK] = ${csoCode}
-        AND TRY_CONVERT(NVARCHAR, s.[Date_SK], 112) BETWEEN '${dbStartDate}' AND '${dbEndDate}'
-      ORDER BY s.[Date_SK]
-    `);
-    // await sql.close();
-    // return result.recordset;
-    const rowsWithDate = result.recordset.map(r => ({
-      ...r,
-      businessDate: parseBusinessDate(r.businessDate)
-    }));
+  const dbStartDate = formatDateForDB(startDate);
+  const dbEndDate = formatDateForDB(endDate);
+  const result = await pool.request().query(`
+    SELECT s.[Station_SK], s.[Date_SK] as 'businessDate', s.[FuelGradeID] as 'fuelGradeID', s.[Sales_Volume_LTR] as 'fuelGradeSalesVolume', s.[Description] as 'fuelGradeDescription'
+    FROM [CSO].[FuelSummary] s
+    WHERE
+      s.[Station_SK] = ${csoCode}
+      AND TRY_CONVERT(NVARCHAR, s.[Date_SK], 112) BETWEEN '${dbStartDate}' AND '${dbEndDate}'
+    ORDER BY s.[Date_SK]
+  `);
+  const rowsWithDate = result.recordset.map(r => ({
+    ...r,
+    businessDate: parseBusinessDate(r.businessDate)
+  }));
 
-    return rowsWithDate;
-  } catch (err) {
-    console.error('SQL error:', err);
-    return [];
-  }
+  return rowsWithDate;
 }
 
 async function getCurrentInventory(site, limit = null) {
@@ -615,216 +588,149 @@ async function retry(fn, retries = 2, delay = 250) {
 }
 
 async function getAllPeriodData(pool, csoCode, startDate, endDate) {
-  try {
-    // Time period transactions
-    const dbStartDate = formatDateForDB(startDate);
-    const dbEndDate = formatDateForDB(endDate);
-    const timePeriodResult = await pool.request()
-      .input("csoCode", sql.Int, csoCode)
-      .input("startDate", sql.VarChar, dbStartDate) // use converted string
-      .input("endDate", sql.VarChar, dbEndDate)
-      .query(`
-        SELECT a.[Date_SK], a.[Hour] AS hours, a.[Type] AS transaction_type, 
-          a.[Count of Transaction ID] AS transaction_count
-        FROM [CSO].[TransactionCountByHour] a
-        WHERE a.[Station_SK] = @csoCode
-          AND a.[Date_SK] BETWEEN @startDate AND @endDate
-        ORDER BY a.[Date_SK];
-      `);
-    const timePeriodResultTransformed = transformTimePeriodData(timePeriodResult.recordset)
-    // console.log(timePeriodResultTransformed)
-    return {
-      timePeriodTransactions: timePeriodResultTransformed ?? [],
-    };
-
-  } catch (err) {
-    console.error("❌ SQL error in getAllTransactionsData:", err);
-    return {
-      // transactions: [],
-      timePeriodTransactions: [],
-      // tenderTransactions: [],
-    };
-  }
+  const dbStartDate = formatDateForDB(startDate);
+  const dbEndDate = formatDateForDB(endDate);
+  const timePeriodResult = await pool.request()
+    .input("csoCode", sql.Int, csoCode)
+    .input("startDate", sql.VarChar, dbStartDate)
+    .input("endDate", sql.VarChar, dbEndDate)
+    .query(`
+      SELECT a.[Date_SK], a.[Hour] AS hours, a.[Type] AS transaction_type,
+        a.[Count of Transaction ID] AS transaction_count
+      FROM [CSO].[TransactionCountByHour] a
+      WHERE a.[Station_SK] = @csoCode
+        AND a.[Date_SK] BETWEEN @startDate AND @endDate
+      ORDER BY a.[Date_SK];
+    `);
+  const timePeriodResultTransformed = transformTimePeriodData(timePeriodResult.recordset)
+  return {
+    timePeriodTransactions: timePeriodResultTransformed ?? [],
+  };
 }
 async function getAllTendorData(pool, csoCode, startDate, endDate) {
-  try {
-    // // Tender transactions
-    const tenderResult = await pool.request()
-      .input("csoCode", sql.Int, csoCode)
-      .input("startDate", sql.Date, startDate)
-      .input("endDate", sql.Date, endDate)
-      .query(`
-        SELECT a.[Station_SK], a.[Date], a.[Number of Customer Acct ID] AS visits,
-               a.[Number of Transaction ID] AS transactions, a.[Tender Code] AS tender
-        FROM [CSO].[Daily Trans by Tender View] a
-        WHERE a.[Station_SK] = @csoCode
-          AND a.[Date] BETWEEN @startDate AND @endDate
-        ORDER BY a.[Date];
-      `);
+  const tenderResult = await pool.request()
+    .input("csoCode", sql.Int, csoCode)
+    .input("startDate", sql.Date, startDate)
+    .input("endDate", sql.Date, endDate)
+    .query(`
+      SELECT a.[Station_SK], a.[Date], a.[Number of Customer Acct ID] AS visits,
+             a.[Number of Transaction ID] AS transactions, a.[Tender Code] AS tender
+      FROM [CSO].[Daily Trans by Tender View] a
+      WHERE a.[Station_SK] = @csoCode
+        AND a.[Date] BETWEEN @startDate AND @endDate
+      ORDER BY a.[Date];
+    `);
 
-    return {
-      tenderTransactions: tenderResult.recordset ?? [],
-    };
-
-  } catch (err) {
-    console.error("❌ SQL error in getAllTransactionsData:", err);
-    return {
-      tenderTransactions: [],
-    };
-  }
+  return {
+    tenderTransactions: tenderResult.recordset ?? [],
+  };
 }
 async function getAllTransactionsData(pool, csoCode, startDate, endDate) {
-  try {
-    // Original transactions
-    const transactionsResult = await pool.request()
-      .input("csoCode", sql.Int, csoCode)
-      .input("startDate", sql.Date, startDate)
-      .input("endDate", sql.Date, endDate)
-      .query(`
-        SELECT a.[Station_SK], a.[Date], a.[Number of Customer Acct ID] AS visits,
-               a.[Number of Transaction ID] AS transactions, b.[Avg Bucket] AS bucket_size
-        FROM [CSO].[Daily Trans and Acct ID Traffic View] a
-        LEFT JOIN [CSO].[Avg Bucket] b
-          ON a.[Station_SK] = b.[Station_SK] 
-         AND a.[Date] = b.[Date]
-        WHERE a.[Station_SK] = @csoCode
-          AND a.[Date] BETWEEN @startDate AND @endDate
-        ORDER BY a.[Date];
-      `);
+  const transactionsResult = await pool.request()
+    .input("csoCode", sql.Int, csoCode)
+    .input("startDate", sql.Date, startDate)
+    .input("endDate", sql.Date, endDate)
+    .query(`
+      SELECT a.[Station_SK], a.[Date], a.[Number of Customer Acct ID] AS visits,
+             a.[Number of Transaction ID] AS transactions, b.[Avg Bucket] AS bucket_size
+      FROM [CSO].[Daily Trans and Acct ID Traffic View] a
+      LEFT JOIN [CSO].[Avg Bucket] b
+        ON a.[Station_SK] = b.[Station_SK]
+       AND a.[Date] = b.[Date]
+      WHERE a.[Station_SK] = @csoCode
+        AND a.[Date] BETWEEN @startDate AND @endDate
+      ORDER BY a.[Date];
+    `);
 
-    return {
-      transactions: transactionsResult.recordset ?? [],
-    };
-
-  } catch (err) {
-    console.error("❌ SQL error in getAllTransactionsData:", err);
-    return {
-      transactions: [],
-    };
-  }
+  return {
+    transactions: transactionsResult.recordset ?? [],
+  };
 }
 
 async function getWeeklyBistroSales(pool, csoCode) {
-  try {
-    // await sql.connect(sqlConfig);
-    // const result = await sql.query(`SELECT TOP (10) * from [CSO].[Sales]`);
-    // const result = await sql.query(`
-    // const pool = await getPool();
-    const result = await pool.request()
-      .input("csoCode", sql.Int, csoCode)
-      .query(`
-      SELECT *
-      FROM [CSO].[BistroSales]
-      WHERE [Station_Code] = @csoCode
-      ORDER BY [WeekStart]
-    `);
-    // await sql.close();
-    return result.recordset;
-  } catch (err) {
-    console.error('SQL error:', err);
-    return [];
-  }
+  const result = await pool.request()
+    .input("csoCode", sql.Int, csoCode)
+    .query(`
+    SELECT *
+    FROM [CSO].[BistroSales]
+    WHERE [Station_Code] = @csoCode
+    ORDER BY [WeekStart]
+  `);
+  return result.recordset;
 }
 
 async function getTop10Bistro(pool, csoCode) {
-  try {
-    // await sql.connect(sqlConfig);
-    // const result = await sql.query(`SELECT TOP (10) * from [CSO].[Sales]`);
-    // const result = await sql.query(`
-    // const pool = await getPool();
-    const result = await pool.request()
-      .input("csoCode", sql.Int, csoCode)
-      .query(`
-      DECLARE @EndDate DATE = CAST(GETDATE() - 1 AS DATE);
-      DECLARE @StartDate DATE = DATEADD(DAY, -30, @EndDate);
+  const result = await pool.request()
+    .input("csoCode", sql.Int, csoCode)
+    .query(`
+    DECLARE @EndDate DATE = CAST(GETDATE() - 1 AS DATE);
+    DECLARE @StartDate DATE = DATEADD(DAY, -30, @EndDate);
 
-      SELECT TOP 10
-          s.Station_Code,
-          item.[Item Description] as Item,
-          SUM(s.[QTY]) AS UnitsSold,
-          SUM(s.[Total Sales]) AS TotalSales,
-          CAST(SUM(s.[QTY]) / 7.0 AS DECIMAL(10,2)) AS UnitsPerDay
-      FROM [CSO].[Sales] s
-      JOIN [CSO].[ItemBookCSO] item
-          ON s.[Item_BK] = item.[Item_BK]
-      WHERE item.[Cat #] IN (130, 134)
-        AND s.[Station_Code] = @csoCode
-        AND CAST(s.[Date] AS DATE) BETWEEN @StartDate AND @EndDate
-      GROUP BY
-          s.Station_Code,
-          item.[Item Description]
-      ORDER BY
-          UnitsSold DESC;
-    `);
-    // await sql.close();
-    return result.recordset;
-  } catch (err) {
-    console.error('SQL error:', err);
-    return [];
-  }
+    SELECT TOP 10
+        s.Station_Code,
+        item.[Item Description] as Item,
+        SUM(s.[QTY]) AS UnitsSold,
+        SUM(s.[Total Sales]) AS TotalSales,
+        CAST(SUM(s.[QTY]) / 7.0 AS DECIMAL(10,2)) AS UnitsPerDay
+    FROM [CSO].[Sales] s
+    JOIN [CSO].[ItemBookCSO] item
+        ON s.[Item_BK] = item.[Item_BK]
+    WHERE item.[Cat #] IN (130, 134)
+      AND s.[Station_Code] = @csoCode
+      AND CAST(s.[Date] AS DATE) BETWEEN @StartDate AND @EndDate
+    GROUP BY
+        s.Station_Code,
+        item.[Item Description]
+    ORDER BY
+        UnitsSold DESC;
+  `);
+  return result.recordset;
 }
 async function getShiftTransactionTimings(pool, csoCode, startDate, endDate) {
-  try {
-    const dbStartDate = formatDateForDB(startDate);
-    const dbEndDate = formatDateForDB(endDate);
-    const result = await pool.request()
-      .input("csoCode", sql.VarChar, csoCode)
-      .input("startDateSK", sql.VarChar, dbStartDate) // e.g., '20260124'
-      .input("endDateSK", sql.VarChar, dbEndDate)   // e.g., '20260131'
-      // .query(`
-      //   SELECT 
-      //       [Date_SK],
-      //       MIN(CASE WHEN [Station] NOT LIKE '%Cardlock%' THEN [DateTime] END) as firstRegTrans,
-      //       MAX(CASE WHEN [Station] NOT LIKE '%Cardlock%' THEN [DateTime] END) as lastRegTrans,
-      //       MIN(CASE WHEN [Station] LIKE '%Cardlock%' THEN [DateTime] END) as firstCardlockTrans,
-      //       MAX(CASE WHEN [Station] LIKE '%Cardlock%' THEN [DateTime] END) as lastCardlockTrans
-      //   FROM [CSO].[Stg_CashRegisterJournal]
-      //   WHERE [Date_SK] BETWEEN @startDateSK AND @endDateSK
-      //   AND [Station_SK] LIKE CONCAT(@csoCode, '%')
-      //   GROUP BY [Date_SK]
-      // `);
-      .query(`
-        WITH TransactionData AS (
-          SELECT 
-            [Date_SK],
-            MIN(CASE WHEN [Station] NOT LIKE '%Cardlock%' THEN [DateTime] END) as firstRegTrans,
-            MAX(CASE WHEN [Station] NOT LIKE '%Cardlock%' THEN [DateTime] END) as lastRegTrans,
-            MIN(CASE WHEN [Station] LIKE '%Cardlock%' THEN [DateTime] END) as firstCardlockTrans,
-            MAX(CASE WHEN [Station] LIKE '%Cardlock%' THEN [DateTime] END) as lastCardlockTrans
-          FROM [CSO].[Stg_CashRegisterJournal]
-          WHERE [Date_SK] BETWEEN @startDateSK AND @endDateSK
-              AND [Station_SK] LIKE CONCAT(@csoCode, '%')
-          GROUP BY [Date_SK]
-          ),
-        TimesheetData AS (
-          SELECT 
-            CONVERT(CHAR(8), [startDate], 112) as [Date_SK],
-            MIN([startDate]) as firstShiftLogin,
-            MAX([endDate]) as lastShiftLogout
-          FROM [Payworks].[Timesheets]
-          WHERE [Station_SK] = @csoCode
-              AND CONVERT(CHAR(8), [startDate], 112) BETWEEN @startDateSK AND @endDateSK
-              AND [position] NOT LIKE '%Manager%'
-              AND [status] = 'Approved'
-          GROUP BY CONVERT(CHAR(8), [startDate], 112)
-        )
-        SELECT 
-          COALESCE(t.[Date_SK], ts.[Date_SK]) as Date_SK,
-          t.firstRegTrans,
-          t.lastRegTrans,
-          t.firstCardlockTrans,
-          t.lastCardlockTrans,
-          ts.firstShiftLogin,
-          ts.lastShiftLogout
-        FROM TransactionData t
-        FULL OUTER JOIN TimesheetData ts ON t.[Date_SK] = ts.[Date_SK]
-        ORDER BY Date_SK DESC;
-      `);
-    return result.recordset;
-  } catch (err) {
-    console.error('SQL Transaction Timing Error:', err);
-    return [];
-  }
+  const dbStartDate = formatDateForDB(startDate);
+  const dbEndDate = formatDateForDB(endDate);
+  const result = await pool.request()
+    .input("csoCode", sql.VarChar, csoCode)
+    .input("startDateSK", sql.VarChar, dbStartDate)
+    .input("endDateSK", sql.VarChar, dbEndDate)
+    .query(`
+      WITH TransactionData AS (
+        SELECT
+          [Date_SK],
+          MIN(CASE WHEN [Station] NOT LIKE '%Cardlock%' THEN [DateTime] END) as firstRegTrans,
+          MAX(CASE WHEN [Station] NOT LIKE '%Cardlock%' THEN [DateTime] END) as lastRegTrans,
+          MIN(CASE WHEN [Station] LIKE '%Cardlock%' THEN [DateTime] END) as firstCardlockTrans,
+          MAX(CASE WHEN [Station] LIKE '%Cardlock%' THEN [DateTime] END) as lastCardlockTrans
+        FROM [CSO].[Stg_CashRegisterJournal]
+        WHERE [Date_SK] BETWEEN @startDateSK AND @endDateSK
+            AND [Station_SK] LIKE CONCAT(@csoCode, '%')
+        GROUP BY [Date_SK]
+        ),
+      TimesheetData AS (
+        SELECT
+          CONVERT(CHAR(8), [startDate], 112) as [Date_SK],
+          MIN([startDate]) as firstShiftLogin,
+          MAX([endDate]) as lastShiftLogout
+        FROM [Payworks].[Timesheets]
+        WHERE [Station_SK] = @csoCode
+            AND CONVERT(CHAR(8), [startDate], 112) BETWEEN @startDateSK AND @endDateSK
+            AND [position] NOT LIKE '%Manager%'
+            AND [status] = 'Approved'
+        GROUP BY CONVERT(CHAR(8), [startDate], 112)
+      )
+      SELECT
+        COALESCE(t.[Date_SK], ts.[Date_SK]) as Date_SK,
+        t.firstRegTrans,
+        t.lastRegTrans,
+        t.firstCardlockTrans,
+        t.lastCardlockTrans,
+        ts.firstShiftLogin,
+        ts.lastShiftLogout
+      FROM TransactionData t
+      FULL OUTER JOIN TimesheetData ts ON t.[Date_SK] = ts.[Date_SK]
+      ORDER BY Date_SK DESC;
+    `);
+  return result.recordset;
 }
 
 async function getRefundTransactions(csoCode, date) {
@@ -903,16 +809,28 @@ async function getAllSQLData(csoCode, dates) {
     shiftStart, shiftEnd
   } = dates;
 
+  const queryNames = [
+    "sales", "fuel", "transactions", "timePeriod",
+    "tender", "shiftTimings", "bistroWoWSales", "top10Bistro",
+  ];
+
   const results = await Promise.allSettled([
     retry(() => getCategorizedSalesData(pool, csoCode, salesStart, salesEnd)),
     retry(() => getGradeVolumeFuelData(pool, csoCode, fuelStart, fuelEnd)),
     retry(() => getAllTransactionsData(pool, csoCode, transStart, transEnd)),
-    retry(() => getAllPeriodData(pool, csoCode, transStart, transEnd)), // unified
+    retry(() => getAllPeriodData(pool, csoCode, transStart, transEnd)),
     retry(() => getAllTendorData(pool, csoCode, transStart, transEnd)),
     retry(() => getShiftTransactionTimings(pool, csoCode, shiftStart, shiftEnd)),
     retry(() => getWeeklyBistroSales(pool, csoCode)),
     retry(() => getTop10Bistro(pool, csoCode)),
   ]);
+
+  // Log any queries that failed after all retries
+  results.forEach((r, i) => {
+    if (r.status === "rejected") {
+      console.error(`❌ SQL query "${queryNames[i]}" failed after retries:`, r.reason?.message || r.reason);
+    }
+  });
 
   return {
     sales: results[0].status === "fulfilled" ? results[0].value : [],

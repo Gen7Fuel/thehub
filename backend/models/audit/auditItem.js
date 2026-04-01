@@ -26,6 +26,8 @@ const AuditItemSchema = new mongoose.Schema({
     status: { type: String },
     timestamp: { type: Date, default: null},
   }],
+  assignee: { type: String },
+  notes: { type: String },
   requestOrder: { type: Boolean },
   suppliesVendor: { type: String },
   orderCreated: { type: Boolean, default: false },

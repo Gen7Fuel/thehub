@@ -16,6 +16,7 @@ require('./cron_jobs/auditIssueReportCron'); //cron job for getting previous mon
 require('./cron_jobs/mongoCsvExportCron'); //cron job for exporting mongo data to azure in csv
 require('./cron_jobs/archiveOldNotification'); //cron job for archiving/removing old notifications
 require('./cron_jobs/logoutUsersCron'); //cron job for logging out users daily at 9 AM UTC
+require('./cron_jobs/dashboardCacheCron'); //cron job for pre-warming dashboard SQL cache daily at 5 AM UTC
 require('./cron_jobs/dailyFuelSyncCron') // cron job for updating fuel related data daily morning at 5 am EST
 // require('./cron_jobs/productCategoryMappingCron'); //cron job for normalising the product categories
 
