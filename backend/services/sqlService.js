@@ -308,6 +308,7 @@ async function getPool() {
         database: process.env.SQL_DB,
         user: process.env.SQL_USER,
         password: process.env.SQL_PASSWORD,
+        requestTimeout: 60000, // 60s per query (default was 15s)
         pool: {
           max: 50, // increase if VPS can handle it
           min: 0,
