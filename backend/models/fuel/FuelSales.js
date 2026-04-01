@@ -12,7 +12,9 @@ const fuelSalesSchema = new mongoose.Schema({
     grade: { type: String, required: true },
     volume: { type: Number, default: 0 }
   }],
-  isLive: { type: Boolean, default: true }
+  isLive: { type: Boolean, default: true },
+  lastFetchedAt: { type: Date },      // When our server last talked to Supabase
+  lastTransactionAt: { type: String }   // The actual MAX(date_time) from the journal
 });
 
 // Indexing for faster lookups when calculating averages

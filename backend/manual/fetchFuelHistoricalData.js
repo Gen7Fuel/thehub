@@ -79,7 +79,7 @@ async function syncFuelSales() {
   console.log('🚀 Starting Fuel Sales Sync (From March 9th)...');
 
   // Fetch only active fuel stations
-  const locations = await Location.find({ type: 'store' });
+  const locations = await Location.find({ type: 'store', stationName: 'Silver Grizzly' });
   const startDate = new Date('2026-03-09T00:00:00');
   const today = new Date();
   const dayNames = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
@@ -130,7 +130,7 @@ async function run() {
   try {
     // Ensure your DB connection logic is imported or defined here
     await connectDB();
-    await syncHistoricalDips();
+    // await syncHistoricalDips();
     await syncFuelSales();
   } catch (err) {
     hadError = true;

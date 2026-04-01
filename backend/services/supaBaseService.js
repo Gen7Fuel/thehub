@@ -64,8 +64,54 @@ export const getTankReadingsForDate = async (station_sk, tank_id, dateStr) => {
  * @param {string} dateStr - YYYY-MM-DD formatted date
  * @returns {Promise<Array>} Cleaned salesData array for Mongoose
  */
+// export const getProcessedFuelSales = async (csoCode, dateStr) => {
+//   // 1. Call the RPC with the wildcard for the LIKE operator
+//   const { data: rawData, error } = await supabase.rpc('get_fuel_sales_by_station_and_date', {
+//     target_cso_code: `${csoCode}%`,
+//     target_date: dateStr
+//   });
+
+//   if (error) throw new Error(`Supabase RPC Error: ${error.message}`);
+
+//   // 2. Initialize processing object
+//   let processed = {
+//     'Regular': 0,
+//     'Premium': 0,
+//     'Diesel': 0,
+//     'Dyed Diesel': 0
+//   };
+
+//   let midVolume = 0;
+
+//   // 3. Map raw codes to Model names and capture MID volume
+//   if (rawData) {
+//     rawData.forEach(item => {
+//       const vol = Number(item.total_volume) || 0;
+//       switch (item.raw_grade) {
+//         case 'REG': processed['Regular'] += vol; break;
+//         case 'PNL': processed['Premium'] += vol; break;
+//         case 'DSL': processed['Diesel'] += vol; break;
+//         case 'DYED': processed['Dyed Diesel'] += vol; break;
+//         case 'MID': midVolume = vol; break;
+//       }
+//     });
+//   }
+
+//   // 4. Apply the 50/50 Mid-grade split logic
+//   if (midVolume > 0) {
+//     processed['Regular'] += (midVolume / 2);
+//     processed['Premium'] += (midVolume / 2);
+//   }
+
+//   // 5. Convert to Mongoose schema format (only return grades with volume > 0)
+//   return Object.entries(processed)
+//     .filter(([_, vol]) => vol > 0)
+//     .map(([grade, volume]) => ({ 
+//       grade, 
+//       volume: parseFloat(volume.toFixed(2)) 
+//     }));
+// };
 export const getProcessedFuelSales = async (csoCode, dateStr) => {
-  // 1. Call the RPC with the wildcard for the LIKE operator
   const { data: rawData, error } = await supabase.rpc('get_fuel_sales_by_station_and_date', {
     target_cso_code: `${csoCode}%`,
     target_date: dateStr
@@ -73,20 +119,18 @@ export const getProcessedFuelSales = async (csoCode, dateStr) => {
 
   if (error) throw new Error(`Supabase RPC Error: ${error.message}`);
 
-  // 2. Initialize processing object
-  let processed = {
-    'Regular': 0,
-    'Premium': 0,
-    'Diesel': 0,
-    'Dyed Diesel': 0
-  };
-
+  let processed = { 'Regular': 0, 'Premium': 0, 'Diesel': 0, 'Dyed Diesel': 0 };
   let midVolume = 0;
+  let latestTs = null;
 
-  // 3. Map raw codes to Model names and capture MID volume
-  if (rawData) {
+  if (rawData && rawData.length > 0) {
     rawData.forEach(item => {
       const vol = Number(item.total_volume) || 0;
+      // Track the latest transaction across all fuel grades
+      if (item.last_transaction && (!latestTs || new Date(item.last_transaction) > new Date(latestTs))) {
+        latestTs = item.last_transaction;
+      }
+
       switch (item.raw_grade) {
         case 'REG': processed['Regular'] += vol; break;
         case 'PNL': processed['Premium'] += vol; break;
@@ -97,17 +141,14 @@ export const getProcessedFuelSales = async (csoCode, dateStr) => {
     });
   }
 
-  // 4. Apply the 50/50 Mid-grade split logic
   if (midVolume > 0) {
     processed['Regular'] += (midVolume / 2);
     processed['Premium'] += (midVolume / 2);
   }
 
-  // 5. Convert to Mongoose schema format (only return grades with volume > 0)
-  return Object.entries(processed)
+  const salesData = Object.entries(processed)
     .filter(([_, vol]) => vol > 0)
-    .map(([grade, volume]) => ({ 
-      grade, 
-      volume: parseFloat(volume.toFixed(2)) 
-    }));
+    .map(([grade, volume]) => ({ grade, volume: parseFloat(volume.toFixed(2)) }));
+
+  return { salesData, lastTransaction: latestTs };
 };

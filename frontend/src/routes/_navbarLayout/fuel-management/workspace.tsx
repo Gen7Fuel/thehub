@@ -1,6 +1,6 @@
 import { useState, useMemo } from 'react';
 import { createFileRoute, Link } from '@tanstack/react-router';
-import { useQuery } from '@tanstack/react-query'; // Recommended for fetching
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'; // Recommended for fetching
 import axios from 'axios';
 import {
   Search, X, ChevronLeft, ChevronRight, Building2,
@@ -13,9 +13,9 @@ import { Checkbox } from "@/components/ui/checkbox";
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger,
 } from "@/components/ui/dialog";
-import { format, addDays, isToday, isAfter, startOfDay } from "date-fns";
+import { format, addDays, isAfter, startOfDay } from "date-fns";
 import { WorkspaceDatePicker } from '@/components/custom/datePicker';
-import { Loader2, Package, Truck, Clock, Info, Edit3, MoreHorizontal } from 'lucide-react';
+import { Loader2, RefreshCw, Truck, Clock, Edit3 } from 'lucide-react';
 import { Badge } from "@/components/ui/badge";
 import { getGradeTheme } from "./manage/locations/$id"
 
@@ -74,15 +74,49 @@ function WorkspaceComponent() {
           <div className="flex flex-col lg:flex-row lg:items-end justify-between gap-6">
 
             {/* Left: Station Selection Logic */}
+            {/* Left: Station Selection Logic */}
             <div className="flex-1 space-y-3">
               <div className="flex items-center justify-between">
-                <div className="flex items-center gap-2">
-                  <div className="bg-blue-600 p-1.5 rounded-lg">
-                    <Building2 className="h-5 w-5 text-white" />
+                <div className="flex items-center gap-6"> {/* Increased gap to separate Title and Legend */}
+                  <div className="flex items-center gap-2">
+                    <div className="bg-blue-600 p-1.5 rounded-lg">
+                      <Building2 className="h-5 w-5 text-white" />
+                    </div>
+                    <h1 className="text-xl font-black tracking-tight text-slate-800 uppercase">
+                      Fuel Workspace
+                    </h1>
                   </div>
-                  <h1 className="text-xl font-black tracking-tight text-slate-800 uppercase">
-                    Fuel Workspace
-                  </h1>
+
+                  {/* --- INVENTORY LEGEND --- */}
+                  <div className="hidden md:flex items-center gap-4 px-4 py-1.5 bg-slate-100/80 border border-slate-200 rounded-xl">
+                    <span className="text-[10px] font-black text-slate-400 uppercase tracking-wider border-r border-slate-300 pr-4">
+                      Status Legend
+                    </span>
+
+                    {/* Critical Low */}
+                    <div className="flex items-center gap-1.5">
+                      <div className="w-2 h-2 rounded-full bg-red-500 animate-ping" />
+                      <span className="text-[10px] font-bold text-slate-600">Critical Low</span>
+                    </div>
+
+                    {/* Physical Overflow */}
+                    <div className="flex items-center gap-1.5">
+                      <div className="w-2 h-2 rounded-full bg-yellow-400 border border-yellow-600 animate-pulse" />
+                      <span className="text-[10px] font-bold text-slate-600">Overflow Risk</span>
+                    </div>
+
+                    {/* Above Max */}
+                    <div className="flex items-center gap-1.5">
+                      <div className="w-1.5 h-1.5 rounded-full bg-amber-400" />
+                      <span className="text-[10px] font-bold text-slate-600">Above Max</span>
+                    </div>
+
+                    {/* Live Data Indicator */}
+                    <div className="flex items-center gap-1.5 ml-2 border-l border-slate-300 pl-4">
+                      <div className="w-1.5 h-1.5 rounded-full bg-blue-600" />
+                      <span className="text-[10px] font-bold text-blue-600 uppercase">Live Sales</span>
+                    </div>
+                  </div>
                 </div>
 
                 <Dialog>
@@ -187,25 +221,27 @@ function WorkspaceComponent() {
 
           </div>
         </div>
-      </div>
+      </div >
 
       {/* WORKSPACE STRIPS AREA */}
-      <div className="w-full px-0 py-0 space-y-0">
-        {selectedStationIds.length === 0 ? (
-          <div className="w-full h-96 border-4 border-dashed rounded-3xl flex flex-col items-center justify-center text-slate-300">
-            <Building2 className="h-20 w-20 mb-4 opacity-20" />
-            <p className="text-xl font-bold italic opacity-30">Select stations above to begin operations</p>
-          </div>
-        ) : (
-          selectedStationIds.map(stationId => {
-            const locData = locations.find((l: any) => l._id === stationId);
-            return (
-              <StationStrip key={stationId} location={locData} date={selectedDate} />
-            );
-          })
-        )}
-      </div>
-    </div>
+      < div className="w-full px-0 py-0 space-y-0" >
+        {
+          selectedStationIds.length === 0 ? (
+            <div className="w-full h-96 border-4 border-dashed rounded-3xl flex flex-col items-center justify-center text-slate-300">
+              <Building2 className="h-20 w-20 mb-4 opacity-20" />
+              <p className="text-xl font-bold italic opacity-30">Select stations above to begin operations</p>
+            </div>
+          ) : (
+            selectedStationIds.map(stationId => {
+              const locData = locations.find((l: any) => l._id === stationId);
+              return (
+                <StationStrip key={stationId} location={locData} date={selectedDate} />
+              );
+            })
+          )
+        }
+      </div >
+    </div >
   );
 }
 
@@ -214,8 +250,8 @@ function StationStrip({ location, date }: { location: any, date: Date }) {
     headers: { Authorization: `Bearer ${localStorage.getItem('token')}` }
   };
 
-  // 1. Fetch Tank Data (now returns enriched inventory info)
-  const { data: tanks = [], isLoading: isTanksLoading } = useQuery({
+  // 1. Update your useQuery to handle the new object structure
+  const { data: tankResponse, isLoading: isTanksLoading } = useQuery({
     queryKey: ['station-tanks', location?._id, format(date, 'yyyy-MM-dd')],
     queryFn: async () => {
       const res = await axios.get(
@@ -226,6 +262,10 @@ function StationStrip({ location, date }: { location: any, date: Date }) {
     },
     enabled: !!location?._id,
   });
+
+  // Extract data from response
+  const tanks = tankResponse?.tanks || [];
+  const lastTxAt = tankResponse?.lastTransaction;
 
   // 2. Aggregate tanks by grade (handling multiple tanks per grade)
   const gradeInventory = useMemo(() => {
@@ -239,7 +279,10 @@ function StationStrip({ location, date }: { location: any, date: Date }) {
           opening: 0,
           estSales: 0,
           currentSales: 0,
-          closing: 0
+          closing: 0,
+          minLimit: 0,
+          maxLimit: 0,
+          totalCapacity: 0
         };
       }
       // Summing values from the enriched backend fields
@@ -247,6 +290,9 @@ function StationStrip({ location, date }: { location: any, date: Date }) {
       summary[gradeKey].estSales += (tank.estSalesL || 0);
       summary[gradeKey].currentSales += (tank.currentSalesL || 0);
       summary[gradeKey].closing += (tank.closingL || 0);
+      summary[gradeKey].minLimit += (tank.minVolumeCapacity || 0);
+      summary[gradeKey].maxLimit += (tank.maxVolumeCapacity || 0);
+      summary[gradeKey].totalCapacity += (tank.tankCapacity || 0);
     });
 
     return Object.values(summary).sort((a: any, b: any) => {
@@ -270,6 +316,20 @@ function StationStrip({ location, date }: { location: any, date: Date }) {
     enabled: !!location?._id,
   });
 
+  const getRowStatusColor = (item: any) => {
+    if (isPast) return 'hover:bg-slate-50/50';
+
+    const isCriticalLow = item.closing <= item.minLimit || item.opening <= item.minLimit;
+    const isPhysicalOverflow = item.closing > item.totalCapacity;
+    const isAboveMaxLimit = item.closing > item.maxLimit;
+
+    if (isCriticalLow) return 'bg-red-50/80 hover:bg-red-100/80';
+    if (isPhysicalOverflow) return 'bg-yellow-50/90 hover:bg-yellow-100/90'; // Brighter for overflow
+    if (isAboveMaxLimit) return 'bg-amber-50/80 hover:bg-amber-100/80';
+
+    return 'hover:bg-slate-50/50';
+  };
+
   const getStatusColor = (status: string) => {
     switch (status?.toLowerCase()) {
       case 'delivered': return 'bg-green-100 text-green-700 border-green-200';
@@ -277,6 +337,19 @@ function StationStrip({ location, date }: { location: any, date: Date }) {
       default: return 'bg-yellow-100 text-yellow-700 border-yellow-200';
     }
   };
+
+  const queryClient = useQueryClient();
+
+  const syncMutation = useMutation({
+    mutationFn: async () => {
+      return axios.post(`/api/fuel-sales/sync/${location._id}`, {}, authHeader);
+    },
+    onSuccess: () => {
+      // Refresh the tank query to show updated currentSales and closing volumes
+      queryClient.invalidateQueries({ queryKey: ['station-tanks', location?._id] });
+      // toast.success("Sales Synced");
+    }
+  });
 
   const gradeMap: Record<string, string> = {
     'Regular': 'REG',
@@ -322,14 +395,41 @@ function StationStrip({ location, date }: { location: any, date: Date }) {
                 <thead>
                   <tr className="bg-slate-100/50 border-b border-slate-200">
                     <th className="py-1.5 px-3 text-[9px] font-black text-slate-500 uppercase">Grade</th>
-                    <th className="py-1.5 px-3 text-[9px] font-black text-slate-500 uppercase text-right">Opening</th>
+                    <th className="py-1.5 px-3 text-[9px] font-black text-slate-500 uppercase text-right">
+                      {isFuture ? 'Est Opening' : 'Opening'}
+                    </th>
                     {/* Label changes: "Sales" for past, "Est Sales" for now/future */}
                     <th className="py-1.5 px-3 text-[9px] font-black text-slate-500 uppercase text-right">
                       {isPast ? 'Sales' : 'Est Sales'}
                     </th>
                     {/* Hide Current column if not Today */}
                     {isToday && (
-                      <th className="py-1.5 px-3 text-[9px] font-black text-slate-500 uppercase text-right">Current</th>
+                      <th className="py-1.5 px-3 text-[9px] font-black text-slate-500 uppercase text-right">
+                        <div className="flex items-center justify-end gap-1.5">
+                          <div className="flex items-center gap-1">
+                            <span>Current</span>
+                            {/* Check for the string and split by either 'T' or a space ' ' */}
+                            {lastTxAt && typeof lastTxAt === 'string' && (
+                              <span className="text-[8px] font-bold text-blue-500 lowercase">
+                                ({lastTxAt.includes('T')
+                                  ? lastTxAt.split('T')[1]?.substring(0, 5)
+                                  : lastTxAt.split(' ')[1]?.substring(0, 5)
+                                })
+                              </span>
+                            )}
+                          </div>
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              syncMutation.mutate();
+                            }}
+                            disabled={syncMutation.isPending}
+                            className="hover:text-blue-600 transition-colors disabled:opacity-50"
+                          >
+                            <RefreshCw className={`h-2.5 w-2.5 ${syncMutation.isPending ? 'animate-spin' : ''}`} />
+                          </button>
+                        </div>
+                      </th>
                     )}
                     <th className="py-1.5 px-3 text-[9px] font-black text-slate-500 uppercase text-right">
                       {isPast ? 'Closing' : 'Est Closing'}
@@ -339,49 +439,64 @@ function StationStrip({ location, date }: { location: any, date: Date }) {
                 <tbody className="divide-y divide-slate-100">
                   {isTanksLoading ? (
                     <tr>
-                      {/* Dynamic colspan based on whether Current column is visible */}
                       <td colSpan={isToday ? 5 : 4} className="p-4 text-center">
                         <Loader2 className="h-4 w-4 animate-spin mx-auto text-slate-300" />
                       </td>
                     </tr>
-                  ) : gradeInventory.map((item: any) => {
-                    const theme = getGradeTheme(item.grade);
-                    return (
-                      <tr key={item.grade} className="hover:bg-slate-50/50 transition-colors">
-                        {/* GRADE LABEL */}
-                        <td className="py-1.5 px-3">
-                          <span
-                            className={`text-[10px] font-black px-1.5 py-0.5 rounded border ${theme.label}`}
-                            style={{ backgroundColor: `${theme.raw}15`, borderColor: `${theme.raw}30` }}
-                          >
-                            {gradeMap[item.grade] || item.grade}
-                          </span>
-                        </td>
+                  ) : (
+                    gradeInventory.map((item: any) => {
+                      const theme = getGradeTheme(item.grade);
+                      const rowColorClass = getRowStatusColor(item);
 
-                        {/* OPENING */}
-                        <td className="py-1.5 px-3 text-right font-mono text-[11px] font-bold text-slate-600">
-                          {item.opening.toLocaleString()}
-                        </td>
+                      // Status Flags
+                      const isLow = !isPast && (item.closing <= item.minLimit);
+                      const isOverflow = !isPast && (item.closing > item.totalCapacity);
+                      const isWarning = !isPast && (item.closing > item.maxLimit && !isOverflow);
 
-                        {/* SALES (Past) or EST SALES (Now/Future) */}
-                        <td className="py-1.5 px-3 text-right font-mono text-[11px] font-bold text-slate-400">
-                          {item.estSales.toLocaleString()}
-                        </td>
+                      return (
+                        <tr key={item.grade} className={`${rowColorClass} transition-colors`}>
+                          <td className="py-1.5 px-3 flex items-center gap-2">
+                            <span
+                              className={`text-[10px] font-black px-1.5 py-0.5 rounded border ${theme.label}`}
+                              style={{ backgroundColor: `${theme.raw}15`, borderColor: `${theme.raw}30` }}
+                            >
+                              {gradeMap[item.grade] || item.grade}
+                            </span>
 
-                        {/* CURRENT SALES - Only visible if Today */}
-                        {isToday && (
-                          <td className="py-1.5 px-3 text-right font-mono text-[11px] font-bold text-blue-600">
-                            {item.currentSales.toLocaleString()}
+                            {/* ALERT DOTS */}
+                            {isLow && (
+                              <div className="w-2 h-2 rounded-full bg-red-500 animate-ping" title="Low Inventory" />
+                            )}
+                            {isOverflow && (
+                              <div className="w-2 h-2 rounded-full bg-yellow-400 animate-pulse border border-yellow-600" title="Physical Overflow Warning" />
+                            )}
+                            {isWarning && (
+                              <div className="w-1.5 h-1.5 rounded-full bg-amber-400" title="Above Max Limit" />
+                            )}
                           </td>
-                        )}
 
-                        {/* CLOSING (Past) or EST CLOSING (Now/Future) */}
-                        <td className="py-1.5 px-3 text-right font-mono text-[11px] font-black text-slate-800">
-                          {item.closing.toLocaleString()}
-                        </td>
-                      </tr>
-                    );
-                  })}
+                          <td className="py-1.5 px-3 text-right font-mono text-[11px] font-bold text-slate-600">
+                            {item.opening.toLocaleString()}
+                          </td>
+
+                          <td className="py-1.5 px-3 text-right font-mono text-[11px] font-bold text-slate-400">
+                            {item.estSales.toLocaleString()}
+                          </td>
+
+                          {isToday && (
+                            <td className="py-1.5 px-3 text-right font-mono text-[11px] font-bold text-blue-600">
+                              {item.currentSales.toLocaleString()}
+                            </td>
+                          )}
+
+                          <td className={`py-1.5 px-3 text-right font-mono text-[11px] font-black 
+                            ${isLow ? 'text-red-600' : isOverflow ? 'text-yellow-700' : 'text-slate-800'}`}>
+                            {item.closing.toLocaleString()}
+                          </td>
+                        </tr>
+                      );
+                    })
+                  )}
                 </tbody>
               </table>
             </div>
