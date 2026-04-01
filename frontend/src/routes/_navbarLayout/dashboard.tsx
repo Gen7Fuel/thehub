@@ -350,6 +350,7 @@ function RouteComponent() {
   const [loadingInventory, setLoadingInventory] = useState(true);
   const [loadingAccounting, setLoadingAccounting] = useState(true);
   const [loadingSql, setLoadingSql] = useState(true);
+  const [sqlLastUpdated, setSqlLastUpdated] = useState<string | null>(null);
 
 
   const today = new Date();
@@ -508,34 +509,34 @@ function RouteComponent() {
         const [salesCached, fuelCached, transCached, timePeriodCached, tenderCached, bistroCached, top10Cached] =
           idbResults.map(r => (r.status === 'fulfilled' ? r.value : null));
 
-        const needsSqlFetch =
-          !salesCached?.length || !fuelCached?.length || !transCached?.length ||
-          !timePeriodCached?.length || !tenderCached?.length ||
-          !bistroCached?.length || !top10Cached?.length;
-
-        // ── Start SQL immediately — overlaps with ongoing slow-track Mongo calls ──
-        const sqlPromise = needsSqlFetch
-          ? (async () => {
-              console.log('📡 No cache → Calling SQL backend...');
-              const data = await fetchAllSqlData(
-                csoCode ?? '', site, salesStartDate, salesEndDate,
-                fuelStartDate, fuelEndDate, transStartDate, transEndDate,
-                shiftStartDate, shiftEndDate,
-              );
-              saveDashboardData(STORES.SALES, site, data.sales);
-              saveDashboardData(STORES.FUEL, site, data.fuel);
-              saveDashboardData(STORES.TRANS, site, data.transactions);
-              saveDashboardData(STORES.TIME_PERIOD_TRANS, site, data.timePeriodTransactions);
-              saveDashboardData(STORES.TENDER_TRANS, site, data.tenderTransactions);
-              saveDashboardData(STORES.BISTRO_WOW_SALES, site, data.bistroWoWSales);
-              saveDashboardData(STORES.TOP_10_BISTRO, site, data.top10Bistro);
-              return data;
-            })()
-          : Promise.resolve({
-              sales: salesCached, fuel: fuelCached, transactions: transCached,
-              timePeriodTransactions: timePeriodCached, tenderTransactions: tenderCached,
-              bistroWoWSales: bistroCached, top10Bistro: top10Cached,
-            });
+        // ── Always call API (Redis-cached on backend, <5ms) — fall back to IDB on failure ──
+        const sqlPromise = (async () => {
+          try {
+            const data = await fetchAllSqlData(
+              csoCode ?? '', site, salesStartDate, salesEndDate,
+              fuelStartDate, fuelEndDate, transStartDate, transEndDate,
+              shiftStartDate, shiftEndDate,
+            );
+            // Update IndexedDB as L2 offline fallback
+            saveDashboardData(STORES.SALES, site, data.sales);
+            saveDashboardData(STORES.FUEL, site, data.fuel);
+            saveDashboardData(STORES.TRANS, site, data.transactions);
+            saveDashboardData(STORES.TIME_PERIOD_TRANS, site, data.timePeriodTransactions);
+            saveDashboardData(STORES.TENDER_TRANS, site, data.tenderTransactions);
+            saveDashboardData(STORES.BISTRO_WOW_SALES, site, data.bistroWoWSales);
+            saveDashboardData(STORES.TOP_10_BISTRO, site, data.top10Bistro);
+            if (data.lastUpdated) setSqlLastUpdated(data.lastUpdated);
+            return data;
+          } catch {
+            // Fallback to IndexedDB if API fails
+            console.log('⚠️ API failed, using IndexedDB cache');
+            return {
+              sales: salesCached ?? [], fuel: fuelCached ?? [], transactions: transCached ?? [],
+              timePeriodTransactions: timePeriodCached ?? [], tenderTransactions: tenderCached ?? [],
+              bistroWoWSales: bistroCached ?? [], top10Bistro: top10Cached ?? [],
+            };
+          }
+        })();
 
         // ── Now await slow-track MongoDB results (~2s, already running) ──
         const [
@@ -1333,6 +1334,11 @@ function RouteComponent() {
           <div className="flex gap-4">
             <LocationPicker setStationName={setSite} value="stationName" defaultValue={site} />
             {/* <DatePickerWithRange date={date} setDate={setDate} /> */}
+            {sqlLastUpdated && (
+              <span className="text-xs text-muted-foreground self-center">
+                Data as of {new Date(sqlLastUpdated).toLocaleString()}
+              </span>
+            )}
           </div>
 
           {/* Main container */}

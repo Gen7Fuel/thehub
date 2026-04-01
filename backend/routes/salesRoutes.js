@@ -3,6 +3,7 @@ const router = express.Router();
 const { CashSummary, CashSummaryReport } = require('../models/CashSummaryNew')
 const Location = require('../models/Location')
 const { getCategorizedSalesData, getGradeVolumeFuelData, getTransTimePeriodData, getAllSQLData } = require('../services/sqlService');
+const redis = require('../utils/redisClient');
 
 router.get('/sales', async (req, res) => {
   // const limit = parseInt(req.query.limit, 10) || 10;
@@ -91,6 +92,15 @@ router.get('/all-data', async (req, res) => {
   } = req.query;
 
   try {
+    // 1. Check Redis cache
+    const cacheKey = `dashboard:${siteParam}:allSqlData`;
+    const cached = await redis.get(cacheKey);
+    if (cached) {
+      const parsed = JSON.parse(cached);
+      return res.json(parsed);
+    }
+
+    // 2. Cache miss — fetch from MSSQL + MongoDB
     const startDate = new Date(shiftStart);
     startDate.setHours(0, 0, 0, 0);
     const endDate = new Date(shiftEnd);
@@ -161,7 +171,7 @@ router.get('/all-data', async (req, res) => {
         firstShiftLogin: sqlRow.firstShiftLogin || null,
         lastShiftLogout: sqlRow.lastShiftLogout || null,
         isSubmitted: reportEntry ? reportEntry.submitted : false,
-        
+
         // Metrics added back for "Store Activity Trend" section
         chartMetrics: {
           openMin,
@@ -178,15 +188,43 @@ router.get('/all-data', async (req, res) => {
 
       current.setDate(current.getDate() + 1);
     }
-    // Final Combined Response
-    res.json({
-      ...sqlResponse, 
-      operationalTimings 
-    });
+
+    // 3. Build response and cache it
+    const responseData = {
+      ...sqlResponse,
+      operationalTimings,
+      lastUpdated: new Date().toISOString(),
+    };
+
+    // Cache for 25 hours (90000 seconds) — cron refreshes daily, buffer for missed runs
+    await redis.set(cacheKey, JSON.stringify(responseData), 'EX', 90000);
+
+    res.json(responseData);
 
   } catch (err) {
     console.error("❌ Failed to fetch combined SQL and Mongo data:", err);
     res.status(500).json({ error: "Combined data fetch failed" });
+  }
+});
+
+// Admin endpoint to manually refresh dashboard cache
+router.post('/refresh-dashboard-cache', async (req, res) => {
+  try {
+    const { refreshSiteCache, refreshAllSitesCache } = require('../cron_jobs/dashboardCacheCron');
+    const { site } = req.query;
+
+    if (site) {
+      const location = await Location.findOne({ stationName: site }).lean();
+      if (!location) return res.status(404).json({ error: "Site not found" });
+      await refreshSiteCache(location.stationName, location.csoCode);
+      return res.json({ message: `Cache refreshed for ${site}` });
+    }
+
+    await refreshAllSitesCache();
+    res.json({ message: "Cache refreshed for all sites" });
+  } catch (err) {
+    console.error("❌ Dashboard cache refresh failed:", err);
+    res.status(500).json({ error: err.message });
   }
 });
 
