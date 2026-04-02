@@ -27,10 +27,10 @@ const fuelOrderSchema = new mongoose.Schema({
     grade: String,
     ltrs: Number
   }],
-  currentStatus: { type: String, default: "Pending" }, // Current status of the order rec
+  currentStatus: { type: String, default: "Created" }, // Current status of the order rec
   statusHistory: {
     type: [StatusHistorySchema],
-    default: [{ status: "Pending", timestamp: new Date() }]
+    default: [{ status: "Created", timestamp: new Date() }]
   },
 }, {
   timestamps: true // Adds createdAt and updatedAt automatically

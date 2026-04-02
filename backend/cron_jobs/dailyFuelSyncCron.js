@@ -1,4 +1,4 @@
-const cron = require('node-cron');
+const cron = require("node-cron");
 const Location = require('../models/Location');
 const FuelStationTank = require('../models/fuel/FuelStationTank');
 const FuelSales = require('../models/fuel/FuelSales');
@@ -59,8 +59,8 @@ const runDailyFuelSync = async () => {
       console.log(`   [Tanks] Processing ${tanks.length} tanks...`);
 
       for (const tank of tanks) {
-        const { openingVolume: todayOpen } = await getTankReadingsForDate(loc.fuelStationNumber, tank.tankNo, todayStr);
-        const { closingVolume: yesterdayClose } = await getTankReadingsForDate(loc.fuelStationNumber, tank.tankNo, yesterdayStr);
+        const { openingVolume: todayOpen } = await getTankReadingsForDate(loc.csoCode, tank.tankNo, todayStr);
+        const { closingVolume: yesterdayClose } = await getTankReadingsForDate(loc.csoCode, tank.tankNo, yesterdayStr);
 
         const tankDoc = await FuelStationTank.findById(tank._id);
         if (!tankDoc) continue;

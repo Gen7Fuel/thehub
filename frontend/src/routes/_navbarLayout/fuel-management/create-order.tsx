@@ -2,6 +2,7 @@ import {
   useState,
   // useEffect, useMemo 
 } from 'react';
+import { cn } from "@/lib/utils";
 import { createFileRoute } from '@tanstack/react-router';
 import { useQuery } from "@tanstack/react-query"
 import axios from 'axios';
@@ -14,6 +15,8 @@ import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
+import { getGradeTheme } from "./manage/locations/$id"
+import { gradeConfig } from "./workspace"
 
 export const Route = createFileRoute('/_navbarLayout/fuel-management/create-order')({
   component: CreateFuelOrder,
@@ -51,6 +54,12 @@ interface FuelSupplier {
   supplierBadges: SupplierBadge[]; // Array of badges inside the supplier
 }
 
+interface GradeProjection {
+  opening: number;
+  sales: number;
+  capacity: number;
+}
+
 function CreateFuelOrder() {
   // --- State Management ---
   const [racks, setRacks] = useState<any[]>([]);
@@ -79,6 +88,7 @@ function CreateFuelOrder() {
     headers: { Authorization: `Bearer ${localStorage.getItem('token')}` }
   };
 
+  const [projections, setProjections] = useState<Record<string, GradeProjection>>({});
   // --- Fetch Locations using TanStack Query ---
   const { data: locations = [], isLoading: isLoadingLocations } = useQuery({
     queryKey: ['locations-list'],
@@ -119,6 +129,8 @@ function CreateFuelOrder() {
         // We pass the carrier ID directly to avoid stale state issues
         handleRackChange(defaultRackId, stationId, stationDefaultCarrierId);
       }
+      if (formData.deliveryDate) fetchProjections(stationId, formData.deliveryDate);
+
     } catch (err) {
       console.error("Station Change Error:", err);
     }
@@ -140,31 +152,16 @@ function CreateFuelOrder() {
       const rackSuppliers = supplierRes.data;
       setSuppliers(rackSuppliers);
 
-      // --- Inside handleRackChange ---
-
-      // 3. Fetch All Carriers (Optional: You might not even need this fetch 
-      // if the Rack already has the carriers populated, but let's keep it for sync)
-      // const carrierRes = await axios.get('/api/fuel-carriers', authHeader);
-      // const allCarriers = carrierRes.data;
-
-      // // FILTER: Look inside the populated objects
-      // const rackCarriers = allCarriers.filter((c: any) => {
-      //   const carrierId = String(c._id);
-
-      //   return rack.associatedCarriers?.some((associatedObj: any) => {
-      //     // If the backend populated the field, associatedObj is an object.
-      //     // If it didn't, it's just a string. This check handles BOTH cases.
-      //     const comparisonId = associatedObj._id ? String(associatedObj._id) : String(associatedObj);
-      //     return comparisonId === carrierId;
-      //   });
-      // });
-
       // Faster alternative if the Rack is already populated
       const rackCarriers = rack.associatedCarriers || [];
       setCarriers(rackCarriers);
 
-      // setCarriers(rackCarriers);
-      console.log("Filtered Carriers (Population-Aware):", rackCarriers);
+      // 1. Identify the current station from our query data
+      const targetStationId = currentStationId || formData.stationId;
+      const station = locations.find((s: any) => s._id === targetStationId);
+
+      // 2. Get the grades available in the station's tanks (from our new backend field)
+      const stationGrades = station?.availableStationGrades || [];
 
       // Supplier/Badge Logic
       const defaultSup = rackSuppliers.find((s: any) => s._id === rack.defaultSupplier) || rackSuppliers[0];
@@ -179,15 +176,22 @@ function CreateFuelOrder() {
 
       console.log("Carrier Selection - Requested:", finalCarrierId, "Is Allowed:", isAllowed); // LOG 7
 
-      setFormData(prev => ({
-        ...prev,
-        rackId,
-        supplierId: defaultSup?._id || '',
-        badgeNo: defaultBadge?.badgeNumber || '',
-        // If the station's carrier isn't allowed at this rack, pick the first valid one
-        carrierId: isAllowed ? finalCarrierId : (rackCarriers[0]?._id || ''),
-        items: rack.availableGrades.map((g: string) => ({ grade: g, ltrs: 0 }))
-      }));
+      setFormData(prev => {
+        // 3. INTERSECTION LOGIC: 
+        // Only include grades that the Rack provides AND the Station has tanks for
+        const filteredItems = rack.availableGrades
+          .filter((grade: string) => stationGrades.includes(grade))
+          .map((grade: string) => ({ grade, ltrs: 0 }));
+
+        return {
+          ...prev,
+          rackId,
+          supplierId: defaultSup?._id || '',
+          badgeNo: defaultBadge?.badgeNumber || '',
+          carrierId: isAllowed ? finalCarrierId : (rackCarriers[0]?._id || ''),
+          items: filteredItems // Applied the filter here
+        };
+      });
 
       // Trigger PO Generation
       generatePONumber(currentStationId || formData.stationId, formData.orderDate, formData.deliveryDate);
@@ -356,6 +360,28 @@ function CreateFuelOrder() {
     }
   };
 
+  const fetchProjections = async (sId: string, dDate: string) => {
+    if (!sId || !dDate) return;
+    try {
+      const res = await axios.get(`/api/fuel-station-tanks/station/${sId}?date=${dDate}`, authHeader);
+
+      // Group tank data by grade for the UI
+      const grouped = res.data.tanks.reduce((acc: any, tank: any) => {
+        if (!acc[tank.grade]) {
+          acc[tank.grade] = { opening: 0, sales: 0, capacity: 0 };
+        }
+        acc[tank.grade].opening += tank.openingL;
+        acc[tank.grade].sales += tank.estSalesL;
+        acc[tank.grade].capacity += tank.maxVolumeCapacity;
+        return acc;
+      }, {});
+
+      setProjections(grouped);
+    } catch (err) {
+      console.error("Error fetching projections:", err);
+    }
+  };
+
   return (
     <div className="p-6 space-y-6 max-w-[1600px] mx-auto">
       <div className="flex justify-between items-center">
@@ -451,6 +477,7 @@ function CreateFuelOrder() {
                   onChange={(e) => {
                     const newDelDate = e.target.value;
                     setFormData(prev => ({ ...prev, deliveryDate: newDelDate }));
+                    fetchProjections(formData.stationId, newDelDate);
                     generatePONumber(formData.stationId, formData.orderDate, newDelDate);
                   }}
                 />
@@ -579,34 +606,114 @@ function CreateFuelOrder() {
                 Order Items
               </CardTitle>
             </CardHeader>
-            <CardContent className="pt-6 space-y-4">
-              {formData.items.length === 0 && (
-                <div className="text-center py-10 text-muted-foreground">
-                  <AlertCircle className="w-8 h-8 mx-auto mb-2 opacity-20" />
-                  <p>Select a Station & Rack to load fuel grades</p>
-                </div>
-              )}
-              {formData.items.map((item, idx) => (
-                <div key={item.grade} className="flex items-center justify-between p-4 bg-white rounded-lg border shadow-sm">
-                  <span className="font-bold text-slate-700">{item.grade}</span>
-                  <div className="flex items-center gap-2">
-                    <Input
-                      type="number"
-                      className="w-32 text-right font-mono"
-                      placeholder="Liters"
-                      value={item.ltrs || ''}
-                      onChange={(e) => {
-                        const value = Number(e.target.value);
-                        const newItems = [...formData.items];
-                        newItems[idx] = { ...newItems[idx], ltrs: value }; // Keep it immutable
-                        setFormData({ ...formData, items: newItems });
-                      }}
-                    />
-                    <span className="text-xs font-bold text-slate-400">LTRS</span>
+            <CardContent className="pt-1 space-y-4">
+              {/* CASE 1: FORM IS EMPTY (Initial State) */}
+              {!formData.stationId ? (
+                <div className="text-center py-10 text-muted-foreground px-4 animate-in fade-in duration-500">
+                  <div className="bg-slate-50 w-12 h-12 rounded-full flex items-center justify-center mx-auto mb-3">
+                    <Building2 className="w-6 h-6 opacity-20" />
                   </div>
+                  <p className="text-sm font-black uppercase tracking-tight">Awaiting Selection</p>
+                  <p className="text-[10px] mt-1 font-medium">
+                    Select a <strong>Station</strong> and <strong>Rack</strong> to load available fuel grades.
+                  </p>
                 </div>
-              ))}
+              ) : (
+                <>
+                  {/* CASE 2: STATION SELECTED BUT NO OVERLAP WITH RACK (The "Conflict" State) */}
+                  {formData.items.length === 0 ? (
+                    <div className="text-center py-10 px-4 bg-amber-50/50 rounded-xl border border-amber-100 border-dashed animate-in zoom-in-95 duration-300">
+                      <AlertCircle className="w-8 h-8 mx-auto mb-2 text-amber-500" />
+                      <p className="text-sm font-black uppercase tracking-tight text-amber-700">Mismatch Detected</p>
+                      <p className="text-[10px] mt-1 text-amber-600 leading-relaxed font-medium">
+                        The selected <strong>Rack</strong> does not provide any fuel grades that match this <strong>Station's</strong> tank configuration.
+                      </p>
+                    </div>
+                  ) : (
+                    formData.items.map((item, idx) => {
+                      const gradeData = projections[item.grade] || { opening: 0, sales: 0, capacity: 0 };
+                      const userLtrs = Number(item.ltrs) || 0;
 
+                      // Theme & Config details
+                      const theme = getGradeTheme(item.grade);
+                      const config = gradeConfig[item.grade] || { short: item.grade.substring(0, 3).toUpperCase() };
+
+                      // DYNAMIC MATH:
+                      const finalClosing = (gradeData.opening + userLtrs) - gradeData.sales;
+
+                      return (
+                        <div key={item.grade} className="p-3 bg-white rounded-xl border shadow-sm relative overflow-hidden">
+                          {/* High-Contrast Color Accent */}
+                          <div className={cn("absolute left-0 top-0 bottom-0 w-1.5", theme.color)} />
+
+                          {/* TOP ROW: Grade & Input */}
+                          <div className="flex items-center justify-between mb-2">
+                            <div className="flex flex-col leading-tight">
+                              <span className={cn("font-black uppercase italic text-sm tracking-tight", theme.label)}>
+                                {item.grade}
+                              </span>
+                              <span className="text-[10px] font-bold text-slate-400 font-mono uppercase">
+                                {config.short}
+                              </span>
+                            </div>
+
+                            <div className="flex items-center gap-2">
+                              <Input
+                                type="number"
+                                className="h-9 w-28 text-right font-mono font-bold border-2 focus:border-blue-500"
+                                placeholder="0"
+                                value={item.ltrs || ''}
+                                onChange={(e) => {
+                                  const value = Number(e.target.value);
+                                  const newItems = [...formData.items];
+                                  newItems[idx] = { ...newItems[idx], ltrs: value };
+                                  setFormData({ ...formData, items: newItems });
+                                }}
+                              />
+                              <span className="text-[10px] font-black text-slate-400">LTRS</span>
+                            </div>
+                          </div>
+
+                          {/* BOTTOM ROW: Metrics Grid (Compact but readable) */}
+                          <div className="grid grid-cols-3 gap-1 pt-2 border-t border-slate-100">
+                            <div className="flex flex-col">
+                              <span className="text-[9px] font-bold text-slate-400 uppercase leading-none mb-1">Est. Opening</span>
+                              <span className="text-xs font-mono font-bold text-slate-700">
+                                {gradeData.opening.toLocaleString()}
+                              </span>
+                            </div>
+
+                            <div className="flex flex-col">
+                              <span className="text-[9px] font-bold text-slate-400 uppercase leading-none mb-1">Est. Sales</span>
+                              <span className="text-xs font-mono font-bold text-red-500">
+                                -{gradeData.sales.toLocaleString()}
+                              </span>
+                            </div>
+
+                            <div className="flex flex-col items-end">
+                              <span className="text-[9px] font-bold text-blue-500 uppercase leading-none mb-1">Final Closing</span>
+                              <span className={cn(
+                                "text-xs font-mono font-black",
+                                finalClosing > gradeData.capacity ? "text-orange-600" : "text-blue-600"
+                              )}>
+                                {finalClosing.toLocaleString()}
+                              </span>
+                            </div>
+                          </div>
+
+                          {/* OVERFLOW WARNING (Only if needed) */}
+                          {gradeData.capacity > 0 && finalClosing > gradeData.capacity && (
+                            <div className="mt-2 flex items-center gap-1.5 text-[9px] font-black text-orange-600 uppercase bg-orange-50 px-2 py-1 rounded border border-orange-100">
+                              <AlertCircle className="h-3 w-3" />
+                              Exceeds {gradeData.capacity.toLocaleString()}L Capacity
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })
+                  )}
+                </>
+              )}
               {formData.items.length > 0 && (
                 <div className="pt-4 border-t border-dashed">
                   <div className="flex justify-between items-center text-lg font-bold px-2">
@@ -621,6 +728,6 @@ function CreateFuelOrder() {
           </Card>
         </div>
       </div>
-    </div>
+    </div >
   );
 }

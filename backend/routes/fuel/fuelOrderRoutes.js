@@ -23,13 +23,18 @@ router.get('/workspace-orders', async (req, res) => {
 
     const orders = await FuelOrder.find({
       station: stationId,
-      estimatedDeliveryDate: { $gte: start, $lte: end }
+      $or: [
+        // Case A: Scheduled for today
+        { estimatedDeliveryDate: { $gte: start, $lte: end } },
+        // Case B: Originally for today, but moved elsewhere
+        { originalDeliveryDate: { $gte: start, $lte: end } }
+      ]
     })
-    // Mapped to match your Schema exactly (removing 'Id' suffix)
-    .populate('carrier', 'carrierName') 
-    .populate('supplier', 'supplierName')
-    .populate('rack', 'rackName')
-    .lean();
+      // Mapped to match your Schema exactly (removing 'Id' suffix)
+      .populate('carrier', 'carrierName')
+      .populate('supplier', 'supplierName')
+      .populate('rack', 'rackName')
+      .lean();
 
     res.json(orders);
   } catch (err) {
@@ -99,10 +104,10 @@ router.post('/', async (req, res) => {
       carrier: carrierId,
       station: stationId,
       items,
-      currentStatus: "Pending",
+      currentStatus: "Created",
       // History initialized with the creation timestamp
       statusHistory: [
-        { status: "Pending", timestamp: new Date() }
+        { status: "Created", timestamp: new Date() }
       ]
     });
 
@@ -110,6 +115,42 @@ router.post('/', async (req, res) => {
     res.status(201).json(savedOrder);
   } catch (err) {
     console.error("Save Order Error:", err);
+    res.status(500).json({ message: err.message });
+  }
+});
+
+// routes/fuelOrders.js
+router.put('/:id', async (req, res) => {
+  try {
+    const {
+      estimatedDeliveryDate,
+      estimatedDeliveryWindow,
+      items,
+      currentStatus
+    } = req.body;
+
+    const order = await FuelOrder.findById(req.params.id);
+    if (!order) return res.status(404).json({ message: "Order not found" });
+
+    // 1. Handle Rescheduling
+    if (estimatedDeliveryDate) order.estimatedDeliveryDate = estimatedDeliveryDate;
+    if (estimatedDeliveryWindow) order.estimatedDeliveryWindow = estimatedDeliveryWindow;
+
+    // 2. Handle Quantity Updates
+    if (items) order.items = items;
+
+    // 3. Handle Status Update + History
+    if (currentStatus && currentStatus !== order.currentStatus) {
+      order.currentStatus = currentStatus;
+      order.statusHistory.push({
+        status: currentStatus,
+        timestamp: new Date()
+      });
+    }
+
+    await order.save();
+    res.json(order);
+  } catch (err) {
     res.status(500).json({ message: err.message });
   }
 });

@@ -25,16 +25,23 @@ router.get('/all-locations', async (req, res) => {
         $match: { stationId: { $in: storeIds } }
       },
       {
-        $group: { _id: "$stationId", count: { $sum: 1 } }
+        $group: {
+          _id: "$stationId",
+          count: { $sum: 1 },
+          // Collect all fuel grades and then use $addToSet to get unique ones
+          availableGrades: { $addToSet: "$grade" }
+        }
       }
     ]);
 
     // 4. Merge the counts into the store objects
     const merged = locations.map(loc => {
-      const countData = tankCounts.find(t => t._id.toString() === loc._id.toString());
+      const data = tankCounts.find(t => t._id.toString() === loc._id.toString());
       return {
         ...loc,
-        tankCount: countData ? countData.count : 0
+        tankCount: data ? data.count : 0,
+        // Default to empty array if no tanks found
+        availableStationGrades: data ? data.availableGrades : []
       };
     });
 
@@ -214,13 +221,28 @@ router.get('/station/:stationId', async (req, res) => {
           closingL = (openingL + gradeOrders) - estSalesL;
         }
       }
+      // else if (isFuture) {
+      //   // FUTURE: Use the recursive pipeline total divided by number of tanks
+      //   openingL = (gradePipeline[tank.grade] || 0) / tanksOfSameGrade;
+      //   estSalesL = (avgSales[tank.grade] || 0) / tanksOfSameGrade;
+      //   closingL = (openingL + gradeOrders) - estSalesL;
+      // }
       else if (isFuture) {
-        // FUTURE: Use the recursive pipeline total divided by number of tanks
-        openingL = (gradePipeline[tank.grade] || 0) / tanksOfSameGrade;
-        estSalesL = (avgSales[tank.grade] || 0) / tanksOfSameGrade;
-        closingL = (openingL + gradeOrders) - estSalesL;
-      }
+        // FIX: Instead of giving the WHOLE pipeline volume to each tank,
+        // divide it by the number of tanks so the frontend SUM is correct.
 
+        const totalGradeVolume = (gradePipeline[tank.grade] || 0);
+
+        // Calculate the Opening, Sales, and Closing for the WHOLE grade first
+        const totalOpening = totalGradeVolume;
+        const totalSales = (avgSales[tank.grade] || 0);
+        const totalClosing = (totalOpening + gradeOrders) - totalSales;
+
+        // Split them equally across the tanks
+        openingL = totalOpening / tanksOfSameGrade;
+        estSalesL = totalSales / tanksOfSameGrade;
+        closingL = totalClosing / tanksOfSameGrade;
+      }
       return {
         ...tank,
         openingL: Math.round(openingL),
