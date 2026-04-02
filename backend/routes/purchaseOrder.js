@@ -282,7 +282,7 @@ router.get("/", async (req, res) => {
 
   try {
     const orders = await Transaction.find(filter)
-      .select('fleetCardNumber driverName customerName vehicleMakeModel productCode quantity amount signature date receipt poNumber')
+      .select('fleetCardNumber driverName customerName vehicleMakeModel productCode quantity amount signature date receipt poNumber requestReceipt')
       .sort({ date: -1 });
 
     const fleetCardNumbers = orders
