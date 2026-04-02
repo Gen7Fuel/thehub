@@ -5,7 +5,8 @@ const Transaction = require("../models/Transactions");
 const Fleet = require("../models/Fleet");
 const Product = require("../models/Product");
 const TIMEZONE = "America/Toronto";
-// const Location = require("../models/Location");
+const Location = require("../models/Location");
+const { pushNotification } = require("../services/notificationService");
 
 // Create a purchase order
 // router.post("/", async (req, res) => {
@@ -101,6 +102,7 @@ router.put("/:id", express.json(), async (req, res) => {
       'source',
       'customerID',
       'receipt',
+      'requestReceipt',
       'customerName',
       'driverName',
       'vehicleInfo',
@@ -168,6 +170,31 @@ router.put("/:id", express.json(), async (req, res) => {
 
     if (!updatedOrder) {
       return res.status(404).json({ message: "Purchase order not found." })
+    }
+
+    if (updates.requestReceipt === true) {
+      Location.findOne({ stationName: updatedOrder.stationName }, 'email stationName').lean()
+        .then(location => {
+          if (!location?.email) return
+          const redirectUrl = `https://app.gen7fuel.com/po/list`
+          return pushNotification({
+            io: null,
+            recipientEmails: [location.email],
+            bccEmails: ['mohammad@gen7fuel.com'],
+            slug: 'po-receipt-requested',
+            subject: `🧾 Receipt Required – ${location.stationName} – PO #${updatedOrder.poNumber || updatedOrder._id}`,
+            fieldValues: {
+              site: location.stationName,
+              poNumber: updatedOrder.poNumber || String(updatedOrder._id),
+              customerName: updatedOrder.customerName || '',
+              amount: (updatedOrder.amount || 0).toFixed(2),
+              date: new Date(updatedOrder.date).toLocaleDateString('en-CA', { timeZone: 'UTC' }),
+              redirectUrl,
+            },
+            type: 'system',
+          })
+        })
+        .catch(e => console.error('PO receipt notification error:', e))
     }
 
     return res.status(200).json(updatedOrder)
@@ -281,7 +308,7 @@ router.get("/", async (req, res) => {
 
   try {
     const orders = await Transaction.find(filter)
-      .select('fleetCardNumber driverName customerName vehicleMakeModel productCode quantity amount signature date receipt poNumber')
+      .select('fleetCardNumber driverName customerName vehicleMakeModel productCode quantity amount signature date receipt poNumber requestReceipt')
       .sort({ date: -1 });
 
     const fleetCardNumbers = orders

@@ -5,6 +5,7 @@ const Payable = require('../models/Payables');
 const Safesheet = require('../models/Safesheet');
 const { logAction } = require('../middleware/actionLogger');
 const { getPermissionMap } = require('../utils/permissionStore');
+const { pushNotification } = require('../services/notificationService');
 
 // Helper: check if a user has effective access to a permId
 function hasEffectiveAccess(user, role, permId) {
@@ -155,7 +156,7 @@ router.post('/', async (req, res) => {
 // PUT update payable
 router.put('/:id', async (req, res) => {
   try {
-    const { vendorName, location, notes, paymentMethod, amount, images, createdAt } = req.body;
+    const { vendorName, location, notes, paymentMethod, amount, images, createdAt, requestInvoice } = req.body;
 
     // Validation
     if (amount !== undefined && amount < 0) {
@@ -180,6 +181,7 @@ router.put('/:id', async (req, res) => {
     if (paymentMethod !== undefined) updateData.paymentMethod = paymentMethod;
     if (amount !== undefined) updateData.amount = amount;
     if (images !== undefined) updateData.images = images;
+    if (requestInvoice !== undefined) updateData.requestInvoice = requestInvoice;
     if (createdAt !== undefined) updateData.createdAt = new Date(createdAt);
 
     console.log('[PUT /payables/:id] updateData:', updateData);
@@ -205,7 +207,7 @@ router.put('/:id', async (req, res) => {
       req.params.id,
       updateData,
       updateOptions
-    ).populate('location', 'stationName csoCode');
+    ).populate('location', 'stationName csoCode email');
 
     console.log('[PUT /payables/:id] after.createdAt:', payable?.createdAt);
     
@@ -235,6 +237,30 @@ router.put('/:id', async (req, res) => {
         },
       });
     } catch (e) {}
+
+    if (requestInvoice === true) {
+      const loc = payable.location
+      const locationEmail = loc?.email
+      if (locationEmail) {
+        const redirectUrl = `https://app.gen7fuel.com/payables/list`
+        pushNotification({
+          io: null,
+          recipientEmails: [locationEmail],
+          bccEmails: ['mohammad@gen7fuel.com'],
+          slug: 'payable-invoice-requested',
+          subject: `📄 Invoice Required – ${loc.stationName} – ${payable.vendorName}`,
+          fieldValues: {
+            site: loc.stationName,
+            vendorName: payable.vendorName,
+            paymentMethod: payable.paymentMethod,
+            amount: (payable.amount || 0).toFixed(2),
+            date: new Date(payable.createdAt).toLocaleDateString('en-CA', { timeZone: 'UTC' }),
+            redirectUrl,
+          },
+          type: 'system',
+        }).catch(e => console.error('Payable invoice notification error:', e))
+      }
+    }
 
     res.json(payable);
   } catch (error) {

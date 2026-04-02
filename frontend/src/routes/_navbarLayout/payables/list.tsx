@@ -1,13 +1,13 @@
-import { useEffect, useState } from 'react'
+import React, { useEffect, useState, useRef } from 'react'
 import { createFileRoute, useNavigate } from '@tanstack/react-router'
 import { DatePickerWithRange } from '@/components/custom/datePickerWithRange'
 import type { DateRange } from "react-day-picker"
 import { LocationPicker } from '@/components/custom/locationPicker'
 import { Button } from '@/components/ui/button'
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog'
-import { getStartAndEndOfToday, toUTC } from '@/lib/utils'
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog'
+import { getStartAndEndOfToday, toUTC, uploadBase64Image } from '@/lib/utils'
 import { domain } from '@/lib/constants'
-import { Eye, ChevronLeft, ChevronRight, ExternalLink, CalendarIcon } from 'lucide-react'
+import { Eye, ChevronLeft, ChevronRight, ExternalLink, CalendarIcon, Camera, Loader2 } from 'lucide-react'
 import axios from "axios"
 import { useAuth } from "@/context/AuthContext";
 import { FileDown } from 'lucide-react'
@@ -29,6 +29,7 @@ interface Payable {
   amount: number
   images: string[]
   createdAt: string
+  requestInvoice?: boolean
 }
 
 export const Route = createFileRoute('/_navbarLayout/payables/list')({
@@ -62,6 +63,60 @@ function RouteComponent() {
 
   // Track which payable's date popover is open (null = none)
   const [dateEditOpenId, setDateEditOpenId] = useState<string | null>(null)
+
+  // Invoice capture state
+  const invoiceFileInputRef = useRef<HTMLInputElement>(null)
+  const [invoiceTargetPayable, setInvoiceTargetPayable] = useState<Payable | null>(null)
+  const [invoicePreview, setInvoicePreview] = useState<string>('')
+  const [invoiceDialogOpen, setInvoiceDialogOpen] = useState(false)
+  const [uploadingInvoice, setUploadingInvoice] = useState(false)
+
+  const onInvoiceCameraClick = (payable: Payable) => {
+    setInvoiceTargetPayable(payable)
+    invoiceFileInputRef.current?.click()
+  }
+
+  const handleInvoiceCapture = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    if (!file) return
+    const reader = new FileReader()
+    reader.onloadend = () => {
+      setInvoicePreview(reader.result as string)
+      setInvoiceDialogOpen(true)
+    }
+    reader.readAsDataURL(file)
+    e.target.value = ''
+  }
+
+  const submitInvoice = async () => {
+    if (!invoiceTargetPayable || !invoicePreview) return
+    setUploadingInvoice(true)
+    try {
+      const { filename } = await uploadBase64Image(invoicePreview, 'invoice.jpg')
+      const updatedImages = [...invoiceTargetPayable.images, filename]
+      await axios.put(
+        `${domain}/api/payables/${invoiceTargetPayable._id}`,
+        { images: updatedImages, requestInvoice: false },
+        {
+          headers: {
+            Authorization: `Bearer ${localStorage.getItem('token')}`,
+            'X-Required-Permission': 'payables',
+          },
+        }
+      )
+      setPayables(prev =>
+        prev.map(p => p._id === invoiceTargetPayable._id ? { ...p, images: updatedImages, requestInvoice: false } : p)
+      )
+      setInvoiceDialogOpen(false)
+      setInvoicePreview('')
+      setInvoiceTargetPayable(null)
+    } catch (error: any) {
+      if (error.response?.status === 403) navigate({ to: '/no-access' })
+      alert(error.response?.data?.message || error.message || 'Upload failed')
+    } finally {
+      setUploadingInvoice(false)
+    }
+  }
 
   const updatePayableDate = async (payableId: string, newDate: Date) => {
     try {
@@ -272,6 +327,14 @@ function RouteComponent() {
 
   return (
     <div className="p-4 border border-dashed border-gray-300 rounded-md">
+      <input
+        type="file"
+        accept="image/*"
+        capture="environment"
+        className="hidden"
+        ref={invoiceFileInputRef}
+        onChange={handleInvoiceCapture}
+      />
       <h2 className="text-lg font-bold mb-2">Payables List</h2>
 
       <div className="flex justify-around gap-4 border-t border-dashed border-gray-300 mt-4 pt-4">
@@ -327,6 +390,17 @@ function RouteComponent() {
                   </td>
                   <td className="border-dashed border-t border-gray-300 px-4 py-2">
                     <div className="flex gap-2">
+                      {payable.requestInvoice && (
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          onClick={() => onInvoiceCameraClick(payable)}
+                          title="Upload Invoice"
+                          aria-label="Upload Invoice"
+                        >
+                          <Camera className="h-4 w-4" />
+                        </Button>
+                      )}
                       <Button
                         size="sm"
                         variant="outline"
@@ -383,6 +457,37 @@ function RouteComponent() {
           </tbody>
         </table>
       )}
+
+      {/* Invoice Upload Dialog */}
+      <Dialog open={invoiceDialogOpen} onOpenChange={(open) => { if (!uploadingInvoice) { setInvoiceDialogOpen(open); if (!open) setInvoicePreview('') } }}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Upload Invoice</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-3">
+            {invoicePreview && (
+              <img src={invoicePreview} alt="Invoice preview" className="w-full max-h-64 object-contain rounded border" />
+            )}
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => invoiceFileInputRef.current?.click()}
+              disabled={uploadingInvoice}
+            >
+              <Camera className="mr-2 h-3 w-3" />
+              Retake
+            </Button>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => { setInvoiceDialogOpen(false); setInvoicePreview('') }} disabled={uploadingInvoice}>
+              Cancel
+            </Button>
+            <Button onClick={submitInvoice} disabled={uploadingInvoice || !invoicePreview}>
+              {uploadingInvoice ? <><Loader2 className="mr-2 h-4 w-4 animate-spin" />Uploading...</> : 'Submit'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       {/* Image Modal */}
       <Dialog open={imageModal.isOpen} onOpenChange={closeModal}>

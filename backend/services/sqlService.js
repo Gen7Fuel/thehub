@@ -308,6 +308,7 @@ async function getPool() {
         database: process.env.SQL_DB,
         user: process.env.SQL_USER,
         password: process.env.SQL_PASSWORD,
+        requestTimeout: 60000, // 60s per query (default was 15s)
         pool: {
           max: 50, // increase if VPS can handle it
           min: 0,
@@ -317,6 +318,7 @@ async function getPool() {
         options: {
           encrypt: true,
           trustServerCertificate: false,
+          enableArithAbort: true,
         },
       });
 
@@ -595,12 +597,44 @@ async function getAllPeriodData(pool, csoCode, startDate, endDate) {
     .input("startDate", sql.VarChar, dbStartDate)
     .input("endDate", sql.VarChar, dbEndDate)
     .query(`
-      SELECT a.[Date_SK], a.[Hour] AS hours, a.[Type] AS transaction_type,
-        a.[Count of Transaction ID] AS transaction_count
-      FROM [CSO].[TransactionCountByHour] a
-      WHERE a.[Station_SK] = @csoCode
-        AND a.[Date_SK] BETWEEN @startDate AND @endDate
-      ORDER BY a.[Date_SK];
+      WITH Classified AS (
+        SELECT DISTINCT
+              [Station_SK]
+            , [Date_SK]
+            , [Transaction ID]
+            , [Status]
+            , [IsCombined]
+            , CASE
+                  WHEN [Event Start Time] <= CONVERT(TIME, '06:00:00') THEN 'Before 06:00AM'
+                  WHEN [Event Start Time] <= CONVERT(TIME, '07:00:00') THEN '06:00AM - 07:00AM'
+                  WHEN [Event Start Time] <= CONVERT(TIME, '08:00:00') THEN '07:00AM - 08:00AM'
+                  WHEN [Event Start Time] <= CONVERT(TIME, '09:00:00') THEN '08:00AM - 09:00AM'
+                  WHEN [Event Start Time] <= CONVERT(TIME, '10:00:00') THEN '09:00AM - 10:00AM'
+                  WHEN [Event Start Time] <= CONVERT(TIME, '11:00:00') THEN '10:00AM - 11:00AM'
+                  WHEN [Event Start Time] <= CONVERT(TIME, '12:00:00') THEN '11:00AM - 12:00PM'
+                  WHEN [Event Start Time] <= CONVERT(TIME, '13:00:00') THEN '12:00PM - 13:00PM'
+                  WHEN [Event Start Time] <= CONVERT(TIME, '14:00:00') THEN '13:00PM - 14:00PM'
+                  WHEN [Event Start Time] <= CONVERT(TIME, '15:00:00') THEN '14:00PM - 15:00PM'
+                  WHEN [Event Start Time] <= CONVERT(TIME, '16:00:00') THEN '15:00PM - 16:00PM'
+                  WHEN [Event Start Time] <= CONVERT(TIME, '17:00:00') THEN '16:00PM - 17:00PM'
+                  WHEN [Event Start Time] <= CONVERT(TIME, '18:00:00') THEN '17:00PM - 18:00PM'
+                  WHEN [Event Start Time] <= CONVERT(TIME, '19:00:00') THEN '18:00PM - 19:00PM'
+                  WHEN [Event Start Time] <= CONVERT(TIME, '20:00:00') THEN '19:00PM - 20:00PM'
+                  WHEN [Event Start Time] <= CONVERT(TIME, '21:00:00') THEN '20:00PM - 21:00PM'
+                  WHEN [Event Start Time] <= CONVERT(TIME, '22:00:00') THEN '21:00PM - 22:00PM'
+                  WHEN [Event Start Time] <= CONVERT(TIME, '23:00:00') THEN '22:00PM - 23:00PM'
+                  ELSE '23:00PM - 24:00AM'
+              END AS [Hour]
+        FROM [CSO].[SalesTransaction]
+        WHERE [Station_SK] = @csoCode
+          AND [Date_SK] BETWEEN @startDate AND @endDate
+      )
+      SELECT [Date_SK], [Hour] AS hours, 'Fuel'    AS transaction_type, COUNT([Transaction ID]) AS transaction_count FROM Classified WHERE [Status] = 'FUEL'   GROUP BY [Date_SK], [Hour]
+      UNION ALL
+      SELECT [Date_SK], [Hour] AS hours, 'C-Store' AS transaction_type, COUNT([Transaction ID]) AS transaction_count FROM Classified WHERE [Status] <> 'FUEL'  GROUP BY [Date_SK], [Hour]
+      UNION ALL
+      SELECT [Date_SK], [Hour] AS hours, 'Both'    AS transaction_type, COUNT([Transaction ID]) AS transaction_count FROM Classified WHERE [IsCombined] = 1     GROUP BY [Date_SK], [Hour]
+      ORDER BY [Date_SK];
     `);
   const timePeriodResultTransformed = transformTimePeriodData(timePeriodResult.recordset)
   return {
@@ -631,12 +665,15 @@ async function getAllTransactionsData(pool, csoCode, startDate, endDate) {
     .input("startDate", sql.Date, startDate)
     .input("endDate", sql.Date, endDate)
     .query(`
-      SELECT a.[Station_SK], a.[Date], a.[Number of Customer Acct ID] AS visits,
-             a.[Number of Transaction ID] AS transactions, b.[Avg Bucket] AS bucket_size
-      FROM [CSO].[Daily Trans and Acct ID Traffic View] a
+      SELECT 
+          a.[Station_SK], 
+          a.[Date], 
+          a.[Number of Transaction ID] AS transactions, 
+          b.[Avg Bucket] AS bucket_size
+      FROM [CSO].[Daily Transaction Traffic View] a
       LEFT JOIN [CSO].[Avg Bucket] b
-        ON a.[Station_SK] = b.[Station_SK]
-       AND a.[Date] = b.[Date]
+          ON a.[Station_SK] = b.[Station_SK]
+        AND a.[Date] = b.[Date]
       WHERE a.[Station_SK] = @csoCode
         AND a.[Date] BETWEEN @startDate AND @endDate
       ORDER BY a.[Date];
@@ -814,33 +851,33 @@ async function getAllSQLData(csoCode, dates) {
     "tender", "shiftTimings", "bistroWoWSales", "top10Bistro",
   ];
 
-  const results = await Promise.allSettled([
-    retry(() => getCategorizedSalesData(pool, csoCode, salesStart, salesEnd)),
-    retry(() => getGradeVolumeFuelData(pool, csoCode, fuelStart, fuelEnd)),
-    retry(() => getAllTransactionsData(pool, csoCode, transStart, transEnd)),
-    retry(() => getAllPeriodData(pool, csoCode, transStart, transEnd)),
-    retry(() => getAllTendorData(pool, csoCode, transStart, transEnd)),
-    retry(() => getShiftTransactionTimings(pool, csoCode, shiftStart, shiftEnd)),
-    retry(() => getWeeklyBistroSales(pool, csoCode)),
-    retry(() => getTop10Bistro(pool, csoCode)),
-  ]);
-
-  // Log any queries that failed after all retries
-  results.forEach((r, i) => {
-    if (r.status === "rejected") {
-      console.error(`❌ SQL query "${queryNames[i]}" failed after retries:`, r.reason?.message || r.reason);
+  async function runQuery(name, fn) {
+    try {
+      return { status: "fulfilled", value: await retry(fn) };
+    } catch (err) {
+      console.error(`❌ SQL query "${name}" failed after retries:`, err?.message || err);
+      return { status: "rejected" };
     }
-  });
+  }
+
+  const salesResult = await runQuery("sales", () => getCategorizedSalesData(pool, csoCode, salesStart, salesEnd));
+  const fuelResult = await runQuery("fuel", () => getGradeVolumeFuelData(pool, csoCode, fuelStart, fuelEnd));
+  const transResult = await runQuery("transactions", () => getAllTransactionsData(pool, csoCode, transStart, transEnd));
+  const periodResult = await runQuery("timePeriod", () => getAllPeriodData(pool, csoCode, transStart, transEnd));
+  const tenderResult = await runQuery("tender", () => getAllTendorData(pool, csoCode, transStart, transEnd));
+  const shiftResult = await runQuery("shiftTimings", () => getShiftTransactionTimings(pool, csoCode, shiftStart, shiftEnd));
+  const bistroResult = await runQuery("bistroWoWSales", () => getWeeklyBistroSales(pool, csoCode));
+  const top10Result = await runQuery("top10Bistro", () => getTop10Bistro(pool, csoCode));
 
   return {
-    sales: results[0].status === "fulfilled" ? results[0].value : [],
-    fuel: results[1].status === "fulfilled" ? results[1].value : [],
-    transactions: results[2].status === "fulfilled" ? results[2].value.transactions : [],
-    timePeriodTransactions: results[3].status === "fulfilled" ? results[3].value.timePeriodTransactions : [],
-    tenderTransactions: results[4].status === "fulfilled" ? results[4].value.tenderTransactions : [],
-    shiftTransactionTimings: results[5].status === "fulfilled" ? results[5].value : [],
-    bistroWoWSales: results[6].status === "fulfilled" ? results[6].value : [],
-    top10Bistro: results[7].status === "fulfilled" ? results[7].value : [],
+    sales: salesResult.status === "fulfilled" ? salesResult.value : [],
+    fuel: fuelResult.status === "fulfilled" ? fuelResult.value : [],
+    transactions: transResult.status === "fulfilled" ? transResult.value.transactions : [],
+    timePeriodTransactions: periodResult.status === "fulfilled" ? periodResult.value.timePeriodTransactions : [],
+    tenderTransactions: tenderResult.status === "fulfilled" ? tenderResult.value.tenderTransactions : [],
+    shiftTransactionTimings: shiftResult.status === "fulfilled" ? shiftResult.value : [],
+    bistroWoWSales: bistroResult.status === "fulfilled" ? bistroResult.value : [],
+    top10Bistro: top10Result.status === "fulfilled" ? top10Result.value : [],
   };
 }
 
