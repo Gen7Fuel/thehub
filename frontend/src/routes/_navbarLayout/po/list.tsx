@@ -8,10 +8,10 @@ import { LocationPicker } from '@/components/custom/locationPicker'
 import PurchaseOrderPDF from '@/components/custom/poForm'
 import { pdf } from '@react-pdf/renderer'
 import { Button } from '@/components/ui/button'
-import { Trash2 } from 'lucide-react'
+import { Trash2, Camera, Loader2 } from 'lucide-react'
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog'
 import { Label } from '@/components/ui/label'
-import { getStartAndEndOfToday } from '@/lib/utils'
+import { getStartAndEndOfToday, uploadBase64Image } from '@/lib/utils'
 import { DateTime } from 'luxon'
 import axios from "axios"
 import { useAuth } from "@/context/AuthContext";
@@ -49,6 +49,7 @@ function RouteComponent() {
     signature: string;
     receipt: string;
     poNumber: string;
+    requestReceipt?: boolean;
   }[]
   >([]);
 
@@ -167,6 +168,60 @@ function RouteComponent() {
     }
   }
 
+  // Receipt capture state
+  const receiptFileInputRef = React.useRef<HTMLInputElement>(null)
+  const [receiptTargetOrder, setReceiptTargetOrder] = React.useState<any | null>(null)
+  const [receiptPreview, setReceiptPreview] = React.useState<string>('')
+  const [receiptDialogOpen, setReceiptDialogOpen] = React.useState(false)
+  const [uploadingReceipt, setUploadingReceipt] = React.useState(false)
+
+  const onCameraClick = (order: any) => {
+    setReceiptTargetOrder(order)
+    receiptFileInputRef.current?.click()
+  }
+
+  const handleReceiptCapture = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    if (!file) return
+    const reader = new FileReader()
+    reader.onloadend = () => {
+      setReceiptPreview(reader.result as string)
+      setReceiptDialogOpen(true)
+    }
+    reader.readAsDataURL(file)
+    // Reset input so the same file can be re-selected
+    e.target.value = ''
+  }
+
+  const submitReceipt = async () => {
+    if (!receiptTargetOrder || !receiptPreview) return
+    setUploadingReceipt(true)
+    try {
+      const { filename } = await uploadBase64Image(receiptPreview, 'receipt.jpg')
+      await axios.put(
+        `/api/purchase-orders/${receiptTargetOrder._id}`,
+        { receipt: filename },
+        {
+          headers: {
+            Authorization: `Bearer ${localStorage.getItem('token')}`,
+            'X-Required-Permission': 'po',
+          },
+        }
+      )
+      setPurchaseOrders(prev =>
+        prev.map(o => (o as any)._id === receiptTargetOrder._id ? { ...o, receipt: filename, requestReceipt: false } : o)
+      )
+      setReceiptDialogOpen(false)
+      setReceiptPreview('')
+      setReceiptTargetOrder(null)
+    } catch (error: any) {
+      if (error.response?.status === 403) navigate({ to: '/no-access' })
+      alert(error.response?.data?.message || error.message || 'Upload failed')
+    } finally {
+      setUploadingReceipt(false)
+    }
+  }
+
   // Change Date dialog state
   const [changeDateOpen, setChangeDateOpen] = React.useState(false)
   const [selectedOrder, setSelectedOrder] = React.useState<any | null>(null)
@@ -211,8 +266,18 @@ function RouteComponent() {
     }
   }
 
+  const showActionsColumn = !!(access?.po?.pdf || access?.po?.changeDate || access?.po?.delete || purchaseOrders.some(o => o.requestReceipt))
+
   return (
     <div className="p-4 border border-dashed border-gray-300 rounded-md">
+      <input
+        type="file"
+        accept="image/*"
+        capture="environment"
+        className="hidden"
+        ref={receiptFileInputRef}
+        onChange={handleReceiptCapture}
+      />
       <h2 className="text-lg font-bold mb-2">Purchase Order List</h2>
 
       <div className="flex justify-around gap-4 border-t border-dashed border-gray-300 mt-4 pt-4">
@@ -235,7 +300,7 @@ function RouteComponent() {
             <th className="border-dashed border-b border-gray-300 px-4 py-2">Driver Name</th>
             <th className="border-dashed border-b border-gray-300 px-4 py-2">Quantity</th>
             <th className="border-dashed border-b border-gray-300 px-4 py-2">Amount</th>
-            {(access?.po?.pdf || access?.po?.changeDate || access?.po?.delete) && (
+            {showActionsColumn && (
               <th className="border-dashed border-b border-gray-300 px-4 py-2">Actions</th>
             )}
           </tr>
@@ -254,29 +319,41 @@ function RouteComponent() {
                 <td className="border-dashed border-t border-gray-300 px-4 py-2">{order.driverName}</td>
                 <td className="border-dashed border-t border-gray-300 px-4 py-2">{order.quantity}</td>
                 <td className="border-dashed border-t border-gray-300 px-4 py-2">{order.amount.toFixed(2)}</td>
-                  {(access?.po?.pdf || access?.po?.changeDate || access?.po?.delete) && (
-                    <td className="border-dashed border-t border-gray-300 px-4 py-2 space-x-2">
-                      {access?.po?.pdf && (
-                        <Button onClick={() => generatePDF(order)}>PDF</Button>
-                      )}
-                      {access?.po?.changeDate && (
-                        <Button variant="outline" onClick={() => onChangeDateClick(order)}>Change Date</Button>
-                      )}
-                      {access?.po?.delete && (
-                        <Button
-                          variant="destructive"
-                          size="icon"
-                          onClick={() => deleteOrder(order)}
-                          disabled={pendingDelete.has(order._id || '')}
-                          title="Delete"
-                          aria-label="Delete"
-                        >
-                          <Trash2 className="h-4 w-4" />
-                          <span className="sr-only">Delete</span>
-                        </Button>
-                      )}
-                    </td>
-                  )}
+                {showActionsColumn && (
+                  <td className="border-dashed border-t border-gray-300 px-4 py-2 space-x-2">
+                    {order.requestReceipt && (
+                      <Button
+                        variant="outline"
+                        size="icon"
+                        onClick={() => onCameraClick(order)}
+                        title="Upload Receipt"
+                        aria-label="Upload Receipt"
+                      >
+                        <Camera className="h-4 w-4" />
+                        <span className="sr-only">Upload Receipt</span>
+                      </Button>
+                    )}
+                    {access?.po?.pdf && (
+                      <Button onClick={() => generatePDF(order)}>PDF</Button>
+                    )}
+                    {access?.po?.changeDate && (
+                      <Button variant="outline" onClick={() => onChangeDateClick(order)}>Change Date</Button>
+                    )}
+                    {access?.po?.delete && (
+                      <Button
+                        variant="destructive"
+                        size="icon"
+                        onClick={() => deleteOrder(order)}
+                        disabled={pendingDelete.has(order._id || '')}
+                        title="Delete"
+                        aria-label="Delete"
+                      >
+                        <Trash2 className="h-4 w-4" />
+                        <span className="sr-only">Delete</span>
+                      </Button>
+                    )}
+                  </td>
+                )}
               </tr>
             ))
           ) : (
@@ -288,6 +365,37 @@ function RouteComponent() {
           )}
         </tbody>
       </table>
+      {/* Receipt Upload Dialog */}
+      <Dialog open={receiptDialogOpen} onOpenChange={(open) => { if (!uploadingReceipt) { setReceiptDialogOpen(open); if (!open) setReceiptPreview('') } }}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Upload Receipt</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-3">
+            {receiptPreview && (
+              <img src={receiptPreview} alt="Receipt preview" className="w-full max-h-64 object-contain rounded border" />
+            )}
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => receiptFileInputRef.current?.click()}
+              disabled={uploadingReceipt}
+            >
+              <Camera className="mr-2 h-3 w-3" />
+              Retake
+            </Button>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => { setReceiptDialogOpen(false); setReceiptPreview('') }} disabled={uploadingReceipt}>
+              Cancel
+            </Button>
+            <Button onClick={submitReceipt} disabled={uploadingReceipt || !receiptPreview}>
+              {uploadingReceipt ? <><Loader2 className="mr-2 h-4 w-4 animate-spin" />Uploading...</> : 'Submit'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
       {/* Change Date Dialog */}
       <Dialog open={changeDateOpen} onOpenChange={setChangeDateOpen}>
         <DialogContent>
