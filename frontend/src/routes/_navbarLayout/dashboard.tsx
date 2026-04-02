@@ -350,7 +350,6 @@ function RouteComponent() {
   const [loadingInventory, setLoadingInventory] = useState(true);
   const [loadingAccounting, setLoadingAccounting] = useState(true);
   const [loadingSql, setLoadingSql] = useState(true);
-  const [sqlLastUpdated, setSqlLastUpdated] = useState<string | null>(null);
 
 
   const today = new Date();
@@ -525,7 +524,6 @@ function RouteComponent() {
             saveDashboardData(STORES.TENDER_TRANS, site, data.tenderTransactions);
             saveDashboardData(STORES.BISTRO_WOW_SALES, site, data.bistroWoWSales);
             saveDashboardData(STORES.TOP_10_BISTRO, site, data.top10Bistro);
-            if (data.lastUpdated) setSqlLastUpdated(data.lastUpdated);
             return data;
           } catch {
             // Fallback to IndexedDB if API fails
@@ -1334,11 +1332,6 @@ function RouteComponent() {
           <div className="flex gap-4">
             <LocationPicker setStationName={setSite} value="stationName" defaultValue={site} />
             {/* <DatePickerWithRange date={date} setDate={setDate} /> */}
-            {sqlLastUpdated && (
-              <span className="text-xs text-muted-foreground self-center">
-                Data as of {new Date(sqlLastUpdated).toLocaleString()}
-              </span>
-            )}
           </div>
 
           {/* Main container */}
