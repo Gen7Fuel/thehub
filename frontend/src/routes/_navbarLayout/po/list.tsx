@@ -200,7 +200,7 @@ function RouteComponent() {
       const { filename } = await uploadBase64Image(receiptPreview, 'receipt.jpg')
       await axios.put(
         `/api/purchase-orders/${receiptTargetOrder._id}`,
-        { receipt: filename },
+        { receipt: filename, requestReceipt: false },
         {
           headers: {
             Authorization: `Bearer ${localStorage.getItem('token')}`,
