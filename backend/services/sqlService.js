@@ -318,6 +318,7 @@ async function getPool() {
         options: {
           encrypt: true,
           trustServerCertificate: false,
+          enableArithAbort: true,
         },
       });
 
