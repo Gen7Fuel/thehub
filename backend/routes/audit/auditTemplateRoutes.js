@@ -576,6 +576,8 @@ router.get("/open-issues", async (req, res) => {
         frequency: item.frequency,
         assignedTo: item.assignedTo,
         status: item.status,
+        assignee: item.assignee,
+        notes: item.notes,
       };
     });
 

@@ -1334,11 +1334,6 @@ function RouteComponent() {
           <div className="flex gap-4">
             <LocationPicker setStationName={setSite} value="stationName" defaultValue={site} />
             {/* <DatePickerWithRange date={date} setDate={setDate} /> */}
-            {sqlLastUpdated && (
-              <span className="text-xs text-muted-foreground self-center">
-                Data as of {new Date(sqlLastUpdated).toLocaleString()}
-              </span>
-            )}
           </div>
 
           {/* Main container */}
