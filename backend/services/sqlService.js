@@ -597,12 +597,44 @@ async function getAllPeriodData(pool, csoCode, startDate, endDate) {
     .input("startDate", sql.VarChar, dbStartDate)
     .input("endDate", sql.VarChar, dbEndDate)
     .query(`
-      SELECT a.[Date_SK], a.[Hour] AS hours, a.[Type] AS transaction_type,
-        a.[Count of Transaction ID] AS transaction_count
-      FROM [CSO].[TransactionCountByHour] a
-      WHERE a.[Station_SK] = @csoCode
-        AND a.[Date_SK] BETWEEN @startDate AND @endDate
-      ORDER BY a.[Date_SK];
+      WITH Classified AS (
+        SELECT DISTINCT
+              [Station_SK]
+            , [Date_SK]
+            , [Transaction ID]
+            , [Status]
+            , [IsCombined]
+            , CASE
+                  WHEN [Event Start Time] <= CONVERT(TIME, '06:00:00') THEN 'Before 06:00AM'
+                  WHEN [Event Start Time] <= CONVERT(TIME, '07:00:00') THEN '06:00AM - 07:00AM'
+                  WHEN [Event Start Time] <= CONVERT(TIME, '08:00:00') THEN '07:00AM - 08:00AM'
+                  WHEN [Event Start Time] <= CONVERT(TIME, '09:00:00') THEN '08:00AM - 09:00AM'
+                  WHEN [Event Start Time] <= CONVERT(TIME, '10:00:00') THEN '09:00AM - 10:00AM'
+                  WHEN [Event Start Time] <= CONVERT(TIME, '11:00:00') THEN '10:00AM - 11:00AM'
+                  WHEN [Event Start Time] <= CONVERT(TIME, '12:00:00') THEN '11:00AM - 12:00PM'
+                  WHEN [Event Start Time] <= CONVERT(TIME, '13:00:00') THEN '12:00PM - 13:00PM'
+                  WHEN [Event Start Time] <= CONVERT(TIME, '14:00:00') THEN '13:00PM - 14:00PM'
+                  WHEN [Event Start Time] <= CONVERT(TIME, '15:00:00') THEN '14:00PM - 15:00PM'
+                  WHEN [Event Start Time] <= CONVERT(TIME, '16:00:00') THEN '15:00PM - 16:00PM'
+                  WHEN [Event Start Time] <= CONVERT(TIME, '17:00:00') THEN '16:00PM - 17:00PM'
+                  WHEN [Event Start Time] <= CONVERT(TIME, '18:00:00') THEN '17:00PM - 18:00PM'
+                  WHEN [Event Start Time] <= CONVERT(TIME, '19:00:00') THEN '18:00PM - 19:00PM'
+                  WHEN [Event Start Time] <= CONVERT(TIME, '20:00:00') THEN '19:00PM - 20:00PM'
+                  WHEN [Event Start Time] <= CONVERT(TIME, '21:00:00') THEN '20:00PM - 21:00PM'
+                  WHEN [Event Start Time] <= CONVERT(TIME, '22:00:00') THEN '21:00PM - 22:00PM'
+                  WHEN [Event Start Time] <= CONVERT(TIME, '23:00:00') THEN '22:00PM - 23:00PM'
+                  ELSE '23:00PM - 24:00AM'
+              END AS [Hour]
+        FROM [CSO].[SalesTransaction]
+        WHERE [Station_SK] = @csoCode
+          AND [Date_SK] BETWEEN @startDate AND @endDate
+      )
+      SELECT [Date_SK], [Hour] AS hours, 'Fuel'    AS transaction_type, COUNT([Transaction ID]) AS transaction_count FROM Classified WHERE [Status] = 'FUEL'   GROUP BY [Date_SK], [Hour]
+      UNION ALL
+      SELECT [Date_SK], [Hour] AS hours, 'C-Store' AS transaction_type, COUNT([Transaction ID]) AS transaction_count FROM Classified WHERE [Status] <> 'FUEL'  GROUP BY [Date_SK], [Hour]
+      UNION ALL
+      SELECT [Date_SK], [Hour] AS hours, 'Both'    AS transaction_type, COUNT([Transaction ID]) AS transaction_count FROM Classified WHERE [IsCombined] = 1     GROUP BY [Date_SK], [Hour]
+      ORDER BY [Date_SK];
     `);
   const timePeriodResultTransformed = transformTimePeriodData(timePeriodResult.recordset)
   return {
@@ -633,40 +665,18 @@ async function getAllTransactionsData(pool, csoCode, startDate, endDate) {
     .input("startDate", sql.Date, startDate)
     .input("endDate", sql.Date, endDate)
     .query(`
-      WITH per_txn AS (
-        SELECT
-          [Station_SK],
-          [Date],
-          [Transaction ID],
-          AVG([Total Gross Amount]) AS avg_gross
-        FROM [CSO].[SalesTransaction]
-        WHERE [Station_SK] = @csoCode
-          AND [Date] BETWEEN @startDate AND @endDate
-        GROUP BY [Station_SK], [Date], [Transaction ID]
-      ),
-      daily AS (
-        SELECT
-          [Station_SK],
-          [Date],
-          COUNT(DISTINCT [Transaction ID]) AS transactions,
-          COUNT(DISTINCT [Customer Acct ID]) AS visits
-        FROM [CSO].[SalesTransaction]
-        WHERE [Station_SK] = @csoCode
-          AND [Date] BETWEEN @startDate AND @endDate
-        GROUP BY [Station_SK], [Date]
-      )
-      SELECT
-        d.[Station_SK],
-        d.[Date],
-        d.visits,
-        d.transactions,
-        AVG(p.avg_gross) AS bucket_size
-      FROM daily d
-      LEFT JOIN per_txn p
-        ON d.[Station_SK] = p.[Station_SK]
-       AND d.[Date] = p.[Date]
-      GROUP BY d.[Station_SK], d.[Date], d.visits, d.transactions
-      ORDER BY d.[Date];
+      SELECT 
+          a.[Station_SK], 
+          a.[Date], 
+          a.[Number of Transaction ID] AS transactions, 
+          b.[Avg Bucket] AS bucket_size
+      FROM [CSO].[Daily Transaction Traffic View] a
+      LEFT JOIN [CSO].[Avg Bucket] b
+          ON a.[Station_SK] = b.[Station_SK]
+        AND a.[Date] = b.[Date]
+      WHERE a.[Station_SK] = @csoCode
+        AND a.[Date] BETWEEN @startDate AND @endDate
+      ORDER BY a.[Date];
     `);
 
   return {
