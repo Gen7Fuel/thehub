@@ -55,9 +55,14 @@ const transactionSchema = new mongoose.Schema({
     type: String, 
     required: false // Optional: Base64-encoded signature image
   },
-  receipt: { 
-    type: String, 
+  receipt: {
+    type: String,
     required: false // Optional: Base64-encoded receipt image
+  },
+  requestReceipt: {
+    type: Boolean,
+    required: false,
+    default: false,
   },
 });
 

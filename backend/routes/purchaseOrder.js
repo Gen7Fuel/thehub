@@ -101,6 +101,7 @@ router.put("/:id", express.json(), async (req, res) => {
       'source',
       'customerID',
       'receipt',
+      'requestReceipt',
       'customerName',
       'driverName',
       'vehicleInfo',
