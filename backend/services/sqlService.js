@@ -633,15 +633,40 @@ async function getAllTransactionsData(pool, csoCode, startDate, endDate) {
     .input("startDate", sql.Date, startDate)
     .input("endDate", sql.Date, endDate)
     .query(`
-      SELECT a.[Station_SK], a.[Date], a.[Number of Customer Acct ID] AS visits,
-             a.[Number of Transaction ID] AS transactions, b.[Avg Bucket] AS bucket_size
-      FROM [CSO].[Daily Trans and Acct ID Traffic View] a
-      LEFT JOIN [CSO].[Avg Bucket] b
-        ON a.[Station_SK] = b.[Station_SK]
-       AND a.[Date] = b.[Date]
-      WHERE a.[Station_SK] = @csoCode
-        AND a.[Date] BETWEEN @startDate AND @endDate
-      ORDER BY a.[Date];
+      WITH per_txn AS (
+        SELECT
+          [Station_SK],
+          [Date],
+          [Transaction ID],
+          AVG([Total Gross Amount]) AS avg_gross
+        FROM [CSO].[SalesTransaction]
+        WHERE [Station_SK] = @csoCode
+          AND [Date] BETWEEN @startDate AND @endDate
+        GROUP BY [Station_SK], [Date], [Transaction ID]
+      ),
+      daily AS (
+        SELECT
+          [Station_SK],
+          [Date],
+          COUNT(DISTINCT [Transaction ID]) AS transactions,
+          COUNT(DISTINCT [Customer Acct ID]) AS visits
+        FROM [CSO].[SalesTransaction]
+        WHERE [Station_SK] = @csoCode
+          AND [Date] BETWEEN @startDate AND @endDate
+        GROUP BY [Station_SK], [Date]
+      )
+      SELECT
+        d.[Station_SK],
+        d.[Date],
+        d.visits,
+        d.transactions,
+        AVG(p.avg_gross) AS bucket_size
+      FROM daily d
+      LEFT JOIN per_txn p
+        ON d.[Station_SK] = p.[Station_SK]
+       AND d.[Date] = p.[Date]
+      GROUP BY d.[Station_SK], d.[Date], d.visits, d.transactions
+      ORDER BY d.[Date];
     `);
 
   return {
