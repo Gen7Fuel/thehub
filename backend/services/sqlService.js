@@ -815,33 +815,33 @@ async function getAllSQLData(csoCode, dates) {
     "tender", "shiftTimings", "bistroWoWSales", "top10Bistro",
   ];
 
-  const results = await Promise.allSettled([
-    retry(() => getCategorizedSalesData(pool, csoCode, salesStart, salesEnd)),
-    retry(() => getGradeVolumeFuelData(pool, csoCode, fuelStart, fuelEnd)),
-    retry(() => getAllTransactionsData(pool, csoCode, transStart, transEnd)),
-    retry(() => getAllPeriodData(pool, csoCode, transStart, transEnd)),
-    retry(() => getAllTendorData(pool, csoCode, transStart, transEnd)),
-    retry(() => getShiftTransactionTimings(pool, csoCode, shiftStart, shiftEnd)),
-    retry(() => getWeeklyBistroSales(pool, csoCode)),
-    retry(() => getTop10Bistro(pool, csoCode)),
-  ]);
-
-  // Log any queries that failed after all retries
-  results.forEach((r, i) => {
-    if (r.status === "rejected") {
-      console.error(`❌ SQL query "${queryNames[i]}" failed after retries:`, r.reason?.message || r.reason);
+  async function runQuery(name, fn) {
+    try {
+      return { status: "fulfilled", value: await retry(fn) };
+    } catch (err) {
+      console.error(`❌ SQL query "${name}" failed after retries:`, err?.message || err);
+      return { status: "rejected" };
     }
-  });
+  }
+
+  const salesResult = await runQuery("sales", () => getCategorizedSalesData(pool, csoCode, salesStart, salesEnd));
+  const fuelResult = await runQuery("fuel", () => getGradeVolumeFuelData(pool, csoCode, fuelStart, fuelEnd));
+  const transResult = await runQuery("transactions", () => getAllTransactionsData(pool, csoCode, transStart, transEnd));
+  const periodResult = await runQuery("timePeriod", () => getAllPeriodData(pool, csoCode, transStart, transEnd));
+  const tenderResult = await runQuery("tender", () => getAllTendorData(pool, csoCode, transStart, transEnd));
+  const shiftResult = await runQuery("shiftTimings", () => getShiftTransactionTimings(pool, csoCode, shiftStart, shiftEnd));
+  const bistroResult = await runQuery("bistroWoWSales", () => getWeeklyBistroSales(pool, csoCode));
+  const top10Result = await runQuery("top10Bistro", () => getTop10Bistro(pool, csoCode));
 
   return {
-    sales: results[0].status === "fulfilled" ? results[0].value : [],
-    fuel: results[1].status === "fulfilled" ? results[1].value : [],
-    transactions: results[2].status === "fulfilled" ? results[2].value.transactions : [],
-    timePeriodTransactions: results[3].status === "fulfilled" ? results[3].value.timePeriodTransactions : [],
-    tenderTransactions: results[4].status === "fulfilled" ? results[4].value.tenderTransactions : [],
-    shiftTransactionTimings: results[5].status === "fulfilled" ? results[5].value : [],
-    bistroWoWSales: results[6].status === "fulfilled" ? results[6].value : [],
-    top10Bistro: results[7].status === "fulfilled" ? results[7].value : [],
+    sales: salesResult.status === "fulfilled" ? salesResult.value : [],
+    fuel: fuelResult.status === "fulfilled" ? fuelResult.value : [],
+    transactions: transResult.status === "fulfilled" ? transResult.value.transactions : [],
+    timePeriodTransactions: periodResult.status === "fulfilled" ? periodResult.value.timePeriodTransactions : [],
+    tenderTransactions: tenderResult.status === "fulfilled" ? tenderResult.value.tenderTransactions : [],
+    shiftTransactionTimings: shiftResult.status === "fulfilled" ? shiftResult.value : [],
+    bistroWoWSales: bistroResult.status === "fulfilled" ? bistroResult.value : [],
+    top10Bistro: top10Result.status === "fulfilled" ? top10Result.value : [],
   };
 }
 
