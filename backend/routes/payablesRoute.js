@@ -155,7 +155,7 @@ router.post('/', async (req, res) => {
 // PUT update payable
 router.put('/:id', async (req, res) => {
   try {
-    const { vendorName, location, notes, paymentMethod, amount, images, createdAt } = req.body;
+    const { vendorName, location, notes, paymentMethod, amount, images, createdAt, requestInvoice } = req.body;
 
     // Validation
     if (amount !== undefined && amount < 0) {
@@ -180,6 +180,7 @@ router.put('/:id', async (req, res) => {
     if (paymentMethod !== undefined) updateData.paymentMethod = paymentMethod;
     if (amount !== undefined) updateData.amount = amount;
     if (images !== undefined) updateData.images = images;
+    if (requestInvoice !== undefined) updateData.requestInvoice = requestInvoice;
     if (createdAt !== undefined) updateData.createdAt = new Date(createdAt);
 
     console.log('[PUT /payables/:id] updateData:', updateData);

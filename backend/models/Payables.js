@@ -32,10 +32,15 @@ const payableSchema = new mongoose.Schema({
     required: true,
     min: 0 // Amount must be non-negative
   },
-  images: [{ 
-    type: String, 
+  images: [{
+    type: String,
     required: false // Optional array of image URLs or paths
-  }]
+  }],
+  requestInvoice: {
+    type: Boolean,
+    required: false,
+    default: false,
+  },
 }, {
   timestamps: true // Adds createdAt and updatedAt fields automatically
 });

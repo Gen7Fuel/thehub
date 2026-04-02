@@ -96,7 +96,7 @@ function RouteComponent() {
       const updatedImages = [...invoiceTargetPayable.images, filename]
       await axios.put(
         `${domain}/api/payables/${invoiceTargetPayable._id}`,
-        { images: updatedImages },
+        { images: updatedImages, requestInvoice: false },
         {
           headers: {
             Authorization: `Bearer ${localStorage.getItem('token')}`,
