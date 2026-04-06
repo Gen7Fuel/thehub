@@ -167,10 +167,25 @@ export default function RouteComponent() {
   // camera upload
   const cameraInputRef = useRef<HTMLInputElement>(null)
   const [photoTargetEntry, setPhotoTargetEntry] = useState<string | null>(null)
+  const longPressTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   const openCameraForEntry = (entryId: string) => {
     setPhotoTargetEntry(entryId)
     cameraInputRef.current?.click()
+  }
+
+  const handleLongPressStart = (entryId: string) => {
+    longPressTimerRef.current = setTimeout(() => {
+      openCameraForEntry(entryId)
+      longPressTimerRef.current = null
+    }, 500)
+  }
+
+  const handleLongPressEnd = () => {
+    if (longPressTimerRef.current) {
+      clearTimeout(longPressTimerRef.current)
+      longPressTimerRef.current = null
+    }
   }
 
   // fmtNumber and fmtNumberShowZero are imported from @/lib/safesheetUtils
@@ -844,11 +859,15 @@ export default function RouteComponent() {
                                       {/* <span className="text-xs font-medium">Add Photo</span> */}
                                     </Button>
                                   ) : (
-                                    // Photo exists → Show "View Photo"
+                                    // Photo exists → Show "View Photo"; right-click/long-press to replace
                                     <Button
                                       size="sm"
                                       variant="default"
                                       onClick={() => window.open(`/cdn/download/${e.photo}`, '_blank')}
+                                      onContextMenu={(ev) => { ev.preventDefault(); openCameraForEntry(e._id) }}
+                                      onTouchStart={() => handleLongPressStart(e._id)}
+                                      onTouchEnd={handleLongPressEnd}
+                                      onTouchMove={handleLongPressEnd}
                                       className="flex items-center gap-2 px-3 py-1.5 bg-green-600 hover:bg-green-700 text-white rounded-md"
                                     >
                                       <ImageIcon className="w-4 h-4" />
