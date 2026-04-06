@@ -1,10 +1,11 @@
 import { createFileRoute, useNavigate } from '@tanstack/react-router'
 import { useState, useEffect, useMemo } from 'react'
+import { useAuth } from '@/context/AuthContext'
 import { SitePicker } from '@/components/custom/sitePicker'
 import { DatePickerWithRange } from '@/components/custom/datePickerWithRange'
 import { Card, CardContent } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
-import { Loader2, Calculator, Wallet, TrendingUp, Landmark, MessageSquare } from 'lucide-react'
+import { Loader2, Calculator, Wallet, TrendingUp, Landmark, MessageSquare, User, Users, Clock } from 'lucide-react'
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog"
 
 // --- Helpers ---
@@ -23,9 +24,14 @@ function OverShortReport() {
   const { site, date } = Route.useSearch()
   const navigate = useNavigate({ from: Route.fullPath })
 
+  const { user } = useAuth();
+
+  const access = user?.access;
+
   const [data, setData] = useState<any[]>([])
   const [safesheetData, setSafesheetData] = useState<any[]>([])
   const [loading, setLoading] = useState(false)
+  const [selectedEmployeeId, setSelectedEmployeeId] = useState<string | null>(null) // New Filter State
   const [_, setError] = useState<string | null>(null)
 
   const [currentRange, setCurrentRange] = useState<{ from: Date | undefined; to: Date | undefined }>(() => {
@@ -70,9 +76,41 @@ function OverShortReport() {
     return map
   }, [safesheetData])
 
-  // Fixed Totals Calculation to prevent NaN
+  // // Fixed Totals Calculation to prevent NaN
+  // const totals = useMemo(() => {
+  //   return data.reduce((acc, row) => {
+  //     const daySafe = safesheetMap.get(row.date)
+  //     return {
+  //       overShort: acc.overShort + (Number(row.overShort) || 0),
+  //       sales: acc.sales + (Number(row.report_canadian_cash) || 0),
+  //       collected: acc.collected + (Number(row.canadian_cash_collected) || 0),
+  //       deposits: acc.deposits + (Number(daySafe?.bankDepositTotal) || 0)
+  //     }
+  //   }, { overShort: 0, sales: 0, collected: 0, deposits: 0 })
+  // }, [data, safesheetMap])
+
+  // 1. Get Unique Employees for the Filter Cards
+  const uniqueEmployees = useMemo(() => {
+    const empMap = new Map();
+    data.forEach(row => {
+      row.employees?.forEach((emp: any) => {
+        empMap.set(emp.id, emp.name);
+      });
+    });
+    return Array.from(empMap.entries()).map(([id, name]) => ({ id, name }));
+  }, [data]);
+
+  // 2. Filter Data based on selected employee
+  const filteredData = useMemo(() => {
+    if (!selectedEmployeeId) return data;
+    return data.filter(row =>
+      row.employees?.some((emp: any) => emp.id === selectedEmployeeId)
+    );
+  }, [data, selectedEmployeeId]);
+
+  // 3. Totals should reflect the filtered view
   const totals = useMemo(() => {
-    return data.reduce((acc, row) => {
+    return filteredData.reduce((acc, row) => {
       const daySafe = safesheetMap.get(row.date)
       return {
         overShort: acc.overShort + (Number(row.overShort) || 0),
@@ -81,9 +119,11 @@ function OverShortReport() {
         deposits: acc.deposits + (Number(daySafe?.bankDepositTotal) || 0)
       }
     }, { overShort: 0, sales: 0, collected: 0, deposits: 0 })
-  }, [data, safesheetMap])
+  }, [filteredData, safesheetMap])
 
   const setSearch = (next: any) => navigate({ search: (prev: any) => ({ ...prev, ...next }) })
+
+  // const setSearch = (next: any) => navigate({ search: (prev: any) => ({ ...prev, ...next }) })
 
   return (
     <div className="pt-5 flex flex-col items-center min-h-screen bg-slate-50 pb-10">
@@ -105,16 +145,40 @@ function OverShortReport() {
       {site && (
         <div className="w-full max-w-7xl px-4 space-y-6">
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-            <SummaryCard
-              title="Net Over/Short"
-              value={totals.overShort}
-              icon={<Calculator size={20} />}
-              variant={totals.overShort < 0 ? "danger" : totals.overShort > 0 ? "success" : "default"}
-            />
+            <SummaryCard title="Net Over/Short" value={totals.overShort} icon={<Calculator size={20} />} variant={totals.overShort < 0 ? "danger" : totals.overShort > 0 ? "success" : "default"} />
             <SummaryCard title="Total Cash Sales" value={totals.sales} icon={<TrendingUp size={20} />} variant="default" />
             <SummaryCard title="Total Cash Collected" value={totals.collected} icon={<Wallet size={20} />} variant="info" />
             <SummaryCard title="Total Bank Deposits" value={totals.deposits} icon={<Landmark size={20} />} variant="warning" />
           </div>
+
+          {access?.accounting?.cashSummary?.overShortReport?.viewEmployeeInfo && (
+            <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm">
+              <div className="flex items-center gap-2 mb-3 text-slate-500">
+                <Users size={16} />
+                <span className="text-xs font-bold uppercase tracking-wider">Filter by Staff on Duty</span>
+                {selectedEmployeeId && (
+                  <button onClick={() => setSelectedEmployeeId(null)} className="ml-auto text-xs text-blue-600 hover:underline">Clear Filter</button>
+                )}
+              </div>
+              <div className="flex flex-wrap gap-2">
+                {uniqueEmployees.map(emp => (
+                  <button
+                    key={emp.id}
+                    onClick={() => setSelectedEmployeeId(selectedEmployeeId === emp.id ? null : emp.id)}
+                    className={`px-3 py-1.5 rounded-lg border text-xs transition-all flex items-center gap-2 ${selectedEmployeeId === emp.id
+                      ? 'bg-blue-600 border-blue-700 text-white shadow-md'
+                      : 'bg-white border-slate-200 text-slate-600 hover:border-blue-300 hover:bg-blue-50'
+                      }`}
+                  >
+                    <User size={12} className={selectedEmployeeId === emp.id ? 'text-blue-100' : 'text-slate-400'} />
+                    <span className="font-medium">
+                      {emp.name.split(' ').map((p:any) => p.charAt(0).toUpperCase() + p.slice(1).toLowerCase()).join(' ')}
+                    </span>
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
 
           <div className="overflow-hidden border border-slate-300 rounded-xl shadow-md bg-white">
             <table className="min-w-full text-sm border-collapse">
@@ -126,19 +190,22 @@ function OverShortReport() {
                   <th className="px-4 py-4 text-right font-semibold">Bank Deposit (C$)</th>
                   <th className="px-4 py-4 text-right font-semibold">Safe Balance (C$)</th>
                   <th className="px-4 py-4 text-center font-semibold">Over/Short (C$)</th>
+                  {access?.accounting?.cashSummary?.overShortReport?.viewEmployeeInfo && (
+                    <th className="px-4 py-4 text-left font-semibold">Employee</th>
+                  )}
                   <th className="px-4 py-4 text-left font-semibold">Managers Notes</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-200">
                 {loading ? (
                   <tr>
-                    <td colSpan={7} className="py-20 text-center">
+                    {/* Updated colSpan to 8 to account for the new column */}
+                    <td colSpan={access?.accounting?.cashSummary?.overShortReport?.viewEmployeeInfo ? 8 : 7} className="py-20 text-center">
                       <Loader2 className="animate-spin mx-auto text-slate-400" />
                     </td>
                   </tr>
                 ) : (
-                  // Sort descending: later dates (e.g. 2024-05-20) will appear before earlier ones (2024-05-01)
-                  [...data]
+                  [...filteredData]
                     .sort((a, b) => b.date.localeCompare(a.date))
                     .map((row) => {
                       const daySafe = safesheetMap.get(row.date);
@@ -147,13 +214,7 @@ function OverShortReport() {
                       const isOver = v > 0.01;
 
                       return (
-                        <tr
-                          key={row.date}
-                          className={`transition-colors ${isShort ? 'bg-red-50/30 hover:bg-red-50/50' :
-                            isOver ? 'bg-green-50/30 hover:bg-green-50/50' :
-                              'hover:bg-slate-50'
-                            }`}
-                        >
+                        <tr key={row.date} className={`transition-colors ${isShort ? 'bg-red-50/30' : isOver ? 'bg-green-50/30' : 'hover:bg-slate-50'}`}>
                           <td className="px-4 py-4 font-bold text-slate-700">{row.date}</td>
                           <td className="px-4 py-4 text-right font-medium text-blue-600">
                             {row.canadian_cash_collected.toLocaleString(undefined, { minimumFractionDigits: 2 })}
@@ -163,7 +224,7 @@ function OverShortReport() {
                           </td>
                           <td className="px-4 py-4 text-right font-medium text-emerald-600">
                             {daySafe?.bankDepositTotal > 0 ? (
-                              `${daySafe.bankDepositTotal.toLocaleString(undefined, { minimumFractionDigits: 2 })}`
+                              daySafe.bankDepositTotal.toLocaleString(undefined, { minimumFractionDigits: 2 })
                             ) : (
                               <span className="text-slate-300">—</span>
                             )}
@@ -182,6 +243,14 @@ function OverShortReport() {
                               {v < 0 ? '-' : v > 0 ? '+' : ''}{Math.abs(v).toLocaleString(undefined, { minimumFractionDigits: 2 })}
                             </Badge>
                           </td>
+
+                          {/* Permission Check for the Staff Column - Removed the internal comment that was breaking it */}
+                          {access?.accounting?.cashSummary?.overShortReport?.viewEmployeeInfo && (
+                            <td className="px-4 py-4">
+                              <StaffCell date={row.date} employees={row.employees} />
+                            </td>
+                          )}
+
                           <td className="px-4 py-4">
                             <NoteCell date={row.date} note={row.notes} variance={v} />
                           </td>
@@ -193,8 +262,92 @@ function OverShortReport() {
             </table>
           </div>
         </div>
-      )}
-    </div>
+      )
+      }
+    </div >
+  )
+}
+
+function StaffCell({ date, employees }: { date: string, employees?: any[] }) {
+  if (!employees || employees.length === 0) return <span className="text-slate-300 italic text-[10px]">No staff data</span>
+
+  // Helper to extract time HH:mm from raw string without timezone conversion
+  const formatRawTime = (dateStr: string) => {
+    if (!dateStr) return 'N/A';
+    try {
+      // Handles both "2026-04-03T14:30:00" and "2026-04-03 14:30:00"
+      const timePart = dateStr.includes('T') ? dateStr.split('T')[1] : dateStr.split(' ')[1];
+      return timePart ? timePart.substring(0, 5) : dateStr;
+    } catch (e) {
+      return 'N/A';
+    }
+  }
+
+  // Sort employees by start time (Earliest to Latest)
+  const sortedEmployees = useMemo(() => {
+    return [...employees].sort((a, b) => {
+      const timeA = a.startDate || "";
+      const timeB = b.startDate || "";
+      return timeA.localeCompare(timeB);
+    });
+  }, [employees]);
+
+  return (
+    <Dialog>
+      <DialogTrigger asChild>
+        <button className="text-[11px] font-bold text-blue-600 hover:text-blue-800 underline decoration-dotted underline-offset-4 flex items-center gap-1">
+          <Users size={12} />
+          View ({employees.length})
+        </button>
+      </DialogTrigger>
+      <DialogContent className="sm:max-w-lg">
+        <DialogHeader>
+          <DialogTitle className="flex items-center gap-2">
+            <Users className="text-slate-400" />
+            Staff on Duty — {date}
+          </DialogTitle>
+        </DialogHeader>
+        <div className="mt-4 space-y-3 max-h-[60vh] overflow-y-auto pr-2 custom-scrollbar">
+          {sortedEmployees.map((emp) => (
+            <div key={emp.id} className="p-3 border rounded-lg bg-slate-50 flex flex-col gap-2 shadow-sm border-slate-200">
+              <div className="flex justify-between items-center border-b border-slate-200 pb-2">
+                <span className="font-bold text-slate-900">
+                  {emp.name
+                    .split(' ')
+                    .filter(Boolean) // This handles extra spaces if any
+                    .map((part: string) => {
+                      // Capitalize first letter, lowercase the rest for every part of the name
+                      return part.charAt(0).toUpperCase() + part.slice(1).toLowerCase();
+                    })
+                    .join(' ')}
+                </span>
+                <Badge variant="secondary" className="font-mono text-[10px] bg-slate-200 text-slate-700">
+                  ID: {emp.id}
+                </Badge>
+              </div>
+              <div className="grid grid-cols-2 gap-4 pt-1">
+                <div className="space-y-1">
+                  <p className="text-[9px] uppercase font-bold text-slate-400 flex items-center gap-1">
+                    <Clock size={10} /> Shift Start
+                  </p>
+                  <p className="text-sm text-slate-700 font-semibold font-mono">
+                    {formatRawTime(emp.startDate)}
+                  </p>
+                </div>
+                <div className="space-y-1">
+                  <p className="text-[9px] uppercase font-bold text-slate-400 flex items-center gap-1">
+                    <Clock size={10} /> Shift End
+                  </p>
+                  <p className="text-sm text-slate-700 font-semibold font-mono">
+                    {formatRawTime(emp.endDate)}
+                  </p>
+                </div>
+              </div>
+            </div>
+          ))}
+        </div>
+      </DialogContent>
+    </Dialog>
   )
 }
 
