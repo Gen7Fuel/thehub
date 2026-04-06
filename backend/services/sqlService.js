@@ -794,6 +794,31 @@ async function getRefundTransactions(csoCode, date) {
   }
 }
 
+async function getShiftEmployees(csoCode, startDate, endDate) {
+  const pool = await getPool();
+  const result = await pool.request()
+    .input("csoCode", sql.VarChar, csoCode)
+    .input("startDate", sql.DateTime2, startDate)
+    .input("endDate", sql.DateTime2, endDate)
+    .query(`
+      SELECT 
+        e.[firstName], 
+        e.[lastName], 
+        t.[startDate], 
+        t.[endDate], 
+        e.[employeeId]
+      FROM [Payworks].[Timesheets] t 
+      LEFT JOIN [Payworks].[Employees] e ON t.[employeeId] = e.[employeeId] 
+      WHERE t.[status] = 'Approved' 
+        AND t.[Station_SK] = @csoCode 
+        AND t.[position] NOT LIKE '%Manager%'
+        -- Logic: Shift started before the end of our range AND ended after the start of our range
+        AND t.[startDate] <= @endDate 
+        AND t.[endDate] >= @startDate
+    `);
+  return result.recordset;
+}
+
 function formatDateForDB(dateString) {
   // input: "2025-11-14"
   // output: "20251114"
@@ -902,4 +927,5 @@ module.exports = {
   getShiftTransactionTimings,
   getBulkUnitPriceCSO,
   getBulkCSOData,
+  getShiftEmployees
 };

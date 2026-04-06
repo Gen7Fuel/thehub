@@ -114,7 +114,7 @@ function RouteComponent() {
             </Button>
           </Link>
         )}
-        {access?.accounting?.cashSummary?.overShortReport && (
+        {access?.accounting?.cashSummary?.overShortReport?.value && (
           <Link
             to="/cash-summary/over-short-report"
             search={(prev: any) => ({ ...prev })}

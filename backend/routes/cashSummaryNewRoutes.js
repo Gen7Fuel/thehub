@@ -11,7 +11,7 @@ const { sendEmail } = require('../utils/emailService')
 const { generateCashSummaryPdf } = require('../utils/cashSummaryPdf')
 const { generateShiftReportsPdf } = require('../utils/shiftReportsPdf')
 const { generateLotteryImagesPdf } = require('../utils/lotteryImagesPdf')
-const { getRefundTransactions } = require('../services/sqlService');
+const { getRefundTransactions, getShiftEmployees } = require('../services/sqlService');
 
 const path = require('path')
 
@@ -282,6 +282,7 @@ router.get('/over-short', async (req, res) => {
     // 1️⃣ Check if site sells lottery
     const location = await Location.findOne({ stationName: site }).lean();
     const sellsLottery = location?.sellsLottery || false;
+    const csoCode = location?.csoCode;
 
     // const end = new Date();
     // end.setHours(0, 0, 0, 0);
@@ -304,20 +305,43 @@ router.get('/over-short', async (req, res) => {
     start.setHours(0, 0, 0, 0);
     end.setHours(23, 59, 59, 999);
 
-    // 3️⃣ Fetch submitted reports (Contains unsettledPrepays and handheldDebit)
-    const reports = await CashSummaryReport.find({
-      site,
-      submitted: true,
-      date: { $gte: start, $lte: end },
-    }).sort({ date: 1 }).lean();
+    // 1. Parallel Fetch: Mongo Data + SQL Employee Data
+    const [reports, shifts, employeeRecords] = await Promise.all([
+      CashSummaryReport.find({ site, submitted: true, date: { $gte: start, $lte: end } }).sort({ date: 1 }).lean(),
+      CashSummary.find({ site, date: { $gte: start, $lte: new Date(end.getTime() + 86400000) } }).lean(),
+      csoCode ? getShiftEmployees(csoCode, start, end) : Promise.resolve([])
+    ]);
 
     if (!reports.length) return res.json([]);
 
-    // 4️⃣ Fetch all shifts for these dates to get the "Bullock" totals
-    const shifts = await CashSummary.find({
-      site,
-      date: { $gte: start, $lte: new Date(end.getTime() + 24 * 60 * 60 * 1000) },
-    }).lean();
+    // 2. Map Employees to Dates
+    // A shift can span multiple days, so we check each day in the range
+    const employeesByDate = {};
+    employeeRecords.forEach(emp => {
+      // Use the raw date from SQL to determine which days the shift spans
+      const shiftStart = new Date(emp.startDate);
+      const shiftEnd = new Date(emp.endDate);
+
+      let current = new Date(shiftStart);
+      // Ensure we don't get stuck in an infinite loop if dates are invalid
+      while (current <= shiftEnd) {
+        const dateKey = current.toISOString().split('T')[0];
+        if (!employeesByDate[dateKey]) employeesByDate[dateKey] = new Map();
+
+        // Map uses employeeId as key to keep them unique per day
+        employeesByDate[dateKey].set(emp.employeeId, {
+          id: emp.employeeId,
+          name: `${emp.firstName} ${emp.lastName}`,
+          // Pass the raw strings directly to avoid JS Date timezone shifting
+          startDate: emp.startDate,
+          endDate: emp.endDate
+        });
+
+        current.setDate(current.getDate() + 1);
+        // Break if the shift somehow spans more than 2 days (sanity check)
+        if (current.getDate() > shiftStart.getDate() + 2) break;
+      }
+    });
 
     // 5️⃣ Fetch Lottery docs if applicable
     let lotteryMap = {};
@@ -407,6 +431,7 @@ router.get('/over-short', async (req, res) => {
         report_canadian_cash: adjustedReported,
         shifts: totals.shifts,
         notes: r.notes || '',
+        employees: Array.from(employeesByDate[dateStr]?.values() || [])
       };
     });
 
