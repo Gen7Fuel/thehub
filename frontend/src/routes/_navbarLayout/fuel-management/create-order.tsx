@@ -58,6 +58,7 @@ interface GradeProjection {
   opening: number;
   sales: number;
   capacity: number;
+  closing: number;
 }
 
 function CreateFuelOrder() {
@@ -368,11 +369,12 @@ function CreateFuelOrder() {
       // Group tank data by grade for the UI
       const grouped = res.data.tanks.reduce((acc: any, tank: any) => {
         if (!acc[tank.grade]) {
-          acc[tank.grade] = { opening: 0, sales: 0, capacity: 0 };
+          acc[tank.grade] = { opening: 0, sales: 0, capacity: 0, closing: 0 };
         }
         acc[tank.grade].opening += tank.openingL;
         acc[tank.grade].sales += tank.estSalesL;
         acc[tank.grade].capacity += tank.maxVolumeCapacity;
+        acc[tank.grade].closing += tank.closingL;
         return acc;
       }, {});
 
@@ -631,7 +633,7 @@ function CreateFuelOrder() {
                     </div>
                   ) : (
                     formData.items.map((item, idx) => {
-                      const gradeData = projections[item.grade] || { opening: 0, sales: 0, capacity: 0 };
+                      const gradeData = projections[item.grade] || { opening: 0, sales: 0, capacity: 0, closing: 0 };
                       const userLtrs = Number(item.ltrs) || 0;
 
                       // Theme & Config details
@@ -639,7 +641,7 @@ function CreateFuelOrder() {
                       const config = gradeConfig[item.grade] || { short: item.grade.substring(0, 3).toUpperCase() };
 
                       // DYNAMIC MATH:
-                      const finalClosing = (gradeData.opening + userLtrs) - gradeData.sales;
+                      const finalClosing = (gradeData.closing + userLtrs);
 
                       return (
                         <div key={item.grade} className="p-3 bg-white rounded-xl border shadow-sm relative overflow-hidden">
@@ -705,7 +707,7 @@ function CreateFuelOrder() {
                           {gradeData.capacity > 0 && finalClosing > gradeData.capacity && (
                             <div className="mt-2 flex items-center gap-1.5 text-[9px] font-black text-orange-600 uppercase bg-orange-50 px-2 py-1 rounded border border-orange-100">
                               <AlertCircle className="h-3 w-3" />
-                              Exceeds {gradeData.capacity.toLocaleString()}L Capacity
+                              Overflow Risk: Exceeds {gradeData.capacity.toLocaleString()}L Capacity
                             </div>
                           )}
                         </div>

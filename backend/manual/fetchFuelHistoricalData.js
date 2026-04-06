@@ -79,7 +79,7 @@ async function syncFuelSales() {
   console.log('🚀 Starting Fuel Sales Sync (From March 9th)...');
 
   // Fetch only active fuel stations
-  const locations = await Location.find({ type: 'store', stationName: 'Silver Grizzly' });
+  const locations = await Location.find({ type: 'store', stationName: 'Charlies' });
   const startDate = new Date('2026-03-09T00:00:00');
   const today = new Date();
   const dayNames = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
@@ -99,7 +99,7 @@ async function syncFuelSales() {
 
       try {
         // CALL THE REUSABLE SERVICE
-        const salesData = await getProcessedFuelSales(loc.csoCode, dateStr);
+        const { salesData, lastTransaction } = await getProcessedFuelSales(loc.csoCode, dateStr);
 
         if (salesData.length > 0) {
           await FuelSales.findOneAndUpdate(
