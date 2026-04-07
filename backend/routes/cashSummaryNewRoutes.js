@@ -1095,7 +1095,7 @@ router.post('/submit/to/safesheet', async (req, res) => {
 
           if (depositSlip) attachments.push(depositSlip)
 
-          let cc = ['mohammad@gen7fuel.com', 'JDzyngel@gen7fuel.com', 'ana@gen7fuel.com']
+          let cc = ['mohammad@gen7fuel.com', 'JDzyngel@gen7fuel.com']
 
           if (site === 'Oliver' || site === 'Osoyoos') {
             cc.push('ZBaptiste@oib.ca');
