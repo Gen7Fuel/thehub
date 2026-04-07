@@ -16,8 +16,23 @@ export const getRankedFuelInventory = async () => {
   return data.map(item => ({
     Station_SK: item.station_sk_out,
     Fuel_Grade: item.fuel_grade_out,
-    Stick_L: item.stick_l_out,
-    LastReadingTime: item.last_reading_time
+    Stick_L: item.stick_l_out
+  }));
+};
+
+export const getLiveTankVolumes = async () => {
+  const { data, error } = await supabase.rpc('get_live_tank_volumes');
+
+  if (error) {
+    console.error('Database Error:', error.message);
+    throw new Error(`Could not fetch inventory: ${error.message}`);
+  }
+
+  return data.map(item => ({
+    Station_SK: item.station_sk_out,
+    Tank_No: item.tank_id_out, // Now returning specific tank ID
+    Volume: item.volume_out,
+    ReadingTime: item.reading_time_out
   }));
 };
 
