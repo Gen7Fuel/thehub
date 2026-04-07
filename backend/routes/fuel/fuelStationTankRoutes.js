@@ -4,6 +4,7 @@ const Location = require('../../models/Location');
 const FuelStationTank = require('../../models/fuel/FuelStationTank');
 const FuelSales = require('../../models/fuel/FuelSales');
 const FuelOrder = require('../../models/fuel/FuelOrder');
+const { getRankedFuelInventory } = require('../../services/supaBaseService');
 
 
 // @route   GET /api/fuel-station-tanks/all-locations
@@ -258,6 +259,42 @@ router.get('/station/:stationId', async (req, res) => {
       // Add this metadata to the top level of the response
       lastTransaction: actualSalesRecord?.lastTransactionAt || null
     });
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+});
+
+router.get('/sync-volumes/:stationId', async (req, res) => {
+  try {
+    const { stationId } = req.params;
+
+    // 1. Fetch from Supabase
+    const supabaseData = await getRankedFuelInventory();
+    const stationReadings = supabaseData.filter(d => d.Station_SK === stationId);
+
+    // 2. Fetch MongoDB Tanks
+    const tanks = await FuelStationTank.find({ stationId });
+
+    const updatePromises = tanks.map(tank => {
+      const reading = stationReadings.find(r => r.Fuel_Grade === tank.grade);
+
+      if (reading) {
+        const tanksOfGrade = tanks.filter(t => t.grade === tank.grade).length;
+        const perTankVolume = Math.round(reading.Stick_L / tanksOfGrade);
+
+        return FuelStationTank.findByIdAndUpdate(tank._id, {
+          currentVolume: perTankVolume,
+          // Directly saving the string "HH:mm:ss"
+          lastUpdatedVolumeReadingDateTime: reading.LastReadingTime
+        });
+      }
+      return Promise.resolve();
+    });
+
+    await Promise.all(updatePromises);
+
+    const updatedTanks = await FuelStationTank.find({ stationId }).lean();
+    res.json(updatedTanks);
   } catch (err) {
     res.status(500).json({ message: err.message });
   }

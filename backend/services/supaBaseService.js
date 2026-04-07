@@ -16,7 +16,8 @@ export const getRankedFuelInventory = async () => {
   return data.map(item => ({
     Station_SK: item.station_sk_out,
     Fuel_Grade: item.fuel_grade_out,
-    Stick_L: item.stick_l_out
+    Stick_L: item.stick_l_out,
+    LastReadingTime: item.last_reading_time
   }));
 };
 
@@ -54,6 +55,7 @@ export const getTankReadingsForDate = async (station_sk, tank_id, dateStr) => {
 
   return {
     openingVolume: openData?.[0]?.volume || 0,
+    openingTime: openData?.[0]?.reading_time || "05:00:00",
     closingVolume: closeData?.[0]?.volume || 0
   };
 };

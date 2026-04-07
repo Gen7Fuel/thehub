@@ -8,7 +8,7 @@ const fuelStationTankSchema = new mongoose.Schema({
   maxVolumeCapacity: { type: Number, required: true }, // Max empty space allowed
   minVolumeCapacity: { type: Number, required: true }, // Min empty space allowed
   currentVolume: { type: Number, default: 0 },
-  lastUpdatedVolumeReadingDateTime: { type: Date, default: Date.now },
+  lastUpdatedVolumeReadingDateTime: { type: String },
   historicalVolume: [{                      // Historical ledger for opening/closing tracking
     date: { type: Date, required: true },
     openingVolume: { type: Number, required: true },

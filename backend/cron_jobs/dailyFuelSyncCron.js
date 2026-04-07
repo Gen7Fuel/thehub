@@ -59,7 +59,7 @@ const runDailyFuelSync = async () => {
       console.log(`   [Tanks] Processing ${tanks.length} tanks...`);
 
       for (const tank of tanks) {
-        const { openingVolume: todayOpen } = await getTankReadingsForDate(loc.csoCode, tank.tankNo, todayStr);
+        const { openingVolume: todayOpen, openingTime: todayOpenTime } = await getTankReadingsForDate(loc.csoCode, tank.tankNo, todayStr);
         const { closingVolume: yesterdayClose } = await getTankReadingsForDate(loc.csoCode, tank.tankNo, yesterdayStr);
 
         const tankDoc = await FuelStationTank.findById(tank._id);
@@ -109,7 +109,8 @@ const runDailyFuelSync = async () => {
         }
 
         tankDoc.currentVolume = todayOpen;
-        tankDoc.lastUpdatedVolumeReadingDateTime = new Date();
+        // tankDoc.lastUpdatedVolumeReadingDateTime = new Date();
+        tankDoc.lastUpdatedVolumeReadingDateTime = todayOpenTime;
         tankDoc.historicalVolume.sort((a, b) => a.date - b.date);
         await tankDoc.save();
       }
