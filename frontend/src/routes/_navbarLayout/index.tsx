@@ -276,15 +276,17 @@ function App() {
           </Section>
         )}
 
-        <Section title="Communication">
-          <div className="flex flex-wrap gap-4">
-            <Link to="/bulletin">
-              <Button className="w-32 h-32 flex items-center justify-center break-words whitespace-normal text-center">
-                Bulletin Board
-              </Button>
-            </Link>
-          </div>
-        </Section>
+        {access?.bulletin && (
+          <Section title="Communication">
+            <div className="flex flex-wrap gap-4">
+              <Link to="/bulletin">
+                <Button className="w-32 h-32 flex items-center justify-center break-words whitespace-normal text-center">
+                  Bulletin Board
+                </Button>
+              </Link>
+            </div>
+          </Section>
+        )}
       </div>
     </div>
   )
