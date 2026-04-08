@@ -1384,4 +1384,21 @@ router.put('/:id', async (req, res) => {
   }
 })
 
+router.delete('/:id', async (req, res) => {
+  try {
+    const existing = await CashSummary.findById(req.params.id).lean()
+    if (!existing) return res.status(404).json({ error: 'Not found' })
+
+    await CashSummary.findByIdAndDelete(req.params.id)
+
+    // Refresh the daily deposit for the affected site/date
+    await upsertDailyDepositForSiteDate(existing.site, existing.date).catch(() => { })
+
+    res.json({ success: true, _id: req.params.id })
+  } catch (err) {
+    console.error('CashSummary delete error:', err)
+    res.status(500).json({ error: 'Failed to delete CashSummary' })
+  }
+})
+
 module.exports = router

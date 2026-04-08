@@ -273,6 +273,39 @@ function App() {
             </div>
           </Section>
         )}
+
+        {access?.training?.voiceAgent && (
+          <Section title="Training">
+            <div className="flex flex-wrap gap-4">
+              <Link to="/ai-customer">
+                <Button className="w-32 h-32 flex items-center justify-center break-words whitespace-normal text-center">
+                  AI Customer Chat
+                </Button>
+              </Link>
+            </div>
+          </Section>
+        )}
+
+        {(access?.bulletin || access?.events) && (
+          <Section title="Communication">
+            <div className="flex flex-wrap gap-4">
+              {access?.bulletin && (
+                <Link to="/bulletin">
+                  <Button className="w-32 h-32 flex items-center justify-center break-words whitespace-normal text-center">
+                    Bulletin Board
+                  </Button>
+                </Link>
+              )}
+              {access?.events && (
+                <Link to="/events">
+                  <Button className="w-32 h-32 flex items-center justify-center break-words whitespace-normal text-center">
+                    Events
+                  </Button>
+                </Link>
+              )}
+            </div>
+          </Section>
+        )}
       </div>
     </div>
   )

@@ -2,6 +2,7 @@ const { Server } = require("socket.io");
 const { authSocket } = require("../middleware/authMiddleware");
 const setupSupportSocket = require("./supportSocket");
 const setupCycleCountSocket = require("./cycleCountSocket");
+const setupAiCustomerSocket = require("./aiCustomerSocket");
 
 function setupSocket(server) {
   const io = new Server(server, {
@@ -57,6 +58,7 @@ function setupSocket(server) {
 
     // Register per-socket modules
     setupCycleCountSocket(io, socket);
+    setupAiCustomerSocket(io, socket);
 
     socket.onAny((event) => {
       console.log("📨 Received event:", event, "from socket:", socket.id);
