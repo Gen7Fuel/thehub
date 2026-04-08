@@ -263,6 +263,16 @@ function App() {
             </div>
           </Section>
         )}
+
+        <Section title="Training">
+          <div className="flex flex-wrap gap-4">
+            <Link to="/ai-customer">
+              <Button className="w-32 h-32 flex items-center justify-center break-words whitespace-normal text-center">
+                AI Customer Chat
+              </Button>
+            </Link>
+          </div>
+        </Section>
       </div>
     </div>
   )

@@ -58,6 +58,7 @@ const selectTemplateRoutes = require("./routes/audit/selectTemplateRoutes");
 const writeOffRoutes = require("./routes/writeOffRoutes");
 const supportRoutes = require('./routes/supportRoutes');
 const maintenanceRoutes = require('./routes/maintenanceRoutes');
+const { router: aiCustomerRoutes } = require('./routes/aiCustomerRoutes');
 const { initializePermissionMap } = require("./utils/permissionStore");
 const setupSocket = require("./socket");
 
@@ -121,6 +122,7 @@ app.use("/api/fuel-rec", fuelRecRoutes);
 app.use('/api/product-category', productCategoryRoutes);
 app.use('/api/write-off', writeOffRoutes);
 app.use('/api/maintenance', maintenanceRoutes);
+app.use('/api/ai-customer', aiCustomerRoutes);
 
 // Misc
 app.use('/api', emailRoutes);
