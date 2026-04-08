@@ -59,6 +59,7 @@ const writeOffRoutes = require("./routes/writeOffRoutes");
 const supportRoutes = require('./routes/supportRoutes');
 const maintenanceRoutes = require('./routes/maintenanceRoutes');
 const { router: aiCustomerRoutes } = require('./routes/aiCustomerRoutes');
+const bulletinRoutes = require('./routes/bulletinRoutes');
 const { initializePermissionMap } = require("./utils/permissionStore");
 const setupSocket = require("./socket");
 
@@ -123,6 +124,7 @@ app.use('/api/product-category', productCategoryRoutes);
 app.use('/api/write-off', writeOffRoutes);
 app.use('/api/maintenance', maintenanceRoutes);
 app.use('/api/ai-customer', aiCustomerRoutes);
+app.use('/api/bulletin', bulletinRoutes);
 
 // Misc
 app.use('/api', emailRoutes);
