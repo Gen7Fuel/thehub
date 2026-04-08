@@ -1,6 +1,16 @@
-import { createFileRoute, useNavigate } from '@tanstack/react-router'
-import { useEffect, useMemo } from 'react'
+import { createFileRoute, useNavigate, useRouter } from '@tanstack/react-router'
+import { useEffect, useMemo, useState } from 'react'
+import { Trash2 } from 'lucide-react'
 import { SitePicker } from '@/components/custom/sitePicker'
+import { Button } from '@/components/ui/button'
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog'
 
 type CashSummarySearch = { site: string }
 
@@ -56,10 +66,15 @@ function RouteComponent() {
   const { site } = Route.useSearch()
   // const { summaries } = Route.useLoaderData() as { summaries: CashSummaryDoc[] }
   const navigate = useNavigate({ from: Route.fullPath })
+  const router = useRouter()
   const { summaries, accessDenied } = Route.useLoaderData() as {
     summaries: CashSummaryDoc[];
     accessDenied: boolean;
   };
+
+  const [pendingDelete, setPendingDelete] = useState<CashSummaryDoc | null>(null)
+  const [deleting, setDeleting] = useState(false)
+  const [deleteError, setDeleteError] = useState<string | null>(null)
 
   useEffect(() => {
     if (accessDenied) {
@@ -73,6 +88,30 @@ function RouteComponent() {
     navigate({ to: '/cash-summary/form', search: { site, id } })
   }
 
+  const confirmDelete = async () => {
+    if (!pendingDelete) return
+    setDeleting(true)
+    setDeleteError(null)
+    try {
+      const res = await fetch(`/api/cash-summary/${pendingDelete._id}`, {
+        method: 'DELETE',
+        headers: {
+          Authorization: `Bearer ${localStorage.getItem('token') || ''}`,
+          'X-Required-Permission': 'accounting.cashSummary.list',
+        },
+      })
+      if (!res.ok) {
+        throw new Error('Failed to delete entry')
+      }
+      setPendingDelete(null)
+      await router.invalidate()
+    } catch (err: any) {
+      setDeleteError(err?.message || 'Failed to delete entry')
+    } finally {
+      setDeleting(false)
+    }
+  }
+
   const updateSite = (newSite: string) => {
     navigate({ search: (prev: CashSummarySearch) => ({ ...prev, site: newSite }) })
   }
@@ -84,6 +123,19 @@ function RouteComponent() {
       ),
     [summaries],
   )
+
+  const duplicateShiftNumbers = useMemo(() => {
+    const counts = new Map<string, number>()
+    for (const row of summaries) {
+      const key = String(row.shift_number)
+      counts.set(key, (counts.get(key) || 0) + 1)
+    }
+    const dups = new Set<string>()
+    for (const [key, count] of counts) {
+      if (count > 1) dups.add(key)
+    }
+    return dups
+  }, [summaries])
 
   const fmtNum = (n: number | undefined) =>
     n == null ? '—' : n.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })
@@ -137,6 +189,7 @@ function RouteComponent() {
                     <th className="px-3 py-2">CPL Bulloch</th>
                     <th className="px-3 py-2">Exempted Tax</th>
                     <th className="px-3 py-2">Created</th>
+                    <th className="px-3 py-2 w-10"></th>
                   </tr>
                 </thead>
                 <tbody>
@@ -163,6 +216,24 @@ function RouteComponent() {
                       <td className="px-3 py-2">{fmtNum(row.cpl_bulloch)}</td>
                       <td className="px-3 py-2">{fmtNum(row.exempted_tax)}</td>
                       <td className="px-3 py-2">{fmtDate(row.createdAt)}</td>
+                      <td className="px-3 py-2">
+                        {duplicateShiftNumbers.has(String(row.shift_number)) && (
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="icon"
+                            className="h-7 w-7 text-destructive hover:text-destructive hover:bg-destructive/10"
+                            aria-label={`Delete duplicate entry for shift ${row.shift_number}`}
+                            onClick={(e) => {
+                              e.stopPropagation()
+                              setDeleteError(null)
+                              setPendingDelete(row)
+                            }}
+                          >
+                            <Trash2 className="h-4 w-4" />
+                          </Button>
+                        )}
+                      </td>
                     </tr>
                   ))}
                 </tbody>
@@ -171,6 +242,56 @@ function RouteComponent() {
           )}
         </div>
       </div>
+
+      <Dialog
+        open={!!pendingDelete}
+        onOpenChange={(open) => {
+          if (!open && !deleting) {
+            setPendingDelete(null)
+            setDeleteError(null)
+          }
+        }}
+      >
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Delete cash summary entry?</DialogTitle>
+            <DialogDescription>
+              {pendingDelete && (
+                <>
+                  This will permanently delete the entry for shift{' '}
+                  <span className="font-semibold">{pendingDelete.shift_number}</span>
+                  {pendingDelete.date && <> on {fmtDateOnly(pendingDelete.date)}</>}
+                  . This action cannot be undone.
+                </>
+              )}
+            </DialogDescription>
+          </DialogHeader>
+          {deleteError && (
+            <p className="text-sm text-destructive">{deleteError}</p>
+          )}
+          <DialogFooter>
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => {
+                setPendingDelete(null)
+                setDeleteError(null)
+              }}
+              disabled={deleting}
+            >
+              Cancel
+            </Button>
+            <Button
+              type="button"
+              variant="destructive"
+              onClick={confirmDelete}
+              disabled={deleting}
+            >
+              {deleting ? 'Deleting…' : 'Delete'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }
