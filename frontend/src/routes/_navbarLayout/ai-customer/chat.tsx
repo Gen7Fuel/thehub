@@ -29,7 +29,7 @@ function arrayBufferToBase64(buffer: ArrayBuffer): string {
   return window.btoa(binary)
 }
 
-function base64ToFloat32(base64: string): Float32Array {
+function base64ToFloat32(base64: string): Float32Array<ArrayBuffer> {
   const raw = atob(base64)
   const bytes = new Uint8Array(raw.length)
   for (let i = 0; i < raw.length; i++) bytes[i] = raw.charCodeAt(i)
