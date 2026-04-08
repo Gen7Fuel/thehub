@@ -1,6 +1,6 @@
 import { createFileRoute, useRouter } from '@tanstack/react-router'
 import { useState } from 'react'
-import { Pin, Plus, Trash2 } from 'lucide-react'
+import { Plus, Trash2 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Textarea } from '@/components/ui/textarea'
 import {
@@ -44,15 +44,8 @@ export const Route = createFileRoute('/_navbarLayout/bulletin/')({
   },
 })
 
-// Subtle, sticky-note-style background colors that cycle by index.
-const NOTE_COLORS = [
-  'bg-yellow-100 border-yellow-300',
-  'bg-pink-100 border-pink-300',
-  'bg-blue-100 border-blue-300',
-  'bg-green-100 border-green-300',
-  'bg-purple-100 border-purple-300',
-  'bg-orange-100 border-orange-300',
-]
+// Uniform, mild yellow sticky-note background.
+const NOTE_COLOR = 'bg-yellow-50 border-yellow-200'
 
 function fmtDate(iso: string) {
   const d = new Date(iso)
@@ -149,10 +142,7 @@ function RouteComponent() {
       <div className="w-full max-w-6xl px-4 space-y-6">
         <div className="flex items-center justify-between">
           <div>
-            <h1 className="text-2xl font-bold flex items-center gap-2">
-              <Pin className="h-5 w-5 text-primary" />
-              Bulletin Board
-            </h1>
+            <h1 className="text-2xl font-bold">Bulletin Board</h1>
             <p className="text-sm text-muted-foreground mt-1">
               {user?.location ? `Posts for ${user.location}` : 'Posts for your site'}
             </p>
@@ -176,7 +166,7 @@ function RouteComponent() {
           </div>
         ) : (
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5">
-            {posts.map((post, idx) => (
+            {posts.map((post) => (
               <button
                 key={post._id}
                 type="button"
@@ -184,9 +174,8 @@ function RouteComponent() {
                   setViewError(null)
                   setViewingPost(post)
                 }}
-                className={`relative text-left rounded-md border-2 ${NOTE_COLORS[idx % NOTE_COLORS.length]} p-4 pt-6 shadow-sm hover:shadow-md transition cursor-pointer min-h-[160px] flex flex-col`}
+                className={`text-left rounded-md border ${NOTE_COLOR} p-4 shadow-sm hover:shadow-md transition cursor-pointer min-h-[160px] flex flex-col`}
               >
-                <Pin className="absolute -top-2 left-1/2 -translate-x-1/2 h-5 w-5 text-red-500 fill-red-500 rotate-45" />
                 <p className="text-sm text-gray-800 whitespace-pre-wrap line-clamp-6 flex-1">
                   {post.text}
                 </p>
@@ -251,10 +240,7 @@ function RouteComponent() {
       >
         <DialogContent>
           <DialogHeader>
-            <DialogTitle className="flex items-center gap-2">
-              <Pin className="h-4 w-4 text-primary" />
-              Bulletin post
-            </DialogTitle>
+            <DialogTitle>Bulletin post</DialogTitle>
             {viewingPost && (
               <DialogDescription>
                 Posted by {authorName(viewingPost)} • {fmtDate(viewingPost.createdAt)}
