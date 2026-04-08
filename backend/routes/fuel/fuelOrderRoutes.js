@@ -33,7 +33,7 @@ router.get('/workspace-orders', async (req, res) => {
       // Mapped to match your Schema exactly (removing 'Id' suffix)
       .populate('carrier', 'carrierName')
       .populate('supplier', 'supplierName')
-      .populate('rack', 'rackName')
+      .populate('rack', 'rackName rackLocation')
       .lean();
 
     res.json(orders);

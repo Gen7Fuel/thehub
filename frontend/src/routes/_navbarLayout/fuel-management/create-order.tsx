@@ -17,6 +17,9 @@ import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { getGradeTheme } from "./manage/locations/$id"
 import { gradeConfig } from "./workspace"
+import { PDFViewer, PDFDownloadLink } from '@react-pdf/renderer';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
+import { POPreviewDocument, formatPDFDate } from "@/components/custom/fuelPoPDF"
 
 export const Route = createFileRoute('/_navbarLayout/fuel-management/create-order')({
   component: CreateFuelOrder,
@@ -70,6 +73,7 @@ function CreateFuelOrder() {
   const [suppliers, setSuppliers] = useState<FuelSupplier[]>([]);
   // --- 2. Submit Logic ---
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [isPreviewOpen, setIsPreviewOpen] = useState(false);
 
   const [formData, setFormData] = useState<FuelOrderFormData>({
     stationId: '',
@@ -215,24 +219,7 @@ function CreateFuelOrder() {
       badgeNo: defaultBadge?.badgeNumber || ''
     }));
   };
-  // const generatePONumber = async (sId: string, oDate: string) => {
-  //   // Use 'locations' (from TanStack Query) instead of 'stations' (which is null)
-  //   const station = locations.find((s: any) => s._id === sId);
-  //   if (!station || !oDate) return;
 
-  //   const dateObj = new Date(oDate);
-  //   const datePart = (dateObj.getMonth() + 1).toString().padStart(2, '0') +
-  //     dateObj.getDate().toString().padStart(2, '0') +
-  //     dateObj.getFullYear().toString().slice(-2);
-
-  //   const stationNum = String(station.fuelStationNumber).padStart(2, '0');
-
-  //   try {
-  //     const res = await axios.get(`/api/fuel-orders/count?stationId=${sId}&date=${oDate}`, authHeader);
-  //     const nextLoad = res.data.count + 1;
-  //     setFormData(prev => ({ ...prev, poNumber: `NSP${datePart}-${stationNum}${nextLoad}` }));
-  //   } catch (err) { console.error("PO Gen Error", err); }
-  // };
   const generatePONumber = async (sId: string, oDate: string, dDate: string) => {
     const station = locations.find((s: any) => s._id === sId);
     // Keep your top-level check
@@ -384,6 +371,13 @@ function CreateFuelOrder() {
     }
   };
 
+
+  // Find selected details for the PDF
+  const selectedStation = locations.find((s: any) => s._id === formData.stationId);
+  const selectedCarrier = carriers.find(c => c._id === formData.carrierId);
+  const selectedRack = racks.find(r => r._id === formData.rackId);
+
+
   return (
     <div className="p-6 space-y-6 max-w-[1600px] mx-auto">
       <div className="flex justify-between items-center">
@@ -399,18 +393,59 @@ function CreateFuelOrder() {
 
           <Button
             className="bg-blue-600 hover:bg-blue-700"
-            onClick={handleSubmit}
-            disabled={isSubmitting}
+            onClick={() => setIsPreviewOpen(true)}
+            disabled={!formData.stationId || isSubmitting}
           >
-            {isSubmitting ? (
-              <>
-                <RefreshCw className="w-4 h-4 mr-2 animate-spin" />
-                Saving...
-              </>
-            ) : (
-              "Submit Order"
-            )}
+            Generate PO PDF
           </Button>
+          <Dialog open={isPreviewOpen} onOpenChange={setIsPreviewOpen}>
+            <DialogContent className="max-w-5xl h-[90vh] flex flex-col">
+              <DialogHeader>
+                <DialogTitle>PO Preview - {formData.poNumber}</DialogTitle>
+              </DialogHeader>
+
+              <div className="flex-1 border rounded-lg overflow-hidden">
+                <PDFViewer width="100%" height="100%" showToolbar={false}>
+                  <POPreviewDocument
+                    data={formData}
+                    selectedStation={selectedStation}
+                    carrierName={selectedCarrier?.carrierName}
+                    rackName={selectedRack?.rackName}
+                  />
+                </PDFViewer>
+              </div>
+
+              <DialogFooter className="flex justify-between items-center sm:justify-between">
+                <PDFDownloadLink
+                  document={
+                    <POPreviewDocument
+                      data={formData}
+                      selectedStation={selectedStation}
+                      carrierName={selectedCarrier?.carrierName}
+                      rackName={selectedRack?.rackName}
+                    />
+                  }
+                  fileName={`Fuel Order Form NSP ${selectedStation?.fuelCustomerName || 'Order'} ${formatPDFDate(formData.deliveryDate, false)}.pdf`}
+                >
+                  {({ loading }) => (
+                    <Button variant="outline" disabled={loading}>
+                      {loading ? "Preparing..." : "Download PDF"}
+                    </Button>
+                  )}
+                </PDFDownloadLink>
+
+                <Button
+                  className="bg-green-600 hover:bg-green-700"
+                  onClick={async () => {
+                    await handleSubmit();
+                    setIsPreviewOpen(false);
+                  }}
+                >
+                  Create Order
+                </Button>
+              </DialogFooter>
+            </DialogContent>
+          </Dialog>
         </div>
       </div>
 

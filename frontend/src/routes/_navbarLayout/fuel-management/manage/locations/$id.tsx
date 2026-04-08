@@ -18,15 +18,15 @@ export const Route = createFileRoute('/_navbarLayout/fuel-management/manage/loca
 export const getGradeTheme = (grade: string) => {
   switch (grade) {
     case "Regular":
-      return { color: "bg-green-500", label: "text-green-700", icon: Car, raw: "#22c55e" }
+      return { color: "bg-green-500", label: "text-green-700", icon: Car, raw: "#22c55e", light: "bg-green-50/50" }
     case "Premium":
-      return { color: "bg-red-500", label: "text-red-700", icon: Zap, raw: "#ef4444" }
+      return { color: "bg-red-500", label: "text-red-700", icon: Zap, raw: "#ef4444", light: "bg-red-50/50" }
     case "Diesel":
-      return { color: "bg-amber-400", label: "text-amber-700", icon: Truck, raw: "#fbbf24" }
+      return { color: "bg-amber-400", label: "text-amber-700", icon: Truck, raw: "#fbbf24", light: "bg-amber-50/50" }
     case "Dyed Diesel":
-      return { color: "bg-red-800", label: "text-red-950", icon: Truck, raw: "#991b1b" }
+      return { color: "bg-red-800", label: "text-red-950", icon: Truck, raw: "#991b1b", light: "bg-red-50/30" }
     default:
-      return { color: "bg-slate-600", label: "text-slate-700", icon: Car, raw: "#475569" }
+      return { color: "bg-slate-600", label: "text-slate-700", icon: Car, raw: "#475569", light: "bg-slate-50" }
   }
 }
 

@@ -1,4 +1,4 @@
-import { useState, useMemo, useEffect } from 'react';
+import { useState, useMemo, useEffect, useRef } from 'react';
 import { createFileRoute, Link } from '@tanstack/react-router';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'; // Recommended for fetching
 import axios from 'axios';
@@ -53,6 +53,20 @@ function WorkspaceComponent() {
     }
   });
 
+  const hasInitialLoaded = useRef(false);
+
+  useEffect(() => {
+    if (locations.length > 0 && !hasInitialLoaded.current) {
+      // Filter out stations with 0 tanks, then map to their IDs
+      const stationsWithTanks = locations
+        .filter((loc: any) => loc.tankCount > 0)
+        .map((loc: any) => loc._id);
+
+      setSelectedStationIds(stationsWithTanks);
+      hasInitialLoaded.current = true;
+    }
+  }, [locations]);
+
   // Filter locations for the Dialog Search
   const filteredLocations = useMemo(() => {
     return locations.filter((loc: any) =>
@@ -74,6 +88,15 @@ function WorkspaceComponent() {
     setSelectedStationIds(prev =>
       prev.includes(id) ? prev.filter(i => i !== id) : [...prev, id]
     );
+  };
+
+  // 1. Bulk toggle function for convenience
+  const toggleAll = () => {
+    if (selectedStationIds.length === locations.length) {
+      setSelectedStationIds([]); // Deselect all
+    } else {
+      setSelectedStationIds(locations.map((loc: any) => loc._id)); // Select all
+    }
   };
 
   return (
@@ -145,6 +168,14 @@ function WorkspaceComponent() {
                         <Filter className="h-5 w-5 text-blue-600" />
                         Authorize Sites for Workspace
                       </DialogTitle>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={toggleAll}
+                        className="text-[10px] font-black uppercase tracking-tighter text-blue-600 hover:bg-blue-50"
+                      >
+                        {selectedStationIds.length === locations.length ? "Deselect All" : "Select All"}
+                      </Button>
                     </DialogHeader>
 
                     <div className="relative my-4">
@@ -158,24 +189,40 @@ function WorkspaceComponent() {
                     </div>
 
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-2 max-h-[60vh] overflow-y-auto pr-2 custom-scrollbar">
-                      {filteredLocations.map((loc: any) => (
-                        <div
-                          key={loc._id}
-                          className={`flex items-center justify-between p-4 border-2 rounded-xl cursor-pointer transition-all ${selectedStationIds.includes(loc._id)
-                            ? "border-blue-500 bg-blue-50/50 shadow-md"
-                            : "border-slate-100 hover:border-slate-300"
-                            }`}
-                          onClick={() => toggleStation(loc._id)}
-                        >
-                          <div className="flex flex-col">
-                            <span className="font-bold text-slate-800">{loc.stationName}</span>
-                            <span className="text-[10px] text-slate-500 font-mono uppercase">
-                              {loc.fuelStationNumber} • {loc.tankCount} Tanks
-                            </span>
+                      {filteredLocations.map((loc: any) => {
+                        const hasNoTanks = loc.tankCount === 0;
+
+                        return (
+                          <div
+                            key={loc._id}
+                            className={`flex items-center justify-between p-4 border-2 rounded-xl cursor-pointer transition-all ${selectedStationIds.includes(loc._id)
+                              ? "border-blue-500 bg-blue-50/50 shadow-md"
+                              : hasNoTanks
+                                ? "border-slate-50 bg-slate-50/30 opacity-60 grayscale" // Dim out empty stations
+                                : "border-slate-100 hover:border-slate-300"
+                              }`}
+                            onClick={() => !hasNoTanks && toggleStation(loc._id)} // Prevent clicking if no tanks
+                          >
+                            <div className="flex flex-col">
+                              <span className={`font-bold ${hasNoTanks ? 'text-slate-400' : 'text-slate-800'}`}>
+                                {loc.stationName}
+                              </span>
+                              <span className="text-[10px] text-slate-500 font-mono uppercase">
+                                {loc.fuelStationNumber} • {loc.tankCount} Tanks
+                              </span>
+                            </div>
+
+                            {hasNoTanks ? (
+                              <span className="text-[8px] font-black uppercase text-slate-400 bg-slate-100 px-2 py-1 rounded">Inactive</span>
+                            ) : (
+                              <Checkbox
+                                checked={selectedStationIds.includes(loc._id)}
+                                className="h-5 w-5 border-2 rounded-md"
+                              />
+                            )}
                           </div>
-                          <Checkbox checked={selectedStationIds.includes(loc._id)} className="h-5 w-5 border-2 rounded-md" />
-                        </div>
-                      ))}
+                        );
+                      })}
                     </div>
                   </DialogContent>
                 </Dialog>
@@ -618,9 +665,13 @@ function StationStrip({ location, date }: { location: any, date: Date }) {
 
                         {/* Metadata Breadcrumbs */}
                         <div className="hidden md:flex items-center gap-2 text-[11px] font-bold text-slate-400 bg-slate-50/50 px-2 py-0.5 rounded-full border border-slate-100">
+                          <span className="text-blue-500 uppercase">{order.supplier?.supplierName || 'No Supplier'}</span>
+                          <span className="text-slate-300">•</span>
                           <span className="text-blue-500 uppercase">{order.rack?.rackName || 'No Rack'}</span>
                           <span className="text-slate-300">•</span>
-                          <span className="uppercase">{order.carrier?.carrierName || 'No Carrier'}</span>
+                          <span className="text-blue-500 uppercase">{order.rack?.rackLocation || 'No Rack'}</span>
+                          <span className="text-slate-300">•</span>
+                          <span className="text-blue-500 uppercase">{order.carrier?.carrierName || 'No Carrier'}</span>
                         </div>
                       </div>
 

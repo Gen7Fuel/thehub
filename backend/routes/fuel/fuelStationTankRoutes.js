@@ -1,10 +1,11 @@
 const express = require('express');
+const mongoose = require('mongoose');
 const router = express.Router();
 const Location = require('../../models/Location');
 const FuelStationTank = require('../../models/fuel/FuelStationTank');
 const FuelSales = require('../../models/fuel/FuelSales');
 const FuelOrder = require('../../models/fuel/FuelOrder');
-const { getRankedFuelInventory } = require('../../services/supaBaseService');
+const { getLiveTankVolumes } = require('../../services/supaBaseService');
 
 
 // @route   GET /api/fuel-station-tanks/all-locations
@@ -44,7 +45,7 @@ router.get('/all-locations', async (req, res) => {
         // Default to empty array if no tanks found
         availableStationGrades: data ? data.availableGrades : []
       };
-    });
+    }).filter(loc => loc.tankCount > 0);
 
     res.json(merged);
   } catch (err) {
@@ -112,6 +113,69 @@ async function getAverageSales(stationId, targetDate) {
 
   return averages;
 }
+
+router.get('/reconciliation/:stationId', async (req, res) => {
+  try {
+    const { stationId } = req.params;
+    if (!stationId || stationId === "[object Object]") {
+      return res.status(400).json({ message: "Invalid Station ID provided" });
+    }
+
+    const sId = new mongoose.Types.ObjectId(stationId);
+
+    // 1. Get Today's date string in YYYY-MM-DD format
+    const todayStr = new Date().toISOString().split('T')[0];
+
+    const searchDate = new Date();
+    searchDate.setDate(searchDate.getDate() - 15);
+
+    const tanks = await FuelStationTank.find({ stationId: sId });
+    const sales = await FuelSales.find({
+      stationId: sId,
+      date: { $gte: searchDate }
+    }).sort({ date: -1 });
+
+    // Helper: Consistent YYYY-MM-DD conversion
+    const toISODate = (date) => new Date(date).toISOString().split('T')[0];
+
+    const reconciliationData = sales
+      .filter(saleDay => toISODate(saleDay.date) !== todayStr) // 2. Strictly exclude today
+      .map(saleDay => {
+        const saleDateStr = toISODate(saleDay.date);
+
+        return {
+          date: saleDay.date,
+          grades: saleDay.salesData.map(s => {
+            const gradeTanks = tanks.filter(t => t.grade === s.grade);
+            let openingSum = 0;
+            let closingSum = 0;
+
+            gradeTanks.forEach(tank => {
+              // 3. Match historical records using the ISO date string
+              const hist = tank.historicalVolume?.find(h => toISODate(h.date) === saleDateStr);
+              if (hist) {
+                openingSum += hist.openingVolume;
+                closingSum += hist.closingVolume;
+              }
+            });
+
+            const draw = openingSum - closingSum;
+            return {
+              grade: s.grade,
+              salesVolume: s.volume || 0,
+              physicalDraw: draw,
+              variance: (s.volume || 0) - draw
+            };
+          })
+        };
+      });
+
+    res.json(reconciliationData);
+  } catch (err) {
+    console.error("Reconciliation Error:", err);
+    res.status(500).json({ message: err.message });
+  }
+});
 
 router.get('/station/:stationId', async (req, res) => {
   try {
@@ -267,34 +331,34 @@ router.get('/station/:stationId', async (req, res) => {
 // GET /api/fuel-station-tanks/sync-all-volumes
 router.get('/sync-all-volumes', async (req, res) => {
   try {
-    // 1. Fetch live data from Supabase
     const liveReadings = await getLiveTankVolumes();
-
-    // 2. Fetch all local MongoDB tanks 
-    // Populating location to get the CSO Code for matching
+    // Populate stationId to access stationName and csoCode
     const allTanks = await FuelStationTank.find({}).populate('stationId');
 
-    const updatePromises = allTanks.map(tank => {
-      // Match by Station CSO Code AND Tank Number
+    const updatePromises = allTanks.map(async (tank) => {
       const reading = liveReadings.find(r =>
-        r.Station_SK === tank.stationId.csoCode &&
+        r.Station_SK === tank.stationId?.csoCode &&
         Number(r.Tank_No) === tank.tankNo
       );
 
+      let updatedDoc = tank;
       if (reading) {
-        return FuelStationTank.findByIdAndUpdate(tank._id, {
+        updatedDoc = await FuelStationTank.findByIdAndUpdate(tank._id, {
           currentVolume: Math.round(reading.Volume),
           lastUpdatedVolumeReadingDateTime: reading.ReadingTime
-        }, { new: true });
+        }, { new: true }).populate('stationId'); // Re-populate for the response
       }
 
-      return Promise.resolve(tank);
+      // Return a flattened object so stationName is at the top level
+      return {
+        ...updatedDoc.toObject(),
+        stationName: updatedDoc.stationId?.stationName || "Unknown"
+      };
     });
 
-    const updatedTanks = await Promise.all(updatePromises);
-    res.json(updatedTanks);
+    const results = await Promise.all(updatePromises);
+    res.json(results);
   } catch (err) {
-    console.error('Sync Error:', err);
     res.status(500).json({ message: err.message });
   }
 });
