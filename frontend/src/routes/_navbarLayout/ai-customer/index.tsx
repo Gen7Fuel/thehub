@@ -24,7 +24,7 @@ export const Route = createFileRoute('/_navbarLayout/ai-customer/')({
 
 function RouteComponent() {
   const navigate = useNavigate()
-  const { data: scenarios } = Route.useLoaderData()
+  const { data: scenarios } = Route.useLoaderData() as { success: boolean; data: Scenario[] }
 
   return (
     <div className="w-full max-w-3xl mx-auto p-6">

@@ -34,7 +34,7 @@ function base64ToFloat32(base64: string): Float32Array {
   const bytes = new Uint8Array(raw.length)
   for (let i = 0; i < raw.length; i++) bytes[i] = raw.charCodeAt(i)
   const length = bytes.length / 2
-  const float32 = new Float32Array(length)
+  const float32 = new Float32Array(new ArrayBuffer(length * Float32Array.BYTES_PER_ELEMENT))
   for (let i = 0; i < length; i++) {
     let sample = bytes[i * 2] | (bytes[i * 2 + 1] << 8)
     if (sample >= 32768) sample -= 65536
