@@ -61,6 +61,8 @@ const maintenanceRoutes = require('./routes/maintenanceRoutes');
 const { router: aiCustomerRoutes } = require('./routes/aiCustomerRoutes');
 const bulletinRoutes = require('./routes/bulletinRoutes');
 const eventRoutes = require('./routes/eventRoutes');
+const { router: supportChatRoutes, initSupportChatIo } = require('./routes/supportChatRoutes');
+const { initChatQueueIo } = require('./queues/supportChatQueue');
 const { initializePermissionMap } = require("./utils/permissionStore");
 const setupSocket = require("./socket");
 
@@ -115,6 +117,7 @@ app.use("/api/sales-summary", salesSummaryRoutes);
 app.use("/api/status-sales", statusSalesRoutes);
 app.use('/api/sql', require('./routes/salesRoutes'));
 
+app.use('/api/support/chat', supportChatRoutes);
 app.use('/api/support', supportRoutes);
 app.use('/api/safesheets', safesheetRoutes);
 app.use('/api/sftp', sftpRoutes);
@@ -133,6 +136,8 @@ app.use('/api', emailRoutes);
 
 const io = setupSocket(server);
 app.set("io", io);
+initSupportChatIo(io);
+initChatQueueIo(io);
 
 const PORT = process.env.PORT || 5000;
 
