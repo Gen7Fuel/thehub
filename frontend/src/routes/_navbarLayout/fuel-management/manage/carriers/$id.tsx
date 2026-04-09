@@ -21,6 +21,24 @@ function EditCarrierComponent() {
   const [loading, setLoading] = useState(true)
   const [isSaving, setIsSaving] = useState(false)
   const [rackSearch, setRackSearch] = useState('')
+  const [newToEmail, setNewToEmail] = useState('');
+  const [newCcEmail, setNewCcEmail] = useState('');
+
+  // Helper to add emails to arrays
+  const addEmail = (field: 'toEmails' | 'ccEmails', value: string) => {
+    if (!value || !value.includes('@')) return;
+    const current = formData[field] || [];
+    if (current.includes(value)) return;
+    setFormData({ ...formData, [field]: [...current, value] });
+    field === 'toEmails' ? setNewToEmail('') : setNewCcEmail('');
+  };
+
+  const removeEmail = (field: 'toEmails' | 'ccEmails', emailToRemove: string) => {
+    setFormData({
+      ...formData,
+      [field]: formData[field].filter((email: string) => email !== emailToRemove)
+    });
+  };
 
   // 1. Fetch ALL available racks for the multi-select
   const { data: allRacks = [] } = useQuery({
@@ -103,7 +121,7 @@ function EditCarrierComponent() {
   if (loading) return <div className="p-10 flex items-center justify-center italic text-muted-foreground"><Loader2 className="animate-spin mr-2" /> Loading...</div>
 
   return (
-    <div className="p-8 max-w-3xl animate-in fade-in duration-300">
+    <div className="p-8 max-w-5xl animate-in fade-in duration-300">
       <div className="flex items-center justify-between mb-8 border-b pb-6">
         <h2 className="text-2xl font-bold tracking-tight">Edit Carrier</h2>
         <Button variant="ghost" onClick={handleDelete} className="text-red-500 hover:bg-red-50 hover:text-red-600 gap-2">
@@ -111,8 +129,10 @@ function EditCarrierComponent() {
         </Button>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-        {/* Left: Basic Info */}
+      {/* Main Two-Column Grid */}
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-8 mb-8">
+
+        {/* Left Column: General Info & Manage Racks Trigger */}
         <div className="space-y-6">
           <div className="space-y-4 p-6 border rounded-xl bg-white shadow-sm">
             <h3 className="text-xs font-bold uppercase text-slate-400 tracking-widest">General Info</h3>
@@ -125,113 +145,133 @@ function EditCarrierComponent() {
               <Input value={formData.carrierId} onChange={(e) => setFormData({ ...formData, carrierId: e.target.value })} />
             </div>
             <div className="space-y-2">
-              <label className="text-xs font-bold text-slate-600 ml-1">Contact</label>
+              <label className="text-xs font-bold text-slate-600 ml-1">Primary Contact</label>
               <Input value={formData.contact} onChange={(e) => setFormData({ ...formData, contact: e.target.value })} />
-            </div>
-            <div className="space-y-2">
-              <label className="text-xs font-bold text-slate-600 ml-1">Email</label>
-              <Input value={formData.email} onChange={(e) => setFormData({ ...formData, email: e.target.value })} />
             </div>
           </div>
 
-          <Button onClick={handleUpdate} disabled={isSaving} className="w-full gap-2">
-            {isSaving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
-            Save Changes
-          </Button>
-        </div>
-
-        {/* Right: Associated Racks */}
-        <div className="space-y-4">
-          <div className="flex items-center justify-between">
-            <h3 className="text-xs font-bold uppercase text-slate-400 tracking-widest">Associated Racks</h3>
-
+          <div className="p-6 border rounded-xl bg-slate-50 border-dashed flex items-center justify-between">
+            <div>
+              <h3 className="text-sm font-bold text-slate-700">Network Reach</h3>
+              <p className="text-xs text-muted-foreground">Assign terminals to this carrier.</p>
+            </div>
             <Dialog>
               <DialogTrigger asChild>
-                <Button size="sm" variant="outline" className="h-7 px-2 gap-1 text-xs border-blue-200 text-blue-600">
-                  <Plus className="h-3 w-3" /> Manage
+                <Button size="sm" variant="outline" className="gap-2 bg-white">
+                  <Plus className="h-4 w-4" /> Manage Racks
                 </Button>
               </DialogTrigger>
+              {/* ... DialogContent stays the same as your previous code ... */}
               <DialogContent className="max-w-md">
-                <DialogHeader>
-                  <DialogTitle>Assign Racks to Carrier</DialogTitle>
-                </DialogHeader>
+                <DialogHeader><DialogTitle>Assign Racks</DialogTitle></DialogHeader>
                 <div className="relative my-4">
                   <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
-                  <Input
-                    placeholder="Search racks by name..."
-                    className="pl-9"
-                    value={rackSearch}
-                    onChange={(e) => setRackSearch(e.target.value)}
-                  />
+                  <Input placeholder="Search..." className="pl-9" value={rackSearch} onChange={(e) => setRackSearch(e.target.value)} />
                 </div>
-                <div className="max-h-60 overflow-y-auto space-y-1 pr-1 custom-scrollbar">
+                <div className="max-h-60 overflow-y-auto space-y-1">
                   {filteredRacks.map((rack: any) => {
                     const isSelected = formData.associatedRacks.some((r: any) => (typeof r === 'string' ? r : r._id) === rack._id)
                     return (
-                      <div
-                        key={rack._id}
-                        className={`flex items-center justify-between p-3 rounded-lg border transition-all cursor-pointer hover:bg-slate-50 ${isSelected ? 'border-blue-200 bg-blue-50/30' : 'border-transparent'}`}
-                        onClick={() => toggleRack(rack._id)}
-                      >
+                      <div key={rack._id} className="flex items-center justify-between p-3 rounded-lg border cursor-pointer hover:bg-slate-50" onClick={() => toggleRack(rack._id)}>
                         <div className="flex items-center gap-3">
-                          <Warehouse className={`h-4 w-4 ${isSelected ? 'text-blue-600' : 'text-slate-400'}`} />
-                          <div>
-                            <p className="text-sm font-semibold">{rack.rackName}</p>
-                            <p className="text-[10px] text-muted-foreground uppercase">{rack.rackLocation}</p>
-                          </div>
+                          <Warehouse className="h-4 w-4" />
+                          <span className="text-sm font-semibold">{rack.rackName}</span>
+                          <p className="text-[10px] uppercase text-muted-foreground">{rack.rackLocation}</p>
                         </div>
-                        <Checkbox checked={isSelected} onCheckedChange={() => toggleRack(rack._id)} />
+                        <Checkbox checked={isSelected} />
                       </div>
                     )
                   })}
                 </div>
-                <DialogFooter>
-                  <p className="text-[10px] text-muted-foreground text-center w-full italic">
-                    {formData.associatedRacks.length} rack(s) currently selected
-                  </p>
-                </DialogFooter>
               </DialogContent>
             </Dialog>
           </div>
 
-          <div className="grid gap-2">
-            {formData.associatedRacks.length === 0 ? (
-              <div className="p-8 border border-dashed rounded-xl text-center">
-                <p className="text-xs text-muted-foreground">No racks assigned. This carrier won't be able to fulfill orders.</p>
-              </div>
-            ) : (
-              formData.associatedRacks.map((rackRef: any) => {
-                // 1. Extract the ID (handles both populated objects and raw strings)
-                const rackId = typeof rackRef === 'string' ? rackRef : rackRef._id;
+          <Button onClick={handleUpdate} disabled={isSaving} className="w-full gap-2 py-6 text-lg shadow-lg shadow-blue-100">
+            {isSaving ? <Loader2 className="h-5 w-5 animate-spin" /> : <Save className="h-5 w-5" />}
+            Save Carrier Profile
+          </Button>
+        </div>
 
-                // 2. Find the full rack details from the 'allRacks' data we already have
-                const fullRackDetails = allRacks.find((r: any) => r._id === rackId);
+        {/* Right Column: Email Distribution */}
+        <div className="space-y-4 p-6 border rounded-xl bg-white shadow-sm h-full">
+          <h3 className="text-xs font-bold uppercase text-slate-400 tracking-widest">Email Distribution</h3>
 
-                return (
-                  <div key={rackId} className="flex items-center justify-between p-3 bg-white border rounded-lg group shadow-sm">
-                    <div className="flex items-center gap-3">
-                      <div className="h-8 w-8 rounded bg-slate-100 flex items-center justify-center text-slate-500">
-                        <Warehouse className="h-4 w-4" />
-                      </div>
-                      {/* 3. Display the name from fullRackDetails, fallback to 'Unknown Rack' if not found */}
-                      <span className="text-sm font-medium">
-                        {fullRackDetails ? fullRackDetails.rackName : 'Unknown Rack'}
-                        <p className="text-[10px] text-muted-foreground uppercase">{fullRackDetails.rackLocation}</p>
-                      </span>
-                    </div>
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      className="h-8 w-8 text-slate-300 hover:text-red-500 opacity-0 group-hover:opacity-100"
-                      onClick={() => toggleRack(rackId)}
-                    >
-                      <X className="h-4 w-4" />
-                    </Button>
-                  </div>
-                );
-              })
-            )}
+          {/* To Emails */}
+          <div className="space-y-2">
+            <label className="text-xs font-bold text-slate-600">To Recipients (Carriers)</label>
+            <div className="flex gap-2">
+              <Input
+                placeholder="Add email..."
+                value={newToEmail}
+                onChange={(e) => setNewToEmail(e.target.value)}
+                onKeyDown={(e) => e.key === 'Enter' && (e.preventDefault(), addEmail('toEmails', newToEmail))}
+              />
+              <Button size="sm" type="button" onClick={() => addEmail('toEmails', newToEmail)}><Plus className="h-4 w-4" /></Button>
+            </div>
+            <div className="flex flex-wrap gap-2 min-h-[40px] p-2 bg-slate-50 rounded-lg border border-inset">
+              {(formData.toEmails || []).map((email: string) => (
+                <span key={email} className="flex items-center gap-1 bg-blue-600 text-white px-2 py-1 rounded-md text-[11px] font-medium">
+                  {email} <X className="h-3 w-3 cursor-pointer hover:text-red-200" onClick={() => removeEmail('toEmails', email)} />
+                </span>
+              ))}
+            </div>
           </div>
+
+          {/* CC Emails */}
+          <div className="space-y-2">
+            <label className="text-xs font-bold text-slate-600">CC Recipients (Internal)</label>
+            <div className="flex gap-2">
+              <Input
+                placeholder="Add email..."
+                value={newCcEmail}
+                onChange={(e) => setNewCcEmail(e.target.value)}
+                onKeyDown={(e) => e.key === 'Enter' && (e.preventDefault(), addEmail('ccEmails', newCcEmail))}
+              />
+              <Button size="sm" type="button" onClick={() => addEmail('ccEmails', newCcEmail)}><Plus className="h-4 w-4" /></Button>
+            </div>
+            <div className="flex flex-wrap gap-2 min-h-[40px] p-2 bg-slate-50 rounded-lg border border-inset">
+              {(formData.ccEmails || []).map((email: string) => (
+                <span key={email} className="flex items-center gap-1 bg-slate-500 text-white px-2 py-1 rounded-md text-[11px] font-medium">
+                  {email} <X className="h-3 w-3 cursor-pointer hover:text-red-200" onClick={() => removeEmail('ccEmails', email)} />
+                </span>
+              ))}
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* Bottom Section: Horizontal Racks Display */}
+      <div className="pt-6 border-t">
+        <h3 className="text-xs font-bold uppercase text-slate-400 tracking-widest mb-4">Current Assignments</h3>
+        <div className="flex flex-wrap gap-4">
+          {formData.associatedRacks.length === 0 ? (
+            <div className="w-full p-6 bg-slate-50 border border-dashed rounded-xl text-center text-muted-foreground text-sm">
+              No racks assigned. Use the 'Manage Racks' button above to start.
+            </div>
+          ) : (
+            formData.associatedRacks.map((rackRef: any) => {
+              const rackId = typeof rackRef === 'string' ? rackRef : rackRef._id;
+              const fullRack = allRacks.find((r: any) => r._id === rackId);
+              return (
+                <div key={rackId} className="flex items-center gap-3 p-3 bg-white border rounded-xl shadow-sm min-w-[200px] relative group hover:border-blue-300 transition-colors">
+                  <div className="h-10 w-10 rounded-lg bg-blue-50 flex items-center justify-center text-blue-600">
+                    <Warehouse className="h-5 w-5" />
+                  </div>
+                  <div>
+                    <p className="text-sm font-bold truncate max-w-[140px]">{fullRack?.rackName || 'Unknown'}</p>
+                    <p className="text-[10px] uppercase text-muted-foreground">{fullRack?.rackLocation}</p>
+                  </div>
+                  <button
+                    onClick={() => toggleRack(rackId)}
+                    className="absolute -top-2 -right-2 bg-white border shadow-sm rounded-full p-1 text-slate-400 hover:text-red-500 opacity-0 group-hover:opacity-100 transition-opacity"
+                  >
+                    <X className="h-3 w-3" />
+                  </button>
+                </div>
+              )
+            })
+          )}
         </div>
       </div>
     </div>

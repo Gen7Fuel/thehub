@@ -33,6 +33,8 @@ const styles = StyleSheet.create({
   row: { flexDirection: 'row', padding: 3 },
   label: { width: 100, fontWeight: 'bold' },
   value: { flex: 1 },
+  deliveryDateValue: { flex: 1, fontWeight: 'bold' },
+  poNumberValue: { flex: 1, fontWeight: 'bold', color: 'red' },
 
   // Custom Table implementation using Flex
   tableContainer: { width: 'auto', marginVertical: 5, flexDirection: 'column' },
@@ -43,7 +45,7 @@ const styles = StyleSheet.create({
 
   // Delivery Table
   deliveryTable: { flexDirection: 'row', marginTop: 5, padding: 5 },
-  deliveryCol: { width: '50%', flexDirection: 'column' },
+  deliveryCol: { width: '35%', flexDirection: 'column' },
   boldText: { fontWeight: 'bold' }
 });
 
@@ -66,13 +68,15 @@ interface POPreviewProps {
   selectedStation: any; // Or your specific Location interface
   carrierName?: string;
   rackName?: string;
+  rackLocation?: string;
 }
 
 export const POPreviewDocument: React.FC<POPreviewProps> = ({
   data,
   selectedStation,
   carrierName,
-  rackName
+  rackName,
+  rackLocation
 }) => {
 
   const getQty = (gradeKey: string): string => {
@@ -103,16 +107,16 @@ export const POPreviewDocument: React.FC<POPreviewProps> = ({
           </View>
           <View style={styles.row}><Text style={styles.label}>Carrier</Text><Text style={styles.value}>{carrierName || ''}</Text></View>
           <View style={styles.row}><Text style={styles.label}>Trailer #</Text><Text style={styles.value}></Text></View>
-          <View style={styles.row}><Text style={styles.label}>PO #</Text><Text style={styles.value}>{data.poNumber}</Text></View>
+          <View style={styles.row}><Text style={styles.label}>PO #</Text><Text style={styles.poNumberValue}>{data.poNumber}</Text></View>
           <View style={styles.row}><Text style={styles.label}>Contact #</Text><Text style={styles.value}>nsporders@nspetroleum.ca</Text></View>
         </View>
 
         {/* Pick Up Section */}
         <View style={styles.section}>
           <Text style={styles.sectionHeader}>Pick Up Information</Text>
-          <View style={styles.row}><Text style={styles.label}>Pick Up #</Text><Text style={styles.value}>{data.badgeNo}</Text></View>
+          <View style={styles.row}><Text style={styles.label}>Pick Up #</Text></View>
           <View style={styles.row}><Text style={styles.label}>Badge #</Text><Text style={styles.value}>{data.badgeNo}</Text></View>
-          <View style={styles.row}><Text style={styles.label}>Rack Source</Text><Text style={styles.value}>{rackName || ''}</Text></View>
+          <View style={styles.row}><Text style={styles.label}>Rack Source</Text><Text style={styles.value}>{rackName || ''} - {rackLocation || ''}</Text></View>
           <View style={styles.row}><Text style={styles.label}>Address</Text><Text style={styles.value}></Text></View>
 
           {/* Grades Table - Using Flex instead of Table display */}
@@ -161,7 +165,7 @@ export const POPreviewDocument: React.FC<POPreviewProps> = ({
           <Text style={styles.sectionHeader}>Delivery Information</Text>
           <View style={styles.row}>
             <Text style={styles.label}>Delivery</Text>
-            <Text style={styles.value}>
+            <Text style={styles.deliveryDateValue}>
               {formatPDFDate(data.deliveryDate, false)} - {formatTime(data.startTime)}-{formatTime(data.endTime)} delivery
             </Text>
           </View>

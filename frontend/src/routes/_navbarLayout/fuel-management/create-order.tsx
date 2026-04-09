@@ -17,7 +17,7 @@ import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { getGradeTheme } from "./manage/locations/$id"
 import { gradeConfig } from "./workspace"
-import { PDFViewer, PDFDownloadLink } from '@react-pdf/renderer';
+import { PDFViewer, PDFDownloadLink, pdf } from '@react-pdf/renderer';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { POPreviewDocument, formatPDFDate } from "@/components/custom/fuelPoPDF"
 
@@ -315,14 +315,46 @@ function CreateFuelOrder() {
     setSuppliers([]);
   };
 
+  // const handleSubmit = async () => {
+  //   // Validation: Ensure mandatory fields are present
+  //   if (!formData.stationId || !formData.rackId || !formData.poNumber) {
+  //     alert("Please select a Station and Rack before submitting.");
+  //     return;
+  //   }
+
+  //   // Validation: Ensure at least one item has liters
+  //   const hasFuel = formData.items.some(item => (item.ltrs || 0) > 0);
+  //   if (!hasFuel) {
+  //     alert("Please enter a quantity for at least one fuel grade.");
+  //     return;
+  //   }
+
+  //   try {
+  //     setIsSubmitting(true);
+
+  //     // We send the formData as is; the backend handles mapping to Schema field names
+  //     const response = await axios.post('/api/fuel-orders', formData, authHeader);
+
+  //     if (response.status === 201) {
+  //       alert(`Success! Order ${response.data.poNumber} has been created.`);
+  //       handleReset(); // Clear the form
+  //     }
+  //   } catch (err: any) {
+  //     const errorMsg = err.response?.data?.message || "Failed to save the order.";
+  //     alert(errorMsg);
+  //     console.error("Submission Error:", err);
+  //   } finally {
+  //     setIsSubmitting(false);
+  //   }
+  // };
   const handleSubmit = async () => {
-    // Validation: Ensure mandatory fields are present
+    // 1. Validation: Ensure mandatory fields are present
     if (!formData.stationId || !formData.rackId || !formData.poNumber) {
       alert("Please select a Station and Rack before submitting.");
       return;
     }
 
-    // Validation: Ensure at least one item has liters
+    // 2. Validation: Ensure at least one item has liters
     const hasFuel = formData.items.some(item => (item.ltrs || 0) > 0);
     if (!hasFuel) {
       alert("Please enter a quantity for at least one fuel grade.");
@@ -332,13 +364,40 @@ function CreateFuelOrder() {
     try {
       setIsSubmitting(true);
 
-      // We send the formData as is; the backend handles mapping to Schema field names
-      const response = await axios.post('/api/fuel-orders', formData, authHeader);
+      // 3. Generate the PDF Blob directly from the component
+      const doc = (
+        <POPreviewDocument
+          data={formData}
+          selectedStation={selectedStation}
+          carrierName={selectedCarrier?.carrierName}
+          rackName={selectedRack?.rackName}
+          rackLocation={selectedRack?.rackLocation}
+        />
+      );
 
-      if (response.status === 201) {
-        alert(`Success! Order ${response.data.poNumber} has been created.`);
-        handleReset(); // Clear the form
-      }
+      const blob = await pdf(doc).toBlob();
+
+      // 4. Convert Blob to Base64 to send in JSON
+      const reader = new FileReader();
+      reader.readAsDataURL(blob);
+      reader.onloadend = async () => {
+        const base64data = (reader.result as string).split(',')[1];
+
+        // 5. Send formData + the PDF string to your backend
+        const payload = {
+          ...formData,
+          pdfBase64: base64data
+        };
+
+        const response = await axios.post('/api/fuel-orders', payload, authHeader);
+
+        if (response.status === 201) {
+          alert(`Success! Order ${response.data.poNumber} created and draft pushed to Outlook.`);
+          handleReset(); // Clear the form
+          if (setIsPreviewOpen) setIsPreviewOpen(false); // Close modal if applicable
+        }
+      };
+
     } catch (err: any) {
       const errorMsg = err.response?.data?.message || "Failed to save the order.";
       alert(errorMsg);
@@ -411,6 +470,7 @@ function CreateFuelOrder() {
                     selectedStation={selectedStation}
                     carrierName={selectedCarrier?.carrierName}
                     rackName={selectedRack?.rackName}
+                    rackLocation={selectedRack?.rackLocation}
                   />
                 </PDFViewer>
               </div>
@@ -423,6 +483,7 @@ function CreateFuelOrder() {
                       selectedStation={selectedStation}
                       carrierName={selectedCarrier?.carrierName}
                       rackName={selectedRack?.rackName}
+                      rackLocation={selectedRack?.rackLocation}
                     />
                   }
                   fileName={`Fuel Order Form NSP ${selectedStation?.fuelCustomerName || 'Order'} ${formatPDFDate(formData.deliveryDate, false)}.pdf`}

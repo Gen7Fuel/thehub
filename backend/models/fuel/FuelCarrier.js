@@ -5,6 +5,8 @@ const fuelCarrierSchema = new mongoose.Schema({
   carrierId: { type: String, required: true },
   email: { type: String },
   contact: { type: String },
+  toEmails: [{ type: String }],
+  ccEmails: [{ type: String }],
   associatedRacks: [{ type: mongoose.Schema.Types.ObjectId, ref: "FuelRack" }]
 });
 
