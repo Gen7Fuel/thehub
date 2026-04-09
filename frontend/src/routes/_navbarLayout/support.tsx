@@ -16,9 +16,10 @@ function RouteComponent() {
   const matchRoute = useMatchRoute()
   const { user } = useAuth()
 
-  // Determine if the Create or List tab is active
+  // Determine if the Create, List, or Chat tab is active
   const isCreateActive = matchRoute({ to: '/support' })
   const isListActive = matchRoute({ to: '/support/list' })
+  const isChatActive = matchRoute({ to: '/support/chat' })
 
   return (
     <div className="pt-5 flex flex-col items-center">
@@ -27,7 +28,7 @@ function RouteComponent() {
         {/* Create tab button */}
         <Link to="/support" activeOptions={{ exact: true }}>
           <Button
-            {...(isCreateActive ? {} : { variant: 'outline' } as object)} // Conditionally add variant
+            {...(isCreateActive ? {} : { variant: 'outline' } as object)}
             className="rounded-r-none"
           >
             Create
@@ -36,10 +37,19 @@ function RouteComponent() {
         {/* List tab button */}
         <Link to="/support/list" search={{site: user?.location }}>
           <Button
-            {...(!isListActive && { variant: 'outline' } as object)} // Conditionally add variant
-            className="rounded-l-none"
+            {...(!isListActive && { variant: 'outline' } as object)}
+            className="rounded-none"
           >
             List
+          </Button>
+        </Link>
+        {/* Chat tab button */}
+        <Link to="/support/chat">
+          <Button
+            {...(!isChatActive && { variant: 'outline' } as object)}
+            className="rounded-l-none"
+          >
+            Chat
           </Button>
         </Link>
       </div>
