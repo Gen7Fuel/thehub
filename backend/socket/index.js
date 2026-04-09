@@ -9,7 +9,7 @@ function setupSocket(server) {
     path: "/socket.io/",
     transports: ["websocket", "polling"],
     cors: {
-      origin: ["https://app.gen7fuel.com", "http://localhost:5173"],
+      origin: ["https://app.gen7fuel.com", "http://localhost:5173", "https://desk.gen7fuel.com"],
       methods: ["GET", "POST"],
       credentials: true,
     },

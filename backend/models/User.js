@@ -92,6 +92,7 @@ const userSchema = new mongoose.Schema({
   is_active: { type: Boolean, default: true },
   is_inOffice: { type: Boolean, default: false },
   is_admin: { type: Boolean, default: false },
+  isSupport: { type: Boolean, default: false },
   stationName: { type: String, required: true },
 
   role: {
