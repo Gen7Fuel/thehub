@@ -72,7 +72,7 @@ router.get('/', async (req, res) => {
     }
 
     const chats = await SupportChat.find({
-      status: { $in: ['pending', 'accepted'] },
+      status: { $in: ['pending', 'accepted', 'expired'] },
     })
       .sort({ createdAt: -1 })
       .lean();
@@ -105,6 +105,52 @@ router.get('/:id', async (req, res) => {
   } catch (error) {
     console.error('Support chat get error:', error);
     res.status(500).json({ success: false, message: 'Failed to fetch support chat.' });
+  }
+});
+
+// PATCH /api/support/chat/:id/accept — accept a pending chat (REST fallback)
+router.patch('/:id/accept', async (req, res) => {
+  try {
+    if (!req.user.isSupport && !req.user.is_admin) {
+      return res.status(403).json({ success: false, message: 'Only support users can accept chats.' });
+    }
+
+    const agentName = `${req.user.firstName || ''} ${req.user.lastName || ''}`.trim();
+
+    // Atomic: only succeeds if still pending
+    const chat = await SupportChat.findOneAndUpdate(
+      { _id: req.params.id, status: 'pending' },
+      {
+        status: 'accepted',
+        acceptedBy: { id: req.user._id, name: agentName },
+      },
+      { new: true }
+    );
+
+    if (!chat) {
+      return res.status(409).json({ success: false, message: 'Chat already accepted or expired.' });
+    }
+
+    // Cancel the timeout job
+    try {
+      const job = await chatTimeoutQueue.getJob(String(chat._id));
+      if (job) await job.remove();
+    } catch (e) {
+      console.warn('Could not cancel timeout job:', e?.message);
+    }
+
+    // Notify via socket
+    if (_io) {
+      const supportNamespace = _io.of('/support');
+      const payload = { chatId: String(chat._id), acceptedBy: chat.acceptedBy };
+      supportNamespace.to(`user-${chat.customer.id}`).emit('support-chat:accepted', payload);
+      supportNamespace.to('support-staff').emit('support-chat:accepted', payload);
+    }
+
+    res.json({ success: true, data: chat });
+  } catch (error) {
+    console.error('Support chat accept error:', error);
+    res.status(500).json({ success: false, message: 'Failed to accept chat.' });
   }
 });
 
