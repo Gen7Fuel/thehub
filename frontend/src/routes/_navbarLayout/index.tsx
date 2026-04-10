@@ -282,8 +282,14 @@ function App() {
                   AI Customer Chat
                 </Button>
               </Link>
+              <Link to="/ai-customer/mcq">
+                <Button className="w-32 h-32 flex items-center justify-center break-words whitespace-normal text-center">
+                  MCQ
+                </Button>
+              </Link>
             </div>
           </Section>
+          
         )}
 
         {(access?.bulletin || access?.events) && (
