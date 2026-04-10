@@ -18,8 +18,7 @@ function NewCarrierComponent() {
     carrierName: '',
     carrierId: '',
     associatedRacks: [],
-    contact: '',
-    email: ''
+    contact: ''
   })
   const [isSubmitting, setIsSubmitting] = useState(false)
 
@@ -94,7 +93,7 @@ function NewCarrierComponent() {
             />
           </div>
 
-          <div className="space-y-2">
+          {/* <div className="space-y-2">
             <label className="text-xs font-bold uppercase text-slate-500 ml-1">Email</label>
             <Input
               required
@@ -103,7 +102,7 @@ function NewCarrierComponent() {
               onChange={(e) => setFormData({ ...formData, email: e.target.value })}
               className="bg-white"
             />
-          </div>
+          </div> */}
         </div>
 
         <div className="flex items-center gap-3">

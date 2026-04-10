@@ -16,10 +16,12 @@ import {
 } from "@/components/ui/dialog";
 import { format, addDays, isAfter, startOfDay } from "date-fns";
 import { WorkspaceDatePicker, DatePicker } from '@/components/custom/datePicker';
-import { Loader2, RefreshCw, Truck, Clock, Edit3, CheckCircle2, PackagePlus, AlertTriangle } from 'lucide-react';
+import { Loader2, RefreshCw, Truck, Clock, Edit3, CheckCircle2, PackagePlus, AlertTriangle, FileText, Download } from 'lucide-react';
 import { Badge } from "@/components/ui/badge";
 // import { Label } from "@/components/ui/label";
 import { getGradeTheme } from "./manage/locations/$id"
+import { POPreviewDocument, formatPDFDate, getISODateOnly } from "@/components/custom/fuelPoPDF"
+import { PDFViewer, PDFDownloadLink } from '@react-pdf/renderer';
 
 export const Route = createFileRoute('/_navbarLayout/fuel-management/workspace')({
   component: WorkspaceComponent,
@@ -34,6 +36,15 @@ interface RescheduleDialogProps {
 
 const authHeader = {
   headers: { Authorization: `Bearer ${localStorage.getItem('token')}` }
+};
+
+export const getStatusColor = (status: string) => {
+  switch (status) {
+    case 'Created': return 'bg-yellow-100 text-yellow-600 border-yellow-200'; // Neutral for new orders
+    case 'In Transit': return 'bg-blue-100 text-blue-700 border-blue-200';
+    case 'Delivered': return 'bg-green-100 text-green-700 border-green-200';
+    default: return 'bg-slate-100 text-slate-500';
+  }
 };
 
 function WorkspaceComponent() {
@@ -310,6 +321,7 @@ function StationStrip({ location, date }: { location: any, date: Date }) {
   const [rescheduleOrder, setRescheduleOrder] = useState<any>(null);
   const [updateStatusOrder, setUpdateStatusOrder] = useState<any>(null);
   const [editQtyOrder, setEditQtyOrder] = useState<any>(null);
+  const [viewingPO, setViewingPO] = useState<any | null>(null);
 
   // 1. Update your useQuery to handle the new object structure
   const { data: tankResponse, isLoading: isTanksLoading } = useQuery({
@@ -389,15 +401,6 @@ function StationStrip({ location, date }: { location: any, date: Date }) {
     if (isAboveMaxLimit) return 'bg-amber-50/80 hover:bg-amber-100/80';
 
     return 'hover:bg-slate-50/50';
-  };
-
-  const getStatusColor = (status: string) => {
-    switch (status) {
-      case 'Created': return 'bg-yellow-100 text-yellow-600 border-yellow-200'; // Neutral for new orders
-      case 'In Transit': return 'bg-blue-100 text-blue-700 border-blue-200';
-      case 'Delivered': return 'bg-green-100 text-green-700 border-green-200';
-      default: return 'bg-slate-100 text-slate-500';
-    }
   };
 
   const queryClient = useQueryClient();
@@ -664,14 +667,28 @@ function StationStrip({ location, date }: { location: any, date: Date }) {
                         </div>
 
                         {/* Metadata Breadcrumbs */}
-                        <div className="hidden md:flex items-center gap-2 text-[11px] font-bold text-slate-400 bg-slate-50/50 px-2 py-0.5 rounded-full border border-slate-100">
-                          <span className="text-blue-500 uppercase">{order.supplier?.supplierName || 'No Supplier'}</span>
-                          <span className="text-slate-300">•</span>
-                          <span className="text-blue-500 uppercase">{order.rack?.rackName || 'No Rack'}</span>
-                          <span className="text-slate-300">•</span>
-                          <span className="text-blue-500 uppercase">{order.rack?.rackLocation || 'No Rack'}</span>
-                          <span className="text-slate-300">•</span>
-                          <span className="text-blue-500 uppercase">{order.carrier?.carrierName || 'No Carrier'}</span>
+                        {/* Metadata Breadcrumbs */}
+                        <div className="hidden md:flex items-center gap-2">
+                          <div className="flex items-center gap-2 text-[11px] font-bold text-slate-400 bg-slate-50/50 px-2 py-0.5 rounded-full border border-slate-100">
+                            <span className="text-blue-500 uppercase">{order.supplier?.supplierName || 'No Supplier'}</span>
+                            <span className="text-slate-300">•</span>
+                            <span className="text-blue-500 uppercase">{order.rack?.rackName || 'No Rack'}</span>
+                            <span className="text-slate-300">•</span>
+                            <span className="text-blue-500 uppercase">{order.rack?.rackLocation || 'No Rack'}</span>
+                            <span className="text-slate-300">•</span>
+                            <span className="text-blue-500 uppercase">{order.carrier?.carrierName || 'No Carrier'}</span>
+                          </div>
+
+                          {/* NEW VIEW PO BUTTON */}
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => setViewingPO(order)}
+                            className="h-6 px-2 text-[10px] font-black uppercase text-slate-500 hover:text-blue-600 hover:bg-blue-50"
+                          >
+                            <FileText className="h-3 w-3 mr-1" />
+                            View PO
+                          </Button>
                         </div>
                       </div>
 
@@ -764,6 +781,72 @@ function StationStrip({ location, date }: { location: any, date: Date }) {
           locationId={location._id}
         />
       )}
+      <Dialog open={!!viewingPO} onOpenChange={(open) => !open && setViewingPO(null)}>
+        <DialogContent className="max-w-5xl h-[90vh] flex flex-col">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <FileText className="h-5 w-5 text-blue-600" />
+              PO Record Preview - {viewingPO?.poNumber}
+            </DialogTitle>
+          </DialogHeader>
+
+          <div className="flex-1 border rounded-lg overflow-hidden bg-slate-100">
+            {viewingPO && (
+              <PDFViewer width="100%" height="100%" showToolbar={false}>
+                <POPreviewDocument
+                  data={{
+                    deliveryDate: getISODateOnly(viewingPO.originalDeliveryDate),
+                    poNumber: viewingPO.poNumber,
+                    badgeNo: viewingPO.badgeNo || '',
+                    startTime: viewingPO.originalDeliveryWindow?.start || '',
+                    endTime: viewingPO.originalDeliveryWindow?.end || '',
+                    items: viewingPO.items || []
+                  }}
+                  selectedStation={viewingPO.station}
+                  carrierName={viewingPO.carrier?.carrierName}
+                  rackName={viewingPO.rack?.rackName}
+                  rackLocation={viewingPO.rack?.rackLocation}
+                />
+              </PDFViewer>
+            )}
+          </div>
+
+          <DialogFooter className="flex justify-end items-center sm:justify-end gap-2">
+            <Button variant="ghost" onClick={() => setViewingPO(null)}>
+              Close
+            </Button>
+
+            {viewingPO && (
+              <PDFDownloadLink
+                document={
+                  <POPreviewDocument
+                    data={{
+                      deliveryDate: getISODateOnly(viewingPO.originalDeliveryDate),
+                      poNumber: viewingPO.poNumber,
+                      badgeNo: viewingPO.badgeNo || '',
+                      startTime: viewingPO.originalDeliveryWindow?.start || '',
+                      endTime: viewingPO.originalDeliveryWindow?.end || '',
+                      items: viewingPO.items || []
+                    }}
+                    selectedStation={viewingPO.station}
+                    carrierName={viewingPO.carrier?.carrierName}
+                    rackName={viewingPO.rack?.rackName}
+                    rackLocation={viewingPO.rack?.rackLocation}
+                  />
+                }
+                fileName={`Fuel Order Form NSP ${viewingPO?.station?.fuelCustomerName || 'Order'} ${formatPDFDate(getISODateOnly(viewingPO.originalDeliveryDate), false)}.pdf`}
+              >
+                {({ loading }) => (
+                  <Button className="bg-blue-600 hover:bg-blue-700" disabled={loading}>
+                    <Download className="h-4 w-4 mr-2" />
+                    {loading ? "Preparing..." : "Download PDF"}
+                  </Button>
+                )}
+              </PDFDownloadLink>
+            )}
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </>
   );
 }
@@ -1107,59 +1190,3 @@ export function EditQtyDialog({ order, open, onOpenChange, locationId }: any) {
     </Dialog>
   );
 }
-
-
-// const OrderDetailsDialog = ({ order }: { order: any }) => (
-//   <Dialog>
-//     <DialogTrigger asChild>
-//       <Button variant="outline" size="sm" className="h-5 px-2 text-[9px] font-black uppercase">
-//         View Details
-//       </Button>
-//     </DialogTrigger>
-//     <DialogContent className="max-w-md p-0 overflow-hidden border-2 border-slate-200 rounded-2xl">
-//       <div className="bg-blue-700 p-4 text-white">
-//         <h3 className="text-lg font-black uppercase tracking-tight">Order Logistics: {order.poNumber}</h3>
-//         <p className="text-[10px] opacity-80 font-bold">Created on {new Date(order.createdAt).toLocaleDateString()}</p>
-//       </div>
-
-//       <div className="p-6 grid grid-cols-2 gap-6 bg-white">
-//         {/* Source Info */}
-//         <div className="space-y-3">
-//           <div>
-//             <label className="text-[9px] font-black text-slate-400 uppercase tracking-wide">Supplier</label>
-//             <p className="text-xs font-black text-slate-800 uppercase">{order.supplier?.supplierName || 'N/A'}</p>
-//           </div>
-//           <div>
-//             <label className="text-[9px] font-black text-slate-400 uppercase tracking-wide">Terminal / Rack</label>
-//             <p className="text-xs font-black text-slate-800 uppercase">{order.rack?.rackName || 'N/A'}</p>
-//           </div>
-//         </div>
-
-//         {/* Carrier Info */}
-//         <div className="space-y-3 border-l pl-6">
-//           <div>
-//             <label className="text-[9px] font-black text-slate-400 uppercase tracking-wide">Carrier</label>
-//             <p className="text-xs font-black text-slate-800 uppercase">{order.carrier?.carrierName || 'TBD'}</p>
-//           </div>
-//           <div>
-//             <label className="text-[9px] font-black text-slate-400 uppercase tracking-wide">Badge Number</label>
-//             <p className="text-xs font-mono font-black text-slate-800">{order.badgeNo || 'None'}</p>
-//           </div>
-//         </div>
-
-//         {/* Full Volume List (Compact) */}
-//         <div className="col-span-2 bg-slate-50 p-3 rounded-xl border border-slate-100">
-//           <label className="text-[9px] font-black text-slate-400 uppercase block mb-2">Order Breakdown</label>
-//           <div className="grid grid-cols-2 gap-x-8 gap-y-1">
-//             {order.items?.map((item: any) => (
-//               <div key={item._id} className="flex justify-between border-b border-slate-200 py-1">
-//                 <span className="text-[10px] font-bold text-slate-600 uppercase">{item.grade}</span>
-//                 <span className="text-[10px] font-mono font-black text-blue-700">{item.ltrs?.toLocaleString()} L</span>
-//               </div>
-//             ))}
-//           </div>
-//         </div>
-//       </div>
-//     </DialogContent>
-//   </Dialog>
-// );

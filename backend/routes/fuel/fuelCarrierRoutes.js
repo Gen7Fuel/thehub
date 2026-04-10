@@ -29,14 +29,13 @@ router.get('/:id', async (req, res) => {
 // @route   POST /api/fuel-carriers
 // @desc    Create a new carrier
 router.post('/', async (req, res) => {
-  const { carrierName, carrierId, associatedRacks, contact, email } = req.body;
+  const { carrierName, carrierId, associatedRacks, contact } = req.body;
 
   const newCarrier = new FuelCarrier({
     carrierName,
     carrierId,
     associatedRacks,
-    contact,
-    email
+    contact
   });
 
   try {

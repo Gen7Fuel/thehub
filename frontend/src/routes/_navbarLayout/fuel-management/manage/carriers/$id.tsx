@@ -3,7 +3,7 @@ import { createFileRoute, useNavigate } from '@tanstack/react-router'
 import { Input } from '@/components/ui/input'
 import { Button } from '@/components/ui/button'
 import { Save, Trash2, Loader2, Plus, Search, X, Warehouse } from 'lucide-react'
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogFooter } from "@/components/ui/dialog"
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog"
 import { Checkbox } from "@/components/ui/checkbox"
 import axios from 'axios'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
@@ -152,13 +152,13 @@ function EditCarrierComponent() {
 
           <div className="p-6 border rounded-xl bg-slate-50 border-dashed flex items-center justify-between">
             <div>
-              <h3 className="text-sm font-bold text-slate-700">Network Reach</h3>
+              <h3 className="text-sm font-bold text-slate-700">Manage Racks</h3>
               <p className="text-xs text-muted-foreground">Assign terminals to this carrier.</p>
             </div>
             <Dialog>
               <DialogTrigger asChild>
                 <Button size="sm" variant="outline" className="gap-2 bg-white">
-                  <Plus className="h-4 w-4" /> Manage Racks
+                  <Plus className="h-4 w-4" /> Assign Racks
                 </Button>
               </DialogTrigger>
               {/* ... DialogContent stays the same as your previous code ... */}

@@ -392,9 +392,12 @@ function CreateFuelOrder() {
         const response = await axios.post('/api/fuel-orders', payload, authHeader);
 
         if (response.status === 201) {
-          alert(`Success! Order ${response.data.poNumber} created and draft pushed to Outlook.`);
-          handleReset(); // Clear the form
-          if (setIsPreviewOpen) setIsPreviewOpen(false); // Close modal if applicable
+          const { order, pushedTo } = response.data;
+
+          alert(`Success! Order ${order.poNumber} created.\n\nA draft has been pushed to: ${pushedTo}`);
+
+          handleReset();
+          if (setIsPreviewOpen) setIsPreviewOpen(false);
         }
       };
 
@@ -502,7 +505,7 @@ function CreateFuelOrder() {
                     setIsPreviewOpen(false);
                   }}
                 >
-                  Create Order
+                  Create Order & Push Draft
                 </Button>
               </DialogFooter>
             </DialogContent>

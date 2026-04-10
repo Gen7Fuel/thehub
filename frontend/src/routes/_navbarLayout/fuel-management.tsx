@@ -15,6 +15,7 @@ function RouteComponent() {
   const isWorkspaceActive = matchRoute({ to: '/fuel-management/workspace' });
   const isVolumeActive = matchRoute({ to: '/fuel-management/volume' });
   const isManageActive = matchRoute({ to: '/fuel-management/manage' });
+  const isOrderPipelineActive = matchRoute({ to: '/fuel-management/order-pipeline' });
 
   const { user } = useAuth();
 
@@ -50,6 +51,21 @@ function RouteComponent() {
               className={access?.fuelManagement?.volume ? 'rounded-none' : 'rounded-l-none'}
             >
               Workspace
+            </Button>
+          </Link>
+        )}
+
+        {access?.fuelManagement?.orderPipeline && (
+          <Link
+            to="/fuel-management/order-pipeline"
+            activeOptions={{ exact: true }}
+          >
+            <Button
+              {...(!isOrderPipelineActive && { variant: 'outline' } as object)}
+              // className={access.component_cycle_count_console ? 'rounded-none' : 'rounded-l-none'} //markpoint
+              className={access?.fuelManagement?.volume ? 'rounded-none' : 'rounded-l-none'}
+            >
+              Order Pipeline
             </Button>
           </Link>
         )}

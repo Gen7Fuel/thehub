@@ -1,4 +1,4 @@
-import { Document, Page, Text, View, StyleSheet } from '@react-pdf/renderer';
+import { Document, Page, Text, View, StyleSheet, Image } from '@react-pdf/renderer';
 
 // Helper to format: April 10th, 2026 or April 10th
 export const formatPDFDate = (dateStr: string, includeYear: boolean = true) => {
@@ -25,9 +25,20 @@ export const formatPDFDate = (dateStr: string, includeYear: boolean = true) => {
     : `${month} ${day}${suffix(day)}`;
 };
 
+export const getISODateOnly = (dateInput: any) => {
+  if (!dateInput) return "";
+  // Split at 'T' to get the 2026-04-10 part
+  return new Date(dateInput).toISOString().split('T')[0];
+};
+
 const styles = StyleSheet.create({
+  logo: {
+    width: 150,
+    alignSelf: 'center',
+    marginBottom: 10
+  },
   page: { padding: 30, fontSize: 10, fontFamily: 'Helvetica' },
-  header: { fontSize: 14, marginBottom: 5, fontWeight: 'bold' },
+  header: { fontSize: 14, marginBottom: 15, fontWeight: 'bold', textAlign: 'left' },
   section: { marginBottom: 15, border: '1pt solid black' },
   sectionHeader: { backgroundColor: '#f0f0f0', padding: 4, fontWeight: 'bold', borderBottom: '1pt solid black' },
   row: { flexDirection: 'row', padding: 3 },
@@ -44,8 +55,22 @@ const styles = StyleSheet.create({
   tableColValue: { width: '20%', padding: 2, textAlign: 'right' },
 
   // Delivery Table
-  deliveryTable: { flexDirection: 'row', marginTop: 5, padding: 5 },
-  deliveryCol: { width: '35%', flexDirection: 'column' },
+  deliveryTable: {
+    flexDirection: 'row',
+    marginTop: 5,
+    padding: 5
+  },
+  // Fixed narrow width for the Station name
+  deliveryColStation: {
+    width: '25%',
+    flexDirection: 'column',
+    paddingRight: 10 // Added a little gap between columns
+  },
+  // Flex 1 allows the address to fill the rest of the line
+  deliveryColAddress: {
+    flex: 1,
+    flexDirection: 'column'
+  },
   boldText: { fontWeight: 'bold' }
 });
 
@@ -97,7 +122,12 @@ export const POPreviewDocument: React.FC<POPreviewProps> = ({
   return (
     <Document>
       <Page size="A4" style={styles.page}>
-        <Text style={styles.header}>National Spirit Petroleum Order Sheet</Text>
+        {/* Logo at the top center */}
+        <Image
+          src="/public/fuel_images/nsp_logo.png"
+          style={styles.logo}
+        />
+        <Text style={styles.header}>Fuel Order Sheet</Text>
 
         {/* Logistics Section */}
         <View style={styles.section}>
@@ -171,11 +201,14 @@ export const POPreviewDocument: React.FC<POPreviewProps> = ({
           </View>
 
           <View style={styles.deliveryTable}>
-            <View style={styles.deliveryCol}>
+            {/* Station Column - 25% Width */}
+            <View style={styles.deliveryColStation}>
               <Text style={styles.boldText}>Station</Text>
               <Text>{selectedStation?.fuelCustomerName || 'N/A'}</Text>
             </View>
-            <View style={styles.deliveryCol}>
+
+            {/* Address Column - Takes remaining 75% Width */}
+            <View style={styles.deliveryColAddress}>
               <Text style={styles.boldText}>Address</Text>
               <Text>{selectedStation?.address || 'N/A'}</Text>
             </View>

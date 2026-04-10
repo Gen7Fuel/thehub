@@ -89,6 +89,7 @@ router.get('/workspace-orders', async (req, res) => {
       .populate('carrier', 'carrierName')
       .populate('supplier', 'supplierName')
       .populate('rack', 'rackName rackLocation')
+      .populate('station', 'stationName fuelStationNumber fuelCustomerName address')
       .lean();
 
     res.json(orders);
@@ -189,10 +190,11 @@ router.post('/', async (req, res) => {
     if (existing) return res.status(400).json({ message: "Duplicate PO Number." });
 
     // 2. Fetch related names for the email body
-    const [station, rack, supplier] = await Promise.all([
+    const [station, rack, supplier, carrier] = await Promise.all([
       Location.findById(stationId).lean(),
       FuelRack.findById(rackId).lean(),
-      FuelSupplier.findById(supplierId).lean()
+      FuelSupplier.findById(supplierId).lean(),
+      FuelCarrier.findById(carrierId).lean()
     ]);
 
     // 3. Save Order to MongoDB
@@ -249,18 +251,40 @@ router.post('/', async (req, res) => {
         <p>Let me know if you have any questions.</p>
       </div>
     `;
+    // B. Build Email Payload
+    const permanentCcEmails = [
+      "kellie@gen7fuel.com",
+      "nmiller@gen7fuel.com",
+      "ryan@gen7fuel.com"
+    ];
+    // Fallback to a default if the station doesn't have one set
+    const targetMailbox = "daksh@gen7fuel.com" || "daksh@gen7fuel.com";
 
     const draftPayload = {
       subject: `${formattedDate} ${customerName} Load`,
       body: { contentType: "HTML", content: emailBody },
-      toRecipients: [{ emailAddress: { address: "daksh@gen7fuel.com" } }],
-      // Note: PDF attachment logic assumes you pass the buffer from your backend PDF generator
+
+      // Map the carrier's 'toEmails' array to the Graph API format
+      toRecipients: (carrier.toEmails || []).map(email => ({
+        emailAddress: { address: email }
+      })),
+
+      // Combine carrier's 'ccEmails' with your 3 permanent placeholders
+      ccRecipients: [
+        ...(carrier.ccEmails || []).map(email => ({
+          emailAddress: { address: email }
+        })),
+        ...permanentCcEmails.map(email => ({
+          emailAddress: { address: email }
+        }))
+      ],
+
       attachments: [
         {
           "@odata.type": "#microsoft.graph.fileAttachment",
           name: `Fuel Order Form NSP ${customerName} ${formattedDate}.pdf`,
           contentType: "application/pdf",
-          contentBytes: pdfBase64 // Use the base64 string directly here
+          contentBytes: pdfBase64
         }
       ]
     };
@@ -278,10 +302,13 @@ router.post('/', async (req, res) => {
       scopes: ["https://graph.microsoft.com/.default"]
     });
     const client = Client.init({ authProvider: (done) => done(null, authRes.accessToken) });
-    // Create draft in the user's mailbox
-    // Change this line
-    await client.api('/users/daksh@gen7fuel.com/mailFolders/drafts/messages').post(draftPayload);
-    // Try sending directly to yourself as a test
+
+    // Create draft in the target user's mailbox
+    await client
+      .api(`/users/${targetMailbox}/mailFolders/drafts/messages`)
+      .post(draftPayload);
+
+    // Sending the email directly
     // const directSend = {
     //   message: draftPayload, // Your existing object goes here
     //   saveToSentItems: "true"
@@ -294,9 +321,11 @@ router.post('/', async (req, res) => {
     //   console.error("Direct send also failed. This is a permission/licensing issue.");
     //   throw sendErr;
     // }
+
     res.status(201).json({
       message: "Order created and email draft pushed to Outlook.",
-      order: savedOrder
+      order: savedOrder,
+      pushedTo: targetMailbox
     });
 
   } catch (err) {
