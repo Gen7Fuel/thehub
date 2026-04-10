@@ -64,6 +64,26 @@ router.post('/', async (req, res) => {
   }
 });
 
+// GET /api/support/chat — list active chats (for support users)
+router.get('/', async (req, res) => {
+  try {
+    if (!req.user.isSupport && !req.user.is_admin) {
+      return res.status(403).json({ success: false, message: 'Access denied.' });
+    }
+
+    const chats = await SupportChat.find({
+      status: { $in: ['pending', 'accepted'] },
+    })
+      .sort({ createdAt: -1 })
+      .lean();
+
+    res.json({ success: true, data: chats });
+  } catch (error) {
+    console.error('Support chat list error:', error);
+    res.status(500).json({ success: false, message: 'Failed to list chats.' });
+  }
+});
+
 // GET /api/support/chat/:id — fetch a chat session
 router.get('/:id', async (req, res) => {
   try {
