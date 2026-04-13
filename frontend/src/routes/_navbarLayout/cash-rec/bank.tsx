@@ -158,6 +158,9 @@ function RouteComponent() {
   const handleFiles = async (files: FileList | null) => {
     setError(null)
     setParsed(null)
+    setDetectedStation(null)
+    // Clear stale site from URL so detection starts fresh for the new file
+    navigate({ to: Route.fullPath, search: (prev: any) => ({ ...prev, site: '' }) })
     if (!files || files.length === 0) return
     const file = files[0]
     const name = file.name.toLowerCase()
@@ -194,7 +197,7 @@ function RouteComponent() {
         }
         if (!locations) return
 
-        const normalize = (s: string) => s.trim().toLowerCase()
+        const normalize = (s: string) => s.trim().toLowerCase().replace(/'/g, '')
         const stripGen7 = (s: string) =>
           s
             .replace(/\bgen7\b/gi, '')

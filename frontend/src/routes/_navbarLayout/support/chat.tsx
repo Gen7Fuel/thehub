@@ -14,6 +14,7 @@ export const Route = createFileRoute('/_navbarLayout/support/chat')({
 interface ChatMessage {
   sender: string
   senderName: string
+  senderType?: 'agent' | 'customer'
   text: string
   createdAt: string
 }
@@ -244,7 +245,9 @@ function RouteComponent() {
             {/* Messages */}
             <div className="flex-1 overflow-y-auto space-y-2 pr-1">
               {messages.map((msg, idx) => {
-                const isMe = String(msg.sender) === String(user?.id)
+                const isMe = msg.senderType != null
+                  ? msg.senderType === 'customer'
+                  : String(msg.sender) === String(user?.id)
                 return (
                   <div
                     key={idx}
