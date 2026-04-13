@@ -1,6 +1,7 @@
 const express = require('express');
 const router = express.Router();
 const SupportChat = require('../models/SupportChat');
+const SupportTicket = require('../models/Support');
 const { chatTimeoutQueue } = require('../queues/supportChatQueue');
 
 const CHAT_TIMEOUT_MS = 60_000; // 60 seconds
@@ -184,6 +185,70 @@ router.patch('/:id/close', async (req, res) => {
   } catch (error) {
     console.error('Support chat close error:', error);
     res.status(500).json({ success: false, message: 'Failed to close chat.' });
+  }
+});
+
+// POST /api/support/chat/:id/convert-to-ticket — agent manually creates a ticket from a chat
+router.post('/:id/convert-to-ticket', async (req, res) => {
+  try {
+    if (!req.user.isSupport && !req.user.is_admin) {
+      return res.status(403).json({ success: false, message: 'Only support users can convert chats to tickets.' });
+    }
+
+    const { text, priority = 'medium' } = req.body;
+    if (!text || !String(text).trim()) {
+      return res.status(400).json({ success: false, message: 'Ticket text is required.' });
+    }
+    if (!['low', 'medium', 'high', 'urgent'].includes(priority)) {
+      return res.status(400).json({ success: false, message: 'Invalid priority.' });
+    }
+
+    const chat = await SupportChat.findById(req.params.id);
+    if (!chat) {
+      return res.status(404).json({ success: false, message: 'Chat not found.' });
+    }
+    if (chat.status === 'expired' || chat.status === 'closed') {
+      return res.status(409).json({ success: false, message: 'Chat is already closed.' });
+    }
+
+    // Create the ticket under the customer's user ID
+    const ticket = await SupportTicket.create({
+      userId: chat.customer.id,
+      text: String(text).trim(),
+      priority,
+      site: chat.site,
+      status: 'open',
+      messages: [{
+        sender: chat.customer.id,
+        text: String(text).trim(),
+        createdAt: new Date(),
+      }],
+    });
+
+    // Cancel the timeout job if the chat was still pending
+    try {
+      const job = await chatTimeoutQueue.getJob(String(chat._id));
+      if (job) await job.remove();
+    } catch (e) {
+      console.warn('Could not cancel timeout job:', e?.message);
+    }
+
+    chat.status = 'expired';
+    chat.convertedTicketId = ticket._id;
+    await chat.save();
+
+    // Notify all parties via socket
+    if (_io) {
+      const supportNamespace = _io.of('/support');
+      const payload = { chatId: String(chat._id), ticketId: String(ticket._id) };
+      supportNamespace.to(`user-${chat.customer.id}`).emit('support-chat:expired', payload);
+      supportNamespace.to('support-staff').emit('support-chat:expired', payload);
+    }
+
+    res.json({ success: true, data: { ticket, chatId: String(chat._id) } });
+  } catch (error) {
+    console.error('Convert chat to ticket error:', error);
+    res.status(500).json({ success: false, message: 'Failed to create ticket.' });
   }
 });
 
