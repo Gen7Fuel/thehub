@@ -211,8 +211,9 @@ const setupSupportSocket = (io) => {
         }
 
         const msg = {
-          sender: socket.user._id || socket.user.id,
+          sender: String(socket.user._id || socket.user.id),
           senderName: `${socket.user.firstName || ''} ${socket.user.lastName || ''}`.trim(),
+          senderType: isSupport ? 'agent' : 'customer',
           text: String(text).trim(),
           createdAt: new Date(),
         };
