@@ -124,7 +124,7 @@ export const POPreviewDocument: React.FC<POPreviewProps> = ({
       <Page size="A4" style={styles.page}>
         {/* Logo at the top center */}
         <Image
-          src="/public/fuel_images/nsp_logo.png"
+          src="/fuel_images/nsp_logo.png"
           style={styles.logo}
         />
         <Text style={styles.header}>Fuel Order Sheet</Text>

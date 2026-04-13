@@ -16,11 +16,18 @@ import {
   DialogHeader,
   DialogTitle,
   DialogFooter,
-} from "@/components/ui/dialog"; 
+} from "@/components/ui/dialog";
 
 export const Route = createFileRoute('/_navbarLayout/settings/sites/new')({
   component: NewSiteRouteComponent,
 });
+
+const CANADIAN_PROVINCES = [
+  "Alberta", "British Columbia", "Manitoba", "New Brunswick",
+  "Newfoundland and Labrador", "Nova Scotia", "Ontario",
+  "Prince Edward Island", "Quebec", "Saskatchewan",
+  "Northwest Territories", "Nunavut", "Yukon"
+];
 
 function NewSiteRouteComponent() {
   const { user } = useAuth();
@@ -38,6 +45,7 @@ function NewSiteRouteComponent() {
     kardpollCode: "",
     csoCode: "",
     timezone: "America/Toronto", // default timezone
+    province: "Ontario",
     email: "",
     sellsLottery: false,
     managerEmails: [] as string[],
@@ -141,6 +149,22 @@ function NewSiteRouteComponent() {
         <div>
           <Label>CSO Code</Label>
           <Input name="csoCode" value={formData.csoCode} onChange={handleChange} required />
+        </div>
+        
+        {/* PROVINCE SELECTION */}
+        <div>
+          <Label>Province</Label>
+          <select
+            name="province"
+            value={formData.province}
+            onChange={handleChange}
+            className="border rounded px-3 py-2 w-full font-medium"
+            required
+          >
+            {CANADIAN_PROVINCES.map(p => (
+              <option key={p} value={p}>{p}</option>
+            ))}
+          </select>
         </div>
 
         <div>
