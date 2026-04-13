@@ -214,17 +214,26 @@ function VolumeDashboard() {
   )
 }
 
-function GradeWrapper({ grade, tanks }: { grade: string, tanks: any[] }) {
+function GradeWrapper({ grade, tanks }: { grade: string; tanks: any[] }) {
   const theme = getGradeTheme(grade);
-  const totalVolume = tanks.reduce((acc, t) => acc + (t.currentVolume || 0), 0);
+
+  // 1. Calculate sum ONLY for tanks that have valid recent readings
+  // We exclude anything that explicitly says "No latest reading available"
+  const validTanks = tanks.filter(
+    (t) => t.lastUpdatedVolumeReadingDateTime &&
+      t.lastUpdatedVolumeReadingDateTime !== "No latest reading available"
+  );
+
+  const totalVolume = validTanks.reduce((acc, t) => acc + (t.currentVolume || 0), 0);
+
+  // 2. Determine if we should even show a total
+  const showTotal = validTanks.length > 0;
 
   return (
     <div
       className={`flex flex-col gap-3 p-4 rounded-[45px] border-2 border-dashed ${theme.raw}25 bg-white/40 backdrop-blur-sm transition-all duration-300`}
-      // This is the magic line: it tells the flexbox to grow based on tank count
       style={{ flex: `${tanks.length} 0 auto`, minWidth: `${tanks.length * 200}px` }}
     >
-      {/* Grade Header */}
       <div className="flex justify-between items-center px-4 py-1">
         <div className="flex items-center gap-2">
           <div className={`h-2 w-2 rounded-full ${theme.color} animate-pulse`} />
@@ -232,16 +241,18 @@ function GradeWrapper({ grade, tanks }: { grade: string, tanks: any[] }) {
             {grade}
           </h3>
         </div>
-        <div className="flex flex-col items-end">
-          <span className="text-sm font-black text-slate-900 leading-none">
-            {totalVolume.toLocaleString()} <span className="text-[10px]">L</span>
-          </span>
-        </div>
+
+        {showTotal && (
+          <div className="flex flex-col items-end">
+            <span className="text-sm font-black text-slate-900 leading-none">
+              {totalVolume.toLocaleString()} <span className="text-[10px]">L</span>
+            </span>
+          </div>
+        )}
       </div>
 
-      {/* Tanks Row - Use grid so they stay uniform regardless of parent width */}
       <div className={`grid grid-cols-${tanks.length} gap-3 w-full`}>
-        {tanks.map(tank => (
+        {tanks.map((tank) => (
           <div key={tank._id} className="w-full">
             <VolumeTankCard tank={tank} />
           </div>
@@ -254,20 +265,22 @@ function GradeWrapper({ grade, tanks }: { grade: string, tanks: any[] }) {
 function VolumeTankCard({ tank }: { tank: any }) {
   const theme = getGradeTheme(tank.grade);
 
-  // Logic for Levels
+  const readingTime = tank.lastUpdatedVolumeReadingDateTime || "";
+  const isStale = readingTime === "No latest reading available" || readingTime === "";
+  const isYesterday = readingTime.includes('Yesterday');
+
   const fillPercentage = (tank.currentVolume / tank.tankCapacity) * 100;
   const maxLine = (tank.maxVolumeCapacity / tank.tankCapacity) * 100;
   const minLine = (tank.minVolumeCapacity / tank.tankCapacity) * 100;
 
-  // Status Checks
-  const isOverflowRisk = tank.currentVolume >= tank.maxVolumeCapacity;
-  const isCriticalLow = tank.currentVolume <= tank.minVolumeCapacity;
+  const isOverflowRisk = !isStale && tank.currentVolume >= tank.maxVolumeCapacity;
+  const isCriticalLow = !isStale && tank.currentVolume <= tank.minVolumeCapacity;
 
   return (
     <div className={`bg-white rounded-[35px] p-4 flex flex-col h-full w-full transition-all duration-300 border-2 ${isCriticalLow ? 'border-red-500 shadow-lg shadow-red-100' :
       isOverflowRisk ? 'border-yellow-500 shadow-lg shadow-yellow-100' :
         'border-slate-100 hover:border-slate-300'
-      }`}>
+      } ${isStale ? 'opacity-60' : ''}`}>
 
       {/* Header */}
       <div className="flex justify-between items-start mb-3">
@@ -279,13 +292,13 @@ function VolumeTankCard({ tank }: { tank: any }) {
           </div>
           <span className="text-lg font-black italic text-slate-900">#0{tank.tankNo}</span>
         </div>
-        <div className={`${theme.color} p-1.5 rounded-xl text-white`}>
+        <div className={`${theme.color} p-1.5 rounded-xl text-white ${isStale ? 'grayscale' : ''}`}>
           <theme.icon className="h-4 w-4" />
         </div>
       </div>
 
-      {/* Vertical Cylinder (Now clean of labels) */}
-      <div className="relative h-56 w-full bg-slate-50 rounded-[30px] border-4 border-white shadow-inner overflow-hidden mb-4">
+      {/* Cylinder - Applied blur here when isStale */}
+      <div className={`relative h-56 w-full bg-slate-50 rounded-[30px] border-4 border-white shadow-inner overflow-hidden mb-4 transition-all duration-500 ${isStale ? 'blur-md grayscale' : ''}`}>
         <div
           className="absolute bottom-0 w-full transition-all duration-1000 ease-in-out"
           style={{
@@ -296,30 +309,30 @@ function VolumeTankCard({ tank }: { tank: any }) {
           <div className="absolute top-0 w-full h-1.5 bg-white/20 blur-[1px]" />
         </div>
 
-        {/* Safety Lines (Visual only) */}
         <div className="absolute w-full border-t border-sky-400/50 border-dashed z-10" style={{ bottom: `${maxLine}%` }} />
         <div className="absolute w-full border-t-2 border-red-500/40 z-10" style={{ bottom: `${minLine}%` }} />
 
-        {/* Volume Bubble */}
-        <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
-          <div className={`px-3 py-1.5 rounded-2xl border backdrop-blur-md ${isCriticalLow ? 'bg-red-500 text-white border-red-400' :
-            isOverflowRisk ? 'bg-yellow-500 text-slate-900 border-yellow-400' :
-              'bg-white/90 text-slate-900 border-white'
-            }`}>
-            <span className="text-sm font-black flex flex-col items-center leading-none">
-              {tank.currentVolume.toLocaleString()}
-              <span className={`text-[9px] uppercase tracking-tight mt-0.5 ${isCriticalLow ? 'text-white/70' : 'text-slate-400'}`}>
-                Liters
+        {/* Volume Bubble - Now hidden entirely if stale */}
+        {!isStale && (
+          <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
+            <div className={`px-3 py-1.5 rounded-2xl border backdrop-blur-md ${isCriticalLow ? 'bg-red-500 text-white border-red-400' :
+              isOverflowRisk ? 'bg-yellow-500 text-slate-900 border-yellow-400' :
+                'bg-white/90 text-slate-900 border-white'
+              }`}>
+              <span className="text-sm font-black flex flex-col items-center leading-none">
+                {tank.currentVolume.toLocaleString()}
+                <span className={`text-[9px] uppercase tracking-tight mt-0.5 ${isCriticalLow ? 'text-white/70' : 'text-slate-400'}`}>
+                  Liters
+                </span>
               </span>
-            </span>
+            </div>
           </div>
-        </div>
+        )}
       </div>
 
       {/* Stats Section */}
       <div className="space-y-3 mt-auto">
-        {/* Capacity Bar with Percentage */}
-        <div className="bg-slate-50 p-2.5 rounded-2xl border border-slate-100/50">
+        <div className={`bg-slate-50 p-2.5 rounded-2xl border border-slate-100/50 transition-all ${isStale ? 'blur-[2px] opacity-40' : ''}`}>
           <div className="flex justify-between items-center px-1 mb-1.5">
             <span className="text-[7px] font-black text-slate-400 uppercase">Total Capacity</span>
             <span className="text-[10px] font-black text-slate-700">{tank.tankCapacity.toLocaleString()}L</span>
@@ -335,23 +348,14 @@ function VolumeTankCard({ tank }: { tank: any }) {
           </div>
         </div>
 
-        {/* Safety Legend (Values below the bar) */}
-        <div className="grid grid-cols-2 gap-2 px-1">
-          <div className="flex flex-col border-l-2 border-sky-400/50 pl-2">
-            <span className="text-[7px] font-black text-slate-400 uppercase">Max Limit</span>
-            <span className="text-[10px] font-bold text-slate-600">{tank.maxVolumeCapacity.toLocaleString()}L</span>
-          </div>
-          <div className="flex flex-col border-l-2 border-red-500/50 pl-2">
-            <span className="text-[7px] font-black text-slate-400 uppercase">Min Limit</span>
-            <span className="text-[10px] font-bold text-slate-600">{tank.minVolumeCapacity.toLocaleString()}L</span>
-          </div>
-        </div>
-
-        {/* Enhanced Last Sync */}
+        {/* Sync Status - Kept clear so user knows WHY it is blurred */}
         <div className="pt-2 border-t border-slate-50 text-center">
-          <p className="text-[7px] font-black text-slate-300 uppercase tracking-wide mb-0.5">Last Reading Time</p>
-          <p className={`text-[12px] font-black tracking-tight ${isCriticalLow ? 'text-red-500 animate-pulse' : 'text-slate-600'}`}>
-            {tank.lastUpdatedVolumeReadingDateTime || 'Syncing...'}
+          <p className="text-[7px] font-black text-slate-300 uppercase mb-0.5">Last Reading Time</p>
+          <p className={`text-[12px] font-black tracking-tight ${isStale ? 'text-slate-400 italic' :
+            isYesterday ? 'text-orange-500' :
+              isCriticalLow ? 'text-red-500 animate-pulse' : 'text-slate-600'
+            }`}>
+            {tank.lastUpdatedVolumeReadingDateTime || 'No Data'}
           </p>
         </div>
       </div>
@@ -403,15 +407,16 @@ function SalesVsTankVarianceChart({ auditData }: { auditData: any[] }) {
                 boxShadow: '0 20px 25px -5px rgba(0,0,0,0.1)',
                 padding: '15px 20px'
               }}
-              // This formats the date at the top of the tooltip
+              // FIX: Force UTC here to prevent the EST/UTC offset shift
               labelFormatter={(value) => {
-                return new Date(value).toLocaleDateString('en-US', {
+                const dateObj = new Date(value);
+                return dateObj.toLocaleDateString('en-US', {
                   day: 'numeric',
                   month: 'short',
-                  year: 'numeric' // Optional: remove if you only want Day/Month
+                  year: 'numeric',
+                  timeZone: 'UTC' // <--- This is the magic line
                 });
               }}
-              // Optional: Clean up the individual data labels inside the tooltip
               formatter={(value: number) => [`${value.toLocaleString()} L`]}
             />
             <Legend verticalAlign="top" align="right" height={36} />

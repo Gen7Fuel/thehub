@@ -32,7 +32,8 @@ export const getLiveTankVolumes = async () => {
     Station_SK: item.station_sk_out,
     Tank_No: item.tank_id_out, // Now returning specific tank ID
     Volume: item.volume_out,
-    ReadingTime: item.reading_time_out
+    ReadingTime: item.reading_time_out,
+    ReadingDate: item.date_sk_out
   }));
 };
 

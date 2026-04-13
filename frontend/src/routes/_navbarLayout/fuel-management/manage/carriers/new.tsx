@@ -18,7 +18,8 @@ function NewCarrierComponent() {
     carrierName: '',
     carrierId: '',
     associatedRacks: [],
-    contact: ''
+    contact: '',
+    contactName: ''
   })
   const [isSubmitting, setIsSubmitting] = useState(false)
 
@@ -75,34 +76,36 @@ function NewCarrierComponent() {
             <label className="text-xs font-bold uppercase text-slate-500 ml-1">Carrier ID</label>
             <Input
               required
-              placeholder="Unique Alpha-numeric ID"
+              placeholder="Unique Alpha-numeric ID (NPT)"
               value={formData.carrierId}
               onChange={(e) => setFormData({ ...formData, carrierId: e.target.value })}
               className="bg-white"
             />
           </div>
 
+          
           <div className="space-y-2">
-            <label className="text-xs font-bold uppercase text-slate-500 ml-1">Contact</label>
+            <label className="text-xs font-bold uppercase text-slate-500 ml-1">Primary Contact Name</label>
             <Input
               required
-              placeholder="Contact Number of the Carrier"
+              placeholder="Enter contact name (Optional)"
+              value={formData.contactName}
+              onChange={(e) => setFormData({ ...formData, contactName: e.target.value })}
+              className="bg-white"
+            />
+          </div>
+
+          <div className="space-y-2">
+            <label className="text-xs font-bold uppercase text-slate-500 ml-1">Primary Contact Information</label>
+            <Input
+              required
+              placeholder="Enter contact information (Optional)"
               value={formData.contact}
               onChange={(e) => setFormData({ ...formData, contact: e.target.value })}
               className="bg-white"
             />
           </div>
 
-          {/* <div className="space-y-2">
-            <label className="text-xs font-bold uppercase text-slate-500 ml-1">Email</label>
-            <Input
-              required
-              placeholder="Carrier Email ID for Orders"
-              value={formData.email}
-              onChange={(e) => setFormData({ ...formData, email: e.target.value })}
-              className="bg-white"
-            />
-          </div> */}
         </div>
 
         <div className="flex items-center gap-3">

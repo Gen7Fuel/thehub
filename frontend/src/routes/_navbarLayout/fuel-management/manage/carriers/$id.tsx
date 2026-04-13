@@ -17,7 +17,7 @@ function EditCarrierComponent() {
   const navigate = useNavigate()
   const queryClient = useQueryClient()
 
-  const [formData, setFormData] = useState<any>({ carrierName: '', carrierId: '', associatedRacks: [], email: '', contact: '' })
+  const [formData, setFormData] = useState<any>({ carrierName: '', carrierId: '', associatedRacks: [], contactName: '', contact: '' })
   const [loading, setLoading] = useState(true)
   const [isSaving, setIsSaving] = useState(false)
   const [rackSearch, setRackSearch] = useState('')
@@ -55,7 +55,7 @@ function EditCarrierComponent() {
     const fetchCarrier = async () => {
       setLoading(true); // Trigger loading state
       // 1. Reset state immediately so old data doesn't "ghost" 
-      setFormData({ carrierName: '', carrierId: '', associatedRacks: [], email: '', contact: '' });
+      setFormData({ carrierName: '', carrierId: '', associatedRacks: [], contactName: '', contact: '' });
 
       try {
         const res = await axios.get(`/api/fuel-carriers/${id}`, {
@@ -145,8 +145,12 @@ function EditCarrierComponent() {
               <Input value={formData.carrierId} onChange={(e) => setFormData({ ...formData, carrierId: e.target.value })} />
             </div>
             <div className="space-y-2">
-              <label className="text-xs font-bold text-slate-600 ml-1">Primary Contact</label>
-              <Input value={formData.contact} onChange={(e) => setFormData({ ...formData, contact: e.target.value })} />
+              <label className="text-xs font-bold text-slate-600 ml-1">Primary Contact Name</label>
+              <Input value={formData.contactName} placeholder="Enter contact name (Optional)" onChange={(e) => setFormData({ ...formData, contactName: e.target.value })} />
+            </div>
+            <div className="space-y-2">
+              <label className="text-xs font-bold text-slate-600 ml-1">Primary Contact Information</label>
+              <Input value={formData.contact} placeholder="Enter contact information (Optional)" onChange={(e) => setFormData({ ...formData, contact: e.target.value })} />
             </div>
           </div>
 

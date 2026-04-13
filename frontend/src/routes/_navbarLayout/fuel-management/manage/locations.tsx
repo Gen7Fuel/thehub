@@ -17,7 +17,7 @@ function LocationListLayout() {
   const { data: locations = [], isLoading } = useQuery({
     queryKey: ['locations-list'],
     queryFn: async () => {
-      const res = await axios.get('/api/fuel-station-tanks/all-locations', {
+      const res = await axios.get('/api/fuel-station-tanks/stations', {
         headers: { Authorization: `Bearer ${localStorage.getItem('token')}` }
       })
       return res.data

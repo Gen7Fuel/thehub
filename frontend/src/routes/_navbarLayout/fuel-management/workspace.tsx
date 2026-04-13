@@ -148,7 +148,7 @@ function WorkspaceComponent() {
 
                     {/* Physical Overflow */}
                     <div className="flex items-center gap-1.5">
-                      <div className="w-2 h-2 rounded-full bg-yellow-400 border border-yellow-600 animate-pulse" />
+                      <div className="w-2 h-2 rounded-full bg-orange-400 border border-orange-600 animate-pulse" />
                       <span className="text-[10px] font-bold text-slate-600">Overflow Risk</span>
                     </div>
 
@@ -397,7 +397,7 @@ function StationStrip({ location, date }: { location: any, date: Date }) {
     const isAboveMaxLimit = item.closing > item.maxLimit;
 
     if (isCriticalLow) return 'bg-red-50/80 hover:bg-red-100/80';
-    if (isPhysicalOverflow) return 'bg-yellow-50/90 hover:bg-yellow-100/90'; // Brighter for overflow
+    if (isPhysicalOverflow) return 'bg-orange-50/90 hover:bg-orange-100/90'; // Brighter for overflow
     if (isAboveMaxLimit) return 'bg-amber-50/80 hover:bg-amber-100/80';
 
     return 'hover:bg-slate-50/50';
@@ -432,6 +432,13 @@ function StationStrip({ location, date }: { location: any, date: Date }) {
   const isPast = selected.getTime() < today.getTime();
   const isToday = selected.getTime() === today.getTime();
   const isFuture = selected.getTime() > today.getTime();
+
+  // Helper to get the YYYY-MM-DD string without timezone shifting
+  const getUTCString = (dateInput: string | Date) => {
+    const d = new Date(dateInput);
+    // This extracts the year, month, and day directly from the UTC values
+    return d.toISOString().split('T')[0];
+  };
 
   return (
     <>
@@ -534,7 +541,7 @@ function StationStrip({ location, date }: { location: any, date: Date }) {
                                 <div className="w-2 h-2 rounded-full bg-red-500 animate-ping" title="Low Inventory" />
                               )}
                               {isOverflow && (
-                                <div className="w-2 h-2 rounded-full bg-yellow-400 animate-pulse border border-yellow-600" title="Physical Overflow Warning" />
+                                <div className="w-2 h-2 rounded-full bg-orange-400 animate-pulse border border-orange-600" title="Physical Overflow Warning" />
                               )}
                               {isWarning && (
                                 <div className="w-1.5 h-1.5 rounded-full bg-amber-400" title="Above Max Limit" />
@@ -600,7 +607,9 @@ function StationStrip({ location, date }: { location: any, date: Date }) {
               {isLoading && <Loader2 className="h-4 w-4 animate-spin text-blue-600" />}
             </div>
 
-            <div className="space-y-2">
+            {/* SCROLLABLE CONTAINER START */}
+            <div className={`space-y-2 overflow-y-auto pr-1 transition-all duration-300 ${orders.length > 1 ? 'max-h-[240px]' : 'max-h-fit'
+              } scrollbar-thin scrollbar-thumb-slate-200 scrollbar-track-transparent hover:scrollbar-thumb-slate-300`}>
               {isLoading ? (
                 [1, 2].map((i) => <div key={i} className="h-28 w-full bg-slate-50 animate-pulse rounded-2xl border border-slate-100" />)
               ) : orders.length === 0 ? (
@@ -609,13 +618,24 @@ function StationStrip({ location, date }: { location: any, date: Date }) {
                 </div>
               ) : (
                 orders.map((order: any) => {
-                  const estDate = new Date(order.estimatedDeliveryDate).toISOString().split('T')[0];
-                  const origDate = new Date(order.originalDeliveryDate).toISOString().split('T')[0];
-                  const activeDateStr = format(date, 'yyyy-MM-dd');
-                  const isDelivered = order.currentStatus === 'Delivered';
+                  // 1. Get plain YYYY-MM-DD strings in UTC
+                  const estDate = getUTCString(order.estimatedDeliveryDate);
+                  const origDate = getUTCString(order.originalDeliveryDate);
 
+                  // 2. Format the active 'date' from the page (ensure this is also treated as a string)
+                  const activeDateStr = format(date, 'yyyy-MM-dd');
+
+                  const isDelivered = order.currentStatus === 'Delivered';
                   const wasMovedFromHere = origDate === activeDateStr && estDate !== activeDateStr;
                   const arrivedHereFromHistory = estDate === activeDateStr && origDate !== activeDateStr;
+
+                  // 3. For the Display Labels, use formatInTimeZone or append a "T12:00:00" 
+                  // to force the formatter to stay on the correct day.
+                  const formatSafeDate = (dateStr: string) => {
+                    // Adding 'T12:00:00' ensures that even with a large timezone offset, 
+                    // it stays on the same calendar day.
+                    return format(new Date(dateStr.split('T')[0] + 'T12:00:00'), 'EEE, MMM do');
+                  };
 
                   // --- 1. COLLAPSED VIEW (For orders moved to a different day) ---
                   if (wasMovedFromHere) {
@@ -632,7 +652,8 @@ function StationStrip({ location, date }: { location: any, date: Date }) {
                         </div>
 
                         <div className="text-[10px] font-black text-orange-600 uppercase flex items-center gap-1">
-                          MOVED TO <span className="underline">{format(new Date(order.estimatedDeliveryDate), 'EEE, MMM do')}</span>
+                          {/* MOVED TO <span className="underline">{format(new Date(order.estimatedDeliveryDate), 'EEE, MMM do')}</span> */}
+                          MOVED TO <span className="underline">{formatSafeDate(order.estimatedDeliveryDate)}</span>
                         </div>
                       </div>
                     );
@@ -645,7 +666,7 @@ function StationStrip({ location, date }: { location: any, date: Date }) {
                       {arrivedHereFromHistory && (
                         <div className="flex items-center gap-2 text-[10px] font-black text-blue-500 uppercase">
                           <History className="h-3 w-3" />
-                          Originally for {format(new Date(order.originalDeliveryDate), 'EEE, MMM do')}
+                          Originally for {formatSafeDate(order.originalDeliveryDate)}
                         </div>
                       )}
 
@@ -751,6 +772,7 @@ function StationStrip({ location, date }: { location: any, date: Date }) {
                 })
               )}
             </div>
+            {/* SCROLLABLE CONTAINER END */}
           </div>
         </CardContent>
       </Card >

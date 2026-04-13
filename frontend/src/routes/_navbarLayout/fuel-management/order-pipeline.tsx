@@ -112,6 +112,10 @@ export function OrderPipelineComponent() {
                   <div className="w-3 h-3 rounded-sm border-2 border-orange-500 bg-orange-100" />
                   <span className="text-[11px] font-black uppercase text-slate-700">Overflow</span>
                 </div>
+                <div className="flex items-center gap-2">
+                  <div className="w-3 h-3 rounded-sm border-2 border-amber-500 bg-amber-100" />
+                  <span className="text-[11px] font-black uppercase text-slate-700">Above Max</span>
+                </div>
               </div>
             </div>
           </div>
@@ -250,6 +254,13 @@ function PipelineBlock({ site, date }: { site: any; date: Date }) {
   //   return summary;
   // }, [tankData]);
 
+  // Helper to get the YYYY-MM-DD string without timezone shifting
+  const getUTCString = (dateInput: string | Date) => {
+    const d = new Date(dateInput);
+    // This extracts the year, month, and day directly from the UTC values
+    return d.toISOString().split('T')[0];
+  };
+
   return (
     <div className="bg-white border-2 border-slate-200 rounded-3xl p-5 shadow-sm hover:shadow-md transition-all flex flex-col justify-between min-h-[500px]">
       <div>
@@ -266,89 +277,15 @@ function PipelineBlock({ site, date }: { site: any; date: Date }) {
           </div>
         </div>
 
-        {/* LOGISTICS SECTION */}
-        <div className="mb-6">
-          <div className="flex justify-between items-center px-1 mb-2">
-            <p className="text-[10px] font-black text-slate-400 uppercase tracking-wide text-indigo-600">Active Pipeline</p>
-            <span className="text-[10px] font-bold bg-slate-100 text-slate-600 px-2 py-0.5 rounded-full">
-              {orders.length} Records
-            </span>
-          </div>
-
-          <div className="h-[180px] overflow-y-auto custom-scrollbar pr-1 space-y-2">
-            {orders.length === 0 ? (
-              <div className="h-full flex flex-col items-center justify-center text-[10px] text-slate-400 italic bg-slate-50 rounded-xl border border-dashed border-slate-200 p-4 text-center">
-                No pipeline activity
-              </div>
-            ) : (
-              orders.map((order: any) => {
-                const estDate = new Date(order.estimatedDeliveryDate).toISOString().split('T')[0];
-                const origDate = new Date(order.originalDeliveryDate).toISOString().split('T')[0];
-                const wasMovedFromHere = origDate === activeDateStr && estDate !== activeDateStr;
-
-                // --- 1. COLLAPSED VIEW (MOVED ORDERS) ---
-                if (wasMovedFromHere) {
-                  return (
-                    <div key={order._id} className="flex flex-col gap-1 p-2 bg-orange-50/30 border border-dashed border-orange-200 rounded-xl opacity-80">
-                      <div className="flex items-center justify-between">
-                        <div className="flex items-center gap-2">
-                          <ArrowRight className="h-3 w-3 text-orange-600" />
-                          <span className="text-[10px] font-black text-slate-500">{order.poNumber}</span>
-                        </div>
-                        <span className="text-[8px] font-black text-orange-600 uppercase">Rescheduled</span>
-                      </div>
-                      <div className="text-[9px] font-bold text-slate-500">
-                        Moved to <span className="text-orange-700 underline">{format(new Date(order.estimatedDeliveryDate), 'MMM do')}</span>
-                      </div>
-                    </div>
-                  );
-                }
-
-                // --- 2. FULL VIEW (ARRIVING TODAY) ---
-                const statusStyles = getStatusColor(order.currentStatus || 'no status');
-                return (
-                  <div key={order._id} className={`${statusStyles} border flex flex-col gap-1 p-2.5 rounded-xl transition-all shadow-sm`}>
-                    <div className="flex justify-between items-center">
-                      <div className="flex items-center gap-2">
-                        <span className="text-[11px] font-black uppercase">{order.poNumber}</span>
-                        {estDate !== origDate && (
-                          <span className="text-[8px] px-1 bg-white/50 rounded text-slate-600 font-bold uppercase">From {format(new Date(order.originalDeliveryDate), 'MMM do')}</span>
-                        )}
-                      </div>
-                      <OrderDetailsDialog
-                        order={order}
-                        trigger={
-                          <button className="p-1 hover:bg-white/50 rounded-md transition-colors">
-                            <Eye className="h-3.5 w-3.5" />
-                          </button>
-                        }
-                      />
-                    </div>
-                    <div className="flex items-center justify-between mt-0.5">
-                      <div className="flex items-center gap-1 opacity-80">
-                        <Clock className="h-3 w-3" />
-                        <span className="text-[9px] font-bold">{order.estimatedDeliveryWindow?.start} - {order.estimatedDeliveryWindow?.end}</span>
-                      </div>
-                      <span className="text-[10px] font-black bg-white/40 px-1.5 py-0.5 rounded">
-                        {order.items?.reduce((a: number, b: any) => a + b.ltrs, 0).toLocaleString()} L
-                      </span>
-                    </div>
-                  </div>
-                );
-              })
-            )}
-          </div>
-        </div>
-
         {/* GRADE INVENTORY - SORTED 2x2 GRID WITH RISK BORDERS */}
-        <div className="grid grid-cols-2 gap-2">
+        <div className="grid grid-cols-2 gap-2 mb-5">
           {sortOrder
             .filter(gradeName => gradeSummary[gradeName])
             .map(gradeName => {
               const data = gradeSummary[gradeName] || { sales: 0, closing: 0, min: 0, max: 0, total: 0 };
               const theme = getGradeTheme(gradeName);
 
-              const isLow = !isPast && data.closing > 0 && data.closing <= data.min;
+              const isLow = !isPast && data.closing <= data.min;
               const isOverflow = !isPast && data.closing > data.total;
               const isWarning = !isPast && data.closing > data.max && !isOverflow;
 
@@ -403,9 +340,94 @@ function PipelineBlock({ site, date }: { site: any; date: Date }) {
               );
             })}
         </div>
+
+        {/* LOGISTICS SECTION */}
+        <div className="mb-2">
+          <div className="flex justify-between items-center px-1 mb-2">
+            <p className="text-[10px] font-black text-slate-400 uppercase tracking-wide text-indigo-600">Active Pipeline</p>
+            <span className="text-[10px] font-bold bg-slate-100 text-slate-600 px-2 py-0.5 rounded-full">
+              {orders.length} Records
+            </span>
+          </div>
+
+          <div className="h-[180px] overflow-y-auto custom-scrollbar pr-1 pb-0 space-y-2">
+            {orders.length === 0 ? (
+              <div className="h-full flex flex-col items-center justify-center text-[10px] text-slate-400 italic bg-slate-50 rounded-xl border border-dashed border-slate-200 p-4 pb-0 text-center">
+                No pipeline activity
+              </div>
+            ) : (
+              orders.map((order: any) => {
+                // const estDate = new Date(order.estimatedDeliveryDate).toISOString().split('T')[0];
+                // const origDate = new Date(order.originalDeliveryDate).toISOString().split('T')[0];
+                const estDate = getUTCString(order.estimatedDeliveryDate);
+                const origDate = getUTCString(order.originalDeliveryDate);
+
+                const wasMovedFromHere = origDate === activeDateStr && estDate !== activeDateStr;
+                const arrivedHereFromHistory = estDate === activeDateStr && origDate !== activeDateStr;
+
+                // 3. For the Display Labels, use formatInTimeZone or append a "T12:00:00" 
+                // to force the formatter to stay on the correct day.
+                const formatSafeDate = (dateStr: string) => {
+                  // Adding 'T12:00:00' ensures that even with a large timezone offset, 
+                  // it stays on the same calendar day.
+                  return format(new Date(dateStr.split('T')[0] + 'T12:00:00'), 'EEE, MMM do');
+                };
+                // --- 1. COLLAPSED VIEW (MOVED ORDERS) ---
+                if (wasMovedFromHere) {
+                  return (
+                    <div key={order._id} className="flex flex-col gap-1 p-2 bg-orange-50/30 border border-dashed border-orange-200 rounded-xl opacity-80">
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-2">
+                          <ArrowRight className="h-3 w-3 text-orange-600" />
+                          <span className="text-[10px] font-black text-slate-500">{order.poNumber}</span>
+                        </div>
+                        <span className="text-[8px] font-black text-orange-600 uppercase">Rescheduled</span>
+                      </div>
+                      <div className="text-[9px] font-bold text-slate-500">
+                        Moved to <span className="text-orange-700 underline">{formatSafeDate(order.estimatedDeliveryDate)}</span>
+                      </div>
+                    </div>
+                  );
+                }
+
+                // --- 2. FULL VIEW (ARRIVING TODAY) ---
+                const statusStyles = getStatusColor(order.currentStatus || 'no status');
+                return (
+                  <div key={order._id} className={`${statusStyles} border flex flex-col gap-1 p-2.5 rounded-xl transition-all shadow-sm`}>
+                    <div className="flex justify-between items-center">
+                      <div className="flex items-center gap-2">
+                        <span className="text-[11px] font-black uppercase">{order.poNumber}</span>
+                        {arrivedHereFromHistory && (
+                          <span className="text-[8px] px-1 bg-white/50 rounded text-slate-600 font-bold uppercase">From {formatSafeDate(order.originalDeliveryDate)}</span>
+                        )}
+                      </div>
+                      <OrderDetailsDialog
+                        order={order}
+                        trigger={
+                          <button className="p-1 hover:bg-white/50 rounded-md transition-colors">
+                            <Eye className="h-3.5 w-3.5" />
+                          </button>
+                        }
+                      />
+                    </div>
+                    <div className="flex items-center justify-between mt-0.5">
+                      <div className="flex items-center gap-1 opacity-80">
+                        <Clock className="h-3 w-3" />
+                        <span className="text-[9px] font-bold">{order.estimatedDeliveryWindow?.start} - {order.estimatedDeliveryWindow?.end}</span>
+                      </div>
+                      <span className="text-[10px] font-black bg-white/40 px-1.5 py-0.5 rounded">
+                        {order.items?.reduce((a: number, b: any) => a + b.ltrs, 0).toLocaleString()} L
+                      </span>
+                    </div>
+                  </div>
+                );
+              })
+            )}
+          </div>
+        </div>
       </div>
 
-      <div className="mt-6 pt-4 border-t border-slate-50">
+      <div className="mt-2 pt-0 border-t border-slate-50">
         <Button variant="outline" className="w-full h-10 text-[10px] font-black uppercase rounded-xl border-slate-200 text-slate-600 hover:bg-slate-900 hover:text-white transition-all">
           <Link to="/fuel-management/volume" search={{ site: site?.stationName }}>
             View Current Volumes
