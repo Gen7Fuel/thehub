@@ -13,7 +13,7 @@ const setupSupportSocket = (io) => {
   supportNamespace.on('connection', (socket) => {
     console.log(`Support user connected: ${socket.user?.name} (${socket.user?.email})`);
 
-    const isSupport = socket.user?.isSupport === true;
+    const isSupport = socket.user?.isSupport === true || socket.user?.is_admin === true;
 
     // Support staff joins support-staff room, users join their own room
     if (isSupport) {
