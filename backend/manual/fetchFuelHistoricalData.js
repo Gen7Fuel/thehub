@@ -1,8 +1,8 @@
 const mongoose = require('mongoose');
 const connectDB = require('../config/db');
 const Location = require('../models/Location');
-const FuelStationTank = require('../models/Fuel/FuelStationTank');
-const FuelSales = require('../models/Fuel/FuelSales');
+const FuelStationTank = require('../models/fuel/FuelStationTank');
+const FuelSales = require('../models/fuel/FuelSales');
 const { getTankReadingsForDate, getProcessedFuelSales } = require('../services/supaBaseService');
 // Helper to format date as YYYY-MM-DD
 const formatDate = (date) => date.toISOString().split('T')[0];
