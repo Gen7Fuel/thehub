@@ -348,6 +348,18 @@ function VolumeTankCard({ tank }: { tank: any }) {
           </div>
         </div>
 
+        {/* Safety Legend (Values below the bar) */}
+        <div className="grid grid-cols-2 gap-2 px-1">
+          <div className="flex flex-col border-l-2 border-sky-400/50 pl-2">
+            <span className="text-[7px] font-black text-slate-400 uppercase">Max Limit</span>
+            <span className="text-[10px] font-bold text-slate-600">{tank.maxVolumeCapacity.toLocaleString()}L</span>
+          </div>
+          <div className="flex flex-col border-l-2 border-red-500/50 pl-2">
+            <span className="text-[7px] font-black text-slate-400 uppercase">Min Limit</span>
+            <span className="text-[10px] font-bold text-slate-600">{tank.minVolumeCapacity.toLocaleString()}L</span>
+          </div>
+        </div>
+
         {/* Sync Status - Kept clear so user knows WHY it is blurred */}
         <div className="pt-2 border-t border-slate-50 text-center">
           <p className="text-[7px] font-black text-slate-300 uppercase mb-0.5">Last Reading Time</p>
