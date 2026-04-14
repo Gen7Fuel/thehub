@@ -1,41 +1,120 @@
 import { createFileRoute, useNavigate } from '@tanstack/react-router'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
-import { Button } from '@/components/ui/button'
 
 export const Route = createFileRoute('/_navbarLayout/support/list')({
   component: RouteComponent,
   loader: () => fetchItems(),
 })
 
+type TicketItem = {
+  kind: 'ticket'
+  _id: string
+  text: string
+  priority: string
+  status: string
+  site: string
+  createdAt: string
+}
+
+type ChatItem = {
+  kind: 'chat'
+  _id: string
+  initialMessage: string
+  status: string
+  site: string
+  createdAt: string
+  convertedTicketId?: string
+}
+
+type ListItem = TicketItem | ChatItem
+
+const STATUS_STYLES: Record<string, string> = {
+  open:     'bg-blue-100 text-blue-700',
+  closed:   'bg-gray-100 text-gray-500',
+  resolved: 'bg-green-100 text-green-700',
+  pending:  'bg-amber-100 text-amber-600',
+  accepted: 'bg-green-100 text-green-700',
+  expired:  'bg-orange-100 text-orange-600',
+}
+
+function StatusBadge({ status }: { status: string }) {
+  return (
+    <span className={`inline-block text-[10px] font-semibold uppercase px-1.5 py-0.5 rounded ${STATUS_STYLES[status] ?? 'bg-muted text-muted-foreground'}`}>
+      {status}
+    </span>
+  )
+}
+
+function formatDate(iso: string) {
+  return new Date(iso).toLocaleDateString(undefined, {
+    month: 'short',
+    day: 'numeric',
+    year: 'numeric',
+  })
+}
+
+function TicketRow({ item, onClick }: { item: TicketItem; onClick: () => void }) {
+  return (
+    <li
+      onClick={onClick}
+      className="flex flex-col gap-1.5 rounded-lg border px-4 py-3 cursor-pointer hover:bg-muted/50 transition-colors"
+    >
+      <div className="flex items-center gap-2">
+        <span className="text-[10px] font-semibold uppercase bg-blue-50 text-blue-600 px-1.5 py-0.5 rounded">
+          Ticket
+        </span>
+        <StatusBadge status={item.status} />
+        <span className="ml-auto text-xs text-muted-foreground shrink-0">{formatDate(item.createdAt)}</span>
+      </div>
+      <p className="text-sm font-semibold leading-snug">{item.text}</p>
+      <p className="text-xs text-muted-foreground">
+        {item.priority} &middot; {item.site}
+      </p>
+    </li>
+  )
+}
+
+function ChatRow({ item, onClick }: { item: ChatItem; onClick?: () => void }) {
+  const hasTicket = !!item.convertedTicketId
+  return (
+    <li
+      onClick={onClick}
+      className={`flex flex-col gap-1.5 rounded-lg border px-4 py-3 transition-colors ${hasTicket ? 'cursor-pointer hover:bg-muted/50' : 'opacity-70'}`}
+    >
+      <div className="flex items-center gap-2">
+        <span className="text-[10px] font-semibold uppercase bg-violet-50 text-violet-600 px-1.5 py-0.5 rounded">
+          Chat
+        </span>
+        <StatusBadge status={item.status} />
+        <span className="ml-auto text-xs text-muted-foreground shrink-0">{formatDate(item.createdAt)}</span>
+      </div>
+      <p className="text-sm font-semibold leading-snug line-clamp-2">{item.initialMessage}</p>
+      <div className="flex items-center justify-between">
+        <p className="text-xs text-muted-foreground">{item.site}</p>
+        {hasTicket && (
+          <span className="text-xs text-primary font-medium">View ticket →</span>
+        )}
+      </div>
+    </li>
+  )
+}
+
 function RouteComponent() {
   const navigate = useNavigate()
   const { tickets, chats } = Route.useLoaderData()
 
-  // Combine tickets and chats into a single list sorted newest-first
-  type ItemType =
-    | { kind: 'ticket'; _id: string; text: string; priority: string; status: string; site: string; createdAt: string }
-    | { kind: 'chat'; _id: string; initialMessage: string; status: string; site: string; createdAt: string; convertedTicketId?: string }
-
-  const items: ItemType[] = [
+  const items: ListItem[] = [
     ...tickets.map((t: any) => ({ kind: 'ticket' as const, ...t })),
-    ...chats.map((c: any) => ({ kind: 'chat' as const, _id: c._id, initialMessage: c.initialMessage, status: c.status, site: c.site, createdAt: c.createdAt, convertedTicketId: c.convertedTicketId })),
+    ...chats.map((c: any) => ({
+      kind: 'chat' as const,
+      _id: c._id,
+      initialMessage: c.initialMessage,
+      status: c.status,
+      site: c.site,
+      createdAt: c.createdAt,
+      convertedTicketId: c.convertedTicketId,
+    })),
   ].sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
-
-  const statusBadge = (status: string) => {
-    const map: Record<string, string> = {
-      open: 'bg-blue-100 text-blue-700',
-      closed: 'bg-gray-100 text-gray-500',
-      resolved: 'bg-green-100 text-green-700',
-      pending: 'bg-amber-100 text-amber-600',
-      accepted: 'bg-green-100 text-green-700',
-      expired: 'bg-orange-100 text-orange-600',
-    }
-    return (
-      <span className={`text-[10px] font-semibold uppercase px-1.5 py-0.5 rounded ${map[status] ?? 'bg-muted text-muted-foreground'}`}>
-        {status}
-      </span>
-    )
-  }
 
   return (
     <div className="w-full max-w-2xl mx-auto p-6">
@@ -45,56 +124,28 @@ function RouteComponent() {
         </CardHeader>
         <CardContent>
           {items.length === 0 ? (
-            <div className="text-sm text-muted-foreground">No tickets or chats found.</div>
+            <p className="text-sm text-muted-foreground">No tickets or chats found.</p>
           ) : (
-            <ul className="space-y-3">
-              {items.map((item) => {
-                if (item.kind === 'ticket') {
-                  return (
-                    <li key={`ticket-${item._id}`}>
-                      <Button
-                        variant="outline"
-                        className="w-full flex flex-col items-start text-left h-auto py-3"
-                        onClick={() => navigate({ to: `/support/${item._id}` })}
-                      >
-                        <div className="flex items-center gap-2 w-full">
-                          <span className="text-[10px] font-semibold uppercase bg-blue-50 text-blue-600 px-1.5 py-0.5 rounded">Ticket</span>
-                          {statusBadge(item.status)}
-                        </div>
-                        <span className="font-semibold mt-1">{item.text}</span>
-                        <span className="text-xs text-muted-foreground">
-                          {item.priority} &middot; {item.site} &middot; {new Date(item.createdAt).toLocaleDateString()}
-                        </span>
-                      </Button>
-                    </li>
-                  )
-                }
-
-                // Chat item
-                const canNavigateToTicket = !!item.convertedTicketId
-                return (
-                  <li key={`chat-${item._id}`}>
-                    <Button
-                      variant="outline"
-                      className="w-full flex flex-col items-start text-left h-auto py-3"
-                      disabled={!canNavigateToTicket}
-                      onClick={() => canNavigateToTicket && navigate({ to: `/support/${item.convertedTicketId}` })}
-                    >
-                      <div className="flex items-center gap-2 w-full">
-                        <span className="text-[10px] font-semibold uppercase bg-violet-50 text-violet-600 px-1.5 py-0.5 rounded">Chat</span>
-                        {statusBadge(item.status)}
-                        {canNavigateToTicket && (
-                          <span className="text-[10px] text-muted-foreground ml-auto">View ticket →</span>
-                        )}
-                      </div>
-                      <span className="font-semibold mt-1 line-clamp-1">{item.initialMessage}</span>
-                      <span className="text-xs text-muted-foreground">
-                        {item.site} &middot; {new Date(item.createdAt).toLocaleDateString()}
-                      </span>
-                    </Button>
-                  </li>
+            <ul className="flex flex-col gap-2">
+              {items.map((item) =>
+                item.kind === 'ticket' ? (
+                  <TicketRow
+                    key={`ticket-${item._id}`}
+                    item={item}
+                    onClick={() => navigate({ to: `/support/${item._id}` })}
+                  />
+                ) : (
+                  <ChatRow
+                    key={`chat-${item._id}`}
+                    item={item}
+                    onClick={
+                      item.convertedTicketId
+                        ? () => navigate({ to: `/support/${item.convertedTicketId}` })
+                        : undefined
+                    }
+                  />
                 )
-              })}
+              )}
             </ul>
           )}
         </CardContent>
