@@ -145,6 +145,9 @@ jobs:
             # export SFTP_OSOYOOS_PASS=${{ secrets.SFTP_OSOYOOS_PASS }}
             export AZURE_STORAGE_CONNECTION_STRING="${{ secrets.AZURE_STORAGE_CONNECTION_STRING }}"
             export AZURE_CONTAINER=${{ secrets.AZURE_CONTAINER }}
+            export AZURE_CLIENT_ID=${{ secrets.AZURE_CLIENT_ID }}
+            export AZURE_TENANT_ID=${{ secrets.AZURE_TENANT_ID }}
+            export AZURE_CLIENT_SECRET=${{ secrets.AZURE_CLIENT_SECRET }}
             export NOREPLY_PASS=${{ secrets.NOREPLY_PASS }}
             export INTACCT_CLIENT_ID=${{ secrets.INTACCT_CLIENT_ID }}
             export INTACCT_CLIENT_SECRET=${{ secrets.INTACCT_CLIENT_SECRET }}
