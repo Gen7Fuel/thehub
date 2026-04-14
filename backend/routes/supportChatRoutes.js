@@ -65,6 +65,22 @@ router.post('/', async (req, res) => {
   }
 });
 
+// GET /api/support/chat/mine — list the current user's own chats
+router.get('/mine', async (req, res) => {
+  try {
+    const chats = await SupportChat.find({
+      'customer.id': req.user._id,
+    })
+      .sort({ createdAt: -1 })
+      .lean();
+
+    res.json({ success: true, data: chats });
+  } catch (error) {
+    console.error('Support chat mine error:', error);
+    res.status(500).json({ success: false, message: 'Failed to list chats.' });
+  }
+});
+
 // GET /api/support/chat — list active chats (for support users)
 router.get('/', async (req, res) => {
   try {
