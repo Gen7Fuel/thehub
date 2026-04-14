@@ -20,6 +20,12 @@ const locationSchema = new mongoose.Schema({
   // a lottery reconciliation to be provided when submitting daily reports.
   sellsLottery: { type: Boolean, default: false },
   safeMaxBalance: { type: Number, default: 25000 }, // Maximum safe balance for the location
+  fuelStationNumber: { type: String, unique: true },
+  fuelCustomerName: { type: String },
+  address: { type: String },
+  province: { type: String, required: true},
+  defaultFuelRack: { type: mongoose.Schema.Types.ObjectId, ref: "FuelRack" },
+  defaultFuelCarrier: { type: mongoose.Schema.Types.ObjectId, ref: "FuelCarrier" },
 });
 
 // Export the Location model based on the schema

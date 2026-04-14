@@ -32,6 +32,14 @@ export const Route = createFileRoute('/_navbarLayout/settings/sites/$id')({
   component: RouteComponent,
 });
 
+// 1. Add Canadian Provinces Constant (outside the component)
+const CANADIAN_PROVINCES = [
+  "Alberta", "British Columbia", "Manitoba", "New Brunswick",
+  "Newfoundland and Labrador", "Nova Scotia", "Ontario",
+  "Prince Edward Island", "Quebec", "Saskatchewan",
+  "Northwest Territories", "Nunavut", "Yukon"
+];
+
 function RouteComponent() {
   const [showDialog, setShowDialog] = useState(false); // 🧩 NEW
   const [initialBalance, setInitialBalance] = useState(""); // 🧩 NEW
@@ -55,6 +63,7 @@ function RouteComponent() {
     managerCode: number;
     sellsLottery?: boolean;
     managerEmails: string[];
+    province: string;
   } | null>(null);
 
   const [loading, setLoading] = useState(true);
@@ -105,6 +114,7 @@ function RouteComponent() {
     email: string;
     sellsLottery?: boolean;
     managerEmails: string[];
+    province: string
   }
 
   const [formData, setFormData] = useState<LocationForm>({
@@ -117,7 +127,8 @@ function RouteComponent() {
     timezone: "",
     email: "",
     sellsLottery: false,
-    managerEmails: []
+    managerEmails: [],
+    province: ""
   });
 
   const [timezones, setTimezones] = useState<string[]>([]);
@@ -156,6 +167,7 @@ function RouteComponent() {
         timezone: location.timezone || timezones[0], // default if missing
         sellsLottery: !!location.sellsLottery,
         managerEmails: location.managerEmails || [],
+        province: location.province || "Ontario",
       });
       setManagerEmails(location.managerEmails || []);
       setOtp(location.managerCode?.toString() || "");
@@ -380,32 +392,6 @@ function RouteComponent() {
             </div>
 
             {/* TEXT INPUT FIELDS */}
-            {/* {[
-              { label: "Station Name", name: "stationName" },
-              { label: "Legal Name", name: "legalName" },
-              { label: "IND Number", name: "INDNumber" },
-              { label: "Kardpoll Code", name: "kardpollCode" },
-              { label: "CSO Code", name: "csoCode" },
-              { label: "Email", name: "email" },
-            ].map((field) => (
-              <div key={field.name}>
-                <Label className="block font-medium mb-1">{field.label}</Label>
-                <input
-                  type="text"
-                  name={field.name}
-                  value={String(formData[field.name as keyof LocationForm] ?? "")}
-                  onChange={(e) =>
-                    setFormData({
-                      ...formData,
-                      [field.name as keyof LocationForm]: e.target.value,
-                    })
-                  }
-                  className="border border-gray-300 rounded-md px-3 py-2 w-full focus:ring-2 focus:ring-blue-500 focus:outline-none"
-                  required={["stationName", "legalName", "INDNumber", "csoCode", "email"].includes(field.name)}
-                />
-              </div>
-            ))} */}
-            {/* TEXT INPUT FIELDS */}
             {[
               { label: "Station Name", name: "stationName" },
               { label: "Legal Name", name: "legalName" },
@@ -453,6 +439,26 @@ function RouteComponent() {
                 )}
               </div>
             ))}
+
+            {/* PROVINCE DROPDOWN */}
+            <div>
+              <Label className="block font-medium mb-1">Province</Label>
+              <Select
+                value={formData.province}
+                onValueChange={(value) => setFormData({ ...formData, province: value })}
+              >
+                <SelectTrigger className="w-full rounded-md border border-gray-300">
+                  <SelectValue placeholder="Select Province" />
+                </SelectTrigger>
+                <SelectContent className="max-h-64 overflow-y-auto">
+                  {CANADIAN_PROVINCES.map((prov) => (
+                    <SelectItem key={prov} value={prov}>
+                      {prov}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
 
             {/* TIMEZONE DROPDOWN */}
             <div>
