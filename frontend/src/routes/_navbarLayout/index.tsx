@@ -11,7 +11,7 @@ export const Route = createFileRoute('/_navbarLayout/')({
  * Renders sections and navigation buttons based on user access permissions.
  */
 function App() {
-  const { user  } = useAuth();
+  const { user } = useAuth();
 
   const access = user?.access || {}
 
@@ -164,11 +164,11 @@ function App() {
             </div>
           </Section>
         )} */}
-        
+
 
         {/* Inventory Section */}
         {/* {(access.module_order_rec || access.module_cycle_count) && ( //markpoint */}
-        {(access?.orderRec?.value || access?.cycleCount?.value || access?.vendor || access?.category || access?.writeOff?.value) && (
+        {(access?.orderRec?.value || access?.cycleCount?.value || access?.vendor || access?.category || access?.writeOff?.value || access?.fuelManagement?.value) && (
           <Section title="Inventory">
             <div className="flex flex-wrap gap-4">
               {/* Order Rec button: goes to upload or list based on access */}
@@ -221,11 +221,21 @@ function App() {
                   </Button>
                 </Link>
               )}
+              {access?.fuelManagement?.value && (
+                <Link to="/fuel-management/workspace"
+                  activeOptions={{ exact: true }}
+                  search={{ site: user?.location || ''}}
+                >
+                  <Button className="w-32 h-32 flex items-center justify-center break-words whitespace-normal text-center">
+                    Fuel Management
+                  </Button>
+                </Link>
+              )}
             </div>
           </Section>
         )}
 
-        
+
 
         {/* Reports Section */}
         {/* {(access.module_daily_reports || access.module_reports) && ( //markpoint */}

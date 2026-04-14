@@ -17,6 +17,7 @@ require('./cron_jobs/mongoCsvExportCron'); //cron job for exporting mongo data t
 require('./cron_jobs/archiveOldNotification'); //cron job for archiving/removing old notifications
 require('./cron_jobs/logoutUsersCron'); //cron job for logging out users daily at 9 AM UTC
 require('./cron_jobs/dashboardCacheCron'); //cron job for pre-warming dashboard SQL cache daily at 5 AM UTC
+require('./cron_jobs/dailyFuelSyncCron') // cron job for updating fuel related data daily morning at 5 am EST
 // require('./cron_jobs/productCategoryMappingCron'); //cron job for normalising the product categories
 
 
@@ -49,6 +50,12 @@ const logsRoute = require("./routes/logsRoute");
 const sageRoutes = require("./routes/sageRoutes");
 const notificationRoutes = require("./routes/notificationRoutes");
 const userGroupRoutes = require("./routes/userGroupRoutes");
+const fuelCarrierRoutes = require("./routes/fuel/fuelCarrierRoutes");
+const fuelRackRoutes = require("./routes/fuel/fuelRackRoutes");
+const fuelSupplierRoutes = require("./routes/fuel/fuelSupplierRoutes");
+const fuelStationTankRoutes = require("./routes/fuel/fuelStationTankRoutes");
+const fuelOrderRoutes = require("./routes/fuel/fuelOrderRoutes");
+const fuelSaleRoutes = require("./routes/fuel/fuelSaleRoutes");
 
 const { auth } = require("./middleware/authMiddleware");
 
@@ -130,6 +137,13 @@ app.use('/api/maintenance', maintenanceRoutes);
 app.use('/api/ai-customer', aiCustomerRoutes);
 app.use('/api/bulletin', bulletinRoutes);
 app.use('/api/events', eventRoutes);
+
+app.use('/api/fuel-carriers', fuelCarrierRoutes);
+app.use('/api/fuel-racks', fuelRackRoutes);
+app.use('/api/fuel-suppliers', fuelSupplierRoutes);
+app.use('/api/fuel-station-tanks', fuelStationTankRoutes);
+app.use('/api/fuel-orders', fuelOrderRoutes);
+app.use('/api/fuel-sales', fuelSaleRoutes);
 
 // Misc
 app.use('/api', emailRoutes);
