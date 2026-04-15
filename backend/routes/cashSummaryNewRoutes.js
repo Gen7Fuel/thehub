@@ -1306,13 +1306,41 @@ router.put('/:id', async (req, res) => {
               // station times parsed from SFT header (strings)
               stationStart: parsed.stationStart,
               stationEnd: parsed.stationEnd,
-              // include lottery parsed fields for enrichment on update
+              // all remaining parsed SFT fields (mirrors POST handler)
+              fuelSales: parsed.fuelSales,
+              dealGroupCplDiscounts: parsed.dealGroupCplDiscounts,
+              fuelPriceOverrides: parsed.fuelPriceOverrides,
+              parsedItemSales: parsed.itemSales,
+              depositTotal: parsed.depositTotal,
+              pennyRounding: parsed.pennyRounding,
+              totalSales: parsed.totalSales,
+              afdCredit: parsed.afdCredit,
+              afdDebit: parsed.afdDebit,
+              kioskCredit: parsed.kioskCredit,
+              kioskDebit: parsed.kioskDebit,
+              afdGiftCard: parsed.afdGiftCard,
+              kioskGiftCard: parsed.kioskGiftCard,
+              totalPos: parsed.totalPos,
+              arIncurred: parsed.arIncurred,
+              grandTotal: parsed.grandTotal,
+              missedCpl: parsed.missedCpl,
+              couponsAccepted: parsed.couponsAccepted,
+              giftCertificates: parsed.giftCertificates,
+              cashOffCoupons: parsed.cashOffCoupons,
+              canadianCash: (parsed.canadianCash || 0) + (parsed.usCash || 0),
+              cashOnHand: parsed.cashOnHand,
+              parsedCashBack: parsed.cashBack,
+              parsedPayouts: parsed.payouts,
+              payouts: parsed.payouts,
+              safedropsCount: parsed.safedrops?.count,
+              safedropsAmount: parsed.safedrops?.amount,
+              // lottery fields
               lottoPayout: parsed.lottoPayout,
               onlineLottoTotal: parsed.onlineLottoTotal,
               instantLottTotal: parsed.instantLottTotal,
               dataWave: parsed.dataWave,
               feeDataWave: parsed.feeDataWave,
-              // SHIFT STATISTICS: Voided Transactions parsed fields
+              // voided transactions
               voidedTransactionsAmount: parsed.voidedTransactionsAmount,
               voidedTransactionsCount: parsed.voidedTransactionsCount,
               unsettledPrepays: parsed.unsettledPrepays,
@@ -1327,7 +1355,13 @@ router.put('/:id', async (req, res) => {
       }
     }
 
-    // 4️⃣ Merge final values
+    const numOrUndef = (v) => {
+      const n = Number(v)
+      return Number.isFinite(n) ? n : undefined
+    }
+
+    // 4️⃣ Merge final values — SFTP-parsed values always win over existing zeros
+    const ev = enrichedValues
     const finalValues = {
       site,
       shift_number: String(shift_number),
@@ -1336,26 +1370,55 @@ router.put('/:id', async (req, res) => {
       canadian_cash_collected: norm(canadian_cash_collected),
 
       // Preserve existing if not provided or parsed
-      stationStart: enrichedValues.stationStart ?? (typeof req.body.stationStart === 'string' ? req.body.stationStart : undefined) ?? existing.stationStart,
-      stationEnd: enrichedValues.stationEnd ?? (typeof req.body.stationEnd === 'string' ? req.body.stationEnd : undefined) ?? existing.stationEnd,
+      stationStart: ev.stationStart ?? (typeof req.body.stationStart === 'string' ? req.body.stationStart : undefined) ?? existing.stationStart,
+      stationEnd: ev.stationEnd ?? (typeof req.body.stationEnd === 'string' ? req.body.stationEnd : undefined) ?? existing.stationEnd,
 
-      item_sales: norm(enrichedValues.item_sales ?? item_sales ?? existing.item_sales),
-      cash_back: norm(enrichedValues.cash_back ?? cash_back ?? existing.cash_back),
-      loyalty: norm(enrichedValues.loyalty ?? loyalty ?? existing.loyalty),
-      cpl_bulloch: norm(enrichedValues.cpl_bulloch ?? cpl_bulloch ?? existing.cpl_bulloch),
-      report_canadian_cash: norm(enrichedValues.report_canadian_cash ?? report_canadian_cash ?? existing.report_canadian_cash),
+      item_sales: norm(ev.item_sales ?? item_sales ?? existing.item_sales),
+      cash_back: norm(ev.cash_back ?? cash_back ?? existing.cash_back),
+      loyalty: norm(ev.loyalty ?? loyalty ?? existing.loyalty),
+      cpl_bulloch: norm(ev.cpl_bulloch ?? cpl_bulloch ?? existing.cpl_bulloch),
+      report_canadian_cash: norm(ev.report_canadian_cash ?? report_canadian_cash ?? existing.report_canadian_cash),
 
-      exempted_tax: norm(exempted_tax),
-      // lottery fields: enriched SFTP values take priority over form-submitted values
-      lottoPayout: norm(enrichedValues.lottoPayout ?? req.body.lottoPayout ?? existing.lottoPayout),
-      onlineLottoTotal: norm(enrichedValues.onlineLottoTotal ?? req.body.onlineLottoTotal ?? existing.onlineLottoTotal),
-      instantLottTotal: norm(enrichedValues.instantLottTotal ?? req.body.instantLottTotal ?? existing.instantLottTotal),
-      dataWave: norm(enrichedValues.dataWave ?? req.body.dataWave ?? existing.dataWave),
-      feeDataWave: norm(enrichedValues.feeDataWave ?? req.body.feeDataWave ?? existing.feeDataWave),
-      // SHIFT STATISTICS: Voided Transactions
-      voidedTransactionsAmount: norm(enrichedValues.voidedTransactionsAmount ?? req.body.voidedTransactionsAmount ?? existing.voidedTransactionsAmount),
-      voidedTransactionsCount: norm(enrichedValues.voidedTransactionsCount ?? req.body.voidedTransactionsCount ?? existing.voidedTransactionsCount),
-      unsettledPrepays: norm(enrichedValues.unsettledPrepays ?? req.body.unsettledPrepays ?? existing.unsettledPrepays),
+      exempted_tax: norm(exempted_tax) ?? existing.exempted_tax,
+
+      // All remaining SFTP-parsed fields — fall back to existing if SFTP didn't return them
+      fuelSales: numOrUndef(ev.fuelSales ?? existing.fuelSales),
+      dealGroupCplDiscounts: numOrUndef(ev.dealGroupCplDiscounts ?? existing.dealGroupCplDiscounts),
+      fuelPriceOverrides: numOrUndef(ev.fuelPriceOverrides ?? existing.fuelPriceOverrides),
+      parsedItemSales: numOrUndef(ev.parsedItemSales ?? existing.parsedItemSales),
+      depositTotal: numOrUndef(ev.depositTotal ?? existing.depositTotal),
+      pennyRounding: numOrUndef(ev.pennyRounding ?? existing.pennyRounding),
+      totalSales: numOrUndef(ev.totalSales ?? existing.totalSales),
+      afdCredit: numOrUndef(ev.afdCredit ?? existing.afdCredit),
+      afdDebit: numOrUndef(ev.afdDebit ?? existing.afdDebit),
+      kioskCredit: numOrUndef(ev.kioskCredit ?? existing.kioskCredit),
+      kioskDebit: numOrUndef(ev.kioskDebit ?? existing.kioskDebit),
+      afdGiftCard: numOrUndef(ev.afdGiftCard ?? existing.afdGiftCard),
+      kioskGiftCard: numOrUndef(ev.kioskGiftCard ?? existing.kioskGiftCard),
+      totalPos: numOrUndef(ev.totalPos ?? existing.totalPos),
+      arIncurred: numOrUndef(ev.arIncurred ?? existing.arIncurred),
+      grandTotal: numOrUndef(ev.grandTotal ?? existing.grandTotal),
+      missedCpl: numOrUndef(ev.missedCpl ?? existing.missedCpl),
+      couponsAccepted: numOrUndef(ev.couponsAccepted ?? existing.couponsAccepted),
+      giftCertificates: numOrUndef(ev.giftCertificates ?? existing.giftCertificates),
+      cashOffCoupons: numOrUndef(ev.cashOffCoupons ?? existing.cashOffCoupons),
+      canadianCash: numOrUndef(ev.canadianCash ?? existing.canadianCash),
+      cashOnHand: numOrUndef(ev.cashOnHand ?? existing.cashOnHand),
+      parsedCashBack: numOrUndef(ev.parsedCashBack ?? existing.parsedCashBack),
+      parsedPayouts: numOrUndef(ev.parsedPayouts ?? existing.parsedPayouts),
+      payouts: numOrUndef(ev.payouts ?? existing.payouts),
+      safedropsCount: numOrUndef(ev.safedropsCount ?? existing.safedropsCount),
+      safedropsAmount: numOrUndef(ev.safedropsAmount ?? existing.safedropsAmount),
+      // lottery fields
+      lottoPayout: norm(ev.lottoPayout ?? req.body.lottoPayout ?? existing.lottoPayout),
+      onlineLottoTotal: norm(ev.onlineLottoTotal ?? req.body.onlineLottoTotal ?? existing.onlineLottoTotal),
+      instantLottTotal: norm(ev.instantLottTotal ?? req.body.instantLottTotal ?? existing.instantLottTotal),
+      dataWave: norm(ev.dataWave ?? req.body.dataWave ?? existing.dataWave),
+      feeDataWave: norm(ev.feeDataWave ?? req.body.feeDataWave ?? existing.feeDataWave),
+      // voided transactions
+      voidedTransactionsAmount: norm(ev.voidedTransactionsAmount ?? req.body.voidedTransactionsAmount ?? existing.voidedTransactionsAmount),
+      voidedTransactionsCount: norm(ev.voidedTransactionsCount ?? req.body.voidedTransactionsCount ?? existing.voidedTransactionsCount),
+      unsettledPrepays: norm(ev.unsettledPrepays ?? req.body.unsettledPrepays ?? existing.unsettledPrepays),
     }
 
     // 5️⃣ Update and return
