@@ -237,7 +237,7 @@ router.post('/', async (req, res) => {
         <p>Please let me know if you have any questions.</p>
         
         <p>
-          <b><u>${rack.rackName} ${rack.rackLocation} Terminal ${supplier.supplierName} (${badgeNo})</u></b><br>
+          <b><u>Pick Up: ${rack.rackName} ${rack.rackLocation} Terminal - ${supplier.supplierName} Badge (${badgeNo})</u></b><br>
           
           <b>${station.stationName}</b><br>
           
