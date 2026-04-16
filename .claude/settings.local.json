@@ -23,7 +23,8 @@
       "WebFetch(domain:api.github.com)",
       "Bash(xargs grep:*)",
       "Bash(find /c/Users/MohammadHasan/workspace/thehub/frontend/src -type f \\\\\\( -name \"*.tsx\" -o -name \"*.ts\" \\\\\\) -exec grep -l \"pending\\\\|desk\" {} \\\\;)",
-      "Bash(node:*)"
+      "Bash(node:*)",
+      "Read(//c/Users/MohammadHasan/workspace/**)"
     ]
   }
 }
