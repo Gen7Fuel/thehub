@@ -394,7 +394,7 @@ router.post('/', async (req, res) => {
         })
         .map(item => `${(item.ltrs / 1000).toFixed(0)}K ${item.grade}`)
         .join('<br>');
-        
+
       // Add to Email Body String
       emailStationSections += `
         <p>
@@ -452,11 +452,12 @@ router.post('/', async (req, res) => {
     const authRes = await cca.acquireTokenByClientCredential({ scopes: ["https://graph.microsoft.com/.default"] });
     const client = Client.init({ authProvider: (done) => done(null, authRes.accessToken) });
 
-    const targetMailbox = "daksh@gen7fuel.com";
+    const targetMailbox = "nsporders@nspetroleum.ca";
+    // const targetMailbox = "daksh@gen7fuel.com"; //only for testing
     await client.api(`/users/${targetMailbox}/mailFolders/drafts/messages`).post(draftPayload);
 
     res.status(201).json({
-      message: "Order(s) created and combined draft pushed.",
+      message: "Order(s) created and email draft pushed.",
       orders: savedOrders,
       pushedTo: targetMailbox
     });
