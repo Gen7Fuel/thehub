@@ -490,14 +490,28 @@ const OrderDetailsDialog = ({ order, trigger }: { order: any, trigger?: React.Re
         </div>
 
         <div className="col-span-2 bg-slate-50 p-3 rounded-xl border border-slate-100">
-          <label className="text-[9px] font-black text-slate-400 uppercase block mb-2">Order Breakdown</label>
+          <label className="text-[9px] font-black text-slate-400 uppercase block mb-2 tracking-wider">
+            Order Breakdown
+          </label>
           <div className="grid grid-cols-2 gap-x-8 gap-y-1">
-            {order.items?.map((item: any) => (
-              <div key={item._id} className="flex justify-between border-b border-slate-200 py-1">
-                <span className="text-[10px] font-bold text-slate-600 uppercase">{item.grade}</span>
-                <span className="text-[10px] font-mono font-black text-blue-700">{item.ltrs?.toLocaleString()} L</span>
-              </div>
-            ))}
+            {order.items
+              ?.filter((item: any) => (item.ltrs || 0) > 0) // Only show items with quantities
+              .sort((a: any, b: any) => {
+                const GRADE_ORDER = ["Regular", "Premium", "Diesel", "Dyed Diesel"];
+                const indexA = GRADE_ORDER.indexOf(a.grade);
+                const indexB = GRADE_ORDER.indexOf(b.grade);
+                return (indexA === -1 ? 99 : indexA) - (indexB === -1 ? 99 : indexB);
+              })
+              .map((item: any) => (
+                <div key={item._id} className="flex justify-between border-b border-slate-200 py-1">
+                  <span className="text-[10px] font-bold text-slate-600 uppercase">
+                    {item.grade}
+                  </span>
+                  <span className="text-[10px] font-mono font-black text-blue-700">
+                    {item.ltrs?.toLocaleString()} L
+                  </span>
+                </div>
+              ))}
           </div>
         </div>
       </div>

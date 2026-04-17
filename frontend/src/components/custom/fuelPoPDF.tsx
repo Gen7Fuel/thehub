@@ -105,10 +105,14 @@ export const POPreviewDocument: React.FC<POPreviewProps> = ({
 }) => {
 
   const getQty = (gradeKey: string): string => {
-    const item = data.items.find(i => i.grade.toLowerCase().includes(gradeKey.toLowerCase()));
+    // 1. Use .find with exact equality (===)
+    // 2. We still use .toLowerCase() on both sides just to be safe with casing
+    const item = data.items.find(
+      (i) => i.grade.toLowerCase() === gradeKey.toLowerCase()
+    );
+
     return item ? item.ltrs.toLocaleString() : "0";
   };
-
   // Helper to convert 24h (13:00) to 12h (1pm)
   const formatTime = (time: string) => {
     if (!time) return "";
@@ -165,7 +169,8 @@ export const POPreviewDocument: React.FC<POPreviewProps> = ({
               <Text style={styles.tableColValue}>{getQty("Regular")}</Text>
               <Text style={styles.tableColValue}>{getQty("Premium")}</Text>
               <Text style={styles.tableColValue}>{getQty("Diesel")}</Text>
-              <Text style={styles.tableColValue}>{getQty("Dyed")}</Text>
+              {/* <Text style={styles.tableColValue}>{getQty("Dyed")}</Text> */}
+              <Text style={styles.tableColValue}>{getQty("Dyed Diesel")}</Text>
             </View>
 
             {/* Spacer/Zero Row */}
@@ -183,7 +188,8 @@ export const POPreviewDocument: React.FC<POPreviewProps> = ({
               <Text style={styles.tableColValue}>{getQty("Regular")}</Text>
               <Text style={styles.tableColValue}>{getQty("Premium")}</Text>
               <Text style={styles.tableColValue}>{getQty("Diesel")}</Text>
-              <Text style={styles.tableColValue}>{getQty("Dyed")}</Text>
+              {/* <Text style={styles.tableColValue}>{getQty("Dyed")}</Text> */}
+              <Text style={styles.tableColValue}>{getQty("Dyed Diesel")}</Text>
             </View>
           </View>
 
