@@ -7,7 +7,7 @@ import { createFileRoute } from '@tanstack/react-router';
 import { useQuery } from "@tanstack/react-query"
 import axios from 'axios';
 import {
-  Building2, Truck, Fuel, RefreshCw, AlertCircle, ShieldCheck,
+  Building2, Truck, Fuel, RefreshCw, AlertCircle, ShieldCheck, Download,
   // Hash, Save,  CheckCircle2, Calendar, Clock
 } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -87,6 +87,7 @@ function CreateFuelOrder() {
   // --- 2. Submit Logic ---
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isPreviewOpen, setIsPreviewOpen] = useState(false);
+  const [activeSplitIdx, setActiveSplitIdx] = useState(0);
 
   const [preSelectedFields, setPreSelectedFields] = useState<string[]>([]);
   const [isVerifyOpen, setIsVerifyOpen] = useState(false);
@@ -115,7 +116,7 @@ function CreateFuelOrder() {
     headers: { Authorization: `Bearer ${localStorage.getItem('token')}` }
   };
 
-  const [projections, setProjections] = useState<Record<string, GradeProjection>>({});
+  const [_, setProjections] = useState<Record<string, GradeProjection>>({});
   // --- Fetch Locations using TanStack Query ---
   const { data: locations = [], isLoading: isLoadingLocations } = useQuery({
     queryKey: ['locations-list'],
@@ -162,6 +163,7 @@ function CreateFuelOrder() {
         if (defaultRackId) {
           handleRackChange(defaultRackId, stationId, stationDefaultCarrierId);
         }
+        setPreSelectedFields(['rackId', 'carrierId']);
       } catch (err) {
         console.error("Master Station Logistics Error:", err);
       }
@@ -170,87 +172,74 @@ function CreateFuelOrder() {
     await syncStationData(stationId, index, formData.orderDate, formData.deliveryDate);
   };
 
-  // const updateSplitData = async (index: number, stationId: string) => {
-  //   // 1. Generate PO for this specific station
-  //   const station = locations.find((s: any) => s._id === stationId);
-  //   const po = await generateSpecificPONumber(stationId, formData.orderDate);
-
-  //   // 2. Fetch projections for this station
-  //   const proj = await fetchProjections(stationId, formData.deliveryDate);
-
-  //   setFormData(prev => {
-  //     const newSplits = [...prev.splits];
-  //     newSplits[index] = {
-  //       ...newSplits[index],
-  //       stationId,
-  //       poNumber: po,
-  //       projections: proj,
-  //       // Intersection of current Rack and this Station's grades
-  //       items: calculateOverlap(stationId, prev.rackId)
-  //     };
-  //     return { ...prev, splits: newSplits };
-  //   });
-  // };
-
   const handleRackChange = async (
     rackId: string,
     currentStationId?: string,
     passedCarrierId?: string
   ) => {
     try {
-      console.log("Fetching Rack Data for:", rackId); // LOG 3
       const rackRes = await axios.get(`/api/fuel-racks/${rackId}`, authHeader);
       const rack = rackRes.data;
-      console.log("Rack Details:", rack); // LOG 4
+      const rackGrades = rack.availableGrades || [];
+      const rackCarriers = rack.associatedCarriers || [];
 
-      // Fetch Suppliers
       const supplierRes = await axios.get(`/api/fuel-suppliers?associatedRack=${rackId}`, authHeader);
       const rackSuppliers = supplierRes.data;
-      setSuppliers(rackSuppliers);
 
-      // Faster alternative if the Rack is already populated
-      const rackCarriers = rack.associatedCarriers || [];
+      setSuppliers(rackSuppliers);
       setCarriers(rackCarriers);
 
-      // 1. Identify the current station from our query data
-      const targetStationId = currentStationId || formData.stationId;
-      const station = locations.find((s: any) => s._id === targetStationId);
-
-      // 2. Get the grades available in the station's tanks (from our new backend field)
-      const stationGrades = station?.availableStationGrades || [];
-
-      // Supplier/Badge Logic
+      // 1. Logistics Defaults (Supplier & Badge)
       const defaultSup = rackSuppliers.find((s: any) => s._id === rack.defaultSupplier) || rackSuppliers[0];
       const defaultBadge = defaultSup?.supplierBadges?.find((b: any) => b.isDefault) || defaultSup?.supplierBadges?.[0];
 
-      // CARRIER LOGIC:
-      // We use the passedCarrierId (from the station) or fallback to the one in the list
-      const finalCarrierId = passedCarrierId || rackCarriers[0]?._id || '';
+      // 2. Carrier Logic: Determine which carrier to auto-select
+      const targetStationId = currentStationId || formData.stationId;
+      const station = locations.find((s: any) => s._id === targetStationId);
 
-      // Check if the station's default is actually allowed at this rack
-      const isAllowed = rackCarriers.some((c: any) => c._id === finalCarrierId);
+      // Check if the passed ID or station default is valid for this specific rack
+      const carrierToVerify = passedCarrierId || station?.defaultFuelCarrier?._id || station?.defaultFuelCarrier || '';
+      const isAllowed = rackCarriers.some((c: any) => c._id === carrierToVerify);
 
-      console.log("Carrier Selection - Requested:", finalCarrierId, "Is Allowed:", isAllowed); // LOG 7
+      // Fallback to the first carrier in the rack list if the default isn't allowed
+      const finalCarrierId = isAllowed ? carrierToVerify : (rackCarriers[0]?._id || '');
 
       setFormData(prev => {
-        // 3. INTERSECTION LOGIC:
-        // Only include grades that the Rack provides AND the Station has tanks for
-        const filteredItems = rack.availableGrades
-          .filter((grade: string) => stationGrades.includes(grade))
-          .map((grade: string) => ({ grade, ltrs: 0 }));
+        // 3. Update all active splits with the new Rack's filtered grades
+        const updatedSplits = prev.splits.map((split) => {
+          if (!split.stationId) return split;
 
-        return {
+          const splitStation = locations.find((l: any) => l._id === split.stationId);
+          const stationGrades = splitStation?.availableStationGrades || [];
+
+          const newFilteredItems = rackGrades
+            .filter((g: string) => stationGrades.includes(g))
+            .map((g: string) => {
+              const existing = split.items.find(i => i.grade === g);
+              return { grade: g, ltrs: existing?.ltrs || 0 };
+            });
+
+          return { ...split, items: newFilteredItems };
+        });
+
+        const update = {
           ...prev,
           rackId,
           supplierId: defaultSup?._id || '',
           badgeNo: defaultBadge?.badgeNumber || '',
-          carrierId: isAllowed ? finalCarrierId : (rackCarriers[0]?._id || ''),
-          items: filteredItems // Applied the filter here
+          carrierId: finalCarrierId, // This performs the auto-selection
+          splits: updatedSplits
         };
+
+        // Sync root level for single mode
+        if (!isSplit) {
+          update.items = updatedSplits[0].items;
+          update.carrierId = finalCarrierId;
+        }
+
+        return update;
       });
 
-      // Trigger PO Generation
-      // generatePONumber(currentStationId || formData.stationId, formData.orderDate, formData.deliveryDate);
     } catch (err) {
       console.error("Error in Rack domino chain:", err);
     }
@@ -342,80 +331,6 @@ function CreateFuelOrder() {
     }
   };
 
-  const generatePONumber = async (sId: string, oDate: string, dDate: string) => {
-    const station = locations.find((s: any) => s._id === sId);
-    // Keep your top-level check
-    if (!station || !oDate || !dDate) return;
-
-    const getFormattedPart = (dateStr: string) => {
-      const dateObj = new Date(dateStr + 'T00:00:00');
-      const mm = (dateObj.getMonth() + 1).toString().padStart(2, '0');
-      const dd = dateObj.getDate().toString().padStart(2, '0');
-      const yy = dateObj.getFullYear().toString().slice(-2);
-      return `${mm}${dd}${yy}`;
-    };
-
-    const stationNum = String(station.fuelStationNumber).padStart(2, '0');
-
-    try {
-      const res = await axios.get(
-        `/api/fuel-orders/check-existing?stationId=${sId}&orderDate=${oDate}`,
-        authHeader
-      );
-
-      const { count, existingOrders } = res.data;
-
-      // --- Validation Logic ---
-      if (count > 0) {
-        // Use originalDeliveryDate from the backend objects
-        const differentDeliveryDate = existingOrders.find((order: any) => {
-          if (!order.originalDeliveryDate) return false;
-          const existingD = new Date(order.originalDeliveryDate).toISOString().split('T')[0];
-          return existingD !== dDate;
-        });
-
-        const sameDeliveryDate = existingOrders.find((order: any) => {
-          if (!order.originalDeliveryDate) return false;
-          const existingD = new Date(order.originalDeliveryDate).toISOString().split('T')[0];
-          return existingD === dDate;
-        });
-
-        if (differentDeliveryDate) {
-          // Logic: Calculate tomorrow's date
-          const tomorrow = new Date(oDate + 'T00:00:00');
-          tomorrow.setDate(tomorrow.getDate() + 1);
-          const tomorrowStr = tomorrow.toISOString().split('T')[0];
-
-          alert(`CRITICAL: An order exists for this date with a different delivery date. To maintain consistency, we are moving this Order Date to tomorrow (${tomorrowStr}).`);
-
-          // Recursive call with the new date
-          setFormData(prev => ({ ...prev, orderDate: tomorrowStr }));
-          generatePONumber(sId, tomorrowStr, dDate);
-          return;
-        }
-
-        if (sameDeliveryDate) {
-          const nextLoad = count + 1;
-          const confirm = window.confirm(`Notice: There is already a load scheduled for delivery on ${dDate}. Do you want to create another load (Load #${nextLoad}) for this same day?`);
-
-          if (!confirm) return;
-
-          // If confirmed, update PO with the next load number
-          const newPO = `NSP${getFormattedPart(oDate)}-${stationNum}${nextLoad}`;
-          setFormData(prev => ({ ...prev, poNumber: newPO }));
-          return;
-        }
-      }
-
-      // Default Case (No existing orders or fresh date)
-      const newPO = `NSP${getFormattedPart(oDate)}-${stationNum}${count + 1}`;
-      setFormData(prev => ({ ...prev, poNumber: newPO }));
-
-    } catch (err) {
-      console.error("PO Gen Error", err);
-    }
-  };
-
   // --- 1. Reset Logic ---
   const handleReset = () => {
     setFormData({
@@ -444,63 +359,81 @@ function CreateFuelOrder() {
   };
 
   const handleSubmit = async () => {
-    // 1. Validation: Ensure mandatory fields are present
-    if (!formData.stationId || !formData.rackId || !formData.poNumber) {
-      alert("Please select a Station and Rack before submitting.");
-      return;
-    }
-
-    // 2. Validation: Ensure at least one item has liters
-    const hasFuel = formData.items.some(item => (item.ltrs || 0) > 0);
-    if (!hasFuel) {
-      alert("Please enter a quantity for at least one fuel grade.");
+    // 1. Validation
+    if (isSplit) {
+      if (formData.splits.some(s => !s.stationId || !s.poNumber)) {
+        alert("Please ensure both split stations and PO numbers are set.");
+        return;
+      }
+    } else if (!formData.stationId || !formData.poNumber) {
+      alert("Please select a Station and PO Number.");
       return;
     }
 
     try {
       setIsSubmitting(true);
 
-      // 3. Generate the PDF Blob directly from the component
-      const doc = (
-        <POPreviewDocument
-          data={formData}
-          selectedStation={selectedStation}
-          carrierName={selectedCarrier?.carrierName}
-          rackName={selectedRack?.rackName}
-          rackLocation={selectedRack?.rackLocation}
-        />
-      );
+      // 2. Prepare an array of objects to send to backend
+      // Each object represents one PO/Station
+      const orderSections = isSplit
+        ? formData.splits.map(s => ({
+          stationId: s.stationId,
+          items: s.items,
+          poNumber: s.poNumber
+        }))
+        : [{
+          stationId: formData.stationId,
+          items: formData.items,
+          poNumber: formData.poNumber
+        }];
 
-      const blob = await pdf(doc).toBlob();
+      // 3. Generate PDFs for each section
+      const processedOrders = await Promise.all(orderSections.map(async (section) => {
+        const stationObj = locations.find((l: any) => l._id === section.stationId);
 
-      // 4. Convert Blob to Base64 to send in JSON
-      const reader = new FileReader();
-      reader.readAsDataURL(blob);
-      reader.onloadend = async () => {
-        const base64data = (reader.result as string).split(',')[1];
+        const doc = (
+          <POPreviewDocument
+            data={{ ...formData, poNumber: section.poNumber, items: section.items }}
+            selectedStation={stationObj}
+            carrierName={selectedCarrier?.carrierName}
+            rackName={selectedRack?.rackName}
+            rackLocation={selectedRack?.rackLocation}
+          />
+        );
 
-        // 5. Send formData + the PDF string to your backend
-        const payload = {
-          ...formData,
-          pdfBase64: base64data
-        };
+        const blob = await pdf(doc).toBlob();
 
-        const response = await axios.post('/api/fuel-orders', payload, authHeader);
+        return new Promise((resolve) => {
+          const reader = new FileReader();
+          reader.readAsDataURL(blob);
+          reader.onloadend = () => {
+            resolve({
+              ...section,
+              pdfBase64: (reader.result as string).split(',')[1],
+              customerName: stationObj?.fuelCustomerName || 'Station'
+            });
+          };
+        });
+      }));
 
-        if (response.status === 201) {
-          const { order, pushedTo } = response.data;
-
-          alert(`Success! Order ${order.poNumber} created.\n\nA draft has been pushed to: ${pushedTo}`);
-
-          handleReset();
-          if (setIsPreviewOpen) setIsPreviewOpen(false);
-        }
+      // 4. Send combined payload
+      const payload = {
+        ...formData,
+        isSplit,
+        orders: processedOrders // Array containing 1 or 2 orders
       };
 
+      const response = await axios.post('/api/fuel-orders', payload, authHeader);
+
+      if (response.status === 201) {
+        alert(`Success! ${isSplit ? 'Split orders' : 'Order'} created and draft pushed.`);
+        handleReset();
+        if (setIsPreviewOpen) setIsPreviewOpen(false);
+      }
+
     } catch (err: any) {
-      const errorMsg = err.response?.data?.message || "Failed to save the order.";
-      alert(errorMsg);
-      console.error("Submission Error:", err);
+      alert(err.response?.data?.message || "Failed to save.");
+      console.error(err);
     } finally {
       setIsSubmitting(false);
     }
@@ -554,126 +487,66 @@ function CreateFuelOrder() {
     }));
   };
 
-  const fetchProjections = async (sId: string, dDate: string) => {
-    if (!sId || !dDate) return;
-    try {
-      const res = await axios.get(`/api/fuel-station-tanks/station/${sId}?date=${dDate}`, authHeader);
+  const syncStationData = async (stationId: string, index: number, orderDate: string, deliveryDate: string) => {
+    const station = locations.find((s: any) => s._id === stationId);
+    if (!station) return;
 
-      // Group tank data by grade for the UI
-      const grouped = res.data.tanks.reduce((acc: any, tank: any) => {
-        if (!acc[tank.grade]) {
-          acc[tank.grade] = { opening: 0, sales: 0, capacity: 0, closing: 0 };
-        }
-        acc[tank.grade].opening += tank.openingL;
-        acc[tank.grade].sales += tank.estSalesL;
-        acc[tank.grade].capacity += tank.maxVolumeCapacity;
-        acc[tank.grade].closing += tank.closingL;
-        return acc;
-      }, {});
+    // 1. Get the current Rack data to know which grades are supported
+    // We look at the master rackId in formData
+    const currentRack = racks.find(r => r._id === formData.rackId);
+    const rackGrades = currentRack?.availableGrades || [];
+    const stationGrades = station.availableStationGrades || [];
 
-      setProjections(grouped);
-    } catch (err) {
-      console.error("Error fetching projections:", err);
+    const tasks: Promise<any>[] = [];
+    tasks.push(getPONumberHelper(station, orderDate, deliveryDate, authHeader));
+
+    if (deliveryDate) {
+      tasks.push(axios.get(`/api/fuel-station-tanks/station/${stationId}?date=${deliveryDate}`, authHeader));
     }
-  };
 
-  const getProjectedData = async (sId: string, dDate: string) => {
-    if (!sId || !dDate) return null;
     try {
-      const res = await axios.get(`/api/fuel-station-tanks/station/${sId}?date=${dDate}`, authHeader);
-      return res.data.tanks.reduce((acc: any, tank: any) => {
+      const [poData, projRes] = await Promise.all(tasks);
+
+      const groupedProjections = projRes?.data.tanks.reduce((acc: any, tank: any) => {
         if (!acc[tank.grade]) acc[tank.grade] = { opening: 0, sales: 0, capacity: 0, closing: 0 };
         acc[tank.grade].opening += tank.openingL;
         acc[tank.grade].sales += tank.estSalesL;
         acc[tank.grade].capacity += tank.maxVolumeCapacity;
         acc[tank.grade].closing += tank.closingL;
         return acc;
-      }, {});
-    } catch (err) {
-      console.error("Projection Fetch Error:", err);
-      return null;
-    }
-  };
-
-  const refreshAllProjections = async (newDeliveryDate: string) => {
-    // 1. Update splits
-    const updatedSplits = await Promise.all(
-      formData.splits.map(async (split) => {
-        if (!split.stationId) return split;
-        const grouped = await getProjectedData(split.stationId, newDeliveryDate);
-        return { ...split, projections: grouped || split.projections };
-      })
-    );
-
-    // 2. Update root if single mode
-    let rootProjections = formData.projections;
-    if (!isSplit && formData.stationId) {
-      rootProjections = await getProjectedData(formData.stationId, newDeliveryDate);
-    }
-
-    setFormData(prev => ({
-      ...prev,
-      splits: updatedSplits,
-      projections: rootProjections
-    }));
-  };
-
-  const syncStationData = async (stationId: string, index: number, orderDate: string, deliveryDate: string) => {
-    const station = locations.find((s: any) => s._id === stationId);
-    if (!station) return;
-
-    // 1. Prepare to fetch PO and Projections in parallel
-    const tasks: Promise<any>[] = [];
-
-    // Task: Fetch PO (Depends on Station, Order Date, Delivery Date)
-    tasks.push(getPONumberHelper(station, orderDate, deliveryDate, authHeader));
-
-    // Task: Fetch Projections (Only if Delivery Date exists)
-    if (deliveryDate) {
-      tasks.push(axios.get(`/api/fuel-station-tanks/station/${stationId}?date=${deliveryDate}`, authHeader));
-    }
-
-    try {
-      const results = await Promise.all(tasks);
-      const poData = results[0];
-      const projRes = deliveryDate ? results[1] : null;
-
-      let groupedProjections = {};
-      if (projRes) {
-        groupedProjections = projRes.data.tanks.reduce((acc: any, tank: any) => {
-          if (!acc[tank.grade]) acc[tank.grade] = { opening: 0, sales: 0, capacity: 0, closing: 0 };
-          acc[tank.grade].opening += tank.openingL;
-          acc[tank.grade].sales += tank.estSalesL;
-          acc[tank.grade].capacity += tank.maxVolumeCapacity;
-          acc[tank.grade].closing += tank.closingL;
-          return acc;
-        }, {});
-      }
+      }, {}) || {};
 
       setFormData(prev => {
+        // INTERSECTION LOGIC: 
+        // Only include grades that exist in BOTH the Station Tanks and the selected Rack
+        const filteredItems = stationGrades
+          .filter((grade: string) => rackGrades.includes(grade))
+          .map((grade: string) => {
+            // Preserve existing liters if the grade was already there
+            const existing = prev.splits[index]?.items.find(i => i.grade === grade);
+            return { grade, ltrs: existing?.ltrs || 0 };
+          });
+
         const newSplits = [...prev.splits];
         newSplits[index] = {
           ...newSplits[index],
           stationId,
           poNumber: poData.po,
           projections: groupedProjections,
-          // Ensure items match the station grades if they were empty
-          items: newSplits[index].items.length > 0 ? newSplits[index].items :
-            (station.availableStationGrades || []).map((grade: string) => ({ grade, ltrs: 0 }))
+          items: filteredItems // Applied intersection here
         };
 
         const update = {
           ...prev,
           splits: newSplits,
-          orderDate: poData.finalOrderDate // In case the helper shifted the date to tomorrow
+          orderDate: poData.finalOrderDate
         };
 
-        // Sync root for single mode
         if (!isSplit && index === 0) {
           update.stationId = stationId;
           update.poNumber = poData.po;
           update.projections = groupedProjections;
-          update.items = newSplits[0].items;
+          update.items = filteredItems;
         }
 
         return update;
@@ -794,15 +667,54 @@ function CreateFuelOrder() {
           </Dialog>
           <Dialog open={isPreviewOpen} onOpenChange={setIsPreviewOpen}>
             <DialogContent className="max-w-5xl h-[90vh] flex flex-col">
-              <DialogHeader>
-                <DialogTitle>PO Preview - {formData.poNumber}</DialogTitle>
+              <DialogHeader className="flex flex-row items-center justify-between pr-8">
+                <div>
+                  <DialogTitle>
+                    PO Preview — {isSplit ? formData.splits[activeSplitIdx]?.poNumber : formData.poNumber}
+                  </DialogTitle>
+                  {isSplit && (
+                    <p className="text-xs text-muted-foreground font-medium uppercase tracking-tight">
+                      Reviewing Split Load: Page {activeSplitIdx + 1} of 2
+                    </p>
+                  )}
+                </div>
+
+                {/* SPLIT LOAD SLIDER/TOGGLE */}
+                {isSplit && (
+                  <div className="flex bg-slate-100 p-1 rounded-lg border shadow-inner">
+                    <Button
+                      variant={activeSplitIdx === 0 ? "default" : "ghost"}
+                      size="sm"
+                      className={cn("h-7 px-4 text-[10px] font-black uppercase transition-all", activeSplitIdx === 0 ? "bg-white text-blue-600 shadow-sm" : "text-slate-500")}
+                      onClick={() => setActiveSplitIdx(0)}
+                    >
+                      Site 1
+                    </Button>
+                    <Button
+                      variant={activeSplitIdx === 1 ? "default" : "ghost"}
+                      size="sm"
+                      className={cn("h-7 px-4 text-[10px] font-black uppercase transition-all", activeSplitIdx === 1 ? "bg-white text-blue-600 shadow-sm" : "text-slate-500")}
+                      onClick={() => setActiveSplitIdx(1)}
+                    >
+                      Site 2
+                    </Button>
+                  </div>
+                )}
               </DialogHeader>
 
-              <div className="flex-1 border rounded-lg overflow-hidden">
+              <div className="flex-1 border rounded-lg overflow-hidden bg-slate-50 shadow-inner">
                 <PDFViewer width="100%" height="100%" showToolbar={false}>
                   <POPreviewDocument
-                    data={formData}
-                    selectedStation={selectedStation}
+                    // Pass the split-specific data if in split mode, otherwise root data
+                    data={{
+                      ...formData,
+                      poNumber: isSplit ? formData.splits[activeSplitIdx].poNumber : formData.poNumber,
+                      items: isSplit ? formData.splits[activeSplitIdx].items : formData.items,
+                    }}
+                    selectedStation={isSplit
+                      ? locations.find((l: any) => l._id === formData.splits[activeSplitIdx].stationId)
+                      : selectedStation
+                    }
                     carrierName={selectedCarrier?.carrierName}
                     rackName={selectedRack?.rackName}
                     rackLocation={selectedRack?.rackLocation}
@@ -810,44 +722,72 @@ function CreateFuelOrder() {
                 </PDFViewer>
               </div>
 
-              <DialogFooter className="flex justify-between items-center sm:justify-between">
-                <PDFDownloadLink
-                  document={
-                    <POPreviewDocument
-                      data={formData}
-                      selectedStation={selectedStation}
-                      carrierName={selectedCarrier?.carrierName}
-                      rackName={selectedRack?.rackName}
-                      rackLocation={selectedRack?.rackLocation}
-                    />
-                  }
-                  fileName={`Fuel Order Form NSP ${selectedStation?.fuelCustomerName || 'Order'} ${formatPDFDate(formData.deliveryDate, false)}.pdf`}
-                >
-                  {({ loading }) => (
-                    <Button variant="outline" disabled={loading}>
-                      {loading ? "Preparing..." : "Download PDF"}
-                    </Button>
-                  )}
-                </PDFDownloadLink>
+              <DialogFooter className="flex flex-col sm:flex-row justify-between items-center gap-4 mt-2">
+                <div className="flex items-center gap-2">
+                  <PDFDownloadLink
+                    document={
+                      <POPreviewDocument
+                        data={{
+                          ...formData,
+                          poNumber: isSplit ? formData.splits[activeSplitIdx].poNumber : formData.poNumber,
+                          items: isSplit ? formData.splits[activeSplitIdx].items : formData.items,
+                        }}
+                        selectedStation={isSplit
+                          ? locations.find((l: any) => l._id === formData.splits[activeSplitIdx].stationId)
+                          : selectedStation
+                        }
+                        carrierName={selectedCarrier?.carrierName}
+                        rackName={selectedRack?.rackName}
+                        rackLocation={selectedRack?.rackLocation}
+                      />
+                    }
+                    // fileName={`Fuel Order Form NSP ${selectedStation?.fuelCustomerName || 'Order'} ${formatPDFDate(formData.deliveryDate, false)}.pdf`}
 
-                <Button
-                  className="bg-green-600 hover:bg-green-700"
-                  onClick={async () => {
-                    await handleSubmit();
-                    setIsPreviewOpen(false);
-                  }}
-                >
-                  Create Order & Push Draft
-                </Button>
+                    fileName={`Fuel Order Form NSP ${(isSplit
+                      ? locations.find((l: any) => l._id === formData.splits[activeSplitIdx].stationId)?.fuelCustomerName
+                      : selectedStation?.fuelCustomerName) || 'Order'
+                      } ${formatPDFDate(formData.deliveryDate, false)}.pdf`}                  >
+                    {({ loading }) => (
+                      <Button variant="outline" disabled={loading} className="border-blue-200 text-blue-600 hover:bg-blue-50">
+                        <Download className="w-4 h-4 mr-2" />
+                        {loading ? "Preparing..." : isSplit ? `Download PO ${activeSplitIdx + 1}` : "Download PDF"}
+                      </Button>
+                    )}
+                  </PDFDownloadLink>
+
+                  {/* {isSplit && (
+                    <p className="text-[10px] text-slate-400 italic">
+                      * Download both POs separately if required.
+                    </p>
+                  )} */}
+                </div>
+
+                <div className="flex gap-2">
+                  <Button variant="ghost" onClick={() => setIsPreviewOpen(false)}>Back</Button>
+                  <Button
+                    className="bg-green-600 hover:bg-green-700 font-bold"
+                    onClick={async () => {
+                      await handleSubmit();
+                      setIsPreviewOpen(false);
+                    }}
+                  >
+                    Create Order & Push Draft
+                  </Button>
+                </div>
               </DialogFooter>
             </DialogContent>
           </Dialog>
         </div>
       </div>
 
-      <div className="grid grid-cols-12 gap-6">
-        {/* LEFT COLUMN: Logistics & Details */}
-        <div className="col-span-12 lg:col-span-8 space-y-6">
+      <div className="grid grid-cols-12 gap-6 items-start">
+
+        {/* LEFT COLUMN: Logistics & Form */}
+        <div className={cn(
+          "col-span-12 transition-all duration-300",
+          // CRITICAL: Shrink the left side when split is active so the right side can fit
+          isSplit ? "lg:col-span-5 xl:col-span-6" : "lg:col-span-8"
+        )}>
           <Card>
             <CardHeader className="pb-3 border-b">
               <CardTitle className="text-lg flex items-center gap-2">
@@ -1128,133 +1068,175 @@ function CreateFuelOrder() {
 
         {/* RIGHT COLUMN: Order Quantities */}
         <div className={cn(
-          "col-span-12 lg:col-span-4",
-          isSplit ? "lg:col-span-12" : "lg:col-span-4" // Expand width if split to prevent scrolling
+          "col-span-12 transition-all duration-300",
+          // CRITICAL: Ensure Left (5) + Right (7) = 12
+          isSplit ? "lg:col-span-7 xl:col-span-6" : "lg:col-span-4"
         )}>
-          <div className={cn(
-            "grid gap-6",
-            isSplit ? "grid-cols-1 md:grid-cols-2" : "grid-cols-1"
-          )}>
-            {(isSplit ? formData.splits : [{
-              stationId: formData.stationId,
-              items: formData.items,
-              projections: formData.projections,
-              poNumber: formData.poNumber
-            }]).map((section, sIdx) => {
-              if (!section.stationId) return null;
+          <Card className="h-full border-blue-100 bg-blue-50/30 flex flex-col">
+            <CardHeader className="pb-3 border-b bg-white">
+              <CardTitle className="text-lg flex items-center gap-2">
+                <Fuel className="w-5 h-5 text-blue-600" />
+                {isSplit ? "Split Load Config" : "Order Items"}
+              </CardTitle>
+            </CardHeader>
 
-              const sectionStation = locations.find((l: any) => l._id === section.stationId);
-              // Sort items for consistency across columns
-              const sortedItems = sortGrades(section.items);
-              const totalSectionLtrs = sortedItems.reduce((sum, i) => sum + (Number(i.ltrs) || 0), 0);
+            <CardContent className={cn(
+              "pt-4 flex-1",
+              isSplit ? "grid grid-cols-2 gap-3 items-start" : "space-y-4"
+            )}>
+              {(isSplit ? formData.splits : [{
+                stationId: formData.stationId,
+                items: formData.items,
+                projections: formData.projections,
+                poNumber: formData.poNumber
+              }]).map((section, sIdx) => {
+                if (!section.stationId) return null;
 
-              return (
-                <Card key={sIdx} className="border-blue-100 bg-blue-50/30 flex flex-col h-full">
-                  <CardHeader className="pb-3 border-b bg-white">
-                    <CardTitle className="text-lg flex items-center justify-between">
-                      <div className="flex items-center gap-2">
-                        <Fuel className="w-5 h-5 text-blue-600" />
-                        <span className="truncate">{sectionStation?.stationName || 'Order Items'}</span>
-                      </div>
-                      <span className="text-[10px] font-mono text-muted-foreground bg-slate-100 px-2 py-1 rounded">
-                        {section.poNumber}
-                      </span>
-                    </CardTitle>
-                  </CardHeader>
+                const sectionStation = locations.find((l: any) => l._id === section.stationId);
+                const sortedItems = sortGrades(section.items);
+                const totalSectionLtrs = sortedItems.reduce((sum, i) => sum + (Number(i.ltrs) || 0), 0);
 
-                  <CardContent className="pt-4 space-y-4 flex-1">
-                    {sortedItems.map((item) => {
-                      const iIdx = section.items.findIndex(original => original.grade === item.grade);
-                      const gradeData = section.projections?.[item.grade] || { opening: 0, sales: 0, capacity: 0, closing: 0 };
-                      const userLtrs = Number(item.ltrs) || 0;
-                      const finalClosing = (gradeData.closing + userLtrs);
-
-                      const theme = getGradeTheme(item.grade);
-                      const config = gradeConfig[item.grade] || { short: item.grade.substring(0, 3).toUpperCase() };
-
-                      return (
-                        <div key={item.grade} className="p-3 bg-white rounded-xl border shadow-sm relative overflow-hidden">
-                          <div className={cn("absolute left-0 top-0 bottom-0 w-1.5", theme.color)} />
-
-                          <div className="flex items-center justify-between mb-2">
-                            <div className="flex flex-col leading-tight">
-                              <span className={cn("font-black uppercase italic text-sm tracking-tight", theme.label)}>
-                                {item.grade}
-                              </span>
-                              <span className="text-[10px] font-bold text-slate-400 font-mono">
-                                {config.short}
-                              </span>
-                            </div>
-
-                            <div className="flex items-center gap-2">
-                              <Input
-                                type="number"
-                                className="h-9 w-24 text-right font-mono font-bold border-2 focus:border-blue-500"
-                                value={item.ltrs || ''}
-                                onChange={(e) => {
-                                  const value = Number(e.target.value);
-                                  if (isSplit) {
-                                    const newSplits = [...formData.splits];
-                                    newSplits[sIdx].items[iIdx].ltrs = value;
-                                    setFormData({ ...formData, splits: newSplits });
-                                  } else {
-                                    const newItems = [...formData.items];
-                                    newItems[iIdx].ltrs = value;
-                                    setFormData({ ...formData, items: newItems });
-                                  }
-                                }}
-                              />
-                            </div>
-                          </div>
-
-                          <div className="grid grid-cols-3 gap-1 pt-2 border-t border-slate-100">
-                            <div className="flex flex-col">
-                              <span className="text-[8px] font-bold text-slate-400 uppercase">Open</span>
-                              <span className="text-xs font-mono">{gradeData.opening.toLocaleString()}</span>
-                            </div>
-                            <div className="flex flex-col">
-                              <span className="text-[8px] font-bold text-slate-400 uppercase">Sales</span>
-                              <span className="text-xs font-mono text-red-500">-{gradeData.sales.toLocaleString()}</span>
-                            </div>
-                            <div className="flex flex-col items-end">
-                              <span className="text-[8px] font-bold text-blue-500 uppercase">Final</span>
-                              <span className={cn(
-                                "text-xs font-mono font-black",
-                                finalClosing > gradeData.capacity ? "text-orange-600" : "text-blue-600"
-                              )}>
-                                {finalClosing.toLocaleString()}
-                              </span>
-                            </div>
-                          </div>
-
-                          {/* Individual Overflow Alerts */}
-                          {gradeData.capacity > 0 && finalClosing > gradeData.capacity && (
-                            <div className="mt-2 flex items-center gap-1.5 text-[8px] font-black text-orange-600 uppercase bg-orange-50 px-2 py-1 rounded border border-orange-100">
-                              <AlertCircle className="h-2.5 w-2.5" />
-                              Overflow Risk: Exceeds {gradeData.capacity.toLocaleString()}L Capacity
-                            </div>
-                          )}
+                return (
+                  <div key={sIdx} className={cn(
+                    "flex flex-col",
+                    // Use a subtle background and border to separate the two columns visually
+                    isSplit && "bg-white/40 p-2 rounded-xl border border-blue-100/50"
+                  )}>
+                    {/* Header for Split Load - restore site names at top of each mini-column */}
+                    {isSplit && (
+                      <div className="mb-4 pb-2 border-b border-blue-100/50">
+                        <p className="text-[11px] font-black uppercase text-blue-700 truncate">
+                          {sectionStation?.stationName || 'Site ' + (sIdx + 1)}
+                        </p>
+                        <div className="flex items-center gap-2">
+                          <span className="text-[9px] font-mono font-bold bg-white px-1.5 py-0.5 rounded border border-blue-100 text-slate-500">
+                            PO: {section.poNumber}
+                          </span>
                         </div>
-                      );
-                    })}
-                  </CardContent>
+                      </div>
+                    )}
 
-                  {/* Individual Totals at the bottom of each Card */}
-                  <div className="p-4 border-t border-dashed border-blue-200 bg-white/50 rounded-b-xl">
-                    <div className="flex justify-between items-center">
-                      <span className="text-[10px] font-black uppercase text-slate-400 tracking-widest">Total Volume</span>
-                      <span className="text-lg font-black text-blue-600 font-mono">
-                        {totalSectionLtrs.toLocaleString()} <span className="text-xs font-bold">L</span>
-                      </span>
+                    <div className={cn("space-y-4", isSplit && "space-y-3")}>
+                      {sortedItems.map((item) => {
+                        const iIdx = section.items.findIndex(original => original.grade === item.grade);
+                        const gradeData = section.projections?.[item.grade] || { opening: 0, sales: 0, capacity: 0, closing: 0 };
+                        const userLtrs = Number(item.ltrs) || 0;
+                        const finalClosing = (gradeData.closing + userLtrs);
+
+                        const theme = getGradeTheme(item.grade);
+                        const config = gradeConfig[item.grade] || { short: item.grade.substring(0, 3).toUpperCase() };
+
+                        return (
+                          <div key={item.grade} className="p-3 bg-white rounded-xl border shadow-sm relative overflow-hidden">
+                            <div className={cn("absolute left-0 top-0 bottom-0 w-1.5", theme.color)} />
+
+                            <div className="flex items-center justify-between mb-2">
+                              <div className="flex flex-col leading-tight">
+                                <span className={cn(
+                                  "font-black uppercase italic tracking-tight",
+                                  isSplit ? "text-[11px]" : "text-sm" // Scale text based on mode
+                                )}>
+                                  {item.grade}
+                                </span>
+                                <span className="text-[10px] font-bold text-slate-400 font-mono uppercase">
+                                  {config.short}
+                                </span>
+                              </div>
+
+                              <div className="flex items-center gap-2">
+                                <Input
+                                  type="number"
+                                  className={cn(
+                                    "text-right font-mono font-bold border-2 focus:border-blue-500",
+                                    isSplit ? "h-8 w-20 text-xs" : "h-9 w-28 text-sm" // Scale input size
+                                  )}
+                                  placeholder="0"
+                                  value={item.ltrs || ''}
+                                  onChange={(e) => {
+                                    const value = Number(e.target.value);
+
+                                    if (isSplit) {
+                                      // 1. Create a deep copy of the splits array
+                                      const newSplits = JSON.parse(JSON.stringify(formData.splits));
+
+                                      // 2. We use iIdx which you correctly calculated using findIndex
+                                      // on the original section.items array
+                                      if (iIdx > -1) {
+                                        newSplits[sIdx].items[iIdx].ltrs = value;
+                                        setFormData({ ...formData, splits: newSplits });
+                                      }
+                                    } else {
+                                      // 1. Create a deep copy of the items array
+                                      const newItems = JSON.parse(JSON.stringify(formData.items));
+
+                                      // 2. Find the index in the original array to avoid any sorting mismatch
+                                      const originalIdx = newItems.findIndex((orig: any) => orig.grade === item.grade);
+
+                                      if (originalIdx > -1) {
+                                        newItems[originalIdx].ltrs = value;
+                                        setFormData({ ...formData, items: newItems });
+                                      }
+                                    }
+                                  }}
+                                />
+                                {!isSplit && <span className="text-[10px] font-black text-slate-400">LTRS</span>}
+                              </div>
+                            </div>
+
+                            <div className="grid grid-cols-3 gap-1 pt-2 border-t border-slate-100">
+                              <div className="flex flex-col">
+                                <span className="text-[9px] font-bold text-slate-400 uppercase leading-none mb-1">Est. Opening</span>
+                                <span className={cn("font-mono font-bold text-slate-700", isSplit ? "text-[10px]" : "text-xs")}>
+                                  {gradeData.opening.toLocaleString()}
+                                </span>
+                              </div>
+                              <div className="flex flex-col">
+                                <span className="text-[9px] font-bold text-slate-400 uppercase leading-none mb-1">Est. Sales</span>
+                                <span className={cn("font-mono font-bold text-red-500", isSplit ? "text-[10px]" : "text-xs")}>
+                                  -{gradeData.sales.toLocaleString()}
+                                </span>
+                              </div>
+                              <div className="flex flex-col items-end">
+                                <span className="text-[9px] font-bold text-blue-500 uppercase leading-none mb-1">Final Closing</span>
+                                <span className={cn(
+                                  "font-mono font-black",
+                                  isSplit ? "text-[10px]" : "text-xs",
+                                  finalClosing > gradeData.capacity ? "text-orange-600" : "text-blue-600"
+                                )}>
+                                  {finalClosing.toLocaleString()}
+                                </span>
+                              </div>
+                            </div>
+
+                            {gradeData.capacity > 0 && finalClosing > gradeData.capacity && (
+                              <div className="mt-2 flex items-center gap-1.5 text-[9px] font-black text-orange-600 uppercase bg-orange-50 px-2 py-1 rounded border border-orange-100">
+                                <AlertCircle className="h-3 w-3" />
+                                Overflow Risk: Exceeds {gradeData.capacity.toLocaleString()}L Capacity
+                              </div>
+                            )}
+                          </div>
+                        );
+                      })}
+                    </div>
+
+                    <div className="mt-6 pt-4 border-t border-dashed border-blue-200">
+                      <div className="flex justify-between items-center px-1">
+                        <span className="text-[10px] font-black uppercase text-slate-400 tracking-widest">
+                          {isSplit ? "Site Total" : "Total Volume:"}
+                        </span>
+                        <span className={cn("font-black text-blue-600 font-mono", isSplit ? "text-base" : "text-lg")}>
+                          {totalSectionLtrs.toLocaleString()} <span className="text-xs font-bold">L</span>
+                        </span>
+                      </div>
                     </div>
                   </div>
-                </Card>
-              );
-            })}
-          </div>
+                );
+              })}
+            </CardContent>
+          </Card>
         </div>
       </div>
-    </div >
+    </div>
   );
 }
 

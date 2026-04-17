@@ -73,7 +73,7 @@ function VolumeDashboard() {
 
   const siteOptions = useMemo(() => {
     const sites = allTanks.map(t => t.stationName);
-    return Array.from(new Set(sites)).sort();
+    return Array.from(new Set(sites));
   }, [allTanks]);
 
   const handleSiteChange = (newSite: string) => {
