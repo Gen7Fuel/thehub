@@ -84,24 +84,62 @@ function RouteComponent() {
   const [cplBulloch, setCplBulloch] = useState('')
   const [exemptedTax, setExemptedTax] = useState('')
   const [submitting, setSubmitting] = useState(false)
-  const [syncing, setSyncing] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [success, setSuccess] = useState<string | null>(null)
 
-  // Populate form when existing record loads
+  // Populate form when existing record loads, then auto-sync from SFTP if shift is present
   useEffect(() => {
-    if (existing) {
-      setShiftNumber(existing.shift_number)
-      setDate(existing.date.slice(0, 10))
-      setCanadianCashCollected(toStr(existing.canadian_cash_collected))
-      setItemSales(toStr(existing.item_sales))
-      setCashBack(toStr(existing.cash_back))
-      setLoyalty(toStr(existing.loyalty))
-      setCplBulloch(toStr(existing.cpl_bulloch))
-      setExemptedTax(toStr(existing.exempted_tax))
-      setSuccess(null)
-      setError(null)
-    }
+    if (!existing) return
+
+    setShiftNumber(existing.shift_number)
+    setDate(existing.date.slice(0, 10))
+    setCanadianCashCollected(toStr(existing.canadian_cash_collected))
+    setItemSales(toStr(existing.item_sales))
+    setCashBack(toStr(existing.cash_back))
+    setLoyalty(toStr(existing.loyalty))
+    setCplBulloch(toStr(existing.cpl_bulloch))
+    setExemptedTax(toStr(existing.exempted_tax))
+    setSuccess(null)
+    setError(null)
+
+    const shiftNum = existing.shift_number
+    const dateStr = existing.date.slice(0, 10)
+
+    ;(async () => {
+      try {
+        const qs = site ? `?site=${encodeURIComponent(site)}` : ''
+        const checkRes = await fetch(`/api/sftp/check/${encodeURIComponent(shiftNum)}${qs}`, {
+          headers: {
+            Authorization: `Bearer ${localStorage.getItem('token') || ''}`,
+            'X-Required-Permission': 'accounting.cashSummary.form',
+          },
+        })
+        if (!checkRes.ok) return
+        const { valid } = await checkRes.json()
+        if (!valid) return
+
+        const [yy, mm, dd] = dateStr.split('-').map(Number)
+        const dateISO = new Date(yy, mm - 1, dd, 0, 0, 0, 0).toISOString()
+
+        await fetch(`/api/cash-summary/${existing._id}`, {
+          method: 'PUT',
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${localStorage.getItem('token') || ''}`,
+            'X-Required-Permission': 'accounting.cashSummary.form',
+          },
+          body: JSON.stringify({
+            site: site || undefined,
+            shift_number: shiftNum,
+            date: dateISO,
+            canadian_cash_collected: existing.canadian_cash_collected,
+            exempted_tax: existing.exempted_tax,
+          }),
+        })
+      } catch {
+        // silent — auto-sync is best-effort
+      }
+    })()
   }, [existing])
 
   const updateSite = (newSite: string) =>
@@ -188,61 +226,6 @@ function RouteComponent() {
     setExemptedTax('')
     setSuccess(null)
     setError(null)
-  }
-
-  const handleSyncFromSftp = async () => {
-    if (!id || !shiftNumber.trim()) return
-    setSyncing(true)
-    setError(null)
-    setSuccess(null)
-
-    try {
-      // 1. Check the shift exists on the SFTP server
-      const qs = site ? `?site=${encodeURIComponent(site)}` : ''
-      const checkRes = await fetch(`/api/sftp/check/${encodeURIComponent(shiftNumber.trim())}${qs}`, {
-        headers: {
-          Authorization: `Bearer ${localStorage.getItem('token') || ''}`,
-          'X-Required-Permission': 'accounting.cashSummary.form',
-        },
-      })
-      if (checkRes.status === 403) { navigate({ to: '/no-access' }); return }
-      if (!checkRes.ok) throw new Error('Shift check failed')
-      const { valid } = await checkRes.json()
-      if (!valid) {
-        setError('Shift not found on SFTP server — cannot sync')
-        return
-      }
-
-      // 2. Call PUT which now re-fetches ALL SFTP fields and overrides the record
-      const toLocalMidnightISO = (dateStr: string) => {
-        const [yy, mm, dd] = dateStr.split('-').map(Number)
-        return new Date(yy, mm - 1, dd, 0, 0, 0, 0).toISOString()
-      }
-
-      const res = await fetch(`/api/cash-summary/${id}`, {
-        method: 'PUT',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${localStorage.getItem('token') || ''}`,
-          'X-Required-Permission': 'accounting.cashSummary.form',
-        },
-        body: JSON.stringify({
-          site: site || undefined,
-          shift_number: shiftNumber.trim(),
-          date: toLocalMidnightISO(date),
-          canadian_cash_collected: num(canadianCashCollected),
-          exempted_tax: num(exemptedTax),
-        }),
-      })
-      if (res.status === 403) { navigate({ to: '/no-access' }); return }
-      if (!res.ok) throw new Error(await res.text())
-
-      setSuccess('Synced from SFTP')
-    } catch (err: any) {
-      setError(err.message || 'Sync failed')
-    } finally {
-      setSyncing(false)
-    }
   }
 
   // Validate the shift number on blur via secured endpoint
@@ -337,21 +320,11 @@ function RouteComponent() {
           <div className="flex items-center gap-4">
             <button
               type="submit"
-              disabled={submitting || syncing}
+              disabled={submitting}
               className="px-4 py-2 rounded bg-primary text-primary-foreground disabled:opacity-50"
             >
               {submitting ? (id ? 'Updating…' : 'Saving…') : id ? 'Update' : 'Save'}
             </button>
-            {id && (
-              <button
-                type="button"
-                onClick={handleSyncFromSftp}
-                disabled={syncing || submitting}
-                className="px-4 py-2 rounded border disabled:opacity-50 hover:bg-muted text-sm"
-              >
-                {syncing ? 'Syncing…' : 'Sync from SFTP'}
-              </button>
-            )}
             {error && <span className="text-red-600 text-sm">Error: {error}</span>}
             {success && <span className="text-green-600 text-sm">{success}</span>}
           </div>
