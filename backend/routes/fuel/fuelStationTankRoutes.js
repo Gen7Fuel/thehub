@@ -463,6 +463,83 @@ router.get('/station/:stationId', async (req, res) => {
 //   }
 // });
 
+// router.get('/sync-all-volumes', async (req, res) => {
+//   try {
+//     const liveReadings = await getLiveTankVolumes();
+//     const allTanks = await FuelStationTank.find({}).populate('stationId');
+
+//     const updatePromises = allTanks.map(async (tank) => {
+//       const reading = liveReadings.find(r =>
+//         r.Station_SK === tank.stationId?.csoCode &&
+//         Number(r.Tank_No) === tank.tankNo
+//       );
+
+//       let statusString = "No latest reading available";
+//       let currentVolume = tank.currentVolume;
+
+//       if (reading) {
+//         // 1. Get current date at the station's timezone
+//         const stationTimezone = tank.stationId?.timezone || 'UTC';
+//         const nowAtStation = new Intl.DateTimeFormat('en-CA', {
+//           timeZone: stationTimezone,
+//           year: 'numeric', month: '2-digit', day: '2-digit'
+//         }).format(new Date()); // Returns YYYY-MM-DD
+
+//         const yesterdayAtStation = format(subDays(new Date(nowAtStation), 1), 'yyyy-MM-dd');
+//         const readingDateStr = reading.ReadingDate; // Already YYYY-MM-DD from Supabase
+
+//         // 2. Logic Check
+//         if (readingDateStr === nowAtStation) {
+//           statusString = reading.ReadingTime; // Normal
+//         } else if (readingDateStr === yesterdayAtStation) {
+//           statusString = `${reading.ReadingTime} (Yesterday)`;
+//         } else {
+//           statusString = "No latest reading available";
+//         }
+
+//         currentVolume = Math.round(reading.Volume);
+//       } else if (tank.lastUpdatedVolumeReadingDateTime?.includes("(Manual)")) {
+//         // ATG failed, but check if we have a manual reading
+//         // Format is "HH:mm YYYY-MM-DD (Manual)"
+//         const parts = tank.lastUpdatedVolumeReadingDateTime.split(" ");
+//         const manualDateStr = parts[1]; // Get YYYY-MM-DD
+
+//         const stationTimezone = tank.stationId?.timezone || 'UTC';
+//         const nowAtStation = new Intl.DateTimeFormat('en-CA', {
+//           timeZone: stationTimezone,
+//           year: 'numeric', month: '2-digit', day: '2-digit'
+//         }).format(new Date());
+
+//         const yesterdayAtStation = format(subDays(new Date(nowAtStation), 1), 'yyyy-MM-dd');
+
+//         if (manualDateStr === nowAtStation) {
+//           statusString = tank.lastUpdatedVolumeReadingDateTime; // Keep as is
+//         } else if (manualDateStr === yesterdayAtStation) {
+//           // Inject (Yesterday) before (Manual)
+//           statusString = `${parts[0]} ${parts[1]} (Yesterday) (Manual)`;
+//         } else {
+//           statusString = "No latest reading available";
+//         }
+//       }
+
+//       const updatedDoc = await FuelStationTank.findByIdAndUpdate(tank._id, {
+//         currentVolume: currentVolume,
+//         lastUpdatedVolumeReadingDateTime: statusString
+//       }, { new: true }).populate('stationId');
+
+//       return {
+//         ...updatedDoc.toObject(),
+//         stationName: updatedDoc.stationId?.stationName || "Unknown"
+//       };
+//     });
+
+//     const results = await Promise.all(updatePromises);
+//     res.json(results);
+//   } catch (err) {
+//     res.status(500).json({ message: err.message });
+//   }
+// });
+
 router.get('/sync-all-volumes', async (req, res) => {
   try {
     const liveReadings = await getLiveTankVolumes();
@@ -474,30 +551,50 @@ router.get('/sync-all-volumes', async (req, res) => {
         Number(r.Tank_No) === tank.tankNo
       );
 
+      // Default state
       let statusString = "No latest reading available";
       let currentVolume = tank.currentVolume;
 
-      if (reading) {
-        // 1. Get current date at the station's timezone
-        const stationTimezone = tank.stationId?.timezone || 'UTC';
-        const nowAtStation = new Intl.DateTimeFormat('en-CA', {
-          timeZone: stationTimezone,
-          year: 'numeric', month: '2-digit', day: '2-digit'
-        }).format(new Date()); // Returns YYYY-MM-DD
+      // 1. Calculate Station Context
+      const stationTimezone = tank.stationId?.timezone || 'UTC';
+      const nowAtStation = new Intl.DateTimeFormat('en-CA', {
+        timeZone: stationTimezone,
+        year: 'numeric', month: '2-digit', day: '2-digit'
+      }).format(new Date());
+      const yesterdayAtStation = format(subDays(new Date(nowAtStation), 1), 'yyyy-MM-dd');
 
-        const yesterdayAtStation = format(subDays(new Date(nowAtStation), 1), 'yyyy-MM-dd');
-        const readingDateStr = reading.ReadingDate; // Already YYYY-MM-DD from Supabase
+      // 2. Logic Check - Check Supabase Freshness
+      const isSupabaseFresh = reading && (reading.ReadingDate === nowAtStation || reading.ReadingDate === yesterdayAtStation);
 
-        // 2. Logic Check
-        if (readingDateStr === nowAtStation) {
-          statusString = reading.ReadingTime; // Normal
-        } else if (readingDateStr === yesterdayAtStation) {
-          statusString = `${reading.ReadingTime} (Yesterday)`;
-        } else {
+      if (isSupabaseFresh) {
+        // PRIORITY 1: Supabase has current/yesterday data
+        statusString = reading.ReadingDate === nowAtStation
+          ? reading.ReadingTime
+          : `${reading.ReadingTime} (Yesterday)`;
+        currentVolume = Math.round(reading.Volume);
+      } else if (tank.lastUpdatedVolumeReadingDateTime?.includes("(Manual)")) {
+        // PRIORITY 2: Supabase is stale/missing, but we have a Manual reading record
+        const parts = tank.lastUpdatedVolumeReadingDateTime.split(" ");
+        const manualDateStr = parts[0]; // "2026-04-20"
+        const manualTimeStr = parts[1]; // "14:30"
+
+        if (manualDateStr === nowAtStation) {
+          // It's from today - Keep the original manual string as is
+          statusString = tank.lastUpdatedVolumeReadingDateTime;
+        }
+        else if (manualDateStr === yesterdayAtStation) {
+          // It's from yesterday - Inject the (Yesterday) tag if not already present
+          statusString = tank.lastUpdatedVolumeReadingDateTime.includes("(Yesterday)")
+            ? tank.lastUpdatedVolumeReadingDateTime
+            : `${manualDateStr} ${manualTimeStr} (Yesterday) (Manual)`;
+        }
+        else {
+          // Too old
           statusString = "No latest reading available";
         }
-
-        currentVolume = Math.round(reading.Volume);
+      }
+      else {
+        statusString = "No latest reading available";
       }
 
       const updatedDoc = await FuelStationTank.findByIdAndUpdate(tank._id, {
@@ -568,6 +665,29 @@ router.put('/tanks/:id', async (req, res) => {
     res.json(updated);
   } catch (err) {
     res.status(400).json({ message: err.message });
+  }
+});
+
+// for attempting manual override of current volume with a timestamp note in the UI during atg failure
+router.patch('/manual-update/:tankId', async (req, res) => {
+  try {
+    const { volume, manualTime, manualDate } = req.body;
+
+    // Combine strings: "YYYY-MM-DD HH:mm (Manual)"
+    const statusString = `${manualDate} ${manualTime} (Manual)`;
+
+    const updatedTank = await FuelStationTank.findByIdAndUpdate(
+      req.params.tankId,
+      {
+        currentVolume: Number(volume),
+        lastUpdatedVolumeReadingDateTime: statusString
+      },
+      { new: true }
+    );
+
+    res.json(updatedTank);
+  } catch (err) {
+    res.status(500).json({ message: err.message });
   }
 });
 

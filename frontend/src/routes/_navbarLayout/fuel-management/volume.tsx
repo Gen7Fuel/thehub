@@ -1,13 +1,15 @@
 import { createFileRoute, useNavigate } from '@tanstack/react-router'
 import { useState, useEffect, useMemo } from 'react'
 import axios from 'axios'
-import { Loader2, RefreshCw, Cylinder, History, LayoutDashboard } from 'lucide-react'
+import { Loader2, RefreshCw, Cylinder, History, LayoutDashboard, Edit3 } from 'lucide-react'
 import { toast } from 'sonner'
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { getGradeTheme } from './manage/locations/$id'
 import { ComposedChart, Bar, Line, XAxis, YAxis, Tooltip, Legend, ResponsiveContainer } from 'recharts';
-
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 
 type VolumeSearch = {
   site?: string
@@ -157,7 +159,7 @@ function VolumeDashboard() {
               if (viewMode === 'live') fetchHistorical(currentStationId);
               setViewMode(viewMode === 'live' ? 'historical' : 'live');
             }}
-            className="rounded-2xl font-black uppercase text-[10px] tracking-widest gap-2"
+            className="rounded-2xl font-black uppercase text-[10px] tracking-wide gap-2"
           >
             {viewMode === 'live' ? <History className="h-4 w-4" /> : <LayoutDashboard className="h-4 w-4" />}
             {viewMode === 'live' ? 'View History' : 'Back to Live'}
@@ -187,7 +189,7 @@ function VolumeDashboard() {
         <div className="flex gap-6 w-full pb-4 items-stretch">
           {/* items-stretch ensures all grade boxes are the same height */}
           {Object.entries(groupedTanks).map(([grade, tanks]) => (
-            <GradeWrapper key={grade} grade={grade} tanks={tanks} />
+            <GradeWrapper key={grade} grade={grade} tanks={tanks} onUpdate={fetchAndSync} />
           ))}
         </div>
       ) : (
@@ -198,7 +200,7 @@ function VolumeDashboard() {
               <Button
                 key={g}
                 onClick={() => setSelectedGrade(g)}
-                className={`rounded-xl px-6 font-black uppercase text-[10px] tracking-widest ${selectedGrade === g ? 'bg-blue-600' : 'bg-slate-100 text-slate-400'}`}
+                className={`rounded-xl px-6 font-black uppercase text-[10px] tracking-wide ${selectedGrade === g ? 'bg-blue-600' : 'bg-slate-100 text-slate-400'}`}
               >
                 {g}
               </Button>
@@ -214,7 +216,7 @@ function VolumeDashboard() {
   )
 }
 
-function GradeWrapper({ grade, tanks }: { grade: string; tanks: any[] }) {
+function GradeWrapper({ grade, tanks, onUpdate }: { grade: string; tanks: any[]; onUpdate: () => void }) {
   const theme = getGradeTheme(grade);
 
   // 1. Calculate sum ONLY for tanks that have valid recent readings
@@ -254,7 +256,7 @@ function GradeWrapper({ grade, tanks }: { grade: string; tanks: any[] }) {
       <div className={`grid grid-cols-${tanks.length} gap-3 w-full`}>
         {tanks.map((tank) => (
           <div key={tank._id} className="w-full">
-            <VolumeTankCard tank={tank} />
+            <VolumeTankCard tank={tank} onUpdate={onUpdate} />
           </div>
         ))}
       </div>
@@ -262,12 +264,18 @@ function GradeWrapper({ grade, tanks }: { grade: string; tanks: any[] }) {
   );
 }
 
-function VolumeTankCard({ tank }: { tank: any }) {
+function VolumeTankCard({ tank, onUpdate }: { tank: any; onUpdate: () => void }) {
   const theme = getGradeTheme(tank.grade);
+  const [manualVolume, setManualVolume] = useState("");
+  const [manualDate, setManualDate] = useState(new Date().toISOString().split('T')[0]);
+  const [manualTime, setManualTime] = useState("");
+  const [isOpen, setIsOpen] = useState(false);
+  const [isSubmitting, setIsSubmitting] = useState(false); // New state for the button loader
 
   const readingTime = tank.lastUpdatedVolumeReadingDateTime || "";
   const isStale = readingTime === "No latest reading available" || readingTime === "";
   const isYesterday = readingTime.includes('Yesterday');
+  const isManual = readingTime.includes('(Manual)');
 
   const fillPercentage = (tank.currentVolume / tank.tankCapacity) * 100;
   const maxLine = (tank.maxVolumeCapacity / tank.tankCapacity) * 100;
@@ -276,11 +284,33 @@ function VolumeTankCard({ tank }: { tank: any }) {
   const isOverflowRisk = !isStale && tank.currentVolume >= tank.maxVolumeCapacity;
   const isCriticalLow = !isStale && tank.currentVolume <= tank.minVolumeCapacity;
 
+  // Handle Submission
+  const handleManualSubmit = async () => {
+    if (!manualVolume || !manualTime || !manualDate) {
+      toast.error("Please fill in all manual reading details");
+      return;
+    }
+    setIsSubmitting(true);
+    try {
+      await axios.patch(`/api/fuel-station-tanks/manual-update/${tank._id}`,
+        { volume: manualVolume, manualTime, manualDate },
+        { headers: { Authorization: `Bearer ${localStorage.getItem('token')}` } }
+      );
+      toast.success("Manual reading recorded");
+      setIsOpen(false);
+      onUpdate();
+    } catch (err) {
+      toast.error("Failed to update volume");
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
   return (
     <div className={`bg-white rounded-[35px] p-4 flex flex-col h-full w-full transition-all duration-300 border-2 ${isCriticalLow ? 'border-red-500 shadow-lg shadow-red-100' :
       isOverflowRisk ? 'border-yellow-500 shadow-lg shadow-yellow-100' :
         'border-slate-100 hover:border-slate-300'
-      } ${isStale ? 'opacity-60' : ''}`}>
+      } ${isStale && !isManual ? 'opacity-60' : ''}`}>
 
       {/* Header */}
       <div className="flex justify-between items-start mb-3">
@@ -292,13 +322,118 @@ function VolumeTankCard({ tank }: { tank: any }) {
           </div>
           <span className="text-lg font-black italic text-slate-900">#0{tank.tankNo}</span>
         </div>
-        <div className={`${theme.color} p-1.5 rounded-xl text-white ${isStale ? 'grayscale' : ''}`}>
-          <theme.icon className="h-4 w-4" />
+
+        <div className="flex items-center gap-2">
+          {/* MANUAL DIALOG BUTTON */}
+          {(isStale || isYesterday || isManual) && (
+            <Dialog open={isOpen} onOpenChange={setIsOpen}>
+              <DialogTrigger asChild>
+                <Button
+                  variant="outline"
+                  size="icon"
+                  className={`h-8 w-8 rounded-xl border-slate-200 transition-all ${isManual ? 'text-green-600 bg-green-50 border-green-100 hover:bg-green-100' : 'text-blue-600 hover:bg-blue-50'
+                    }`}
+                >
+                  <Edit3 className="h-4 w-4" />
+                </Button>
+              </DialogTrigger>
+              <DialogContent className="rounded-[40px] border-none shadow-2xl p-8 max-w-md">
+                <DialogHeader>
+                  <DialogTitle className="text-2xl font-black italic text-slate-900">
+                    Physical Reading
+                  </DialogTitle>
+                </DialogHeader>
+
+                <div className="space-y-6 py-4">
+                  {/* STATION INFO HEADER WITH LOCAL TIME CLOCK */}
+                  <div className="bg-slate-50 p-5 rounded-[30px] border border-slate-100 relative overflow-hidden">
+                    <div className={`absolute top-0 right-0 h-full w-1.5 ${theme.color}`} />
+
+                    <div className="flex flex-col gap-4">
+                      <div className="flex justify-between items-start">
+                        <div className="flex flex-col">
+                          <p className="text-[9px] font-black uppercase text-slate-400 tracking-[0.2em] mb-1">Station / Tank</p>
+                          <div className="flex items-center gap-2">
+                            <span className="text-lg font-black text-slate-800">{tank.stationName}</span>
+                            <span className="text-slate-300">/</span>
+                            <span className="text-lg font-black text-blue-600">#0{tank.tankNo}</span>
+                          </div>
+                        </div>
+
+                        <div className={`${theme.color} px-4 py-1.5 rounded-full shadow-sm`}>
+                          <span className="text-[11px] font-black uppercase text-white tracking-wide">
+                            {tank.grade}
+                          </span>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Input Fields */}
+                  <div className="space-y-3">
+                    <Label className="text-[11px] font-black uppercase text-slate-500 ml-1 tracking-wide">
+                      Current Physical Volume (Liters)
+                    </Label>
+                    <div className="relative">
+                      <Input
+                        type="number"
+                        placeholder="0,000"
+                        className="h-16 rounded-[20px] border-2 border-slate-100 focus:border-blue-500 text-2xl font-black px-6 transition-all"
+                        value={manualVolume}
+                        onChange={(e) => setManualVolume(e.target.value)}
+                      />
+                      <div className="absolute right-6 top-1/2 -translate-y-1/2 text-slate-300 font-black italic text-xl">L</div>
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-4">
+                    <div className="space-y-3">
+                      <Label className="text-[11px] font-black uppercase text-slate-500 ml-1 tracking-wide">Reading Date</Label>
+                      <Input
+                        type="date"
+                        className="h-14 rounded-[20px] border-2 border-slate-100 font-bold px-4 text-slate-700 focus:border-blue-500"
+                        value={manualDate}
+                        onChange={(e) => setManualDate(e.target.value)}
+                      />
+                    </div>
+
+                    <div className="space-y-3">
+                      <Label className="text-[11px] font-black uppercase text-slate-500 ml-1 tracking-wide">Reading Time</Label>
+                      <Input
+                        type="time"
+                        className="h-14 rounded-[20px] border-2 border-slate-100 font-bold px-4 text-slate-700 focus:border-blue-500"
+                        value={manualTime}
+                        onChange={(e) => setManualTime(e.target.value)}
+                      />
+                    </div>
+                  </div>
+
+                  <div className="bg-blue-50 border border-blue-100 p-4 rounded-[20px]">
+                    <p className="text-[10px] font-bold text-blue-700 leading-relaxed text-center">
+                      Please match the Date and Time precisely with the station's physical dip report.
+                    </p>
+                  </div>
+
+                  <Button
+                    onClick={handleManualSubmit}
+                    disabled={!manualVolume || !manualTime || isSubmitting}
+                    className="w-full h-16 rounded-[20px] bg-slate-900 text-white font-black uppercase tracking-[0.2em] hover:bg-blue-600 transition-all shadow-lg active:scale-[0.98]"
+                  >
+                    {isSubmitting ? <Loader2 className="h-5 w-5 animate-spin" /> : "Save Physical Reading"}
+                  </Button>
+                </div>
+              </DialogContent>
+            </Dialog>
+          )}
+
+          <div className={`${theme.color} p-1.5 rounded-xl text-white ${isStale && !isManual ? 'grayscale' : ''}`}>
+            <theme.icon className="h-4 w-4" />
+          </div>
         </div>
       </div>
 
-      {/* Cylinder - Applied blur here when isStale */}
-      <div className={`relative h-56 w-full bg-slate-50 rounded-[30px] border-4 border-white shadow-inner overflow-hidden mb-4 transition-all duration-500 ${isStale ? 'blur-md grayscale' : ''}`}>
+      {/* Cylinder */}
+      <div className={`relative h-56 w-full bg-slate-50 rounded-[30px] border-4 border-white shadow-inner overflow-hidden mb-4 transition-all duration-500 ${isStale && !isManual ? 'blur-md grayscale' : ''}`}>
         <div
           className="absolute bottom-0 w-full transition-all duration-1000 ease-in-out"
           style={{
@@ -312,8 +447,7 @@ function VolumeTankCard({ tank }: { tank: any }) {
         <div className="absolute w-full border-t border-sky-400/50 border-dashed z-10" style={{ bottom: `${maxLine}%` }} />
         <div className="absolute w-full border-t-2 border-red-500/40 z-10" style={{ bottom: `${minLine}%` }} />
 
-        {/* Volume Bubble - Now hidden entirely if stale */}
-        {!isStale && (
+        {(!isStale || isManual) && (
           <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
             <div className={`px-3 py-1.5 rounded-2xl border backdrop-blur-md ${isCriticalLow ? 'bg-red-500 text-white border-red-400' :
               isOverflowRisk ? 'bg-yellow-500 text-slate-900 border-yellow-400' :
@@ -332,7 +466,7 @@ function VolumeTankCard({ tank }: { tank: any }) {
 
       {/* Stats Section */}
       <div className="space-y-3 mt-auto">
-        <div className={`bg-slate-50 p-2.5 rounded-2xl border border-slate-100/50 transition-all ${isStale ? 'blur-[2px] opacity-40' : ''}`}>
+        <div className={`bg-slate-50 p-2.5 rounded-2xl border border-slate-100/50 transition-all ${isStale && !isManual ? 'blur-[2px] opacity-40' : ''}`}>
           <div className="flex justify-between items-center px-1 mb-1.5">
             <span className="text-[7px] font-black text-slate-400 uppercase">Total Capacity</span>
             <span className="text-[10px] font-black text-slate-700">{tank.tankCapacity.toLocaleString()}L</span>
@@ -348,7 +482,7 @@ function VolumeTankCard({ tank }: { tank: any }) {
           </div>
         </div>
 
-        {/* Safety Legend (Values below the bar) */}
+        {/* Safety Legend */}
         <div className="grid grid-cols-2 gap-2 px-1">
           <div className="flex flex-col border-l-2 border-sky-400/50 pl-2">
             <span className="text-[7px] font-black text-slate-400 uppercase">Max Limit</span>
@@ -360,12 +494,13 @@ function VolumeTankCard({ tank }: { tank: any }) {
           </div>
         </div>
 
-        {/* Sync Status - Kept clear so user knows WHY it is blurred */}
+        {/* Sync Status */}
         <div className="pt-2 border-t border-slate-50 text-center">
           <p className="text-[7px] font-black text-slate-300 uppercase mb-0.5">Last Reading Time</p>
-          <p className={`text-[12px] font-black tracking-tight ${isStale ? 'text-slate-400 italic' :
-            isYesterday ? 'text-orange-500' :
-              isCriticalLow ? 'text-red-500 animate-pulse' : 'text-slate-600'
+          <p className={`text-[12px] font-black tracking-tight ${isManual ? 'text-blue-600' :
+            isStale ? 'text-slate-400 italic' :
+              isYesterday ? 'text-orange-500' :
+                isCriticalLow ? 'text-red-500 animate-pulse' : 'text-slate-600'
             }`}>
             {tank.lastUpdatedVolumeReadingDateTime || 'No Data'}
           </p>
@@ -380,7 +515,7 @@ function SalesVsTankVarianceChart({ auditData }: { auditData: any[] }) {
     <div className="bg-white p-8 rounded-[45px] border border-slate-100 shadow-sm space-y-6">
       <div className="flex justify-between items-end px-4">
         <div>
-          <h2 className="text-sm font-black uppercase tracking-widest text-slate-400">Inventory Reconciliation</h2>
+          <h2 className="text-sm font-black uppercase tracking-wide text-slate-400">Inventory Reconciliation</h2>
           <p className="text-2xl font-black italic text-slate-900">Sales vs. Physical Draw</p>
         </div>
         <div className="flex gap-4">
