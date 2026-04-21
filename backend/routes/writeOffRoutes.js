@@ -322,7 +322,7 @@ router.post('/', async (req, res) => {
 
     const emailRecipients = {
       primaryCC: ["daksh@gen7fuel.com", "grayson@gen7fuel.com"],
-      categoryTeam: ["daksh@gen7fuel.com", "vasu@gen7fuel.com", "Saeid@gen7fuel.com", "zyannic@bosservicesltd.com", "grayson@gen7fuel.com"]
+      categoryTeam: ["daksh@gen7fuel.com", "vasu@gen7fuel.com", "frank@gen7fuel.com", "Saeid@gen7fuel.com", "zyannic@bosservicesltd.com", "grayson@gen7fuel.com"]
     };
     // --- NOTIFICATION TRIGGER LOGIC ---
     const io = req.app.get("io");
@@ -573,7 +573,7 @@ router.patch('/:id/finalize', async (req, res) => {
     // 3. Notification Config
     const emailRecipients = {
       primaryTo: "grayson@gen7fuel.com",
-      categoryTeam: ["daksh@gen7fuel.com", "vasu@gen7fuel.com", "Saeid@gen7fuel.com", "zyannic@bosservicesltd.com"]
+      categoryTeam: ["daksh@gen7fuel.com", "frank@gen7fuel.com", "vasu@gen7fuel.com", "Saeid@gen7fuel.com", "zyannic@bosservicesltd.com"]
     };
 
     const subject = isBT
