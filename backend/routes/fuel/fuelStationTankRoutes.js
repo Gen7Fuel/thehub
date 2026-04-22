@@ -7,6 +7,7 @@ const FuelSales = require('../../models/fuel/FuelSales');
 const FuelOrder = require('../../models/fuel/FuelOrder');
 const { getLiveTankVolumes } = require('../../services/supaBaseService');
 const { subDays, format } = require('date-fns');
+const { moment } = require('moment-timezone');
 
 
 // @route   GET /api/fuel-station-tanks/all-locations
@@ -297,84 +298,21 @@ router.get('/station/:stationId', async (req, res) => {
       }).lean()
     ]);
 
-    // const enrichedTanks = tanks.map(tank => {
-    //   let openingL = 0;
-    //   let estSalesL = 0;
-    //   let currentSalesL = 0;
-    //   let closingL = 0;
-
-    //   // Sales are usually grade-based, so we split them across tanks of the same grade
-    //   // (Assuming equal draw or just for display purposes)
-    //   const tanksOfSameGrade = tanks.filter(t => t.grade === tank.grade).length;
-    //   const salesEntry = actualSalesRecord?.salesData?.find(s => s.grade === tank.grade);
-
-    //   const gradeOrders = orders.reduce((sum, order) => {
-    //     const item = order.items.find(i => i.grade === tank.grade);
-    //     return sum + (item?.ltrs || 0);
-    //   }, 0);
-
-    //   if (isPast || isToday) {
-    //     const hist = tank.historicalVolume?.find(h =>
-    //       new Date(h.date).toISOString().split('T')[0] === selectedDate.toISOString().split('T')[0]
-    //     );
-    //     openingL = hist?.openingVolume || 0;
-
-    //     if (isPast) {
-    //       // Show actual historical sales split by tank
-    //       estSalesL = (salesEntry?.volume || 0) / tanksOfSameGrade;
-    //       closingL = hist?.closingVolume || 0;
-    //     } else {
-    //       estSalesL = (avgSales[tank.grade] || 0) / tanksOfSameGrade;
-    //       currentSalesL = (actualSalesRecord?.isLive) ? (salesEntry?.volume || 0) / tanksOfSameGrade : 0;
-    //       closingL = (openingL + gradeOrders) - estSalesL;
-    //     }
-    //   }
-    //   // else if (isFuture) {
-    //   //   // FUTURE: Use the recursive pipeline total divided by number of tanks
-    //   //   openingL = (gradePipeline[tank.grade] || 0) / tanksOfSameGrade;
-    //   //   estSalesL = (avgSales[tank.grade] || 0) / tanksOfSameGrade;
-    //   //   closingL = (openingL + gradeOrders) - estSalesL;
-    //   // }
-    //   else if (isFuture) {
-    //     // FIX: Instead of giving the WHOLE pipeline volume to each tank,
-    //     // divide it by the number of tanks so the frontend SUM is correct.
-
-    //     const totalGradeVolume = (gradePipeline[tank.grade] || 0);
-
-    //     // Calculate the Opening, Sales, and Closing for the WHOLE grade first
-    //     const totalOpening = totalGradeVolume;
-    //     const totalSales = (avgSales[tank.grade] || 0);
-    //     const totalClosing = (totalOpening + gradeOrders) - totalSales;
-
-    //     // Split them equally across the tanks
-    //     openingL = totalOpening / tanksOfSameGrade;
-    //     estSalesL = totalSales / tanksOfSameGrade;
-    //     closingL = totalClosing / tanksOfSameGrade;
-    //   }
-    //   return {
-    //     ...tank,
-    //     openingL: Math.round(openingL),
-    //     estSalesL: Math.round(estSalesL),
-    //     currentSalesL: Math.round(currentSalesL),
-    //     closingL: Math.round(closingL)
-    //   };
-    // });
+    // ENRICHMENT LOGIC (Now outside the if-block so Past dates work)
     const enrichedTanks = tanks.map(tank => {
       let openingL = 0;
       let estSalesL = 0;
       let currentSalesL = 0;
       let closingL = 0;
 
-      const tanksOfSameGrade = tanks.filter(t => t.grade === tank.grade).length;
+      const tanksOfSameGrade = tanks.filter(t => t.grade === tank.grade).length || 1;
       const salesEntry = actualSalesRecord?.salesData?.find(s => s.grade === tank.grade);
 
-      // Total volume ordered for this specific grade today
       const totalGradeOrders = orders.reduce((sum, order) => {
         const item = order.items.find(i => i.grade === tank.grade);
         return sum + (item?.ltrs || 0);
       }, 0);
 
-      // DIVIDE the orders by number of tanks so the frontend sum is correct
       const splitOrders = totalGradeOrders / tanksOfSameGrade;
 
       if (isPast || isToday) {
@@ -391,8 +329,6 @@ router.get('/station/:stationId', async (req, res) => {
           // TODAY logic
           estSalesL = (avgSales[tank.grade] || 0) / tanksOfSameGrade;
           currentSalesL = (actualSalesRecord?.isLive) ? (salesEntry?.volume || 0) / tanksOfSameGrade : 0;
-
-          // FIX: Ensure closing volume includes the split orders
           closingL = (openingL + splitOrders) - estSalesL;
         }
       }
@@ -400,10 +336,8 @@ router.get('/station/:stationId', async (req, res) => {
         const totalGradeVolume = (gradePipeline[tank.grade] || 0);
         const totalSales = (avgSales[tank.grade] || 0);
 
-        // Split everything equally
         openingL = totalGradeVolume / tanksOfSameGrade;
         estSalesL = totalSales / tanksOfSameGrade;
-        // Closing = (Grade Opening / n + Grade Orders / n) - (Grade Sales / n)
         closingL = (openingL + splitOrders) - estSalesL;
       }
 
@@ -413,20 +347,253 @@ router.get('/station/:stationId', async (req, res) => {
         estSalesL: Math.round(estSalesL),
         currentSalesL: Math.round(currentSalesL),
         closingL: Math.round(closingL),
-        orderL: Math.round(splitOrders) // Adding this helps debugging on frontend
+        orderL: Math.round(splitOrders)
       };
     });
 
-    // res.json(enrichedTanks);
     res.json({
       tanks: enrichedTanks,
-      // Add this metadata to the top level of the response
       lastTransaction: actualSalesRecord?.lastTransactionAt || null
     });
+
   } catch (err) {
     res.status(500).json({ message: err.message });
   }
 });
+
+// router.get('/station/:stationId', async (req, res) => {
+//   try {
+//     // const { stationId } = req.params;
+//     // const selectedDate = new Date(req.query.date);
+//     // const today = new Date();
+//     // today.setHours(0, 0, 0, 0);
+
+//     // const compareDate = new Date(selectedDate);
+//     // compareDate.setHours(0, 0, 0, 0);
+
+//     // const isPast = compareDate < today;
+//     // const isToday = compareDate.getTime() === today.getTime();
+//     // const isFuture = compareDate > today;
+//     const { stationId } = req.params;
+//     const { date: dateStr } = req.query; // e.g., "2026-04-22"
+
+//     const location = await Location.findById(stationId).lean();
+//     const tz = location.timezone || 'America/Toronto';
+
+//     // "Today" relative to the station's location
+//     const stationNow = moment().tz(tz).startOf('day');
+//     const compareDate = moment.tz(dateStr, tz).startOf('day');
+
+//     const isPast = compareDate.isBefore(stationNow);
+//     const isToday = compareDate.isSame(stationNow);
+//     const isFuture = compareDate.isAfter(stationNow);
+
+//     // Normalize start/end for queries
+//     const startOfDay = compareDate.clone().startOf('day').toDate();
+//     const endOfDay = compareDate.clone().endOf('day').toDate();
+
+//     // const [tanks, avgSales] = await Promise.all([
+//     //   FuelStationTank.find({ stationId }).lean(),
+//     //   getAverageSales(stationId, selectedDate)
+//     // ]);
+
+//     const [tanks, avgSales] = await Promise.all([
+//       FuelStationTank.find({ stationId }).lean(),
+//       getAverageSales(stationId, compareDate.toDate()) // Use the moment object
+//     ]);
+
+//     // PIPELINE: Aggregate all tanks of the same grade into one "Grade Volume"
+//     let gradePipeline = {};
+
+//     if (isFuture || isToday) {
+//       // Initialize the pipeline with the sum of all tanks per grade for Today
+//       tanks.forEach(tank => {
+//         // const todayHist = tank.historicalVolume?.find(h =>
+//         //   new Date(h.date).toDateString() === today.toDateString()
+//         // );
+//         const todayHist = tank.historicalVolume?.find(h =>
+//           moment(h.date).tz(tz).format('YYYY-MM-DD') === dateStr
+//         );
+//         const startVol = todayHist?.openingVolume || 0;
+//         gradePipeline[tank.grade] = (gradePipeline[tank.grade] || 0) + startVol;
+//       });
+
+//       // If looking at a future date, run the daily recursion
+//       if (isFuture) {
+//         let tempDate = new Date(today);
+//         while (tempDate < compareDate) {
+//           const dayAvg = await getAverageSales(stationId, tempDate);
+//           const dayOrders = await FuelOrder.find({
+//             station: stationId,
+//             estimatedDeliveryDate: {
+//               $gte: new Date(tempDate).setHours(0, 0, 0, 0),
+//               $lte: new Date(tempDate).setHours(23, 59, 59, 999)
+//             }
+//           }).lean();
+
+//           // Calculate for each grade across all its tanks
+//           Object.keys(gradePipeline).forEach(grade => {
+//             const dailyOrderVol = dayOrders.reduce((sum, order) => {
+//               const item = order.items.find(i => i.grade === grade);
+//               return sum + (item?.ltrs || 0);
+//             }, 0);
+
+//             const dailySales = dayAvg[grade] || 0;
+//             // Carrying the total grade volume forward
+//             gradePipeline[grade] = (gradePipeline[grade] + dailyOrderVol) - dailySales;
+//           });
+
+//           tempDate.setDate(tempDate.getDate() + 1);
+//         }
+//       }
+//     }
+
+//     // Fetch orders and actual sales for the target date
+//     const [orders, actualSalesRecord] = await Promise.all([
+//       FuelOrder.find({
+//         station: stationId,
+//         estimatedDeliveryDate: { $gte: startOfDay, $lte: endOfDay }
+//       }).lean(),
+//       FuelSales.findOne({
+//         stationId,
+//         date: { $gte: startOfDay, $lte: endOfDay }
+//       }).lean()
+//     ]);
+
+//     // const enrichedTanks = tanks.map(tank => {
+//     //   let openingL = 0;
+//     //   let estSalesL = 0;
+//     //   let currentSalesL = 0;
+//     //   let closingL = 0;
+
+//     //   // Sales are usually grade-based, so we split them across tanks of the same grade
+//     //   // (Assuming equal draw or just for display purposes)
+//     //   const tanksOfSameGrade = tanks.filter(t => t.grade === tank.grade).length;
+//     //   const salesEntry = actualSalesRecord?.salesData?.find(s => s.grade === tank.grade);
+
+//     //   const gradeOrders = orders.reduce((sum, order) => {
+//     //     const item = order.items.find(i => i.grade === tank.grade);
+//     //     return sum + (item?.ltrs || 0);
+//     //   }, 0);
+
+//     //   if (isPast || isToday) {
+//     //     const hist = tank.historicalVolume?.find(h =>
+//     //       new Date(h.date).toISOString().split('T')[0] === selectedDate.toISOString().split('T')[0]
+//     //     );
+//     //     openingL = hist?.openingVolume || 0;
+
+//     //     if (isPast) {
+//     //       // Show actual historical sales split by tank
+//     //       estSalesL = (salesEntry?.volume || 0) / tanksOfSameGrade;
+//     //       closingL = hist?.closingVolume || 0;
+//     //     } else {
+//     //       estSalesL = (avgSales[tank.grade] || 0) / tanksOfSameGrade;
+//     //       currentSalesL = (actualSalesRecord?.isLive) ? (salesEntry?.volume || 0) / tanksOfSameGrade : 0;
+//     //       closingL = (openingL + gradeOrders) - estSalesL;
+//     //     }
+//     //   }
+//     //   // else if (isFuture) {
+//     //   //   // FUTURE: Use the recursive pipeline total divided by number of tanks
+//     //   //   openingL = (gradePipeline[tank.grade] || 0) / tanksOfSameGrade;
+//     //   //   estSalesL = (avgSales[tank.grade] || 0) / tanksOfSameGrade;
+//     //   //   closingL = (openingL + gradeOrders) - estSalesL;
+//     //   // }
+//     //   else if (isFuture) {
+//     //     // FIX: Instead of giving the WHOLE pipeline volume to each tank,
+//     //     // divide it by the number of tanks so the frontend SUM is correct.
+
+//     //     const totalGradeVolume = (gradePipeline[tank.grade] || 0);
+
+//     //     // Calculate the Opening, Sales, and Closing for the WHOLE grade first
+//     //     const totalOpening = totalGradeVolume;
+//     //     const totalSales = (avgSales[tank.grade] || 0);
+//     //     const totalClosing = (totalOpening + gradeOrders) - totalSales;
+
+//     //     // Split them equally across the tanks
+//     //     openingL = totalOpening / tanksOfSameGrade;
+//     //     estSalesL = totalSales / tanksOfSameGrade;
+//     //     closingL = totalClosing / tanksOfSameGrade;
+//     //   }
+//     //   return {
+//     //     ...tank,
+//     //     openingL: Math.round(openingL),
+//     //     estSalesL: Math.round(estSalesL),
+//     //     currentSalesL: Math.round(currentSalesL),
+//     //     closingL: Math.round(closingL)
+//     //   };
+//     // });
+//     const enrichedTanks = tanks.map(tank => {
+//       let openingL = 0;
+//       let estSalesL = 0;
+//       let currentSalesL = 0;
+//       let closingL = 0;
+
+//       const tanksOfSameGrade = tanks.filter(t => t.grade === tank.grade).length;
+//       const salesEntry = actualSalesRecord?.salesData?.find(s => s.grade === tank.grade);
+
+//       // Total volume ordered for this specific grade today
+//       const totalGradeOrders = orders.reduce((sum, order) => {
+//         const item = order.items.find(i => i.grade === tank.grade);
+//         return sum + (item?.ltrs || 0);
+//       }, 0);
+
+//       // DIVIDE the orders by number of tanks so the frontend sum is correct
+//       const splitOrders = totalGradeOrders / tanksOfSameGrade;
+
+//       if (isPast || isToday) {
+//         // const hist = tank.historicalVolume?.find(h =>
+//         //   new Date(h.date).toISOString().split('T')[0] === selectedDate.toISOString().split('T')[0]
+//         // );
+//         // Replace the .find inside enrichedTanks:
+//         const hist = tank.historicalVolume?.find(h =>
+//           moment(h.date).tz(tz).format('YYYY-MM-DD') === dateStr
+//         );
+
+//         openingL = hist?.openingVolume || 0;
+
+//         if (isPast) {
+//           estSalesL = (salesEntry?.volume || 0) / tanksOfSameGrade;
+//           closingL = hist?.closingVolume || 0;
+//         } else {
+//           // TODAY logic
+//           estSalesL = (avgSales[tank.grade] || 0) / tanksOfSameGrade;
+//           currentSalesL = (actualSalesRecord?.isLive) ? (salesEntry?.volume || 0) / tanksOfSameGrade : 0;
+
+//           // FIX: Ensure closing volume includes the split orders
+//           closingL = (openingL + splitOrders) - estSalesL;
+//         }
+//       }
+//       else if (isFuture) {
+//         const totalGradeVolume = (gradePipeline[tank.grade] || 0);
+//         const totalSales = (avgSales[tank.grade] || 0);
+
+//         // Split everything equally
+//         openingL = totalGradeVolume / tanksOfSameGrade;
+//         estSalesL = totalSales / tanksOfSameGrade;
+//         // Closing = (Grade Opening / n + Grade Orders / n) - (Grade Sales / n)
+//         closingL = (openingL + splitOrders) - estSalesL;
+//       }
+
+//       return {
+//         ...tank,
+//         openingL: Math.round(openingL),
+//         estSalesL: Math.round(estSalesL),
+//         currentSalesL: Math.round(currentSalesL),
+//         closingL: Math.round(closingL),
+//         orderL: Math.round(splitOrders) // Adding this helps debugging on frontend
+//       };
+//     });
+
+//     // res.json(enrichedTanks);
+//     res.json({
+//       tanks: enrichedTanks,
+//       // Add this metadata to the top level of the response
+//       lastTransaction: actualSalesRecord?.lastTransactionAt || null
+//     });
+//   } catch (err) {
+//     res.status(500).json({ message: err.message });
+//   }
+// });
 
 // GET /api/fuel-station-tanks/sync-all-volumes
 // router.get('/sync-all-volumes', async (req, res) => {

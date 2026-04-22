@@ -22,6 +22,7 @@ import { Badge } from "@/components/ui/badge";
 import { getGradeTheme } from "./manage/locations/$id"
 import { POPreviewDocument, formatPDFDate, getISODateOnly } from "@/components/custom/fuelPoPDF"
 import { PDFViewer, PDFDownloadLink } from '@react-pdf/renderer';
+import { formatInTimeZone, toDate } from 'date-fns-tz';
 
 export const Route = createFileRoute('/_navbarLayout/fuel-management/workspace')({
   component: WorkspaceComponent,
@@ -63,6 +64,36 @@ function WorkspaceComponent() {
       return res.data;
     }
   });
+
+  // Place this inside WorkspaceComponent, after the 'locations' useQuery
+
+  const sortedSelectedStations = useMemo(() => {
+    // 1. Map IDs to full objects
+    const selectedLocs = selectedStationIds
+      .map(id => locations.find((l: any) => l._id === id))
+      .filter(Boolean);
+
+    // 2. Sort logic
+    return [...selectedLocs].sort((a: any, b: any) => {
+      const provA = (a.province || "").toUpperCase();
+      const provB = (b.province || "").toUpperCase();
+
+      // --- STEP 1: PROVINCE PRIORITY ---
+      // If provinces are different, handle Ontario vs Others
+      if (provA !== provB) {
+        if (provA === "ON" || provA === "ONTARIO") return -1;
+        if (provB === "ON" || provB === "ONTARIO") return 1;
+        return provA.localeCompare(provB);
+      }
+
+      // --- STEP 2: NATURAL SELECTION ORDER ---
+      // If they are in the same province, use the order of selectedStationIds
+      const indexA = selectedStationIds.indexOf(a._id);
+      const indexB = selectedStationIds.indexOf(b._id);
+
+      return indexA - indexB;
+    });
+  }, [selectedStationIds, locations]);
 
   const hasInitialLoaded = useRef(false);
 
@@ -295,7 +326,7 @@ function WorkspaceComponent() {
       </div >
 
       {/* WORKSPACE STRIPS AREA */}
-      < div className="w-full px-0 py-0 space-y-0" >
+      {/* < div className="w-full px-0 py-0 space-y-0" >
         {
           selectedStationIds.length === 0 ? (
             <div className="w-full h-96 border-4 border-dashed rounded-3xl flex flex-col items-center justify-center text-slate-300">
@@ -311,7 +342,25 @@ function WorkspaceComponent() {
             })
           )
         }
-      </div >
+      </div > */}
+      {/* WORKSPACE STRIPS AREA */}
+      <div className="w-full px-0 py-0 space-y-0">
+        {selectedStationIds.length === 0 ? (
+          <div className="w-full h-96 border-4 border-dashed rounded-3xl flex flex-col items-center justify-center text-slate-300">
+            <Building2 className="h-20 w-20 mb-4 opacity-20" />
+            <p className="text-xl font-bold italic opacity-30">Select stations above to begin operations</p>
+          </div>
+        ) : (
+          // Use the sorted objects here
+          sortedSelectedStations.map((locData: any) => (
+            <StationStrip
+              key={locData._id}
+              location={locData}
+              date={selectedDate}
+            />
+          ))
+        )}
+      </div>
     </div >
   );
 }
@@ -323,17 +372,34 @@ function StationStrip({ location, date }: { location: any, date: Date }) {
   const [editQtyOrder, setEditQtyOrder] = useState<any>(null);
   const [viewingPO, setViewingPO] = useState<any | null>(null);
 
+  const stationTz = location.timezone || 'America/Toronto';
+
+  // 1. Get "Now" in the Station's timezone
+  const nowInStation = toDate(new Date(), { timeZone: stationTz });
+  const stationTodayStr = formatInTimeZone(nowInStation, stationTz, 'yyyy-MM-dd');
+
+  // 2. Get "Selected Date" string in Station's timezone
+  const selectedDateStr = formatInTimeZone(date, stationTz, 'yyyy-MM-dd');
+
+  // 3. Comparison logic using Strings (YYYY-MM-DD) is safest for timezones
+  const isToday = selectedDateStr === stationTodayStr;
+  const isPast = selectedDateStr < stationTodayStr;
+  const isFuture = selectedDateStr > stationTodayStr;
+
+  // 4. API Calls: Send the date as a plain YYYY-MM-DD string
+  // This prevents the backend from misinterpreting ISO strings with offsets
+  const dateParam = selectedDateStr;
+
   // 1. Update your useQuery to handle the new object structure
   const { data: tankResponse, isLoading: isTanksLoading } = useQuery({
-    queryKey: ['station-tanks', location?._id, format(date, 'yyyy-MM-dd')],
+    queryKey: ['station-tanks', location?._id, dateParam],
     queryFn: async () => {
       const res = await axios.get(
-        `/api/fuel-station-tanks/station/${location._id}?date=${date.toISOString()}`,
+        `/api/fuel-station-tanks/station/${location._id}?date=${dateParam}`,
         authHeader
       );
       return res.data;
     },
-    enabled: !!location?._id,
   });
 
   // Extract data from response
@@ -378,10 +444,10 @@ function StationStrip({ location, date }: { location: any, date: Date }) {
 
   // Fetch Orders (Your existing logic)
   const { data: orders = [], isLoading } = useQuery({
-    queryKey: ['workspace-orders', location?._id, format(date, 'yyyy-MM-dd')],
+    queryKey: ['workspace-orders', location?._id, dateParam], // Use dateParam
     queryFn: async () => {
       const res = await axios.get(
-        `/api/fuel-orders/workspace-orders?stationId=${location._id}&date=${date.toISOString()}`,
+        `/api/fuel-orders/workspace-orders?stationId=${location._id}&date=${dateParam}`, // Send string, not ISO
         authHeader
       );
       return res.data;
@@ -429,16 +495,16 @@ function StationStrip({ location, date }: { location: any, date: Date }) {
   const selected = new Date(date);
   selected.setHours(0, 0, 0, 0);
 
-  const isPast = selected.getTime() < today.getTime();
-  const isToday = selected.getTime() === today.getTime();
-  const isFuture = selected.getTime() > today.getTime();
+  // const isPast = selected.getTime() < today.getTime();
+  // const isToday = selected.getTime() === today.getTime();
+  // const isFuture = selected.getTime() > today.getTime();
 
   // Helper to get the YYYY-MM-DD string without timezone shifting
-  const getUTCString = (dateInput: string | Date) => {
-    const d = new Date(dateInput);
-    // This extracts the year, month, and day directly from the UTC values
-    return d.toISOString().split('T')[0];
-  };
+  // const getUTCString = (dateInput: string | Date) => {
+  //   const d = new Date(dateInput);
+  //   // This extracts the year, month, and day directly from the UTC values
+  //   return d.toISOString().split('T')[0];
+  // };
 
   return (
     <>
@@ -618,26 +684,25 @@ function StationStrip({ location, date }: { location: any, date: Date }) {
                 </div>
               ) : (
                 orders.map((order: any) => {
-                  // 1. Get plain YYYY-MM-DD strings in UTC
-                  const estDate = getUTCString(order.estimatedDeliveryDate);
-                  const origDate = getUTCString(order.originalDeliveryDate);
+                  const stationTz = location.timezone || 'America/Toronto';
 
-                  // 2. Format the active 'date' from the page (ensure this is also treated as a string)
+                  // 1. Convert DB dates to simple YYYY-MM-DD strings relative to the Station
+                  const estDate = formatInTimeZone(new Date(order.estimatedDeliveryDate), stationTz, 'yyyy-MM-dd');
+                  const origDate = formatInTimeZone(new Date(order.originalDeliveryDate), stationTz, 'yyyy-MM-dd');
+
+                  // 2. Format the active 'date' prop from your page
                   const activeDateStr = format(date, 'yyyy-MM-dd');
 
                   const isDelivered = order.currentStatus === 'Delivered';
                   const wasMovedFromHere = origDate === activeDateStr && estDate !== activeDateStr;
                   const arrivedHereFromHistory = estDate === activeDateStr && origDate !== activeDateStr;
 
-                  // 3. For the Display Labels, use formatInTimeZone or append a "T12:00:00" 
-                  // to force the formatter to stay on the correct day.
-                  const formatSafeDate = (dateStr: string) => {
-                    // Adding 'T12:00:00' ensures that even with a large timezone offset, 
-                    // it stays on the same calendar day.
-                    return format(new Date(dateStr.split('T')[0] + 'T12:00:00'), 'EEE, MMM do');
+                  // Use your formatSafeDate helper for display labels
+                  const formatSafeDate = (dateInput: string | Date) => {
+                    return formatInTimeZone(new Date(dateInput), stationTz, 'EEE, MMM do');
                   };
 
-                  // --- 1. COLLAPSED VIEW (For orders moved to a different day) ---
+                  // --- UI Rendering follows your existing logic ---
                   if (wasMovedFromHere) {
                     return (
                       <div key={order._id} className="flex items-center justify-between p-3 bg-slate-50/50 border-2 border-dashed border-slate-200 rounded-xl">
@@ -874,7 +939,10 @@ function StationStrip({ location, date }: { location: any, date: Date }) {
 }
 
 export function RescheduleDialog({ order, isOpen, onOpenChange, locationId }: RescheduleDialogProps) {
-  const [date, setDate] = useState<Date | undefined>(new Date(order.estimatedDeliveryDate));
+  const [date, setDate] = useState<Date | undefined>(() => {
+    // Use the existing order date but ensure it's treated as local for the picker
+    return order.estimatedDeliveryDate ? new Date(order.estimatedDeliveryDate) : new Date();
+  });
   const [window, setWindow] = useState(order.estimatedDeliveryWindow || { start: "08:00", end: "12:00" });
 
   const queryClient = useQueryClient();
@@ -895,24 +963,13 @@ export function RescheduleDialog({ order, isOpen, onOpenChange, locationId }: Re
   const handleConfirm = () => {
     if (!date) return;
 
-    // 1. Get "Today" at midnight for accurate comparison
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
-
-    // 2. Get the selected date at midnight
-    const selectedDate = new Date(date);
-    selectedDate.setHours(0, 0, 0, 0);
-
-    // 3. Validation Gate
-    if (selectedDate < today) {
-      // You can replace this alert with a toast.error() if you're using Sonner/React-Hot-Toast
-      alert("Cannot reschedule an order to a past date.");
-      return;
-    }
+    // Use a library like 'date-fns' or just format it manually to YYYY-MM-DD
+    // This ensures we send "2026-04-25" instead of an ISO string with a timezone
+    const dateString = format(date, 'yyyy-MM-dd');
 
     // 4. Proceed with mutation if validation passes
     mutation.mutate({
-      estimatedDeliveryDate: date,
+      estimatedDeliveryDate: dateString, // Send the string!
       estimatedDeliveryWindow: window
     });
   };
