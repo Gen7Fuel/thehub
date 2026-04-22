@@ -140,7 +140,8 @@ describe('InfoNet Tax Report — infonet-report.tsx', () => {
     global.fetch = makeOkFetch(sampleData)
 
     renderWithSuspense(<InfonetReport />)
-    // MATCH NEW UI TEXT (Removed "Expected" from regex if you removed it from UI)
+
+    // Use a more specific matcher for the Card title
     await waitFor(
       () => expect(screen.getByText(/total infonet tax rebate/i)).toBeInTheDocument(),
       { timeout: 5000 }
@@ -174,15 +175,18 @@ describe('InfoNet Tax Report — infonet-report.tsx', () => {
     global.fetch = makeOkFetch(sampleData)
 
     renderWithSuspense(<InfonetReport />)
+
     await waitFor(
       () => expect(screen.getByText('Date')).toBeInTheDocument(),
       { timeout: 5000 }
     )
+
+    // FIX: Instead of getByText(/infonet tax/i), we use getByRole to target the <th>
+    expect(screen.getByRole('columnheader', { name: /infonet tax/i })).toBeInTheDocument()
+    expect(screen.getByRole('columnheader', { name: /cpl bulloch tax/i })).toBeInTheDocument()
+    expect(screen.getByRole('columnheader', { name: /total item sales/i })).toBeInTheDocument()
+
     expect(screen.getByText('Shift Numbers')).toBeInTheDocument()
-    // UPDATED MATCHERS to match your latest UI headers
-    expect(screen.getByText(/infonet tax/i)).toBeInTheDocument()
-    expect(screen.getByText(/cpl bulloch tax/i)).toBeInTheDocument()
-    expect(screen.getByText(/total item sales/i)).toBeInTheDocument()
     expect(screen.getByText('Status')).toBeInTheDocument()
   })
 
@@ -303,10 +307,16 @@ describe('InfoNet Tax Report — infonet-report.tsx', () => {
     global.fetch = makeOkFetch(sampleData)
 
     renderWithSuspense(<InfonetReport />)
+
+    // FIX: Since 200.75 might appear in the card and the row, use getAll and check the first one
     await waitFor(
-      () => expect(screen.getAllByText(/200\.75/)[0]).toBeInTheDocument(),
+      () => {
+        const matches = screen.getAllByText(/200\.75/)
+        expect(matches.length).toBeGreaterThan(0)
+      },
       { timeout: 5000 }
     )
+
     // Check for CPL Bulloch total (100 + 90 = 190.00)
     expect(screen.getByText(/190\.00/)).toBeInTheDocument()
   })
