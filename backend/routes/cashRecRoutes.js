@@ -655,6 +655,50 @@ router.get('/entries', async (req, res) => {
   }
 })
 
+router.post('/kardpoll', express.json({ limit: '1mb' }), async (req, res) => {
+  try {
+    const { site, date, litresSold, sales, ar, ar_rows } = req.body || {}
+
+    if (!site || !date) {
+      return res.status(400).json({ error: 'site and date (YYYY-MM-DD) are required' })
+    }
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) {
+      return res.status(400).json({ error: 'date must be in YYYY-MM-DD format' })
+    }
+
+    const parsed = {
+      site,
+      date,
+      litresSold: round2(parseFloat(litresSold) || 0),
+      sales: round2(parseFloat(sales) || 0),
+      ar: round2(parseFloat(ar) || 0),
+      ar_rows: Array.isArray(ar_rows) ? ar_rows : [],
+    }
+
+    const existing = await KardpollReport.findOne({ site, date }).lean()
+    if (existing) {
+      const updated = await KardpollReport.findByIdAndUpdate(
+        existing._id,
+        {
+          litresSold: parsed.litresSold,
+          sales: parsed.sales,
+          ar: parsed.ar,
+          ar_rows: parsed.ar_rows,
+        },
+        { new: true }
+      ).lean()
+      return res.json({ saved: true, upserted: true, report: updated })
+    }
+
+    const doc = KardpollReport.fromParsed(parsed)
+    const saved = await doc.save()
+    return res.json({ saved: true, report: saved })
+  } catch (e) {
+    console.error('cashRecRoutes.kardpoll error:', e)
+    res.status(500).json({ error: 'Failed to save Kardpoll report' })
+  }
+})
+
 router.post('/parse-kardpoll-excel', express.json({ limit: '1mb' }), async (req, res) => {
   try {
     const { site, date, totalSales, totalLitres } = req.body || {}
