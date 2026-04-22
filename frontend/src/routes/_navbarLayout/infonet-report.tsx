@@ -28,35 +28,41 @@ function RouteComponent() {
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
-  // Derived state for the DatePicker component
-  const dateRange = {
-    from: from ? new Date(from) : undefined,
-    to: to ? new Date(to) : undefined,
-  }
+  // Sync internal state with URL params or default to 30 days
+  const [currentRange, setCurrentRange] = useState<{ from: Date | undefined; to: Date | undefined }>(() => {
+    const endDate = to ? new Date(to) : new Date()
+    const startDate = from ? new Date(from) : new Date()
+
+    // If no URL params, default to 30 days ago
+    if (!from) startDate.setDate(endDate.getDate() - 30)
+
+    return { from: startDate, to: endDate }
+  })
 
   const setSearch = (next: Partial<{ site: string; from: string; to: string }>) => {
     navigate({ search: (prev: any) => ({ ...prev, ...next }) })
   }
 
-  // Ensure URL has a 7-day YYYY-MM-DD range if missing/invalid
+  // Update URL search params only when a full range is picked
   useEffect(() => {
-    const valid = (v?: string) => !!v && /^\d{4}-\d{2}-\d{2}$/.test(v)
-    if (!valid(from) || !valid(to)) {
-      const today = new Date()
-      const end = new Date(today.getFullYear(), today.getMonth(), today.getDate(), 0, 0, 0, 0)
-      const start = new Date(end); start.setDate(end.getDate() - 30)
-      setSearch({ from: ymd(start), to: ymd(end) })
+    if (currentRange.from && currentRange.to) {
+      setSearch({
+        from: ymd(currentRange.from),
+        to: ymd(currentRange.to)
+      })
     }
-  }, [from, to])
+  }, [currentRange])
 
   // Calculate Grand Totals for the summary section
   const grandTotals = data.reduce(
     (acc, row) => {
       acc.taxExempt += row.totalExemptedTax || 0
       acc.itemSales += row.totalItemSales || 0
+      // Ensure we sum the absolute values if the backend hasn't already
+      acc.cplBulloch += Math.abs(row.totalCplBulloch || 0)
       return acc
     },
-    { taxExempt: 0, itemSales: 0 }
+    { taxExempt: 0, itemSales: 0, cplBulloch: 0 }
   )
 
   // Sort data descending by date (Latest first)
@@ -118,11 +124,16 @@ function RouteComponent() {
         />
 
         <DatePickerWithRange
-          date={dateRange}
-          setDate={(val) => {
-            const next = typeof val === 'function' ? val(dateRange) : val
-            if (!next?.from || !next?.to) return
-            setSearch({ from: ymd(next.from), to: ymd(next.to) })
+          date={currentRange}
+          setDate={(val: any) => {
+            // Logic copied from OverShortReport
+            const next = typeof val === 'function' ? val(currentRange) : val
+            if (next?.from && next?.to) {
+              setCurrentRange(next)
+            } else if (next?.from) {
+              // Allows UI to show the selection in progress
+              setCurrentRange({ from: next.from, to: undefined })
+            }
           }}
         />
       </div>
@@ -141,17 +152,31 @@ function RouteComponent() {
           {!loading && !error && data.length > 0 && (
             <>
               {/* 2. Grand Total Summary Section */}
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-6">
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-6">
                 <div className="bg-blue-600 text-white p-6 rounded-xl shadow-md border border-blue-700">
-                  <p className="text-blue-100 text-sm font-medium uppercase tracking-wider">Total Infonet Tax Rebate Expected</p>
+                  <p className="text-blue-100 text-sm font-medium uppercase tracking-wider">Total Infonet Tax Rebate</p>
                   <p className="text-3xl font-bold mt-1">
                     C${grandTotals.taxExempt.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                   </p>
                 </div>
+
+                {/* New CPL Bulloch Card with Warning Logic */}
+                <div className={`p-6 rounded-xl shadow-md border transition-all ${grandTotals.cplBulloch > grandTotals.taxExempt
+                  ? 'bg-red-600 text-white border-red-700'
+                  : 'bg-white text-slate-800 border-slate-200'
+                  }`}>
+                  <p className={`${grandTotals.cplBulloch > grandTotals.taxExempt ? 'text-red-100' : 'text-slate-500'} text-sm font-medium uppercase tracking-wider`}>
+                    Total CPL Bulloch Tax {grandTotals.cplBulloch > grandTotals.taxExempt && "⚠️ Exceeds Infonet"}
+                  </p>
+                  <p className="text-3xl font-bold mt-1">
+                    C${grandTotals.cplBulloch.toLocaleString(undefined, { minimumFractionDigits: 2 })}
+                  </p>
+                </div>
+
                 <div className="bg-white text-slate-800 p-6 rounded-xl shadow-md border border-slate-200">
-                  <p className="text-slate-500 text-sm font-medium uppercase tracking-wider">Total Item Sales Recorded</p>
+                  <p className="text-slate-500 text-sm font-medium uppercase tracking-wider">Total Item Sales</p>
                   <p className="text-3xl font-bold mt-1 text-slate-900">
-                    C${grandTotals.itemSales.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                    C${grandTotals.itemSales.toLocaleString(undefined, { minimumFractionDigits: 2 })}
                   </p>
                 </div>
               </div>
@@ -162,8 +187,9 @@ function RouteComponent() {
                   <thead className="bg-slate-800 text-white sticky top-0">
                     <tr>
                       <th className="px-4 py-3 text-left font-semibold w-32">Date</th>
-                      <th className="px-4 py-3 text-left font-semibold w-48">Shift Numbers</th>
-                      <th className="px-4 py-3 text-right font-semibold w-40">Infonet Tax Exempt (C$)</th>
+                      <th className="px-4 py-3 text-left font-semibold w-40">Shift Numbers</th>
+                      <th className="px-4 py-3 text-right font-semibold w-40">Infonet Tax (C$)</th>
+                      <th className="px-4 py-3 text-right font-semibold w-40">CPL Bulloch Tax</th> {/* NEW COLUMN */}
                       <th className="px-4 py-3 text-right font-semibold w-40">Total Item Sales</th>
                       <th className="px-4 py-3 text-center font-semibold w-36">Status</th>
                     </tr>
@@ -173,22 +199,32 @@ function RouteComponent() {
                     {sortedData.map((row) => {
                       const hasShifts = row.shiftNumbers && row.shiftNumbers.length > 0;
 
+                      // Use absolute values for comparison
+                      const absBulloch = Math.abs(row.totalCplBulloch || 0);
+                      const absInfonet = Math.abs(row.totalExemptedTax || 0);
+                      const isOverLimit = absBulloch > absInfonet;
                       return (
-                        <tr key={row.date} className="hover:bg-slate-50 transition-colors">
+                        <tr key={row.date} className={`transition-colors ${isOverLimit ? 'bg-red-50 hover:bg-red-100' : 'hover:bg-slate-50'}`}>
                           <td className="px-4 py-3 font-medium text-slate-900">{row.date}</td>
                           <td className="px-4 py-3 text-slate-600 truncate">
                             {hasShifts ? row.shiftNumbers.join(', ') : '—'}
                           </td>
 
                           {!hasShifts && !row.isSubmitted ? (
-                            <td colSpan={3} className="px-4 py-3 text-center text-amber-600 italic bg-amber-50/50">
+                            <td colSpan={4} className="px-4 py-3 text-center text-amber-600 italic bg-amber-50/50">
                               No shifts recorded for this date.
                             </td>
                           ) : (
                             <>
                               <td className="px-4 py-3 text-right text-blue-700 font-bold">
-                                {row.totalExemptedTax.toLocaleString(undefined, { minimumFractionDigits: 2 })}
+                                {absInfonet.toLocaleString(undefined, { minimumFractionDigits: 2 })}
                               </td>
+
+                              {/* Displaying as a positive number for the report view */}
+                              <td className={`px-4 py-3 text-right font-bold ${isOverLimit ? 'text-red-600' : 'text-slate-700'}`}>
+                                {absBulloch.toLocaleString(undefined, { minimumFractionDigits: 2 })}
+                              </td>
+
                               <td className="px-4 py-3 text-right font-medium">
                                 {row.totalItemSales.toLocaleString(undefined, { minimumFractionDigits: 2 })}
                               </td>

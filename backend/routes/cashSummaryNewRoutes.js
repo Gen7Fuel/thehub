@@ -183,6 +183,7 @@ router.get('/tax-exempt-report', async (req, res) => {
           date: dateKey,
           totalExemptedTax: 0,
           totalItemSales: 0,
+          totalCplBulloch: 0,
           shiftNumbers: [],
           isSubmitted: !!reportMap[dateKey]
         };
@@ -190,6 +191,7 @@ router.get('/tax-exempt-report', async (req, res) => {
 
       dailyData[dateKey].totalExemptedTax += (shift.exempted_tax || 0);
       dailyData[dateKey].totalItemSales += (shift.item_sales || 0);
+      dailyData[dateKey].totalCplBulloch += (shift.cpl_bulloch || 0);
       if (shift.shift_number) {
         dailyData[dateKey].shiftNumbers.push(shift.shift_number);
       }
@@ -208,6 +210,7 @@ router.get('/tax-exempt-report', async (req, res) => {
           date: key,
           totalExemptedTax: 0,
           totalItemSales: 0,
+          totalCplBulloch: 0,
           shiftNumbers: [],
           isSubmitted: !!reportMap[key]
         });
