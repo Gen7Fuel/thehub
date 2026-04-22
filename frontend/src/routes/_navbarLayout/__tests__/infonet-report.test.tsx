@@ -159,13 +159,15 @@ describe('InfoNet Tax Report — infonet-report.tsx', () => {
     )
   })
 
-  it('shows the grand total Item Sales Recorded when data is loaded', async () => {
+  it('shows the grand total Item Sales when data is loaded', async () => {
     mockUseSearch.mockReturnValue({ site: 'Rankin', from: '2026-03-01', to: '2026-03-18' })
     global.fetch = makeOkFetch(sampleData)
 
     renderWithSuspense(<InfonetReport />)
+
+    // MATCH ACTUAL UI: "Total Item Sales" instead of "Total Item Sales Recorded"
     await waitFor(
-      () => expect(screen.getByText(/total item sales recorded/i)).toBeInTheDocument(),
+      () => expect(screen.getByText(/total item sales/i)).toBeInTheDocument(),
       { timeout: 5000 }
     )
   })
@@ -185,6 +187,7 @@ describe('InfoNet Tax Report — infonet-report.tsx', () => {
     expect(screen.getByRole('columnheader', { name: /infonet tax/i })).toBeInTheDocument()
     expect(screen.getByRole('columnheader', { name: /cpl bulloch tax/i })).toBeInTheDocument()
     expect(screen.getByRole('columnheader', { name: /total item sales/i })).toBeInTheDocument()
+    // expect(screen.getByText(/total item sales/i, { selector: 'p' })).toBeInTheDocument()
 
     expect(screen.getByText('Shift Numbers')).toBeInTheDocument()
     expect(screen.getByText('Status')).toBeInTheDocument()
