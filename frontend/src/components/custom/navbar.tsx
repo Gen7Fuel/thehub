@@ -352,6 +352,10 @@ export default function Navbar() {
         return { title: 'Write-offs & Markdowns', url: `${DOCS_BASE_URL}/9b0j5ary4m/p/write-offs-and-markdowns-jqHcm9CCbD` };
       case 'infonet-report':
         return { title: 'Infonet Tax Report', url: `${DOCS_BASE_URL}/9b0j5ary4m/p/infonet-tax-report-bNWL7qOUTA` };
+      case 'fuel-management':
+        return { title: 'Fuel Management', url: `${DOCS_BASE_URL}/9b0j5ary4m/p/fuel-management-6Ag4MFLA2U` };
+      case 'dashboard':
+        return { title: 'Dashboard', url: `${DOCS_BASE_URL}/9b0j5ary4m/p/dashboard-pjDseu6OE6` };
       default:
         return { title: 'The Hub User Guide', url: `${DOCS_BASE_URL}/9b0j5ary4m/p/the-hub-user-guide-JX89JyLv77` };
     }

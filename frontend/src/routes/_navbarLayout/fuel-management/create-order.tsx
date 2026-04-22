@@ -424,9 +424,10 @@ function CreateFuelOrder() {
       };
 
       const response = await axios.post('/api/fuel-orders', payload, authHeader);
+      const res = response.data;
 
       if (response.status === 201) {
-        alert(`Success! ${isSplit ? 'Split orders' : 'Order'} created and draft pushed.`);
+        alert(`Success! ${isSplit ? 'Split orders' : 'Order'} created and draft pushed to ${res.pushedTo}`);
         handleReset();
         if (setIsPreviewOpen) setIsPreviewOpen(false);
       }
