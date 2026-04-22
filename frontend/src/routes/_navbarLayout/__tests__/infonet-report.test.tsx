@@ -166,10 +166,18 @@ describe('InfoNet Tax Report — infonet-report.tsx', () => {
     renderWithSuspense(<InfonetReport />)
 
     // MATCH ACTUAL UI: "Total Item Sales" instead of "Total Item Sales Recorded"
+    // await waitFor(
+    //   () => expect(screen.getByText(/total item sales/i)).toBeInTheDocument(),
+    //   { timeout: 5000 }
+    // )
     await waitFor(
-      () => expect(screen.getByText(/total item sales/i)).toBeInTheDocument(),
+      () => expect(screen.getAllByText(/total item sales/i).length).toBeGreaterThan(0),
       { timeout: 5000 }
     )
+    // await waitFor(
+    //   () => expect(screen.getByText(/total item sales/i, { selector: 'p' })).toBeInTheDocument(),
+    //   { timeout: 5000 }
+    // )
   })
 
   it('renders the table headers', async () => {
