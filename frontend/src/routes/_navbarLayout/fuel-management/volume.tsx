@@ -101,22 +101,18 @@ function VolumeDashboard() {
 
   // Filter reconciliation data for the chart based on selected grade
   const chartData = useMemo(() => {
-    const todayStr = new Date().toLocaleDateString('en-CA'); // 'YYYY-MM-DD'
+    // REMOVED: No more frontend filtering. 
+    // Trust that the backend reconciliation route is only returning closed days.
 
-    return historicalData
-      .filter(day => {
-        // Eliminate today's data from the historical chart
-        const dayStr = new Date(day.date).toLocaleDateString('en-CA');
-        return dayStr !== todayStr;
-      })
-      .map(day => {
-        const gradeData = day.grades.find((g: any) => g.grade === selectedGrade);
-        return {
-          date: day.date,
-          salesVolume: gradeData?.salesVolume || 0,
-          physicalDraw: gradeData?.physicalDraw || 0,
-        };
-      });
+    return historicalData.map(day => {
+      const gradeData = day.grades.find((g: any) => g.grade === selectedGrade);
+      return {
+        // Pass the date directly as it comes from the server
+        date: day.date,
+        salesVolume: gradeData?.salesVolume || 0,
+        physicalDraw: gradeData?.physicalDraw || 0,
+      };
+    });
   }, [historicalData, selectedGrade]);
 
   // UI helpers...
@@ -536,12 +532,11 @@ function SalesVsTankVarianceChart({ auditData }: { auditData: any[] }) {
             <XAxis
               dataKey="date"
               tickFormatter={(d) => {
-                // Add a manual 'T00:00:00' if it's just a date string, 
-                // or use getUTCDate to ensure April 8 stays April 8.
+                // Use 'UTC' to ensure the date doesn't jump forward/backward
                 const dateObj = new Date(d);
-                return dateObj.getUTCDate().toLocaleString('en-US', { minimumIntegerDigits: 1 }) +
-                  ' ' +
-                  dateObj.toLocaleString('en-US', { month: 'short', timeZone: 'UTC' });
+                const day = dateObj.getUTCDate();
+                const month = dateObj.toLocaleString('en-US', { month: 'short', timeZone: 'UTC' });
+                return `${day} ${month}`;
               }}
               tick={{ fontSize: 10, fontWeight: 900 }}
               axisLine={false}

@@ -7,7 +7,7 @@ const FuelSales = require('../../models/fuel/FuelSales');
 const FuelOrder = require('../../models/fuel/FuelOrder');
 const { getLiveTankVolumes } = require('../../services/supaBaseService');
 const { subDays, format } = require('date-fns');
-const { moment } = require('moment-timezone');
+const moment = require('moment-timezone');
 
 
 // @route   GET /api/fuel-station-tanks/all-locations
@@ -158,61 +158,142 @@ async function getAverageSales(stationId, targetDate) {
   return averages;
 }
 
+// router.get('/reconciliation/:stationId', async (req, res) => {
+//   try {
+//     const { stationId } = req.params;
+//     if (!stationId || stationId === "[object Object]") {
+//       return res.status(400).json({ message: "Invalid Station ID provided" });
+//     }
+
+//     const sId = new mongoose.Types.ObjectId(stationId);
+
+//     // 1. Get Today's date string in YYYY-MM-DD format
+//     const todayStr = new Date().toISOString().split('T')[0];
+
+//     const searchDate = new Date();
+//     searchDate.setDate(searchDate.getDate() - 15);
+
+//     const tanks = await FuelStationTank.find({ stationId: sId });
+//     const sales = await FuelSales.find({
+//       stationId: sId,
+//       date: { $gte: searchDate }
+//     }).sort({ date: -1 });
+
+//     // Helper: Consistent YYYY-MM-DD conversion
+//     const toISODate = (date) => new Date(date).toISOString().split('T')[0];
+
+//     const reconciliationData = sales
+//       .filter(saleDay => toISODate(saleDay.date) !== todayStr) // 2. Strictly exclude today
+//       .map(saleDay => {
+//         const saleDateStr = toISODate(saleDay.date);
+
+//         return {
+//           date: saleDay.date,
+//           grades: saleDay.salesData.map(s => {
+//             const gradeTanks = tanks.filter(t => t.grade === s.grade);
+//             let openingSum = 0;
+//             let closingSum = 0;
+
+//             gradeTanks.forEach(tank => {
+//               // 3. Match historical records using the ISO date string
+//               const hist = tank.historicalVolume?.find(h => toISODate(h.date) === saleDateStr);
+//               if (hist) {
+//                 openingSum += hist.openingVolume;
+//                 closingSum += hist.closingVolume;
+//               }
+//             });
+
+//             const draw = openingSum - closingSum;
+//             return {
+//               grade: s.grade,
+//               salesVolume: s.volume || 0,
+//               physicalDraw: draw,
+//               variance: (s.volume || 0) - draw
+//             };
+//           })
+//         };
+//       });
+
+//     res.json(reconciliationData);
+//   } catch (err) {
+//     console.error("Reconciliation Error:", err);
+//     res.status(500).json({ message: err.message });
+//   }
+// });
+
+
 router.get('/reconciliation/:stationId', async (req, res) => {
   try {
     const { stationId } = req.params;
-    if (!stationId || stationId === "[object Object]") {
-      return res.status(400).json({ message: "Invalid Station ID provided" });
-    }
-
     const sId = new mongoose.Types.ObjectId(stationId);
 
-    // 1. Get Today's date string in YYYY-MM-DD format
-    const todayStr = new Date().toISOString().split('T')[0];
+    // 1. Get Station Timezone
+    const location = await Location.findById(sId).select('timezone').lean();
+    const tz = location?.timezone || 'America/Toronto';
 
-    const searchDate = new Date();
-    searchDate.setDate(searchDate.getDate() - 15);
+    // 2. Define the Window: Yesterday back to 15 days ago (Station Time)
+    const stationYesterday = moment.tz(tz).subtract(1, 'day').endOf('day');
+    const yesterdayStr = stationYesterday.format('YYYY-MM-DD');
 
-    const tanks = await FuelStationTank.find({ stationId: sId });
-    const sales = await FuelSales.find({
-      stationId: sId,
-      date: { $gte: searchDate }
-    }).sort({ date: -1 });
+    // Start of the 14-day window ending yesterday
+    const searchDateStart = moment.tz(tz).subtract(15, 'days').startOf('day').toDate();
+    const stationTodayStart = moment.tz(tz).startOf('day');
+    const searchDateEnd = stationTodayStart.toDate(); // This is Today at 00:00:00.000
+    // 3. Fetch Data within that closed window
+    const [tanks, sales, orders] = await Promise.all([
+      FuelStationTank.find({ stationId: sId }).lean(),
+      FuelSales.find({
+        stationId: sId,
+        date: { $gte: searchDateStart, $lte: searchDateEnd }
+      }).sort({ date: -1 }).lean(),
+      FuelOrder.find({
+        station: sId,
+        estimatedDeliveryDate: { $gte: searchDateStart, $lte: searchDateEnd },
+        currentStatus: 'Delivered'
+      }).lean()
+    ]);
 
-    // Helper: Consistent YYYY-MM-DD conversion
-    const toISODate = (date) => new Date(date).toISOString().split('T')[0];
+    const toDateStr = (date) => moment.tz(date, tz).format('YYYY-MM-DD');
 
-    const reconciliationData = sales
-      .filter(saleDay => toISODate(saleDay.date) !== todayStr) // 2. Strictly exclude today
-      .map(saleDay => {
-        const saleDateStr = toISODate(saleDay.date);
+    const reconciliationData = sales.map(saleDay => {
+      const saleDateStr = toDateStr(saleDay.date);
 
-        return {
-          date: saleDay.date,
-          grades: saleDay.salesData.map(s => {
-            const gradeTanks = tanks.filter(t => t.grade === s.grade);
-            let openingSum = 0;
-            let closingSum = 0;
+      return {
+        date: saleDay.date,
+        grades: saleDay.salesData.map(s => {
+          const gradeTanks = tanks.filter(t => t.grade === s.grade);
+          let openingSum = 0;
+          let closingSum = 0;
 
-            gradeTanks.forEach(tank => {
-              // 3. Match historical records using the ISO date string
-              const hist = tank.historicalVolume?.find(h => toISODate(h.date) === saleDateStr);
-              if (hist) {
-                openingSum += hist.openingVolume;
-                closingSum += hist.closingVolume;
-              }
-            });
+          // Deliveries for this grade on this specific historical day
+          const dayDeliveries = orders
+            .filter(o => toDateStr(o.estimatedDeliveryDate) === saleDateStr)
+            .reduce((sum, o) => {
+              const item = o.items.find(i => i.grade === s.grade);
+              return sum + (item?.ltrs || 0);
+            }, 0);
 
-            const draw = openingSum - closingSum;
-            return {
-              grade: s.grade,
-              salesVolume: s.volume || 0,
-              physicalDraw: draw,
-              variance: (s.volume || 0) - draw
-            };
-          })
-        };
-      });
+          gradeTanks.forEach(tank => {
+            const hist = tank.historicalVolume?.find(h => toDateStr(h.date) === saleDateStr);
+            if (hist) {
+              openingSum += (hist.openingVolume || 0);
+              closingSum += (hist.closingVolume || 0);
+            }
+          });
+
+          // (Opening + Inbound) - Closing = Outbound (Physical Draw)
+          const physicalDraw = (openingSum + dayDeliveries) - closingSum;
+
+          return {
+            grade: s.grade,
+            salesVolume: s.volume || 0,
+            physicalDraw: physicalDraw,
+            variance: (s.volume || 0) - physicalDraw,
+            deliveries: dayDeliveries
+          };
+        })
+      };
+    });
 
     res.json(reconciliationData);
   } catch (err) {
@@ -224,81 +305,131 @@ router.get('/reconciliation/:stationId', async (req, res) => {
 router.get('/station/:stationId', async (req, res) => {
   try {
     const { stationId } = req.params;
-    const selectedDate = new Date(req.query.date);
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
+    const { date: dateStr } = req.query; // Expecting "YYYY-MM-DD" from frontend
 
-    const compareDate = new Date(selectedDate);
-    compareDate.setHours(0, 0, 0, 0);
+    // 1. Setup Station Timezone
+    const station = await Location.findById(stationId).select('timezone').lean();
+    const tz = station?.timezone || 'America/Toronto';
 
-    const isPast = compareDate < today;
-    const isToday = compareDate.getTime() === today.getTime();
-    const isFuture = compareDate > today;
+    // 2. Define Time Markers in Station Local Time
+    const stationNow = moment.tz(tz).startOf('day');
+    const targetDate = moment.tz(dateStr, tz).startOf('day');
 
+    const isPast = targetDate.isBefore(stationNow, 'day');
+    const isToday = targetDate.isSame(stationNow, 'day');
+    const isFuture = targetDate.isAfter(stationNow, 'day');
+
+    const dateStrnew = targetDate.format('YYYY-MM-DD');
+    // console.log(`[DEBUG] Query Date: ${dateStrnew} | Station Timezone: ${tz}`);
+
+    // 3. Fetch Base Data
     const [tanks, avgSales] = await Promise.all([
       FuelStationTank.find({ stationId }).lean(),
-      getAverageSales(stationId, selectedDate)
+      getAverageSales(stationId, targetDate.toDate())
     ]);
 
-    // PIPELINE: Aggregate all tanks of the same grade into one "Grade Volume"
+    // 4. Projection Pipeline (for Future dates)
     let gradePipeline = {};
-
     if (isFuture || isToday) {
-      // Initialize the pipeline with the sum of all tanks per grade for Today
+      const todayStr = stationNow.format('YYYY-MM-DD');
+
+      // Step A: Initialize with Today's Opening Volume
       tanks.forEach(tank => {
         const todayHist = tank.historicalVolume?.find(h =>
-          new Date(h.date).toDateString() === today.toDateString()
+          new Date(h.date).toISOString().split('T')[0] === todayStr
         );
-        const startVol = todayHist?.openingVolume || 0;
+        // const startVol = todayHist?.openingVolume || 0;
+        let startVol = todayHist?.openingVolume || 0;
+
+        // --- FALLBACK LOGIC ---
+        // If today's opening is 0, look for yesterday's closing volume
+        if (startVol === 0) {
+          const yesterdayStr = stationNow.clone().subtract(1, 'day').format('YYYY-MM-DD');
+          const yesterdayHist = tank.historicalVolume?.find(h =>
+            new Date(h.date).toISOString().split('T')[0] === yesterdayStr
+          );
+
+          if (yesterdayHist && yesterdayHist.closingVolume > 0) {
+            startVol = yesterdayHist.closingVolume;
+            // console.log(`[PIPELINE] Fallback applied for Tank ${tank._id}: Using Yesterday's Closing (${startVol}L)`);
+          }
+        }
         gradePipeline[tank.grade] = (gradePipeline[tank.grade] || 0) + startVol;
       });
 
-      // If looking at a future date, run the daily recursion
+      // Step B: IMPORTANT - Add Today's deliveries and subtract Today's sales 
+      // so the pipeline starts from Today's ESTIMATED CLOSING.
+      const todayAvgSales = await getAverageSales(stationId, stationNow.toDate());
+      const todayOrders = await FuelOrder.find({
+        station: stationId,
+        estimatedDeliveryDate: {
+          $gte: stationNow.clone().startOf('day').toDate(),
+          $lte: stationNow.clone().endOf('day').toDate()
+        }
+      }).lean();
+
+      Object.keys(gradePipeline).forEach(grade => {
+        const todayOrderVol = todayOrders.reduce((sum, o) => {
+          const item = o.items.find(i => i.grade === grade);
+          return sum + (item?.ltrs || 0);
+        }, 0);
+
+        // Move the needle from Opening -> Estimated Closing of Today
+        gradePipeline[grade] = (gradePipeline[grade] + todayOrderVol) - (todayAvgSales[grade] || 0);
+      });
+
+      // Step C: If we are looking further than tomorrow, loop through the gap
       if (isFuture) {
-        let tempDate = new Date(today);
-        while (tempDate < compareDate) {
-          const dayAvg = await getAverageSales(stationId, tempDate);
+        let cursor = stationNow.clone().add(1, 'day'); // Start from Tomorrow
+        while (cursor.isBefore(targetDate, 'day')) {
+          const dayAvg = await getAverageSales(stationId, cursor.toDate());
           const dayOrders = await FuelOrder.find({
             station: stationId,
             estimatedDeliveryDate: {
-              $gte: new Date(tempDate).setHours(0, 0, 0, 0),
-              $lte: new Date(tempDate).setHours(23, 59, 59, 999)
+              $gte: cursor.clone().startOf('day').toDate(),
+              $lte: cursor.clone().endOf('day').toDate()
             }
           }).lean();
 
-          // Calculate for each grade across all its tanks
           Object.keys(gradePipeline).forEach(grade => {
-            const dailyOrderVol = dayOrders.reduce((sum, order) => {
-              const item = order.items.find(i => i.grade === grade);
+            const dailyOrderVol = dayOrders.reduce((sum, o) => {
+              const item = o.items.find(i => i.grade === grade);
               return sum + (item?.ltrs || 0);
             }, 0);
-
-            const dailySales = dayAvg[grade] || 0;
-            // Carrying the total grade volume forward
-            gradePipeline[grade] = (gradePipeline[grade] + dailyOrderVol) - dailySales;
+            gradePipeline[grade] = (gradePipeline[grade] + dailyOrderVol) - (dayAvg[grade] || 0);
           });
-
-          tempDate.setDate(tempDate.getDate() + 1);
+          cursor.add(1, 'day');
         }
       }
     }
 
-    // Fetch orders and actual sales for the target date
+    // 5. Fetch Target Day Records
+
+    // Window A: Strict Station Local Midnight (For Orders)
+    const startOfTarget = targetDate.clone().startOf('day').toDate();
+    const endOfTarget = targetDate.clone().endOf('day').toDate();
+
+    // Window B: Strict UTC Midnight (To catch Historical/Sales data stored at 00:00:00Z)
+    // This explicitly creates "2026-04-23T00:00:00.000Z"
+    const utcMidnight = new Date(`${dateStr}T00:00:00.000Z`);
+
     const [orders, actualSalesRecord] = await Promise.all([
       FuelOrder.find({
         station: stationId,
-        estimatedDeliveryDate: {
-          $gte: new Date(compareDate).setHours(0, 0, 0, 0),
-          $lte: new Date(compareDate).setHours(23, 59, 59, 999)
-        }
+        estimatedDeliveryDate: { $gte: startOfTarget, $lte: endOfTarget }
       }).lean(),
+
       FuelSales.findOne({
         stationId,
-        date: { $gte: compareDate, $lte: new Date(compareDate).setHours(23, 59, 59, 999) }
+        // Use an $in or an $or to catch the record whether it's stored at 
+        // UTC Midnight OR Local Midnight
+        date: {
+          $in: [utcMidnight, startOfTarget]
+        }
       }).lean()
     ]);
 
-    // ENRICHMENT LOGIC (Now outside the if-block so Past dates work)
+    // 6. Enrichment Logic
     const enrichedTanks = tanks.map(tank => {
       let openingL = 0;
       let estSalesL = 0;
@@ -308,38 +439,70 @@ router.get('/station/:stationId', async (req, res) => {
       const tanksOfSameGrade = tanks.filter(t => t.grade === tank.grade).length || 1;
       const salesEntry = actualSalesRecord?.salesData?.find(s => s.grade === tank.grade);
 
-      const totalGradeOrders = orders.reduce((sum, order) => {
-        const item = order.items.find(i => i.grade === tank.grade);
+      const totalGradeOrders = orders.reduce((sum, o) => {
+        const item = o.items.find(i => i.grade === tank.grade);
         return sum + (item?.ltrs || 0);
       }, 0);
 
       const splitOrders = totalGradeOrders / tanksOfSameGrade;
 
+      // --- START UPDATED LOGIC BLOCK ---
       if (isPast || isToday) {
-        const hist = tank.historicalVolume?.find(h =>
-          new Date(h.date).toISOString().split('T')[0] === selectedDate.toISOString().split('T')[0]
-        );
+        // Match by raw string to prevent UTC-to-EST date shifting
+        const hist = tank.historicalVolume?.find(h => {
+          if (!h.date) return false;
+          const dbDateStr = new Date(h.date).toISOString().split('T')[0];
+          return dbDateStr === dateStr;
+        });
 
-        openingL = hist?.openingVolume || 0;
+        if (hist) {
+          // 1. Assign values from history
+          openingL = hist.openingVolume || 0;
+          closingL = isPast ? (hist.closingVolume || 0) : 0;
+
+          // 2. TRIGGER FALLBACK: Only if Today, and only if opening is 0
+          if (isToday && openingL === 0) {
+            const yesterdayStr = targetDate.clone().subtract(1, 'day').format('YYYY-MM-DD');
+            const yesterdayHist = tank.historicalVolume?.find(h => {
+              if (!h.date) return false;
+              const dbStr = new Date(h.date).toISOString().split('T')[0];
+              return dbStr === yesterdayStr;
+            });
+
+            // Only fallback if yesterday actually has a value > 0
+            if (yesterdayHist && yesterdayHist.closingVolume > 0) {
+              openingL = yesterdayHist.closingVolume;
+            }
+          }
+        } else if (isToday) {
+          // 3. COMPLETE MISSING RECORD FALLBACK: If no record for today exists at all yet
+          const yesterdayStr = targetDate.clone().subtract(1, 'day').format('YYYY-MM-DD');
+          const yesterdayHist = tank.historicalVolume?.find(h => {
+            if (!h.date) return false;
+            const dbStr = new Date(h.date).toISOString().split('T')[0];
+            return dbStr === yesterdayStr;
+          });
+          openingL = yesterdayHist?.closingVolume || 0;
+        }
 
         if (isPast) {
+          // For past, show actuals
           estSalesL = (salesEntry?.volume || 0) / tanksOfSameGrade;
-          closingL = hist?.closingVolume || 0;
         } else {
-          // TODAY logic
+          // For today, show projections based on averages
           estSalesL = (avgSales[tank.grade] || 0) / tanksOfSameGrade;
           currentSalesL = (actualSalesRecord?.isLive) ? (salesEntry?.volume || 0) / tanksOfSameGrade : 0;
+
+          // Calculate projected closing (Opening + Deliveries - Estimated Sales)
           closingL = (openingL + splitOrders) - estSalesL;
         }
       }
       else if (isFuture) {
-        const totalGradeVolume = (gradePipeline[tank.grade] || 0);
-        const totalSales = (avgSales[tank.grade] || 0);
-
-        openingL = totalGradeVolume / tanksOfSameGrade;
-        estSalesL = totalSales / tanksOfSameGrade;
+        openingL = (gradePipeline[tank.grade] || 0) / tanksOfSameGrade;
+        estSalesL = (avgSales[tank.grade] || 0) / tanksOfSameGrade;
         closingL = (openingL + splitOrders) - estSalesL;
       }
+      // --- END UPDATED LOGIC BLOCK ---
 
       return {
         ...tank,
@@ -347,13 +510,15 @@ router.get('/station/:stationId', async (req, res) => {
         estSalesL: Math.round(estSalesL),
         currentSalesL: Math.round(currentSalesL),
         closingL: Math.round(closingL),
-        orderL: Math.round(splitOrders)
+        orderL: Math.round(splitOrders),
       };
     });
 
+    // console.log(stationNow.format('YYYY-MM-DD'));
     res.json({
       tanks: enrichedTanks,
-      lastTransaction: actualSalesRecord?.lastTransactionAt || null
+      lastTransaction: actualSalesRecord?.lastTransactionAt || null,
+      stationToday: stationNow.format('YYYY-MM-DD') // Add this line
     });
 
   } catch (err) {

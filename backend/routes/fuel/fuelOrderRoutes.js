@@ -85,9 +85,9 @@ router.get('/workspace-orders', async (req, res) => {
         { originalDeliveryDate: { $gte: start, $lte: end } }
       ]
     })
-    .populate('carrier supplier rack')
-    .populate('station', 'stationName timezone')
-    .lean();
+      .populate('carrier supplier rack')
+      .populate('station', 'stationName timezone')
+      .lean();
 
     res.json(orders);
   } catch (err) {
@@ -136,13 +136,22 @@ router.get('/workspace-orders', async (req, res) => {
 // fuelOrderRoutes.js
 router.get('/check-existing', async (req, res) => {
   try {
-    const { stationId, orderDate } = req.query;
+    const { stationId, orderDate } = req.query; // orderDate is "YYYY-MM-DD"
 
-    const start = new Date(orderDate);
-    start.setUTCHours(0, 0, 0, 0);
-    const end = new Date(orderDate);
-    end.setUTCHours(23, 59, 59, 999);
+    // 1. Get the station timezone
+    const station = await Location.findById(stationId).select('timezone').lean();
+    const tz = station?.timezone || 'America/Toronto';
 
+    // 2. Define the start and end of that day in the STATION's timezone
+    // .startOf('day') gives 00:00:00.000 in local time
+    // .endOf('day') gives 23:59:59.999 in local time
+    const start = moment.tz(orderDate, tz).startOf('day').toDate();
+    const end = moment.tz(orderDate, tz).endOf('day').toDate();
+
+    // console.log(`[DEBUG] Checking existing orders for station ${stationId}`);
+    // console.log(`[DEBUG] Timezone: ${tz} | Window: ${start.toISOString()} to ${end.toISOString()}`);
+
+    // 3. Query using the localized UTC window
     const existingOrders = await FuelOrder.find({
       station: stationId,
       orderDate: { $gte: start, $lte: end }
@@ -153,6 +162,7 @@ router.get('/check-existing', async (req, res) => {
       existingOrders: existingOrders
     });
   } catch (err) {
+    console.error(err);
     res.status(500).json({ error: err.message });
   }
 });
@@ -399,13 +409,18 @@ router.post('/', async (req, res) => {
     for (const orderData of orders) {
       const station = await Location.findById(orderData.stationId).lean();
 
+      const tz = station?.timezone || 'America/Toronto';
+
+      // Use moment-timezone to pin delivery to the station's local start-of-day
+      const stationMidnight = moment.tz(deliveryDate, tz).startOf('day').toDate();
+
       // Save to MongoDB
       const newOrder = new FuelOrder({
         poNumber: orderData.poNumber,
         orderDate: new Date(orderDate),
-        originalDeliveryDate: new Date(deliveryDate),
+        originalDeliveryDate: stationMidnight,
         originalDeliveryWindow: { start: startTime, end: endTime },
-        estimatedDeliveryDate: new Date(deliveryDate),
+        estimatedDeliveryDate: stationMidnight,
         estimatedDeliveryWindow: { start: startTime, end: endTime },
         rack: rackId,
         supplier: supplierId,
@@ -485,8 +500,8 @@ router.post('/', async (req, res) => {
     const authRes = await cca.acquireTokenByClientCredential({ scopes: ["https://graph.microsoft.com/.default"] });
     const client = Client.init({ authProvider: (done) => done(null, authRes.accessToken) });
 
-    const targetMailbox = "nsporders@nspetroleum.ca";
-    // const targetMailbox = "daksh@gen7fuel.com"; //only for testing
+    // const targetMailbox = "nsporders@nspetroleum.ca";
+    const targetMailbox = "daksh@gen7fuel.com"; //only for testing
     await client.api(`/users/${targetMailbox}/mailFolders/drafts/messages`).post(draftPayload);
 
     res.status(201).json({

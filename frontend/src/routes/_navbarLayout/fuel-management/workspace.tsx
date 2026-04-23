@@ -22,7 +22,7 @@ import { Badge } from "@/components/ui/badge";
 import { getGradeTheme } from "./manage/locations/$id"
 import { POPreviewDocument, formatPDFDate, getISODateOnly } from "@/components/custom/fuelPoPDF"
 import { PDFViewer, PDFDownloadLink } from '@react-pdf/renderer';
-import { formatInTimeZone, toDate } from 'date-fns-tz';
+import { formatInTimeZone } from 'date-fns-tz';
 
 export const Route = createFileRoute('/_navbarLayout/fuel-management/workspace')({
   component: WorkspaceComponent,
@@ -117,11 +117,11 @@ function WorkspaceComponent() {
   }, [locations, stationSearch]);
 
   const shiftDate = (amount: number) => {
-    const today = startOfDay(new Date());
-    const maxFuture = addDays(today, 4);
+    // Use pure local system time for the "Future" boundary
+    const localToday = startOfDay(new Date());
+    const maxFuture = addDays(localToday, 4);
     const newDate = addDays(selectedDate, amount);
 
-    // Allow infinite past, but restrict future to +3 days
     if (isAfter(newDate, maxFuture)) return;
     setSelectedDate(newDate);
   };
@@ -373,35 +373,28 @@ function StationStrip({ location, date }: { location: any, date: Date }) {
   const [viewingPO, setViewingPO] = useState<any | null>(null);
 
   const stationTz = location.timezone || 'America/Toronto';
+  const selectedDateStr = format(date, 'yyyy-MM-dd');
 
-  // 1. Get "Now" in the Station's timezone
-  const nowInStation = toDate(new Date(), { timeZone: stationTz });
-  const stationTodayStr = formatInTimeZone(nowInStation, stationTz, 'yyyy-MM-dd');
-
-  // 2. Get "Selected Date" string in Station's timezone
-  const selectedDateStr = formatInTimeZone(date, stationTz, 'yyyy-MM-dd');
-
-  // 3. Comparison logic using Strings (YYYY-MM-DD) is safest for timezones
-  const isToday = selectedDateStr === stationTodayStr;
-  const isPast = selectedDateStr < stationTodayStr;
-  const isFuture = selectedDateStr > stationTodayStr;
-
-  // 4. API Calls: Send the date as a plain YYYY-MM-DD string
-  // This prevents the backend from misinterpreting ISO strings with offsets
-  const dateParam = selectedDateStr;
-
-  // 1. Update your useQuery to handle the new object structure
   const { data: tankResponse, isLoading: isTanksLoading } = useQuery({
-    queryKey: ['station-tanks', location?._id, dateParam],
+    queryKey: ['station-tanks', location?._id, selectedDateStr],
     queryFn: async () => {
       const res = await axios.get(
-        `/api/fuel-station-tanks/station/${location._id}?date=${dateParam}`,
+        `/api/fuel-station-tanks/station/${location._id}?date=${selectedDateStr}`,
         authHeader
       );
       return res.data;
     },
   });
 
+  // Use the date provided by the SERVER
+  const stationTodayStr = tankResponse?.stationToday || formatInTimeZone(new Date(), stationTz, 'yyyy-MM-dd');
+
+  // Now comparisons are relative to the SERVER clock
+  const isToday = selectedDateStr === stationTodayStr;
+  const isPast = stationTodayStr ? selectedDateStr < stationTodayStr : false;
+  const isFuture = stationTodayStr ? selectedDateStr > stationTodayStr : false;
+
+  const dateParam = selectedDateStr;
   // Extract data from response
   const tanks = tankResponse?.tanks || [];
   const lastTxAt = tankResponse?.lastTransaction;
@@ -489,11 +482,11 @@ function StationStrip({ location, date }: { location: any, date: Date }) {
     'Dyed Diesel': 'DYED'
   };
 
-  const today = new Date();
-  today.setHours(0, 0, 0, 0);
+  // const today = new Date();
+  // today.setHours(0, 0, 0, 0);
 
-  const selected = new Date(date);
-  selected.setHours(0, 0, 0, 0);
+  // const selected = new Date(date);
+  // selected.setHours(0, 0, 0, 0);
 
   // const isPast = selected.getTime() < today.getTime();
   // const isToday = selected.getTime() === today.getTime();
