@@ -238,17 +238,25 @@ router.get('/reconciliation/:stationId', async (req, res) => {
     // Start of the 14-day window ending yesterday
     const searchDateStart = moment.tz(tz).subtract(15, 'days').startOf('day').toDate();
     const stationTodayStart = moment.tz(tz).startOf('day');
-    const searchDateEnd = stationTodayStart.toDate(); // This is Today at 00:00:00.000
-    // 3. Fetch Data within that closed window
+    const searchDateEnd = stationTodayStart.toDate(); // 2026-04-24T00:00:00.000
+
     const [tanks, sales, orders] = await Promise.all([
       FuelStationTank.find({ stationId: sId }).lean(),
       FuelSales.find({
         stationId: sId,
-        date: { $gte: searchDateStart, $lte: searchDateEnd }
+        date: {
+          $gte: searchDateStart,
+          $lt: searchDateEnd  // Use $lt (Less Than) instead of $lte
+        },
+        isLive: false        // Only include finalized/audited sales
       }).sort({ date: -1 }).lean(),
+
       FuelOrder.find({
         station: sId,
-        estimatedDeliveryDate: { $gte: searchDateStart, $lte: searchDateEnd },
+        estimatedDeliveryDate: {
+          $gte: searchDateStart,
+          $lt: searchDateEnd  // Use $lt here as well
+        },
         currentStatus: 'Delivered'
       }).lean()
     ]);
@@ -901,8 +909,8 @@ router.get('/sync-all-volumes', async (req, res) => {
       if (isSupabaseFresh) {
         // PRIORITY 1: Supabase has current/yesterday data
         statusString = reading.ReadingDate === nowAtStation
-          ? reading.ReadingTime
-          : `${reading.ReadingTime} (Yesterday)`;
+          ? `${reading.ReadingDate} ${reading.ReadingTime}`
+          : `${reading.ReadingDate} ${reading.ReadingTime} (Yesterday)`;
         currentVolume = Math.round(reading.Volume);
       } else if (tank.lastUpdatedVolumeReadingDateTime?.includes("(Manual)")) {
         // PRIORITY 2: Supabase is stale/missing, but we have a Manual reading record

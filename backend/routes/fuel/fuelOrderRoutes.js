@@ -500,8 +500,8 @@ router.post('/', async (req, res) => {
     const authRes = await cca.acquireTokenByClientCredential({ scopes: ["https://graph.microsoft.com/.default"] });
     const client = Client.init({ authProvider: (done) => done(null, authRes.accessToken) });
 
-    // const targetMailbox = "nsporders@nspetroleum.ca";
-    const targetMailbox = "daksh@gen7fuel.com"; //only for testing
+    const targetMailbox = "nsporders@nspetroleum.ca";
+    // const targetMailbox = "daksh@gen7fuel.com"; //only for testing
     await client.api(`/users/${targetMailbox}/mailFolders/drafts/messages`).post(draftPayload);
 
     res.status(201).json({
@@ -516,32 +516,44 @@ router.post('/', async (req, res) => {
   }
 });
 
-
+// router.put('/:id', ...)
 router.put('/:id', async (req, res) => {
   try {
-    const { estimatedDeliveryDate, estimatedDeliveryWindow, items, currentStatus } = req.body;
+    const { 
+      estimatedDeliveryDate, 
+      estimatedDeliveryWindow, 
+      items, 
+      currentStatus,
+      // NEW FIELDS
+      rack,
+      supplier,
+      badgeNo,
+      carrier
+    } = req.body;
 
     const order = await FuelOrder.findById(req.params.id);
     if (!order) return res.status(404).json({ message: "Order not found" });
 
+    // Existing Date Logic...
     if (estimatedDeliveryDate) {
-      // Fetch the location to get the station's timezone
-      const station = await Location.findById(order.station).lean();
-      const tz = station?.timezone || 'America/Toronto';
-
-      // Force the date to be the START of the day in that timezone, then save
-      order.estimatedDeliveryDate = moment.tz(estimatedDeliveryDate, tz).startOf('day').toDate();
+       const station = await Location.findById(order.station).lean();
+       const tz = station?.timezone || 'America/Toronto';
+       order.estimatedDeliveryDate = moment.tz(estimatedDeliveryDate, tz).startOf('day').toDate();
     }
+
+    // Update Metadata if provided
+    if (rack) order.rack = rack;
+    if (supplier) order.supplier = supplier;
+    if (badgeNo) order.badgeNo = badgeNo;
+    if (carrier) order.carrier = carrier; // Even if view-only in UI, keep it here for safety
 
     if (estimatedDeliveryWindow) order.estimatedDeliveryWindow = estimatedDeliveryWindow;
     if (items) order.items = items;
 
+    // Status History logic...
     if (currentStatus && currentStatus !== order.currentStatus) {
-      order.currentStatus = currentStatus;
-      order.statusHistory.push({
-        status: currentStatus,
-        timestamp: new Date() // Actual timestamp of the update
-      });
+       order.currentStatus = currentStatus;
+       order.statusHistory.push({ status: currentStatus, timestamp: new Date() });
     }
 
     await order.save();
@@ -550,32 +562,30 @@ router.put('/:id', async (req, res) => {
     res.status(500).json({ message: err.message });
   }
 });
-
 // router.put('/:id', async (req, res) => {
 //   try {
-//     const {
-//       estimatedDeliveryDate,
-//       estimatedDeliveryWindow,
-//       items,
-//       currentStatus
-//     } = req.body;
+//     const { estimatedDeliveryDate, estimatedDeliveryWindow, items, currentStatus } = req.body;
 
 //     const order = await FuelOrder.findById(req.params.id);
 //     if (!order) return res.status(404).json({ message: "Order not found" });
 
-//     // 1. Handle Rescheduling
-//     if (estimatedDeliveryDate) order.estimatedDeliveryDate = estimatedDeliveryDate;
-//     if (estimatedDeliveryWindow) order.estimatedDeliveryWindow = estimatedDeliveryWindow;
+//     if (estimatedDeliveryDate) {
+//       // Fetch the location to get the station's timezone
+//       const station = await Location.findById(order.station).lean();
+//       const tz = station?.timezone || 'America/Toronto';
 
-//     // 2. Handle Quantity Updates
+//       // Force the date to be the START of the day in that timezone, then save
+//       order.estimatedDeliveryDate = moment.tz(estimatedDeliveryDate, tz).startOf('day').toDate();
+//     }
+
+//     if (estimatedDeliveryWindow) order.estimatedDeliveryWindow = estimatedDeliveryWindow;
 //     if (items) order.items = items;
 
-//     // 3. Handle Status Update + History
 //     if (currentStatus && currentStatus !== order.currentStatus) {
 //       order.currentStatus = currentStatus;
 //       order.statusHistory.push({
 //         status: currentStatus,
-//         timestamp: new Date()
+//         timestamp: new Date() // Actual timestamp of the update
 //       });
 //     }
 

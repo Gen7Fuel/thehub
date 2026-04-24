@@ -1,5 +1,5 @@
 import { createFileRoute, Link } from '@tanstack/react-router'
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 import React from 'react';
 import { useQuery } from '@tanstack/react-query';
 import axios from 'axios';
@@ -16,6 +16,7 @@ import {
 } from "@/components/ui/dialog";
 import { getGradeTheme } from "./manage/locations/$id"
 import { getStatusColor } from './workspace';
+import { formatInTimeZone } from 'date-fns-tz';
 
 export const Route = createFileRoute(
   '/_navbarLayout/fuel-management/order-pipeline',
@@ -192,6 +193,7 @@ export function OrderPipelineComponent() {
 }
 
 function PipelineBlock({ site, date }: { site: any; date: Date }) {
+  const [stationTime, setStationTime] = useState('');
   const gradeMap: Record<string, string> = {
     'Regular': 'REG',
     'Premium': 'PUL',
@@ -265,18 +267,54 @@ function PipelineBlock({ site, date }: { site: any; date: Date }) {
     return d.toISOString().split('T')[0];
   };
 
+  useEffect(() => {
+    const tz = site?.timezone || 'America/Toronto';
+
+    const updateClock = () => {
+      const now = new Date();
+      // 'MMM do' adds the ordinal (st, nd, rd, th) for the date
+      const formatted = formatInTimeZone(now, tz, 'MMM do, h:mm:ss a');
+      setStationTime(formatted);
+    };
+
+    updateClock();
+    const timer = setInterval(updateClock, 1000);
+
+    return () => clearInterval(timer);
+  }, [site?.timezone]);
+
   return (
     <div className="bg-white border-2 border-slate-200 rounded-3xl p-5 shadow-sm hover:shadow-md transition-all flex flex-col justify-between min-h-[500px]">
       <div>
         {/* HEADER */}
-        <div className="flex justify-between items-start mb-5">
-          <div className="flex items-center gap-3">
-            <div className="w-12 h-12 bg-slate-900 rounded-2xl flex items-center justify-center text-white font-black text-sm shadow-lg shadow-slate-200">
+        <div className="flex justify-between items-start mb-5 gap-2">
+          <div className="flex items-center gap-3 min-w-0">
+            <div className="w-11 h-11 bg-slate-900 rounded-2xl flex-shrink-0 flex items-center justify-center text-white font-black text-xs shadow-lg shadow-slate-200">
               {site.fuelStationNumber}
             </div>
-            <div>
-              <h3 className="text-sm font-black text-slate-800 uppercase leading-tight truncate w-32">{site.stationName}</h3>
-              <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wide">{site.province}</p>
+            <div className="min-w-0">
+              <h3 className="text-sm font-black text-slate-800 uppercase leading-tight truncate">
+                {site.stationName}
+              </h3>
+              <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wide">
+                {site.province}
+              </p>
+            </div>
+          </div>
+
+          {/* COMPACT CLOCK: No label, date & time on one line */}
+          <div className="flex flex-col items-end flex-shrink-0 pt-0.5">
+            <div className="flex items-center gap-1.5 bg-slate-100 border border-slate-200 px-2 py-1 rounded-lg">
+              {/* Small pulse dot */}
+              <div className="relative flex h-1.5 w-1.5">
+                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-blue-400 opacity-75"></span>
+                <span className="relative inline-flex rounded-full h-1.5 w-1.5 bg-blue-600"></span>
+              </div>
+
+              {/* Date & Time: Using a very tight font-mono */}
+              <span className="text-[10px] font-mono font-black text-slate-700 tracking-tighter uppercase whitespace-nowrap">
+                {stationTime || '--/-- --:--'}
+              </span>
             </div>
           </div>
         </div>

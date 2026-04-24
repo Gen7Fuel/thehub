@@ -96,135 +96,6 @@ interface POPreviewProps {
   rackLocation?: string;
 }
 
-// export const POPreviewDocument: React.FC<POPreviewProps> = ({
-//   data,
-//   selectedStation,
-//   carrierName,
-//   rackName,
-//   rackLocation
-// }) => {
-
-//   const getQty = (gradeKey: string): string => {
-//     // 1. Use .find with exact equality (===)
-//     // 2. We still use .toLowerCase() on both sides just to be safe with casing
-//     const item = data.items.find(
-//       (i) => i.grade.toLowerCase() === gradeKey.toLowerCase()
-//     );
-
-//     return item ? item.ltrs.toLocaleString() : "0";
-//   };
-//   // Helper to convert 24h (13:00) to 12h (1pm)
-//   const formatTime = (time: string) => {
-//     if (!time) return "";
-//     const [hours, _] = time.split(':');
-//     const h = parseInt(hours);
-//     const ampm = h >= 12 ? 'pm' : 'am';
-//     const displayH = h % 12 || 12;
-//     return `${displayH}${ampm}`;
-//   };
-
-//   return (
-//     <Document>
-//       <Page size="A4" style={styles.page}>
-//         {/* Logo at the top center */}
-//         <Image
-//           src="/fuel_images/nsp_logo.png"
-//           style={styles.logo}
-//         />
-//         <Text style={styles.header}>Fuel Order Sheet</Text>
-
-//         {/* Logistics Section */}
-//         <View style={styles.section}>
-//           <View style={styles.row}>
-//             <Text style={styles.label}>Date</Text>
-//             <Text style={styles.value}>{formatPDFDate(data.deliveryDate)}</Text>
-//           </View>
-//           <View style={styles.row}><Text style={styles.label}>Carrier</Text><Text style={styles.value}>{carrierName || ''}</Text></View>
-//           <View style={styles.row}><Text style={styles.label}>Trailer #</Text><Text style={styles.value}></Text></View>
-//           <View style={styles.row}><Text style={styles.label}>PO #</Text><Text style={styles.poNumberValue}>{data.poNumber}</Text></View>
-//           <View style={styles.row}><Text style={styles.label}>Contact #</Text><Text style={styles.value}>nsporders@nspetroleum.ca</Text></View>
-//         </View>
-
-//         {/* Pick Up Section */}
-//         <View style={styles.section}>
-//           <Text style={styles.sectionHeader}>Pick Up Information</Text>
-//           <View style={styles.row}><Text style={styles.label}>Pick Up #</Text></View>
-//           <View style={styles.row}><Text style={styles.label}>Badge #</Text><Text style={styles.value}>{data.badgeNo}</Text></View>
-//           <View style={styles.row}><Text style={styles.label}>Rack Source</Text><Text style={styles.value}>{rackName || ''} - {rackLocation || ''}</Text></View>
-//           <View style={styles.row}><Text style={styles.label}>Address</Text><Text style={styles.value}></Text></View>
-
-//           {/* Grades Table - Using Flex instead of Table display */}
-//           <View style={styles.tableContainer}>
-//             <View style={styles.tableRow}>
-//               <Text style={styles.tableColStation}>Station</Text>
-//               <Text style={styles.tableColHeader}>RUL</Text>
-//               <Text style={styles.tableColHeader}>PUL</Text>
-//               <Text style={styles.tableColHeader}>ULSD</Text>
-//               <Text style={styles.tableColHeader}>DYED</Text>
-//             </View>
-
-//             {/* Main Data Row */}
-//             <View style={styles.tableRow}>
-//               <Text style={styles.tableColStation}>{selectedStation?.fuelCustomerName || 'N/A'}</Text>
-//               <Text style={styles.tableColValue}>{getQty("Regular")}</Text>
-//               <Text style={styles.tableColValue}>{getQty("Premium")}</Text>
-//               <Text style={styles.tableColValue}>{getQty("Diesel")}</Text>
-//               {/* <Text style={styles.tableColValue}>{getQty("Dyed")}</Text> */}
-//               <Text style={styles.tableColValue}>{getQty("Dyed Diesel")}</Text>
-//             </View>
-
-//             {/* Spacer/Zero Row */}
-//             <View style={styles.tableRow}>
-//               <Text style={styles.tableColStation}></Text>
-//               <Text style={styles.tableColValue}>0</Text>
-//               <Text style={styles.tableColValue}>0</Text>
-//               <Text style={styles.tableColValue}>0</Text>
-//               <Text style={styles.tableColValue}>0</Text>
-//             </View>
-
-//             {/* Totals Row */}
-//             <View style={styles.tableRow}>
-//               <Text style={styles.tableColStation}>Total</Text>
-//               <Text style={styles.tableColValue}>{getQty("Regular")}</Text>
-//               <Text style={styles.tableColValue}>{getQty("Premium")}</Text>
-//               <Text style={styles.tableColValue}>{getQty("Diesel")}</Text>
-//               {/* <Text style={styles.tableColValue}>{getQty("Dyed")}</Text> */}
-//               <Text style={styles.tableColValue}>{getQty("Dyed Diesel")}</Text>
-//             </View>
-//           </View>
-
-//           <Text style={{ padding: 3, marginTop: 5 }}>Pick up ETA - </Text>
-//         </View>
-
-//         {/* Delivery Section */}
-//         <View style={styles.section}>
-//           <Text style={styles.sectionHeader}>Delivery Information</Text>
-//           <View style={styles.row}>
-//             <Text style={styles.label}>Delivery</Text>
-//             <Text style={styles.deliveryDateValue}>
-//               {formatPDFDate(data.deliveryDate, false)} - {formatTime(data.startTime)}-{formatTime(data.endTime)} delivery
-//             </Text>
-//           </View>
-
-//           <View style={styles.deliveryTable}>
-//             {/* Station Column - 25% Width */}
-//             <View style={styles.deliveryColStation}>
-//               <Text style={styles.boldText}>Station</Text>
-//               <Text>{selectedStation?.fuelCustomerName || 'N/A'}</Text>
-//             </View>
-
-//             {/* Address Column - Takes remaining 75% Width */}
-//             <View style={styles.deliveryColAddress}>
-//               <Text style={styles.boldText}>Address</Text>
-//               <Text>{selectedStation?.address || 'N/A'}</Text>
-//             </View>
-//           </View>
-//         </View>
-//       </Page>
-//     </Document>
-//   );
-// };
-
 export const POPreviewDocument: React.FC<POPreviewProps> = ({
   data,
   selectedStation,
@@ -234,15 +105,18 @@ export const POPreviewDocument: React.FC<POPreviewProps> = ({
 }) => {
 
   const getQty = (gradeKey: string): string => {
+    // 1. Use .find with exact equality (===)
+    // 2. We still use .toLowerCase() on both sides just to be safe with casing
     const item = data.items.find(
       (i) => i.grade.toLowerCase() === gradeKey.toLowerCase()
     );
+
     return item ? item.ltrs.toLocaleString() : "0";
   };
-
+  // Helper to convert 24h (13:00) to 12h (1pm)
   const formatTime = (time: string) => {
     if (!time) return "";
-    const [hours] = time.split(':');
+    const [hours, _] = time.split(':');
     const h = parseInt(hours);
     const ampm = h >= 12 ? 'pm' : 'am';
     const displayH = h % 12 || 12;
@@ -252,7 +126,11 @@ export const POPreviewDocument: React.FC<POPreviewProps> = ({
   return (
     <Document>
       <Page size="A4" style={styles.page}>
-        <Image src="/fuel_images/nsp_logo.png" style={styles.logo} />
+        {/* Logo at the top center */}
+        <Image
+          src="/fuel_images/nsp_logo.png"
+          style={styles.logo}
+        />
         <Text style={styles.header}>Fuel Order Sheet</Text>
 
         {/* Logistics Section */}
@@ -273,29 +151,46 @@ export const POPreviewDocument: React.FC<POPreviewProps> = ({
           <View style={styles.row}><Text style={styles.label}>Pick Up #</Text></View>
           <View style={styles.row}><Text style={styles.label}>Badge #</Text><Text style={styles.value}>{data.badgeNo}</Text></View>
           <View style={styles.row}><Text style={styles.label}>Rack Source</Text><Text style={styles.value}>{rackName || ''} - {rackLocation || ''}</Text></View>
-          
-          {/* Vertical Grades Table */}
-          <View style={[styles.tableContainer, { borderTop: '1pt solid black', marginTop: 10 }]}>
+          <View style={styles.row}><Text style={styles.label}>Address</Text><Text style={styles.value}></Text></View>
+
+          {/* Grades Table - Using Flex instead of Table display */}
+          <View style={styles.tableContainer}>
             <View style={styles.tableRow}>
-              <View style={[styles.tableColStation, { borderRight: '1pt solid black', width: '40%' }]}>
-                <Text style={styles.boldText}>Grade</Text>
-              </View>
-              <View style={[styles.tableColStation, { width: '60%', textAlign: 'center' }]}>
-                <Text style={styles.boldText}>{selectedStation?.fuelCustomerName || 'N/A'}</Text>
-              </View>
+              <Text style={styles.tableColStation}>Station</Text>
+              <Text style={styles.tableColHeader}>RUL</Text>
+              <Text style={styles.tableColHeader}>PUL</Text>
+              <Text style={styles.tableColHeader}>ULSD</Text>
+              <Text style={styles.tableColHeader}>DYED</Text>
             </View>
 
-            {[
-              { label: 'RUL', key: 'Regular' },
-              { label: 'PUL', key: 'Premium' },
-              { label: 'ULSD', key: 'Diesel' },
-              { label: 'DYED', key: 'Dyed Diesel' }
-            ].map((grade, index) => (
-              <View key={index} style={[styles.tableRow, { borderTop: '1pt solid #eee' }]}>
-                <Text style={[styles.tableColStation, { width: '40%', borderRight: '1pt solid black' }]}>{grade.label}</Text>
-                <Text style={[styles.tableColValue, { width: '60%', textAlign: 'center' }]}>{getQty(grade.key)}</Text>
-              </View>
-            ))}
+            {/* Main Data Row */}
+            <View style={styles.tableRow}>
+              <Text style={styles.tableColStation}>{selectedStation?.fuelCustomerName || 'N/A'}</Text>
+              <Text style={styles.tableColValue}>{getQty("Regular")}</Text>
+              <Text style={styles.tableColValue}>{getQty("Premium")}</Text>
+              <Text style={styles.tableColValue}>{getQty("Diesel")}</Text>
+              {/* <Text style={styles.tableColValue}>{getQty("Dyed")}</Text> */}
+              <Text style={styles.tableColValue}>{getQty("Dyed Diesel")}</Text>
+            </View>
+
+            {/* Spacer/Zero Row */}
+            <View style={styles.tableRow}>
+              <Text style={styles.tableColStation}></Text>
+              <Text style={styles.tableColValue}>0</Text>
+              <Text style={styles.tableColValue}>0</Text>
+              <Text style={styles.tableColValue}>0</Text>
+              <Text style={styles.tableColValue}>0</Text>
+            </View>
+
+            {/* Totals Row */}
+            <View style={styles.tableRow}>
+              <Text style={styles.tableColStation}>Total</Text>
+              <Text style={styles.tableColValue}>{getQty("Regular")}</Text>
+              <Text style={styles.tableColValue}>{getQty("Premium")}</Text>
+              <Text style={styles.tableColValue}>{getQty("Diesel")}</Text>
+              {/* <Text style={styles.tableColValue}>{getQty("Dyed")}</Text> */}
+              <Text style={styles.tableColValue}>{getQty("Dyed Diesel")}</Text>
+            </View>
           </View>
 
           <Text style={{ padding: 3, marginTop: 5 }}>Pick up ETA - </Text>
@@ -312,30 +207,135 @@ export const POPreviewDocument: React.FC<POPreviewProps> = ({
           </View>
 
           <View style={styles.deliveryTable}>
+            {/* Station Column - 25% Width */}
             <View style={styles.deliveryColStation}>
               <Text style={styles.boldText}>Station</Text>
               <Text>{selectedStation?.fuelCustomerName || 'N/A'}</Text>
             </View>
+
+            {/* Address Column - Takes remaining 75% Width */}
             <View style={styles.deliveryColAddress}>
               <Text style={styles.boldText}>Address</Text>
               <Text>{selectedStation?.address || 'N/A'}</Text>
             </View>
           </View>
         </View>
-
-        {/* Office Use Only Section */}
-        <View style={[styles.section, { marginTop: 10 }]}>
-          <Text style={styles.sectionHeader}>For Office Use Only</Text>
-          <View style={styles.row}>
-            <Text style={styles.label}>Supplier/Terminal</Text>
-            <Text style={styles.value}>NLP-IOL-TOR-ON</Text>
-          </View>
-          <View style={styles.row}>
-            <Text style={styles.label}>Hauler</Text>
-            <Text style={styles.value}>NPT-ON</Text>
-          </View>
-        </View>
       </Page>
     </Document>
   );
 };
+
+// export const POPreviewDocument: React.FC<POPreviewProps> = ({
+//   data,
+//   selectedStation,
+//   carrierName,
+//   rackName,
+//   rackLocation
+// }) => {
+
+//   const getQty = (gradeKey: string): string => {
+//     const item = data.items.find(
+//       (i) => i.grade.toLowerCase() === gradeKey.toLowerCase()
+//     );
+//     return item ? item.ltrs.toLocaleString() : "0";
+//   };
+
+//   const formatTime = (time: string) => {
+//     if (!time) return "";
+//     const [hours] = time.split(':');
+//     const h = parseInt(hours);
+//     const ampm = h >= 12 ? 'pm' : 'am';
+//     const displayH = h % 12 || 12;
+//     return `${displayH}${ampm}`;
+//   };
+
+//   return (
+//     <Document>
+//       <Page size="A4" style={styles.page}>
+//         <Image src="/fuel_images/nsp_logo.png" style={styles.logo} />
+//         <Text style={styles.header}>Fuel Order Sheet</Text>
+
+//         {/* Logistics Section */}
+//         <View style={styles.section}>
+//           <View style={styles.row}>
+//             <Text style={styles.label}>Date</Text>
+//             <Text style={styles.value}>{formatPDFDate(data.deliveryDate)}</Text>
+//           </View>
+//           <View style={styles.row}><Text style={styles.label}>Carrier</Text><Text style={styles.value}>{carrierName || ''}</Text></View>
+//           <View style={styles.row}><Text style={styles.label}>Trailer #</Text><Text style={styles.value}></Text></View>
+//           <View style={styles.row}><Text style={styles.label}>PO #</Text><Text style={styles.poNumberValue}>{data.poNumber}</Text></View>
+//           <View style={styles.row}><Text style={styles.label}>Contact #</Text><Text style={styles.value}>nsporders@nspetroleum.ca</Text></View>
+//         </View>
+
+//         {/* Pick Up Section */}
+//         <View style={styles.section}>
+//           <Text style={styles.sectionHeader}>Pick Up Information</Text>
+//           <View style={styles.row}><Text style={styles.label}>Pick Up #</Text></View>
+//           <View style={styles.row}><Text style={styles.label}>Badge #</Text><Text style={styles.value}>{data.badgeNo}</Text></View>
+//           <View style={styles.row}><Text style={styles.label}>Rack Source</Text><Text style={styles.value}>{rackName || ''} - {rackLocation || ''}</Text></View>
+          
+//           {/* Vertical Grades Table */}
+//           <View style={[styles.tableContainer, { borderTop: '1pt solid black', marginTop: 10 }]}>
+//             <View style={styles.tableRow}>
+//               <View style={[styles.tableColStation, { borderRight: '1pt solid black', width: '40%' }]}>
+//                 <Text style={styles.boldText}>Grade</Text>
+//               </View>
+//               <View style={[styles.tableColStation, { width: '60%', textAlign: 'center' }]}>
+//                 <Text style={styles.boldText}>{selectedStation?.fuelCustomerName || 'N/A'}</Text>
+//               </View>
+//             </View>
+
+//             {[
+//               { label: 'RUL', key: 'Regular' },
+//               { label: 'PUL', key: 'Premium' },
+//               { label: 'ULSD', key: 'Diesel' },
+//               { label: 'DYED', key: 'Dyed Diesel' }
+//             ].map((grade, index) => (
+//               <View key={index} style={[styles.tableRow, { borderTop: '1pt solid #eee' }]}>
+//                 <Text style={[styles.tableColStation, { width: '40%', borderRight: '1pt solid black' }]}>{grade.label}</Text>
+//                 <Text style={[styles.tableColValue, { width: '60%', textAlign: 'center' }]}>{getQty(grade.key)}</Text>
+//               </View>
+//             ))}
+//           </View>
+
+//           <Text style={{ padding: 3, marginTop: 5 }}>Pick up ETA - </Text>
+//         </View>
+
+//         {/* Delivery Section */}
+//         <View style={styles.section}>
+//           <Text style={styles.sectionHeader}>Delivery Information</Text>
+//           <View style={styles.row}>
+//             <Text style={styles.label}>Delivery</Text>
+//             <Text style={styles.deliveryDateValue}>
+//               {formatPDFDate(data.deliveryDate, false)} - {formatTime(data.startTime)}-{formatTime(data.endTime)} delivery
+//             </Text>
+//           </View>
+
+//           <View style={styles.deliveryTable}>
+//             <View style={styles.deliveryColStation}>
+//               <Text style={styles.boldText}>Station</Text>
+//               <Text>{selectedStation?.fuelCustomerName || 'N/A'}</Text>
+//             </View>
+//             <View style={styles.deliveryColAddress}>
+//               <Text style={styles.boldText}>Address</Text>
+//               <Text>{selectedStation?.address || 'N/A'}</Text>
+//             </View>
+//           </View>
+//         </View>
+
+//         {/* Office Use Only Section */}
+//         {/* <View style={[styles.section, { marginTop: 10 }]}>
+//           <Text style={styles.sectionHeader}>For Office Use Only</Text>
+//           <View style={styles.row}>
+//             <Text style={styles.label}>Supplier/Terminal</Text>
+//             <Text style={styles.value}>NLP-IOL-TOR-ON</Text>
+//           </View>
+//           <View style={styles.row}>
+//             <Text style={styles.label}>Hauler</Text>
+//             <Text style={styles.value}>NPT-ON</Text>
+//           </View>
+//         </View> */}
+//       </Page>
+//     </Document>
+//   );
+// };
