@@ -6,6 +6,7 @@ const FuelStationTank = require('../../models/fuel/FuelStationTank');
 const FuelSales = require('../../models/fuel/FuelSales');
 const FuelOrder = require('../../models/fuel/FuelOrder');
 const { getLiveTankVolumes } = require('../../services/supaBaseService');
+const { runDailyFuelSync } = require('../../manual/oldDailyFuelSync');
 const { subDays, format } = require('date-fns');
 const moment = require('moment-timezone');
 
@@ -1038,6 +1039,21 @@ router.delete('/tanks/:id', async (req, res) => {
     res.json({ message: "Tank removed" });
   } catch (err) {
     res.status(500).json({ message: err.message });
+  }
+});
+
+// router.post('/manual-daily-sync', async (req, res) => { ... })
+router.post('/manual-daily-sync', async (req, res) => {
+  try {
+    console.log('--- 🚀 [MANUAL TRIGGER] Daily Fuel Sync & Archive ---');
+
+    // Call the function logic here
+    await runDailyFuelSync();
+
+    res.json({ message: "Daily fuel sync and archive completed successfully." });
+  } catch (err) {
+    console.error("Manual Sync Error:", err);
+    res.status(500).json({ error: "Failed to complete manual sync: " + err.message });
   }
 });
 
