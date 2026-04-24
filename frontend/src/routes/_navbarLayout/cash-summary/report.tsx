@@ -435,7 +435,7 @@ function RouteComponent() {
   useEffect(() => {
     setPayoutsCheckMatch(null)
     toast.dismiss('payouts-check-mismatch')
-    if (!site || !date) return
+    if (!site || !date || ['Oliver', 'Osoyoos'].includes(site)) return
 
     const check = async () => {
       try {
@@ -464,7 +464,7 @@ function RouteComponent() {
   useEffect(() => {
     setArCheckMatch(null)
     toast.dismiss('ar-check-mismatch')
-    if (!site || !date) return
+    if (!site || !date || ['Oliver', 'Osoyoos'].includes(site)) return
 
     const check = async () => {
       try {
