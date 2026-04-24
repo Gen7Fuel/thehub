@@ -1,5 +1,6 @@
 import { createFileRoute, useNavigate } from '@tanstack/react-router'
 import { useMemo, useState, useEffect, useRef } from 'react'
+import { toast, Toaster } from 'sonner'
 import { SitePicker } from '@/components/custom/sitePicker'
 import { Button } from '@/components/ui/button';
 import { Info, RefreshCw } from 'lucide-react'
@@ -157,6 +158,8 @@ function RouteComponent() {
 
   const [noteText, setNoteText] = useState('')
   const [fetching, setFetching] = useState(false)
+
+  const [arCheckMatch, setArCheckMatch] = useState<boolean | null>(null)
 
   const [voidedDetails, setVoidedDetails] = useState<any[]>([]);
   const [loadingVoided, setLoadingVoided] = useState(false);
@@ -428,9 +431,38 @@ function RouteComponent() {
     setVoidedDetails([]);
   }, [site, date]);
 
+  useEffect(() => {
+    setArCheckMatch(null)
+    toast.dismiss('ar-check-mismatch')
+    if (!site || !date) return
+
+    const check = async () => {
+      try {
+        const token = localStorage.getItem('token')
+        const res = await fetch(
+          `/api/cash-summary/ar-check?site=${encodeURIComponent(site)}&date=${encodeURIComponent(date)}`,
+          { headers: { Authorization: `Bearer ${token || ''}`, 'X-Required-Permission': 'accounting.cashSummary.report' } }
+        )
+        if (res.status === 403) { navigate({ to: '/no-access' }); return }
+        if (!res.ok) return
+        const data = await res.json()
+        setArCheckMatch(data.match)
+        if (!data.match) {
+          toast.warning(
+            "This report cannot be submitted — receivables in Bulloch don't match the receivables entered in the Hub.",
+            { id: 'ar-check-mismatch', duration: Infinity }
+          )
+        }
+      } catch {
+        // silently ignore — don't block the page on a check failure
+      }
+    }
+    check()
+  }, [site, date])
+
   console.log('Site/date report:', site, date, voidedDetails)
 
-  const submitDisabled = submitState !== 'idle'
+  const submitDisabled = submitState !== 'idle' || arCheckMatch === false
   const submitLabel =
     submitState === 'idle' ? 'Submit' : submitState === 'submitting' ? 'Submitting...' : 'Submitted'
 
@@ -544,6 +576,7 @@ function RouteComponent() {
 
   return (
     <div className="pt-2 w-full flex flex-col items-center">
+      <Toaster />
       {/* Print-only CSS: hide everything except #print-area */}
       <style>{`
         @media print {
