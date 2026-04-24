@@ -92,9 +92,12 @@ app.get('/api/health', (req, res) => res.send('OK'));
 app.use("/api/sage", sageRoutes); // Publicly accessible
 app.use("/api/auth", authRoutes);
 app.use("/api/locations", locationRoutes);
+app.use("/api/academy/admin", require("./routes/academy/adminRoutes"));
 
 // console.log("Middleware is:",auth);
 app.use(auth);
+
+app.use("/api/academy/learner", require("./routes/academy/learnerRoutes"));
 
 app.use("/api/users", userRoutes);
 app.use("/api/products", productRoutes);
