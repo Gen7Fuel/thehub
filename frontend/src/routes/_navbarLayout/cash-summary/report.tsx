@@ -160,6 +160,7 @@ function RouteComponent() {
   const [fetching, setFetching] = useState(false)
 
   const [arCheckMatch, setArCheckMatch] = useState<boolean | null>(null)
+  const [payoutsCheckMatch, setPayoutsCheckMatch] = useState<boolean | null>(null)
 
   const [voidedDetails, setVoidedDetails] = useState<any[]>([]);
   const [loadingVoided, setLoadingVoided] = useState(false);
@@ -432,6 +433,35 @@ function RouteComponent() {
   }, [site, date]);
 
   useEffect(() => {
+    setPayoutsCheckMatch(null)
+    toast.dismiss('payouts-check-mismatch')
+    if (!site || !date) return
+
+    const check = async () => {
+      try {
+        const token = localStorage.getItem('token')
+        const res = await fetch(
+          `/api/cash-summary/payouts-check?site=${encodeURIComponent(site)}&date=${encodeURIComponent(date)}`,
+          { headers: { Authorization: `Bearer ${token || ''}`, 'X-Required-Permission': 'accounting.cashSummary.report' } }
+        )
+        if (res.status === 403) { navigate({ to: '/no-access' }); return }
+        if (!res.ok) return
+        const data = await res.json()
+        setPayoutsCheckMatch(data.match)
+        if (!data.match) {
+          toast.warning(
+            "This report cannot be submitted — payouts in Bulloch don't match the payables entered in the Hub.",
+            { id: 'payouts-check-mismatch', duration: Infinity }
+          )
+        }
+      } catch {
+        // silently ignore — don't block the page on a check failure
+      }
+    }
+    check()
+  }, [site, date])
+
+  useEffect(() => {
     setArCheckMatch(null)
     toast.dismiss('ar-check-mismatch')
     if (!site || !date) return
@@ -462,7 +492,7 @@ function RouteComponent() {
 
   console.log('Site/date report:', site, date, voidedDetails)
 
-  const submitDisabled = submitState !== 'idle' || arCheckMatch === false
+  const submitDisabled = submitState !== 'idle' || arCheckMatch === false || payoutsCheckMatch === false
   const submitLabel =
     submitState === 'idle' ? 'Submit' : submitState === 'submitting' ? 'Submitting...' : 'Submitted'
 
