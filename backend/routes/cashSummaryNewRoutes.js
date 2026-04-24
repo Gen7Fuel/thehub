@@ -1245,6 +1245,40 @@ router.post('/submit', async (req, res) => {
   }
 })
 
+router.get('/payouts-check', async (req, res) => {
+  const { site, date } = req.query
+  if (!site || !date) return res.status(400).json({ error: 'site and date required' })
+
+  try {
+    const start = new Date(date); start.setUTCHours(0, 0, 0, 0)
+    const end   = new Date(date); end.setUTCHours(23, 59, 59, 999)
+
+    const location = await Location.findOne({ stationName: site }).lean()
+
+    const [shiftAgg] = await CashSummary.aggregate([
+      { $match: { site, date: { $gte: start, $lte: end } } },
+      { $group: { _id: null, total: { $sum: { $ifNull: ['$payouts', 0] } } } },
+    ])
+
+    let payablesTotal = 0
+    if (location) {
+      const [payableAgg] = await Payable.aggregate([
+        { $match: { location: location._id, paymentMethod: 'till', createdAt: { $gte: start, $lte: end } } },
+        { $group: { _id: null, total: { $sum: { $ifNull: ['$amount', 0] } } } },
+      ])
+      payablesTotal = payableAgg?.total ?? 0
+    }
+
+    const shiftsPayoutsTotal = shiftAgg?.total ?? 0
+    const match = Math.round(shiftsPayoutsTotal * 100) === Math.round(payablesTotal * 100)
+
+    res.json({ shiftsPayoutsTotal, payablesTotal, match })
+  } catch (err) {
+    console.error('Payouts check error:', err)
+    res.status(500).json({ error: 'Failed to check payouts totals' })
+  }
+})
+
 router.get('/ar-check', async (req, res) => {
   const { site, date } = req.query
   if (!site || !date) return res.status(400).json({ error: 'site and date required' })
