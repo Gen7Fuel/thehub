@@ -1,5 +1,5 @@
 import { createFileRoute, Link } from '@tanstack/react-router'
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 import React from 'react';
 import { useQuery } from '@tanstack/react-query';
 import axios from 'axios';
@@ -16,6 +16,7 @@ import {
 } from "@/components/ui/dialog";
 import { getGradeTheme } from "./manage/locations/$id"
 import { getStatusColor } from './workspace';
+import { formatInTimeZone } from 'date-fns-tz';
 
 export const Route = createFileRoute(
   '/_navbarLayout/fuel-management/order-pipeline',
@@ -58,9 +59,14 @@ export function OrderPipelineComponent() {
 
   // --- 4. HANDLERS ---
   const shiftDate = (amount: number) => {
-    const today = startOfDay(new Date());
+    const localToday = startOfDay(new Date());
+    // Allowing 2 days in past and 4 days in future for stakeholders
+    const maxFuture = addDays(localToday, 4);
+    const maxPast = addDays(localToday, -2);
+
     const newDate = addDays(selectedDate, amount);
-    if (isBefore(newDate, addDays(today, -2)) || isAfter(newDate, addDays(today, 3))) return;
+
+    if (isAfter(newDate, maxFuture) || isBefore(newDate, maxPast)) return;
     setSelectedDate(newDate);
   };
 
@@ -187,6 +193,7 @@ export function OrderPipelineComponent() {
 }
 
 function PipelineBlock({ site, date }: { site: any; date: Date }) {
+  const [stationTime, setStationTime] = useState('');
   const gradeMap: Record<string, string> = {
     'Regular': 'REG',
     'Premium': 'PUL',
@@ -195,16 +202,27 @@ function PipelineBlock({ site, date }: { site: any; date: Date }) {
   };
 
   const sortOrder = ['Regular', 'Premium', 'Diesel', 'Dyed Diesel'];
-  const activeDateStr = format(date, 'yyyy-MM-dd');
-  const isPast = isBefore(date, startOfDay(new Date()));
+
+  // 1. FORMAT AS STRING (Avoids .toISOString() shifting dates for UTC stakeholders)
+  const selectedDateStr = format(date, 'yyyy-MM-dd');
 
   const { data: tankData } = useQuery({
-    queryKey: ['pipeline-tanks', site._id, activeDateStr],
+    queryKey: ['pipeline-tanks', site._id, selectedDateStr],
     queryFn: async () => {
-      const res = await axios.get(`/api/fuel-station-tanks/station/${site._id}?date=${date.toISOString()}`, authHeader);
+      // Send the string, exactly like we do in StationStrip
+      const res = await axios.get(`/api/fuel-station-tanks/station/${site._id}?date=${selectedDateStr}`, authHeader);
       return res.data;
     }
   });
+
+  // 2. SERVER-DRIVEN DATE LOGIC
+  const stationTodayStr = tankData?.stationToday; // Pull from the backend response
+  // 1. ENSURE DATE STRINGS ARE DEFINED
+  const activeDateStr = format(date, 'yyyy-MM-dd');
+
+  const isToday = activeDateStr === stationTodayStr;
+  const isPast = stationTodayStr ? activeDateStr < stationTodayStr : false;
+  // const isFuture = stationTodayStr ? activeDateStr > stationTodayStr : false;
 
   const gradeSummary = useMemo(() => {
     const summary: Record<string, any> = {};
@@ -222,37 +240,25 @@ function PipelineBlock({ site, date }: { site: any; date: Date }) {
         };
       }
 
-      // Accumulate volumes and limits across all tanks for this specific grade
+      // Use the enriched backend fields (openingL/closingL) which now have your fallback logic
       summary[gradeKey].sales += (t.estSalesL || 0);
       summary[gradeKey].closing += (t.closingL || 0);
-
-      // CRITICAL FIX: Sum these up. If grade has multiple tanks, capacity is cumulative.
-      summary[gradeKey].min += (t.minVolumeCapacity || t.minLimit || 0);
-      summary[gradeKey].max += (t.maxVolumeCapacity || t.maxLimit || 0);
-      summary[gradeKey].total += (t.tankCapacity || t.totalCapacity || 0);
+      summary[gradeKey].min += (t.minVolumeCapacity || 0);
+      summary[gradeKey].max += (t.maxVolumeCapacity || 0);
+      summary[gradeKey].total += (t.tankCapacity || 0);
     });
 
     return summary;
   }, [tankData]);
 
   const { data: orders = [] } = useQuery({
-    queryKey: ['pipeline-orders', site._id, activeDateStr],
+    queryKey: ['pipeline-orders', site._id, selectedDateStr],
     queryFn: async () => {
-      // Note: Ensure backend returns orders matching either original OR estimated date for this station
-      const res = await axios.get(`/api/fuel-orders/workspace-orders?stationId=${site._id}&date=${date.toISOString()}`, authHeader);
+      // Use the string dateParam to match the Workspace behavior
+      const res = await axios.get(`/api/fuel-orders/workspace-orders?stationId=${site._id}&date=${selectedDateStr}`, authHeader);
       return res.data;
     }
   });
-
-  // const gradeSummary = useMemo(() => {
-  //   const summary: any = {};
-  //   (tankData?.tanks || []).forEach((t: any) => {
-  //     if (!summary[t.grade]) summary[t.grade] = { sales: 0, closing: 0 };
-  //     summary[t.grade].sales += (t.estSalesL || 0);
-  //     summary[t.grade].closing += (t.closingL || 0);
-  //   });
-  //   return summary;
-  // }, [tankData]);
 
   // Helper to get the YYYY-MM-DD string without timezone shifting
   const getUTCString = (dateInput: string | Date) => {
@@ -261,18 +267,54 @@ function PipelineBlock({ site, date }: { site: any; date: Date }) {
     return d.toISOString().split('T')[0];
   };
 
+  useEffect(() => {
+    const tz = site?.timezone || 'America/Toronto';
+
+    const updateClock = () => {
+      const now = new Date();
+      // 'MMM do' adds the ordinal (st, nd, rd, th) for the date
+      const formatted = formatInTimeZone(now, tz, 'MMM do, h:mm:ss a');
+      setStationTime(formatted);
+    };
+
+    updateClock();
+    const timer = setInterval(updateClock, 1000);
+
+    return () => clearInterval(timer);
+  }, [site?.timezone]);
+
   return (
     <div className="bg-white border-2 border-slate-200 rounded-3xl p-5 shadow-sm hover:shadow-md transition-all flex flex-col justify-between min-h-[500px]">
       <div>
         {/* HEADER */}
-        <div className="flex justify-between items-start mb-5">
-          <div className="flex items-center gap-3">
-            <div className="w-12 h-12 bg-slate-900 rounded-2xl flex items-center justify-center text-white font-black text-sm shadow-lg shadow-slate-200">
+        <div className="flex justify-between items-start mb-5 gap-2">
+          <div className="flex items-center gap-3 min-w-0">
+            <div className="w-11 h-11 bg-slate-900 rounded-2xl flex-shrink-0 flex items-center justify-center text-white font-black text-xs shadow-lg shadow-slate-200">
               {site.fuelStationNumber}
             </div>
-            <div>
-              <h3 className="text-sm font-black text-slate-800 uppercase leading-tight truncate w-32">{site.stationName}</h3>
-              <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wide">{site.province}</p>
+            <div className="min-w-0">
+              <h3 className="text-sm font-black text-slate-800 uppercase leading-tight truncate">
+                {site.stationName}
+              </h3>
+              <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wide">
+                {site.province}
+              </p>
+            </div>
+          </div>
+
+          {/* COMPACT CLOCK: No label, date & time on one line */}
+          <div className="flex flex-col items-end flex-shrink-0 pt-0.5">
+            <div className="flex items-center gap-1.5 bg-slate-100 border border-slate-200 px-2 py-1 rounded-lg">
+              {/* Small pulse dot */}
+              <div className="relative flex h-1.5 w-1.5">
+                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-blue-400 opacity-75"></span>
+                <span className="relative inline-flex rounded-full h-1.5 w-1.5 bg-blue-600"></span>
+              </div>
+
+              {/* Date & Time: Using a very tight font-mono */}
+              <span className="text-[10px] font-mono font-black text-slate-700 tracking-tighter uppercase whitespace-nowrap">
+                {stationTime || '--/-- --:--'}
+              </span>
             </div>
           </div>
         </div>
@@ -344,7 +386,13 @@ function PipelineBlock({ site, date }: { site: any; date: Date }) {
         {/* LOGISTICS SECTION */}
         <div className="mb-2">
           <div className="flex justify-between items-center px-1 mb-2">
-            <p className="text-[10px] font-black text-slate-400 uppercase tracking-wide text-indigo-600">Active Pipeline</p>
+            <div className="flex items-center gap-2">
+              <p className="text-[10px] font-black text-indigo-600 uppercase tracking-wide">
+                {isPast ? 'Past Records' : isToday ? 'Today\'s Pipeline' : 'Future Projection'}
+              </p>
+              {/* Optional: Add a small pulsating dot for Today */}
+              {isToday && <div className="w-1.5 h-1.5 rounded-full bg-indigo-600 animate-ping" />}
+            </div>
             <span className="text-[10px] font-bold bg-slate-100 text-slate-600 px-2 py-0.5 rounded-full">
               {orders.length} Records
             </span>
@@ -352,26 +400,22 @@ function PipelineBlock({ site, date }: { site: any; date: Date }) {
 
           <div className="h-[180px] overflow-y-auto custom-scrollbar pr-1 pb-0 space-y-2">
             {orders.length === 0 ? (
-              <div className="h-full flex flex-col items-center justify-center text-[10px] text-slate-400 italic bg-slate-50 rounded-xl border border-dashed border-slate-200 p-4 pb-0 text-center">
-                No pipeline activity
+              <div className="h-full flex flex-col items-center justify-center text-[10px] text-slate-400 italic bg-slate-50 rounded-xl border border-dashed border-slate-200 p-4 text-center">
+                No activity for this date
               </div>
             ) : (
               orders.map((order: any) => {
-                // const estDate = new Date(order.estimatedDeliveryDate).toISOString().split('T')[0];
-                // const origDate = new Date(order.originalDeliveryDate).toISOString().split('T')[0];
                 const estDate = getUTCString(order.estimatedDeliveryDate);
                 const origDate = getUTCString(order.originalDeliveryDate);
 
+                // These depend on activeDateStr being defined correctly above
                 const wasMovedFromHere = origDate === activeDateStr && estDate !== activeDateStr;
                 const arrivedHereFromHistory = estDate === activeDateStr && origDate !== activeDateStr;
 
-                // 3. For the Display Labels, use formatInTimeZone or append a "T12:00:00" 
-                // to force the formatter to stay on the correct day.
                 const formatSafeDate = (dateStr: string) => {
-                  // Adding 'T12:00:00' ensures that even with a large timezone offset, 
-                  // it stays on the same calendar day.
                   return format(new Date(dateStr.split('T')[0] + 'T12:00:00'), 'EEE, MMM do');
                 };
+
                 // --- 1. COLLAPSED VIEW (MOVED ORDERS) ---
                 if (wasMovedFromHere) {
                   return (
@@ -390,7 +434,7 @@ function PipelineBlock({ site, date }: { site: any; date: Date }) {
                   );
                 }
 
-                // --- 2. FULL VIEW (ARRIVING TODAY) ---
+                // --- 2. FULL VIEW (ACTIVE ON THIS DATE) ---
                 const statusStyles = getStatusColor(order.currentStatus || 'no status');
                 return (
                   <div key={order._id} className={`${statusStyles} border flex flex-col gap-1 p-2.5 rounded-xl transition-all shadow-sm`}>
@@ -398,7 +442,9 @@ function PipelineBlock({ site, date }: { site: any; date: Date }) {
                       <div className="flex items-center gap-2">
                         <span className="text-[11px] font-black uppercase">{order.poNumber}</span>
                         {arrivedHereFromHistory && (
-                          <span className="text-[8px] px-1 bg-white/50 rounded text-slate-600 font-bold uppercase">From {formatSafeDate(order.originalDeliveryDate)}</span>
+                          <span className="text-[8px] px-1 bg-white/50 rounded text-slate-600 font-bold uppercase">
+                            From {formatSafeDate(order.originalDeliveryDate)}
+                          </span>
                         )}
                       </div>
                       <OrderDetailsDialog
@@ -413,7 +459,9 @@ function PipelineBlock({ site, date }: { site: any; date: Date }) {
                     <div className="flex items-center justify-between mt-0.5">
                       <div className="flex items-center gap-1 opacity-80">
                         <Clock className="h-3 w-3" />
-                        <span className="text-[9px] font-bold">{order.estimatedDeliveryWindow?.start} - {order.estimatedDeliveryWindow?.end}</span>
+                        <span className="text-[9px] font-bold">
+                          {order.estimatedDeliveryWindow?.start} - {order.estimatedDeliveryWindow?.end}
+                        </span>
                       </div>
                       <span className="text-[10px] font-black bg-white/40 px-1.5 py-0.5 rounded">
                         {order.items?.reduce((a: number, b: any) => a + b.ltrs, 0).toLocaleString()} L

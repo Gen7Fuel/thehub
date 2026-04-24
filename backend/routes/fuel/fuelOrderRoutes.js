@@ -6,6 +6,7 @@ const FuelOrder = require('../../models/fuel/FuelOrder');
 const FuelCarrier = require('../../models/fuel/FuelCarrier');
 const FuelSupplier = require('../../models/fuel/FuelSupplier');
 const FuelRack = require('../../models/fuel/FuelRack');
+const moment = require('moment-timezone');
 const { ConfidentialClientApplication } = require("@azure/msal-node");
 const { Client } = require("@microsoft/microsoft-graph-client");
 
@@ -61,35 +62,31 @@ const formatEmailDayDate = (dateStr) => {
   return `${dayName} ${formatPDFDate(dateStr, false)}`;
 };
 
-// routes/fuelOrders.js
 router.get('/workspace-orders', async (req, res) => {
   try {
-    const { stationId, date } = req.query;
+    const { stationId, date } = req.query; // date is "YYYY-MM-DD"
 
     if (!stationId || !date) {
       return res.status(400).json({ message: "Station ID and Date are required" });
     }
 
-    // Use UTC to match how MongoDB stores the dates from your post route
-    const start = new Date(date);
-    start.setUTCHours(0, 0, 0, 0);
-    const end = new Date(date);
-    end.setUTCHours(23, 59, 59, 999);
+    // 1. Fetch station to get its local timezone
+    const station = await Location.findById(stationId).select('timezone').lean();
+    const tz = station?.timezone || 'America/Toronto';
+
+    // 2. Create a 24-hour window based on the STATION'S wall clock
+    const start = moment.tz(date, tz).startOf('day').toDate();
+    const end = moment.tz(date, tz).endOf('day').toDate();
 
     const orders = await FuelOrder.find({
       station: stationId,
       $or: [
-        // Case A: Scheduled for today
         { estimatedDeliveryDate: { $gte: start, $lte: end } },
-        // Case B: Originally for today, but moved elsewhere
         { originalDeliveryDate: { $gte: start, $lte: end } }
       ]
     })
-      // Mapped to match your Schema exactly (removing 'Id' suffix)
-      .populate('carrier', 'carrierName')
-      .populate('supplier', 'supplierName')
-      .populate('rack', 'rackName rackLocation')
-      .populate('station', 'stationName fuelStationNumber fuelCustomerName address')
+      .populate('carrier supplier rack')
+      .populate('station', 'stationName timezone')
       .lean();
 
     res.json(orders);
@@ -98,17 +95,63 @@ router.get('/workspace-orders', async (req, res) => {
   }
 });
 
+// // routes/fuelOrders.js
+// router.get('/workspace-orders', async (req, res) => {
+//   try {
+//     const { stationId, date } = req.query;
+
+//     if (!stationId || !date) {
+//       return res.status(400).json({ message: "Station ID and Date are required" });
+//     }
+
+//     // Use UTC to match how MongoDB stores the dates from your post route
+//     const start = new Date(date);
+//     start.setUTCHours(0, 0, 0, 0);
+//     const end = new Date(date);
+//     end.setUTCHours(23, 59, 59, 999);
+
+//     const orders = await FuelOrder.find({
+//       station: stationId,
+//       $or: [
+//         // Case A: Scheduled for today
+//         { estimatedDeliveryDate: { $gte: start, $lte: end } },
+//         // Case B: Originally for today, but moved elsewhere
+//         { originalDeliveryDate: { $gte: start, $lte: end } }
+//       ]
+//     })
+//       // Mapped to match your Schema exactly (removing 'Id' suffix)
+//       .populate('carrier', 'carrierName')
+//       .populate('supplier', 'supplierName')
+//       .populate('rack', 'rackName rackLocation')
+//       .populate('station', 'stationName fuelStationNumber fuelCustomerName address')
+//       .lean();
+
+//     res.json(orders);
+//   } catch (err) {
+//     res.status(500).json({ message: err.message });
+//   }
+// });
+
 // fuelOrderRoutes.js
 // fuelOrderRoutes.js
 router.get('/check-existing', async (req, res) => {
   try {
-    const { stationId, orderDate } = req.query;
+    const { stationId, orderDate } = req.query; // orderDate is "YYYY-MM-DD"
 
-    const start = new Date(orderDate);
-    start.setUTCHours(0, 0, 0, 0);
-    const end = new Date(orderDate);
-    end.setUTCHours(23, 59, 59, 999);
+    // 1. Get the station timezone
+    const station = await Location.findById(stationId).select('timezone').lean();
+    const tz = station?.timezone || 'America/Toronto';
 
+    // 2. Define the start and end of that day in the STATION's timezone
+    // .startOf('day') gives 00:00:00.000 in local time
+    // .endOf('day') gives 23:59:59.999 in local time
+    const start = moment.tz(orderDate, tz).startOf('day').toDate();
+    const end = moment.tz(orderDate, tz).endOf('day').toDate();
+
+    // console.log(`[DEBUG] Checking existing orders for station ${stationId}`);
+    // console.log(`[DEBUG] Timezone: ${tz} | Window: ${start.toISOString()} to ${end.toISOString()}`);
+
+    // 3. Query using the localized UTC window
     const existingOrders = await FuelOrder.find({
       station: stationId,
       orderDate: { $gte: start, $lte: end }
@@ -119,6 +162,7 @@ router.get('/check-existing', async (req, res) => {
       existingOrders: existingOrders
     });
   } catch (err) {
+    console.error(err);
     res.status(500).json({ error: err.message });
   }
 });
@@ -365,13 +409,18 @@ router.post('/', async (req, res) => {
     for (const orderData of orders) {
       const station = await Location.findById(orderData.stationId).lean();
 
+      const tz = station?.timezone || 'America/Toronto';
+
+      // Use moment-timezone to pin delivery to the station's local start-of-day
+      const stationMidnight = moment.tz(deliveryDate, tz).startOf('day').toDate();
+
       // Save to MongoDB
       const newOrder = new FuelOrder({
         poNumber: orderData.poNumber,
         orderDate: new Date(orderDate),
-        originalDeliveryDate: new Date(deliveryDate),
+        originalDeliveryDate: stationMidnight,
         originalDeliveryWindow: { start: startTime, end: endTime },
-        estimatedDeliveryDate: new Date(deliveryDate),
+        estimatedDeliveryDate: stationMidnight,
         estimatedDeliveryWindow: { start: startTime, end: endTime },
         rack: rackId,
         supplier: supplierId,
@@ -420,7 +469,6 @@ router.post('/', async (req, res) => {
       <div style="font-family: Arial, sans-serif; line-height: 1.5;">
         <p>Hello Team,</p>
         <p>Here is our load for ${combinedCustomerNames} ${formattedDate}</p>
-        <p>Please let me know if you have any questions.</p>
         <p>
           <b><u>Pick Up: ${rack.rackName} ${rack.rackLocation} Terminal - ${supplier.supplierName} Badge (${badgeNo})</u></b>
         </p>
@@ -468,32 +516,44 @@ router.post('/', async (req, res) => {
   }
 });
 
+// router.put('/:id', ...)
 router.put('/:id', async (req, res) => {
   try {
-    const {
-      estimatedDeliveryDate,
-      estimatedDeliveryWindow,
-      items,
-      currentStatus
+    const { 
+      estimatedDeliveryDate, 
+      estimatedDeliveryWindow, 
+      items, 
+      currentStatus,
+      // NEW FIELDS
+      rack,
+      supplier,
+      badgeNo,
+      carrier
     } = req.body;
 
     const order = await FuelOrder.findById(req.params.id);
     if (!order) return res.status(404).json({ message: "Order not found" });
 
-    // 1. Handle Rescheduling
-    if (estimatedDeliveryDate) order.estimatedDeliveryDate = estimatedDeliveryDate;
-    if (estimatedDeliveryWindow) order.estimatedDeliveryWindow = estimatedDeliveryWindow;
+    // Existing Date Logic...
+    if (estimatedDeliveryDate) {
+       const station = await Location.findById(order.station).lean();
+       const tz = station?.timezone || 'America/Toronto';
+       order.estimatedDeliveryDate = moment.tz(estimatedDeliveryDate, tz).startOf('day').toDate();
+    }
 
-    // 2. Handle Quantity Updates
+    // Update Metadata if provided
+    if (rack) order.rack = rack;
+    if (supplier) order.supplier = supplier;
+    if (badgeNo) order.badgeNo = badgeNo;
+    if (carrier) order.carrier = carrier; // Even if view-only in UI, keep it here for safety
+
+    if (estimatedDeliveryWindow) order.estimatedDeliveryWindow = estimatedDeliveryWindow;
     if (items) order.items = items;
 
-    // 3. Handle Status Update + History
+    // Status History logic...
     if (currentStatus && currentStatus !== order.currentStatus) {
-      order.currentStatus = currentStatus;
-      order.statusHistory.push({
-        status: currentStatus,
-        timestamp: new Date()
-      });
+       order.currentStatus = currentStatus;
+       order.statusHistory.push({ status: currentStatus, timestamp: new Date() });
     }
 
     await order.save();
@@ -502,5 +562,38 @@ router.put('/:id', async (req, res) => {
     res.status(500).json({ message: err.message });
   }
 });
+// router.put('/:id', async (req, res) => {
+//   try {
+//     const { estimatedDeliveryDate, estimatedDeliveryWindow, items, currentStatus } = req.body;
+
+//     const order = await FuelOrder.findById(req.params.id);
+//     if (!order) return res.status(404).json({ message: "Order not found" });
+
+//     if (estimatedDeliveryDate) {
+//       // Fetch the location to get the station's timezone
+//       const station = await Location.findById(order.station).lean();
+//       const tz = station?.timezone || 'America/Toronto';
+
+//       // Force the date to be the START of the day in that timezone, then save
+//       order.estimatedDeliveryDate = moment.tz(estimatedDeliveryDate, tz).startOf('day').toDate();
+//     }
+
+//     if (estimatedDeliveryWindow) order.estimatedDeliveryWindow = estimatedDeliveryWindow;
+//     if (items) order.items = items;
+
+//     if (currentStatus && currentStatus !== order.currentStatus) {
+//       order.currentStatus = currentStatus;
+//       order.statusHistory.push({
+//         status: currentStatus,
+//         timestamp: new Date() // Actual timestamp of the update
+//       });
+//     }
+
+//     await order.save();
+//     res.json(order);
+//   } catch (err) {
+//     res.status(500).json({ message: err.message });
+//   }
+// });
 
 module.exports = router;
