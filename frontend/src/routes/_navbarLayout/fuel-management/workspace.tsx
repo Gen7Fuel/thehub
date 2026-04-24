@@ -14,7 +14,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogFooter
 } from "@/components/ui/dialog";
-import { format, addDays, isAfter, startOfDay } from "date-fns";
+import { format, addDays, isAfter, startOfDay, subDays, isBefore } from "date-fns";
 import { WorkspaceDatePicker, DatePicker } from '@/components/custom/datePicker';
 import { Loader2, RefreshCw, Truck, Clock, Edit3, CheckCircle2, PackagePlus, AlertTriangle, FileText, Download } from 'lucide-react';
 import { Badge } from "@/components/ui/badge";
@@ -22,6 +22,8 @@ import { Badge } from "@/components/ui/badge";
 import { getGradeTheme } from "./manage/locations/$id"
 import { POPreviewDocument, formatPDFDate, getISODateOnly } from "@/components/custom/fuelPoPDF"
 import { PDFViewer, PDFDownloadLink } from '@react-pdf/renderer';
+import { formatInTimeZone, toZonedTime } from 'date-fns-tz';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 
 export const Route = createFileRoute('/_navbarLayout/fuel-management/workspace')({
   component: WorkspaceComponent,
@@ -64,6 +66,46 @@ function WorkspaceComponent() {
     }
   });
 
+  // Fetch all racks once at the top level
+  const { data: racks = [] } = useQuery({
+    queryKey: ['all-racks'],
+    queryFn: async () => {
+      const res = await axios.get('/api/fuel-racks', authHeader);
+      return res.data;
+    },
+    staleTime: 5 * 60 * 1000, // Optional: Keep data fresh for 5 minutes
+  });
+
+  // Place this inside WorkspaceComponent, after the 'locations' useQuery
+
+  const sortedSelectedStations = useMemo(() => {
+    // 1. Map IDs to full objects
+    const selectedLocs = selectedStationIds
+      .map(id => locations.find((l: any) => l._id === id))
+      .filter(Boolean);
+
+    // 2. Sort logic
+    return [...selectedLocs].sort((a: any, b: any) => {
+      const provA = (a.province || "").toUpperCase();
+      const provB = (b.province || "").toUpperCase();
+
+      // --- STEP 1: PROVINCE PRIORITY ---
+      // If provinces are different, handle Ontario vs Others
+      if (provA !== provB) {
+        if (provA === "ON" || provA === "ONTARIO") return -1;
+        if (provB === "ON" || provB === "ONTARIO") return 1;
+        return provA.localeCompare(provB);
+      }
+
+      // --- STEP 2: NATURAL SELECTION ORDER ---
+      // If they are in the same province, use the order of selectedStationIds
+      const indexA = selectedStationIds.indexOf(a._id);
+      const indexB = selectedStationIds.indexOf(b._id);
+
+      return indexA - indexB;
+    });
+  }, [selectedStationIds, locations]);
+
   const hasInitialLoaded = useRef(false);
 
   useEffect(() => {
@@ -86,11 +128,11 @@ function WorkspaceComponent() {
   }, [locations, stationSearch]);
 
   const shiftDate = (amount: number) => {
-    const today = startOfDay(new Date());
-    const maxFuture = addDays(today, 4);
+    // Use pure local system time for the "Future" boundary
+    const localToday = startOfDay(new Date());
+    const maxFuture = addDays(localToday, 4);
     const newDate = addDays(selectedDate, amount);
 
-    // Allow infinite past, but restrict future to +3 days
     if (isAfter(newDate, maxFuture)) return;
     setSelectedDate(newDate);
   };
@@ -295,7 +337,7 @@ function WorkspaceComponent() {
       </div >
 
       {/* WORKSPACE STRIPS AREA */}
-      < div className="w-full px-0 py-0 space-y-0" >
+      {/* < div className="w-full px-0 py-0 space-y-0" >
         {
           selectedStationIds.length === 0 ? (
             <div className="w-full h-96 border-4 border-dashed rounded-3xl flex flex-col items-center justify-center text-slate-300">
@@ -311,31 +353,63 @@ function WorkspaceComponent() {
             })
           )
         }
-      </div >
+      </div > */}
+      {/* WORKSPACE STRIPS AREA */}
+      <div className="w-full px-0 py-0 space-y-0">
+        {selectedStationIds.length === 0 ? (
+          <div className="w-full h-96 border-4 border-dashed rounded-3xl flex flex-col items-center justify-center text-slate-300">
+            <Building2 className="h-20 w-20 mb-4 opacity-20" />
+            <p className="text-xl font-bold italic opacity-30">Select stations above to begin operations</p>
+          </div>
+        ) : (
+          // Use the sorted objects here
+          sortedSelectedStations.map((locData: any) => (
+            <StationStrip
+              key={locData._id}
+              location={locData}
+              date={selectedDate}
+              racks={racks}
+            />
+          ))
+        )}
+      </div>
     </div >
   );
 }
 
-function StationStrip({ location, date }: { location: any, date: Date }) {
+function StationStrip({ location, date, racks }: { location: any, date: Date, racks: any[] }) {
 
   const [rescheduleOrder, setRescheduleOrder] = useState<any>(null);
   const [updateStatusOrder, setUpdateStatusOrder] = useState<any>(null);
   const [editQtyOrder, setEditQtyOrder] = useState<any>(null);
   const [viewingPO, setViewingPO] = useState<any | null>(null);
+  const [stationTime, setStationTime] = useState('');
+  // State to track which order is currently being edited for logistics metadata
+  const [editMetaOrder, setEditMetaOrder] = useState<any | null>(null);
 
-  // 1. Update your useQuery to handle the new object structure
+  const stationTz = location.timezone || 'America/Toronto';
+  const selectedDateStr = format(date, 'yyyy-MM-dd');
+
   const { data: tankResponse, isLoading: isTanksLoading } = useQuery({
-    queryKey: ['station-tanks', location?._id, format(date, 'yyyy-MM-dd')],
+    queryKey: ['station-tanks', location?._id, selectedDateStr],
     queryFn: async () => {
       const res = await axios.get(
-        `/api/fuel-station-tanks/station/${location._id}?date=${date.toISOString()}`,
+        `/api/fuel-station-tanks/station/${location._id}?date=${selectedDateStr}`,
         authHeader
       );
       return res.data;
     },
-    enabled: !!location?._id,
   });
 
+  // Use the date provided by the SERVER
+  const stationTodayStr = tankResponse?.stationToday || formatInTimeZone(new Date(), stationTz, 'yyyy-MM-dd');
+
+  // Now comparisons are relative to the SERVER clock
+  const isToday = selectedDateStr === stationTodayStr;
+  const isPast = stationTodayStr ? selectedDateStr < stationTodayStr : false;
+  const isFuture = stationTodayStr ? selectedDateStr > stationTodayStr : false;
+
+  const dateParam = selectedDateStr;
   // Extract data from response
   const tanks = tankResponse?.tanks || [];
   const lastTxAt = tankResponse?.lastTransaction;
@@ -378,10 +452,10 @@ function StationStrip({ location, date }: { location: any, date: Date }) {
 
   // Fetch Orders (Your existing logic)
   const { data: orders = [], isLoading } = useQuery({
-    queryKey: ['workspace-orders', location?._id, format(date, 'yyyy-MM-dd')],
+    queryKey: ['workspace-orders', location?._id, dateParam], // Use dateParam
     queryFn: async () => {
       const res = await axios.get(
-        `/api/fuel-orders/workspace-orders?stationId=${location._id}&date=${date.toISOString()}`,
+        `/api/fuel-orders/workspace-orders?stationId=${location._id}&date=${dateParam}`, // Send string, not ISO
         authHeader
       );
       return res.data;
@@ -423,22 +497,38 @@ function StationStrip({ location, date }: { location: any, date: Date }) {
     'Dyed Diesel': 'DYED'
   };
 
-  const today = new Date();
-  today.setHours(0, 0, 0, 0);
+  useEffect(() => {
+    const tz = location?.timezone || 'America/Toronto';
 
-  const selected = new Date(date);
-  selected.setHours(0, 0, 0, 0);
+    const updateClock = () => {
+      const now = new Date();
+      // 'MMM do' adds the ordinal (st, nd, rd, th) for the date
+      const formatted = formatInTimeZone(now, tz, 'MMM do, h:mm:ss a');
+      setStationTime(formatted);
+    };
 
-  const isPast = selected.getTime() < today.getTime();
-  const isToday = selected.getTime() === today.getTime();
-  const isFuture = selected.getTime() > today.getTime();
+    updateClock();
+    const timer = setInterval(updateClock, 1000);
+
+    return () => clearInterval(timer);
+  }, [location?.timezone]);
+
+  // const today = new Date();
+  // today.setHours(0, 0, 0, 0);
+
+  // const selected = new Date(date);
+  // selected.setHours(0, 0, 0, 0);
+
+  // const isPast = selected.getTime() < today.getTime();
+  // const isToday = selected.getTime() === today.getTime();
+  // const isFuture = selected.getTime() > today.getTime();
 
   // Helper to get the YYYY-MM-DD string without timezone shifting
-  const getUTCString = (dateInput: string | Date) => {
-    const d = new Date(dateInput);
-    // This extracts the year, month, and day directly from the UTC values
-    return d.toISOString().split('T')[0];
-  };
+  // const getUTCString = (dateInput: string | Date) => {
+  //   const d = new Date(dateInput);
+  //   // This extracts the year, month, and day directly from the UTC values
+  //   return d.toISOString().split('T')[0];
+  // };
 
   return (
     <>
@@ -449,16 +539,41 @@ function StationStrip({ location, date }: { location: any, date: Date }) {
           <div className="w-full xl:w-2/5 p-3 bg-slate-50/50 border-r border-slate-100 flex flex-col justify-between">
             <div>
               <div className="flex items-center gap-3 mb-2"> {/* Reduced margin from mb-6 */}
-                <div className="bg-white p-0 rounded-xl border-2 border-slate-100 shadow-sm font-black text-blue-700 font-mono text-lg">
+                {/* Station Number Badge */}
+                <div className="bg-white px-2 py-1 rounded-xl border-2 border-slate-100 shadow-sm font-black text-blue-700 font-mono text-lg mt-1">
                   {location?.fuelStationNumber || '00'}
                 </div>
-                <div>
-                  <h2 className="text-xl font-black text-slate-800 leading-tight tracking-tight uppercase">
-                    {location?.stationName}
-                  </h2>
-                  <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wide">
-                    {location?.address}
-                  </p>
+
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center justify-between gap-4">
+                    <div className="flex flex-col min-w-0">
+                      <h2 className="text-xl font-black text-slate-800 leading-none tracking-tight uppercase truncate">
+                        {location?.stationName}
+                      </h2>
+                      <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wide truncate mt-1">
+                        {location?.address}
+                      </p>
+                    </div>
+
+                    {/* COMPACT LIVE STATION CLOCK & DATE */}
+                    <div className="flex items-center gap-2 bg-slate-900 text-white pl-2 pr-3 py-1.5 rounded-xl shadow-lg border border-slate-800 flex-shrink-0">
+                      {/* Live Ping Indicator */}
+                      <div className="relative flex h-2 w-2 mr-1">
+                        <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+                        <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
+                      </div>
+
+                      {/* Date & Time String */}
+                      <div className="flex items-center gap-2">
+                        <span className="text-[11px] font-black text-slate-400 uppercase tracking-widest border-r border-slate-700 pr-2">
+                          Station Local
+                        </span>
+                        <span className="text-[12px] font-mono font-black tracking-tighter uppercase whitespace-nowrap">
+                          {stationTime || 'Syncing...'}
+                        </span>
+                      </div>
+                    </div>
+                  </div>
                 </div>
               </div>
 
@@ -618,26 +733,25 @@ function StationStrip({ location, date }: { location: any, date: Date }) {
                 </div>
               ) : (
                 orders.map((order: any) => {
-                  // 1. Get plain YYYY-MM-DD strings in UTC
-                  const estDate = getUTCString(order.estimatedDeliveryDate);
-                  const origDate = getUTCString(order.originalDeliveryDate);
+                  const stationTz = location.timezone || 'America/Toronto';
 
-                  // 2. Format the active 'date' from the page (ensure this is also treated as a string)
+                  // 1. Convert DB dates to simple YYYY-MM-DD strings relative to the Station
+                  const estDate = formatInTimeZone(new Date(order.estimatedDeliveryDate), stationTz, 'yyyy-MM-dd');
+                  const origDate = formatInTimeZone(new Date(order.originalDeliveryDate), stationTz, 'yyyy-MM-dd');
+
+                  // 2. Format the active 'date' prop from your page
                   const activeDateStr = format(date, 'yyyy-MM-dd');
 
                   const isDelivered = order.currentStatus === 'Delivered';
                   const wasMovedFromHere = origDate === activeDateStr && estDate !== activeDateStr;
                   const arrivedHereFromHistory = estDate === activeDateStr && origDate !== activeDateStr;
 
-                  // 3. For the Display Labels, use formatInTimeZone or append a "T12:00:00" 
-                  // to force the formatter to stay on the correct day.
-                  const formatSafeDate = (dateStr: string) => {
-                    // Adding 'T12:00:00' ensures that even with a large timezone offset, 
-                    // it stays on the same calendar day.
-                    return format(new Date(dateStr.split('T')[0] + 'T12:00:00'), 'EEE, MMM do');
+                  // Use your formatSafeDate helper for display labels
+                  const formatSafeDate = (dateInput: string | Date) => {
+                    return formatInTimeZone(new Date(dateInput), stationTz, 'EEE, MMM do');
                   };
 
-                  // --- 1. COLLAPSED VIEW (For orders moved to a different day) ---
+                  // --- UI Rendering follows your existing logic ---
                   if (wasMovedFromHere) {
                     return (
                       <div key={order._id} className="flex items-center justify-between p-3 bg-slate-50/50 border-2 border-dashed border-slate-200 rounded-xl">
@@ -699,6 +813,17 @@ function StationStrip({ location, date }: { location: any, date: Date }) {
                             <span className="text-slate-300">•</span>
                             <span className="text-blue-500 uppercase">{order.carrier?.carrierName || 'No Carrier'}</span>
                           </div>
+
+                          {/* NEW EDIT META BUTTON */}
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            disabled={isDelivered}
+                            onClick={() => setEditMetaOrder(order)} // Opens the dialog by setting the order
+                            className="h-6 w-6 p-0 text-slate-400 hover:text-blue-600"
+                          >
+                            <Edit3 className="h-3.5 w-3.5" />
+                          </Button>
 
                           {/* NEW VIEW PO BUTTON */}
                           <Button
@@ -803,6 +928,20 @@ function StationStrip({ location, date }: { location: any, date: Date }) {
           locationId={location._id}
         />
       )}
+
+      {/* Logistics Metadata Editor Dialog */}
+      {editMetaOrder && (
+        <EditMetaDialog
+          isOpen={!!editMetaOrder}
+          onOpenChange={(open: boolean) => !open && setEditMetaOrder(null)}
+          order={editMetaOrder}
+          racks={racks} // Ensure the 'racks' list is available in the parent component
+          onUpdateSuccess={() => {
+            // Refresh the specific station data after a successful save
+            queryClient.invalidateQueries({ queryKey: ['workspace-orders', location._id] });
+          }}
+        />
+      )}
       <Dialog open={!!viewingPO} onOpenChange={(open) => !open && setViewingPO(null)}>
         <DialogContent className="max-w-5xl h-[90vh] flex flex-col">
           <DialogHeader>
@@ -874,11 +1013,26 @@ function StationStrip({ location, date }: { location: any, date: Date }) {
 }
 
 export function RescheduleDialog({ order, isOpen, onOpenChange, locationId }: RescheduleDialogProps) {
-  const [date, setDate] = useState<Date | undefined>(new Date(order.estimatedDeliveryDate));
+  const [date, setDate] = useState<Date | undefined>(() => {
+    // Use the existing order date but ensure it's treated as local for the picker
+    return order.estimatedDeliveryDate ? new Date(order.estimatedDeliveryDate) : new Date();
+  });
   const [window, setWindow] = useState(order.estimatedDeliveryWindow || { start: "08:00", end: "12:00" });
 
   const queryClient = useQueryClient();
   const authHeader = { headers: { Authorization: `Bearer ${localStorage.getItem('token')}` } };
+
+  const allowedMinDate = useMemo(() => {
+    const tz = order.station?.timezone || 'America/Toronto';
+
+    // 1. Get current time in the Station's Timezone
+    const nowInStationTz = toZonedTime(new Date(), tz);
+
+    // 2. Subtract 1 day and set to 00:00:00
+    const yesterdayInStationTz = startOfDay(subDays(nowInStationTz, 1));
+
+    return yesterdayInStationTz;
+  }, [order.station?.timezone]);
 
   const mutation = useMutation({
     mutationFn: async (updateData: any) => {
@@ -892,27 +1046,20 @@ export function RescheduleDialog({ order, isOpen, onOpenChange, locationId }: Re
     }
   });
 
+  const isInvalidDate = useMemo(() => {
+    if (!date) return false;
+    return isBefore(startOfDay(date), allowedMinDate);
+  }, [date, allowedMinDate])
+
   const handleConfirm = () => {
-    if (!date) return;
-
-    // 1. Get "Today" at midnight for accurate comparison
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
-
-    // 2. Get the selected date at midnight
-    const selectedDate = new Date(date);
-    selectedDate.setHours(0, 0, 0, 0);
-
-    // 3. Validation Gate
-    if (selectedDate < today) {
-      // You can replace this alert with a toast.error() if you're using Sonner/React-Hot-Toast
-      alert("Cannot reschedule an order to a past date.");
-      return;
-    }
+    if (!date || isInvalidDate) return;
+    // Use a library like 'date-fns' or just format it manually to YYYY-MM-DD
+    // This ensures we send "2026-04-25" instead of an ISO string with a timezone
+    const dateString = format(date, 'yyyy-MM-dd');
 
     // 4. Proceed with mutation if validation passes
     mutation.mutate({
-      estimatedDeliveryDate: date,
+      estimatedDeliveryDate: dateString, // Send the string!
       estimatedDeliveryWindow: window
     });
   };
@@ -928,12 +1075,19 @@ export function RescheduleDialog({ order, isOpen, onOpenChange, locationId }: Re
 
         <div className="space-y-6 py-4">
           <div className="flex flex-col gap-2">
-            <label className="text-[10px] font-black uppercase text-slate-400 tracking-wider">Move to Date</label>
+            <label className="text-[10px] font-black uppercase text-slate-400 tracking-wider">
+              Move to Date
+            </label>
             <DatePicker
               date={date}
               setDate={setDate}
-              disablePast={true}
             />
+            {/* 3. The Error Message */}
+            {isInvalidDate && (
+              <span className="text-[10px] text-red-500 font-bold uppercase mt-1 animate-in fade-in slide-in-from-top-1">
+                ⚠️ Date cannot be earlier than yesterday ({format(allowedMinDate, 'MMM do')})
+              </span>
+            )}
           </div>
 
           <div className="grid grid-cols-2 gap-4">
@@ -959,9 +1113,11 @@ export function RescheduleDialog({ order, isOpen, onOpenChange, locationId }: Re
         </div>
 
         <Button
-          className="w-full font-black uppercase tracking-widest bg-blue-600 hover:bg-blue-700 h-12 shadow-lg shadow-blue-100"
+          className="w-full font-black uppercase tracking-widest h-12 shadow-lg"
+          variant={isInvalidDate ? "secondary" : "default"} // Visual cue button is disabled
           onClick={handleConfirm}
-          disabled={mutation.isPending || !date}
+          // 4. Disable the button if the date is invalid
+          disabled={mutation.isPending || !date || isInvalidDate}
         >
           {mutation.isPending ? "Updating Schedule..." : "Confirm Reschedule"}
         </Button>
@@ -1105,6 +1261,165 @@ export function UpdateStatusDialog({ order, open, onOpenChange, locationId }: an
             </div>
           )}
         </div>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+export function EditMetaDialog({ order, isOpen, onOpenChange, racks, onUpdateSuccess }: any) {
+  const [selectedRack, setSelectedRack] = useState(order.rack?._id || order.rack);
+  const [suppliers, setSuppliers] = useState<any[]>([]);
+  const [selectedSupplier, setSelectedSupplier] = useState(order.supplier?._id || order.supplier);
+  const [badgeNo, setBadgeNo] = useState(order.badgeNo || '');
+  const [carrierName, _] = useState(order.carrier?.carrierName || 'No Carrier');
+  const [loading, setLoading] = useState(false);
+
+  const authHeader = { headers: { Authorization: `Bearer ${localStorage.getItem('token')}` } };
+
+  // Initialize and handle Rack changes
+  const handleRackChange = async (rackId: string) => {
+    try {
+      setLoading(true);
+      setSelectedRack(rackId);
+
+      // 1. Fetch Suppliers for this Rack
+      const supRes = await axios.get(`/api/fuel-suppliers?associatedRack=${rackId}`, authHeader);
+      const rackSuppliers = supRes.data;
+      setSuppliers(rackSuppliers);
+
+      // 2. Fetch Rack details for defaults
+      const rackRes = await axios.get(`/api/fuel-racks/${rackId}`, authHeader);
+      const rackData = rackRes.data;
+
+      // 3. Set Defaults
+      const defaultSup = rackSuppliers.find((s: any) => s._id === rackData.defaultSupplier) || rackSuppliers[0];
+      setSelectedSupplier(defaultSup?._id || '');
+
+      const defaultBadge = defaultSup?.supplierBadges?.find((b: any) => b.isDefault) || defaultSup?.supplierBadges?.[0];
+      setBadgeNo(defaultBadge?.badgeNumber || '');
+
+      setLoading(false);
+    } catch (err) {
+      console.error("Rack Change Error:", err);
+      setLoading(false);
+    }
+  };
+
+  // Handle manual supplier change
+  const handleSupplierChange = (supId: string) => {
+    setSelectedSupplier(supId);
+    const sup = suppliers.find(s => s._id === supId);
+    const defaultBadge = sup?.supplierBadges?.find((b: any) => b.isDefault) || sup?.supplierBadges?.[0];
+    setBadgeNo(defaultBadge?.badgeNumber || '');
+  };
+
+  // Initial load
+  useEffect(() => {
+    if (isOpen && selectedRack) {
+      handleRackChange(selectedRack);
+    }
+  }, [isOpen]);
+
+  const handleSave = async () => {
+    try {
+      await axios.put(`/api/fuel-orders/${order._id}`, {
+        rack: selectedRack,
+        supplier: selectedSupplier,
+        badgeNo: badgeNo
+      }, authHeader);
+      onUpdateSuccess();
+      onOpenChange(false);
+    } catch (err) {
+      console.error("Update failed", err);
+    }
+  };
+
+  return (
+    <Dialog open={isOpen} onOpenChange={onOpenChange}>
+      <DialogContent className="sm:max-w-[425px] font-sans">
+        <DialogHeader>
+          <DialogTitle className="font-black uppercase tracking-tight">Edit Order Logistics</DialogTitle>
+        </DialogHeader>
+
+        <div className="space-y-4 py-4">
+          {/* RACK SELECTOR */}
+          <div className="space-y-1">
+            <label className="text-[10px] font-black uppercase text-slate-400">Fuel Rack</label>
+            <Select value={selectedRack} onValueChange={handleRackChange}>
+              <SelectTrigger className="font-bold">
+                <SelectValue placeholder="Select Rack" />
+              </SelectTrigger>
+              <SelectContent>
+                {racks.map((r: any) => (
+                  <SelectItem key={r._id} value={r._id} className="font-bold uppercase">{r.rackName} ({r.rackLocation})</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+
+          {/* SUPPLIER SELECTOR */}
+          <div className="space-y-1">
+            <label className="text-[10px] font-black uppercase text-slate-400">Supplier</label>
+            <Select value={selectedSupplier} onValueChange={handleSupplierChange} disabled={loading}>
+              <SelectTrigger className="font-bold">
+                <SelectValue placeholder="Select Supplier" />
+              </SelectTrigger>
+              <SelectContent>
+                {suppliers.map((s: any) => (
+                  <SelectItem key={s._id} value={s._id} className="font-bold uppercase">{s.supplierName}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+
+          {/* BADGE SELECTOR (Dropdown instead of Input) */}
+          <div className="space-y-1">
+            <label className="text-[10px] font-black uppercase text-slate-400 tracking-wider">
+              Badge Number
+            </label>
+            <Select
+              value={badgeNo}
+              onValueChange={(v) => setBadgeNo(v)}
+              disabled={loading || !selectedSupplier}
+            >
+              <SelectTrigger className="font-mono w-full overflow-hidden border-2 border-slate-200">
+                <div className="truncate text-left font-bold">
+                  <SelectValue placeholder="Select Badge" />
+                </div>
+              </SelectTrigger>
+              <SelectContent className="max-w-[300px]">
+                {/* Find the current supplier from our local state list 
+                  to map through their specific badges 
+                */}
+                {suppliers
+                  .find(s => s._id === selectedSupplier)
+                  ?.supplierBadges.map((b: any) => (
+                    <SelectItem key={b.badgeNumber} value={b.badgeNumber}>
+                      <div className="flex items-center gap-2">
+                        <span className="font-bold">{b.badgeNumber}</span>
+                        <span className="text-slate-400 text-xs truncate">— {b.badgeName}</span>
+                        {b.isDefault && (
+                          <span className="text-[8px] bg-blue-100 text-blue-600 px-1 rounded">DEF</span>
+                        )}
+                      </div>
+                    </SelectItem>
+                  ))}
+              </SelectContent>
+            </Select>
+          </div>
+
+          {/* CARRIER (VIEW ONLY) */}
+          <div className="space-y-1 opacity-60">
+            <label className="text-[10px] font-black uppercase text-slate-400">Carrier (Read Only)</label>
+            <div className="h-10 px-3 flex items-center bg-slate-50 border rounded-md font-bold text-slate-500">
+              {carrierName}
+            </div>
+          </div>
+        </div>
+
+        <Button onClick={handleSave} className="w-full font-black uppercase h-12 bg-blue-600">
+          Save Changes
+        </Button>
       </DialogContent>
     </Dialog>
   );

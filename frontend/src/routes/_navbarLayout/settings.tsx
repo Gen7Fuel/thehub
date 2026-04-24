@@ -20,6 +20,8 @@ function RouteComponent() {
   const [cacheRefreshing, setCacheRefreshing] = useState(false);
   const [cacheMessage, setCacheMessage] = useState('');
 
+  const [syncing, setSyncing] = useState(false);
+  const [syncMessage, setSyncMessage] = useState('');
   // Retrieve access permissions from Auth provider
   // const access = user?.access || "{}" //markpoint
   const access = user?.access || {}
@@ -38,6 +40,25 @@ function RouteComponent() {
       setCacheMessage(err.response?.data?.error || 'Cache refresh failed');
     } finally {
       setCacheRefreshing(false);
+    }
+  };
+  // NEW SYNC HANDLER
+  const handleManualSync = async () => {
+    if (!confirm("This will pull sales and tank data for yesterday/today. Continue?")) return;
+
+    setSyncing(true);
+    setSyncMessage('');
+    try {
+      const res = await axios.post('/api/fuel-station-tanks/manual-daily-sync', null, {
+        headers: {
+          Authorization: `Bearer ${localStorage.getItem('token')}`,
+        },
+      });
+      setSyncMessage(res.data.message);
+    } catch (err: any) {
+      setSyncMessage(err.response?.data?.error || 'Manual sync failed');
+    } finally {
+      setSyncing(false);
     }
   };
   // Props to apply to the active link for highlighting
@@ -83,6 +104,20 @@ function RouteComponent() {
           </button>
           {cacheMessage && (
             <span className='text-xs text-gray-500 mt-1 pr-2'>{cacheMessage}</span>
+          )}
+          {/* NEW MANUAL SYNC BUTTON */}
+          <button
+            onClick={handleManualSync}
+            disabled={syncing}
+            className='p-2 text-sm text-orange-600 hover:text-orange-800 disabled:text-gray-400 cursor-pointer disabled:cursor-not-allowed text-right'
+          >
+            {syncing ? 'Syncing Data...' : 'Run Manual Fuel Sync'}
+          </button>
+
+          {(cacheMessage || syncMessage) && (
+            <span className='text-xs text-gray-500 mt-1 pr-2 text-right'>
+              {syncMessage || cacheMessage}
+            </span>
           )}
         </div>
       </aside>

@@ -82,53 +82,6 @@ export const getTankReadingsForDate = async (station_sk, tank_id, dateStr) => {
  * @param {string} dateStr - YYYY-MM-DD formatted date
  * @returns {Promise<Array>} Cleaned salesData array for Mongoose
  */
-// export const getProcessedFuelSales = async (csoCode, dateStr) => {
-//   // 1. Call the RPC with the wildcard for the LIKE operator
-//   const { data: rawData, error } = await supabase.rpc('get_fuel_sales_by_station_and_date', {
-//     target_cso_code: `${csoCode}%`,
-//     target_date: dateStr
-//   });
-
-//   if (error) throw new Error(`Supabase RPC Error: ${error.message}`);
-
-//   // 2. Initialize processing object
-//   let processed = {
-//     'Regular': 0,
-//     'Premium': 0,
-//     'Diesel': 0,
-//     'Dyed Diesel': 0
-//   };
-
-//   let midVolume = 0;
-
-//   // 3. Map raw codes to Model names and capture MID volume
-//   if (rawData) {
-//     rawData.forEach(item => {
-//       const vol = Number(item.total_volume) || 0;
-//       switch (item.raw_grade) {
-//         case 'REG': processed['Regular'] += vol; break;
-//         case 'PNL': processed['Premium'] += vol; break;
-//         case 'DSL': processed['Diesel'] += vol; break;
-//         case 'DYED': processed['Dyed Diesel'] += vol; break;
-//         case 'MID': midVolume = vol; break;
-//       }
-//     });
-//   }
-
-//   // 4. Apply the 50/50 Mid-grade split logic
-//   if (midVolume > 0) {
-//     processed['Regular'] += (midVolume / 2);
-//     processed['Premium'] += (midVolume / 2);
-//   }
-
-//   // 5. Convert to Mongoose schema format (only return grades with volume > 0)
-//   return Object.entries(processed)
-//     .filter(([_, vol]) => vol > 0)
-//     .map(([grade, volume]) => ({ 
-//       grade, 
-//       volume: parseFloat(volume.toFixed(2)) 
-//     }));
-// };
 export const getProcessedFuelSales = async (csoCode, dateStr) => {
   const { data: rawData, error } = await supabase.rpc('get_fuel_sales_by_station_and_date', {
     target_cso_code: `${csoCode}%`,
@@ -169,4 +122,34 @@ export const getProcessedFuelSales = async (csoCode, dateStr) => {
     .map(([grade, volume]) => ({ grade, volume: parseFloat(volume.toFixed(2)) }));
 
   return { salesData, lastTransaction: latestTs };
+};
+
+// Update your service helper to look at the transition
+export const getTankReadingsForCron = async (station_sk, tank_id, yesterdayStr, todayStr) => {
+  
+  // 1. Closing (Latest record from YESTERDAY)
+  const { data: closeData } = await supabase
+    .from('current_fuel_inventory')
+    .select('volume')
+    .eq('station_sk', station_sk)
+    .eq('tank_id', tank_id.toString())
+    .eq('date_sk', yesterdayStr)
+    .order('reading_time', { ascending: false })
+    .limit(1);
+
+  // 2. Opening (First record from TODAY - usually 00:00 or 12am)
+  const { data: openData } = await supabase
+    .from('current_fuel_inventory')
+    .select('volume, reading_time')
+    .eq('station_sk', station_sk)
+    .eq('tank_id', tank_id.toString())
+    .eq('date_sk', todayStr)
+    .order('reading_time', { ascending: true }) // Get the EARLIEST record of the new day
+    .limit(1);
+
+  return {
+    openingVolume: openData?.[0]?.volume || 0,
+    openingTime: openData?.[0]?.reading_time || "00:00:00",
+    closingVolume: closeData?.[0]?.volume || 0
+  };
 };
