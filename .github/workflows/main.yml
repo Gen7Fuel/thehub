@@ -153,6 +153,7 @@ jobs:
             export INTACCT_CLIENT_SECRET=${{ secrets.INTACCT_CLIENT_SECRET }}
             export INTACCT_CALLBACK_URL=${{ secrets.INTACCT_CALLBACK_URL }}
             export CDN_ADMIN_TOKEN=${{ secrets.CDN_ADMIN_TOKEN }}
+            export ACADEMY_ADMIN_TOKEN=${{ secrets.ACADEMY_ADMIN_TOKEN }}
             export NEXT_PUBLIC_SUPABASE_URL=${{ secrets.NEXT_PUBLIC_SUPABASE_URL }}
             export SUPABASE_SERVICE_ROLE_KEY=${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
             export GOOGLE_API_KEY=${{ secrets.GOOGLE_API_KEY }}
