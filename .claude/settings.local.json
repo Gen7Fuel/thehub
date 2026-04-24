@@ -24,7 +24,10 @@
       "Bash(xargs grep:*)",
       "Bash(find /c/Users/MohammadHasan/workspace/thehub/frontend/src -type f \\\\\\( -name \"*.tsx\" -o -name \"*.ts\" \\\\\\) -exec grep -l \"pending\\\\|desk\" {} \\\\;)",
       "Bash(node:*)",
-      "Read(//c/Users/MohammadHasan/workspace/**)"
+      "Read(//c/Users/MohammadHasan/workspace/**)",
+      "Bash(identify /c/Users/MohammadHasan/workspace/thehub/frontend/public/logo.png)",
+      "Bash(python -c \"from PIL import Image; print\\('pillow available'\\)\")",
+      "Bash(python3 -c \"from PIL import Image; print\\('pillow available'\\)\")"
     ]
   }
 }

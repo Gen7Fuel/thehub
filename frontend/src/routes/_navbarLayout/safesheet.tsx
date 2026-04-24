@@ -713,6 +713,8 @@ export default function RouteComponent() {
                             entry.getUTCDate() === now.getUTCDate()
                           )
                         })()
+                        const isBankDeposit = (e.cashDepositBank ?? 0) > 0
+                        const canEdit = isToday && isBankDeposit
 
                         return (
                           <tr
@@ -739,7 +741,7 @@ export default function RouteComponent() {
                                 <span
                                   className="block w-full cursor-text min-h-[1rem]"
                                   onDoubleClick={() =>
-                                    isToday &&
+                                    canEdit &&
                                     startEdit(e._id, 'description', e.description || '')
                                   }
                                 >
@@ -764,7 +766,7 @@ export default function RouteComponent() {
                                 <span
                                   className="block w-full cursor-text"
                                   onDoubleClick={() =>
-                                    isToday &&
+                                    canEdit &&
                                     startEdit(
                                       e._id,
                                       'cashIn',
@@ -793,7 +795,7 @@ export default function RouteComponent() {
                                 <span
                                   className="block w-full cursor-text"
                                   onDoubleClick={() =>
-                                    isToday &&
+                                    canEdit &&
                                     startEdit(
                                       e._id,
                                       'cashExpenseOut',
@@ -824,7 +826,7 @@ export default function RouteComponent() {
                                 <span
                                   className="block w-full cursor-text"
                                   onDoubleClick={() =>
-                                    isToday &&
+                                    canEdit &&
                                     startEdit(
                                       e._id,
                                       'cashDepositBank',
@@ -1001,6 +1003,7 @@ export default function RouteComponent() {
                             ref={descRef}
                             type="text"
                             placeholder="Description"
+                            defaultValue="Bank Deposit"
                             className="w-full px-3 py-2 bg-white focus:outline-none focus:ring-1 focus:ring-blue-400 rounded-sm"
                             onKeyDown={handleKeyDown}
                           />
