@@ -148,7 +148,7 @@ async function refreshAllSitesCache() {
 }
 
 // Schedule: 5:00 AM America/Toronto daily
-cron.schedule("0 5 * * *", async () => {
+cron.schedule("0 7 * * *", async () => {
   try {
     await refreshAllSitesCache();
   } catch (err) {
@@ -156,6 +156,6 @@ cron.schedule("0 5 * * *", async () => {
   }
 }, { timezone: "America/Toronto" });
 
-console.log("📊 Dashboard cache cron registered (daily at 5:00 AM America/Toronto)");
+console.log("📊 Dashboard cache cron registered (daily at 7:00 AM America/Toronto)");
 
 module.exports = { refreshSiteCache, refreshAllSitesCache, buildDashboardData };
