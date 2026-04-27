@@ -237,7 +237,7 @@ function LearningItemView({ item }: { item: LearningItem }) {
   if (type === 'hotspot') {
     return (
       <div className="relative inline-block rounded border overflow-hidden">
-        <img src={content.image} alt="Hotspot" className="max-w-full" />
+        <img src={content.imageUrl ?? content.image} alt="Hotspot" className="max-w-full" />
         {(content.hotspots as Array<{ x: number; y: number; label: string }> ?? []).map((h, i) => (
           <div
             key={i}
