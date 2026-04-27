@@ -1,5 +1,5 @@
 import { createFileRoute, useNavigate } from '@tanstack/react-router'
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import axios from 'axios'
 import {
   DndContext,
@@ -225,11 +225,13 @@ function LearningItemView({ item }: { item: LearningItem }) {
     return (
       <button
         onClick={() => setFlipped((f) => !f)}
-        className="w-full rounded border p-6 text-center text-sm min-h-[100px] hover:bg-gray-50 transition-colors"
+        className="w-full rounded border text-center text-sm min-h-[100px] hover:bg-gray-50 transition-colors overflow-hidden"
       >
-        {sideImage && <img src={sideImage} alt="" className="mx-auto mb-2 max-h-40 object-contain" />}
-        {sideText}
-        <p className="mt-2 text-xs text-gray-400">{flipped ? 'Click to flip back' : 'Click to flip'}</p>
+        {sideImage && <img src={sideImage} alt="" className="w-full object-cover" />}
+        <div className="p-6">
+          {sideText}
+          <p className="mt-2 text-xs text-gray-400">{flipped ? 'Click to flip back' : 'Click to flip'}</p>
+        </div>
       </button>
     )
   }
@@ -475,6 +477,7 @@ function MCQItemView({ content }: { content: Record<string, any> }) {
 }
 
 type MatchingPair = { id: string; left: string; right: string }
+type MatchLine = { leftId: string; x1: number; y1: number; x2: number; y2: number; correct: boolean | null }
 
 function MatchingItemView({ content }: { content: Record<string, any> }) {
   const pairs = useMemo<MatchingPair[]>(() => {
@@ -483,9 +486,37 @@ function MatchingItemView({ content }: { content: Record<string, any> }) {
   }, [content.pairs])
 
   const [rightOptions] = useState<MatchingPair[]>(() => shuffle(pairs))
-  const [selected, setSelected] = useState<string | null>(null) // left pair id
-  const [matches, setMatches] = useState<Record<string, string>>({}) // leftId -> rightId
+  const [selected, setSelected] = useState<string | null>(null)
+  const [matches, setMatches] = useState<Record<string, string>>({})
   const [checked, setChecked] = useState(false)
+  const [lines, setLines] = useState<MatchLine[]>([])
+
+  const containerRef = useRef<HTMLDivElement>(null)
+  const leftRefs = useRef<Record<string, HTMLButtonElement | null>>({})
+  const rightRefs = useRef<Record<string, HTMLButtonElement | null>>({})
+
+  useLayoutEffect(() => {
+    if (!containerRef.current) return
+    const cr = containerRef.current.getBoundingClientRect()
+    const next: MatchLine[] = []
+    for (const [leftId, rightId] of Object.entries(matches)) {
+      const lEl = leftRefs.current[leftId]
+      const rEl = rightRefs.current[rightId]
+      if (!lEl || !rEl) continue
+      const lr = lEl.getBoundingClientRect()
+      const rr = rEl.getBoundingClientRect()
+      const correctPair = pairs.find((p) => p.id === leftId)
+      next.push({
+        leftId,
+        x1: lr.right - cr.left,
+        y1: lr.top + lr.height / 2 - cr.top,
+        x2: rr.left - cr.left,
+        y2: rr.top + rr.height / 2 - cr.top,
+        correct: checked ? correctPair?.id === rightId : null,
+      })
+    }
+    setLines(next)
+  }, [matches, checked, pairs])
 
   const handleLeftClick = (id: string) => {
     setSelected((prev) => (prev === id ? null : id))
@@ -502,10 +533,27 @@ function MatchingItemView({ content }: { content: Record<string, any> }) {
   const allMatched = pairs.every((p) => matches[p.id] !== undefined)
   const isCorrect = checked && pairs.every((p) => matches[p.id] === p.id)
 
+  const lineColor = (l: MatchLine) =>
+    l.correct === null ? '#3b82f6' : l.correct ? '#16a34a' : '#ef4444'
+
   return (
     <div className="rounded border p-4 space-y-3">
       <p className="text-sm font-medium">{content.prompt ?? content.question ?? 'Match the following:'}</p>
-      <div className="grid grid-cols-2 gap-3 text-sm">
+      <div ref={containerRef} className="relative grid grid-cols-2 gap-16 text-sm">
+        {/* SVG lines overlay */}
+        <svg className="absolute inset-0 w-full h-full pointer-events-none overflow-visible">
+          {lines.map((l) => (
+            <line
+              key={l.leftId}
+              x1={l.x1} y1={l.y1}
+              x2={l.x2} y2={l.y2}
+              stroke={lineColor(l)}
+              strokeWidth={2}
+              strokeDasharray={l.correct === null ? '5 3' : undefined}
+            />
+          ))}
+        </svg>
+
         <div className="space-y-2">
           {pairs.map((p) => {
             const isSelected = selected === p.id
@@ -513,6 +561,7 @@ function MatchingItemView({ content }: { content: Record<string, any> }) {
             return (
               <button
                 key={p.id}
+                ref={(el) => { leftRefs.current[p.id] = el }}
                 onClick={() => handleLeftClick(p.id)}
                 className={[
                   'w-full rounded px-3 py-2 text-left transition-colors border',
@@ -526,6 +575,7 @@ function MatchingItemView({ content }: { content: Record<string, any> }) {
             )
           })}
         </div>
+
         <div className="space-y-2">
           {rightOptions.map((p) => {
             const isMatchedBySelected = selected !== null && matches[selected] === p.id
@@ -533,6 +583,7 @@ function MatchingItemView({ content }: { content: Record<string, any> }) {
             return (
               <button
                 key={p.id}
+                ref={(el) => { rightRefs.current[p.id] = el }}
                 onClick={() => handleRightClick(p.id)}
                 className={[
                   'w-full rounded px-3 py-2 text-left transition-colors border',
@@ -548,6 +599,7 @@ function MatchingItemView({ content }: { content: Record<string, any> }) {
           })}
         </div>
       </div>
+
       {selected && (
         <p className="text-xs text-blue-600">Now click an item on the right to match it</p>
       )}
