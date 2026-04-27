@@ -182,14 +182,16 @@ function LearningItemView({ item }: { item: LearningItem }) {
   }
 
   if (type === 'mcq') {
+    type MCQOption = { id?: string; text: string; isCorrect?: boolean }
+    const options = content.options as Array<MCQOption | string>
     return (
       <div className="space-y-2 rounded border p-4">
-        <p className="font-medium text-sm">{content.question}</p>
+        <p className="font-medium text-sm">{content.question as string}</p>
         <ul className="space-y-1">
-          {(content.options as string[]).map((opt, i) => (
+          {options.map((opt, i) => (
             <li key={i} className="flex items-center gap-2 text-sm">
               <span className="w-5 h-5 rounded-full border flex items-center justify-center text-xs">{String.fromCharCode(65 + i)}</span>
-              {opt}
+              {typeof opt === 'object' ? opt.text : opt}
             </li>
           ))}
         </ul>
