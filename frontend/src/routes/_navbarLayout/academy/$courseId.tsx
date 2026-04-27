@@ -198,12 +198,16 @@ function LearningItemView({ item }: { item: LearningItem }) {
   }
 
   if (type === 'flip-card') {
+    const side = flipped ? content.back : content.front
+    const sideText = typeof side === 'object' && side !== null ? (side as any).text : side
+    const sideImage = typeof side === 'object' && side !== null ? (side as any).imageUrl : null
     return (
       <button
         onClick={() => setFlipped((f) => !f)}
         className="w-full rounded border p-6 text-center text-sm min-h-[100px] hover:bg-gray-50 transition-colors"
       >
-        {flipped ? content.back : content.front}
+        {sideImage && <img src={sideImage} alt="" className="mx-auto mb-2 max-h-40 object-contain" />}
+        {sideText}
         <p className="mt-2 text-xs text-gray-400">{flipped ? 'Click to flip back' : 'Click to flip'}</p>
       </button>
     )
@@ -228,12 +232,14 @@ function LearningItemView({ item }: { item: LearningItem }) {
   }
 
   if (type === 'ordering') {
+    type OrderingItem = { id?: string; text: string }
+    const items = content.items as Array<OrderingItem | string>
     return (
       <div className="rounded border p-4 space-y-2">
-        <p className="text-sm font-medium">{content.question ?? 'Put in order:'}</p>
+        <p className="text-sm font-medium">{(content.prompt ?? content.question ?? 'Put in order:') as string}</p>
         <ol className="list-decimal list-inside text-sm space-y-1">
-          {(content.items as string[]).map((item, i) => (
-            <li key={i}>{item}</li>
+          {items.map((item, i) => (
+            <li key={i}>{typeof item === 'object' ? item.text : item}</li>
           ))}
         </ol>
       </div>
