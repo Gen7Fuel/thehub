@@ -66,6 +66,7 @@ interface FuelOrderFormData {
 interface SupplierBadge {
   badgeName: string;
   badgeNumber: string;
+  accountingId: string;
   isDefault: boolean;
 }
 
@@ -398,6 +399,8 @@ function CreateFuelOrder() {
             carrierName={selectedCarrier?.carrierName}
             rackName={selectedRack?.rackName}
             rackLocation={selectedRack?.rackLocation}
+            carrierBookworksId={currentCarrierId}
+            supplierBookworksId={currentSupplierAccountingId}
           />
         );
 
@@ -563,6 +566,12 @@ function CreateFuelOrder() {
   const selectedCarrier = carriers.find(c => c._id === formData.carrierId);
   const selectedRack = racks.find(r => r._id === formData.rackId);
   const selectedSupplier = suppliers.find(s => s._id === formData.supplierId);
+  // Find the accountingId for the current badge selected
+  const activeBadge = selectedSupplier?.supplierBadges?.find(
+    (b: any) => b.badgeNumber === formData.badgeNo
+  );
+  const currentSupplierAccountingId = activeBadge?.accountingId || '';
+  const currentCarrierId = selectedCarrier?.carrierId || '';
 
   // Function to trigger the flow
   const handleGenerateClick = () => {
@@ -719,6 +728,8 @@ function CreateFuelOrder() {
                     carrierName={selectedCarrier?.carrierName}
                     rackName={selectedRack?.rackName}
                     rackLocation={selectedRack?.rackLocation}
+                    carrierBookworksId={currentCarrierId}
+                    supplierBookworksId={currentSupplierAccountingId}
                   />
                 </PDFViewer>
               </div>
@@ -740,6 +751,8 @@ function CreateFuelOrder() {
                         carrierName={selectedCarrier?.carrierName}
                         rackName={selectedRack?.rackName}
                         rackLocation={selectedRack?.rackLocation}
+                        carrierBookworksId={currentCarrierId}
+                        supplierBookworksId={currentSupplierAccountingId}
                       />
                     }
                     // fileName={`Fuel Order Form NSP ${selectedStation?.fuelCustomerName || 'Order'} ${formatPDFDate(formData.deliveryDate, false)}.pdf`}

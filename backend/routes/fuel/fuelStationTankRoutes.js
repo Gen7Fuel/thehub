@@ -5,7 +5,7 @@ const Location = require('../../models/Location');
 const FuelStationTank = require('../../models/fuel/FuelStationTank');
 const FuelSales = require('../../models/fuel/FuelSales');
 const FuelOrder = require('../../models/fuel/FuelOrder');
-const { getLiveTankVolumes } = require('../../services/supaBaseService');
+const { getLiveTankVolumes, getSingleTankHistoryByDay } = require('../../services/supaBaseService');
 const { runDailyFuelSync } = require('../../manual/oldDailyFuelSync');
 const { subDays, format } = require('date-fns');
 const moment = require('moment-timezone');
@@ -158,6 +158,47 @@ async function getAverageSales(stationId, targetDate) {
 
   return averages;
 }
+
+/**
+ * GET /api/fuel-station-tanks/history/:tankId
+ * Fetches time-series volume data for a specific tank using Supabase
+ */
+router.get('/history/:tankId', async (req, res) => {
+  try {
+    const { tankId } = req.params;
+    const { date } = req.query; // Expecting format 'YYYY-MM-DD'
+
+    // 1. Fetch Tank & Location metadata from MongoDB
+    // We populate 'stationId' to get the csoCode (station_sk)
+    const tank = await FuelStationTank.findById(tankId).populate('stationId');
+
+    if (!tank) {
+      return res.status(404).json({ message: "Tank configuration not found" });
+    }
+
+    if (!tank.stationId || !tank.stationId.csoCode) {
+      return res.status(400).json({ message: "Station CSO Code mapping is missing" });
+    }
+
+    // 2. Call your existing Supabase Service function
+    // Mapping: station_sk = csoCode, tank_id = tankNo
+    const historyData = await getSingleTankHistoryByDay(
+      tank.stationId.csoCode,
+      tank.tankNo,
+      date
+    );
+
+    // 3. Return the array of readings to the frontend chart
+    res.json(historyData);
+
+  } catch (err) {
+    console.error('Error in Tank History Route:', err);
+    res.status(500).json({
+      message: "Internal Server Error fetching tank history",
+      error: err.message
+    });
+  }
+});
 
 // router.get('/reconciliation/:stationId', async (req, res) => {
 //   try {

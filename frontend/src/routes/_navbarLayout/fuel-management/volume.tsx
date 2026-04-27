@@ -1,15 +1,16 @@
 import { createFileRoute, useNavigate } from '@tanstack/react-router'
 import { useState, useEffect, useMemo } from 'react'
 import axios from 'axios'
-import { Loader2, RefreshCw, Cylinder, History, LayoutDashboard, Edit3 } from 'lucide-react'
+import { Loader2, RefreshCw, Cylinder, History, LayoutDashboard, Edit3, ChevronLeft, ChevronRight, AlertCircle } from 'lucide-react'
 import { toast } from 'sonner'
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { getGradeTheme } from './manage/locations/$id'
-import { ComposedChart, Bar, Line, XAxis, YAxis, Tooltip, Legend, ResponsiveContainer } from 'recharts';
+import { ComposedChart, Bar, Line, XAxis, YAxis, Tooltip, Legend, ResponsiveContainer, BarChart, Cell } from 'recharts';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { format, addDays, isAfter, startOfDay } from 'date-fns';
 
 type VolumeSearch = {
   site?: string
@@ -267,6 +268,10 @@ function VolumeTankCard({ tank, onUpdate }: { tank: any; onUpdate: () => void })
   const [manualTime, setManualTime] = useState("");
   const [isOpen, setIsOpen] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false); // New state for the button loader
+  const [isChartOpen, setIsChartOpen] = useState(false);
+  const [chartData, setChartData] = useState([]);
+  const [isLoadingChart, setIsLoadingChart] = useState(false);
+  const [selectedDate, setSelectedDate] = useState(startOfDay(new Date()));
 
   const readingTime = tank.lastUpdatedVolumeReadingDateTime || "";
   const isStale = readingTime === "No latest reading available" || readingTime === "";
@@ -302,207 +307,347 @@ function VolumeTankCard({ tank, onUpdate }: { tank: any; onUpdate: () => void })
     }
   };
 
-  return (
-    <div className={`bg-white rounded-[35px] p-4 flex flex-col h-full w-full transition-all duration-300 border-2 ${isCriticalLow ? 'border-red-500 shadow-lg shadow-red-100' :
-      isOverflowRisk ? 'border-yellow-500 shadow-lg shadow-yellow-100' :
-        'border-slate-100 hover:border-slate-300'
-      } ${isStale && !isManual ? 'opacity-60' : ''}`}>
+  const fetchChartData = async (date: Date) => {
+    setIsLoadingChart(true);
+    try {
+      const dateStr = format(date, 'yyyy-MM-dd');
+      const res = await axios.get(`/api/fuel-station-tanks/history/${tank._id}?date=${dateStr}`, {
+        headers: { Authorization: `Bearer ${localStorage.getItem('token')}` }
+      });
+      setChartData(res.data);
+    } catch (err) {
+      toast.error("Failed to load history");
+    } finally {
+      setIsLoadingChart(false);
+    }
+  };
 
-      {/* Header */}
-      <div className="flex justify-between items-start mb-3">
-        <div className="flex flex-col">
-          <div className="flex items-center gap-2 mb-1">
-            <p className="text-[8px] font-black uppercase tracking-wide text-slate-400">Tank</p>
-            {isCriticalLow && <div className="w-2 h-2 rounded-full bg-red-500 animate-ping" />}
-            {isOverflowRisk && <div className="w-2 h-2 rounded-full bg-yellow-500 animate-pulse" />}
-          </div>
-          <span className="text-lg font-black italic text-slate-900">#0{tank.tankNo}</span>
+  const shiftDate = (amount: number) => {
+    const nextDate = addDays(selectedDate, amount);
+    const today = startOfDay(new Date());
+
+    // Block only if the next date is strictly greater than today
+    if (isAfter(nextDate, today)) return;
+
+    setSelectedDate(nextDate);
+    fetchChartData(nextDate);
+  };
+
+  // Logic for Bar Colors
+  const getBarColor = (volume: number) => {
+    if (volume <= tank.minVolumeCapacity) return '#ef4444'; // Red (Refill)
+    if (volume >= tank.maxVolumeCapacity * 1.1) return '#f97316'; // Orange (Overflow - 110% cap)
+    if (volume >= tank.maxVolumeCapacity) return '#f59e0b'; // Amber (Above Max)
+    return '#2563eb'; // Blue (Normal)
+  };
+
+  // Custom Tooltip Component
+  const CustomTooltip = ({ active, payload }: any) => {
+    if (active && payload && payload.length) {
+      const val = payload[0].value;
+      const isRefill = val <= tank.minVolumeCapacity;
+      const isAbove = val >= tank.maxVolumeCapacity;
+
+      return (
+        <div className="bg-white p-4 rounded-2xl shadow-xl border border-slate-100">
+          <p className="text-[10px] font-black text-slate-400 uppercase">{payload[0].payload.reading_time}</p>
+          <p className="text-lg font-black text-slate-900">{val.toLocaleString()} L</p>
+          {isRefill && <p className="text-[10px] font-bold text-red-500 uppercase mt-1 flex items-center gap-1"><AlertCircle className="w-3 h-3" /> REFILL REQUIRED</p>}
+          {isAbove && <p className="text-[10px] font-bold text-amber-500 uppercase mt-1 flex items-center gap-1"><AlertCircle className="w-3 h-3" /> ABOVE SAFE LIMIT</p>}
         </div>
+      );
+    }
+    return null;
+  };
 
-        <div className="flex items-center gap-2">
-          {/* MANUAL DIALOG BUTTON */}
-          {(isStale || isYesterday || isManual) && (
-            <Dialog open={isOpen} onOpenChange={setIsOpen}>
-              <DialogTrigger asChild>
-                <Button
-                  variant="outline"
-                  size="icon"
-                  className={`h-8 w-8 rounded-xl border-slate-200 transition-all ${isManual ? 'text-green-600 bg-green-50 border-green-100 hover:bg-green-100' : 'text-blue-600 hover:bg-blue-50'
-                    }`}
-                >
-                  <Edit3 className="h-4 w-4" />
-                </Button>
-              </DialogTrigger>
-              <DialogContent className="rounded-[40px] border-none shadow-2xl p-8 max-w-md">
-                <DialogHeader>
-                  <DialogTitle className="text-2xl font-black italic text-slate-900">
-                    Physical Reading
-                  </DialogTitle>
-                </DialogHeader>
+  return (
+    <>
+      <div className={`bg-white rounded-[35px] p-4 flex flex-col h-full w-full transition-all duration-300 border-2 ${isCriticalLow ? 'border-red-500 shadow-lg shadow-red-100' :
+        isOverflowRisk ? 'border-yellow-500 shadow-lg shadow-yellow-100' :
+          'border-slate-100 hover:border-slate-300'
+        } ${isStale && !isManual ? 'opacity-60' : ''}`}>
 
-                <div className="space-y-6 py-4">
-                  {/* STATION INFO HEADER WITH LOCAL TIME CLOCK */}
-                  <div className="bg-slate-50 p-5 rounded-[30px] border border-slate-100 relative overflow-hidden">
-                    <div className={`absolute top-0 right-0 h-full w-1.5 ${theme.color}`} />
+        {/* Header */}
+        <div className="flex justify-between items-start mb-3">
+          <div className="flex flex-col">
+            <div className="flex items-center gap-2 mb-1">
+              <p className="text-[8px] font-black uppercase tracking-wide text-slate-400">Tank</p>
+              {isCriticalLow && <div className="w-2 h-2 rounded-full bg-red-500 animate-ping" />}
+              {isOverflowRisk && <div className="w-2 h-2 rounded-full bg-yellow-500 animate-pulse" />}
+            </div>
+            <span className="text-lg font-black italic text-slate-900">#0{tank.tankNo}</span>
+          </div>
 
-                    <div className="flex flex-col gap-4">
-                      <div className="flex justify-between items-start">
-                        <div className="flex flex-col">
-                          <p className="text-[9px] font-black uppercase text-slate-400 tracking-[0.2em] mb-1">Station / Tank</p>
-                          <div className="flex items-center gap-2">
-                            <span className="text-lg font-black text-slate-800">{tank.stationName}</span>
-                            <span className="text-slate-300">/</span>
-                            <span className="text-lg font-black text-blue-600">#0{tank.tankNo}</span>
+          <div className="flex items-center gap-2">
+            {/* MANUAL DIALOG BUTTON */}
+            {(isStale || isYesterday || isManual) && (
+              <Dialog open={isOpen} onOpenChange={setIsOpen}>
+                <DialogTrigger asChild>
+                  <Button
+                    variant="outline"
+                    size="icon"
+                    className={`h-8 w-8 rounded-xl border-slate-200 transition-all ${isManual ? 'text-green-600 bg-green-50 border-green-100 hover:bg-green-100' : 'text-blue-600 hover:bg-blue-50'
+                      }`}
+                  >
+                    <Edit3 className="h-4 w-4" />
+                  </Button>
+                </DialogTrigger>
+                <DialogContent className="rounded-[40px] border-none shadow-2xl p-8 max-w-md">
+                  <DialogHeader>
+                    <DialogTitle className="text-2xl font-black italic text-slate-900">
+                      Physical Reading
+                    </DialogTitle>
+                  </DialogHeader>
+
+                  <div className="space-y-6 py-4">
+                    {/* STATION INFO HEADER WITH LOCAL TIME CLOCK */}
+                    <div className="bg-slate-50 p-5 rounded-[30px] border border-slate-100 relative overflow-hidden">
+                      <div className={`absolute top-0 right-0 h-full w-1.5 ${theme.color}`} />
+
+                      <div className="flex flex-col gap-4">
+                        <div className="flex justify-between items-start">
+                          <div className="flex flex-col">
+                            <p className="text-[9px] font-black uppercase text-slate-400 tracking-[0.2em] mb-1">Station / Tank</p>
+                            <div className="flex items-center gap-2">
+                              <span className="text-lg font-black text-slate-800">{tank.stationName}</span>
+                              <span className="text-slate-300">/</span>
+                              <span className="text-lg font-black text-blue-600">#0{tank.tankNo}</span>
+                            </div>
                           </div>
-                        </div>
 
-                        <div className={`${theme.color} px-4 py-1.5 rounded-full shadow-sm`}>
-                          <span className="text-[11px] font-black uppercase text-white tracking-wide">
-                            {tank.grade}
-                          </span>
+                          <div className={`${theme.color} px-4 py-1.5 rounded-full shadow-sm`}>
+                            <span className="text-[11px] font-black uppercase text-white tracking-wide">
+                              {tank.grade}
+                            </span>
+                          </div>
                         </div>
                       </div>
                     </div>
-                  </div>
 
-                  {/* Input Fields */}
-                  <div className="space-y-3">
-                    <Label className="text-[11px] font-black uppercase text-slate-500 ml-1 tracking-wide">
-                      Current Physical Volume (Liters)
-                    </Label>
-                    <div className="relative">
-                      <Input
-                        type="number"
-                        placeholder="0,000"
-                        className="h-16 rounded-[20px] border-2 border-slate-100 focus:border-blue-500 text-2xl font-black px-6 transition-all"
-                        value={manualVolume}
-                        onChange={(e) => setManualVolume(e.target.value)}
-                      />
-                      <div className="absolute right-6 top-1/2 -translate-y-1/2 text-slate-300 font-black italic text-xl">L</div>
-                    </div>
-                  </div>
-
-                  <div className="grid grid-cols-2 gap-4">
+                    {/* Input Fields */}
                     <div className="space-y-3">
-                      <Label className="text-[11px] font-black uppercase text-slate-500 ml-1 tracking-wide">Reading Date</Label>
-                      <Input
-                        type="date"
-                        className="h-14 rounded-[20px] border-2 border-slate-100 font-bold px-4 text-slate-700 focus:border-blue-500"
-                        value={manualDate}
-                        onChange={(e) => setManualDate(e.target.value)}
-                      />
+                      <Label className="text-[11px] font-black uppercase text-slate-500 ml-1 tracking-wide">
+                        Current Physical Volume (Liters)
+                      </Label>
+                      <div className="relative">
+                        <Input
+                          type="number"
+                          placeholder="0,000"
+                          className="h-16 rounded-[20px] border-2 border-slate-100 focus:border-blue-500 text-2xl font-black px-6 transition-all"
+                          value={manualVolume}
+                          onChange={(e) => setManualVolume(e.target.value)}
+                        />
+                        <div className="absolute right-6 top-1/2 -translate-y-1/2 text-slate-300 font-black italic text-xl">L</div>
+                      </div>
                     </div>
 
-                    <div className="space-y-3">
-                      <Label className="text-[11px] font-black uppercase text-slate-500 ml-1 tracking-wide">Reading Time</Label>
-                      <Input
-                        type="time"
-                        className="h-14 rounded-[20px] border-2 border-slate-100 font-bold px-4 text-slate-700 focus:border-blue-500"
-                        value={manualTime}
-                        onChange={(e) => setManualTime(e.target.value)}
-                      />
+                    <div className="grid grid-cols-2 gap-4">
+                      <div className="space-y-3">
+                        <Label className="text-[11px] font-black uppercase text-slate-500 ml-1 tracking-wide">Reading Date</Label>
+                        <Input
+                          type="date"
+                          className="h-14 rounded-[20px] border-2 border-slate-100 font-bold px-4 text-slate-700 focus:border-blue-500"
+                          value={manualDate}
+                          onChange={(e) => setManualDate(e.target.value)}
+                        />
+                      </div>
+
+                      <div className="space-y-3">
+                        <Label className="text-[11px] font-black uppercase text-slate-500 ml-1 tracking-wide">Reading Time</Label>
+                        <Input
+                          type="time"
+                          className="h-14 rounded-[20px] border-2 border-slate-100 font-bold px-4 text-slate-700 focus:border-blue-500"
+                          value={manualTime}
+                          onChange={(e) => setManualTime(e.target.value)}
+                        />
+                      </div>
                     </div>
+
+                    <div className="bg-blue-50 border border-blue-100 p-4 rounded-[20px]">
+                      <p className="text-[10px] font-bold text-blue-700 leading-relaxed text-center">
+                        Please match the Date and Time precisely with the station's physical dip report.
+                      </p>
+                    </div>
+
+                    <Button
+                      onClick={handleManualSubmit}
+                      disabled={!manualVolume || !manualTime || isSubmitting}
+                      className="w-full h-16 rounded-[20px] bg-slate-900 text-white font-black uppercase tracking-[0.2em] hover:bg-blue-600 transition-all shadow-lg active:scale-[0.98]"
+                    >
+                      {isSubmitting ? <Loader2 className="h-5 w-5 animate-spin" /> : "Save Physical Reading"}
+                    </Button>
                   </div>
+                </DialogContent>
+              </Dialog>
+            )}
 
-                  <div className="bg-blue-50 border border-blue-100 p-4 rounded-[20px]">
-                    <p className="text-[10px] font-bold text-blue-700 leading-relaxed text-center">
-                      Please match the Date and Time precisely with the station's physical dip report.
-                    </p>
-                  </div>
+            <Button
+              variant="outline"
+              size="icon"
+              onClick={() => { setIsChartOpen(true); fetchChartData(selectedDate); }}
+              className="h-8 w-8 rounded-xl border-slate-200 text-slate-600 hover:bg-indigo-50 hover:text-indigo-600"
+            >
+              <LayoutDashboard className="h-4 w-4" />
+            </Button>
 
-                  <Button
-                    onClick={handleManualSubmit}
-                    disabled={!manualVolume || !manualTime || isSubmitting}
-                    className="w-full h-16 rounded-[20px] bg-slate-900 text-white font-black uppercase tracking-[0.2em] hover:bg-blue-600 transition-all shadow-lg active:scale-[0.98]"
-                  >
-                    {isSubmitting ? <Loader2 className="h-5 w-5 animate-spin" /> : "Save Physical Reading"}
-                  </Button>
-                </div>
-              </DialogContent>
-            </Dialog>
-          )}
-
-          <div className={`${theme.color} p-1.5 rounded-xl text-white ${isStale && !isManual ? 'grayscale' : ''}`}>
-            <theme.icon className="h-4 w-4" />
+            <div className={`${theme.color} p-1.5 rounded-xl text-white ${isStale && !isManual ? 'grayscale' : ''}`}>
+              <theme.icon className="h-4 w-4" />
+            </div>
           </div>
         </div>
-      </div>
 
-      {/* Cylinder */}
-      <div className={`relative h-56 w-full bg-slate-50 rounded-[30px] border-4 border-white shadow-inner overflow-hidden mb-4 transition-all duration-500 ${isStale && !isManual ? 'blur-md grayscale' : ''}`}>
-        <div
-          className="absolute bottom-0 w-full transition-all duration-1000 ease-in-out"
-          style={{
-            height: `${fillPercentage}%`,
-            background: `linear-gradient(180deg, ${theme.raw} 0%, ${theme.raw}cc 100%)`
-          }}
-        >
-          <div className="absolute top-0 w-full h-1.5 bg-white/20 blur-[1px]" />
+        {/* Cylinder */}
+        <div className={`relative h-56 w-full bg-slate-50 rounded-[30px] border-4 border-white shadow-inner overflow-hidden mb-4 transition-all duration-500 ${isStale && !isManual ? 'blur-md grayscale' : ''}`}>
+          <div
+            className="absolute bottom-0 w-full transition-all duration-1000 ease-in-out"
+            style={{
+              height: `${fillPercentage}%`,
+              background: `linear-gradient(180deg, ${theme.raw} 0%, ${theme.raw}cc 100%)`
+            }}
+          >
+            <div className="absolute top-0 w-full h-1.5 bg-white/20 blur-[1px]" />
+          </div>
+
+          <div className="absolute w-full border-t border-sky-400/50 border-dashed z-10" style={{ bottom: `${maxLine}%` }} />
+          <div className="absolute w-full border-t-2 border-red-500/40 z-10" style={{ bottom: `${minLine}%` }} />
+
+          {(!isStale || isManual) && (
+            <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
+              <div className={`px-3 py-1.5 rounded-2xl border backdrop-blur-md ${isCriticalLow ? 'bg-red-500 text-white border-red-400' :
+                isOverflowRisk ? 'bg-yellow-500 text-slate-900 border-yellow-400' :
+                  'bg-white/90 text-slate-900 border-white'
+                }`}>
+                <span className="text-sm font-black flex flex-col items-center leading-none">
+                  {tank.currentVolume.toLocaleString()}
+                  <span className={`text-[9px] uppercase tracking-tight mt-0.5 ${isCriticalLow ? 'text-white/70' : 'text-slate-400'}`}>
+                    Liters
+                  </span>
+                </span>
+              </div>
+            </div>
+          )}
         </div>
 
-        <div className="absolute w-full border-t border-sky-400/50 border-dashed z-10" style={{ bottom: `${maxLine}%` }} />
-        <div className="absolute w-full border-t-2 border-red-500/40 z-10" style={{ bottom: `${minLine}%` }} />
-
-        {(!isStale || isManual) && (
-          <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
-            <div className={`px-3 py-1.5 rounded-2xl border backdrop-blur-md ${isCriticalLow ? 'bg-red-500 text-white border-red-400' :
-              isOverflowRisk ? 'bg-yellow-500 text-slate-900 border-yellow-400' :
-                'bg-white/90 text-slate-900 border-white'
-              }`}>
-              <span className="text-sm font-black flex flex-col items-center leading-none">
-                {tank.currentVolume.toLocaleString()}
-                <span className={`text-[9px] uppercase tracking-tight mt-0.5 ${isCriticalLow ? 'text-white/70' : 'text-slate-400'}`}>
-                  Liters
-                </span>
+        {/* Stats Section */}
+        <div className="space-y-3 mt-auto">
+          <div className={`bg-slate-50 p-2.5 rounded-2xl border border-slate-100/50 transition-all ${isStale && !isManual ? 'blur-[2px] opacity-40' : ''}`}>
+            <div className="flex justify-between items-center px-1 mb-1.5">
+              <span className="text-[7px] font-black text-slate-400 uppercase">Total Capacity</span>
+              <span className="text-[10px] font-black text-slate-700">{tank.tankCapacity.toLocaleString()}L</span>
+            </div>
+            <div className="relative w-full h-4 bg-slate-200 rounded-lg overflow-hidden flex items-center justify-center">
+              <div
+                className={`absolute left-0 h-full transition-all duration-1000 ${isCriticalLow ? 'bg-red-500' : isOverflowRisk ? 'bg-yellow-500' : 'bg-blue-600'}`}
+                style={{ width: `${fillPercentage}%` }}
+              />
+              <span className="relative z-10 text-[9px] font-black text-white mix-blend-difference">
+                {Math.round(fillPercentage)}% Filled
               </span>
             </div>
           </div>
-        )}
-      </div>
 
-      {/* Stats Section */}
-      <div className="space-y-3 mt-auto">
-        <div className={`bg-slate-50 p-2.5 rounded-2xl border border-slate-100/50 transition-all ${isStale && !isManual ? 'blur-[2px] opacity-40' : ''}`}>
-          <div className="flex justify-between items-center px-1 mb-1.5">
-            <span className="text-[7px] font-black text-slate-400 uppercase">Total Capacity</span>
-            <span className="text-[10px] font-black text-slate-700">{tank.tankCapacity.toLocaleString()}L</span>
+          {/* Safety Legend */}
+          <div className="grid grid-cols-2 gap-2 px-1">
+            <div className="flex flex-col border-l-2 border-sky-400/50 pl-2">
+              <span className="text-[7px] font-black text-slate-400 uppercase">Max Limit</span>
+              <span className="text-[10px] font-bold text-slate-600">{tank.maxVolumeCapacity.toLocaleString()}L</span>
+            </div>
+            <div className="flex flex-col border-l-2 border-red-500/50 pl-2">
+              <span className="text-[7px] font-black text-slate-400 uppercase">Min Limit</span>
+              <span className="text-[10px] font-bold text-slate-600">{tank.minVolumeCapacity.toLocaleString()}L</span>
+            </div>
           </div>
-          <div className="relative w-full h-4 bg-slate-200 rounded-lg overflow-hidden flex items-center justify-center">
-            <div
-              className={`absolute left-0 h-full transition-all duration-1000 ${isCriticalLow ? 'bg-red-500' : isOverflowRisk ? 'bg-yellow-500' : 'bg-blue-600'}`}
-              style={{ width: `${fillPercentage}%` }}
-            />
-            <span className="relative z-10 text-[9px] font-black text-white mix-blend-difference">
-              {Math.round(fillPercentage)}% Filled
-            </span>
-          </div>
-        </div>
 
-        {/* Safety Legend */}
-        <div className="grid grid-cols-2 gap-2 px-1">
-          <div className="flex flex-col border-l-2 border-sky-400/50 pl-2">
-            <span className="text-[7px] font-black text-slate-400 uppercase">Max Limit</span>
-            <span className="text-[10px] font-bold text-slate-600">{tank.maxVolumeCapacity.toLocaleString()}L</span>
+          {/* Sync Status */}
+          <div className="pt-2 border-t border-slate-50 text-center">
+            <p className="text-[7px] font-black text-slate-300 uppercase mb-0.5">Last Reading Time</p>
+            <p className={`text-[12px] font-black tracking-tight ${isManual ? 'text-blue-600' :
+              isStale ? 'text-slate-400 italic' :
+                isYesterday ? 'text-orange-500' :
+                  isCriticalLow ? 'text-red-500 animate-pulse' : 'text-slate-600'
+              }`}>
+              {tank.lastUpdatedVolumeReadingDateTime || 'No Data'}
+            </p>
           </div>
-          <div className="flex flex-col border-l-2 border-red-500/50 pl-2">
-            <span className="text-[7px] font-black text-slate-400 uppercase">Min Limit</span>
-            <span className="text-[10px] font-bold text-slate-600">{tank.minVolumeCapacity.toLocaleString()}L</span>
-          </div>
-        </div>
-
-        {/* Sync Status */}
-        <div className="pt-2 border-t border-slate-50 text-center">
-          <p className="text-[7px] font-black text-slate-300 uppercase mb-0.5">Last Reading Time</p>
-          <p className={`text-[12px] font-black tracking-tight ${isManual ? 'text-blue-600' :
-            isStale ? 'text-slate-400 italic' :
-              isYesterday ? 'text-orange-500' :
-                isCriticalLow ? 'text-red-500 animate-pulse' : 'text-slate-600'
-            }`}>
-            {tank.lastUpdatedVolumeReadingDateTime || 'No Data'}
-          </p>
         </div>
       </div>
-    </div>
+      {/* CHART DIALOG */}
+      <Dialog open={isChartOpen} onOpenChange={setIsChartOpen}>
+        <DialogContent className="max-w-4xl rounded-[40px] p-8">
+          <div className="flex justify-between items-center mb-8">
+            <div>
+              <DialogTitle className="text-2xl font-black italic">Volume Analytics</DialogTitle>
+              <p className="text-slate-400 text-sm font-medium">Tank #0{tank.tankNo} — {tank.grade}</p>
+            </div>
+
+            {/* DATE SLIDER */}
+            <div className="flex items-center gap-3 bg-slate-100 p-1.5 rounded-2xl border-2 border-slate-200">
+              <Button variant="ghost" size="icon" onClick={() => shiftDate(-1)} className="rounded-xl h-10 w-10">
+                <ChevronLeft className="h-5 w-5" />
+              </Button>
+              <div className="px-4 text-center min-w-[140px]">
+                <p className="text-[10px] font-black text-indigo-600 uppercase">{format(selectedDate, 'eeee')}</p>
+                <p className="text-sm font-bold text-slate-800">{format(selectedDate, 'MMM dd, yyyy')}</p>
+              </div>
+              <Button
+                variant="ghost"
+                size="icon"
+                onClick={() => shiftDate(1)}
+                className="rounded-xl h-10 w-10"
+                // LOGIC: If selectedDate is 26th, addDays makes it 27th. 
+                // isAfter(27th, 27th) is FALSE, so disabled will be FALSE.
+                disabled={isAfter(addDays(selectedDate, 1), startOfDay(new Date()))}
+              >
+                <ChevronRight className={`h-5 w-5 ${isAfter(addDays(selectedDate, 1), startOfDay(new Date()))
+                    ? 'text-slate-200'
+                    : 'text-slate-600'
+                  }`} />
+              </Button>
+            </div>
+          </div>
+
+          <div className="h-[400px] w-full bg-slate-50/50 rounded-[30px] p-6 border border-slate-100">
+            {isLoadingChart ? (
+              <div className="h-full flex items-center justify-center"><Loader2 className="animate-spin text-indigo-600" /></div>
+            ) : chartData.length > 0 ? (
+              <ResponsiveContainer width="100%" height="100%">
+                <BarChart data={chartData}>
+                  <XAxis dataKey="reading_time" fontSize={10} fontWeight="bold" tickLine={false} axisLine={false} />
+                  <YAxis hide domain={[0, tank.tankCapacity]} />
+                  <Tooltip content={<CustomTooltip />} cursor={{ fill: '#f1f5f9' }} />
+                  <Bar dataKey="volume" radius={[6, 6, 0, 0]}>
+                    {chartData.map((entry: any, index) => (
+                      <Cell key={`cell-${index}`} fill={getBarColor(entry.volume)} />
+                    ))}
+                  </Bar>
+                </BarChart>
+              </ResponsiveContainer>
+            ) : (
+              <div className="h-full flex flex-col items-center justify-center text-slate-400">
+                <AlertCircle className="mb-2 opacity-20" size={48} />
+                <p className="font-bold">No data recorded for this date</p>
+              </div>
+            )}
+          </div>
+
+          {/* Legend Footer */}
+          <div className="flex justify-center gap-6 mt-6">
+            <div className="flex items-center gap-2">
+              <div className="w-3 h-3 rounded-sm bg-blue-600" />
+              <span className="text-[10px] font-black uppercase text-slate-500">Normal</span>
+            </div>
+            <div className="flex items-center gap-2">
+              <div className="w-3 h-3 rounded-sm bg-amber-500" />
+              <span className="text-[10px] font-black uppercase text-slate-500">Above Max</span>
+            </div>
+            <div className="flex items-center gap-2">
+              <div className="w-3 h-3 rounded-sm bg-red-500" />
+              <span className="text-[10px] font-black uppercase text-slate-500">Refill Risk</span>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
+    </>
   );
 }
 

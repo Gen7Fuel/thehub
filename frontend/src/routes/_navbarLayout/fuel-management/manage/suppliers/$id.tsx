@@ -15,18 +15,18 @@ function EditSupplierComponent() {
   const { id } = Route.useParams()
   // const navigate = useNavigate()
   const queryClient = useQueryClient()
-  
+
   const [formData, setFormData] = useState<any>(null)
   const [isLoading, setIsLoading] = useState(true)
   const [isSaving, setIsSaving] = useState(false)
 
- // Fetch Racks for the dropdown with Authorization
-  const { data: racks = [] } = useQuery({ 
-    queryKey: ['fuel-racks'], 
+  // Fetch Racks for the dropdown with Authorization
+  const { data: racks = [] } = useQuery({
+    queryKey: ['fuel-racks'],
     queryFn: async () => {
       const res = await axios.get('/api/fuel-racks', {
-        headers: { 
-          Authorization: `Bearer ${localStorage.getItem('token')}` 
+        headers: {
+          Authorization: `Bearer ${localStorage.getItem('token')}`
         }
       });
       return res.data;
@@ -54,7 +54,7 @@ function EditSupplierComponent() {
   const addBadge = () => {
     setFormData({
       ...formData,
-      supplierBadges: [...formData.supplierBadges, { badgeName: '', badgeNumber: '', isDefault: false }]
+      supplierBadges: [...formData.supplierBadges, { badgeName: '', badgeNumber: '', accountingId: '', isDefault: false }]
     })
   }
 
@@ -65,9 +65,17 @@ function EditSupplierComponent() {
     })
   }
 
+  // const handleBadgeChange = (index: number, field: string, value: any) => {
+  //   const updated = [...formData.supplierBadges]
+  //   // If setting a new default, uncheck all others
+  //   if (field === 'isDefault' && value === true) {
+  //     updated.forEach(b => b.isDefault = false)
+  //   }
+  //   updated[index] = { ...updated[index], [field]: value }
+  //   setFormData({ ...formData, supplierBadges: updated })
+  // }
   const handleBadgeChange = (index: number, field: string, value: any) => {
     const updated = [...formData.supplierBadges]
-    // If setting a new default, uncheck all others
     if (field === 'isDefault' && value === true) {
       updated.forEach(b => b.isDefault = false)
     }
@@ -91,6 +99,29 @@ function EditSupplierComponent() {
     }
   }
 
+  // const handleDelete = async () => {
+  //   if (!window.confirm("Are you sure you want to delete this supplier? This action cannot be undone.")) {
+  //     return;
+  //   }
+
+  //   try {
+  //     setIsSaving(true); // Reusing the saving state to disable buttons
+  //     await axios.delete(`/api/fuel-suppliers/${id}`, {
+  //       headers: { Authorization: `Bearer ${localStorage.getItem('token')}` }
+  //     });
+
+  //     queryClient.invalidateQueries({ queryKey: ['fuel-suppliers'] });
+  //     alert("Supplier deleted successfully");
+
+  //     // Redirect back to the main list or dashboard after deletion
+  //     navigate({ to: '/fuel-management/manage/suppliers' });
+  //   } catch (err: any) {
+  //     alert(err.response?.data?.message || "Failed to delete supplier");
+  //   } finally {
+  //     setIsSaving(false);
+  //   }
+  // };
+
   if (isLoading) return <div className="h-full flex items-center justify-center"><Loader2 className="animate-spin text-primary" /></div>
   if (!formData) return <div className="p-8 text-center italic">Supplier not found.</div>
 
@@ -108,26 +139,33 @@ function EditSupplierComponent() {
             </p>
           </div>
         </div>
-        <Button variant="destructive" size="sm" className="gap-2">
-          <Trash2 className="h-4 w-4" /> Delete Supplier
-        </Button>
+        {/* <Button
+          variant="destructive"
+          size="sm"
+          className="gap-2"
+          onClick={handleDelete}
+          disabled={isSaving}
+        >
+          <Trash2 className="h-4 w-4" />
+          {isSaving ? "Deleting..." : "Delete Supplier"}
+        </Button> */}
       </div>
 
       <form onSubmit={handleUpdate} className="space-y-8">
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6 p-6 border rounded-xl bg-white shadow-sm">
           <div className="space-y-2">
             <label className="text-xs font-bold uppercase text-slate-500">Supplier Name</label>
-            <Input 
-              value={formData.supplierName} 
-              onChange={e => setFormData({...formData, supplierName: e.target.value})} 
+            <Input
+              value={formData.supplierName}
+              onChange={e => setFormData({ ...formData, supplierName: e.target.value })}
             />
           </div>
 
           <div className="space-y-2">
             <label className="text-xs font-bold uppercase text-slate-500">Associated Fuel Rack</label>
-            <Select 
-              value={formData.associatedRack?._id || formData.associatedRack} 
-              onValueChange={(val) => setFormData({...formData, associatedRack: val})}
+            <Select
+              value={formData.associatedRack?._id || formData.associatedRack}
+              onValueChange={(val) => setFormData({ ...formData, associatedRack: val })}
             >
               <SelectTrigger>
                 <SelectValue placeholder="Change Rack" />
@@ -144,12 +182,12 @@ function EditSupplierComponent() {
         <div className="space-y-4">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-2">
-               <h3 className="font-bold text-sm uppercase text-slate-400 tracking-widest">Active Badges</h3>
-               {!formData.supplierBadges.some((b: any) => b.isDefault) && (
-                 <span className="flex items-center gap-1 text-[10px] text-amber-600 font-bold animate-pulse">
-                   <AlertCircle className="h-3 w-3" /> No Default Set
-                 </span>
-               )}
+              <h3 className="font-bold text-sm uppercase text-slate-400 tracking-widest">Active Badges</h3>
+              {!formData.supplierBadges.some((b: any) => b.isDefault) && (
+                <span className="flex items-center gap-1 text-[10px] text-amber-600 font-bold animate-pulse">
+                  <AlertCircle className="h-3 w-3" /> No Default Set
+                </span>
+              )}
             </div>
             <Button type="button" variant="outline" size="sm" onClick={addBadge} className="gap-2 border-dashed">
               <Plus className="h-3.5 w-3.5" /> Add New Badge
@@ -161,27 +199,37 @@ function EditSupplierComponent() {
               <div key={index} className={`flex items-end gap-3 p-4 border rounded-xl transition-all ${badge.isDefault ? 'bg-blue-50/30 border-blue-200' : 'bg-white'}`}>
                 <div className="flex-1 space-y-1.5">
                   <label className="text-[10px] font-bold uppercase text-slate-400 ml-1">Badge Name</label>
-                  <Input 
+                  <Input
                     className="bg-white h-9"
-                    value={badge.badgeName} 
-                    onChange={e => handleBadgeChange(index, 'badgeName', e.target.value)} 
+                    value={badge.badgeName}
+                    onChange={e => handleBadgeChange(index, 'badgeName', e.target.value)}
                     placeholder="e.g. Unit Card"
                   />
                 </div>
                 <div className="flex-1 space-y-1.5">
                   <label className="text-[10px] font-bold uppercase text-slate-400 ml-1">Badge Number</label>
-                  <Input 
+                  <Input
                     className="bg-white h-9"
-                    value={badge.badgeNumber} 
-                    onChange={e => handleBadgeChange(index, 'badgeNumber', e.target.value)} 
+                    value={badge.badgeNumber}
+                    onChange={e => handleBadgeChange(index, 'badgeNumber', e.target.value)}
                     placeholder="ID#"
                   />
                 </div>
-                
+
+                <div className="flex-1 space-y-1.5">
+                  <label className="text-[10px] font-bold uppercase text-slate-400 ml-1">Bookworks ID</label>
+                  <Input
+                    className="bg-white h-9 border-amber-200 focus:border-amber-500"
+                    value={badge.accountingId || ''}
+                    onChange={e => handleBadgeChange(index, 'accountingId', e.target.value)}
+                    placeholder="Bookworks ID for Mapping"
+                  />
+                </div>
+
                 <div className="flex items-center gap-2 mb-0.5">
-                  <Button 
-                    type="button" 
-                    variant={badge.isDefault ? "default" : "outline"} 
+                  <Button
+                    type="button"
+                    variant={badge.isDefault ? "default" : "outline"}
                     size="sm"
                     className={`h-9 px-3 gap-2 ${badge.isDefault ? '' : 'text-slate-400 border-slate-200'}`}
                     onClick={() => handleBadgeChange(index, 'isDefault', true)}
@@ -189,7 +237,7 @@ function EditSupplierComponent() {
                     <CheckCircle2 className="h-4 w-4" />
                     <span className="text-xs uppercase font-bold">{badge.isDefault ? 'Default' : 'Set Default'}</span>
                   </Button>
-                  
+
                   {formData.supplierBadges.length > 1 && (
                     <Button variant="ghost" size="icon" onClick={() => removeBadge(index)} className="h-9 w-9 text-slate-300 hover:text-red-500">
                       <Trash2 className="h-4 w-4" />

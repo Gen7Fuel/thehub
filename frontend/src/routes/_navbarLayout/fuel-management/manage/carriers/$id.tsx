@@ -1,8 +1,8 @@
 import { useState, useEffect, useMemo } from 'react'
-import { createFileRoute, useNavigate } from '@tanstack/react-router'
+import { createFileRoute } from '@tanstack/react-router'
 import { Input } from '@/components/ui/input'
 import { Button } from '@/components/ui/button'
-import { Save, Trash2, Loader2, Plus, Search, X, Warehouse } from 'lucide-react'
+import { Save, Loader2, Plus, Search, X, Warehouse } from 'lucide-react'
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog"
 import { Checkbox } from "@/components/ui/checkbox"
 import axios from 'axios'
@@ -14,7 +14,7 @@ export const Route = createFileRoute('/_navbarLayout/fuel-management/manage/carr
 
 function EditCarrierComponent() {
   const { id } = Route.useParams()
-  const navigate = useNavigate()
+  // const navigate = useNavigate()
   const queryClient = useQueryClient()
 
   const [formData, setFormData] = useState<any>({ carrierName: '', carrierId: '', associatedRacks: [], contactName: '', contact: '' })
@@ -107,16 +107,16 @@ function EditCarrierComponent() {
     } finally { setIsSaving(false) }
   }
 
-  const handleDelete = async () => {
-    if (!window.confirm("Are you sure? This cannot be undone.")) return
-    try {
-      await axios.delete(`/api/fuel-carriers/${id}`, {
-        headers: { Authorization: `Bearer ${localStorage.getItem('token')}` }
-      })
-      await queryClient.invalidateQueries({ queryKey: ['fuel-carriers'] })
-      navigate({ to: '/fuel-management/manage/carriers' })
-    } catch (err) { alert("Delete failed") }
-  }
+  // const handleDelete = async () => {
+  //   if (!window.confirm("Are you sure? This cannot be undone.")) return
+  //   try {
+  //     await axios.delete(`/api/fuel-carriers/${id}`, {
+  //       headers: { Authorization: `Bearer ${localStorage.getItem('token')}` }
+  //     })
+  //     await queryClient.invalidateQueries({ queryKey: ['fuel-carriers'] })
+  //     navigate({ to: '/fuel-management/manage/carriers' })
+  //   } catch (err) { alert("Delete failed") }
+  // }
 
   if (loading) return <div className="p-10 flex items-center justify-center italic text-muted-foreground"><Loader2 className="animate-spin mr-2" /> Loading...</div>
 
@@ -124,9 +124,9 @@ function EditCarrierComponent() {
     <div className="p-8 max-w-5xl animate-in fade-in duration-300">
       <div className="flex items-center justify-between mb-8 border-b pb-6">
         <h2 className="text-2xl font-bold tracking-tight">Edit Carrier</h2>
-        <Button variant="ghost" onClick={handleDelete} className="text-red-500 hover:bg-red-50 hover:text-red-600 gap-2">
+        {/* <Button variant="ghost" onClick={handleDelete} className="text-red-500 hover:bg-red-50 hover:text-red-600 gap-2">
           <Trash2 className="h-4 w-4" /> Delete Carrier
-        </Button>
+        </Button> */}
       </div>
 
       {/* Main Two-Column Grid */}
@@ -141,8 +141,8 @@ function EditCarrierComponent() {
               <Input value={formData.carrierName} onChange={(e) => setFormData({ ...formData, carrierName: e.target.value })} />
             </div>
             <div className="space-y-2">
-              <label className="text-xs font-bold text-slate-600 ml-1">System ID</label>
-              <Input value={formData.carrierId} onChange={(e) => setFormData({ ...formData, carrierId: e.target.value })} />
+              <label className="text-xs font-bold text-slate-600 ml-1">Bookworks ID</label>
+              <Input placeholder="Bookworks ID for Mapping" value={formData.carrierId} onChange={(e) => setFormData({ ...formData, carrierId: e.target.value })} />
             </div>
             <div className="space-y-2">
               <label className="text-xs font-bold text-slate-600 ml-1">Primary Contact Name</label>

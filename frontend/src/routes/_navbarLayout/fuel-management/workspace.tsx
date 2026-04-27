@@ -942,7 +942,7 @@ function StationStrip({ location, date, racks }: { location: any, date: Date, ra
           }}
         />
       )}
-      <Dialog open={!!viewingPO} onOpenChange={(open) => !open && setViewingPO(null)}>
+      {/* <Dialog open={!!viewingPO} onOpenChange={(open) => !open && setViewingPO(null)}>
         <DialogContent className="max-w-5xl h-[90vh] flex flex-col">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
@@ -1006,6 +1006,70 @@ function StationStrip({ location, date, racks }: { location: any, date: Date, ra
               </PDFDownloadLink>
             )}
           </DialogFooter>
+        </DialogContent>
+      </Dialog> */}
+      <Dialog open={!!viewingPO} onOpenChange={(open) => !open && setViewingPO(null)}>
+        <DialogContent className="max-w-5xl h-[90vh] flex flex-col p-0"> {/* p-0 to control spacing better */}
+          <DialogHeader className="p-6 pb-2">
+            <DialogTitle className="flex items-center gap-2">
+              <FileText className="h-5 w-5 text-blue-600" />
+              PO Record Preview - {viewingPO?.poNumber}
+            </DialogTitle>
+          </DialogHeader>
+
+          {viewingPO && (() => {
+            const activeBadge = viewingPO.supplier?.supplierBadges?.find(
+              (b: any) => b.badgeNumber === viewingPO.badgeNo
+            );
+
+            const commonProps = {
+              data: {
+                deliveryDate: getISODateOnly(viewingPO.originalDeliveryDate),
+                poNumber: viewingPO.poNumber,
+                badgeNo: viewingPO.badgeNo || '',
+                startTime: viewingPO.originalDeliveryWindow?.start || '',
+                endTime: viewingPO.originalDeliveryWindow?.end || '',
+                items: viewingPO.items || []
+              },
+              // We use the same fallback logic as your logs
+              selectedStation: viewingPO.stationId || viewingPO.station,
+              carrierName: viewingPO.carrier?.carrierName,
+              rackName: viewingPO.rack?.rackName,
+              rackLocation: viewingPO.rack?.rackLocation,
+              carrierBookworksId: viewingPO.carrier?.carrierId,
+              supplierBookworksId: activeBadge?.accountingId || 'N/A'
+            };
+
+            return (
+              <>
+                {/* Scrollable Area for PDF */}
+                <div className="flex-1 border-y bg-slate-100 overflow-hidden">
+                  <PDFViewer width="100%" height="100%" showToolbar={false} style={{ border: 'none' }}>
+                    <POPreviewDocument {...commonProps} />
+                  </PDFViewer>
+                </div>
+
+                {/* Footer moved OUTSIDE the viewer container */}
+                <div className="p-4 flex justify-end items-center gap-2 bg-white">
+                  <Button variant="ghost" onClick={() => setViewingPO(null)}>
+                    Close
+                  </Button>
+
+                  <PDFDownloadLink
+                    document={<POPreviewDocument {...commonProps} />}
+                    fileName={`Fuel Order Form NSP ${commonProps.selectedStation?.fuelCustomerName || 'Order'} ${formatPDFDate(getISODateOnly(viewingPO.originalDeliveryDate), false)}.pdf`}
+                  >
+                    {({ loading }) => (
+                      <Button className="bg-blue-600 hover:bg-blue-700" disabled={loading}>
+                        <Download className="h-4 w-4 mr-2" />
+                        {loading ? "Preparing..." : "Download PDF"}
+                      </Button>
+                    )}
+                  </PDFDownloadLink>
+                </div>
+              </>
+            );
+          })()}
         </DialogContent>
       </Dialog>
     </>

@@ -1,11 +1,11 @@
 import { useState, useEffect, useMemo } from 'react'
-import { createFileRoute, useNavigate } from '@tanstack/react-router'
+import { createFileRoute } from '@tanstack/react-router'
 import { Input } from '@/components/ui/input'
 import { Button } from '@/components/ui/button'
 import { Checkbox } from '@/components/ui/checkbox'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog"
-import { Save, Trash2, Warehouse, Loader2, Search, Plus, X, Truck, CreditCard, ShieldCheck } from 'lucide-react'
+import { Save, Warehouse, Loader2, Search, Plus, X, Truck, CreditCard, ShieldCheck } from 'lucide-react'
 import axios from 'axios'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 
@@ -17,7 +17,7 @@ const AVAILABLE_GRADES = ["Regular", "Premium", "Diesel", "Dyed Diesel"]
 
 function EditRackComponent() {
   const { id } = Route.useParams()
-  const navigate = useNavigate()
+  // const navigate = useNavigate()
   const queryClient = useQueryClient()
 
   const [formData, setFormData] = useState<any>(null)
@@ -106,14 +106,14 @@ function EditRackComponent() {
     } catch (err) { alert("Update failed") } finally { setIsSaving(false) }
   }
 
-  const handleDelete = async () => {
-    if (!window.confirm("Delete this rack?")) return
-    try {
-      await axios.delete(`/api/fuel-racks/${id}`, { headers: { Authorization: `Bearer ${localStorage.getItem('token')}` } })
-      queryClient.invalidateQueries({ queryKey: ['fuel-racks'] })
-      navigate({ to: '/fuel-management/manage/racks' })
-    } catch (err) { alert("Delete failed") }
-  }
+  // const handleDelete = async () => {
+  //   if (!window.confirm("Delete this rack?")) return
+  //   try {
+  //     await axios.delete(`/api/fuel-racks/${id}`, { headers: { Authorization: `Bearer ${localStorage.getItem('token')}` } })
+  //     queryClient.invalidateQueries({ queryKey: ['fuel-racks'] })
+  //     navigate({ to: '/fuel-management/manage/racks' })
+  //   } catch (err) { alert("Delete failed") }
+  // }
 
   if (isLoading || !formData) return <div className="h-full flex items-center justify-center"><Loader2 className="animate-spin text-primary" /></div>
 
@@ -127,9 +127,9 @@ function EditRackComponent() {
             <p className="text-sm text-muted-foreground uppercase font-semibold">{formData.rackLocation}</p>
           </div>
         </div>
-        <Button variant="ghost" onClick={handleDelete} className="text-red-500 hover:bg-red-50 hover:text-red-600 gap-2">
+        {/* <Button variant="ghost" onClick={handleDelete} className="text-red-500 hover:bg-red-50 hover:text-red-600 gap-2">
           <Trash2 className="h-4 w-4" /> Delete Rack
-        </Button>
+        </Button> */}
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">

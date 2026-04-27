@@ -86,7 +86,7 @@ router.get('/workspace-orders', async (req, res) => {
       ]
     })
       .populate('carrier supplier rack')
-      .populate('station', 'stationName timezone')
+      .populate('station', 'stationName timezone fuelStationNumber fuelCustomerName address')
       .lean();
 
     res.json(orders);
@@ -500,8 +500,8 @@ router.post('/', async (req, res) => {
     const authRes = await cca.acquireTokenByClientCredential({ scopes: ["https://graph.microsoft.com/.default"] });
     const client = Client.init({ authProvider: (done) => done(null, authRes.accessToken) });
 
-    const targetMailbox = "nsporders@nspetroleum.ca";
-    // const targetMailbox = "daksh@gen7fuel.com"; //only for testing
+    // const targetMailbox = "nsporders@nspetroleum.ca";
+    const targetMailbox = "daksh@gen7fuel.com"; //only for testing
     await client.api(`/users/${targetMailbox}/mailFolders/drafts/messages`).post(draftPayload);
 
     res.status(201).json({
