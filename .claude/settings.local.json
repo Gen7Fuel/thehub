@@ -27,7 +27,9 @@
       "Read(//c/Users/MohammadHasan/workspace/**)",
       "Bash(identify /c/Users/MohammadHasan/workspace/thehub/frontend/public/logo.png)",
       "Bash(python -c \"from PIL import Image; print\\('pillow available'\\)\")",
-      "Bash(python3 -c \"from PIL import Image; print\\('pillow available'\\)\")"
+      "Bash(python3 -c \"from PIL import Image; print\\('pillow available'\\)\")",
+      "Bash(head -524 '/c/Users/MohammadHasan/workspace/thehub/frontend/src/routes/_navbarLayout/academy/$courseId.tsx')",
+      "Bash(mv /tmp/courseId_clean.tsx '/c/Users/MohammadHasan/workspace/thehub/frontend/src/routes/_navbarLayout/academy/$courseId.tsx')"
     ]
   }
 }
