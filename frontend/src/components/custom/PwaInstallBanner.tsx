@@ -6,6 +6,7 @@ export function PwaInstallBanner() {
 
   useEffect(() => {
     if (window.matchMedia('(display-mode: standalone)').matches) return
+    if (window.matchMedia('(min-width: 1024px)').matches) return
 
     const handler = (e: Event) => {
       e.preventDefault()
