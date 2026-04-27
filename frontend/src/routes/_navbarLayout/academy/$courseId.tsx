@@ -1,6 +1,24 @@
 import { createFileRoute, useNavigate } from '@tanstack/react-router'
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import axios from 'axios'
+import {
+  DndContext,
+  KeyboardSensor,
+  PointerSensor,
+  closestCenter,
+  useSensor,
+  useSensors,
+} from '@dnd-kit/core'
+import type { DragEndEvent } from '@dnd-kit/core'
+import {
+  SortableContext,
+  arrayMove,
+  sortableKeyboardCoordinates,
+  useSortable,
+  verticalListSortingStrategy,
+} from '@dnd-kit/sortable'
+import { CSS } from '@dnd-kit/utilities'
+import { GripVertical } from 'lucide-react'
 
 interface LearningItem {
   _id: string
@@ -164,39 +182,40 @@ function RouteComponent() {
   )
 }
 
+function toEmbedUrl(url: string): string {
+  // youtu.be/ID
+  const short = url.match(/youtu\.be\/([a-zA-Z0-9_-]{11})/)
+  if (short) return `https://www.youtube.com/embed/${short[1]}`
+  // youtube.com/watch?v=ID
+  const watch = url.match(/youtube\.com\/watch\?.*v=([a-zA-Z0-9_-]{11})/)
+  if (watch) return `https://www.youtube.com/embed/${watch[1]}`
+  // vimeo.com/ID
+  const vimeo = url.match(/vimeo\.com\/(\d+)/)
+  if (vimeo) return `https://player.vimeo.com/video/${vimeo[1]}`
+  return url
+}
+
 function LearningItemView({ item }: { item: LearningItem }) {
   const { type, content } = item
   const [flipped, setFlipped] = useState(false)
 
   if (type === 'video') {
-    const src: string = content.url ?? content.src ?? ''
-    return src ? (
+    const raw: string = content.url ?? content.src ?? ''
+    if (!raw) return null
+    const src = toEmbedUrl(raw)
+    return (
       <div className="rounded overflow-hidden border">
-        {src.includes('youtube') || src.includes('youtu.be') || src.includes('vimeo') ? (
-          <iframe src={src} className="w-full aspect-video" allowFullScreen />
+        {src.includes('youtube.com/embed') || src.includes('player.vimeo') ? (
+          <iframe src={src} className="w-full aspect-video" allowFullScreen allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" />
         ) : (
           <video src={src} controls className="w-full" />
         )}
       </div>
-    ) : null
+    )
   }
 
   if (type === 'mcq') {
-    type MCQOption = { id?: string; text: string; isCorrect?: boolean }
-    const options = content.options as Array<MCQOption | string>
-    return (
-      <div className="space-y-2 rounded border p-4">
-        <p className="font-medium text-sm">{content.question as string}</p>
-        <ul className="space-y-1">
-          {options.map((opt, i) => (
-            <li key={i} className="flex items-center gap-2 text-sm">
-              <span className="w-5 h-5 rounded-full border flex items-center justify-center text-xs">{String.fromCharCode(65 + i)}</span>
-              {typeof opt === 'object' ? opt.text : opt}
-            </li>
-          ))}
-        </ul>
-      </div>
-    )
+    return <MCQItemView content={content} />
   }
 
   if (type === 'flip-card') {
@@ -234,35 +253,287 @@ function LearningItemView({ item }: { item: LearningItem }) {
   }
 
   if (type === 'ordering') {
-    type OrderingItem = { id?: string; text: string }
-    const items = content.items as Array<OrderingItem | string>
-    return (
-      <div className="rounded border p-4 space-y-2">
-        <p className="text-sm font-medium">{(content.prompt ?? content.question ?? 'Put in order:') as string}</p>
-        <ol className="list-decimal list-inside text-sm space-y-1">
-          {items.map((item, i) => (
-            <li key={i}>{typeof item === 'object' ? item.text : item}</li>
-          ))}
-        </ol>
-      </div>
-    )
+    return <OrderingItemView content={content} />
   }
 
   if (type === 'matching') {
-    return (
-      <div className="rounded border p-4 space-y-2">
-        <p className="text-sm font-medium">{content.question ?? 'Match the following:'}</p>
-        <div className="grid grid-cols-2 gap-2 text-sm">
-          {(content.pairs as Array<{ left: string; right: string }> ?? []).map((pair, i) => (
-            <div key={i} className="contents">
-              <div className="rounded bg-gray-100 px-2 py-1">{pair.left}</div>
-              <div className="rounded bg-blue-50 px-2 py-1">{pair.right}</div>
-            </div>
-          ))}
-        </div>
-      </div>
-    )
+    return <MatchingItemView content={content} />
   }
 
   return null
+}
+
+type OrderingRow = { id: string; text: string }
+
+function shuffle<T>(arr: T[]): T[] {
+  const a = [...arr]
+  for (let i = a.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1))
+    ;[a[i], a[j]] = [a[j], a[i]]
+  }
+  return a
+}
+
+function SortableRow({ row }: { row: OrderingRow }) {
+  const { attributes, listeners, setNodeRef, transform, transition } = useSortable({ id: row.id })
+  return (
+    <div
+      ref={setNodeRef}
+      style={{ transform: CSS.Transform.toString(transform), transition }}
+      className="flex items-center gap-2 rounded border bg-white px-3 py-2 text-sm shadow-sm"
+    >
+      <button type="button" className="cursor-grab text-gray-400 touch-none" {...attributes} {...listeners}>
+        <GripVertical className="h-4 w-4" />
+      </button>
+      <span>{row.text}</span>
+    </div>
+  )
+}
+
+function OrderingItemView({ content }: { content: Record<string, any> }) {
+  const correctOrder = useMemo<OrderingRow[]>(() => {
+    const raw = content.items as Array<{ id?: string; text: string } | string>
+    return raw.map((item, i) => ({
+      id: (typeof item === 'object' ? item.id : undefined) ?? String(i),
+      text: typeof item === 'object' ? item.text : item,
+    }))
+  }, [content.items])
+
+  const [rows, setRows] = useState<OrderingRow[]>(() => shuffle(correctOrder))
+  const [checked, setChecked] = useState(false)
+
+  const sensors = useSensors(
+    useSensor(PointerSensor),
+    useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates }),
+  )
+
+  const handleDragEnd = (event: DragEndEvent) => {
+    const { active, over } = event
+    if (!over || active.id === over.id) return
+    setRows((prev) => {
+      const oldIndex = prev.findIndex((r) => r.id === active.id)
+      const newIndex = prev.findIndex((r) => r.id === over.id)
+      return arrayMove(prev, oldIndex, newIndex)
+    })
+    setChecked(false)
+  }
+
+  const isCorrect = checked && rows.every((r, i) => r.id === correctOrder[i].id)
+
+  return (
+    <div className="rounded border p-4 space-y-3">
+      <p className="text-sm font-medium">{content.prompt ?? content.question ?? 'Put in order:'}</p>
+      <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
+        <SortableContext items={rows.map((r) => r.id)} strategy={verticalListSortingStrategy}>
+          <div className="space-y-2">
+            {rows.map((row) => <SortableRow key={row.id} row={row} />)}
+          </div>
+        </SortableContext>
+      </DndContext>
+      <div className="flex items-center gap-3 pt-1">
+        <button
+          onClick={() => setChecked(true)}
+          className="rounded bg-blue-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-blue-700"
+        >
+          Check order
+        </button>
+        {checked && (
+          <span className={isCorrect ? 'text-xs text-green-600 font-medium' : 'text-xs text-red-500 font-medium'}>
+            {isCorrect ? 'Correct!' : 'Not quite — try again'}
+          </span>
+        )}
+      </div>
+    </div>
+  )
+}
+
+type MCQOption = { id: string; text: string; isCorrect: boolean }
+
+function MCQItemView({ content }: { content: Record<string, any> }) {
+  const options = useMemo<MCQOption[]>(() => {
+    const raw = content.options as Array<{ id?: string; text: string; isCorrect?: boolean } | string>
+    return raw.map((o, i) =>
+      typeof o === 'object'
+        ? { id: o.id ?? String(i), text: o.text, isCorrect: o.isCorrect ?? false }
+        : { id: String(i), text: o, isCorrect: false },
+    )
+  }, [content.options])
+
+  const multipleCorrect = options.filter((o) => o.isCorrect).length > 1
+  const [selected, setSelected] = useState<Set<string>>(new Set())
+  const [checked, setChecked] = useState(false)
+
+  const toggle = (id: string) => {
+    if (checked) return
+    setSelected((prev) => {
+      const next = new Set(prev)
+      if (multipleCorrect) {
+        next.has(id) ? next.delete(id) : next.add(id)
+      } else {
+        next.clear()
+        next.add(id)
+      }
+      return next
+    })
+  }
+
+  const isCorrect = checked && options.every((o) => o.isCorrect === selected.has(o.id))
+
+  const optionStyle = (o: MCQOption) => {
+    if (!checked) {
+      return selected.has(o.id)
+        ? 'bg-blue-600 text-white border-blue-600'
+        : 'bg-white border-gray-300 hover:bg-gray-50'
+    }
+    if (o.isCorrect) return 'bg-green-100 border-green-500 text-green-800'
+    if (selected.has(o.id)) return 'bg-red-100 border-red-400 text-red-800'
+    return 'bg-white border-gray-200 text-gray-400'
+  }
+
+  return (
+    <div className="rounded border p-4 space-y-3">
+      <p className="font-medium text-sm">{content.question as string}</p>
+      {multipleCorrect && <p className="text-xs text-gray-500">Select all that apply</p>}
+      <div className="space-y-2">
+        {options.map((o, i) => (
+          <button
+            key={o.id}
+            onClick={() => toggle(o.id)}
+            className={['w-full flex items-center gap-3 rounded border px-3 py-2 text-sm text-left transition-colors', optionStyle(o)].join(' ')}
+          >
+            <span className="w-5 h-5 shrink-0 rounded-full border flex items-center justify-center text-xs font-medium">
+              {String.fromCharCode(65 + i)}
+            </span>
+            {o.text}
+          </button>
+        ))}
+      </div>
+      <div className="flex items-center gap-3 pt-1">
+        <button
+          onClick={() => setChecked(true)}
+          disabled={selected.size === 0 || checked}
+          className="rounded bg-blue-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-blue-700 disabled:opacity-40"
+        >
+          Check answer
+        </button>
+        {checked && (
+          <>
+            <button
+              onClick={() => { setSelected(new Set()); setChecked(false) }}
+              className="rounded border px-3 py-1.5 text-xs font-medium hover:bg-gray-50"
+            >
+              Try again
+            </button>
+            <span className={isCorrect ? 'text-xs text-green-600 font-medium' : 'text-xs text-red-500 font-medium'}>
+              {isCorrect ? 'Correct!' : 'Not quite — try again'}
+            </span>
+          </>
+        )}
+      </div>
+      {checked && content.explanation && (
+        <p className="rounded bg-gray-50 px-3 py-2 text-xs text-gray-600 border">{content.explanation as string}</p>
+      )}
+    </div>
+  )
+}
+
+type MatchingPair = { id: string; left: string; right: string }
+
+function MatchingItemView({ content }: { content: Record<string, any> }) {
+  const pairs = useMemo<MatchingPair[]>(() => {
+    const raw = content.pairs as Array<{ id?: string; left: string; right: string }>
+    return raw.map((p, i) => ({ id: p.id ?? String(i), left: p.left, right: p.right }))
+  }, [content.pairs])
+
+  const [rightOptions] = useState<MatchingPair[]>(() => shuffle(pairs))
+  const [selected, setSelected] = useState<string | null>(null) // left pair id
+  const [matches, setMatches] = useState<Record<string, string>>({}) // leftId -> rightId
+  const [checked, setChecked] = useState(false)
+
+  const handleLeftClick = (id: string) => {
+    setSelected((prev) => (prev === id ? null : id))
+    setChecked(false)
+  }
+
+  const handleRightClick = (rightId: string) => {
+    if (!selected) return
+    setMatches((prev) => ({ ...prev, [selected]: rightId }))
+    setSelected(null)
+    setChecked(false)
+  }
+
+  const allMatched = pairs.every((p) => matches[p.id] !== undefined)
+  const isCorrect = checked && pairs.every((p) => matches[p.id] === p.id)
+
+  return (
+    <div className="rounded border p-4 space-y-3">
+      <p className="text-sm font-medium">{content.prompt ?? content.question ?? 'Match the following:'}</p>
+      <div className="grid grid-cols-2 gap-3 text-sm">
+        <div className="space-y-2">
+          {pairs.map((p) => {
+            const isSelected = selected === p.id
+            const isMatched = matches[p.id] !== undefined
+            return (
+              <button
+                key={p.id}
+                onClick={() => handleLeftClick(p.id)}
+                className={[
+                  'w-full rounded px-3 py-2 text-left transition-colors border',
+                  isSelected ? 'bg-blue-600 text-white border-blue-600' :
+                  isMatched ? 'bg-blue-50 border-blue-300' :
+                  'bg-gray-100 border-transparent hover:bg-gray-200',
+                ].join(' ')}
+              >
+                {p.left}
+              </button>
+            )
+          })}
+        </div>
+        <div className="space-y-2">
+          {rightOptions.map((p) => {
+            const isMatchedBySelected = selected !== null && matches[selected] === p.id
+            const isMatchedByAny = Object.values(matches).includes(p.id)
+            return (
+              <button
+                key={p.id}
+                onClick={() => handleRightClick(p.id)}
+                className={[
+                  'w-full rounded px-3 py-2 text-left transition-colors border',
+                  isMatchedBySelected ? 'bg-blue-600 text-white border-blue-600' :
+                  isMatchedByAny ? 'bg-blue-50 border-blue-300' :
+                  selected ? 'bg-white border-gray-300 hover:bg-blue-50 cursor-pointer' :
+                  'bg-white border-gray-200',
+                ].join(' ')}
+              >
+                {p.right}
+              </button>
+            )
+          })}
+        </div>
+      </div>
+      {selected && (
+        <p className="text-xs text-blue-600">Now click an item on the right to match it</p>
+      )}
+      <div className="flex items-center gap-3 pt-1">
+        <button
+          onClick={() => setChecked(true)}
+          disabled={!allMatched}
+          className="rounded bg-blue-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-blue-700 disabled:opacity-40"
+        >
+          Check matches
+        </button>
+        <button
+          onClick={() => { setMatches({}); setSelected(null); setChecked(false) }}
+          className="rounded border px-3 py-1.5 text-xs font-medium hover:bg-gray-50"
+        >
+          Reset
+        </button>
+        {checked && (
+          <span className={isCorrect ? 'text-xs text-green-600 font-medium' : 'text-xs text-red-500 font-medium'}>
+            {isCorrect ? 'Correct!' : 'Not quite — try again'}
+          </span>
+        )}
+      </div>
+    </div>
+  )
 }
