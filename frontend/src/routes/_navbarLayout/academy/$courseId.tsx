@@ -235,21 +235,7 @@ function LearningItemView({ item }: { item: LearningItem }) {
   }
 
   if (type === 'hotspot') {
-    return (
-      <div className="relative inline-block rounded border overflow-hidden">
-        <img src={content.imageUrl ?? content.image} alt="Hotspot" className="max-w-full" />
-        {(content.hotspots as Array<{ x: number; y: number; label: string }> ?? []).map((h, i) => (
-          <div
-            key={i}
-            className="absolute w-5 h-5 rounded-full bg-blue-500 opacity-80 flex items-center justify-center text-white text-xs cursor-pointer"
-            style={{ left: `${h.x}%`, top: `${h.y}%`, transform: 'translate(-50%,-50%)' }}
-            title={h.label}
-          >
-            {i + 1}
-          </div>
-        ))}
-      </div>
-    )
+    return <HotspotItemView content={content} />
   }
 
   if (type === 'ordering') {
@@ -261,6 +247,57 @@ function LearningItemView({ item }: { item: LearningItem }) {
   }
 
   return null
+}
+
+type Hotspot = { id?: string; x: number; y: number; label: string; description?: string }
+
+function HotspotItemView({ content }: { content: Record<string, any> }) {
+  const hotspots = (content.hotspots ?? []) as Hotspot[]
+  const [activeId, setActiveId] = useState<string | null>(null)
+
+  const getId = (h: Hotspot, i: number) => h.id ?? String(i)
+
+  const toggle = (id: string) => setActiveId((prev) => (prev === id ? null : id))
+
+  return (
+    <div className="space-y-2">
+      <div className="relative inline-block w-full rounded border overflow-hidden">
+        <img src={content.imageUrl ?? content.image} alt="Hotspot" className="w-full" draggable={false} />
+        {hotspots.map((h, i) => {
+          const id = getId(h, i)
+          const isActive = activeId === id
+          return (
+            <button
+              key={id}
+              type="button"
+              onClick={() => toggle(id)}
+              className={[
+                'absolute flex h-7 w-7 -translate-x-1/2 -translate-y-1/2 items-center justify-center rounded-full border-2 border-white text-white text-xs font-bold shadow-md transition-transform hover:scale-110',
+                isActive ? 'bg-orange-500 scale-110' : 'bg-blue-600',
+              ].join(' ')}
+              style={{ left: `${h.x}%`, top: `${h.y}%` }}
+            >
+              {i + 1}
+            </button>
+          )
+        })}
+      </div>
+      {activeId && (() => {
+        const idx = hotspots.findIndex((h, i) => getId(h, i) === activeId)
+        const h = hotspots[idx]
+        if (!h) return null
+        return (
+          <div className="rounded border bg-white p-4 shadow-sm space-y-1">
+            <div className="flex items-center justify-between">
+              <p className="font-medium text-sm">{idx + 1}. {h.label}</p>
+              <button onClick={() => setActiveId(null)} className="text-gray-400 hover:text-gray-600 text-xs">✕</button>
+            </div>
+            {h.description && <p className="text-sm text-gray-600">{h.description}</p>}
+          </div>
+        )
+      })()}
+    </div>
+  )
 }
 
 type OrderingRow = { id: string; text: string }
