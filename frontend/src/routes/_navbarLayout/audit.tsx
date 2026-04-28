@@ -38,7 +38,17 @@ function RouteComponent() {
           { key: 'visitor', label: 'Visitor\'s Audit', to: '/audit/visitor', isActive: isVisitorActive },
           { key: 'interface', label: 'Interface', to: '/audit/interface', isActive: isInterfaceActive },
         ]
-          .filter(btn => access?.stationAudit?.[btn.key]) // Only keep buttons with permission
+          .filter(btn => {
+            const section = access?.stationAudit?.[btn.key];
+
+            // If it's the checklist, we need to check the .value property
+            if (btn.key === 'checklist') {
+              return section?.value === true;
+            }
+
+            // Otherwise, check the permission normally
+            return !!section;
+          })
           .map((btn, idx, arr) => {
             const isFirst = idx === 0;
             const isLast = idx === arr.length - 1;

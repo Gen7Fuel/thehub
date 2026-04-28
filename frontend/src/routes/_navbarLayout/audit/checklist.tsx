@@ -579,30 +579,32 @@ function RouteComponent() {
       <div className="flex items-center gap-4 mb-6">
 
         {/* ◼ Audit Report Dialog Button */}
-        <Dialog open={isReportOpen} onOpenChange={setIsReportOpen}>
-          <DialogTrigger asChild>
-            <Button variant="outline" size="icon" className="shrink-0" title="View Audit Report">
-              <BarChart3 className="h-5 w-5" />
-            </Button>
-          </DialogTrigger>
-          {/* Note the max-w-5xl to make it larger than the chart's internal popup */}
-          <DialogContent className="max-w-5xl max-h-[90vh] overflow-y-auto">
-            <DialogHeader>
-              <DialogTitle>Audit Report: {site}</DialogTitle>
-            </DialogHeader>
-            {auditStats ? (
-              <div className="py-4">
-                <AuditSummaryChart
-                  auditStats={auditStats}
-                  periodKeys={pKeys}
-                  timezone={siteTimezone}
-                />
-              </div>
-            ) : (
-              <div className="h-64 flex items-center justify-center">Loading Report...</div>
-            )}
-          </DialogContent>
-        </Dialog>
+        {user?.access?.stationAudit?.checklist?.viewReport && (
+          <Dialog open={isReportOpen} onOpenChange={setIsReportOpen}>
+            <DialogTrigger asChild>
+              <Button variant="outline" size="icon" className="shrink-0" title="View Audit Report">
+                <BarChart3 className="h-5 w-5" />
+              </Button>
+            </DialogTrigger>
+            {/* Note the max-w-5xl to make it larger than the chart's internal popup */}
+            <DialogContent className="max-w-5xl max-h-[90vh] overflow-y-auto">
+              <DialogHeader>
+                <DialogTitle>Audit Report: {site}</DialogTitle>
+              </DialogHeader>
+              {auditStats ? (
+                <div className="py-4">
+                  <AuditSummaryChart
+                    auditStats={auditStats}
+                    periodKeys={pKeys}
+                    timezone={siteTimezone}
+                  />
+                </div>
+              ) : (
+                <div className="h-64 flex items-center justify-center">Loading Report...</div>
+              )}
+            </DialogContent>
+          </Dialog>
+        )}
 
         <SitePicker
           value={site}
@@ -676,7 +678,7 @@ function RouteComponent() {
         </div>
 
         {/* ◼ Open Issues */}
-        {openIssues.length > 0 && (
+        {user?.access?.stationAudit?.checklist?.viewOpenIssues && openIssues.length > 0 && (
           <Link to="/audit/checklist/open-issues" search={(prev: any) => ({ site: prev.site })}>
             <Button
               {...(matchRoute({ to: "/audit/checklist/open-issues", fuzzy: true }) ? {} : { variant: "outline" })}

@@ -13,7 +13,7 @@ function RouteComponent() {
 
   useEffect(() => {
     if (!user) return; // wait for auth load
-    if (access?.stationAudit?.checklist) {
+    if (access?.stationAudit?.checklist?.value) {
       navigate({to: "/audit/checklist"});
     } else if (access?.stationAudit?.visitor) {
       navigate({to: "/audit/visitor"});
