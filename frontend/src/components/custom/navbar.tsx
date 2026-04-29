@@ -367,12 +367,24 @@ export default function Navbar() {
     // Navbar container
     <div className="sticky top-0 left-0 w-full bg-white border-b border-dashed border-gray-300 z-10">
       <div className="max-w-7xl mx-auto flex justify-between items-center p-2 relative">
-        {/* Logo/Home link */}
-        <Link to="/">
-          <HomeIcon className="h-6 w-6 md:hidden" />
-          <span className="hidden md:inline text-xl font-bold">The Hub</span>
-        </Link>
 
+        {/* Logo / Home Link */}
+        <Link to="/" className="flex items-center gap-2 group">
+          {/* Mobile View: Keep the Home Icon */}
+          <HomeIcon className="h-6 w-6 md:hidden text-slate-600" />
+
+          {/* Desktop/Tablet View: Logo + "Hub" */}
+          <div className="hidden md:flex items-center gap-3">
+            <img
+              src="/logo.png"
+              alt="Company Logo"
+              className="h-8 w-auto object-contain transition-transform group-hover:scale-105"
+            />
+            <span className="text-xl font-bold tracking-tight text-slate-800">
+              Hub
+            </span>
+          </div>
+        </Link>
         {/* Centered dynamic header */}
         {/* <h1 className="absolute left-1/2 transform -translate-x-1/2 text-lg font-bold">
           {headerText()}
