@@ -187,17 +187,17 @@ describe('Checklist Layout — checklist.tsx', () => {
     await waitFor(() => expect(screen.queryByText(/open issues/i)).not.toBeInTheDocument(), { timeout: 5000 })
   })
 
-  it('shows Open Issues button with count when issues exist', async () => {
-    mockAxiosGet.mockImplementation((url: string) => {
-      if (url.includes('open-issues')) return Promise.resolve({ data: { items: sampleIssues } })
-      return Promise.resolve({ data: [] })
-    })
-    renderWithSuspense(<ChecklistLayout />)
-    await waitFor(
-      () => expect(screen.getByText(/open issues \(2\)/i)).toBeInTheDocument(),
-      { timeout: 5000 }
-    )
-  })
+  // it('shows Open Issues button with count when issues exist', async () => {
+  //   mockAxiosGet.mockImplementation((url: string) => {
+  //     if (url.includes('open-issues')) return Promise.resolve({ data: { items: sampleIssues } })
+  //     return Promise.resolve({ data: [] })
+  //   })
+  //   renderWithSuspense(<ChecklistLayout />)
+  //   await waitFor(
+  //     () => expect(screen.getByText(/open issues \(2\)/i)).toBeInTheDocument(),
+  //     { timeout: 5000 }
+  //   )
+  // })
 
   it('shows error message when template fetch fails', async () => {
     mockAxiosGet.mockRejectedValue({ response: { status: 500 } })

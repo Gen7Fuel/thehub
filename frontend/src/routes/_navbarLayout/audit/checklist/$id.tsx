@@ -1,5 +1,5 @@
 import { createFileRoute, useParams, useNavigate } from "@tanstack/react-router";
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { ChecklistItemCard } from "@/components/custom/ChecklistItem";
 import { Button } from "@/components/ui/button";
 // import { useContext } from "react";
@@ -141,10 +141,48 @@ function RouteComponent() {
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
 
-  const [frequency, setFrequency] = useState<"daily" | "weekly" | "monthly" | "all">("all");
+  // const [frequency, setFrequency] = useState<"daily" | "weekly" | "monthly" | "all">("all");
   const [currentDate] = useState(new Date());
   const [templateName, setTemplateName] = useState("");
   const [siteTimezone, setSiteTimezone] = useState<string>(""); // e.g. "America/Toronto"
+
+  const access = user?.access?.stationAudit?.checklist;
+  type Frequency = "daily" | "weekly" | "monthly" | "all";
+
+  const availableFrequencies = useMemo(() => {
+    // CHANGE: Allow Frequency types here, not just the 3 specific ones
+    const options: Frequency[] = [];
+
+    if (access?.dailyAudits) options.push("daily");
+    if (access?.weeklyAudits) options.push("weekly");
+    if (access?.monthlyAudits) options.push("monthly");
+
+    const hasAllPermissions = access?.dailyAudits && access?.weeklyAudits && access?.monthlyAudits;
+
+    // By using 'as const', TS will treat this as a fixed list of Frequency values
+    return hasAllPermissions ? (["all", ...options] as const) : options;
+  }, [access]);
+
+  // --- NEW ACCESS GUARD ---
+  useEffect(() => {
+    // If we've checked the user and found no available frequencies, kick them out
+    if (user && availableFrequencies.length === 0) {
+      navigate({ to: '/no-access' });
+    }
+  }, [user, availableFrequencies, navigate]);
+
+  // Initialize state with the first permitted option
+  const [frequency, setFrequency] = useState<Frequency>(
+    availableFrequencies[0] as Frequency
+  );
+
+  // Sync frequency if availableFrequencies changes (e.g., after login)
+  useEffect(() => {
+    if (availableFrequencies.length > 0 && !availableFrequencies.includes(frequency)) {
+      setFrequency(availableFrequencies[0]);
+    }
+  }, [availableFrequencies]);
+
   // Extract unique categories
   const categories = [...new Set(items.map(item => item.category).filter(Boolean))];
 
@@ -496,44 +534,42 @@ function RouteComponent() {
   }
   const totalItems = items.length;
   const checkedItems = items.filter(item => item.checked).length;
-  const frequencies = ["all", "daily", "weekly", "monthly"] as const;
-
-  type Frequency = typeof frequencies[number];
 
   interface FrequencyPickerProps {
     frequency: Frequency;
     setFrequency: React.Dispatch<React.SetStateAction<Frequency>>;
+    options: readonly Frequency[]; // Use the union type here
   }
 
-  function FrequencyPicker({ frequency, setFrequency }: FrequencyPickerProps) {
-    const currentIndex = frequencies.indexOf(frequency);
-    const prevIndex = (currentIndex - 1 + frequencies.length) % frequencies.length;
-    const nextIndex = (currentIndex + 1) % frequencies.length;
+  function FrequencyPicker({ frequency, setFrequency, options }: FrequencyPickerProps) {
+    // If for some reason there are no options, return null or a placeholder
+    if (options.length === 0) return <div className="text-xs text-gray-400">No Access</div>;
+
+    const currentIndex = options.indexOf(frequency);
+
+    // Navigate through the filtered list only
+    const prevIndex = (currentIndex - 1 + options.length) % options.length;
+    const nextIndex = (currentIndex + 1) % options.length;
 
     return (
       <div className="flex items-center h-10 border rounded-md bg-white px-2 text-sm w-[160px] justify-between shadow-sm">
-
-        {/* Left Arrow */}
         <button
-          className="px-2 text-lg select-none"
-          onClick={() => setFrequency(frequencies[prevIndex])}
+          className="px-2 text-lg select-none hover:bg-gray-100 rounded"
+          onClick={() => setFrequency(options[prevIndex])}
         >
           ◀
         </button>
 
-        {/* Center Value */}
         <div className="flex-1 text-center truncate px-1 font-normal text-sm capitalize">
           {frequency}
         </div>
 
-        {/* Right Arrow */}
         <button
-          className="px-2 text-lg select-none"
-          onClick={() => setFrequency(frequencies[nextIndex])}
+          className="px-2 text-lg select-none hover:bg-gray-100 rounded"
+          onClick={() => setFrequency(options[nextIndex])}
         >
           ▶
         </button>
-
       </div>
     );
   }
@@ -544,8 +580,11 @@ function RouteComponent() {
       {/* HEADER BAR */}
       <div className="flex items-center gap-6 mb-3">
 
-        <FrequencyPicker frequency={frequency} setFrequency={setFrequency} />
-
+        <FrequencyPicker
+          frequency={frequency}
+          setFrequency={setFrequency}
+          options={availableFrequencies}
+        />
         <div className="text-gray-600 text-sm whitespace-nowrap">
           Items checked {checkedItems} of {totalItems}
         </div>
