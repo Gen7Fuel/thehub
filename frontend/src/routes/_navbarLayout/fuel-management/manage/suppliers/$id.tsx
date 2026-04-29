@@ -20,6 +20,8 @@ function EditSupplierComponent() {
   const [isLoading, setIsLoading] = useState(true)
   const [isSaving, setIsSaving] = useState(false)
 
+  const AVAILABLE_GRADES = ["Regular", "Premium", "Diesel", "Dyed Diesel"];
+
   // Fetch Racks for the dropdown with Authorization
   const { data: racks = [] } = useQuery({
     queryKey: ['fuel-racks'],
@@ -51,12 +53,30 @@ function EditSupplierComponent() {
     fetchSupplier()
   }, [id])
 
+  // Update addBadge to include the empty array
   const addBadge = () => {
     setFormData({
       ...formData,
-      supplierBadges: [...formData.supplierBadges, { badgeName: '', badgeNumber: '', accountingId: '', isDefault: false }]
-    })
-  }
+      supplierBadges: [
+        ...formData.supplierBadges,
+        { badgeName: '', badgeNumber: '', accountingId: '', isDefault: false, availableGrades: [] }
+      ]
+    });
+  };
+
+  // Helper to toggle grades for a specific badge index
+  const toggleBadgeGrade = (badgeIndex: number, grade: string) => {
+    const updatedBadges = [...formData.supplierBadges];
+    const currentGrades = updatedBadges[badgeIndex].availableGrades || [];
+
+    if (currentGrades.includes(grade)) {
+      updatedBadges[badgeIndex].availableGrades = currentGrades.filter((g: string) => g !== grade);
+    } else {
+      updatedBadges[badgeIndex].availableGrades = [...currentGrades, grade];
+    }
+
+    setFormData({ ...formData, supplierBadges: updatedBadges });
+  };
 
   const removeBadge = (index: number) => {
     setFormData({
@@ -194,55 +214,100 @@ function EditSupplierComponent() {
             </Button>
           </div>
 
-          <div className="grid gap-3">
+          <div className="grid gap-4">
             {formData.supplierBadges.map((badge: any, index: number) => (
-              <div key={index} className={`flex items-end gap-3 p-4 border rounded-xl transition-all ${badge.isDefault ? 'bg-blue-50/30 border-blue-200' : 'bg-white'}`}>
-                <div className="flex-1 space-y-1.5">
-                  <label className="text-[10px] font-bold uppercase text-slate-400 ml-1">Badge Name</label>
-                  <Input
-                    className="bg-white h-9"
-                    value={badge.badgeName}
-                    onChange={e => handleBadgeChange(index, 'badgeName', e.target.value)}
-                    placeholder="e.g. Unit Card"
-                  />
-                </div>
-                <div className="flex-1 space-y-1.5">
-                  <label className="text-[10px] font-bold uppercase text-slate-400 ml-1">Badge Number</label>
-                  <Input
-                    className="bg-white h-9"
-                    value={badge.badgeNumber}
-                    onChange={e => handleBadgeChange(index, 'badgeNumber', e.target.value)}
-                    placeholder="ID#"
-                  />
+              <div
+                key={index}
+                className={`flex flex-col gap-4 p-5 border rounded-xl transition-all shadow-sm ${badge.isDefault ? 'bg-blue-50/40 border-blue-200' : 'bg-white border-slate-200'
+                  }`}
+              >
+                {/* ROW 1: PRIMARY INPUTS */}
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                  <div className="space-y-1.5">
+                    <label className="text-[10px] font-bold uppercase text-slate-400 ml-1">Badge Name</label>
+                    <Input
+                      className="bg-white h-10 w-full"
+                      value={badge.badgeName}
+                      onChange={e => handleBadgeChange(index, 'badgeName', e.target.value)}
+                      placeholder="e.g. Unit Card"
+                    />
+                  </div>
+                  <div className="space-y-1.5">
+                    <label className="text-[10px] font-bold uppercase text-slate-400 ml-1">Badge Number</label>
+                    <Input
+                      className="bg-white h-10 w-full"
+                      value={badge.badgeNumber}
+                      onChange={e => handleBadgeChange(index, 'badgeNumber', e.target.value)}
+                      placeholder="ID#"
+                    />
+                  </div>
+                  <div className="space-y-1.5">
+                    <label className="text-[10px] font-bold uppercase text-slate-400 ml-1">Bookworks ID</label>
+                    <Input
+                      className="bg-white h-10 w-full border-amber-200 focus:border-amber-500"
+                      value={badge.accountingId || ''}
+                      onChange={e => handleBadgeChange(index, 'accountingId', e.target.value)}
+                      placeholder="Bookworks ID for Mapping"
+                    />
+                  </div>
                 </div>
 
-                <div className="flex-1 space-y-1.5">
-                  <label className="text-[10px] font-bold uppercase text-slate-400 ml-1">Bookworks ID</label>
-                  <Input
-                    className="bg-white h-9 border-amber-200 focus:border-amber-500"
-                    value={badge.accountingId || ''}
-                    onChange={e => handleBadgeChange(index, 'accountingId', e.target.value)}
-                    placeholder="Bookworks ID for Mapping"
-                  />
-                </div>
+                {/* ROW 2: GRADES & ACTIONS (Moved Default here) */}
+                <div className="pt-4 border-t border-slate-100 flex flex-col md:flex-row md:items-center justify-between gap-4">
+                  <div className="flex-1">
+                    <label className="text-[10px] font-bold uppercase text-slate-400 ml-1 block mb-2">
+                      Available Grades for this Badge
+                    </label>
+                    <div className="flex flex-wrap gap-x-6 gap-y-2">
+                      {AVAILABLE_GRADES.map(grade => (
+                        <label key={grade} className="flex items-center gap-2 cursor-pointer group">
+                          <div
+                            onClick={() => toggleBadgeGrade(index, grade)}
+                            className={`w-5 h-5 rounded border flex items-center justify-center transition-colors ${badge.availableGrades?.includes(grade)
+                              ? 'bg-blue-600 border-blue-600'
+                              : 'border-slate-300 bg-white group-hover:border-blue-400'
+                              }`}
+                          >
+                            {badge.availableGrades?.includes(grade) && (
+                              <CheckCircle2 className="h-3.5 w-3.5 text-white" />
+                            )}
+                          </div>
+                          <span className={`text-sm font-semibold ${badge.availableGrades?.includes(grade) ? 'text-slate-900' : 'text-slate-500'
+                            }`}>
+                            {grade}
+                          </span>
+                        </label>
+                      ))}
+                    </div>
+                  </div>
 
-                <div className="flex items-center gap-2 mb-0.5">
-                  <Button
-                    type="button"
-                    variant={badge.isDefault ? "default" : "outline"}
-                    size="sm"
-                    className={`h-9 px-3 gap-2 ${badge.isDefault ? '' : 'text-slate-400 border-slate-200'}`}
-                    onClick={() => handleBadgeChange(index, 'isDefault', true)}
-                  >
-                    <CheckCircle2 className="h-4 w-4" />
-                    <span className="text-xs uppercase font-bold">{badge.isDefault ? 'Default' : 'Set Default'}</span>
-                  </Button>
-
-                  {formData.supplierBadges.length > 1 && (
-                    <Button variant="ghost" size="icon" onClick={() => removeBadge(index)} className="h-9 w-9 text-slate-300 hover:text-red-500">
-                      <Trash2 className="h-4 w-4" />
+                  {/* ACTION BUTTONS */}
+                  <div className="flex items-center gap-2 self-end md:self-center">
+                    <Button
+                      type="button"
+                      variant={badge.isDefault ? "default" : "outline"}
+                      size="sm"
+                      className={`h-9 px-4 gap-2 shadow-sm ${badge.isDefault ? 'bg-blue-600' : 'text-slate-500 border-slate-200 hover:bg-slate-50'
+                        }`}
+                      onClick={() => handleBadgeChange(index, 'isDefault', true)}
+                    >
+                      <CheckCircle2 className="h-4 w-4" />
+                      <span className="text-xs uppercase font-bold">
+                        {badge.isDefault ? 'Primary Default' : 'Set as Default'}
+                      </span>
                     </Button>
-                  )}
+
+                    {formData.supplierBadges.length > 1 && (
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        onClick={() => removeBadge(index)}
+                        className="h-9 w-9 text-slate-300 hover:text-red-500 hover:bg-red-50"
+                      >
+                        <Trash2 className="h-4 w-4" />
+                      </Button>
+                    )}
+                  </div>
                 </div>
               </div>
             ))}
