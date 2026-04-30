@@ -1314,7 +1314,11 @@ router.get('/ar-check', async (req, res) => {
     const transactionsTotal = txAgg?.total    ?? 0
     const match = Math.round(arIncurredTotal * 100) === Math.round(transactionsTotal * 100)
 
-    res.json({ arIncurredTotal, transactionsTotal, match })
+    res.json({
+      arIncurredTotal: Math.round(arIncurredTotal * 100) / 100,
+      transactionsTotal: Math.round(transactionsTotal * 100) / 100,
+      match,
+    })
   } catch (err) {
     console.error('AR check error:', err)
     res.status(500).json({ error: 'Failed to check AR totals' })
