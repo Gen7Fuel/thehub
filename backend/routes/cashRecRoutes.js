@@ -387,7 +387,8 @@ async function computeBankRecForDate(site, date) {
   let handheldDebit = 0
   try {
     const { CashSummaryReport } = require('../models/CashSummaryNew')
-    const report = await CashSummaryReport.findOne({ site, date: start }).lean()
+    const reportDate = new Date(`${date}T00:00:00.000Z`) // CashSummaryReport stores date as UTC midnight
+    const report = await CashSummaryReport.findOne({ site, date: reportDate }).lean()
     if (report && typeof report.handheldDebit === 'number') {
       handheldDebit = report.handheldDebit
     }
