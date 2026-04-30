@@ -16,6 +16,27 @@ type ParsedTtx = {
   statementDate?: string // YYYY-MM-DD
   accountName?: string // raw Account Name (legalName)
   derivedSite?: string // first token fallback
+  ontarioIntegratedTax?: number
+  transferFrom?: number
+}
+
+// Account number suffix per site used to filter GBL credits
+const GBL_CREDITS_SUFFIX: Record<string, string> = {
+  'Rankin': '38',
+  'Jocko Point': '88',
+  'Silver Grizzly': '51',
+}
+
+function computeGblCreditsFiltered(
+  gblCredits: { description: string; amount: number }[],
+  site: string
+): number | undefined {
+  const suffix = GBL_CREDITS_SUFFIX[site]
+  if (!suffix) return undefined
+  const re = new RegExp(`\\b\\d+${suffix}\\b`)
+  return gblCredits
+    .filter(entry => re.test(entry.description))
+    .reduce((sum, entry) => sum + (entry.amount ?? 0), 0)
 }
 
 const pad = (n: number) => String(n).padStart(2, '0')
@@ -65,7 +86,7 @@ function parseTtx(text: string): ParsedTtx {
   const balanceIdx = idx('Balance')
   const acctNameIdx = idx('Account Name')
 
-  const out: ParsedTtx = { miscDebits: [], miscCredits: [], gblDebits: [], gblCredits: [] }
+  const out: ParsedTtx = { miscDebits: [], miscCredits: [], gblDebits: [], gblCredits: [], ontarioIntegratedTax: 0, transferFrom: 0 }
   let lastBalance: number | undefined
   let latestDate: string | undefined
 
@@ -104,6 +125,8 @@ function parseTtx(text: string): ParsedTtx {
       if (credits > 0) {
         if (hasGBL) out.gblCredits!.push({ date: dateStr || '', description, amount: credits })
         else out.miscCredits!.push({ date: dateStr || '', description, amount: credits })
+        if (/ontario integrated tax/i.test(description)) out.ontarioIntegratedTax = (out.ontarioIntegratedTax ?? 0) + credits
+        if (description.includes('TRANSFER FROM~801500002518')) out.transferFrom = (out.transferFrom ?? 0) + credits
       }
     }
   }
@@ -259,6 +282,7 @@ function RouteComponent() {
 
   const capture = async () => {
     if (!canCapture || !parsed) return
+    const gblCreditsFiltered = computeGblCreditsFiltered(parsed.gblCredits ?? [], selectedSite)
     const payload = {
       site: selectedSite,
       date: parsed.statementDate,
@@ -274,6 +298,9 @@ function RouteComponent() {
       gblCredits: parsed.gblCredits ?? [],
       // NEW: include merchantFees
       merchantFees: merchantFeesNumber,
+      ...(gblCreditsFiltered !== undefined && { gblCreditsFiltered }),
+      ontarioIntegratedTax: parsed.ontarioIntegratedTax ?? 0,
+      transferFrom: parsed.transferFrom ?? 0,
     }
     try {
       const res = await fetch('/api/cash-rec/bank-statement', {
@@ -416,6 +443,32 @@ function RouteComponent() {
                   </>
               )}
             </div>
+              {/* GBL Credits Filtered */}
+              {GBL_CREDITS_SUFFIX[selectedSite] && (
+                <div className="sm:col-span-2 border rounded p-3">
+                  <div className="font-semibold mb-1">GBL Credits Filtered (account ending in {GBL_CREDITS_SUFFIX[selectedSite]})</div>
+                  <div className="text-sm font-mono">
+                    {computeGblCreditsFiltered(parsed.gblCredits ?? [], selectedSite)?.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 }) ?? '-'}
+                  </div>
+                </div>
+              )}
+
+              {/* Ontario Integrated Tax */}
+              <div className="border rounded p-3">
+                <div className="font-semibold mb-1">Ontario Integrated Tax</div>
+                <div className="text-sm font-mono">
+                  {(parsed.ontarioIntegratedTax ?? 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                </div>
+              </div>
+
+              {/* Transfer From 801500002518 */}
+              <div className="border rounded p-3">
+                <div className="font-semibold mb-1">Transfer From (801500002518)</div>
+                <div className="text-sm font-mono">
+                  {(parsed.transferFrom ?? 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                </div>
+              </div>
+
               {/* GBL Credits */}
               <div className="sm:col-span-2 border rounded p-3">
                 <div className="font-semibold mb-2">GBL Credits</div>
