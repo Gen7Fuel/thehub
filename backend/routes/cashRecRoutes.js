@@ -508,7 +508,8 @@ router.get('/entries', async (req, res) => {
     const aggUnsettledPrepays = agg?.unsettledPrepays
     try {
       const { CashSummaryReport } = require('../models/CashSummaryNew')
-      const report = await CashSummaryReport.findOne({ site, date: start }).lean()
+      const reportDate = new Date(`${date}T00:00:00.000Z`) // CashSummaryReport stores date as UTC midnight
+      const report = await CashSummaryReport.findOne({ site, date: reportDate }).lean()
       if (report) {
         cashSummary.unsettledPrepays = aggUnsettledPrepays || (typeof report.unsettledPrepays === 'number' ? report.unsettledPrepays : undefined)
         cashSummary.handheldDebit = typeof report.handheldDebit === 'number' ? report.handheldDebit : undefined
