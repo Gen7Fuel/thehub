@@ -6,6 +6,7 @@ const Location = require('../models/Location')
 const Payable = require('../models/Payables');
 const Transactions = require('../models/Transactions');
 const Lottery = LotteryModule?.Lottery || LotteryModule?.default || LotteryModule
+const { DateTime } = require('luxon')
 const { parseSftReport } = require('../utils/parseSftReport')
 const { dateFromYMDLocal } = require('../utils/dateUtils')
 const { sendEmail } = require('../utils/emailService')
@@ -1260,10 +1261,15 @@ router.get('/payouts-check', async (req, res) => {
       { $group: { _id: null, total: { $sum: { $ifNull: ['$payouts', 0] } } } },
     ])
 
+    // Payables are stored with createdAt timestamps in UTC, so use the site's
+    // local timezone day boundaries to avoid evening entries crossing into the next UTC day.
     let payablesTotal = 0
     if (location) {
+      const tz = location.timezone || 'America/Toronto'
+      const payStart = DateTime.fromISO(date, { zone: tz }).startOf('day').toJSDate()
+      const payEnd   = DateTime.fromISO(date, { zone: tz }).endOf('day').toJSDate()
       const [payableAgg] = await Payable.aggregate([
-        { $match: { location: location._id, paymentMethod: 'till', createdAt: { $gte: start, $lte: end } } },
+        { $match: { location: location._id, paymentMethod: 'till', createdAt: { $gte: payStart, $lte: payEnd } } },
         { $group: { _id: null, total: { $sum: { $ifNull: ['$amount', 0] } } } },
       ])
       payablesTotal = payableAgg?.total ?? 0
@@ -1291,8 +1297,16 @@ router.get('/ar-check', async (req, res) => {
       { $match: { site, date: { $gte: start, $lte: end } } },
       { $group: { _id: null, total: { $sum: { $ifNull: ['$arIncurred', 0] } } } },
     ])
+
+    // Transactions are stored as exact submission timestamps in UTC, so we must
+    // query using the site's local timezone day boundaries, not UTC midnight.
+    const location = await Location.findOne({ stationName: site }, { timezone: 1 }).lean()
+    const tz = location?.timezone || 'America/Toronto'
+    const txStart = DateTime.fromISO(date, { zone: tz }).startOf('day').toJSDate()
+    const txEnd   = DateTime.fromISO(date, { zone: tz }).endOf('day').toJSDate()
+
     const [txAgg] = await Transactions.aggregate([
-      { $match: { stationName: site, date: { $gte: start, $lte: end } } },
+      { $match: { stationName: site, date: { $gte: txStart, $lte: txEnd } } },
       { $group: { _id: null, total: { $sum: { $ifNull: ['$amount', 0] } } } },
     ])
 
@@ -1300,7 +1314,11 @@ router.get('/ar-check', async (req, res) => {
     const transactionsTotal = txAgg?.total    ?? 0
     const match = Math.round(arIncurredTotal * 100) === Math.round(transactionsTotal * 100)
 
-    res.json({ arIncurredTotal, transactionsTotal, match })
+    res.json({
+      arIncurredTotal: Math.round(arIncurredTotal * 100) / 100,
+      transactionsTotal: Math.round(transactionsTotal * 100) / 100,
+      match,
+    })
   } catch (err) {
     console.error('AR check error:', err)
     res.status(500).json({ error: 'Failed to check AR totals' })

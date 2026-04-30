@@ -74,6 +74,9 @@ const BankStatementSchema = new mongoose.Schema(
     gblCredits: { type: [MiscDebitSchema], default: [] },
     // NEW: merchant fees (required on frontend)
     merchantFees: { type: Number },
+    gblCreditsFiltered: { type: Number },
+    ontarioIntegratedTax: { type: Number },
+    transferFrom: { type: Number },
   },
   { timestamps: true }
 )
@@ -105,6 +108,9 @@ BankStatementSchema.statics.fromParsed = function (payload = {}) {
     gblCredits = [],
     // NEW: accept merchantFees
     merchantFees,
+    gblCreditsFiltered,
+    ontarioIntegratedTax,
+    transferFrom,
   } = payload
 
   return new this({
@@ -143,6 +149,9 @@ BankStatementSchema.statics.fromParsed = function (payload = {}) {
         }))
       : [],
     merchantFees: typeof merchantFees === 'number' ? merchantFees : undefined,
+    gblCreditsFiltered: typeof gblCreditsFiltered === 'number' ? gblCreditsFiltered : undefined,
+    ontarioIntegratedTax: typeof ontarioIntegratedTax === 'number' ? ontarioIntegratedTax : undefined,
+    transferFrom: typeof transferFrom === 'number' ? transferFrom : undefined,
   })
 }
 

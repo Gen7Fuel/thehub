@@ -125,7 +125,6 @@ function parseTransactionDetailTab(text) {
   const totalIdx = idxExact('Total') >= 0 ? idxExact('Total') : headers.findIndex(h => h.toLowerCase().includes('amount'))
   const cardIdx = idxExact('Card1/Card2')
   const priceIdx = idxExact('Price') >= 0 ? idxExact('Price') : headers.findIndex(h => h.toLowerCase().includes('price'))
-  // const customerIdx = idxExact('Customer Name') >= 0 ? idxExact('Customer Name') : headers.findIndex(h => h.toLowerCase().includes('customer'))
   const customerIdx = headers.findIndex(h => h.toLowerCase() === 'customer')
 
   let litresSold = 0
@@ -246,6 +245,9 @@ router.post('/bank-statement', express.json({ limit: '1mb' }), async (req, res) 
       gblCredits,
       // NEW: accept merchantFees in payload
       merchantFees,
+      gblCreditsFiltered,
+      ontarioIntegratedTax,
+      transferFrom,
     } = req.body || {}
 
     if (!site || !date) {
@@ -267,6 +269,9 @@ router.post('/bank-statement', express.json({ limit: '1mb' }), async (req, res) 
       gblDebits,
       gblCredits,
       merchantFees,
+      gblCreditsFiltered,
+      ontarioIntegratedTax,
+      transferFrom,
     })
 
     // Upsert per site+date
@@ -285,6 +290,9 @@ router.post('/bank-statement', express.json({ limit: '1mb' }), async (req, res) 
           gblDebits: doc.gblDebits ?? [],
           gblCredits: doc.gblCredits ?? [],
           merchantFees: typeof doc.merchantFees === 'number' ? doc.merchantFees : 0,
+          ...(typeof doc.gblCreditsFiltered === 'number' && { gblCreditsFiltered: doc.gblCreditsFiltered }),
+          ...(typeof doc.ontarioIntegratedTax === 'number' && { ontarioIntegratedTax: doc.ontarioIntegratedTax }),
+          ...(typeof doc.transferFrom === 'number' && { transferFrom: doc.transferFrom }),
         },
       },
       { new: true, upsert: true, setDefaultsOnInsert: true }
@@ -387,7 +395,8 @@ async function computeBankRecForDate(site, date) {
   let handheldDebit = 0
   try {
     const { CashSummaryReport } = require('../models/CashSummaryNew')
-    const report = await CashSummaryReport.findOne({ site, date: start }).lean()
+    const reportDate = new Date(`${date}T00:00:00.000Z`) // CashSummaryReport stores date as UTC midnight
+    const report = await CashSummaryReport.findOne({ site, date: reportDate }).lean()
     if (report && typeof report.handheldDebit === 'number') {
       handheldDebit = report.handheldDebit
     }
@@ -508,7 +517,8 @@ router.get('/entries', async (req, res) => {
     const aggUnsettledPrepays = agg?.unsettledPrepays
     try {
       const { CashSummaryReport } = require('../models/CashSummaryNew')
-      const report = await CashSummaryReport.findOne({ site, date: start }).lean()
+      const reportDate = new Date(`${date}T00:00:00.000Z`) // CashSummaryReport stores date as UTC midnight
+      const report = await CashSummaryReport.findOne({ site, date: reportDate }).lean()
       if (report) {
         cashSummary.unsettledPrepays = aggUnsettledPrepays || (typeof report.unsettledPrepays === 'number' ? report.unsettledPrepays : undefined)
         cashSummary.handheldDebit = typeof report.handheldDebit === 'number' ? report.handheldDebit : undefined
