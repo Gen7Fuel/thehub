@@ -16,11 +16,12 @@ function EditSupplierComponent() {
   // const navigate = useNavigate()
   const queryClient = useQueryClient()
 
+
   const [formData, setFormData] = useState<any>(null)
   const [isLoading, setIsLoading] = useState(true)
   const [isSaving, setIsSaving] = useState(false)
 
-  const AVAILABLE_GRADES = ["Regular", "Premium", "Diesel", "Dyed Diesel"];
+  // const AVAILABLE_GRADES = ["Regular", "Premium", "Diesel", "Dyed Diesel"];
 
   // Fetch Racks for the dropdown with Authorization
   const { data: racks = [] } = useQuery({
@@ -52,6 +53,17 @@ function EditSupplierComponent() {
     }
     fetchSupplier()
   }, [id])
+
+  if (isLoading) return <div className="h-full flex items-center justify-center"><Loader2 className="animate-spin text-primary" /></div>
+  if (!formData) return <div className="p-8 text-center italic">Supplier not found.</div>
+
+  // Find the full rack object based on the current selection in formData
+  const selectedRackData = racks.find((r: any) =>
+    (r._id === (formData.associatedRack?._id || formData.associatedRack))
+  );
+
+  // Fallback to empty array if no rack is found yet
+  const rackSupportedGrades = selectedRackData?.availableGrades || [];
 
   // Update addBadge to include the empty array
   const addBadge = () => {
@@ -142,9 +154,6 @@ function EditSupplierComponent() {
   //   }
   // };
 
-  if (isLoading) return <div className="h-full flex items-center justify-center"><Loader2 className="animate-spin text-primary" /></div>
-  if (!formData) return <div className="p-8 text-center italic">Supplier not found.</div>
-
   return (
     <div className="p-8 max-w-4xl animate-in fade-in duration-300">
       <div className="flex items-center justify-between mb-8 border-b pb-6">
@@ -155,7 +164,7 @@ function EditSupplierComponent() {
           <div>
             <h2 className="text-2xl font-bold tracking-tight">{formData.supplierName}</h2>
             <p className="text-sm text-muted-foreground font-semibold uppercase">
-              Rack: {formData.associatedRack?.rackName || 'Not Linked'} - {formData.associatedRack?.rackLocation || 'No Linked Location'}
+              Rack: {selectedRackData?.rackName || 'Not Linked'} - {selectedRackData?.rackLocation || 'No Linked Location'}
             </p>
           </div>
         </div>
@@ -183,9 +192,30 @@ function EditSupplierComponent() {
 
           <div className="space-y-2">
             <label className="text-xs font-bold uppercase text-slate-500">Associated Fuel Rack</label>
-            <Select
+            {/* <Select
               value={formData.associatedRack?._id || formData.associatedRack}
               onValueChange={(val) => setFormData({ ...formData, associatedRack: val })}
+            > */}
+            <Select
+              value={typeof formData.associatedRack === 'object' ? formData.associatedRack?._id : formData.associatedRack}
+              onValueChange={(newRackId) => {
+                const newRack = racks.find((r: any) => r._id === newRackId);
+                const newRackGrades = newRack?.availableGrades || [];
+
+                // Ensure supplierBadges exists before mapping
+                const currentBadges = formData?.supplierBadges || [];
+
+                const cleanedBadges = currentBadges.map((badge: any) => ({
+                  ...badge,
+                  availableGrades: badge.availableGrades?.filter((g: string) => newRackGrades.includes(g)) || []
+                }));
+
+                setFormData({
+                  ...formData,
+                  associatedRack: newRackId,
+                  supplierBadges: cleanedBadges
+                });
+              }}
             >
               <SelectTrigger>
                 <SelectValue placeholder="Change Rack" />
@@ -256,28 +286,35 @@ function EditSupplierComponent() {
                 <div className="pt-4 border-t border-slate-100 flex flex-col md:flex-row md:items-center justify-between gap-4">
                   <div className="flex-1">
                     <label className="text-[10px] font-bold uppercase text-slate-400 ml-1 block mb-2">
-                      Available Grades for this Badge
+                      Badge Capabilities (Limited by {selectedRackData?.rackName || 'Rack'})
                     </label>
+
                     <div className="flex flex-wrap gap-x-6 gap-y-2">
-                      {AVAILABLE_GRADES.map(grade => (
-                        <label key={grade} className="flex items-center gap-2 cursor-pointer group">
-                          <div
-                            onClick={() => toggleBadgeGrade(index, grade)}
-                            className={`w-5 h-5 rounded border flex items-center justify-center transition-colors ${badge.availableGrades?.includes(grade)
-                              ? 'bg-blue-600 border-blue-600'
-                              : 'border-slate-300 bg-white group-hover:border-blue-400'
-                              }`}
-                          >
-                            {badge.availableGrades?.includes(grade) && (
-                              <CheckCircle2 className="h-3.5 w-3.5 text-white" />
-                            )}
-                          </div>
-                          <span className={`text-sm font-semibold ${badge.availableGrades?.includes(grade) ? 'text-slate-900' : 'text-slate-500'
-                            }`}>
-                            {grade}
-                          </span>
-                        </label>
-                      ))}
+                      {rackSupportedGrades.length > 0 ? (
+                        rackSupportedGrades.map((grade: string) => (
+                          <label key={grade} className="flex items-center gap-2 cursor-pointer group">
+                            <div
+                              onClick={() => toggleBadgeGrade(index, grade)}
+                              className={`w-5 h-5 rounded border flex items-center justify-center transition-colors ${badge.availableGrades?.includes(grade)
+                                ? 'bg-blue-600 border-blue-600'
+                                : 'border-slate-300 bg-white group-hover:border-blue-400'
+                                }`}
+                            >
+                              {badge.availableGrades?.includes(grade) && (
+                                <CheckCircle2 className="h-3.5 w-3.5 text-white" />
+                              )}
+                            </div>
+                            <span className={`text-sm font-semibold ${badge.availableGrades?.includes(grade) ? 'text-slate-900' : 'text-slate-500'
+                              }`}>
+                              {grade}
+                            </span>
+                          </label>
+                        ))
+                      ) : (
+                        <span className="text-xs italic text-amber-600 flex items-center gap-1">
+                          <AlertCircle className="h-3 w-3" /> No grades configured for this rack.
+                        </span>
+                      )}
                     </div>
                   </div>
 
