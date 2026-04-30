@@ -288,6 +288,11 @@ function RouteComponent() {
               </SelectGroup>
             </SelectContent>
           </Select>
+          {payablePaymentMethod === 'safe' && (
+            <p className="text-sm text-amber-700 bg-amber-50 border border-amber-200 rounded-md px-3 py-2">
+              Do NOT enter the full invoice amount. Only record the amount you have ACTUALLY withdrawn from the safe to make the payment.
+            </p>
+          )}
           <Input
             type="number"
             placeholder="Amount"
