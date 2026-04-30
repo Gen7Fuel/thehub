@@ -125,7 +125,6 @@ function parseTransactionDetailTab(text) {
   const totalIdx = idxExact('Total') >= 0 ? idxExact('Total') : headers.findIndex(h => h.toLowerCase().includes('amount'))
   const cardIdx = idxExact('Card1/Card2')
   const priceIdx = idxExact('Price') >= 0 ? idxExact('Price') : headers.findIndex(h => h.toLowerCase().includes('price'))
-  // const customerIdx = idxExact('Customer Name') >= 0 ? idxExact('Customer Name') : headers.findIndex(h => h.toLowerCase().includes('customer'))
   const customerIdx = headers.findIndex(h => h.toLowerCase() === 'customer')
 
   let litresSold = 0
@@ -246,6 +245,9 @@ router.post('/bank-statement', express.json({ limit: '1mb' }), async (req, res) 
       gblCredits,
       // NEW: accept merchantFees in payload
       merchantFees,
+      gblCreditsFiltered,
+      ontarioIntegratedTax,
+      transferFrom,
     } = req.body || {}
 
     if (!site || !date) {
@@ -267,6 +269,9 @@ router.post('/bank-statement', express.json({ limit: '1mb' }), async (req, res) 
       gblDebits,
       gblCredits,
       merchantFees,
+      gblCreditsFiltered,
+      ontarioIntegratedTax,
+      transferFrom,
     })
 
     // Upsert per site+date
@@ -285,6 +290,9 @@ router.post('/bank-statement', express.json({ limit: '1mb' }), async (req, res) 
           gblDebits: doc.gblDebits ?? [],
           gblCredits: doc.gblCredits ?? [],
           merchantFees: typeof doc.merchantFees === 'number' ? doc.merchantFees : 0,
+          ...(typeof doc.gblCreditsFiltered === 'number' && { gblCreditsFiltered: doc.gblCreditsFiltered }),
+          ...(typeof doc.ontarioIntegratedTax === 'number' && { ontarioIntegratedTax: doc.ontarioIntegratedTax }),
+          ...(typeof doc.transferFrom === 'number' && { transferFrom: doc.transferFrom }),
         },
       },
       { new: true, upsert: true, setDefaultsOnInsert: true }
