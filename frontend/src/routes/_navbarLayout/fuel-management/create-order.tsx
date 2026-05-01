@@ -18,9 +18,9 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { getGradeTheme } from "./manage/locations/$id"
-import { gradeConfig } from "./workspace"
+// import { gradeConfig } from "./workspace"
 import { PDFViewer, PDFDownloadLink, pdf } from '@react-pdf/renderer';
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { POPreviewDocument, formatPDFDate } from "@/components/custom/fuelPoPDF"
 
 export const Route = createFileRoute('/_navbarLayout/fuel-management/create-order')({
@@ -398,47 +398,75 @@ function CreateFuelOrder() {
   };
 
   const handleSubmit = async () => {
-    // 1. Validation
+    // 1. Validation Logic
     if (isSplit) {
-      if (formData.splits.some(s => !s.stationId || !s.poNumber)) {
-        alert("Please ensure both split stations and PO numbers are set.");
+      const hasMissingSplit = formData.splits.some(s => !s.stationId || !s.poNumber);
+      const hasMissingSecondarySplit = formData.isMultiBadge && formData.splits.some(s => !s.secondaryPoNumber);
+
+      if (hasMissingSplit || hasMissingSecondarySplit) {
+        alert("Please ensure all stations and PO numbers (including secondary badges) are set.");
         return;
       }
-    } else if (!formData.stationId || !formData.poNumber) {
-      alert("Please select a Station and PO Number.");
-      return;
+    } else {
+      if (!formData.stationId || !formData.poNumber || (formData.isMultiBadge && !formData.secondaryPoNumber)) {
+        alert("Please ensure the Station and all required PO numbers are set.");
+        return;
+      }
     }
 
     try {
       setIsSubmitting(true);
+      const orderSections: any[] = [];
 
-      // 2. Prepare an array of objects to send to backend
-      // Each object represents one PO/Station
-      const orderSections = isSplit
-        ? formData.splits.map(s => ({
-          stationId: s.stationId,
-          items: s.items,
-          poNumber: s.poNumber
-        }))
-        : [{
-          stationId: formData.stationId,
-          items: formData.items,
-          poNumber: formData.poNumber
-        }];
+      // Helper: Only adds to the array if there is actual volume
+      const addOrder = (stationId: string, items: any[], po: string, badgeNo: string) => {
+        if (items.some(i => (i.ltrs || 0) > 0)) {
+          orderSections.push({ stationId, items, poNumber: po, badgeNo });
+        }
+      };
 
-      // 3. Generate PDFs for each section
+      // Build the list
+      if (isSplit) {
+        formData.splits.forEach((split, idx) => {
+          addOrder(split.stationId, split.items, split.poNumber, formData.badgeNo);
+          if (formData.isMultiBadge) {
+            addOrder(split.stationId, formData.secondarySplits[idx].items, split.secondaryPoNumber, formData.secondaryBadgeNo);
+          }
+        });
+      } else {
+        addOrder(formData.stationId, formData.items, formData.poNumber, formData.badgeNo);
+        if (formData.isMultiBadge) {
+          addOrder(formData.stationId, formData.secondaryItems, formData.secondaryPoNumber, formData.secondaryBadgeNo);
+        }
+      }
+
+      if (orderSections.length === 0) {
+        alert("No volumes detected. Cannot create empty POs.");
+        return;
+      }
+
+      // 3. Generate PDFs for each identified section
       const processedOrders = await Promise.all(orderSections.map(async (section) => {
         const stationObj = locations.find((l: any) => l._id === section.stationId);
 
+        // Find the specific accounting ID for the badge used in this section
+        const badgeData = selectedSupplier?.supplierBadges?.find(b => b.badgeNumber === section.badgeNo);
+        const supplierAccountingId = badgeData?.accountingId || '';
+
         const doc = (
           <POPreviewDocument
-            data={{ ...formData, poNumber: section.poNumber, items: section.items }}
+            data={{
+              ...formData,
+              poNumber: section.poNumber,
+              items: section.items,
+              badgeNo: section.badgeNo
+            }}
             selectedStation={stationObj}
             carrierName={selectedCarrier?.carrierName}
             rackName={selectedRack?.rackName}
             rackLocation={selectedRack?.rackLocation}
-            carrierBookworksId={currentCarrierId}
-            supplierBookworksId={currentSupplierAccountingId}
+            carrierBookworksId={selectedCarrier?.carrierId}
+            supplierBookworksId={supplierAccountingId}
           />
         );
 
@@ -449,7 +477,10 @@ function CreateFuelOrder() {
           reader.readAsDataURL(blob);
           reader.onloadend = () => {
             resolve({
-              ...section,
+              stationId: section.stationId,
+              items: section.items,
+              poNumber: section.poNumber,
+              badgeNo: section.badgeNo,
               pdfBase64: (reader.result as string).split(',')[1],
               customerName: stationObj?.fuelCustomerName || 'Station'
             });
@@ -461,20 +492,21 @@ function CreateFuelOrder() {
       const payload = {
         ...formData,
         isSplit,
-        orders: processedOrders // Array containing 1 or 2 orders
+        orders: processedOrders // Array containing 1, 2, or 4 orders
       };
 
       const response = await axios.post('/api/fuel-orders', payload, authHeader);
+
       const res = response.data;
 
       if (response.status === 201) {
-        alert(`Success! ${isSplit ? 'Split orders' : 'Order'} created and draft pushed to ${res.pushedTo}`);
+        alert(`Success! ${processedOrders.length} Order(s) created and Email Order draft pushed to ${res.pushedTo}'s Inbox.`);
         handleReset();
-        if (setIsPreviewOpen) setIsPreviewOpen(false);
+        setIsPreviewOpen(false);
       }
 
     } catch (err: any) {
-      alert(err.response?.data?.message || "Failed to save.");
+      alert(err.response?.data?.message || "Failed to save orders.");
       console.error(err);
     } finally {
       setIsSubmitting(false);
@@ -636,11 +668,11 @@ function CreateFuelOrder() {
   const selectedRack = racks.find(r => r._id === formData.rackId);
   const selectedSupplier = suppliers.find(s => s._id === formData.supplierId);
   // Find the accountingId for the current badge selected
-  const activeBadge = selectedSupplier?.supplierBadges?.find(
-    (b: any) => b.badgeNumber === formData.badgeNo
-  );
-  const currentSupplierAccountingId = activeBadge?.accountingId || '';
-  const currentCarrierId = selectedCarrier?.carrierId || '';
+  // const activeBadge = selectedSupplier?.supplierBadges?.find(
+  //   (b: any) => b.badgeNumber === formData.badgeNo
+  // );
+  // const currentSupplierAccountingId = activeBadge?.accountingId || '';
+  // const currentCarrierId = selectedCarrier?.carrierId || '';
 
   // Function to trigger the flow
   const handleGenerateClick = () => {
@@ -756,6 +788,8 @@ function CreateFuelOrder() {
     });
   };
 
+  const hasVolume = (items: any[]) => items.some(item => (item.ltrs || 0) > 0);
+
   // CSS for the highlight (Add to your global CSS or use a Tailwind class)
   // @keyframes pulse-highlight { 0% { box-shadow: 0 0 0 0 rgba(59, 130, 246, 0.5); } 70% { box-shadow: 0 0 0 10px rgba(59, 130, 246, 0); } 100% { box-shadow: 0 0 0 0 rgba(59, 130, 246, 0); } }
   const highlightClass = "animate-pulse ring-2 ring-blue-500 ring-offset-2 border-blue-500";
@@ -843,10 +877,38 @@ function CreateFuelOrder() {
             </DialogContent>
           </Dialog>
           <Dialog open={isPreviewOpen} onOpenChange={setIsPreviewOpen}>
-            <DialogContent className="max-w-[1400px] !w-[95vw] h-[92vh] flex flex-col">
+            <DialogContent className="w-[85vw] !max-w-[1200px] h-[92vh] flex flex-col p-6">
               {/* Helper variables to keep the JSX clean */}
               {(() => {
-                const isPrimary = activeBadgeIdx === 0;
+                // Logic to determine which Site and Badge combinations actually exist
+                const validSplits = isSplit
+                  ? formData.splits.map((s, idx) => ({
+                    idx,
+                    hasData: hasVolume(s.items) || (formData.isMultiBadge && hasVolume(formData.secondarySplits[idx].items))
+                  })).filter(s => s.hasData)
+                  : [];
+
+                // 1. Check volume for all possible combinations
+                const badge1HasVolume = isSplit
+                  ? hasVolume(formData.splits[activeSplitIdx].items)
+                  : hasVolume(formData.items);
+
+                const badge2HasVolume = isSplit
+                  ? hasVolume(formData.secondarySplits[activeSplitIdx].items)
+                  : hasVolume(formData.secondaryItems);
+
+                // 2. SMART INDEX RESOLUTION
+                // If the currently selected badge has no volume, but the other one does, 
+                // we "pivot" the view temporarily for the preview logic.
+                let effectiveBadgeIdx = activeBadgeIdx;
+                if (!badge1HasVolume && badge2HasVolume && activeBadgeIdx === 0) {
+                  effectiveBadgeIdx = 1;
+                } else if (!badge2HasVolume && badge1HasVolume && activeBadgeIdx === 1) {
+                  effectiveBadgeIdx = 0;
+                }
+
+                // 3. Use the EFFECTIVE index for your UI variables
+                const isPrimary = effectiveBadgeIdx === 0;
 
                 const currentStation = isSplit
                   ? locations.find((l: any) => l._id === formData.splits[activeSplitIdx].stationId)
@@ -854,27 +916,16 @@ function CreateFuelOrder() {
 
                 const currentStationName = currentStation?.fuelCustomerName || "Unknown Station";
 
-                // 1. Resolve Badge and PO
                 const currentBadge = isPrimary ? formData.badgeNo : formData.secondaryBadgeNo;
 
+                // Resolve PO and Items using the effective isPrimary
                 const currentPo = isSplit
-                  ? (isPrimary
-                    ? formData.splits[activeSplitIdx].poNumber
-                    : formData.splits[activeSplitIdx].secondaryPoNumber)
-                  : (isPrimary
-                    ? formData.poNumber
-                    : formData.secondaryPoNumber);
+                  ? (isPrimary ? formData.splits[activeSplitIdx].poNumber : formData.splits[activeSplitIdx].secondaryPoNumber)
+                  : (isPrimary ? formData.poNumber : formData.secondaryPoNumber);
 
-                // 2. Resolve Items (Quantities)
-                // Logic: If Split, choose between 'splits' array or 'secondarySplits' array
-                // If Single, choose between 'items' or 'secondaryItems'
                 const currentItems = isSplit
-                  ? (isPrimary
-                    ? formData.splits[activeSplitIdx].items
-                    : formData.secondarySplits[activeSplitIdx].items) // Access items from the secondary split array
-                  : (isPrimary
-                    ? formData.items
-                    : formData.secondaryItems);
+                  ? (isPrimary ? formData.splits[activeSplitIdx].items : formData.secondarySplits[activeSplitIdx].items)
+                  : (isPrimary ? formData.items : formData.secondaryItems);
 
                 // 3. Resolve Accounting IDs
                 const activeBadgeData = selectedSupplier?.supplierBadges?.find(
@@ -905,22 +956,19 @@ function CreateFuelOrder() {
                       </div>
 
                       <div className="flex gap-4 items-center">
-                        {/* SITE TOGGLE */}
-                        {isSplit && (
+                        {/* SITE TOGGLE: Only show sites that have volume in at least one badge */}
+                        {isSplit && validSplits.length > 1 && (
                           <div className="flex flex-col gap-1 items-center">
                             <span className="text-[9px] font-bold text-slate-400 uppercase">Select Delivery Site</span>
                             <div className="flex bg-slate-100 p-1 rounded-lg border">
                               {formData.splits.map((split, idx) => {
+                                if (!hasVolume(split.items) && !hasVolume(formData.secondarySplits[idx].items)) return null;
                                 const name = locations.find((l: any) => l._id === split.stationId)?.fuelCustomerName || `Site ${idx + 1}`;
                                 return (
                                   <Button
                                     key={idx}
-                                    variant="ghost"
-                                    size="sm"
-                                    className={cn(
-                                      "h-7 px-3 text-[10px] font-bold transition-all max-w-[120px] truncate",
-                                      activeSplitIdx === idx ? "bg-white text-blue-600 shadow-sm" : "text-slate-500"
-                                    )}
+                                    variant="ghost" size="sm"
+                                    className={cn("h-7 px-3 text-[10px] font-bold transition-all", activeSplitIdx === idx ? "bg-white text-blue-600 shadow-sm" : "text-slate-500")}
                                     onClick={() => setActiveSplitIdx(idx)}
                                   >
                                     {name}
@@ -931,23 +979,24 @@ function CreateFuelOrder() {
                           </div>
                         )}
 
-                        {/* BADGE TOGGLE */}
-                        {formData.isMultiBadge && (
+                        {/* BADGE TOGGLE: Only show badge buttons if they actually have volume for THIS station */}
+                        {formData.isMultiBadge && badge1HasVolume && badge2HasVolume && (
                           <div className="flex flex-col gap-1 items-center">
                             <span className="text-[9px] font-bold text-slate-400 uppercase">Select Loading Badge</span>
                             <div className="flex bg-slate-100 p-1 rounded-lg border">
                               <Button
                                 variant="ghost"
-                                size="sm"
-                                className={cn("h-7 px-4 text-[10px] font-bold transition-all", activeBadgeIdx === 0 ? "bg-white text-blue-600 shadow-sm" : "text-slate-500")}
+                                className={cn(
+                                  "h-7 px-4 text-[10px] font-bold",
+                                  effectiveBadgeIdx === 0 ? "bg-white text-blue-600 shadow-sm" : "text-slate-500"
+                                )}
                                 onClick={() => setActiveBadgeIdx(0)}
                               >
                                 {formData.badgeNo}
                               </Button>
                               <Button
-                                variant="ghost"
-                                size="sm"
-                                className={cn("h-7 px-4 text-[10px] font-bold transition-all", activeBadgeIdx === 1 ? "bg-white text-orange-600 shadow-sm" : "text-slate-500")}
+                                variant="ghost" size="sm"
+                                className={cn("h-7 px-4 text-[10px] font-bold", activeBadgeIdx === 1 ? "bg-white text-orange-600" : "text-slate-500")}
                                 onClick={() => setActiveBadgeIdx(1)}
                               >
                                 {formData.secondaryBadgeNo}
@@ -958,7 +1007,7 @@ function CreateFuelOrder() {
                       </div>
                     </DialogHeader>
 
-                    <div className="flex-1 border rounded-lg overflow-hidden bg-slate-50">
+                    <div className="flex-1 border rounded-lg overflow-hidden bg-slate-50 px-4 py-2">
                       <PDFViewer width="100%" height="100%" showToolbar={false}>
                         <POPreviewDocument
                           data={{
@@ -995,12 +1044,12 @@ function CreateFuelOrder() {
                             supplierBookworksId={displaySupplierAccountingId}
                           />
                         }
-                        fileName={`Fuel Order Form NSP ${currentStationName} ${currentBadge}.pdf`}
+                        fileName={`Fuel Order Form ${currentPo} - ${currentStationName} - ${formatPDFDate(formData.deliveryDate, false)}.pdf`}
                       >
                         {({ loading }) => (
                           <Button variant="outline" disabled={loading} className="border-blue-200 text-blue-600 hover:bg-blue-50">
                             <Download className="w-4 h-4 mr-2" />
-                            {loading ? "Generating..." : `Download PO for ${currentStationName}`}
+                            {loading ? "Generating..." : `Download PO for ${currentStationName} - ${currentBadge}`}
                           </Button>
                         )}
                       </PDFDownloadLink>
@@ -1504,85 +1553,112 @@ function CreateFuelOrder() {
                               </Badge>
                             </div>
 
-                            {sortedCompatible.length > 0 ? sortedCompatible.map((item) => {
-                              const theme = getGradeTheme(item.grade);
-                              const projection = section.projections?.[item.grade] || { opening: 0, sales: 0, capacity: 0, closing: 0 };
+                            {/* {sortedCompatible.length > 0 ? sortedCompatible.map((item) => { */}
+                            {sortedCompatible.length > 0 ? (
+                              <>
+                                {sortedCompatible.map((item) => {
+                                  const theme = getGradeTheme(item.grade);
+                                  const projection = section.projections?.[item.grade] || { opening: 0, sales: 0, capacity: 0, closing: 0 };
 
-                              // Find total volume for this grade across BOTH badges for inventory calculation
-                              const otherBadgeItems = bc.isSecondary
-                                ? (section.items || [])
-                                : (isSplit ? (formData.secondarySplits?.[sIdx]?.items || []) : (formData.secondaryItems || []));
+                                  // Find total volume for this grade across BOTH badges for inventory calculation
+                                  const otherBadgeItems = bc.isSecondary
+                                    ? (section.items || [])
+                                    : (isSplit ? (formData.secondarySplits?.[sIdx]?.items || []) : (formData.secondaryItems || []));
 
-                              const otherQty = Number(otherBadgeItems?.find(i => i.grade === item.grade)?.ltrs || 0);
-                              const currentQty = Number(item.ltrs) || 0;
-                              const finalClosing = projection.closing + currentQty + otherQty;
+                                  const otherQty = Number(otherBadgeItems?.find(i => i.grade === item.grade)?.ltrs || 0);
+                                  const currentQty = Number(item.ltrs) || 0;
+                                  const finalClosing = projection.closing + currentQty + otherQty;
 
-                              return (
-                                <div key={item.grade} className="p-2 bg-white rounded-lg border shadow-sm relative overflow-hidden">
-                                  <div className={cn("absolute left-0 top-0 bottom-0 w-1", theme.color)} />
+                                  return (
+                                    <div key={item.grade} className="p-2 bg-white rounded-lg border shadow-sm relative overflow-hidden">
+                                      <div className={cn("absolute left-0 top-0 bottom-0 w-1", theme.color)} />
 
-                                  <div className="flex items-center justify-between gap-4">
-                                    <div className="flex flex-col">
-                                      <span className="text-[12px] font-black uppercase italic">{item.grade}</span>
-                                      {otherQty > 0 && (
-                                        <span className="text-[8px] text-blue-500 font-bold">
-                                          +{otherQty.toLocaleString()} L (Other Badge)
-                                        </span>
+                                      <div className="flex items-center justify-between gap-4">
+                                        <div className="flex flex-col">
+                                          <span className="text-[12px] font-black uppercase italic">{item.grade}</span>
+                                          {otherQty > 0 && (
+                                            <span className="text-[8px] text-blue-500 font-bold">
+                                              +{otherQty.toLocaleString()} L (Other Badge)
+                                            </span>
+                                          )}
+                                        </div>
+
+                                        <Input
+                                          type="number"
+                                          className="h-7 w-24 text-right font-mono font-bold text-sm border-blue-200 focus-visible:ring-blue-500"
+                                          value={item.ltrs || ''}
+                                          onChange={(e) => handleQtyChange(sIdx, item.grade, Number(e.target.value), bc.isSecondary)}
+                                        />
+                                      </div>
+
+                                      {/* Grid for Opening, Sales, and Closing */}
+                                      <div className="grid grid-cols-3 gap-1 mt-2 pt-2 border-t border-slate-100">
+                                        <div className="flex flex-col">
+                                          <span className="text-[9px] font-bold text-slate-400 uppercase leading-none mb-1">
+                                            Est. Opening
+                                          </span>
+                                          <span className={cn("font-mono font-bold text-slate-700", isSplit ? "text-[10px]" : "text-xs")}>
+                                            {projection.opening.toLocaleString()}
+                                          </span>
+                                        </div>
+
+                                        <div className="flex flex-col">
+                                          <span className="text-[9px] font-bold text-slate-400 uppercase leading-none mb-1">
+                                            Est. Sales
+                                          </span>
+                                          <span className={cn("font-mono font-bold text-red-500", isSplit ? "text-[10px]" : "text-xs")}>
+                                            -{projection.sales.toLocaleString()}
+                                          </span>
+                                        </div>
+
+                                        <div className="flex flex-col items-end">
+                                          <span className="text-[9px] font-bold text-blue-500 uppercase leading-none mb-1">
+                                            Est. Closing
+                                          </span>
+                                          <span className={cn(
+                                            "font-mono font-black",
+                                            isSplit ? "text-[10px]" : "text-xs",
+                                            projection.capacity > 0 && finalClosing > projection.capacity ? "text-orange-600" : "text-blue-600"
+                                          )}>
+                                            {finalClosing.toLocaleString()}
+                                          </span>
+                                        </div>
+                                      </div>
+
+                                      {/* Overflow Risk Alert */}
+                                      {projection.capacity > 0 && finalClosing > projection.capacity && (
+                                        <div className="mt-2 flex items-center gap-1.5 text-[9px] font-black text-orange-600 uppercase bg-orange-50 px-2 py-1 rounded border border-orange-100">
+                                          <AlertTriangle className="h-3 w-3" />
+                                          Overflow Risk: Exceeds {projection.capacity.toLocaleString()}L Capacity
+                                        </div>
                                       )}
                                     </div>
+                                  );
+                                })}
+                                {/* ADDED: Total sum for this specific Badge/Station combination */}
+                                {(() => {
+                                  const badgeTotal = sortedCompatible.reduce((sum, item) => sum + (Number(item.ltrs) || 0), 0);
 
-                                    <Input
-                                      type="number"
-                                      className="h-7 w-24 text-right font-mono font-bold text-sm border-blue-200 focus-visible:ring-blue-500"
-                                      value={item.ltrs || ''}
-                                      onChange={(e) => handleQtyChange(sIdx, item.grade, Number(e.target.value), bc.isSecondary)}
-                                    />
-                                  </div>
-
-                                  {/* Grid for Opening, Sales, and Closing */}
-                                  <div className="grid grid-cols-3 gap-1 mt-2 pt-2 border-t border-slate-100">
-                                    <div className="flex flex-col">
-                                      <span className="text-[9px] font-bold text-slate-400 uppercase leading-none mb-1">
-                                        Est. Opening
-                                      </span>
-                                      <span className={cn("font-mono font-bold text-slate-700", isSplit ? "text-[10px]" : "text-xs")}>
-                                        {projection.opening.toLocaleString()}
-                                      </span>
-                                    </div>
-
-                                    <div className="flex flex-col">
-                                      <span className="text-[9px] font-bold text-slate-400 uppercase leading-none mb-1">
-                                        Est. Sales
-                                      </span>
-                                      <span className={cn("font-mono font-bold text-red-500", isSplit ? "text-[10px]" : "text-xs")}>
-                                        -{projection.sales.toLocaleString()}
-                                      </span>
-                                    </div>
-
-                                    <div className="flex flex-col items-end">
-                                      <span className="text-[9px] font-bold text-blue-500 uppercase leading-none mb-1">
-                                        Est. Closing
+                                  return (
+                                    <div className={cn(
+                                      "mt-4 pt-3 border-t border-dashed flex justify-between items-center px-1",
+                                      bc.isSecondary ? "border-blue-200" : "border-slate-200"
+                                    )}>
+                                      <span className="text-[9px] font-black uppercase text-slate-400 tracking-wider">
+                                        {bc.isSecondary ? "Secondary Total" : "Primary Total"}
                                       </span>
                                       <span className={cn(
-                                        "font-mono font-black",
-                                        isSplit ? "text-[10px]" : "text-xs",
-                                        projection.capacity > 0 && finalClosing > projection.capacity ? "text-orange-600" : "text-blue-600"
+                                        "font-black font-mono",
+                                        isSplit ? "text-sm" : "text-base",
+                                        bc.isSecondary ? "text-blue-600" : "text-slate-700"
                                       )}>
-                                        {finalClosing.toLocaleString()}
+                                        {badgeTotal.toLocaleString()} <span className="text-[10px] font-bold">L</span>
                                       </span>
                                     </div>
-                                  </div>
-
-                                  {/* Overflow Risk Alert */}
-                                  {projection.capacity > 0 && finalClosing > projection.capacity && (
-                                    <div className="mt-2 flex items-center gap-1.5 text-[9px] font-black text-orange-600 uppercase bg-orange-50 px-2 py-1 rounded border border-orange-100">
-                                      <AlertTriangle className="h-3 w-3" />
-                                      Overflow Risk: Exceeds {projection.capacity.toLocaleString()}L Capacity
-                                    </div>
-                                  )}
-                                </div>
-                              );
-                            }) : (
+                                  );
+                                })()}
+                              </>
+                            ) : (
                               <div className="text-[10px] text-slate-400 italic py-4 text-center">
                                 No compatible grades for this badge
                               </div>

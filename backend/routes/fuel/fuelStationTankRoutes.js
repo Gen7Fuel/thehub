@@ -269,44 +269,38 @@ router.get('/reconciliation/:stationId', async (req, res) => {
     const { stationId } = req.params;
     const sId = new mongoose.Types.ObjectId(stationId);
 
-    // 1. Get Station Timezone
     const location = await Location.findById(sId).select('timezone').lean();
     const tz = location?.timezone || 'America/Toronto';
 
-    // 2. Define the Window: Yesterday back to 15 days ago (Station Time)
-    const stationYesterday = moment.tz(tz).subtract(1, 'day').endOf('day');
-    const yesterdayStr = stationYesterday.format('YYYY-MM-DD');
+    // 1. Define the overall search window (Last 15 days) based on Station Time
+    const startOfWindow = moment.tz(tz).subtract(15, 'days').startOf('day').toDate();
+    const endOfWindow = moment.tz(tz).startOf('day').toDate();
 
-    // Start of the 14-day window ending yesterday
-    const searchDateStart = moment.tz(tz).subtract(15, 'days').startOf('day').toDate();
-    const stationTodayStart = moment.tz(tz).startOf('day');
-    const searchDateEnd = stationTodayStart.toDate(); // 2026-04-24T00:00:00.000
-
+    // 2. Fetch all necessary data in parallel
     const [tanks, sales, orders] = await Promise.all([
       FuelStationTank.find({ stationId: sId }).lean(),
       FuelSales.find({
         stationId: sId,
-        date: {
-          $gte: searchDateStart,
-          $lt: searchDateEnd  // Use $lt (Less Than) instead of $lte
-        },
-        isLive: false        // Only include finalized/audited sales
+        date: { $gte: startOfWindow, $lt: endOfWindow },
+        isLive: false
       }).sort({ date: -1 }).lean(),
-
       FuelOrder.find({
         station: sId,
-        estimatedDeliveryDate: {
-          $gte: searchDateStart,
-          $lt: searchDateEnd  // Use $lt here as well
-        },
+        estimatedDeliveryDate: { $gte: startOfWindow, $lt: endOfWindow },
         currentStatus: 'Delivered'
       }).lean()
     ]);
 
-    const toDateStr = (date) => moment.tz(date, tz).format('YYYY-MM-DD');
+    // Helper: Force date to a simple YYYY-MM-DD string using UTC baseline
+    const getSimpleDateString = (date) => {
+      if (!date) return null;
+      return moment.utc(date).format('YYYY-MM-DD');
+    };
 
+    // 3. Process the reconciliation data
     const reconciliationData = sales.map(saleDay => {
-      const saleDateStr = toDateStr(saleDay.date);
+      // Use UTC format for the sale day as the anchor (e.g., "2026-04-28")
+      const saleDateStr = getSimpleDateString(saleDay.date);
 
       return {
         date: saleDay.date,
@@ -315,31 +309,40 @@ router.get('/reconciliation/:stationId', async (req, res) => {
           let openingSum = 0;
           let closingSum = 0;
 
-          // Deliveries for this grade on this specific historical day
+          // A. Deliveries: Filter using the simple UTC date string
           const dayDeliveries = orders
-            .filter(o => toDateStr(o.estimatedDeliveryDate) === saleDateStr)
+            .filter(o => {
+              const orderDateStr = getSimpleDateString(o.estimatedDeliveryDate);
+              return orderDateStr === saleDateStr;
+            })
             .reduce((sum, o) => {
               const item = o.items.find(i => i.grade === s.grade);
               return sum + (item?.ltrs || 0);
             }, 0);
 
+          // B. Tank Readings: Match historical records to the same UTC date string
           gradeTanks.forEach(tank => {
-            const hist = tank.historicalVolume?.find(h => toDateStr(h.date) === saleDateStr);
+            const hist = tank.historicalVolume?.find(h =>
+              getSimpleDateString(h.date) === saleDateStr
+            );
             if (hist) {
               openingSum += (hist.openingVolume || 0);
               closingSum += (hist.closingVolume || 0);
             }
           });
 
-          // (Opening + Inbound) - Closing = Outbound (Physical Draw)
+          // C. Math: (Opening + Inbound) - Closing = Outbound (Physical Draw)
           const physicalDraw = (openingSum + dayDeliveries) - closingSum;
 
           return {
             grade: s.grade,
+            openingVolume: openingSum,
+            closingVolume: closingSum,
+            deliveries: dayDeliveries,
             salesVolume: s.volume || 0,
             physicalDraw: physicalDraw,
-            variance: (s.volume || 0) - physicalDraw,
-            deliveries: dayDeliveries
+            // Variance: How much "extra" or "less" left the tank vs what was sold
+            variance: physicalDraw - (s.volume || 0)
           };
         })
       };

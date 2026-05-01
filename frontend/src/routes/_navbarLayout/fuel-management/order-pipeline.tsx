@@ -6,7 +6,7 @@ import axios from 'axios';
 import { format, addDays, startOfDay, isAfter, isBefore } from 'date-fns';
 import {
   ChevronLeft, ChevronRight, Filter, ArrowRight,
-  MapPin, ClipboardList, Eye, Clock, TrendingDown, Package
+  MapPin, ClipboardList, Eye, Clock, TrendingDown, Droplets
 } from 'lucide-react';
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -121,6 +121,31 @@ export function OrderPipelineComponent() {
                 <div className="flex items-center gap-2">
                   <div className="w-3 h-3 rounded-sm border-2 border-amber-500 bg-amber-100" />
                   <span className="text-[11px] font-black uppercase text-slate-700">Above Max</span>
+                </div>
+              </div>
+
+              {/* Inventory Metrics Legend */}
+              <div className="flex items-center gap-4 border-l-2 pl-6 border-slate-100">
+                {/* Sales Metric */}
+                <div className="flex items-center gap-2 group">
+                  <div className="p-1 bg-slate-100 rounded shadow-sm">
+                    <TrendingDown className="h-3 w-3 text-slate-500" />
+                  </div>
+                  <div className="flex flex-col leading-none">
+                    <span className="text-[10px] font-black uppercase text-slate-700">Sales</span>
+                    <span className="text-[8px] font-bold text-slate-400 uppercase tracking-tighter">Est. Sales</span>
+                  </div>
+                </div>
+
+                {/* Closing Volume Metric */}
+                <div className="flex items-center gap-2 group">
+                  <div className="p-1 bg-blue-50 rounded shadow-sm">
+                    <Droplets className="h-3 w-3 text-blue-600" />
+                  </div>
+                  <div className="flex flex-col leading-none">
+                    <span className="text-[10px] font-black uppercase text-slate-700">Closing</span>
+                    <span className="text-[8px] font-bold text-slate-400 uppercase tracking-tighter">Est. Closing</span>
+                  </div>
                 </div>
               </div>
             </div>
@@ -372,7 +397,7 @@ function PipelineBlock({ site, date }: { site: any; date: Date }) {
                       </span>
                     </div>
                     <div className="flex items-center justify-between border-t border-black/5 pt-1">
-                      <Package className="h-2.5 w-2.5 text-slate-400" />
+                      <Droplets className="h-2.5 w-2.5 text-blue-400" />
                       <span className={`text-[11px] font-mono font-black ${theme.label}`}>
                         {data.closing.toLocaleString()}
                       </span>
