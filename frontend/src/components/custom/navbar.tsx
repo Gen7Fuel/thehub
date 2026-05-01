@@ -7,7 +7,7 @@ import { getSocket } from "@/lib/websocket";
 import { syncPendingActions } from "@/lib/utils"
 import { isActuallyOnline } from "@/lib/network";
 import { useAuth } from "@/context/AuthContext";
-import { GraduationCap, HelpCircle, LogOut, Settings as SettingsIcon, LayoutDashboard, Home as HomeIcon, KeyRound, ExternalLink, Bell } from 'lucide-react'
+import { HelpCircle, LogOut, Settings as SettingsIcon, LayoutDashboard, Home as HomeIcon, KeyRound, ExternalLink, Bell } from 'lucide-react'
 import { clearLocalDB } from "@/lib/orderRecIndexedDB";
 import {
   Dialog,
