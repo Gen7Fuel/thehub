@@ -1,5 +1,5 @@
 import { createFileRoute, useNavigate } from '@tanstack/react-router'
-import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import axios from 'axios'
 import {
   DndContext,
@@ -157,7 +157,7 @@ function RouteComponent() {
           {[...section.items]
             .sort((a, b) => a.order - b.order)
             .map((item) => (
-              <LearningItemView key={item._id} item={item} />
+              <LearningItemView key={item._id} item={item} employeeCode={employeeCode} courseId={courseId} />
             ))}
         </div>
       ))}
@@ -195,23 +195,97 @@ function toEmbedUrl(url: string): string {
   return url
 }
 
-function LearningItemView({ item }: { item: LearningItem }) {
+function VideoItemView({
+  item,
+  content,
+  employeeCode,
+  courseId,
+}: {
+  item: LearningItem
+  content: Record<string, any>
+  employeeCode: string | null
+  courseId: string
+}) {
+  const raw: string = content.url ?? content.src ?? ''
+  if (!raw) return null
+  const src = toEmbedUrl(raw)
+  const isEmbed = src.includes('youtube.com/embed') || src.includes('player.vimeo')
+
+  const videoRef = useRef<HTMLVideoElement>(null)
+  const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const token = localStorage.getItem('token')
+  const headers = { Authorization: `Bearer ${token}`, 'X-Required-Permission': 'academy' }
+
+  const saveProgress = useCallback(
+    (seconds: number) => {
+      if (!employeeCode) return
+      axios.put(
+        '/api/academy/learner/video-progress',
+        { employeeCode, courseId, itemId: item._id, progressSeconds: Math.floor(seconds) },
+        { headers },
+      ).catch(() => {})
+    },
+    [employeeCode, courseId, item._id],
+  )
+
+  useEffect(() => {
+    if (isEmbed || !employeeCode) return
+    axios
+      .get(`/api/academy/learner/video-progress/${courseId}/${item._id}`, {
+        params: { employeeCode },
+        headers,
+      })
+      .then((res) => {
+        const saved: number = res.data.progressSeconds ?? 0
+        if (saved > 1 && videoRef.current) {
+          videoRef.current.currentTime = saved - 1
+        }
+      })
+      .catch(() => {})
+  }, [isEmbed, employeeCode, courseId, item._id])
+
+  function handleTimeUpdate() {
+    const v = videoRef.current
+    if (!v) return
+    if (saveTimerRef.current) clearTimeout(saveTimerRef.current)
+    saveTimerRef.current = setTimeout(() => saveProgress(v.currentTime), 5000)
+  }
+
+  function handlePauseOrEnded() {
+    if (saveTimerRef.current) clearTimeout(saveTimerRef.current)
+    if (videoRef.current) saveProgress(videoRef.current.currentTime)
+  }
+
+  return (
+    <div className="rounded overflow-hidden border">
+      {isEmbed ? (
+        <iframe
+          src={src}
+          className="w-full aspect-video"
+          allowFullScreen
+          allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+        />
+      ) : (
+        <video
+          ref={videoRef}
+          src={src}
+          controls
+          className="w-full"
+          onTimeUpdate={handleTimeUpdate}
+          onPause={handlePauseOrEnded}
+          onEnded={handlePauseOrEnded}
+        />
+      )}
+    </div>
+  )
+}
+
+function LearningItemView({ item, employeeCode, courseId }: { item: LearningItem; employeeCode: string | null; courseId: string }) {
   const { type, content } = item
   const [flipped, setFlipped] = useState(false)
 
   if (type === 'video') {
-    const raw: string = content.url ?? content.src ?? ''
-    if (!raw) return null
-    const src = toEmbedUrl(raw)
-    return (
-      <div className="rounded overflow-hidden border">
-        {src.includes('youtube.com/embed') || src.includes('player.vimeo') ? (
-          <iframe src={src} className="w-full aspect-video" allowFullScreen allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" />
-        ) : (
-          <video src={src} controls className="w-full" />
-        )}
-      </div>
-    )
+    return <VideoItemView item={item} content={content} employeeCode={employeeCode} courseId={courseId} />
   }
 
   if (type === 'mcq') {
