@@ -55,4 +55,19 @@ router.put('/:id', async (req, res) => {
   }
 });
 
+// DELETE a supplier
+router.delete('/:id', async (req, res) => {
+  try {
+    const deletedSupplier = await FuelSupplier.findByIdAndDelete(req.params.id);
+
+    if (!deletedSupplier) {
+      return res.status(404).json({ message: "Supplier not found" });
+    }
+
+    res.json({ message: "Supplier deleted successfully" });
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+});
+
 module.exports = router;

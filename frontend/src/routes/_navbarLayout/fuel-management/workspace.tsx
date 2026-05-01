@@ -387,6 +387,24 @@ function StationStrip({ location, date, racks }: { location: any, date: Date, ra
   // State to track which order is currently being edited for logistics metadata
   const [editMetaOrder, setEditMetaOrder] = useState<any | null>(null);
 
+  // 1. Add a state to track if we should return to status dialog after editing
+  const [returnToStatus, setReturnToStatus] = useState(false);
+  const [resumeStep, setResumeStep] = useState<'schedule' | 'quantities' | 'final' | null>(null);
+  
+  const openRescheduleFromStatus = (order: any) => {
+    setReturnToStatus(true);
+    setResumeStep('schedule'); // We want to go back to step 1
+    setUpdateStatusOrder(null);
+    setRescheduleOrder(order);
+  };
+
+  const openEditQtyFromStatus = (order: any) => {
+    setReturnToStatus(true);
+    setResumeStep('quantities'); // We want to go back to step 2
+    setUpdateStatusOrder(null);
+    setEditQtyOrder(order);
+  };
+
   const stationTz = location.timezone || 'America/Toronto';
   const selectedDateStr = format(date, 'yyyy-MM-dd');
 
@@ -906,17 +924,45 @@ function StationStrip({ location, date, racks }: { location: any, date: Date, ra
         <RescheduleDialog
           order={rescheduleOrder}
           isOpen={!!rescheduleOrder}
-          onOpenChange={(open) => !open && setRescheduleOrder(null)}
+          // onOpenChange={(open) => !open && setRescheduleOrder(null)}
+          onOpenChange={(open) => {
+            if (!open) {
+              setRescheduleOrder(null);
+              if (returnToStatus) {
+                setUpdateStatusOrder(rescheduleOrder);
+                setReturnToStatus(false); // <--- Clear it here!
+              }
+            }
+          }}
           locationId={location._id}
         />
       )}
 
-      {updateStatusOrder && (
+      {/* {updateStatusOrder && (
         <UpdateStatusDialog
           order={updateStatusOrder}
           open={!!updateStatusOrder}
           onOpenChange={(open: any) => !open && setUpdateStatusOrder(null)}
           locationId={location._id}
+        />
+      )} */}
+      {updateStatusOrder && (
+        <UpdateStatusDialog
+          // CRITICAL: Find the LATEST order data from your main list/query 
+          // so the "Edited" values show up immediately.
+          order={orders?.find((o: any) => o._id === updateStatusOrder._id) || updateStatusOrder}
+          open={!!updateStatusOrder}
+          initialStep={resumeStep} // Pass the step we want to land on
+          onOpenChange={(open: any) => {
+            if (!open) {
+              setUpdateStatusOrder(null);
+              setReturnToStatus(false);
+              setResumeStep(null);
+            }
+          }}
+          locationId={location._id}
+          onEditSchedule={openRescheduleFromStatus}
+          onEditQty={openEditQtyFromStatus}
         />
       )}
 
@@ -924,7 +970,16 @@ function StationStrip({ location, date, racks }: { location: any, date: Date, ra
         <EditQtyDialog
           order={editQtyOrder}
           open={!!editQtyOrder}
-          onOpenChange={(open: any) => !open && setEditQtyOrder(null)}
+          // onOpenChange={(open: any) => !open && setEditQtyOrder(null)}
+          onOpenChange={((open: any) => {
+            if (!open) {
+              setEditQtyOrder(null);
+              if (returnToStatus) {
+                setUpdateStatusOrder(editQtyOrder);
+                setReturnToStatus(false); // <--- Clear it here!
+              }
+            }
+          })}
           locationId={location._id}
         />
       )}
@@ -942,7 +997,7 @@ function StationStrip({ location, date, racks }: { location: any, date: Date, ra
           }}
         />
       )}
-      <Dialog open={!!viewingPO} onOpenChange={(open) => !open && setViewingPO(null)}>
+      {/* <Dialog open={!!viewingPO} onOpenChange={(open) => !open && setViewingPO(null)}>
         <DialogContent className="max-w-5xl h-[90vh] flex flex-col">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
@@ -1006,6 +1061,70 @@ function StationStrip({ location, date, racks }: { location: any, date: Date, ra
               </PDFDownloadLink>
             )}
           </DialogFooter>
+        </DialogContent>
+      </Dialog> */}
+      <Dialog open={!!viewingPO} onOpenChange={(open) => !open && setViewingPO(null)}>
+        <DialogContent className="max-w-5xl h-[90vh] flex flex-col p-0"> {/* p-0 to control spacing better */}
+          <DialogHeader className="p-6 pb-2">
+            <DialogTitle className="flex items-center gap-2">
+              <FileText className="h-5 w-5 text-blue-600" />
+              PO Record Preview - {viewingPO?.poNumber}
+            </DialogTitle>
+          </DialogHeader>
+
+          {viewingPO && (() => {
+            const activeBadge = viewingPO.supplier?.supplierBadges?.find(
+              (b: any) => b.badgeNumber === viewingPO.badgeNo
+            );
+
+            const commonProps = {
+              data: {
+                deliveryDate: getISODateOnly(viewingPO.originalDeliveryDate),
+                poNumber: viewingPO.poNumber,
+                badgeNo: viewingPO.badgeNo || '',
+                startTime: viewingPO.originalDeliveryWindow?.start || '',
+                endTime: viewingPO.originalDeliveryWindow?.end || '',
+                items: viewingPO.items || []
+              },
+              // We use the same fallback logic as your logs
+              selectedStation: viewingPO.stationId || viewingPO.station,
+              carrierName: viewingPO.carrier?.carrierName,
+              rackName: viewingPO.rack?.rackName,
+              rackLocation: viewingPO.rack?.rackLocation,
+              carrierBookworksId: viewingPO.carrier?.carrierId,
+              supplierBookworksId: activeBadge?.accountingId || 'N/A'
+            };
+
+            return (
+              <>
+                {/* Scrollable Area for PDF */}
+                <div className="flex-1 border-y bg-slate-100 overflow-hidden">
+                  <PDFViewer width="100%" height="100%" showToolbar={false} style={{ border: 'none' }}>
+                    <POPreviewDocument {...commonProps} />
+                  </PDFViewer>
+                </div>
+
+                {/* Footer moved OUTSIDE the viewer container */}
+                <div className="p-4 flex justify-end items-center gap-2 bg-white">
+                  <Button variant="ghost" onClick={() => setViewingPO(null)}>
+                    Close
+                  </Button>
+
+                  <PDFDownloadLink
+                    document={<POPreviewDocument {...commonProps} />}
+                    fileName={`Fuel Order Form NSP ${commonProps.selectedStation?.fuelCustomerName || 'Order'} ${formatPDFDate(getISODateOnly(viewingPO.originalDeliveryDate), false)}.pdf`}
+                  >
+                    {({ loading }) => (
+                      <Button className="bg-blue-600 hover:bg-blue-700" disabled={loading}>
+                        <Download className="h-4 w-4 mr-2" />
+                        {loading ? "Preparing..." : "Download PDF"}
+                      </Button>
+                    )}
+                  </PDFDownloadLink>
+                </div>
+              </>
+            );
+          })()}
         </DialogContent>
       </Dialog>
     </>
@@ -1133,10 +1252,33 @@ export function RescheduleDialog({ order, isOpen, onOpenChange, locationId }: Re
 //   onUpdate: (newStatus: string) => void;
 // }
 
-export function UpdateStatusDialog({ order, open, onOpenChange, locationId }: any) {
+export function UpdateStatusDialog({ order, open, initialStep, onOpenChange, locationId, onEditSchedule, onEditQty }: any) {
+  // Use initialStep if provided (e.g., when returning from Edit Qty)
+  const [pendingStatus, setPendingStatus] = useState<string | null>(initialStep ? 'Delivered' : null);
+  const [confirmStep, setConfirmStep] = useState<'schedule' | 'quantities' | 'final'>(initialStep || 'schedule');
+
   const queryClient = useQueryClient();
-  // Track which status the user clicked but hasn't confirmed yet
-  const [pendingStatus, setPendingStatus] = useState<string | null>(null);
+
+  const statuses = [
+    { id: 'Created', label: 'Created', icon: PackagePlus, color: 'text-slate-500', bg: 'bg-slate-50' },
+    { id: 'In Transit', label: 'In Transit', icon: Truck, color: 'text-blue-500', bg: 'bg-blue-50' },
+    { id: 'Delivered', label: 'Delivered', icon: CheckCircle2, color: 'text-green-500', bg: 'bg-green-50' },
+  ];
+
+  // 2. Sync state when the dialog opens
+  useEffect(() => {
+    if (open) {
+      if (initialStep) {
+        setPendingStatus('Delivered');
+        setConfirmStep(initialStep);
+      } else {
+        setPendingStatus(null);
+        setConfirmStep('schedule');
+      }
+    }
+  }, [open, initialStep]);
+
+  const currentIndex = statuses.findIndex(s => s.id === order.currentStatus);
 
   const mutation = useMutation({
     mutationFn: async (newStatus: string) => {
@@ -1144,127 +1286,278 @@ export function UpdateStatusDialog({ order, open, onOpenChange, locationId }: an
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['workspace-orders', locationId] });
-      queryClient.invalidateQueries({ queryKey: ['station-tanks', locationId] });
-      setPendingStatus(null);
       onOpenChange(false);
     }
   });
 
-  if (!order) return null;
+  const renderStep = () => {
+    if (pendingStatus === 'In Transit') {
+      return (
+        <div className="space-y-4">
+          <div className="p-4 bg-blue-50 border-2 border-blue-100 rounded-2xl flex flex-col gap-2">
+            <div className="flex items-center gap-2 text-blue-700 font-black text-xs uppercase">
+              <Truck className="h-4 w-4" /> Status Update
+            </div>
+            <p className="text-sm text-blue-900 font-medium leading-tight">
+              Move PO <span className="font-black">{order.poNumber}</span> to <span className="font-black uppercase">In Transit</span>?
+            </p>
+          </div>
+          <Button onClick={() => mutation.mutate('In Transit')} className="w-full h-12 bg-blue-600 font-black uppercase">Confirm Transit</Button>
+          <Button variant="ghost" onClick={() => setPendingStatus(null)} className="w-full text-slate-400 font-black uppercase">Go Back</Button>
+        </div>
+      );
+    }
 
-  const statuses = [
-    { id: 'Created', label: 'Created', icon: PackagePlus, color: 'text-slate-500' },
-    { id: 'In Transit', label: 'In Transit', icon: Truck, color: 'text-blue-500' },
-    { id: 'Delivered', label: 'Delivered', icon: CheckCircle2, color: 'text-green-500' },
-  ];
+    // DELIVERED STEPS
+    switch (confirmStep) {
+      case 'schedule':
+        return (
+          <div className="space-y-4 animate-in fade-in slide-in-from-bottom-2 duration-300">
+            <div className="p-4 bg-slate-50 border-2 border-slate-200 rounded-2xl">
+              <label className="text-[10px] font-black uppercase text-slate-400">Step 1: Verify Delivery Window</label>
+              <div className="flex items-center justify-between mt-2">
+                <div className="flex flex-col">
+                  <span className="text-lg font-black text-slate-800">
+                    {order.estimatedDeliveryWindow?.start} — {order.estimatedDeliveryWindow?.end}
+                  </span>
+                  <span className="text-[10px] font-bold text-blue-600 uppercase">
+                    {format(new Date(order.estimatedDeliveryDate), 'EEEE, MMM do')}
+                  </span>
+                </div>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => onEditSchedule(order)}
+                  className="h-8 border-blue-200 text-blue-600 font-black uppercase text-[10px]"
+                >
+                  Change
+                </Button>
+              </div>
+            </div>
+            <Button
+              onClick={() => setConfirmStep('quantities')}
+              className="w-full h-12 bg-slate-900 font-black uppercase tracking-widest"
+            >
+              Confirm & Continue
+            </Button>
+          </div>
+        );
 
-  const currentIndex = statuses.findIndex(s => s.id === order.currentStatus);
+      case 'quantities':
+        return (
+          <div className="space-y-4 animate-in fade-in slide-in-from-right-4 duration-300">
+            <div className="p-4 bg-slate-50 border-2 border-slate-200 rounded-2xl">
+              <label className="text-[10px] font-black uppercase text-slate-400">Step 2: Confirm Drop Quantities</label>
+              <div className="space-y-2 mt-3 border-t pt-2">
+                {order.items.map((item: any) => (
+                  <div key={item.grade} className="flex justify-between font-mono text-sm font-black">
+                    <span className="text-slate-500">{item.grade}</span>
+                    <span className="text-slate-900">{item.ltrs.toLocaleString()} L</span>
+                  </div>
+                ))}
+              </div>
+              <Button variant="outline" size="sm" onClick={() => onEditQty(order)} className="w-full mt-4 h-8 text-[10px] font-black uppercase border-blue-200 text-blue-600">Adjust Quantities</Button>
+            </div>
+            <Button
+              onClick={() => setConfirmStep('final')}
+              className="w-full h-12 bg-slate-900 font-black uppercase tracking-widest"
+            >
+              Totals are Correct
+            </Button>
+          </div>
+        );
+
+      case 'final':
+        return (
+          <div className="space-y-4">
+            <div className="p-4 bg-amber-50 border-2 border-amber-100 rounded-2xl">
+              <div className="flex items-center gap-2 text-amber-700 font-black text-xs uppercase mb-1">
+                <AlertTriangle className="h-4 w-4" /> Final Warning
+              </div>
+              <p className="text-sm text-amber-900 leading-tight">This will update inventory and <strong>lock</strong> this order permanently.</p>
+            </div>
+            <Button onClick={() => mutation.mutate('Delivered')} className="w-full h-14 bg-green-600 hover:bg-green-700 font-black uppercase text-lg shadow-lg">Confirm & Finalize</Button>
+          </div>
+        );
+    }
+  };
 
   return (
-    <Dialog open={open} onOpenChange={(val) => {
-      if (!val) setPendingStatus(null); // Reset warning if they close dialog
-      onOpenChange(val);
-    }}>
+    <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-[400px]">
         <DialogHeader>
-          <DialogTitle className="text-xl font-black uppercase italic">
-            {pendingStatus ? "Confirm Change" : "Update Status"}
+          <DialogTitle className="text-xl font-black uppercase italic tracking-tight">
+            {pendingStatus ? "Verify Details" : "Update Status"}
           </DialogTitle>
-          <p className="text-sm text-slate-500 font-bold tracking-tight">
-            PO: {order.poNumber}
-          </p>
+          <p className="text-[10px] font-bold text-slate-400 uppercase">PO: {order.poNumber}</p>
         </DialogHeader>
 
-        <div className="flex flex-col gap-3 py-4">
+        <div className="py-4">
           {!pendingStatus ? (
-            // STANDARD LIST VIEW
-            statuses.map((status, index) => {
-              const isCurrent = order.currentStatus === status.id;
-              const isDisabled = index < currentIndex || index > currentIndex + 1;
+            <div className="flex flex-col gap-3">
+              {statuses.map((status, index) => {
+                const isCurrent = order.currentStatus === status.id;
+                // STICK TO THE LIFECYCLE: Only allow the NEXT step
+                const isDisabled = index !== currentIndex + 1;
 
-              return (
-                <Button
-                  key={status.id}
-                  variant={isCurrent ? "default" : "outline"}
-                  disabled={isDisabled || isCurrent || mutation.isPending}
-                  onClick={() => setPendingStatus(status.id)} // Set the pending state instead of mutating
-                  className={`h-14 justify-start gap-4 border-2 ${isCurrent ? 'border-blue-600 bg-blue-50 text-blue-700' : ''
-                    }`}
-                >
-                  <status.icon className={`h-5 w-5 ${status.color}`} />
-                  <div className="flex flex-col items-start">
-                    <span className="font-black uppercase text-xs tracking-widest">{status.label}</span>
-                    {isCurrent && <span className="text-[10px] font-bold opacity-70">CURRENT STATUS</span>}
-                  </div>
-                </Button>
-              );
-            })
-          ) : (
-            // CONFIRMATION VIEW
-            // Inside the Confirmation View section of your UpdateStatusDialog:
-
-            <div className="flex flex-col gap-3 py-4">
-              {pendingStatus && (
-                <div className="space-y-4 animate-in fade-in zoom-in-95 duration-200">
-
-                  {/* 1. CONDITIONAL WARNING BOX */}
-                  {pendingStatus === 'Delivered' ? (
-                    <div className="p-4 bg-amber-50 border-2 border-amber-100 rounded-2xl flex flex-col gap-2">
-                      <div className="flex items-center gap-2 text-amber-700 font-black text-xs uppercase">
-                        <AlertTriangle className="h-4 w-4" />
-                        Warning: Finalize Order
-                      </div>
-                      <p className="text-sm text-amber-900 font-medium leading-tight">
-                        Marking this as <span className="font-black uppercase">Delivered</span> will lock the fuel quantities and update the station inventory. <strong>This action cannot be undone.</strong>
-                      </p>
+                return (
+                  <Button
+                    key={status.id}
+                    variant={isCurrent ? "default" : "outline"}
+                    disabled={isDisabled || mutation.isPending}
+                    onClick={() => setPendingStatus(status.id)}
+                    className={`h-16 justify-start gap-4 border-2 transition-all ${isCurrent ? 'border-blue-600 bg-blue-50/50 text-blue-700' : 'hover:border-blue-300'
+                      }`}
+                  >
+                    <status.icon className={`h-6 w-6 ${status.color}`} />
+                    <div className="flex flex-col items-start">
+                      <span className="font-black uppercase text-xs tracking-widest">{status.label}</span>
+                      {isCurrent && <span className="text-[10px] font-bold opacity-60">CURRENT POSITION</span>}
+                      {isDisabled && !isCurrent && <span className="text-[10px] font-bold text-slate-300">LOCKED</span>}
                     </div>
-                  ) : (
-                    <div className="p-4 bg-blue-50 border-2 border-blue-100 rounded-2xl flex flex-col gap-2">
-                      <div className="flex items-center gap-2 text-blue-700 font-black text-xs uppercase">
-                        <Truck className="h-4 w-4" />
-                        Status Update
-                      </div>
-                      <p className="text-sm text-blue-900 font-medium leading-tight">
-                        Are you sure you want to move this order to <span className="font-black uppercase">In Transit</span>?
-                      </p>
-                    </div>
-                  )}
-
-                  {/* 2. ACTION BUTTONS */}
-                  <div className="flex flex-col gap-2">
-                    <Button
-                      className={cn(
-                        "w-full h-12 font-black uppercase transition-all",
-                        pendingStatus === 'Delivered' ? "bg-green-600 hover:bg-green-700" : "bg-blue-600 hover:bg-blue-700"
-                      )}
-                      disabled={mutation.isPending}
-                      onClick={() => mutation.mutate(pendingStatus)}
-                    >
-                      {mutation.isPending ? (
-                        <Loader2 className="h-5 w-5 animate-spin" />
-                      ) : (
-                        `Confirm ${pendingStatus}`
-                      )}
-                    </Button>
-
-                    <Button
-                      variant="ghost"
-                      className="w-full font-black uppercase text-slate-400 hover:text-slate-600"
-                      disabled={mutation.isPending}
-                      onClick={() => setPendingStatus(null)}
-                    >
-                      Go Back
-                    </Button>
-                  </div>
-                </div>
-              )}
+                  </Button>
+                );
+              })}
             </div>
-          )}
+          ) : renderStep()}
         </div>
       </DialogContent>
     </Dialog>
   );
 }
+
+// export function UpdateStatusDialog({ order, open, onOpenChange, locationId }: any) {
+//   const queryClient = useQueryClient();
+//   // Track which status the user clicked but hasn't confirmed yet
+//   const [pendingStatus, setPendingStatus] = useState<string | null>(null);
+
+//   const mutation = useMutation({
+//     mutationFn: async (newStatus: string) => {
+//       return axios.put(`/api/fuel-orders/${order._id}`, { currentStatus: newStatus }, authHeader);
+//     },
+//     onSuccess: () => {
+//       queryClient.invalidateQueries({ queryKey: ['workspace-orders', locationId] });
+//       queryClient.invalidateQueries({ queryKey: ['station-tanks', locationId] });
+//       setPendingStatus(null);
+//       onOpenChange(false);
+//     }
+//   });
+
+//   if (!order) return null;
+
+//   const statuses = [
+//     { id: 'Created', label: 'Created', icon: PackagePlus, color: 'text-slate-500' },
+//     { id: 'In Transit', label: 'In Transit', icon: Truck, color: 'text-blue-500' },
+//     { id: 'Delivered', label: 'Delivered', icon: CheckCircle2, color: 'text-green-500' },
+//   ];
+
+//   const currentIndex = statuses.findIndex(s => s.id === order.currentStatus);
+
+//   return (
+//     <Dialog open={open} onOpenChange={(val) => {
+//       if (!val) setPendingStatus(null); // Reset warning if they close dialog
+//       onOpenChange(val);
+//     }}>
+//       <DialogContent className="sm:max-w-[400px]">
+//         <DialogHeader>
+//           <DialogTitle className="text-xl font-black uppercase italic">
+//             {pendingStatus ? "Confirm Change" : "Update Status"}
+//           </DialogTitle>
+//           <p className="text-sm text-slate-500 font-bold tracking-tight">
+//             PO: {order.poNumber}
+//           </p>
+//         </DialogHeader>
+
+//         <div className="flex flex-col gap-3 py-4">
+//           {!pendingStatus ? (
+//             // STANDARD LIST VIEW
+//             statuses.map((status, index) => {
+//               const isCurrent = order.currentStatus === status.id;
+//               const isDisabled = index < currentIndex || index > currentIndex + 1;
+
+//               return (
+//                 <Button
+//                   key={status.id}
+//                   variant={isCurrent ? "default" : "outline"}
+//                   disabled={isDisabled || isCurrent || mutation.isPending}
+//                   onClick={() => setPendingStatus(status.id)} // Set the pending state instead of mutating
+//                   className={`h-14 justify-start gap-4 border-2 ${isCurrent ? 'border-blue-600 bg-blue-50 text-blue-700' : ''
+//                     }`}
+//                 >
+//                   <status.icon className={`h-5 w-5 ${status.color}`} />
+//                   <div className="flex flex-col items-start">
+//                     <span className="font-black uppercase text-xs tracking-widest">{status.label}</span>
+//                     {isCurrent && <span className="text-[10px] font-bold opacity-70">CURRENT STATUS</span>}
+//                   </div>
+//                 </Button>
+//               );
+//             })
+//           ) : (
+//             // CONFIRMATION VIEW
+//             // Inside the Confirmation View section of your UpdateStatusDialog:
+
+//             <div className="flex flex-col gap-3 py-4">
+//               {pendingStatus && (
+//                 <div className="space-y-4 animate-in fade-in zoom-in-95 duration-200">
+
+//                   {/* 1. CONDITIONAL WARNING BOX */}
+//                   {pendingStatus === 'Delivered' ? (
+//                     <div className="p-4 bg-amber-50 border-2 border-amber-100 rounded-2xl flex flex-col gap-2">
+//                       <div className="flex items-center gap-2 text-amber-700 font-black text-xs uppercase">
+//                         <AlertTriangle className="h-4 w-4" />
+//                         Warning: Finalize Order
+//                       </div>
+//                       <p className="text-sm text-amber-900 font-medium leading-tight">
+//                         Marking this as <span className="font-black uppercase">Delivered</span> will lock the fuel quantities and update the station inventory. <strong>This action cannot be undone.</strong>
+//                       </p>
+//                     </div>
+//                   ) : (
+//                     <div className="p-4 bg-blue-50 border-2 border-blue-100 rounded-2xl flex flex-col gap-2">
+//                       <div className="flex items-center gap-2 text-blue-700 font-black text-xs uppercase">
+//                         <Truck className="h-4 w-4" />
+//                         Status Update
+//                       </div>
+//                       <p className="text-sm text-blue-900 font-medium leading-tight">
+//                         Are you sure you want to move this order to <span className="font-black uppercase">In Transit</span>?
+//                       </p>
+//                     </div>
+//                   )}
+
+//                   {/* 2. ACTION BUTTONS */}
+//                   <div className="flex flex-col gap-2">
+//                     <Button
+//                       className={cn(
+//                         "w-full h-12 font-black uppercase transition-all",
+//                         pendingStatus === 'Delivered' ? "bg-green-600 hover:bg-green-700" : "bg-blue-600 hover:bg-blue-700"
+//                       )}
+//                       disabled={mutation.isPending}
+//                       onClick={() => mutation.mutate(pendingStatus)}
+//                     >
+//                       {mutation.isPending ? (
+//                         <Loader2 className="h-5 w-5 animate-spin" />
+//                       ) : (
+//                         `Confirm ${pendingStatus}`
+//                       )}
+//                     </Button>
+
+//                     <Button
+//                       variant="ghost"
+//                       className="w-full font-black uppercase text-slate-400 hover:text-slate-600"
+//                       disabled={mutation.isPending}
+//                       onClick={() => setPendingStatus(null)}
+//                     >
+//                       Go Back
+//                     </Button>
+//                   </div>
+//                 </div>
+//               )}
+//             </div>
+//           )}
+//         </div>
+//       </DialogContent>
+//     </Dialog>
+//   );
+// }
 
 export function EditMetaDialog({ order, isOpen, onOpenChange, racks, onUpdateSuccess }: any) {
   const [selectedRack, setSelectedRack] = useState(order.rack?._id || order.rack);

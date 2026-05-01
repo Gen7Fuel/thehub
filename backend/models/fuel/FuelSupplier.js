@@ -6,6 +6,8 @@ const fuelSupplierSchema = new mongoose.Schema({
   supplierBadges: [{
     badgeName: String,
     badgeNumber: String,
+    accountingId: String,
+    availableGrades: [{ type: String }],
     isDefault: { type: Boolean, default: false }
   }]
 });

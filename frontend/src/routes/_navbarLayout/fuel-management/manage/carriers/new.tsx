@@ -73,10 +73,10 @@ function NewCarrierComponent() {
           </div>
 
           <div className="space-y-2">
-            <label className="text-xs font-bold uppercase text-slate-500 ml-1">Carrier ID</label>
+            <label className="text-xs font-bold uppercase text-slate-500 ml-1">Bookworks ID</label>
             <Input
               required
-              placeholder="Unique Alpha-numeric ID (NPT)"
+              placeholder="Bookworks ID for Mapping"
               value={formData.carrierId}
               onChange={(e) => setFormData({ ...formData, carrierId: e.target.value })}
               className="bg-white"
@@ -87,7 +87,6 @@ function NewCarrierComponent() {
           <div className="space-y-2">
             <label className="text-xs font-bold uppercase text-slate-500 ml-1">Primary Contact Name</label>
             <Input
-              required
               placeholder="Enter contact name (Optional)"
               value={formData.contactName}
               onChange={(e) => setFormData({ ...formData, contactName: e.target.value })}
@@ -98,7 +97,6 @@ function NewCarrierComponent() {
           <div className="space-y-2">
             <label className="text-xs font-bold uppercase text-slate-500 ml-1">Primary Contact Information</label>
             <Input
-              required
               placeholder="Enter contact information (Optional)"
               value={formData.contact}
               onChange={(e) => setFormData({ ...formData, contact: e.target.value })}

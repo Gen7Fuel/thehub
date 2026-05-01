@@ -126,7 +126,7 @@ export const getProcessedFuelSales = async (csoCode, dateStr) => {
 
 // Update your service helper to look at the transition
 export const getTankReadingsForCron = async (station_sk, tank_id, yesterdayStr, todayStr) => {
-  
+
   // 1. Closing (Latest record from YESTERDAY)
   const { data: closeData } = await supabase
     .from('current_fuel_inventory')
@@ -152,4 +152,29 @@ export const getTankReadingsForCron = async (station_sk, tank_id, yesterdayStr, 
     openingTime: openData?.[0]?.reading_time || "00:00:00",
     closingVolume: closeData?.[0]?.volume || 0
   };
+};
+
+/**
+ * Fetches all volume readings for a specific tank on a specific day.
+ * Used to populate a time-series bar chart for a single tank.
+ * * @param {string} csoCode - Maps to station_sk
+ * @param {string} tankId - The specific tank identifier
+ * @param {string} dateStr - 'YYYY-MM-DD'
+ */
+export const getSingleTankHistoryByDay = async (csoCode, tankId, dateStr) => {
+  try {
+    const { data, error } = await supabase
+      .from('current_fuel_inventory')
+      .select('reading_time, volume, fuel_grade, temperature')
+      .eq('station_sk', csoCode)
+      .eq('tank_id', tankId.toString())
+      .eq('date_sk', dateStr)
+      .order('reading_time', { ascending: true }); // Ascending so the chart flows left-to-right
+
+    if (error) throw error;
+    return data;
+  } catch (error) {
+    console.error('Error fetching tank history:', error.message);
+    return [];
+  }
 };
