@@ -2,6 +2,7 @@ const express = require('express')
 const Course = require('../../models/academy/Course')
 const AcademyEmployee = require('../../models/academy/AcademyEmployee')
 const CourseCompletion = require('../../models/academy/CourseCompletion')
+const VideoProgress = require('../../models/academy/VideoProgress')
 
 const router = express.Router()
 
@@ -61,6 +62,37 @@ router.post('/courses/:courseId/complete', async (req, res) => {
     res.json(completion)
   } catch (err) {
     res.status(500).json({ message: 'Failed to record completion', error: err.message })
+  }
+})
+
+router.get('/video-progress/:courseId/:itemId', async (req, res) => {
+  try {
+    const { courseId, itemId } = req.params
+    const { employeeCode } = req.query
+    if (!employeeCode) return res.status(400).json({ message: 'employeeCode is required' })
+
+    const record = await VideoProgress.findOne({ employeeCode, courseId, itemId }).lean()
+    res.json({ progressSeconds: record?.progressSeconds ?? 0 })
+  } catch (err) {
+    res.status(500).json({ message: 'Failed to fetch video progress', error: err.message })
+  }
+})
+
+router.put('/video-progress', async (req, res) => {
+  try {
+    const { employeeCode, courseId, itemId, progressSeconds } = req.body
+    if (!employeeCode || !courseId || !itemId || progressSeconds == null) {
+      return res.status(400).json({ message: 'employeeCode, courseId, itemId, progressSeconds are required' })
+    }
+
+    const record = await VideoProgress.findOneAndUpdate(
+      { employeeCode, courseId, itemId },
+      { $set: { progressSeconds } },
+      { upsert: true, new: true },
+    )
+    res.json({ progressSeconds: record.progressSeconds })
+  } catch (err) {
+    res.status(500).json({ message: 'Failed to save video progress', error: err.message })
   }
 })
 
