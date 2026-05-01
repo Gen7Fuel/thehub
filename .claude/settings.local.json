@@ -41,7 +41,8 @@
       "Bash(npx tsc *)",
       "Bash(npm run *)",
       "Bash(Get-ChildItem -Recurse -Name)",
-      "PowerShell(Get-ChildItem -Path \"C:\\\\Users\\\\MohammadHasan\\\\workspace\\\\thehub\\\\backend\" -Directory | ForEach-Object { $_.Name })"
+      "PowerShell(Get-ChildItem -Path \"C:\\\\Users\\\\MohammadHasan\\\\workspace\\\\thehub\\\\backend\" -Directory | ForEach-Object { $_.Name })",
+      "Bash(Get-ChildItem *)"
     ]
   }
 }
