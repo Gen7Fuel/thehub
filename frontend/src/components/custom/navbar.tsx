@@ -416,12 +416,6 @@ export default function Navbar() {
           </Button>
           {/* Dashboard button, shown if user has access */}
           {/* {access.module_dashboard && ( //markpoint */}
-          {access?.academy && (
-            <Button variant="outline" onClick={() => navigate({ to: '/academy' })}>
-              <GraduationCap className="h-5 w-5 md:hidden" />
-              <span className="hidden md:inline">Academy</span>
-            </Button>
-          )}
           {access?.dashboard && (
             <Button variant="outline" onClick={() => navigate({ to: '/dashboard' })}>
               <LayoutDashboard className="h-5 w-5 md:hidden" />

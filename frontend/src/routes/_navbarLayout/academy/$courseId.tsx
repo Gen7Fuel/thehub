@@ -213,15 +213,18 @@ function VideoItemView({
 
   const videoRef = useRef<HTMLVideoElement>(null)
   const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const lastValidTimeRef = useRef(0)
+  const programmaticSeekRef = useRef(false)
   const token = localStorage.getItem('token')
   const headers = { Authorization: `Bearer ${token}`, 'X-Required-Permission': 'academy' }
 
   const saveProgress = useCallback(
     (seconds: number) => {
       if (!employeeCode) return
+      const toSave = seconds > 1 ? Math.floor(seconds) - 1 : 0
       axios.put(
         '/api/academy/learner/video-progress',
-        { employeeCode, courseId, itemId: item._id, progressSeconds: Math.floor(seconds) },
+        { employeeCode, courseId, itemId: item._id, progressSeconds: toSave },
         { headers },
       ).catch(() => {})
     },
@@ -237,8 +240,10 @@ function VideoItemView({
       })
       .then((res) => {
         const saved: number = res.data.progressSeconds ?? 0
-        if (saved > 1 && videoRef.current) {
-          videoRef.current.currentTime = saved - 1
+        if (saved > 0 && videoRef.current) {
+          programmaticSeekRef.current = true
+          lastValidTimeRef.current = saved
+          videoRef.current.currentTime = saved
         }
       })
       .catch(() => {})
@@ -247,8 +252,20 @@ function VideoItemView({
   function handleTimeUpdate() {
     const v = videoRef.current
     if (!v) return
+    lastValidTimeRef.current = v.currentTime
     if (saveTimerRef.current) clearTimeout(saveTimerRef.current)
     saveTimerRef.current = setTimeout(() => saveProgress(v.currentTime), 5000)
+  }
+
+  function handleSeeking() {
+    const v = videoRef.current
+    if (!v) return
+    if (programmaticSeekRef.current) return
+    v.currentTime = lastValidTimeRef.current
+  }
+
+  function handleSeeked() {
+    programmaticSeekRef.current = false
   }
 
   function handlePauseOrEnded() {
@@ -272,6 +289,8 @@ function VideoItemView({
           controls
           className="w-full"
           onTimeUpdate={handleTimeUpdate}
+          onSeeking={handleSeeking}
+          onSeeked={handleSeeked}
           onPause={handlePauseOrEnded}
           onEnded={handlePauseOrEnded}
         />

@@ -153,14 +153,21 @@ function App() {
           )}
 
           {/* TRAINING - VIOLET */}
-          {access?.training?.voiceAgent && (
-            <Section 
-              title="Training" 
+          {(access?.training?.voiceAgent || access?.academy) && (
+            <Section
+              title="Training"
               accentColor="border-t-violet-500"
               icon={<GraduationCap className="w-5 h-5 text-violet-600" />}
             >
-              <NavButton to="/ai-customer" label="AI Customer Chat" icon={MessageSquare} theme="violet" />
-              <NavButton to="/ai-customer/mcq" label="MCQ" icon={FileText} theme="violet" />
+              {access?.training?.voiceAgent && (
+                <>
+                  <NavButton to="/ai-customer" label="AI Customer Chat" icon={MessageSquare} theme="violet" />
+                  <NavButton to="/ai-customer/mcq" label="MCQ" icon={FileText} theme="violet" />
+                </>
+              )}
+              {access?.academy && (
+                <NavButton to="/academy" label="Academy" icon={GraduationCap} theme="violet" />
+              )}
             </Section>
           )}
 
