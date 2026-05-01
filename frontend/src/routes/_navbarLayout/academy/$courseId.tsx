@@ -221,7 +221,7 @@ function VideoItemView({
   const saveProgress = useCallback(
     (seconds: number) => {
       if (!employeeCode) return
-      const toSave = seconds > 1 ? Math.floor(seconds) - 1 : 0
+      const toSave = Math.floor(seconds)
       axios.put(
         '/api/academy/learner/video-progress',
         { employeeCode, courseId, itemId: item._id, progressSeconds: toSave },
