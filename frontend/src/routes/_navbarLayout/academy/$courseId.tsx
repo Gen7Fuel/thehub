@@ -215,6 +215,7 @@ function VideoItemView({
   const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const lastValidTimeRef = useRef(0)
   const programmaticSeekRef = useRef(false)
+  const wasPlayingRef = useRef(false)
   const token = localStorage.getItem('token')
   const headers = { Authorization: `Bearer ${token}`, 'X-Required-Permission': 'academy' }
 
@@ -259,13 +260,18 @@ function VideoItemView({
 
   function handleSeeking() {
     const v = videoRef.current
-    if (!v) return
-    if (programmaticSeekRef.current) return
+    if (!v || programmaticSeekRef.current) return
+    wasPlayingRef.current = !v.paused
+    programmaticSeekRef.current = true
     v.currentTime = lastValidTimeRef.current
   }
 
   function handleSeeked() {
     programmaticSeekRef.current = false
+    if (wasPlayingRef.current) {
+      videoRef.current?.play().catch(() => {})
+      wasPlayingRef.current = false
+    }
   }
 
   function handlePauseOrEnded() {
