@@ -4,7 +4,7 @@ const path = require("path");
 const archiver = require("archiver");
 const { DateTime } = require("luxon");
 const { emailQueue } = require("../queues/emailQueue");
-const { KardpollReport } = require("../models/CashRec");
+const Transaction = require("../models/Transactions");
 const { generateArTransactionPdf } = require("../utils/arTransactionPdf");
 
 const SITES = ["Oliver", "Osoyoos"];
@@ -42,13 +42,15 @@ function buildSiteTable(site, transactions) {
 
   const rows = transactions
     .map(
-      ({ date, customer, card, quantity, price_per_litre, amount }) => `
+      ({ date, customerName, poNumber, driverName, vehicleMakeModel, productCode, quantity, amount }) => `
       <tr>
         <td style="padding:6px 10px;border:1px solid #ddd;">${formatDate(date)}</td>
-        <td style="padding:6px 10px;border:1px solid #ddd;">${customer}</td>
-        <td style="padding:6px 10px;border:1px solid #ddd;font-family:monospace;">****${String(card).slice(-4)}</td>
+        <td style="padding:6px 10px;border:1px solid #ddd;">${customerName || ''}</td>
+        <td style="padding:6px 10px;border:1px solid #ddd;">${poNumber || ''}</td>
+        <td style="padding:6px 10px;border:1px solid #ddd;">${driverName || ''}</td>
+        <td style="padding:6px 10px;border:1px solid #ddd;">${vehicleMakeModel || ''}</td>
+        <td style="padding:6px 10px;border:1px solid #ddd;">${productCode || ''}</td>
         <td style="padding:6px 10px;border:1px solid #ddd;text-align:right;">${Number(quantity).toFixed(3)} L</td>
-        <td style="padding:6px 10px;border:1px solid #ddd;text-align:right;">$${Number(price_per_litre).toFixed(3)}</td>
         <td style="padding:6px 10px;border:1px solid #ddd;text-align:right;">${formatCurrency(amount)}</td>
       </tr>`
     )
@@ -63,9 +65,11 @@ function buildSiteTable(site, transactions) {
     <tr style="background-color:#2c5f2e;color:#fff;">
       <th style="padding:8px 10px;border:1px solid #2c5f2e;text-align:left;">Date</th>
       <th style="padding:8px 10px;border:1px solid #2c5f2e;text-align:left;">Customer</th>
-      <th style="padding:8px 10px;border:1px solid #2c5f2e;text-align:left;">Card</th>
+      <th style="padding:8px 10px;border:1px solid #2c5f2e;text-align:left;">PO #</th>
+      <th style="padding:8px 10px;border:1px solid #2c5f2e;text-align:left;">Driver</th>
+      <th style="padding:8px 10px;border:1px solid #2c5f2e;text-align:left;">Vehicle</th>
+      <th style="padding:8px 10px;border:1px solid #2c5f2e;text-align:left;">Product</th>
       <th style="padding:8px 10px;border:1px solid #2c5f2e;text-align:right;">Quantity</th>
-      <th style="padding:8px 10px;border:1px solid #2c5f2e;text-align:right;">Price/L</th>
       <th style="padding:8px 10px;border:1px solid #2c5f2e;text-align:right;">Amount</th>
     </tr>
   </thead>
@@ -74,7 +78,7 @@ function buildSiteTable(site, transactions) {
   </tbody>
   <tfoot>
     <tr style="background-color:#f2f2f2;font-weight:bold;">
-      <td colspan="5" style="padding:6px 10px;border:1px solid #ddd;text-align:right;">Total</td>
+      <td colspan="7" style="padding:6px 10px;border:1px solid #ddd;text-align:right;">Total</td>
       <td style="padding:6px 10px;border:1px solid #ddd;text-align:right;">${formatCurrency(total)}</td>
     </tr>
   </tfoot>
@@ -93,20 +97,19 @@ async function sendWeeklyArReport() {
   const siteHtmlBlocks = [];
 
   for (const site of SITES) {
-    const docs = await KardpollReport.find({
-      site,
-      date: { $gte: startDate, $lte: endDate },
-    }).lean();
+    const startDateObj = DateTime.fromISO(startDate, { zone: TIMEZONE }).startOf("day").toJSDate();
+    const endDateObj = DateTime.fromISO(endDate, { zone: TIMEZONE }).endOf("day").toJSDate();
 
-    // Flatten ar_rows and attach the date from the parent document
-    const transactions = docs.flatMap((doc) =>
-      (doc.ar_rows || []).map((row) => ({ ...row, date: doc.date }))
-    );
+    const transactions = await Transaction.find({
+      source: "PO",
+      stationName: site,
+      date: { $gte: startDateObj, $lte: endDateObj },
+    }).sort({ date: 1 }).lean();
 
     // Generate a PDF for each transaction
     const sitePdfPaths = [];
     for (const txn of transactions) {
-      const pdfPath = await generateArTransactionPdf(txn, txn.date, site);
+      const pdfPath = await generateArTransactionPdf(txn, site);
       sitePdfPaths.push(pdfPath);
     }
     allPdfPaths.push(...sitePdfPaths);
