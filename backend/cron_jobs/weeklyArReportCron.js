@@ -8,7 +8,7 @@ const Transaction = require("../models/Transactions");
 const { generateArTransactionPdf } = require("../utils/arTransactionPdf");
 
 const SITES = ["Oliver", "Osoyoos"];
-const RECIPIENT = "mario@gen7fuel.com";
+const RECIPIENT = "mario@bosservicesltd.com";
 const TIMEZONE = "America/Vancouver";
 
 function formatCurrency(n) {
