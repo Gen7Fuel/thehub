@@ -8,8 +8,8 @@ const Transaction = require("../models/Transactions");
 const { generateArTransactionPdf } = require("../utils/arTransactionPdf");
 
 const SITES = ["Oliver", "Osoyoos"];
-const RECIPIENT = "mario@bosservicesltd.com";
-const TIMEZONE = "America/Vancouver";
+const RECIPIENT = "zbaptiste@oib.ca";
+const TIMEZONE = "America/Toronto";
 
 function formatCurrency(n) {
   return `$${Number(n).toFixed(2)}`;
@@ -144,7 +144,7 @@ async function sendWeeklyArReport() {
 
   await emailQueue.add("sendWeeklyArReport", {
     to: RECIPIENT,
-    cc: ["mohammad@gen7fuel.com"],
+    cc: ["mario@bosservicesltd.com", "ar@gen7fuel.com", "mohammad@gen7fuel.com"],
     subject: `Weekly AR Report – ${startDate} to ${endDate}`,
     html: htmlBody,
     attachments: zipPaths.map(({ filename, zipPath }) => ({
@@ -162,7 +162,7 @@ async function sendWeeklyArReport() {
 }
 
 cron.schedule(
-  "0 9 * * 2",
+  "0 14 * * 2",
   async () => {
     if (process.env.HOST !== "VPS") return;
     try {
