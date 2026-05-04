@@ -741,4 +741,16 @@ router.post('/parse-kardpoll-excel', express.json({ limit: '1mb' }), async (req,
   }
 })
 
+// Manually trigger the weekly AR report email (for testing)
+router.post('/send-weekly-ar-report', async (req, res) => {
+  try {
+    const { sendWeeklyArReport } = require('../cron_jobs/weeklyArReportCron')
+    await sendWeeklyArReport()
+    return res.json({ success: true, message: 'Weekly AR report queued successfully.' })
+  } catch (e) {
+    console.error('send-weekly-ar-report error:', e)
+    return res.status(500).json({ error: 'Failed to send weekly AR report', details: e.message })
+  }
+})
+
 module.exports = router

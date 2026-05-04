@@ -18,6 +18,7 @@ require('./cron_jobs/archiveOldNotification'); //cron job for archiving/removing
 require('./cron_jobs/logoutUsersCron'); //cron job for logging out users daily at 9 AM UTC
 require('./cron_jobs/dashboardCacheCron'); //cron job for pre-warming dashboard SQL cache daily at 5 AM UTC
 require('./cron_jobs/dailyFuelSyncCron') // cron job for updating fuel related data daily morning at 5 am EST
+require('./cron_jobs/weeklyArReportCron') // cron job for weekly AR report emailed to mario every Tuesday 9 AM PT
 // require('./cron_jobs/productCategoryMappingCron'); //cron job for normalising the product categories
 
 

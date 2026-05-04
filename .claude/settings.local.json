@@ -42,7 +42,10 @@
       "Bash(npm run *)",
       "Bash(Get-ChildItem -Recurse -Name)",
       "PowerShell(Get-ChildItem -Path \"C:\\\\Users\\\\MohammadHasan\\\\workspace\\\\thehub\\\\backend\" -Directory | ForEach-Object { $_.Name })",
-      "Bash(Get-ChildItem *)"
+      "Bash(Get-ChildItem *)",
+      "Bash(Select-Object Name)",
+      "Bash(findstr /S \"Osoyoos\" .)",
+      "Bash(Select-Object -ExpandProperty FullName)"
     ]
   }
 }

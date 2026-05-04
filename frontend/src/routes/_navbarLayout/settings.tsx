@@ -22,6 +22,9 @@ function RouteComponent() {
 
   const [syncing, setSyncing] = useState(false);
   const [syncMessage, setSyncMessage] = useState('');
+
+  const [arReportSending, setArReportSending] = useState(false);
+  const [arReportMessage, setArReportMessage] = useState('');
   // Retrieve access permissions from Auth provider
   // const access = user?.access || "{}" //markpoint
   const access = user?.access || {}
@@ -61,6 +64,23 @@ function RouteComponent() {
       setSyncing(false);
     }
   };
+  const handleSendWeeklyArReport = async () => {
+    setArReportSending(true);
+    setArReportMessage('');
+    try {
+      const res = await axios.post('/api/cash-rec/send-weekly-ar-report', null, {
+        headers: {
+          Authorization: `Bearer ${localStorage.getItem('token')}`,
+        },
+      });
+      setArReportMessage(res.data.message || 'Report queued successfully.');
+    } catch (err: any) {
+      setArReportMessage(err.response?.data?.error || 'Failed to send AR report.');
+    } finally {
+      setArReportSending(false);
+    }
+  };
+
   // Props to apply to the active link for highlighting
   const activeProps = {
     className: 'bg-gray-100 rounded-md',
@@ -118,6 +138,16 @@ function RouteComponent() {
             <span className='text-xs text-gray-500 mt-1 pr-2 text-right'>
               {syncMessage || cacheMessage}
             </span>
+          )}
+          <button
+            onClick={handleSendWeeklyArReport}
+            disabled={arReportSending}
+            className='p-2 text-sm text-green-900 hover:text-green-950 disabled:text-gray-400 cursor-pointer disabled:cursor-not-allowed text-right'
+          >
+            {arReportSending ? 'Sending...' : 'Send Weekly AR Report'}
+          </button>
+          {arReportMessage && (
+            <span className='text-xs text-gray-500 mt-1 pr-2 text-right'>{arReportMessage}</span>
           )}
         </div>
       </aside>
