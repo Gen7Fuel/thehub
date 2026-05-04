@@ -139,7 +139,7 @@ function parseSftReport(text) {
     kioskCredit: pickNum(/^\s*Kiosk Credit\s+([-\d.,]+)\s*$/mi, text),
     kioskDebit: pickNum(/^\s*Kiosk Debit\s+([-\d.,]+)\s*$/mi, text),
     kioskGiftCard: pickNum(/^\s*Kiosk Gift Card\s+([-\d.,]+)\s*$/mi, text),
-    totalPos: pickNum(/^\s*Total POS\s+([-\d.,]+)\s*$/mi, text),
+    totalPos: pickNum(/^\s*Total POS\s+([-\d.,]+)\s*$/mi, text) ?? pickNum(/^\s*POS\s+([-\d.,]+)\s*$/mi, text),
     arIncurred: pickNum(/^\s*A\/R incurred\s+([-\d.,]+)\s*$/mi, text),
     grandTotal: pickNum(/^\s*Total\s+([-\d.,]+)\s*$/mi, text),
 

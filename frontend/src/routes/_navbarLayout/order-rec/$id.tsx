@@ -8,8 +8,8 @@ import { camelCaseToTitleCase } from '@/lib/utils'
 import { Square, CheckSquare, MinusSquare, Plus, Minus } from 'lucide-react';
 import ExcelJS from 'exceljs';
 import { Input } from '@/components/ui/input'
-import { Textarea } from '@/components/ui/textarea'
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip'
+import { OrderRecChat } from '@/components/custom/OrderRecChat'
 import { Trash2 } from 'lucide-react'
 import { getOrderRecStatusColor } from "@/lib/utils"
 import { getOrderRecById, saveOrderRec, savePendingAction, hasPendingActionsForId, deletePendingActionsForId } from "@/lib/orderRecIndexedDB"
@@ -38,17 +38,8 @@ function RouteComponent() {
   const [editItem, setEditItem] = useState<{ catIdx: number, itemIdx: number } | null>(null)
   const [notifying, setNotifying] = useState<boolean>(false)
 
-  const [extraNote, setExtraNote] = useState(orderRec?.extraItemsNote || '');
-  const [savingNote, setSavingNote] = useState(false);
-  const [noteSuccess, setNoteSuccess] = useState<string | null>(null);
-  const [noteError, setNoteError] = useState<string | null>(null);
   const navigate = useNavigate()
   // const [switchLoading, setSwitchLoading] = useState(false);
-
-  // Keep textarea in sync if orderRec changes
-  useEffect(() => {
-    setExtraNote(orderRec?.extraItemsNote || '');
-  }, [orderRec]);
 
   // useEffect(() => {
   //   const fetchOrderRec = async () => {
@@ -1198,79 +1189,16 @@ function RouteComponent() {
 
 
       <div className="mb-8 max-w-2xl mx-auto">
-        {/* <form
-          onSubmit={async e => {
-            e.preventDefault();
-            setSavingNote(true);
-            setNoteSuccess(null);
-            setNoteError(null);
-            try {
-              // add authorization header with bearer token
-              await axios.patch(`/api/order-rec/${id}`, { extraItemsNote: extraNote }, {
-                headers: {
-                  Authorization: `Bearer ${localStorage.getItem('token')}`
-                }
-              });
-              setNoteSuccess('Saved!');
-              setOrderRec((prev: any) => ({ ...prev, extraItemsNote: extraNote }));
-            } catch (err) {
-              setNoteError('Failed to save.');
-            } finally {
-              setSavingNote(false);
-            }
-          }}
-          className="space-y-2"
-        > */}
-
-        <form
-          onSubmit={async e => {
-            e.preventDefault();
-            setSavingNote(true);
-            setNoteSuccess(null);
-            setNoteError(null);
-
-            try {
-              // 1️⃣ Update UI immediately
-              setOrderRec((prev: any) => ({ ...prev, extraItemsNote: extraNote }));
-
-              // 2️⃣ Create new pending action
-              const action = {
-                type: "SAVE_EXTRA_NOTE",
-                orderId: orderRec.id || orderRec._id,
-                note: extraNote,
-                timestamp: Date.now(),
-              };
-
-              // 3️⃣ Save action to IndexedDB
-              await savePendingAction(action);
-            } catch (err) {
-              console.error("⚠️ Failed to save note", err);
-              setNoteError('Failed to save note.');
-            } finally {
-              setSavingNote(false);
-            }
-          }}
-          className="space-y-2"
-        >
-          <label className="block text-sm font-medium mb-1">
-            Extra Information (if any items are missing or other notes)
-          </label>
-          <Textarea
-            value={extraNote}
-            onChange={e => setExtraNote(e.target.value)}
-            rows={4}
-            className="w-full"
-            placeholder="Add any extra info here..."
-            disabled={savingNote}
-          />
-          <div className="flex items-center gap-2">
-            <Button type="submit" disabled={savingNote || extraNote === orderRec?.extraItemsNote}>
-              {savingNote ? 'Saving...' : 'Save'}
-            </Button>
-            {noteSuccess && <span className="text-green-600 text-sm">{noteSuccess}</span>}
-            {noteError && <span className="text-red-600 text-sm">{noteError}</span>}
-          </div>
-        </form>
+        <OrderRecChat
+          orderRecId={orderRec._id || orderRec.id}
+          comments={orderRec.comments ?? []}
+          onCommentsUpdate={(updated) =>
+            setOrderRec((prev: any) => ({ ...prev, comments: updated }))
+          }
+          legacyNote={orderRec.extraItemsNote}
+          uploaderEmail={orderRec.email}
+          createdAt={orderRec.createdAt}
+        />
       </div>
 
       <Accordion type="single" collapsible className="w-full">

@@ -8,7 +8,7 @@ interface OrderCardProps {
   site?: string
   currentStatus?: string
   statusHistory: { status: string; timestamp: string }[];
-  comments?: { text: string; author: string; timestamp: string }[]
+  comments?: { text: string; author: string; senderRole?: string; timestamp: string }[]
   onUpdateStatus: () => void
   onViewOrder?: (id: string) => void
   onViewComments?: (id: string) => void
@@ -42,13 +42,23 @@ export function OrderCard({
   // empty,
 }: OrderCardProps) {
   const lastComment = comments && comments.length > 0 ? comments[comments.length - 1] : null
+  const hasUnreadStoreMessage = !!lastComment?.senderRole &&
+    ['Station Cashier', 'Station Manager'].includes(lastComment.senderRole)
 
   return (
-    <Card className="w-80 overflow-hidden rounded-2xl border border-gray-300 shadow-sm gap-0 py-0">
+    <Card className="relative w-80 overflow-hidden rounded-2xl border border-gray-300 shadow-sm gap-0 py-0">
     {/* <Card className="relative w-80 overflow-hidden rounded-2xl border border-gray-300 shadow-sm"> */}
 
 
       {/* <Card className="w-110 grid grid-cols-[70%_30%] overflow-hidden rounded-2xl border border-gray-300 shadow-sm gap-0 py-0"> */}
+      {/* Unread store message indicator */}
+      {hasUnreadStoreMessage && (
+        <span className="absolute top-2 right-2 flex h-3 w-3 z-10">
+          <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-orange-400 opacity-75" />
+          <span className="relative inline-flex h-3 w-3 rounded-full bg-orange-500" />
+        </span>
+      )}
+
       {/* Left panel */}
       <div className="flex flex-col p-4 h-full justify-between" style={{
         backgroundColor: getStatusColor?.(currentStatus ?? "Created") ?? "#f3f4f6"

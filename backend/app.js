@@ -159,6 +159,29 @@ initChatQueueIo(io);
 
 const PORT = process.env.PORT || 5000;
 
+const seedNotificationTemplates = async () => {
+  const NotificationTemplate = require('./models/notification/notificationTemplate');
+  await NotificationTemplate.findOneAndUpdate(
+    { slug: 'order-rec-comment' },
+    {
+      $setOnInsert: {
+        name: 'Order Rec Comment',
+        slug: 'order-rec-comment',
+        description: 'Sent when a user posts a message in an order rec chat',
+        fields: [
+          { key: 'senderName', label: 'Sender Name', fieldType: 'text', required: true },
+          { key: 'site', label: 'Site', fieldType: 'text', required: true },
+          { key: 'message', label: 'Message', fieldType: 'text', required: true },
+          { key: 'orderRecId', label: 'Order Rec ID', fieldType: 'text', required: true },
+        ],
+        type: 'system',
+        contentLayout: '<p><strong>{{senderName}}</strong> sent a message on the order rec for <strong>{{site}}</strong>:</p><p>{{message}}</p><p><a href="https://app.gen7fuel.com/order-rec/{{orderRecId}}">View Order Rec</a></p>'
+      }
+    },
+    { upsert: true }
+  );
+};
+
 // Create an async start function
 const startServer = async () => {
   try {
@@ -166,7 +189,10 @@ const startServer = async () => {
     // This ensures your auth middleware has the data it needs immediately
     await initializePermissionMap();
 
-    // 2. Start the server
+    // 2. Seed required notification templates
+    await seedNotificationTemplates();
+
+    // 3. Start the server
     server.listen(PORT, "0.0.0.0", () => {
       console.log(`🚀 Server running on port ${PORT}`);
     });
