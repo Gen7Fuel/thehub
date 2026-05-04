@@ -15,9 +15,11 @@ function formatCurrency(n) {
   return `$${Number(n).toFixed(2)}`;
 }
 
-function formatDate(isoStr) {
-  // YYYY-MM-DD → Mon DD, YYYY
-  return DateTime.fromISO(isoStr, { zone: TIMEZONE }).toFormat("LLL dd, yyyy");
+function formatDate(date) {
+  const dt = date instanceof Date
+    ? DateTime.fromJSDate(date, { zone: TIMEZONE })
+    : DateTime.fromISO(date, { zone: TIMEZONE });
+  return dt.toFormat("LLL dd, yyyy");
 }
 
 function createZip(filePaths, outputPath) {
