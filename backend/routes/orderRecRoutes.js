@@ -5,8 +5,11 @@ const OrderRec = require('../models/OrderRec');
 const Vendor = require('../models/Vendor');
 const CycleCount = require('../models/CycleCount');
 const ProductCategory = require('../models/ProductCategory');
+const Role = require('../models/Role');
+const User = require('../models/User');
 const { getUPC_barcode } = require('../services/sqlService');
 const { calcSingleVendorLeadTime } = require('../utils/calcSingleVendorLeadTime');
+const { pushNotification } = require('../services/notificationService');
 
 // Get all
 router.get('/', async (req, res) => {
@@ -707,19 +710,76 @@ router.put('/:id/status', async (req, res) => {
 // Adding comments
 router.post('/:id/comments', async (req, res) => {
   try {
-    const { text, author } = req.body;
+    const { text, photos } = req.body;
+    if (!text || text.trim() === '') {
+      return res.status(400).json({ message: 'Comment text is required' });
+    }
+
     const orderRec = await OrderRec.findById(req.params.id);
     if (!orderRec) return res.status(404).json({ message: 'Not found' });
 
-    orderRec.comments.push({ text, author, timestamp: new Date() });
+    const author = req.user
+      ? (`${req.user.firstName || ''} ${req.user.lastName || ''}`).trim() || req.user.email
+      : 'Unknown';
+
+    orderRec.comments.push({
+      text: text.trim(),
+      author,
+      senderRole: req.user?.role?.role_name ?? null,
+      timestamp: new Date(),
+      photos: Array.isArray(photos) ? photos : []
+    });
     await orderRec.save();
 
-    // Notify all SSE clients about the update
-    // broadcastSSE(req.app, "orderUpdated", orderRec);
-
     res.json(orderRec);
+
+    // Fire notifications after response (non-blocking)
+    try {
+      const senderRoleName = req.user?.role?.role_name;
+      const io = req.app.get('io');
+      if (!senderRoleName || !io) return;
+
+      let recipientQuery = null;
+
+      if (['Station Cashier', 'Station Manager'].includes(senderRoleName)) {
+        const invRole = await Role.findOne({ role_name: 'Inventory Team' });
+        if (invRole) recipientQuery = { role: invRole._id, is_active: true };
+      } else if (senderRoleName === 'Inventory Team') {
+        const storeRoles = await Role.find({ role_name: { $in: ['Station Cashier', 'Station Manager'] } });
+        if (storeRoles.length) {
+          recipientQuery = {
+            role: { $in: storeRoles.map(r => r._id) },
+            stationName: orderRec.site,
+            is_active: true
+          };
+        }
+      }
+
+      if (!recipientQuery) return;
+
+      const recipients = await User.find(recipientQuery).select('email');
+      const recipientEmails = recipients.map(u => u.email).filter(Boolean);
+      if (!recipientEmails.length) return;
+
+      await pushNotification({
+        io,
+        senderId: req.user._id,
+        recipientEmails,
+        slug: 'order-rec-comment',
+        fieldValues: {
+          senderName: author,
+          site: orderRec.site,
+          message: text.trim().substring(0, 200),
+          orderRecId: orderRec._id.toString()
+        },
+        subject: `New message on order rec for ${orderRec.site}`,
+        type: 'system'
+      });
+    } catch (notifErr) {
+      console.error('Order rec comment notification failed:', notifErr);
+    }
   } catch (err) {
-    console.error("Error adding comment:", err); // Log full error
+    console.error("Error adding comment:", err);
     res.status(500).json({ message: err.message });
   }
 });
