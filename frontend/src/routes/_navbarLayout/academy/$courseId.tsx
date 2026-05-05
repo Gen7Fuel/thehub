@@ -213,9 +213,6 @@ function VideoItemView({
 
   const videoRef = useRef<HTMLVideoElement>(null)
   const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
-  const lastValidTimeRef = useRef(0)
-  const programmaticSeekRef = useRef(false)
-  const wasPlayingRef = useRef(false)
   const token = localStorage.getItem('token')
   const headers = { Authorization: `Bearer ${token}`, 'X-Required-Permission': 'academy' }
 
@@ -242,8 +239,6 @@ function VideoItemView({
       .then((res) => {
         const saved: number = res.data.progressSeconds ?? 0
         if (saved > 0 && videoRef.current) {
-          programmaticSeekRef.current = true
-          lastValidTimeRef.current = saved
           videoRef.current.currentTime = saved
         }
       })
@@ -253,25 +248,8 @@ function VideoItemView({
   function handleTimeUpdate() {
     const v = videoRef.current
     if (!v) return
-    lastValidTimeRef.current = v.currentTime
     if (saveTimerRef.current) clearTimeout(saveTimerRef.current)
     saveTimerRef.current = setTimeout(() => saveProgress(v.currentTime), 5000)
-  }
-
-  function handleSeeking() {
-    const v = videoRef.current
-    if (!v || programmaticSeekRef.current) return
-    wasPlayingRef.current = !v.paused
-    programmaticSeekRef.current = true
-    v.currentTime = lastValidTimeRef.current
-  }
-
-  function handleSeeked() {
-    programmaticSeekRef.current = false
-    if (wasPlayingRef.current) {
-      videoRef.current?.play().catch(() => {})
-      wasPlayingRef.current = false
-    }
   }
 
   function handlePauseOrEnded() {
@@ -292,11 +270,9 @@ function VideoItemView({
         <video
           ref={videoRef}
           src={src}
-          controls
-          className="w-full"
+          className="w-full cursor-pointer"
+          onClick={() => videoRef.current?.paused ? videoRef.current.play() : videoRef.current?.pause()}
           onTimeUpdate={handleTimeUpdate}
-          onSeeking={handleSeeking}
-          onSeeked={handleSeeked}
           onPause={handlePauseOrEnded}
           onEnded={handlePauseOrEnded}
         />
