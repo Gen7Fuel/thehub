@@ -739,26 +739,24 @@ router.post('/:id/comments', async (req, res) => {
       const io = req.app.get('io');
       if (!senderRoleName || !io) return;
 
-      let recipientQuery = null;
+      let recipientEmails = [];
 
       if (['Station Cashier', 'Station Manager'].includes(senderRoleName)) {
-        const invRole = await Role.findOne({ role_name: 'Inventory Team' });
-        if (invRole) recipientQuery = { role: invRole._id, is_active: true };
+        // Notify only the Inventory Team member who uploaded this specific order rec
+        if (orderRec.email) recipientEmails = [orderRec.email];
       } else if (senderRoleName === 'Inventory Team') {
+        // Notify Station Cashier/Manager users at this order rec's site
         const storeRoles = await Role.find({ role_name: { $in: ['Station Cashier', 'Station Manager'] } });
         if (storeRoles.length) {
-          recipientQuery = {
+          const storeUsers = await User.find({
             role: { $in: storeRoles.map(r => r._id) },
             stationName: orderRec.site,
             is_active: true
-          };
+          }).select('email');
+          recipientEmails = storeUsers.map(u => u.email).filter(Boolean);
         }
       }
 
-      if (!recipientQuery) return;
-
-      const recipients = await User.find(recipientQuery).select('email');
-      const recipientEmails = recipients.map(u => u.email).filter(Boolean);
       if (!recipientEmails.length) return;
 
       await pushNotification({
