@@ -20,6 +20,7 @@ interface OrderCardProps {
   vendor_order_frequency?: number
   empty?: boolean
   leadTime?: number | null
+  dismissedUntil?: string
 }
 
 export function OrderCard({
@@ -39,11 +40,14 @@ export function OrderCard({
   lastPlacedOrder,
   vendor_order_frequency,
   leadTime,
+  dismissedUntil,
   // empty,
 }: OrderCardProps) {
+  const STORE_ROLES = ['Station Cashier', 'Station Manager']
   const lastComment = comments && comments.length > 0 ? comments[comments.length - 1] : null
   const hasUnreadStoreMessage = !!lastComment?.senderRole &&
-    ['Station Cashier', 'Station Manager'].includes(lastComment.senderRole)
+    STORE_ROLES.includes(lastComment.senderRole) &&
+    (!dismissedUntil || new Date(lastComment.timestamp) > new Date(dismissedUntil))
 
   return (
     <Card className="relative w-80 overflow-hidden rounded-2xl border border-gray-300 shadow-sm gap-0 py-0">
