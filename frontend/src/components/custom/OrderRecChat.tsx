@@ -1,7 +1,7 @@
 import { useState, useMemo } from 'react'
 import axios from 'axios'
 import { Button } from '@/components/ui/button'
-import { Dialog, DialogContent } from '@/components/ui/dialog'
+import { Dialog, DialogContent, DialogClose } from '@/components/ui/dialog'
 import { isActuallyOnline } from '@/lib/network'
 import { ImagePlus, Send, ChevronDown, ChevronUp, X } from 'lucide-react'
 
@@ -224,9 +224,12 @@ export function OrderRecChat({
 
       {/* Lightbox */}
       <Dialog open={!!lightboxSrc} onOpenChange={open => !open && setLightboxSrc(null)}>
-        <DialogContent className="max-w-3xl p-2 flex items-center justify-center">
+        <DialogContent className="max-w-none w-screen h-screen p-0 bg-black border-none rounded-none flex items-center justify-center [&>button]:hidden">
+          <DialogClose className="absolute top-4 right-4 z-50 flex items-center justify-center w-10 h-10 rounded-md bg-red-600 hover:bg-red-700 text-white">
+            <X className="w-5 h-5" />
+          </DialogClose>
           {lightboxSrc && (
-            <img src={lightboxSrc} className="max-h-[80vh] max-w-full object-contain rounded" alt="full size" />
+            <img src={lightboxSrc} className="max-h-screen max-w-screen object-contain" alt="full size" />
           )}
         </DialogContent>
       </Dialog>
