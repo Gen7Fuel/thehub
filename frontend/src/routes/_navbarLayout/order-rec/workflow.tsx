@@ -59,6 +59,18 @@ function RouteComponent() {
   const [updateStatusOrderId, setUpdateStatusOrderId] = useState<string | null>(null);
   const [newStatus, setNewStatus] = useState<string>("");
   const [pendingStatusAfterComment, setPendingStatusAfterComment] = useState<null | string>(null);
+  const [dismissedComments, setDismissedComments] = useState<Record<string, string>>(
+    () => JSON.parse(localStorage.getItem('orderRecChatDismissed') || '{}')
+  );
+
+  const dismissStoreMessage = (id: string, comments: any[]) => {
+    const STORE_ROLES = ['Station Cashier', 'Station Manager'];
+    const lastStoreComment = [...comments].reverse().find(c => STORE_ROLES.includes(c.senderRole));
+    if (!lastStoreComment) return;
+    const updated = { ...dismissedComments, [id]: lastStoreComment.timestamp };
+    setDismissedComments(updated);
+    localStorage.setItem('orderRecChatDismissed', JSON.stringify(updated));
+  };
   // const [pendingStatusOrderId, setPendingStatusOrderId] = useState<string | null>(null);
 
 
@@ -740,12 +752,17 @@ function RouteComponent() {
                                         ? Number(vendorMeta.vendor_order_frequency)
                                         : undefined
                                     }
-                                    onViewOrder={(id) => navigate({ to: '/order-rec/$id', params: { id } })}
+                                    onViewOrder={(id) => {
+                                      dismissStoreMessage(id, rec.comments || []);
+                                      navigate({ to: '/order-rec/$id', params: { id } });
+                                    }}
                                     onViewComments={(id) => {
                                       const recData = orderRecs.find((r) => r._id === id);
+                                      dismissStoreMessage(id, recData?.comments || []);
                                       setCurrentComments(recData?.comments || []);
                                       setViewCommentsOrderId(id);
                                     }}
+                                    dismissedUntil={dismissedComments[rec._id]}
                                     onAddEditComment={(id, lastComment) => {
                                       setCommentText(lastComment || "");
                                       setAddEditCommentOrderId(id);

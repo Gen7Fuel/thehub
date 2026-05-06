@@ -38,8 +38,10 @@ const CategorySchema = new mongoose.Schema({
  */
 const CommentSchema = new mongoose.Schema({
   text: { type: String, required: true },           // Comment text
-  author: { type: String },                         // Author's email or user id
-  timestamp: { type: Date, default: new Date() }    // When the comment was made
+  author: { type: String },                         // Author's display name
+  senderRole: { type: String },                     // Role name of the sender at time of posting
+  timestamp: { type: Date, default: new Date() },   // When the comment was made
+  photos: { type: [String], default: [] }           // CDN filenames for attached photos
 });
 
 /**
