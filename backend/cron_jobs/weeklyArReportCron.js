@@ -106,6 +106,7 @@ async function sendWeeklyArReport() {
       source: "PO",
       stationName: site,
       date: { $gte: startDateObj, $lte: endDateObj },
+      poNumber: { $exists: true, $nin: [null, ""] },
     }).sort({ date: 1 }).lean();
 
     // Generate a PDF for each transaction
