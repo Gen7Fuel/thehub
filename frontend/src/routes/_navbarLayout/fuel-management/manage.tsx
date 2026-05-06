@@ -1,11 +1,38 @@
 import { createFileRoute, Link, Outlet } from '@tanstack/react-router'
-import { Warehouse, Truck, UserCheck, MapPin } from 'lucide-react'
+import { Warehouse, Truck, UserCheck, MapPin, Send } from 'lucide-react'
+import axios from 'axios';
 
 export const Route = createFileRoute('/_navbarLayout/fuel-management/manage')({
   component: ManageLayout,
 })
 
 function ManageLayout() {
+
+  const handleNotify = async () => {
+    try {
+      const authHeader = {
+        headers: {
+          Authorization: `Bearer ${localStorage.getItem('token')}`
+        }
+      };
+
+      const res = await axios.get(
+        '/api/fuel-orders/notify-upcoming',
+        authHeader
+      );
+
+      if (res.status === 200) {
+        alert("Email notifications pushed to queue successfully!");
+      } else {
+        alert("Failed to trigger notifications.");
+      }
+
+    } catch (err) {
+      console.error(err);
+      alert("Error connecting to server.");
+    }
+  };
+
   const activeProps = { className: 'bg-primary text-primary-foreground shadow-md' }
 
   const links = [
@@ -33,6 +60,13 @@ function ManageLayout() {
             <span className="hidden lg:block font-medium">{link.label}</span>
           </Link>
         ))}
+        <button
+          onClick={handleNotify}
+          className="mt-4 flex items-center gap-3 p-3 rounded-lg hover:bg-blue-50 text-blue-600 transition-all group"
+        >
+          <Send className="h-5 w-5 shrink-0" />
+          <span className="hidden lg:block font-medium">Notify EOD Orders</span>
+        </button>
       </aside>
 
       {/* Renders COLUMN 2 and COLUMN 3 */}
