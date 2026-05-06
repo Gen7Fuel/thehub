@@ -45,7 +45,8 @@
       "Bash(Get-ChildItem *)",
       "Bash(Select-Object Name)",
       "Bash(findstr /S \"Osoyoos\" .)",
-      "Bash(Select-Object -ExpandProperty FullName)"
+      "Bash(Select-Object -ExpandProperty FullName)",
+      "WebFetch(domain:developer.sage.com)"
     ]
   }
 }
