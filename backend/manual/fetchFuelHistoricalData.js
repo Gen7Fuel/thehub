@@ -26,7 +26,11 @@ async function syncHistoricalDips() {
 
   const tanks = await FuelStationTank.find().populate('stationId');
 
-  const startDate = new Date('2026-03-23T00:00:00');
+  // Dynamic Start Date: 14 days ago from today
+  const startDate = new Date();
+  startDate.setDate(startDate.getDate() - 14);
+  startDate.setHours(0, 0, 0, 0);
+
   const today = new Date();
   today.setHours(0, 0, 0, 0);
 
@@ -80,7 +84,10 @@ async function syncFuelSales() {
 
   // Fetch only active fuel stations
   const locations = await Location.find({ type: 'store' });
-  const startDate = new Date('2026-03-09T00:00:00');
+  const startDate = new Date();
+  startDate.setDate(startDate.getDate() - 14);
+  startDate.setHours(0, 0, 0, 0);
+  
   const today = new Date();
   const dayNames = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
 
@@ -91,9 +98,9 @@ async function syncFuelSales() {
     }
 
     console.log(`\n📍 Processing: ${loc.stationName} [${loc.csoCode}]`);
-    
+
     let currentDate = new Date(startDate);
-    
+
     while (currentDate <= today) {
       const dateStr = formatDate(currentDate);
 
@@ -103,14 +110,14 @@ async function syncFuelSales() {
 
         if (salesData.length > 0) {
           await FuelSales.findOneAndUpdate(
-            { 
-              stationId: loc._id, 
-              date: new Date(currentDate).setHours(0,0,0,0) 
+            {
+              stationId: loc._id,
+              date: new Date(currentDate).setHours(0, 0, 0, 0)
             },
-            { 
-              salesData, 
+            {
+              salesData,
               dayOfWeek: dayNames[currentDate.getDay()],
-              isLive: dateStr === formatDate(today) 
+              isLive: dateStr === formatDate(today)
             },
             { upsert: true }
           );
