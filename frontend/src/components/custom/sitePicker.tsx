@@ -8,7 +8,8 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select"
-import { useAuth } from "@/context/AuthContext"  // ✅ so we can read user.access.site_access
+import { useAuth } from "@/context/AuthContext"
+import { useSite } from "@/context/SiteContext"
 
 interface Location {
   _id: string
@@ -17,7 +18,7 @@ interface Location {
 
 interface SitePickerProps {
   value?: string
-  onValueChange: (value: string) => void
+  onValueChange?: (value: string) => void
   placeholder?: string
   label?: string
   className?: string
@@ -34,6 +35,14 @@ export function SitePicker({
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const { user } = useAuth()
+  const { selectedSite, setSelectedSite } = useSite()
+
+  const resolvedValue = value ?? selectedSite
+
+  const handleChange = (v: string) => {
+    setSelectedSite(v)
+    onValueChange?.(v)
+  }
 
   useEffect(() => {
     const fetchLocations = async () => {
@@ -98,7 +107,7 @@ export function SitePicker({
   }
 
   return (
-    <Select value={value} onValueChange={onValueChange}>
+    <Select value={resolvedValue} onValueChange={handleChange}>
       <SelectTrigger className={className}>
         <SelectValue placeholder={placeholder} />
       </SelectTrigger>

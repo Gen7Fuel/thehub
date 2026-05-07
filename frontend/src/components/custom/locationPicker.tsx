@@ -97,6 +97,7 @@ import {
 } from "@/components/ui/select";
 import axios from "axios";
 import { useAuth } from "@/context/AuthContext";
+import { useSite } from "@/context/SiteContext";
 
 interface Location {
   _id: string;
@@ -124,6 +125,7 @@ export function LocationPicker({
   });
 
   const { user } = useAuth();
+  const { selectedSite, setSelectedSite } = useSite();
 
   // Extract sites user has access to
   const siteAccess = user?.access?.site_access || {};
@@ -140,9 +142,10 @@ export function LocationPicker({
   const filteredLocations = locations?.filter((loc: Location) =>
     allAllowedSites.includes(loc.stationName)
   );
-  
+
   const handleValueChange = (selectedValue: string) => {
     setStationName(selectedValue);
+    setSelectedSite(selectedValue);
 
     if (setTimezone) {
       const selectedLocation = locations?.find(
@@ -155,7 +158,7 @@ export function LocationPicker({
   };
 
   const selectDefaultValue =
-    defaultValue !== undefined ? defaultValue : user?.location;
+    defaultValue !== undefined ? defaultValue : (selectedSite || user?.location);
 
   return (
     <Select
