@@ -38,6 +38,10 @@ vi.mock('@/context/AuthContext', () => ({
   useAuth: () => mockUseAuth(),
 }))
 
+vi.mock('@/context/SiteContext', () => ({
+  useSite: () => ({ selectedSite: '', setSelectedSite: vi.fn() }),
+}))
+
 vi.mock('@/lib/websocket', () => ({
   getSocket: () => ({
     on: vi.fn(),

@@ -64,6 +64,10 @@ vi.mock('@/context/AuthContext', () => ({
   useAuth: () => mockUseAuth(),
 }))
 
+vi.mock('@/context/SiteContext', () => ({
+  useSite: () => ({ selectedSite: '', setSelectedSite: vi.fn() }),
+}))
+
 vi.mock('@/store', () => ({
   useFormStore: (selector: (state: any) => any) => selector(mockStore),
 }))
