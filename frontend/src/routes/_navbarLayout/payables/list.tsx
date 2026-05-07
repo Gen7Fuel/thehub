@@ -9,7 +9,8 @@ import { getStartAndEndOfToday, toUTC, uploadBase64Image } from '@/lib/utils'
 import { domain } from '@/lib/constants'
 import { Eye, ChevronLeft, ChevronRight, ExternalLink, CalendarIcon, Camera, Loader2 } from 'lucide-react'
 import axios from "axios"
-import { useAuth } from "@/context/AuthContext";
+import { useAuth } from "@/context/AuthContext"
+import { useSite } from "@/context/SiteContext";
 import { FileDown } from 'lucide-react'
 import PayablePDF from '@/components/custom/PayablePDF'
 import { pdf } from '@react-pdf/renderer'
@@ -43,9 +44,10 @@ function RouteComponent() {
     to: end,
   })
   const { user } = useAuth()
+  const { selectedSite } = useSite()
   const access = user?.access || {}
   const navigate = useNavigate()
-  const [location, setLocation] = useState<string>(user?.location || "")
+  const [location, setLocation] = useState<string>(selectedSite || user?.location || "")
   const [_, setTimezone] = useState<string>(user?.timezone || "America/Toronto")
   const [payables, setPayables] = useState<Payable[]>([])
   const [loading, setLoading] = useState(false)

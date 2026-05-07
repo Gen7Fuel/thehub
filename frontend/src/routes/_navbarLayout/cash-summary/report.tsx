@@ -447,6 +447,7 @@ function RouteComponent() {
         if (res.status === 403) { navigate({ to: '/no-access' }); return }
         if (!res.ok) return
         const data = await res.json()
+        console.log('[payouts-check]', data)
         setPayoutsCheckMatch(data.match)
         if (!data.match) {
           toast.warning(
@@ -476,6 +477,7 @@ function RouteComponent() {
         if (res.status === 403) { navigate({ to: '/no-access' }); return }
         if (!res.ok) return
         const data = await res.json()
+        console.log('[ar-check]', data)
         setArCheckMatch(data.match)
         if (!data.match) {
           toast.warning(
