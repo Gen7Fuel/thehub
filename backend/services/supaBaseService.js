@@ -41,22 +41,16 @@ export const getLiveTankVolumes = async () => {
  * Fetches the specific opening/closing volume for a tank on a specific date.
  */
 export const getTankReadingsForDate = async (station_sk, tank_id, dateStr) => {
-  // 1. Get Opening (Latest before 05:00:00)
-  // Note: For 2026-03-23, we fallback to the first record available if 5am is missing
-  let openingQuery = supabase
+  // 1. Get Opening (Latest before 02:00:00)
+  const { data: openData } = supabase
     .from('current_fuel_inventory')
     .select('volume, reading_time')
     .eq('station_sk', station_sk)
     .eq('tank_id', tank_id.toString())
-    .eq('date_sk', dateStr);
-
-  if (dateStr === '2026-03-23') {
-    openingQuery = openingQuery.order('reading_time', { ascending: true }).limit(1);
-  } else {
-    openingQuery = openingQuery.lt('reading_time', '05:00:00').order('reading_time', { ascending: false }).limit(1);
-  }
-
-  const { data: openData } = await openingQuery;
+    .eq('date_sk', dateStr)
+    .lt('reading_time', '02:00:00')
+    .order('reading_time', { ascending: false })
+    .limit(1);
 
   // 2. Get Closing (Latest before midnight)
   const { data: closeData } = await supabase
@@ -71,7 +65,7 @@ export const getTankReadingsForDate = async (station_sk, tank_id, dateStr) => {
 
   return {
     openingVolume: openData?.[0]?.volume || 0,
-    openingTime: openData?.[0]?.reading_time || "05:00:00",
+    openingTime: openData?.[0]?.reading_time || "00:00:00",
     closingVolume: closeData?.[0]?.volume || 0
   };
 };
@@ -176,5 +170,18 @@ export const getSingleTankHistoryByDay = async (csoCode, tankId, dateStr) => {
   } catch (error) {
     console.error('Error fetching tank history:', error.message);
     return [];
+  }
+};
+
+// Add this to supaBaseService.js
+export const purgeOldData = async () => {
+  try {
+    const { data, error } = await supabase.rpc('delete_old_fuel_data');
+    if (error) throw error;
+    console.log("Successfully purged Supabase data older than 14 days.");
+    return { success: true };
+  } catch (error) {
+    console.error("Error purging Supabase data:", error.message);
+    throw error;
   }
 };

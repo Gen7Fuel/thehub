@@ -5,7 +5,7 @@ const FuelStationTank = require('../models/fuel/FuelStationTank');
 const FuelSales = require('../models/fuel/FuelSales');
 const FuelSalesArchived = require('../models/fuel/FuelSalesArchived');
 const FuelStationTankArchived = require('../models/fuel/FuelStationTankArchived');
-const { getTankReadingsForCron, getProcessedFuelSales } = require('../services/supaBaseService');
+const { getTankReadingsForCron, getProcessedFuelSales, purgeOldData } = require('../services/supaBaseService');
 
 const runSmartSync = async (targetStationId = null, retryAttempt = 1) => {
   console.log(`--- 🕒 [START] Smart Fuel Sync (Attempt ${retryAttempt}) ---`);
@@ -184,6 +184,14 @@ cron.schedule('10 22,23,0,1,2,3,4,5,6,7,8 * * *', async () => {
     else if (hour === 4) {
       console.log(`🔄 Final Retry window for ${loc.stationName}`);
       runSmartSync(loc._id, 3);
+
+      // --- NEW PURGE LOGIC ---
+      // Only run the purge once per day. 
+      // We check if this is the first station in the loop to avoid calling purge 50 times.
+      if (loc._id.toString() === locations[0]._id.toString()) {
+        console.log("🧹 [Maintenance] Starting Supabase Data Purge...");
+        await purgeOldData();
+      }
     }
   }
 }, {
