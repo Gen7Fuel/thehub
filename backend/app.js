@@ -2,6 +2,7 @@ const express = require("express");
 const dotenv = require("dotenv");
 const cors = require("cors");
 const connectDB = require("./config/db");
+const { connectPostgres } = require('./config/postgresDb');
 const http = require("http");
 const { Server } = require("socket.io");
 const requestId = require("./middleware/requestId");
@@ -76,6 +77,7 @@ const setupSocket = require("./socket");
 
 dotenv.config();
 connectDB();
+connectPostgres();
 
 const app = express();
 const server = http.createServer(app);

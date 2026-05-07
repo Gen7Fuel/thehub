@@ -12,6 +12,21 @@ services:
     image: redis:7
     restart: always
 
+  postgres:
+    container_name: postgres
+    image: postgres:16-alpine
+    restart: always
+    env_file:
+      - ./backend/.env  # This tells Docker to load the file
+    environment:
+      - POSTGRES_USER=${POSTGRES_USER}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
+      - POSTGRES_DB=${POSTGRES_DB}
+    ports:
+      - "5433:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+
   backend:
     container_name: backend
     build:
@@ -31,6 +46,7 @@ services:
     depends_on:
       - mongo
       - redis
+      - postgres
     restart: always
 
   auth-backend:
@@ -94,6 +110,7 @@ volumes:
   dist:
   uploads:
   mongodb_data:
+  postgres_data:
   backend_node_modules:
   frontend_node_modules:
   auth-backend_node_modules:
