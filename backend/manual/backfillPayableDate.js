@@ -4,7 +4,7 @@ const connectDB = require('../config/db');
 const Payable = require('../models/Payables');
 require('../models/Location'); // register schema so populate works
 
-const DRY_RUN = true; // Set to false to commit changes
+const DRY_RUN = false; // Set to false to commit changes
 
 async function run() {
   await connectDB();
