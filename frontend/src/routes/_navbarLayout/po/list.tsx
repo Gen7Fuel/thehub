@@ -15,6 +15,7 @@ import { getStartAndEndOfToday, uploadBase64Image } from '@/lib/utils'
 import { DateTime } from 'luxon'
 import axios from "axios"
 import { useAuth } from "@/context/AuthContext";
+import { useSite } from "@/context/SiteContext";
 import { formatFleetCardNumber } from '@/lib/utils';
 
 export const Route = createFileRoute('/_navbarLayout/po/list')({
@@ -23,6 +24,7 @@ export const Route = createFileRoute('/_navbarLayout/po/list')({
 
 function RouteComponent() {
   const { user } = useAuth()
+  const { selectedSite } = useSite()
   const navigate = useNavigate()
   const resetForm = useFormStore((state) => state.resetForm);
   const { start, end } = getStartAndEndOfToday();
@@ -30,10 +32,10 @@ function RouteComponent() {
     from: start,
     to: end,
   });
-  
+
   // const poData = Route.useLoaderData() as any;
 
-  const [stationName, setStationName] = React.useState<string>(user?.location || "");
+  const [stationName, setStationName] = React.useState<string>(selectedSite || user?.location || "");
   const [timezone, setTimezone] = React.useState<string>(user?.timezone || "America/Toronto");
   const [purchaseOrders, setPurchaseOrders] = React.useState<
     {

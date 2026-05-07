@@ -5,6 +5,7 @@ import axios from "axios"
 import { LocationPicker } from "@/components/custom/locationPicker";
 import { createContext } from "react";
 import { useAuth } from "@/context/AuthContext";
+import { useSite } from "@/context/SiteContext";
 
 export const RouteContext = createContext<{
   stationName: string;
@@ -44,7 +45,8 @@ function RouteComponent() {
   const [error, setError] = useState("");
 
   const { user } = useAuth();
-  const [stationName, setStationName] = useState(user?.location || "");
+  const { selectedSite } = useSite();
+  const [stationName, setStationName] = useState(selectedSite || user?.location || "");
 
   // temporary central patch function
   const updateStation = (newStation: string) => {

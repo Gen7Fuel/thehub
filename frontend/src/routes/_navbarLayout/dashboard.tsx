@@ -33,6 +33,7 @@ import { FuelSparkline } from "@/components/custom/dashboard/fuelSparkLine";
 // import { DatePickerWithRange } from '@/components/custom/datePickerWithRange';
 // import type { DateRange } from "react-day-picker";
 import { useAuth } from "@/context/AuthContext";
+import { useSite } from "@/context/SiteContext";
 import { getOrderRecStatusColor } from '@/lib/utils';
 import { PasswordProtection } from "@/components/custom/PasswordProtection";
 import { AuditSummaryChart } from "@/components/custom/dashboard/auditCharts"
@@ -323,7 +324,8 @@ function processOverShortData(data: OverShortChartItem[]) {
 
 function RouteComponent() {
   const { user } = useAuth();
-  const [site, setSite] = useState(user?.location || "Rankin");
+  const { selectedSite } = useSite();
+  const [site, setSite] = useState(selectedSite || user?.location || "Rankin");
   const [_orderRecs, setOrderRecs] = useState<Record<string, any[]>>({});
   const [_vendorNames, setVendorNames] = useState<Record<string, string>>({});
   const [_vendors, setVendors] = useState<any[]>([]);

@@ -162,6 +162,7 @@ import { LocationPicker } from '@/components/custom/locationPicker'
 import { Textarea } from '@/components/ui/textarea'
 import { useAuth } from "@/context/AuthContext";
 import { Camera, Eye } from 'lucide-react'; // Added icons
+import { useSite } from "@/context/SiteContext";
 
 export const Route = createFileRoute('/_navbarLayout/payables/')({
   component: RouteComponent,
@@ -169,6 +170,7 @@ export const Route = createFileRoute('/_navbarLayout/payables/')({
 
 function RouteComponent() {
   const { user } = useAuth()
+  const { selectedSite } = useSite()
   const navigate = useNavigate()
   const fileInputRef = useRef<HTMLInputElement>(null)
 
@@ -191,10 +193,9 @@ function RouteComponent() {
   const setPayableImages = useFormStore((state) => state.setPayableImages)
 
   useEffect(() => {
-    if (user?.location && !payableLocation) {
-      setPayableLocation(user.location);
-    }
-  }, [user?.location, payableLocation, setPayableLocation]);
+    const site = selectedSite || user?.location
+    if (site) setPayableLocation(site)
+  }, [selectedSite, user?.location, setPayableLocation]);
 
   const handleCapture = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]
@@ -251,7 +252,6 @@ function RouteComponent() {
           <LocationPicker
             setStationName={setPayableLocation as React.Dispatch<React.SetStateAction<string>>}
             value="stationName"
-            defaultValue={user?.location}
           />
         </div>
 
