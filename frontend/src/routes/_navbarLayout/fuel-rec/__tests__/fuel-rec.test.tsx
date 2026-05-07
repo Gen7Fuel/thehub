@@ -42,6 +42,10 @@ vi.mock('@tanstack/react-router', async (importOriginal) => {
   }
 })
 
+vi.mock('@/context/SiteContext', () => ({
+  useSite: () => ({ selectedSite: '', setSelectedSite: vi.fn() }),
+}))
+
 vi.mock('@/context/AuthContext', () => ({
   useAuth: () => mockUseAuth(),
 }))
