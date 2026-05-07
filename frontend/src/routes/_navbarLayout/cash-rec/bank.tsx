@@ -114,7 +114,7 @@ function parseTtx(text: string): ParsedTtx {
 
       const descLower = description.toLowerCase()
       if (out.balanceForward == null && descLower.includes('balance forward')) out.balanceForward = balance
-      if (descLower.includes('night deposit')) out.nightDeposit = (out.nightDeposit ?? 0) + credits
+      if (descLower.includes('deposit')) out.nightDeposit = (out.nightDeposit ?? 0) + credits
       if (descLower.includes('transfer to')) out.transferTo = (out.transferTo ?? 0) + debits
       // Column-driven classification with GBL split (strictly > 0)
       const hasGBL = /gbl/i.test(description)
