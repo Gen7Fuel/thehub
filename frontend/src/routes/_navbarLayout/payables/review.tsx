@@ -6,6 +6,7 @@ import { Button } from '@/components/ui/button'
 import { uploadBase64Image } from '@/lib/utils'
 import { domain } from '@/lib/constants'
 import axios from "axios"
+import { format } from 'date-fns'
 
 export const Route = createFileRoute('/_navbarLayout/payables/review')({
   component: RouteComponent,
@@ -71,7 +72,7 @@ function RouteComponent() {
         paymentMethod: payablePaymentMethod,
         amount: payableAmount,
         images: imageFilenames,
-        date: date,
+        date: date ? format(date, 'yyyy-MM-dd') : format(new Date(), 'yyyy-MM-dd'),
       }, {
         headers: {
           Authorization: `Bearer ${token}`,

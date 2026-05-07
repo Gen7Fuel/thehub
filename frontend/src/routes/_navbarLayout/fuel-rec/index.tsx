@@ -1,5 +1,6 @@
 import * as React from 'react'
 import { createFileRoute, useNavigate } from '@tanstack/react-router'
+import { useSite } from '@/context/SiteContext'
 import { format } from 'date-fns'
 import { Button } from '@/components/ui/button'
 import { SitePicker } from '@/components/custom/sitePicker'
@@ -24,6 +25,11 @@ function RouteComponent() {
   const { site, date } = Route.useSearch() as Search
   const navigate = useNavigate({ from: Route.fullPath })
   const setSearch = (next: Partial<Search>) => navigate({ search: (prev: any) => ({ ...prev, ...next }) })
+  const { selectedSite } = useSite()
+
+  React.useEffect(() => {
+    if (!site && selectedSite) setSearch({ site: selectedSite })
+  }, [selectedSite])
 
   const [bolNumber, setBolNumber] = React.useState<string>('')
   const [photo, setPhoto] = React.useState<string>('') // Base64 string

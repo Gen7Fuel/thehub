@@ -9,6 +9,7 @@ import type { DateRange } from 'react-day-picker'
 import { getStartAndEndOfToday } from '@/lib/utils'
 import { PasswordProtection } from "@/components/custom/PasswordProtection";
 import { useAuth } from "@/context/AuthContext";
+import { useSite } from "@/context/SiteContext";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog'
 import { Switch } from '@/components/ui/switch';
 import {
@@ -77,12 +78,17 @@ export default function RouteComponent() {
   const [calendarModalEntryId, setCalendarModalEntryId] = useState<string | null>(null);
   // const { site } = Route.useSearch() as { site?: string }
   const { user } = useAuth();
+  const { selectedSite } = useSite();
   const { site, from, to } = Route.useSearch() as { site?: string; from?: string; to?: string }
   const navigate = useNavigate({ from: Route.fullPath })
 
   const setSearch = (next: Partial<{ site: string; from: string; to: string }>) => {
     navigate({ search: (prev: any) => ({ ...prev, ...next }) })
   }
+
+  useEffect(() => {
+    if (!site && selectedSite) setSearch({ site: selectedSite })
+  }, [selectedSite])
 
   const [showPasswordDialog, setShowPasswordDialog] = useState(false);
   const [hasAccess, setHasAccess] = useState(false);
