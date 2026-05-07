@@ -37,7 +37,7 @@ export function SitePicker({
   const { user } = useAuth()
   const { selectedSite, setSelectedSite } = useSite()
 
-  const resolvedValue = value ?? selectedSite
+  const resolvedValue = value || selectedSite
 
   const handleChange = (v: string) => {
     setSelectedSite(v)

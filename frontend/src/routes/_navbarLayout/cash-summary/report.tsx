@@ -5,6 +5,7 @@ import { SitePicker } from '@/components/custom/sitePicker'
 import { Button } from '@/components/ui/button';
 import { Info, RefreshCw } from 'lucide-react'
 import { useAuth } from '@/context/AuthContext'
+import { useSite } from '@/context/SiteContext'
 import {
   Dialog,
   DialogContent,
@@ -138,15 +139,17 @@ export function Card({ title, value, dialogContent }: CardProps) {
 
 function RouteComponent() {
   const { user } = useAuth()
+  const { selectedSite } = useSite()
   const access = user?.access || {}
   const { site, date } = Route.useSearch()
+
+  const navigate = useNavigate({ from: Route.fullPath })
   // const { report, error } = Route.useLoaderData() as { report: ReportData | null; error: string | null }
   const { report, error, accessDenied } = Route.useLoaderData() as {
     report: ReportData | null
     error: string | null
     accessDenied: boolean
   }
-  const navigate = useNavigate({ from: Route.fullPath })
   // const [submitState, setSubmitState] = useState<'idle' | 'submitting' | 'submitted'>('idle')
   const [submitState, setSubmitState] = useState<'idle' | 'submitting' | 'submitted'>(
     report?.report?.submitted === true ? 'submitted' : 'idle'
@@ -188,6 +191,10 @@ function RouteComponent() {
       navigate({ to: "/no-access" })
     }
   }, [accessDenied, navigate])
+
+  useEffect(() => {
+    if (!site && selectedSite) navigate({ search: (prev: Search) => ({ ...prev, site: selectedSite }) })
+  }, [selectedSite])
 
 
   useEffect(() => {

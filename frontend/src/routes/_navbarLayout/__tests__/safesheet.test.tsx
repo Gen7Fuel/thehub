@@ -40,6 +40,10 @@ const mockUserBase = {
 
 const mockUseAuth = vi.fn().mockReturnValue({ user: mockUserBase })
 
+vi.mock('@/context/SiteContext', () => ({
+  useSite: () => ({ selectedSite: '', setSelectedSite: vi.fn() }),
+}))
+
 vi.mock('@/context/AuthContext', () => ({
   useAuth: () => mockUseAuth(),
 }))

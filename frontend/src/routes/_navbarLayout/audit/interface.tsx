@@ -48,6 +48,11 @@ function RouteComponent() {
   const { selectedSite } = useSite();
   const [stationName, setStationName] = useState(selectedSite || user?.location || "");
 
+  // Keep stationName in sync when the global site changes from another module
+  useEffect(() => {
+    if (selectedSite) setStationName(selectedSite)
+  }, [selectedSite])
+
   // temporary central patch function
   const updateStation = (newStation: string) => {
     setStationName(newStation);
@@ -121,6 +126,7 @@ function RouteComponent() {
 
           {/* ◼ Location Picker (left) */}
           <LocationPicker
+            key={stationName}
             value="stationName"
             defaultValue={stationName}
             setStationName={(value) => {
