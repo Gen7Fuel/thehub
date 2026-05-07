@@ -5,6 +5,7 @@ import { InputOTP, InputOTPGroup, InputOTPSeparator, InputOTPSlot } from '@/comp
 import { Select, SelectContent, SelectGroup, SelectItem, SelectLabel, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { createFileRoute, Link, useNavigate } from '@tanstack/react-router'
 import { useAuth } from '@/context/AuthContext'
+import { useSite } from '@/context/SiteContext'
 import { useFormStore } from '@/store'
 import axios from 'axios'
 import { DatePicker } from '@/components/custom/datePicker';
@@ -42,6 +43,7 @@ export const Route = createFileRoute('/_navbarLayout/po/')({
 
 function RouteComponent() {
   const { user } = useAuth()
+  const { selectedSite } = useSite()
   const [numberType, setNumberType] = useState<'fleet' | 'po'>('po') // dropdown selection
 
   const fleetCardNumber = useFormStore((state) => state.fleetCardNumber)
@@ -103,15 +105,14 @@ function RouteComponent() {
   }
 
   useEffect(() => {
-    if (!stationName && user?.location) {
-      setStationName(user.location);
-    }
+    const site = selectedSite || user?.location
+    if (site) setStationName(site)
     // Set default fuel type to 'Regular' if not already set
     if (!fuelType && data.products && data.products.length > 0) {
       const regular = data.products.find((p: { description: string }) => p.description.toLowerCase().includes('regular'));
       if (regular) setFuelType(regular.code);
     }
-  }, [stationName, user?.location, setStationName, fuelType, setFuelType, data.products]);
+  }, [selectedSite, user?.location, setStationName, fuelType, setFuelType, data.products]);
 
   // Helpers for 5-digit numeric PO input
   const toFiveDigits = (s: string) => {
@@ -156,7 +157,6 @@ function RouteComponent() {
         <LocationPicker
           setStationName={(value) => setStationName(typeof value === 'string' ? value : '')}
           value="stationName"
-          defaultValue={user?.location}
         />
       </div>
 

@@ -2,6 +2,7 @@ import { createFileRoute, useNavigate } from '@tanstack/react-router'
 import { useState } from "react";
 import { LocationPicker } from "@/components/custom/locationPicker";
 import { useAuth } from "@/context/AuthContext";
+import { useSite } from "@/context/SiteContext";
 
 export const Route = createFileRoute('/_navbarLayout/cycle-count/lookup')({
   component: RouteComponent,
@@ -10,7 +11,8 @@ export const Route = createFileRoute('/_navbarLayout/cycle-count/lookup')({
 function RouteComponent() {
   const [upc, setUpc] = useState("");
   const { user } = useAuth()
-  const [site, setSite] = useState(user?.location || "");
+  const { selectedSite } = useSite()
+  const [site, setSite] = useState(selectedSite || user?.location || "");
   const [result, setResult] = useState<any>(null);
   const [loading, setLoading] = useState(false);
 

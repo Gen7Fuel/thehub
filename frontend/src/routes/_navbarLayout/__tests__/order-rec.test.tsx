@@ -45,6 +45,10 @@ vi.mock('@/context/AuthContext', () => ({
   useAuth: () => mockUseAuth(),
 }))
 
+vi.mock('@/context/SiteContext', () => ({
+  useSite: () => ({ selectedSite: '', setSelectedSite: vi.fn() }),
+}))
+
 vi.mock('axios', () => ({
   default: {
     post: mockAxiosPost,

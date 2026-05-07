@@ -25,6 +25,10 @@ vi.mock('@tanstack/react-router', async (importOriginal) => {
   }
 })
 
+vi.mock('@/context/SiteContext', () => ({
+  useSite: () => ({ selectedSite: '', setSelectedSite: vi.fn() }),
+}))
+
 vi.mock('@/components/custom/sitePicker', () => ({
   SitePicker: ({ onValueChange, value }: any) => (
     <button data-testid="site-picker" onClick={() => onValueChange('Rankin')}>

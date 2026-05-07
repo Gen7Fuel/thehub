@@ -27,9 +27,10 @@ router.get('/', async (req, res) => {
     if (location) filter.location = location;
 
     if (from && to) {
-      const start = new Date(from);
-      const end = new Date(to);
-      filter.createdAt = { $gte: start, $lte: end }
+      filter.date = {
+        $gte: String(from).slice(0, 10),
+        $lte: String(to).slice(0, 10),
+      }
     }
 
     
@@ -75,6 +76,10 @@ router.post('/', async (req, res) => {
       return res.status(400).json({ error: 'Amount must be non-negative' });
     }
     
+    const dateStr = date
+      ? String(date).slice(0, 10)
+      : new Date().toISOString().slice(0, 10);
+
     const payable = new Payable({
       vendorName,
       location,
@@ -82,7 +87,8 @@ router.post('/', async (req, res) => {
       paymentMethod,
       amount,
       images: images || [],
-      createdAt: date ? new Date(date) : undefined, // <--- override createdAt if date sent
+      createdAt: date ? new Date(date) : undefined,
+      date: dateStr,
     });
 
     const savedPayable = await payable.save();
@@ -156,7 +162,7 @@ router.post('/', async (req, res) => {
 // PUT update payable
 router.put('/:id', async (req, res) => {
   try {
-    const { vendorName, location, notes, paymentMethod, amount, images, createdAt, requestInvoice } = req.body;
+    const { vendorName, location, notes, paymentMethod, amount, images, createdAt, date: dateField, requestInvoice } = req.body;
 
     // Validation
     if (amount !== undefined && amount < 0) {
@@ -183,6 +189,7 @@ router.put('/:id', async (req, res) => {
     if (images !== undefined) updateData.images = images;
     if (requestInvoice !== undefined) updateData.requestInvoice = requestInvoice;
     if (createdAt !== undefined) updateData.createdAt = new Date(createdAt);
+    if (dateField !== undefined) updateData.date = String(dateField).slice(0, 10);
 
     console.log('[PUT /payables/:id] updateData:', updateData);
 

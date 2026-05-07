@@ -8,6 +8,7 @@ import { pdf } from '@react-pdf/renderer'
 import StatusSalesPDF from '@/components/custom/statusSalesForm';
 import axios from "axios"
 import { useAuth } from "@/context/AuthContext";
+import { useSite } from "@/context/SiteContext";
 
 export const Route = createFileRoute('/_navbarLayout/status/list')({
   component: RouteComponent,
@@ -15,12 +16,13 @@ export const Route = createFileRoute('/_navbarLayout/status/list')({
 
 function RouteComponent() {
   const { user } = useAuth()
+  const { selectedSite } = useSite()
   const navigate = useNavigate()
   const [date, setDate] = React.useState<Date | undefined>(new Date());
   if (date)
     console.log('Selected date:', new Date(date.setHours(0, 0, 0, 0)).toISOString());
 
-  const [stationName, setStationName] = React.useState<string>(user?.location || '');
+  const [stationName, setStationName] = React.useState<string>(selectedSite || user?.location || '');
   const [statusSales, setStatusSales] = React.useState<
     {
       createdAt: string;

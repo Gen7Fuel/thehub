@@ -1,5 +1,6 @@
 import { createFileRoute, useNavigate } from '@tanstack/react-router'
 import { useState, useEffect } from 'react'
+import { useSite } from '@/context/SiteContext'
 import { SitePicker } from '@/components/custom/sitePicker' // Adjust imports to your project
 import { DatePickerWithRange } from '@/components/custom/datePickerWithRange'
 // import { useAuth } from "@/context/AuthContext";
@@ -23,6 +24,14 @@ export const Route = createFileRoute('/_navbarLayout/infonet-report')({
 function RouteComponent() {
   const { site, from, to } = Route.useSearch()
   const navigate = useNavigate({ from: Route.fullPath })
+  const { selectedSite } = useSite()
+  const setSearch = (next: Partial<{ site: string; from: string; to: string }>) => {
+    navigate({ search: (prev: any) => ({ ...prev, ...next }) })
+  }
+
+  useEffect(() => {
+    if (!site && selectedSite) setSearch({ site: selectedSite })
+  }, [selectedSite])
 
   const [data, setData] = useState<any[]>([])
   const [loading, setLoading] = useState(false)
@@ -38,10 +47,6 @@ function RouteComponent() {
 
     return { from: startDate, to: endDate }
   })
-
-  const setSearch = (next: Partial<{ site: string; from: string; to: string }>) => {
-    navigate({ search: (prev: any) => ({ ...prev, ...next }) })
-  }
 
   // Update URL search params only when a full range is picked
   useEffect(() => {

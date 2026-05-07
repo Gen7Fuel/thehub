@@ -9,6 +9,7 @@ import { pdf } from '@react-pdf/renderer';
 import { CashSummaryPDF } from '@/components/custom/CashSummaryPDF'; // Adjust path as needed
 import axios from "axios"
 import { useAuth } from "@/context/AuthContext";
+import { useSite } from "@/context/SiteContext";
 
 export const Route = createFileRoute(
   '/_navbarLayout/daily-reports/cash-summary',
@@ -106,7 +107,8 @@ function RouteComponent() {
     payables: [],
   });
   const { user } = useAuth()
-  const [location, setLocation] = useState<string>(user?.location || '')
+  const { selectedSite } = useSite()
+  const [location, setLocation] = useState<string>(selectedSite || user?.location || '')
   const [totals, setTotals] = useState({
     totalShiftReportCash: 0,
     totalCalculatedCash: 0,

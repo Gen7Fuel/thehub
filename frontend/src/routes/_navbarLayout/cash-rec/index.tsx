@@ -1,5 +1,6 @@
 import * as React from 'react'
 import { createFileRoute, useLoaderData, useNavigate, useSearch } from '@tanstack/react-router'
+import { useSite } from '@/context/SiteContext'
 import { format } from 'date-fns'
 import { SitePicker } from '@/components/custom/sitePicker'
 import { DatePicker } from '@/components/custom/datePicker'
@@ -212,6 +213,11 @@ function RouteComponent() {
   }
   const navigate = useNavigate({ from: Route.fullPath })
   const search = useSearch({ from: Route.id }) as Search
+  const { selectedSite } = useSite()
+
+  React.useEffect(() => {
+    if (!search.site && selectedSite) navigate({ search: { ...search, site: selectedSite } })
+  }, [selectedSite])
 
   const [merchantFeesEdit, setMerchantFeesEdit] = React.useState<boolean>(false)
   const [merchantFeesValue, setMerchantFeesValue] = React.useState<string>('')

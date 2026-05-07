@@ -5,11 +5,13 @@ import type { DateRange } from "react-day-picker"
 import { LocationPicker } from '@/components/custom/locationPicker'
 import { Button } from '@/components/ui/button'
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog'
-import { getStartAndEndOfToday, toUTC, uploadBase64Image } from '@/lib/utils'
+import { getStartAndEndOfToday, uploadBase64Image } from '@/lib/utils'
+import { format } from 'date-fns'
 import { domain } from '@/lib/constants'
 import { Eye, ChevronLeft, ChevronRight, ExternalLink, CalendarIcon, Camera, Loader2 } from 'lucide-react'
 import axios from "axios"
-import { useAuth } from "@/context/AuthContext";
+import { useAuth } from "@/context/AuthContext"
+import { useSite } from "@/context/SiteContext";
 import { FileDown } from 'lucide-react'
 import PayablePDF from '@/components/custom/PayablePDF'
 import { pdf } from '@react-pdf/renderer'
@@ -29,6 +31,7 @@ interface Payable {
   amount: number
   images: string[]
   createdAt: string
+  date?: string
   requestInvoice?: boolean
 }
 
@@ -43,9 +46,10 @@ function RouteComponent() {
     to: end,
   })
   const { user } = useAuth()
+  const { selectedSite } = useSite()
   const access = user?.access || {}
   const navigate = useNavigate()
-  const [location, setLocation] = useState<string>(user?.location || "")
+  const [location, setLocation] = useState<string>(selectedSite || user?.location || "")
   const [_, setTimezone] = useState<string>(user?.timezone || "America/Toronto")
   const [payables, setPayables] = useState<Payable[]>([])
   const [loading, setLoading] = useState(false)
@@ -211,8 +215,8 @@ function RouteComponent() {
       // })
       const queryParams = new URLSearchParams({
         location: selectedLocation._id,
-        from: toUTC(date.from).toISOString(),   // start of range
-        to: toUTC(date.to).toISOString()        // end of range
+        from: format(date.from, 'yyyy-MM-dd'),
+        to: format(date.to, 'yyyy-MM-dd'),
       })
 
 
@@ -374,7 +378,7 @@ function RouteComponent() {
               payables.map((payable) => (
                 <tr key={payable._id} className="hover:bg-gray-50">
                   <td className="border-dashed border-t border-gray-300 px-4 py-2">
-                    {new Date(payable.createdAt).toLocaleDateString('en-CA', { timeZone: 'UTC' })}
+                    {payable.date || new Date(payable.createdAt).toLocaleDateString('en-CA', { timeZone: 'UTC' })}
                   </td>
                   <td className="border-dashed border-t border-gray-300 px-4 py-2">
                     {payable.vendorName}

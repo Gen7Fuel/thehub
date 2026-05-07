@@ -5,6 +5,7 @@ import axios from "axios"
 import { LocationPicker } from "@/components/custom/locationPicker";
 import { createContext } from "react";
 import { useAuth } from "@/context/AuthContext";
+import { useSite } from "@/context/SiteContext";
 
 export const RouteContext = createContext<{
   stationName: string;
@@ -44,7 +45,13 @@ function RouteComponent() {
   const [error, setError] = useState("");
 
   const { user } = useAuth();
-  const [stationName, setStationName] = useState(user?.location || "");
+  const { selectedSite } = useSite();
+  const [stationName, setStationName] = useState(selectedSite || user?.location || "");
+
+  // Keep stationName in sync when the global site changes from another module
+  useEffect(() => {
+    if (selectedSite) setStationName(selectedSite)
+  }, [selectedSite])
 
   // temporary central patch function
   const updateStation = (newStation: string) => {
@@ -119,6 +126,7 @@ function RouteComponent() {
 
           {/* ◼ Location Picker (left) */}
           <LocationPicker
+            key={stationName}
             value="stationName"
             defaultValue={stationName}
             setStationName={(value) => {

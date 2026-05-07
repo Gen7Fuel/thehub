@@ -41,6 +41,9 @@ const payableSchema = new mongoose.Schema({
     required: false,
     default: false,
   },
+  date: {
+    type: String, // "yyyy-mm-dd"
+  },
 }, {
   timestamps: true // Adds createdAt and updatedAt fields automatically
 });
@@ -48,6 +51,7 @@ const payableSchema = new mongoose.Schema({
 // Indexes for efficient queries by vendorName and location
 payableSchema.index({ vendorName: 1 });
 payableSchema.index({ location: 1 });
+payableSchema.index({ date: 1 });
 
 // Create and export the Payable model
 const Payable = mongoose.model('Payable', payableSchema);
