@@ -5,18 +5,42 @@
 
 generator client {
   provider = "prisma-client-js"
+  engineType = "library"
 }
 
 datasource db {
   provider = "postgresql"
 }
 
+// --------------------------------------
+// ITEM BACKUP MODULE (Azure Sync)
+// --------------------------------------
 model ItemBk {
-  id          Int      @id @default(autoincrement())
-  upc         String   @unique
-  gtin        String?
-  description String?
-  syncDate    DateTime @default(now())
+  id              Int      @id @default(autoincrement())
+  gtin            String?  // MI.GTIN
+  upc             String   // MI.UPC & IB.UPC
+  upc_barcode     String?  // MI.SKU
+  site            String   // MI.Station_SK (Converted to Mongo Location ID String)
+  description     String?  // MI.Description
+  retail          String?  // MI.Retail
+  vendorId        String?  @map("vendor_id")     // MI.Vendor ID
+  vendorName      String?  @map("vendor_name")   // MI.Vendor
+  categoryId      Int?     @map("category_id")   // MI.Category Id
+  departmentId    String?  @map("department_id") // MI.Department ID
+  department      String?  @map("department")    // MI.Department
+  priceGroupId    String?  @map("price_group_id")// MI.Price Group ID
+  priceGroup      String?  @map("price_group")   // MI.Price Group
+  promoGroupId    String?  @map("promo_group_id")// MI.Promo Group ID
+  promoGroup      String?  @map("promo_group")   // MI.Promo Group
+  active          Boolean  @default(true)        // Defaulting to true
+  onHandQty       Int?     @map("on_hand_qty")   // CI.On Hand Qty
+  pk_in_crt       Int?     @map("pk_in_crt")     // Null for now
+  crt_in_case     Int?     @map("crt_in_case")   // Null for now
+  last_inv_date   DateTime? @map("last_inv_date") // IB.Last_Inv_Date
+  grade           String?  @default("B")         // Mapped from Mongo (Default B)
+  syncDate        DateTime @default(now())       // Track when sync happened
 
+  // Composite unique constraint: An item is unique to a specific site and UPC
+  @@unique([site, upc])
   @@map("item_bk")
 }

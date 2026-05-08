@@ -248,50 +248,49 @@ async function getBulkUnitPriceCSO(site, gtins = []) {
   }
 }
 
+/**
+ * Fetches flattened item data from Azure SQL by joining Current_Inventory,
+ * Master_Item, and the most recent record from Inventory Balance.
+ */
+async function getFullItemBackupData() {
+  try {
+    const pool = await getPool();
+    const query = `
+      SELECT 
+        CI.[UPC],
+        CI.[Station_SK],
+        CI.[On Hand Qty] AS onHandQty,
+        MI.[GTIN],
+        MI.[SKU] AS upc_barcode,
+        MI.[Description],
+        MI.[Retail],
+        MI.[Vendor ID] AS vendorId,
+        MI.[Vendor] AS vendorName,
+        MI.[Category ID] AS categoryId,
+        MI.[Department ID] AS departmentId,
+        MI.[Department],
+        MI.[Price Group ID] AS priceGroupId,
+        MI.[Price Group] AS priceGroup,
+        MI.[Promo Group ID] AS promoGroupId,
+        MI.[Promo Group] AS promoGroup,
+        (
+          SELECT MAX([Last_Inv_Date]) 
+          FROM [CSO].[Inventory Balance] IB 
+          WHERE IB.[UPC] = CI.[UPC] AND IB.[Station_SK] = CI.[Station_SK]
+        ) AS last_inv_date
+      FROM [CSO].[Current_Inventory] CI
+      LEFT JOIN [CSO].[Master_Item] MI 
+        ON CI.[UPC] = MI.[UPC] AND CI.[Station_SK] = MI.[Station_SK]
+      WHERE MI.[GTIN] is not null and CI.[Station_SK] IS NOT NULL
+    `;
 
-// let pool;
-
-// async function getPool() {
-//   try {
-//     if (!pool) {
-//       console.log("🔌 Creating new SQL connection pool...");
-//       pool = await sql.connect({
-//         server: process.env.SQL_SERVER,
-//         database: process.env.SQL_DB,
-//         user: process.env.SQL_USER,
-//         password: process.env.SQL_PASSWORD,
-//         pool: {
-//           max: 20,           // increase max connections
-//           min: 0,
-//           idleTimeoutMillis: 30000,
-//           acquireTimeoutMillis: 60000, // wait longer before abort
-//         },
-//         options: {
-//           encrypt: true,
-//           trustServerCertificate: false,
-//         },
-//       });
-
-//       // Optional: log when pool is closed
-//       pool.on('error', err => {
-//         console.error("SQL Pool Error:", err);
-//         pool = null; // force reconnect next time
-//       });
-//     }
-
-//     // 🔍 Check if pool is still healthy
-//     if (!pool.connected) {
-//       console.warn("SQL pool was disconnected — reconnecting...");
-//       pool = await sql.connect(pool.config);
-//     }
-
-//     return pool;
-//   } catch (err) {
-//     console.error("Failed to get SQL pool:", err);
-//     pool = null;
-//     throw err;
-//   }
-// }
+    const result = await pool.request().query(query);
+    return result.recordset;
+  } catch (err) {
+    console.error('SQL error fetching backup data:', err);
+    throw err;
+  }
+}
 
 let pool = null;
 
@@ -927,5 +926,6 @@ module.exports = {
   getShiftTransactionTimings,
   getBulkUnitPriceCSO,
   getBulkCSOData,
-  getShiftEmployees
+  getShiftEmployees,
+  getFullItemBackupData
 };

@@ -1,21 +1,21 @@
 const { PrismaClient } = require('@prisma/client');
+const { PrismaPg } = require('@prisma/adapter-pg');
+const { Pool } = require('pg');
 
-// In Prisma 7, it will automatically look at your prisma.config.ts 
-// but we pass the URL explicitly here to ensure it uses the .env value
-const prisma = global.prisma || new PrismaClient({
-  datasource: {
-    url: process.env.DATABASE_URL
-  }
+// Debug: Log the URL being used (remove after testing)
+console.log("Connecting to Postgres at:", process.env.DATABASE_URL);
+
+const pool = new Pool({ 
+  connectionString: process.env.DATABASE_URL,
+  connectionTimeoutMillis: 5000 // Give up after 5 seconds
 });
 
+// Add this to catch specific connection errors
+pool.on('error', (err) => {
+  console.error('Unexpected error on idle client', err);
+});
 
-/**
- * We check if HOST is NOT "VPS". 
- * If it's local development (no HOST variable), we store prisma on the global 
- * object to prevent nodemon from creating a new connection on every save.
- */
-if (process.env.HOST !== 'VPS') {
-  global.prisma = prisma;
-}
+const adapter = new PrismaPg(pool);
+const prisma = new PrismaClient({ adapter });
 
 module.exports = prisma;
