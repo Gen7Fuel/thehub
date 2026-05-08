@@ -1,6 +1,7 @@
 const express = require('express')
 const { DateTime } = require('luxon')
 const { BankStatement, KardpollReport } = require('../models/CashRec')
+const CashRecTag = require('../models/CashRecTag')
 const CashSummary = require('../models/CashSummaryNew')
 const Transactions = require('../models/Transactions')
 const LotteryModule = require('../models/Lottery')
@@ -751,6 +752,32 @@ router.post('/send-weekly-ar-report', async (req, res) => {
     console.error('send-weekly-ar-report error:', e)
     return res.status(500).json({ error: 'Failed to send weekly AR report', details: e.message })
   }
+})
+
+router.get('/tags', async (req, res) => {
+  const { site, startDate, endDate } = req.query
+  if (!site || !startDate) return res.status(400).json({ error: 'site and startDate required' })
+  const dateFilter = endDate ? { $gte: startDate, $lte: endDate } : startDate
+  const tags = await CashRecTag.find({ site, date: dateFilter }).lean()
+  res.json(tags)
+})
+
+router.post('/tags', express.json(), async (req, res) => {
+  const { site, date } = req.body || {}
+  if (!site || !date) return res.status(400).json({ error: 'site and date required' })
+  const tag = await CashRecTag.findOneAndUpdate(
+    { site, date },
+    { site, date },
+    { upsert: true, new: true, setDefaultsOnInsert: true }
+  ).lean()
+  res.json(tag)
+})
+
+router.delete('/tags', async (req, res) => {
+  const { site, date } = req.query
+  if (!site || !date) return res.status(400).json({ error: 'site and date required' })
+  await CashRecTag.deleteOne({ site, date })
+  res.json({ ok: true })
 })
 
 module.exports = router

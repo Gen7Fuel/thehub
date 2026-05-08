@@ -147,3 +147,61 @@ vi.mock('@tanstack/react-router', async (importOriginal) => {
 - **Azure Blob Storage** — backup exports
 - **Nodemailer** — transactional email via BullMQ queue
 - **pdfkit** — PDF generation for reports
+
+## Desk Integration
+
+**Desk** (`C:\Users\MohammadHasan\workspace\desk`) is a sibling internal tool for Gen7 Fuel covering fuel invoicing, personnel, assets, credentials, subscriptions, and Sage accounting. Its frontend "Hub" pages call Hub APIs directly from the browser, and its backend proxies Sage Intacct calls.
+
+### Desk backend structure (`desk/backend/`)
+```
+backend/
+├── index.js              # Entry point; mounts all app routers
+├── middleware/
+│   └── auth.js           # JWT middleware (Desk-issued tokens)
+└── apps/                 # Feature domains — each has *.model.js + *.routes.js
+    ├── sage/             – Proxies to Sage Intacct REST API
+    │   └── sage.routes.js    POST /api/sage/connect, /bill, /invoice,
+    │                          /other-receipt, /attachment;
+    │                          GET  /api/sage/entity/:key, /department/:key
+    ├── fuel-invoicing/   – Kardpoll Excel parsing, fuel invoice upload
+    ├── auth/             – Login, JWT issuance (embeds externalToken from Hub)
+    ├── users/ roles/ personnel/ credentials/ assets/ access/
+    ├── subscriptions/ cipher/ inventory/
+    └── ...
+```
+
+### Desk frontend structure (`desk/frontend/src/`)
+```
+src/
+├── routes/
+│   ├── _appbar.tsx               # Authenticated layout + nav
+│   ├── _appbar/_sidebar/hub/    # Pages that call Hub APIs directly
+│   │   ├── cash-management.tsx   – Multi-day cash rec + Sage Other Receipt
+│   │   ├── payables.tsx
+│   │   ├── receivables.tsx
+│   │   └── cdn.tsx
+│   └── (auth)/login.tsx
+├── lib/
+│   ├── api.ts            # apiFetch() — wraps fetch with Desk JWT
+│   └── permissions.ts    # getTokenPayload(), can(), getExternalToken pattern
+└── components/custom/
+    └── SitePicker.tsx    # Dropdown fetching /api/locations from Hub
+```
+
+### Auth flow between Desk and Hub
+1. User logs in to Desk → Desk `auth` backend validates credentials and calls Hub to obtain a short-lived `externalToken`.
+2. Desk issues its own JWT containing the Hub `externalToken` as a nested field.
+3. Desk frontend hub pages extract `externalToken` from the Desk JWT and use it as the Bearer token for all Hub API calls.
+4. Hub's `authMiddleware.js` validates the `externalToken` on every request.
+
+### Hub endpoints called by Desk
+
+| Hub endpoint | Desk file |
+|---|---|
+| `GET /api/cash-rec/entries` | `hub/cash-management.tsx` |
+| `GET /api/cash-rec/tags` | `hub/cash-management.tsx` |
+| `POST /api/cash-rec/tags` | `hub/cash-management.tsx` |
+| `DELETE /api/cash-rec/tags` | `hub/cash-management.tsx` |
+| `GET /api/cash-rec/kardpoll-entries` | `hub/cash-management.tsx` |
+| `GET /api/locations` | `SitePicker.tsx`, `hub/cash-management.tsx` |
+| `GET /api/purchase-orders` | `hub/cash-management.tsx` |
