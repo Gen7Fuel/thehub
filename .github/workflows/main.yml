@@ -124,6 +124,9 @@ jobs:
             export SQL_DB=${{ secrets.SQL_DB }}
             export SQL_USER=${{ secrets.SQL_USER }}
             export SQL_PASSWORD=${{ secrets.SQL_PASSWORD }}
+            export POSTGRES_DB=${{ secrets.POSTGRES_DB }}
+            export POSTGRES_USER=${{ secrets.POSTGRES_USER }}
+            export POSTGRES_PASSWORD=${{ secrets.POSTGRES_PASSWORD }}
             export REDIS_URL=${{ secrets.REDIS_URL }}
             # export SFTP_HOST=${{ secrets.SFTP_HOST }}
             # export SFTP_PORT=${{ secrets.SFTP_PORT }}
@@ -164,6 +167,16 @@ jobs:
             # ---- Backend rolling update ----
             # docker compose up -d --build --no-deps --wait backend
 
+            # ---- Ensure Postgres is running before backend deploy ----
+            echo "Starting postgres..."
+            if docker compose up -d --wait postgres; then
+                echo "SUCCESS: Postgres is healthy."
+            else
+                echo "FATAL: Postgres failed health check!"
+                docker logs postgres --tail 50
+                exit 1
+            fi
+
             # ---- 1. Deploy Auth-Backend with Safety ----
             echo "Deploying auth-backend..."
             if docker compose up -d --build --no-deps --wait auth-backend; then
@@ -199,6 +212,14 @@ jobs:
                 echo "Rolling back main backend..."
                 docker compose up -d backend
                 exit 1
+            fi
+
+            # ---- Optional: Postgres schema migrations (only if postgres service exists) ----
+            if docker compose ps --services | grep -q '^postgres$'; then
+              echo "Running Postgres migrations..."
+              docker compose exec -T backend node scripts/pg-migrate.js
+            else
+              echo "Skipping Postgres migrations (no postgres service in compose.yaml)."
             fi
 
             # ---- Frontend zero-downtime update ----
