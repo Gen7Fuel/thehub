@@ -43,7 +43,7 @@ function RouteComponent() {
         )}
 
         {/* List tab button, always shown */}
-        <Link to="/order-rec/list" search={{ site: user?.location || '' }}>
+        <Link to="/order-rec/list" search={{ site: user?.site || '' }}>
           <Button
             {...(isListActive ? {} : { variant: 'outline' } as object)}
             // className={`${access.component_order_rec_upload ? 'rounded-l-none rounded-r-none' : ''}`} //markpoint

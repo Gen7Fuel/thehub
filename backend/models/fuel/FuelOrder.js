@@ -22,7 +22,7 @@ const fuelOrderSchema = new mongoose.Schema({
   supplier: { type: mongoose.Schema.Types.ObjectId, ref: "FuelSupplier" },
   badgeNo: { type: String },
   carrier: { type: mongoose.Schema.Types.ObjectId, ref: "FuelCarrier" },
-  station: { type: mongoose.Schema.Types.ObjectId, ref: "Location" },
+  site: { type: mongoose.Schema.Types.ObjectId, ref: "Location" },
   items: [{
     grade: String,
     ltrs: Number

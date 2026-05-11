@@ -537,7 +537,7 @@ router.get('/entries', async (req, res) => {
         {
           $match: {
             source: 'PO',
-            stationName: site,
+            site: site,
             date: { $gte: start, $lte: end },
           },
         },
@@ -620,7 +620,7 @@ router.get('/entries', async (req, res) => {
     // Compute adjusted over/short for lottery sites
     let adjustedOverShort = null
     try {
-      const location = await Location.findOne({ stationName: site }).lean()
+      const location = await Location.findOne({ name: site }).lean()
       if (location?.sellsLottery) {
         const lotteryDoc = await Lottery.findOne({ site, date }).lean()
         if (lotteryDoc) {

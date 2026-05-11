@@ -42,7 +42,7 @@ router.post("/", async (req, res) => {
     amount,
     signature,
     productCode,
-    stationName,
+    site,
     source,
     receipt,
     customerName,
@@ -52,15 +52,15 @@ router.post("/", async (req, res) => {
 
   try {
     // Auto-numbering logic for Charlie's site only if both fields are missing
-    const isCharlies = stationName && stationName.trim().toLowerCase() === "charlie's";
+    const isCharlies = site && site.trim().toLowerCase() === "charlie's";
     if (isCharlies && (!poNumber || poNumber === '' || poNumber === '00000') && (!fleetCardNumber || fleetCardNumber === '')) {
-      poNumber = await Transaction.getNextPoNumberForSite(stationName);
+      poNumber = await Transaction.getNextPoNumberForSite(site);
     }
 
     const newOrder = new Transaction({
       source,
       date,
-      stationName,
+      site,
       fleetCardNumber: fleetCardNumber || '',
       poNumber: poNumber || '',
       quantity,
@@ -76,7 +76,7 @@ router.post("/", async (req, res) => {
     const savedOrder = await newOrder.save();
     res.status(201).json(savedOrder);
   } catch (err) {
-    if (err && err.code === 11000 && err.keyPattern && (err.keyPattern.poNumber || err.keyPattern.stationName)) {
+    if (err && err.code === 11000 && err.keyPattern && (err.keyPattern.poNumber || err.keyPattern.site)) {
       return res.status(409).json({ message: "PO number already exists." })
     }
     console.error(err);
@@ -98,7 +98,7 @@ router.put("/:id", express.json(), async (req, res) => {
       'amount',
       'signature',
       'productCode',
-      'stationName',
+      'site',
       'source',
       'customerID',
       'receipt',
@@ -173,7 +173,7 @@ router.put("/:id", express.json(), async (req, res) => {
     }
 
     if (updates.requestReceipt === true) {
-      Location.findOne({ stationName: updatedOrder.stationName }, 'email stationName').lean()
+      Location.findOne({ name: updatedOrder.site }, 'email name').lean()
         .then(location => {
           if (!location?.email) return
           const redirectUrl = `https://app.gen7fuel.com/po/list`
@@ -182,9 +182,9 @@ router.put("/:id", express.json(), async (req, res) => {
             recipientEmails: [location.email],
             bccEmails: ['mohammad@gen7fuel.com'],
             slug: 'po-receipt-requested',
-            subject: `🧾 Receipt Required – ${location.stationName} – PO #${updatedOrder.poNumber || updatedOrder._id}`,
+            subject: `🧾 Receipt Required – ${location.name} – PO #${updatedOrder.poNumber || updatedOrder._id}`,
             fieldValues: {
-              site: location.stationName,
+              site: location.name,
               poNumber: updatedOrder.poNumber || String(updatedOrder._id),
               customerName: updatedOrder.customerName || '',
               amount: (updatedOrder.amount || 0).toFixed(2),
@@ -199,7 +199,7 @@ router.put("/:id", express.json(), async (req, res) => {
 
     return res.status(200).json(updatedOrder)
   } catch (err) {
-    if (err && err.code === 11000 && err.keyPattern && (err.keyPattern.poNumber || err.keyPattern.stationName)) {
+    if (err && err.code === 11000 && err.keyPattern && (err.keyPattern.poNumber || err.keyPattern.site)) {
       return res.status(409).json({ message: "PO number already exists." })
     }
     console.error('PUT /api/purchase-orders/:id failed:', err)
@@ -292,8 +292,8 @@ router.put("/:id", express.json(), async (req, res) => {
 // });
 
 router.get("/", async (req, res) => {
-  const { startDate, endDate, stationName } = req.query;
-  const filter = { source: "PO", stationName };
+  const { startDate, endDate, site } = req.query;
+  const filter = { source: "PO", site };
 
   if (startDate && endDate) {
     const isYmd = (s) => /^\d{4}-\d{2}-\d{2}$/.test(s);
@@ -351,19 +351,19 @@ router.get("/", async (req, res) => {
 });
 
 // Validate uniqueness of a PO number for a station
-// GET /api/purchase-orders/unique?stationName=...&poNumber=...
+// GET /api/purchase-orders/unique?site=...&poNumber=...
 router.get('/unique', async (req, res) => {
   try {
-    const stationNameRaw = (req.query.stationName || '').toString()
+    const siteRaw = (req.query.site || '').toString()
     const poNumberRaw = (req.query.poNumber || '').toString()
-    const stationName = stationNameRaw.trim()
+    const site = siteRaw.trim()
     const poNumber = poNumberRaw.trim()
 
-    if (!stationName || !poNumber) {
-      return res.status(400).json({ message: 'stationName and poNumber are required' })
+    if (!site || !poNumber) {
+      return res.status(400).json({ message: 'site and poNumber are required' })
     }
 
-    const existing = await Transaction.findOne({ source: 'PO', stationName, poNumber }).select('_id').lean()
+    const existing = await Transaction.findOne({ source: 'PO', site, poNumber }).select('_id').lean()
     return res.json({ unique: !existing })
   } catch (err) {
     console.error('GET /api/purchase-orders/unique failed:', err)

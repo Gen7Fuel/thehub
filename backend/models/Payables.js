@@ -11,10 +11,10 @@ const payableSchema = new mongoose.Schema({
     required: true,
     trim: true // Removes leading/trailing whitespace
   },
-  location: {
+  site: {
     type: mongoose.Schema.Types.ObjectId,
     ref: 'Location',
-    required: true // References the Location model
+    required: true,
   },
   notes: {
     type: String,
@@ -50,7 +50,7 @@ const payableSchema = new mongoose.Schema({
 
 // Indexes for efficient queries by vendorName and location
 payableSchema.index({ vendorName: 1 });
-payableSchema.index({ location: 1 });
+payableSchema.index({ site: 1 });
 payableSchema.index({ date: 1 });
 
 // Create and export the Payable model

@@ -23,7 +23,7 @@ const ShiftWorksheetSchema = new mongoose.Schema(
       type: String,
       required: true,
     },
-    location: {
+    site: {
       type: String,
       required: true,
     },

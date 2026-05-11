@@ -78,8 +78,8 @@ function RouteComponent() {
   const setReceipt = useFormStore((state) => state.setReceipt)
 
   const data = Route.useLoaderData()
-  const stationName = useFormStore((state) => state.stationName)
-  const setStationName = useFormStore((state) => state.setStationName)
+  const stationName = useFormStore((state) => state.site)
+  const setStationName = useFormStore((state) => state.setSite)
 
   const [poError, setPoError] = useState<string>('')
 
@@ -89,7 +89,7 @@ function RouteComponent() {
     const token = localStorage.getItem('token')
     const response = await axios.get(`${domain}/api/fleet/getByCardNumber/${fleetCardNumber}`, {
       headers: { Authorization: `Bearer ${token}` },
-      params: { stationName },
+      params: { name: stationName },
     })
     const data = response.data
 
@@ -105,14 +105,14 @@ function RouteComponent() {
   }
 
   useEffect(() => {
-    const site = selectedSite || user?.location
+    const site = selectedSite || user?.site
     if (site) setStationName(site)
     // Set default fuel type to 'Regular' if not already set
     if (!fuelType && data.products && data.products.length > 0) {
       const regular = data.products.find((p: { description: string }) => p.description.toLowerCase().includes('regular'));
       if (regular) setFuelType(regular.code);
     }
-  }, [selectedSite, user?.location, setStationName, fuelType, setFuelType, data.products]);
+  }, [selectedSite, user?.site, setStationName, fuelType, setFuelType, data.products]);
 
   // Helpers for 5-digit numeric PO input
   const toFiveDigits = (s: string) => {
@@ -156,7 +156,7 @@ function RouteComponent() {
         <h2 className="text-lg font-bold">Select Site</h2>
         <LocationPicker
           setStationName={(value) => setStationName(typeof value === 'string' ? value : '')}
-          value="stationName"
+          value="name"
         />
       </div>
 
@@ -231,7 +231,7 @@ function RouteComponent() {
                   if (!stationName || !padded) return
                   try {
                     const res = await axios.get('/api/purchase-orders/unique', {
-                      params: { stationName, poNumber: padded },
+                      params: { name: stationName, poNumber: padded },
                       headers: {
                         Authorization: `Bearer ${localStorage.getItem('token') || ''}`,
                         'X-Required-Permission': 'po',

@@ -92,7 +92,7 @@ type EntriesResponse = {
   totalReceivablesAmount?: number
   receivablesRows?: Array<{ amount?: number; quantity?: number; [key: string]: any }>
   totalPayablesAmount?: number
-  payablesRows?: Array<{ amount?: number; paymentMethod?: string; vendorName?: string; createdAt?: string; location?: { stationName?: string } ; [key: string]: any }>
+  payablesRows?: Array<{ amount?: number; paymentMethod?: string; vendorName?: string; createdAt?: string; location?: { name?: string } ; [key: string]: any }>
   kardpollEntriesRows?: Array<{ customer?: string; card?: string; amount?: number; quantity?: number; price_per_litre?: number; [key: string]: any }>
   bankStmtTrans?: number
   bankRec?: number
@@ -138,7 +138,7 @@ export const Route = createFileRoute('/_navbarLayout/cash-rec/')({
     let totalReceivablesAmount: number | undefined
     try {
       const params: Record<string, string> = { startDate: date, endDate: date }
-      if (site) params.stationName = site
+      if (site) params.name = site
       const qs = new URLSearchParams(params).toString()
       const rcv = await fetch(`/api/purchase-orders?${qs}`, {
         headers: { Authorization: `Bearer ${localStorage.getItem('token') || ''}` },
@@ -153,7 +153,7 @@ export const Route = createFileRoute('/_navbarLayout/cash-rec/')({
     }
 
     // Also fetch payables (payouts) for the same date, filter by site
-    let payablesRows: Array<{ amount?: number; paymentMethod?: string; vendorName?: string; createdAt?: string; location?: { stationName?: string } }> | undefined
+    let payablesRows: Array<{ amount?: number; paymentMethod?: string; vendorName?: string; createdAt?: string; location?: { name?: string } }> | undefined
     let totalPayablesAmount: number | undefined
     try {
       const qs = new URLSearchParams({ from: date, to: date }).toString()
@@ -161,9 +161,9 @@ export const Route = createFileRoute('/_navbarLayout/cash-rec/')({
         headers: { Authorization: `Bearer ${localStorage.getItem('token') || ''}` },
       })
       if (resp.ok) {
-        const all: Array<{ amount?: number; paymentMethod?: string; location?: { stationName?: string } }> = await resp.json()
+        const all: Array<{ amount?: number; paymentMethod?: string; location?: { name?: string } }> = await resp.json()
         const filtered = all
-          .filter(p => !site || p.location?.stationName === site)
+          .filter(p => !site || p.location?.name === site)
           .filter(p => p.paymentMethod === 'till')
         payablesRows = filtered
         totalPayablesAmount = filtered.reduce((a, p) => a + (Number(p.amount) || 0), 0)

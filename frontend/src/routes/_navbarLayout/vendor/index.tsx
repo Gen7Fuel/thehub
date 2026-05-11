@@ -31,7 +31,7 @@ function RouteComponent() {
   const [notes, setNotes] = useState("");
   const [uniqueVendors, setUniqueVendors] = useState<string[]>([]);
   const [uniqueCategories, setUniqueCategories] = useState<string[]>([]);
-  const [sites, setSites] = useState<{ _id: string; stationName: string }[]>([]);
+  const [sites, setSites] = useState<{ _id: string; name: string }[]>([]);
   // const [selectedSites, setSelectedSites] = useState<string[]>([]);
   const [siteDialogOpen, setSiteDialogOpen] = useState(false);
   const [vendorSites, setVendorSites] = useState<{ site: string; frequency: string }[]>([]);
@@ -428,7 +428,7 @@ function RouteComponent() {
                 checked={vendorSites.length === sites.length}
                 onChange={e => {
                   if (e.target.checked) {
-                    setVendorSites(sites.map(s => ({ site: s.stationName, frequency: "" as "" })));
+                    setVendorSites(sites.map(s => ({ site: s.name, frequency: "" as "" })));
                   } else {
                     setVendorSites([]);
                   }
@@ -438,7 +438,7 @@ function RouteComponent() {
             </label>
 
             {sites.map(site => {
-              const isChecked = vendorSites.find(vs => vs.site === site.stationName);
+              const isChecked = vendorSites.find(vs => vs.site === site.name);
 
               return (
                 <label key={site._id} className="flex items-center gap-2">
@@ -447,17 +447,17 @@ function RouteComponent() {
                     checked={!!isChecked}
                     onChange={() => {
                       setVendorSites(prev => {
-                        if (prev.find(vs => vs.site === site.stationName)) {
+                        if (prev.find(vs => vs.site === site.name)) {
                           // remove if unchecked
-                          return prev.filter(vs => vs.site !== site.stationName);
+                          return prev.filter(vs => vs.site !== site.name);
                         } else {
                           // add if checked
-                          return [...prev, { site: site.stationName, frequency: "" as "" }];
+                          return [...prev, { site: site.name, frequency: "" as "" }];
                         }
                       });
                     }}
                   />
-                  {site.stationName}
+                  {site.name}
                 </label>
               );
             })}

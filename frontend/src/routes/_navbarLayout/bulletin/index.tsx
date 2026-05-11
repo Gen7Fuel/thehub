@@ -144,7 +144,7 @@ function RouteComponent() {
           <div>
             <h1 className="text-2xl font-bold">Bulletin Board</h1>
             <p className="text-sm text-muted-foreground mt-1">
-              {user?.location ? `Posts for ${user.location}` : 'Posts for your site'}
+              {user?.site ? `Posts for ${user.site}` : 'Posts for your site'}
             </p>
           </div>
           <Button
@@ -200,7 +200,7 @@ function RouteComponent() {
           <DialogHeader>
             <DialogTitle>New bulletin post</DialogTitle>
             <DialogDescription>
-              Visible to everyone with access to {user?.location || 'your site'}.
+              Visible to everyone with access to {user?.site || 'your site'}.
             </DialogDescription>
           </DialogHeader>
           <Textarea

@@ -75,7 +75,7 @@ function VolumeDashboard() {
   useEffect(() => { fetchAndSync() }, [])
 
   const siteOptions = useMemo(() => {
-    const sites = allTanks.map(t => t.stationName);
+    const sites = allTanks.map(t => t.name);
     return Array.from(new Set(sites));
   }, [allTanks]);
 
@@ -86,12 +86,12 @@ function VolumeDashboard() {
   // 1. Get all tanks for this site and sort them by Tank Number
   // const activeTanks = useMemo(() => {
   //   return allTanks
-  //     .filter(t => t.stationName === site)
+  //     .filter(t => t.name === site)
   //     .sort((a, b) => a.tankNo - b.tankNo);
   // }, [allTanks, site]);
 
   const groupedTanks = useMemo(() => {
-    const active = allTanks.filter(t => t.stationName === site).sort((a, b) => a.tankNo - b.tankNo);
+    const active = allTanks.filter(t => t.name === site).sort((a, b) => a.tankNo - b.tankNo);
     const groups: Record<string, any[]> = {};
     active.forEach(tank => {
       if (!groups[tank.grade]) groups[tank.grade] = [];
@@ -119,7 +119,7 @@ function VolumeDashboard() {
   // UI helpers...
   // Change this line in your VolumeDashboard
   // Find the tank for the selected site
-  const selectedTank = allTanks.find(t => t.stationName === site);
+  const selectedTank = allTanks.find(t => t.name === site);
 
   // If stationId was populated, it is an object. We need the ._id from inside it.
   const currentStationId = selectedTank?.stationId?._id || selectedTank?.stationId;
@@ -409,7 +409,7 @@ function VolumeTankCard({ tank, onUpdate }: { tank: any; onUpdate: () => void })
                           <div className="flex flex-col">
                             <p className="text-[9px] font-black uppercase text-slate-400 tracking-[0.2em] mb-1">Station / Tank</p>
                             <div className="flex items-center gap-2">
-                              <span className="text-lg font-black text-slate-800">{tank.stationName}</span>
+                              <span className="text-lg font-black text-slate-800">{tank.name}</span>
                               <span className="text-slate-300">/</span>
                               <span className="text-lg font-black text-blue-600">#0{tank.tankNo}</span>
                             </div>

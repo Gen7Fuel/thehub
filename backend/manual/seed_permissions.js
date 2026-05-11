@@ -535,7 +535,7 @@ const seedPermissionsDB = async () => {
           "lastName": "Demo",
           "is_active": true,
           "is_admin": true,
-          "stationName": "Oliver",
+          "site": "Oliver",
           "is_inOffice": false,
           "role": insertedRole._id,
           "site_access": {

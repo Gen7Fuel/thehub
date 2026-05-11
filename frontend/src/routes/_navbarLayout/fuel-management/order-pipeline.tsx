@@ -319,7 +319,7 @@ function PipelineBlock({ site, date }: { site: any; date: Date }) {
             </div>
             <div className="min-w-0">
               <h3 className="text-sm font-black text-slate-800 uppercase leading-tight truncate">
-                {site.stationName}
+                {site.name}
               </h3>
               <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wide">
                 {site.province}
@@ -502,7 +502,7 @@ function PipelineBlock({ site, date }: { site: any; date: Date }) {
 
       <div className="mt-2 pt-0 border-t border-slate-50">
         <Button variant="outline" className="w-full h-10 text-[10px] font-black uppercase rounded-xl border-slate-200 text-slate-600 hover:bg-slate-900 hover:text-white transition-all">
-          <Link to="/fuel-management/volume" search={{ site: site?.stationName }}>
+          <Link to="/fuel-management/volume" search={{ site: site?.name }}>
             View Current Volumes
           </Link>
         </Button>

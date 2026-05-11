@@ -206,7 +206,7 @@ function RouteComponent() {
     const autoPickSite = async () => {
       if (!parsed?.accountName) return
       try {
-        let locations: { stationName: string; legalName: string }[] | null = null
+        let locations: { name: string; legalName: string }[] | null = null
         // Try local proxy first
         const localResp = await fetch('/api/locations', {
           headers: { Authorization: `Bearer ${localStorage.getItem('token') || ''}` },
@@ -238,14 +238,14 @@ function RouteComponent() {
 
         const match = locations.find((loc) => {
           const ln = normalize(loc.legalName)
-          const sn = normalize(loc.stationName)
+          const sn = normalize(loc.name)
           return candidates.some((c) => c === ln || c === sn)
         })
 
         if (match) {
-          setDetectedStation(match.stationName)
+          setDetectedStation(match.name)
           if (!site) {
-            navigate({ to: Route.fullPath, search: (prev: any) => ({ ...prev, site: match.stationName }) })
+            navigate({ to: Route.fullPath, search: (prev: any) => ({ ...prev, site: match.name }) })
           }
         } else {
           setDetectedStation(null)

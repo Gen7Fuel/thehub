@@ -41,7 +41,7 @@ const fetchTransactions = async () => {
       params: {
         startDate: toUTC(date.from).toISOString(),
         endDate: toUTC(date.to).toISOString(),
-        stationName,
+        name: stationName,
       },
       headers: {
         Authorization: `Bearer ${localStorage.getItem('token')}`,
@@ -81,7 +81,7 @@ const fetchTransactions = async () => {
 
         <LocationPicker
           setStationName={setStationName}
-          value='stationName'
+          value='name'
           // disabled={!access.component_kardpoll_list_location_filter}
         />
       </div>

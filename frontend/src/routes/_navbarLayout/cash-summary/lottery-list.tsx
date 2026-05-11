@@ -573,11 +573,11 @@ function RouteComponent() {
 
   // Default site from user.location if missing
   useEffect(() => {
-    if (!siteFromUrl && user?.location) {
+    if (!siteFromUrl && user?.site) {
       navigate({
         search: (prev: LotteryListSearch) => ({
           ...prev,
-          site: user.location,
+          site: user.site,
         }),
         replace: true,
       })

@@ -38,7 +38,7 @@ async function syncHistoricalDips() {
     const station = tank.stationId;
     if (!station?.csoCode) continue;
 
-    console.log(`Processing: ${station.stationName} (Tank ${tank.tankNo})`);
+    console.log(`Processing: ${station.name} (Tank ${tank.tankNo})`);
 
     let currentDate = new Date(startDate);
     const historicalUpdates = [];
@@ -93,11 +93,11 @@ async function syncFuelSales() {
 
   for (const loc of locations) {
     if (!loc.csoCode) {
-      console.warn(`⚠️ Skipping ${loc.stationName}: Missing CSO Code`);
+      console.warn(`⚠️ Skipping ${loc.name}: Missing CSO Code`);
       continue;
     }
 
-    console.log(`\n📍 Processing: ${loc.stationName} [${loc.csoCode}]`);
+    console.log(`\n📍 Processing: ${loc.name} [${loc.csoCode}]`);
 
     let currentDate = new Date(startDate);
 

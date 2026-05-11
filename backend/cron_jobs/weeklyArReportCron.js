@@ -104,7 +104,7 @@ async function sendWeeklyArReport() {
 
     const transactions = await Transaction.find({
       source: "PO",
-      stationName: site,
+      site: site,
       date: { $gte: startDateObj, $lte: endDateObj },
       poNumber: { $exists: true, $nin: [null, ""] },
     }).sort({ date: 1 }).lean();

@@ -206,7 +206,7 @@ function RouteComponent() {
   const [uploadedFile, setUploadedFile] = useState<File | null>(null)
   const [isProcessing, setIsProcessing] = useState(false)
   const [error, setError] = useState<string | null>(null)
-  const [site, setSite] = useState<string>(selectedSite || user?.location || '')
+  const [site, setSite] = useState<string>(selectedSite || user?.site || '')
   const [vendor, setVendor] = useState<string>('')
   const [includeStationSupplies, setIncludeStationSupplies] = useState(false);
   const navigate = useNavigate()
@@ -352,7 +352,7 @@ function RouteComponent() {
           <div className="mb-4 flex gap-4">
             <div>
               <label className="block text-sm font-medium mb-1">Site</label>
-              <LocationPicker value='stationName' setStationName={setSite} />
+              <LocationPicker value='name' setStationName={setSite} />
             </div>
             <div>
               <label className="block text-sm font-medium mb-1">Vendor</label>

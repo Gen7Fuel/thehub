@@ -88,7 +88,7 @@ export function RouteComponent() {
   const [mergedPermissions, setMergedPermissions] = useState<PermissionNode[]>([]);
 
   const [siteAccess, setSiteAccess] = useState<Record<string, boolean>>({});
-  const [locations, setLocations] = useState<{ stationName: string }[]>([]);
+  const [locations, setLocations] = useState<{ name: string }[]>([]);
   const [savingAccess, setSavingAccess] = useState(false);
   const [showLogoutConfirmDialog, setShowLogoutConfirmDialog] = useState(false);
   const [verifyAction, setVerifyAction] = useState<
@@ -452,14 +452,14 @@ export function RouteComponent() {
             <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3">
               {locations.map((loc) => (
                 <button
-                  key={loc.stationName}
-                  onClick={() => toggleSiteAccess(loc.stationName)}
-                  className={`p-2 rounded-md border transition ${siteAccess[loc.stationName]
+                  key={loc.name}
+                  onClick={() => toggleSiteAccess(loc.name)}
+                  className={`p-2 rounded-md border transition ${siteAccess[loc.name]
                     ? "bg-green-100 border-green-500 text-green-700 font-semibold"
                     : "bg-gray-100 border-gray-400 text-gray-600"
                     }`}
                 >
-                  {loc.stationName}
+                  {loc.name}
                 </button>
               ))}
             </div>

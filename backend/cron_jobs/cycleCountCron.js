@@ -29,7 +29,7 @@ const updateCycleCountCSO = async () => {
     }).lean();
 
     for (const loc of locations) {
-      const { stationName: siteName, timezone } = loc;
+      const { name: siteName, timezone } = loc;
       if (!timezone) continue;
 
       const { start, end } = getYesterdayRange(timezone);

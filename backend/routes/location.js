@@ -27,19 +27,17 @@ const { auth } = require("../middleware/authMiddleware");
 
 // Get locations
 router.get("/", async (req, res) => {
-  const { stationName } = req.query;
+  const { name } = req.query;
 
   try {
-    if (stationName) {
-      // Fetch specific location by stationName
-      const location = await Location.findOne({ stationName });
+    if (name) {
+      const location = await Location.findOne({ name });
       if (location) {
         res.status(200).json(location);
       } else {
         res.status(404).json({ message: "Location not found." });
       }
     } else {
-      // Fetch all locations
       const locations = await Location.find({ type: "store" });
       res.status(200).json(locations);
     }
@@ -49,12 +47,12 @@ router.get("/", async (req, res) => {
   }
 });
 
-// PUBLIC: Get location by station name
-router.get("/name/:stationName", async (req, res) => {
-  const { stationName } = req.params;
+// PUBLIC: Get location by name
+router.get("/name/:name", async (req, res) => {
+  const { name } = req.params;
 
   try {
-    const location = await Location.findOne({ stationName });
+    const location = await Location.findOne({ name });
     if (location) {
       res.status(200).json(location);
     } else {
@@ -83,28 +81,28 @@ router.get("/:id", async (req, res) => {
   }
 });
 
-// Protect everything below; only GET /, GET /name/:stationName and GET /:id are public
+// Protect everything below; only GET /, GET /name/:name and GET /:id are public
 router.use(auth)
 
 router.post('/:id/assign-users', async (req, res) => {
   try {
-    const { userIds, stationName } = req.body;
+    const { userIds, locationName } = req.body;
     const io = req.app.get("io");
 
     // Identify users losing access for socket notification
     const previouslyAssigned = await User.find({
-      [`site_access.${stationName}`]: true
+      [`site_access.${locationName}`]: true
     }).select('_id');
     const previouslyAssignedIds = previouslyAssigned.map(u => u._id.toString());
 
     // Update Access
     await User.updateMany(
-      { _id: { $nin: userIds }, [`site_access.${stationName}`]: true },
-      { $set: { [`site_access.${stationName}`]: false } }
+      { _id: { $nin: userIds }, [`site_access.${locationName}`]: true },
+      { $set: { [`site_access.${locationName}`]: false } }
     );
     await User.updateMany(
       { _id: { $in: userIds } },
-      { $set: { [`site_access.${stationName}`]: true } }
+      { $set: { [`site_access.${locationName}`]: true } }
     );
 
     // Notify all affected users via Socket
@@ -142,17 +140,17 @@ router.put("/:id", async (req, res) => {
 // POST /api/locations
 router.post("/", async (req, res) => {
   try {
-    const { type, stationName, legalName, INDNumber, kardpollCode, csoCode, timezone, email, managerCode, sellsLottery, managerEmails, province } = req.body;
+    const { type, name, legalName, INDNumber, kardpollCode, csoCode, timezone, email, managerCode, sellsLottery, managerEmails, province } = req.body;
 
     // Basic validation
-    if (!type || !stationName || !legalName || !INDNumber || !csoCode || !timezone || !email || !managerCode || !province) {
+    if (!type || !name || !legalName || !INDNumber || !csoCode || !timezone || !email || !managerCode || !province) {
       return res.status(400).json({ message: "Missing required fields." });
     }
 
     // Create new location, include sellsLottery if provided
     const location = new Location({
       type,
-      stationName,
+      name,
       legalName,
       INDNumber,
       kardpollCode,
@@ -186,7 +184,7 @@ router.post("/", async (req, res) => {
       return {
         updateOne: {
           filter: { _id: user._id },
-          update: { $set: { [`site_access.${stationName}`]: isAdmin } },
+          update: { $set: { [`site_access.${name}`]: isAdmin } },
         },
       };
     });
@@ -212,7 +210,7 @@ router.post("/check-code", async (req, res) => {
       return res.status(400).json({ error: "Missing location or code" });
     }
 
-    const locationDoc = await Location.findOne({ stationName: location }).lean();
+    const locationDoc = await Location.findOne({ name: location }).lean();
 
     if (!locationDoc) {
       return res.status(404).json({ error: "Location not found" });

@@ -54,7 +54,7 @@ export const Route = createFileRoute("/_navbarLayout/audit/interface/open-issues
 export function OpenIssuesPage() {
   const { stationName } = useContext(RouteContext);
   const { user } = useAuth()
-  const site = stationName || user?.location || "";
+  const site = stationName || user?.site || "";
   const navigate = useNavigate()
 
   const [openIssues, setOpenIssues] = useState<OpenIssue[]>([]);

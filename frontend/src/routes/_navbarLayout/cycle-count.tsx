@@ -56,7 +56,7 @@ function RouteComponent() {
         <Link
           to="/cycle-count/inventory"
           activeOptions={{ exact: true }}
-          search={{ site: user?.location || '', category: '' }}
+          search={{ site: user?.site || '', category: '' }}
         >
           <Button
             {...(!isInventoryActive && { variant: 'outline' } as object)}
@@ -70,7 +70,7 @@ function RouteComponent() {
         <Link
           to="/cycle-count/report"
           activeOptions={{ exact: true }}
-          search={{ site: user?.location || '', category: '' }}
+          search={{ site: user?.site || '', category: '' }}
         >
           <Button
             {...(!isReportActive && { variant: 'outline' } as object)}

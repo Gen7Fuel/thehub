@@ -514,7 +514,7 @@ describe('Cash Rec Report — index.tsx', () => {
           amount: 80,
           paymentMethod: 'till',
           vendorName: 'Ace Supplier',
-          location: { stationName: 'Rankin' },
+          location: { name: 'Rankin' },
         },
       ],
     }))

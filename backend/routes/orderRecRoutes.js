@@ -750,7 +750,7 @@ router.post('/:id/comments', async (req, res) => {
         if (storeRoles.length) {
           const storeUsers = await User.find({
             role: { $in: storeRoles.map(r => r._id) },
-            stationName: orderRec.site,
+            site: orderRec.site,
             is_active: true
           }).select('email');
           recipientEmails = storeUsers.map(u => u.email).filter(Boolean);

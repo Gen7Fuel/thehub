@@ -123,7 +123,7 @@ function LocationFuelComponent() {
     <div className="p-6 space-y-8 animate-in fade-in duration-300">
       <div className="flex items-center justify-between">
         <div>
-          <h2 className="text-2xl font-black text-slate-900">{locationData.stationName}</h2>
+          <h2 className="text-2xl font-black text-slate-900">{locationData.name}</h2>
           <p className="text-xs text-slate-500 font-bold uppercase tracking-widest">{locationData.csoCode} — {locationData.legalName}</p>
         </div>
       </div>

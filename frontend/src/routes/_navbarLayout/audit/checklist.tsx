@@ -447,13 +447,13 @@ function RouteComponent() {
   }, [site, pKeys, isReportOpen]);
 
   useEffect(() => {
-    if (!site && user?.location) {
+    if (!site && user?.site) {
       navigate({
-        search: { site: user.location },
+        search: { site: user.site },
         replace: true,
       });
     }
-  }, [site, user?.location, navigate]);
+  }, [site, user?.site, navigate]);
 
   const handleSiteChange = (newSite: string) => {
     const activeTemplateId = templates.find(t =>

@@ -34,7 +34,7 @@ interface CycleCountItem {
 function RouteComponent() {
   const navigate = useNavigate()
   const { user } = useAuth()
-  const location = user?.location
+  const location = user?.site
   const [date, setDate] = useState<Date | undefined>(() => {
     const d = new Date()
     d.setDate(d.getDate() - 1)   // yesterday
@@ -165,7 +165,7 @@ function RouteComponent() {
           isOpen={showPasswordDialog}
           onSuccess={handlePasswordSuccess}
           onCancel={handlePasswordCancel}
-          userLocation={user?.location || "Rankin"}
+          userLocation={user?.site || "Rankin"}
         />
       )}
 
@@ -192,7 +192,7 @@ function RouteComponent() {
 
               <LocationPicker
                 setStationName={setSiteName}
-                value="stationName"
+                value="name"
                 // {...(!access.component_cycle_count_count_location_filter ? { disabled: true } : {})}
                 defaultValue={location}
               />

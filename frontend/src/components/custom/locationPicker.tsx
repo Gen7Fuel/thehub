@@ -101,7 +101,7 @@ import { useSite } from "@/context/SiteContext";
 
 interface Location {
   _id: string;
-  stationName: string;
+  name: string;
   csoCode: string;
   timezone: string;
 }
@@ -109,7 +109,7 @@ interface Location {
 interface LocationPickerProps {
   setStationName: React.Dispatch<React.SetStateAction<string>>;
   setTimezone?: React.Dispatch<React.SetStateAction<string>>;
-  value: "stationName" | "csoCode";
+  value: "name" | "csoCode";
   defaultValue?: string;
 }
 
@@ -140,7 +140,7 @@ export function LocationPicker({
 
   // Filter available locations to allowed ones
   const filteredLocations = locations?.filter((loc: Location) =>
-    allAllowedSites.includes(loc.stationName)
+    allAllowedSites.includes(loc.name)
   );
 
   const handleValueChange = (selectedValue: string) => {
@@ -158,7 +158,7 @@ export function LocationPicker({
   };
 
   const selectDefaultValue =
-    defaultValue !== undefined ? defaultValue : (selectedSite || user?.location);
+    defaultValue !== undefined ? defaultValue : (selectedSite || user?.site);
 
   return (
     <Select
@@ -175,7 +175,7 @@ export function LocationPicker({
           {filteredLocations?.length > 0 ? (
             filteredLocations.map((location: Location) => (
               <SelectItem key={location._id} value={location[value]}>
-                {location.stationName}
+                {location.name}
               </SelectItem>
             ))
           ) : (

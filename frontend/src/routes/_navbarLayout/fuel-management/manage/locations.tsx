@@ -31,7 +31,7 @@ function LocationListLayout() {
     const search = searchTerm.toLowerCase().trim()
     return locations.filter((loc: any) => {
       return (
-        loc.stationName?.toLowerCase().includes(search) ||
+        loc.name?.toLowerCase().includes(search) ||
         loc.csoCode?.toLowerCase().includes(search) ||
         loc.legalName?.toLowerCase().includes(search) ||
         // Since it's a string "06", this will now match "06" correctly
@@ -75,7 +75,7 @@ function LocationListLayout() {
                   </div>
                   <div className="overflow-hidden">
                     <p className="font-bold text-sm truncate">
-                      {loc.stationName} <span className="text-blue-500 ml-1">({loc.csoCode})</span>
+                      {loc.name} <span className="text-blue-500 ml-1">({loc.csoCode})</span>
                     </p>
                     <p className="text-[10px] font-bold text-muted-foreground uppercase truncate">
                       {loc.legalName} <span className="ml-1 opacity-60">#{loc.fuelStationNumber}</span>

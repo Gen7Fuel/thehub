@@ -12,7 +12,7 @@ const {
   mockUseAuth,
 } = vi.hoisted(() => {
   const mockUseAuth = vi.fn().mockReturnValue({
-    user: { id: 'user-1', location: 'Rankin', email: 'test@example.com' },
+    user: { id: 'user-1', site: 'Rankin', email: 'test@example.com' },
   })
 
   return {

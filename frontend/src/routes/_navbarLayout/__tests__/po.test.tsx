@@ -40,15 +40,15 @@ const {
     setSignature: vi.fn(),
     date: new Date('2026-01-15') as Date | undefined,
     setDate: vi.fn(),
-    stationName: 'Rankin' as string,
-    setStationName: vi.fn(),
+    site: 'Rankin' as string,
+    setSite: vi.fn(),
     resetForm: vi.fn(),
   }
 
   const mockUseAuth = vi.fn().mockReturnValue({
     user: {
       id: 'user-1',
-      location: 'Rankin',
+      site: 'Rankin',
       timezone: 'America/Toronto',
       access: {
         po: { pdf: true, changeDate: true, delete: true },
@@ -243,7 +243,7 @@ const resetStore = () => {
   mockStore.receipt = 'data:image/png;base64,abc'
   mockStore.signature = 'data:image/png;base64,sig'
   mockStore.date = new Date('2026-01-15')
-  mockStore.stationName = 'Rankin'
+  mockStore.site = 'Rankin'
 }
 
 const POForm = (IndexRoute as any).component as React.ComponentType
@@ -259,7 +259,7 @@ describe('PO Form — index.tsx', () => {
     vi.clearAllMocks()
     localStorage.setItem('token', 'test-token')
     mockUseAuth.mockReturnValue({
-      user: { id: 'u1', location: 'Rankin', timezone: 'America/Toronto', access: {} },
+      user: { id: 'u1', site: 'Rankin', timezone: 'America/Toronto', access: {} },
     })
   })
 
@@ -274,7 +274,7 @@ describe('PO Form — index.tsx', () => {
 
   it("hides the number-type toggle and PO/fleet fields when stationName is charlies", async () => {
     // isCharlies = stationName.trim().toLowerCase() === "charlies" (no apostrophe)
-    mockStore.stationName = 'charlies'
+    mockStore.site = 'charlies'
     renderWithSuspense(<POForm />)
     // Wait for the component to mount (Select Site heading is always rendered)
     await waitFor(() => expect(screen.getByText(/select site/i)).toBeInTheDocument())
@@ -352,7 +352,7 @@ describe('PO List — list.tsx', () => {
     mockUseAuth.mockReturnValue({
       user: {
         id: 'u1',
-        location: 'Rankin',
+        site: 'Rankin',
         timezone: 'America/Toronto',
         access: { po: { pdf: true, changeDate: true, delete: true } },
       },
@@ -391,7 +391,7 @@ describe('PO List — list.tsx', () => {
     mockUseAuth.mockReturnValue({
       user: {
         id: 'u1',
-        location: 'Rankin',
+        site: 'Rankin',
         timezone: 'America/Toronto',
         access: { po: { pdf: false, changeDate: false, delete: false } },
       },
@@ -425,7 +425,7 @@ describe('PO Signature — signature.tsx', () => {
     vi.clearAllMocks()
     localStorage.setItem('token', 'test-token')
     mockUseAuth.mockReturnValue({
-      user: { id: 'u1', location: 'Rankin', timezone: 'America/Toronto', access: {} },
+      user: { id: 'u1', site: 'Rankin', timezone: 'America/Toronto', access: {} },
     })
     mockAxiosPost.mockResolvedValue({ status: 201, data: { _id: 'txn-1' } })
   })
@@ -456,7 +456,7 @@ describe('PO Signature — signature.tsx', () => {
     await waitFor(() =>
       expect(mockAxiosPost).toHaveBeenCalledWith(
         expect.stringContaining('/api/purchase-orders'),
-        expect.objectContaining({ source: 'PO', stationName: 'Rankin' }),
+        expect.objectContaining({ source: 'PO', name: 'Rankin' }),
         expect.any(Object)
       )
     )
@@ -474,7 +474,7 @@ describe('PO Receipt — receipt.tsx', () => {
     vi.clearAllMocks()
     localStorage.setItem('token', 'test-token')
     mockUseAuth.mockReturnValue({
-      user: { id: 'u1', location: 'Rankin', timezone: 'America/Toronto', access: {} },
+      user: { id: 'u1', site: 'Rankin', timezone: 'America/Toronto', access: {} },
     })
     mockAxiosPost.mockResolvedValue({ status: 201, data: { _id: 'txn-2' } })
   })
