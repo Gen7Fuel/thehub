@@ -915,7 +915,6 @@ router.post('/instance', async (req, res) => {
                   const cc = [
                     "daksh@gen7fuel.com",
                     "ana@gen7fuel.com",
-                    "JDzyngel@gen7fuel.com",
                     "kporter@gen7fuel.com",
                     "michelle@gen7fuel.com"
                   ];
