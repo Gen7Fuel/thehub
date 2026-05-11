@@ -307,7 +307,7 @@ router.post("/login", async (req, res) => {
       name: `${user.firstName} ${user.lastName}`,
       initials: getInitials(user.firstName, user.lastName),
       permissions: mergedPermissions,
-      site_access: Object.fromEntries(user.site_access || new Map()),
+      site_access: user.site_access,
       timezone,
     };
 
@@ -380,7 +380,7 @@ router.post("/refresh-token", async (req, res) => {
       name: `${user.firstName} ${user.lastName}`,
       initials: getInitials(user.firstName, user.lastName),
       permissions: mergedPermissions,
-      site_access: Object.fromEntries(user.site_access || new Map()),
+      site_access: user.site_access,
       access: user.access,
       timezone,
     };
