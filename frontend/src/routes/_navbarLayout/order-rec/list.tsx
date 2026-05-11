@@ -117,10 +117,10 @@ function RouteComponent() {
 
   // Auto-select site if missing
   useEffect(() => {
-    if (!site && user?.site) {
-      navigate({ search: { site: user.site } });
+    if (!site && user?.location) {
+      navigate({ search: { site: user.location } });
     }
-  }, [site, user?.site, navigate]);
+  }, [site, user?.location, navigate]);
 
   const updateSite = (newSite: string) => {
     navigate({ search: { site: newSite } });

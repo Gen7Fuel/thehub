@@ -561,7 +561,7 @@ function RouteComponent() {
 
       try {
         // Fetch the store email
-        const locationRes = await axios.get(`/api/locations?name=${encodeURIComponent(site)}`, {
+        const locationRes = await axios.get(`/api/locations?stationName=${encodeURIComponent(site)}`, {
           headers: {
             Authorization: `Bearer ${localStorage.getItem('token')}`
           }

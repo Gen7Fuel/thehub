@@ -35,7 +35,7 @@ function RouteComponent() {
 
   // const poData = Route.useLoaderData() as any;
 
-  const [stationName, setStationName] = React.useState<string>(selectedSite || user?.site || "");
+  const [stationName, setStationName] = React.useState<string>(selectedSite || user?.location || "");
   const [timezone, setTimezone] = React.useState<string>(user?.timezone || "America/Toronto");
   const [purchaseOrders, setPurchaseOrders] = React.useState<
     {
@@ -76,7 +76,7 @@ function RouteComponent() {
           params: {
             startDate: startUtc.toISOString(),
             endDate: endUtc.toISOString(),
-            name: stationName
+            stationName
           },
           headers: {
             Authorization: `Bearer ${localStorage.getItem('token')}`,
@@ -288,7 +288,7 @@ function RouteComponent() {
         <LocationPicker
           setStationName={setStationName}
           setTimezone={setTimezone}
-          value="name"
+          value="stationName"
           // {...(!access.component_po_location_filter ? { disabled: true } : {})}
         />
       </div>

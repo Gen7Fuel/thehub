@@ -43,7 +43,7 @@ const flattenPermissions = (permissionTree: any[] = []) => {
 interface User {
   id?: string;
   email?: string;
-  site?: string;
+  location?: string;
   initials?: string;
   name?: string;
   timezone?: string;
@@ -89,7 +89,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
       const updatedUser: User = {
         id: decoded.id,
         email: decoded.email,
-        site: decoded.site,
+        location: decoded.location,
         initials: decoded.initials,
         name: decoded.name,
         timezone: decoded.timezone,

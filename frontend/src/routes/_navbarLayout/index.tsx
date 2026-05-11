@@ -86,13 +86,13 @@ function App() {
               icon={<Calculator className="w-5 h-5 text-amber-600" />}
             >
               {access?.accounting?.cashSummary?.value && (
-                <NavButton to="/cash-summary" label="Cash Summary" icon={Calculator} theme="amber" search={{ site: user?.site }} />
+                <NavButton to="/cash-summary" label="Cash Summary" icon={Calculator} theme="amber" search={{ site: user?.location }} />
               )}
               {access?.accounting?.safesheet?.value && (
-                <NavButton to="/safesheet" label="Safesheet" icon={ShieldCheck} theme="amber" search={{ site: user?.site }} />
+                <NavButton to="/safesheet" label="Safesheet" icon={ShieldCheck} theme="amber" search={{ site: user?.location }} />
               )}
               {access?.accounting?.cashRec && (
-                <NavButton to="/cash-rec" label="Cash Rec" icon={Receipt} theme="amber" search={{ site: user?.site }} />
+                <NavButton to="/cash-rec" label="Cash Rec" icon={Receipt} theme="amber" search={{ site: user?.location }} />
               )}
               {access?.accounting?.fuelRec?.value && (
                 <NavButton 
@@ -100,11 +100,11 @@ function App() {
                   label="Fuel Rec" 
                   icon={Droplets} 
                   theme="amber" 
-                  search={{ site: user?.site }} 
+                  search={{ site: user?.location }} 
                 />
               )}
               {access?.accounting?.infonetReport && (
-                <NavButton to="/infonet-report" label="Infonet Tax Report" icon={BarChart3} theme="amber" search={{ site: user?.site }} />
+                <NavButton to="/infonet-report" label="Infonet Tax Report" icon={BarChart3} theme="amber" search={{ site: user?.location }} />
               )}
             </Section>
           )}
@@ -122,7 +122,7 @@ function App() {
                   label="Order Rec" 
                   icon={Package} 
                   theme="indigo" 
-                  search={!access?.orderRec?.upload ? { site: user?.site || '' } : undefined} 
+                  search={!access?.orderRec?.upload ? { site: user?.location || '' } : undefined} 
                 />
               )}
               {access?.cycleCount?.value && <NavButton to="/cycle-count" label="Cycle Count" icon={Layers} theme="indigo" />}
@@ -135,7 +135,7 @@ function App() {
                   label="Fuel Mgmt" 
                   icon={Droplets} 
                   theme="indigo" 
-                  search={{ site: user?.site || '' }} 
+                  search={{ site: user?.location || '' }} 
                 />
               )}
             </Section>
@@ -342,49 +342,49 @@ function Section({ title, icon, children, accentColor }: { title: string; icon: 
 //           <Section title="Accounting">
 //             <div className="flex flex-wrap gap-4">
 //               {access?.accounting?.cashSummary.value && (
-//                 <Link to="/cash-summary" search={{ site: user?.site }}>
+//                 <Link to="/cash-summary" search={{ site: user?.location }}>
 //                   <Button className="w-32 h-32 flex items-center justify-center break-words whitespace-normal text-center">
 //                     Cash Summary
 //                   </Button>
 //                 </Link>
 //               )}
 //               {access?.accounting?.safesheet?.value && (
-//                 <Link to="/safesheet" search={{ site: user?.site }}>
+//                 <Link to="/safesheet" search={{ site: user?.location }}>
 //                   <Button className="w-32 h-32 flex items-center justify-center break-words whitespace-normal text-center">
 //                     Safesheet
 //                   </Button>
 //                 </Link>
 //               )}
 //               {access?.accounting?.cashRec && (
-//                 <Link to="/cash-rec" search={{ site: user?.site }}>
+//                 <Link to="/cash-rec" search={{ site: user?.location }}>
 //                   <Button className="w-32 h-32 flex items-center justify-center break-words whitespace-normal text-center">
 //                     Cash Rec
 //                   </Button>
 //                 </Link>
 //               )}
 //               {access?.accounting?.fuelRec.value && (
-//                 <Link to={access?.accounting?.fuelRec?.bol ? `/fuel-rec` : `/fuel-rec/list`} search={{ site: user?.site }}>
+//                 <Link to={access?.accounting?.fuelRec?.bol ? `/fuel-rec` : `/fuel-rec/list`} search={{ site: user?.location }}>
 //                   <Button className="w-32 h-32 flex items-center justify-center break-words whitespace-normal text-center">
 //                     Fuel Rec
 //                   </Button>
 //                 </Link>
 //               )}
 //               {access?.accounting?.infonetReport && (
-//                 <Link to="/infonet-report" search={{ site: user?.site }}>
+//                 <Link to="/infonet-report" search={{ site: user?.location }}>
 //                   <Button className="w-32 h-32 flex items-center justify-center break-words whitespace-normal text-center">
 //                     Infonet Tax Report
 //                   </Button>
 //                 </Link>
 //               )}
 //               {/* {access?.accounting.sftp && (
-//                 <Link to="/sftp" search={{ site: user?.site }}>
+//                 <Link to="/sftp" search={{ site: user?.location }}>
 //                   <Button className="w-32 h-32 flex items-center justify-center break-words whitespace-normal text-center">
 //                     SFTP
 //                   </Button>
 //                 </Link>s
 //               )} */}
 //               {/* {access?.accounting.fuelRec && (
-//                 <Link to="/fuel-rec" search={{ site: user?.site }}>
+//                 <Link to="/fuel-rec" search={{ site: user?.location }}>
 //                 <Button className="w-32 h-32 flex items-center justify-center break-words whitespace-normal text-center">
 //                   Fuel Rec
 //                 </Button>
@@ -396,7 +396,7 @@ function Section({ title, icon, children, accentColor }: { title: string; icon: 
 //         {/* {access?.safesheet && (
 //           <Section title="Safesheet">
 //             <div className="flex flex-wrap gap-4">
-//               <Link to="/safesheet" search={{ site: user?.site }}>
+//               <Link to="/safesheet" search={{ site: user?.location }}>
 //                 <Button className="w-32 h-32 flex items-center justify-center break-words whitespace-normal text-center">
 //                   Safesheet
 //                 </Button>
@@ -436,7 +436,7 @@ function Section({ title, icon, children, accentColor }: { title: string; icon: 
 //                     </Button>
 //                   </Link>
 //                 ) : (
-//                   <Link to="/order-rec/list" search={{ site: user?.site || '' }}>
+//                   <Link to="/order-rec/list" search={{ site: user?.location || '' }}>
 //                     <Button className="w-32 h-32 flex items-center justify-center break-words whitespace-normal text-center">
 //                       Order Rec
 //                     </Button>
@@ -478,7 +478,7 @@ function Section({ title, icon, children, accentColor }: { title: string; icon: 
 //               {access?.fuelManagement?.value && (
 //                 <Link to="/fuel-management/workspace"
 //                   activeOptions={{ exact: true }}
-//                   search={{ site: user?.site || ''}}
+//                   search={{ site: user?.location || ''}}
 //                 >
 //                   <Button className="w-32 h-32 flex items-center justify-center break-words whitespace-normal text-center">
 //                     Fuel Management

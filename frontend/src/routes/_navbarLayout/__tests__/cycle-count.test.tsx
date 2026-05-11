@@ -6,7 +6,7 @@ import { render, screen, waitFor } from '@testing-library/react'
 
 const { mockNavigate, mockUseLoaderData, mockUseSearch, mockUseAuth } = vi.hoisted(() => {
   const mockUseAuth = vi.fn().mockReturnValue({
-    user: { id: 'user-1', site: 'Rankin' },
+    user: { id: 'user-1', location: 'Rankin' },
   })
 
   return {

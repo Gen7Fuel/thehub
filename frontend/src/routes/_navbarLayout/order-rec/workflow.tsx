@@ -666,12 +666,12 @@ function RouteComponent() {
                   return Object.values(uniquevendors)
                     .flat()
                     .some(vendor =>
-                      vendor.location === store.name && vendor.category === selectedCategory
+                      vendor.location === store.stationName && vendor.category === selectedCategory
                     );
                 })
                 .filter(
                   store =>
-                    store.name !== "Sarnia"
+                    store.stationName !== "Sarnia"
                   // &&
                   // store.stationName !== "Jocko Point"
                 )
@@ -679,13 +679,13 @@ function RouteComponent() {
                   <tr key={store._id}>
                     {/* Store name column */}
                     <td className="border border-gray-300 px-4 py-2 font-semibold text-gray-800 bg-gray-50 sticky left-0 z-20 shadow-sm">
-                      {store.name}
+                      {store.stationName}
                     </td>
 
                     {/* Vendor columns */}
                     {allVendors.map(vendorName => {
                       // Find vendor(s) tied to this store + vendor name
-                      const vendorObjsRaw = uniquevendors[`${vendorName}::${store.name}`];
+                      const vendorObjsRaw = uniquevendors[`${vendorName}::${store.stationName}`];
                       const vendorObjs = vendorObjsRaw?.filter(
                         v => !selectedCategory || selectedCategory === "All" || v.category === selectedCategory
                       ) || [];
@@ -713,7 +713,7 @@ function RouteComponent() {
                       const weekEndTs = weekStartTs + (7 * 24 * 60 * 60 * 1000); // Full 7 days
 
                       const allOrders = orderRecs.filter(r =>
-                        r.site === store.name &&
+                        r.site === store.stationName &&
                         vendorObjs.some(vo => vo._id === (typeof r.vendor === "object" ? r.vendor._id : r.vendor))
                       );
 

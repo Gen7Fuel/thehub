@@ -36,7 +36,7 @@ export const Route = createFileRoute(
 
 function RouteComponent() {
   const { user } = useAuth();
-  const location = user?.site;
+  const location = user?.location;
   const [paypoints, setPaypoints] = useState<any[]>([]);
 
   useEffect(() => {

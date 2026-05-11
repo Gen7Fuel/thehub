@@ -40,7 +40,7 @@ function RouteComponent() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [date, setDate] = useState<Date | undefined>(new Date());
-  const [location, setLocation] = useState<string>(user?.site || '')
+  const [location, setLocation] = useState<string>(user?.location || '')
   const [vendor, setVendor] = useState<string>('')
   const [showAdvanced, setShowAdvanced] = useState(false)
 
@@ -67,7 +67,7 @@ function RouteComponent() {
       <div className="mb-4 flex gap-4 flex-wrap">
         <div>
           <label className="block text-sm font-medium mb-1">Site</label>
-          <LocationPicker value='name' setStationName={setLocation} />
+          <LocationPicker value='stationName' setStationName={setLocation} />
         </div>
         {showAdvanced && (
           <>

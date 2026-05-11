@@ -331,7 +331,7 @@ function CreateFuelOrder() {
           tomorrow.setDate(tomorrow.getDate() + 1);
           const tomorrowStr = tomorrow.toISOString().split('T')[0];
 
-          alert(`CRITICAL: Station ${station.name} has an order for this date with a different delivery date. Moving Order Date to tomorrow (${tomorrowStr}).`);
+          alert(`CRITICAL: Station ${station.stationName} has an order for this date with a different delivery date. Moving Order Date to tomorrow (${tomorrowStr}).`);
 
           // Recursive call with new date
           return getPONumberHelper(station, tomorrowStr, dDate, authHeader);
@@ -340,7 +340,7 @@ function CreateFuelOrder() {
         // Handle Multiple Loads same day
         if (sameDeliveryDate) {
           const nextLoad = count + 1;
-          const confirm = window.confirm(`Station ${station.name}: Already a load for ${dDate}. Create Load #${nextLoad}?`);
+          const confirm = window.confirm(`Station ${station.stationName}: Already a load for ${dDate}. Create Load #${nextLoad}?`);
           if (!confirm) return { po: '', finalOrderDate: oDate };
 
           return {
@@ -1103,7 +1103,7 @@ function CreateFuelOrder() {
                         <SelectContent>
                           {(locations || []).map((s: any) => (
                             <SelectItem key={s._id} value={s._id}>
-                              {s.name} <span className="text-xs text-muted-foreground ml-2">({s.tankCount} Tanks)</span>
+                              {s.stationName} <span className="text-xs text-muted-foreground ml-2">({s.tankCount} Tanks)</span>
                             </SelectItem>
                           ))}
                         </SelectContent>
@@ -1175,7 +1175,7 @@ function CreateFuelOrder() {
                           </SelectTrigger>
                           <SelectContent>
                             {(locations || []).map((s: any) => (
-                              <SelectItem key={s._id} value={s._id}>{s.name}</SelectItem>
+                              <SelectItem key={s._id} value={s._id}>{s.stationName}</SelectItem>
                             ))}
                           </SelectContent>
                         </Select>
@@ -1518,7 +1518,7 @@ function CreateFuelOrder() {
                     {/* Station Header */}
                     <div className="flex justify-between items-center bg-slate-50 p-2 rounded-lg border">
                       <span className="text-xs font-black text-blue-800 uppercase">
-                        {sectionStation?.name}
+                        {sectionStation?.stationName}
                       </span>
                       <span className="text-[10px] font-mono bg-white px-2 border rounded">
                         PO: {section.poNumber}

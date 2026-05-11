@@ -7,7 +7,7 @@ import type { Key, ReactElement, JSXElementConstructor, ReactNode, ReactPortal }
 
 type PO = {
   _id: string
-  name?: string
+  stationName?: string
   date: string
   productCode?: string
   description?: string
@@ -33,7 +33,7 @@ export const Route = createFileRoute('/_navbarLayout/cash-rec/receivables')({
   loader: async ({ deps }) => {
     const day = deps.date
     const params: Record<string, string> = { startDate: day, endDate: day }
-    if (deps.site) params.name = deps.site
+    if (deps.site) params.stationName = deps.site
     const qs = new URLSearchParams(params).toString()
 
     const resp = await fetch(`/api/purchase-orders?${qs}`, {

@@ -10,7 +10,7 @@ describe('Transaction schema — field validation', () => {
   const base = () => ({
     source: 'PO',
     date: new Date('2026-01-15T12:00:00Z'),
-    site: 'Rankin',
+    stationName: 'Rankin',
     customerName: 'Jane Doe',
     quantity: 50,
     amount: 100.0,
@@ -121,13 +121,13 @@ describe('Transaction.getNextPoNumberForSite', () => {
     const spy = stubFindOne(null)
     await Transaction.getNextPoNumberForSite('Rankin')
     expect(spy).toHaveBeenCalledWith(
-      expect.objectContaining({ source: 'PO', site: 'Rankin' })
+      expect.objectContaining({ source: 'PO', stationName: 'Rankin' })
     )
   })
 
-  it('throws when site is empty', async () => {
+  it('throws when stationName is empty', async () => {
     await expect(Transaction.getNextPoNumberForSite('')).rejects.toThrow(
-      'site is required'
+      'stationName is required'
     )
   })
 })

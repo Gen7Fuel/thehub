@@ -17,7 +17,7 @@ function RouteComponent() {
   const { user } = useAuth()
   const { selectedSite } = useSite()
   const [date, setDate] = useState<Date | undefined>(new Date());
-  const [location, setLocation] = useState<string>(selectedSite || user?.site || '');
+  const [location, setLocation] = useState<string>(selectedSite || user?.location || '');
   const [worksheets, setWorksheets] = useState<{ _id: string; report_number: number; shift: string; till_location: string }[]>([]);
   const [loading, setLoading] = useState<boolean>(false);
   const navigate = useNavigate()
@@ -76,7 +76,7 @@ function RouteComponent() {
         <DatePicker date={date} setDate={setDate} />
         <LocationPicker
           setStationName={setLocation}
-          value="name"
+          value="stationName"
           // {...(!access.component_po_location_filter ? { disabled: true } : {})}
         />
       </div>

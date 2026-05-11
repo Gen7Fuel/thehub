@@ -36,7 +36,7 @@ function RouteComponent() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const { user } = useAuth();
-  // const [stationName, setStationName] = useState(user?.site || "");
+  // const [stationName, setStationName] = useState(user?.location || "");
 
   // temporary central patch function
   // const updateStation = (newStation: string) => {
@@ -47,13 +47,13 @@ function RouteComponent() {
   // };
 
   useEffect(() => {
-    if (!site && user?.site) {
+    if (!site && user?.location) {
       navigate({
-        search: { site: user.site },
+        search: { site: user.location },
         replace: true,
       });
     }
-  }, [site, user?.site, navigate]);
+  }, [site, user?.location, navigate]);
 
   const handleSiteChange = (newSite: string) => {
     const activeTemplateId = templates.find(t =>
@@ -125,7 +125,7 @@ function RouteComponent() {
 
         {/* ◼ Location Picker (left) */}
         {/* <LocationPicker
-            value="name"
+            value="stationName"
             defaultValue={stationName}
             setStationName={(value) => {
               const newValue =

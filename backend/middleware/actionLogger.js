@@ -8,7 +8,7 @@ function getActor(req) {
     username: user.username || user.email || user.firstName || undefined,
     role: user.role || undefined,
     locationId: user.location || undefined,
-    locationName: user.locationName || user.site || undefined,
+    locationName: user.locationName || user.stationName || undefined,
   };
 }
 

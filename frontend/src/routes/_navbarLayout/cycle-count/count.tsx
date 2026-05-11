@@ -15,7 +15,7 @@ export const Route = createFileRoute('/_navbarLayout/cycle-count/count')({
 
 function RouteComponent() {
   const { user } = useAuth()
-  const location = user?.site || "";
+  const location = user?.location || "";
   const [stationName, setStationName] = useState(location);
   const [items, setItems] = useState<any[]>([]);
   const [flaggedItems, setFlaggedItems] = useState<any[]>([]);
@@ -311,7 +311,7 @@ function RouteComponent() {
       <div className="mb-6">
         <LocationPicker
           setStationName={setStationName}
-          value="name"
+          value="stationName"
           // {...(!access.component_cycle_count_count_location_filter ? { disabled: true } : {})}
           defaultValue={location}
         />

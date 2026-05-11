@@ -299,7 +299,7 @@ async function syncCategoryProductMapping() {
       if (!site) continue;
 
       // find Location to get station code (csoCode)
-      const loc = await Location.findOne({ name: site }).lean();
+      const loc = await Location.findOne({ stationName: site }).lean();
       if (!loc || !loc.csoCode) {
         console.log(`No Location.csoCode found for site '${site}', skipping inactive check for this site.`);
         continue;

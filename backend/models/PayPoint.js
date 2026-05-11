@@ -12,9 +12,9 @@ const PayPointSchema = new mongoose.Schema(
       required: true,
       trim: true, // Removes extra spaces from the label
     },
-    site: {
+    location: {
       type: mongoose.Schema.Types.ObjectId,
-      ref: 'Location',
+      ref: 'Location', // Reference to the Location model
       required: true,
     },
   },

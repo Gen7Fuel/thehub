@@ -55,7 +55,7 @@ function RouteComponent() {
         }
       })
       const locations = locationsResponse.data
-      const selectedLocation = locations.find((loc: any) => loc.name === payableLocation)
+      const selectedLocation = locations.find((loc: any) => loc.stationName === payableLocation)
       
       if (!selectedLocation) {
         alert('Invalid location selected')

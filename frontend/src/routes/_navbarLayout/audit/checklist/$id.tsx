@@ -130,7 +130,7 @@ function RouteComponent() {
   const { user } = useAuth();
   // const { stationName } = Route.useSearch();
   // const site = stationName || user?.location || "";
-  const { site } = Route.useSearch() || user?.site;
+  const { site } = Route.useSearch() || user?.location;
   // const navigate = useNavigate()
   const navigate = useNavigate({ from: Route.fullPath });
 
@@ -381,7 +381,7 @@ function RouteComponent() {
 
     const controller = new AbortController();
 
-    fetch(`/api/locations?name=${encodeURIComponent(site)}`, {
+    fetch(`/api/locations?stationName=${encodeURIComponent(site)}`, {
       signal: controller.signal,
     })
       .then(async (res) => {

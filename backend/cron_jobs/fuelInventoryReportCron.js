@@ -38,9 +38,9 @@ async function transformFuelInventory(rows, currentDay = false) {
 
   if (currentDay) {
     try {
-      const locations = await Location.find({}, { csoCode: 1, name: 1 }).lean();
+      const locations = await Location.find({}, { csoCode: 1, stationName: 1 }).lean();
       for (const loc of locations) {
-        stationMap[loc.csoCode] = loc.name;
+        stationMap[loc.csoCode] = loc.stationName;
       }
     } catch {
       console.log('Cannot map cso code with station name');

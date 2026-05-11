@@ -6,10 +6,10 @@ const router = express.Router();
 // Create a status sale
 router.post('/', async (req, res) => {
   try {
-    const { statusCardNumber, name, phone, pump, fuelGrade, amount, total, site, notes } = req.body;
+    const { statusCardNumber, name, phone, pump, fuelGrade, amount, total, stationName, notes } = req.body;
 
     // Validate required fields
-    if (!statusCardNumber || !name || !pump || !fuelGrade || !amount || !total || !site) {
+    if (!statusCardNumber || !name || !pump || !fuelGrade || !amount || !total || !stationName) {
       return res.status(400).json({ error: 'Missing required fields' });
     }
 
@@ -27,7 +27,7 @@ router.post('/', async (req, res) => {
       fuelGrade,
       amount,
       total,
-      site,
+      stationName,
       notes,
     });
 
@@ -52,7 +52,7 @@ router.post('/', async (req, res) => {
           <li><b>Fuel Grade:</b> ${fuelGrade}</li>
           <li><b>Amount:</b> ${amount}</li>
           <li><b>Total:</b> ${total}</li>
-          <li><b>Station Name:</b> ${site}</li>
+          <li><b>Station Name:</b> ${stationName}</li>
           <li><b>Notes:</b> ${notes || ''}</li>
         </ul>
         <p>Submitted at: ${new Date().toLocaleString()}</p>
@@ -79,11 +79,11 @@ router.post('/', async (req, res) => {
 
 router.get('/', async (req, res) => {
   try {
-    const { site, startDate, endDate } = req.query;
+    const { stationName, startDate, endDate } = req.query;
 
     // Build the query object
     const query = {};
-    if (site) query.site = site;
+    if (stationName) query.stationName = stationName;
     if (startDate && endDate) {
       // query.createdAt = {
       //   $gte: new Date(startDate + "T00:00:00Z"),

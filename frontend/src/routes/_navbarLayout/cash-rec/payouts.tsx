@@ -12,7 +12,7 @@ type Payable = {
   paymentMethod: string
   notes?: string
   createdAt: string
-  location?: { name?: string; csoCode?: string }
+  location?: { stationName?: string; csoCode?: string }
 }
 
 export const Route = createFileRoute('/_navbarLayout/cash-rec/payouts')({
@@ -37,7 +37,7 @@ export const Route = createFileRoute('/_navbarLayout/cash-rec/payouts')({
     const all: Payable[] = resp.ok ? await resp.json() : []
     // filter by site name (stationName) if provided
     const filtered = deps.site
-      ? all.filter(p => p.location?.name === deps.site)
+      ? all.filter(p => p.location?.stationName === deps.site)
       : all
     // aggregate total
     const totalAmount = filtered.reduce((a, p) => a + (p.amount || 0), 0)

@@ -33,7 +33,7 @@ export const Route = createFileRoute("/_navbarLayout/audit/checklist/open-issues
 export function OpenIssuesPage() {
   // const { stationName } = useContext(RouteContextChecklist);
   const { user } = useAuth()
-  const { site } = Route.useSearch() || user?.site;
+  const { site } = Route.useSearch() || user?.location;
   // const site = stationName || user?.location || "";
   const navigate = useNavigate()
 

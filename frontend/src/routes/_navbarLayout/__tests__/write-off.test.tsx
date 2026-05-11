@@ -8,7 +8,7 @@ const { mockNavigate, mockUseSearch, mockUseLoaderData, mockUser } = vi.hoisted(
   mockNavigate: vi.fn(),
   mockUseSearch: vi.fn().mockReturnValue({ site: '', type: 'WO' }),
   mockUseLoaderData: vi.fn().mockReturnValue({ data: [], accessDenied: false }),
-  mockUser: { email: 'test@example.com', site: 'Rankin', access: { writeOff: { create: true, requests: true } } },
+  mockUser: { email: 'test@example.com', location: 'Rankin', access: { writeOff: { create: true, requests: true } } },
 }))
 
 // ─── Module mocks ──────────────────────────────────────────────────────────────

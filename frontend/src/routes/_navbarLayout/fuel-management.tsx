@@ -43,7 +43,7 @@ function RouteComponent() {
           <Link
             to="/fuel-management/workspace"
             activeOptions={{ exact: true }}
-            search={{ site: user?.site || ''}}
+            search={{ site: user?.location || ''}}
           >
             <Button
               {...(!isWorkspaceActive && { variant: 'outline' } as object)}
@@ -74,7 +74,7 @@ function RouteComponent() {
           <Link
             to="/fuel-management/volume"
             activeOptions={{ exact: true }}
-            search={{ site: user?.site || ''}}
+            search={{ site: user?.location || ''}}
           >
             <Button
               {...(!isVolumeActive && { variant: 'outline' } as object)}

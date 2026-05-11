@@ -18,9 +18,9 @@ const transactionSchema = new mongoose.Schema({
     type: Date, 
     required: true // Date and time of the transaction
   },
-  site: {
-    type: String,
-    required: true,
+  stationName: { 
+    type: String, 
+    required: true // Name of the station where the transaction occurred
   },
   fleetCardNumber: { 
     type: String, 
@@ -69,23 +69,25 @@ const transactionSchema = new mongoose.Schema({
 // Ensure uniqueness of PO number scoped to station for PO-sourced docs with non-empty values
 // Allows multiple docs without poNumber or with source !== 'PO'
 transactionSchema.index(
-  { site: 1, poNumber: 1 },
+  { stationName: 1, poNumber: 1 },
   {
     unique: true,
     partialFilterExpression: {
       source: 'PO',
-      site: { $exists: true, $ne: '' },
+      stationName: { $exists: true, $ne: '' },
       poNumber: { $exists: true, $ne: '' },
     },
   }
 )
 
 // Static method to get next PO number for a site (atomic, per site)
-transactionSchema.statics.getNextPoNumberForSite = async function (site) {
-  if (!site) throw new Error('site is required for auto-numbering');
+transactionSchema.statics.getNextPoNumberForSite = async function (stationName) {
+  if (!stationName) throw new Error('stationName is required for auto-numbering');
+  // Find the highest poNumber for this site, only for source: 'PO' and poNumber not empty
+  // Only consider numeric poNumbers >= 10000
   const last = await this.findOne({
     source: 'PO',
-    site,
+    stationName,
     poNumber: { $exists: true, $ne: '' }
   })
     .sort({

@@ -21,7 +21,7 @@ export const Route = createFileRoute('/_navbarLayout/settings/sites')({
 
 interface Location {
   _id: string;
-  name: string;
+  stationName: string;
   legalName: string;
   INDNumber: string;
   kardpollCode: string;
@@ -47,7 +47,7 @@ function RouteComponent() {
             params={{ id: location._id }}
             activeProps={activeProps}
           >
-            {location.name} - {location.csoCode}
+            {location.stationName} - {location.csoCode}
           </Link>
         ))}
 

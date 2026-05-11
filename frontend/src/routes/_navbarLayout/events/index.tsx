@@ -219,7 +219,7 @@ function RouteComponent() {
             Events
           </h1>
           <p className="text-sm text-muted-foreground mt-1">
-            {user?.site ? `Upcoming events for ${user.site}` : 'Upcoming events for your site'}
+            {user?.location ? `Upcoming events for ${user.location}` : 'Upcoming events for your site'}
             {' '}— click any date to add an event.
           </p>
         </div>
@@ -322,7 +322,7 @@ function RouteComponent() {
             <DialogTitle>New event</DialogTitle>
             <DialogDescription>
               {composeDate && formatLongDate(composeDate)}
-              {user?.site && <> • {user.site}</>}
+              {user?.location && <> • {user.location}</>}
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-3">

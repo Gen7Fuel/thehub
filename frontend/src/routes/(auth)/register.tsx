@@ -30,7 +30,7 @@ function RouteComponent() {
   const [error, setError] = useState<string | null>(null);
   const navigate = useNavigate();
 
-  const data = Route.useLoaderData() as { locations: { _id: string; name: string }[] };
+  const data = Route.useLoaderData() as { locations: { _id: string; stationName: string }[] };
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     setFormData({
@@ -63,7 +63,7 @@ function RouteComponent() {
         password,
         firstName,
         lastName,
-        name: stationName,
+        stationName,
       });
 
       if (response.status === 201) {
@@ -166,8 +166,8 @@ function RouteComponent() {
               <SelectContent>
                 {data.locations.length > 0 ? (
                   data.locations.map((location) => (
-                    <SelectItem key={location._id} value={location.name}>
-                      {location.name}
+                    <SelectItem key={location._id} value={location.stationName}>
+                      {location.stationName}
                     </SelectItem>
                   ))
                 ) : (

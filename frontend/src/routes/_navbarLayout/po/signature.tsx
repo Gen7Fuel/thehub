@@ -98,13 +98,13 @@ function RouteComponent() {
         }
       }
 
-      const stationName = user?.site || 'Rankin';
+      const stationName = user?.location || 'Rankin';
 
       const poResponse = await authAxios(() =>
         axios.post(`${domain}/api/purchase-orders`, {
           source: 'PO',
           date,
-          name: stationName,
+          stationName,
           fleetCardNumber: fleetCardNumber || '', 
           poNumber: poNumber || '',
           quantity,

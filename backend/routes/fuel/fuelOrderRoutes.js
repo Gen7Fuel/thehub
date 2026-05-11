@@ -115,7 +115,7 @@ async function processUpcomingOrderNotifications() {
       $lte: latestUTC
     }
   })
-    .populate('site')
+    .populate('station')
     .populate('rack')
     .populate('carrier')
     .populate('supplier');
@@ -128,9 +128,9 @@ async function processUpcomingOrderNotifications() {
 
   const orders = allOrders.filter(order => {
 
-    if (!order.site?.timezone) return false;
+    if (!order.station?.timezone) return false;
 
-    const stationTZ = order.site.timezone;
+    const stationTZ = order.station.timezone;
 
     const localDate = moment(order.estimatedDeliveryDate)
       .tz(stationTZ)
@@ -149,15 +149,15 @@ async function processUpcomingOrderNotifications() {
 
   for (const order of orders) {
 
-    if (!order.site) continue;
+    if (!order.station) continue;
 
-    const stationTZ = order.site.timezone;
+    const stationTZ = order.station.timezone;
 
     const deliveryDate = moment(order.estimatedDeliveryDate)
       .tz(stationTZ)
       .format('YYYY-MM-DD');
 
-    const stationName = order.site.name;
+    const stationName = order.station.stationName;
 
     if (!grouped[deliveryDate]) {
       grouped[deliveryDate] = {};
@@ -244,11 +244,11 @@ async function processUpcomingOrderNotifications() {
 
   // B. BC-Only Group
   const bcGrouped = {};
-  const bcOrders = orders.filter(o => o.site?.province === 'British Columbia');
+  const bcOrders = orders.filter(o => o.station?.province === 'British Columbia');
 
   for (const order of bcOrders) {
-    const deliveryDate = moment(order.estimatedDeliveryDate).tz(order.site.timezone).format('YYYY-MM-DD');
-    const stationName = order.site.name;
+    const deliveryDate = moment(order.estimatedDeliveryDate).tz(order.station.timezone).format('YYYY-MM-DD');
+    const stationName = order.station.stationName;
     if (!bcGrouped[deliveryDate]) bcGrouped[deliveryDate] = {};
     if (!bcGrouped[deliveryDate][stationName]) bcGrouped[deliveryDate][stationName] = [];
     bcGrouped[deliveryDate][stationName].push(order);
@@ -299,14 +299,14 @@ router.get('/workspace-orders', async (req, res) => {
     const end = moment.tz(date, tz).endOf('day').toDate();
 
     const orders = await FuelOrder.find({
-      site: stationId,
+      station: stationId,
       $or: [
         { estimatedDeliveryDate: { $gte: start, $lte: end } },
         { originalDeliveryDate: { $gte: start, $lte: end } }
       ]
     })
       .populate('carrier supplier rack')
-      .populate('site', 'name timezone fuelStationNumber fuelCustomerName address')
+      .populate('station', 'stationName timezone fuelStationNumber fuelCustomerName address')
       .lean();
 
     res.json(orders);
@@ -454,7 +454,7 @@ router.post('/', async (req, res) => {
       // Build the HTML snippet for this specific station order
       const stationHtml = `
         <p style="margin-left: 20px;">
-          <b>${station.name}</b><br>
+          <b>${station.stationName}</b><br>
           ${gradeSummary}<br>
           <span style="color: red; font-weight: bold;">${orderData.poNumber}</span><br>
           ${formatEmailTime(startTime, endTime)}
@@ -703,7 +703,7 @@ router.put('/:id', async (req, res) => {
 
     // Existing Date Logic...
     if (estimatedDeliveryDate) {
-      const station = await Location.findById(order.site).lean();
+      const station = await Location.findById(order.station).lean();
       const tz = station?.timezone || 'America/Toronto';
       order.estimatedDeliveryDate = moment.tz(estimatedDeliveryDate, tz).startOf('day').toDate();
     }
@@ -738,7 +738,7 @@ router.put('/:id', async (req, res) => {
 
 //     if (estimatedDeliveryDate) {
 //       // Fetch the location to get the station's timezone
-//       const station = await Location.findById(order.site).lean();
+//       const station = await Location.findById(order.station).lean();
 //       const tz = station?.timezone || 'America/Toronto';
 
 //       // Force the date to be the START of the day in that timezone, then save

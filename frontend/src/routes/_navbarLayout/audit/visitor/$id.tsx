@@ -121,7 +121,7 @@ function RouteComponent() {
   // Temporary patch for location picker getting state from ther parent
   // const { stationName } = useContext(RouteContextVisitor);
   const { user } = useAuth();
-  const { site } = Route.useSearch() || user?.site;
+  const { site } = Route.useSearch() || user?.location;
   const navigate = useNavigate({ from: Route.fullPath });
 
   // const site = localStorage.getItem("location") || ""; //Original file
@@ -228,7 +228,7 @@ function RouteComponent() {
 
     const controller = new AbortController();
 
-    fetch(`/api/locations?name=${encodeURIComponent(site)}`, {
+    fetch(`/api/locations?stationName=${encodeURIComponent(site)}`, {
       signal: controller.signal,
     })
       .then(async (res) => {

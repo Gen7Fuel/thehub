@@ -22,7 +22,7 @@ router.post('/:site', async (req, res) => {
     // Fetch the location ID using the stationName
     let response;
     try {
-      const url = `http://localhost:5000/api/locations?name=${encodeURIComponent(stationName)}`;
+      const url = `http://localhost:5000/api/locations?stationName=${encodeURIComponent(stationName)}`;
       console.log('Generated URL:', url); // Log the generated URL
       response = await axios.get(url);
     } catch (error) {
@@ -42,7 +42,7 @@ router.post('/:site', async (req, res) => {
     // Create the PayPoint entry
     const payPoint = new PayPoint({
       label: name,
-      site: location._id,
+      location: location._id,
     });
 
     await payPoint.save();
@@ -68,7 +68,7 @@ router.get('/:site', async (req, res) => {
     // Fetch the location ID using the stationName
     let response;
     try {
-      const url = `http://localhost:5000/api/locations?name=${encodeURIComponent(stationName)}`;
+      const url = `http://localhost:5000/api/locations?stationName=${encodeURIComponent(stationName)}`;
       console.log('Generated URL:', url); // Log the generated URL
       response = await axios.get(url);
     } catch (error) {
@@ -86,7 +86,7 @@ router.get('/:site', async (req, res) => {
     }
 
     // // Fetch PayPoints for the specific location
-    const payPoints = await PayPoint.find({ site: location._id }).populate('site', 'name');
+    const payPoints = await PayPoint.find({ location: location._id }).populate('location', 'stationName');
     res.status(200).json(payPoints);
   } catch (error) {
     console.error('Error fetching PayPoints:', error);

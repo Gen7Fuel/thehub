@@ -16,7 +16,7 @@ const escapeHtml = (s = '') =>
 // GET /api/events?site=... — list upcoming events for a site
 router.get('/', async (req, res) => {
   try {
-    const site = (req.query.site || req.user?.site || '').trim();
+    const site = (req.query.site || req.user?.stationName || '').trim();
     if (!site) {
       return res.status(400).json({ success: false, message: 'Site is required.' });
     }
@@ -47,7 +47,7 @@ router.post('/', async (req, res) => {
       return res.status(400).json({ success: false, message: 'Date (YYYY-MM-DD) is required.' });
     }
 
-    const site = (req.user?.site || '').trim();
+    const site = (req.user?.stationName || '').trim();
     if (!site) {
       return res.status(400).json({ success: false, message: 'User has no associated site.' });
     }

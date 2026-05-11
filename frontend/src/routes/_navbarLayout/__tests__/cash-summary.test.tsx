@@ -8,7 +8,7 @@ const { mockNavigate, mockUseLoaderData, mockUseSearch, mockUseAuth } = vi.hoist
   const mockUseAuth = vi.fn().mockReturnValue({
     user: {
       id: 'user-1',
-      site: 'Rankin',
+      location: 'Rankin',
       access: {
         accounting: {
           cashSummary: {
@@ -162,7 +162,7 @@ describe('Cash Summary Form — form.tsx', () => {
     global.fetch = makeOkFetch({})
     mockUseLoaderData.mockReturnValue({ existing: null, accessDenied: false })
     mockUseSearch.mockReturnValue({ site: 'Rankin', id: undefined })
-    mockUseAuth.mockReturnValue({ user: { id: 'user-1', site: 'Rankin', access: {} } })
+    mockUseAuth.mockReturnValue({ user: { id: 'user-1', location: 'Rankin', access: {} } })
   })
 
   it('renders the SitePicker', async () => {
@@ -329,7 +329,7 @@ describe('Cash Summary Report — report.tsx', () => {
     mockUseSearch.mockReturnValue({ site: 'Rankin', date: '2026-03-10' })
     mockUseLoaderData.mockReturnValue({ report: null, error: null, accessDenied: false })
     mockUseAuth.mockReturnValue({
-      user: { id: 'user-1', site: 'Rankin', access: { accounting: { cashSummary: { report: { value: true } } } } },
+      user: { id: 'user-1', location: 'Rankin', access: { accounting: { cashSummary: { report: { value: true } } } } },
     })
   })
 
