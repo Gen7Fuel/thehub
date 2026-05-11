@@ -32,10 +32,10 @@ const StatusSaleSchema = new mongoose.Schema(
       required: true, // Total in CAD
       min: 0, // Ensures non-negative values
     },
-    stationName: {
+    site: {
       type: String,
       required: true,
-      trim: true, // Removes extra spaces from the station name
+      trim: true,
     },
     notes: {
       type: String,

@@ -7,11 +7,11 @@ const connectDB = require('../config/db');
 async function syncUnitPrices() {
   console.log('--- Starting Unit Price Sync ---');
 
-  // 1. Create a Map of stationName -> csoCode
-  const locations = await Location.find({}, 'stationName csoCode').lean();
+  // 1. Create a Map of name -> csoCode
+  const locations = await Location.find({}, 'name csoCode').lean();
   const siteMap = {};
   locations.forEach(loc => {
-    siteMap[loc.stationName] = loc.csoCode;
+    siteMap[loc.name] = loc.csoCode;
   });
 
   // 2. Get all unique sites in CycleCount to process them group by group

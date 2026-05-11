@@ -53,7 +53,7 @@ router.post("/upload", async (req, res) => {
       const newOrder = new Transaction({
         source: "Kardpoll",
         date: dateTime,
-        stationName: locationRecord.stationName,
+        site: locationRecord.name,
         fleetCardNumber,
         quantity,
         amount,
@@ -75,20 +75,20 @@ router.post("/upload", async (req, res) => {
 
 // Get all transactions with optional date and location filters
 router.get("/", async (req, res) => {
-  const { startDate, endDate, stationName } = req.query;
+  const { startDate, endDate, site } = req.query;
   const filter = { source: "Kardpoll" };
 
   if (startDate && endDate) {
     const start = new Date(startDate);
     const end = new Date(endDate);
-    end.setDate(end.getDate() + 1); // Set end date to the next day to include the entire end date
+    end.setDate(end.getDate() + 1);
     filter.date = { $gte: start, $lt: end };
   }
 
-  if (stationName) {
-    const locationRecord = await Location.findOne({ stationName: stationName });
+  if (site) {
+    const locationRecord = await Location.findOne({ name: site });
     if (locationRecord) {
-      filter.stationName = locationRecord.stationName;
+      filter.site = locationRecord.name;
     } else {
       return res.status(404).json({ message: "Location not found" });
     }
@@ -139,8 +139,8 @@ router.get("/", async (req, res) => {
 // WE NEED THIS FOR SALES SUMMARY REPORT
 // Get all transactions with optional date and location filters
 router.get("/all", async (req, res) => {
-  const { startDate, endDate, stationName } = req.query;
-  const filter = { stationName };
+  const { startDate, endDate, site } = req.query;
+  const filter = { site };
 
   if (startDate && endDate) {
     const start = new Date(startDate);

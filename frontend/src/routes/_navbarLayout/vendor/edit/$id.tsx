@@ -423,7 +423,7 @@ function RouteComponent() {
         const res = await fetch("/api/locations", { headers: { Authorization: `Bearer ${token}` } });
         if (!res.ok) throw new Error("Failed to fetch sites");
         const data = await res.json();
-        setAllSites(data.map((s: any) => s.stationName));
+        setAllSites(data.map((s: any) => s.name));
       } catch (err) { console.error(err); }
     };
     fetchSites();

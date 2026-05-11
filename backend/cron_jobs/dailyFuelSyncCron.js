@@ -30,7 +30,7 @@ const runSmartSync = async (targetStationId = null, retryAttempt = 1) => {
       const yesterdayDate = new Date(yesterdayStr + 'T00:00:00.000Z');
       const todayDate = new Date(todayStr + 'T00:00:00.000Z');
 
-      console.log(`\n📍 [${loc.stationName}] Local Time: ${stationNow.format('HH:mm')} | Processing: ${yesterdayStr}`);
+      console.log(`\n📍 [${loc.name}] Local Time: ${stationNow.format('HH:mm')} | Processing: ${yesterdayStr}`);
 
       // --- STEP 1: SALES SYNC ---
       if (loc.csoCode) {
@@ -151,7 +151,7 @@ const runSmartSync = async (targetStationId = null, retryAttempt = 1) => {
       }
 
     } catch (err) {
-      console.error(`   ❌ [ERROR] ${loc.stationName}:`, err.message);
+      console.error(`   ❌ [ERROR] ${loc.name}:`, err.message);
     }
   }
 };
@@ -172,17 +172,17 @@ cron.schedule('10 22,23,0,1,2,3,4,5,6,7,8 * * *', async () => {
 
     // Primary Sync (12:10 AM)
     if (hour === 0) {
-      console.log(`🚀 Primary Sync window for ${loc.stationName}`);
+      console.log(`🚀 Primary Sync window for ${loc.name}`);
       runSmartSync(loc._id, 1);
     }
     // First Retry (02:10 AM)
     else if (hour === 2) {
-      console.log(`🔄 Retry 1 window for ${loc.stationName}`);
+      console.log(`🔄 Retry 1 window for ${loc.name}`);
       runSmartSync(loc._id, 2);
     }
     // Final Retry (04:10 AM)
     else if (hour === 4) {
-      console.log(`🔄 Final Retry window for ${loc.stationName}`);
+      console.log(`🔄 Final Retry window for ${loc.name}`);
       runSmartSync(loc._id, 3);
 
       // --- NEW PURGE LOGIC ---

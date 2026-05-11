@@ -256,7 +256,7 @@ router.post('/', async (req, res) => {
     //     // else no email to category team and manager email if both then 2 links if one the one link
     //     // --------------------------------
 
-    //     const location = await Location.findOne({ stationName: site });
+    //     const location = await Location.findOne({ name: site });
     //     const storeEmail = location?.email;
 
     //     if (!storeEmail) {
@@ -305,7 +305,7 @@ router.post('/', async (req, res) => {
     //   }
     // });
     // 8. Fetch Location for Manager Emails
-    const location = await Location.findOne({ stationName: site });
+    const location = await Location.findOne({ name: site });
 
     // 🧩 Logic: Fallback to store email if manager list is empty
     let storeTo = "grayson@gen7fuel.com"; // Absolute fallback
@@ -503,7 +503,7 @@ router.patch('/:id/items/:itemId', async (req, res) => {
 //     // 2. Fetch Location for CSO (Only if not BT)
 //     let csoLink = null;
 //     if (!isBT) {
-//       const location = await Location.findOne({ stationName: list.site });
+//       const location = await Location.findOne({ name: list.site });
 //       const csoCode = location?.csoCode || '0';
 //       const dateObj = new Date(list.createdAt);
 //       const formattedDate = dateObj.toLocaleDateString('en-US', {
@@ -558,7 +558,7 @@ router.patch('/:id/finalize', async (req, res) => {
     // 2. Fetch Location for CSO Link (Only if not Bistro)
     let csoLink = "";
     if (!isBT) {
-      const location = await Location.findOne({ stationName: list.site });
+      const location = await Location.findOne({ name: list.site });
       const csoCode = location?.csoCode || '0';
       const dateObj = new Date(list.createdAt);
       const formattedDate = dateObj.toLocaleDateString('en-US', {

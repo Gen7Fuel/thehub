@@ -13,7 +13,7 @@ import { useSite } from "@/context/SiteContext"
 
 interface Location {
   _id: string
-  stationName: string
+  name: string
 }
 
 interface SitePickerProps {
@@ -75,14 +75,14 @@ export function SitePicker({
 
     // force-include user's own site
     const permittedSites = [
-      user.location,
+      user.site,
       ...Object.entries(siteAccess)
         .filter(([_, hasAccess]) => hasAccess)
         .map(([siteName]) => siteName),
     ].filter(Boolean)
 
     return locations.filter(loc =>
-      permittedSites.includes(loc.stationName)
+      permittedSites.includes(loc.name)
     )
   }, [locations, user])
 
@@ -116,8 +116,8 @@ export function SitePicker({
           <SelectLabel>{label}</SelectLabel>
           {filteredLocations.length > 0 ? (
             filteredLocations.map((location) => (
-              <SelectItem key={location._id} value={location.stationName}>
-                {location.stationName}
+              <SelectItem key={location._id} value={location.name}>
+                {location.name}
               </SelectItem>
             ))
           ) : (

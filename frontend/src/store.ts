@@ -55,8 +55,8 @@ type FormStore = {
     date: Date | undefined;
     setDate: (date: Date | undefined) => void;
 
-    stationName: string;
-    setStationName: (stationName: string) => void;
+    site: string;
+    setSite: (site: string) => void;
 
 
     resetPayableForm: () => void;
@@ -110,8 +110,8 @@ export const useFormStore = create<FormStore>((set) => ({
     setFleetCardNumber: (fleetCardNumber) => set({ fleetCardNumber }),
     poNumber: '',
     setPoNumber: (poNumber) => set({ poNumber }),
-    stationName: '',
-    setStationName: (stationName) => set({ stationName }),
+    site: '',
+    setSite: (site) => set({ site }),
     customerName: '',
     setCustomerName: (customerName) => set({ customerName }),
     driverName: '',
@@ -131,7 +131,7 @@ export const useFormStore = create<FormStore>((set) => ({
     resetForm: () => set({
         fleetCardNumber: '',
         poNumber: '',
-        stationName: '',
+        site: '',
         customerName: '',
         driverName: '',
         vehicleInfo: '',

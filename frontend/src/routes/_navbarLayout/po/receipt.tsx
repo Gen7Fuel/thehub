@@ -32,7 +32,7 @@ function RouteComponent() {
   const amount = useFormStore((state) => state.amount);
   const fuelType = useFormStore((state) => state.fuelType);
   const date = useFormStore((state) => state.date);
-  const stationName = useFormStore((state) => state.stationName);
+  const stationName = useFormStore((state) => state.site);
 
   useEffect(() => {
     if (!date || !customerName || !driverName || !vehicleInfo || !fuelType || quantity === 0 || amount === 0) {
@@ -129,7 +129,7 @@ function RouteComponent() {
         }
       }
 
-      // Use selected stationName from store, fallback to 'Rankin' if empty
+      // Use selected site from store, fallback to 'Rankin' if empty
       const selectedStation = stationName || "Rankin";
 
       // ---- Submit PO without signature ----
@@ -139,7 +139,7 @@ function RouteComponent() {
           {
             source: "PO",
             date,
-            stationName: selectedStation,
+            name: selectedStation,
             fleetCardNumber: fleetCardNumber || "",
             poNumber: poNumber || "",
             quantity,

@@ -73,10 +73,10 @@ function RouteComponent() {
   maxExpiry.setDate(today.getDate() + 20); // 20 days from now
 
   useEffect(() => {
-    if (!site && user?.location) {
-      navigate({ search: { site: user.location } });
+    if (!site && user?.site) {
+      navigate({ search: { site: user.site } });
     }
-  }, [site, user?.location]);
+  }, [site, user?.site]);
 
   useEffect(() => {
     const delay = setTimeout(async () => {

@@ -1324,7 +1324,7 @@ function RouteComponent() {
           isOpen={showPasswordDialog}
           onSuccess={handlePasswordSuccess}
           onCancel={handlePasswordCancel}
-          userLocation={user?.location || "Rankin"}
+          userLocation={user?.site || "Rankin"}
         />
       )}
 
@@ -1332,7 +1332,7 @@ function RouteComponent() {
         <div className="pt-5 flex flex-col items-center">
           {/* Filters */}
           <div className="flex gap-4">
-            <LocationPicker setStationName={setSite} value="stationName" defaultValue={site} />
+            <LocationPicker setStationName={setSite} value="name" defaultValue={site} />
             {/* <DatePickerWithRange date={date} setDate={setDate} /> */}
           </div>
 

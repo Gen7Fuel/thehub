@@ -20,7 +20,7 @@ router.post('/', async (req, res) => {
       return res.status(400).json({ success: false, message: 'Initial message is required.' });
     }
 
-    const site = (req.user?.stationName || '').trim();
+    const site = (req.user?.site || '').trim();
     if (!site) {
       return res.status(400).json({ success: false, message: 'User has no associated site.' });
     }

@@ -58,7 +58,7 @@ router.get('/daily-items', async (req, res) => {
     if (!site) return res.status(400).json({ message: "site is required" });
 
     // Get location object to determine the site's timezone
-    const location = await Location.findOne({ stationName: site.toString().trim() });
+    const location = await Location.findOne({ name: site.toString().trim() });
     const siteTimezone = location?.timezone || 'UTC';
 
     // Compare user timezone with site timezone

@@ -38,7 +38,7 @@ function RouteComponent() {
       amount,
       total,
       notes,
-      stationName: user?.location,
+      site: user?.site,
     };
 
     try {

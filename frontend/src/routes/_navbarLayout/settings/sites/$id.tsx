@@ -53,7 +53,7 @@ function RouteComponent() {
   const [location, setLocation] = useState<{
     _id: string;
     type: string;
-    stationName: string;
+    name: string;
     legalName: string;
     INDNumber: string;
     kardpollCode: string;
@@ -105,7 +105,7 @@ function RouteComponent() {
 
   interface LocationForm {
     type: string;
-    stationName: string;
+    name: string;
     legalName: string;
     INDNumber: string;
     kardpollCode?: string;
@@ -119,7 +119,7 @@ function RouteComponent() {
 
   const [formData, setFormData] = useState<LocationForm>({
     type: "",
-    stationName: "",
+    name: "",
     legalName: "",
     INDNumber: "",
     kardpollCode: "",
@@ -158,7 +158,7 @@ function RouteComponent() {
     if (location && timezones.length > 0) {
       setFormData({
         type: location.type || "",
-        stationName: location.stationName || "",
+        name: location.name || "",
         legalName: location.legalName || "",
         INDNumber: location.INDNumber || "",
         kardpollCode: location.kardpollCode || "",
@@ -189,7 +189,7 @@ function RouteComponent() {
         },
       });
 
-      alert(`Location: ${formData.stationName} has been updated successfully!`);
+      alert(`Location: ${formData.name} has been updated successfully!`);
       // No navigation — stay on the same page
     } catch (error) {
       console.error(error);
@@ -216,8 +216,8 @@ function RouteComponent() {
         setLocation(response.data.location || null);
 
         // 🧩 Check if safesheet already exists
-        if (response.data.location?.stationName) {
-          const site = response.data.location.stationName;
+        if (response.data.location?.name) {
+          const site = response.data.location.name;
           const sheetCheck = await axios.get(`/api/safesheets/${site}`, {
             headers: { Authorization: `Bearer ${token}` },
           });
@@ -243,7 +243,7 @@ function RouteComponent() {
       await axios.post(
         "/api/safesheets",
         {
-          site: location?.stationName,
+          site: location?.name,
           initialBalance: Number(initialBalance),
         },
         {
@@ -251,7 +251,7 @@ function RouteComponent() {
         }
       );
 
-      alert(`Safesheet created successfully for ${location?.stationName}`);
+      alert(`Safesheet created successfully for ${location?.name}`);
       setHasSafesheet(true);
       setShowDialog(false);
     } catch (err: any) {
@@ -276,10 +276,10 @@ function RouteComponent() {
       const allUsers = res.data;
       setUsers(allUsers);
 
-      // Populate initial selections based on stationName for the count (n)
-      if (location?.stationName) {
+      // Populate initial selections based on name for the count (n)
+      if (location?.name) {
         const currentlyAssigned = allUsers
-          .filter((u: any) => u.site_access && u.site_access[location.stationName])
+          .filter((u: any) => u.site_access && u.site_access[location.name])
           .map((u: any) => u._id);
         setSelectedUsers(currentlyAssigned);
       }
@@ -290,10 +290,10 @@ function RouteComponent() {
 
   // Trigger fetch on load or when location changes
   useEffect(() => {
-    if (location?.stationName) {
+    if (location?.name) {
       fetchUsersData();
     }
-  }, [location?.stationName]);
+  }, [location?.name]);
 
   // Open dialog and trigger fetch
   const openAssignUsersDialog = () => {
@@ -318,7 +318,7 @@ function RouteComponent() {
       const token = localStorage.getItem('token');
       await axios.post(`/api/locations/${id}/assign-users`, {
         userIds: selectedUsers,
-        stationName: location?.stationName
+        name: location?.name
       }, {
         headers: { Authorization: `Bearer ${token}` }
       });
@@ -393,7 +393,7 @@ function RouteComponent() {
 
             {/* TEXT INPUT FIELDS */}
             {[
-              { label: "Station Name", name: "stationName" },
+              { label: "Station Name", name: "name" },
               { label: "Legal Name", name: "legalName" },
               { label: "IND Number", name: "INDNumber" },
               { label: "Kardpoll Code", name: "kardpollCode" },
@@ -415,7 +415,7 @@ function RouteComponent() {
                       })
                     }
                     className="border border-gray-300 rounded-md px-3 py-2 w-full focus:ring-2 focus:ring-blue-500 focus:outline-none"
-                    required={["stationName", "legalName", "INDNumber", "csoCode", "email"].includes(field.name)}
+                    required={["name", "legalName", "INDNumber", "csoCode", "email"].includes(field.name)}
                   />
 
                   {/* 🧩 NEW: Add "Manage Managers" button specifically for the email field */}
@@ -528,7 +528,7 @@ function RouteComponent() {
       <Dialog open={assignDialogOpen} onOpenChange={setAssignDialogOpen}>
         <DialogContent className="max-w-3xl h-[80vh] flex flex-col">
           <DialogHeader>
-            <DialogTitle className="text-2xl">Manage Site Access: {location?.stationName}</DialogTitle>
+            <DialogTitle className="text-2xl">Manage Site Access: {location?.name}</DialogTitle>
           </DialogHeader>
 
           <div className="flex-1 overflow-y-auto mt-4 pr-2">
@@ -592,7 +592,7 @@ function RouteComponent() {
       <Dialog open={managerDialogOpen} onOpenChange={setManagerDialogOpen}>
         <DialogContent className="max-w-3xl h-[80vh] flex flex-col">
           <DialogHeader>
-            <DialogTitle className="text-2xl">Assign Manager Notifications: {location?.stationName}</DialogTitle>
+            <DialogTitle className="text-2xl">Assign Manager Notifications: {location?.name}</DialogTitle>
             <p className="text-sm text-muted-foreground">
               Selected users will receive manager-level alerts (Audits, Order Recs) in their personal Hub inbox.
             </p>

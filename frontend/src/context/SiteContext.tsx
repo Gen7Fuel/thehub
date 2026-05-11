@@ -12,10 +12,10 @@ export const SiteProvider = ({ children }: { children: React.ReactNode }) => {
   const { user } = useAuth()
   const [selectedSite, setSelectedSite] = useState<string>("")
 
-  // Seed from user.location once auth loads, but never overwrite a user's explicit pick
+  // Seed from user.site once auth loads, but never overwrite a user's explicit pick
   useEffect(() => {
     if (!selectedSite && user?.location) {
-      setSelectedSite(user.location)
+      setSelectedSite(user.site)
     }
   }, [user?.location])
 

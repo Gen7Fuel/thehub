@@ -15,6 +15,7 @@ export const RouteContext = createContext<{
   setStationName: () => { },
 });
 
+
 export const Route = createFileRoute('/_navbarLayout/audit/interface')({
   component: RouteComponent,
 })
@@ -46,7 +47,7 @@ function RouteComponent() {
 
   const { user } = useAuth();
   const { selectedSite } = useSite();
-  const [stationName, setStationName] = useState(selectedSite || user?.location || "");
+  const [stationName, setStationName] = useState(selectedSite || user?.site || "");
 
   // Keep stationName in sync when the global site changes from another module
   useEffect(() => {
@@ -127,7 +128,7 @@ function RouteComponent() {
           {/* ◼ Location Picker (left) */}
           <LocationPicker
             key={stationName}
-            value="stationName"
+            value="name"
             defaultValue={stationName}
             setStationName={(value) => {
               const newValue =

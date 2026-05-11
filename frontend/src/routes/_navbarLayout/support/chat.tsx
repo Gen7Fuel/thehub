@@ -175,7 +175,7 @@ function RouteComponent() {
           <CardContent className="space-y-4">
             <p className="text-sm text-muted-foreground">
               Describe your issue and we'll connect you with a support agent.
-              {user?.location && <> Site: <strong>{user.location}</strong></>}
+              {user?.site && <> Site: <strong>{user.site}</strong></>}
             </p>
             <Textarea
               value={initialMessage}

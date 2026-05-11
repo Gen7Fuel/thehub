@@ -22,7 +22,7 @@ function RouteComponent() {
   if (date)
     console.log('Selected date:', new Date(date.setHours(0, 0, 0, 0)).toISOString());
 
-  const [stationName, setStationName] = React.useState<string>(selectedSite || user?.location || '');
+  const [stationName, setStationName] = React.useState<string>(selectedSite || user?.site || '');
   const [statusSales, setStatusSales] = React.useState<
     {
       createdAt: string;
@@ -48,7 +48,7 @@ function RouteComponent() {
         params: {
           startDate: new Date(date.setHours(0, 0, 0, 0)).toISOString(),
           endDate: new Date(date.setHours(23, 59, 59, 999)).toISOString(),
-          stationName,
+          name: stationName,
         },
         headers: {
           Authorization: `Bearer ${localStorage.getItem('token')}`,
@@ -126,7 +126,7 @@ function RouteComponent() {
 
         <LocationPicker
           setStationName={setStationName}
-          value="stationName"
+          value="name"
           // {...(!access.component_po_location_filter ? { disabled: true } : {})}
         />
       </div>

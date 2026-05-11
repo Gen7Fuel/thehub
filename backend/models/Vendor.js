@@ -24,7 +24,7 @@ const VendorSchema = new mongoose.Schema({
     // enum: ['Cannabis', 'Vape', 'Convenience', 'Tobacco', 'Native Crafts', 'Other'], // Allowed categories
     // required: true
   },
-  location: { type: String, required: true }, // Associated station/location
+  site: { type: String, required: true },
   station_supplies: [StationSupplySchema],    // Supplies this vendor provides to stations
   email_order: { type: Boolean, default: false }, // Whether orders are placed by email
   email: { type: String },                        // Vendor's email address
@@ -40,7 +40,7 @@ const VendorSchema = new mongoose.Schema({
 }, { timestamps: true });                         // Adds createdAt and updatedAt fields
 
 VendorSchema.index(
-  { name: 1, location: 1 }, 
+  { name: 1, site: 1 },
   { unique: true }
 );
 // Create and export the Vendor model

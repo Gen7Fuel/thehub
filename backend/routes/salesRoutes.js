@@ -214,9 +214,9 @@ router.post('/refresh-dashboard-cache', async (req, res) => {
     const { site } = req.query;
 
     if (site) {
-      const location = await Location.findOne({ stationName: site }).lean();
+      const location = await Location.findOne({ name: site }).lean();
       if (!location) return res.status(404).json({ error: "Site not found" });
-      await refreshSiteCache(location.stationName, location.csoCode);
+      await refreshSiteCache(location.name, location.csoCode);
       return res.json({ message: `Cache refreshed for ${site}` });
     }
 

@@ -67,7 +67,7 @@ function RouteComponent() {
       <div className="mb-4 flex gap-4 flex-wrap">
         <div>
           <label className="block text-sm font-medium mb-1">Site</label>
-          <LocationPicker value='stationName' setStationName={setLocation} />
+          <LocationPicker value='name' setStationName={setLocation} />
         </div>
         {showAdvanced && (
           <>

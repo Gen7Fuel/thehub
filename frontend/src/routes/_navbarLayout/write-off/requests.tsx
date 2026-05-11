@@ -209,10 +209,10 @@ function RouteComponent() {
   }, [accessDenied, navigate]);
 
   useEffect(() => {
-    if (!site && user?.location) {
-      navigate({ search: (prev: any) => ({ ...prev, site: user.location }) });
+    if (!site && user?.site) {
+      navigate({ search: (prev: any) => ({ ...prev, site: user.site }) });
     }
-  }, [site, user?.location, navigate]);
+  }, [site, user?.site, navigate]);
 
   const sortedData = useMemo(() => {
     const statusPriority: Record<string, number> = { Incomplete: 0, Partial: 1, Complete: 2 };
