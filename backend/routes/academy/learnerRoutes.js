@@ -104,7 +104,10 @@ router.get('/course-progress/:courseId', async (req, res) => {
     if (!employeeCode) return res.status(400).json({ message: 'employeeCode is required' })
 
     const record = await CourseProgress.findOne({ employeeCode, courseId }).lean()
-    res.json({ currentPageIndex: record?.currentPageIndex ?? 0 })
+    res.json({
+      currentPageIndex: record?.currentPageIndex ?? 0,
+      completedPages: record?.completedPages ?? [],
+    })
   } catch (err) {
     res.status(500).json({ message: 'Failed to fetch course progress', error: err.message })
   }
@@ -112,17 +115,28 @@ router.get('/course-progress/:courseId', async (req, res) => {
 
 router.put('/course-progress', async (req, res) => {
   try {
-    const { employeeCode, courseId, currentPageIndex } = req.body
-    if (!employeeCode || !courseId || currentPageIndex == null) {
-      return res.status(400).json({ message: 'employeeCode, courseId, currentPageIndex are required' })
+    const { employeeCode, courseId, currentPageIndex, completedPageIndex } = req.body
+    if (!employeeCode || !courseId) {
+      return res.status(400).json({ message: 'employeeCode and courseId are required' })
+    }
+
+    const update = {}
+    if (currentPageIndex != null) {
+      update.$set = { currentPageIndex }
+    }
+    if (completedPageIndex != null) {
+      update.$addToSet = { completedPages: completedPageIndex }
+    }
+    if (Object.keys(update).length === 0) {
+      return res.status(400).json({ message: 'Nothing to update' })
     }
 
     const record = await CourseProgress.findOneAndUpdate(
       { employeeCode, courseId },
-      { $set: { currentPageIndex } },
+      update,
       { upsert: true, new: true },
     )
-    res.json({ currentPageIndex: record.currentPageIndex })
+    res.json({ currentPageIndex: record.currentPageIndex, completedPages: record.completedPages })
   } catch (err) {
     res.status(500).json({ message: 'Failed to save course progress', error: err.message })
   }
