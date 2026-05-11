@@ -23,7 +23,7 @@ interface Payable {
   vendorName: string
   location: {
     _id: string
-    name: string
+    stationName: string
     csoCode: string
   }
   notes: string
@@ -49,7 +49,7 @@ function RouteComponent() {
   const { selectedSite } = useSite()
   const access = user?.access || {}
   const navigate = useNavigate()
-  const [location, setLocation] = useState<string>(selectedSite || user?.site || "")
+  const [location, setLocation] = useState<string>(selectedSite || user?.location || "")
   const [_, setTimezone] = useState<string>(user?.timezone || "America/Toronto")
   const [payables, setPayables] = useState<Payable[]>([])
   const [loading, setLoading] = useState(false)
@@ -201,7 +201,7 @@ function RouteComponent() {
         }
       })
       const locations = locationsResponse.data
-      const selectedLocation = locations.find((loc: any) => loc.name === location)
+      const selectedLocation = locations.find((loc: any) => loc.stationName === location)
 
       if (!selectedLocation) {
         console.error('Location not found:', location)
@@ -346,7 +346,7 @@ function RouteComponent() {
         <LocationPicker
           setStationName={setLocation}
           setTimezone={setTimezone}
-          value="name"
+          value="stationName"
           // disabled={!access.component_payables_list_location_filter}
         />
       </div>

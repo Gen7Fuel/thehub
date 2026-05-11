@@ -880,7 +880,7 @@ router.post('/instance', async (req, res) => {
 
                   if (match.text === "Station Manager") {
                     // 🧩 NEW: Fetch Location to get the managerEmails array
-                    const location = await Location.findOne({ name: site });
+                    const location = await Location.findOne({ stationName: site });
 
                     if (location?.managerEmails && location.managerEmails.length > 0) {
                       // Add all manager emails to the list

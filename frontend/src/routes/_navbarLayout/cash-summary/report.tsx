@@ -314,7 +314,7 @@ function RouteComponent() {
       const locResp = await fetch('/api/locations', { headers: token ? { Authorization: `Bearer ${token}` } : {} })
       if (locResp.ok) {
         const locs = await locResp.json()
-        const found = Array.isArray(locs) ? locs.find((l: any) => l.name === site) : null
+        const found = Array.isArray(locs) ? locs.find((l: any) => l.stationName === site) : null
         if (found && found.sellsLottery) {
           console.log('[CashSummary] onSubmitClick site sellsLottery; lottery present?', !!lottery)
           // lottery state was loaded earlier; if missing, block submit

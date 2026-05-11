@@ -628,7 +628,7 @@ export default function RouteComponent() {
           isOpen={showPasswordDialog}
           onSuccess={handlePasswordSuccess}
           onCancel={handlePasswordCancel}
-          userLocation={user?.site || "Rankin"}
+          userLocation={user?.location || "Rankin"}
         />
       )}
 

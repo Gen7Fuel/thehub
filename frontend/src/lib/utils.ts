@@ -383,7 +383,7 @@ export const getOrderRecStatusColor = (status?: string) => {
 interface User {
   id?: string;
   email?: string;
-  site?: string;
+  location?: string;
   initials?: string;
   name?: string;
   timezone?: string;

@@ -21,10 +21,10 @@ function hasEffectiveAccess(user, role, permId) {
 // GET all payables
 router.get('/', async (req, res) => {
   try {
-    const { site, from, to } = req.query;
+    const { location, from, to } = req.query;
 
     const filter = {};
-    if (site) filter.site = site;
+    if (location) filter.location = location;
 
     if (from && to) {
       filter.date = {
@@ -33,8 +33,9 @@ router.get('/', async (req, res) => {
       }
     }
 
+    
     const payables = await Payable.find(filter)
-      .populate('site', 'name csoCode')
+      .populate('location', 'stationName csoCode')
       .sort({ createdAt: -1 });
     
     res.json(payables);
@@ -47,7 +48,7 @@ router.get('/', async (req, res) => {
 router.get('/:id', async (req, res) => {
   try {
     const payable = await Payable.findById(req.params.id)
-      .populate('site', 'name csoCode timezone');
+      .populate('location', 'stationName csoCode timezone');
     
     if (!payable) {
       return res.status(404).json({ error: 'Payable not found' });
@@ -62,12 +63,12 @@ router.get('/:id', async (req, res) => {
 // POST create new payable
 router.post('/', async (req, res) => {
   try {
-    const { vendorName, site, notes, paymentMethod, amount, images, date } = req.body;
-
+    const { vendorName, location, notes, paymentMethod, amount, images, date } = req.body;
+    
     // Validation
-    if (!vendorName || !site || !paymentMethod || amount === undefined) {
-      return res.status(400).json({
-        error: 'Missing required fields: vendorName, site, paymentMethod, amount'
+    if (!vendorName || !location || !paymentMethod || amount === undefined) {
+      return res.status(400).json({ 
+        error: 'Missing required fields: vendorName, location, paymentMethod, amount' 
       });
     }
     
@@ -81,7 +82,7 @@ router.post('/', async (req, res) => {
 
     const payable = new Payable({
       vendorName,
-      site,
+      location,
       notes,
       paymentMethod,
       amount,
@@ -93,11 +94,11 @@ router.post('/', async (req, res) => {
     const savedPayable = await payable.save();
 
     const populatedPayable = await Payable.findById(savedPayable._id)
-      .populate('site', 'name csoCode');
-
+      .populate('location', 'stationName csoCode');
+    
     if (paymentMethod == 'safe') {
       try {
-        const siteName = populatedPayable?.site?.name
+        const siteName = populatedPayable?.location?.stationName
         if (siteName) {
           // derive local YYYY-MM-DD from createdAt
           const created = new Date(populatedPayable.createdAt)
@@ -120,7 +121,7 @@ router.post('/', async (req, res) => {
           console.log('Entering into safesheet');
           await sheet.save()
         } else {
-          console.warn('Safesheet entry skipped: missing name on payable.site')
+          console.warn('Safesheet entry skipped: missing stationName on payable.location')
         }
       } catch (e) {
         console.warn('Safesheet payable entry failed:', e?.message || e)
@@ -140,7 +141,7 @@ router.post('/', async (req, res) => {
           vendorName: populatedPayable.vendorName,
           amount: populatedPayable.amount,
           paymentMethod: populatedPayable.paymentMethod,
-          site: populatedPayable.site?._id?.toString() || populatedPayable.site?.toString(),
+          location: populatedPayable.location?._id?.toString() || populatedPayable.location?.toString(),
         },
       });
     } catch (e) {
@@ -161,7 +162,7 @@ router.post('/', async (req, res) => {
 // PUT update payable
 router.put('/:id', async (req, res) => {
   try {
-    const { vendorName, site, notes, paymentMethod, amount, images, createdAt, date: dateField, requestInvoice } = req.body;
+    const { vendorName, location, notes, paymentMethod, amount, images, createdAt, date: dateField, requestInvoice } = req.body;
 
     // Validation
     if (amount !== undefined && amount < 0) {
@@ -181,7 +182,7 @@ router.put('/:id', async (req, res) => {
 
     const updateData = {};
     if (vendorName !== undefined) updateData.vendorName = vendorName;
-    if (site !== undefined) updateData.site = site;
+    if (location !== undefined) updateData.location = location;
     if (notes !== undefined) updateData.notes = notes;
     if (paymentMethod !== undefined) updateData.paymentMethod = paymentMethod;
     if (amount !== undefined) updateData.amount = amount;
@@ -213,7 +214,7 @@ router.put('/:id', async (req, res) => {
       req.params.id,
       updateData,
       updateOptions
-    ).populate('site', 'name csoCode email');
+    ).populate('location', 'stationName csoCode email');
 
     console.log('[PUT /payables/:id] after.createdAt:', payable?.createdAt);
     
@@ -233,19 +234,19 @@ router.put('/:id', async (req, res) => {
           vendorName: before.vendorName,
           amount: before.amount,
           paymentMethod: before.paymentMethod,
-          site: before.site?.toString(),
+          location: before.location?.toString(),
         } : undefined,
         after: {
           vendorName: payable.vendorName,
           amount: payable.amount,
           paymentMethod: payable.paymentMethod,
-          site: payable.site?._id?.toString() || payable.site?.toString(),
+          location: payable.location?._id?.toString() || payable.location?.toString(),
         },
       });
     } catch (e) {}
 
     if (requestInvoice === true) {
-      const loc = payable.site
+      const loc = payable.location
       const locationEmail = loc?.email
       if (locationEmail) {
         const redirectUrl = `https://app.gen7fuel.com/payables/list`
@@ -254,9 +255,9 @@ router.put('/:id', async (req, res) => {
           recipientEmails: [locationEmail],
           bccEmails: ['mohammad@gen7fuel.com'],
           slug: 'payable-invoice-requested',
-          subject: `📄 Invoice Required – ${loc.name} – ${payable.vendorName}`,
+          subject: `📄 Invoice Required – ${loc.stationName} – ${payable.vendorName}`,
           fieldValues: {
-            site: loc.name,
+            site: loc.stationName,
             vendorName: payable.vendorName,
             paymentMethod: payable.paymentMethod,
             amount: (payable.amount || 0).toFixed(2),
@@ -300,7 +301,7 @@ router.delete('/:id', async (req, res) => {
           vendorName: payable.vendorName,
           amount: payable.amount,
           paymentMethod: payable.paymentMethod,
-          site: payable.site?.toString(),
+          location: payable.location?.toString(),
         },
       });
     } catch (e) {}
@@ -315,10 +316,10 @@ router.delete('/:id', async (req, res) => {
 // GET summary statistics
 router.get('/stats/summary', async (req, res) => {
   try {
-    const { site, date } = req.query;
-
+    const { location, date } = req.query;
+    
     const matchFilter = {};
-    if (site) matchFilter.site = new mongoose.Types.ObjectId(site);
+    if (location) matchFilter.location = new mongoose.Types.ObjectId(location);
     
     if (date) {
       const startOfDay = new Date(date);

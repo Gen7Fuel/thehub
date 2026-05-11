@@ -33,7 +33,7 @@ const {
   const mockUseAuth = vi.fn().mockReturnValue({
     user: {
       id: 'user-1',
-      site: 'Rankin',
+      location: 'Rankin',
       timezone: 'America/Toronto',
     },
   })
@@ -248,7 +248,7 @@ describe('Payable List — list.tsx', () => {
     {
       _id: 'pay-1',
       vendorName: 'Shell Canada',
-      location: { _id: 'loc-1', name: 'Rankin', csoCode: 'RNK' },
+      location: { _id: 'loc-1', stationName: 'Rankin', csoCode: 'RNK' },
       paymentMethod: 'safe',
       amount: 150,
       images: [],
@@ -264,11 +264,11 @@ describe('Payable List — list.tsx', () => {
     URL.createObjectURL = vi.fn(() => 'blob:mock-url')
     window.open = vi.fn()
     mockUseAuth.mockReturnValue({
-      user: { id: 'u1', site: 'Rankin', timezone: 'America/Toronto' },
+      user: { id: 'u1', location: 'Rankin', timezone: 'America/Toronto' },
     })
     // First call: locations lookup, second call: payables fetch
     mockAxiosGet
-      .mockResolvedValueOnce({ data: [{ _id: 'loc-1', name: 'Rankin' }] })
+      .mockResolvedValueOnce({ data: [{ _id: 'loc-1', stationName: 'Rankin' }] })
       .mockResolvedValueOnce({ data: samplePayables })
   })
 
@@ -290,7 +290,7 @@ describe('Payable List — list.tsx', () => {
   it('shows "No payables found" when the response is empty', async () => {
     mockAxiosGet
       .mockReset()
-      .mockResolvedValueOnce({ data: [{ _id: 'loc-1', name: 'Rankin' }] })
+      .mockResolvedValueOnce({ data: [{ _id: 'loc-1', stationName: 'Rankin' }] })
       .mockResolvedValueOnce({ data: [] })
 
     renderWithSuspense(<PayableList />)
@@ -396,7 +396,7 @@ describe('Payable Review — review.tsx', () => {
     vi.clearAllMocks()
     localStorage.setItem('token', 'test-token')
     mockAxiosGet.mockResolvedValue({
-      data: [{ _id: 'loc-1', name: 'Rankin' }],
+      data: [{ _id: 'loc-1', stationName: 'Rankin' }],
     })
     mockAxiosPost.mockResolvedValue({ status: 201, data: { _id: 'pay-new' } })
   })
@@ -457,7 +457,7 @@ describe('Payable Review — review.tsx', () => {
 
   it('shows "Submitting..." while the request is in flight', async () => {
     // Never resolve so the component stays in submitting state
-    mockAxiosGet.mockResolvedValue({ data: [{ _id: 'loc-1', name: 'Rankin' }] })
+    mockAxiosGet.mockResolvedValue({ data: [{ _id: 'loc-1', stationName: 'Rankin' }] })
     mockAxiosPost.mockReturnValue(new Promise(() => {}))
 
     renderWithSuspense(<PayableReview />)

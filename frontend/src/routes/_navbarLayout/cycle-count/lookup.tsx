@@ -12,7 +12,7 @@ function RouteComponent() {
   const [upc, setUpc] = useState("");
   const { user } = useAuth()
   const { selectedSite } = useSite()
-  const [site, setSite] = useState(selectedSite || user?.site || "");
+  const [site, setSite] = useState(selectedSite || user?.location || "");
   const [result, setResult] = useState<any>(null);
   const [loading, setLoading] = useState(false);
 
@@ -63,7 +63,7 @@ function RouteComponent() {
         />
         <LocationPicker
           setStationName={setSite}
-          value="name"
+          value="stationName"
           defaultValue={site}
         />
         <button

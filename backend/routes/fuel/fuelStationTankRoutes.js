@@ -989,7 +989,7 @@ router.get('/sync-all-volumes', async (req, res) => {
 
       return {
         ...updatedDoc.toObject(),
-        name: updatedDoc.stationId?.name || "Unknown"
+        stationName: updatedDoc.stationId?.stationName || "Unknown"
       };
     });
 

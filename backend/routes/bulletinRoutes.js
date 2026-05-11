@@ -5,7 +5,7 @@ const BulletinPost = require('../models/BulletinPost');
 // GET /api/bulletin?site=... — list posts for a site
 router.get('/', async (req, res) => {
   try {
-    const site = (req.query.site || req.user?.site || '').trim();
+    const site = (req.query.site || req.user?.stationName || '').trim();
     if (!site) {
       return res.status(400).json({ success: false, message: 'Site is required.' });
     }
@@ -26,7 +26,7 @@ router.post('/', async (req, res) => {
       return res.status(400).json({ success: false, message: 'Post text is required.' });
     }
 
-    const site = (req.user?.site || '').trim();
+    const site = (req.user?.stationName || '').trim();
     if (!site) {
       return res.status(400).json({ success: false, message: 'User has no associated site.' });
     }

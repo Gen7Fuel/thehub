@@ -102,7 +102,7 @@ const styles = StyleSheet.create({
 interface PayablePDFProps {
   payable: {
     vendorName: string
-    location?: { name?: string }
+    location?: { stationName?: string }
     paymentMethod: string
     amount: number
     notes: string
@@ -129,7 +129,7 @@ export default function PayablePDF({ payable, imageDataUris }: PayablePDFProps) 
           </View>
           <View style={styles.row}>
             <Text style={styles.cellLabel}>Location</Text>
-            <Text style={styles.cellValue}>{payable.location?.name || '-'}</Text>
+            <Text style={styles.cellValue}>{payable.location?.stationName || '-'}</Text>
           </View>
           <View style={styles.row}>
             <Text style={styles.cellLabel}>Payment Method</Text>

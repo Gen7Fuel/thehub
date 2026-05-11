@@ -86,10 +86,10 @@ function RouteComponent() {
 
 
   useEffect(() => {
-    if (!site && user?.site) {
-      navigate({ search: { site: user.site, category: '' } });
+    if (!site && user?.location) {
+      navigate({ search: { site: user.location, category: '' } });
     }
-  }, [site, user?.site, category, navigate]);
+  }, [site, user?.location, category, navigate]);
 
   // const access = user?.access || {}
 
@@ -206,7 +206,7 @@ function RouteComponent() {
         isOpen={showPasswordDialog}
         onSuccess={handlePasswordSuccess}
         onCancel={handlePasswordCancel}
-        userLocation={user?.site || "Rankin"}
+        userLocation={user?.location || "Rankin"}
       />
     )
   }

@@ -74,7 +74,7 @@
 //           <h2 className="text-lg font-bold">Location</h2>
 //           <LocationPicker
 //             setStationName={setPayableLocation as React.Dispatch<React.SetStateAction<string>>}
-//             value="name"
+//             value="stationName"
 //             defaultValue={user?.location}
 //           // disabled={!access.component_payables_create_location_filter}
 //           />
@@ -193,9 +193,9 @@ function RouteComponent() {
   const setPayableImages = useFormStore((state) => state.setPayableImages)
 
   useEffect(() => {
-    const site = selectedSite || user?.site
+    const site = selectedSite || user?.location
     if (site) setPayableLocation(site)
-  }, [selectedSite, user?.site, setPayableLocation]);
+  }, [selectedSite, user?.location, setPayableLocation]);
 
   const handleCapture = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]
@@ -251,7 +251,7 @@ function RouteComponent() {
           <h2 className="text-lg font-bold">Location</h2>
           <LocationPicker
             setStationName={setPayableLocation as React.Dispatch<React.SetStateAction<string>>}
-            value="name"
+            value="stationName"
           />
         </div>
 

@@ -137,10 +137,10 @@ async function refreshAllSitesCache() {
 
   for (const loc of locations) {
     try {
-      await refreshSiteCache(loc.name, loc.csoCode);
-      console.log(`  ✅ ${loc.name} cached`);
+      await refreshSiteCache(loc.stationName, loc.csoCode);
+      console.log(`  ✅ ${loc.stationName} cached`);
     } catch (err) {
-      console.error(`  ❌ ${loc.name} failed:`, err.message);
+      console.error(`  ❌ ${loc.stationName} failed:`, err.message);
     }
   }
 

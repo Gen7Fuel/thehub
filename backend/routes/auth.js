@@ -86,7 +86,7 @@ router.post("/identify", async (req, res) => {
 //   }
 // });
 router.post("/register", async (req, res) => {
-  const { email, password, firstName, lastName, site } = req.body;
+  const { email, password, firstName, lastName, stationName } = req.body;
 
   try {
     const inputEmail = String(email || '').trim();
@@ -103,7 +103,7 @@ router.post("/register", async (req, res) => {
     // Build site_access map: all stores false except user's own
     const site_access = {};
     storeLocations.forEach((loc) => {
-      site_access[loc.name] = loc.name === site;
+      site_access[loc.stationName] = loc.stationName === stationName;
     });
 
     // Create the user (store email in lowercase)
@@ -112,11 +112,11 @@ router.post("/register", async (req, res) => {
       password,
       firstName,
       lastName,
-      site,
+      stationName,
       site_access,
-      custom_permissions: [],
-      role: null,
-      is_active: true,
+      custom_permissions: [], // empty by default
+      role: null,             // no role assigned yet
+      is_active: true,        // active by default
     });
 
     res.status(201).json({
@@ -202,8 +202,8 @@ router.post("/login", async (req, res) => {
 
     // Fetch location & timezone
     let timezone = null;
-    if (user.site) {
-      const location = await Location.findOne({ name: user.site });
+    if (user.stationName) {
+      const location = await Location.findOne({ stationName: user.stationName });
       timezone = location?.timezone || null;
     }
 
@@ -211,7 +211,7 @@ router.post("/login", async (req, res) => {
     const payload = {
       id: user._id,
       email: user.email,
-      site: user.site,
+      location: user.stationName,
       isSupport: user.isSupport,
       name: `${user.firstName} ${user.lastName}`,
       initials: getInitials(user.firstName, user.lastName),
@@ -393,8 +393,8 @@ router.post("/refresh-token", async (req, res) => {
     // const mergedPermissions = await getMergedPermissions(user);
     const mergedPermissions = await getMergedPermissionsTreeArray(user);
     let timezone = null;
-    if (user.site) {
-      const location = await Location.findOne({ name: user.site });
+    if (user.stationName) {
+      const location = await Location.findOne({ stationName: user.stationName });
       timezone = location?.timezone || null;
     }
 
@@ -402,7 +402,7 @@ router.post("/refresh-token", async (req, res) => {
     const payload = {
       id: user._id,
       email: user.email,
-      site: user.site,
+      location: user.stationName,
       isSupport: user.isSupport,
       name: `${user.firstName} ${user.lastName}`,
       initials: getInitials(user.firstName, user.lastName),

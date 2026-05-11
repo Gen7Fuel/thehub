@@ -39,7 +39,7 @@ function NewSiteRouteComponent() {
   }
   const [formData, setFormData] = useState({
     type: "store", // default type
-    name: "",
+    stationName: "",
     legalName: "",
     INDNumber: "",
     kardpollCode: "",
@@ -91,7 +91,7 @@ function NewSiteRouteComponent() {
       });
 
       const createdLocation = response.data; // this will have the _id
-      alert(`Location: ${createdLocation.name} has been created successfully!`);
+      alert(`Location: ${createdLocation.stationName} has been created successfully!`);
       router.load();
 
       // Navigate to the newly created location's edit page
@@ -128,7 +128,7 @@ function NewSiteRouteComponent() {
 
         <div>
           <Label>Station Name</Label>
-          <Input name="name" value={formData.name} onChange={handleChange} required />
+          <Input name="stationName" value={formData.stationName} onChange={handleChange} required />
         </div>
 
         <div>

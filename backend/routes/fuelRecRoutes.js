@@ -227,8 +227,8 @@ router.post('/request-again', async (req, res) => {
 
   try {
     const location = await Location.findOne(
-      { name: site },
-      { email: 1, name: 1, managerEmails: 1 }
+      { stationName: site },
+      { email: 1, stationName: 1, managerEmails: 1 }
     ).lean();
 
     if (!location) return res.status(404).json({ error: 'Location not found' });
@@ -239,10 +239,10 @@ router.post('/request-again', async (req, res) => {
     const internalCCs = ['daksh@gen7fuel.com', 'mohammad@gen7fuel.com'];
 
     // Dynamic data for the template placeholders
-    const redirectUrl = `https://app.gen7fuel.com/fuel-rec?site=${encodeURIComponent(location.name)}&date=${date}`;
+    const redirectUrl = `https://app.gen7fuel.com/fuel-rec?site=${encodeURIComponent(location.stationName)}&date=${date}`;
 
     const fieldValues = {
-      site: location.name,
+      site: location.stationName,
       date: date,
       reason: "Image not clear / Blur reported.",
       redirectUrl: redirectUrl
@@ -255,7 +255,7 @@ router.post('/request-again', async (req, res) => {
       io,
       recipientEmails: [...primaryRecipients, ...internalCCs],
       slug: "bol-retake-requested",
-      subject: `📸 BOL Photo Retake Requested – ${location.name} – ${date}`,
+      subject: `📸 BOL Photo Retake Requested – ${location.stationName} – ${date}`,
       fieldValues: fieldValues,
       type: 'system'
     });

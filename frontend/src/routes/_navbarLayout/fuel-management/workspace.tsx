@@ -123,7 +123,7 @@ function WorkspaceComponent() {
   // Filter locations for the Dialog Search
   const filteredLocations = useMemo(() => {
     return locations.filter((loc: any) =>
-      loc.name.toLowerCase().includes(stationSearch.toLowerCase())
+      loc.stationName.toLowerCase().includes(stationSearch.toLowerCase())
     );
   }, [locations, stationSearch]);
 
@@ -258,7 +258,7 @@ function WorkspaceComponent() {
                           >
                             <div className="flex flex-col">
                               <span className={`font-bold ${hasNoTanks ? 'text-slate-400' : 'text-slate-800'}`}>
-                                {loc.name}
+                                {loc.stationName}
                               </span>
                               <span className="text-[10px] text-slate-500 font-mono uppercase">
                                 {loc.fuelStationNumber} • {loc.tankCount} Tanks
@@ -290,7 +290,7 @@ function WorkspaceComponent() {
                     const loc = locations.find((l: any) => l._id === id);
                     return (
                       <div key={id} className="flex items-center gap-2 bg-white border-2 border-blue-100 pl-4 pr-2 py-1.5 rounded-full text-xs font-black text-blue-800 shadow-sm animate-in fade-in zoom-in duration-200">
-                        {loc?.name}
+                        {loc?.stationName}
                         <button
                           onClick={() => toggleStation(id)}
                           className="p-1 hover:bg-red-50 hover:text-red-500 rounded-full transition-colors"
@@ -566,7 +566,7 @@ function StationStrip({ location, date, racks }: { location: any, date: Date, ra
                   <div className="flex items-center justify-between gap-4">
                     <div className="flex flex-col min-w-0">
                       <h2 className="text-xl font-black text-slate-800 leading-none tracking-tight uppercase truncate">
-                        {location?.name}
+                        {location?.stationName}
                       </h2>
                       <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wide truncate mt-1">
                         {location?.address}
@@ -716,7 +716,7 @@ function StationStrip({ location, date, racks }: { location: any, date: Date, ra
                 className="w-full border-dashed border-2 text-blue-600 font-bold hover:bg-blue-50 transition-all text-xs h-9"
                 asChild
               >
-                <Link to="/fuel-management/volume" search={{ site: location?.name }}>
+                <Link to="/fuel-management/volume" search={{ site: location?.stationName }}>
                   View Current Tanks Volume
                 </Link>
               </Button>
@@ -1018,7 +1018,7 @@ function StationStrip({ location, date, racks }: { location: any, date: Date, ra
                     endTime: viewingPO.originalDeliveryWindow?.end || '',
                     items: viewingPO.items || []
                   }}
-                  selectedStation={viewingPO.site}
+                  selectedStation={viewingPO.station}
                   carrierName={viewingPO.carrier?.carrierName}
                   rackName={viewingPO.rack?.rackName}
                   rackLocation={viewingPO.rack?.rackLocation}
@@ -1044,13 +1044,13 @@ function StationStrip({ location, date, racks }: { location: any, date: Date, ra
                       endTime: viewingPO.originalDeliveryWindow?.end || '',
                       items: viewingPO.items || []
                     }}
-                    selectedStation={viewingPO.site}
+                    selectedStation={viewingPO.station}
                     carrierName={viewingPO.carrier?.carrierName}
                     rackName={viewingPO.rack?.rackName}
                     rackLocation={viewingPO.rack?.rackLocation}
                   />
                 }
-                fileName={`Fuel Order Form NSP ${viewingPO?.site?.fuelCustomerName || 'Order'} ${formatPDFDate(getISODateOnly(viewingPO.originalDeliveryDate), false)}.pdf`}
+                fileName={`Fuel Order Form NSP ${viewingPO?.station?.fuelCustomerName || 'Order'} ${formatPDFDate(getISODateOnly(viewingPO.originalDeliveryDate), false)}.pdf`}
               >
                 {({ loading }) => (
                   <Button className="bg-blue-600 hover:bg-blue-700" disabled={loading}>
@@ -1087,7 +1087,7 @@ function StationStrip({ location, date, racks }: { location: any, date: Date, ra
                 items: viewingPO.items || []
               },
               // We use the same fallback logic as your logs
-              selectedStation: viewingPO.stationId || viewingPO.site,
+              selectedStation: viewingPO.stationId || viewingPO.station,
               carrierName: viewingPO.carrier?.carrierName,
               rackName: viewingPO.rack?.rackName,
               rackLocation: viewingPO.rack?.rackLocation,
@@ -1142,7 +1142,7 @@ export function RescheduleDialog({ order, isOpen, onOpenChange, locationId }: Re
   const authHeader = { headers: { Authorization: `Bearer ${localStorage.getItem('token')}` } };
 
   const allowedMinDate = useMemo(() => {
-    const tz = order.site?.timezone || 'America/Toronto';
+    const tz = order.station?.timezone || 'America/Toronto';
 
     // 1. Get current time in the Station's Timezone
     const nowInStationTz = toZonedTime(new Date(), tz);
@@ -1151,7 +1151,7 @@ export function RescheduleDialog({ order, isOpen, onOpenChange, locationId }: Re
     const yesterdayInStationTz = startOfDay(subDays(nowInStationTz, 1));
 
     return yesterdayInStationTz;
-  }, [order.site?.timezone]);
+  }, [order.station?.timezone]);
 
   const mutation = useMutation({
     mutationFn: async (updateData: any) => {

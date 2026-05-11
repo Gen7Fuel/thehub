@@ -47,7 +47,7 @@ function RouteComponent() {
   const [error, setError] = useState("");
   const [saving, setSaving] = useState(false);
 
-  const [sites, setSites] = useState<{ _id: string; name: string }[]>([]);
+  const [sites, setSites] = useState<{ _id: string; stationName: string }[]>([]);
   const [selectedSites, setSelectedSites] = useState<string[]>([]);
 
   const [uniqueVendors, setUniqueVendors] = useState<string[]>([]);
@@ -367,10 +367,10 @@ function RouteComponent() {
               <label key={site._id} className="flex items-center gap-2">
                 <input
                   type="checkbox"
-                  checked={selectedSites.includes(site.name)}
-                  onChange={() => handleSiteToggle(site.name)}
+                  checked={selectedSites.includes(site.stationName)}
+                  onChange={() => handleSiteToggle(site.stationName)}
                 />
-                {site.name}
+                {site.stationName}
               </label>
             ))}
           </div>

@@ -19,7 +19,7 @@ function RouteComponent() {
     // Navigate and preserve user location if possible
     navigate({
       to: targetPath,
-      search: user?.site ? { site: user.site } : undefined
+      search: user?.location ? { site: user.location } : undefined
     });
   }, [user, navigate]);
 

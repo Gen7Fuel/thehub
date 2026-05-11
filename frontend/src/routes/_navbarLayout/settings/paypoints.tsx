@@ -21,7 +21,7 @@ export const Route = createFileRoute('/_navbarLayout/settings/paypoints')({
 });
 
 function RouteComponent() {
-  const { locations } = Route.useLoaderData() as { locations: { name: string }[] };
+  const { locations } = Route.useLoaderData() as { locations: { stationName: string }[] };
 
   const activeProps = {
     className: 'bg-gray-100 rounded-md',
@@ -32,13 +32,13 @@ function RouteComponent() {
       <aside className="flex flex-col w-1/4 p-4 border-r border-gray-300 border-dashed justify-start items-end">
         {locations.map((location) => (
           <Link
-            key={location.name}
+            key={location.stationName}
             className="p-2"
             to="/settings/paypoints/$site"
-            params={{ site: slugify(location.name) }}
+            params={{ site: slugify(location.stationName) }}
             activeProps={activeProps}
           >
-            {location.name}
+            {location.stationName}
           </Link>
         ))}
       </aside>

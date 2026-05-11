@@ -72,7 +72,7 @@
 //   const token = localStorage.getItem("token");
 //   const { stationName } = useContext(RouteContext);
 //   const { user } = useAuth()
-//   const site = stationName || user?.site || "";
+//   const site = stationName || user?.location || "";
 
 
 //   const shiftDate = (direction: number) => {
@@ -421,7 +421,7 @@ function RouteComponent() {
   const token = localStorage.getItem("token");
   const { stationName } = useContext(RouteContext);
   const { user } = useAuth();
-  const site = stationName || user?.site || "";
+  const site = stationName || user?.location || "";
   const [auditorName, setAuditorName] = useState<string | null>(null);
   const [siteTimezone, setSiteTimezone] = useState<string>(""); // e.g. "America/Toronto"
 
@@ -442,7 +442,7 @@ function RouteComponent() {
 
     const controller = new AbortController();
 
-    fetch(`/api/locations?name=${encodeURIComponent(site)}`, {
+    fetch(`/api/locations?stationName=${encodeURIComponent(site)}`, {
       signal: controller.signal,
     })
       .then(async (res) => {

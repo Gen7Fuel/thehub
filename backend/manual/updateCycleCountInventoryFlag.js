@@ -324,7 +324,7 @@ async function syncCycleCountWithCurrentInventory() {
   );
 
   for (const loc of locations) {
-    const site = loc.name;
+    const site = loc.stationName;
 
     logs[site] = {
       matchedAndUpdated: [],

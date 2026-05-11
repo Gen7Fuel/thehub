@@ -720,7 +720,7 @@ export const Route = createFileRoute('/_navbarLayout/cash-summary/lottery')({
       // 1) Check if site sells lottery
       let sellsLottery: boolean | null = null
       try {
-        const locResp = await fetch(`/api/locations?name=${encodeURIComponent(site)}`, {
+        const locResp = await fetch(`/api/locations?stationName=${encodeURIComponent(site)}`, {
           headers: token ? { Authorization: `Bearer ${token}` } : {},
         })
         if (locResp.ok) {
@@ -789,8 +789,8 @@ function RouteComponent() {
     const next: Partial<LotterySearch> = {}
     let changed = false
 
-    if (!siteFromUrl && user?.site) {
-      next.site = user.site
+    if (!siteFromUrl && user?.location) {
+      next.site = user.location
       changed = true
     }
     if (!dateFromUrl) {
@@ -804,7 +804,7 @@ function RouteComponent() {
         replace: true,
       })
     }
-  }, [siteFromUrl, dateFromUrl, user?.site, navigate])
+  }, [siteFromUrl, dateFromUrl, user?.location, navigate])
 
   // Sync global store date from search (guard to avoid loops)
   const dateAsDate = parseYmdToDate(dateFromUrl)

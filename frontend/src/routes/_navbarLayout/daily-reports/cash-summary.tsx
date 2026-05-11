@@ -85,7 +85,7 @@ interface PurchaseOrder {
   productCode: string;
   quantity: number;
   date: string;
-  name: string;
+  stationName: string;
 }
 
 interface Payable {
@@ -95,7 +95,7 @@ interface Payable {
   paymentMethod: string;
   notes: string;
   date: string;
-  name: string;
+  stationName: string;
 }
 
 function RouteComponent() {
@@ -108,7 +108,7 @@ function RouteComponent() {
   });
   const { user } = useAuth()
   const { selectedSite } = useSite()
-  const [location, setLocation] = useState<string>(selectedSite || user?.site || '')
+  const [location, setLocation] = useState<string>(selectedSite || user?.location || '')
   const [totals, setTotals] = useState({
     totalShiftReportCash: 0,
     totalCalculatedCash: 0,
@@ -312,7 +312,7 @@ function RouteComponent() {
         <DatePicker date={date} setDate={setDate} />
         <LocationPicker
           setStationName={setLocation}
-          value="name"
+          value="stationName"
           // {...(!access.component_po_location_filter ? { disabled: true } : {})}
         />
       </div>
