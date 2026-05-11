@@ -15,7 +15,7 @@ export const Route = createFileRoute('/_navbarLayout/cycle-count/count')({
 
 function RouteComponent() {
   const { user } = useAuth()
-  const location = user?.location || "";
+  const location = user?.site || "";
   const [stationName, setStationName] = useState(location);
   const [items, setItems] = useState<any[]>([]);
   const [flaggedItems, setFlaggedItems] = useState<any[]>([]);

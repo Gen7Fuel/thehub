@@ -12,7 +12,7 @@ const { mockNavigate, mockUseSearch, mockUseAuth, mockAxiosGet, mockAxiosDelete,
       mockUseSearch: vi.fn().mockReturnValue({ site: 'Rankin' }),
       mockUseAuth: vi.fn().mockReturnValue({
         user: {
-          location: 'Rankin',
+          site: 'Rankin',
           access: { stationAudit: { checklist: true, template: true } },
         },
       }),
@@ -161,7 +161,7 @@ describe('Checklist Layout — checklist.tsx', () => {
     localStorage.setItem('token', 'test-token')
     mockUseSearch.mockReturnValue({ site: 'Rankin' })
     mockUseAuth.mockReturnValue({
-      user: { location: 'Rankin', access: {} },
+      user: { site: 'Rankin', access: {} },
     })
     mockAxiosGet.mockResolvedValue({ data: [] })
   })
@@ -222,7 +222,7 @@ describe('Checklist Layout — checklist.tsx', () => {
 
   it('navigates to set site using user location when no site in search params', async () => {
     mockUseSearch.mockReturnValue({ site: undefined })
-    mockUseAuth.mockReturnValue({ user: { location: 'Couchiching', access: {} } })
+    mockUseAuth.mockReturnValue({ user: { site: 'Couchiching', access: {} } })
     renderWithSuspense(<ChecklistLayout />)
     await waitFor(() =>
       expect(mockNavigate).toHaveBeenCalledWith(
@@ -453,7 +453,7 @@ describe('Checklist Open Issues — checklist/open-issues.tsx', () => {
     vi.clearAllMocks()
     localStorage.setItem('token', 'test-token')
     mockUseSearch.mockReturnValue({ site: 'Rankin' })
-    mockUseAuth.mockReturnValue({ user: { location: 'Rankin', access: {} } })
+    mockUseAuth.mockReturnValue({ user: { site: 'Rankin', access: {} } })
   })
 
   it('shows Loading... while fetching issues', () => {

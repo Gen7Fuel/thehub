@@ -19,7 +19,7 @@ function RouteComponent() {
   const isFormActive = matchRoute({ to: '/cash-summary/form' })
   const isOverShortReportActive = matchRoute({ to: '/cash-summary/over-short-report' })
 
-  const fallbackSite = user?.location
+  const fallbackSite = user?.site
   const access = user?.access || {}
 
   return (

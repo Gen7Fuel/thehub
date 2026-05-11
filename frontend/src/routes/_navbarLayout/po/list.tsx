@@ -35,7 +35,7 @@ function RouteComponent() {
 
   // const poData = Route.useLoaderData() as any;
 
-  const [stationName, setStationName] = React.useState<string>(selectedSite || user?.location || "");
+  const [stationName, setStationName] = React.useState<string>(selectedSite || user?.site || "");
   const [timezone, setTimezone] = React.useState<string>(user?.timezone || "America/Toronto");
   const [purchaseOrders, setPurchaseOrders] = React.useState<
     {

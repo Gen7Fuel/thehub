@@ -14,10 +14,10 @@ export const SiteProvider = ({ children }: { children: React.ReactNode }) => {
 
   // Seed from user.site once auth loads, but never overwrite a user's explicit pick
   useEffect(() => {
-    if (!selectedSite && user?.location) {
+    if (!selectedSite && user?.site) {
       setSelectedSite(user.site)
     }
-  }, [user?.location])
+  }, [user?.site])
 
   return (
     <SiteContext.Provider value={{ selectedSite, setSelectedSite }}>

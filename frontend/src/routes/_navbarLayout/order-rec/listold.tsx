@@ -40,7 +40,7 @@ function RouteComponent() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [date, setDate] = useState<Date | undefined>(new Date());
-  const [location, setLocation] = useState<string>(user?.location || '')
+  const [location, setLocation] = useState<string>(user?.site || '')
   const [vendor, setVendor] = useState<string>('')
   const [showAdvanced, setShowAdvanced] = useState(false)
 

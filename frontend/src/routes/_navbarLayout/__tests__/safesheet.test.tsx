@@ -26,7 +26,7 @@ vi.mock('@tanstack/react-router', () => ({
 const mockUserBase = {
   id: 'user-1',
   email: 'test@example.com',
-  location: 'Rankin',
+  site: 'Rankin',
   access: {
     accounting: {
       safesheet: {
