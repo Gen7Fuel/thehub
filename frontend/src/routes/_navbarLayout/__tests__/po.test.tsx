@@ -352,7 +352,7 @@ describe('PO List — list.tsx', () => {
     mockUseAuth.mockReturnValue({
       user: {
         id: 'u1',
-        site: 'Rankin',
+        location: 'Rankin',
         timezone: 'America/Toronto',
         access: { po: { pdf: true, changeDate: true, delete: true } },
       },
