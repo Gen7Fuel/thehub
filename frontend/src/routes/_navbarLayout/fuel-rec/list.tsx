@@ -7,8 +7,9 @@ import { DatePickerWithRange } from '@/components/custom/datePickerWithRange'
 import { pdf, Document, Page, Image as PdfImage, StyleSheet } from '@react-pdf/renderer'
 import { Button } from '@/components/ui/button'
 import { useAuth } from '@/context/AuthContext'
-import { Trash2, MessageSquareText, RefreshCcw, ExternalLink } from 'lucide-react'
+import { ClipboardCheck, Trash2, MessageSquareText, RefreshCcw, ExternalLink } from 'lucide-react'
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog'
+import { toast } from 'sonner'
 
 
 type BOLPhoto = {
@@ -245,6 +246,32 @@ function RouteComponent() {
     }
   }
 
+  const postBolComment = async (e: BOLPhoto) => {
+    try {
+      setPending((prev) => new Set(prev).add(e._id))
+      const res = await fetch(`/api/fuel-rec/${encodeURIComponent(e._id)}/comment`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${localStorage.getItem('token') || ''}`,
+        },
+        body: JSON.stringify({ text: 'BOL Posted' }),
+      })
+      if (!res.ok) throw new Error('Failed to post comment')
+      const result = await res.json()
+      setEntries((prev) => prev.map((x) => x._id === e._id ? { ...x, comments: result.comments } : x))
+      toast.success('BOL Posted')
+    } catch (err) {
+      toast.error(`Failed: ${err instanceof Error ? err.message : String(err)}`)
+    } finally {
+      setPending((prev) => {
+        const next = new Set(prev)
+        next.delete(e._id)
+        return next
+      })
+    }
+  }
+
   const handleCommentSave = async () => {
     if (!commentText.trim() || !activeCommentEntry) return
     setCommentPending(true)
@@ -361,6 +388,20 @@ function RouteComponent() {
                             ) : (
                               <RefreshCcw className="h-4 w-4" />
                             )}
+                          </Button>
+                        )}
+
+                        {access?.accounting?.fuelRec?.postBol &&
+                          !e.comments?.some((c) => c.text.toLowerCase().includes('bol posted')) && (
+                          <Button
+                            variant="outline"
+                            size="icon"
+                            onClick={() => postBolComment(e)}
+                            disabled={pending.has(e._id)}
+                            title="BOL Posted"
+                            aria-label="BOL Posted"
+                          >
+                            <ClipboardCheck className="h-4 w-4" />
                           </Button>
                         )}
 

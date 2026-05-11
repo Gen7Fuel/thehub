@@ -1261,15 +1261,10 @@ router.get('/payouts-check', async (req, res) => {
       { $group: { _id: null, total: { $sum: { $ifNull: ['$payouts', 0] } } } },
     ])
 
-    // Payables are stored with createdAt timestamps in UTC, so use the site's
-    // local timezone day boundaries to avoid evening entries crossing into the next UTC day.
     let payablesTotal = 0
     if (location) {
-      const tz = location.timezone || 'America/Toronto'
-      const payStart = DateTime.fromISO(date, { zone: tz }).startOf('day').toJSDate()
-      const payEnd   = DateTime.fromISO(date, { zone: tz }).endOf('day').toJSDate()
       const [payableAgg] = await Payable.aggregate([
-        { $match: { location: location._id, paymentMethod: 'till', createdAt: { $gte: payStart, $lte: payEnd } } },
+        { $match: { location: location._id, paymentMethod: 'till', date: date } },
         { $group: { _id: null, total: { $sum: { $ifNull: ['$amount', 0] } } } },
       ])
       payablesTotal = payableAgg?.total ?? 0
