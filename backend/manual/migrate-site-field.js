@@ -25,22 +25,16 @@ async function run() {
   const db = mongoose.connection.db;
   console.log('Connected to MongoDB');
 
-  // Already completed in previous run — skip:
-  // locations, users, transactions, statussales, shiftworksheets
-
-  // vendors: drop stale index before renaming so the unique constraint doesn't block $rename
-  try {
-    await db.collection('vendors').dropIndex('name_1_location_1');
-    console.log('vendors: dropped stale index name_1_location_1');
-  } catch (e) {
-    console.log('vendors: stale index not found (already dropped or never existed), continuing');
-  }
-
   const steps = [
-    { col: 'vendors',   from: 'location', to: 'site' },
-    { col: 'paypoints', from: 'location', to: 'site' },
-    { col: 'payables',  from: 'location', to: 'site' },
-    { col: 'fuelorders', from: 'station', to: 'site' },
+    { col: 'locations',       from: 'stationName', to: 'name' },
+    { col: 'users',           from: 'stationName', to: 'site' },
+    { col: 'transactions',    from: 'stationName', to: 'site' },
+    { col: 'statussales',     from: 'stationName', to: 'site' },
+    { col: 'shiftworksheets', from: 'location',    to: 'site' },
+    { col: 'vendors',         from: 'location',    to: 'site' },
+    { col: 'paypoints',       from: 'location',    to: 'site' },
+    { col: 'payables',        from: 'location',    to: 'site' },
+    { col: 'fuelorders',      from: 'station',     to: 'site' },
   ];
 
   for (const { col, from, to } of steps) {
