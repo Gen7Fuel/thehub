@@ -46,6 +46,11 @@ export const Route = createFileRoute('/_navbarLayout/academy/$courseId')({
   component: RouteComponent,
 })
 
+interface Page {
+  item: LearningItem
+  sectionTitle: string
+}
+
 function RouteComponent() {
   const { courseId } = Route.useParams()
   const navigate = useNavigate()
@@ -56,6 +61,9 @@ function RouteComponent() {
   const [codeInput, setCodeInput] = useState('')
   const [codeError, setCodeError] = useState<string | null>(null)
   const [employeeCode, setEmployeeCode] = useState<string | null>(null)
+
+  const [currentPageIdx, setCurrentPageIdx] = useState(0)
+  const [pageProgressLoaded, setPageProgressLoaded] = useState(false)
 
   const [completing, setCompleting] = useState(false)
   const [completed, setCompleted] = useState(false)
@@ -75,6 +83,30 @@ function RouteComponent() {
       .finally(() => setLoading(false))
   }, [courseId, navigate])
 
+  useEffect(() => {
+    if (!employeeCode) return
+    const token = localStorage.getItem('token')
+    axios
+      .get(`/api/academy/learner/course-progress/${courseId}`, {
+        params: { employeeCode },
+        headers: { Authorization: `Bearer ${token}`, 'X-Required-Permission': 'academy' },
+      })
+      .then((res) => setCurrentPageIdx(res.data.currentPageIndex ?? 0))
+      .catch(() => {})
+      .finally(() => setPageProgressLoaded(true))
+  }, [employeeCode, courseId])
+
+  const pages = useMemo<Page[]>(() => {
+    if (!course) return []
+    const result: Page[] = []
+    for (const section of [...course.sections].sort((a, b) => a.order - b.order)) {
+      for (const item of [...section.items].sort((a, b) => a.order - b.order)) {
+        result.push({ item, sectionTitle: section.title })
+      }
+    }
+    return result
+  }, [course])
+
   function handleStartCourse() {
     if (!codeInput.trim()) {
       setCodeError('Please enter your employee code.')
@@ -86,6 +118,25 @@ function RouteComponent() {
     }
     setCodeError(null)
     setEmployeeCode(codeInput.trim())
+  }
+
+  function savePageProgress(pageIndex: number) {
+    if (!employeeCode) return
+    const token = localStorage.getItem('token')
+    axios
+      .put(
+        '/api/academy/learner/course-progress',
+        { employeeCode, courseId, currentPageIndex: pageIndex },
+        { headers: { Authorization: `Bearer ${token}`, 'X-Required-Permission': 'academy' } },
+      )
+      .catch(() => {})
+  }
+
+  function goToPage(idx: number) {
+    const bounded = Math.max(0, Math.min(idx, pages.length - 1))
+    setCurrentPageIdx(bounded)
+    savePageProgress(bounded)
+    window.scrollTo({ top: 0, behavior: 'smooth' })
   }
 
   async function handleComplete() {
@@ -126,7 +177,9 @@ function RouteComponent() {
             placeholder="EMP-XXXXXX"
             value={codeInput}
             onChange={(e) => setCodeInput(e.target.value.toUpperCase())}
-            onKeyDown={(e) => { if (e.key === 'Enter') handleStartCourse() }}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter') handleStartCourse()
+            }}
             className="w-full rounded border px-3 py-2 text-sm font-mono focus:outline-none focus:ring-2 focus:ring-blue-500"
           />
           {codeError && <p className="text-sm text-red-500">{codeError}</p>}
@@ -141,41 +194,73 @@ function RouteComponent() {
     )
   }
 
-  // Course content
-  const sortedSections = [...course.sections].sort((a, b) => a.order - b.order)
+  if (!pageProgressLoaded) return <div className="p-6 text-sm text-gray-500">Loading...</div>
+
+  if (pages.length === 0) {
+    return <div className="p-6 text-sm text-gray-500">This course has no content yet.</div>
+  }
+
+  const currentPage = pages[currentPageIdx]
+  const isFirst = currentPageIdx === 0
+  const isLast = currentPageIdx === pages.length - 1
+  const prevSectionTitle = currentPageIdx > 0 ? pages[currentPageIdx - 1].sectionTitle : null
+  const sectionChanged = prevSectionTitle !== null && prevSectionTitle !== currentPage.sectionTitle
 
   return (
-    <div className="p-6 max-w-3xl mx-auto space-y-8">
+    <div className="p-6 max-w-3xl mx-auto space-y-6">
       <div>
         <h1 className="text-2xl font-bold">{course.title}</h1>
-        {course.description && <p className="mt-1 text-sm text-gray-500">{course.description}</p>}
+        <p className="mt-1 text-sm text-gray-500">{currentPage.sectionTitle}</p>
       </div>
 
-      {sortedSections.map((section) => (
-        <div key={section._id} className="space-y-4">
-          <h2 className="text-lg font-semibold border-b pb-1">{section.title}</h2>
-          {[...section.items]
-            .sort((a, b) => a.order - b.order)
-            .map((item) => (
-              <LearningItemView key={item._id} item={item} employeeCode={employeeCode} courseId={courseId} />
-            ))}
+      {sectionChanged && (
+        <div className="rounded bg-blue-50 border border-blue-200 px-4 py-2 text-sm text-blue-700">
+          Now starting: <span className="font-medium">{currentPage.sectionTitle}</span>
         </div>
-      ))}
+      )}
 
-      <div className="pt-4 border-t">
-        {completed ? (
-          <p className="text-green-600 font-medium">Course completed! Well done.</p>
+      <div className="text-xs text-gray-400">
+        Page {currentPageIdx + 1} of {pages.length}
+      </div>
+
+      <LearningItemView
+        key={currentPage.item._id}
+        item={currentPage.item}
+        employeeCode={employeeCode}
+        courseId={courseId}
+      />
+
+      <div className="flex items-center justify-between pt-4 border-t">
+        <button
+          onClick={() => goToPage(currentPageIdx - 1)}
+          disabled={isFirst}
+          className="rounded border px-4 py-2 text-sm font-medium hover:bg-gray-50 disabled:opacity-40 disabled:cursor-not-allowed"
+        >
+          Previous
+        </button>
+
+        {isLast ? (
+          <div className="flex flex-col items-end gap-1">
+            {completeError && <p className="text-sm text-red-500">{completeError}</p>}
+            {completed ? (
+              <p className="text-sm font-medium text-green-600">Course completed! Well done.</p>
+            ) : (
+              <button
+                onClick={handleComplete}
+                disabled={completing}
+                className="rounded bg-green-600 px-6 py-2 text-sm font-medium text-white hover:bg-green-700 disabled:opacity-50"
+              >
+                {completing ? 'Submitting…' : 'Complete Course'}
+              </button>
+            )}
+          </div>
         ) : (
-          <>
-            {completeError && <p className="mb-2 text-sm text-red-500">{completeError}</p>}
-            <button
-              onClick={handleComplete}
-              disabled={completing}
-              className="rounded bg-green-600 px-6 py-2 text-sm font-medium text-white hover:bg-green-700 disabled:opacity-50"
-            >
-              {completing ? 'Submitting…' : 'Complete Course'}
-            </button>
-          </>
+          <button
+            onClick={() => goToPage(currentPageIdx + 1)}
+            className="rounded bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700"
+          >
+            Next
+          </button>
         )}
       </div>
     </div>
