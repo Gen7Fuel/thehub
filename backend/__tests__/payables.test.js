@@ -11,7 +11,7 @@ const fakeObjectId = () => new mongoose.Types.ObjectId()
 /** Minimal valid Payable document (in-memory, no DB write). */
 const base = (overrides = {}) => ({
   vendorName: 'Shell Canada',
-  location: fakeObjectId(),
+  site: fakeObjectId(),
   paymentMethod: 'safe',
   amount: 150.0,
   ...overrides,
@@ -30,10 +30,10 @@ describe('Payable schema — field validation', () => {
     expect(err?.errors.vendorName).toBeDefined()
   })
 
-  it('rejects a missing location', () => {
-    const { location, ...rest } = base()
+  it('rejects a missing site', () => {
+    const { site, ...rest } = base()
     const err = new Payable(rest).validateSync()
-    expect(err?.errors.location).toBeDefined()
+    expect(err?.errors.site).toBeDefined()
   })
 
   it('rejects a missing paymentMethod', () => {
