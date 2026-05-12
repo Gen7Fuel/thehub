@@ -119,7 +119,6 @@ function RouteComponent() {
 
   const [currentPageIdx, setCurrentPageIdx] = useState(0)
   const [completedPages, setCompletedPages] = useState<Set<number>>(new Set())
-  const [pageProgressLoaded, setPageProgressLoaded] = useState(false)
 
   const [completing, setCompleting] = useState(false)
   const [completed, setCompleted] = useState(false)
@@ -165,7 +164,6 @@ function RouteComponent() {
       setEmployeeName(empRes.data.name)
       setCurrentPageIdx(progress.currentPageIndex ?? 0)
       setCompletedPages(new Set(progress.completedPages ?? []))
-      setPageProgressLoaded(true)
       setIsReturning(hasProgress)
     } catch (err: any) {
       setCodeError(
