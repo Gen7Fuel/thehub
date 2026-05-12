@@ -984,6 +984,5 @@ module.exports = {
   getBulkCSOData,
   getShiftEmployees,
   lookupAcademyEmployee,
-  getShiftEmployees,
   getFullItemBackupData
 };
