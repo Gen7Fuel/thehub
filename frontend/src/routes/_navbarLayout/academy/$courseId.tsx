@@ -761,27 +761,54 @@ function FlipCardView({
     }
   }
 
-  const side = flipped ? content.back : content.front
-  const sideText = typeof side === 'object' && side !== null ? (side as any).text : side
-  const sideImage = typeof side === 'object' && side !== null ? (side as any).imageUrl : null
+  const front = content.front
+  const back = content.back
+  const frontText = typeof front === 'object' && front !== null ? (front as any).text : front
+  const frontImage = typeof front === 'object' && front !== null ? (front as any).imageUrl : null
+  const backText = typeof back === 'object' && back !== null ? (back as any).text : back
+  const backImage = typeof back === 'object' && back !== null ? (back as any).imageUrl : null
 
   return (
     <div className="space-y-3">
       <p className="text-xs font-semibold uppercase tracking-wide text-gray-400">
         {flipped ? 'Back' : 'Front'} — click the card to flip
       </p>
-      <button
-        onClick={handleFlip}
-        className="w-full rounded-2xl border-2 border-gray-200 text-center hover:border-red-300 hover:bg-red-50/30 transition-all duration-300 overflow-hidden"
-      >
-        {sideImage && <img src={sideImage} alt="" className="w-full object-cover" />}
-        <div className="p-8 text-gray-700 font-semibold text-base">
-          {sideText}
-          <p className="mt-3 text-xs text-gray-400 font-normal">
-            {flipped ? 'Click to flip back' : 'Click to reveal answer'}
-          </p>
+      {/* Perspective wrapper */}
+      <div style={{ perspective: '1200px' }} className="w-full cursor-pointer" onClick={handleFlip}>
+        {/* Rotating card — grid so container sizes to taller face */}
+        <div
+          style={{
+            transformStyle: 'preserve-3d',
+            transform: flipped ? 'rotateY(180deg)' : 'rotateY(0deg)',
+            transition: 'transform 0.55s cubic-bezier(0.4, 0, 0.2, 1)',
+            display: 'grid',
+          }}
+          className="w-full"
+        >
+          {/* Front face */}
+          <div
+            style={{ backfaceVisibility: 'hidden', gridArea: '1/1' }}
+            className="rounded-2xl border-2 border-gray-200 bg-white overflow-hidden text-center"
+          >
+            {frontImage && <img src={frontImage} alt="" className="w-full object-cover" />}
+            <div className="p-8 text-gray-700 font-semibold text-base">
+              {frontText}
+              <p className="mt-3 text-xs text-gray-400 font-normal">Click to reveal answer</p>
+            </div>
+          </div>
+          {/* Back face */}
+          <div
+            style={{ backfaceVisibility: 'hidden', transform: 'rotateY(180deg)', gridArea: '1/1' }}
+            className="rounded-2xl border-2 border-red-200 bg-red-50/20 overflow-hidden text-center"
+          >
+            {backImage && <img src={backImage} alt="" className="w-full object-cover" />}
+            <div className="p-8 text-gray-700 font-semibold text-base">
+              {backText}
+              <p className="mt-3 text-xs text-gray-400 font-normal">Click to flip back</p>
+            </div>
+          </div>
         </div>
-      </button>
+      </div>
     </div>
   )
 }
