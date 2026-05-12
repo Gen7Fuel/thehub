@@ -121,10 +121,10 @@ function RouteComponent() {
       headers: { Authorization: `Bearer ${localStorage.getItem('token') || ''}` },
     })
       .then((r) => r.json())
-      .then((data: Array<{ name: string; legalName?: string }>) => {
+      .then((data: Array<{ stationName: string; legalName?: string }>) => {
         const map: Record<string, string> = {}
         for (const loc of data) {
-          if (loc.legalName) map[loc.name] = loc.legalName
+          if (loc.legalName) map[loc.stationName] = loc.legalName
         }
         setLocationNames(map)
       })
