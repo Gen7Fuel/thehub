@@ -321,8 +321,8 @@ function RouteComponent() {
     <div className="min-h-screen bg-slate-100 p-6 font-sans flex flex-col items-center pt-8 pb-16">
       <div className="max-w-2xl w-full bg-white rounded-3xl shadow-2xl overflow-hidden">
 
-        {/* Dark header */}
-        <div className="bg-gray-900 px-8 py-6 text-white">
+        {/* Header — red for MCQ, black otherwise */}
+        <div className={`${currentPage.item.type === 'mcq' ? 'bg-red-600' : 'bg-gray-900'} px-8 py-6 text-white transition-colors duration-300`}>
           <p className="text-xs font-bold text-yellow-400 uppercase tracking-widest">Gen 7 Academy</p>
           <h1 className="text-xl font-black uppercase italic tracking-tight mt-1">
             {currentPage.item.title || currentPage.sectionTitle}
