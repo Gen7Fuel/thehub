@@ -1,6 +1,7 @@
 const mongoose = require('mongoose')
 
 const LearningItemSchema = new mongoose.Schema({
+  title: { type: String, default: '' },
   type: {
     type: String,
     enum: ['hotspot', 'video', 'mcq', 'flip-card', 'ordering', 'matching'],
