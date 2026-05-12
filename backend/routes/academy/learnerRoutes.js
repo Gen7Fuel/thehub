@@ -1,11 +1,25 @@
 const express = require('express')
 const Course = require('../../models/academy/Course')
-const AcademyEmployee = require('../../models/academy/AcademyEmployee')
 const CourseCompletion = require('../../models/academy/CourseCompletion')
 const VideoProgress = require('../../models/academy/VideoProgress')
 const CourseProgress = require('../../models/academy/CourseProgress')
+const { lookupAcademyEmployee } = require('../../services/sqlService')
 
 const router = express.Router()
+
+router.get('/employee-lookup', async (req, res) => {
+  try {
+    const { employeeNumber } = req.query
+    if (!employeeNumber || !/^\d{4}$/.test(String(employeeNumber))) {
+      return res.status(400).json({ message: 'employeeNumber must be a 4-digit number' })
+    }
+    const employee = await lookupAcademyEmployee(employeeNumber)
+    if (!employee) return res.status(404).json({ message: 'Employee not found' })
+    res.json(employee)
+  } catch (err) {
+    res.status(500).json({ message: 'Failed to look up employee', error: err.message })
+  }
+})
 
 router.get('/courses', async (req, res) => {
   try {
@@ -40,8 +54,8 @@ router.post('/courses/:courseId/complete', async (req, res) => {
     const { employeeCode } = req.body
     if (!employeeCode) return res.status(400).json({ message: 'employeeCode is required' })
 
-    const employee = await AcademyEmployee.findOne({ code: employeeCode })
-    if (!employee) return res.status(404).json({ message: 'Employee code not found' })
+    const employee = await lookupAcademyEmployee(employeeCode)
+    if (!employee) return res.status(404).json({ message: 'Employee not found' })
 
     const course = await Course.findOne({ _id: req.params.courseId, status: 'published' })
     if (!course) return res.status(404).json({ message: 'Course not found' })

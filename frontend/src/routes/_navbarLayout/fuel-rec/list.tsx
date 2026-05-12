@@ -115,6 +115,22 @@ function RouteComponent() {
     })
   }
 
+  const [locationNames, setLocationNames] = React.useState<Record<string, string>>({})
+  React.useEffect(() => {
+    fetch('/api/locations', {
+      headers: { Authorization: `Bearer ${localStorage.getItem('token') || ''}` },
+    })
+      .then((r) => r.json())
+      .then((data: Array<{ name: string; legalName?: string }>) => {
+        const map: Record<string, string> = {}
+        for (const loc of data) {
+          if (loc.legalName) map[loc.name] = loc.legalName
+        }
+        setLocationNames(map)
+      })
+      .catch(() => {})
+  }, [])
+
   // Track in-flight requests per entry
   const [pending, setPending] = React.useState<Set<string>>(() => new Set())
   // Local entries state for optimistic delete updates
@@ -183,7 +199,7 @@ function RouteComponent() {
 
   const formatDesiredName = (e: BOLPhoto) => {
     const date = (e.date || '').trim()
-    const site = sanitizeSegment(e.site)
+    const site = sanitizeSegment(locationNames[e.site] ?? e.site)
     const bol = sanitizeSegment(e.bolNumber || '')
     const parts = [date, site, bol].filter(Boolean)
     return parts.join(' - ')

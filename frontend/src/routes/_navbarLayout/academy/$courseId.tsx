@@ -34,6 +34,7 @@ interface MCQOption {
 
 interface LearningItem {
   _id: string
+  title?: string
   type: 'video' | 'mcq' | 'flip-card' | 'hotspot' | 'ordering' | 'matching'
   order: number
   content: Record<string, any>
@@ -110,7 +111,11 @@ function RouteComponent() {
 
   const [codeInput, setCodeInput] = useState('')
   const [codeError, setCodeError] = useState<string | null>(null)
+  const [lookingUp, setLookingUp] = useState(false)
   const [employeeCode, setEmployeeCode] = useState<string | null>(null)
+  const [employeeName, setEmployeeName] = useState<string | null>(null)
+  const [isReturning, setIsReturning] = useState(false)
+  const [courseStarted, setCourseStarted] = useState(false)
 
   const [currentPageIdx, setCurrentPageIdx] = useState(0)
   const [completedPages, setCompletedPages] = useState<Set<number>>(new Set())
@@ -131,20 +136,47 @@ function RouteComponent() {
       .finally(() => setLoading(false))
   }, [courseId, navigate])
 
-  useEffect(() => {
-    if (!employeeCode) return
-    axios
-      .get(`/api/academy/learner/course-progress/${courseId}`, {
-        params: { employeeCode },
-        headers: makeAuthHeaders(),
-      })
-      .then((res) => {
-        setCurrentPageIdx(res.data.currentPageIndex ?? 0)
-        setCompletedPages(new Set(res.data.completedPages ?? []))
-      })
-      .catch(() => {})
-      .finally(() => setPageProgressLoaded(true))
-  }, [employeeCode, courseId])
+  async function handleLookup() {
+    const num = codeInput.trim()
+    if (!/^\d{4}$/.test(num)) {
+      setCodeError('Please enter your 4-digit employee number.')
+      return
+    }
+    setCodeError(null)
+    setLookingUp(true)
+    try {
+      const [empRes, progressRes] = await Promise.all([
+        axios.get('/api/academy/learner/employee-lookup', {
+          params: { employeeNumber: num },
+          headers: makeAuthHeaders(),
+        }),
+        axios
+          .get(`/api/academy/learner/course-progress/${courseId}`, {
+            params: { employeeCode: num },
+            headers: makeAuthHeaders(),
+          })
+          .catch(() => ({ data: { currentPageIndex: 0, completedPages: [] } })),
+      ])
+      const progress = progressRes.data
+      const hasProgress =
+        (progress.currentPageIndex ?? 0) > 0 ||
+        (progress.completedPages ?? []).length > 0
+      setEmployeeCode(num)
+      setEmployeeName(empRes.data.name)
+      setCurrentPageIdx(progress.currentPageIndex ?? 0)
+      setCompletedPages(new Set(progress.completedPages ?? []))
+      setPageProgressLoaded(true)
+      setIsReturning(hasProgress)
+    } catch (err: any) {
+      setCodeError(
+        err.response?.status === 404
+          ? 'Employee number not found. Please try again.'
+          : 'Unable to verify your employee number. Please try again.',
+      )
+    } finally {
+      setLookingUp(false)
+    }
+  }
 
   const pages = useMemo<Page[]>(() => {
     if (!course) return []
@@ -175,13 +207,6 @@ function RouteComponent() {
     setCurrentPageIdx(bounded)
     saveProgressToBackend({ currentPageIndex: bounded })
     window.scrollTo({ top: 0, behavior: 'smooth' })
-  }
-
-  function handleStartCourse() {
-    if (!codeInput.trim()) { setCodeError('Please enter your employee code.'); return }
-    if (!codeInput.trim().startsWith('EMP-')) { setCodeError('Invalid code format. Codes start with EMP-'); return }
-    setCodeError(null)
-    setEmployeeCode(codeInput.trim())
   }
 
   async function handleComplete() {
@@ -218,30 +243,34 @@ function RouteComponent() {
 
   if (!course) return null
 
+  // Step 1 — employee number entry
   if (!employeeCode) {
     return (
       <div className="min-h-screen bg-slate-100 flex items-center justify-center p-6 font-sans">
         <div className="w-full max-w-sm bg-white rounded-3xl shadow-2xl overflow-hidden">
-          <div className="bg-orange-600 px-8 py-8 text-white text-center">
-            <h1 className="text-2xl font-black uppercase italic tracking-tighter">Gen 7 Academy</h1>
+          <div className="bg-gray-900 px-8 py-8 text-white text-center">
+            <h1 className="text-2xl font-black uppercase italic tracking-tighter text-yellow-400">Gen 7 Academy</h1>
             <p className="mt-1 opacity-80 text-sm font-bold">{course.title.toUpperCase()}</p>
           </div>
           <div className="p-8 space-y-4">
-            <p className="text-sm text-gray-500 text-center">Enter your employee code to begin.</p>
+            <p className="text-sm text-gray-500 text-center">Enter your 4-digit employee number.</p>
             <input
               type="text"
-              placeholder="EMP-XXXXXX"
+              inputMode="numeric"
+              maxLength={4}
+              placeholder="0000"
               value={codeInput}
-              onChange={(e) => setCodeInput(e.target.value.toUpperCase())}
-              onKeyDown={(e) => { if (e.key === 'Enter') handleStartCourse() }}
-              className="w-full rounded-2xl border-2 border-gray-200 px-4 py-3 text-sm font-mono focus:outline-none focus:border-orange-500 transition-colors"
+              onChange={(e) => setCodeInput(e.target.value.replace(/\D/g, '').slice(0, 4))}
+              onKeyDown={(e) => { if (e.key === 'Enter') handleLookup() }}
+              className="w-full rounded-2xl border-2 border-gray-200 px-4 py-3 text-center text-lg font-mono tracking-widest focus:outline-none focus:border-red-500 transition-colors"
             />
             {codeError && <p className="text-sm text-red-500 text-center">{codeError}</p>}
             <button
-              onClick={handleStartCourse}
-              className="w-full rounded-2xl bg-orange-600 px-4 py-3 text-sm font-black text-white uppercase tracking-widest hover:bg-orange-700 transition-colors shadow-lg shadow-orange-200"
+              onClick={handleLookup}
+              disabled={lookingUp || codeInput.length !== 4}
+              className="w-full rounded-2xl bg-red-600 px-4 py-3 text-sm font-black text-white uppercase tracking-widest hover:bg-red-700 disabled:opacity-40 disabled:cursor-not-allowed transition-colors shadow-lg shadow-red-200"
             >
-              Start Course
+              {lookingUp ? 'Verifying…' : 'Verify'}
             </button>
           </div>
         </div>
@@ -249,10 +278,30 @@ function RouteComponent() {
     )
   }
 
-  if (!pageProgressLoaded) {
+  // Step 2 — greeting (employee found, not yet started)
+  if (!courseStarted) {
     return (
-      <div className="flex items-center justify-center min-h-screen bg-slate-100">
-        <p className="text-sm text-gray-500">Loading...</p>
+      <div className="min-h-screen bg-slate-100 flex items-center justify-center p-6 font-sans">
+        <div className="w-full max-w-sm bg-white rounded-3xl shadow-2xl overflow-hidden">
+          <div className="bg-gray-900 px-8 py-8 text-white text-center">
+            <h1 className="text-2xl font-black uppercase italic tracking-tighter text-yellow-400">Gen 7 Academy</h1>
+            <p className="mt-1 opacity-80 text-sm font-bold">{course.title.toUpperCase()}</p>
+          </div>
+          <div className="p-8 text-center space-y-6">
+            <div>
+              <p className="text-xs font-semibold uppercase tracking-widest text-gray-400">
+                {isReturning ? 'Welcome back,' : 'Welcome,'}
+              </p>
+              <p className="text-2xl font-black text-gray-800 mt-1">{employeeName}</p>
+            </div>
+            <button
+              onClick={() => setCourseStarted(true)}
+              className="w-full rounded-2xl bg-red-600 px-4 py-3 text-sm font-black text-white uppercase tracking-widest hover:bg-red-700 transition-colors shadow-lg shadow-red-200"
+            >
+              {isReturning ? 'Resume Course →' : 'Start Course →'}
+            </button>
+          </div>
+        </div>
       </div>
     )
   }
@@ -274,17 +323,19 @@ function RouteComponent() {
     <div className="min-h-screen bg-slate-100 p-6 font-sans flex flex-col items-center pt-8 pb-16">
       <div className="max-w-2xl w-full bg-white rounded-3xl shadow-2xl overflow-hidden">
 
-        {/* Orange header */}
-        <div className="bg-orange-600 px-8 py-6 text-white">
-          <p className="text-xs font-bold opacity-70 uppercase tracking-widest">Gen 7 Academy</p>
-          <h1 className="text-xl font-black uppercase italic tracking-tight mt-1">{course.title}</h1>
+        {/* Dark header */}
+        <div className="bg-gray-900 px-8 py-6 text-white">
+          <p className="text-xs font-bold text-yellow-400 uppercase tracking-widest">Gen 7 Academy</p>
+          <h1 className="text-xl font-black uppercase italic tracking-tight mt-1">
+            {currentPage.item.title || currentPage.sectionTitle}
+          </h1>
           <div className="flex items-center justify-between mt-3">
             <p className="text-sm opacity-80 font-semibold">{currentPage.sectionTitle}</p>
             <p className="text-xs opacity-60 font-mono tabular-nums">{currentPageIdx + 1} / {pages.length}</p>
           </div>
           <div className="mt-3 h-1.5 bg-white/20 rounded-full overflow-hidden">
             <div
-              className="h-full bg-white rounded-full transition-all duration-500"
+              className="h-full bg-yellow-400 rounded-full transition-all duration-500"
               style={{ width: `${((currentPageIdx + 1) / pages.length) * 100}%` }}
             />
           </div>
@@ -338,7 +389,7 @@ function RouteComponent() {
             <button
               onClick={() => goToPage(currentPageIdx + 1)}
               disabled={!isPageCompleted}
-              className="rounded-2xl bg-orange-600 px-6 py-2.5 text-sm font-black text-white uppercase tracking-wider hover:bg-orange-700 disabled:opacity-40 disabled:cursor-not-allowed transition-colors shadow-lg shadow-orange-200"
+              className="rounded-2xl bg-red-600 px-6 py-2.5 text-sm font-black text-white uppercase tracking-wider hover:bg-red-700 disabled:opacity-40 disabled:cursor-not-allowed transition-colors shadow-lg shadow-red-200"
             >
               Next →
             </button>
@@ -449,8 +500,8 @@ function VideoItemView({
           <video
             ref={videoRef}
             src={src}
-            controls
-            className="w-full"
+            className="w-full cursor-pointer"
+            onClick={() => videoRef.current?.paused ? videoRef.current.play() : videoRef.current?.pause()}
             onTimeUpdate={handleTimeUpdate}
             onPause={handlePause}
             onEnded={handleEnded}
@@ -464,7 +515,7 @@ function VideoItemView({
             setMarkedWatched(true)
             onComplete()
           }}
-          className="w-full rounded-2xl border-2 border-dashed border-gray-300 py-3 text-sm font-bold text-gray-500 hover:border-orange-400 hover:text-orange-600 transition-colors"
+          className="w-full rounded-2xl border-2 border-dashed border-gray-300 py-3 text-sm font-bold text-gray-500 hover:border-yellow-400 hover:text-yellow-500 transition-colors"
         >
           Mark as Watched ✓
         </button>
@@ -723,7 +774,7 @@ function FlipCardView({
       </p>
       <button
         onClick={handleFlip}
-        className="w-full rounded-2xl border-2 border-gray-200 text-center hover:border-orange-300 hover:bg-orange-50/30 transition-all duration-300 overflow-hidden"
+        className="w-full rounded-2xl border-2 border-gray-200 text-center hover:border-red-300 hover:bg-red-50/30 transition-all duration-300 overflow-hidden"
       >
         {sideImage && <img src={sideImage} alt="" className="w-full object-cover" />}
         <div className="p-8 text-gray-700 font-semibold text-base">
@@ -774,7 +825,7 @@ function HotspotItemView({
     <div className="space-y-3">
       <div className="flex items-center justify-between">
         <p className="text-xs font-semibold uppercase tracking-wide text-gray-400">Click all hotspots to explore</p>
-        <span className="text-xs font-bold text-orange-600 tabular-nums">
+        <span className="text-xs font-bold text-yellow-500 tabular-nums">
           {clickedIds.size}/{hotspots.length} discovered
         </span>
       </div>
@@ -791,7 +842,7 @@ function HotspotItemView({
               onClick={() => handleToggle(id)}
               className={[
                 'absolute flex h-8 w-8 -translate-x-1/2 -translate-y-1/2 items-center justify-center rounded-full border-2 border-white text-white text-xs font-black shadow-lg transition-all hover:scale-110',
-                isActive ? 'bg-orange-500 scale-110' : isClicked ? 'bg-green-500' : 'bg-blue-600',
+                isActive ? 'bg-red-600 scale-110' : isClicked ? 'bg-green-500' : 'bg-blue-600',
               ].join(' ')}
               style={{ left: `${h.x}%`, top: `${h.y}%` }}
             >
@@ -902,7 +953,7 @@ function OrderingItemView({
         <div className="flex items-center gap-3 pt-1">
           <button
             onClick={handleCheck}
-            className="rounded-2xl bg-orange-600 px-5 py-2.5 text-sm font-black text-white uppercase tracking-wider hover:bg-orange-700 transition-colors"
+            className="rounded-2xl bg-red-600 px-5 py-2.5 text-sm font-black text-white uppercase tracking-wider hover:bg-red-700 transition-colors"
           >
             Check Order
           </button>
@@ -992,7 +1043,7 @@ function MatchingItemView({
 
   const allMatched = pairs.every((p) => matches[p.id] !== undefined)
   const lineColor = (l: MatchLine) =>
-    l.correct === null ? '#f97316' : l.correct ? '#16a34a' : '#ef4444'
+    l.correct === null ? '#dc2626' : l.correct ? '#16a34a' : '#ef4444'
 
   return (
     <div className="space-y-4">
@@ -1023,9 +1074,9 @@ function MatchingItemView({
                 onClick={() => handleLeftClick(p.id)}
                 className={[
                   'w-full rounded-2xl px-3 py-2.5 text-left font-semibold transition-colors border-2',
-                  isSelected ? 'bg-orange-500 text-white border-orange-500'
-                    : isMatched ? 'bg-orange-50 border-orange-200'
-                    : 'bg-gray-100 border-transparent hover:bg-orange-50 hover:border-orange-200',
+                  isSelected ? 'bg-red-600 text-white border-red-600'
+                    : isMatched ? 'bg-red-50 border-red-200'
+                    : 'bg-gray-100 border-transparent hover:bg-red-50 hover:border-red-200',
                 ].join(' ')}
               >
                 {p.left}
@@ -1045,9 +1096,9 @@ function MatchingItemView({
                 onClick={() => handleRightClick(p.id)}
                 className={[
                   'w-full rounded-2xl px-3 py-2.5 text-left font-semibold transition-colors border-2',
-                  isMatchedBySelected ? 'bg-orange-500 text-white border-orange-500'
-                    : isMatchedByAny ? 'bg-orange-50 border-orange-200'
-                    : selectedLeft ? 'bg-white border-gray-200 hover:bg-orange-50 hover:border-orange-200 cursor-pointer'
+                  isMatchedBySelected ? 'bg-red-600 text-white border-red-600'
+                    : isMatchedByAny ? 'bg-red-50 border-red-200'
+                    : selectedLeft ? 'bg-white border-gray-200 hover:bg-red-50 hover:border-red-200 cursor-pointer'
                     : 'bg-white border-gray-200',
                 ].join(' ')}
               >
@@ -1059,7 +1110,7 @@ function MatchingItemView({
       </div>
 
       {selectedLeft && (
-        <p className="text-xs font-semibold text-orange-600">Now click an item on the right to match it</p>
+        <p className="text-xs font-semibold text-yellow-500">Now click an item on the right to match it</p>
       )}
 
       {correct ? (
@@ -1069,7 +1120,7 @@ function MatchingItemView({
           <button
             onClick={handleCheck}
             disabled={!allMatched}
-            className="rounded-2xl bg-orange-600 px-5 py-2.5 text-sm font-black text-white uppercase tracking-wider hover:bg-orange-700 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+            className="rounded-2xl bg-red-600 px-5 py-2.5 text-sm font-black text-white uppercase tracking-wider hover:bg-red-700 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
           >
             Check Matches
           </button>
