@@ -2,6 +2,7 @@ const express = require("express");
 const dotenv = require("dotenv");
 const cors = require("cors");
 const connectDB = require("./config/db");
+const { connectPG, migratePG } = require("./config/pg");
 const http = require("http");
 const { Server } = require("socket.io");
 const requestId = require("./middleware/requestId");
@@ -76,6 +77,19 @@ const setupSocket = require("./socket");
 
 dotenv.config();
 connectDB();
+connectPG();
+
+if ((process.env.RUN_PG_MIGRATIONS || "false").toLowerCase() === "true") {
+  migratePG()
+    .then(({ batchNo, log }) => {
+      if (log.length === 0) console.log("Postgres migrations: already up to date");
+      else console.log(`Postgres migrations batch ${batchNo} applied: ${log.join(", ")}`);
+    })
+    .catch((err) => {
+      console.error("Postgres migrations failed:", err);
+      process.exit(1);
+    });
+}
 
 const app = express();
 const server = http.createServer(app);

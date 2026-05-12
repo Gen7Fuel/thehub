@@ -24,6 +24,7 @@
     "ioredis": "^5.8.2",
     "json2csv": "^6.0.0-alpha.2",
     "jsonwebtoken": "^9.0.2",
+    "knex": "^3.2.10",
     "lodash": "^4.17.21",
     "luxon": "^3.7.2",
     "moment-timezone": "^0.6.1",
@@ -35,6 +36,7 @@
     "nodemailer": "^7.0.5",
     "openai": "^6.33.0",
     "pdfkit": "^0.17.2",
+    "pg": "^8.20.0",
     "socket.io": "^4.8.1",
     "ssh2-sftp-client": "^12.0.1",
     "xlsx": "^0.18.5"
@@ -42,6 +44,7 @@
   "scripts": {
     "start": "node app.js",
     "dev": "npx nodemon -L app.js",
+    "pg:migrate": "node ./scripts/pg-migrate.js",
     "test": "vitest run"
   },
   "devDependencies": {

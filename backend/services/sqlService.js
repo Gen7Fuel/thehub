@@ -819,6 +819,50 @@ async function getShiftEmployees(csoCode, startDate, endDate) {
   return result.recordset;
 }
 
+/**
+ * Fetches flattened item data from Azure SQL by joining Current_Inventory,
+ * Master_Item, and the most recent record from Inventory Balance.
+ */
+async function getFullItemBackupData() {
+  try {
+    const pool = await getPool();
+    const query = `
+      SELECT 
+        CI.[UPC],
+        CI.[Station_SK],
+        CI.[On Hand Qty] AS onHandQty,
+        MI.[GTIN],
+        MI.[SKU] AS upc_barcode,
+        MI.[Description],
+        MI.[Retail],
+        MI.[Vendor ID] AS vendorId,
+        MI.[Vendor] AS vendorName,
+        MI.[Category ID] AS categoryId,
+        MI.[Department ID] AS departmentId,
+        MI.[Department],
+        MI.[Price Group ID] AS priceGroupId,
+        MI.[Price Group] AS priceGroup,
+        MI.[Promo Group ID] AS promoGroupId,
+        MI.[Promo Group] AS promoGroup,
+        (
+          SELECT MAX([Last_Inv_Date]) 
+          FROM [CSO].[Inventory Balance] IB 
+          WHERE IB.[UPC] = CI.[UPC] AND IB.[Station_SK] = CI.[Station_SK]
+        ) AS last_inv_date
+      FROM [CSO].[Current_Inventory] CI
+      LEFT JOIN [CSO].[Master_Item] MI 
+        ON CI.[UPC] = MI.[UPC] AND CI.[Station_SK] = MI.[Station_SK]
+      WHERE MI.[GTIN] IS NOT NULL
+    `;
+
+    const result = await pool.request().query(query);
+    return result.recordset;
+  } catch (err) {
+    console.error("SQL error fetching backup data:", err);
+    throw err;
+  }
+}
+
 function formatDateForDB(dateString) {
   // input: "2025-11-14"
   // output: "20251114"
@@ -940,4 +984,6 @@ module.exports = {
   getBulkCSOData,
   getShiftEmployees,
   lookupAcademyEmployee,
+  getShiftEmployees,
+  getFullItemBackupData
 };
