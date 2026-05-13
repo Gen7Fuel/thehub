@@ -68,6 +68,8 @@ type CashSummaryTotals = {
   missedCpl?: number
   couponsAccepted: number
   giftCertificates?: number
+  cashOffCoupons?: number
+  otherCoupons?: number
   canadianCash: number
   cashOnHand: number
   parsedCashBack: number
@@ -307,7 +309,7 @@ function RouteComponent() {
             const canadianCashCollected = num(totals.canadian_cash_collected)
             const afdGiftCard = num(totals.afdGiftCard)
             const kioskGiftCard = num(totals.kioskGiftCard)
-            const loyaltyCoupons = num(totals.couponsAccepted) + num(totals.giftCertificates)
+            const loyaltyCoupons = num(totals.couponsAccepted) + num(totals.giftCertificates) + num(totals.cashOffCoupons) + num(totals.otherCoupons)
 
             const gblMonerisFuelSales = totalSales - itemSales - reportedCanadianCash - missedCpl
             const storeSales = itemSales
