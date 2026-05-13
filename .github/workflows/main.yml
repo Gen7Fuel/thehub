@@ -31,6 +31,8 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 23
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
 
       - name: Build frontend
         run: |
@@ -106,14 +108,14 @@ jobs:
           cache-from: type=gha,scope=auth-backend
           cache-to: type=gha,mode=max,scope=auth-backend
 
-  # Runs after all three build jobs complete
-  deploy:
+  # Starts as soon as backend images are ready — does not wait for frontend
+  deploy-backends:
     runs-on: ubuntu-latest
-    needs: [build-frontend, build-backend, build-auth-backend, setup]
+    needs: [build-backend, build-auth-backend, setup]
     steps:
       - uses: actions/checkout@v4
 
-      - name: Deploy via SSH
+      - name: Deploy backends via SSH
         uses: appleboy/ssh-action@v0.1.7
         with:
           host: ${{ secrets.SERVER_HOST }}
@@ -126,7 +128,7 @@ jobs:
             # ---- Login to GHCR to pull private images ----
             echo "${{ secrets.GHCR_TOKEN }}" | docker login ghcr.io -u ${{ github.actor }} --password-stdin
 
-            # ---- Pull backend ----
+            # ---- Pull latest config (compose.yaml, Caddyfile, etc.) ----
             git pull origin main
 
             # ---- Image references (built in CI) ----
@@ -219,20 +221,6 @@ jobs:
               echo "Skipping Postgres migrations (no postgres service in compose.yaml)."
             fi
 
-            # ---- Frontend zero-downtime update ----
-            VERSION=${{ needs.build-frontend.outputs.version }}
-            TMP_DIR=/tmp/frontend-dist/$VERSION
-            NEW_DIR=/var/www/thehub/$VERSION
-
-            sudo rm -rf $NEW_DIR
-            sudo mkdir -p $NEW_DIR
-            sudo cp -rp $TMP_DIR/. $NEW_DIR/
-            sudo chown -R gen7fuel:gen7fuel $NEW_DIR
-            sudo chmod -R 755 $NEW_DIR
-
-            cd /var/www/thehub
-            sudo ln -sfn $VERSION dist_current
-
             # ---- Safe Caddy update ----
             echo "Validating new Caddyfile..."
             docker exec -i webserver sh -c "cat > /etc/caddy/Caddyfile.new" < /home/gen7fuel/thehub/Caddyfile
@@ -249,10 +237,39 @@ jobs:
                 exit 1
             fi
 
-            # ---- Cleanup ----
-            cd /var/www/thehub && ls -1dt 202* | tail -n +4 | xargs sudo rm -rf
-            sudo rm -rf /tmp/frontend-dist/
-
             # ---- Redis safety ----
             docker exec -i redis redis-cli replicaof no one
             docker exec -i redis redis-cli SAVE
+
+  # Starts as soon as frontend dist is on the VPS — does not wait for backends
+  deploy-frontend:
+    runs-on: ubuntu-latest
+    needs: [build-frontend]
+    steps:
+      - name: Deploy frontend via SSH
+        uses: appleboy/ssh-action@v0.1.7
+        with:
+          host: ${{ secrets.SERVER_HOST }}
+          username: ${{ secrets.SERVER_USER }}
+          key: ${{ secrets.SERVER_SSH_KEY }}
+          script: |
+            set -e
+
+            VERSION=${{ needs.build-frontend.outputs.version }}
+            TMP_DIR=/tmp/frontend-dist/$VERSION
+            NEW_DIR=/var/www/thehub/$VERSION
+
+            # ---- Move dist to versioned folder ----
+            sudo rm -rf $NEW_DIR
+            sudo mkdir -p $NEW_DIR
+            sudo cp -rp $TMP_DIR/. $NEW_DIR/
+            sudo chown -R gen7fuel:gen7fuel $NEW_DIR
+            sudo chmod -R 755 $NEW_DIR
+
+            # ---- Atomic symlink swap ----
+            cd /var/www/thehub
+            sudo ln -sfn $VERSION dist_current
+
+            # ---- Cleanup: keep 3 most recent versions ----
+            cd /var/www/thehub && ls -1dt 202* | tail -n +4 | xargs sudo rm -rf
+            sudo rm -rf /tmp/frontend-dist/
