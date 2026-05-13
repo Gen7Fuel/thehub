@@ -77,6 +77,7 @@ type CashSummaryTotals = {
   couponsAccepted: number
   giftCertificates?: number
   cashOffCoupons?: number
+  otherCoupons?: number
   canadianCash: number
   cashOnHand: number
   parsedCashBack: number
@@ -332,7 +333,7 @@ function RouteComponent() {
                     <td className="px-2 py-2 text-right cursor-copy" onClick={copyCell}>{fmt2(data?.cashSummary?.totals.payouts)}</td>
                     {/* <td className="px-2 py-2 text-right cursor-copy" onClick={copyCell}>{fmt2(data?.cashSummary?.totals.cpl_bulloch)}</td> */}
                     <td className="px-2 py-2 text-right cursor-copy" onClick={copyCell}>{fmt2(data?.cashSummary?.totals.missedCpl)}</td>
-                    <td className="px-2 py-2 text-right cursor-copy" onClick={copyCell}>{fmt2((data?.cashSummary?.totals.couponsAccepted ?? 0) + (data?.cashSummary?.totals.giftCertificates ?? 0) + (data?.cashSummary?.totals.cashOffCoupons ?? 0))}</td>
+                    <td className="px-2 py-2 text-right cursor-copy" onClick={copyCell}>{fmt2((data?.cashSummary?.totals.couponsAccepted ?? 0) + (data?.cashSummary?.totals.giftCertificates ?? 0) + (data?.cashSummary?.totals.cashOffCoupons ?? 0) + (data?.cashSummary?.totals.otherCoupons ?? 0))}</td>
                     <td className="px-2 py-2 text-right cursor-copy" onClick={copyCell}>{fmt2(data?.cashSummary?.totals.cash_back)}</td>
                     <td className="px-2 py-2 text-right cursor-copy" onClick={copyCell}>{fmt2(data?.cashSummary?.totals.report_canadian_cash)}</td>
 
