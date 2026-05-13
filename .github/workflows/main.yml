@@ -6,23 +6,49 @@ on:
       - main
 
 jobs:
-  # Computes lowercase image names once; build-backend and build-auth-backend depend on it.
-  # Runs in ~5s so it barely delays the parallel build jobs.
-  setup:
+  check-changes:
     runs-on: ubuntu-latest
     outputs:
+      backend: ${{ steps.filter.outputs.backend }}
+      auth-backend: ${{ steps.filter.outputs.auth-backend }}
+      frontend: ${{ steps.filter.outputs.frontend }}
       backend-image: ${{ steps.images.outputs.backend-image }}
       auth-backend-image: ${{ steps.images.outputs.auth-backend-image }}
+      owner: ${{ steps.images.outputs.owner }}
     steps:
+      - uses: actions/checkout@v4
+
+      - uses: dorny/paths-filter@v3
+        id: filter
+        with:
+          filters: |
+            backend:
+              - 'backend/**'
+            auth-backend:
+              - 'auth-backend/**'
+            frontend:
+              - 'frontend/**'
+
       - id: images
         run: |
           OWNER=$(echo "${{ github.repository_owner }}" | tr '[:upper:]' '[:lower:]')
-          echo "backend-image=ghcr.io/${OWNER}/thehub-backend:${{ github.sha }}" >> $GITHUB_OUTPUT
-          echo "auth-backend-image=ghcr.io/${OWNER}/thehub-auth-backend:${{ github.sha }}" >> $GITHUB_OUTPUT
+          echo "owner=${OWNER}" >> $GITHUB_OUTPUT
+          if [ "${{ steps.filter.outputs.backend }}" = "true" ]; then
+            echo "backend-image=ghcr.io/${OWNER}/thehub-backend:${{ github.sha }}" >> $GITHUB_OUTPUT
+          else
+            echo "backend-image=ghcr.io/${OWNER}/thehub-backend:latest" >> $GITHUB_OUTPUT
+          fi
+          if [ "${{ steps.filter.outputs.auth-backend }}" = "true" ]; then
+            echo "auth-backend-image=ghcr.io/${OWNER}/thehub-auth-backend:${{ github.sha }}" >> $GITHUB_OUTPUT
+          else
+            echo "auth-backend-image=ghcr.io/${OWNER}/thehub-auth-backend:latest" >> $GITHUB_OUTPUT
+          fi
 
-  # Runs in parallel with build-backend and build-auth-backend
+  # Only runs when frontend/** changed
   build-frontend:
     runs-on: ubuntu-latest
+    needs: check-changes
+    if: needs.check-changes.outputs.frontend == 'true'
     outputs:
       version: ${{ steps.version.outputs.version }}
     steps:
@@ -54,10 +80,11 @@ jobs:
           strip_components: 2
           target: "/tmp/frontend-dist/${{ steps.version.outputs.version }}"
 
-  # Runs in parallel with build-frontend and build-auth-backend
+  # Only runs when backend/** changed
   build-backend:
     runs-on: ubuntu-latest
-    needs: setup
+    needs: check-changes
+    if: needs.check-changes.outputs.backend == 'true'
     permissions:
       contents: read
       packages: write
@@ -77,14 +104,17 @@ jobs:
         with:
           context: ./backend
           push: true
-          tags: ${{ needs.setup.outputs.backend-image }}
+          tags: |
+            ${{ needs.check-changes.outputs.backend-image }}
+            ghcr.io/${{ needs.check-changes.outputs.owner }}/thehub-backend:latest
           cache-from: type=gha,scope=backend
           cache-to: type=gha,mode=max,scope=backend
 
-  # Runs in parallel with build-frontend and build-backend
+  # Only runs when auth-backend/** changed
   build-auth-backend:
     runs-on: ubuntu-latest
-    needs: setup
+    needs: check-changes
+    if: needs.check-changes.outputs.auth-backend == 'true'
     permissions:
       contents: read
       packages: write
@@ -104,14 +134,20 @@ jobs:
         with:
           context: ./auth-backend
           push: true
-          tags: ${{ needs.setup.outputs.auth-backend-image }}
+          tags: |
+            ${{ needs.check-changes.outputs.auth-backend-image }}
+            ghcr.io/${{ needs.check-changes.outputs.owner }}/thehub-auth-backend:latest
           cache-from: type=gha,scope=auth-backend
           cache-to: type=gha,mode=max,scope=auth-backend
 
-  # Starts as soon as backend images are ready — does not wait for frontend
+  # Runs as long as neither build failed — skipped builds are fine
   deploy-backends:
     runs-on: ubuntu-latest
-    needs: [build-backend, build-auth-backend, setup]
+    needs: [build-backend, build-auth-backend, check-changes]
+    if: |
+      always() &&
+      needs.build-backend.result != 'failure' &&
+      needs.build-auth-backend.result != 'failure'
     steps:
       - uses: actions/checkout@v4
 
@@ -131,9 +167,12 @@ jobs:
             # ---- Pull latest config (compose.yaml, Caddyfile, etc.) ----
             git pull origin main
 
-            # ---- Image references (built in CI) ----
-            export BACKEND_IMAGE=${{ needs.setup.outputs.backend-image }}
-            export AUTH_BACKEND_IMAGE=${{ needs.setup.outputs.auth-backend-image }}
+            # ---- Image references (built in CI or latest fallback) ----
+            export BACKEND_IMAGE=${{ needs.check-changes.outputs.backend-image }}
+            export AUTH_BACKEND_IMAGE=${{ needs.check-changes.outputs.auth-backend-image }}
+
+            BACKEND_CHANGED=${{ needs.check-changes.outputs.backend }}
+            AUTH_BACKEND_CHANGED=${{ needs.check-changes.outputs.auth-backend }}
 
             # ---- Export env vars ----
             export MONGO_URI=${{ secrets.MONGO_URI }}
@@ -146,24 +185,6 @@ jobs:
             export POSTGRES_USER=${{ secrets.POSTGRES_USER }}
             export POSTGRES_PASSWORD=${{ secrets.POSTGRES_PASSWORD }}
             export REDIS_URL=${{ secrets.REDIS_URL }}
-            # export SFTP_HOST=${{ secrets.SFTP_HOST }}
-            # export SFTP_PORT=${{ secrets.SFTP_PORT }}
-            # export SFTP_COUCHICHING_USER=${{ secrets.SFTP_COUCHICHING_USER }}
-            # export SFTP_COUCHICHING_PASS=${{ secrets.SFTP_COUCHICHING_PASS }}
-            # export SFTP_RANKIN_USER=${{ secrets.SFTP_RANKIN_USER }}
-            # export SFTP_RANKIN_PASS=${{ secrets.SFTP_RANKIN_PASS }}
-            # export SFTP_JOCKO_POINT_USER=${{ secrets.SFTP_JOCKO_POINT_USER }}
-            # export SFTP_JOCKO_POINT_PASS=${{ secrets.SFTP_JOCKO_POINT_PASS }}
-            # export SFTP_WALPOLE_USER=${{ secrets.SFTP_WALPOLE_USER }}
-            # export SFTP_WALPOLE_PASS=${{ secrets.SFTP_WALPOLE_PASS }}
-            # export SFTP_SARNIA_USER=${{ secrets.SFTP_SARNIA_USER }}
-            # export SFTP_SARNIA_PASS=${{ secrets.SFTP_SARNIA_PASS }}
-            # export SFTP_SILVER_GRIZZLY_USER=${{ secrets.SFTP_SILVER_GRIZZLY_USER }}
-            # export SFTP_SILVER_GRIZZLY_PASS=${{ secrets.SFTP_SILVER_GRIZZLY_PASS }}
-            # export SFTP_OLIVER_USER=${{ secrets.SFTP_OLIVER_USER }}
-            # export SFTP_OLIVER_PASS=${{ secrets.SFTP_OLIVER_PASS }}
-            # export SFTP_OSOYOOS_USER=${{ secrets.SFTP_OSOYOOS_USER }}
-            # export SFTP_OSOYOOS_PASS=${{ secrets.SFTP_OSOYOOS_PASS }}
             export AZURE_STORAGE_CONNECTION_STRING="${{ secrets.AZURE_STORAGE_CONNECTION_STRING }}"
             export AZURE_CONTAINER=${{ secrets.AZURE_CONTAINER }}
             export AZURE_CLIENT_ID=${{ secrets.AZURE_CLIENT_ID }}
@@ -179,10 +200,6 @@ jobs:
             export SUPABASE_SERVICE_ROLE_KEY=${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
             export GOOGLE_API_KEY=${{ secrets.GOOGLE_API_KEY }}
 
-            # ---- Pull pre-built images from GHCR ----
-            docker pull $BACKEND_IMAGE
-            docker pull $AUTH_BACKEND_IMAGE
-
             # ---- Ensure Postgres is running before backend deploy ----
             echo "Starting postgres..."
             if docker compose up -d --wait postgres; then
@@ -193,32 +210,52 @@ jobs:
                 exit 1
             fi
 
-            # ---- 1. Deploy Auth-Backend ----
-            echo "Deploying auth-backend..."
-            if docker compose up -d --no-deps --wait auth-backend; then
-                echo "SUCCESS: Auth-backend is healthy."
+            # ---- 1. Deploy Auth-Backend (only if changed) ----
+            if [ "$AUTH_BACKEND_CHANGED" = "true" ]; then
+                echo "Deploying auth-backend (new image: $AUTH_BACKEND_IMAGE)..."
+                OLD_AUTH_BACKEND=$(docker inspect --format='{{.Image}}' auth-backend 2>/dev/null || echo "")
+                docker pull $AUTH_BACKEND_IMAGE
+                if docker compose up -d --no-deps --wait auth-backend; then
+                    echo "SUCCESS: Auth-backend is healthy."
+                else
+                    echo "FATAL: Auth-backend failed health check!"
+                    docker logs auth-backend --tail 50
+                    if [ -n "$OLD_AUTH_BACKEND" ]; then
+                        echo "Rolling back auth-backend to $OLD_AUTH_BACKEND..."
+                        export AUTH_BACKEND_IMAGE=$OLD_AUTH_BACKEND
+                        docker compose up -d --no-deps auth-backend
+                    fi
+                    exit 1
+                fi
             else
-                echo "FATAL: Auth-backend failed health check!"
-                docker logs auth-backend --tail 50
-                exit 1
+                echo "Skipping auth-backend deploy (no changes)."
             fi
 
-            # ---- 2. Deploy Main Backend ----
-            echo "Deploying backend..."
-            if docker compose up -d --no-deps --wait backend; then
-                echo "SUCCESS: Backend is healthy."
-            else
-                echo "FATAL: Backend failed health check!"
-                docker logs backend --tail 50
-                exit 1
-            fi
+            # ---- 2. Deploy Main Backend (only if changed) ----
+            if [ "$BACKEND_CHANGED" = "true" ]; then
+                echo "Deploying backend (new image: $BACKEND_IMAGE)..."
+                OLD_BACKEND=$(docker inspect --format='{{.Image}}' backend 2>/dev/null || echo "")
+                docker pull $BACKEND_IMAGE
+                if docker compose up -d --no-deps --wait backend; then
+                    echo "SUCCESS: Backend is healthy."
+                else
+                    echo "FATAL: Backend failed health check!"
+                    docker logs backend --tail 50
+                    if [ -n "$OLD_BACKEND" ]; then
+                        echo "Rolling back backend to $OLD_BACKEND..."
+                        export BACKEND_IMAGE=$OLD_BACKEND
+                        docker compose up -d --no-deps backend
+                    fi
+                    exit 1
+                fi
 
-            # ---- Postgres migrations ----
-            if docker compose ps --services | grep -q '^postgres$'; then
-              echo "Running Postgres migrations..."
-              docker compose exec -T backend node scripts/pg-migrate.js
+                # ---- Postgres migrations (only when backend changed) ----
+                if docker compose ps --services | grep -q '^postgres$'; then
+                    echo "Running Postgres migrations..."
+                    docker compose exec -T backend node scripts/pg-migrate.js
+                fi
             else
-              echo "Skipping Postgres migrations (no postgres service in compose.yaml)."
+                echo "Skipping backend deploy (no changes)."
             fi
 
             # ---- Safe Caddy update ----
@@ -241,10 +278,14 @@ jobs:
             docker exec -i redis redis-cli replicaof no one
             docker exec -i redis redis-cli SAVE
 
-  # Starts as soon as frontend dist is on the VPS — does not wait for backends
+  # Only runs when frontend actually changed
   deploy-frontend:
     runs-on: ubuntu-latest
-    needs: [build-frontend]
+    needs: [build-frontend, check-changes]
+    if: |
+      always() &&
+      needs.check-changes.outputs.frontend == 'true' &&
+      needs.build-frontend.result == 'success'
     steps:
       - name: Deploy frontend via SSH
         uses: appleboy/ssh-action@v0.1.7
