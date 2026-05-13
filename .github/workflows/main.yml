@@ -1,66 +1,3 @@
-# name: Deploy to Server
-
-# # Trigger on pushes to the main branch
-# on:
-#   push:
-#     branches:
-#       - main
-
-# jobs:
-#   deploy:
-#     runs-on: ubuntu-latest
-
-#     steps:
-#       # Step 1: Checkout repo (optional, mainly for GitHub Actions context)
-#       - name: Checkout repository
-#         uses: actions/checkout@v4
-
-#       # Step 2: SSH to server and run deployment commands
-#       - name: Deploy via SSH
-#         uses: appleboy/ssh-action@v0.1.7
-#         with:
-#           host: ${{ secrets.SERVER_HOST }}       # Server IP or hostname
-#           username: ${{ secrets.SERVER_USER }}   # SSH username
-#           key: ${{ secrets.SERVER_SSH_KEY }}     # Private SSH key from GitHub Secrets
-#           script: |
-#             cd /home/gen7fuel/thehub
-
-#             export MONGO_URI=${{ secrets.MONGO_URI }}
-#             export JWT_SECRET=${{ secrets.JWT_SECRET }}
-#             export SQL_SERVER=${{ secrets.SQL_SERVER }}
-#             export SQL_DB=${{ secrets.SQL_DB }}
-#             export SQL_USER=${{ secrets.SQL_USER }}
-#             export SQL_PASSWORD=${{ secrets.SQL_PASSWORD }}
-#             export REDIS_URL=${{ secrets.REDIS_URL }}
-#             export SFTP_HOST=${{ secrets.SFTP_HOST }}
-#             export SFTP_PORT=${{ secrets.SFTP_PORT }}
-#             export SFTP_COUCHICHING_USER=${{ secrets.SFTP_COUCHICHING_USER }}
-#             export SFTP_COUCHICHING_PASS=${{ secrets.SFTP_COUCHICHING_PASS }}
-#             export SFTP_RANKIN_USER=${{ secrets.SFTP_RANKIN_USER }}
-#             export SFTP_RANKIN_PASS=${{ secrets.SFTP_RANKIN_PASS }}
-#             export SFTP_JOCKO_POINT_USER=${{ secrets.SFTP_JOCKO_POINT_USER }}
-#             export SFTP_JOCKO_POINT_PASS=${{ secrets.SFTP_JOCKO_POINT_PASS }}
-#             export SFTP_WALPOLE_USER=${{ secrets.SFTP_WALPOLE_USER }}
-#             export SFTP_WALPOLE_PASS=${{ secrets.SFTP_WALPOLE_PASS }}
-#             export SFTP_SARNIA_USER=${{ secrets.SFTP_SARNIA_USER }}
-#             export SFTP_SARNIA_PASS=${{ secrets.SFTP_SARNIA_PASS }}
-#             export SFTP_SILVER_GRIZZLY_USER=${{ secrets.SFTP_SILVER_GRIZZLY_USER }}
-#             export SFTP_SILVER_GRIZZLY_PASS=${{ secrets.SFTP_SILVER_GRIZZLY_PASS }}
-#             export SFTP_OLIVER_USER=${{ secrets.SFTP_OLIVER_USER }}
-#             export SFTP_OLIVER_PASS=${{ secrets.SFTP_OLIVER_PASS }}
-#             export SFTP_OSOYOOS_USER=${{ secrets.SFTP_OSOYOOS_USER }}
-#             export SFTP_OSOYOOS_PASS=${{ secrets.SFTP_OSOYOOS_PASS }}
-#             export AZURE_STORAGE_CONNECTION_STRING=${{ secrets.AZURE_STORAGE_CONNECTION_STRING }}
-#             export AZURE_CONTAINER=${{ secrets.AZURE_CONTAINER }}
-
-#             git pull origin main
-#             docker compose down
-#             docker volume rm thehub_dist || true
-#             docker compose up --build -d
-#             docker exec -i redis redis-cli replicaof no one
-#             docker exec -i redis redis-cli SAVE
-
-
 name: Deploy to Server
 
 on:
@@ -69,41 +6,113 @@ on:
       - main
 
 jobs:
-  deploy:
+  # Computes lowercase image names once; build-backend and build-auth-backend depend on it.
+  # Runs in ~5s so it barely delays the parallel build jobs.
+  setup:
     runs-on: ubuntu-latest
-
+    outputs:
+      backend-image: ${{ steps.images.outputs.backend-image }}
+      auth-backend-image: ${{ steps.images.outputs.auth-backend-image }}
     steps:
-      # 1. Checkout repo
+      - id: images
+        run: |
+          OWNER=$(echo "${{ github.repository_owner }}" | tr '[:upper:]' '[:lower:]')
+          echo "backend-image=ghcr.io/${OWNER}/thehub-backend:${{ github.sha }}" >> $GITHUB_OUTPUT
+          echo "auth-backend-image=ghcr.io/${OWNER}/thehub-auth-backend:${{ github.sha }}" >> $GITHUB_OUTPUT
+
+  # Runs in parallel with build-backend and build-auth-backend
+  build-frontend:
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+    steps:
       - uses: actions/checkout@v4
 
-      # 2. Setup Node
-      - name: Setup Node
-        uses: actions/setup-node@v4
+      - uses: actions/setup-node@v4
         with:
           node-version: 23
 
-      # 3. Build frontend
       - name: Build frontend
         run: |
           cd frontend
           npm ci
-          rm -rf dist  # <--- FORCE DELETE OLD BUILD
+          rm -rf dist
           npm run build
-          VERSION=$(date +%Y%m%d%H%M%S)-${GITHUB_SHA::7}
-          echo "VERSION=$VERSION" >> $GITHUB_ENV
 
-      # 4. Copy frontend build to server
+      - id: version
+        run: echo "version=$(date +%Y%m%d%H%M%S)-${GITHUB_SHA::7}" >> $GITHUB_OUTPUT
+
       - name: Copy frontend build to server
         uses: appleboy/scp-action@v0.1.7
         with:
           host: ${{ secrets.SERVER_HOST }}
           username: ${{ secrets.SERVER_USER }}
           key: ${{ secrets.SERVER_SSH_KEY }}
-          source: "frontend/dist/*"   # Add /* to get the contents
-          strip_components: 2        # This removes 'frontend/' and 'dist/' from the folder structure
-          target: "/tmp/frontend-dist/${{ env.VERSION }}"
+          source: "frontend/dist/*"
+          strip_components: 2
+          target: "/tmp/frontend-dist/${{ steps.version.outputs.version }}"
 
-      # 5. Deploy backend + frontend
+  # Runs in parallel with build-frontend and build-auth-backend
+  build-backend:
+    runs-on: ubuntu-latest
+    needs: setup
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: docker/setup-buildx-action@v3
+
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build and push backend
+        uses: docker/build-push-action@v6
+        with:
+          context: ./backend
+          push: true
+          tags: ${{ needs.setup.outputs.backend-image }}
+          cache-from: type=gha,scope=backend
+          cache-to: type=gha,mode=max,scope=backend
+
+  # Runs in parallel with build-frontend and build-backend
+  build-auth-backend:
+    runs-on: ubuntu-latest
+    needs: setup
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: docker/setup-buildx-action@v3
+
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build and push auth-backend
+        uses: docker/build-push-action@v6
+        with:
+          context: ./auth-backend
+          push: true
+          tags: ${{ needs.setup.outputs.auth-backend-image }}
+          cache-from: type=gha,scope=auth-backend
+          cache-to: type=gha,mode=max,scope=auth-backend
+
+  # Runs after all three build jobs complete
+  deploy:
+    runs-on: ubuntu-latest
+    needs: [build-frontend, build-backend, build-auth-backend, setup]
+    steps:
+      - uses: actions/checkout@v4
+
       - name: Deploy via SSH
         uses: appleboy/ssh-action@v0.1.7
         with:
@@ -114,8 +123,15 @@ jobs:
             set -e
             cd /home/gen7fuel/thehub
 
+            # ---- Login to GHCR to pull private images ----
+            echo "${{ secrets.GHCR_TOKEN }}" | docker login ghcr.io -u ${{ github.actor }} --password-stdin
+
             # ---- Pull backend ----
             git pull origin main
+
+            # ---- Image references (built in CI) ----
+            export BACKEND_IMAGE=${{ needs.setup.outputs.backend-image }}
+            export AUTH_BACKEND_IMAGE=${{ needs.setup.outputs.auth-backend-image }}
 
             # ---- Export env vars ----
             export MONGO_URI=${{ secrets.MONGO_URI }}
@@ -161,11 +177,9 @@ jobs:
             export SUPABASE_SERVICE_ROLE_KEY=${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
             export GOOGLE_API_KEY=${{ secrets.GOOGLE_API_KEY }}
 
-            # ---- Deploy Auth-Backend ----
-            # docker compose up -d --build --no-deps --wait auth-backend
-            
-            # ---- Backend rolling update ----
-            # docker compose up -d --build --no-deps --wait backend
+            # ---- Pull pre-built images from GHCR ----
+            docker pull $BACKEND_IMAGE
+            docker pull $AUTH_BACKEND_IMAGE
 
             # ---- Ensure Postgres is running before backend deploy ----
             echo "Starting postgres..."
@@ -177,44 +191,27 @@ jobs:
                 exit 1
             fi
 
-            # ---- 1. Deploy Auth-Backend with Safety ----
+            # ---- 1. Deploy Auth-Backend ----
             echo "Deploying auth-backend..."
-            if docker compose up -d --build --no-deps --wait auth-backend; then
+            if docker compose up -d --no-deps --wait auth-backend; then
                 echo "SUCCESS: Auth-backend is healthy."
             else
                 echo "FATAL: Auth-backend failed health check!"
                 docker logs auth-backend --tail 50
-                echo "Rolling back auth-backend..."
-                docker compose up -d auth-backend
                 exit 1
             fi
 
-            # ---- 2. Deploy CDN with Safety ----
-            # echo "Deploying cdn..."
-            # if docker compose up -d --build --no-deps --wait cdn; then
-            #     echo "SUCCESS: cdn is healthy."
-            # else
-            #     echo "FATAL: cdn failed health check!"
-            #     docker logs cdn --tail 50
-            #     echo "Rolling back cdn..."
-            #     docker compose up -d cdn
-            #     exit 1
-            # fi
-
-            # ---- 3. Deploy Main Backend with Safety ----
+            # ---- 2. Deploy Main Backend ----
             echo "Deploying backend..."
-            if docker compose up -d --build --no-deps --wait backend; then
+            if docker compose up -d --no-deps --wait backend; then
                 echo "SUCCESS: Backend is healthy."
             else
                 echo "FATAL: Backend failed health check!"
-                # This captures the 'Module Not Found' or 'Mongoose' errors
                 docker logs backend --tail 50
-                echo "Rolling back main backend..."
-                docker compose up -d backend
                 exit 1
             fi
 
-            # ---- Optional: Postgres schema migrations (only if postgres service exists) ----
+            # ---- Postgres migrations ----
             if docker compose ps --services | grep -q '^postgres$'; then
               echo "Running Postgres migrations..."
               docker compose exec -T backend node scripts/pg-migrate.js
@@ -223,48 +220,27 @@ jobs:
             fi
 
             # ---- Frontend zero-downtime update ----
-            VERSION=${{ env.VERSION }}
+            VERSION=${{ needs.build-frontend.outputs.version }}
             TMP_DIR=/tmp/frontend-dist/$VERSION
             NEW_DIR=/var/www/thehub/$VERSION
-            CURRENT_DIR=/var/www/thehub/dist_current
 
-            # 1. Create a fresh versioned folder (ensure it's empty)
             sudo rm -rf $NEW_DIR
             sudo mkdir -p $NEW_DIR
-
-            # 2. Copy from tmp to the versioned folder
             sudo cp -rp $TMP_DIR/. $NEW_DIR/
-
-            # 3. FIX PERMISSIONS (Ensures Caddy can read the new files)
             sudo chown -R gen7fuel:gen7fuel $NEW_DIR
             sudo chmod -R 755 $NEW_DIR
 
-            # 4. ATOMIC RELATIVE SYMLINK (Crucial for Docker)
-            # We 'cd' into the directory so the link is "2025... -> dist_current" 
-            # instead of "/var/www/thehub/2025... -> dist_current"
             cd /var/www/thehub
             sudo ln -sfn $VERSION dist_current
 
-            # 5. Reload Caddy
-            # docker exec webserver caddy reload --config /etc/caddy/Caddyfile
-            
-            # ---- 5. Safe Caddy Update ----
+            # ---- Safe Caddy update ----
             echo "Validating new Caddyfile..."
-
-            # 1. Push to a temporary file inside the container
             docker exec -i webserver sh -c "cat > /etc/caddy/Caddyfile.new" < /home/gen7fuel/thehub/Caddyfile
 
-            # 2. Validate the temporary file
             if docker exec webserver caddy validate --config /etc/caddy/Caddyfile.new; then
                 echo "Validation passed. Applying new config..."
-                
-                # USE CAT TO OVERWRITE (Avoids 'Resource busy' error)
                 docker exec webserver sh -c "cat /etc/caddy/Caddyfile.new > /etc/caddy/Caddyfile"
-                
-                # Reload Caddy
                 docker exec webserver caddy reload --config /etc/caddy/Caddyfile
-                
-                # Cleanup
                 docker exec webserver rm /etc/caddy/Caddyfile.new
                 echo "Caddy reloaded successfully."
             else
@@ -274,10 +250,7 @@ jobs:
             fi
 
             # ---- Cleanup ----
-            # Keep only the 3 most recent versions
             cd /var/www/thehub && ls -1dt 202* | tail -n +4 | xargs sudo rm -rf
-            
-            # Clean up the /tmp folder so it doesn't grow forever
             sudo rm -rf /tmp/frontend-dist/
 
             # ---- Redis safety ----
