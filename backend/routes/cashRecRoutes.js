@@ -85,7 +85,7 @@ function extractSiteFromHeader(lines) {
   return raw // fallback to the original string if no match
 }
 
-// Parse tab-delimited Kardpoll/Transaction Detail file
+// Parse Kardpoll/Transaction Detail file \u2014 supports both tab-delimited and fixed-width space-delimited formats
 function parseTransactionDetailTab(text) {
   const clean = String(text || '')
     .replace(/^\uFEFF/, '')
@@ -93,19 +93,36 @@ function parseTransactionDetailTab(text) {
     .replace(/\r/g, '\n')
   const lines = clean.split('\n').map(l => l.trimEnd()).filter(Boolean)
 
+  // Detect format: if any of the first 40 lines contain a tab, treat as tab-delimited
+  const isTabDelimited = lines.slice(0, 40).some(l => l.includes('\t'))
+
   // Locate header with required columns
   let headerIdx = -1
-  let headers = []
+  let headers = []       // tab format: array of column name strings
+  let colPos = null      // fixed-width format: array of { name, start }
+
   for (let i = 0; i < lines.length; i++) {
-    const cols = lines[i].split('\t').map(s => s.trim())
-    const lower = cols.map(c => c.toLowerCase())
-    const hasCard = lower.includes('card1/card2')
-    const hasQty = lower.includes('quantity') || lower.includes('qty')
-    const hasTotal = lower.includes('total') || lower.includes('amount')
-    if (hasCard && hasQty && hasTotal) {
-      headerIdx = i
-      headers = cols
-      break
+    const line = lines[i]
+    if (isTabDelimited) {
+      const cols = line.split('\t').map(s => s.trim())
+      const lower = cols.map(c => c.toLowerCase())
+      if (lower.includes('card1/card2') && (lower.includes('quantity') || lower.includes('qty')) && (lower.includes('total') || lower.includes('amount'))) {
+        headerIdx = i
+        headers = cols
+        break
+      }
+    } else {
+      const lower = line.toLowerCase()
+      if (lower.includes('card1/card2') && (lower.includes('quantity') || lower.includes('qty')) && (lower.includes('total') || lower.includes('amount'))) {
+        headerIdx = i
+        // Record start position of each whitespace-separated token
+        const positions = []
+        const re = /(\S+)/g
+        let m
+        while ((m = re.exec(line)) !== null) positions.push({ name: m[1].toLowerCase(), start: m.index })
+        colPos = positions
+        break
+      }
     }
   }
 
@@ -120,13 +137,32 @@ function parseTransactionDetailTab(text) {
     }
   }
 
-  // Column indices
-  const idxExact = (name) => headers.findIndex(h => h.toLowerCase() === String(name).toLowerCase())
-  const qtyIdx = idxExact('Quantity') >= 0 ? idxExact('Quantity') : headers.findIndex(h => h.toLowerCase().includes('qty'))
-  const totalIdx = idxExact('Total') >= 0 ? idxExact('Total') : headers.findIndex(h => h.toLowerCase().includes('amount'))
-  const cardIdx = idxExact('Card1/Card2')
-  const priceIdx = idxExact('Price') >= 0 ? idxExact('Price') : headers.findIndex(h => h.toLowerCase().includes('price'))
-  const customerIdx = headers.findIndex(h => h.toLowerCase() === 'customer')
+  // Column index helpers
+  let qtyIdx, totalIdx, cardIdx, priceIdx, customerIdx
+  if (isTabDelimited) {
+    const idxExact = (name) => headers.findIndex(h => h.toLowerCase() === name.toLowerCase())
+    qtyIdx = idxExact('Quantity') >= 0 ? idxExact('Quantity') : headers.findIndex(h => h.toLowerCase().includes('qty'))
+    totalIdx = idxExact('Total') >= 0 ? idxExact('Total') : headers.findIndex(h => h.toLowerCase().includes('amount'))
+    cardIdx = idxExact('Card1/Card2')
+    priceIdx = idxExact('Price') >= 0 ? idxExact('Price') : headers.findIndex(h => h.toLowerCase().includes('price'))
+    customerIdx = headers.findIndex(h => h.toLowerCase() === 'customer')
+  } else {
+    const idxFw = (name) => colPos.findIndex(p => p.name === name.toLowerCase())
+    const idxFwSub = (sub) => colPos.findIndex(p => p.name.includes(sub.toLowerCase()))
+    qtyIdx = idxFw('quantity') >= 0 ? idxFw('quantity') : idxFwSub('qty')
+    totalIdx = idxFw('total') >= 0 ? idxFw('total') : idxFwSub('amount')
+    cardIdx = idxFw('card1/card2')
+    priceIdx = idxFw('price') >= 0 ? idxFw('price') : idxFwSub('price')
+    customerIdx = idxFw('customer')
+  }
+
+  // Extract a fixed-width column value using the colPos table
+  const extractFw = (line, posIdx) => {
+    if (posIdx < 0 || posIdx >= colPos.length) return ''
+    const start = colPos[posIdx].start
+    const end = posIdx + 1 < colPos.length ? colPos[posIdx + 1].start : undefined
+    return (end !== undefined ? line.slice(start, end) : line.slice(start)).trim()
+  }
 
   let litresSold = 0
   let sales = 0
@@ -134,16 +170,33 @@ function parseTransactionDetailTab(text) {
   const ar_rows = []
 
   for (let i = headerIdx + 1; i < lines.length; i++) {
-    const cols = lines[i].split('\t').map(s => s.trim())
-    if (cols.length <= Math.max(qtyIdx, totalIdx, cardIdx)) continue
-    const first = (cols[0] || '').toLowerCase()
-    if (first.startsWith('total')) continue
+    const line = lines[i]
 
-    const qty = qtyIdx >= 0 ? toNum(cols[qtyIdx]) : 0
-    const tot = totalIdx >= 0 ? toNum(cols[totalIdx]) : 0
-    const cardVal = cardIdx >= 0 ? cols[cardIdx] : ''
-    const price = priceIdx >= 0 ? toNum(cols[priceIdx]) : 0
-    // const customer = customerIdx >= 0 ? cols[customerIdx] : ''
+    let qty, tot, cardVal, price, customerName
+
+    if (isTabDelimited) {
+      const cols = line.split('\t').map(s => s.trim())
+      if (cols.length <= Math.max(qtyIdx, totalIdx, cardIdx)) continue
+      if ((cols[0] || '').toLowerCase().startsWith('total')) continue
+      qty = toNum(cols[qtyIdx])
+      tot = toNum(cols[totalIdx])
+      cardVal = cardIdx >= 0 ? cols[cardIdx] : ''
+      price = priceIdx >= 0 ? toNum(cols[priceIdx]) : 0
+      customerName =
+        customerIdx >= 0 && customerIdx + 1 < cols.length
+          ? (cols[customerIdx + 1] || '').trim()
+          : (cols[customerIdx] || '').trim()
+    } else {
+      // Skip separator lines (underscores/dashes) and repeated header rows
+      if (/^[_\-\s]+$/.test(line)) continue
+      if (line.toLowerCase().includes('card1/card2')) continue
+      if (line.trim().toLowerCase().startsWith('total')) continue
+      qty = toNum(extractFw(line, qtyIdx))
+      tot = toNum(extractFw(line, totalIdx))
+      cardVal = extractFw(line, cardIdx)
+      price = priceIdx >= 0 ? toNum(extractFw(line, priceIdx)) : 0
+      customerName = customerIdx >= 0 ? extractFw(line, customerIdx) : ''
+    }
 
     if (qty === 0 && tot === 0) continue
 
@@ -152,11 +205,6 @@ function parseTransactionDetailTab(text) {
 
     if (isARCard(cardVal)) {
       ar += tot
-      // Use the next column (untitled) as the customer name, but keep the field key "customer"
-      const customerName =
-        customerIdx >= 0 && customerIdx + 1 < cols.length
-          ? (cols[customerIdx + 1] || '').trim()
-          : (cols[customerIdx] || '').trim()
       ar_rows.push({
         customer: customerName,
         card: cardVal,
