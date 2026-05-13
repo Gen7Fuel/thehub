@@ -168,7 +168,7 @@ jobs:
             # docker compose up -d --build --no-deps --wait backend
 
             # ---- Ensure Postgres is running before backend deploy ----
-            echo "Starting postgres..."
+            echo "Ensuring Postgres is running..."
             if docker compose up -d --wait postgres; then
                 echo "SUCCESS: Postgres is healthy."
             else

@@ -852,7 +852,7 @@ async function getFullItemBackupData() {
       FROM [CSO].[Current_Inventory] CI
       LEFT JOIN [CSO].[Master_Item] MI 
         ON CI.[UPC] = MI.[UPC] AND CI.[Station_SK] = MI.[Station_SK]
-      WHERE MI.[GTIN] IS NOT NULL
+      WHERE MI.[GTIN] IS NOT NULL and MI.[Category ID] is not null
     `;
 
     const result = await pool.request().query(query);

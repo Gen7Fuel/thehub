@@ -8,6 +8,8 @@ const Location = require('../models/Location');
 const { getCurrentInventory, getInventoryCategories, getBulkOnHandQtyCSO } = require('../services/sqlService');
 const { updateCycleCountCSO } = require('../cron_jobs/cycleCountCron');
 const ProductCategory = require('../models/ProductCategory');
+const { getPg } = require("../config/pg");
+const moment = require("moment-timezone");
 
 const upload = multer({ storage: multer.memoryStorage() });
 
@@ -313,6 +315,98 @@ router.get('/daily-items', async (req, res) => {
   } catch (err) {
     console.error(err);
     res.status(500).json({ message: "Failed to get daily items" });
+  }
+});
+
+router.get('/daily-items-v2', async (req, res) => {
+  try {
+    const { site } = req.query;
+    const db = getPg();
+    console.log("Fetching daily items for site:", site);
+
+    // 1. Get Site & Categories from Mongo
+    const [location, mongoCategories] = await Promise.all([
+      Location.findOne({ stationName: site }),
+      ProductCategory.find({}).lean()
+    ]);
+
+    if (!location) return res.status(404).json({ message: "Location not found" });
+
+    // Create a lookup: { "10": "Beverages" }
+    const categoryMap = mongoCategories.reduce((acc, cat) => {
+      acc[cat.Number] = cat.Name;
+      return acc;
+    }, {});
+
+    // 2. Calculate local date
+    const stationTimezone = location.timezone || "UTC";
+    const localDateStr = moment().tz(stationTimezone).format("YYYY-MM-DD");
+
+    // 3. Fetch Items from Postgres
+    const items = await db("cycle_count_instance as i")
+      .join("cycle_count_items as ci", "i.id", "ci.instance_id")
+      .join("item_bk as ib", "ci.product_id", "ib.id")
+      .where({
+        "i.site_mongo_id": location._id.toString(),
+        "i.date": localDateStr
+      })
+      .select(
+        "ci.id as entryId",
+        "ci.foh",
+        "ci.boh",
+        "ci.priority",
+        "ib.id as productId",
+        "ib.description as name",
+        "ib.upc_barcode",
+        "ib.category_id", // This matches ProductCategory.Number
+        "ib.on_hand_qty as onHandCSO"
+      )
+      .orderBy("ci.priority", "desc");
+
+    // 4. Attach Category Names
+    const enrichedItems = items.map(item => ({
+      ...item,
+      categoryName: categoryMap[item.category_id] || `Uncategorized (${item.category_id})`
+    }));
+
+    res.json({ items: enrichedItems });
+  } catch (err) {
+    console.error(err);
+    res.status(500).send("Server Error");
+  }
+});
+
+
+router.post('/save-item-v2', async (req, res) => {
+  try {
+    const { entryId, field, value, site } = req.body; // entryId is ci.id from Postgres
+    const db = getPg();
+
+    if (!['foh', 'boh'].includes(field)) {
+      return res.status(400).json({ message: "Invalid field" });
+    }
+
+    // 1. Update the Postgres record
+    await db("cycle_count_items")
+      .where({ id: entryId })
+      .update({
+        [field]: value,
+        count_completed: true // Mark as interacted with
+      });
+
+    // 2. Emit Socket Event (using your existing pattern)
+    // We emit to the specific site so other tablets at the same store update
+    req.app.get("io").emit("cycle-count-field-updated", {
+      entryId,
+      field,
+      value,
+      site
+    });
+
+    res.json({ success: true });
+  } catch (err) {
+    console.error("Error saving Postgres count:", err);
+    res.status(500).json({ message: "Failed to save item." });
   }
 });
 
