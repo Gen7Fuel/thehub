@@ -1,15 +1,11 @@
-# Use Node.js official image as base
 FROM node:20-alpine
 
-# Set working directory
 WORKDIR /app
 
-# Copy package.json and install dependencies
-COPY package.json .
-RUN npm install
+COPY package*.json ./
+RUN --mount=type=cache,target=/root/.npm \
+    npm install --prefer-offline
 
-# Copy all source files into the container
 COPY . .
 
-# Command to run the app
 CMD ["node", "index.js"]
