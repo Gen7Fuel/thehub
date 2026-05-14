@@ -107,6 +107,7 @@ async function runItemBackupSync() {
       grade,
       active: true,
       allow_cycle_count: true,
+      image_url: item?.image_url ?? null,
       sync_date: db.fn.now(),
     });
   }

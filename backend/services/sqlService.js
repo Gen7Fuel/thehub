@@ -848,7 +848,12 @@ async function getFullItemBackupData() {
           SELECT MAX([Last_Inv_Date]) 
           FROM [CSO].[Inventory Balance] IB 
           WHERE IB.[UPC] = CI.[UPC] AND IB.[Station_SK] = CI.[Station_SK]
-        ) AS last_inv_date
+        ) AS last_inv_date,
+        (
+          SELECT [URL] 
+          FROM [CSO].[UPC Details] UD
+          WHERE UD.[UPC] = CI.[UPC]
+        ) AS image_url
       FROM [CSO].[Current_Inventory] CI
       LEFT JOIN [CSO].[Master_Item] MI 
         ON CI.[UPC] = MI.[UPC] AND CI.[Station_SK] = MI.[Station_SK]

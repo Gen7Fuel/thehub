@@ -111,8 +111,8 @@ async function generateWeeklyCycleCounts() {
               const itemRows = dailySelection.map(item => ({
                 instance_id: instance.id,
                 product_id: item.id,
-                foh: 0,
-                boh: 0,
+                foh: null,
+                boh: null,
                 count_completed: false,
                 priority: false
               }));

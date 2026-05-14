@@ -358,7 +358,8 @@ router.get('/daily-items-v2', async (req, res) => {
         "ib.id as productId",
         "ib.description as name",
         "ib.upc_barcode",
-        "ib.category_id", // This matches ProductCategory.Number
+        "ib.image_url",
+        "ib.category_id", 
         "ib.on_hand_qty as onHandCSO"
       )
       .orderBy("ci.priority", "desc");
