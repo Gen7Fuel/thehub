@@ -43,7 +43,8 @@ export function SitePicker({
 
   const handleChange = (v: string) => {
     setSelectedSite(v)
-    navigate({ search: (prev: Record<string, unknown>) => ({ ...prev, site: v }), replace: true })
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    navigate({ search: ((prev: Record<string, unknown>) => ({ ...prev, site: v })) as any, replace: true })
     onValueChange?.(v)
   }
 
