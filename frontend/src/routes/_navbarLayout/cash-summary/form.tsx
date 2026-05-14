@@ -1,6 +1,7 @@
 import { createFileRoute, useNavigate } from '@tanstack/react-router'
 import { useEffect, useState } from 'react'
 import { SitePicker } from '@/components/custom/sitePicker'
+import { useSite } from '@/context/SiteContext'
 
 type CashSummarySearch = { site: string; id?: string }
 
@@ -56,6 +57,13 @@ export const Route = createFileRoute('/_navbarLayout/cash-summary/form')({
 function RouteComponent() {
   const { site, id } = Route.useSearch()
   const navigate = useNavigate({ from: Route.fullPath })
+  const { selectedSite } = useSite()
+
+  useEffect(() => {
+    if (!site && selectedSite) {
+      navigate({ search: (prev: CashSummarySearch) => ({ ...prev, site: selectedSite }), replace: true })
+    }
+  }, [selectedSite])
   // const { existing } = Route.useLoaderData() as { existing: CashSummaryDoc | null }
   const { existing, accessDenied } = Route.useLoaderData() as {
     existing: CashSummaryDoc | null;
