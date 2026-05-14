@@ -955,6 +955,17 @@ async function getAllSQLData(csoCode, dates) {
   };
 }
 
+async function lookupAcademyEmployee(employeeNumber) {
+  const pool = await getPool()
+  const result = await pool
+    .request()
+    .input('employeeNumber', sql.VarChar, String(employeeNumber))
+    .query('SELECT firstName, lastName FROM Payworks.Employees WHERE employeeNumber = @employeeNumber')
+  if (result.recordset.length === 0) return null
+  const { firstName, lastName } = result.recordset[0]
+  return { employeeNumber: String(employeeNumber), name: `${firstName} ${lastName}`.trim() }
+}
+
 module.exports = {
   sqlConfig,
   getUPC_barcode,
@@ -977,5 +988,6 @@ module.exports = {
   getBulkUnitPriceCSO,
   getBulkCSOData,
   getShiftEmployees,
+  lookupAcademyEmployee,
   getFullItemBackupData
 };

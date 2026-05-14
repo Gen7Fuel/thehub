@@ -1,6 +1,7 @@
 import { createFileRoute, useNavigate } from '@tanstack/react-router'
 import { useState, useEffect, useMemo } from 'react'
 import { useAuth } from '@/context/AuthContext'
+import { useSite } from '@/context/SiteContext'
 import { SitePicker } from '@/components/custom/sitePicker'
 import { DatePickerWithRange } from '@/components/custom/datePickerWithRange'
 import { Card, CardContent } from "@/components/ui/card"
@@ -24,7 +25,14 @@ function OverShortReport() {
   const { site, date } = Route.useSearch()
   const navigate = useNavigate({ from: Route.fullPath })
 
-  const { user } = useAuth();
+  const { user } = useAuth()
+  const { selectedSite } = useSite()
+
+  useEffect(() => {
+    if (!site && selectedSite) {
+      navigate({ search: (prev: any) => ({ ...prev, site: selectedSite }), replace: true })
+    }
+  }, [selectedSite])
 
   const access = user?.access;
 

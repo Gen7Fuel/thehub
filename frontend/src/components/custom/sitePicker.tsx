@@ -8,6 +8,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select"
+import { useNavigate } from '@tanstack/react-router'
 import { useAuth } from "@/context/AuthContext"
 import { useSite } from "@/context/SiteContext"
 
@@ -36,11 +37,14 @@ export function SitePicker({
   const [error, setError] = useState<string | null>(null)
   const { user } = useAuth()
   const { selectedSite, setSelectedSite } = useSite()
+  const navigate = useNavigate()
 
   const resolvedValue = value || selectedSite
 
   const handleChange = (v: string) => {
     setSelectedSite(v)
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    navigate({ search: ((prev: Record<string, unknown>) => ({ ...prev, site: v })) as any, replace: true })
     onValueChange?.(v)
   }
 

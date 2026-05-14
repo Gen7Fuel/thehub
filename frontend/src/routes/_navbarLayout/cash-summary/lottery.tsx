@@ -674,6 +674,7 @@ import { useFormStore } from '@/store'
 import { DatePicker } from '@/components/custom/datePicker'
 import { SitePicker } from '@/components/custom/sitePicker'
 import { useAuth } from '@/context/AuthContext'
+import { useSite } from '@/context/SiteContext'
 import { LotteryComparisonTable } from '@/components/custom/LotteryComparisionTable'
 
 type LotterySearch = {
@@ -766,6 +767,7 @@ export const Route = createFileRoute('/_navbarLayout/cash-summary/lottery')({
 
 function RouteComponent() {
   const { user } = useAuth()
+  const { selectedSite } = useSite()
   const navigate = useNavigate({ from: Route.fullPath })
 
   const { site: siteFromUrl, date: dateFromUrl } = Route.useSearch()
@@ -789,8 +791,8 @@ function RouteComponent() {
     const next: Partial<LotterySearch> = {}
     let changed = false
 
-    if (!siteFromUrl && user?.location) {
-      next.site = user.location
+    if (!siteFromUrl && (selectedSite || user?.location)) {
+      next.site = selectedSite || user?.location
       changed = true
     }
     if (!dateFromUrl) {
@@ -804,7 +806,7 @@ function RouteComponent() {
         replace: true,
       })
     }
-  }, [siteFromUrl, dateFromUrl, user?.location, navigate])
+  }, [siteFromUrl, dateFromUrl, selectedSite, user?.location, navigate])
 
   // Sync global store date from search (guard to avoid loops)
   const dateAsDate = parseYmdToDate(dateFromUrl)
