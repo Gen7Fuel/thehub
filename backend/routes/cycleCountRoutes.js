@@ -13,6 +13,21 @@ const moment = require("moment-timezone");
 
 const upload = multer({ storage: multer.memoryStorage() });
 
+function hasCountValue(value) {
+  return value !== "" && value !== null && value !== undefined;
+}
+
+function isCountSideComplete(row, field) {
+  if (!hasCountValue(row[field])) return false;
+  if (row.pk_in_crt && !hasCountValue(row[`${field}_crt`])) return false;
+  if (row.pk_in_crt && row.crt_in_case && !hasCountValue(row[`${field}_case`])) return false;
+  return true;
+}
+
+function isCountComplete(row) {
+  return isCountSideComplete(row, "foh") && isCountSideComplete(row, "boh");
+}
+
 router.post('/upload-excel', upload.single('file'), async (req, res) => {
   try {
     if (!req.file) return res.status(400).json({ message: 'No file uploaded' });
@@ -354,12 +369,18 @@ router.get('/daily-items-v2', async (req, res) => {
         "ci.id as entryId",
         "ci.foh",
         "ci.boh",
+        "ci.foh_crt",
+        "ci.boh_crt",
+        "ci.foh_case",
+        "ci.boh_case",
         "ci.priority",
         "ib.id as productId",
         "ib.description as name",
         "ib.upc_barcode",
         "ib.image_url",
         "ib.category_id", 
+        "ib.pk_in_crt",
+        "ib.crt_in_case",
         "ib.on_hand_qty as onHandCSO"
       )
       .orderBy("ci.priority", "desc");
@@ -377,32 +398,56 @@ router.get('/daily-items-v2', async (req, res) => {
   }
 });
 
-
 router.post('/save-item-v2', async (req, res) => {
   try {
-    const { entryId, field, value, site } = req.body; // entryId is ci.id from Postgres
+    const { entryId, field, value, breakdown } = req.body;
     const db = getPg();
 
-    if (!['foh', 'boh'].includes(field)) {
-      return res.status(400).json({ message: "Invalid field" });
+    if (!entryId || !["foh", "boh"].includes(field)) {
+      return res.status(400).json({ message: "entryId and a valid field are required." });
     }
 
-    // 1. Update the Postgres record
+    const existing = await db("cycle_count_items as ci")
+      .join("item_bk as ib", "ci.product_id", "ib.id")
+      .where("ci.id", entryId)
+      .select(
+        "ci.foh",
+        "ci.boh",
+        "ci.foh_crt",
+        "ci.boh_crt",
+        "ci.foh_case",
+        "ci.boh_case",
+        "ib.pk_in_crt",
+        "ib.crt_in_case"
+      )
+      .first();
+
+    if (!existing) {
+      return res.status(404).json({ message: "Cycle count item not found." });
+    }
+
+    // Prepare the update object
+    const updateData = {
+      [field]: value, // Store loose pack count in 'foh' or 'boh'
+    };
+
+    // If breakdown was provided (Tobacco items), map to extra columns
+    if (breakdown) {
+      // field is either 'foh' or 'boh'
+      // columns are 'foh_crt', 'foh_case', etc.
+      updateData[`${field}_crt`] = breakdown.cartons;
+      updateData[`${field}_case`] = breakdown.cases;
+      // Note: breakdown.packs is stored directly in the main loose pack column
+    }
+
+    updateData.count_completed = isCountComplete({
+      ...existing,
+      ...updateData,
+    });
+
     await db("cycle_count_items")
       .where({ id: entryId })
-      .update({
-        [field]: value,
-        count_completed: true // Mark as interacted with
-      });
-
-    // 2. Emit Socket Event (using your existing pattern)
-    // We emit to the specific site so other tablets at the same store update
-    req.app.get("io").emit("cycle-count-field-updated", {
-      entryId,
-      field,
-      value,
-      site
-    });
+      .update(updateData);
 
     res.json({ success: true });
   } catch (err) {
@@ -410,6 +455,39 @@ router.post('/save-item-v2', async (req, res) => {
     res.status(500).json({ message: "Failed to save item." });
   }
 });
+
+// router.post('/save-item-v2', async (req, res) => {
+//   try {
+//     const { entryId, field, value, site } = req.body; // entryId is ci.id from Postgres
+//     const db = getPg();
+
+//     if (!['foh', 'boh'].includes(field)) {
+//       return res.status(400).json({ message: "Invalid field" });
+//     }
+
+//     // 1. Update the Postgres record
+//     await db("cycle_count_items")
+//       .where({ id: entryId })
+//       .update({
+//         [field]: value,
+//         count_completed: true // Mark as interacted with
+//       });
+
+//     // 2. Emit Socket Event (using your existing pattern)
+//     // We emit to the specific site so other tablets at the same store update
+//     req.app.get("io").emit("cycle-count-field-updated", {
+//       entryId,
+//       field,
+//       value,
+//       site
+//     });
+
+//     res.json({ success: true });
+//   } catch (err) {
+//     console.error("Error saving Postgres count:", err);
+//     res.status(500).json({ message: "Failed to save item." });
+//   }
+// });
 
 router.post('/save-item', async (req, res) => {
   try {

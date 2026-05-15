@@ -21,10 +21,22 @@ function RouteComponent() {
   const [openItems, setOpenItems] = useState<string[]>([]);
   const [items, setItems] = useState<any[]>([]);
   const [loading, setLoading] = useState(false);
-  const [counts, setCounts] = useState<{ [id: string]: { foh: string; boh: string } }>({});
+  const [counts, setCounts] = useState<{ [id: string]: Record<string, string> }>({});
   const [movedToBottom, setMovedToBottom] = useState<string[]>([]);
   const [completedCategories, setCompletedCategories] = useState<string[]>([]);
   const [varianceMap, setVarianceMap] = useState<{ [key: number]: number }>({});
+
+  interface CycleCountFieldUpdateV2 {
+    entryId: string;
+    field: "foh" | "boh";
+    value: number | string;
+    site?: string;
+    breakdown?: {
+      packs?: number | string;
+      cartons?: number | string;
+      // cases?: number | string;
+    } | null;
+  }
 
   // 1. Fetch data based on the LOCAL 'site' state (connected to LocationPicker)
   const fetchData = async () => {
@@ -48,7 +60,11 @@ function RouteComponent() {
       fetchedItems.forEach((item: any) => {
         initial[item.entryId] = {
           foh: item.foh != null ? String(item.foh) : "",
-          boh: item.boh != null ? String(item.boh) : ""
+          boh: item.boh != null ? String(item.boh) : "",
+          foh_crt: item.foh_crt ?? "",
+          // foh_case: item.foh_case ?? "",
+          boh_crt: item.boh_crt ?? "",
+          // boh_case: item.boh_case ?? ""
         };
       });
       setCounts(initial);
@@ -58,19 +74,19 @@ function RouteComponent() {
 
       // Check Priority Section
       const prio = fetchedItems.filter((i: any) => i.priority);
-      const prioDone = prio.length > 0 && prio.every((i:any) => i.foh != null && i.boh != null);
+      const prioDone = prio.length > 0 && prio.every((i: any) => isItemCountComplete(i, initial[i.entryId]));
       if (prioDone) autoCompleted.push("priority_section");
 
       // Check Regular Categories
       const regItems = fetchedItems.filter((i: any) => !i.priority);
       const catMap: Record<string, any[]> = {};
-      regItems.forEach((i:any) => {
+      regItems.forEach((i: any) => {
         if (!catMap[i.categoryName]) catMap[i.categoryName] = [];
         catMap[i.categoryName].push(i);
       });
 
       Object.entries(catMap).forEach(([catName, catItems]) => {
-        const isDone = catItems.every((i:any) => i.foh != null && i.boh != null);
+        const isDone = catItems.every((i: any) => isItemCountComplete(i, initial[i.entryId]));
         if (isDone) autoCompleted.push(catName);
       });
 
@@ -94,24 +110,107 @@ function RouteComponent() {
     }));
   };
 
-  const handleInputBlur = async (id: string, field: "foh" | "boh", value: string) => {
-    if (value === "") return;
+  // const handleInputBlur = async (id: string, field: "foh" | "boh", value: string) => {
+  //   if (value === "") return;
 
+  //   try {
+  //     await fetch("/api/cycle-count/save-item-v2", {
+  //       method: "POST",
+  //       headers: {
+  //         "Content-Type": "application/json",
+  //         "Authorization": `Bearer ${localStorage.getItem("token")}`,
+  //         "X-Required-Permission": "cycleCount",
+  //       },
+  //       body: JSON.stringify({
+  //         entryId: id,
+  //         field,
+  //         value: Number(value),
+  //         site: user?.location // Pass site for the socket room
+  //       }),
+  //     });
+  //   } catch (err) {
+  //     console.error("Save failed", err);
+  //   }
+  // };
+
+  const handleInputBlur = async (
+    id: string,
+    field: "foh" | "boh",
+    data: string | Record<string, string | number>
+  ) => {
+    let numericValue: number;
+    let breakdown = null;
+
+    // 1. Identify data shape
+    if (typeof data === "object") {
+      numericValue = Number(data[field] ?? 0);
+      breakdown = {
+        packs: Number(data[field] ?? 0),
+        cartons: Number(data[`${field}_crt`] ?? 0),
+        // cases: Number(data[`${field}_case`] ?? 0),
+      };
+    } else {
+      numericValue = Number(data);
+      if (isNaN(numericValue) || data.trim() === "") return;
+    }
+
+    // 2. OPTIMISTIC UI UPDATE: Update local state immediately so inputs feel snappy and responsive
+    setCounts((prev: any) => {
+      const currentItem = prev[id] || {};
+
+      if (typeof data === "object") {
+        return {
+          ...prev,
+          [id]: {
+            ...currentItem,
+            [field]: String(breakdown?.packs ?? 0),
+            [`${field}_crt`]: String(breakdown?.cartons ?? 0),
+            // [`${field}_case`]: String(breakdown?.cases ?? 0),
+          }
+        };
+      } else {
+        // Standard input path
+        return {
+          ...prev,
+          [id]: {
+            ...currentItem,
+            [field]: String(numericValue)
+          }
+        };
+      }
+    });
+
+    // 3. Database Sync Path
     try {
-      await fetch("/api/cycle-count/save-item-v2", {
+      const res = await fetch("/api/cycle-count/save-item-v2", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
-          "Authorization": `Bearer ${localStorage.getItem("token")}`,
+          Authorization: `Bearer ${localStorage.getItem("token")}`,
           "X-Required-Permission": "cycleCount",
         },
         body: JSON.stringify({
           entryId: id,
           field,
-          value: Number(value),
-          site: user?.location // Pass site for the socket room
+          value: numericValue, // This updates the main loose pack column
+          breakdown,           // This contains packs and cartons for your columns
+          site,
         }),
       });
+
+      if (res.ok) {
+        const socket = getSocket();
+        socket.emit("cycle-count-field-updated-v2", {
+          entryId: id,
+          field,
+          value: numericValue,
+          breakdown,
+          site,
+        });
+      } else {
+        // Optional: Handle error rollbacks if your backend rejects the save
+        console.error("Server rejected the cycle count update");
+      }
     } catch (err) {
       console.error("Save failed", err);
     }
@@ -120,24 +219,35 @@ function RouteComponent() {
   useEffect(() => {
     const socket = getSocket();
 
-    // Listen for real-time updates from other tablets
-    socket.on("cycle-count-field-updated", (data: { entryId: string; field: string; value: any; site: string }) => {
-      // Only update if the update belongs to this site
-      if (data.site === user?.location) {
-        setCounts((prev) => ({
+    function updateField({ entryId, field, value, breakdown, site: updateSite }: CycleCountFieldUpdateV2) {
+      if (updateSite && updateSite !== site) return;
+
+      setCounts((prev) => {
+        const currentItem = prev[entryId] || {};
+        const nextItem = {
+          ...currentItem,
+          [field]: String(value),
+        };
+
+        if (breakdown) {
+          nextItem[field] = String(breakdown.packs ?? value);
+          nextItem[`${field}_crt`] = String(breakdown.cartons ?? 0);
+          // nextItem[`${field}_case`] = String(breakdown.cases ?? 0);
+        }
+
+        return {
           ...prev,
-          [data.entryId]: {
-            ...prev[data.entryId],
-            [data.field]: String(data.value),
-          },
-        }));
-      }
-    });
+          [entryId]: nextItem,
+        };
+      });
+    }
+
+    socket.on("cycle-count-field-updated-v2", updateField);
 
     return () => {
-      socket.off("cycle-count-field-updated");
+      socket.off("cycle-count-field-updated-v2", updateField);
     };
-  }, [user?.location]);
+  }, [site]);
 
   useEffect(() => {
     const fetchVariance = async () => {
@@ -175,7 +285,7 @@ function RouteComponent() {
   const getGroupProgress = (catItems: any[]) => {
     const completed = catItems.filter((item: any) => {
       const c = counts[item.entryId];
-      return c && c.foh !== "" && c.boh !== "";
+      return isItemCountComplete(item, c);
     }).length;
     return {
       count: completed,
@@ -243,7 +353,7 @@ function RouteComponent() {
   };
 
   // Calculate overall progress for a top progress bar
-  const totalCompleted = items.filter(item => counts[item.entryId]?.foh !== "" && counts[item.entryId]?.boh !== "").length;
+  const totalCompleted = items.filter(item => isItemCountComplete(item, counts[item.entryId])).length;
   const overallPercent = items.length > 0 ? (totalCompleted / items.length) * 100 : 0;
 
   if (loading) return <div className="p-8 text-center">Loading tablet view...</div>;
@@ -437,3 +547,18 @@ function RouteComponent() {
     </div>
   );
 };
+
+function hasValue(value: unknown) {
+  return value !== "" && value !== null && value !== undefined;
+}
+
+function isSideComplete(item: any, counts: Record<string, string> | undefined, field: "foh" | "boh") {
+  if (!counts || !hasValue(counts[field])) return false;
+  if (item.pk_in_crt && !hasValue(counts[`${field}_crt`])) return false;
+  // if (item.pk_in_crt && item.crt_in_case && !hasValue(counts[`${field}_case`])) return false;
+  return true;
+}
+
+function isItemCountComplete(item: any, counts: Record<string, string> | undefined) {
+  return isSideComplete(item, counts, "foh") && isSideComplete(item, counts, "boh");
+}
