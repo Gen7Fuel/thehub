@@ -483,6 +483,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/u
 import { domain } from '@/lib/constants'
 import { ChevronLeft, ChevronRight, ExternalLink } from 'lucide-react'
 import { useAuth } from '@/context/AuthContext'
+import { useSite } from '@/context/SiteContext'
 import { LotteryComparisonTable } from '@/components/custom/LotteryComparisionTable'
 
 type LotteryListSearch = {
@@ -554,6 +555,7 @@ export const Route = createFileRoute('/_navbarLayout/cash-summary/lottery-list')
 function RouteComponent() {
   const navigate = useNavigate({ from: Route.fullPath })
   const { user } = useAuth()
+  const { selectedSite } = useSite()
 
   const { site: siteFromUrl, date: dateFromUrl } = Route.useSearch()
   const { lottery, totals: bullock, error, status } = Route.useLoaderData() as LoaderData
@@ -571,18 +573,18 @@ function RouteComponent() {
     }
   }, [status, navigate])
 
-  // Default site from user.location if missing
+  // Default site from SiteContext, then user.location if missing
   useEffect(() => {
-    if (!siteFromUrl && user?.location) {
+    if (!siteFromUrl && (selectedSite || user?.location)) {
       navigate({
         search: (prev: LotteryListSearch) => ({
           ...prev,
-          site: user.location,
+          site: selectedSite || user?.location,
         }),
         replace: true,
       })
     }
-  }, [siteFromUrl, user, navigate])
+  }, [siteFromUrl, selectedSite, user, navigate])
 
   // Default date to today if missing
   useEffect(() => {

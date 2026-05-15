@@ -48,7 +48,9 @@
       "Bash(Select-Object -ExpandProperty FullName)",
       "WebFetch(domain:developer.sage.com)",
       "PowerShell(head *)",
-      "PowerShell(Get-ChildItem -Path \"C:\\\\Users\\\\MohammadHasan\\\\workspace\\\\thehub\\\\frontend\\\\src\\\\routes\\\\_navbarLayout\" -Recurse | Select-Object -ExpandProperty FullName | ForEach-Object { $_ -replace [regex]::Escape\\(\"C:\\\\Users\\\\MohammadHasan\\\\workspace\\\\thehub\\\\\"\\), \"\" })"
+      "PowerShell(Get-ChildItem -Path \"C:\\\\Users\\\\MohammadHasan\\\\workspace\\\\thehub\\\\frontend\\\\src\\\\routes\\\\_navbarLayout\" -Recurse | Select-Object -ExpandProperty FullName | ForEach-Object { $_ -replace [regex]::Escape\\(\"C:\\\\Users\\\\MohammadHasan\\\\workspace\\\\thehub\\\\\"\\), \"\" })",
+      "Bash(Select-Object FullName)",
+      "Bash(findstr /E \"\\\\.env|config\")"
     ]
   }
 }

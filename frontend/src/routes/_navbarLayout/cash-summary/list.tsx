@@ -2,6 +2,7 @@ import { createFileRoute, useNavigate, useRouter } from '@tanstack/react-router'
 import { useEffect, useMemo, useState } from 'react'
 import { Trash2 } from 'lucide-react'
 import { SitePicker } from '@/components/custom/sitePicker'
+import { useSite } from '@/context/SiteContext'
 import { Button } from '@/components/ui/button'
 import {
   Dialog,
@@ -64,9 +65,15 @@ export const Route = createFileRoute('/_navbarLayout/cash-summary/list')({
 
 function RouteComponent() {
   const { site } = Route.useSearch()
-  // const { summaries } = Route.useLoaderData() as { summaries: CashSummaryDoc[] }
   const navigate = useNavigate({ from: Route.fullPath })
   const router = useRouter()
+  const { selectedSite } = useSite()
+
+  useEffect(() => {
+    if (!site && selectedSite) {
+      navigate({ search: (prev: CashSummarySearch) => ({ ...prev, site: selectedSite }), replace: true })
+    }
+  }, [selectedSite])
   const { summaries, accessDenied } = Route.useLoaderData() as {
     summaries: CashSummaryDoc[];
     accessDenied: boolean;

@@ -20,9 +20,27 @@ services:
     command: ["redis-server", "--appendonly", "yes"]
     restart: always
 
+  postgres:
+    container_name: postgres
+    image: postgres:16
+    environment:
+      - POSTGRES_DB=${POSTGRES_DB}
+      - POSTGRES_USER=${POSTGRES_USER}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
+    ports:
+      - "127.0.0.1:5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $$POSTGRES_USER -d $$POSTGRES_DB"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: always
+
   backend:
     container_name: backend
-    build: ./backend
+    image: ${BACKEND_IMAGE}
     expose:
       - "5000"
     environment:
@@ -34,6 +52,11 @@ services:
       - SQL_DB=${SQL_DB}
       - SQL_USER=${SQL_USER}
       - SQL_PASSWORD=${SQL_PASSWORD}
+      - POSTGRES_HOST=postgres
+      - POSTGRES_PORT=5432
+      - POSTGRES_DB=${POSTGRES_DB}
+      - POSTGRES_USER=${POSTGRES_USER}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
       - UPLOAD_SERVICE_URL=http://cdn:5001
       - REDIS_URL=${REDIS_URL}
       # - SFTP_HOST=${SFTP_HOST}
@@ -70,6 +93,7 @@ services:
     depends_on:
       - mongo
       - redis
+      - postgres
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:5000/api/health"]
       interval: 10s
@@ -79,7 +103,7 @@ services:
 
   auth-backend:
     container_name: auth-backend
-    build: ./auth-backend
+    image: ${AUTH_BACKEND_IMAGE}
     ports:
       - "5005:5005"
     environment:
@@ -141,6 +165,7 @@ volumes:
   uploads:
   mongodb_data:
   redis_data:
+  postgres_data:
 
 networks:
   default:

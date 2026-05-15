@@ -772,6 +772,7 @@ router.post('/', async (req, res) => {
       couponsAccepted: numOrUndef(parsed.couponsAccepted),
       giftCertificates: numOrUndef(parsed.giftCertificates),
       cashOffCoupons: numOrUndef(parsed.cashOffCoupons),
+      otherCoupons: numOrUndef(parsed.otherCoupons),
       canadianCash: numOrUndef((parsed.canadianCash || 0) + (parsed.usCash || 0)),
       cashOnHand: numOrUndef(parsed.cashOnHand),
       parsedCashBack: numOrUndef(parsed.cashBack),
@@ -1100,7 +1101,7 @@ router.post('/submit/to/safesheet', async (req, res) => {
 
           if (depositSlip) attachments.push(depositSlip)
 
-          let cc = ['mohammad@gen7fuel.com', 'JDzyngel@gen7fuel.com']
+          let cc = ['mohammad@gen7fuel.com']
 
           if (site === 'Oliver' || site === 'Osoyoos') {
             cc.push('ZBaptiste@oib.ca');
@@ -1261,15 +1262,10 @@ router.get('/payouts-check', async (req, res) => {
       { $group: { _id: null, total: { $sum: { $ifNull: ['$payouts', 0] } } } },
     ])
 
-    // Payables are stored with createdAt timestamps in UTC, so use the site's
-    // local timezone day boundaries to avoid evening entries crossing into the next UTC day.
     let payablesTotal = 0
     if (location) {
-      const tz = location.timezone || 'America/Toronto'
-      const payStart = DateTime.fromISO(date, { zone: tz }).startOf('day').toJSDate()
-      const payEnd   = DateTime.fromISO(date, { zone: tz }).endOf('day').toJSDate()
       const [payableAgg] = await Payable.aggregate([
-        { $match: { location: location._id, paymentMethod: 'till', createdAt: { $gte: payStart, $lte: payEnd } } },
+        { $match: { location: location._id, paymentMethod: 'till', date: date } },
         { $group: { _id: null, total: { $sum: { $ifNull: ['$amount', 0] } } } },
       ])
       payablesTotal = payableAgg?.total ?? 0
@@ -1411,6 +1407,7 @@ router.put('/:id', async (req, res) => {
               couponsAccepted: parsed.couponsAccepted,
               giftCertificates: parsed.giftCertificates,
               cashOffCoupons: parsed.cashOffCoupons,
+              otherCoupons: parsed.otherCoupons,
               canadianCash: (parsed.canadianCash || 0) + (parsed.usCash || 0),
               cashOnHand: parsed.cashOnHand,
               parsedCashBack: parsed.cashBack,
@@ -1486,6 +1483,7 @@ router.put('/:id', async (req, res) => {
       couponsAccepted: numOrUndef(ev.couponsAccepted ?? existing.couponsAccepted),
       giftCertificates: numOrUndef(ev.giftCertificates ?? existing.giftCertificates),
       cashOffCoupons: numOrUndef(ev.cashOffCoupons ?? existing.cashOffCoupons),
+      otherCoupons: numOrUndef(ev.otherCoupons ?? existing.otherCoupons),
       canadianCash: numOrUndef(ev.canadianCash ?? existing.canadianCash),
       cashOnHand: numOrUndef(ev.cashOnHand ?? existing.cashOnHand),
       parsedCashBack: numOrUndef(ev.parsedCashBack ?? existing.parsedCashBack),

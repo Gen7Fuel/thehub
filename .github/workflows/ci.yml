@@ -42,11 +42,6 @@ jobs:
         with:
           node-version: 23
 
-      # 3. Build all Docker Compose services
-      - name: Build Docker Compose services
-        run: |
-          docker compose -f compose.yaml build
-
       # 3. Build Auth Backend (npm install only)
       - name: Build Auth Backend
         run: |

@@ -150,6 +150,7 @@ function parseSftReport(text) {
     couponsAccepted: pickNum(/^\s*Coupons Accepted\s+([-\d.,]+)\s*$/mi, text),
     giftCertificates: pickNum(/^\s*Gift Certificates\s+([-\d.,]+)\s*$/mi, text),
     cashOffCoupons: pickNum(/^\s*Cash Off Coupons\s+([-\d.,]+)\s*$/mi, text),
+    otherCoupons: pickNum(/^\s*Other Coupons\s+([-\d.,]+)\s*$/mi, text),
     canadianCash: pickNum(/^\s*Canadian Cash\s+([-\d.,]+)\s*$/mi, text),
     usCash: pickNum(/^\s*U\.?S\.?\s*Cash\s+([-\d.,]+)\s*$/mi, text),
     cashOnHand: pickNum(/^\s*Cash On Hand\s+([-\d.,]+)\s*$/mi, text),

@@ -2,6 +2,7 @@ const express = require("express");
 const dotenv = require("dotenv");
 const cors = require("cors");
 const connectDB = require("./config/db");
+const { connectPG, migratePG } = require("./config/pg");
 const http = require("http");
 const { Server } = require("socket.io");
 const requestId = require("./middleware/requestId");
@@ -11,7 +12,7 @@ const requestId = require("./middleware/requestId");
 //BullMQ for background email processing running
 require("./queues/emailQueue"); // Just runs the worker
 require('./cron_jobs/cycleCountCron'); //cron job for getting cso on hands for cyclecount
-require('./cron_jobs/fuelInventoryReportCron'); //cron job for getting fuel inventory report and email to kellie
+// require('./cron_jobs/fuelInventoryReportCron'); //cron job for getting fuel inventory report and email to kellie
 require('./cron_jobs/auditIssueReportCron'); //cron job for getting previous months audit issue report and email to Ana
 require('./cron_jobs/mongoCsvExportCron'); //cron job for exporting mongo data to azure in csv
 require('./cron_jobs/archiveOldNotification'); //cron job for archiving/removing old notifications
@@ -76,6 +77,19 @@ const setupSocket = require("./socket");
 
 dotenv.config();
 connectDB();
+connectPG();
+
+if ((process.env.RUN_PG_MIGRATIONS || "false").toLowerCase() === "true") {
+  migratePG()
+    .then(({ batchNo, log }) => {
+      if (log.length === 0) console.log("Postgres migrations: already up to date");
+      else console.log(`Postgres migrations batch ${batchNo} applied: ${log.join(", ")}`);
+    })
+    .catch((err) => {
+      console.error("Postgres migrations failed:", err);
+      process.exit(1);
+    });
+}
 
 const app = express();
 const server = http.createServer(app);
