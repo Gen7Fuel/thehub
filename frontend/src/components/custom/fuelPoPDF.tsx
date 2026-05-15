@@ -233,7 +233,7 @@ export const POPreviewDocument: React.FC<POPreviewProps> = ({
           <View style={styles.row}>
             <Text style={styles.label}>Delivery</Text>
             <Text style={[styles.value, { fontWeight: 'bold' }]}>
-              {formatPDFDate(data.deliveryDate, false)} @ {formatTime(data.startTime)} - {formatTime(data.endTime)}
+              {formatPDFDate(data.deliveryDate)} - {formatTime(data.startTime)} to {formatTime(data.endTime)}
             </Text>
           </View>
           <View style={styles.deliveryTable}>
