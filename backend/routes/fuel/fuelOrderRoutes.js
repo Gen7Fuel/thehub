@@ -500,7 +500,7 @@ router.post('/', async (req, res) => {
       toRecipients: (carrier.toEmails || []).map(email => ({ emailAddress: { address: email } })),
       ccRecipients: [
         ...(carrier.ccEmails || []).map(email => ({ emailAddress: { address: email } })),
-        ...["kellie@gen7fuel.com", "nmiller@gen7fuel.com", "ryan@gen7fuel.com", "nsporders@nspetroleum.ca"].map(email => ({ emailAddress: { address: email } }))
+        ...["brian@gen7fuel.com", "nmiller@gen7fuel.com", "ryan@gen7fuel.com", "nsporders@nspetroleum.ca"].map(email => ({ emailAddress: { address: email } }))
       ],
       attachments: attachments
     };
