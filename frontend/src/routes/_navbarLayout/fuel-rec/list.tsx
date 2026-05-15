@@ -124,7 +124,7 @@ function RouteComponent() {
       .then((data: Array<{ stationName: string; legalName?: string }>) => {
         const map: Record<string, string> = {}
         for (const loc of data) {
-          if (loc.legalName) map[loc.stationName] = loc.legalName
+          if (loc.stationName === 'Silver Grizzly' && loc.legalName) map[loc.stationName] = loc.legalName
         }
         setLocationNames(map)
       })
