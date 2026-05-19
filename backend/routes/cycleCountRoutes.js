@@ -378,7 +378,7 @@ router.get('/daily-items-v2', async (req, res) => {
         "ib.description as name",
         "ib.upc_barcode",
         "ib.image_url",
-        "ib.category_id", 
+        "ib.category_id",
         "ib.pk_in_crt",
         "ib.crt_in_case",
         "ib.on_hand_qty as onHandCSO"
@@ -394,6 +394,78 @@ router.get('/daily-items-v2', async (req, res) => {
     res.json({ items: enrichedItems });
   } catch (err) {
     console.error(err);
+    res.status(500).send("Server Error");
+  }
+});
+
+router.get('/item-bk', async (req, res) => {
+  try {
+    const { site } = req.query;
+    if (!site) {
+      return res.status(400).json({ message: "Site parameter is required" });
+    }
+
+    const db = getPg();
+    console.log("Admin Panel: Fetching item book for site name:", site);
+
+    // 1. Get Site details and Mongo categories simultaneously
+    const [location, mongoCategories] = await Promise.all([
+      Location.findOne({ stationName: site }),
+      ProductCategory.find({}).lean()
+    ]);
+
+    if (!location) {
+      return res.status(404).json({ message: `Location '${site}' not found` });
+    }
+
+    // Convert the site's Mongo ObjectId to its string representation matching item_bk.site
+    const siteMongoIdString = location._id.toString();
+
+    // Create a lookup map: { 10: "Beverages" }
+    const categoryMap = mongoCategories.reduce((acc, cat) => {
+      acc[cat.Number] = cat.Name;
+      return acc;
+    }, {});
+
+    // 2. Query Postgres item_bk for this specific site configuration
+    const items = await db("item_bk")
+      .where({ site: siteMongoIdString })
+      .select(
+        "id",
+        "gtin",
+        "upc",
+        "upc_barcode",
+        "description",
+        "retail",
+        "vendor_id",
+        "vendor_name",
+        "category_id",
+        "department_id",
+        "department",
+        "price_group_id",
+        "price_group",
+        "promo_group_id",
+        "promo_group",
+        "active",
+        "on_hand_qty",
+        "pk_in_crt",
+        "crt_in_case",
+        "last_inv_date",
+        "grade",
+        "allow_cycle_count",
+        "image_url"
+      )
+      .orderBy("description", "asc");
+
+    // 3. Attach category names inline using our Mongo lookup map
+    const enrichedItems = items.map(item => ({
+      ...item,
+      categoryName: categoryMap[item.category_id] || `Uncategorized (${item.category_id})`
+    }));
+
+    res.json({ items: enrichedItems });
+  } catch (err) {
+    console.error("Error in /api/cycle-count/item-bk:", err);
     res.status(500).send("Server Error");
   }
 });
@@ -453,6 +525,89 @@ router.post('/save-item-v2', async (req, res) => {
   } catch (err) {
     console.error("Error saving Postgres count:", err);
     res.status(500).json({ message: "Failed to save item." });
+  }
+});
+
+/**
+ * PUT /api/cycle-count/item-bk/mass-edit
+ * Securely overwrites historical parameters for selected array collections.
+ */
+router.put('/item-bk/mass-edit', async (req, res) => {
+  try {
+    const { ids, updates } = req.body;
+    const db = getPg();
+
+    // 1. Array Validation Guard
+    if (!ids || !Array.isArray(ids) || ids.length === 0) {
+      return res.status(400).json({
+        success: false,
+        message: "Invalid Payload Context: Target IDs array parsing failed."
+      });
+    }
+
+    // 2. Extracted Values Field Guard
+    if (!updates || Object.keys(updates).length === 0) {
+      return res.status(400).json({
+        success: false,
+        message: "No parameters isolated for configuration updates."
+      });
+    }
+
+    // 3. Strict Param Whitelisting & Input Sanitization
+    const targetFields = ['allow_cycle_count', 'grade', 'pk_in_crt', 'crt_in_case'];
+    const sanitizedPayload = {};
+
+    for (const field of targetFields) {
+      if (updates[field] !== undefined) {
+        let value = updates[field];
+
+        // Formatting processing matrix per type
+        if (field === 'allow_cycle_count') {
+          sanitizedPayload[field] = Boolean(value);
+        } else if (field === 'grade') {
+          if (!['A', 'B', 'C'].includes(value)) {
+            return res.status(400).json({ success: false, message: "Invalid value passed for grade matrix alignment." });
+          }
+          sanitizedPayload[field] = value;
+        } else if (field === 'pk_in_crt' || field === 'crt_in_case') {
+          sanitizedPayload[field] = value !== null ? parseInt(value, 10) : null;
+          if (sanitizedPayload[field] !== null && isNaN(sanitizedPayload[field])) {
+            return res.status(400).json({ success: false, message: `Logistics value for ${field} must evaluate cleanly to an integer.` });
+          }
+        }
+      }
+    }
+
+    // Double check that we still have sanitized targets to alter after cleaning data
+    if (Object.keys(sanitizedPayload).length === 0) {
+      return res.status(400).json({ success: false, message: "No valid tracking parameters parsed for database changes." });
+    }
+
+    // 4. Database Transaction Write Execution
+    // Standard Knex execution syntax query matrix:
+    await db('item_bk')
+      .whereIn('id', ids)
+      .update(sanitizedPayload);
+
+    /* 
+    Alternative: If using native raw pg / postgres pool:
+    const fieldsToSet = Object.keys(sanitizedPayload).map((key, index) => `"${key}" = $${index + 1}`).join(', ');
+    const values = Object.values(sanitizedPayload);
+    await db.query(`UPDATE item_bk SET ${fieldsToSet} WHERE id = ANY($${values.length + 1})`, [...values, ids]);
+    */
+
+    return res.status(200).json({
+      success: true,
+      message: `Successfully updated config variables across ${ids.length} selected row contexts.`,
+      rowsAffected: ids.length
+    });
+
+  } catch (error) {
+    console.error("Critical server failure writing bulk item records:", error);
+    return res.status(500).json({
+      success: false,
+      message: "Internal system transaction processing exception occurred."
+    });
   }
 });
 

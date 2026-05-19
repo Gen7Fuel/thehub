@@ -176,6 +176,11 @@ const CycleCountTableGroup: React.FC<Props> = ({
         <DialogContent className="sm:max-w-md rounded-3xl overflow-hidden p-0 border-none">
           {/* Product Image Header */}
           <div className="w-full h-48 bg-gray-50 relative border-b border-gray-100">
+            <div className="absolute top-4 left-0 right-0 text-center">
+              <span className="bg-white/80 backdrop-blur-sm px-3 py-1 rounded-full text-[9px] uppercase tracking-tighter font-black text-gray-500 shadow-sm border border-white/50">
+                Verify Product Identity
+              </span>
+            </div>
             {activeBarcodeItem?.image ? (
               <img
                 src={activeBarcodeItem.image}
@@ -188,11 +193,6 @@ const CycleCountTableGroup: React.FC<Props> = ({
                 <span className="text-xs font-bold uppercase tracking-widest opacity-40">No Image Available</span>
               </div>
             )}
-            <div className="absolute top-4 left-0 right-0 text-center">
-              <span className="bg-white/80 backdrop-blur-sm px-3 py-1 rounded-full text-[9px] uppercase tracking-tighter font-black text-gray-500 shadow-sm border border-white/50">
-                Verify Product Identity
-              </span>
-            </div>
           </div>
 
           <div className="flex flex-col justify-center items-center p-8 pt-6">
