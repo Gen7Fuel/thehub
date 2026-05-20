@@ -470,6 +470,179 @@ router.get('/item-bk', async (req, res) => {
   }
 });
 
+router.get('/groups', async (req, res) => {
+  try {
+    const db = getPg();
+
+    // Fetch groups and count how many active values each has mapped
+    const groups = await db('public.cycle_count_groups as g')
+      .leftJoin('public.cycle_count_group_values as v', 'g.id', 'v.group_id')
+      .select('g.id', 'g.name', 'g.filter_column', 'g.created_at')
+      .count('v.id as values_count')
+      .groupBy('g.id', 'g.name', 'g.filter_column', 'g.created_at')
+      .orderBy('g.created_at', 'desc');
+
+    res.json(groups);
+  } catch (err) {
+    console.error("Error matching cycle count group lists:", err);
+    res.status(500).send("Server Error");
+  }
+});
+
+// 1. Get filterable columns directly from the DB schema definitions
+router.get('/groups/filterable-columns', async (req, res) => {
+  try {
+    const db = getPg();
+    // Exclude operational/large unique fields that aren't useful for grouping
+    const excludedColumns = ['id', 'gtin', 'upc', 'upc_barcode', 'image_url', 'sync_date', 'last_inv_date', 'on_hand_qty', 'retail'];
+
+    const columnsInfo = await db('information_schema.columns')
+      .where({ table_schema: 'public', table_name: 'item_bk' })
+      .select('column_name');
+
+    const columns = columnsInfo
+      .map(c => c.column_name)
+      .filter(col => !excludedColumns.includes(col));
+
+    res.json({ columns });
+  } catch (err) {
+    console.error("Error fetching schema columns:", err);
+    res.status(500).send("Server Error");
+  }
+});
+
+// 2. Fetch unique values for a chosen column safely and quickly
+router.get('/groups/unique-values', async (req, res) => {
+  const { column } = req.query;
+
+  try {
+    if (!column) {
+      return res.status(400).json({ message: "Column parameter is required" });
+    }
+
+    const db = getPg();
+
+    // 1. Build the base query checking for null values
+    let query = db('public.item_bk')
+      .distinct(column)
+      .whereNotNull(column);
+
+    // 2. Only add empty string exclusion if we aren't querying integer columns
+    if (column !== 'category_id' && !column.endsWith('_id')) {
+      query = query.where(column, '!=', '');
+    }
+
+    // 3. Execute with ordering and safety limit
+    const uniqueRecords = await query
+      .orderBy(column, 'asc')
+      .limit(1000);
+
+    const values = uniqueRecords.map(r => String(r[column]));
+    res.json({ values });
+  } catch (err) {
+    console.error(`Error pulling unique values for column ${column || 'unknown'}:`, err);
+    res.status(500).send("Server Error");
+  }
+});
+
+// 4. On-Demand Preview Endpoint using high-speed database filters
+router.get('/groups/preview-items', async (req, res) => {
+  try {
+    const { site, column, values } = req.query;
+
+    if (!site || !column) {
+      return res.status(400).json({ message: "Site and Target Column parameters are required" });
+    }
+
+    // Safely parse values array if provided as a comma-separated string or query array
+    let parsedValues = [];
+    if (values) {
+      parsedValues = Array.isArray(values) ? values : String(values).split(',');
+    }
+
+    const db = getPg();
+
+    // 1. Resolve Site details and Mongo categories concurrently
+    const [location, mongoCategories] = await Promise.all([
+      Location.findOne({ stationName: site }),
+      ProductCategory.find({}).lean()
+    ]);
+
+    if (!location) {
+      return res.status(404).json({ message: `Location '${site}' not found` });
+    }
+
+    const siteMongoIdString = location._id.toString();
+    const categoryMap = mongoCategories.reduce((acc, cat) => {
+      acc[cat.Number] = cat.Name;
+      return acc;
+    }, {});
+
+    // 2. Build the high-speed Postgres query execution layer
+    let baseQuery = db("public.item_bk")
+      .where({ site: siteMongoIdString })
+      .select(
+        "id",
+        "upc",
+        "description",
+        "category_id",
+        "on_hand_qty",
+        column // Dynamically include the chosen target filter column
+      );
+
+    // Only apply value rules if the user has tokens selected
+    if (parsedValues.length > 0) {
+      baseQuery = baseQuery.whereIn(column, parsedValues);
+    }
+
+    const items = await baseQuery.orderBy("description", "asc").limit(200); // Safety cap for rapid preview layout feedback
+
+    // 3. Map category labels smoothly
+    const enrichedItems = items.map(item => ({
+      ...item,
+      categoryName: categoryMap[item.category_id] || `Uncategorized (${item.category_id})`
+    }));
+
+    res.json({ items: enrichedItems });
+  } catch (err) {
+    console.error("Error generating live group item previews:", err);
+    res.status(500).send("Server Error");
+  }
+});
+
+// 3. Save your group and your relational values atomically
+router.post('/groups', async (req, res) => {
+  const db = getPg();
+  const trx = await db.transaction();
+  try {
+    const { name, filter_column, values } = req.body;
+
+    if (!name || !filter_column || !values || !values.length) {
+      return res.status(400).json({ message: "Missing required tracking group payloads" });
+    }
+
+    // Insert Group Header
+    const [group] = await trx('public.cycle_count_groups')
+      .insert({ name, filter_column })
+      .returning('*');
+
+    // Insert Associated Value Conditions
+    const valuesPayload = values.map((val) => ({
+      group_id: group.id,
+      value: String(val)
+    }));
+
+    await trx('public.cycle_count_group_values').insert(valuesPayload);
+    await trx.commit();
+
+    res.status(201).json({ message: "Group setup created successfully", groupId: group.id });
+  } catch (err) {
+    await trx.rollback();
+    console.error("Failed storing custom selection group:", err);
+    res.status(500).json({ message: "Server error creating group" });
+  }
+});
+
 router.post('/save-item-v2', async (req, res) => {
   try {
     const { entryId, field, value, breakdown } = req.body;
