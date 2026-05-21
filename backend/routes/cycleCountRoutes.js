@@ -479,6 +479,7 @@ router.get('/groups', async (req, res) => {
       .leftJoin('public.cycle_count_group_values as v', 'g.id', 'v.group_id')
       .select('g.id', 'g.name', 'g.filter_column', 'g.created_at')
       .count('v.id as values_count')
+      .where('g.is_active', true)
       .groupBy('g.id', 'g.name', 'g.filter_column', 'g.created_at')
       .orderBy('g.created_at', 'desc');
 
@@ -537,8 +538,39 @@ router.get('/groups/unique-values', async (req, res) => {
       .orderBy(column, 'asc')
       .limit(1000);
 
-    const values = uniqueRecords.map(r => String(r[column]));
-    res.json({ values });
+    // Standard raw string value map
+    let values = uniqueRecords.map(r => String(r[column]));
+
+    // 4. Special Mapping logic if category_id is targeted
+    if (column === 'category_id') {
+      // Assuming your mongo connection/model is accessible here
+      // Pulling from your categories collection matching your preview setup
+      const mongoCategories = await ProductCategory.find({}).lean();
+
+      const categoryMap = mongoCategories.reduce((acc, cat) => {
+        acc[cat.Number] = cat.Name;
+        return acc;
+      }, {});
+
+      // Map array into a combination structure or array of metadata objects
+      // To keep standard string formats clean but descriptive, we return a structured layout
+      // Or you can return objects. Let's return objects if category_id, or strings otherwise.
+      // To keep things uniform, let's map them to a uniform payload array:
+      const processedValues = uniqueRecords.map(r => {
+        const catId = String(r[column]);
+        return {
+          id: catId,
+          displayName: categoryMap[catId] ? `${catId} - ${categoryMap[catId]}` : catId
+        };
+      });
+
+      return res.json({ values: processedValues, isCategory: true });
+    }
+
+    // Standard string fallback for text-based columns
+    const standardValues = values.map(val => ({ id: val, displayName: val }));
+    res.json({ values: standardValues, isCategory: false });
+
   } catch (err) {
     console.error(`Error pulling unique values for column ${column || 'unknown'}:`, err);
     res.status(500).send("Server Error");
@@ -578,42 +610,275 @@ router.get('/groups/preview-items', async (req, res) => {
       return acc;
     }, {});
 
-    // 2. Build the high-speed Postgres query execution layer
-    let baseQuery = db("public.item_bk")
-      .where({ site: siteMongoIdString })
-      .select(
-        "id",
-        "upc",
-        "description",
-        "category_id",
-        "on_hand_qty",
-        column // Dynamically include the chosen target filter column
-      );
+    // 2. Build the base high-speed query state
+    let baseQuery = db("public.item_bk").where({ site: siteMongoIdString });
 
     // Only apply value rules if the user has tokens selected
     if (parsedValues.length > 0) {
       baseQuery = baseQuery.whereIn(column, parsedValues);
     }
 
-    const items = await baseQuery.orderBy("description", "asc").limit(200); // Safety cap for rapid preview layout feedback
+    // 3. Execute count query over the exact same filter criteria
+    const countResult = await baseQuery.clone().count('id as total');
+    const totalMatchingItems = parseInt(countResult[0]?.total || '0', 10);
 
-    // 3. Map category labels smoothly
+    // 4. Fetch the payload bounded by the safety cap
+    const items = await baseQuery
+      .select(
+        "id",
+        "upc_barcode",
+        "description",
+        "category_id",
+        "on_hand_qty",
+        column // Dynamically include the chosen target filter column
+      )
+      .orderBy("description", "asc")
+      .limit(200);
+
+    // 5. Map category labels smoothly
     const enrichedItems = items.map(item => ({
       ...item,
       categoryName: categoryMap[item.category_id] || `Uncategorized (${item.category_id})`
     }));
 
-    res.json({ items: enrichedItems });
+    // Return both the items array and total calculation metrics
+    res.json({
+      items: enrichedItems,
+      totalCount: totalMatchingItems
+    });
   } catch (err) {
     console.error("Error generating live group item previews:", err);
     res.status(500).send("Server Error");
   }
 });
 
+
+router.get('/instances', async (req, res) => {
+  try {
+    const { site } = req.query;
+    if (!site) {
+      return res.status(400).json({ message: "Site parameter is required" });
+    }
+
+    // 1. Fetch site mapping from MongoDB to get _id and timezone
+    const location = await Location.findOne({ stationName: site });
+    if (!location) {
+      return res.status(404).json({ message: `Location '${site}' not found` });
+    }
+
+    const siteMongoIdString = location._id.toString();
+    const siteTimezone = location.timezone || 'UTC';
+
+    // 2. Determine today's date in the target station's local timezone
+    // Format matches 'YYYY-MM-DD' to safely string-compare if your text field uses standard layouts
+    const stationTodayStr = DateTime.now().setZone(siteTimezone).toFormat('yyyy-MM-dd');
+
+    const db = getPg();
+
+    // 3. Query PostgreSQL for records >= today's date for this station
+    // Adjust order by date ascending so closest upcoming events show first
+    const instances = await db("public.cycle_count_instance")
+      .where({ site_mongo_id: siteMongoIdString })
+      .andWhere("date", ">", stationTodayStr)
+      .select(
+        "id",
+        "date",
+        "day",
+        "is_scheduled",
+        "site_mongo_id",
+        "scheduled_by",
+        "group_id"
+      )
+      .orderBy("date", "asc");
+
+    res.json({ instances });
+  } catch (err) {
+    console.error("Error in GET /api/cycle-count/instances:", err);
+    res.status(500).send("Server Error");
+  }
+});
+
+// 1. DATE DUPLICATION SOFT CHECK
+router.get('/schedules/check-date', async (req, res) => {
+  try {
+    const { site, date } = req.query;
+    if (!site || !date) {
+      return res.status(400).json({ message: "Site and date string are required" });
+    }
+
+    const location = await Location.findOne({ stationName: site });
+    if (!location) {
+      return res.status(404).json({ message: "Location structure not found" });
+    }
+
+    const db = getPg();
+    const existing = await db("public.cycle_count_instance")
+      .where({
+        site_mongo_id: location._id.toString(),
+        date: date
+      })
+      .first();
+
+    return res.json({ alreadyExists: !!existing });
+  } catch (err) {
+    console.error("Error in date validation check:", err);
+    res.status(500).json({ message: "Server date verification breakdown" });
+  }
+});
+
+// 2. FETCH ACTIVE GROUPS & EXPOSE EMBEDDED FILTER TOKENS
+router.get('/groups/active-rules', async (req, res) => {
+  try {
+    const db = getPg();
+
+    // Query active master groups
+    const groups = await db("public.cycle_count_groups")
+      .select("id", "name", "filter_column")
+      .where("is_active", true)
+      .orderBy("name", "asc");
+
+    // Fetch related array conditions simultaneously
+    const values = await db("public.cycle_count_group_values")
+      .select("group_id", "value");
+
+    // Group the array properties by master group mapping
+    const structuredRules = groups.map(group => ({
+      ...group,
+      allowedValues: values
+        .filter(v => v.group_id === group.id)
+        .map(v => v.value)
+    }));
+
+    res.json({ groups: structuredRules });
+  } catch (err) {
+    console.error("Error fetching execution rule definitions:", err);
+    res.status(500).json({ message: "Error mapping rules" });
+  }
+});
+
+
+// 1. GET - Fetch an individual group and its selected values
+router.get('/groups/:id', async (req, res) => {
+  const db = getPg();
+  const { id } = req.params;
+
+  try {
+    const group = await db('public.cycle_count_groups').where({ id }).andWhere('is_active', true).first();
+    if (!group) {
+      return res.status(404).json({ message: "Cycle count group not found" });
+    }
+
+    const assignedValues = await db('public.cycle_count_group_values')
+      .where({ group_id: id })
+      .select('value');
+
+    // Return flattened array of value strings to make state population simple
+    res.json({
+      ...group,
+      values: assignedValues.map(v => v.value)
+    });
+  } catch (err) {
+    console.error("Failed to fetch cycle count group details:", err);
+    res.status(500).json({ message: "Server error fetching group details" });
+  }
+});
+
+// 3. ATOMIC TRANSACTION: CREATE INSTANCE & INJECT CHILD RECORDS
+router.post('/schedules/create', async (req, res) => {
+  const db = getPg();
+  try {
+    const { site, date, day, groupId, filterColumn, filterValues } = req.body;
+    const scheduledBy = req.user?._id || req.user?.firstName || "system_operator";
+
+    if (!site || !date || !day || !groupId || !filterColumn || !filterValues) {
+      return res.status(400).json({ message: "Missing required setup parameters" });
+    }
+
+    // Resolve site context to grab Mongo ID mapping target
+    const location = await Location.findOne({ stationName: site });
+    if (!location) {
+      return res.status(404).json({ message: "Selected location context not recognized" });
+    }
+    const siteMongoIdString = location._id.toString();
+
+    // Begin single transaction isolation sandbox
+    const result = await db.transaction(async (trx) => {
+
+      // Secondary absolute safety gate for date duplicates inside transaction block
+      const duplicateGate = await trx("public.cycle_count_instance")
+        .where({ site_mongo_id: siteMongoIdString, date })
+        .first();
+
+      if (duplicateGate) {
+        throw new Error(`CONFLICT_DATE`);
+      }
+
+      // Step A: Insert master instance header row structure
+      const [insertedInstance] = await trx("public.cycle_count_instance")
+        .insert({
+          date: date,
+          day: day,
+          is_scheduled: true,
+          site_mongo_id: siteMongoIdString,
+          scheduled_by: String(scheduledBy),
+          group_id: parseInt(groupId, 10)
+        })
+        .returning(["id"]);
+
+      const newInstanceId = insertedInstance.id;
+
+      // Step B: Query ALL qualifying matching records inside public.item_bk
+      const targetItemsToSchedule = await trx("public.item_bk")
+        .where({ site: siteMongoIdString })
+        .whereIn(filterColumn, filterValues)
+        .select("id");
+
+      if (targetItemsToSchedule.length === 0) {
+        throw new Error("NO_ITEMS_FOUND");
+      }
+
+      // Step C: Chunk-insert array relations into public.cycle_count_items
+      const childPayload = targetItemsToSchedule.map(item => ({
+        instance_id: newInstanceId,
+        product_id: item.id,
+        foh: null,
+        boh: null,
+        count_completed: false,
+        priority: false
+      }));
+
+      // Batch insert inside chunks to prevent parameter limits saturation
+      const chunkSize = 1000;
+      for (let i = 0; i < childPayload.length; i += chunkSize) {
+        await trx("public.cycle_count_items")
+          .insert(childPayload.slice(i, i + chunkSize));
+      }
+
+      return { instanceId: newInstanceId, totalAdded: childPayload.length };
+    });
+
+    res.json({
+      success: true,
+      message: `Schedule locked down. Tracked ${result.totalAdded} child entries successfully.`,
+      instanceId: result.instanceId
+    });
+
+  } catch (err) {
+    console.error("Critical error building schedule pipeline execution block:", err);
+    if (err.message === 'CONFLICT_DATE') {
+      return res.status(422).json({ message: "A schedule layout variant already locks down that precise date context." });
+    }
+    if (err.message === 'NO_ITEMS_FOUND') {
+      return res.status(422).json({ message: "The configuration matched zero inventory records inside item_bk." });
+    }
+    res.status(500).json({ message: "Database failure creating schedule engine logs." });
+  }
+});
+
 // 3. Save your group and your relational values atomically
 router.post('/groups', async (req, res) => {
   const db = getPg();
-  const trx = await db.transaction();
+
   try {
     const { name, filter_column, values } = req.body;
 
@@ -621,23 +886,43 @@ router.post('/groups', async (req, res) => {
       return res.status(400).json({ message: "Missing required tracking group payloads" });
     }
 
-    // Insert Group Header
-    const [group] = await trx('public.cycle_count_groups')
-      .insert({ name, filter_column })
-      .returning('*');
+    // 1. Check for duplicate group name (Case-Insensitive)
+    const existingGroup = await db('public.cycle_count_groups')
+      .where('name', 'ilike', name.trim())
+      .andWhere('is_active', true)
+      .first();
 
-    // Insert Associated Value Conditions
-    const valuesPayload = values.map((val) => ({
-      group_id: group.id,
-      value: String(val)
-    }));
+    if (existingGroup) {
+      return res.status(400).json({
+        message: `A cycle count group named "${name}" already exists. Please choose a unique name.`
+      });
+    }
 
-    await trx('public.cycle_count_group_values').insert(valuesPayload);
-    await trx.commit();
+    // 2. Open transaction only after validation passes
+    const trx = await db.transaction();
 
-    res.status(201).json({ message: "Group setup created successfully", groupId: group.id });
+    try {
+      // Insert Group Header
+      const [group] = await trx('public.cycle_count_groups')
+        .insert({ name: name.trim(), filter_column, is_active: true })
+        .returning('*');
+
+      // Insert Associated Value Conditions
+      const valuesPayload = values.map((val) => ({
+        group_id: group.id,
+        value: String(val)
+      }));
+
+      await trx('public.cycle_count_group_values').insert(valuesPayload);
+      await trx.commit();
+
+      res.status(201).json({ message: "Group setup created successfully", groupId: group.id });
+    } catch (txErr) {
+      await trx.rollback();
+      throw txErr; // Bubble up to main catch block
+    }
+
   } catch (err) {
-    await trx.rollback();
     console.error("Failed storing custom selection group:", err);
     res.status(500).json({ message: "Server error creating group" });
   }
@@ -698,6 +983,100 @@ router.post('/save-item-v2', async (req, res) => {
   } catch (err) {
     console.error("Error saving Postgres count:", err);
     res.status(500).json({ message: "Failed to save item." });
+  }
+});
+
+
+// 2. PUT - Update group name and assigned value rules (Column locked)
+router.put('/groups/:id', async (req, res) => {
+  const db = getPg();
+  const { id } = req.params;
+  const { name, values } = req.body;
+
+  if (!name || !values || !values.length) {
+    return res.status(400).json({ message: "Missing group name or tracking rule values" });
+  }
+
+  try {
+    // 1. Verify group exists and is active before saving updates
+    const activeCheck = await db('public.cycle_count_groups').where({ id }).first();
+    if (!activeCheck || !activeCheck.is_active) {
+      return res.status(404).json({ message: "Cannot update group rules. This template is inactive or has been deleted." });
+    }
+    // Check if the new name is taken by an entirely DIFFERENT group template
+    const duplicateCheck = await db('public.cycle_count_groups')
+      .where('name', 'ilike', name.trim())
+      .andWhere('is_active', true)
+      .andWhereNot({ id })
+      .first();
+
+    if (duplicateCheck) {
+      return res.status(400).json({
+        message: `Another group named "${name}" already exists. Please choose a unique name.`
+      });
+    }
+
+    const trx = await db.transaction();
+    try {
+      // Update header details
+      // Update header details
+      await trx('public.cycle_count_groups')
+        .where({ id })
+        .update({ name: name.trim() });
+
+      // Wipe old value definitions and replace them cleanly
+      await trx('public.cycle_count_group_values').where({ group_id: id }).del();
+
+      const newValuesPayload = values.map((val) => ({
+        group_id: id,
+        value: String(val)
+      }));
+
+      await trx('public.cycle_count_group_values').insert(newValuesPayload);
+      await trx.commit();
+
+      res.json({ message: "Cycle count group updated successfully" });
+    } catch (txErr) {
+      await trx.rollback();
+      throw txErr;
+    }
+  } catch (err) {
+    console.error("Failed updating custom tracking group rules:", err);
+    res.status(500).json({ message: "Server error saving group updates" });
+  }
+});
+
+router.delete('/groups/:id', async (req, res) => {
+  const db = getPg();
+  const { id } = req.params;
+  const todayStr = new Date().toISOString().split('T')[0];
+
+  try {
+    // 1. Check for active/pending future instances tied to this group filter
+    const activeInstance = await db('public.cycle_count_instances')
+      .where({ group_id: id })
+      .andWhere('date', '>=', todayStr) // Protects active or un-started future instances
+      .first();
+
+    if (activeInstance) {
+      return res.status(400).json({
+        message: `This group cannot be removed because it is linked to an active or upcoming cycle count instance scheduled for ${activeInstance.date || 'today'}. Please close or cancel that instance first.`
+      });
+    }
+
+    // 2. Soft-delete by setting the active flag to false
+    const rowsUpdated = await db('public.cycle_count_groups')
+      .where({ id })
+      .update({ is_active: false });
+
+    if (rowsUpdated === 0) {
+      return res.status(404).json({ message: "Group template not found" });
+    }
+
+    res.json({ message: "Group template removed successfully" });
+  } catch (err) {
+    console.error("Failed soft-deleting cycle count group:", err);
+    res.status(500).json({ message: "Server error removing group template" });
   }
 });
 
