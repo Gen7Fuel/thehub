@@ -82,6 +82,16 @@ function RouteComponent() {
   const setStationName = useFormStore((state) => state.setStationName)
 
   const [poError, setPoError] = useState<string>('')
+  const [cardStatus, setCardStatus] = useState<string | null>(null)
+
+  const statusConfig: Record<string, { label: string; className: string }> = {
+    active:    { label: 'Active',         className: 'text-green-600' },
+    inactive:  { label: 'Inactive',       className: 'text-orange-500' },
+    lost:      { label: 'Lost',           className: 'text-red-600' },
+    stolen:    { label: 'Stolen',         className: 'text-red-600' },
+    cancelled: { label: 'Cancelled',      className: 'text-gray-500' },
+    not_found: { label: 'Card not found', className: 'text-red-600' },
+  }
 
   const handleBlur = async () => {
     if (numberType !== 'fleet') return // only for fleet cards
@@ -186,7 +196,22 @@ function RouteComponent() {
                 maxLength={16}
                 name="fleetCardNumber"
                 value={fleetCardNumber}
-                onChange={(value) => setFleetCardNumber(value)}
+                onChange={async (value) => {
+                  setFleetCardNumber(value)
+                  if (value.length === 16) {
+                    try {
+                      const token = localStorage.getItem('token')
+                      const res = await axios.get(`${domain}/api/fleet/verify/${value}`, {
+                        headers: { Authorization: `Bearer ${token}` },
+                      })
+                      setCardStatus(res.data.reason || res.data.status || 'not_found')
+                    } catch {
+                      setCardStatus('not_found')
+                    }
+                  } else {
+                    setCardStatus(null)
+                  }
+                }}
                 onBlur={handleBlur}
               >
                 <InputOTPGroup>
@@ -213,6 +238,10 @@ function RouteComponent() {
                   ))}
                 </InputOTPGroup>
               </InputOTP>
+              {cardStatus && (() => {
+                const cfg = statusConfig[cardStatus] ?? { label: cardStatus, className: 'text-gray-500' }
+                return <div className={`text-xs text-right ${cfg.className}`}>{cfg.label}</div>
+              })()}
             </div>
           ) : (
             <div className="space-y-2">
