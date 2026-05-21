@@ -62,6 +62,33 @@ function RouteComponent() {
   const [signature, setSignature] = useState('')
   const [isSubmitting, setIsSubmitting] = useState(false)
 
+  type VerifyResult = { valid: boolean; status?: string; reason: string }
+  const [cardVerify, setCardVerify] = useState<VerifyResult | null>(null)
+  const [cardVerifying, setCardVerifying] = useState(false)
+
+  useEffect(() => {
+    if (fleetCardNumber.length !== 16) {
+      setCardVerify(null)
+      return
+    }
+    let cancelled = false
+    setCardVerifying(true)
+    axios
+      .get(`${domain}/api/fleet/verify/${fleetCardNumber}`, {
+        headers: { Authorization: `Bearer ${localStorage.getItem('token')}` },
+      })
+      .then((res) => {
+        if (!cancelled) setCardVerify(res.data as VerifyResult)
+      })
+      .catch(() => {
+        if (!cancelled) setCardVerify(null)
+      })
+      .finally(() => {
+        if (!cancelled) setCardVerifying(false)
+      })
+    return () => { cancelled = true }
+  }, [fleetCardNumber])
+
   // Get selected customer details
   const selectedCustomerData = data.customers.find((c: { _id: string }) => c._id === selectedCustomer)
 
@@ -268,6 +295,26 @@ function RouteComponent() {
             <InputOTPSlot index={15} />
           </InputOTPGroup>
         </InputOTP>
+
+        {cardVerifying && (
+          <p className="text-sm text-muted-foreground">Checking card status…</p>
+        )}
+        {!cardVerifying && cardVerify && (
+          <p className={`text-sm font-medium ${
+            cardVerify.reason === 'not_found'  ? 'text-gray-500' :
+            cardVerify.valid                   ? 'text-green-600' :
+            cardVerify.reason === 'cancelled'  ? 'text-yellow-600' :
+                                                 'text-red-600'
+          }`}>
+            {cardVerify.reason === 'not_found'  ? 'Card not found' :
+             cardVerify.reason === 'active'     ? 'Card is active' :
+             cardVerify.reason === 'inactive'   ? 'Card is inactive' :
+             cardVerify.reason === 'lost'       ? 'Card reported lost' :
+             cardVerify.reason === 'stolen'     ? 'Card reported stolen' :
+             cardVerify.reason === 'cancelled'  ? 'Card has been cancelled' :
+                                                  `Card status: ${cardVerify.reason}`}
+          </p>
+        )}
       </div>
 
       {/* Fleet Customer Selection */}
