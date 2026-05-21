@@ -13,6 +13,13 @@ const fleetSchema = new mongoose.Schema({
   vehicleMakeModel: { type: String, required: false },             // Vehicle make and model (optional)
   customerEmail: { type: String, required: false },                // Customer email (optional)
   signature: { type: String, required: false },                    // Base64-encoded signature (optional)
+  status: {
+    type: String,
+    enum: ['active', 'inactive', 'lost', 'stolen', 'cancelled'],
+    default: 'active',
+  },
+  numberPlate: { type: String, default: '' },
+  notes:       { type: String, default: '' },
 });
 
 // Export the Fleet model based on the schema
