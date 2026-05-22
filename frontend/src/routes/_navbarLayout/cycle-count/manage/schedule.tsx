@@ -1,5 +1,5 @@
 import { useState, useMemo, useEffect } from 'react'
-import { createFileRoute, Link, Outlet } from '@tanstack/react-router'
+import { createFileRoute, Link, Outlet, useNavigate, useLocation } from '@tanstack/react-router' // <-- Added useLocation here
 import { Button } from '@/components/ui/button'
 import { Plus, Search, Calendar, Loader2 } from 'lucide-react'
 import { Input } from '@/components/ui/input'
@@ -26,15 +26,28 @@ interface CycleCountInstance {
 function ScheduleListLayout() {
   const { user } = useAuth()
   const { selectedSite } = useSite()
+  const navigate = useNavigate()
+  const location = useLocation() // <-- Hook into current URL pathname states
   const [site, setSite] = useState(selectedSite || user?.location || "")
   const [searchTerm, setSearchTerm] = useState('')
 
-  // Keep state updated if user switches site globally elsewhere
+  // 1. Keep state updated if user switches site globally elsewhere
   useEffect(() => {
-    if (selectedSite) {
+    if (selectedSite && selectedSite !== site) {
       setSite(selectedSite)
     }
   }, [selectedSite])
+
+  // 2. NEW: Cleanly break child workspaces if site changes locally or globally
+  useEffect(() => {
+    // Only navigate away if the user is deep inside a specific instance detail workspace
+    const isViewingDetails = location.pathname.includes('/cycle-count/manage/schedule/') && 
+                            !location.pathname.endsWith('/new');
+
+    if (isViewingDetails) {
+      navigate({ to: '/cycle-count/manage/schedule' })
+    }
+  }, [site, navigate]) // Fires smoothly whenever the 'site' variable alters, regardless of who changed it
 
   const activeProps = { className: 'border-l-4 border-primary bg-slate-50' }
 
@@ -72,6 +85,7 @@ function ScheduleListLayout() {
           <div>
             <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Active Station</label>
             <div className="mt-1 w-full">
+              {/* Restored exact original assignment pattern safely mapping back to standard layout behaviors */}
               <LocationPicker setStationName={setSite} value="stationName" defaultValue={site} />
             </div>
           </div>
@@ -108,7 +122,6 @@ function ScheduleListLayout() {
           ) : (
             <div className="flex flex-col">
               {filteredInstances.map((instance) => {
-                // Determine styling classes dynamically based on schedule state
                 const badgeColorClass = instance.is_scheduled 
                   ? 'bg-amber-50 text-amber-600 border-amber-200 group-hover:bg-amber-100' 
                   : 'bg-blue-50 text-blue-600 border-blue-200 group-hover:bg-blue-100'
@@ -125,7 +138,6 @@ function ScheduleListLayout() {
                     activeProps={activeProps}
                     className="group flex items-center gap-3.5 p-4 border-b bg-white hover:bg-slate-50/70 transition-all"
                   >
-                    {/* Visual Status Indicator Container */}
                     <div className={`h-11 w-11 rounded-xl border flex flex-col items-center justify-center transition-colors ${badgeColorClass}`}>
                       <Calendar className="h-4 w-4 shrink-0" />
                     </div>

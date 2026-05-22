@@ -1,10 +1,12 @@
 const express = require('express');
 const router = express.Router();
+const mongoose = require('mongoose');
 const multer = require('multer');
 const XLSX = require('xlsx');
 const { DateTime } = require('luxon');
 const CycleCount = require('../models/CycleCount');
 const Location = require('../models/Location');
+const User = require('../models/User');
 const { getCurrentInventory, getInventoryCategories, getBulkOnHandQtyCSO } = require('../services/sqlService');
 const { updateCycleCountCSO } = require('../cron_jobs/cycleCountCron');
 const ProductCategory = require('../models/ProductCategory');
@@ -679,7 +681,7 @@ router.get('/instances', async (req, res) => {
     // Adjust order by date ascending so closest upcoming events show first
     const instances = await db("public.cycle_count_instance")
       .where({ site_mongo_id: siteMongoIdString })
-      .andWhere("date", ">", stationTodayStr)
+      .andWhere("date", ">=", stationTodayStr)
       .select(
         "id",
         "date",
@@ -756,6 +758,183 @@ router.get('/groups/active-rules', async (req, res) => {
   }
 });
 
+// GET LIGHTWEIGHT LIST OF PRODUCTS FOR SELECTION DIALOG (SCOPED BY STATION SITE)
+router.get('/schedules/items/search', async (req, res) => {
+  try {
+    const { query, siteMongoId } = req.query; // Capture both lookup queries
+    const db = getPg();
+
+    if (!siteMongoId) {
+      return res.status(400).json({ message: "Bad Request: Target siteMongoId contextual parameter tracker is required." });
+    }
+
+    // Initialize base query with absolute strict mapping to the specified station store entity context trace
+    let sqlQuery = db("public.item_bk")
+      .where({ site: String(siteMongoId) }) // <-- Lock database search strictly to this store site map
+      .select("id", "upc_barcode", "description", "category_id", "on_hand_qty")
+      .orderBy("on_hand_qty", "asc");
+
+    // Server-Side optimized search filter condition branches
+    if (query && query.trim().length >= 3) {
+      const searchPattern = `%${query.trim()}%`;
+      sqlQuery = sqlQuery.where(function () {
+        this.where("description", "ILIKE", searchPattern)
+          .orWhere("upc_barcode", "ILIKE", searchPattern)
+          .orWhere(db.raw("CAST(category_id AS TEXT)"), "ILIKE", searchPattern);
+      });
+
+      // Limit search hits payload so network streams stay highly performant
+      sqlQuery = sqlQuery.limit(100);
+    } else {
+      // Default initial view boundary payload limit
+      sqlQuery = sqlQuery.limit(50);
+    }
+
+    const items = await sqlQuery;
+
+    // Resolve Mongo categories to append strings
+    const mongoCategories = await ProductCategory.find({}).lean();
+    const categoryMap = mongoCategories.reduce((acc, cat) => {
+      acc[cat.Number] = cat.Name;
+      return acc;
+    }, {});
+
+    const sanitizedItems = items.map(item => ({
+      id: item.id,
+      upc: item.upc_barcode || 'N/A',
+      description: item.description,
+      on_hand_qty: Number(item.on_hand_qty || 0),
+      categoryName: categoryMap[item.category_id] || `Category ${item.category_id}`
+    }));
+
+    return res.json(sanitizedItems);
+  } catch (err) {
+    console.error("Error executing lightweight catalog indexes fetch lookup:", err);
+    return res.status(500).json({ message: "Server error querying target item book indices." });
+  }
+});
+
+
+// FETCH AN INDIVIDUAL INSTANCE PROFILE WITH ENRICHED CHILD ITEMS MATRIX
+router.get('/schedules/details/:id', async (req, res) => {
+  try {
+    const { id } = req.params;
+    if (!id) {
+      return res.status(400).json({ message: "Schedule Instance ID parameter is required" });
+    }
+
+    const db = getPg();
+    const User = require("../models/User"); // Adjust path to your User model asset reference
+
+    // 1. Fetch details safely (updated_by query bypass handled dynamically via your structural schema updates)
+    // Note: We try to grab updated_by from pg if it exists, or select it safely down the line
+    let instance;
+    try {
+      instance = await db("public.cycle_count_instance")
+        .where({ id })
+        .select("id", "date", "day", "is_scheduled", "site_mongo_id", "scheduled_by", "updated_by")
+        .first();
+    } catch (sqlErr) {
+      // Fallback fallback mechanism block if the column structurally hasn't been migrated yet
+      instance = await db("public.cycle_count_instance")
+        .where({ id })
+        .select("id", "date", "day", "is_scheduled", "site_mongo_id", "scheduled_by")
+        .first();
+      if (instance) instance.updated_by = null;
+    }
+
+    if (!instance) {
+      return res.status(404).json({ message: `Schedule instance with ID ${id} not found` });
+    }
+
+    // 2. Resolve Station context, Mongo categories, and human User profiles concurrently
+    const promises = [
+      Location.findById(instance.site_mongo_id),
+      ProductCategory.find({}).lean()
+    ];
+
+    // Push conditional user queries only if valid hexadecimal object links exist
+    if (instance.scheduled_by && mongoose.Types.ObjectId.isValid(instance.scheduled_by)) {
+      promises.push(User.findById(instance.scheduled_by).lean());
+    } else {
+      promises.push(Promise.resolve(null));
+    }
+
+    if (instance.updated_by && mongoose.Types.ObjectId.isValid(instance.updated_by)) {
+      promises.push(User.findById(instance.updated_by).lean());
+    } else {
+      promises.push(Promise.resolve(null));
+    }
+
+    const [location, mongoCategories, scheduledByUser, updatedByUser] = await Promise.all(promises);
+
+    if (!location) {
+      return res.status(404).json({ message: "Assigned station context location records missing" });
+    }
+
+    const categoryMap = mongoCategories.reduce((acc, cat) => {
+      acc[cat.Number] = cat.Name;
+      return acc;
+    }, {});
+
+    // 3. Query PostgreSQL relational table with item_bk fields
+    const items = await db("public.cycle_count_items as cci")
+      .join("public.item_bk as ib", "cci.product_id", "ib.id")
+      .where({ "cci.instance_id": id })
+      .select(
+        "ib.id as product_id",
+        "cci.id as cycle_count_item_id",
+        "cci.priority as priority",
+        "ib.description",
+        "ib.upc",
+        "ib.upc_barcode",
+        "ib.image_url",
+        "ib.on_hand_qty",
+        "ib.grade",
+        "ib.category_id",
+        "cci.count_completed",
+        "cci.foh",
+        "cci.boh"
+      )
+      .orderBy("ib.description", "asc");
+
+    const enrichedItems = items.map(item => {
+      const catId = item.category_id;
+      return {
+        ...item,
+        categoryName: categoryMap[catId] || `Uncategorized (${catId})`
+      };
+    });
+
+    // 4. Safely construct human readable names
+    const scheduledByName = scheduledByUser
+      ? `${scheduledByUser.firstName} ${scheduledByUser.lastName}`
+      : (instance.scheduled_by || null);
+
+    const updatedByName = updatedByUser
+      ? `${updatedByUser.firstName} ${updatedByUser.lastName}`
+      : (instance.updated_by || null);
+
+    // 5. Send fully aggregated response
+    res.json({
+      instanceData: {
+        id: instance.id,
+        date: instance.date,
+        day: instance.day,
+        is_scheduled: !!instance.is_scheduled,
+        site_mongo_id: instance.site_mongo_id,
+        scheduled_by: scheduledByName,
+        updated_by: updatedByName
+      },
+      stationTimezone: location.timezone || 'America/New_York',
+      itemsData: enrichedItems
+    });
+
+  } catch (err) {
+    console.error(`Error aggregating profile detail matrices for schedule instance ${req.params.id}:`, err);
+    res.status(500).send("Server Error tracking schedule context elements");
+  }
+});
 
 // 1. GET - Fetch an individual group and its selected values
 router.get('/groups/:id', async (req, res) => {
@@ -780,6 +959,86 @@ router.get('/groups/:id', async (req, res) => {
   } catch (err) {
     console.error("Failed to fetch cycle count group details:", err);
     res.status(500).json({ message: "Server error fetching group details" });
+  }
+});
+
+// PUT ROUTE: APPEND MULTIPLE SELECTED ITEMS INTO AN INSTANCE
+router.put('/schedules/details/:id/items', async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { productIds } = req.body; // Array of product IDs to add
+
+    const userIdStr = req.user?._id || req.user?.firstName || "system_operator";
+
+    if (!id || !Array.isArray(productIds) || productIds.length === 0) {
+      return res.status(400).json({ message: "Invalid payload params structural map." });
+    }
+
+    const db = getPg();
+
+    // 1. STRICT VALIDATION: Check if any of these items are already in today's instance list
+    // AND fetch their descriptions from the item_bk table
+    const existingItems = await db("public.cycle_count_items as cci")
+      .join("public.item_bk as bk", "cci.product_id", "bk.id") // Adjust 'bk.id' if your primary key name is different (e.g., bk.product_id)
+      .where("cci.instance_id", id)
+      .whereIn("cci.product_id", productIds)
+      .select("cci.product_id", "bk.description", "bk.upc_barcode"); // Pull both ID and description
+
+    if (existingItems.length > 0) {
+      // Create a readable list of descriptions (e.g., "Apple iPhone 15, Sony Headphones")
+      const duplicateDetails = existingItems.map(item => `${item.description} (${item.upc_barcode})`);
+
+      return res.status(400).json({
+        message: `Validation Error: The following products are already in today's list: ${duplicateDetails.join(', ')}`
+      });
+    }
+    // 2. Double check current aggregate sizing safety threshold rules on the server side
+    const currentItemsCount = await db("public.cycle_count_items")
+      .where({ instance_id: id })
+      .count("id as count")
+      .first();
+
+    const currentTotal = parseInt(currentItemsCount.count || "0", 10);
+
+    // Check if configuration structural conditions apply
+    const instance = await db("public.cycle_count_instance").where({ id }).select("is_scheduled").first();
+
+    if (!instance) {
+      return res.status(404).json({ message: "Cycle count instance not found." });
+    }
+
+    if (!instance.is_scheduled && (currentTotal + productIds.length) > 20) {
+      return res.status(400).json({
+        message: `Validation Error: This draft sequence cannot exceed 20 total items. Currently has ${currentTotal}.`
+      });
+    }
+
+    // 3. Perform safe batch insert transactions
+    await db.transaction(async (trx) => {
+      const rowsToInsert = productIds.map(pid => ({
+        instance_id: id,
+        product_id: pid,
+        count_completed: false,
+        foh: null,
+        boh: null,
+        priority: true
+      }));
+
+      await trx("public.cycle_count_items").insert(rowsToInsert);
+
+      // 4. Update the audit trail metadata on the parent instance 
+      await trx("public.cycle_count_instance")
+        .where({ id })
+        .update({
+          updated_by: String(userIdStr),
+          updated_at: new Date() // Knex safely serializes native JS dates into PostgreSQL timestamptz
+        });
+    });
+
+    return res.json({ success: true, message: `Successfully appended ${productIds.length} items.` });
+  } catch (err) {
+    console.error("Critical error appending item sets:", err);
+    return res.status(500).json({ message: "Internal server error completing transaction sequence." });
   }
 });
 
@@ -1077,6 +1336,83 @@ router.delete('/groups/:id', async (req, res) => {
   } catch (err) {
     console.error("Failed soft-deleting cycle count group:", err);
     res.status(500).json({ message: "Server error removing group template" });
+  }
+});
+
+// DELETE MULTIPLE ROUTE ITEMS FROM AN ACTIVE COUNT INSTANCE
+router.delete('/schedules/details/:id/items', async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { productIds } = req.body; // Expecting an array of numbers: [102, 304, ...]
+
+    // Fallback profile identifier strings from your custom authentication middleware layer
+    const userIdStr = req.user?._id || req.user?.firstName || "system_operator";
+
+    if (!id || !productIds || !Array.isArray(productIds) || productIds.length === 0) {
+      return res.status(400).json({ message: "Instance ID and target productIds array are required." });
+    }
+
+    const db = getPg();
+
+    // 1. Fetch structural core context variables
+    const instance = await db("public.cycle_count_instance")
+      .where({ id })
+      .select("id", "date", "site_mongo_id")
+      .first();
+
+    if (!instance) {
+      return res.status(404).json({ message: "Count instance record parameters not found." });
+    }
+
+    // 2. Resolve target location to isolate its timezone configurations
+    const location = await Location.findById(instance.site_mongo_id);
+    if (!location) {
+      return res.status(404).json({ message: "Associated station location context trace missing." });
+    }
+
+    const stationTimezone = location.timezone || 'America/New_York';
+
+    // 3. SECURE TIMEZONE CHECK: Verify that the current date in the station's timezone isn't the count date
+    const formatter = new Intl.DateTimeFormat('en-CA', {
+      timeZone: stationTimezone,
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit'
+    });
+    const currentStationDateStr = formatter.format(new Date()); // Outputs 'YYYY-MM-DD'
+
+    if (instance.date === currentStationDateStr) {
+      return res.status(403).json({
+        message: "Action Denied: Items cannot be deleted because this cycle count instance is currently live."
+      });
+    }
+
+    // 4. Transaction execution: Remove sub-items and stamp attribution identity tracking logs
+    await db.transaction(async (trx) => {
+      // A. Delete items matching the instance context link registry mapping
+      await trx("public.cycle_count_items")
+        .where({ instance_id: id })
+        .whereIn("product_id", productIds)
+        .del();
+
+      // B. Update auditing properties to reflect user changes
+      await trx("public.cycle_count_instance")
+        .where({ id })
+        .update({
+          updated_by: String(userIdStr),
+          updated_at: new Date() // Updates parent tracking timestamp
+        });
+    });
+
+    return res.status(200).json({
+      success: true,
+      message: "Selected items deleted successfully.",
+      updated_by: String(userIdStr)
+    });
+
+  } catch (err) {
+    console.error("Error executing safe delete batch mutation sequence:", err);
+    return res.status(500).json({ message: "Internal server error dropping registry indexes." });
   }
 });
 

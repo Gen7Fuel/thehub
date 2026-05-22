@@ -5,7 +5,7 @@ import { Input } from '@/components/ui/input'
 import { Badge } from '@/components/ui/badge'
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
-import { Calendar, Eye, Loader2, Save, X, AlertTriangle, Layers, MapPin } from 'lucide-react'
+import { Eye, Loader2, Save, AlertTriangle, Layers, MapPin } from 'lucide-react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import axios from 'axios'
 import { useSite } from '@/context/SiteContext'
@@ -41,7 +41,7 @@ function CreateScheduleView() {
   }, [selectedDate])
 
   // Query A: Perform soft date clash confirmation hook 
-  const { data: dateCheck, isLoading: checkingDate } = useQuery({
+  const { data: dateCheck } = useQuery({
     queryKey: ['date-clash-check', selectedSite, selectedDate],
     queryFn: async () => {
       if (!selectedSite || !selectedDate) return { alreadyExists: false }
@@ -194,15 +194,29 @@ function CreateScheduleView() {
 
           {/* Explicit Clash Warning Alert Block Box */}
           {dateCheck?.alreadyExists && (
-            <Alert variant="destructive" className="bg-rose-50 border-rose-200 text-rose-900 rounded-xl">
+            <Alert
+              variant="destructive"
+              className="bg-rose-50 border-rose-200 text-rose-900 rounded-xl"
+            >
               <AlertTriangle className="h-4 w-4 text-rose-600" />
-              <AlertTitle className="font-bold text-sm text-rose-800">Duplicate Schedule Collision</AlertTitle>
-              <AlertDescription className="text-xs text-rose-700 font-medium mt-0.5">
-                The location context <strong>{selectedSite}</strong> already maps to a locked cycle record configuration on {selectedDate}. Please select an alternate operational date or update the existing snapshot records instead.
+
+              <AlertTitle className="font-bold text-sm text-rose-800">
+                Duplicate Schedule Collision
+              </AlertTitle>
+
+              <AlertDescription className="text-xs text-rose-700 font-medium mt-0.5 leading-relaxed">
+                <span className="inline">
+                  Site{" "}
+                  <strong className="whitespace-nowrap">
+                    {selectedSite}
+                  </strong>{" "}
+                  already maps to a locked cycle record configuration on{" "}
+                  <strong>{selectedDate}</strong>. Please select an alternate
+                  operational date or update the existing snapshot records instead.
+                </span>
               </AlertDescription>
             </Alert>
           )}
-
           {/* Row B: Assign Count Filter Group Template */}
           <div className="space-y-1.5">
             <label className="text-xs font-bold text-slate-700 uppercase tracking-wide">Target Group Specification</label>
