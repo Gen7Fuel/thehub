@@ -43,7 +43,7 @@ router.get("/verify/:cardNumber", async (req, res) => {
 
 // POST / — create a new fleet card (returns full card object)
 router.post("/", async (req, res) => {
-  const { fleetCardNumber, customerName, driverName, vehicleMakeModel, numberPlate, status, notes } = req.body;
+  const { fleetCardNumber, customerName, driverName, vehicleMakeModel, numberPlate, status, notes, site } = req.body;
 
   const trimmedCardNumber = (fleetCardNumber || '').trim();
   if (!/^\d{16}$/.test(trimmedCardNumber)) {
@@ -51,7 +51,7 @@ router.post("/", async (req, res) => {
   }
 
   try {
-    const card = new Fleet({ fleetCardNumber: trimmedCardNumber, customerName, driverName, vehicleMakeModel, numberPlate, status, notes });
+    const card = new Fleet({ fleetCardNumber: trimmedCardNumber, customerName, driverName, vehicleMakeModel, numberPlate, status, notes, site });
     await card.save();
     res.status(201).json(card);
   } catch (error) {
@@ -64,8 +64,8 @@ router.post("/", async (req, res) => {
 
 // PUT /:id — update a fleet card by Mongo _id
 router.put("/:id", async (req, res) => {
-  const { fleetCardNumber, customerName, driverName, vehicleMakeModel, numberPlate, status, notes } = req.body;
-  const update = { customerName, driverName, vehicleMakeModel, numberPlate, status, notes };
+  const { fleetCardNumber, customerName, driverName, vehicleMakeModel, numberPlate, status, notes, site } = req.body;
+  const update = { customerName, driverName, vehicleMakeModel, numberPlate, status, notes, site };
 
   if (fleetCardNumber !== undefined) {
     const trimmed = fleetCardNumber.trim();

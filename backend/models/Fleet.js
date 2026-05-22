@@ -20,6 +20,7 @@ const fleetSchema = new mongoose.Schema({
   },
   numberPlate: { type: String, default: '' },
   notes:       { type: String, default: '' },
+  site:        { type: String, default: '' },
 });
 
 // Export the Fleet model based on the schema
