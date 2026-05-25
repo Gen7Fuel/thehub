@@ -33,7 +33,7 @@ const getRankedItemsForSite = async (siteId) => {
         ROW_NUMBER() OVER (
           PARTITION BY grade 
           ORDER BY 
-            last_inv_date ASC NULLS FIRST,  -- 1. Oldest items first (The "Cycle")
+            last_counted_at ASC NULLS FIRST,  -- 1. Oldest items first (The "Cycle")
             CASE 
               WHEN on_hand_qty <= 0 THEN 0 
               ELSE 1 

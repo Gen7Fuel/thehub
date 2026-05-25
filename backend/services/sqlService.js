@@ -217,6 +217,41 @@ async function getBulkCSOData(site, gtins = []) {
   }
 }
 
+async function getOnHandBulkCSOData(siteName, gtins = []) {
+  if (!gtins.length) return {};
+  try {
+    const pool = await getPool();
+    
+    // Sanitize and wrap strings safely for cross-db query mapping
+    const list = gtins.map(u => `'${u.replace(/'/g, "''")}'`).join(",");
+
+    const query = `
+      SELECT 
+          [GTIN] AS gtin, 
+          [On Hand Qty] AS qty,
+          [Retail] AS unitPrice
+      FROM [CSO].[Current_Inventory]
+      WHERE [Station] = '${siteName.replace(/'/g, "''")}' 
+        AND [GTIN] IN (${list})
+    `;
+
+    const result = await pool.request().query(query);
+
+    const data = {};
+    for (const row of result.recordset) {
+      if (!row.gtin) continue;
+      data[row.gtin.trim()] = {
+        qty: row.qty != null ? Number(row.qty) : 0,
+        unitPrice: row.unitPrice != null ? Number(row.unitPrice) : 0
+      };
+    }
+    return data;
+  } catch (err) {
+    console.error(`SQL error in getOnHandBulkCSOData for site ${siteName}:`, err);
+    return {};
+  }
+}
+
 
 async function getBulkUnitPriceCSO(site, gtins = []) {
   if (!gtins.length) return {};
@@ -868,6 +903,61 @@ async function getFullItemBackupData() {
   }
 }
 
+/**
+ * Fetches the entire current inventory matrix from Azure SQL to sanitize Postgres item_bk.
+ * Includes Category Name for Mongo cross-verification lookup.
+ */
+async function getSanitizationBackupData() {
+  try {
+    const pool = await getPool();
+    const query = `
+SELECT 
+        CI.[UPC],
+        CI.[Station_SK],
+        CI.[On Hand Qty] AS onHandQty,
+        MI.[GTIN],
+        MI.[SKU] AS upc_barcode,
+        MI.[Description],
+        MI.[Retail],
+        MI.[Vendor ID] AS vendorId,
+        MI.[Vendor] AS vendorName,
+        MI.[Category ID] AS categoryId,
+        MI.[Category Name] AS categoryName,
+        MI.[Department ID] AS departmentId,
+        MI.[Department],
+        MI.[Price Group ID] AS priceGroupId,
+        MI.[Price Group] AS priceGroup,
+        MI.[Promo Group ID] AS promoGroupId,
+        MI.[Promo Group] AS promoGroup,
+        (
+          SELECT MAX([Last_Inv_Date]) 
+          FROM [CSO].[Inventory Balance] IB 
+          WHERE IB.[UPC] = CI.[UPC] AND IB.[Station_SK] = CI.[Station_SK]
+        ) AS last_inv_date,
+        (
+          SELECT [URL] 
+          FROM [CSO].[UPC Details] UD
+          WHERE UD.[UPC] = CI.[UPC]
+        ) AS image_url
+      FROM [CSO].[Current_Inventory] CI
+      LEFT JOIN [CSO].[Master_Item] MI 
+        ON CI.[UPC] = MI.[UPC] AND CI.[Station_SK] = MI.[Station_SK]
+      WHERE MI.[GTIN] IS NOT NULL 
+        AND MI.[Category ID] IS NOT NULL 
+        AND MI.[Category ID] 
+          NOT IN (0, 121, 130, 131, 133, 134, 152, 153, 155, 157, 158, 175, 176, 
+                  200, 201, 202, 203, 204, 205, 206, 207, 208, 209, 210, 213, 
+                  214, 216, 218, 219, 220, 800, 999, 5001, 5002, 5003, 10000)
+    `;
+
+    const result = await pool.request().query(query);
+    return result.recordset;
+  } catch (err) {
+    console.error("SQL error fetching sanitization backup data:", err);
+    throw err;
+  }
+}
+
 function formatDateForDB(dateString) {
   // input: "2025-11-14"
   // output: "20251114"
@@ -989,5 +1079,7 @@ module.exports = {
   getBulkCSOData,
   getShiftEmployees,
   lookupAcademyEmployee,
-  getFullItemBackupData
+  getFullItemBackupData,
+  getSanitizationBackupData,
+  getOnHandBulkCSOData
 };

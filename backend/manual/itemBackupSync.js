@@ -104,6 +104,7 @@ async function runItemBackupSync() {
       promo_group: item?.promoGroup ?? null,
       on_hand_qty: toNullableNumber(item?.onHandQty),
       last_inv_date: lastInvDate, // Now a string "2026-05-13"
+      last_counted_at: lastInvDate, // Initialize last_counted_at to last_inv_date for new records
       grade,
       active: true,
       allow_cycle_count: true,

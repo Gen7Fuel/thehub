@@ -827,7 +827,7 @@
 //   )
 // }
 import { createFileRoute, useNavigate } from '@tanstack/react-router'
-import { useState, useEffect, useMemo, useCallback, memo } from 'react'
+import { useState, useEffect, useMemo, useCallback, useRef, memo } from 'react'
 import { Search, SlidersHorizontal, Edit3, AlertTriangle, Loader2, ChevronDown, ChevronRight, X, Check, Image as ImageIcon, Barcode as BarcodeIcon } from 'lucide-react'
 import { useSite } from '@/context/SiteContext'
 import { LocationPicker } from '@/components/custom/locationPicker'
@@ -866,6 +866,7 @@ interface ItemBkRow {
   crt_in_case: number | null
   on_hand_qty: string | number | null
   retail: string | number | null
+  last_counted_at: string | null
   last_inv_date: string | null
   image_url: string | null
 }
@@ -901,6 +902,11 @@ const frozenGradeBgStyles: Record<string, string> = {
   B: 'bg-[#fffbeb]', // Matches amber-50 base row color
   C: 'bg-[#f0fdf4]', // Matches green-50 base row color
 }
+
+const VIRTUAL_ROW_HEIGHT = 58
+const VIRTUAL_OVERSCAN = 12
+
+const formatDateValue = (value: string | null) => value ? new Date(value).toLocaleDateString() : '-'
 
 // High performance memoized row element explicitly processing explicit cell distributions
 const ItemRow = memo(({
@@ -953,7 +959,7 @@ const ItemRow = memo(({
       <td className={`p-2 sticky left-[48px] z-10 align-middle text-center w-14 transition-colors ${frozenBgClass} group-hover:bg-gray-100/50`}>
         <div className="w-9 h-9 rounded-lg bg-gray-100/60 flex-shrink-0 overflow-hidden border border-gray-200/80 mx-auto">
           {item.image_url ? (
-            <img src={item.image_url} alt={item.description} className="w-full h-full object-cover" />
+            <img src={item.image_url} alt={item.description} loading="lazy" decoding="async" className="w-full h-full object-cover" />
           ) : (
             <div className="w-full h-full flex items-center justify-center text-gray-400">
               <ImageIcon className="w-4 h-4 opacity-30" />
@@ -1033,7 +1039,10 @@ const ItemRow = memo(({
         </span>
       </td>
       <td className="p-3 font-mono text-xs text-gray-400 text-center align-middle w-32">
-        {item.last_inv_date ? new Date(item.last_inv_date).toLocaleDateString() : '—'}
+        {formatDateValue(item.last_counted_at)}
+      </td>
+      <td className="p-3 font-mono text-xs text-gray-400 text-center align-middle w-32">
+        {formatDateValue(item.last_inv_date)}
       </td>
       <td className="p-3 text-xs text-gray-400 align-left w-44 truncate" title={item.price_group || ''}>
         {item.price_group || '—'}
@@ -1057,10 +1066,14 @@ function RouteComponent() {
   const { selectedSite } = useSite()
   const { user } = useAuth()
   const navigate = useNavigate()
+  const tableScrollRef = useRef<HTMLDivElement | null>(null)
   const [site, setSite] = useState<string>(selectedSite || user?.location || "")
   const [searchQuery, setSearchQuery] = useState<string>("")
+  const [debouncedSearchQuery, setDebouncedSearchQuery] = useState<string>("")
   const [items, setItems] = useState<ItemBkRow[]>([])
   const [selectedIds, setSelectedIds] = useState<number[]>([])
+  const [scrollTop, setScrollTop] = useState(0)
+  const [viewportHeight, setViewportHeight] = useState(650)
   const [isLoading, setIsLoading] = useState<boolean>(false)
   const [collapsedCategories, setCollapsedCategories] = useState<Record<string, boolean>>({})
   const [isMassEditOpen, setIsMassEditOpen] = useState<boolean>(false)
@@ -1080,6 +1093,27 @@ function RouteComponent() {
   const [isFilterDialogOpen, setIsFilterDialogOpen] = useState<boolean>(false)
   const [selectedFilterColumn, setSelectedFilterColumn] = useState<FilterKey>('categoryName')
   const [activeFilters, setActiveFilters] = useState<Record<string, string[]>>({})
+
+  useEffect(() => {
+    const timeout = window.setTimeout(() => {
+      setDebouncedSearchQuery(searchQuery)
+    }, 250)
+
+    return () => window.clearTimeout(timeout)
+  }, [searchQuery])
+
+  useEffect(() => {
+    const scrollEl = tableScrollRef.current
+    if (!scrollEl) return
+
+    const updateViewportHeight = () => setViewportHeight(scrollEl.clientHeight || 650)
+    updateViewportHeight()
+
+    const resizeObserver = new ResizeObserver(updateViewportHeight)
+    resizeObserver.observe(scrollEl)
+
+    return () => resizeObserver.disconnect()
+  }, [])
 
   useEffect(() => {
     if (!site) return
@@ -1167,7 +1201,7 @@ function RouteComponent() {
   }, [activeFilters, searchQuery])
 
   const { groupedItems, filteredItemCount, allFilteredIds } = useMemo(() => {
-    const cleanQuery = searchQuery.trim().toLowerCase()
+    const cleanQuery = debouncedSearchQuery.trim().toLowerCase()
 
     const filtered = items.filter(item => {
       if (cleanQuery) {
@@ -1215,7 +1249,38 @@ function RouteComponent() {
       filteredItemCount: filtered.length,
       allFilteredIds: filteredIds
     }
-  }, [items, searchQuery, activeFilters])
+  }, [items, debouncedSearchQuery, activeFilters])
+
+  const selectedIdSet = useMemo(() => new Set(selectedIds), [selectedIds])
+
+  const virtualRows = useMemo(() => {
+    return Object.entries(groupedItems).flatMap(([categoryName, categoryRows]) => {
+      const rows: Array<
+        | { type: 'category'; categoryName: string; categoryRows: ItemBkRow[] }
+        | { type: 'item'; item: ItemBkRow }
+      > = [{ type: 'category', categoryName, categoryRows }]
+
+      if (!collapsedCategories[categoryName]) {
+        rows.push(...categoryRows.map(item => ({ type: 'item' as const, item })))
+      }
+
+      return rows
+    })
+  }, [groupedItems, collapsedCategories])
+
+  const virtualStartIndex = Math.max(0, Math.floor(scrollTop / VIRTUAL_ROW_HEIGHT) - VIRTUAL_OVERSCAN)
+  const virtualEndIndex = Math.min(
+    virtualRows.length,
+    Math.ceil((scrollTop + viewportHeight) / VIRTUAL_ROW_HEIGHT) + VIRTUAL_OVERSCAN
+  )
+  const visibleVirtualRows = virtualRows.slice(virtualStartIndex, virtualEndIndex)
+  const topSpacerHeight = virtualStartIndex * VIRTUAL_ROW_HEIGHT
+  const bottomSpacerHeight = Math.max(0, (virtualRows.length - virtualEndIndex) * VIRTUAL_ROW_HEIGHT)
+
+  useEffect(() => {
+    setScrollTop(0)
+    tableScrollRef.current?.scrollTo({ top: 0 })
+  }, [debouncedSearchQuery, activeFilters, site])
 
   const handleToggleSelectAll = () => {
     if (selectedIds.length === allFilteredIds.length) {
@@ -1307,7 +1372,8 @@ function RouteComponent() {
         "Vendor Name": item.vendor_name || "—",
         "Department": item.department || "—",
         "Status": item.is_active !== false ? "Active" : "Inactive",
-        "Last Inventory Date": item.last_inv_date ? new Date(item.last_inv_date).toLocaleDateString() : "—",
+        "Last Counted Date": formatDateValue(item.last_counted_at),
+        "Last Inventory Date": formatDateValue(item.last_inv_date),
         "Price Group": item.price_group || "—",
         "Promo Group": item.promo_group || "—",
         "Packs In Crt": item.pk_in_crt ?? "—",
@@ -1469,7 +1535,11 @@ function RouteComponent() {
           </div>
         ) : (
           <div className="bg-white border rounded-xl shadow-sm overflow-hidden max-h-[calc(100vh-230px)] relative flex flex-col">
-            <div className="overflow-auto flex-1">
+            <div
+              ref={tableScrollRef}
+              onScroll={(event) => setScrollTop(event.currentTarget.scrollTop)}
+              className="overflow-auto flex-1"
+            >
               <table className="w-full text-left border-collapse text-sm table-fixed">
                 <thead className="bg-gray-100 text-gray-700 font-semibold sticky top-0 z-30 shadow-[0_1px_0_0_rgba(0,0,0,0.1)]">
                   <tr>
@@ -1504,6 +1574,7 @@ function RouteComponent() {
                     <th className="p-3 w-44">Vendor Name</th>
                     <th className="p-3 w-44">Department</th>
                     <th className="p-3 text-center w-24">Status</th>
+                    <th className="p-3 text-center w-32">Last Counted</th>
                     <th className="p-3 text-center w-32">Last Inv Date</th>
                     <th className="p-3 w-44">Price Group</th>
                     <th className="p-3 w-44">Promo Group</th>
@@ -1513,40 +1584,48 @@ function RouteComponent() {
                 </thead>
 
                 <tbody className="divide-y text-gray-600">
-                  {Object.entries(groupedItems).map(([categoryName, categoryRows]) => {
-                    const isCollapsed = !!collapsedCategories[categoryName];
-                    return (
-                      <caption key={categoryName} style={{ display: 'contents' }}>
-                        {/* CATEGORY TITLE ACCORDION HEADER ROW */}
+                  {topSpacerHeight > 0 && (
+                    <tr aria-hidden="true">
+                      <td colSpan={20} style={{ height: topSpacerHeight, padding: 0 }} />
+                    </tr>
+                  )}
+                  {visibleVirtualRows.map((row, index) => {
+                    if (row.type === 'category') {
+                      const isCollapsed = !!collapsedCategories[row.categoryName]
+                      return (
                         <tr
-                          onClick={() => toggleCategoryCollapse(categoryName)}
+                          key={`category-${row.categoryName}`}
+                          onClick={() => toggleCategoryCollapse(row.categoryName)}
                           className="bg-gray-50 hover:bg-gray-100/80 cursor-pointer select-none transition-colors border-y"
                         >
-                          {/* Extended colSpan to account for the total structural columns */}
-                          <td colSpan={19} className="p-2.5 font-semibold text-gray-800 text-xs tracking-wide uppercase sticky left-0 z-20 bg-gray-50">
+                          <td colSpan={20} className="p-2.5 font-semibold text-gray-800 text-xs tracking-wide uppercase sticky left-0 z-20 bg-gray-50">
                             <div className="flex items-center gap-2">
                               {isCollapsed ? <ChevronRight className="h-4 w-4 text-gray-500 shrink-0" /> : <ChevronDown className="h-4 w-4 text-gray-500 shrink-0" />}
-                              <span>{categoryName}</span>
+                              <span>{row.categoryName}</span>
                               <span className="ml-1 px-1.5 py-0.5 rounded-full bg-gray-200 text-gray-600 text-[10px] font-normal lowercase">
-                                {categoryRows.length} {categoryRows.length === 1 ? 'product' : 'products'}
+                                {row.categoryRows.length} {row.categoryRows.length === 1 ? 'product' : 'products'}
                               </span>
                             </div>
                           </td>
                         </tr>
+                      )
+                    }
 
-                        {/* RENDER UNCOLLAPSED ITEMS MATRICES */}
-                        {!isCollapsed && categoryRows.map((item) => (
-                          <ItemRow
-                            key={item.id}
-                            item={item}
-                            isSelected={selectedIds.includes(item.id)}
-                            onToggle={handleToggleRow}
-                            onOpenBarcode={handleOpenBarcodeDialog}
-                          />
-                        ))}
-                      </caption>
+                    return (
+                      <ItemRow
+                        key={`item-${row.item.id}-${virtualStartIndex + index}`}
+                        item={row.item}
+                        isSelected={selectedIdSet.has(row.item.id)}
+                        onToggle={handleToggleRow}
+                        onOpenBarcode={handleOpenBarcodeDialog}
+                      />
                     )
                   })}
+                  {bottomSpacerHeight > 0 && (
+                    <tr aria-hidden="true">
+                      <td colSpan={20} style={{ height: bottomSpacerHeight, padding: 0 }} />
+                    </tr>
+                  )}
                 </tbody>
               </table>
             </div>

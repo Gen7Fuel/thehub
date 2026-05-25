@@ -1,147 +1,14 @@
-const connectDB = require("../config/db");
-const mongoose = require("mongoose");
 const Location = require("../models/Location");
-const ItemBk = require("../pg/models/itemBk");
+const ItemBk = require("../pg/models/itemBk"); // Assumed structure
 const { getPg } = require("../config/pg");
 const { format, addDays, nextMonday } = require("date-fns");
+const cron = require("node-cron");
 
+async function runWeeklyInstanceCalculations() {
+  const db = getPg();
+  console.log("--- Starting Weekly Cycle Count Generation ---");
 
-// async function generateWeeklyCycleCounts() {
-//   try {
-//     await connectDB();
-//     const db = getPg();
-//     console.log("--- Starting Weekly Cycle Count Generation ---");
-
-//     const stores = await Location.find({ type: "store" });
-//     const startDate = nextMonday(new Date());
-
-//     for (const store of stores) {
-//       const siteId = store._id.toString();
-//       console.log(`\nProcessing Store: ${store.stationName} (${siteId})`);
-
-//       // --- CHANGE 1: Move getRankedItems inside the loop, but only for Auto-Sort ---
-//       // We initialize pool as null and only fetch it if we hit a non-scheduled day
-//       let pool = null;
-
-//       for (let i = 0; i < 7; i++) {
-//         const targetDate = addDays(startDate, i);
-//         const dateStr = format(targetDate, "yyyy-MM-dd");
-//         const dayName = format(targetDate, "EEEE");
-
-//         const existing = await db("cycle_count_instance")
-//           .where({ site_mongo_id: siteId, date: dateStr })
-//           .first();
-
-//         if (existing) {
-//           console.log(`   [SKIP] ${dateStr} already exists.`);
-//           continue;
-//         }
-
-//         const schedule = await db("cycle_count_schedule as s")
-//           .join("cycle_count_groups as g", "s.group_id", "g.id")
-//           .where("s.site_mongo_id", siteId)
-//           .andWhere(function () {
-//             this.where("s.date", dateStr).orWhere("s.day", dayName);
-//           })
-//           .select("g.filter_column", "g.id as group_id")
-//           .first();
-
-//         let dailySelection = [];
-//         let isScheduled = false;
-
-//         if (schedule) {
-//           isScheduled = true;
-
-//           // --- CHANGE 2: Query DIRECTLY from item_bk to bypass EXCLUDED_CATEGORIES ---
-//           const groupValues = await db("cycle_count_group_values")
-//             .where("group_id", schedule.group_id)
-//             .pluck("value")
-//             .then(values => values.map(v => String(v)));
-
-//           dailySelection = await db("item_bk")
-//             .where({
-//               site: siteId,
-//               active: true,
-//               allow_cycle_count: true
-//             })
-//             // Use WHERE IN with a cast to ensure string/int compatibility
-//             .whereIn(db.raw(`CAST(?? AS TEXT)`, [schedule.filter_column]), groupValues);
-
-//           console.log(`   [SCHEDULED] ${dateStr}: Found ${dailySelection.length} items for group filter.`);
-//         } else {
-//           isScheduled = false;
-
-//           // --- CHANGE 3: Lazy-load the Ranked Pool only when needed ---
-//           if (!pool) {
-//             const allRanked = await ItemBk.getRankedItemsForSite(siteId);
-//             pool = {
-//               A: allRanked.filter(i => i.grade === 'A'),
-//               B: allRanked.filter(i => i.grade === 'B'),
-//               C: allRanked.filter(i => i.grade === 'C')
-//             };
-//           }
-
-//           const rawSelection = [
-//             ...pool.A.splice(0, 10),
-//             ...pool.B.splice(0, 7),
-//             ...pool.C.splice(0, 3)
-//           ];
-
-//           dailySelection = rawSelection.sort((a, b) => {
-//             if (a.category_id !== b.category_id) {
-//               return (a.category_id || 0) - (b.category_id || 0);
-//             }
-//             return a.grade.localeCompare(b.grade);
-//           });
-//           console.log(`   [AUTO] ${dateStr}: Selected top 20 items.`);
-//         }
-
-//         // 7. Transactional Insert (Same as before)
-//         if (dailySelection.length > 0) {
-//           try {
-//             await db.transaction(async (trx) => {
-//               const [instance] = await trx("cycle_count_instance")
-//                 .insert({
-//                   date: dateStr,
-//                   day: dayName,
-//                   is_scheduled: isScheduled,
-//                   site_mongo_id: siteId
-//                 })
-//                 .returning("id");
-
-//               const itemRows = dailySelection.map(item => ({
-//                 instance_id: instance.id,
-//                 product_id: item.id,
-//                 foh: null,
-//                 boh: null,
-//                 count_completed: false,
-//                 priority: false
-//               }));
-
-//               await trx("cycle_count_items").insert(itemRows);
-//             });
-//           } catch (trxErr) {
-//             console.error(`   [ERROR] Failed to save ${dateStr}:`, trxErr.message);
-//           }
-//         }
-//       }
-//     }
-
-//     console.log("\n--- Cycle Count Generation Finished ---");
-//   } catch (err) {
-//     console.error("Generation failed:", err);
-//   } finally {
-//     await mongoose.disconnect();
-//     process.exit(0);
-//   }
-// }
-
-async function generateWeeklyCycleCounts() {
   try {
-    await connectDB();
-    const db = getPg();
-    console.log("--- Starting Weekly Cycle Count Generation ---");
-
     const stores = await Location.find({ type: "store" });
     const startDate = nextMonday(new Date());
 
@@ -149,7 +16,6 @@ async function generateWeeklyCycleCounts() {
       const siteId = store._id.toString();
       console.log(`\nProcessing Store: ${store.stationName} (${siteId})`);
 
-      // We initialize pool as null and only fetch it if we hit a non-scheduled day
       let pool = null;
 
       for (let i = 0; i < 7; i++) {
@@ -158,7 +24,6 @@ async function generateWeeklyCycleCounts() {
         const dayName = format(targetDate, "EEEE");
 
         // --- CHECK EXISTING INSTANCE ---
-        // If an instance (scheduled or manual) already exists for this date, skip it!
         const existing = await db("cycle_count_instance")
           .where({ site_mongo_id: siteId, date: dateStr })
           .first();
@@ -169,12 +34,6 @@ async function generateWeeklyCycleCounts() {
         }
 
         // --- AUTO-SORT GENERATION ENGINE ---
-        // If we reach this point, no instance exists for today. 
-        // We auto-generate the top 20 ranked items using the pool.
-        let dailySelection = [];
-        const isScheduled = false; // Always false for auto-generated backfills
-
-        // Lazy-load the Ranked Pool only when needed
         if (!pool) {
           const allRanked = await ItemBk.getRankedItemsForSite(siteId);
           pool = {
@@ -190,53 +49,72 @@ async function generateWeeklyCycleCounts() {
           ...pool.C.splice(0, 3)
         ];
 
-        dailySelection = rawSelection.sort((a, b) => {
+        if (rawSelection.length === 0) {
+          console.log(`   [NOTICE] No items available in pool for ${dateStr}.`);
+          continue;
+        }
+
+        const dailySelection = rawSelection.sort((a, b) => {
           if (a.category_id !== b.category_id) {
             return (a.category_id || 0) - (b.category_id || 0);
           }
           return a.grade.localeCompare(b.grade);
         });
         
-        console.log(`   [AUTO] ${dateStr}: Selected top 20 items.`);
+        console.log(`   [AUTO] ${dateStr}: Selected top ${dailySelection.length} items.`);
 
         // --- TRANSACTIONAL INSERT ---
-        if (dailySelection.length > 0) {
-          try {
-            await db.transaction(async (trx) => {
-              const [instance] = await trx("cycle_count_instance")
-                .insert({
-                  date: dateStr,
-                  day: dayName,
-                  is_scheduled: isScheduled, // false
-                  site_mongo_id: siteId
-                })
-                .returning("id");
+        try {
+          await db.transaction(async (trx) => {
+            const [insertedInstance] = await trx("cycle_count_instance")
+              .insert({
+                date: dateStr,
+                day: dayName,
+                is_scheduled: false,
+                site_mongo_id: siteId
+              })
+              .returning("id");
 
-              const itemRows = dailySelection.map(item => ({
-                instance_id: instance.id,
-                product_id: item.id,
-                foh: null,
-                boh: null,
-                count_completed: false,
-                priority: false
-              }));
+            // Guaranteed resolution fallback for Knex version variant differences:
+            const instanceId = typeof insertedInstance === 'object' ? insertedInstance.id : insertedInstance;
 
-              await trx("cycle_count_items").insert(itemRows);
-            });
-          } catch (trxErr) {
-            console.error(`   [ERROR] Failed to save ${dateStr}:`, trxErr.message);
-          }
+            const itemRows = dailySelection.map(item => ({
+              instance_id: instanceId,
+              product_id: item.id,
+              foh: null,
+              boh: null,
+              count_completed: false,
+              priority: false
+            }));
+
+            await trx("cycle_count_items").insert(itemRows);
+          });
+          console.log(`   [SUCCESS] Saved cycle count instance for ${dateStr}`);
+        } catch (trxErr) {
+          // Log the individual date block failure but allow loops to continue processing other days/stores
+          console.error(`   [ERROR] Failed to save transaction for ${dateStr}:`, trxErr.message);
         }
       }
     }
 
-    console.log("\n--- Cycle Count Generation Finished ---");
+    console.log("\n--- Cycle Count Generation Finished Cleanly ---");
   } catch (err) {
-    console.error("Generation failed:", err);
-  } finally {
-    await mongoose.disconnect();
-    process.exit(0);
+    console.error("Master Generation Pipeline Failure:", err);
   }
 }
 
-generateWeeklyCycleCounts();
+// Runs every Sunday at exactly 03:00 AM
+cron.schedule("0 3 * * 0", async () => {
+  console.log(`[${new Date().toISOString()}] Triggering scheduled Sunday morning Weekly Instance Calculation engine...`);
+  try {
+    await runWeeklyInstanceCalculations();
+    console.log(`[${new Date().toISOString()}] Sunday morning Weekly Instance Calculations completed successfully.`);
+  } catch (error) {
+    console.error("Critical Failure running Sunday Weekly Instance Calculations:", error);
+  }
+}, {
+  scheduled: true,
+  timezone: "America/Toronto"
+});
+
+module.exports = { runWeeklyInstanceCalculations };

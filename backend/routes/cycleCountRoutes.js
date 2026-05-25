@@ -448,10 +448,11 @@ router.get('/item-bk', async (req, res) => {
         "price_group",
         "promo_group_id",
         "promo_group",
-        "active",
+        "active as is_active",
         "on_hand_qty",
         "pk_in_crt",
         "crt_in_case",
+        "last_counted_at",
         "last_inv_date",
         "grade",
         "allow_cycle_count",
@@ -1200,12 +1201,14 @@ router.post('/save-item-v2', async (req, res) => {
       .join("item_bk as ib", "ci.product_id", "ib.id")
       .where("ci.id", entryId)
       .select(
+        "ci.product_id", // ADDED: Need this to update item_bk directly
         "ci.foh",
         "ci.boh",
         "ci.foh_crt",
         "ci.boh_crt",
         "ci.foh_case",
         "ci.boh_case",
+        "ib.site",       // ADDED: Needed to lookup location timezone parameters
         "ib.pk_in_crt",
         "ib.crt_in_case"
       )
@@ -1218,6 +1221,7 @@ router.post('/save-item-v2', async (req, res) => {
     // Prepare the update object
     const updateData = {
       [field]: value, // Store loose pack count in 'foh' or 'boh'
+      updated_at: new Date()
     };
 
     // If breakdown was provided (Tobacco items), map to extra columns
@@ -1234,9 +1238,38 @@ router.post('/save-item-v2', async (req, res) => {
       ...updateData,
     });
 
+    // 1. Existing Transaction: Update inventory table records
     await db("cycle_count_items")
       .where({ id: entryId })
       .update(updateData);
+
+    // ==========================================
+    // NEW ADDITION: UPDATE LAST_COUNTED_AT DATE
+    // ==========================================
+    try {
+      // 2. Query location parameters from MongoDB using your item site ID mapping
+      const locationDoc = await Location.findById(existing.site, "timezone");
+
+      // Fallback to absolute standard systems if timezone setup is missing
+      const targetTimezone = locationDoc?.timezone || "America/New_York";
+
+      // 3. Compute what date it is right now inside that station's legal timezone boundary
+      const stationLocalDateStr = moment().tz(targetTimezone).format("YYYY-MM-DD");
+
+      // 4. Update the Master Item Backup profile 
+      await db("item_bk")
+        .where({ id: existing.product_id })
+        .update({
+          last_counted_at: stationLocalDateStr
+        });
+
+      // console.log(`[TIMESTAMP LOG] Updated item_bk ID ${existing.product_id} with last_counted_at: ${stationLocalDateStr} (${targetTimezone})`);
+    } catch (tzError) {
+      // Wrapped in a sub-try/catch so that if Mongo/Moment fails, it does not throw a 500 error 
+      // after the count itself was already saved successfully.
+      console.error("Non-blocking error calculating station timezone date:", tzError);
+    }
+    // ==========================================
 
     res.json({ success: true });
   } catch (err) {
@@ -1732,6 +1765,113 @@ router.get('/daily-counts', async (req, res) => {
   } catch (err) {
     console.error(err);
     res.status(500).json({ message: "Failed to get daily counts." });
+  }
+});
+
+router.get("/daily-report", async (req, res) => {
+  const { site, date } = req.query; // Expects site: "Rankin", date: "YYYY-MM-DD"
+  const db = getPg();
+
+  if (!site || !date) {
+    return res.status(400).json({ success: false, message: "Missing required parameters: site and date." });
+  }
+
+  try {
+    // 1. Resolve the text site name to its MongoDB ID string reference
+    const locationDoc = await Location.findOne({ stationName: site }).lean();
+    if (!locationDoc) {
+      return res.status(404).json({ success: false, message: `Location profile not found for site: ${site}` });
+    }
+    const siteMongoIdStr = locationDoc._id.toString();
+
+    // 2. Fetch the instance row from PostgreSQL
+    const instance = await db("cycle_count_instance")
+      .where({ site_mongo_id: siteMongoIdStr, date: date })
+      .first();
+
+    // If no instance exists for that day, return an empty array gracefully
+    if (!instance) {
+      return res.status(200).json({ success: true, data: [] });
+    }
+
+    // 3. Fetch all Mongo Product Categories upfront to avoid N+1 query performance hits
+    const mongoCategories = await ProductCategory.find({}).lean();
+    const categoryMap = new Map(mongoCategories.map(cat => [Number(cat.Number), cat.Name]));
+
+    // 4. Query all items tied to this instance, including case/crate breakdowns & master product details
+    const reportItems = await db("cycle_count_items as cci")
+      .join("item_bk as ib", "cci.product_id", "ib.id")
+      .where({
+        "cci.instance_id": instance.id,
+        "cci.count_completed": true // Added condition here
+      })
+      .select(
+        "cci.id as itemId",
+        "cci.product_id as productId",
+        "ib.description as name",
+        "ib.upc as upc_barcode",
+        "ib.image_url",
+        "ib.retail as unitPrice",
+        "ib.category_id as categoryId",
+        "ib.on_hand_qty as onHandCSO",
+        "cci.foh",
+        "cci.foh_crt",
+        "cci.foh_case",
+        "cci.boh",
+        "cci.boh_crt",
+        "cci.boh_case",
+        "cci.count_completed",
+        "cci.priority"
+      );
+
+    // 5. Calculate total pieces and stitch the categoryName into the payload
+    const parsedItems = reportItems.map(item => {
+      const totalFoh = Number(item.foh || 0);
+      const totalBoh = Number(item.boh || 0);
+      const compositeTotalQty = totalFoh + totalBoh;
+      const cleanCategoryId = item.categoryId ? Number(item.categoryId) : 0;
+
+      return {
+        _id: String(item.itemId),
+        productId: item.productId,
+        name: item.name,
+        upc_barcode: item.upc_barcode,
+        image_url: item.image_url,
+        unitPrice: item.unitPrice ? Number(item.unitPrice) : 0,
+        onHandCSO: item.onHandCSO ? Number(item.onHandCSO) : 0,
+        categoryId: cleanCategoryId,
+
+        // Match Postgres categoryId with Mongo's "Number" field to get the string Name
+        categoryName: categoryMap.get(cleanCategoryId) || "Unknown Category",
+
+        // Loose counts
+        foh: totalFoh,
+        boh: totalBoh,
+
+        // Case / Crate tracking metrics
+        foh_crt: item.foh_crt,
+        foh_case: item.foh_case,
+        boh_crt: item.boh_crt,
+        boh_case: item.boh_case,
+
+        totalQty: compositeTotalQty,
+        count_completed: item.count_completed,
+        priority: item.priority,
+        comments: []
+      };
+    });
+
+    return res.status(200).json({
+      success: true,
+      instanceId: instance.id,
+      date: instance.date,
+      day: instance.day,
+      data: parsedItems
+    });
+
+  } catch (error) {
+    console.error("Error generating relational variance report query:", error);
+    return res.status(500).json({ success: false, message: "Internal server registry error processing report data." });
   }
 });
 

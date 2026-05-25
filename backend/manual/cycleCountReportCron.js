@@ -1,7 +1,8 @@
 // scripts/runCycleCountUpdate.js
 require('dotenv').config();
 const mongoose = require('mongoose');
-const { updateCycleCountCSO } = require('../cron_jobs/cycleCountCron');
+// const { updateCycleCountCSO } = require('../cron_jobs/cycleCountCron');
+const { updateCycleCountCSO } = require('../cron_jobs/cycleCountReportCron'); // Importing the same function from the report cron for manual execution
 
 async function run() {
   try {
