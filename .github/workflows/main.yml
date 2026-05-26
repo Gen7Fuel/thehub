@@ -201,7 +201,7 @@ jobs:
             export GOOGLE_API_KEY=${{ secrets.GOOGLE_API_KEY }}
 
             # ---- Ensure Postgres is running before backend deploy ----
-            echo "Starting postgres..."
+            echo "Ensuring Postgres is running..."
             if docker compose up -d --wait postgres; then
                 echo "SUCCESS: Postgres is healthy."
             else

@@ -21,7 +21,9 @@ require('./cron_jobs/dashboardCacheCron'); //cron job for pre-warming dashboard 
 require('./cron_jobs/dailyFuelSyncCron') // cron job for updating fuel related data daily morning at 5 am EST
 require('./cron_jobs/weeklyArReportCron') // cron job for weekly AR report emailed to mario every Tuesday 9 AM PT
 // require('./cron_jobs/productCategoryMappingCron'); //cron job for normalising the product categories
-
+require('./cron_jobs/itemBkSanitizationCron'); //cron job for sanitizing item backup data from SQL
+require('./cron_jobs/cycleCountReportCron'); //cron job for updating onHandCSO and unit prices for cycle count report, runs every morning at 3 AM
+require('./cron_jobs/cycleCountWeeklyInstanceCron'); //cron job for generating weekly cycle count instances, runs every Sunday at 3 AM
 
 // Route imports
 const authRoutes = require("./routes/auth");
