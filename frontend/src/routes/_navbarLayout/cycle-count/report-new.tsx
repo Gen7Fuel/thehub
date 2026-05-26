@@ -2,7 +2,7 @@
 import { useState, useEffect, memo } from "react";
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import axios from "axios";
-import { ArrowUp, ArrowDown, Image as ImageIcon, ChevronDown, ChevronRight, ScanBarcode, AlertCircle, CheckCircle2, Send, MessageSquare } from "lucide-react";
+import { ArrowUp, ArrowDown, Image as ImageIcon, ChevronDown, Eye, ChevronRight, ScanBarcode, AlertCircle, CheckCircle2, Send, MessageSquare } from "lucide-react";
 import { LocationPicker } from "@/components/custom/locationPicker";
 import { useAuth } from "@/context/AuthContext";
 import { DatePicker } from '@/components/custom/datePicker';
@@ -50,7 +50,7 @@ interface ThreadNote {
 // Optimized sub-row component to cleanly display stacked values without conversion
 const CrateBreakdown = ({ loosePacks, rawCrates }: { loosePacks: number; rawCrates: number }) => {
   return (
-    <div className="mt-1 pt-1 border-t border-slate-100 text-[10px] text-left mx-auto w-max font-sans text-slate-500 space-y-0.5 leading-tight">
+    <div className="mt-0.5 pt-0.5 border-t border-slate-100 text-[10px] text-left mx-auto w-max font-sans text-slate-500 space-y-0.5 leading-tight">
       <div><span className="font-semibold text-slate-400">Pks:</span> {loosePacks}</div>
       <div><span className="font-semibold text-slate-400">Crt:</span> {rawCrates}</div>
     </div>
@@ -83,7 +83,7 @@ const ItemRow = memo(({
   if (!item.count_completed) {
     return (
       <tr className="border-b border-rose-100/70 bg-rose-50/20 hover:bg-rose-50/40 transition-colors group text-xs text-slate-400">
-        <td className="p-2.5 sticky left-0 z-10 align-middle text-center w-14 bg-rose-50/10 border-r border-rose-100/40">
+        <td className="p-2.5 sticky left-0 z-10 align-middle text-center w-14 bg-[#fffafb] group-hover:bg-rose-50/40 transition-colors border-r border-rose-100/40">
           <div className="w-9 h-9 rounded-lg bg-slate-100 flex-shrink-0 overflow-hidden border border-slate-200/40 mx-auto grayscale opacity-60">
             {item.image_url ? (
               <img src={item.image_url} alt={item.name} loading="lazy" className="w-full h-full object-cover" />
@@ -94,7 +94,7 @@ const ItemRow = memo(({
             )}
           </div>
         </td>
-        <td className="p-3 sticky left-[56px] z-10 font-mono align-middle w-36 bg-rose-50/10 border-r border-rose-100/40">
+        <td className="p-3 sticky left-[56px] z-10 font-mono align-middle w-36 bg-[#fffafb] group-hover:bg-rose-50/40 transition-colors border-r border-rose-100/40">
           <button
             type="button"
             onClick={() => onOpenBarcode(item.name, item.upc_barcode, item.image_url)}
@@ -104,8 +104,10 @@ const ItemRow = memo(({
             <span className="font-semibold truncate">{item.upc_barcode || "NO UPC"}</span>
           </button>
         </td>
-        <td className="p-3 sticky left-[200px] z-10 font-medium align-middle w-54 bg-rose-50/10 shadow-[4px_0_8px_-3px_rgba(0,0,0,0.04)] italic text-slate-500 truncate" title={item.name}>
-          {item.name}
+        <td className="p-3 sticky left-[200px] z-10 font-medium align-middle w-54 bg-[#fffafb] group-hover:bg-rose-50/40 transition-colors border-r border-rose-100/40 shadow-[4px_0_8px_-3px_rgba(0,0,0,0.04)] italic text-slate-500" title={item.name}>
+          <div className="line-clamp-2 leading-tight break-words pr-2">
+            {item.name}
+          </div>
         </td>
         <td className="p-3 text-center align-middle w-28 font-medium text-slate-300">-</td>
         <td className="p-3 text-center align-middle w-28 font-medium text-slate-300">-</td>
@@ -146,9 +148,9 @@ const ItemRow = memo(({
         </button>
       </td>
 
-      {/* STICKY DESCRIPTION COLUMN */}
-      <td className="p-3 sticky left-[200px] z-10 font-medium text-slate-900 align-middle w-54 shadow-[4px_0_8px_-3px_rgba(0,0,0,0.08)] bg-white group-hover:bg-slate-50/60 transition-colors" title={item.name}>
-        <div className="line-clamp-2 leading-tight break-words font-semibold text-slate-800">
+      {/* STICKY DESCRIPTION COLUMN WITH LINE CLAMP WRAPPING */}
+      <td className="p-3 sticky left-[200px] z-10 font-medium text-slate-900 align-middle w-54 shadow-[4px_0_8px_-3px_rgba(0,0,0,0.08)] bg-white group-hover:bg-slate-50/60 transition-colors border-r border-slate-100" title={item.name}>
+        <div className="line-clamp-2 leading-tight break-words font-semibold text-slate-800 pr-1">
           {item.name}
         </div>
       </td>
@@ -158,7 +160,7 @@ const ItemRow = memo(({
         {hasFohCrates ? (
           <CrateBreakdown loosePacks={item.foh} rawCrates={item.foh_crt!} />
         ) : (
-          <span className="font-bold text-slate-900 block">{item.foh}</span>
+          <span className="font-bold text-slate-900 block mt-1">{item.foh}</span>
         )}
       </td>
 
@@ -167,12 +169,12 @@ const ItemRow = memo(({
         {hasBohCrates ? (
           <CrateBreakdown loosePacks={item.boh} rawCrates={item.boh_crt!} />
         ) : (
-          <span className="font-bold text-slate-900 block">{item.boh}</span>
+          <span className="font-bold text-slate-900 block mt-1">{item.boh}</span>
         )}
       </td>
 
       {/* COMPILED PACK QUANTITIES */}
-      <td className="p-3 font-mono text-center align-middle w-24 bg-slate-50/40 group-hover:bg-slate-50/80 font-black text-slate-900 border-x border-slate-100">
+      <td className="p-3 font-mono text-center align-middle w-24 bg-slate-50/40 group-hover:bg-slate-50/80 font-black text-slate-900 border-r border-slate-100">
         {computedTotalQty}
       </td>
 
@@ -340,42 +342,42 @@ function RouteComponent() {
       )}
 
       {hasAccess && (
-        <div className="min-h-screen bg-slate-50/60 p-3 sm:p-4 lg:p-6 flex flex-col justify-start items-center select-none font-sans antialiased">
+        <div className="min-h-screen bg-slate-50/60 p-3 sm:p-4 lg:p-6 flex flex-col justify-start items-center select-none font-sans antialiased w-full max-w-full overflow-x-hidden">
           <div className="w-full max-w-full lg:max-w-[1400px]">
 
             {/* Header / Filter Module */}
-            <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-6 bg-white p-4 sm:p-5 rounded-2xl border border-slate-200/70 shadow-2xs">
+            <div className="flex flex-col xl:flex-row xl:items-center justify-between gap-4 mb-6 bg-white p-4 sm:p-5 rounded-2xl border border-slate-200/70 shadow-2xs">
               <div>
                 <h1 className="text-xl md:text-2xl font-black text-slate-900 tracking-tight flex items-center gap-2">
                   Cycle Count Analytics
                 </h1>
-                <p className="text-xs text-slate-500 font-medium mt-0.5">Comprehensive store ledger reconciliation parameters grouped by workflow status</p>
               </div>
 
-              {/* CENTER CONSOLE: COMMENT INSTANCE FIELD */}
+              {/* CENTER CONSOLE: EXPANDED COMMENT INSTANCE FIELD */}
               {instanceId ? (
-                <div className="flex-1 max-w-2xl bg-slate-50 border border-slate-200/80 rounded-xl p-2.5 flex items-center gap-2 mx-0 lg:mx-4">
+                <div className="w-full md:flex-1 md:max-w-4xl bg-slate-50 border border-slate-200/80 rounded-xl p-2 flex items-center gap-2 mx-0 xl:mx-4">
                   <textarea
                     value={newNoteText}
                     onChange={(e) => setNewNoteText(e.target.value)}
-                    placeholder="Add comments to this instance..."
+                    placeholder="Add comments related to this count report....."
                     rows={1}
-                    className="flex-1 bg-transparent text-xs p-1 px-2 focus:outline-hidden resize-none font-medium placeholder-slate-400 max-h-10 text-slate-800"
+                    className="flex-1 bg-transparent text-xs p-1.5 px-2 focus:outline-hidden resize-none font-medium placeholder-slate-400 max-h-10 text-slate-800"
                   />
                   <button
                     onClick={handlePostNote}
                     disabled={!newNoteText.trim() || postingNote}
-                    className="p-2 bg-slate-900 text-white rounded-lg hover:bg-black transition-all disabled:opacity-30 disabled:hover:bg-slate-900"
+                    className="p-2 bg-slate-900 text-white rounded-lg hover:bg-black transition-all disabled:opacity-30 disabled:hover:bg-slate-900 shrink-0"
                   >
                     <Send className="w-3.5 h-3.5" />
                   </button>
-                  <div className="h-6 w-[1px] bg-slate-200 mx-1" />
+                  <div className="h-6 w-[1px] bg-slate-200 mx-0.5 shrink-0" />
                   <button
                     onClick={() => setIsThreadOpen(true)}
-                    className="flex items-center gap-1.5 px-3 py-2 bg-white hover:bg-slate-100 border border-slate-200 text-slate-700 rounded-lg transition-colors text-xs font-bold shrink-0 shadow-3xs"
+                    title={`View Thread (${notes.length})`}
+                    className="flex items-center gap-1 px-2.5 py-1.5 bg-white hover:bg-slate-100 border border-slate-200 text-slate-700 rounded-lg transition-colors text-[11px] font-bold shrink-0 shadow-3xs"
                   >
-                    <MessageSquare className="w-3.5 h-3.5 text-slate-400" />
-                    <span>View Thread ({notes.length})</span>
+                    <Eye className="w-3.5 h-3.5 text-slate-500" />
+                    <span>({notes.length})</span>
                   </button>
                 </div>
               ) : (
@@ -383,7 +385,8 @@ function RouteComponent() {
                   Select a location setup matching an active scheduled sequence to drop thread comments.
                 </div>
               )}
-              <div className="flex flex-wrap items-center gap-2.5">
+
+              <div className="flex flex-wrap items-center gap-2.5 shrink-0">
                 <DatePicker date={date} setDate={(val) => typeof val === 'function' ? setDate(val(date)) : setDate(val)} restrictToPast />
                 <LocationPicker setStationName={setSite} value="stationName" defaultValue={site} />
               </div>
@@ -401,14 +404,14 @@ function RouteComponent() {
                   <thead className="bg-slate-100 text-slate-600 font-bold sticky top-0 z-30 shadow-[0_1px_0_0_rgba(0,0,0,0.06)] uppercase tracking-wider text-[10px]">
                     <tr>
                       <th className="p-3 sticky left-0 bg-slate-100 z-40 text-center w-14 border-r border-slate-200">Image</th>
-                      <th className="p-3 sticky left-[56px] bg-slate-100 z-40 w-32 font-mono border-r border-slate-200">UPC</th>
-                      <th className="p-3 sticky left-[184px] bg-slate-100 z-40 w-48 shadow-[4px_0_8px_-3px_rgba(0,0,0,0.08)] border-r border-slate-200">Description</th>
-                      <th className="p-3 text-center w-24">FOH Count</th>
-                      <th className="p-3 text-center w-24">BOH Count</th>
+                      <th className="p-3 sticky left-[56px] bg-slate-100 z-40 w-36 font-mono border-r border-slate-200">UPC</th>
+                      <th className="p-3 sticky left-[200px] bg-slate-100 z-40 w-54 shadow-[4px_0_8px_-3px_rgba(0,0,0,0.08)] border-r border-slate-200">Description</th>
+                      <th className="p-3 text-center w-28">FOH Count</th>
+                      <th className="p-3 text-center w-28">BOH Count</th>
                       <th className="p-3 text-center w-24 bg-slate-200/50 text-slate-800 font-black">Total Pack</th>
-                      <th className="p-3 text-center w-24">Expected (CSO)</th>
-                      <th className="p-3 text-center w-24">Variance (Pcs)</th>
-                      <th className="p-3 text-right pr-6 w-28">Variance (C$)</th>
+                      <th className="p-3 text-center w-28">Expected (CSO)</th>
+                      <th className="p-3 text-center w-28">Variance (Pcs)</th>
+                      <th className="p-3 text-right pr-6 w-32">Variance (C$)</th>
                     </tr>
                   </thead>
 
@@ -465,14 +468,14 @@ function RouteComponent() {
                   <thead className="bg-rose-50/20 text-rose-800 font-bold sticky top-0 z-30 shadow-[0_1px_0_0_rgba(225,29,72,0.06)] uppercase tracking-wider text-[10px]">
                     <tr>
                       <th className="p-3 sticky left-0 bg-[#fff9f9] z-40 text-center w-14 border-r border-rose-100/50">Image</th>
-                      <th className="p-3 sticky left-[56px] bg-[#fff9f9] z-40 w-32 font-mono border-r border-rose-100/50">UPC</th>
-                      <th className="p-3 sticky left-[184px] bg-[#fff9f9] z-40 w-48 shadow-[4px_0_8px_-3px_rgba(0,0,0,0.03)] border-r border-rose-100/50">Description</th>
-                      <th className="p-3 text-center w-24">FOH Count</th>
-                      <th className="p-3 text-center w-24">BOH Count</th>
+                      <th className="p-3 sticky left-[56px] bg-[#fff9f9] z-40 w-36 font-mono border-r border-rose-100/50">UPC</th>
+                      <th className="p-3 sticky left-[200px] bg-[#fff9f9] z-40 w-54 shadow-[4px_0_8px_-3px_rgba(0,0,0,0.03)] border-r border-rose-100/50">Description</th>
+                      <th className="p-3 text-center w-28">FOH Count</th>
+                      <th className="p-3 text-center w-28">BOH Count</th>
                       <th className="p-3 text-center w-24 border-x border-rose-100/30">Total Pack</th>
-                      <th className="p-3 text-center w-24">Expected (CSO)</th>
-                      <th className="p-3 text-center w-24">Variance (Pcs)</th>
-                      <th className="p-3 text-right pr-6 w-28">Variance (C$)</th>
+                      <th className="p-3 text-center w-28">Expected (CSO)</th>
+                      <th className="p-3 text-center w-28">Variance (Pcs)</th>
+                      <th className="p-3 text-right pr-6 w-32">Variance (C$)</th>
                     </tr>
                   </thead>
                   <tbody>
