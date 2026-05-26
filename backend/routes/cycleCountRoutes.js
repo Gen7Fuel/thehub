@@ -1233,10 +1233,22 @@ router.post('/save-item-v2', async (req, res) => {
       // Note: breakdown.packs is stored directly in the main loose pack column
     }
 
-    updateData.count_completed = isCountComplete({
-      ...existing,
-      ...updateData,
-    });
+    // updateData.count_completed = isCountComplete({
+    //   ...existing,
+    //   ...updateData,
+    // });
+
+    // ==========================================================
+    // DETERMINISTIC FLAG: BOTH FOH AND BOH MUST BE PRESENT
+    // ==========================================================
+    // Merge existing database state with incoming updates to verify both fields
+    const finalFoh = updateData.foh !== undefined ? updateData.foh : existing.foh;
+    const finalBoh = updateData.boh !== undefined ? updateData.boh : existing.boh;
+
+    // Item count is complete ONLY when neither field is null or undefined
+    updateData.count_completed = (finalFoh !== null && finalFoh !== undefined) &&
+      (finalBoh !== null && finalBoh !== undefined);
+    // ==========================================================
 
     // 1. Existing Transaction: Update inventory table records
     await db("cycle_count_items")
@@ -1789,6 +1801,8 @@ router.get("/daily-report", async (req, res) => {
       .where({ site_mongo_id: siteMongoIdStr, date: date })
       .first();
 
+    // console.log("Resolved instance for report query:", instance.id);
+
     // If no instance exists for that day, return an empty array gracefully
     if (!instance) {
       return res.status(200).json({ success: true, data: [] });
@@ -1802,16 +1816,17 @@ router.get("/daily-report", async (req, res) => {
     const reportItems = await db("cycle_count_items as cci")
       .join("item_bk as ib", "cci.product_id", "ib.id")
       .where({
-        "cci.instance_id": instance.id,
-        "cci.count_completed": true // Added condition here
+        "cci.instance_id": instance.id
+        // "cci.count_completed": true // Added condition here
       })
       .select(
         "cci.id as itemId",
         "cci.product_id as productId",
         "ib.description as name",
-        "ib.upc as upc_barcode",
+        "ib.upc_barcode as upc_barcode",
         "ib.image_url",
         "ib.retail as unitPrice",
+        "ib.pk_in_crt",
         "ib.category_id as categoryId",
         "ib.on_hand_qty as onHandCSO",
         "cci.foh",
@@ -1823,6 +1838,8 @@ router.get("/daily-report", async (req, res) => {
         "cci.count_completed",
         "cci.priority"
       );
+
+    // console.log(`Fetched ${reportItems.length} items for report generation.`);
 
     // 5. Calculate total pieces and stitch the categoryName into the payload
     const parsedItems = reportItems.map(item => {
@@ -1840,6 +1857,7 @@ router.get("/daily-report", async (req, res) => {
         unitPrice: item.unitPrice ? Number(item.unitPrice) : 0,
         onHandCSO: item.onHandCSO ? Number(item.onHandCSO) : 0,
         categoryId: cleanCategoryId,
+        pk_in_crt: item.pk_in_crt ? Number(item.pk_in_crt) : 0,
 
         // Match Postgres categoryId with Mongo's "Number" field to get the string Name
         categoryName: categoryMap.get(cleanCategoryId) || "Unknown Category",
@@ -1872,6 +1890,94 @@ router.get("/daily-report", async (req, res) => {
   } catch (error) {
     console.error("Error generating relational variance report query:", error);
     return res.status(500).json({ success: false, message: "Internal server registry error processing report data." });
+  }
+});
+
+// GET: Fetch all notes for an instance with user profiles
+router.get('/instance-notes/:instanceId', async (req, res) => {
+  try {
+    const { instanceId } = req.params;
+    const db = getPg();
+
+    // 1. Fetch raw notes from PostgreSQL
+    const notes = await db("cycle_count_instance_notes")
+      .where({ instance_id: instanceId })
+      .orderBy("created_at", "desc");
+
+    if (notes.length === 0) {
+      return res.json({ success: true, data: [] });
+    }
+
+    // 2. Extract and sanitize IDs to guarantee pure 24-character hex values
+    const mongoUserIds = [
+      ...new Set(
+        notes.map(n => n.user_mongo_id ? n.user_mongo_id.replace(/^"|"$/g, '') : '')
+      )
+    ].filter(Boolean); // Filter out empty strings if any exist
+
+    // 3. Resolve matching User metadata from MongoDB
+    const users = await User.find({ _id: { $in: mongoUserIds } }, "firstName lastName");
+
+    const userMap = users.reduce((acc, u) => {
+      const fullName = `${u.firstName || ""} ${u.lastName || ""}`.trim();
+      return {
+        ...acc,
+        [u._id.toString()]: fullName || "Unknown Operator"
+      };
+    }, {});
+
+    const enrichedNotes = notes.map(note => {
+      // Create a normalized lookup key to match what mongo returned
+      const lookupKey = note.user_mongo_id ? note.user_mongo_id.replace(/^"|"$/g, '') : '';
+
+      return {
+        id: note.id,
+        note: note.note,
+        createdAt: note.created_at,
+        userName: userMap[lookupKey] || "System Operator"
+      };
+    });
+
+    res.json({ success: true, data: enrichedNotes });
+  } catch (err) {
+    console.error("Error fetching instance notes:", err);
+    res.status(500).json({ message: "Failed to retrieve comment thread." });
+  }
+});
+
+// POST: Add a note to a specific count instance thread
+router.post('/instance-notes', async (req, res) => {
+  try {
+    const { instanceId, note } = req.body;
+    const userMongoId = req.user?._id;
+    const db = getPg();
+
+    if (!instanceId || !note?.trim()) {
+      return res.status(400).json({ message: "Instance ID and note content are required." });
+    }
+
+    // Convert cleanly to hex string, stripping out any accidental double quotes
+    const cleanMongoId = userMongoId
+      ? userMongoId.toString().replace(/^"|"$/g, '')
+      : null;
+
+    if (!cleanMongoId) {
+      return res.status(401).json({ message: "Unauthorized: Missing user reference context." });
+    }
+
+    const [newNote] = await db("cycle_count_instance_notes")
+      .insert({
+        instance_id: instanceId,
+        note: note.trim(),
+        user_mongo_id: cleanMongoId, // Pure 24-character hex string
+        created_at: new Date()
+      })
+      .returning("*");
+
+    res.status(201).json({ success: true, data: newNote });
+  } catch (err) {
+    console.error("Error creating instance note:", err);
+    res.status(500).json({ message: "Failed to post comment to thread." });
   }
 });
 
