@@ -28,7 +28,8 @@ const transactionSchema = new mongoose.Schema({
   },
   driverName: { type: String, required: false },                   // Name of the driver (optional)
   customerName: { type: String, required: true },                   // Customer ID (optional)
-  vehicleMakeModel: { type: String, required: false },  
+  vehicleMakeModel: { type: String, required: false },
+  licensePlate: { type: String, default: '' },
   poNumber: {
     type: String,
     required: false, // optional new field for PO
