@@ -21,8 +21,9 @@ function RouteComponent() {
   // const isInputActive = matchRoute({ to: '/cycle-count' });
   const isCountActive = matchRoute({ to: '/cycle-count/count' });
   const isInventoryActive = matchRoute({ to: '/cycle-count/inventory' });
-  const isConsoleActive = matchRoute({ to: '/cycle-count/lookup' });
+  // const isConsoleActive = matchRoute({ to: '/cycle-count/lookup' });
   const isReportActive = matchRoute({ to: '/cycle-count/report' });
+  const isManageCountActive = matchRoute({ to: '/cycle-count/manage' });
 
   const { user } = useAuth();
 
@@ -82,14 +83,24 @@ function RouteComponent() {
         </Link>
 
         {/* Console tab button, shown only if user has access */}
-        {/* {access.component_cycle_count_console && ( //markpoint */}
-        {access?.cycleCount?.lookup && (
+        {/* {access?.cycleCount?.lookup && (
           <Link to="/cycle-count/lookup" activeOptions={{ exact: true }}>
             <Button
               {...(!isConsoleActive && { variant: 'outline' } as object)}
               className="rounded-l-none"
             >
               Lookup
+            </Button>
+          </Link>
+        )} */}
+
+        {access?.cycleCount?.manageCount && (
+          <Link to="/cycle-count/manage" activeOptions={{ exact: true }}>
+            <Button
+              {...(!isManageCountActive && { variant: 'outline' } as object)}
+              className="rounded-l-none"
+            >
+              Manage Counts
             </Button>
           </Link>
         )}
