@@ -1828,7 +1828,7 @@ router.get("/daily-report", async (req, res) => {
         "ib.retail as unitPrice",
         "ib.pk_in_crt",
         "ib.category_id as categoryId",
-        "ib.on_hand_qty as onHandCSO",
+        "ib.on_hand_at_count as onHandCSO",
         "cci.foh",
         "cci.foh_crt",
         "cci.foh_case",
