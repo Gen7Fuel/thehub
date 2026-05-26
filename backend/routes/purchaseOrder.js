@@ -7,6 +7,11 @@ const Product = require("../models/Product");
 const TIMEZONE = "America/Toronto";
 const Location = require("../models/Location");
 const { pushNotification } = require("../services/notificationService");
+const { emailQueue } = require('../queues/emailQueue');
+
+const escapeHtml = (s = '') =>
+  String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+           .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
 
 // Create a purchase order
 // router.post("/", async (req, res) => {
@@ -47,7 +52,8 @@ router.post("/", async (req, res) => {
     receipt,
     customerName,
     driverName,
-    vehicleInfo,
+    vehicleMakeModel,
+    licensePlate,
   } = req.body;
 
   try {
@@ -55,6 +61,70 @@ router.post("/", async (req, res) => {
     const isCharlies = stationName && stationName.trim().toLowerCase() === "charlie's";
     if (isCharlies && (!poNumber || poNumber === '' || poNumber === '00000') && (!fleetCardNumber || fleetCardNumber === '')) {
       poNumber = await Transaction.getNextPoNumberForSite(stationName);
+    }
+
+    // Fleet upsert + change-notification (owned by backend so comparison happens before update)
+    if (fleetCardNumber) {
+      try {
+        const existingFleet = await Fleet.findOne({ fleetCardNumber }).lean();
+        const normalize = (v) => (v || '').trim().toLowerCase();
+
+        const fieldMap = [
+          { label: 'Customer Name', submitted: customerName,     stored: existingFleet?.customerName },
+          { label: 'Driver Name',   submitted: driverName,       stored: existingFleet?.driverName },
+          { label: 'Make & Model',  submitted: vehicleMakeModel, stored: existingFleet?.vehicleMakeModel },
+          { label: 'License Plate', submitted: licensePlate,     stored: existingFleet?.numberPlate },
+        ];
+
+        const changes = existingFleet
+          ? fieldMap.filter(f => normalize(f.submitted) !== normalize(f.stored))
+          : [];
+
+        if (existingFleet) {
+          await Fleet.findOneAndUpdate(
+            { fleetCardNumber },
+            { customerName, driverName, vehicleMakeModel, numberPlate: licensePlate }
+          );
+        } else {
+          await Fleet.create({ fleetCardNumber, customerName, driverName, vehicleMakeModel, numberPlate: licensePlate });
+        }
+
+        if (changes.length > 0) {
+          const changesHtml = changes.map(f =>
+            `<tr>
+              <td><strong>${escapeHtml(f.label)}</strong></td>
+              <td>${escapeHtml(f.stored || '(empty)')}</td>
+              <td>&#8594;</td>
+              <td>${escapeHtml(f.submitted || '(empty)')}</td>
+            </tr>`
+          ).join('');
+
+          await emailQueue.add('poCustomerInfoChanged', {
+            to: 'ar@gen7fuel.com',
+            cc: 'mohammad@gen7fuel.com',
+            subject: `Customer Info Changed on PO — ${stationName}`,
+            html: `
+              <p>Customer information was changed on a PO submission at <strong>${escapeHtml(stationName)}</strong>.</p>
+              <h3>Changed Fields</h3>
+              <table cellpadding="6" cellspacing="0" style="border-collapse:collapse;border:1px solid #e5e7eb;font-family:Arial,sans-serif;font-size:14px">
+                <thead><tr><th align="left">Field</th><th align="left">Was</th><th></th><th align="left">Now</th></tr></thead>
+                <tbody>${changesHtml}</tbody>
+              </table>
+              <h3>Full Submitted Values</h3>
+              <table cellpadding="6" cellspacing="0" style="border-collapse:collapse;border:1px solid #e5e7eb;font-family:Arial,sans-serif;font-size:14px">
+                <tr><td><strong>Site</strong></td><td>${escapeHtml(stationName)}</td></tr>
+                <tr><td><strong>Fleet Card</strong></td><td>${escapeHtml(fleetCardNumber)}</td></tr>
+                <tr><td><strong>Customer Name</strong></td><td>${escapeHtml(customerName)}</td></tr>
+                <tr><td><strong>Driver Name</strong></td><td>${escapeHtml(driverName)}</td></tr>
+                <tr><td><strong>Make &amp; Model</strong></td><td>${escapeHtml(vehicleMakeModel)}</td></tr>
+                <tr><td><strong>License Plate</strong></td><td>${escapeHtml(licensePlate)}</td></tr>
+              </table>`,
+          });
+        }
+      } catch (fleetErr) {
+        console.error('Fleet upsert / change-notification failed:', fleetErr);
+        // Non-fatal — PO save continues
+      }
     }
 
     const newOrder = new Transaction({
@@ -70,7 +140,8 @@ router.post("/", async (req, res) => {
       receipt,
       customerName,
       driverName,
-      vehicleInfo,
+      vehicleMakeModel: vehicleMakeModel || '',
+      licensePlate: licensePlate || '',
     });
 
     const savedOrder = await newOrder.save();
@@ -105,8 +176,8 @@ router.put("/:id", express.json(), async (req, res) => {
       'requestReceipt',
       'customerName',
       'driverName',
-      'vehicleInfo',
       'vehicleMakeModel',
+      'licensePlate',
     ]
 
     const updates = {}
@@ -308,7 +379,7 @@ router.get("/", async (req, res) => {
 
   try {
     const orders = await Transaction.find(filter)
-      .select('fleetCardNumber driverName customerName vehicleMakeModel productCode quantity amount signature date receipt poNumber requestReceipt')
+      .select('fleetCardNumber driverName customerName vehicleMakeModel licensePlate productCode quantity amount signature date receipt poNumber requestReceipt')
       .sort({ date: -1 });
 
     const fleetCardNumbers = orders

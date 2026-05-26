@@ -101,20 +101,20 @@ router.delete("/:id", async (req, res) => {
 
 // Route to create a new Fleet entry
 router.post("/create", async (req, res) => {
-  const { fleetCardNumber, driverName, customerName, vehicleMakeModel } = req.body;
+  const { fleetCardNumber, driverName, customerName, vehicleMakeModel, numberPlate } = req.body;
 
   try {
     let fleet = await Fleet.findOne({ fleetCardNumber });
 
     if (fleet) {
-      return res.status(200).json({ 
+      return res.status(200).json({
         schema: Fleet.schema.paths,
         message: "Fleet entry with this card number already exists.",
-        fleetId: fleet._id 
+        fleetId: fleet._id
       });
     }
 
-    fleet = new Fleet({ fleetCardNumber, driverName, customerName, vehicleMakeModel });
+    fleet = new Fleet({ fleetCardNumber, driverName, customerName, vehicleMakeModel, numberPlate });
     await fleet.save();
 
     res.status(201).json({ 
@@ -137,11 +137,12 @@ router.get("/getByCardNumber/:fleetCardNumber", async (req, res) => {
       return res.status(404).json({ message: "Fleet entry not found." });
     }
 
-    res.status(200).json({ 
-      driverName: fleet.driverName, 
+    res.status(200).json({
+      driverName: fleet.driverName,
       customerName: fleet.customerName,
       vehicleMakeModel: fleet.vehicleMakeModel,
-      fleetId: fleet._id 
+      numberPlate: fleet.numberPlate,
+      fleetId: fleet._id
     });
   } catch (error) {
     res.status(500).json({ message: "Server error", error });
@@ -151,12 +152,12 @@ router.get("/getByCardNumber/:fleetCardNumber", async (req, res) => {
 router.put("/updateByCardNumber/:fleetCardNumber", async (req, res) => {
   // Update a fleet entry by fleetCardNumber
   const { fleetCardNumber } = req.params;
-  const { driverName, customerName, vehicleMakeModel } = req.body;
+  const { driverName, customerName, vehicleMakeModel, numberPlate } = req.body;
 
   try {
     const fleet = await Fleet.findOneAndUpdate(
       { fleetCardNumber },
-      { driverName, customerName, vehicleMakeModel },
+      { driverName, customerName, vehicleMakeModel, ...(numberPlate !== undefined && { numberPlate }) },
       { new: true }
     );
 
