@@ -134,9 +134,13 @@ function RouteComponent() {
 
   useEffect(() => {
     const token = localStorage.getItem('token')
-    axios.get(`${domain}/api/ar-customers`, {
-      headers: { Authorization: `Bearer ${token}` },
-    }).then((res) => setArCustomers(res.data)).catch(() => {})
+    Promise.resolve(
+      axios.get(`${domain}/api/ar-customers`, {
+        headers: { Authorization: `Bearer ${token}` },
+      })
+    ).then((res) => {
+      if (Array.isArray(res?.data)) setArCustomers(res.data)
+    }).catch(() => {})
   }, [])
 
   useEffect(() => {
@@ -186,8 +190,8 @@ function RouteComponent() {
 
   const customerSuggestions = useMemo(() => {
     const q = customerName.trim().toLowerCase()
-    if (!q) return []
-    return arCustomers.filter((c) => c.name.toLowerCase().includes(q))
+    if (!q || !Array.isArray(arCustomers)) return []
+    return arCustomers.filter((c) => c.name?.toLowerCase().includes(q))
   }, [customerName, arCustomers])
 
   return (
