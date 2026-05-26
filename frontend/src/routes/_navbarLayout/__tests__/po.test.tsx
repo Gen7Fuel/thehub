@@ -261,6 +261,8 @@ describe('PO Form — index.tsx', () => {
     mockUseAuth.mockReturnValue({
       user: { id: 'u1', location: 'Rankin', timezone: 'America/Toronto', access: {} },
     })
+    // Default: AR customers fetch resolves to empty list so the component mounts cleanly.
+    mockAxiosGet.mockResolvedValue({ data: [] })
   })
 
   it('renders the location picker and OTP input by default', async () => {
@@ -283,7 +285,10 @@ describe('PO Form — index.tsx', () => {
 
   it('shows a PO uniqueness error when the uniqueness API returns not-unique', async () => {
     mockStore.poNumber = '12345'
-    mockAxiosGet.mockResolvedValue({ data: { unique: false } })
+    mockAxiosGet.mockImplementation((url: string) => {
+      if (url.includes('ar-customers')) return Promise.resolve({ data: [] })
+      return Promise.resolve({ data: { unique: false } })
+    })
 
     renderWithSuspense(<POForm />)
     const otpInput = await waitFor(() => screen.getByTestId('otp-input'), { timeout: 5000 })
@@ -297,7 +302,10 @@ describe('PO Form — index.tsx', () => {
 
   it('clears the PO error when the uniqueness API confirms the number is unique', async () => {
     mockStore.poNumber = '12345'
-    mockAxiosGet.mockResolvedValue({ data: { unique: true } })
+    mockAxiosGet.mockImplementation((url: string) => {
+      if (url.includes('ar-customers')) return Promise.resolve({ data: [] })
+      return Promise.resolve({ data: { unique: true } })
+    })
 
     renderWithSuspense(<POForm />)
     const otpInput = await waitFor(() => screen.getByTestId('otp-input'), { timeout: 5000 })
