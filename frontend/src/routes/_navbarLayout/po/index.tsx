@@ -1,5 +1,5 @@
 import { Button } from '@/components/ui/button'
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect, useRef, useMemo } from 'react'
 import { Input } from '@/components/ui/input'
 import { InputOTP, InputOTPGroup, InputOTPSeparator, InputOTPSlot } from '@/components/ui/input-otp'
 import { Select, SelectContent, SelectGroup, SelectItem, SelectLabel, SelectTrigger, SelectValue } from '@/components/ui/select'
@@ -17,6 +17,11 @@ interface Product {
   _id: string
   code: string
   description: string
+}
+
+interface ArCustomer {
+  _id: string
+  name: string
 }
 
 async function loader() {
@@ -83,6 +88,9 @@ function RouteComponent() {
 
   const [poError, setPoError] = useState<string>('')
   const [cardStatus, setCardStatus] = useState<string | null>(null)
+  const [arCustomers, setArCustomers] = useState<ArCustomer[]>([])
+  const [showSuggestions, setShowSuggestions] = useState(false)
+  const customerNameRef = useRef<HTMLDivElement>(null)
 
   const statusConfig: Record<string, { label: string; className: string }> = {
     active:    { label: 'Active',         className: 'text-green-600' },
@@ -124,6 +132,27 @@ function RouteComponent() {
     }
   }, [selectedSite, user?.location, setStationName, fuelType, setFuelType, data.products]);
 
+  useEffect(() => {
+    const token = localStorage.getItem('token')
+    Promise.resolve(
+      axios.get(`${domain}/api/ar-customers`, {
+        headers: { Authorization: `Bearer ${token}` },
+      })
+    ).then((res) => {
+      if (Array.isArray(res?.data)) setArCustomers(res.data)
+    }).catch(() => {})
+  }, [])
+
+  useEffect(() => {
+    const handleClickOutside = (e: MouseEvent) => {
+      if (customerNameRef.current && !customerNameRef.current.contains(e.target as Node)) {
+        setShowSuggestions(false)
+      }
+    }
+    document.addEventListener('mousedown', handleClickOutside)
+    return () => document.removeEventListener('mousedown', handleClickOutside)
+  }, [])
+
   // Helpers for 5-digit numeric PO input
   const toFiveDigits = (s: string) => {
     // keep only digits, max length 5 without regex to avoid parser quirks
@@ -158,6 +187,12 @@ function RouteComponent() {
 
   // Only show number type and PO/fleet fields if not Charlie's
   const isCharlies = stationName && stationName.trim().toLowerCase() === "charlies";
+
+  const customerSuggestions = useMemo(() => {
+    const q = customerName.trim().toLowerCase()
+    if (!q || !Array.isArray(arCustomers)) return []
+    return arCustomers.filter((c) => c.name?.toLowerCase().includes(q))
+  }, [customerName, arCustomers])
 
   return (
     <div className="p-4 border border-dashed border-gray-300 rounded-md space-y-6">
@@ -311,13 +346,36 @@ function RouteComponent() {
       {/* Customer and Driver Info */}
       <div className="space-y-2">
         <h2 className="text-lg font-bold">Customer and Driver Information</h2>
-        <Input
-          type="text"
-          name="customerName"
-          placeholder="Customer Name"
-          value={customerName}
-          onChange={(e) => setCustomerName(e.target.value)}
-        />
+        <div ref={customerNameRef} className="relative">
+          <Input
+            type="text"
+            name="customerName"
+            placeholder="Customer Name"
+            value={customerName}
+            autoComplete="off"
+            onChange={(e) => {
+              setCustomerName(e.target.value)
+              setShowSuggestions(true)
+            }}
+            onFocus={() => setShowSuggestions(true)}
+          />
+          {showSuggestions && customerSuggestions.length > 0 && (
+            <ul className="absolute z-50 w-full bg-white border border-gray-200 rounded-md shadow-md mt-1 max-h-48 overflow-y-auto">
+              {customerSuggestions.map((c) => (
+                <li
+                  key={c._id}
+                  className="px-3 py-2 text-sm cursor-pointer hover:bg-gray-100"
+                  onMouseDown={() => {
+                    setCustomerName(c.name)
+                    setShowSuggestions(false)
+                  }}
+                >
+                  {c.name}
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
         <Input
           type="text"
           name="driverName"
