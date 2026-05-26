@@ -70,6 +70,9 @@ function RouteComponent() {
   const vehicleInfo = useFormStore((state) => state.vehicleInfo)
   const setVehicleInfo = useFormStore((state) => state.setVehicleInfo)
 
+  const licensePlate = useFormStore((state) => state.licensePlate)
+  const setLicensePlate = useFormStore((state) => state.setLicensePlate)
+
   const quantity = useFormStore((state) => state.quantity)
   const setQuantity = useFormStore((state) => state.setQuantity)
 
@@ -115,10 +118,12 @@ function RouteComponent() {
       setCustomerName('')
       setDriverName('')
       setVehicleInfo('')
+      setLicensePlate('')
     } else {
       setCustomerName(data.customerName)
       setDriverName(data.driverName)
       setVehicleInfo(data.vehicleMakeModel)
+      setLicensePlate(data.numberPlate ?? '')
     }
   }
 
@@ -386,9 +391,16 @@ function RouteComponent() {
         <Input
           type="text"
           name="vehicleInfo"
-          placeholder="Vehicle Info"
+          placeholder="Make & Model (optional)"
           value={vehicleInfo}
           onChange={(e) => setVehicleInfo(e.target.value)}
+        />
+        <Input
+          type="text"
+          name="licensePlate"
+          placeholder="License Plate (optional)"
+          value={licensePlate}
+          onChange={(e) => setLicensePlate(e.target.value)}
         />
       </div>
 

@@ -26,6 +26,7 @@ function RouteComponent() {
   const customerName = useFormStore((state) => state.customerName);
   const driverName = useFormStore((state) => state.driverName);
   const vehicleInfo = useFormStore((state) => state.vehicleInfo);
+  const licensePlate = useFormStore((state) => state.licensePlate);
   const quantity = useFormStore((state) => state.quantity);
   const amount = useFormStore((state) => state.amount);
   const fuelType = useFormStore((state) => state.fuelType);
@@ -67,36 +68,7 @@ function RouteComponent() {
         }
       };
 
-      if(fleetCardNumber){
-        let fleetData = null;
-        try {
-          const fleetResponse = await authAxios(() =>
-            axios.get(`${domain}/api/fleet/getByCardNumber/${fleetCardNumber}`, { headers: authHeaders })
-          );
-          fleetData = fleetResponse.data;
-        } catch (err: any) {
-          if (axios.isAxiosError(err) && err.response?.status !== 404) throw err;
-        }
-
-        if (fleetData && !fleetData.message) {
-          await authAxios(() =>
-            axios.put(`${domain}/api/fleet/updateByCardNumber/${fleetCardNumber}`, {
-              customerName,
-              driverName,
-              vehicleMakeModel: vehicleInfo,
-            }, { headers: authHeaders })
-          );
-        } else {
-          await authAxios(() =>
-            axios.post(`${domain}/api/fleet/create`, {
-              fleetCardNumber,
-              customerName,
-              driverName,
-              vehicleMakeModel: vehicleInfo,
-            }, { headers: authHeaders })
-          );
-        }
-      }
+      // Fleet upsert and change-notification are now handled by the backend POST /api/purchase-orders.
 
       const stationName = user?.location || 'Rankin';
 
@@ -115,7 +87,8 @@ function RouteComponent() {
           receipt: filename,
           customerName,
           driverName,
-          vehicleInfo,
+          vehicleMakeModel: vehicleInfo,
+          licensePlate,
         }, { headers: authHeaders })
       );
 

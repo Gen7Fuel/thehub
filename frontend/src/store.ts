@@ -16,6 +16,9 @@ type FormStore = {
     vehicleInfo: string;
     setVehicleInfo: (name: string) => void;
 
+    licensePlate: string;
+    setLicensePlate: (lp: string) => void;
+
     quantity: number;
     setQuantity: (quantity: number) => void;
 
@@ -118,6 +121,8 @@ export const useFormStore = create<FormStore>((set) => ({
     setDriverName: (driverName) => set({ driverName }),
     vehicleInfo: '',
     setVehicleInfo: (vehicleInfo) => set({ vehicleInfo }),
+    licensePlate: '',
+    setLicensePlate: (licensePlate) => set({ licensePlate }),
     quantity: 0,
     setQuantity: (quantity) => set({ quantity }),
     amount: 0,
@@ -135,6 +140,7 @@ export const useFormStore = create<FormStore>((set) => ({
         customerName: '',
         driverName: '',
         vehicleInfo: '',
+        licensePlate: '',
         quantity: 0,
         amount: 0,
         fuelType: '',

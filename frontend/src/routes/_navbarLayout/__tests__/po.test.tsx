@@ -28,6 +28,8 @@ const {
     setDriverName: vi.fn(),
     vehicleInfo: 'Ford F-150' as string,
     setVehicleInfo: vi.fn(),
+    licensePlate: '' as string,
+    setLicensePlate: vi.fn(),
     quantity: 50 as number,
     setQuantity: vi.fn(),
     amount: 100 as number,
@@ -237,6 +239,7 @@ const resetStore = () => {
   mockStore.customerName = 'Jane Doe'
   mockStore.driverName = 'Bob Smith'
   mockStore.vehicleInfo = 'Ford F-150'
+  mockStore.licensePlate = ''
   mockStore.quantity = 50
   mockStore.amount = 100
   mockStore.fuelType = 'UNL'
@@ -464,7 +467,7 @@ describe('PO Signature — signature.tsx', () => {
     await waitFor(() =>
       expect(mockAxiosPost).toHaveBeenCalledWith(
         expect.stringContaining('/api/purchase-orders'),
-        expect.objectContaining({ source: 'PO', stationName: 'Rankin' }),
+        expect.objectContaining({ source: 'PO', stationName: 'Rankin', vehicleMakeModel: 'Ford F-150', licensePlate: '' }),
         expect.any(Object)
       )
     )
@@ -534,7 +537,7 @@ describe('PO Receipt — receipt.tsx', () => {
     await waitFor(() =>
       expect(mockAxiosPost).toHaveBeenCalledWith(
         expect.stringContaining('/api/purchase-orders'),
-        expect.objectContaining({ source: 'PO', signature: '' }),
+        expect.objectContaining({ source: 'PO', signature: '', vehicleMakeModel: 'Ford F-150', licensePlate: '' }),
         expect.any(Object)
       )
     )

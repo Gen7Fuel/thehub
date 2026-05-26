@@ -51,7 +51,8 @@
       "PowerShell(Get-ChildItem -Path \"C:\\\\Users\\\\MohammadHasan\\\\workspace\\\\thehub\\\\frontend\\\\src\\\\routes\\\\_navbarLayout\" -Recurse | Select-Object -ExpandProperty FullName | ForEach-Object { $_ -replace [regex]::Escape\\(\"C:\\\\Users\\\\MohammadHasan\\\\workspace\\\\thehub\\\\\"\\), \"\" })",
       "Bash(Select-Object FullName)",
       "Bash(findstr /E \"\\\\.env|config\")",
-      "Bash(Select-Object -ExpandProperty Name)"
+      "Bash(Select-Object -ExpandProperty Name)",
+      "Bash(xargs -I{} sh -c 'echo {}')"
     ]
   }
 }
