@@ -492,7 +492,7 @@ function RouteComponent() {
               if (!isCharlies) setPoNumber(padFive(poNumber));
               fileInputRef.current?.click();
             }}
-            disabled={(!isCharlies && !!poError) || !customerName || !driverName || quantity === 0}
+            disabled={(!isCharlies && !!poError) || !customerName || !driverName || quantity === 0 || (numberType === 'fleet' && cardStatus !== 'active')}
           >
             <Camera className="mr-2 h-4 w-4" />
             Upload Receipt
