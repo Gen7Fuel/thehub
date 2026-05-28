@@ -3,14 +3,14 @@ import { createFileRoute, Link } from '@tanstack/react-router'
 import { Button } from '@/components/ui/button'
 import { useAuth } from "@/context/AuthContext"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
-import { 
-  ClipboardCheck, 
-  Wallet, 
-  Receipt, 
-  Calculator, 
-  Package, 
-  TrendingUp, 
-  GraduationCap, 
+import {
+  ClipboardCheck,
+  Wallet,
+  Receipt,
+  Calculator,
+  Package,
+  TrendingUp,
+  GraduationCap,
   Megaphone,
   FileText,
   Truck,
@@ -21,7 +21,8 @@ import {
   Layers,
   ShieldCheck,
   BarChart3,
-  type LucideProps 
+  Banknote,
+  type LucideProps
 } from 'lucide-react'
 
 export const Route = createFileRoute('/_navbarLayout/')({
@@ -80,8 +81,8 @@ function App() {
 
           {/* ACCOUNTING - AMBER */}
           {access?.accounting?.value && (
-            <Section 
-              title="Accounting" 
+            <Section
+              title="Accounting"
               accentColor="border-t-amber-500"
               icon={<Calculator className="w-5 h-5 text-amber-600" />}
             >
@@ -105,6 +106,9 @@ function App() {
               )}
               {access?.accounting?.infonetReport && (
                 <NavButton to="/infonet-report" label="Infonet Tax Report" icon={BarChart3} theme="amber" search={{ site: user?.location }} />
+              )}
+              {access?.accounting?.atm && (
+                <NavButton to="/atm" label="ATM" icon={Banknote} theme="amber" />
               )}
             </Section>
           )}

@@ -106,6 +106,11 @@ const allPermissions = [
         "permId": 80015,
         "name": "infonetReport",
         "children": []
+      },
+      {
+        "permId": 100000,
+        "name": "atm",
+        "children": []
       }
     ],
     "module_permId": 80000

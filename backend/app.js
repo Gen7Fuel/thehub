@@ -32,6 +32,7 @@ const productRoutes = require("./routes/productRoutes");
 const locationRoutes = require("./routes/location");
 const purchaseOrderRoutes = require("./routes/purchaseOrder");
 const payablesRoutes = require("./routes/payablesRoute");
+const atmRoutes = require("./routes/atmRoutes");
 const shiftWorksheetRoutes = require("./routes/shiftWorksheetRoutes");
 const cashSummaryRoutes = require("./routes/cashSummaryNewRoutes");
 const payPointRoutes = require("./routes/payPointRoutes");
@@ -123,6 +124,7 @@ app.use("/api/products", productRoutes);
 // Business Logic
 app.use("/api/purchase-orders", purchaseOrderRoutes);
 app.use("/api/payables", payablesRoutes);
+app.use("/api/atm", atmRoutes);
 app.use("/api/shift-worksheet", shiftWorksheetRoutes);
 app.use("/api/cash-summary", cashSummaryRoutes);
 app.use("/api/paypoints", payPointRoutes);
