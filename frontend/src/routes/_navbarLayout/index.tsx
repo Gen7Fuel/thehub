@@ -22,7 +22,9 @@ import {
   ShieldCheck,
   BarChart3,
   Banknote,
-  type LucideProps
+  type LucideProps,
+  Coins,
+  Fuel
 } from 'lucide-react'
 
 export const Route = createFileRoute('/_navbarLayout/')({
@@ -114,7 +116,7 @@ function App() {
           )}
 
           {/* INVENTORY - INDIGO */}
-          {(access?.orderRec?.value || access?.cycleCount?.value || access?.vendor || access?.category || access?.writeOff?.value || access?.fuelManagement?.value) && (
+          {(access?.orderRec?.value || access?.cycleCount?.value || access?.vendor || access?.category || access?.writeOff?.value) && (
             <Section 
               title="Inventory" 
               accentColor="border-t-indigo-500"
@@ -133,15 +135,6 @@ function App() {
               {access?.vendor && <NavButton to="/vendor" label="Vendors" icon={Truck} theme="indigo" />}
               {access?.category && <NavButton to="/category" label="Categories" icon={Tags} theme="indigo" />}
               {access?.writeOff?.value && <NavButton to="/write-off" label="Write Offs" icon={FileText} theme="indigo" />}
-              {access?.fuelManagement?.value && (
-                <NavButton 
-                  to="/fuel-management/workspace" 
-                  label="Fuel Mgmt" 
-                  icon={Droplets} 
-                  theme="indigo" 
-                  search={{ site: user?.location || '' }} 
-                />
-              )}
             </Section>
           )}
 
@@ -156,6 +149,33 @@ function App() {
             </Section>
           )}
 
+          {/* FUEL OPERATIONS - SKY */}
+          {(access?.fuelManagement?.value || access?.fuelPricing?.value) && (
+            <Section 
+              title="Fuel Operations" 
+              accentColor="border-t-sky-500"
+              icon={<Fuel className="w-5 h-5 text-sky-600" />}
+            >
+              {access?.fuelManagement?.value && (
+                <NavButton 
+                  to="/fuel-management/workspace" 
+                  label="Fuel Mgmt" 
+                  icon={Droplets} 
+                  theme="sky" 
+                  search={{ site: user?.location || '' }} 
+                />
+              )}
+              {access?.fuelPricing?.value && (
+                <NavButton 
+                  to="/fuel-pricing" 
+                  label="Fuel Pricing" 
+                  icon={Coins} 
+                  theme="sky" 
+                  search={{ site: user?.location || '' }} 
+                />
+              )}
+            </Section>
+          )}
           {/* TRAINING - VIOLET */}
           {(access?.training?.voiceAgent || access?.academy) && (
             <Section
@@ -198,11 +218,10 @@ interface NavButtonProps {
   label: string;
   icon: React.ComponentType<LucideProps>;
   search?: Record<string, any>;
-  theme: 'emerald' | 'blue' | 'amber' | 'indigo' | 'violet' | 'rose' | 'slate';
+  theme: 'emerald' | 'blue' | 'amber' | 'indigo' | 'violet' | 'rose' | 'slate' | 'sky'; // Added 'sky'
 }
 
 function NavButton({ to, label, icon: Icon, search, theme }: NavButtonProps) {
-  // Map themes to specific Tailwind classes for light tint and bold hover
   const themeClasses = {
     emerald: "bg-emerald-50 text-emerald-700 border-emerald-100 hover:border-emerald-500 hover:bg-emerald-100",
     blue: "bg-blue-50 text-blue-700 border-blue-100 hover:border-blue-500 hover:bg-blue-100",
@@ -211,8 +230,9 @@ function NavButton({ to, label, icon: Icon, search, theme }: NavButtonProps) {
     violet: "bg-violet-50 text-violet-700 border-violet-100 hover:border-violet-500 hover:bg-violet-100",
     rose: "bg-rose-50 text-rose-700 border-rose-100 hover:border-rose-500 hover:bg-rose-100",
     slate: "bg-slate-50 text-slate-700 border-slate-100 hover:border-slate-500 hover:bg-slate-100",
+    sky: "bg-sky-50 text-sky-700 border-sky-100 hover:border-sky-500 hover:bg-sky-100", // Added sky theme
   };
-
+  
   return (
     <Link to={to} search={search} className="group">
       <Button 
