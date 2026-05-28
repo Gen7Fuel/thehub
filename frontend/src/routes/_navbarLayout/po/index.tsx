@@ -158,6 +158,15 @@ function RouteComponent() {
     return () => document.removeEventListener('mousedown', handleClickOutside)
   }, [])
 
+  useEffect(() => {
+    if (numberType === 'fleet') {
+      setFleetCardNumber('777689000000')
+    } else {
+      setFleetCardNumber('')
+    }
+    setCardStatus(null)
+  }, [numberType])
+
   // Helpers for 5-digit numeric PO input
   const toFiveDigits = (s: string) => {
     // keep only digits, max length 5 without regex to avoid parser quirks
@@ -483,7 +492,7 @@ function RouteComponent() {
               if (!isCharlies) setPoNumber(padFive(poNumber));
               fileInputRef.current?.click();
             }}
-            disabled={(!isCharlies && !!poError) || !customerName || !driverName || quantity === 0}
+            disabled={(!isCharlies && !!poError) || !customerName || !driverName || quantity === 0 || (numberType === 'fleet' && cardStatus !== 'active')}
           >
             <Camera className="mr-2 h-4 w-4" />
             Upload Receipt

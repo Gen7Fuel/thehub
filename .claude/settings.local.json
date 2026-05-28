@@ -52,7 +52,14 @@
       "Bash(Select-Object FullName)",
       "Bash(findstr /E \"\\\\.env|config\")",
       "Bash(Select-Object -ExpandProperty Name)",
-      "Bash(xargs -I{} sh -c 'echo {}')"
+      "Bash(xargs -I{} sh -c 'echo {}')",
+      "Bash(grep -E \"\\\\.\\(js|tsx?|json\\)$\")",
+      "Bash(xargs -I {} basename {})",
+      "Bash(python -c \"import docx; print\\('python-docx OK'\\)\")",
+      "Bash(mkdir -p C:/Users/MohammadHasan/Desktop/hub-doc-gen)",
+      "Read(//c/Users/MohammadHasan/Desktop/**)",
+      "Bash(npm init *)",
+      "Bash(grep -E \"\\\\.js$|app\\\\.\")"
     ]
   }
 }
