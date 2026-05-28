@@ -1,6 +1,6 @@
 import { memo, useMemo, useState, useEffect } from 'react'
 import React from 'react'
-import { createFileRoute } from '@tanstack/react-router'
+import { createFileRoute, useNavigate } from '@tanstack/react-router'
 import {
   ChevronDown,
   ChevronRight,
@@ -15,7 +15,9 @@ import {
   AlertTriangle,
   Check,
   Star,
-  Layers
+  Layers,
+  XCircle,
+  CheckCircle
 } from 'lucide-react'
 import Barcode from 'react-barcode'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
@@ -47,6 +49,7 @@ const badgeGradeStyles: Record<string, string> = {
 interface ItemRowProps {
   item: CycleCountItemCombined;
   isLive: boolean; // Added structural context mapping prop
+  isHistorical: boolean; // Added structural context mapping prop
   isSelected: boolean;
   onToggle: (id: number) => void;
   onOpenBarcode: (name: string, upc: string, image: string | null) => void;
@@ -56,6 +59,7 @@ interface ItemRowProps {
 const ItemRow = memo(({
   item,
   isLive,
+  isHistorical,
   isSelected,
   onToggle,
   onOpenBarcode
@@ -64,7 +68,7 @@ const ItemRow = memo(({
   const isCriticalQty = qty <= 0;
 
   const baseGradeClass = gradeStyles[item.grade] || (isCriticalQty ? 'bg-rose-50/40 hover:bg-rose-50' : 'hover:bg-gray-50')
-  const gradeClass = isSelected && !isLive ? '!bg-primary/5 transition-colors' : baseGradeClass
+  const gradeClass = isSelected && !isLive && !isHistorical ? '!bg-primary/5 transition-colors' : baseGradeClass
 
   // Left identity borders are assigned directly to the image container if checkboxes are missing
   const borderClass = item.grade === 'A'
@@ -78,13 +82,14 @@ const ItemRow = memo(({
           : ''
 
   const barcode = item.upc_barcode || item.upc || "NO UPC"
+  const showCheckbox = !isLive && !isHistorical;
 
   return (
     <tr className={`${gradeClass} ${isCriticalQty ? 'ring-1 ring-rose-100 ring-inset' : ''} group`}>
 
-      {/* 1. SELECTION CHECKBOX CONTAINER (Hidden completely during live windows) */}
-      {!isLive && (
-        <td className={`p-3 text-center align-middle w-12 transition-colors ${borderClass} group-hover:bg-gray-100/50`}>
+      {/* 1. SELECTION CHECKBOX CONTAINER (Removed fixed inline width) */}
+      {showCheckbox && (
+        <td className={`p-3 text-center align-middle transition-colors ${borderClass} group-hover:bg-gray-100/50`}>
           <input
             type="checkbox"
             className="rounded accent-primary cursor-pointer h-4 w-4"
@@ -94,8 +99,8 @@ const ItemRow = memo(({
         </td>
       )}
 
-      {/* 2. LOGISTICS IMAGE (Inherits grade border indicator lines if count is Live) */}
-      <td className={`p-2 align-middle text-center w-14 transition-colors ${isLive ? borderClass : ''} group-hover:bg-gray-100/50`}>
+      {/* 2. LOGISTICS IMAGE (Removed fixed inline width, safely inherits master layout slot) */}
+      <td className={`p-2 align-middle text-center transition-colors ${!showCheckbox ? borderClass : ''} group-hover:bg-gray-100/50`}>
         <div className="w-9 h-9 rounded-lg bg-gray-100/60 flex-shrink-0 overflow-hidden border border-gray-200/80 mx-auto">
           {item.image_url ? (
             <img src={item.image_url} alt={item.description} className="w-full h-full object-cover" />
@@ -107,8 +112,8 @@ const ItemRow = memo(({
         </div>
       </td>
 
-      {/* 3. INTERACTIVE UPC MONO DIALOG */}
-      <td className="p-3 font-mono text-xs align-middle w-36 transition-colors group-hover:bg-gray-100/50">
+      {/* 3. INTERACTIVE UPC MONO DIALOG (Removed fixed inline width) */}
+      <td className="p-3 font-mono text-xs align-middle transition-colors group-hover:bg-gray-100/50">
         <button
           type="button"
           onClick={() => onOpenBarcode(item.description, barcode, item.image_url)}
@@ -119,15 +124,15 @@ const ItemRow = memo(({
         </button>
       </td>
 
-      {/* 4. COMPACT DESCRIPTION COLUMN */}
-      <td className="p-3 text-left font-medium text-gray-900 align-middle w-54 transition-colors group-hover:bg-gray-100/50" title={item.description}>
+      {/* 4. COMPACT DESCRIPTION COLUMN (Removed fixed inline width, relies on table tracking layout) */}
+      <td className="p-3 text-left font-medium text-gray-900 align-middle transition-colors group-hover:bg-gray-100/50" title={item.description}>
         <div className="line-clamp-2 text-xs leading-tight break-words font-medium">
           {item.description}
         </div>
       </td>
 
-      {/* 5. ON HAND QUANTITY */}
-      <td className="p-3 font-mono align-middle text-right pr-4 w-24">
+      {/* 5. ON HAND QUANTITY (Removed fixed inline width) */}
+      <td className="p-3 font-mono align-middle text-right pr-4">
         <div className="flex items-center justify-end gap-1.5">
           {isCriticalQty && (
             <span className="relative flex h-2 w-2">
@@ -141,15 +146,15 @@ const ItemRow = memo(({
         </div>
       </td>
 
-      {/* 6. GRADE BADGE */}
-      <td className="p-3 align-middle w-24 pl-5">
+      {/* 6. GRADE BADGE (Removed fixed inline width) */}
+      <td className="p-3 align-middle pl-5">
         <span className={`px-2 py-0.5 rounded text-xs font-bold border shadow-sm whitespace-nowrap tracking-wide ${badgeGradeStyles[item.grade] || 'bg-white border-gray-200'}`}>
           Grade {item.grade || '—'}
         </span>
       </td>
 
-      {/* 7. PROGRESS STATUS COLUMN */}
-      <td className="p-3 align-middle text-center w-32">
+      {/* 7. PROGRESS STATUS COLUMN (Removed fixed inline width) */}
+      <td className="p-3 align-middle text-center">
         <span className={`px-2 py-0.5 rounded-full text-xs font-semibold ${item.count_completed ? 'bg-green-100 text-green-700' : 'bg-amber-100 text-amber-700'}`}>
           {item.count_completed ? 'Completed' : 'Pending'}
         </span>
@@ -202,6 +207,8 @@ function RouteComponent() {
   const [activeBarcodeItem, setActiveBarcodeItem] = useState<{ name: string; upc: string; image: string | null } | null>(null)
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
 
+  const navigate = useNavigate();
+
   const { data, isLoading, isError, error } = useQuery<ScheduleInstancePayload>({
     queryKey: ['cycleCountInstanceDetails', id],
     queryFn: async () => {
@@ -224,13 +231,12 @@ function RouteComponent() {
   const stationTimezone = data?.stationTimezone || 'America/New_York'
   const itemsData = data?.itemsData || []
 
-  // --- TIMEZONE AND LIVE STATE LOGIC ---
-  const { isLive, badgeText, subStatusText } = useMemo(() => {
+  // --- TIMEZONE, LIVE, AND HISTORICAL STATE LOGIC ---
+  const { isLive, isHistorical, badgeText, subStatusText } = useMemo(() => {
     if (!instanceData) {
-      return { isLive: false, badgeText: 'Loading...', subStatusText: '' }
+      return { isLive: false, isHistorical: false, badgeText: 'Loading...', subStatusText: '' }
     }
 
-    // Get modern localized date representation matching station timezone rules
     const formatter = new Intl.DateTimeFormat('en-CA', {
       timeZone: stationTimezone,
       year: 'numeric',
@@ -246,20 +252,26 @@ function RouteComponent() {
     if (instanceData.date === todayStr) {
       return {
         isLive: true,
+        isHistorical: false,
         badgeText: 'Currently Live',
         subStatusText: `${completedItems} done, ${remainingItems} remaining`
       }
     } else {
-      // Calculate upcoming delay days safely
       const instanceDate = new Date(`${instanceData.date}T00:00:00`)
       const todayDate = new Date(`${todayStr}T00:00:00`)
       const diffTime = instanceDate.getTime() - todayDate.getTime()
       const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24))
 
+      // If diffDays is less than 0, it means the calendar date is entirely in the past
+      const historicalFlag = diffDays < 0;
+
       return {
         isLive: false,
-        badgeText: 'Upcoming',
-        subStatusText: diffDays > 0 ? `Starts in ${diffDays} day${diffDays > 1 ? 's' : ''}` : 'Scheduled past date'
+        isHistorical: historicalFlag,
+        badgeText: historicalFlag ? 'Schedule Completed' : 'Upcoming',
+        subStatusText: historicalFlag
+          ? `Archived • Completed ${completedItems}/${totalItems} items`
+          : (diffDays > 0 ? `Starts in ${diffDays} day${diffDays > 1 ? 's' : ''}` : 'Scheduled past date')
       }
     }
   }, [instanceData, itemsData, stationTimezone])
@@ -390,6 +402,43 @@ function RouteComponent() {
     }
   }
 
+  // --- MUTATION FOR REMOVING THE ENTIRE INSTANCE ---
+  // --- 2. Update your Mutation Handler ---
+  const deleteEntireScheduleMutation = useMutation({
+    mutationFn: async () => {
+      const token = localStorage.getItem('token');
+
+      const response = await axios.delete(`/api/cycle-count/instance/${id}`, {
+        headers: {
+          Authorization: token ? `Bearer ${token}` : '',
+        }
+      });
+      return response.data;
+    },
+    onSuccess: () => {
+      // Force a fresh layout reload on the side panel's master index list cache track
+      queryClient.invalidateQueries({ queryKey: ['cycle-count-instances'] });
+
+      alert("Schedule instance completely deleted successfully.");
+
+      // Smooth, client-side routing via TanStack Router
+      navigate({ to: "/cycle-count/manage/schedule" });
+    },
+    onError: (err: any) => {
+      const errorMsg = err.response?.data?.message || "Failed to successfully terminate the targeted count instance.";
+      alert(`Error: ${errorMsg}`);
+    }
+  });
+
+  // --- FULL DELETION TRIGGER INTERACTION ---
+  const handleDeleteEntireSchedule = () => {
+    const confirmText = "⚠️ CRITICAL WARNING: Are you sure you want to completely DELETE this entire schedule? This action will permanently drop the instance along with all linked item lines. This action cannot be undone.";
+
+    if (window.confirm(confirmText)) {
+      deleteEntireScheduleMutation.mutate();
+    }
+  };
+
   // --- ASYNC NETWORK STATE RENDERS ---
   if (isLoading) {
     return (
@@ -432,9 +481,13 @@ function RouteComponent() {
             {/* Status Schedule Badge */}
             <div className="flex flex-col gap-1">
               <span className="text-xs font-semibold text-gray-400 uppercase tracking-wider">Status</span>
-              <span className={`px-3 py-1 rounded-full text-xs font-bold w-max shadow-sm border ${isInstanceScheduled ? 'bg-amber-50 border-amber-200 text-amber-700' : 'bg-blue-50 border-blue-200 text-blue-700'
+              <span className={`px-3 py-1 rounded-full text-xs font-bold w-max shadow-sm border ${isHistorical
+                ? 'bg-slate-100 border-slate-300 text-slate-700' // Neutral gray look for closed history records
+                : isInstanceScheduled
+                  ? 'bg-amber-50 border-amber-200 text-amber-700'
+                  : 'bg-blue-50 border-blue-200 text-blue-700'
                 }`}>
-                {isInstanceScheduled ? 'Scheduled' : 'System'}
+                {isHistorical ? 'Schedule Completed' : isInstanceScheduled ? 'Scheduled' : 'System'}
               </span>
             </div>
 
@@ -455,9 +508,13 @@ function RouteComponent() {
             <div className="flex flex-col gap-1">
               <span className="text-xs font-semibold text-gray-400 uppercase tracking-wider">Timeline Status</span>
               <div className="flex items-center gap-2">
-                <span className={`flex items-center gap-1 px-2.5 py-0.5 rounded-md text-xs font-bold ${isLive ? 'bg-rose-100 text-rose-800 animate-pulse' : 'bg-blue-100 text-blue-800'
+                <span className={`flex items-center gap-1 px-2.5 py-0.5 rounded-md text-xs font-bold ${isLive
+                  ? 'bg-rose-100 text-rose-800 animate-pulse'
+                  : isHistorical
+                    ? 'bg-emerald-100 text-emerald-800' // Clear signature indicator color for archived rows
+                    : 'bg-blue-100 text-blue-800'
                   }`}>
-                  <Clock className="w-3.5 h-3.5" />
+                  {isHistorical ? <CheckCircle className="w-3.5 h-3.5" /> : <Clock className="w-3.5 h-3.5" />}
                   {badgeText}
                 </span>
                 <span className="text-xs font-medium text-gray-600">{subStatusText}</span>
@@ -511,48 +568,78 @@ function RouteComponent() {
               </div>
             </div>
 
-            {/* --- GLOBAL WORKFLOW ACTION BUTTONS --- */}
-            <button
-              type="button"
-              onClick={handleDeleteSelectedItems}
-              disabled={!isDeleteActive || isLive || deleteItemsMutation.isPending}
-              className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-xs font-bold transition-all shadow-sm h-[38px] ${isDeleteActive && !isLive && !deleteItemsMutation.isPending
-                ? 'bg-rose-600 hover:bg-rose-700 text-white cursor-pointer active:scale-[0.98]'
-                : 'bg-gray-100 text-gray-400 cursor-not-allowed'
-                }`}
-            >
-              {deleteItemsMutation.isPending ? (
-                <div className="w-4 h-4 border-2 border-gray-400 border-t-transparent rounded-full animate-spin" />
-              ) : (
-                <Trash2 className="w-4 h-4" />
-              )}
-              Remove Item ({selectedIds.length})
-            </button>
+            {/* --- GLOBAL WORKFLOW ACTION BUTTONS: HIDE COMPLETELY IF VIEW IS HISTORICAL --- */}
+            {!isHistorical && (
+              <>
+                <button
+                  type="button"
+                  onClick={handleDeleteSelectedItems}
+                  disabled={!isDeleteActive || isLive || deleteItemsMutation.isPending}
+                  className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-xs font-bold transition-all shadow-sm h-[38px] ${isDeleteActive && !isLive && !deleteItemsMutation.isPending
+                    ? 'bg-rose-600 hover:bg-rose-700 text-white cursor-pointer active:scale-[0.98]'
+                    : 'bg-gray-100 text-gray-400 cursor-not-allowed'
+                    }`}
+                >
+                  {deleteItemsMutation.isPending ? (
+                    <div className="w-4 h-4 border-2 border-gray-400 border-t-transparent rounded-full animate-spin" />
+                  ) : (
+                    <Trash2 className="w-4 h-4" />
+                  )}
+                  Remove Item ({selectedIds.length})
+                </button>
 
-            <button
-              type="button"
-              onClick={() => setIsAddModalOpen(true)} // <-- Open the selection view modal overlay
-              disabled={!canAddItem || isLive}
-              className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-xs font-bold transition-all shadow-sm h-[38px] ${canAddItem && !isLive
-                ? 'bg-gray-900 hover:bg-black text-white cursor-pointer active:scale-[0.98]'
-                : 'bg-gray-100 text-gray-400 cursor-not-allowed'
-                }`}
-            >
-              <Plus className="w-4 h-4" />
-              Add Item
-            </button>
+                <button
+                  type="button"
+                  onClick={() => setIsAddModalOpen(true)}
+                  disabled={!canAddItem || isLive}
+                  className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-xs font-bold transition-all shadow-sm h-[38px] ${canAddItem && !isLive
+                    ? 'bg-gray-900 hover:bg-black text-white cursor-pointer active:scale-[0.98]'
+                    : 'bg-gray-100 text-gray-400 cursor-not-allowed'
+                    }`}
+                >
+                  <Plus className="w-4 h-4" />
+                  Add Item
+                </button>
+
+                {isInstanceScheduled && (
+                  <button
+                    type="button"
+                    onClick={handleDeleteEntireSchedule}
+                    disabled={deleteEntireScheduleMutation.isPending}
+                    className="flex items-center gap-2 px-4 py-2.5 rounded-xl text-xs font-bold bg-white text-rose-600 border border-rose-200 hover:bg-rose-50/50 transition-all shadow-sm h-[38px] cursor-pointer active:scale-[0.98]"
+                  >
+                    {deleteEntireScheduleMutation.isPending ? (
+                      <div className="w-4 h-4 border-2 border-rose-400 border-t-transparent rounded-full animate-spin" />
+                    ) : (
+                      <XCircle className="w-4 h-4" />
+                    )}
+                    Delete Entire Schedule
+                  </button>
+                )}
+              </>
+            )}
           </div>
         </div>
       </div>
 
-      {/* Unscheduled Max Threshold Alert Box Banner */}
-      {!isInstanceScheduled && totalItemCount >= 20 && (
-        <div className="p-4 bg-amber-50 border border-amber-200 rounded-xl flex items-start gap-3">
-          <span className="p-1 rounded-md bg-amber-100 text-amber-800 text-xs font-bold uppercase shrink-0">Limit Hit</span>
-          <p className="text-xs text-amber-800 leading-normal font-medium">
-            This count instance is system generated and has hit its limit of <b>20 items per day</b>. To insert alternative SKU entities, remove items from the list first or create a full schedule compilation rules.
+      {/* Unscheduled Max Threshold Alert Box Banner - HIDE IF HISTORICAL */}
+      {/* ================= CONTEXTUAL NOTIFICATION BANNERS ================= */}
+      {isHistorical ? (
+        <div className="p-4 bg-slate-50 border border-slate-200 rounded-xl flex items-start gap-3 shadow-sm">
+          <span className="p-1 rounded-md bg-slate-200 text-slate-700 text-xs font-bold uppercase shrink-0">Archive View</span>
+          <p className="text-xs text-slate-600 leading-normal font-medium">
+            You are viewing an immutable historical entry record. For detailed information about consolidated final counts, operational adjustments, and inventory variances, please visit the <a href="/cycle-count/report" className="text-blue-600 font-bold hover:underline">Reports page</a>.
           </p>
         </div>
+      ) : (
+        !isInstanceScheduled && totalItemCount >= 20 && (
+          <div className="p-4 bg-amber-50 border border-amber-200 rounded-xl flex items-start gap-3">
+            <span className="p-1 rounded-md bg-amber-100 text-amber-800 text-xs font-bold uppercase shrink-0">Limit Hit</span>
+            <p className="text-xs text-amber-800 leading-normal font-medium">
+              This count instance is system generated and has hit its limit of <b>20 items per day</b>. To insert alternative SKU entities, remove items from the list first or create a full schedule compilation rules.
+            </p>
+          </div>
+        )
       )}
 
       {/* ================= CONDENSED DATA MATRIX WORKBENCH ================= */}
@@ -562,7 +649,7 @@ function RouteComponent() {
             <thead className="bg-gray-100 text-gray-700 font-semibold sticky top-0 z-30 shadow-[0_1px_0_0_rgba(0,0,0,0.1)]">
               <tr>
                 {/* Conditionally hide the selection header column if the count instance is live */}
-                {!isLive && (
+                {!isLive && !isHistorical && (
                   <th className="p-3 bg-gray-100 text-center w-12">
                     <input
                       type="checkbox"
@@ -598,7 +685,10 @@ function RouteComponent() {
                         }`}
                     >
                       {/* Dynamically adjust colSpan matching the active number of columns */}
-                      <td colSpan={isLive ? 6 : 7} className="p-2.5 font-semibold text-xs tracking-wide uppercase">
+                      <td
+                        colSpan={isLive || isHistorical ? 6 : 7}
+                        className="p-2.5 font-semibold text-xs tracking-wide uppercase"
+                      >
                         <div className="flex items-center justify-between w-full pr-2">
                           <div className="flex items-center gap-2">
                             {isCollapsed ? (
@@ -639,6 +729,7 @@ function RouteComponent() {
                         key={item.product_id}
                         item={item}
                         isLive={isLive}
+                        isHistorical={isHistorical}
                         isSelected={selectedIds.includes(item.product_id)}
                         onToggle={handleToggleRow}
                         onOpenBarcode={handleOpenBarcodeDialog}
@@ -852,7 +943,7 @@ export const AddItemsModal: React.FC<AddItemsModalProps> = ({
   // Safe Guard Condition integrated directly into the core execution return block
   if (!isOpen) return null;
 
-return (
+  return (
     <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4">
       <div className="bg-white rounded-2xl shadow-xl w-full max-w-4xl h-[85vh] flex flex-col overflow-hidden border border-gray-100">
 

@@ -103,12 +103,68 @@ async function runWeeklyInstanceCalculations() {
   }
 }
 
+async function archiveHistoricalCycleCounts() {
+  const db = getPg();
+  console.log("--- Starting Cycle Count Data Archival Engine ---");
+
+  try {
+    await db.transaction(async (trx) => {
+      // 1. Identify all instances older than 1 month
+      const oldInstances = await trx("cycle_count_instance")
+        .whereRaw("CAST(date AS date) < CURRENT_DATE - INTERVAL '1 month'")
+        .select("id");
+
+      if (oldInstances.length === 0) {
+        console.log("-> No historical metrics found older than 1 month. Skipping migration pass.");
+        return;
+      }
+
+      const instanceIdsToMove = oldInstances.map(inst => inst.id);
+      console.log(`-> Found ${instanceIdsToMove.length} historical instances to move to archive storage.`);
+
+      // 2. Extract child rows targeting items mapped to these instances
+      const itemsToMove = await trx("cycle_count_items")
+        .whereIn("instance_id", instanceIdsToMove);
+
+      // 3. Extract the instance records themselves
+      const instancesToMove = await trx("cycle_count_instance")
+        .whereIn("id", instanceIdsToMove);
+
+      // 4. Batch push items into the archive table (if child records exist)
+      if (itemsToMove.length > 0) {
+        console.log(`-> Copying ${itemsToMove.length} child items to cycle_count_items_archive...`);
+        // chunk to prevent statement execution footprint failures if datasets scale high
+        await trx("cycle_count_items_archive").insert(itemsToMove);
+      }
+
+      // 5. Batch push parent rows into instance archive table
+      console.log("-> Copying instances to cycle_count_instance_archive...");
+      await trx("cycle_count_instance_archive").insert(instancesToMove);
+
+      // 6. Delete from active working tables (Cascades clean down to items automatically due to your Foreign Key constraint)
+      console.log("-> Purging archived records cleanly from production tracking tables...");
+      await trx("cycle_count_instance")
+        .whereIn("id", instanceIdsToMove)
+        .del();
+
+      console.log(`[SUCCESS] Completed data archival. ${instanceIdsToMove.length} sets successfully shifted.`);
+    });
+  } catch (err) {
+    console.error("Critical Failure running Cycle Count Database Data Archival Loop:", err);
+    throw err; // Bubbles up cleanly to master log handler block
+  }
+}
+
 // Runs every Sunday at exactly 03:00 AM
 cron.schedule("0 3 * * 0", async () => {
   console.log(`[${new Date().toISOString()}] Triggering scheduled Sunday morning Weekly Instance Calculation engine...`);
   try {
     await runWeeklyInstanceCalculations();
     console.log(`[${new Date().toISOString()}] Sunday morning Weekly Instance Calculations completed successfully.`);
+    
+    // RUN DEEP ARCHIVAL IMMEDIATELY AFTER GENERATION FINISHES
+    await archiveHistoricalCycleCounts();
+    console.log(`[${new Date().toISOString()}] Database table maintenance and historical archival run completed.`);
   } catch (error) {
     console.error("Critical Failure running Sunday Weekly Instance Calculations:", error);
   }
@@ -117,4 +173,4 @@ cron.schedule("0 3 * * 0", async () => {
   timezone: "America/Toronto"
 });
 
-module.exports = { runWeeklyInstanceCalculations };
+module.exports = { runWeeklyInstanceCalculations, archiveHistoricalCycleCounts };

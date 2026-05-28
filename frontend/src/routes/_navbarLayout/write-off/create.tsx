@@ -78,13 +78,43 @@ function RouteComponent() {
     }
   }, [site, user?.location]);
 
+  // useEffect(() => {
+  //   const delay = setTimeout(async () => {
+  //     if (formQuery.length > 2) {
+  //       setIsSearching(true);
+  //       try {
+  //         const res = await axios.get(`/api/cycle-count/search`, {
+  //           params: { site, q: formQuery },
+  //           headers: {
+  //             Authorization: `Bearer ${localStorage.getItem('token')}`,
+  //             "X-Required-Permission": "writeOff.create"
+  //           }
+  //         });
+  //         setFormResults(res.data);
+  //       } catch (err: any) {
+  //         if (err.response?.status === 403) navigate({ to: "/no-access" });
+  //         setFormResults([]);
+  //       } finally {
+  //         setIsSearching(false);
+  //       }
+  //     } else {
+  //       setFormResults([]);
+  //     }
+  //   }, 300);
+
+  //   return () => clearTimeout(delay);
+  // }, [formQuery, site, navigate]);
   useEffect(() => {
     const delay = setTimeout(async () => {
-      if (formQuery.length > 2) {
+      // Check if we have a valid text query string and an active site string before sending
+      if (formQuery.length > 2 && site) {
         setIsSearching(true);
         try {
           const res = await axios.get(`/api/cycle-count/search`, {
-            params: { site, q: formQuery },
+            params: {
+              site: site, // Sends the plain text string name like "Sarnia" or "Jocko Point"
+              q: formQuery
+            },
             headers: {
               Authorization: `Bearer ${localStorage.getItem('token')}`,
               "X-Required-Permission": "writeOff.create"
@@ -103,7 +133,7 @@ function RouteComponent() {
     }, 300);
 
     return () => clearTimeout(delay);
-  }, [formQuery, site, navigate]);
+  }, [formQuery, site, navigate]); // Matches the name string field context beautifully // Swapped dependency array watch context to look at site
 
   const selectFromSearch = (item: any) => {
     setFormData({
@@ -299,7 +329,7 @@ function RouteComponent() {
                         </div>
                       )}
                     </div>
-                  </> 
+                  </>
                 )}
                 {/* Form Fields */}
                 <div className="rounded-lg border bg-slate-50 p-4 space-y-3">

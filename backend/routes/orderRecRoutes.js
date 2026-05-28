@@ -159,6 +159,210 @@ router.get('/:id', async (req, res) => {
 
 
 // Update item completion
+// router.put('/:id/item/:catIdx/:itemIdx', async (req, res) => {
+//   try {
+//     const { completed, isChanged } = req.body;
+//     const orderRec = await OrderRec.findById(req.params.id);
+//     if (!orderRec) return res.status(404).json({ message: 'Not found' });
+
+//     const catIdx = Number(req.params.catIdx);
+//     const itemIdx = Number(req.params.itemIdx);
+
+//     // Validate indices
+//     if (
+//       !orderRec.categories ||
+//       catIdx < 0 ||
+//       catIdx >= orderRec.categories.length ||
+//       !orderRec.categories[catIdx].items ||
+//       itemIdx < 0 ||
+//       itemIdx >= orderRec.categories[catIdx].items.length
+//     ) {
+//       return res.status(400).json({ message: 'Invalid category or item index' });
+//     }
+
+//     const category = orderRec.categories[catIdx];
+//     const item = category.items[itemIdx];
+//     item.completed = completed;
+
+//     // Update category completion
+//     category.completed = category.items.every(i => i.completed);
+
+//     // Update orderRec completion
+//     orderRec.completed = orderRec.categories.every(c => c.completed);
+
+//     orderRec.markModified('categories'); // Ensure Mongoose tracks changes
+
+//     const status = "Completed";
+
+//     if (orderRec.completed) {
+//       orderRec.currentStatus = status;
+//       let statusEntry = orderRec.statusHistory.find(e => e.status === status);
+//       if (!statusEntry) {
+//         // Add new status with current timestamp
+//         orderRec.statusHistory.push({ status, timestamp: new Date() });
+//       } else {
+//         // Moving forward in hierarchy → update timestamp
+//         statusEntry.timestamp = new Date();
+//       }
+//     } else {
+//       orderRec.currentStatus = "Created";
+//     }
+
+//     await orderRec.save();
+//     const io = req.app.get("io");
+//     if (io) {
+//       io.emit("orderUpdated", orderRec);
+//     }
+
+//     let isActuallyChanged = false;
+//     if (isChanged) {
+//       const productCategory = await ProductCategory.findOne({ Number: category.number });
+
+//       let varianceThreshold = productCategory?.OrderRecVariance ?? 0;
+
+//       const qtyDiff = Math.abs(item.onHandQty - item.onHandQtyOld);
+
+//       // Determine if the item should be flagged
+//       isActuallyChanged = qtyDiff > varianceThreshold;
+//     }
+
+//     const site = orderRec.site;
+
+//     // temposrary patch for PCG order not flagging these items in cyclecount module
+//     let vendorName = "";
+//     if (mongoose.isValidObjectId(orderRec.vendor)) {
+//       const vendorDoc = await Vendor.findById(orderRec.vendor);
+//       vendorName = vendorDoc ? vendorDoc.name : "";
+//     }
+
+//     // 2. Define the exclusion logic
+//     const isPCGVendor = vendorName === "Proulx Commercial Growers";
+    
+    
+//     if (category.number !== "5001" && !isPCGVendor && item.completed && item.gtin) {
+//     // if (category.number !== "5001" && item.completed && item.gtin) {
+
+//       let cycleCount = await CycleCount.findOne({ site, gtin: item.gtin });
+
+//       // 🔧 Helper: get UPC/barcode from SQL
+//       async function fetchFromSQL(gtin) {
+//         let upc = "";
+//         let upc_barcode = "";
+//         try {
+//           const itembook = await getUPC_barcode(gtin);
+//           if (itembook.length > 0) {
+//             upc = itembook[0].UPC || "";
+//             upc_barcode = itembook[0].UPC_barcode || "";
+//           }
+//         } catch (err) {
+//           console.error("SQL lookup failed for gtin:", gtin, err);
+//         }
+//         return { upc, upc_barcode };
+//       }
+
+//       if (cycleCount) {
+//         // ✅ Case 1: Existing site+gtin → update flagged + maybe backfill UPC/barcode
+//         if (!cycleCount.upc || !cycleCount.upc_barcode) {
+//           const { upc, upc_barcode } = await fetchFromSQL(item.gtin);
+//           if (upc || upc_barcode) {
+//             cycleCount.upc = cycleCount.upc || upc;
+//             cycleCount.upc_barcode = cycleCount.upc_barcode || upc_barcode;
+//           }
+//         }
+//         // Ensure flags are true for existing docs when updating from an OrderRec
+//         if (!cycleCount.active) {
+//           console.log(`Setting active=true for existing CycleCount (gtin=${cycleCount.gtin}, upc=${cycleCount.upc})`);
+//           cycleCount.active = true;
+//         }
+//         if (!cycleCount.inventoryExists) {
+//           console.log(`Setting inventoryExists=true for existing CycleCount (gtin=${cycleCount.gtin}, upc=${cycleCount.upc})`);
+//           cycleCount.inventoryExists = true;
+//         }
+//         cycleCount.flagged = !!isActuallyChanged;
+//         if (isActuallyChanged) {
+//           cycleCount.flaggedAt = new Date();
+//         }
+//         await cycleCount.save({ timestamps: false });
+
+//         console.log(
+//           `Updated CycleCount (${cycleCount.flagged ? "flagged=true" : "flagged=false"}):`,
+//           cycleCount.upc
+//         );
+//       } else {
+//         // 🚀 Case 2: No site+gtin entry → need to create new
+//         let baseData = null;
+
+//         const otherSite = await CycleCount.findOne({ gtin: item.gtin }).lean();
+
+//         if (otherSite) {
+//           // 🟢 Use other site's UPC/barcode, but backfill if missing
+//           let { upc, upc_barcode } = {
+//             upc: otherSite.upc,
+//             upc_barcode: otherSite.upc_barcode,
+//           };
+
+//           if (!upc || !upc_barcode) {
+//             const sqlData = await fetchFromSQL(item.gtin);
+//             upc = upc || sqlData.upc;
+//             upc_barcode = upc_barcode || sqlData.upc_barcode;
+//           }
+
+//           baseData = {
+//             site,
+//             upc,
+//             upc_barcode,
+//             name: item.itemName || "",
+//             categoryNumber: category.number,
+//             grade: "C",
+//             foh: 0,
+//             boh: 0,
+//             gtin: otherSite.gtin,
+//             updatedAt: new Date("2025-09-18T00:00:00Z"),
+//           };
+//         } else {
+//           // 🟡 Case 3: No other site → SQL fallback directly
+//           const { upc, upc_barcode } = await fetchFromSQL(item.gtin);
+
+//           baseData = {
+//             site,
+//             upc,
+//             upc_barcode,
+//             name: item.itemName || "",
+//             categoryNumber: category.number,
+//             grade: "C",
+//             foh: 0,
+//             boh: 0,
+//             gtin: item.gtin,
+//             updatedAt: new Date("2025-09-18T00:00:00Z"),
+//           };
+//         }
+
+//         // Add flagged fields
+//         baseData.flagged = !!isActuallyChanged;
+//         if (isActuallyChanged) {
+//           baseData.flaggedAt = new Date();
+//         }
+
+//         // Insert new doc (safe due to unique index on site+gtin)
+//         cycleCount = await CycleCount.findOneAndUpdate(
+//           { site, gtin: item.gtin },
+//           { $setOnInsert: baseData },
+//           { new: true, upsert: true, timestamps: false }
+//         );
+
+//         console.log(
+//           `Created CycleCount (${cycleCount.flagged ? "flagged=true" : "flagged=false"}):`,
+//           cycleCount.upc
+//         );
+//       }
+//     }
+
+//     res.json(orderRec);
+//   } catch (err) {
+//     res.status(500).json({ message: err.message });
+//   }
+// });
+
 router.put('/:id/item/:catIdx/:itemIdx', async (req, res) => {
   try {
     const { completed, isChanged } = req.body;
@@ -214,6 +418,11 @@ router.put('/:id/item/:catIdx/:itemIdx', async (req, res) => {
       io.emit("orderUpdated", orderRec);
     }
 
+    // ==========================================================================
+    // DEPRECATED: RETIRED VARIANCE & FLAG CALCULATION BLOCKS
+    // Commented out to prevent redundant DB calls to ProductCategory and Vendor collections.
+    // ==========================================================================
+    /*
     let isActuallyChanged = false;
     if (isChanged) {
       const productCategory = await ProductCategory.findOne({ Number: category.number });
@@ -228,19 +437,17 @@ router.put('/:id/item/:catIdx/:itemIdx', async (req, res) => {
 
     const site = orderRec.site;
 
-    // temposrary patch for PCG order not flagging these items in cyclecount module
+    // temporary patch for PCG order not flagging these items in cyclecount module
     let vendorName = "";
     if (mongoose.isValidObjectId(orderRec.vendor)) {
       const vendorDoc = await Vendor.findById(orderRec.vendor);
       vendorName = vendorDoc ? vendorDoc.name : "";
     }
 
-    // 2. Define the exclusion logic
+    // Define the exclusion logic
     const isPCGVendor = vendorName === "Proulx Commercial Growers";
     
-    
     if (category.number !== "5001" && !isPCGVendor && item.completed && item.gtin) {
-    // if (category.number !== "5001" && item.completed && item.gtin) {
 
       let cycleCount = await CycleCount.findOne({ site, gtin: item.gtin });
 
@@ -261,7 +468,6 @@ router.put('/:id/item/:catIdx/:itemIdx', async (req, res) => {
       }
 
       if (cycleCount) {
-        // ✅ Case 1: Existing site+gtin → update flagged + maybe backfill UPC/barcode
         if (!cycleCount.upc || !cycleCount.upc_barcode) {
           const { upc, upc_barcode } = await fetchFromSQL(item.gtin);
           if (upc || upc_barcode) {
@@ -269,13 +475,10 @@ router.put('/:id/item/:catIdx/:itemIdx', async (req, res) => {
             cycleCount.upc_barcode = cycleCount.upc_barcode || upc_barcode;
           }
         }
-        // Ensure flags are true for existing docs when updating from an OrderRec
         if (!cycleCount.active) {
-          console.log(`Setting active=true for existing CycleCount (gtin=${cycleCount.gtin}, upc=${cycleCount.upc})`);
           cycleCount.active = true;
         }
         if (!cycleCount.inventoryExists) {
-          console.log(`Setting inventoryExists=true for existing CycleCount (gtin=${cycleCount.gtin}, upc=${cycleCount.upc})`);
           cycleCount.inventoryExists = true;
         }
         cycleCount.flagged = !!isActuallyChanged;
@@ -283,19 +486,11 @@ router.put('/:id/item/:catIdx/:itemIdx', async (req, res) => {
           cycleCount.flaggedAt = new Date();
         }
         await cycleCount.save({ timestamps: false });
-
-        console.log(
-          `Updated CycleCount (${cycleCount.flagged ? "flagged=true" : "flagged=false"}):`,
-          cycleCount.upc
-        );
       } else {
-        // 🚀 Case 2: No site+gtin entry → need to create new
         let baseData = null;
-
         const otherSite = await CycleCount.findOne({ gtin: item.gtin }).lean();
 
         if (otherSite) {
-          // 🟢 Use other site's UPC/barcode, but backfill if missing
           let { upc, upc_barcode } = {
             upc: otherSite.upc,
             upc_barcode: otherSite.upc_barcode,
@@ -320,7 +515,6 @@ router.put('/:id/item/:catIdx/:itemIdx', async (req, res) => {
             updatedAt: new Date("2025-09-18T00:00:00Z"),
           };
         } else {
-          // 🟡 Case 3: No other site → SQL fallback directly
           const { upc, upc_barcode } = await fetchFromSQL(item.gtin);
 
           baseData = {
@@ -337,25 +531,20 @@ router.put('/:id/item/:catIdx/:itemIdx', async (req, res) => {
           };
         }
 
-        // Add flagged fields
         baseData.flagged = !!isActuallyChanged;
         if (isActuallyChanged) {
           baseData.flaggedAt = new Date();
         }
 
-        // Insert new doc (safe due to unique index on site+gtin)
         cycleCount = await CycleCount.findOneAndUpdate(
           { site, gtin: item.gtin },
           { $setOnInsert: baseData },
           { new: true, upsert: true, timestamps: false }
         );
-
-        console.log(
-          `Created CycleCount (${cycleCount.flagged ? "flagged=true" : "flagged=false"}):`,
-          cycleCount.upc
-        );
       }
     }
+    */
+    // ==========================================================================
 
     res.json(orderRec);
   } catch (err) {

@@ -658,12 +658,12 @@ router.get('/groups/preview-items', async (req, res) => {
 
 router.get('/instances', async (req, res) => {
   try {
-    const { site } = req.query;
+    // Added 'view' parameter ("active" vs "historical")
+    const { site, view = "active" } = req.query;
     if (!site) {
       return res.status(400).json({ message: "Site parameter is required" });
     }
 
-    // 1. Fetch site mapping from MongoDB to get _id and timezone
     const location = await Location.findOne({ stationName: site });
     if (!location) {
       return res.status(404).json({ message: `Location '${site}' not found` });
@@ -671,28 +671,29 @@ router.get('/instances', async (req, res) => {
 
     const siteMongoIdString = location._id.toString();
     const siteTimezone = location.timezone || 'UTC';
-
-    // 2. Determine today's date in the target station's local timezone
-    // Format matches 'YYYY-MM-DD' to safely string-compare if your text field uses standard layouts
     const stationTodayStr = DateTime.now().setZone(siteTimezone).toFormat('yyyy-MM-dd');
 
     const db = getPg();
 
-    // 3. Query PostgreSQL for records >= today's date for this station
-    // Adjust order by date ascending so closest upcoming events show first
-    const instances = await db("public.cycle_count_instance")
-      .where({ site_mongo_id: siteMongoIdString })
-      .andWhere("date", ">=", stationTodayStr)
-      .select(
-        "id",
-        "date",
-        "day",
-        "is_scheduled",
-        "site_mongo_id",
-        "scheduled_by",
-        "group_id"
-      )
-      .orderBy("date", "asc");
+    let query = db("public.cycle_count_instance")
+      .where({ site_mongo_id: siteMongoIdString });
+
+    // Conditional tracking based on the active view state toggle
+    if (view === "historical") {
+      query = query.andWhere("date", "<", stationTodayStr).orderBy("date", "desc");
+    } else {
+      query = query.andWhere("date", ">=", stationTodayStr).orderBy("date", "asc");
+    }
+
+    const instances = await query.select(
+      "id",
+      "date",
+      "day",
+      "is_scheduled",
+      "site_mongo_id",
+      "scheduled_by",
+      "group_id"
+    );
 
     res.json({ instances });
   } catch (err) {
@@ -1828,7 +1829,7 @@ router.get("/daily-report", async (req, res) => {
         "ib.retail as unitPrice",
         "ib.pk_in_crt",
         "ib.category_id as categoryId",
-        "ib.on_hand_qty as onHandCSO",
+        "ib.on_hand_at_count as onHandCSO",
         "cci.foh",
         "cci.foh_crt",
         "cci.foh_case",
@@ -2002,6 +2003,46 @@ router.post('/:id/comments', async (req, res) => {
   } catch (err) {
     console.error(err);
     res.status(500).json({ message: 'Failed to add comment.' });
+  }
+});
+
+// Express Handler Endpoint: DELETE /api/cycle-count/instance/:id
+router.delete('/instance/:id', async (req, res) => {
+  const instanceId = req.params.id;
+  const db = req.app.get("db") || getPg();
+
+  try {
+    // 1. Fetch the targeted instance profile record
+    const instance = await db("cycle_count_instance")
+      .where({ id: instanceId })
+      .first();
+
+    if (!instance) {
+      return res.status(404).json({ message: "The requested count instance could not be found." });
+    }
+
+    // 2. CRITICAL SECURITY GUARDRAIL: Block deletion if it is NOT a manual/scheduled record
+    if (!instance.is_scheduled) {
+      return res.status(403).json({
+        message: "Action Denied: Automatically generated system count instances cannot be manually deleted."
+      });
+    }
+
+    // 3. Execution wrapper block
+    await db.transaction(async (trx) => {
+      // Due to 'ON DELETE CASCADE' on your Foreign Key constraint,
+      // dropping the parent row here drops everything inside cycle_count_items automatically.
+      await trx("cycle_count_instance")
+        .where({ id: instanceId })
+        .del();
+    });
+
+    console.log(`[SUCCESS] Purged scheduled instance ID: ${instanceId} along with its cascading items.`);
+    res.json({ success: true, message: "Instance and linked line mappings completely dropped cleanly." });
+
+  } catch (err) {
+    console.error("Critical Failure executing Instance Deletion Chain:", err);
+    res.status(500).json({ error: "Internal server error occurred while deleting the instance layout." });
   }
 });
 
@@ -2188,31 +2229,82 @@ router.get('/inventory-categories', async (req, res) => {
 });
 
 // Example Express Route: /api/cycle-count/search
+// router.get('/search', async (req, res) => {
+//   try {
+//     const { site, q } = req.query;
+
+//     if (!site || !q) {
+//       return res.json([]);
+//     }
+
+//     // Use a case-insensitive regex for the name and an exact or prefix match for UPC
+//     const query = {
+//       site: site, // Must match the site format in your DB
+//       $or: [
+//         { upc_barcode: { $regex: `^${q}`, $options: 'i' } }, // Prefix match for UPC is faster
+//         { name: { $regex: q, $options: 'i' } }
+//       ]
+//     };
+
+//     const items = await CycleCount.find(query)
+//       .select('name upc_barcode gtin onHandCSO') // Only fetch needed fields
+//       .limit(10)
+//       .lean(); // Faster execution
+
+//     res.json(items);
+//   } catch (err) {
+//     console.error('Search Error:', err);
+//     res.status(500).json({ error: 'Internal server error' });
+//   }
+// });
+
+// Updated Express Route: /api/items/search
 router.get('/search', async (req, res) => {
   try {
-    const { site, q } = req.query;
+    const { site, q } = req.query; // 'site' comes in as the readable string name (stationName)
+    const db = req.app.get("db") || getPg();
 
     if (!site || !q) {
       return res.json([]);
     }
 
-    // Use a case-insensitive regex for the name and an exact or prefix match for UPC
-    const query = {
-      site: site, // Must match the site format in your DB
-      $or: [
-        { upc_barcode: { $regex: `^${q}`, $options: 'i' } }, // Prefix match for UPC is faster
-        { name: { $regex: q, $options: 'i' } }
-      ]
-    };
+    // 1. Resolve the human-readable site name to its master Mongo ID string
+    const locationDoc = await Location.findOne({
+      stationName: site
+    }).lean();
 
-    const items = await CycleCount.find(query)
-      .select('name upc_barcode gtin onHandCSO') // Only fetch needed fields
-      .limit(10)
-      .lean(); // Faster execution
+    // console.log(`Resolved location for site "${site}":`, locationDoc);
+
+    // If the store name doesn't match a configuration setup, bail out safely with an empty array
+    if (!locationDoc || !locationDoc._id) {
+      console.warn(`[Search Warning] No registered location matching stationName: "${site}"`);
+      return res.json([]);
+    }
+
+    const siteMongoIdStr = locationDoc._id.toString();
+    const searchPattern = `%${q}%`;
+
+    // 2. Query your PostgreSQL item_bk using the resolved site ID string
+    const items = await db("item_bk")
+      .where({ site: siteMongoIdStr })
+      .andWhere(function () {
+        this.where('description', 'ILIKE', searchPattern)
+          .orWhere('upc', 'ILIKE', searchPattern)
+          .orWhere('upc_barcode', 'ILIKE', searchPattern)
+          .orWhere('gtin', 'ILIKE', searchPattern);
+      })
+      .select(
+        'id as _id', // Kept for frontend data list mapping compatibility
+        'description as name',
+        'upc_barcode',
+        'gtin',
+        'on_hand_qty as onHandQty'
+      )
+      .limit(20);
 
     res.json(items);
   } catch (err) {
-    console.error('Search Error:', err);
+    console.error('Relational Item Book Search Failure:', err);
     res.status(500).json({ error: 'Internal server error' });
   }
 });

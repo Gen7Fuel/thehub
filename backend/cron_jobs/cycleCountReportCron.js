@@ -79,7 +79,7 @@ const updateCycleCountCSO = async () => {
 
           // Safely extract and check closing inventory levels
           if (sqlSnapshot.qty !== undefined) {
-            updateFields.on_hand_qty = sqlSnapshot.qty;
+            updateFields.on_hand_at_count = sqlSnapshot.qty;
           }
 
           // Update product base retail price if it has updated on the POS system
