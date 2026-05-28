@@ -408,7 +408,7 @@ router.get('/item-bk', async (req, res) => {
     }
 
     const db = getPg();
-    console.log("Admin Panel: Fetching item book for site name:", site);
+    // console.log("Admin Panel: Fetching item book for site name:", site);
 
     // 1. Get Site details and Mongo categories simultaneously
     const [location, mongoCategories] = await Promise.all([
@@ -1778,6 +1778,99 @@ router.get('/daily-counts', async (req, res) => {
   } catch (err) {
     console.error(err);
     res.status(500).json({ message: "Failed to get daily counts." });
+  }
+});
+
+// Assuming you're using Knex, Prisma, or PG Client pool. Here is a standard SQL implementation:
+router.get('/v2/daily-counts', async (req, res) => {
+  try {
+    const { site, startDate, endDate } = req.query;
+    if (!site || !startDate || !endDate) {
+      return res.status(400).json({ message: "site, startDate, and endDate are required" });
+    }
+    const db = getPg();
+
+    const locationDoc = await Location.findOne({ stationName: site }).lean();
+    if (!locationDoc) {
+      return res.status(404).json({ success: false, message: `Location profile not found for site: ${site}` });
+    }
+    const siteMongoIdStr = locationDoc._id.toString();
+
+    // Pure dynamic calendar array generation without dealing with execution time zones
+    // dates come in as 'YYYY-MM-DD' text matching the `date` text column in cycle_count_instance
+    const startStr = startDate.toString();
+    const endStr = endDate.toString();
+
+    // Query both instances and join child components seamlessly 
+    // Resolving dynamic total counts matching custom packing specifications
+    const rows = await db('cycle_count_instance as cci')
+      .leftJoin('cycle_count_items as cci_items', 'cci.id', 'cci_items.instance_id')
+      .leftJoin('item_bk as ibk', 'cci_items.product_id', 'ibk.id')
+      .where('cci.site_mongo_id', siteMongoIdStr)
+      .whereBetween('cci.date', [startStr, endStr])
+      .select([
+        'cci.date as instance_date',
+        'cci_items.id as item_id',
+        'cci_items.count_completed',
+        'cci_items.foh',
+        'cci_items.boh',
+        'cci_items.foh_crt',
+        'cci_items.boh_crt',
+        'ibk.description as item_name',
+        'ibk.upc_barcode',
+        'ibk.pk_in_crt'
+      ]);
+
+    // Group the joined flat structure by date
+    const dailyMap = {};
+
+    // Seed all tracking calendar days in target view scope window
+    let current = DateTime.fromISO(startStr);
+    const targetEnd = DateTime.fromISO(endStr);
+    while (current <= targetEnd) {
+      dailyMap[current.toISODate()] = [];
+      current = current.plus({ days: 1 });
+    }
+
+    // Distribute results matching assigned layout
+    rows.forEach(row => {
+      if (dailyMap[row.instance_date] && row.item_id) {
+        // Run customized logic parsing matching inventory matrix structure
+        const baseQty = (row.foh ?? 0) + (row.boh ?? 0);
+        const pksInCrt = Number(row.pk_in_crt || 0);
+        const crtQty = (pksInCrt * (row.foh_crt ?? 0)) + (pksInCrt * (row.boh_crt ?? 0));
+
+        dailyMap[row.instance_date].push({
+          name: row.item_name || "Unknown Item",
+          upc_barcode: row.upc_barcode || "NO UPC",
+          totalQty: baseQty + crtQty,
+          completed: !!row.count_completed
+        });
+      }
+    });
+
+    // Structure raw metrics collection matching standard formats
+    const data = Object.entries(dailyMap).map(([date, items]) => {
+      const totalItems = items.length;
+      const completedItems = items.filter(i => i.completed).length;
+
+      // Percentage metrics block logic
+      const completionPercentage = totalItems > 0
+        ? Math.round((completedItems / totalItems) * 100)
+        : 0;
+
+      return {
+        date,
+        count: totalItems, // preserving legacy naming for dashboard compatibility layer
+        completionPercentage,
+        items
+      };
+    });
+
+    res.json({ site, data });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ message: "Failed to compile Postgres live metrics statistics." });
   }
 });
 

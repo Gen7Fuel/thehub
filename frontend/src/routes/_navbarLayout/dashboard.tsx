@@ -78,19 +78,21 @@ interface CycleCountItem {
   name: string;
   upc_barcode: string;
   totalQty: number;
+  completed: boolean; 
 }
 
 interface CycleCountDayData {
-  day: string;
-  count: number;
-  items: CycleCountItem[];
+  day: string;                  // Formatted as MM-DD
+  count: number;                // Total unique item rows matching instance 
+  completionPercentage: number; // calculated integer (0 - 100)
+  items: CycleCountItem[];      // Array of items evaluated for the calculation
 }
 
 interface ChartBarModalProps {
   data: CycleCountDayData | null;
   isOpen: boolean;
   onClose: () => void;
-}
+} 
 
 interface TransactionData {
   dayFull: string;    // full date string e.g., "2023-11-14"
@@ -159,33 +161,39 @@ export const ChartBarModal: React.FC<ChartBarModalProps> = ({ data, isOpen, onCl
       <DialogContent className="bg-white max-w-3xl w-full rounded-lg shadow-lg">
         <DialogHeader>
           <DialogTitle>{`Date: ${data.day}`}</DialogTitle>
-          <DialogDescription>{`Total Count: ${data.count}`}</DialogDescription>
+          <DialogDescription>
+            {`Total Unique Items: ${data.count} | Progress: ${data.completionPercentage}%`}
+          </DialogDescription>
         </DialogHeader>
 
         {data.items.length === 0 ? (
-          <div className="text-muted-foreground mt-4">No items</div>
+          <div className="text-muted-foreground mt-4 text-center py-6">No cycle items cataloged for this shift window.</div>
         ) : (
           <div className="mt-4 max-h-80 overflow-y-auto w-full">
             <table className="min-w-full table-fixed border border-slate-200 divide-y divide-slate-200 text-sm">
               <thead className="bg-slate-50 sticky top-0 z-10">
                 <tr>
-                  <th className="px-3 py-2 text-left font-medium w-1/2 max-w-[250px] truncate">
-                    Name
-                  </th>
-                  <th className="px-3 py-2 text-left font-medium w-1/4 max-w-[120px]">
-                    UPC
-                  </th>
-                  <th className="px-3 py-2 text-right font-medium w-1/4 max-w-[80px]">
-                    Qty
-                  </th>
+                  <th className="px-3 py-2 text-left font-medium w-1/2 max-w-[220px] truncate">Name</th>
+                  <th className="px-3 py-2 text-left font-medium w-1/4 max-w-[120px]">UPC</th>
+                  <th className="px-3 py-2 text-right font-medium w-1/4 max-w-[100px]">Qty</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-slate-200">
+              <tbody className="divide-y divide-slate-200 bg-white">
                 {data.items.map((item, idx) => (
-                  <tr key={idx}>
-                    <td className="px-3 py-2 truncate max-w-[250px]">{item.name}</td>
-                    <td className="px-3 py-2 max-w-[120px]">{item.upc_barcode}</td>
-                    <td className="px-3 py-2 text-right max-w-[80px]">{item.totalQty}</td>
+                  <tr key={idx} className={item.completed ? "bg-green-50/30" : ""}>
+                    <td className="px-3 py-2 truncate max-w-[220px] font-medium text-gray-900">{item.name}</td>
+                    <td className="px-3 py-2 max-w-[120px] font-mono text-gray-500">{item.upc_barcode}</td>
+                    <td className="px-3 py-2 text-right max-w-[100px] align-middle">
+                      {item.completed ? (
+                        <span className="font-mono font-bold text-gray-900">
+                          {Number(item.totalQty).toFixed(2)}
+                        </span>
+                      ) : (
+                        <span className="inline-block text-[11px] font-semibold text-amber-700 bg-amber-50 px-1.5 py-0.5 rounded border border-amber-200/60 whitespace-nowrap">
+                          Not Completed
+                        </span>
+                      )}
+                    </td>
                   </tr>
                 ))}
               </tbody>
@@ -329,7 +337,7 @@ function RouteComponent() {
   const [_orderRecs, setOrderRecs] = useState<Record<string, any[]>>({});
   const [_vendorNames, setVendorNames] = useState<Record<string, string>>({});
   const [_vendors, setVendors] = useState<any[]>([]);
-  const [dailyCounts, setDailyCounts] = useState<{ date: string, count: number, items: any }[]>([]);
+  const [dailyCounts, setDailyCounts] = useState<{ date: string, count: number, completionPercentage: number, items: any }[]>([]);
   const [selectedDay, setSelectedDay] = useState<CycleCountDayData | null>(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [selectedGrade, setSelectedGrade] = useState<string | null>(null);
@@ -591,7 +599,7 @@ function RouteComponent() {
         const timezone = locationData.timezone || 'UTC';
         setSiteTimezone(timezone);
         const dailyCountsPromise = fetchDailyCounts(
-          site, sevenDaysAgo.toISOString().slice(0, 10), today.toISOString().slice(0, 10), timezone,
+          site, sevenDaysAgo.toISOString().slice(0, 10), today.toISOString().slice(0, 10),
         );
 
         // Vendor names (runs in parallel with cycle counts + SQL)
@@ -1250,10 +1258,17 @@ function RouteComponent() {
   // Prepare chart data
   // ----------------------------
   // const chartData = dailyCounts.map(({ date, count }) => ({ day: date.slice(5), count }));
-  const chartData = dailyCounts.map(({ date, count, items }) => ({
-    day: date.slice(5), // or whatever format you like
-    count,
-    items: items ?? [], // default to empty array if missing
+  // const chartData = dailyCounts.map(({ date, count, items }) => ({
+  //   day: date.slice(5), // or whatever format you like
+  //   count,
+  //   items: items ?? [], // default to empty array if missing
+  // }));
+
+  const chartData = dailyCounts.map(({ date, count, completionPercentage, items }) => ({
+    day: date.slice(5), // YYYY-MM-DD -> MM-DD
+    count, // keeping baseline number tracks intact
+    completionPercentage, // newly injected data dimension 
+    items: items ?? [],
   }));
 
 
@@ -1561,52 +1576,40 @@ function RouteComponent() {
                           </CardHeader>
                           <CardContent>
                             <ChartContainer config={chartConfig}>
+                              {/* We pass completionPercentage as the core visualization data layer */}
                               <BarChart accessibilityLayer data={chartData}>
                                 <CartesianGrid vertical={false} />
                                 <XAxis dataKey="day" tickLine={false} axisLine={false} tickMargin={10} />
-                                <YAxis axisLine={false} tickLine={false} />
-                                {/* <Tooltip content={<CycleCountTooltip />} /> */}
-                                {/* <Bar
-                              dataKey="count"
-                              fill="var(--color-count)"
-                              radius={8}
-                              onClick={(data) => {
-                                setSelectedDay(data.payload as CycleCountDayData);
-                                setIsModalOpen(true);
-                              }}
-                            >
-                              <LabelList position="top" offset={12} className="fill-foreground" fontSize={12} />
-                            </Bar> */}
+                                <YAxis axisLine={false} tickLine={false} domain={[0, 100]} unit="%" />
                                 <Bar
-                                  dataKey="count"
+                                  dataKey="completionPercentage"
                                   radius={8}
                                   onClick={(data) => {
-                                    setSelectedDay(data.payload as CycleCountDayData);
+                                    setSelectedDay(data.payload);
                                     setIsModalOpen(true);
                                   }}
                                 >
                                   {chartData.map((entry, index) => (
                                     <Cell
                                       key={`cell-${index}`}
-                                      fill={entry.count === 20 ? "#22c55e" : "var(--color-count)"}
+                                      fill={entry.completionPercentage === 100 ? "#22c55e" : "#f97316"}
                                     />
                                   ))}
 
                                   <LabelList
                                     position="top"
                                     offset={12}
-                                    className="fill-foreground"
-                                    fontSize={12}
+                                    className="fill-foreground font-bold"
+                                    fontSize={11}
+                                    formatter={(value: number) => `${value}%`}
                                   />
                                 </Bar>
-
                               </BarChart>
-
                             </ChartContainer>
                           </CardContent>
                           <CardFooter className="flex-col items-start gap-2 text-sm">
                             <div className="text-muted-foreground leading-none">
-                              Showing cycle count entries per day for the selected range
+                              Showing verification compliance status percentages per day range.
                             </div>
                           </CardFooter>
                         </Card>
@@ -2032,9 +2035,17 @@ function RouteComponent() {
 // ----------------------------
 // Helper functions
 // ----------------------------
-const fetchDailyCounts = async (site: string, startDate: string, endDate: string, timezone: string) => {
-  const params = new URLSearchParams({ site, startDate, endDate, timezone });
-  return fetch(`/api/cycle-count/daily-counts?${params}`, {
+// const fetchDailyCounts = async (site: string, startDate: string, endDate: string, timezone: string) => {
+//   const params = new URLSearchParams({ site, startDate, endDate, timezone });
+//   return fetch(`/api/cycle-count/daily-counts?${params}`, {
+//     headers: { Authorization: `Bearer ${localStorage.getItem("token")}` },
+//   }).then(res => res.json());
+// };
+
+const fetchDailyCounts = async (site: string, startDate: string, endDate: string) => {
+  // Simplified parameters block omitting legacy timezone parameters logic completely
+  const params = new URLSearchParams({ site, startDate, endDate });
+  return fetch(`/api/cycle-count/v2/daily-counts?${params}`, {
     headers: { Authorization: `Bearer ${localStorage.getItem("token")}` },
   }).then(res => res.json());
 };

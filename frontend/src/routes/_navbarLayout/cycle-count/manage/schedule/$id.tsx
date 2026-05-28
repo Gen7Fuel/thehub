@@ -1,6 +1,6 @@
 import { memo, useMemo, useState, useEffect } from 'react'
 import React from 'react'
-import { createFileRoute, useNavigate } from '@tanstack/react-router'
+import { createFileRoute, useNavigate, Link } from '@tanstack/react-router'
 import {
   ChevronDown,
   ChevronRight,
@@ -628,7 +628,14 @@ function RouteComponent() {
         <div className="p-4 bg-slate-50 border border-slate-200 rounded-xl flex items-start gap-3 shadow-sm">
           <span className="p-1 rounded-md bg-slate-200 text-slate-700 text-xs font-bold uppercase shrink-0">Archive View</span>
           <p className="text-xs text-slate-600 leading-normal font-medium">
-            You are viewing an immutable historical entry record. For detailed information about consolidated final counts, operational adjustments, and inventory variances, please visit the <a href="/cycle-count/report" className="text-blue-600 font-bold hover:underline">Reports page</a>.
+            You are viewing an immutable historical entry record. For detailed information about consolidated final counts, operational adjustments, and inventory variances, please visit the{' '}
+            <Link
+              to="/cycle-count/report"
+              className="text-blue-600 font-bold hover:underline"
+            >
+              Reports page
+            </Link>
+            .
           </p>
         </div>
       ) : (

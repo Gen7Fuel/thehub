@@ -9,7 +9,7 @@ import { getSocket } from "@/lib/websocket";
 import { useAuth } from "@/context/AuthContext";
 
 
-export const Route = createFileRoute('/_navbarLayout/cycle-count/count')({
+export const Route = createFileRoute('/_navbarLayout/cycle-count/count-old')({
   component: RouteComponent,
 })
 
