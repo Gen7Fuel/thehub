@@ -1,6 +1,7 @@
 const express = require('express');
 const router = express.Router();
 const FleetCustomer = require('../models/FleetCustomer');
+const bcrypt = require('bcryptjs');
 
 // GET all fleet customers
 router.get('/', async (req, res) => {
@@ -130,6 +131,60 @@ router.get('/search/:query', async (req, res) => {
     }).sort({ name: 1 });
     
     res.json(customers);
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// PATCH - Set portal login credentials
+router.patch('/:id/credentials', async (req, res) => {
+  try {
+    const { username, password } = req.body;
+
+    if (!username || !username.trim() || !password || !password.trim()) {
+      return res.status(400).json({ error: 'Username and password are required' });
+    }
+
+    const salt = await bcrypt.genSalt(10);
+    const hashedPassword = await bcrypt.hash(password, salt);
+
+    const customer = await FleetCustomer.findByIdAndUpdate(
+      req.params.id,
+      {
+        username: username.trim().toLowerCase(),
+        password: hashedPassword
+      },
+      { new: true }
+    );
+
+    if (!customer) {
+      return res.status(404).json({ error: 'Customer not found' });
+    }
+
+    res.json(customer);
+  } catch (error) {
+    if (error.code === 11000) {
+      res.status(409).json({ error: 'Username already taken' });
+    } else {
+      res.status(500).json({ error: error.message });
+    }
+  }
+});
+
+// PATCH - Revoke portal credentials
+router.patch('/:id/revoke-credentials', async (req, res) => {
+  try {
+    const customer = await FleetCustomer.findByIdAndUpdate(
+      req.params.id,
+      { username: null, password: null },
+      { new: true }
+    );
+
+    if (!customer) {
+      return res.status(404).json({ error: 'Customer not found' });
+    }
+
+    res.json(customer);
   } catch (error) {
     res.status(500).json({ error: error.message });
   }
