@@ -19,7 +19,7 @@ function FuelPricingPanel() {
             Coming Soon
           </div>
           <p className="text-xs font-medium text-slate-500 leading-normal">
-            Users with administrative pricing access clearance profiles will be capable of transmitting open terminal updates directly via this pipeline interface execution.
+            Users with administrative pricing access clearance will be capable of transmitting fuel price updates directly via this pipeline interface.
           </p>
         </CardContent>
       </Card>

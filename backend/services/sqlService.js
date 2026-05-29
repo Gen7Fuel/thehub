@@ -480,6 +480,7 @@ async function getFuelPricingDate(date) {
             ,[Competitor Price]
             ,[C_Updated Date]
             ,[C_Updated Time]
+            ,[UpdatedAt]
       FROM [FUEL].[Fuel_Pricing] WHERE [Date_SK] = @date
     `;
 
