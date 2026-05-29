@@ -161,9 +161,10 @@ function EditGroupComponent() {
       navigate({ to: '/cycle-count/manage/group' })
     },
     onError: (error: any) => {
-      // Extract the smart error string from backend validations
       const serverMessage = error.response?.data?.message || "Failed to delete group template safely."
       setSubmitError(serverMessage)
+      // Optional: Pop an immediate window alert so the user catches it even if the dialog closes
+      alert(serverMessage)
     }
   })
 
