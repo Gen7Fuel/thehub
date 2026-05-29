@@ -1354,34 +1354,43 @@ router.put('/groups/:id', async (req, res) => {
 router.delete('/groups/:id', async (req, res) => {
   const db = getPg();
   const { id } = req.params;
+
+  // Format matching your text column layout (YYYY-MM-DD)
   const todayStr = new Date().toISOString().split('T')[0];
 
   try {
-    // 1. Check for active/pending future instances tied to this group filter
-    const activeInstance = await db('public.cycle_count_instances')
+    // 1. Check for active/upcoming instances using this group
+    // Explicitly scope table namespace public.cycle_count_instance
+    const activeInstance = await db('public.cycle_count_instance')
       .where({ group_id: id })
-      .andWhere('date', '>=', todayStr) // Protects active or un-started future instances
+      .andWhere('public.cycle_count_instance.date', '>=', todayStr)
+      // Optional safety check: only block if the instance is actively pending/running
+      // Remove or modify the line below if you want to block regardless of performance state
+      // .whereIn('status', ['pending', 'in_progress', 'active']) 
       .first();
 
     if (activeInstance) {
       return res.status(400).json({
-        message: `This group cannot be removed because it is linked to an active or upcoming cycle count instance scheduled for ${activeInstance.date || 'today'}. Please close or cancel that instance first.`
+        message: `This group cannot be deleted because it is assigned to an upcoming cycle count scheduled for ${activeInstance.date} (${activeInstance.day}).`
       });
     }
 
-    // 2. Soft-delete by setting the active flag to false
+    // 2. Perform the soft-delete update on your groups table
     const rowsUpdated = await db('public.cycle_count_groups')
       .where({ id })
       .update({ is_active: false });
 
     if (rowsUpdated === 0) {
-      return res.status(404).json({ message: "Group template not found" });
+      return res.status(404).json({ message: "Group template not found." });
     }
 
-    res.json({ message: "Group template removed successfully" });
+    res.json({ message: "Group template marked as inactive successfully." });
+
   } catch (err) {
-    console.error("Failed soft-deleting cycle count group:", err);
-    res.status(500).json({ message: "Server error removing group template" });
+    console.error("Error executing cycle count group deletion sequence:", err);
+    res.status(500).json({
+      message: "Internal server error processing the template removal rules."
+    });
   }
 });
 
