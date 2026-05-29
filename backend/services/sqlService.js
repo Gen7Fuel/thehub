@@ -221,7 +221,7 @@ async function getOnHandBulkCSOData(siteName, gtins = []) {
   if (!gtins.length) return {};
   try {
     const pool = await getPool();
-    
+
     // Sanitize and wrap strings safely for cross-db query mapping
     const list = gtins.map(u => `'${u.replace(/'/g, "''")}'`).join(",");
 
@@ -441,6 +441,56 @@ async function getCategoryNumbersFromSQL() {
     `;
     const request = pool.request();
     const result = await request.query(sql);
+    return result;
+  } catch (err) {
+    console.error("SQL error:", err);
+    return { recordset: [] };
+  }
+}
+
+// /app/services/sqlService.js
+
+async function getFuelPricingDate(date) {
+  const pool = await getPool();
+
+  try {
+    // 1. Rename this variable from 'sql' to 'queryText' to avoid the scope collision
+    const queryText = `
+      SELECT [Station_SK]
+            ,[Date_SK]
+            ,[Provider]
+            ,[Location]
+            ,[Type]
+            ,[Effective Date]
+            ,[T-1's Rack]
+            ,[Today's Rack]
+            ,[Prev Close]
+            ,[T-1 Landed Cost]
+            ,[Landed Cost]
+            ,[Rec Price]
+            ,[Low]
+            ,[T-1 Low]
+            ,[Avg]
+            ,[T-1 Avg]
+            ,[High]
+            ,[T-1 High]
+            ,[Competitor Type]
+            ,[Competitor]
+            ,[Competitor Address]
+            ,[Competitor Price]
+            ,[C_Updated Date]
+            ,[C_Updated Time]
+            ,[UpdatedAt]
+      FROM [FUEL].[Fuel_Pricing] WHERE [Date_SK] = @date
+    `;
+
+    const request = pool.request();
+
+    // 2. Now 'sql.VarChar' correctly references the global mssql module instance
+    request.input("date", sql.VarChar, date);
+
+    // 3. Pass the renamed query variable into the driver execution method
+    const result = await request.query(queryText);
     return result;
   } catch (err) {
     console.error("SQL error:", err);
@@ -1081,5 +1131,6 @@ module.exports = {
   lookupAcademyEmployee,
   getFullItemBackupData,
   getSanitizationBackupData,
+  getFuelPricingDate,
   getOnHandBulkCSOData
 };

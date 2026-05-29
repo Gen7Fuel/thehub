@@ -1,16 +1,20 @@
 const mongoose = require("mongoose");
+const bcrypt = require("bcryptjs");
 
-/**
- * FleetCustomer Schema
- * Represents a customer associated with a fleet.
- * Each document stores the customer's name and email.
- */
 const fleetCustomerSchema = new mongoose.Schema({
-  name: { type: String, required: true },   // Customer's name
-  email: { type: String, required: true, unique: false }, // Customer's email address (not unique)
+  name:     { type: String, required: true },
+  email:    { type: String, required: true, unique: false },
+  username: { type: String, unique: true, sparse: true, lowercase: true, trim: true },
+  password: { type: String },
+  isActive: { type: Boolean, default: true },
 }, {
-  timestamps: true // Automatically adds createdAt and updatedAt fields
+  timestamps: true
 });
 
-// Export the FleetCustomer model based on the schema
+fleetCustomerSchema.pre("save", async function () {
+  if (!this.isModified("password") || !this.password) return;
+  const salt = await bcrypt.genSalt(10);
+  this.password = await bcrypt.hash(this.password, salt);
+});
+
 module.exports = mongoose.model("FleetCustomer", fleetCustomerSchema);
