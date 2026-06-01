@@ -19,7 +19,7 @@ function RouteComponent() {
 
   // Determine if each tab is active
   // const isInputActive = matchRoute({ to: '/cycle-count' });
-  const isCountActive = matchRoute({ to: '/cycle-count/count' });
+  const isCountActive = matchRoute({ to: '/cycle-count' });
   const isInventoryActive = matchRoute({ to: '/cycle-count/inventory' });
   // const isConsoleActive = matchRoute({ to: '/cycle-count/lookup' });
   const isReportActive = matchRoute({ to: '/cycle-count/report' });
@@ -45,7 +45,7 @@ function RouteComponent() {
           </Button>
         </Link> */}
         {/* Count tab button */}
-        <Link to="/cycle-count/count" activeOptions={{ exact: true }}>
+        <Link to="/cycle-count" activeOptions={{ exact: true }}>
           <Button
             {...(!isCountActive && { variant: 'outline' } as object)}
             className="rounded-r-none"
@@ -71,12 +71,11 @@ function RouteComponent() {
         <Link
           to="/cycle-count/report"
           activeOptions={{ exact: true }}
-          search={{ site: user?.location || '', category: '' }}
         >
           <Button
             {...(!isReportActive && { variant: 'outline' } as object)}
             // className={access.component_cycle_count_console ? 'rounded-none' : 'rounded-l-none'} //markpoint
-            className={access?.cycleCount?.lookup ? 'rounded-none' : 'rounded-l-none'}
+            className={access?.cycleCount?.manageCount ? 'rounded-none' : 'rounded-l-none'}
           >
             Report
           </Button>

@@ -1,10 +1,8 @@
 import React from 'react'
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { render, screen, waitFor } from '@testing-library/react'
+import { render, screen, waitFor, fireEvent } from '@testing-library/react'
 
-// ─── Hoisted mutable state ─────────────────────────────────────────────────────
-
-const { mockNavigate, mockUseLoaderData, mockUseSearch, mockUseAuth } = vi.hoisted(() => {
+const { mockNavigate, mockUseLoaderData, mockUseSearch, mockUseAuth, mockUseSite, mockUseQuery } = vi.hoisted(() => {
   const mockUseAuth = vi.fn().mockReturnValue({
     user: { id: 'user-1', location: 'Rankin' },
   })
@@ -14,10 +12,16 @@ const { mockNavigate, mockUseLoaderData, mockUseSearch, mockUseAuth } = vi.hoist
     mockUseLoaderData: vi.fn().mockReturnValue({}),
     mockUseSearch: vi.fn().mockReturnValue({ site: 'Rankin', category: '' }),
     mockUseAuth,
+    mockUseSite: vi.fn().mockReturnValue({ selectedSite: 'Rankin', setSelectedSite: vi.fn() }),
+    mockUseQuery: vi.fn().mockReturnValue({
+      data: undefined,
+      isLoading: false,
+      isSuccess: false,
+      isFetching: false,
+      refetch: vi.fn(),
+    }),
   }
 })
-
-// ─── Module mocks ──────────────────────────────────────────────────────────────
 
 vi.mock('@tanstack/react-router', async (importOriginal) => {
   const actual = await importOriginal<typeof import('@tanstack/react-router')>()
@@ -30,16 +34,26 @@ vi.mock('@tanstack/react-router', async (importOriginal) => {
       useSearch: mockUseSearch,
     }),
     useNavigate: () => mockNavigate,
+    useLocation: () => ({ pathname: '/cycle-count/manage/schedule' }),
     Link: ({ to, children }: any) => <a href={to}>{children}</a>,
   }
 })
+
+vi.mock('axios', () => ({
+  default: {
+    get: vi.fn().mockResolvedValue({ data: {} }),
+    post: vi.fn().mockResolvedValue({ data: {} }),
+    put: vi.fn().mockResolvedValue({ data: {} }),
+    delete: vi.fn().mockResolvedValue({ data: {} }),
+  },
+}))
 
 vi.mock('@/context/AuthContext', () => ({
   useAuth: () => mockUseAuth(),
 }))
 
 vi.mock('@/context/SiteContext', () => ({
-  useSite: () => ({ selectedSite: '', setSelectedSite: vi.fn() }),
+  useSite: () => mockUseSite(),
 }))
 
 vi.mock('@/lib/websocket', () => ({
@@ -63,11 +77,25 @@ vi.mock('@/components/custom/locationPicker', () => ({
   ),
 }))
 
+vi.mock('@/components/custom/datePicker', () => ({
+  DatePicker: () => <button data-testid="date-picker">Date</button>,
+}))
+
 vi.mock('@/components/custom/sitePicker', () => ({
   SitePicker: ({ onValueChange }: any) => (
     <button data-testid="site-picker" onClick={() => onValueChange('Rankin')}>
       Site
     </button>
+  ),
+}))
+
+vi.mock('@/components/custom/CycleCountTableGroup', () => ({
+  default: ({ items }: any) => (
+    <div data-testid="cycle-count-table-group">
+      {items.map((item: any) => (
+        <div key={item.entryId || item._id || item.id}>{item.name}</div>
+      ))}
+    </div>
   ),
 }))
 
@@ -82,23 +110,26 @@ vi.mock('@/components/custom/TableWithInputs', () => ({
 }))
 
 vi.mock('@/components/custom/PasswordProtection', () => ({
-  PasswordProtection: ({ isOpen }: any) =>
-    isOpen ? <div data-testid="password-dialog">Password Required</div> : null,
+  PasswordProtection: ({ isOpen, onSuccess }: any) =>
+    isOpen ? (
+      <div data-testid="password-dialog">
+        Password Required
+        <button onClick={onSuccess}>Unlock</button>
+      </div>
+    ) : null,
 }))
 
-vi.mock('@tanstack/react-query', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('@tanstack/react-query')>()
-  return {
-    ...actual,
-    useQuery: vi.fn().mockReturnValue({
-      data: undefined,
-      isLoading: false,
-      isSuccess: false,
-      isFetching: false,
-    }),
-    useQueryClient: vi.fn().mockReturnValue({ prefetchQuery: vi.fn() }),
-  }
-})
+vi.mock('@tanstack/react-query', () => ({
+  useQuery: (options: any) => mockUseQuery(options),
+  useMutation: vi.fn().mockReturnValue({
+    mutate: vi.fn(),
+    isPending: false,
+  }),
+  useQueryClient: vi.fn().mockReturnValue({
+    prefetchQuery: vi.fn(),
+    invalidateQueries: vi.fn(),
+  }),
+}))
 
 vi.mock('@/queries/inventory', () => ({
   inventoryQueries: {
@@ -117,14 +148,12 @@ vi.mock('xlsx', () => ({
   writeFile: vi.fn(),
 }))
 
-// ─── Component imports (after mocks) ─────────────────────────────────────────
-
 import { Route as IndexRoute } from '../cycle-count/index'
-import { Route as CountRoute } from '../cycle-count/count'
-import { Route as LookupRoute } from '../cycle-count/lookup'
+import { Route as ReportRoute } from '../cycle-count/report'
 import { Route as InventoryRoute } from '../cycle-count/inventory'
-
-// ─── Helpers ──────────────────────────────────────────────────────────────────
+import { Route as GroupNewRoute } from '../cycle-count/manage/group/new'
+import { Route as ScheduleNewRoute } from '../cycle-count/manage/schedule/new'
+import { Route as ItemBkRoute } from '../cycle-count/manage/item-bk'
 
 const renderWithSuspense = (ui: React.ReactElement) =>
   render(ui, {
@@ -133,160 +162,134 @@ const renderWithSuspense = (ui: React.ReactElement) =>
     ),
   })
 
-const CycleCountIndex = (IndexRoute as any).component as React.ComponentType
-const CycleCountPage = (CountRoute as any).component as React.ComponentType
-const LookupPage = (LookupRoute as any).component as React.ComponentType
-const InventoryPage = (InventoryRoute as any).component as React.ComponentType
+const getRouteComponent = (route: any) => (route.component || route.options?.component) as React.ComponentType
 
-/** Build a successful fetch mock response. */
+const CycleCountIndex = getRouteComponent(IndexRoute)
+const ReportPage = getRouteComponent(ReportRoute)
+const InventoryPage = getRouteComponent(InventoryRoute)
+const GroupNewPage = getRouteComponent(GroupNewRoute)
+const ScheduleNewPage = getRouteComponent(ScheduleNewRoute)
+const ItemBkPage = getRouteComponent(ItemBkRoute)
+
 const makeOkFetch = (data: any) =>
   vi.fn().mockResolvedValue({ status: 200, ok: true, json: () => Promise.resolve(data) })
 
-// ─── Cycle Count Index — index.tsx ────────────────────────────────────────────
-
-describe('Cycle Count Index — index.tsx', () => {
-  beforeEach(() => {
-    vi.clearAllMocks()
+beforeEach(() => {
+  vi.clearAllMocks()
+  localStorage.setItem('token', 'test-token')
+  sessionStorage.clear()
+  mockUseAuth.mockReturnValue({ user: { id: 'user-1', location: 'Rankin' } })
+  mockUseSite.mockReturnValue({ selectedSite: 'Rankin', setSelectedSite: vi.fn() })
+  mockUseQuery.mockReturnValue({
+    data: undefined,
+    isLoading: false,
+    isSuccess: false,
+    isFetching: false,
+    refetch: vi.fn(),
   })
+  global.fetch = makeOkFetch({ items: [] })
+})
 
-  it('redirects to /cycle-count/count on mount', async () => {
+describe('Cycle Count Index - active count page', () => {
+  it('renders the new count page instead of redirecting', async () => {
     renderWithSuspense(<CycleCountIndex />)
-    await waitFor(
-      () => expect(mockNavigate).toHaveBeenCalledWith({ to: '/cycle-count/count' }),
-      { timeout: 5000 }
-    )
-  })
-})
 
-// ─── Cycle Count Page — count.tsx ─────────────────────────────────────────────
-
-describe('Cycle Count Page — count.tsx', () => {
-  beforeEach(() => {
-    vi.clearAllMocks()
-    localStorage.setItem('token', 'test-token')
-    // Default: empty items, resolves immediately
-    global.fetch = makeOkFetch({ items: [], flaggedItems: [] })
+    await waitFor(() => expect(screen.getByText(/cycle count/i)).toBeInTheDocument())
+    expect(mockNavigate).not.toHaveBeenCalledWith({ to: '/cycle-count/count' })
   })
 
-  it('renders the "Today\'s Cycle Count Items" heading', async () => {
-    renderWithSuspense(<CycleCountPage />)
-    await waitFor(
-      () => expect(screen.getByText(/today's cycle count items/i)).toBeInTheDocument(),
-      { timeout: 5000 }
-    )
-  })
+  it('renders the LocationPicker and count action buttons', async () => {
+    renderWithSuspense(<CycleCountIndex />)
 
-  it('renders the LocationPicker', async () => {
-    renderWithSuspense(<CycleCountPage />)
     await waitFor(() => expect(screen.getByTestId('location-picker')).toBeInTheDocument())
+    expect(screen.getByRole('button', { name: /expand all/i })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /collapse all/i })).toBeInTheDocument()
   })
 
-  it('shows "Loading..." while the fetch is in-flight', async () => {
-    global.fetch = vi.fn().mockReturnValue(new Promise(() => {})) // never resolves
-    renderWithSuspense(<CycleCountPage />)
-    await waitFor(() => expect(screen.getByText(/loading/i)).toBeInTheDocument())
+  it('shows the tablet loading state while daily items are loading', async () => {
+    global.fetch = vi.fn().mockReturnValue(new Promise(() => {}))
+
+    renderWithSuspense(<CycleCountIndex />)
+
+    await waitFor(() => expect(screen.getByText(/loading tablet view/i)).toBeInTheDocument())
   })
 
-  it('shows "No items found for this site" when the items list is empty', async () => {
-    renderWithSuspense(<CycleCountPage />)
-    await waitFor(() =>
-      expect(screen.getByText(/no items found for this site/i)).toBeInTheDocument()
-    )
-  })
-
-  it('renders items inside TableWithInputs when items are present', async () => {
-    global.fetch = makeOkFetch({
-      items: [{ _id: 'i1', name: 'Milk 1L', foh: 0, boh: 0, updatedAt: '2026-03-10T12:00:00Z' }],
-      flaggedItems: [],
-    })
-    renderWithSuspense(<CycleCountPage />)
-    await waitFor(() => expect(screen.getByTestId('table-with-inputs')).toBeInTheDocument())
-  })
-
-  it('shows the "Flagged Items" section when flagged items exist', async () => {
-    global.fetch = makeOkFetch({
-      items: [],
-      flaggedItems: [{ _id: 'f1', name: 'Flagged Item', foh: 0, boh: 0, updatedAt: '2026-03-10T12:00:00Z' }],
-    })
-    renderWithSuspense(<CycleCountPage />)
-    await waitFor(() => expect(screen.getByText(/flagged items/i)).toBeInTheDocument())
-  })
-
-  it('navigates to /no-access when fetch returns 403', async () => {
+  it('navigates to /no-access when daily items returns 403', async () => {
     global.fetch = vi.fn().mockResolvedValue({ status: 403, ok: false, json: () => Promise.resolve({}) })
-    renderWithSuspense(<CycleCountPage />)
-    await waitFor(() =>
-      expect(mockNavigate).toHaveBeenCalledWith({ to: '/no-access' })
-    )
+
+    renderWithSuspense(<CycleCountIndex />)
+
+    await waitFor(() => expect(mockNavigate).toHaveBeenCalledWith({ to: '/no-access' }))
   })
 })
 
-// ─── Lookup Page — lookup.tsx ─────────────────────────────────────────────────
+describe('Cycle Count Report - report.tsx', () => {
+  it('shows password protection before report access is granted', async () => {
+    renderWithSuspense(<ReportPage />)
 
-describe('Cycle Count Lookup — lookup.tsx', () => {
-  beforeEach(() => {
-    vi.clearAllMocks()
-    localStorage.setItem('token', 'test-token')
-    global.fetch = vi.fn()
+    await waitFor(() => expect(screen.getByTestId('password-dialog')).toBeInTheDocument())
   })
 
-  it('renders the UPC input', async () => {
-    renderWithSuspense(<LookupPage />)
-    await waitFor(
-      () => expect(screen.getByPlaceholderText(/enter upc/i)).toBeInTheDocument(),
-      { timeout: 5000 }
-    )
-  })
+  it('renders the new analytics report after access is granted', async () => {
+    renderWithSuspense(<ReportPage />)
 
-  it('renders the LocationPicker', async () => {
-    renderWithSuspense(<LookupPage />)
-    await waitFor(() => expect(screen.getByTestId('location-picker')).toBeInTheDocument())
-  })
+    fireEvent.click(await screen.findByRole('button', { name: /unlock/i }))
 
-  it('renders the "Lookup" submit button', async () => {
-    renderWithSuspense(<LookupPage />)
-    await waitFor(() =>
-      expect(screen.getByRole('button', { name: /lookup/i })).toBeInTheDocument()
-    )
-  })
-
-  it('displays item details after a successful lookup', async () => {
-    global.fetch = makeOkFetch({ name: 'Milk 1L', category: 'Dairy', foh: 5, boh: 3, active: true, inventoryExists: true })
-    renderWithSuspense(<LookupPage />)
-
-    // Simulate entering a UPC and submitting
-    const input = await waitFor(() => screen.getByPlaceholderText(/enter upc/i))
-    const button = screen.getByRole('button', { name: /lookup/i })
-
-    input.setAttribute('value', '012345678901')
-    button.click()
-
-    // Wait for the result to appear — but since input needs a change event, just verify fetch mock works
-    // The button click with empty input won't submit (required field)
-    // Instead verify the result block appears by directly triggering fetch
-    global.fetch = makeOkFetch({ name: 'Milk 1L', category: 'Dairy', foh: 5, boh: 3, active: true, inventoryExists: true })
-    // (covered by the next test — the form submission path)
-  })
-
-  it('navigates to /no-access when lookup returns 403', async () => {
-    global.fetch = vi.fn().mockResolvedValue({ status: 403, ok: false, json: () => Promise.resolve({}) })
-    renderWithSuspense(<LookupPage />)
-
-    const input = await waitFor(() => screen.getByPlaceholderText(/enter upc/i))
-    // Trigger a form submit with a UPC value via fireEvent would require fireEvent import
-    // Covered structurally — the navigate branch is reachable
-    expect(input).toBeInTheDocument()
+    await waitFor(() => expect(screen.getByText(/cycle count analytics/i)).toBeInTheDocument())
+    expect(screen.getByTestId('date-picker')).toBeInTheDocument()
+    expect(screen.getByTestId('location-picker')).toBeInTheDocument()
+    expect(screen.getByText(/reconciled core matrix/i)).toBeInTheDocument()
+    expect(screen.getByText(/incomplete counts/i)).toBeInTheDocument()
   })
 })
 
-// ─── Inventory Page — inventory.tsx ──────────────────────────────────────────
+describe('Cycle Count Manage - group pages', () => {
+  it('renders the create group form', async () => {
+    mockUseQuery.mockImplementation((options: any) => {
+      if (options?.queryKey?.[0] === 'filterable-columns') {
+        return { data: ['vendor_name', 'category_id', 'department', 'grade'], isLoading: false, refetch: vi.fn() }
+      }
+      return { data: { values: [], isCategory: false }, isLoading: false, refetch: vi.fn() }
+    })
 
-describe('Cycle Count Inventory — inventory.tsx', () => {
-  beforeEach(() => {
-    vi.clearAllMocks()
-    sessionStorage.clear()
+    renderWithSuspense(<GroupNewPage />)
+
+    await waitFor(() => expect(screen.getByText(/create cycle count group/i)).toBeInTheDocument())
+    expect(screen.getByLabelText(/group name/i)).toBeInTheDocument()
+    expect(screen.getByText(/selected filtering rules/i)).toBeInTheDocument()
   })
+})
 
+describe('Cycle Count Manage - schedule pages', () => {
+  it('renders the create schedule form', async () => {
+    mockUseQuery.mockReturnValue({
+      data: { groups: [{ id: 1, name: 'Beverages', filter_column: 'category_id', allowedValues: ['10'] }] },
+      isLoading: false,
+      refetch: vi.fn(),
+    })
+
+    renderWithSuspense(<ScheduleNewPage />)
+
+    await waitFor(() => expect(screen.getByText(/create inventory schedule/i)).toBeInTheDocument())
+    expect(screen.getByText(/drafting configuration node/i)).toBeInTheDocument()
+    expect(screen.getByText(/target count date/i)).toBeInTheDocument()
+  })
+})
+
+describe('Cycle Count Manage - item book', () => {
+  it('renders the item book toolbar and empty state', async () => {
+    global.fetch = makeOkFetch({ items: [] })
+
+    renderWithSuspense(<ItemBkPage />)
+
+    await waitFor(() => expect(screen.getByPlaceholderText(/search description or upc/i)).toBeInTheDocument())
+    expect(screen.getByText(/filters/i)).toBeInTheDocument()
+    expect(screen.getByText(/export excel/i)).toBeInTheDocument()
+    expect(screen.getByText(/no matching items found/i)).toBeInTheDocument()
+  })
+})
+
+describe('Cycle Count Inventory - inventory.tsx', () => {
   it('shows the password dialog when no session access has been granted', async () => {
     renderWithSuspense(<InventoryPage />)
     await waitFor(
@@ -303,3 +306,8 @@ describe('Cycle Count Inventory — inventory.tsx', () => {
     )
   })
 })
+
+// Retired pages intentionally left without active coverage while production testing continues:
+// - ../cycle-count/count-old
+// - ../cycle-count/report-old
+// - ../cycle-count/lookup
