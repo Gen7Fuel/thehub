@@ -159,19 +159,27 @@ function App() {
               {access?.fuelManagement?.value && (
                 <NavButton 
                   to="/fuel-management/workspace" 
-                  label="Fuel Mgmt" 
+                  label="Fuel Order Mgmt" 
                   icon={Droplets} 
                   theme="sky" 
                   search={{ site: user?.location || '' }} 
                 />
               )}
-              {access?.fuelPricing?.value && (
+              {access?.fuelPricing?.setFuelPrice && (
                 <NavButton 
                   to="/fuel-pricing" 
                   label="Fuel Pricing" 
                   icon={Coins} 
                   theme="sky" 
                   search={{ site: user?.location || '' }} 
+                />
+              )}
+              {access?.fuelPricing?.manage && (
+                <NavButton 
+                  to="/fuel-price-management" 
+                  label="Fuel Price Mgmt" 
+                  icon={Calculator}
+                  theme="sky" 
                 />
               )}
             </Section>

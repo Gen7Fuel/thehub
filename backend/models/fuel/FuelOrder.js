@@ -5,6 +5,12 @@ const StatusHistorySchema = new mongoose.Schema({
   timestamp: { type: Date }                         // When the status was set
 });
 
+const CommentSchema = new mongoose.Schema({
+  text: { type: String, required: true },
+  author: { type: String },
+  timestamp: { type: Date, default: Date.now }
+});
+
 const fuelOrderSchema = new mongoose.Schema({
   poNumber: { type: String, unique: true, required: true },
   orderDate: { type: Date, default: Date.now },
@@ -32,6 +38,10 @@ const fuelOrderSchema = new mongoose.Schema({
     type: [StatusHistorySchema],
     default: [{ status: "Created", timestamp: new Date() }]
   },
+  comments: {
+    type: [CommentSchema],
+    default: []
+  }
 }, {
   timestamps: true // Adds createdAt and updatedAt automatically
 });

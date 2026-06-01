@@ -548,6 +548,25 @@ async function getFuelInventoryReportCurrentDay() {
   }
 }
 
+async function getFuelSupplierDiscounts() {
+  try {
+    const pool = await getPool();
+    const result = await pool.request().query(`
+      SELECT [Supplier Code]
+            ,[ Supplier Item]
+            ,[Inventory Item]
+            ,[Discounts]
+            ,[Updated At]
+      FROM [FUEL].[TEST_SupplierDiscounts]
+    `);
+    await sql.close();
+    return result.recordset;
+  } catch (err) {
+    console.error('SQL error:', err);
+    return [];
+  }
+}
+
 /**
  * Fetch GTIN -> UPC list for items marked inactive on account.
  * @param {string[]} gtins
@@ -1132,5 +1151,6 @@ module.exports = {
   getFullItemBackupData,
   getSanitizationBackupData,
   getFuelPricingDate,
-  getOnHandBulkCSOData
+  getOnHandBulkCSOData,
+  getFuelSupplierDiscounts,
 };

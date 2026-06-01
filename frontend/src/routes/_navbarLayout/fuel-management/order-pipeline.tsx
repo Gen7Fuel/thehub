@@ -6,7 +6,7 @@ import axios from 'axios';
 import { format, addDays, startOfDay, isAfter, isBefore } from 'date-fns';
 import {
   ChevronLeft, ChevronRight, Filter, ArrowRight,
-  MapPin, ClipboardList, Eye, Clock, TrendingDown, Droplets
+  MapPin, ClipboardList, Eye, Clock, TrendingDown, Droplets, Loader2
 } from 'lucide-react';
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -34,12 +34,13 @@ export function OrderPipelineComponent() {
   const [provinceSearch, setProvinceSearch] = useState("");
 
   // --- 2. DATA FETCHING ---
-  const { data: locations = [] } = useQuery({
+  const { data: locations = [], isLoading: isLocationsLoading } = useQuery({
     queryKey: ['all-locations-pipeline'],
     queryFn: async () => {
       const res = await axios.get('/api/fuel-station-tanks/all-locations', authHeader);
       return res.data;
-    }
+    },
+    retry: 2,
   });
 
   // --- 3. MEMOIZED DATA ---
@@ -99,7 +100,8 @@ export function OrderPipelineComponent() {
                 {[
                   { label: 'Created', color: 'bg-yellow-500' },
                   { label: 'In Transit', color: 'bg-blue-600' },
-                  { label: 'Delivered', color: 'bg-green-600' }
+                  { label: 'Delivered', color: 'bg-green-600' },
+                  { label: 'Cancelled', color: 'bg-red-600' },
                 ].map(status => (
                   <div key={status.label} className="flex items-center gap-2">
                     <div className={`w-3 h-3 rounded-full ${status.color} ring-4 ring-white shadow-sm`} />
@@ -200,7 +202,12 @@ export function OrderPipelineComponent() {
 
       {/* PIPELINE GRID */}
       <div className="p-6">
-        {activeSites.length === 0 ? (
+        {isLocationsLoading ? (
+          <div className="flex flex-col items-center justify-center h-64 text-slate-300">
+            <Loader2 className="h-10 w-10 mb-4 animate-spin opacity-40" />
+            <p className="font-bold italic">Loading site pipelines...</p>
+          </div>
+        ) : activeSites.length === 0 ? (
           <div className="flex flex-col items-center justify-center h-64 text-slate-300">
             <MapPin className="h-16 w-16 mb-2 opacity-20" />
             <p className="font-bold italic">Select a province to view site pipelines</p>
@@ -231,13 +238,15 @@ function PipelineBlock({ site, date }: { site: any; date: Date }) {
   // 1. FORMAT AS STRING (Avoids .toISOString() shifting dates for UTC stakeholders)
   const selectedDateStr = format(date, 'yyyy-MM-dd');
 
-  const { data: tankData } = useQuery({
+  const { data: tankData, isLoading: isTanksLoading, isError: isTanksError, isFetching: isTanksFetching } = useQuery({
     queryKey: ['pipeline-tanks', site._id, selectedDateStr],
     queryFn: async () => {
       // Send the string, exactly like we do in StationStrip
       const res = await axios.get(`/api/fuel-station-tanks/station/${site._id}?date=${selectedDateStr}`, authHeader);
       return res.data;
-    }
+    },
+    enabled: !!site?._id,
+    retry: 2,
   });
 
   // 2. SERVER-DRIVEN DATE LOGIC
@@ -276,13 +285,15 @@ function PipelineBlock({ site, date }: { site: any; date: Date }) {
     return summary;
   }, [tankData]);
 
-  const { data: orders = [] } = useQuery({
+  const { data: orders = [], isLoading: isOrdersLoading, isError: isOrdersError, isFetching: isOrdersFetching } = useQuery({
     queryKey: ['pipeline-orders', site._id, selectedDateStr],
     queryFn: async () => {
       // Use the string dateParam to match the Workspace behavior
       const res = await axios.get(`/api/fuel-orders/workspace-orders?stationId=${site._id}&date=${selectedDateStr}`, authHeader);
       return res.data;
-    }
+    },
+    enabled: !!site?._id,
+    retry: 2,
   });
 
   // Helper to get the YYYY-MM-DD string without timezone shifting
@@ -346,7 +357,15 @@ function PipelineBlock({ site, date }: { site: any; date: Date }) {
 
         {/* GRADE INVENTORY - SORTED 2x2 GRID WITH RISK BORDERS */}
         <div className="grid grid-cols-2 gap-2 mb-5">
-          {sortOrder
+          {isTanksLoading ? (
+            <div className="col-span-2 h-[178px] flex items-center justify-center bg-slate-50 rounded-2xl border border-dashed border-slate-200">
+              <Loader2 className="h-5 w-5 animate-spin text-slate-300" />
+            </div>
+          ) : isTanksError ? (
+            <div className="col-span-2 h-[178px] flex items-center justify-center bg-red-50 rounded-2xl border border-dashed border-red-100 text-[10px] font-bold uppercase text-red-400">
+              Unable to load tank data
+            </div>
+          ) : sortOrder
             .filter(gradeName => gradeSummary[gradeName])
             .map(gradeName => {
               const data = gradeSummary[gradeName] || { sales: 0, closing: 0, min: 0, max: 0, total: 0 };
@@ -421,10 +440,17 @@ function PipelineBlock({ site, date }: { site: any; date: Date }) {
             <span className="text-[10px] font-bold bg-slate-100 text-slate-600 px-2 py-0.5 rounded-full">
               {orders.length} Records
             </span>
+            {(isOrdersFetching || isTanksFetching) && <Loader2 className="h-3.5 w-3.5 animate-spin text-indigo-500" />}
           </div>
 
           <div className="h-[180px] overflow-y-auto custom-scrollbar pr-1 pb-0 space-y-2">
-            {orders.length === 0 ? (
+            {isOrdersLoading ? (
+              [1, 2].map((i) => <div key={i} className="h-16 w-full bg-slate-50 animate-pulse rounded-xl border border-slate-100" />)
+            ) : isOrdersError ? (
+              <div className="h-full flex flex-col items-center justify-center text-[10px] text-red-400 italic bg-red-50 rounded-xl border border-dashed border-red-100 p-4 text-center">
+                Unable to load orders for this date
+              </div>
+            ) : orders.length === 0 ? (
               <div className="h-full flex flex-col items-center justify-center text-[10px] text-slate-400 italic bg-slate-50 rounded-xl border border-dashed border-slate-200 p-4 text-center">
                 No activity for this date
               </div>
