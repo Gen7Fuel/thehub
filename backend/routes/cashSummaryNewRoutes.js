@@ -9,7 +9,7 @@ const Lottery = LotteryModule?.Lottery || LotteryModule?.default || LotteryModul
 const { DateTime } = require('luxon')
 const { parseSftReport } = require('../utils/parseSftReport')
 const { dateFromYMDLocal } = require('../utils/dateUtils')
-const { sendEmail } = require('../utils/emailService')
+const { emailQueue } = require('../queues/emailQueue')
 const { generateCashSummaryPdf } = require('../utils/cashSummaryPdf')
 const { generateShiftReportsPdf } = require('../utils/shiftReportsPdf')
 const { generateLotteryImagesPdf } = require('../utils/lotteryImagesPdf')
@@ -1106,13 +1106,19 @@ router.post('/submit/to/safesheet', async (req, res) => {
           if (site === 'Oliver' || site === 'Osoyoos') {
             cc.push('ZBaptiste@oib.ca');
           }
-          await sendEmail({
+          const serializedAttachments = attachments.map((att) => ({
+            filename: att.filename,
+            content: Buffer.isBuffer(att.content) ? att.content.toString('base64') : att.content,
+            encoding: 'base64',
+            contentType: att.contentType,
+          }))
+          await emailQueue.add('sendCashSummaryEmail', {
             to: CASH_SUMMARY_EMAILS.join(','),
             cc,
             // to: 'daksh@gen7fuel.com',
             subject: `Daily Report – ${site} – ${date}`,
             text: `Attached are the Cash Summary${shiftReportsPdf ? ', Shift Reports' : ''}${depositSlip ? ' and Bank Deposit Slip' : ''} for ${site} on ${date}.`,
-            attachments,
+            attachments: serializedAttachments,
           })
 
           console.log(

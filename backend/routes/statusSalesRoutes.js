@@ -1,6 +1,7 @@
 const express = require('express');
 const StatusCustomer = require('../models/StatusCustomer');
 const StatusSale = require('../models/StatusSale');
+const { emailQueue } = require('../queues/emailQueue');
 const router = express.Router();
 
 // Create a status sale
@@ -58,9 +59,7 @@ router.post('/', async (req, res) => {
         <p>Submitted at: ${new Date().toLocaleString()}</p>
       `;
 
-      // Send the email (using your email utility)
-      const { sendEmail } = require('../utils/emailService');
-      await sendEmail({
+      await emailQueue.add('sendStatusSaleEmail', {
         to: emailTo,
         subject: emailSubject,
         html: emailHtml,
