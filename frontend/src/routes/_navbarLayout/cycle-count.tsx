@@ -68,18 +68,20 @@ function RouteComponent() {
           </Button>
         </Link>
 
-        <Link
-          to="/cycle-count/report"
-          activeOptions={{ exact: true }}
-        >
-          <Button
-            {...(!isReportActive && { variant: 'outline' } as object)}
-            // className={access.component_cycle_count_console ? 'rounded-none' : 'rounded-l-none'} //markpoint
-            className={access?.cycleCount?.manageCount ? 'rounded-none' : 'rounded-l-none'}
+        {access?.cycleCount?.report && (
+          <Link
+            to="/cycle-count/report"
+            activeOptions={{ exact: true }}
           >
-            Report
-          </Button>
-        </Link>
+            <Button
+              {...(!isReportActive && { variant: 'outline' } as object)}
+              // className={access.component_cycle_count_console ? 'rounded-none' : 'rounded-l-none'} //markpoint
+              className={access?.cycleCount?.manageCount ? 'rounded-none' : 'rounded-l-none'}
+            >
+              Report
+            </Button>
+          </Link>
+        )}
 
         {/* Console tab button, shown only if user has access */}
         {/* {access?.cycleCount?.lookup && (
