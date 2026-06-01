@@ -112,6 +112,7 @@ async function runSanitizeItemBk() {
       // SCENARIO B: Item exists in both -> VERIFY AND CORRECT SHIFTS
       // We explicitly leave 'grade' and 'last_counted_at' untouched to protect the system data
       const hasChanged =
+        match.active !== true || // in the sceanario where an item was previously soft-deleted but reappears in Azure SQL, we want to reactivate it and update all fields accordingly
         match.gtin !== gtin ||
         match.upc_barcode !== (item?.upc_barcode != null ? String(item.upc_barcode) : null) ||
         match.description !== (item?.Description ?? null) ||
@@ -180,6 +181,21 @@ async function runSanitizeItemBk() {
       await trx("item_bk")
         .whereIn("id", idsToRemove)
         .update({ active: false, sync_date: db.fn.now() });
+
+      // 2. Clear uncounted instances from future manually scheduled cycles
+      const removedCount = await trx("cycle_count_items")
+        .whereIn("product_id", idsToRemove)
+        .whereIn("instance_id", function () {
+          this.select("id")
+            .from("cycle_count_instance")
+            .where("date", ">", todayDateStr); // Filters for future dates strictly ahead of today
+        })
+        .andWhere("count_completed", false) // Protects historical updates if edge execution windows overlap
+        .del();
+
+      if (removedCount > 0) {
+        console.log(`[FUTURE COUNT PURGE] Removed ${removedCount} scheduled item entries from upcoming cycles.`);
+      }
 
       // Still write to the historical audit log
       const logChunks = chunkArray(logEntriesToInsert, 200);
