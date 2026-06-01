@@ -190,7 +190,8 @@ jobs:
             export AZURE_CLIENT_ID=${{ secrets.AZURE_CLIENT_ID }}
             export AZURE_TENANT_ID=${{ secrets.AZURE_TENANT_ID }}
             export AZURE_CLIENT_SECRET=${{ secrets.AZURE_CLIENT_SECRET }}
-            export NOREPLY_PASS=${{ secrets.NOREPLY_PASS }}
+            export EMAIL_SERVICE_URL=http://email-service:2525
+            export EMAIL_SERVICE_API_KEY=${{ secrets.EMAIL_SERVICE_API_KEY }}
             export INTACCT_CLIENT_ID=${{ secrets.INTACCT_CLIENT_ID }}
             export INTACCT_CLIENT_SECRET=${{ secrets.INTACCT_CLIENT_SECRET }}
             export INTACCT_CALLBACK_URL=${{ secrets.INTACCT_CALLBACK_URL }}

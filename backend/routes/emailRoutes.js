@@ -100,8 +100,8 @@ router.post('/send-bulk-email', async (req, res) => {
       return res.status(400).json({ error: 'Subject is required' });
     }
 
-    const results = await sendBulkEmail({ recipients, subject, text, html });
-    res.json(results);
+    const job = await emailQueue.add('sendBulkEmail', { to: recipients, subject, text, html });
+    res.json({ message: 'Email queued successfully', jobId: job.id });
   } catch (error) {
     console.error('Error in send-bulk-email route:', error);
     res.status(500).json({ error: error.message });
