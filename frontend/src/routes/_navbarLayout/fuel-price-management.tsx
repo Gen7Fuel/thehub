@@ -16,7 +16,7 @@ function FuelPricingManagementLayout() {
     },
     { 
       to: '/fuel-price-management/carrier-fcs', 
-      label: 'Carrier FCS', 
+      label: 'Carrier FSC', 
       icon: Flame 
     },
     { 
