@@ -15,14 +15,14 @@ function initSupportChatIo(io) {
 // POST /api/support/chat — create a new chat session
 router.post('/', async (req, res) => {
   try {
-    const { message } = req.body || {};
+    const { message, site: requestedSite } = req.body || {};
     if (!message || !String(message).trim()) {
       return res.status(400).json({ success: false, message: 'Initial message is required.' });
     }
 
-    const site = (req.user?.stationName || '').trim();
+    const site = (requestedSite || req.user?.stationName || '').trim();
     if (!site) {
-      return res.status(400).json({ success: false, message: 'User has no associated site.' });
+      return res.status(400).json({ success: false, message: 'No site associated with this request.' });
     }
 
     const customerName = `${req.user.firstName || ''} ${req.user.lastName || ''}`.trim();
