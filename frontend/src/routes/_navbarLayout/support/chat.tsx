@@ -6,6 +6,7 @@ import { Button } from '@/components/ui/button'
 import { Textarea } from '@/components/ui/textarea'
 import { useAuth } from '@/context/AuthContext'
 import { getSupportSocket, disconnectSupportSocket } from '@/lib/websocket'
+import { SitePicker } from '@/components/custom/sitePicker'
 
 export const Route = createFileRoute('/_navbarLayout/support/chat')({
   component: RouteComponent,
@@ -23,6 +24,7 @@ type ChatState = 'form' | 'waiting' | 'active' | 'expired' | 'closed'
 
 function RouteComponent() {
   const { user } = useAuth()
+  const [site, setSite] = useState<string>(user?.location || '')
   const [chatState, setChatState] = useState<ChatState>('form')
   const [chatId, setChatId] = useState<string | null>(null)
   const [initialMessage, setInitialMessage] = useState('')
@@ -65,7 +67,7 @@ function RouteComponent() {
           'Content-Type': 'application/json',
           Authorization: `Bearer ${localStorage.getItem('token') || ''}`,
         },
-        body: JSON.stringify({ message: initialMessage.trim() }),
+        body: JSON.stringify({ message: initialMessage.trim(), site }),
       })
 
       if (!res.ok) {
@@ -152,6 +154,7 @@ function RouteComponent() {
     if (countdownRef.current) clearInterval(countdownRef.current)
     setChatState('form')
     setChatId(null)
+    setSite(user?.location || '')
     setInitialMessage('')
     setMessages([])
     setMessageText('')
@@ -175,8 +178,15 @@ function RouteComponent() {
           <CardContent className="space-y-4">
             <p className="text-sm text-muted-foreground">
               Describe your issue and we'll connect you with a support agent.
-              {user?.location && <> Site: <strong>{user.location}</strong></>}
             </p>
+            <div className="space-y-1.5">
+              <label className="text-sm font-medium">Site</label>
+              <SitePicker
+                value={site}
+                onValueChange={setSite}
+                className="w-full"
+              />
+            </div>
             <Textarea
               value={initialMessage}
               onChange={(e) => setInitialMessage(e.target.value)}

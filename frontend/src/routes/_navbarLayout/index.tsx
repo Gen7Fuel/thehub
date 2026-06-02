@@ -24,7 +24,8 @@ import {
   Banknote,
   type LucideProps,
   Coins,
-  Fuel
+  Fuel,
+  LifeBuoy
 } from 'lucide-react'
 
 export const Route = createFileRoute('/_navbarLayout/')({
@@ -203,6 +204,18 @@ function App() {
             </Section>
           )}
 
+          {/* SUPPORT - TEAL */}
+          {access?.support && (
+            <Section
+              title="Support"
+              accentColor="border-t-teal-500"
+              icon={<LifeBuoy className="w-5 h-5 text-teal-600" />}
+            >
+              <NavButton to="/support/chat" label="Live Chat" icon={MessageSquare} theme="teal" />
+              <NavButton to="/support/list" label="My Tickets" icon={FileText} theme="teal" />
+            </Section>
+          )}
+
           {/* COMMUNICATION - CYAN */}
           {(access?.bulletin || access?.events) && (
             <Section 
@@ -226,7 +239,7 @@ interface NavButtonProps {
   label: string;
   icon: React.ComponentType<LucideProps>;
   search?: Record<string, any>;
-  theme: 'emerald' | 'blue' | 'amber' | 'indigo' | 'violet' | 'rose' | 'slate' | 'sky'; // Added 'sky'
+  theme: 'emerald' | 'blue' | 'amber' | 'indigo' | 'violet' | 'rose' | 'slate' | 'sky' | 'teal';
 }
 
 function NavButton({ to, label, icon: Icon, search, theme }: NavButtonProps) {
@@ -238,7 +251,8 @@ function NavButton({ to, label, icon: Icon, search, theme }: NavButtonProps) {
     violet: "bg-violet-50 text-violet-700 border-violet-100 hover:border-violet-500 hover:bg-violet-100",
     rose: "bg-rose-50 text-rose-700 border-rose-100 hover:border-rose-500 hover:bg-rose-100",
     slate: "bg-slate-50 text-slate-700 border-slate-100 hover:border-slate-500 hover:bg-slate-100",
-    sky: "bg-sky-50 text-sky-700 border-sky-100 hover:border-sky-500 hover:bg-sky-100", // Added sky theme
+    sky: "bg-sky-50 text-sky-700 border-sky-100 hover:border-sky-500 hover:bg-sky-100",
+    teal: "bg-teal-50 text-teal-700 border-teal-100 hover:border-teal-500 hover:bg-teal-100",
   };
   
   return (
