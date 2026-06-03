@@ -3,7 +3,7 @@ import axios from 'axios'
 import { Button } from '@/components/ui/button'
 import { Dialog, DialogContent, DialogClose } from '@/components/ui/dialog'
 import { isActuallyOnline } from '@/lib/network'
-import { ImagePlus, Send, ChevronDown, ChevronUp, X } from 'lucide-react'
+import { ImagePlus, Send, ChevronDown, ChevronUp, X, Camera } from 'lucide-react'
 
 interface Comment {
   _id?: string
@@ -196,10 +196,24 @@ export function OrderRecChat({
         />
         <label className="cursor-pointer">
           <Button type="button" variant="outline" size="sm" asChild disabled={sending}>
+            <span><Camera className="w-4 h-4" /></span>
+          </Button>
+          <input
+            key={`cam-${inputKey}`}
+            type="file"
+            accept="image/*"
+            capture="environment"
+            className="hidden"
+            onChange={handlePhotoSelect}
+            disabled={sending}
+          />
+        </label>
+        <label className="cursor-pointer">
+          <Button type="button" variant="outline" size="sm" asChild disabled={sending}>
             <span><ImagePlus className="w-4 h-4" /></span>
           </Button>
           <input
-            key={inputKey}
+            key={`gal-${inputKey}`}
             type="file"
             accept="image/*"
             multiple
