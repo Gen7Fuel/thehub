@@ -16,7 +16,7 @@ import {
 } from "@/components/ui/dialog";
 import { format, addDays, isAfter, startOfDay, subDays, isBefore } from "date-fns";
 import { WorkspaceDatePicker, DatePicker } from '@/components/custom/datePicker';
-import { Loader2, RefreshCw, Truck, Clock, Edit3, CheckCircle2, PackagePlus, AlertTriangle, FileText, Download } from 'lucide-react';
+import { XCircle, MessageSquare, User, Loader2, RefreshCw, Truck, Clock, Edit3, CheckCircle2, PackagePlus, AlertTriangle, FileText, Download } from 'lucide-react';
 import { Badge } from "@/components/ui/badge";
 // import { Label } from "@/components/ui/label";
 import { getGradeTheme } from "./manage/locations/$id"
@@ -24,6 +24,7 @@ import { POPreviewDocument, formatPDFDate, getISODateOnly } from "@/components/c
 import { PDFViewer, PDFDownloadLink } from '@react-pdf/renderer';
 import { formatInTimeZone, toZonedTime } from 'date-fns-tz';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Textarea } from '@/components/ui/textarea';
 
 export const Route = createFileRoute('/_navbarLayout/fuel-management/workspace')({
   component: WorkspaceComponent,
@@ -45,6 +46,7 @@ export const getStatusColor = (status: string) => {
     case 'Created': return 'bg-yellow-100 text-yellow-600 border-yellow-200'; // Neutral for new orders
     case 'In Transit': return 'bg-blue-100 text-blue-700 border-blue-200';
     case 'Delivered': return 'bg-green-100 text-green-700 border-green-200';
+    case 'Cancelled': return 'bg-red-100 text-red-700 border-red-200';
     default: return 'bg-slate-100 text-slate-500';
   }
 };
@@ -58,12 +60,13 @@ function WorkspaceComponent() {
   };
 
   // 1. Fetch Real Locations from your Backend
-  const { data: locations = [] } = useQuery({
+  const { data: locations = [], isLoading: isLocationsLoading } = useQuery({
     queryKey: ['all-locations'],
     queryFn: async () => {
       const res = await axios.get('/api/fuel-station-tanks/all-locations', authHeader);
       return res.data;
-    }
+    },
+    retry: 2,
   });
 
   // Fetch all racks once at the top level
@@ -356,7 +359,12 @@ function WorkspaceComponent() {
       </div > */}
       {/* WORKSPACE STRIPS AREA */}
       <div className="w-full px-0 py-0 space-y-0">
-        {selectedStationIds.length === 0 ? (
+        {isLocationsLoading ? (
+          <div className="w-full h-96 border-4 border-dashed rounded-3xl flex flex-col items-center justify-center text-slate-300">
+            <Loader2 className="h-10 w-10 mb-4 animate-spin opacity-40" />
+            <p className="text-xl font-bold italic opacity-50">Loading workspace stations...</p>
+          </div>
+        ) : selectedStationIds.length === 0 ? (
           <div className="w-full h-96 border-4 border-dashed rounded-3xl flex flex-col items-center justify-center text-slate-300">
             <Building2 className="h-20 w-20 mb-4 opacity-20" />
             <p className="text-xl font-bold italic opacity-30">Select stations above to begin operations</p>
@@ -380,6 +388,7 @@ function WorkspaceComponent() {
 function StationStrip({ location, date, racks }: { location: any, date: Date, racks: any[] }) {
 
   const [rescheduleOrder, setRescheduleOrder] = useState<any>(null);
+  const [viewingCommentsOrder, setViewingCommentsOrder] = useState<any | null>(null);
   const [updateStatusOrder, setUpdateStatusOrder] = useState<any>(null);
   const [editQtyOrder, setEditQtyOrder] = useState<any>(null);
   const [viewingPO, setViewingPO] = useState<any | null>(null);
@@ -390,7 +399,7 @@ function StationStrip({ location, date, racks }: { location: any, date: Date, ra
   // 1. Add a state to track if we should return to status dialog after editing
   const [returnToStatus, setReturnToStatus] = useState(false);
   const [resumeStep, setResumeStep] = useState<'schedule' | 'quantities' | 'final' | null>(null);
-  
+
   const openRescheduleFromStatus = (order: any) => {
     setReturnToStatus(true);
     setResumeStep('schedule'); // We want to go back to step 1
@@ -408,7 +417,7 @@ function StationStrip({ location, date, racks }: { location: any, date: Date, ra
   const stationTz = location.timezone || 'America/Toronto';
   const selectedDateStr = format(date, 'yyyy-MM-dd');
 
-  const { data: tankResponse, isLoading: isTanksLoading } = useQuery({
+  const { data: tankResponse, isLoading: isTanksLoading, isError: isTanksError, isFetching: isTanksFetching } = useQuery({
     queryKey: ['station-tanks', location?._id, selectedDateStr],
     queryFn: async () => {
       const res = await axios.get(
@@ -417,6 +426,8 @@ function StationStrip({ location, date, racks }: { location: any, date: Date, ra
       );
       return res.data;
     },
+    enabled: !!location?._id,
+    retry: 2,
   });
 
   // Use the date provided by the SERVER
@@ -469,7 +480,7 @@ function StationStrip({ location, date, racks }: { location: any, date: Date, ra
   }, [tanks]);
 
   // Fetch Orders (Your existing logic)
-  const { data: orders = [], isLoading } = useQuery({
+  const { data: orders = [], isLoading, isFetching, isError } = useQuery({
     queryKey: ['workspace-orders', location?._id, dateParam], // Use dateParam
     queryFn: async () => {
       const res = await axios.get(
@@ -479,6 +490,7 @@ function StationStrip({ location, date, racks }: { location: any, date: Date, ra
       return res.data;
     },
     enabled: !!location?._id,
+    retry: 2,
   });
 
   const getRowStatusColor = (item: any) => {
@@ -649,6 +661,12 @@ function StationStrip({ location, date, racks }: { location: any, date: Date, ra
                           <Loader2 className="h-4 w-4 animate-spin mx-auto text-slate-300" />
                         </td>
                       </tr>
+                    ) : isTanksError ? (
+                      <tr>
+                        <td colSpan={isToday ? 5 : 4} className="p-4 text-center text-[10px] font-bold uppercase text-red-400">
+                          Unable to load tank data
+                        </td>
+                      </tr>
                     ) : (
                       gradeInventory.map((item: any) => {
                         const theme = getGradeTheme(item.grade);
@@ -737,7 +755,7 @@ function StationStrip({ location, date, racks }: { location: any, date: Date, ra
                   </Badge>
                 )}
               </div>
-              {isLoading && <Loader2 className="h-4 w-4 animate-spin text-blue-600" />}
+              {(isLoading || isFetching || isTanksFetching) && <Loader2 className="h-4 w-4 animate-spin text-blue-600" />}
             </div>
 
             {/* SCROLLABLE CONTAINER START */}
@@ -745,6 +763,10 @@ function StationStrip({ location, date, racks }: { location: any, date: Date, ra
               } scrollbar-thin scrollbar-thumb-slate-200 scrollbar-track-transparent hover:scrollbar-thumb-slate-300`}>
               {isLoading ? (
                 [1, 2].map((i) => <div key={i} className="h-28 w-full bg-slate-50 animate-pulse rounded-2xl border border-slate-100" />)
+              ) : isError ? (
+                <div className="flex flex-col items-center justify-center py-12 text-red-300 border-2 border-dashed rounded-2xl bg-red-50/30">
+                  <p className="font-bold italic text-sm text-red-400">Unable to load orders for this date</p>
+                </div>
               ) : orders.length === 0 ? (
                 <div className="flex flex-col items-center justify-center py-12 text-slate-300 border-2 border-dashed rounded-2xl bg-slate-50/30">
                   <p className="font-bold italic text-sm text-slate-400">No orders scheduled for this date</p>
@@ -760,7 +782,7 @@ function StationStrip({ location, date, racks }: { location: any, date: Date, ra
                   // 2. Format the active 'date' prop from your page
                   const activeDateStr = format(date, 'yyyy-MM-dd');
 
-                  const isDelivered = order.currentStatus === 'Delivered';
+                  const isDelivered = order.currentStatus === 'Delivered' || order.currentStatus === 'Cancelled';
                   const wasMovedFromHere = origDate === activeDateStr && estDate !== activeDateStr;
                   const arrivedHereFromHistory = estDate === activeDateStr && origDate !== activeDateStr;
 
@@ -876,6 +898,16 @@ function StationStrip({ location, date, racks }: { location: any, date: Date, ra
                               >
                                 Reschedule
                               </Button>
+
+                              {/* NEW DEDICATED AUDIT THREAD ACTION - UNLOCKED FOR ANY STATUS POSITION */}
+                              <Button
+                                variant="ghost"
+                                onClick={() => setViewingCommentsOrder(order)}
+                                className="h-5 px-1.5 text-[11px] font-black uppercase text-slate-500 hover:text-blue-600 flex items-center gap-1 bg-slate-50 hover:bg-slate-100 rounded-md"
+                              >
+                                <MessageSquare className="h-3 w-3" />
+                                <span>Comments ({order.comments?.length || 0})</span>
+                              </Button>
                             </div>
                           </div>
                         </div>
@@ -963,6 +995,15 @@ function StationStrip({ location, date, racks }: { location: any, date: Date, ra
           locationId={location._id}
           onEditSchedule={openRescheduleFromStatus}
           onEditQty={openEditQtyFromStatus}
+        />
+      )}
+
+      {viewingCommentsOrder && (
+        <OrderCommentsDialog
+          order={orders?.find((o: any) => o._id === viewingCommentsOrder._id) || viewingCommentsOrder}
+          open={!!viewingCommentsOrder}
+          onOpenChange={(open: boolean) => !open && setViewingCommentsOrder(null)}
+          locationId={location._id}
         />
       )}
 
@@ -1253,9 +1294,9 @@ export function RescheduleDialog({ order, isOpen, onOpenChange, locationId }: Re
 // }
 
 export function UpdateStatusDialog({ order, open, initialStep, onOpenChange, locationId, onEditSchedule, onEditQty }: any) {
-  // Use initialStep if provided (e.g., when returning from Edit Qty)
   const [pendingStatus, setPendingStatus] = useState<string | null>(initialStep ? 'Delivered' : null);
   const [confirmStep, setConfirmStep] = useState<'schedule' | 'quantities' | 'final'>(initialStep || 'schedule');
+  const [cancelReason, setCancelReason] = useState('');
 
   const queryClient = useQueryClient();
 
@@ -1265,7 +1306,6 @@ export function UpdateStatusDialog({ order, open, initialStep, onOpenChange, loc
     { id: 'Delivered', label: 'Delivered', icon: CheckCircle2, color: 'text-green-500', bg: 'bg-green-50' },
   ];
 
-  // 2. Sync state when the dialog opens
   useEffect(() => {
     if (open) {
       if (initialStep) {
@@ -1275,22 +1315,76 @@ export function UpdateStatusDialog({ order, open, initialStep, onOpenChange, loc
         setPendingStatus(null);
         setConfirmStep('schedule');
       }
+      setCancelReason('');
     }
   }, [open, initialStep]);
 
   const currentIndex = statuses.findIndex(s => s.id === order.currentStatus);
 
   const mutation = useMutation({
-    mutationFn: async (newStatus: string) => {
-      return axios.put(`/api/fuel-orders/${order._id}`, { currentStatus: newStatus }, authHeader);
+    mutationFn: async ({ status, commentText }: { status: string, commentText?: string }) => {
+      const payload: any = { currentStatus: status };
+      if (commentText?.trim()) {
+        payload.comment = { text: commentText.trim() };
+      }
+      return axios.put(`/api/fuel-orders/${order._id}`, payload, authHeader);
     },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['workspace-orders', locationId] });
+    onSuccess: (_, variables) => {
+      // 1. Always invalidate the orders list so the UI badges update immediately
+      queryClient.invalidateQueries({ 
+        queryKey: ['workspace-orders', locationId] 
+      });
+
+      // 2. Only trigger the heavy tank re-calculation query if the status 
+      // reached a volume-altering terminal endpoint ('Cancelled' )
+      if (variables.status === 'Cancelled') {
+        queryClient.invalidateQueries({
+          queryKey: ['station-tanks', locationId]
+        });
+      }
+
+      // 3. Close the dialog layout
       onOpenChange(false);
     }
   });
 
   const renderStep = () => {
+    if (pendingStatus === 'Cancelled') {
+      return (
+        <div className="space-y-4 animate-in fade-in zoom-in-95 duration-200">
+          <div className="p-4 bg-red-50 border-2 border-red-100 rounded-2xl flex flex-col gap-2">
+            <div className="flex items-center gap-2 text-red-700 font-black text-xs uppercase">
+              <XCircle className="h-4 w-4" /> Cancel Order Processing
+            </div>
+            <p className="text-sm text-red-900 leading-tight">
+              Are you sure you want to cancel PO <span className="font-black">{order.poNumber}</span>?
+            </p>
+          </div>
+
+          <div className="space-y-1.5">
+            <label className="text-[10px] font-black uppercase text-slate-500 tracking-wider">
+              Cancellation Reason <span className="text-red-500">*</span>
+            </label>
+            <Textarea
+              placeholder="Provide a mandatory verification reason for canceling this order..."
+              value={cancelReason}
+              onChange={(e) => setCancelReason(e.target.value)}
+              className="min-h-[80px] rounded-xl border-slate-200 focus-visible:ring-red-400"
+            />
+          </div>
+
+          <Button
+            onClick={() => mutation.mutate({ status: 'Cancelled', commentText: cancelReason })}
+            disabled={!cancelReason.trim() || mutation.isPending}
+            className="w-full h-12 bg-red-600 hover:bg-red-700 text-white font-black uppercase tracking-wide disabled:opacity-50"
+          >
+            Confirm Permanent Cancellation
+          </Button>
+          <Button variant="ghost" onClick={() => setPendingStatus(null)} className="w-full text-slate-400 font-black uppercase">Go Back</Button>
+        </div>
+      );
+    }
+
     if (pendingStatus === 'In Transit') {
       return (
         <div className="space-y-4">
@@ -1302,13 +1396,12 @@ export function UpdateStatusDialog({ order, open, initialStep, onOpenChange, loc
               Move PO <span className="font-black">{order.poNumber}</span> to <span className="font-black uppercase">In Transit</span>?
             </p>
           </div>
-          <Button onClick={() => mutation.mutate('In Transit')} className="w-full h-12 bg-blue-600 font-black uppercase">Confirm Transit</Button>
+          <Button onClick={() => mutation.mutate({ status: 'In Transit' })} className="w-full h-12 bg-blue-600 font-black uppercase">Confirm Transit</Button>
           <Button variant="ghost" onClick={() => setPendingStatus(null)} className="w-full text-slate-400 font-black uppercase">Go Back</Button>
         </div>
       );
     }
 
-    // DELIVERED STEPS
     switch (confirmStep) {
       case 'schedule':
         return (
@@ -1320,26 +1413,11 @@ export function UpdateStatusDialog({ order, open, initialStep, onOpenChange, loc
                   <span className="text-lg font-black text-slate-800">
                     {order.estimatedDeliveryWindow?.start} — {order.estimatedDeliveryWindow?.end}
                   </span>
-                  <span className="text-[10px] font-bold text-blue-600 uppercase">
-                    {format(new Date(order.estimatedDeliveryDate), 'EEEE, MMM do')}
-                  </span>
                 </div>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => onEditSchedule(order)}
-                  className="h-8 border-blue-200 text-blue-600 font-black uppercase text-[10px]"
-                >
-                  Change
-                </Button>
+                <Button variant="outline" size="sm" onClick={() => onEditSchedule(order)} className="h-8 border-blue-200 text-blue-600 font-black uppercase text-[10px]">Change</Button>
               </div>
             </div>
-            <Button
-              onClick={() => setConfirmStep('quantities')}
-              className="w-full h-12 bg-slate-900 font-black uppercase tracking-widest"
-            >
-              Confirm & Continue
-            </Button>
+            <Button onClick={() => setConfirmStep('quantities')} className="w-full h-12 bg-slate-900 font-black uppercase tracking-widest">Confirm & Continue</Button>
           </div>
         );
 
@@ -1349,7 +1427,7 @@ export function UpdateStatusDialog({ order, open, initialStep, onOpenChange, loc
             <div className="p-4 bg-slate-50 border-2 border-slate-200 rounded-2xl">
               <label className="text-[10px] font-black uppercase text-slate-400">Step 2: Confirm Drop Quantities</label>
               <div className="space-y-2 mt-3 border-t pt-2">
-                {order.items.map((item: any) => (
+                {order.items?.map((item: any) => (
                   <div key={item.grade} className="flex justify-between font-mono text-sm font-black">
                     <span className="text-slate-500">{item.grade}</span>
                     <span className="text-slate-900">{item.ltrs.toLocaleString()} L</span>
@@ -1358,12 +1436,7 @@ export function UpdateStatusDialog({ order, open, initialStep, onOpenChange, loc
               </div>
               <Button variant="outline" size="sm" onClick={() => onEditQty(order)} className="w-full mt-4 h-8 text-[10px] font-black uppercase border-blue-200 text-blue-600">Adjust Quantities</Button>
             </div>
-            <Button
-              onClick={() => setConfirmStep('final')}
-              className="w-full h-12 bg-slate-900 font-black uppercase tracking-widest"
-            >
-              Totals are Correct
-            </Button>
+            <Button onClick={() => setConfirmStep('final')} className="w-full h-12 bg-slate-900 font-black uppercase tracking-widest">Totals are Correct</Button>
           </div>
         );
 
@@ -1376,7 +1449,7 @@ export function UpdateStatusDialog({ order, open, initialStep, onOpenChange, loc
               </div>
               <p className="text-sm text-amber-900 leading-tight">This will update inventory and <strong>lock</strong> this order permanently.</p>
             </div>
-            <Button onClick={() => mutation.mutate('Delivered')} className="w-full h-14 bg-green-600 hover:bg-green-700 font-black uppercase text-lg shadow-lg">Confirm & Finalize</Button>
+            <Button onClick={() => mutation.mutate({ status: 'Delivered' })} className="w-full h-14 bg-green-600 hover:bg-green-700 font-black uppercase text-lg shadow-lg">Confirm & Finalize</Button>
           </div>
         );
     }
@@ -1397,8 +1470,7 @@ export function UpdateStatusDialog({ order, open, initialStep, onOpenChange, loc
             <div className="flex flex-col gap-3">
               {statuses.map((status, index) => {
                 const isCurrent = order.currentStatus === status.id;
-                // STICK TO THE LIFECYCLE: Only allow the NEXT step
-                const isDisabled = index !== currentIndex + 1;
+                const isDisabled = order.currentStatus === 'Cancelled' || index !== currentIndex + 1;
 
                 return (
                   <Button
@@ -1418,8 +1490,108 @@ export function UpdateStatusDialog({ order, open, initialStep, onOpenChange, loc
                   </Button>
                 );
               })}
+
+              {order.currentStatus === 'Created' && (
+                <Button
+                  variant="outline"
+                  onClick={() => setPendingStatus('Cancelled')}
+                  disabled={mutation.isPending}
+                  className="h-16 justify-start gap-4 border-2 border-dashed border-red-200 hover:border-red-400 hover:bg-red-50/30 text-red-600 transition-all rounded-xl mt-1"
+                >
+                  <XCircle className="h-6 w-6 text-red-500" />
+                  <div className="flex flex-col items-start">
+                    <span className="font-black uppercase text-xs tracking-widest">Cancel Order</span>
+                    <span className="text-[10px] font-bold text-red-400">AVAILABLE ONLY IN CREATED STATUS</span>
+                  </div>
+                </Button>
+              )}
             </div>
           ) : renderStep()}
+        </div>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+export function OrderCommentsDialog({ order, open, onOpenChange, locationId }: any) {
+  const [newComment, setNewComment] = useState('');
+  const queryClient = useQueryClient();
+
+  useEffect(() => {
+    if (open) {
+      setNewComment('');
+    }
+  }, [open]);
+
+  const mutation = useMutation({
+    mutationFn: async (text: string) => {
+      // Frontend only passes the text textblock. The backend maps req.user session properties.
+      return axios.put(`/api/fuel-orders/${order._id}`, {
+        comment: { text: text.trim() }
+      }, authHeader);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['workspace-orders', locationId] });
+      setNewComment('');
+    }
+  });
+
+  const handlePostComment = () => {
+    if (!newComment.trim() || mutation.isPending) return;
+    mutation.mutate(newComment);
+  };
+
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="sm:max-w-[440px] max-h-[85vh] flex flex-col p-0 overflow-hidden rounded-2xl">
+        <DialogHeader className="p-4 border-b bg-slate-50/50">
+          <DialogTitle className="text-xl font-black uppercase italic tracking-tight flex items-center gap-2">
+            <MessageSquare className="h-5 w-5 text-blue-600" />
+            <span>PO Comments Log</span>
+          </DialogTitle>
+          <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">PO: {order?.poNumber}</p>
+        </DialogHeader>
+
+        <div className="p-4 flex-1 overflow-y-auto space-y-4">
+          <div className="space-y-2 max-h-[300px] overflow-y-auto pr-1 text-xs">
+            {order?.comments && order.comments.length > 0 ? (
+              order.comments.map((c: any, idx: number) => (
+                <div key={c._id || idx} className="p-3 bg-slate-50 rounded-xl border border-slate-100 flex flex-col gap-1.5 animate-in fade-in-50 duration-200">
+                  <div className="flex items-center justify-between text-[10px] font-bold">
+                    <span className="text-slate-700 flex items-center gap-1">
+                      <User className="h-3 w-3 text-slate-400" /> {c.author}
+                    </span>
+                    <span className="text-slate-400 font-mono flex items-center gap-1">
+                      <Clock className="h-2.5 w-2.5" /> {format(new Date(c.timestamp), 'MMM d, h:mm a')}
+                    </span>
+                  </div>
+                  <p className="text-slate-600 font-medium leading-normal解决 whitespace-pre-wrap">{c.text}</p>
+                </div>
+              ))
+            ) : (
+              <p className="text-slate-400 italic text-center py-6">No workflow comments submitted yet.</p>
+            )}
+          </div>
+        </div>
+
+        {/* Form Entry Dock footer */}
+        <div className="p-3 border-t bg-slate-50/30 flex gap-2 items-center">
+          <input
+            type="text"
+            placeholder="Type a workflow update comment..."
+            value={newComment}
+            onChange={(e) => setNewComment(e.target.value)}
+            onKeyDown={(e) => e.key === 'Enter' && handlePostComment()}
+            className="flex-1 h-9 px-3 border border-slate-200 bg-white rounded-xl text-xs font-medium focus:outline-none focus:border-blue-400 disabled:opacity-60"
+            disabled={mutation.isPending}
+          />
+          <Button
+            onClick={handlePostComment}
+            disabled={!newComment.trim() || mutation.isPending}
+            className="h-9 bg-slate-900 text-white hover:bg-slate-800 text-xs font-bold rounded-xl px-4 tracking-wide disabled:opacity-40"
+          >
+            Post
+          </Button>
         </div>
       </DialogContent>
     </Dialog>

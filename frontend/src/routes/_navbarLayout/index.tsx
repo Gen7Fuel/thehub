@@ -25,7 +25,8 @@ import {
   type LucideProps,
   Coins,
   Fuel,
-  LifeBuoy
+  LifeBuoy,
+  Settings
 } from 'lucide-react'
 
 export const Route = createFileRoute('/_navbarLayout/')({
@@ -160,7 +161,7 @@ function App() {
               {access?.fuelManagement?.value && (
                 <NavButton 
                   to="/fuel-management/workspace" 
-                  label="Fuel Mgmt" 
+                  label="Fuel Order Mgmt" 
                   icon={Droplets} 
                   theme="sky" 
                   search={{ site: user?.location || '' }} 
@@ -173,6 +174,14 @@ function App() {
                   icon={Coins} 
                   theme="sky" 
                   search={{ site: user?.location || '' }} 
+                />
+              )}
+              {access?.fuelSettings?.value && (
+                <NavButton 
+                  to="/fuel-settings" 
+                  label="Fuel Settings" 
+                  icon={Settings}
+                  theme="sky" 
                 />
               )}
             </Section>

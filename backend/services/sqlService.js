@@ -548,6 +548,134 @@ async function getFuelInventoryReportCurrentDay() {
   }
 }
 
+async function getFuelSupplierDiscounts() {
+  try {
+    const { getPool } = require('./sqlService'); // Adjust path if needed
+    const pool = await getPool();
+
+    // Coalesce primary keys to safeguard output integrity against missing links on either side
+    const result = await pool.request().query(`
+      SELECT 
+        COALESCE(live.[Supplier Code], stg.[Supplier Code]) AS [Supplier Code],
+        COALESCE(live.[ Supplier Item], stg.[ Supplier Item]) AS [ Supplier Item],
+        COALESCE(live.[Inventory Item], stg.[Inventory Item]) AS [Inventory Item],
+        live.[Discounts] AS [Live_Discounts],
+        live.[Updated At] AS [Live_Updated_At],
+        stg.[Discounts] AS [Stg_Discounts],
+        stg.[Updated At] AS [Stg_Updated_At]
+      FROM [FUEL].[SupplierDiscounts] AS live
+      FULL OUTER JOIN [FUEL].[Stg_SupplierDiscounts] AS stg
+        ON  live.[Supplier Code] = stg.[Supplier Code]
+        AND live.[ Supplier Item] = stg.[ Supplier Item]
+        AND live.[Inventory Item] = stg.[Inventory Item]
+    `);
+
+    return result.recordset;
+  } catch (err) {
+    console.error('SQL error executing dual-table fetch:', err);
+    return [];
+  }
+}
+
+// async function getFuelCarrierHaulage() {
+//   try {
+//     const pool = await getPool();
+//     const result = await pool.request().query(`
+//       SELECT [Carrier]
+//             ,[Type]
+//             ,[Location]
+//             ,[Pickup]
+//             ,[Haulage]
+//             ,[Updated At]
+//       FROM [FUEL].[TEST_CarrierHaulage]
+//     `);
+//     await sql.close();
+//     return result.recordset;
+//   } catch (err) {
+//     console.error('SQL error:', err);
+//     return [];
+//   }
+// }
+
+// async function getFuelCarrierFCS() {
+//   try {
+//     const pool = await getPool();
+//     const result = await pool.request().query(`
+//       SELECT [Carrier]
+//             ,[Province]
+//             ,[FCS]
+//             ,[Updated At]
+//         FROM [FUEL].[TEST_CarrierFCS]
+//         WHERE [Province] IS NOT NULL
+//     `);
+//     await sql.close();
+//     return result.recordset;
+//   } catch (err) {
+//     console.error('SQL error:', err);
+//     return [];
+//   }
+// }
+
+async function getFuelCarrierHaulage() {
+  try {
+    const { getPool } = require('./sqlService'); // Adjust path if needed
+    const pool = await getPool();
+
+    // FULL OUTER JOIN on all 4 composite keys: Carrier, Type, Location, and Pickup
+    const result = await pool.request().query(`
+      SELECT 
+        COALESCE(live.[Carrier], stg.[Carrier]) AS [Carrier],
+        COALESCE(live.[Type], stg.[Type]) AS [Type],
+        COALESCE(live.[Location], stg.[Location]) AS [Location],
+        COALESCE(live.[Pickup], stg.[Pickup]) AS [Pickup],
+        live.[Haulage] AS [Live_Haulage],
+        live.[Updated At] AS [Live_Updated_At],
+        stg.[Haulage] AS [Stg_Haulage],
+        stg.[Updated At] AS [Stg_Updated_At]
+      FROM [FUEL].[CarrierHaulage] AS live
+      FULL OUTER JOIN [FUEL].[Stg_CarrierHaulage] AS stg
+        ON  live.[Carrier] = stg.[Carrier]
+        AND live.[Type] = stg.[Type]
+        AND live.[Location] = stg.[Location]
+        AND live.[Pickup] = stg.[Pickup]
+    `);
+
+    return result.recordset;
+  } catch (err) {
+    console.error('SQL error executing dual-table fetch for Carrier Haulage:', err);
+    return [];
+  }
+}
+
+async function getFuelCarrierFCS() {
+  try {
+    const { getPool } = require('./sqlService'); // Adjust path if needed
+    const pool = await getPool();
+
+    // FULL OUTER JOIN on the 2 composite keys: Carrier and Province
+    const result = await pool.request().query(`
+      SELECT 
+        COALESCE(live.[Carrier], stg.[Carrier]) AS [Carrier],
+        COALESCE(live.[Province], stg.[Province]) AS [Province],
+        live.[FCS] AS [Live_FCS],
+        live.[Updated At] AS [Live_Updated_At],
+        stg.[FCS] AS [Stg_FCS],
+        stg.[Updated At] AS [Stg_Updated_At]
+      FROM [FUEL].[CarrierFCS] AS live
+      FULL OUTER JOIN [FUEL].[Stg_CarrierFCS] AS stg
+        ON  live.[Carrier] = stg.[Carrier]
+        AND live.[Province] = stg.[Province]
+      WHERE live.[Province] IS NOT NULL OR stg.[Province] IS NOT NULL
+    `);
+
+    return result.recordset;
+  } catch (err) {
+    console.error('SQL error executing dual-table fetch for Carrier FCS:', err);
+    return [];
+  }
+}
+
+
 /**
  * Fetch GTIN -> UPC list for items marked inactive on account.
  * @param {string[]} gtins
@@ -615,7 +743,6 @@ async function getInventoryOnHandForUPCAndStation(upc, stationSk) {
   }
 }
 
-/**
 /**
  * Get On_hand values from [CSO].[Inventory Balance] for multiple UPCs and a station for yesterday.
  * Returns a map: { upc: onHandValue | null }
@@ -1132,5 +1259,8 @@ module.exports = {
   getFullItemBackupData,
   getSanitizationBackupData,
   getFuelPricingDate,
-  getOnHandBulkCSOData
+  getOnHandBulkCSOData,
+  getFuelSupplierDiscounts,
+  getFuelCarrierHaulage,
+  getFuelCarrierFCS,
 };

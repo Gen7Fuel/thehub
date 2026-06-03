@@ -684,6 +684,51 @@ router.get('/notify-upcoming', async (req, res) => {
 
 
 // router.put('/:id', ...)
+// router.put('/:id', async (req, res) => {
+//   try {
+//     const {
+//       estimatedDeliveryDate,
+//       estimatedDeliveryWindow,
+//       items,
+//       currentStatus,
+//       // NEW FIELDS
+//       rack,
+//       supplier,
+//       badgeNo,
+//       carrier
+//     } = req.body;
+
+//     const order = await FuelOrder.findById(req.params.id);
+//     if (!order) return res.status(404).json({ message: "Order not found" });
+
+//     // Existing Date Logic...
+//     if (estimatedDeliveryDate) {
+//       const station = await Location.findById(order.station).lean();
+//       const tz = station?.timezone || 'America/Toronto';
+//       order.estimatedDeliveryDate = moment.tz(estimatedDeliveryDate, tz).startOf('day').toDate();
+//     }
+
+//     // Update Metadata if provided
+//     if (rack) order.rack = rack;
+//     if (supplier) order.supplier = supplier;
+//     if (badgeNo) order.badgeNo = badgeNo;
+//     if (carrier) order.carrier = carrier; // Even if view-only in UI, keep it here for safety
+
+//     if (estimatedDeliveryWindow) order.estimatedDeliveryWindow = estimatedDeliveryWindow;
+//     if (items) order.items = items;
+
+//     // Status History logic...
+//     if (currentStatus && currentStatus !== order.currentStatus) {
+//       order.currentStatus = currentStatus;
+//       order.statusHistory.push({ status: currentStatus, timestamp: new Date() });
+//     }
+
+//     await order.save();
+//     res.json(order);
+//   } catch (err) {
+//     res.status(500).json({ message: err.message });
+//   }
+// });
 router.put('/:id', async (req, res) => {
   try {
     const {
@@ -691,33 +736,51 @@ router.put('/:id', async (req, res) => {
       estimatedDeliveryWindow,
       items,
       currentStatus,
-      // NEW FIELDS
       rack,
       supplier,
       badgeNo,
-      carrier
+      carrier,
+      comment 
     } = req.body;
 
     const order = await FuelOrder.findById(req.params.id);
     if (!order) return res.status(404).json({ message: "Order not found" });
 
-    // Existing Date Logic...
+    // Enforce business constraint rule: Cancelled requires a payload comment text block
+    if (currentStatus === 'Cancelled' && (!comment || !comment.text.trim())) {
+      return res.status(400).json({ message: "A comment reason is strictly required to cancel an order." });
+    }
+
     if (estimatedDeliveryDate) {
       const station = await Location.findById(order.station).lean();
       const tz = station?.timezone || 'America/Toronto';
       order.estimatedDeliveryDate = moment.tz(estimatedDeliveryDate, tz).startOf('day').toDate();
     }
 
-    // Update Metadata if provided
     if (rack) order.rack = rack;
     if (supplier) order.supplier = supplier;
     if (badgeNo) order.badgeNo = badgeNo;
-    if (carrier) order.carrier = carrier; // Even if view-only in UI, keep it here for safety
+    if (carrier) order.carrier = carrier;
 
     if (estimatedDeliveryWindow) order.estimatedDeliveryWindow = estimatedDeliveryWindow;
     if (items) order.items = items;
 
-    // Status History logic...
+    // Build the author name from the session user middleware context securely
+    let authorName = 'System User';
+    if (req.user && (req.user.firstName || req.user.lastName)) {
+      authorName = `${req.user.firstName || ''} ${req.user.lastName || ''}`.trim();
+    }
+
+    // Append standard or reason comments safely to the array history if present
+    if (comment && comment.text.trim()) {
+      order.comments.push({
+        text: comment.text.trim(),
+        author: authorName,
+        timestamp: new Date()
+      });
+    }
+
+    // Process State Changes
     if (currentStatus && currentStatus !== order.currentStatus) {
       order.currentStatus = currentStatus;
       order.statusHistory.push({ status: currentStatus, timestamp: new Date() });
@@ -729,41 +792,5 @@ router.put('/:id', async (req, res) => {
     res.status(500).json({ message: err.message });
   }
 });
-// router.put('/:id', async (req, res) => {
-//   try {
-//     const { estimatedDeliveryDate, estimatedDeliveryWindow, items, currentStatus } = req.body;
-
-//     const order = await FuelOrder.findById(req.params.id);
-//     if (!order) return res.status(404).json({ message: "Order not found" });
-
-//     if (estimatedDeliveryDate) {
-//       // Fetch the location to get the station's timezone
-//       const station = await Location.findById(order.station).lean();
-//       const tz = station?.timezone || 'America/Toronto';
-
-//       // Force the date to be the START of the day in that timezone, then save
-//       order.estimatedDeliveryDate = moment.tz(estimatedDeliveryDate, tz).startOf('day').toDate();
-//     }
-
-//     if (estimatedDeliveryWindow) order.estimatedDeliveryWindow = estimatedDeliveryWindow;
-//     if (items) order.items = items;
-
-//     if (currentStatus && currentStatus !== order.currentStatus) {
-//       order.currentStatus = currentStatus;
-//       order.statusHistory.push({
-//         status: currentStatus,
-//         timestamp: new Date() // Actual timestamp of the update
-//       });
-//     }
-
-//     await order.save();
-//     res.json(order);
-//   } catch (err) {
-//     res.status(500).json({ message: err.message });
-//   }
-// });
 
 module.exports = router;
-// module.exports = {
-//   processUpcomingOrderNotifications
-// };
