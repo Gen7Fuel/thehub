@@ -126,7 +126,7 @@ function parseTtx(text: string): ParsedTtx {
         if (hasGBL) out.gblCredits!.push({ date: dateStr || '', description, amount: credits })
         else out.miscCredits!.push({ date: dateStr || '', description, amount: credits })
         if (/ontario integrated tax/i.test(description)) out.ontarioIntegratedTax = (out.ontarioIntegratedTax ?? 0) + credits
-        if (description.includes('TRANSFER FROM~801500002518')) out.transferFrom = (out.transferFrom ?? 0) + credits
+        if (description.includes('TRANSFER FROM~801500') || description.includes('TRANSFER FROM~920800')) out.transferFrom = (out.transferFrom ?? 0) + credits
       }
     }
   }
