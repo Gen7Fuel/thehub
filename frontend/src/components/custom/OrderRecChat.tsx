@@ -80,23 +80,17 @@ export function OrderRecChat({
     setSending(true)
     setSendError(null)
 
-    const uploadedFilenames: string[] = []
-    for (const file of pendingFiles) {
-      const formData = new FormData()
-      formData.append('file', file)
-      try {
+    try {
+      const uploadedFilenames: string[] = []
+      for (const file of pendingFiles) {
+        const formData = new FormData()
+        formData.append('file', file)
         const res = await fetch('/cdn/upload', { method: 'POST', body: formData })
-        if (!res.ok) throw new Error(res.statusText)
+        if (!res.ok) throw new Error(`Failed to upload photo: ${file.name}`)
         const data = await res.json()
         uploadedFilenames.push(data.filename)
-      } catch {
-        setSendError(`Failed to upload photo: ${file.name}`)
-        setSending(false)
-        return
       }
-    }
 
-    try {
       const res = await axios.post(
         `/api/order-rec/${orderRecId}/comments`,
         { text: text.trim() || ' ', photos: uploadedFilenames },
@@ -108,8 +102,8 @@ export function OrderRecChat({
       setPendingFiles([])
       setPendingPreviews([])
       setInputKey(k => k + 1)
-    } catch {
-      setSendError('Failed to send message. Please try again.')
+    } catch (err: any) {
+      setSendError(err?.message || 'Failed to send message. Please try again.')
     } finally {
       setSending(false)
     }
@@ -208,7 +202,6 @@ export function OrderRecChat({
             key={inputKey}
             type="file"
             accept="image/*"
-            capture="environment"
             multiple
             className="hidden"
             onChange={handlePhotoSelect}
