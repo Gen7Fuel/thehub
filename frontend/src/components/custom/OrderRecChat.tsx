@@ -236,7 +236,7 @@ export function OrderRecChat({
             <X className="w-5 h-5" />
           </DialogClose>
           {lightboxSrc && (
-            <img src={lightboxSrc} className="max-h-screen max-w-screen object-contain" alt="full size" />
+            <img src={lightboxSrc} className="max-h-screen max-w-screen object-contain cursor-pointer" onClick={() => setLightboxSrc(null)} alt="full size" />
           )}
         </DialogContent>
       </Dialog>
