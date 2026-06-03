@@ -11,8 +11,6 @@ import './styles.css'
 import reportWebVitals from './reportWebVitals.ts'
 
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
-// import { SocketProvider } from './context/SignalContext.tsx'
-
 const queryClient = new QueryClient({
   defaultOptions: { 
     queries: { 
@@ -42,13 +40,11 @@ if (rootElement && !rootElement.innerHTML) {
   root.render(
     <StrictMode>
       <QueryClientProvider client={queryClient}>
-        {/* <SocketProvider> */}
           <AuthProvider>
             <SiteProvider>
               <RouterProvider router={router} />
             </SiteProvider>
           </AuthProvider>
-        {/* </SocketProvider> */}
       </QueryClientProvider>
     </StrictMode>,
   )
