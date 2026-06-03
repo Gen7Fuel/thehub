@@ -59,7 +59,12 @@
       "Bash(mkdir -p C:/Users/MohammadHasan/Desktop/hub-doc-gen)",
       "Read(//c/Users/MohammadHasan/Desktop/**)",
       "Bash(npm init *)",
-      "Bash(grep -E \"\\\\.js$|app\\\\.\")"
+      "Bash(grep -E \"\\\\.js$|app\\\\.\")",
+      "Bash(Remove-Item -Recurse -Force \"C:\\\\Users\\\\MohammadHasan\\\\workspace\\\\thehub\\\\signaling\")",
+      "Bash(Remove-Item -Force \"C:\\\\Users\\\\MohammadHasan\\\\workspace\\\\thehub\\\\frontend\\\\src\\\\context\\\\SignalContext.tsx\")",
+      "Bash(Remove-Item -Force \"C:\\\\Users\\\\MohammadHasan\\\\workspace\\\\thehub\\\\frontend\\\\src\\\\lib\\\\webrtc.ts\")",
+      "Bash(Remove-Item -Force \"C:\\\\Users\\\\MohammadHasan\\\\workspace\\\\thehub\\\\frontend\\\\src\\\\components\\\\custom\\\\videoCall.tsx\")",
+      "Bash(Remove-Item -Force \"C:\\\\Users\\\\MohammadHasan\\\\workspace\\\\thehub\\\\frontend\\\\src\\\\components\\\\custom\\\\IncomingCallModal.tsx\")"
     ]
   }
 }
