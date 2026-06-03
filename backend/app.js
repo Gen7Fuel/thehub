@@ -24,6 +24,7 @@ require('./cron_jobs/weeklyArReportCron') // cron job for weekly AR report email
 require('./cron_jobs/itemBkSanitizationCron'); //cron job for sanitizing item backup data from SQL
 require('./cron_jobs/cycleCountReportCron'); //cron job for updating onHandCSO and unit prices for cycle count report, runs every morning at 3 AM
 require('./cron_jobs/cycleCountWeeklyInstanceCron'); //cron job for generating weekly cycle count instances, runs every Sunday at 3 AM
+require('./cron_jobs/syncStgLiveFuelPriceCron'); //cron job for syncing staging to live fuel price tables on the 1st of every month at 12 AM EST in SSMS
 
 // Route imports
 const authRoutes = require("./routes/auth");

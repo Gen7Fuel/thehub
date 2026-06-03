@@ -415,6 +415,7 @@ router.get('/station/:stationId', async (req, res) => {
       const todayAvgSales = await getAverageSales(stationId, stationNow.toDate());
       const todayOrders = await FuelOrder.find({
         station: stationId,
+        currentStatus: { $ne: 'Cancelled' },
         estimatedDeliveryDate: {
           $gte: stationNow.clone().startOf('day').toDate(),
           $lte: stationNow.clone().endOf('day').toDate()
@@ -438,6 +439,7 @@ router.get('/station/:stationId', async (req, res) => {
           const dayAvg = await getAverageSales(stationId, cursor.toDate());
           const dayOrders = await FuelOrder.find({
             station: stationId,
+            currentStatus: { $ne: 'Cancelled' },
             estimatedDeliveryDate: {
               $gte: cursor.clone().startOf('day').toDate(),
               $lte: cursor.clone().endOf('day').toDate()
@@ -469,6 +471,7 @@ router.get('/station/:stationId', async (req, res) => {
     const [orders, actualSalesRecord] = await Promise.all([
       FuelOrder.find({
         station: stationId,
+        currentStatus: { $ne: 'Cancelled' },
         estimatedDeliveryDate: { $gte: startOfTarget, $lte: endOfTarget }
       }).lean(),
 
