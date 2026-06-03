@@ -61,26 +61,16 @@ export default defineConfig({
         changeOrigin: true
       },
       '/cdn': 'http://cdn:5001',
-      '/signaling': {
-        target: 'http://signaling:5002',
-        ws: true,
-        changeOrigin: true
-      }
     }
   : {
       '/api': 'http://localhost:5000',
       '/login-auth': 'http://localhost:5005',
       '/socket.io': {
         target: 'http://localhost:5000',
-        ws: true,  // Add WebSocket support
+        ws: true,
         changeOrigin: true
       },
       '/cdn': 'http://localhost:5001',
-      '/signaling': {
-        target: 'http://localhost:5002',
-        ws: true,
-        changeOrigin: true
-      }
     }
   }
 });
