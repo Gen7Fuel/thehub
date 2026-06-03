@@ -147,7 +147,7 @@ router.post('/supplier-discounts/batch', async (req, res) => {
           .input('invItem', mssql.VarChar, entry.inventoryItem)
           .input('discountVal', mssql.Float, discountVal)
           .query(`
-            INSERT INTO [FUEL].[TEST_SupplierDiscounts] (
+            INSERT INTO [FUEL].[SupplierDiscounts] (
               [Supplier Code], [ Supplier Item], [Inventory Item], [Discounts], [Created At], [Updated At], [Deleted At]
             ) VALUES (
               @supCode, @supItem, @invItem, @discountVal, GETDATE(), GETDATE(), '1900-01-01 00:00:00.000'
@@ -197,7 +197,7 @@ router.put('/supplier-discounts/batch', async (req, res) => {
             .input('supCode', mssql.VarChar, item.supplierCode)
             .input('supItem', mssql.VarChar, item.supplierItem)
             .input('invItem', mssql.VarChar, item.inventoryItem)
-            .query(`DELETE FROM [FUEL].[TEST_SupplierDiscounts] WHERE [Supplier Code] = @supCode AND [ Supplier Item] = @supItem AND [Inventory Item] = @invItem`);
+            .query(`DELETE FROM [FUEL].[SupplierDiscounts] WHERE [Supplier Code] = @supCode AND [ Supplier Item] = @supItem AND [Inventory Item] = @invItem`);
 
           const stgDelete = new mssql.Request(transaction);
           await stgDelete
@@ -219,7 +219,7 @@ router.put('/supplier-discounts/batch', async (req, res) => {
               .input('supCode', mssql.VarChar, item.supplierCode)
               .input('supItem', mssql.VarChar, item.supplierItem)
               .input('invItem', mssql.VarChar, item.inventoryItem)
-              .query(`UPDATE [FUEL].[TEST_SupplierDiscounts] SET [Discounts] = @discountVal, [Updated At] = GETDATE() WHERE [Supplier Code] = @supCode AND [ Supplier Item] = @supItem AND [Inventory Item] = @invItem`);
+              .query(`UPDATE [FUEL].[SupplierDiscounts] SET [Discounts] = @discountVal, [Updated At] = GETDATE() WHERE [Supplier Code] = @supCode AND [ Supplier Item] = @supItem AND [Inventory Item] = @invItem`);
 
             const stgUpdate = new mssql.Request(transaction);
             await stgUpdate
@@ -293,7 +293,7 @@ router.post('/carrier-fcs/batch', async (req, res) => {
           .input('province', mssql.VarChar, entry.province)
           .input('fcsVal', mssql.Float, fcsVal)
           .query(`
-            INSERT INTO [FUEL].[TEST_CarrierFCS] (
+            INSERT INTO [FUEL].[CarrierFCS] (
               [Carrier], [Province], [FCS], [Created At], [Updated At], [Deleted At]
             ) VALUES (
               @carrier, @province, @fcsVal, GETDATE(), GETDATE(), '1900-01-01 00:00:00.000'
@@ -344,7 +344,7 @@ router.put('/carrier-fcs/batch', async (req, res) => {
           await liveDelete
             .input('carrier', mssql.VarChar, item.carrier)
             .input('province', mssql.VarChar, item.province)
-            .query(`DELETE FROM [FUEL].[TEST_CarrierFCS] WHERE [Carrier] = @carrier AND [Province] = @province`);
+            .query(`DELETE FROM [FUEL].[CarrierFCS] WHERE [Carrier] = @carrier AND [Province] = @province`);
 
           const stgDelete = new mssql.Request(transaction);
           await stgDelete
@@ -364,7 +364,7 @@ router.put('/carrier-fcs/batch', async (req, res) => {
               .input('fcsVal', mssql.Float, fcsVal)
               .input('carrier', mssql.VarChar, item.carrier)
               .input('province', mssql.VarChar, item.province)
-              .query(`UPDATE [FUEL].[TEST_CarrierFCS] SET [FCS] = @fcsVal, [Updated At] = GETDATE() WHERE [Carrier] = @carrier AND [Province] = @province`);
+              .query(`UPDATE [FUEL].[CarrierFCS] SET [FCS] = @fcsVal, [Updated At] = GETDATE() WHERE [Carrier] = @carrier AND [Province] = @province`);
 
             const stgUpdate = new mssql.Request(transaction);
             await stgUpdate
@@ -439,7 +439,7 @@ router.post('/carrier-haulage/batch', async (req, res) => {
           .input('pickup', mssql.VarChar, entry.pickup)
           .input('haulageVal', mssql.Float, haulageVal)
           .query(`
-            INSERT INTO [FUEL].[TEST_CarrierHaulage] (
+            INSERT INTO [FUEL].[CarrierHaulage] (
               [Carrier], [Type], [Location], [Pickup], [Haulage], [Created At], [Updated At], [Deleted At]
             ) VALUES (
               @carrier, @type, @location, @pickup, @haulageVal, GETDATE(), GETDATE(), '1900-01-01 00:00:00.000'
@@ -458,7 +458,7 @@ router.post('/carrier-haulage/batch', async (req, res) => {
             INSERT INTO [FUEL].[Stg_CarrierHaulage] (
               [Carrier], [Type], [Location], [Pickup], [Haulage], [Updated At]
             ) VALUES (
-              @carrier, @type, @location, @pickup, @haulageVal, GETDATE()
+              @carrier, @type, @location, @pickup, @haulageVal, NULL
             )
           `);
       }
@@ -493,7 +493,7 @@ router.put('/carrier-haulage/batch', async (req, res) => {
             .input('type', mssql.VarChar, item.type)
             .input('location', mssql.VarChar, item.location)
             .input('pickup', mssql.VarChar, item.pickup)
-            .query(`DELETE FROM [FUEL].[TEST_CarrierHaulage] WHERE [Carrier] = @carrier AND [Type] = @type AND [Location] = @location AND [Pickup] = @pickup`);
+            .query(`DELETE FROM [FUEL].[CarrierHaulage] WHERE [Carrier] = @carrier AND [Type] = @type AND [Location] = @location AND [Pickup] = @pickup`);
 
           const stgDelete = new mssql.Request(transaction);
           await stgDelete
@@ -517,7 +517,7 @@ router.put('/carrier-haulage/batch', async (req, res) => {
               .input('type', mssql.VarChar, item.type)
               .input('location', mssql.VarChar, item.location)
               .input('pickup', mssql.VarChar, item.pickup)
-              .query(`UPDATE [FUEL].[TEST_CarrierHaulage] SET [Haulage] = @haulageVal, [Updated At] = GETDATE() WHERE [Carrier] = @carrier AND [Type] = @type AND [Location] = @location AND [Pickup] = @pickup`);
+              .query(`UPDATE [FUEL].[CarrierHaulage] SET [Haulage] = @haulageVal, [Updated At] = GETDATE() WHERE [Carrier] = @carrier AND [Type] = @type AND [Location] = @location AND [Pickup] = @pickup`);
 
             const stgUpdate = new mssql.Request(transaction);
             await stgUpdate

@@ -758,14 +758,15 @@
 //   )
 // }
 
-import { createFileRoute } from '@tanstack/react-router'
+import { createFileRoute, useNavigate } from '@tanstack/react-router'
 import { useState, useEffect, useMemo } from 'react'
 import { Edit2, Trash2, Zap, Calendar, X, PlusCircle, RotateCcw, AlertTriangle, FileText, Search } from 'lucide-react'
 import CreatableSelect from 'react-select/creatable'
 import axios from 'axios'
+import { useAuth } from '@/context/AuthContext'
 
 export const Route = createFileRoute(
-  '/_navbarLayout/fuel-price-management/supplier-discounts',
+  '/_navbarLayout/fuel-settings/supplier-discounts',
 )({
   component: RouteComponent,
 })
@@ -801,6 +802,10 @@ const customSelectStyles = {
 }
 
 export function RouteComponent() {
+  const { user } = useAuth()
+  const access = user?.access || {}
+  const canEdit = access?.fuelSettings?.supplierDiscounts?.edit === true;
+  const navigate = useNavigate()
   const [data, setData] = useState<SupplierDiscountRow[]>([])
   const [loading, setLoading] = useState(true)
   const [searchQuery, setSearchQuery] = useState('')
@@ -817,24 +822,33 @@ export function RouteComponent() {
   const [wizardStep, setWizardStep] = useState<'closed' | 'warning' | 'form'>('closed')
   const [newEntriesList, setNewEntriesList] = useState<StagedNewEntry[]>([])
   const [isScheduleConfirmOpen, setIsScheduleConfirmOpen] = useState(false)
+  const [isLiveConfirmOpen, setIsLiveConfirmOpen] = useState(false);
+
 
   // Creation form inputs
   const [formSupplierCode, setFormSupplierCode] = useState('')
   const [formSupplierItem, setFormSupplierItem] = useState('')
-  const [formInventoryItem, setFormInventoryItem] = useState('')
+  // const [formInventoryItem, setFormInventoryItem] = useState('')
   const [formDiscountValue, setFormDiscountValue] = useState('')
 
   const fetchDiscounts = async () => {
     try {
       setLoading(true)
       const res = await axios.get('/api/fuel-pricing/supplier-discounts', {
-        headers: { Authorization: `Bearer ${localStorage.getItem('token')}` }
+        headers: {
+          Authorization: `Bearer ${localStorage.getItem('token')}`,
+          'X-Required-Permission': 'fuelSettings.supplierDiscounts'
+        }
       })
       setData(res.data)
       setEditedRows({})
       setDeletedRows({})
-    } catch (err) {
+    } catch (err: any) {
       console.error(err)
+      if (err.response?.status === 403) {
+        navigate({ to: '/no-access' })
+        return
+      }
       alert("Could not load the discounts from the server. Please refresh the page.")
     } finally {
       setLoading(false)
@@ -895,17 +909,17 @@ export function RouteComponent() {
     return Array.from(new Set(codes)).sort()
   }, [data])
 
-  const uniqueSupplierItems = useMemo(() => {
-    const items = data.map(row => row[' Supplier Item'].trim())
-    return Array.from(new Set(items)).sort()
-  }, [data])
+  // const uniqueSupplierItems = useMemo(() => {
+  //   const items = data.map(row => row[' Supplier Item'].trim())
+  //   return Array.from(new Set(items)).sort()
+  // }, [data])
 
-  const contextualInventoryItems = useMemo(() => {
-    if (!formSupplierItem) return []
-    const filtered = data.filter(row => row[' Supplier Item'].trim() === formSupplierItem)
-    const items = filtered.map(row => row['Inventory Item'].trim())
-    return Array.from(new Set(items)).sort()
-  }, [formSupplierItem, data])
+  // const contextualInventoryItems = useMemo(() => {
+  //   if (!formSupplierItem) return []
+  //   const filtered = data.filter(row => row[' Supplier Item'].trim() === formSupplierItem)
+  //   const items = filtered.map(row => row['Inventory Item'].trim())
+  //   return Array.from(new Set(items)).sort()
+  // }, [formSupplierItem, data])
 
   const getRowKey = (row: SupplierDiscountRow) => {
     return `${row['Supplier Code']}-${row[' Supplier Item']}-${row['Inventory Item']}`
@@ -915,7 +929,7 @@ export function RouteComponent() {
   const openEditDialog = (row: SupplierDiscountRow) => {
     setActiveDialogRow(row)
     const currentKey = getRowKey(row)
-    
+
     // Default to scheduled price if one exists from this month, otherwise show live price
     const baselineValue = (row['Stg_Discounts'] !== null && isStagedInCurrentMonth(row['Stg_Updated_At']))
       ? row['Stg_Discounts']
@@ -949,7 +963,7 @@ export function RouteComponent() {
   const resetCreationFormFields = () => {
     setFormSupplierCode('')
     setFormSupplierItem('')
-    setFormInventoryItem('')
+    // setFormInventoryItem('')
     setFormDiscountValue('')
   }
 
@@ -960,44 +974,73 @@ export function RouteComponent() {
   }
 
   const handleAddEntryToStagingList = () => {
-    const discountNum = parseFloat(formDiscountValue)
-    if (!formSupplierCode.trim() || !formSupplierItem || !formInventoryItem || isNaN(discountNum)) {
-      alert("Please fill out all choices completely before adding.")
-      return
+    const discountNum = parseFloat(formDiscountValue);
+    const selectedCategory = formSupplierItem; // e.g., "GAS" or "DIESEL & DYED"
+
+    if (!formSupplierCode.trim() || !selectedCategory || isNaN(discountNum)) {
+      alert("Please enter a Supplier Code, pick a Fuel Category, and set a price.");
+      return;
     }
 
-    const currentSupCode = formSupplierCode.trim().toUpperCase()
-    const currentSupItem = formSupplierItem.trim().toUpperCase()
-    const currentInvItem = formInventoryItem.trim().toUpperCase()
+    // Define the relationship for expansion
+    const MAPPING_CONFIG = {
+      "GAS": [
+        { supplierItem: "GAS", inventoryItem: "RUL87" },
+        { supplierItem: "GAS", inventoryItem: "PUL91" }
+      ],
+      "DIESEL & DYED": [
+        { supplierItem: "DIESEL", inventoryItem: "ULSD" },
+        { supplierItem: "DIESEL", inventoryItem: "WULSD" },
+        { supplierItem: "DYED", inventoryItem: "ULSDD" }
+      ]
+    };
 
-    const isStagedDuplicate = newEntriesList.some(
-      e => e.supplierCode.trim().toUpperCase() === currentSupCode &&
-        e.supplierItem.trim().toUpperCase() === currentSupItem &&
-        e.inventoryItem.trim().toUpperCase() === currentInvItem
-    )
-
-    const isDatabaseDuplicate = data.some(
-      r => r['Supplier Code'].trim().toUpperCase() === currentSupCode &&
-        r[' Supplier Item'].trim().toUpperCase() === currentSupItem &&
-        r['Inventory Item'].trim().toUpperCase() === currentInvItem
-    )
-
-    if (isStagedDuplicate || isDatabaseDuplicate) {
-      alert("This exact item combination already exists in the table.")
-      return
+    // 2. Ensure the category exists in your config
+    if (!(selectedCategory in MAPPING_CONFIG)) {
+      alert("Invalid fuel category selected.");
+      return;
     }
 
-    setNewEntriesList(prev => [...prev, {
-      supplierCode: formSupplierCode.trim().toUpperCase(),
-      supplierItem: formSupplierItem.trim(),
-      inventoryItem: formInventoryItem.trim(),
-      discounts: discountNum
-    }])
+    // Now TypeScript knows selectedCategory is valid
+    const itemsToPush = MAPPING_CONFIG[selectedCategory as keyof typeof MAPPING_CONFIG]; const supplierCode = formSupplierCode.trim().toUpperCase();
 
-    setFormSupplierItem('')
-    setFormInventoryItem('')
-    setFormDiscountValue('')
-  }
+    let addedCount = 0;
+
+    itemsToPush.forEach((item: any) => {
+      // 1. Check for duplicates in staging or existing database
+      const isStagedDuplicate = newEntriesList.some(
+        e => e.supplierCode === supplierCode &&
+          e.supplierItem === item.supplierItem &&
+          e.inventoryItem === item.inventoryItem
+      );
+
+      const isDatabaseDuplicate = data.some(
+        r => r['Supplier Code'].trim().toUpperCase() === supplierCode &&
+          r[' Supplier Item'].trim().toUpperCase() === item.supplierItem &&
+          r['Inventory Item'].trim().toUpperCase() === item.inventoryItem
+      );
+
+      if (!isStagedDuplicate && !isDatabaseDuplicate) {
+        setNewEntriesList(prev => [...prev, {
+          supplierCode: supplierCode,
+          supplierItem: item.supplierItem,
+          inventoryItem: item.inventoryItem,
+          discounts: discountNum
+        }]);
+        addedCount++;
+      }
+    });
+
+    if (addedCount === 0) {
+      alert("All items for this category already exist in the list or database.");
+    }
+
+    // Reset form fields
+    setFormSupplierItem('');
+    setFormDiscountValue('');
+    // Note: If you keep formInventoryItem in state, reset it here too
+    // setFormInventoryItem('');
+  };
 
   const removeStagedItemFromPreview = (index: number) => {
     setNewEntriesList(prev => prev.filter((_, i) => i !== index))
@@ -1009,7 +1052,10 @@ export function RouteComponent() {
       const res = await axios.post('/api/fuel-pricing/supplier-discounts/batch', {
         entries: newEntriesList
       }, {
-        headers: { Authorization: `Bearer ${localStorage.getItem('token')}` }
+        headers: {
+          Authorization: `Bearer ${localStorage.getItem('token')}`,
+          'X-Required-Permission': 'fuelSettings.supplierDiscounts.edit'
+        }
       })
 
       if (res.status === 200) {
@@ -1017,8 +1063,12 @@ export function RouteComponent() {
         closeCreationWizard()
         await fetchDiscounts()
       }
-    } catch (err) {
+    } catch (err: any) {
       console.error(err)
+      if (err.response?.status === 403) {
+        navigate({ to: '/no-access' })
+        return
+      }
       alert("Something went wrong on the server. Could not create the records.")
     }
   }
@@ -1052,16 +1102,24 @@ export function RouteComponent() {
         deletions: deletionsPayload,
         isImmediate: isImmediateAction
       }, {
-        headers: { Authorization: `Bearer ${localStorage.getItem('token')}` }
+        headers: {
+          Authorization: `Bearer ${localStorage.getItem('token')}`,
+          'X-Required-Permission': 'fuelSettings.supplierDiscounts.edit'
+        }
       })
 
       if (res.status === 200) {
         alert(isImmediateAction ? "Changes applied live right now!" : "Changes saved and scheduled successfully.")
         setIsScheduleConfirmOpen(false)
+        setIsLiveConfirmOpen(false)
         await fetchDiscounts()
       }
-    } catch (err) {
+    } catch (err: any) {
       console.error(err)
+      if (err.response?.status === 403) {
+        navigate({ to: '/no-access' })
+        return
+      }
       alert("Could not save your changes. Please try again.")
     }
   }
@@ -1094,58 +1152,61 @@ export function RouteComponent() {
 
   return (
     <div className="flex-1 flex flex-col overflow-hidden p-6 bg-white">
-      
+
       {/* HEADER ACTION CONTROL INTERFACE LAYOUT */}
       <div className="flex items-end justify-between w-full">
         <div>
           <h1 className="text-xl font-bold text-gray-900">Supplier Discounts</h1>
           <p className="text-xs text-gray-500 mt-1">
-            Manage your fuel prices here. You can make updates live right away, or schedule them to go live automatically on the 1st of next month.
+            View and Manage your Supplier Discounts here. {canEdit && "You can make updates live right away, or schedule them to go live automatically on the 1st of next month."}
           </p>
         </div>
 
         {/* CONTROLS CLUSTER */}
-        <div className="flex flex-col items-end gap-1.5 shrink-0">
-          {/* DELETION ADVISORY BANNER */}
-          <div className="flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-tight text-amber-800 bg-amber-50/70 border border-amber-200/50 px-2.5 py-1 rounded-md">
-            <AlertTriangle className="w-3.5 h-3.5 shrink-0 text-amber-600" />
-            <span>Creating and Deleting rows happens instantly live</span>
+        {canEdit && (
+          <div className="flex flex-col items-end gap-1.5 shrink-0">
+            {/* DELETION ADVISORY BANNER */}
+            <div className="flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-tight text-amber-800 bg-amber-50/70 border border-amber-200/50 px-2.5 py-1 rounded-md">
+              <AlertTriangle className="w-3.5 h-3.5 shrink-0 text-amber-600" />
+              <span>Creating and Deleting rows happens instantly live</span>
+            </div>
+
+            <div className="flex items-center gap-2">
+              <button
+                onClick={() => setWizardStep('warning')}
+                className="flex items-center gap-2 h-9 px-4 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-sm font-medium shadow-xs cursor-pointer transition-colors"
+              >
+                <PlusCircle className="w-4 h-4" />
+                Add New Line
+              </button>
+
+              <button
+                onClick={() => setIsLiveConfirmOpen(true)}
+                disabled={!hasPendingChanges}
+                className={`flex items-center gap-1.5 h-9 px-3 text-sm font-medium rounded-lg shadow-xs transition-all ${hasPendingChanges
+                  ? 'bg-red-600 text-white hover:bg-red-700 cursor-pointer'
+                  : 'bg-gray-100 text-gray-400 cursor-not-allowed'
+                  }`}
+              >
+                <Zap className="w-4 h-4" />
+                Go Live Now ({totalStagedCount})
+              </button>
+
+              <button
+                onClick={() => setIsScheduleConfirmOpen(true)}
+                disabled={!hasPendingChanges}
+                className={`flex items-center gap-1.5 h-9 px-3 text-sm font-medium rounded-lg shadow-xs transition-all ${hasPendingChanges
+                  ? 'bg-amber-600 text-white hover:bg-amber-700 cursor-pointer'
+                  : 'bg-gray-100 text-gray-400 cursor-not-allowed'
+                  }`}
+                title={`Save updates to turn on automatically on the 1st of ${scheduledMonthName}.`}
+              >
+                <Calendar className="w-4 h-4" />
+                Schedule for {scheduledMonthName} ({totalStagedCount})
+              </button>
+            </div>
           </div>
-
-          <div className="flex items-center gap-2">
-            <button
-              onClick={() => setWizardStep('warning')}
-              className="flex items-center gap-2 h-9 px-4 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-sm font-medium shadow-xs cursor-pointer transition-colors"
-            >
-              <PlusCircle className="w-4 h-4" />
-              Add New Line
-            </button>
-
-            <button
-              onClick={() => handlePushUpdatesBatch(true)}
-              disabled={!hasPendingChanges}
-              className={`flex items-center gap-1.5 h-9 px-3 text-sm font-medium rounded-lg shadow-xs transition-all ${
-                hasPendingChanges ? 'bg-red-600 text-white hover:bg-red-700 cursor-pointer' : 'bg-gray-100 text-gray-400 cursor-not-allowed'
-              }`}
-              title="Push changes live to production systems right now."
-            >
-              <Zap className="w-4 h-4" />
-              Go Live Now ({totalStagedCount})
-            </button>
-
-            <button
-              onClick={() => setIsScheduleConfirmOpen(true)}
-              disabled={!hasPendingChanges}
-              className={`flex items-center gap-1.5 h-9 px-3 text-sm font-medium rounded-lg shadow-xs transition-all ${
-                hasPendingChanges ? 'bg-amber-600 text-white hover:bg-amber-700 cursor-pointer' : 'bg-gray-100 text-gray-400 cursor-not-allowed'
-              }`}
-              title={`Save updates to turn on automatically on the 1st of ${scheduledMonthName}.`}
-            >
-              <Calendar className="w-4 h-4" />
-              Schedule for {scheduledMonthName} ({totalStagedCount})
-            </button>
-          </div>
-        </div>
+        )}
       </div>
 
       {/* SEARCH INPUT BAR */}
@@ -1173,12 +1234,12 @@ export function RouteComponent() {
               <th className="p-4 bg-gray-50/90">Supplier Code</th>
               <th className="p-4 bg-gray-50/90">Supplier Item</th>
               <th className="p-4 bg-gray-50/90">Inventory Item</th>
-              <th className="p-3 text-right bg-emerald-50/40 text-emerald-900 border-x">Current Price ($)</th>
-              <th className="p-3 text-right bg-amber-50/40 text-amber-900 border-r">Scheduled Price ($)</th>
-              <th className="p-4">Live Price Set Date</th>
-              <th className="p-4">Schedule Set Date</th>
+              <th className="p-3 text-right bg-emerald-50/40 text-emerald-900 border-x">Current Discount ($)</th>
+              <th className="p-4">Last Updated At</th>
+              <th className="p-3 text-right bg-amber-50/40 text-amber-900 border-r">Scheduled Discount ($)</th>
+              <th className="p-4">Schedule Last Updated At</th>
               <th className="p-4 text-center">Status Checks</th>
-              <th className="p-4 text-center w-24">Actions</th>
+              {canEdit && <th className="p-4 text-center w-24">Actions</th>}
             </tr>
           </thead>
           <tbody className="divide-y divide-gray-100 text-sm">
@@ -1219,13 +1280,13 @@ export function RouteComponent() {
                     <td className="p-3 text-right font-mono font-bold bg-emerald-50/10 text-emerald-700 border-x">
                       {row['Live_Discounts'] !== null ? row['Live_Discounts'].toFixed(4) : '-'}
                     </td>
+                    <td className="p-4 text-xs text-gray-400 font-medium">{formatToLocalTime(row['Live_Updated_At'])}</td>
 
                     {/* FUTURE COMMITTED DISPLAY */}
                     <td className={`p-3 text-right font-mono font-bold bg-amber-50/10 border-r ${isCommittedScheduleActive ? 'text-blue-600 font-semibold' : 'text-gray-400'}`}>
                       {committedStagedValue !== null ? committedStagedValue.toFixed(4) : '-'}
                     </td>
 
-                    <td className="p-4 text-xs text-gray-400 font-medium">{formatToLocalTime(row['Live_Updated_At'])}</td>
                     <td className={`p-4 text-xs font-medium ${isCommittedScheduleActive ? 'text-blue-500 font-semibold' : 'text-gray-400'}`}>{formatToLocalTime(row['Stg_Updated_At'])}</td>
 
                     {/* STATUS BADGES COLUMN */}
@@ -1237,7 +1298,7 @@ export function RouteComponent() {
                       )}
                       {hasUnsavedLocalEdit && !isStagedDeleted && (
                         <span className="inline-flex px-2 py-0.5 rounded text-[10px] font-bold uppercase bg-amber-100 text-amber-700 border border-amber-200 animate-pulse">
-                          Changing: ({ (committedStagedValue ?? liveValue).toFixed(4) } → { editedRows[rowKey].toFixed(4) })
+                          Changing: ({(committedStagedValue ?? liveValue).toFixed(4)} → {editedRows[rowKey].toFixed(4)})
                         </span>
                       )}
                       {!isStagedDeleted && !hasUnsavedLocalEdit && isCommittedScheduleActive && (
@@ -1249,23 +1310,25 @@ export function RouteComponent() {
                     </td>
 
                     {/* ITEM ROW CONTROLS */}
-                    <td className="p-4 text-center">
-                      <div className="flex items-center justify-center gap-1">
-                        <button
-                          onClick={() => openEditDialog(row)}
-                          disabled={isStagedDeleted}
-                          className={`p-1.5 rounded transition-all ${isStagedDeleted ? 'text-gray-300 cursor-not-allowed' : 'text-blue-600 hover:bg-blue-50'}`}
-                        >
-                          <Edit2 className="w-4 h-4" />
-                        </button>
-                        <button
-                          onClick={() => toggleRowDeletion(row)}
-                          className={`p-1.5 rounded transition-all ${isStagedDeleted ? 'text-amber-600 hover:bg-amber-50' : 'text-red-600 hover:bg-red-50'}`}
-                        >
-                          {isStagedDeleted ? <RotateCcw className="w-4 h-4" /> : <Trash2 className="w-4 h-4" />}
-                        </button>
-                      </div>
-                    </td>
+                    {canEdit && (
+                      <td className="p-4 text-center">
+                        <div className="flex items-center justify-center gap-1">
+                          <button
+                            onClick={() => openEditDialog(row)}
+                            disabled={isStagedDeleted}
+                            className={`p-1.5 rounded transition-all ${isStagedDeleted ? 'text-gray-300 cursor-not-allowed' : 'text-blue-600 hover:bg-blue-50'}`}
+                          >
+                            <Edit2 className="w-4 h-4" />
+                          </button>
+                          <button
+                            onClick={() => toggleRowDeletion(row)}
+                            className={`p-1.5 rounded transition-all ${isStagedDeleted ? 'text-amber-600 hover:bg-amber-50' : 'text-red-600 hover:bg-red-50'}`}
+                          >
+                            {isStagedDeleted ? <RotateCcw className="w-4 h-4" /> : <Trash2 className="w-4 h-4" />}
+                          </button>
+                        </div>
+                      </td>
+                    )}
                   </tr>
                 )
               })
@@ -1343,22 +1406,21 @@ export function RouteComponent() {
                 />
               </div>
 
+              {/* Replace your Supplier Item select dropdown with this */}
               <div>
-                <label className="block font-bold text-gray-600 uppercase mb-1">Supplier Item</label>
+                <label className="block font-bold text-gray-600 uppercase mb-1">Select Fuel Type</label>
                 <select
                   className="w-full p-2 border rounded-lg bg-white h-[38px] text-sm"
                   value={formSupplierItem}
-                  onChange={(e) => {
-                    setFormSupplierItem(e.target.value)
-                    setFormInventoryItem('')
-                  }}
+                  onChange={(e) => setFormSupplierItem(e.target.value)}
                 >
-                  <option value="">-- Select Item Type --</option>
-                  {uniqueSupplierItems.map(item => <option key={item} value={item}>{item}</option>)}
+                  <option value="">-- Choose Fuel Category --</option>
+                  <option value="GAS">GAS</option>
+                  <option value="DIESEL & DYED">DIESEL & DYED</option>
                 </select>
               </div>
 
-              <div>
+              {/* <div>
                 <label className="block font-bold text-gray-600 uppercase mb-1">
                   Inventory Item {!formSupplierItem && <span className="text-red-500 font-normal lowercase">(Please pick Supplier Item first)</span>}
                 </label>
@@ -1368,8 +1430,8 @@ export function RouteComponent() {
                 >
                   <option value="">-- Select Store Label Match --</option>
                   {contextualInventoryItems.map(item => <option key={item} value={item}>{item}</option>)}
-                </select>
-              </div>
+                </select> 
+              </div> */}
 
               <div>
                 <label className="block font-bold text-gray-600 uppercase mb-1">Discount Number Amount ($)</label>
@@ -1459,11 +1521,45 @@ export function RouteComponent() {
 
             <div className="flex justify-end gap-3 border-t pt-4">
               <button onClick={() => setIsScheduleConfirmOpen(false)} className="px-4 py-2 border border-gray-200 text-gray-500 hover:bg-gray-50 rounded-lg text-sm font-medium transition-colors">Cancel</button>
-              <button 
+              <button
                 onClick={() => handlePushUpdatesBatch(false)}
                 className="px-5 py-2 bg-amber-600 hover:bg-amber-700 text-white rounded-lg text-sm font-medium shadow-sm transition-colors cursor-pointer"
               >
                 Confirm and Schedule
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* DIALOG 5: CONFIRM LIVE UPDATE WARNING */}
+      {isLiveConfirmOpen && (
+        <div className="fixed inset-0 bg-black/40 backdrop-blur-xs flex items-center justify-center z-50">
+          <div className="bg-white border rounded-xl shadow-2xl w-full max-w-md p-6 border-red-200">
+            <div className="flex items-center gap-3 text-red-600 mb-4">
+              <Zap className="w-8 h-8 shrink-0" />
+              <h3 className="text-lg font-bold text-gray-900">Push Changes Live?</h3>
+            </div>
+
+            <p className="text-sm text-gray-600 leading-relaxed mb-6">
+              You are about to push <strong className="text-gray-900">{totalStagedCount} changes</strong> directly to live calculation table. This action is <strong>immediate</strong> and cannot be undone.
+            </p>
+
+            <div className="flex justify-end gap-3 border-t pt-4">
+              <button
+                onClick={() => setIsLiveConfirmOpen(false)}
+                className="px-4 py-2 border border-gray-200 text-gray-500 hover:bg-gray-50 rounded-lg text-sm font-medium"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={() => {
+                  handlePushUpdatesBatch(true);
+                  setIsLiveConfirmOpen(false);
+                }}
+                className="px-5 py-2 bg-red-600 hover:bg-red-700 text-white rounded-lg text-sm font-medium shadow-sm"
+              >
+                Confirm and Go Live
               </button>
             </div>
           </div>

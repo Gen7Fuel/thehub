@@ -1,42 +1,52 @@
 import { createFileRoute, Link, Outlet } from '@tanstack/react-router'
 import { Truck, Flame, Percent } from 'lucide-react'
+import { useAuth } from '@/context/AuthContext'
 
-export const Route = createFileRoute('/_navbarLayout/fuel-price-management')({
+export const Route = createFileRoute('/_navbarLayout/fuel-settings')({
   component: FuelPricingManagementLayout,
 })
 
 function FuelPricingManagementLayout() {
   const activeProps = { className: 'bg-primary text-primary-foreground shadow-md' }
+  const { user } = useAuth()
+  const access = user?.access || {}
 
   const links = [
-    { 
-      to: '/fuel-price-management/carrier-haulage', 
-      label: 'Carrier Haulage', 
-      icon: Truck 
+    {
+      to: '/fuel-settings/carrier-haulage',
+      label: 'Carrier Haulage',
+      icon: Truck,
+      permissionKey: 'haulage' // Matches your access key
     },
-    { 
-      to: '/fuel-price-management/carrier-fcs', 
-      label: 'Carrier FSC', 
-      icon: Flame 
+    {
+      to: '/fuel-settings/carrier-fcs',
+      label: 'Carrier FSC',
+      icon: Flame,
+      permissionKey: 'fsc' // Matches your access key
     },
-    { 
-      to: '/fuel-price-management/supplier-discounts', 
-      label: 'Supplier Discounts', 
-      icon: Percent 
+    {
+      to: '/fuel-settings/supplier-discounts',
+      label: 'Supplier Discounts',
+      icon: Percent,
+      permissionKey: 'supplierDiscounts' // Matches your access key
     },
   ]
 
+  // Filter links based on whether the user has the 'value' permission set to true
+  const authorizedLinks = links.filter((link) => {
+    return access?.fuelSettings?.[link.permissionKey]?.value === true
+  })
+
   return (
     <div className="flex w-full h-[calc(100vh-80px)] overflow-hidden bg-gray-50/50">
-      {/* COLUMN 1: Price Management Parameters */}
       <aside className="w-16 lg:w-64 flex flex-col border-r bg-white p-4 gap-2 shrink-0">
         <div className="mb-4 px-2">
           <h2 className="text-xs font-bold uppercase text-muted-foreground tracking-tighter">
             Price Parameters
           </h2>
         </div>
-        
-        {links.map((link) => (
+
+        {authorizedLinks.map((link) => (
           <Link
             key={link.to}
             to={link.to}
@@ -49,7 +59,6 @@ function FuelPricingManagementLayout() {
         ))}
       </aside>
 
-      {/* Renders COLUMN 2 and COLUMN 3 (The data tables) */}
       <main className="flex-1 flex overflow-hidden">
         <Outlet />
       </main>

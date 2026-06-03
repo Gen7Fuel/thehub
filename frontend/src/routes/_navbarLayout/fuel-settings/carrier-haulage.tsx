@@ -1,11 +1,12 @@
-import { createFileRoute } from '@tanstack/react-router'
+import { createFileRoute, useNavigate } from '@tanstack/react-router'
 import { useState, useEffect, useMemo } from 'react'
 import { Edit2, Trash2, Zap, Calendar, X, PlusCircle, RotateCcw, AlertTriangle, FileText, Search } from 'lucide-react'
 import CreatableSelect from 'react-select/creatable'
 import axios from 'axios'
+import { useAuth } from '@/context/AuthContext'
 
 export const Route = createFileRoute(
-  '/_navbarLayout/fuel-price-management/carrier-haulage',
+  '/_navbarLayout/fuel-settings/carrier-haulage',
 )({
   component: RouteComponent,
 })
@@ -43,6 +44,10 @@ const customSelectStyles = {
 }
 
 export function RouteComponent() {
+  const { user } = useAuth()
+  const access = user?.access || {}
+  const canEdit = access?.fuelSettings?.haulage?.edit === true;
+  const navigate = useNavigate()
   const [data, setData] = useState<CarrierHaulageRow[]>([])
   const [loading, setLoading] = useState(true)
   const [searchQuery, setSearchQuery] = useState('')
@@ -59,6 +64,7 @@ export function RouteComponent() {
   const [wizardStep, setWizardStep] = useState<'closed' | 'warning' | 'form'>('closed')
   const [newEntriesList, setNewEntriesList] = useState<StagedNewHaulageEntry[]>([])
   const [isScheduleConfirmOpen, setIsScheduleConfirmOpen] = useState(false)
+  const [isLiveConfirmOpen, setIsLiveConfirmOpen] = useState(false);
 
   // Creation form inputs
   const [formCarrier, setFormCarrier] = useState('')
@@ -67,17 +73,35 @@ export function RouteComponent() {
   const [formPickup, setFormPickup] = useState('')
   const [formHaulageValue, setFormHaulageValue] = useState('')
 
+  const HAULAGE_MAPPING = {
+    "GAS": [
+      { type: "REG" },
+      { type: "PNL" }
+    ],
+    "DIESEL": [
+      { type: "DSL" },
+      { type: "DYED" }
+    ]
+  };
+
   const fetchHaulageData = async () => {
     try {
       setLoading(true)
       const res = await axios.get('/api/fuel-pricing/carrier-haulage', {
-        headers: { Authorization: `Bearer ${localStorage.getItem('token')}` }
+        headers: {
+          Authorization: `Bearer ${localStorage.getItem('token')}`,
+          'X-Required-Permission': 'fuelSettings.haulage'
+        }
       })
       setData(res.data)
       setEditedRows({})
       setDeletedRows({})
-    } catch (err) {
+    } catch (err: any) {
       console.error(err)
+      if (err.response?.status === 403) {
+        navigate({ to: '/no-access' })
+        return
+      }
       alert("Could not load the haulage routes from the server. Please refresh the page.")
     } finally {
       setLoading(false)
@@ -134,7 +158,7 @@ export function RouteComponent() {
 
   // Dropdown options extractors
   const uniqueCarriers = useMemo(() => Array.from(new Set(data.map(r => r['Carrier'].trim()))).sort(), [data])
-  const uniqueTypes = useMemo(() => Array.from(new Set(data.map(r => r['Type'].trim()))).sort(), [data])
+  // const uniqueTypes = useMemo(() => Array.from(new Set(data.map(r => r['Type'].trim()))).sort(), [data])
   const uniqueLocations = useMemo(() => Array.from(new Set(data.map(r => r['Location'].trim()))).sort(), [data])
   const uniquePickups = useMemo(() => Array.from(new Set(data.map(r => r['Pickup'].trim()))).sort(), [data])
 
@@ -146,7 +170,7 @@ export function RouteComponent() {
   const openEditDialog = (row: CarrierHaulageRow) => {
     setActiveDialogRow(row)
     const key = getRowKey(row)
-    
+
     // Default to scheduled price if one exists from this month, otherwise show live price
     const baselineValue = (row['Stg_Haulage'] !== null && isStagedInCurrentMonth(row['Stg_Updated_At']))
       ? row['Stg_Haulage']
@@ -190,46 +214,65 @@ export function RouteComponent() {
   }
 
   const handleAddEntryToStagingList = () => {
-    const haulageNum = parseFloat(formHaulageValue)
-    if (!formCarrier || !formType || !formLocation || !formPickup || isNaN(haulageNum)) {
-      alert("Please fill out all choices completely before adding.")
-      return
+    const haulageNum = parseFloat(formHaulageValue);
+    const selectedCategory = formType;
+
+    if (!formCarrier || !selectedCategory || !formLocation || !formPickup || isNaN(haulageNum)) {
+      alert("Please fill out all fields completely before adding.");
+      return;
     }
 
-    const currentCarrier = formCarrier.trim().toUpperCase()
-    const currentType = formType.trim().toUpperCase()
-    const currentLocation = formLocation.trim().toUpperCase()
-    const currentPickup = formPickup.trim().toUpperCase()
-
-    const isStagedDuplicate = newEntriesList.some(
-      e => e.carrier.trim().toUpperCase() === currentCarrier &&
-        e.type.trim().toUpperCase() === currentType &&
-        e.location.trim().toUpperCase() === currentLocation &&
-        e.pickup.trim().toUpperCase() === currentPickup
-    )
-
-    const isDatabaseDuplicate = data.some(
-      r => r['Carrier'].trim().toUpperCase() === currentCarrier &&
-        r['Type'].trim().toUpperCase() === currentType &&
-        r['Location'].trim().toUpperCase() === currentLocation &&
-        r['Pickup'].trim().toUpperCase() === currentPickup
-    )
-
-    if (isStagedDuplicate || isDatabaseDuplicate) {
-      alert("This exact route combination already exists in the table.")
-      return
+    if (!(selectedCategory in HAULAGE_MAPPING)) {
+      alert("Invalid category selected.");
+      return;
     }
 
-    setNewEntriesList(prev => [...prev, {
-      carrier: formCarrier.trim().toUpperCase(),
-      type: formType.trim().toUpperCase(),
-      location: formLocation.trim().toUpperCase(),
-      pickup: formPickup.trim().toUpperCase(),
-      haulage: haulageNum
-    }])
+    const entriesToPush = HAULAGE_MAPPING[selectedCategory as keyof typeof HAULAGE_MAPPING];
 
-    setFormHaulageValue('')
-  }
+    // Keep original values for the actual data object
+    const carrierOriginal = formCarrier.trim();
+    const locationOriginal = formLocation.trim();
+    const pickupOriginal = formPickup.trim();
+
+    // Create uppercase versions specifically for duplication checks
+    const carrierUpper = carrierOriginal.toUpperCase();
+    const locationUpper = locationOriginal.toUpperCase();
+    const pickupUpper = pickupOriginal.toUpperCase();
+
+    let addedCount = 0;
+
+    entriesToPush.forEach(item => {
+      // Check for duplicates using the UPPERCASE versions
+      const isDuplicate = newEntriesList.some(
+        e => e.carrier.toUpperCase() === carrierUpper &&
+          e.type === item.type &&
+          e.location.toUpperCase() === locationUpper &&
+          e.pickup.toUpperCase() === pickupUpper
+      ) || data.some(
+        r => r['Carrier'].trim().toUpperCase() === carrierUpper &&
+          r['Type'].trim().toUpperCase() === item.type &&
+          r['Location'].trim().toUpperCase() === locationUpper &&
+          r['Pickup'].trim().toUpperCase() === pickupUpper
+      );
+
+      if (!isDuplicate) {
+        setNewEntriesList(prev => [...prev, {
+          carrier: carrierOriginal, // Send original casing
+          type: item.type,
+          location: locationOriginal, // Send original casing
+          pickup: pickupOriginal,     // Send original casing
+          haulage: haulageNum
+        }]);
+        addedCount++;
+      }
+    });
+
+    if (addedCount === 0) alert("These routes already exist in the system.");
+
+    // Reset fields
+    setFormType('');
+    setFormHaulageValue('');
+  };
 
   const removeStagedItemFromPreview = (index: number) => {
     setNewEntriesList(prev => prev.filter((_, i) => i !== index))
@@ -239,15 +282,22 @@ export function RouteComponent() {
     if (newEntriesList.length === 0) return
     try {
       const res = await axios.post('/api/fuel-pricing/carrier-haulage/batch', { entries: newEntriesList }, {
-        headers: { Authorization: `Bearer ${localStorage.getItem('token')}` }
+        headers: {
+          Authorization: `Bearer ${localStorage.getItem('token')}`,
+          'X-Required-Permission': 'fuelSettings.haulage.edit'
+        }
       })
       if (res.status === 200) {
         alert("Successfully added new routes to the table.")
         closeCreationWizard()
         await fetchHaulageData()
       }
-    } catch (err) {
+    } catch (err: any) {
       console.error(err)
+      if (err.response?.status === 403) {
+        navigate({ to: '/no-access' })
+        return
+      }
       alert("Something went wrong on the server. Could not create the records.")
     }
   }
@@ -283,15 +333,24 @@ export function RouteComponent() {
         deletions: deletionsPayload,
         isImmediate: isImmediateAction
       }, {
-        headers: { Authorization: `Bearer ${localStorage.getItem('token')}` }
+        headers: {
+          Authorization: `Bearer ${localStorage.getItem('token')}`,
+          'X-Required-Permission': 'fuelSettings.haulage.edit'
+        }
       })
+
       if (res.status === 200) {
-        alert(isImmediateAction ? "Changes applied live right now!" : "Changes saved and scheduled successfully.")
-        setIsScheduleConfirmOpen(false)
-        await fetchHaulageData()
+        alert(isImmediateAction ? "Changes applied live right now!" : "Changes saved and scheduled successfully.");
+        setIsScheduleConfirmOpen(false);
+        setIsLiveConfirmOpen(false);
+        await fetchHaulageData();
       }
-    } catch (err) {
+    } catch (err: any) {
       console.error(err)
+      if (err.response?.status === 403) {
+        navigate({ to: '/no-access' })
+        return
+      }
       alert("Could not save your changes. Please try again.")
     }
   }
@@ -325,58 +384,60 @@ export function RouteComponent() {
 
   return (
     <div className="flex-1 flex flex-col overflow-hidden p-6 bg-white">
-      
+
       {/* HEADER ACTION CONTROL INTERFACE LAYOUT */}
       <div className="flex items-end justify-between w-full">
         <div>
           <h1 className="text-xl font-bold text-gray-900">Carrier Haulage Routes</h1>
           <p className="text-xs text-gray-500 mt-1">
-            Manage shipping and delivery costs for different truck routes. You can make updates live right away, or schedule them to go live automatically on the 1st of next month.
+            Manage shipping and delivery costs for different carrier routes. {canEdit && (
+              <span>You can make updates live right away, or schedule them to go live automatically on the 1st of next month.</span>
+            )}
           </p>
         </div>
 
         {/* CONTROLS CLUSTER */}
-        <div className="flex flex-col items-end gap-1.5 shrink-0">
-          {/* DELETION ADVISORY BANNER */}
-          <div className="flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-tight text-amber-800 bg-amber-50/70 border border-amber-200/50 px-2.5 py-1 rounded-md">
-            <AlertTriangle className="w-3.5 h-3.5 shrink-0 text-amber-600" />
-            <span>Deleting a row happens instantly live</span>
+
+        {canEdit && (
+          <div className="flex flex-col items-end gap-1.5 shrink-0">
+            {/* DELETION ADVISORY BANNER */}
+            <div className="flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-tight text-amber-800 bg-amber-50/70 border border-amber-200/50 px-2.5 py-1 rounded-md">
+              <AlertTriangle className="w-3.5 h-3.5 shrink-0 text-amber-600" />
+              <span>Creating and Deleting rows happens instantly live</span>
+            </div>
+
+            <div className="flex items-center gap-2">
+              <button
+                onClick={() => setWizardStep('warning')}
+                className="flex items-center gap-2 h-9 px-4 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-sm font-medium shadow-xs cursor-pointer transition-colors"
+              >
+                <PlusCircle className="w-4 h-4" />
+                Add New Route
+              </button>
+
+              <button
+                onClick={() => setIsLiveConfirmOpen(true)} // Changed from direct call
+                disabled={!hasPendingChanges}
+                className={`flex items-center gap-1.5 h-9 px-3 text-sm font-medium rounded-lg shadow-xs transition-all ${hasPendingChanges ? 'bg-red-600 text-white hover:bg-red-700 cursor-pointer' : 'bg-gray-100 text-gray-400 cursor-not-allowed'
+                  }`}
+              >
+                <Zap className="w-4 h-4" />
+                Go Live Now ({totalStagedCount})
+              </button>
+
+              <button
+                onClick={() => setIsScheduleConfirmOpen(true)}
+                disabled={!hasPendingChanges}
+                className={`flex items-center gap-1.5 h-9 px-3 text-sm font-medium rounded-lg shadow-xs transition-all ${hasPendingChanges ? 'bg-amber-600 text-white hover:bg-amber-700 cursor-pointer' : 'bg-gray-100 text-gray-400 cursor-not-allowed'
+                  }`}
+                title={`Save updates to turn on automatically on the 1st of ${scheduledMonthName}.`}
+              >
+                <Calendar className="w-4 h-4" />
+                Schedule for {scheduledMonthName} ({totalStagedCount})
+              </button>
+            </div>
           </div>
-
-          <div className="flex items-center gap-2">
-            <button
-              onClick={() => setWizardStep('warning')}
-              className="flex items-center gap-2 h-9 px-4 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-sm font-medium shadow-xs cursor-pointer transition-colors"
-            >
-              <PlusCircle className="w-4 h-4" />
-              Add New Route
-            </button>
-
-            <button
-              onClick={() => handlePushUpdatesBatch(true)}
-              disabled={!hasPendingChanges}
-              className={`flex items-center gap-1.5 h-9 px-3 text-sm font-medium rounded-lg shadow-xs transition-all ${
-                hasPendingChanges ? 'bg-red-600 text-white hover:bg-red-700 cursor-pointer' : 'bg-gray-100 text-gray-400 cursor-not-allowed'
-              }`}
-              title="Push changes live to production systems right now."
-            >
-              <Zap className="w-4 h-4" />
-              Go Live Now ({totalStagedCount})
-            </button>
-
-            <button
-              onClick={() => setIsScheduleConfirmOpen(true)}
-              disabled={!hasPendingChanges}
-              className={`flex items-center gap-1.5 h-9 px-3 text-sm font-medium rounded-lg shadow-xs transition-all ${
-                hasPendingChanges ? 'bg-amber-600 text-white hover:bg-amber-700 cursor-pointer' : 'bg-gray-100 text-gray-400 cursor-not-allowed'
-              }`}
-              title={`Save updates to turn on automatically on the 1st of ${scheduledMonthName}.`}
-            >
-              <Calendar className="w-4 h-4" />
-              Schedule for {scheduledMonthName} ({totalStagedCount})
-            </button>
-          </div>
-        </div>
+        )}
       </div>
 
       {/* SEARCH INPUT BAR */}
@@ -405,15 +466,16 @@ export function RouteComponent() {
               <th className="p-4 bg-gray-50/90">Type</th>
               <th className="p-4 bg-gray-50/90">Location</th>
               <th className="p-4 bg-gray-50/90">Pickup Terminal</th>
-              
+
               {/* ALIGNED RATE AND DATE COLUMN GROUPS */}
               <th className="p-3 text-right bg-emerald-50/40 text-emerald-900 border-x">Current Haulage ($)</th>
-              <th className="p-4">Rate Last Updated At</th>
+              <th className="p-4">Last Updated At</th>
               <th className="p-3 text-right bg-amber-50/40 text-amber-900 border-r">Scheduled Haulage ($)</th>
               <th className="p-4">Schedule Last Updated At</th>
-              
+
               <th className="p-4 text-center">Status Checks</th>
-              <th className="p-4 text-center w-24">Actions</th>
+
+              {canEdit && (<th className="p-4 text-center w-24">Actions</th>)}
             </tr>
           </thead>
           <tbody className="divide-y divide-gray-100 text-sm">
@@ -480,7 +542,7 @@ export function RouteComponent() {
                       )}
                       {hasUnsavedLocalEdit && !isStagedDeleted && (
                         <span className="inline-flex px-2 py-0.5 rounded text-[10px] font-bold uppercase bg-amber-100 text-amber-700 border border-amber-200 animate-pulse">
-                          Changing: ({ (committedStagedValue ?? liveValue).toFixed(4) } → { editedRows[key].toFixed(4) })
+                          Changing: ({(committedStagedValue ?? liveValue).toFixed(4)} → {editedRows[key].toFixed(4)})
                         </span>
                       )}
                       {!isStagedDeleted && !hasUnsavedLocalEdit && isCommittedScheduleActive && (
@@ -492,23 +554,26 @@ export function RouteComponent() {
                     </td>
 
                     {/* ITEM ROW CONTROLS */}
-                    <td className="p-4 text-center">
-                      <div className="flex items-center justify-center gap-1">
-                        <button
-                          onClick={() => openEditDialog(row)}
-                          disabled={isStagedDeleted}
-                          className={`p-1.5 rounded transition-all ${isStagedDeleted ? 'text-gray-300 cursor-not-allowed' : 'text-blue-600 hover:bg-blue-50'}`}
-                        >
-                          <Edit2 className="w-4 h-4" />
-                        </button>
-                        <button
-                          onClick={() => toggleRowDeletion(row)}
-                          className={`p-1.5 rounded transition-all ${isStagedDeleted ? 'text-amber-600 hover:bg-amber-50' : 'text-red-600 hover:bg-red-50'}`}
-                        >
-                          {isStagedDeleted ? <RotateCcw className="w-4 h-4" /> : <Trash2 className="w-4 h-4" />}
-                        </button>
-                      </div>
-                    </td>
+
+                    {canEdit && (
+                      <td className="p-4 text-center">
+                        <div className="flex items-center justify-center gap-1">
+                          <button
+                            onClick={() => openEditDialog(row)}
+                            disabled={isStagedDeleted}
+                            className={`p-1.5 rounded transition-all ${isStagedDeleted ? 'text-gray-300 cursor-not-allowed' : 'text-blue-600 hover:bg-blue-50'}`}
+                          >
+                            <Edit2 className="w-4 h-4" />
+                          </button>
+                          <button
+                            onClick={() => toggleRowDeletion(row)}
+                            className={`p-1.5 rounded transition-all ${isStagedDeleted ? 'text-amber-600 hover:bg-amber-50' : 'text-red-600 hover:bg-red-50'}`}
+                          >
+                            {isStagedDeleted ? <RotateCcw className="w-4 h-4" /> : <Trash2 className="w-4 h-4" />}
+                          </button>
+                        </div>
+                      </td>
+                    )}
                   </tr>
                 )
               })
@@ -588,13 +653,15 @@ export function RouteComponent() {
               </div>
 
               <div>
-                <label className="block font-bold text-gray-600 uppercase mb-1">Route Type</label>
+                <label className="block font-bold text-gray-600 uppercase mb-1">Fuel Category</label>
                 <select
                   className="w-full p-2 border rounded-lg bg-white h-[38px] text-sm"
-                  value={formType} onChange={(e) => setFormType(e.target.value)}
+                  value={formType}
+                  onChange={(e) => setFormType(e.target.value)}
                 >
-                  <option value="">-- Select Route Segment Type --</option>
-                  {uniqueTypes.map(t => <option key={t} value={t}>{t}</option>)}
+                  <option value="">-- Select Category --</option>
+                  <option value="GAS">GAS</option>
+                  <option value="DIESEL">DIESEL</option>
                 </select>
               </div>
 
@@ -709,11 +776,45 @@ export function RouteComponent() {
 
             <div className="flex justify-end gap-3 border-t pt-4">
               <button onClick={() => setIsScheduleConfirmOpen(false)} className="px-4 py-2 border border-gray-200 text-gray-500 hover:bg-gray-50 rounded-lg text-sm font-medium transition-colors">Cancel</button>
-              <button 
+              <button
                 onClick={() => handlePushUpdatesBatch(false)}
                 className="px-5 py-2 bg-amber-600 hover:bg-amber-700 text-white rounded-lg text-sm font-medium shadow-sm transition-colors cursor-pointer"
               >
                 Confirm and Schedule
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* DIALOG 5: CONFIRM LIVE UPDATE WARNING */}
+      {isLiveConfirmOpen && (
+        <div className="fixed inset-0 bg-black/40 backdrop-blur-xs flex items-center justify-center z-50">
+          <div className="bg-white border rounded-xl shadow-2xl w-full max-w-md p-6 border-red-200">
+            <div className="flex items-center gap-3 text-red-600 mb-4">
+              <Zap className="w-8 h-8 shrink-0" />
+              <h3 className="text-lg font-bold text-gray-900">Push Changes Live?</h3>
+            </div>
+
+            <p className="text-sm text-gray-600 leading-relaxed mb-6">
+              You are about to push <strong className="text-gray-900">{totalStagedCount} changes</strong> directly to live calculation table. This action is <strong>immediate</strong> and cannot be undone.
+            </p>
+
+            <div className="flex justify-end gap-3 border-t pt-4">
+              <button
+                onClick={() => setIsLiveConfirmOpen(false)}
+                className="px-4 py-2 border border-gray-200 text-gray-500 hover:bg-gray-50 rounded-lg text-sm font-medium"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={() => {
+                  handlePushUpdatesBatch(true);
+                  setIsLiveConfirmOpen(false);
+                }}
+                className="px-5 py-2 bg-red-600 hover:bg-red-700 text-white rounded-lg text-sm font-medium shadow-sm"
+              >
+                Confirm and Go Live
               </button>
             </div>
           </div>

@@ -37,13 +37,13 @@ async function processMonthlySync() {
         const updateSet = columns.map(c => `[${c}] = @${c}`).join(', ');
 
         const result = await upsertReq.query(`
-          UPDATE [FUEL].[TEST_${table.name}] 
+          UPDATE [FUEL].[${table.name}] 
           SET ${updateSet}, [Updated At] = GETDATE() 
           WHERE ${whereClause};
           
           IF @@ROWCOUNT = 0
           BEGIN
-            INSERT INTO [FUEL].[TEST_${table.name}] (${table.keys.map(k => `[${k}]`).join(', ')}, ${columns.map(c => `[${c}]`).join(', ')}, [Updated At])
+            INSERT INTO [FUEL].[${table.name}] (${table.keys.map(k => `[${k}]`).join(', ')}, ${columns.map(c => `[${c}]`).join(', ')}, [Updated At])
             VALUES (${table.keys.map(k => `@${k.replace(/\s/g, '')}`).join(', ')}, ${columns.map(c => `@${c}`).join(', ')}, GETDATE())
           END
         `);

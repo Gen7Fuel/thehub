@@ -563,7 +563,7 @@ async function getFuelSupplierDiscounts() {
         live.[Updated At] AS [Live_Updated_At],
         stg.[Discounts] AS [Stg_Discounts],
         stg.[Updated At] AS [Stg_Updated_At]
-      FROM [FUEL].[TEST_SupplierDiscounts] AS live
+      FROM [FUEL].[SupplierDiscounts] AS live
       FULL OUTER JOIN [FUEL].[Stg_SupplierDiscounts] AS stg
         ON  live.[Supplier Code] = stg.[Supplier Code]
         AND live.[ Supplier Item] = stg.[ Supplier Item]
@@ -632,7 +632,7 @@ async function getFuelCarrierHaulage() {
         live.[Updated At] AS [Live_Updated_At],
         stg.[Haulage] AS [Stg_Haulage],
         stg.[Updated At] AS [Stg_Updated_At]
-      FROM [FUEL].[TEST_CarrierHaulage] AS live
+      FROM [FUEL].[CarrierHaulage] AS live
       FULL OUTER JOIN [FUEL].[Stg_CarrierHaulage] AS stg
         ON  live.[Carrier] = stg.[Carrier]
         AND live.[Type] = stg.[Type]
@@ -661,7 +661,7 @@ async function getFuelCarrierFCS() {
         live.[Updated At] AS [Live_Updated_At],
         stg.[FCS] AS [Stg_FCS],
         stg.[Updated At] AS [Stg_Updated_At]
-      FROM [FUEL].[TEST_CarrierFCS] AS live
+      FROM [FUEL].[CarrierFCS] AS live
       FULL OUTER JOIN [FUEL].[Stg_CarrierFCS] AS stg
         ON  live.[Carrier] = stg.[Carrier]
         AND live.[Province] = stg.[Province]
