@@ -1,4 +1,4 @@
-import { useState, useMemo } from 'react'
+import { useState, useMemo, useRef } from 'react'
 import axios from 'axios'
 import { Button } from '@/components/ui/button'
 import { Dialog, DialogContent, DialogClose } from '@/components/ui/dialog'
@@ -22,6 +22,13 @@ interface OrderRecChatProps {
   createdAt?: string | Date
 }
 
+interface PendingPhoto {
+  id: number
+  preview: string
+  status: 'uploading' | 'done' | 'error'
+  progress: number
+}
+
 const COLLAPSED_COUNT = 2
 
 export function OrderRecChat({
@@ -33,13 +40,15 @@ export function OrderRecChat({
   createdAt,
 }: OrderRecChatProps) {
   const [text, setText] = useState('')
-  const [pendingFiles, setPendingFiles] = useState<File[]>([])
-  const [pendingPreviews, setPendingPreviews] = useState<string[]>([])
+  const [pendingPhotos, setPendingPhotos] = useState<PendingPhoto[]>([])
   const [sending, setSending] = useState(false)
   const [sendError, setSendError] = useState<string | null>(null)
   const [expanded, setExpanded] = useState(false)
   const [lightboxSrc, setLightboxSrc] = useState<string | null>(null)
   const [inputKey, setInputKey] = useState(0)
+
+  const uploadPromisesRef = useRef<Map<number, Promise<string | null>>>(new Map())
+  const photoIdRef = useRef(0)
 
   const allComments = useMemo<Comment[]>(() => {
     const base: Comment[] = legacyNote?.trim()
@@ -54,19 +63,61 @@ export function OrderRecChat({
   const handlePhotoSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = Array.from(e.target.files ?? [])
     if (!files.length) return
-    const previews = files.map(f => URL.createObjectURL(f))
-    setPendingFiles(prev => [...prev, ...files])
-    setPendingPreviews(prev => [...prev, ...previews])
+
+    const newPhotos: PendingPhoto[] = files.map(file => {
+      const id = ++photoIdRef.current
+      const preview = URL.createObjectURL(file)
+
+      const promise = new Promise<string | null>(resolve => {
+        const xhr = new XMLHttpRequest()
+        const formData = new FormData()
+        formData.append('file', file)
+
+        xhr.upload.onprogress = (e) => {
+          if (e.lengthComputable) {
+            const pct = Math.floor((e.loaded / e.total) * 10) * 10
+            setPendingPhotos(prev => prev.map(p => p.id === id ? { ...p, progress: pct } : p))
+          }
+        }
+
+        xhr.onload = () => {
+          if (xhr.status >= 200 && xhr.status < 300) {
+            const data = JSON.parse(xhr.responseText)
+            setPendingPhotos(prev => prev.map(p => p.id === id ? { ...p, status: 'done', progress: 100 } : p))
+            resolve(data.filename)
+          } else {
+            setPendingPhotos(prev => prev.map(p => p.id === id ? { ...p, status: 'error' } : p))
+            resolve(null)
+          }
+        }
+
+        xhr.onerror = () => {
+          setPendingPhotos(prev => prev.map(p => p.id === id ? { ...p, status: 'error' } : p))
+          resolve(null)
+        }
+
+        xhr.open('POST', '/cdn/upload')
+        xhr.send(formData)
+      })
+
+      uploadPromisesRef.current.set(id, promise)
+      return { id, preview, status: 'uploading' as const, progress: 0 }
+    })
+
+    setPendingPhotos(prev => [...prev, ...newPhotos])
   }
 
-  const removePhoto = (i: number) => {
-    URL.revokeObjectURL(pendingPreviews[i])
-    setPendingFiles(prev => prev.filter((_, idx) => idx !== i))
-    setPendingPreviews(prev => prev.filter((_, idx) => idx !== i))
+  const removePhoto = (id: number) => {
+    setPendingPhotos(prev => {
+      const photo = prev.find(p => p.id === id)
+      if (photo) URL.revokeObjectURL(photo.preview)
+      uploadPromisesRef.current.delete(id)
+      return prev.filter(p => p.id !== id)
+    })
   }
 
   const handleSend = async () => {
-    if (!text.trim() && pendingFiles.length === 0) {
+    if (!text.trim() && pendingPhotos.length === 0) {
       setSendError('Please type a message or attach a photo.')
       return
     }
@@ -81,26 +132,24 @@ export function OrderRecChat({
     setSendError(null)
 
     try {
-      const uploadedFilenames: string[] = []
-      for (const file of pendingFiles) {
-        const formData = new FormData()
-        formData.append('file', file)
-        const res = await fetch('/cdn/upload', { method: 'POST', body: formData })
-        if (!res.ok) throw new Error(`Failed to upload photo: ${file.name}`)
-        const data = await res.json()
-        uploadedFilenames.push(data.filename)
-      }
+      const results = await Promise.all(
+        pendingPhotos.map(p => uploadPromisesRef.current.get(p.id) ?? Promise.resolve(null))
+      )
+
+      const failed = results.filter(r => r === null).length
+      if (failed > 0)
+        throw new Error(`${failed} photo${failed > 1 ? 's' : ''} failed to upload. Remove them and try again.`)
 
       const res = await axios.post(
         `/api/order-rec/${orderRecId}/comments`,
-        { text: text.trim() || ' ', photos: uploadedFilenames },
+        { text: text.trim() || ' ', photos: results as string[] },
         { headers: { Authorization: `Bearer ${localStorage.getItem('token')}` } }
       )
       onCommentsUpdate(res.data.comments)
-      pendingPreviews.forEach(p => URL.revokeObjectURL(p))
+      pendingPhotos.forEach(p => URL.revokeObjectURL(p.preview))
+      uploadPromisesRef.current.clear()
       setText('')
-      setPendingFiles([])
-      setPendingPreviews([])
+      setPendingPhotos([])
       setInputKey(k => k + 1)
     } catch (err: any) {
       setSendError(err?.message || 'Failed to send message. Please try again.')
@@ -166,14 +215,28 @@ export function OrderRecChat({
       </div>
 
       {/* Pending photo previews */}
-      {pendingPreviews.length > 0 && (
+      {pendingPhotos.length > 0 && (
         <div className="flex gap-2 flex-wrap">
-          {pendingPreviews.map((src, i) => (
-            <div key={i} className="relative">
-              <img src={src} className="w-16 h-16 object-cover rounded border" alt="preview" />
+          {pendingPhotos.map(photo => (
+            <div key={photo.id} className="relative">
+              <img
+                src={photo.preview}
+                className={`w-16 h-16 object-cover rounded border ${photo.status === 'error' ? 'border-red-500 opacity-60' : ''}`}
+                alt="preview"
+              />
+              {photo.status === 'uploading' && (
+                <div className="absolute inset-0 bg-black/40 rounded flex items-center justify-center">
+                  <span className="text-white text-xs font-bold">{photo.progress}%</span>
+                </div>
+              )}
+              {photo.status === 'error' && (
+                <div className="absolute inset-0 bg-red-500/50 rounded flex items-center justify-center">
+                  <X className="w-5 h-5 text-white" />
+                </div>
+              )}
               <button
                 type="button"
-                onClick={() => removePhoto(i)}
+                onClick={() => removePhoto(photo.id)}
                 className="absolute -top-1 -right-1 bg-red-500 text-white rounded-full w-4 h-4 flex items-center justify-center"
               >
                 <X className="w-2.5 h-2.5" />
