@@ -1641,7 +1641,7 @@ router.post('/save-counts', async (req, res) => {
       );
     }
 
-    req.app.get("io").emit("cycle-count-updated", { site: req.body.site });
+    // req.app.get("io").emit("cycle-count-updated", { site: req.body.site });
 
     res.json({ message: "Counts saved successfully." });
   } catch (err) {
