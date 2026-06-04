@@ -998,6 +998,17 @@ router.post('/submit/to/safesheet', async (req, res) => {
     const start = new Date(yy, mm - 1, dd, 0, 0, 0, 0)
     const end = new Date(yy, mm - 1, dd + 1, 0, 0, 0, 0)
 
+    // --- NEW: Lookup the site's province to determine if Manitoba ---
+    let isManitoba = false;
+    try {
+      // Accessing your location database directly on the backend
+      const loc = await Location.findOne({ stationName: site }).lean();
+      isManitoba = loc?.province?.trim().toLowerCase() === 'manitoba';
+    } catch (locErr) {
+      console.error('Backend location lookup for province failed:', locErr?.message || locErr);
+      isManitoba = false; // Fallback safely
+    }
+
     // Aggregate total canadian_cash_collected for the site/day
     const agg = await CashSummary.aggregate([
       { $match: { site, date: { $gte: start, $lt: end } } },
@@ -1064,7 +1075,7 @@ router.post('/submit/to/safesheet', async (req, res) => {
           const notes = reportForPdf?.notes || ''
 
           // Cash Summary PDF
-          const cashSummaryPdf = await generateCashSummaryPdf({ site, date })
+          const cashSummaryPdf = await generateCashSummaryPdf({ site, date, isManitoba })
 
           // Shift Reports PDF (all shifts for the date)
           const shiftReportsPdf = await generateShiftReportsPdf({ site, date })
@@ -1106,12 +1117,14 @@ router.post('/submit/to/safesheet', async (req, res) => {
           if (site === 'Oliver' || site === 'Osoyoos') {
             cc.push('ZBaptiste@oib.ca');
           }
-          const serializedAttachments = attachments.map((att) => ({
-            filename: att.filename,
-            content: Buffer.isBuffer(att.content) ? att.content.toString('base64') : att.content,
-            encoding: 'base64',
-            contentType: att.contentType,
-          }))
+          const serializedAttachments = await Promise.all(
+            attachments.map(async (att) => ({
+              filename: att.filename,
+              content: await attachmentContentToBase64(att.content),
+              encoding: 'base64',
+              contentType: att.contentType,
+            }))
+          )
           await emailQueue.add('sendCashSummaryEmail', {
             to: CASH_SUMMARY_EMAILS.join(','),
             cc,
@@ -1142,6 +1155,23 @@ function startEndOfYmd(ymd) {
   const start = new Date(yy, (mm || 1) - 1, dd || 1, 0, 0, 0, 0)
   const end = new Date(yy, (mm || 1) - 1, (dd || 1) + 1, 0, 0, 0, 0)
   return { start, end }
+}
+
+function streamToBuffer(stream) {
+  return new Promise((resolve, reject) => {
+    const chunks = []
+    stream.on('data', (chunk) => chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk)))
+    stream.on('end', () => resolve(Buffer.concat(chunks)))
+    stream.on('error', reject)
+  })
+}
+
+async function attachmentContentToBase64(content) {
+  if (Buffer.isBuffer(content)) return content.toString('base64')
+  if (content && typeof content.pipe === 'function') {
+    return (await streamToBuffer(content)).toString('base64')
+  }
+  return content
 }
 
 router.get('/report', async (req, res) => {
@@ -1259,7 +1289,7 @@ router.get('/payouts-check', async (req, res) => {
 
   try {
     const start = new Date(date); start.setUTCHours(0, 0, 0, 0)
-    const end   = new Date(date); end.setUTCHours(23, 59, 59, 999)
+    const end = new Date(date); end.setUTCHours(23, 59, 59, 999)
 
     const location = await Location.findOne({ stationName: site }).lean()
 
@@ -1293,7 +1323,7 @@ router.get('/ar-check', async (req, res) => {
 
   try {
     const start = new Date(date); start.setUTCHours(0, 0, 0, 0)
-    const end   = new Date(date); end.setUTCHours(23, 59, 59, 999)
+    const end = new Date(date); end.setUTCHours(23, 59, 59, 999)
 
     const [shiftAgg] = await CashSummary.aggregate([
       { $match: { site, date: { $gte: start, $lte: end } } },
@@ -1305,15 +1335,15 @@ router.get('/ar-check', async (req, res) => {
     const location = await Location.findOne({ stationName: site }, { timezone: 1 }).lean()
     const tz = location?.timezone || 'America/Toronto'
     const txStart = DateTime.fromISO(date, { zone: tz }).startOf('day').toJSDate()
-    const txEnd   = DateTime.fromISO(date, { zone: tz }).endOf('day').toJSDate()
+    const txEnd = DateTime.fromISO(date, { zone: tz }).endOf('day').toJSDate()
 
     const [txAgg] = await Transactions.aggregate([
       { $match: { stationName: site, date: { $gte: txStart, $lte: txEnd } } },
       { $group: { _id: null, total: { $sum: { $ifNull: ['$amount', 0] } } } },
     ])
 
-    const arIncurredTotal   = shiftAgg?.total ?? 0
-    const transactionsTotal = txAgg?.total    ?? 0
+    const arIncurredTotal = shiftAgg?.total ?? 0
+    const transactionsTotal = txAgg?.total ?? 0
     const match = Math.round(arIncurredTotal * 100) === Math.round(transactionsTotal * 100)
 
     res.json({

@@ -76,6 +76,22 @@ export const Route = createFileRoute('/_navbarLayout/cash-summary/report')({
     if (!site || !date) {
       return { report: null as ReportData | null, error: null as string | null, accessDenied: false }
     }
+    const token = localStorage.getItem('token') || ''
+    let isManitoba = false
+
+    // 1) Fetch locations endpoint to safely determine the province
+    try {
+      const locResp = await fetch(`/api/locations?stationName=${encodeURIComponent(site)}`, {
+        headers: token ? { Authorization: `Bearer ${token}` } : {},
+      })
+      if (locResp.ok) {
+        const loc = await locResp.json()
+        isManitoba = loc?.province?.trim().toLowerCase() === 'manitoba'
+      }
+    } catch (locErr) {
+      console.error('Failed to resolve site location profile info', locErr)
+      isManitoba = false
+    }
 
     try {
       const res = await fetch(
@@ -95,14 +111,14 @@ export const Route = createFileRoute('/_navbarLayout/cash-summary/report')({
 
       if (!res.ok) {
         const msg = await res.text().catch(() => 'Failed to load')
-        return { report: null, error: msg || 'Failed to load', accessDenied: false }
+        return { report: null, error: msg || 'Failed to load', accessDenied: false, isManitoba: false }
       }
 
       const report = (await res.json()) as ReportData
-      return { report, error: null, accessDenied: false }
+      return { report, error: null, accessDenied: false, isManitoba }
 
     } catch (err) {
-      return { report: null, error: 'Network error', accessDenied: false }
+      return { report: null, error: 'Network error', accessDenied: false, isManitoba: false }
     }
   }
 })
@@ -145,10 +161,11 @@ function RouteComponent() {
 
   const navigate = useNavigate({ from: Route.fullPath })
   // const { report, error } = Route.useLoaderData() as { report: ReportData | null; error: string | null }
-  const { report, error, accessDenied } = Route.useLoaderData() as {
+  const { report, error, accessDenied, isManitoba } = Route.useLoaderData() as {
     report: ReportData | null
     error: string | null
     accessDenied: boolean
+    isManitoba: boolean
   }
   // const [submitState, setSubmitState] = useState<'idle' | 'submitting' | 'submitted'>('idle')
   const [submitState, setSubmitState] = useState<'idle' | 'submitting' | 'submitted'>(
@@ -584,8 +601,9 @@ function RouteComponent() {
       (safeLottery.onlineCancellations || 0) -
       (safeLottery.onlineDiscounts || 0))
 
-  const scratchOverShort =
-    (safeBullock.scratchSales || 0) -
+  const scratchOverShort = isManitoba
+    ? 0
+    : (safeBullock.scratchSales || 0) -
     ((safeLottery.instantLottTotal ?? 0) +
       (safeLottery.scratchFreeTickets ?? 0) +
       (safeLottery.oldScratchTickets ?? 0))
@@ -827,7 +845,11 @@ function RouteComponent() {
                       value={<span className="font-semibold">{fmtNum(adjustedReportedCash)}</span>}
                       dialogContent={
                         <div className="whitespace-pre-line text-sm leading-relaxed">
-                          Adjusted Reported Cash = Bulloch Reported Cash + (Online Lottery Sales Over/Short + Scratch Lottery Sales Over/Short)
+                          {isManitoba ? (
+                            "Adjusted Reported Cash = Bulloch Reported Cash + Online Lottery Sales Over/Short"
+                          ) : (
+                            "Adjusted Reported Cash = Bulloch Reported Cash + (Online Lottery Sales Over/Short + Scratch Lottery Sales Over/Short)"
+                          )}
                         </div>
                       }
                     />
@@ -842,7 +864,11 @@ function RouteComponent() {
                       value={<span className="font-semibold">{fmtNum(adjustedItemSales)}</span>}
                       dialogContent={
                         <div className="whitespace-pre-line text-sm leading-relaxed">
-                          Adjusted Item Sales = Bulloch Item Sales + (Online Lottery Sales Over/Short + Scratch Lottery Sales Over/Short)
+                          {isManitoba ? (
+                            "Adjusted Item Sales = Bulloch Item Sales + Online Lottery Sales Over/Short"
+                          ) : (
+                            "Adjusted Item Sales = Bulloch Item Sales + (Online Lottery Sales Over/Short + Scratch Lottery Sales Over/Short)"
+                          )}
                         </div>
                       }
                     />
@@ -904,6 +930,7 @@ function RouteComponent() {
                     bullockData={bullock}
                     isReadOnly={true}
                     showImages={false} // Set to false for the report view
+                    isManitoba={isManitoba}
                   />
                 </div>
               )}

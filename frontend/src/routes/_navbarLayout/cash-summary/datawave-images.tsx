@@ -1,6 +1,5 @@
 import { useEffect, useState, useRef } from 'react'
 import { createFileRoute, Link, useNavigate } from '@tanstack/react-router'
-// import Webcam from 'react-webcam'
 import { Button } from '@/components/ui/button'
 import { X, Camera, ChevronLeft, ChevronRight } from 'lucide-react'
 import { useFormStore } from '@/store'
@@ -106,16 +105,6 @@ function RouteComponent() {
     }
   }, [date, navigate])
 
-  // const capture = () => {
-  //   if (webcamRef.current) {
-  //     const img = webcamRef.current.getScreenshot()
-  //     if (img) {
-  //       setCurrentCapture(img)
-  //       setIsCapturing(false)
-  //     }
-  //   }
-  // }
-
   const saveImage = () => {
     if (currentCapture) {
       setDatawaveImages([...datawaveImages, currentCapture])
@@ -138,15 +127,6 @@ function RouteComponent() {
     }
     removeImage(idx); // Your store's remove function
   };
-
-  // const startCapture = () => {
-  //   setIsCapturing(true)
-  //   setCurrentCapture('')
-  // }
-  // const retryCapture = () => {
-  //   setCurrentCapture('')
-  //   setIsCapturing(true)
-  // }
 
   const uploadImages = async (
     ymd: string,
@@ -205,14 +185,6 @@ function RouteComponent() {
 
   // Submit assembles payload; replace fetch URL when backend ready.
   const handleSubmit = async () => {
-    // const payload = {
-    //   date,
-    //   values: lotteryValues,
-    //   images: lotteryImages,
-    //   // bullock data will be fetched/stored on backend later;
-    //   // for now frontend supplies values; backend will attach bullock when available.
-    // }
-
     try {
       const ymd = date ? `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}` : ''
 
@@ -253,70 +225,7 @@ function RouteComponent() {
     }
   }
 
-  // const videoConstraints = { facingMode: 'environment', width: 1280, height: 720 }
-
   return (
-    // <div className="p-4 border border-dashed border-gray-300 rounded-md space-y-6 w-full">
-    //   <div className="space-y-2">
-    //     <h2 className="text-lg font-bold">Upload DataWave Images</h2>
-
-    //     <div className="space-y-4">
-    //       {isCapturing && (
-    //         <div className="relative w-full h-[60vh] max-h-[70vh] border border-dashed border-gray-300 rounded-md overflow-hidden">
-    //           <Webcam
-    //             ref={webcamRef}
-    //             audio={false}
-    //             screenshotFormat="image/jpeg"
-    //             screenshotQuality={1}
-    //             videoConstraints={videoConstraints as any}
-    //             className="absolute inset-0 w-full h-full object-contain bg-black"
-    //           />
-    //           <div className="absolute bottom-3 left-3 right-3">
-    //             <Button onClick={capture} variant="destructive" className="w-full">
-    //               <Camera className="mr-2 h-4 w-4" />
-    //               Capture Image
-    //             </Button>
-    //           </div>
-    //         </div>
-    //       )}
-
-    //       {currentCapture && (
-    //         <div className="relative w-full h-[60vh] max-h-[70vh] border border-dashed border-gray-300 rounded-md overflow-hidden">
-    //           <img src={currentCapture} alt="Captured" className="absolute inset-0 w-full h-full object-contain bg-black" />
-    //           <div className="absolute bottom-3 left-3 right-3 flex gap-2">
-    //             <Button onClick={saveImage} className="flex-1">Save Image</Button>
-    //             <Button onClick={retryCapture} variant="secondary" className="flex-1">Retry</Button>
-    //           </div>
-    //         </div>
-    //       )}
-
-    //       {!isCapturing && !currentCapture && (
-    //         <Button onClick={startCapture} variant="outline" className="w-full">
-    //           <Camera className="mr-2 h-4 w-4" />
-    //           Add Image
-    //         </Button>
-    //       )}
-    //     </div>
-    //   </div>
-
-    //   {datawaveImages.length > 0 && (
-    //     <div className="space-y-2">
-    //       <h3 className="text-md font-semibold">Saved DataWave Images ({datawaveImages.length})</h3>
-    //       <div className="grid grid-cols-2 gap-4">
-    //         {datawaveImages.map((img, idx) => {
-    //           const src = typeof img === 'string' && img.startsWith('data:') ? img : `${domain || ''}/cdn/download/${encodeURIComponent(String(img))}`
-    //           return (
-    //             <div key={idx} className="relative">
-    //               <img src={src} alt={`img-${idx}`} className="border border-dashed border-gray-300 rounded-md w-full h-32 object-cover" />
-    //               <Button variant="destructive" size="sm" className="absolute top-1 right-1 h-6 w-6 p-0" onClick={() => removeImage(idx)}>
-    //                 <X className="h-3 w-3" />
-    //               </Button>
-    //             </div>
-    //           )
-    //         })}
-    //       </div>
-    //     </div>
-    //   )}
     <div className="p-4 border border-dashed border-gray-300 rounded-md space-y-6 w-full">
       <input type="file" accept="image/*" capture="environment" ref={fileInputRef} onChange={handleFileChange} className="hidden" />
 
