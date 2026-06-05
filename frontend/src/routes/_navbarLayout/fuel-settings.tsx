@@ -1,5 +1,5 @@
 import { createFileRoute, Link, Outlet } from '@tanstack/react-router'
-import { Truck, Flame, Percent } from 'lucide-react'
+import { Truck, Flame, Percent, Fuel } from 'lucide-react'
 import { useAuth } from '@/context/AuthContext'
 
 export const Route = createFileRoute('/_navbarLayout/fuel-settings')({
@@ -30,6 +30,12 @@ function FuelPricingManagementLayout() {
       icon: Percent,
       permissionKey: 'supplierDiscounts' // Matches your access key
     },
+    {
+      to: '/fuel-settings/station-discounts',
+      label: 'Station Discounts',
+      icon: Fuel,
+      permissionKey: 'stationDiscounts' // Matches your access key
+    }
   ]
 
   // Filter links based on whether the user has the 'value' permission set to true
