@@ -693,7 +693,7 @@ async function getFuelStationDiscounts() {
         stg.[Discounts] AS [Stg_Discounts],
         stg.[Updated_At] AS [Stg_Updated_At],
         stg.[Schedule_Effective_From] AS [Schedule_Effective_From]
-      FROM [FUEL].[TEST_Station_Discounts] AS live
+      FROM [FUEL].[Station_Discounts] AS live
       FULL OUTER JOIN [FUEL].[Stg_Station_Discounts] AS stg
         ON  live.[Station_SK] = stg.[Station_SK]
         AND live.[Location] = stg.[Location]
