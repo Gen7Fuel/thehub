@@ -23,7 +23,7 @@ async function processDailyScheduledSync() {
     ];
 
     for (const table of tables) {
-      const liveTableName = `[FUEL].[${table.livePrefix}${table.name}]`;
+      const liveTableName = `[FUEL].[${table.name}]`;
       const stgTableName = `[FUEL].[${table.stgPrefix}${table.name}]`;
 
       // 1. Fetch rows meant to go live today from the staging table
