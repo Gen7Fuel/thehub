@@ -73,7 +73,7 @@ export function RouteComponent() {
   const fetchFCSData = async () => {
     try {
       setLoading(true)
-      const res = await axios.get('/api/fuel-pricing/carrier-fcs', {
+      const res = await axios.get('/api/fuel-settings/carrier-fcs', {
         headers: {
           Authorization: `Bearer ${localStorage.getItem('token')}`,
           'X-Required-Permission': 'fuelSettings.fsc'
@@ -234,7 +234,7 @@ export function RouteComponent() {
   const handlePushNewEntriesToServer = async () => {
     if (newEntriesList.length === 0) return
     try {
-      const res = await axios.post('/api/fuel-pricing/carrier-fcs/batch', { entries: newEntriesList }, {
+      const res = await axios.post('/api/fuel-settings/carrier-fcs/batch', { entries: newEntriesList }, {
         headers: {
           Authorization: `Bearer ${localStorage.getItem('token')}`,
           'X-Required-Permission': 'fuelSettings.fsc.edit'
@@ -269,7 +269,7 @@ export function RouteComponent() {
     }
 
     try {
-      const res = await axios.put('/api/fuel-pricing/carrier-fcs/batch', {
+      const res = await axios.put('/api/fuel-settings/carrier-fcs/batch', {
         updates: updatesPayload,
         deletions: deletionsPayload,
         isImmediate: isImmediateAction

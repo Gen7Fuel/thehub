@@ -87,7 +87,7 @@ export function RouteComponent() {
   const fetchHaulageData = async () => {
     try {
       setLoading(true)
-      const res = await axios.get('/api/fuel-pricing/carrier-haulage', {
+      const res = await axios.get('/api/fuel-settings/carrier-haulage', {
         headers: {
           Authorization: `Bearer ${localStorage.getItem('token')}`,
           'X-Required-Permission': 'fuelSettings.haulage'
@@ -281,7 +281,7 @@ export function RouteComponent() {
   const handlePushNewEntriesToServer = async () => {
     if (newEntriesList.length === 0) return
     try {
-      const res = await axios.post('/api/fuel-pricing/carrier-haulage/batch', { entries: newEntriesList }, {
+      const res = await axios.post('/api/fuel-settings/carrier-haulage/batch', { entries: newEntriesList }, {
         headers: {
           Authorization: `Bearer ${localStorage.getItem('token')}`,
           'X-Required-Permission': 'fuelSettings.haulage.edit'
@@ -328,7 +328,7 @@ export function RouteComponent() {
     }
 
     try {
-      const res = await axios.put('/api/fuel-pricing/carrier-haulage/batch', {
+      const res = await axios.put('/api/fuel-settings/carrier-haulage/batch', {
         updates: updatesPayload,
         deletions: deletionsPayload,
         isImmediate: isImmediateAction

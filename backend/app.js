@@ -25,6 +25,7 @@ require('./cron_jobs/itemBkSanitizationCron'); //cron job for sanitizing item ba
 require('./cron_jobs/cycleCountReportCron'); //cron job for updating onHandCSO and unit prices for cycle count report, runs every morning at 3 AM
 require('./cron_jobs/cycleCountWeeklyInstanceCron'); //cron job for generating weekly cycle count instances, runs every Sunday at 3 AM
 require('./cron_jobs/syncStgLiveFuelPriceCron'); //cron job for syncing staging to live fuel price tables on the 1st of every month at 12 AM EST in SSMS
+require('./cron_jobs/syncDailyStgLiveFuelCron'); //cron job for syncing staging to live fuel price tables daily at 5 AM EST in SSMS
 
 // Route imports
 const authRoutes = require("./routes/auth");
@@ -64,6 +65,7 @@ const fuelStationTankRoutes = require("./routes/fuel/fuelStationTankRoutes");
 const fuelOrderRoutes = require("./routes/fuel/fuelOrderRoutes");
 const fuelSaleRoutes = require("./routes/fuel/fuelSaleRoutes");
 const fuelPriceRoutes = require("./routes/fuel/fuelPricingRoutes");
+const fuelSettingsRoutes = require("./routes/fuel/fuelSettingsRoutes");
 
 const { auth } = require("./middleware/authMiddleware");
 
@@ -171,7 +173,7 @@ app.use('/api/fuel-suppliers', fuelSupplierRoutes);
 app.use('/api/fuel-station-tanks', fuelStationTankRoutes);
 app.use('/api/fuel-orders', fuelOrderRoutes);
 app.use('/api/fuel-sales', fuelSaleRoutes);
-
+app.use('/api/fuel-settings', fuelSettingsRoutes);
 // Misc
 app.use('/api', emailRoutes);
 
