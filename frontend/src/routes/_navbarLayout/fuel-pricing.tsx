@@ -2,6 +2,8 @@ import { useState, useEffect } from 'react'
 import { createFileRoute, Outlet } from '@tanstack/react-router'
 import { useQuery } from '@tanstack/react-query'
 import axios from 'axios'
+import { useSite } from '@/context/SiteContext'
+import FuelPricingContext from '@/context/FuelPricingContext'
 import { Card, CardContent } from "@/components/ui/card"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import {
@@ -56,6 +58,8 @@ function FuelPricingDashboard() {
   const [selectedCso, setSelectedCso] = useState<string>('')
   const [selectedGrade, setSelectedGrade] = useState<string>('REG')
 
+  const { setSelectedSite } = useSite()
+
   const authHeader = { 
     headers: { 
       Authorization: `Bearer ${localStorage.getItem('token')}`,
@@ -80,13 +84,22 @@ function FuelPricingDashboard() {
   const stations = (data?.stations || []).filter((station: any) => station.stationName !== 'Test Lab')
   const pricingData = data?.pricingData || {}
 
+// 3. Keep site context perfectly synchronized on initial render
   useEffect(() => {
     if (stations.length > 0 && !selectedCso) {
       setSelectedCso(stations[0].csoCode)
+      setSelectedSite(stations[0].stationName) // Set initial global site matching the selected CSO
     }
-  }, [stations, selectedCso])
+  }, [stations, selectedCso, setSelectedSite])
 
   const currentStationData = pricingData[selectedCso] || {}
+  const recommendedPrices = Object.entries(currentStationData).reduce(
+    (acc: Record<string, number>, [gradeId, gradeData]: any) => {
+      acc[gradeId] = gradeData?.metrics?.recPrice ?? 0
+      return acc
+    },
+    {}
+  )
   const activeGradesAtStation = Object.keys(currentStationData)
   const currentGradeData = currentStationData[selectedGrade]
 
@@ -98,13 +111,13 @@ function FuelPricingDashboard() {
     return <div className="p-8 text-center font-medium text-rose-500">Failed to load the fuel pricing asset matrix.</div>
   }
 
-  return (
-    <div
-      className="grid h-full w-full bg-[#f8fafc] overflow-hidden"
-      style={{
-        gridTemplateColumns: 'minmax(0, 1fr) 380px',
-      }}
-    >
+return (
+// 1. PLACE PROVIDER AROUND EVERYTHING AT THE ROOT RETURN
+    <FuelPricingContext.Provider value={{ selectedCso, recommendedPrices }}>
+      <div
+        className="grid h-full w-full bg-[#f8fafc] overflow-hidden"
+        style={{ gridTemplateColumns: 'minmax(0, 1fr) 380px' }}
+      >
       <div className="min-w-0 p-6 border-r border-slate-200 flex flex-col space-y-5 overflow-hidden">
         
         {/* TOP: HORIZONTAL GRADE SELECTOR ROW */}
@@ -146,7 +159,7 @@ function FuelPricingDashboard() {
         {/* WORKSPACE AREA */}
         <div className="flex flex-row items-start space-x-4 w-full min-w-0 overflow-hidden text-slate-700">
               
-          {/* LEFT COMPONENT: STATION LIST */}
+         {/* LEFT COMPONENT: STATION LIST */}
           <div className="w-[280px] shrink-0 flex flex-col gap-2 max-h-[82vh] overflow-y-auto pr-1 scrollbar-thin">
             <div className="text-[10px] font-extrabold uppercase text-slate-400 tracking-widest pl-1 pb-1 border-b border-slate-100">
               Station Locations
@@ -158,6 +171,7 @@ function FuelPricingDashboard() {
                   key={station.csoCode}
                   onClick={() => {
                     setSelectedCso(station.csoCode)
+                    setSelectedSite(station.stationName) // 4. Update global site context when clicked
                     const targetStationData = pricingData[station.csoCode] || {}
                     const available = Object.keys(targetStationData)
                     if (available.length > 0 && !available.includes(selectedGrade)) {
@@ -268,7 +282,8 @@ function FuelPricingDashboard() {
         <Outlet />
       </aside>
 
-    </div>
+  </div>
+    </FuelPricingContext.Provider>
   )
 }
 
