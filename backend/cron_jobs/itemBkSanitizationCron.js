@@ -11,8 +11,6 @@ const toNullableNumber = (value) => {
   return Number.isFinite(n) ? n : null;
 };
 
-const normalizeKey = (value) => String(value ?? "").trim().toLowerCase();
-
 async function runSanitizeItemBk() {
   console.log("--- Starting Saturday Morning Item Sanitization Protocol ---");
   const db = getPg();
@@ -26,6 +24,22 @@ async function runSanitizeItemBk() {
   ]);
 
   console.log(`Fetched ${azureData.length} records from Azure SQL.`);
+
+  // ==========================================
+  // 🛡️ CRITICAL ETL SAFETY GATE
+  // ==========================================
+  const ABSOLUTE_MINIMUM_ROWS = 5000; // Adjust to 10000 or 0 depending on your risk tolerance
+
+  if (!azureData || azureData.length === 0) {
+    console.error(`🚨 [CRITICAL ALERT] Azure SQL returned 0 records! This indicates a upstream ETL pipeline failure. Skipping sanitization loop to protect production data.`);
+    return; // Safe early exit
+  }
+
+  if (azureData.length < ABSOLUTE_MINIMUM_ROWS) {
+    console.error(`🚨 [CRITICAL ALERT] Azure SQL returned only ${azureData.length} records, which is below the safe threshold of ${ABSOLUTE_MINIMUM_ROWS}. This drop looks anomalous. Aborting execution.`);
+    return; // Safe early exit
+  }
+  // ==========================================
 
   // 2. Build Location Mappings
   const locationMap = new Map(mongoLocations.map(loc => [String(loc.csoCode), loc._id.toString()]));
@@ -70,7 +84,6 @@ async function runSanitizeItemBk() {
       if (existingName !== item.categoryName) {
         console.log(`[CATEGORY MISMATCH] ID ${categoryId}: Syncing Mongo value to "${item.categoryName}"`);
 
-        // FIX: Using exact schema paths 'Number' and 'Name'
         await ProductCategory.updateOne(
           { Number: categoryId },
           { $set: { Name: item.categoryName } },
@@ -101,8 +114,7 @@ async function runSanitizeItemBk() {
         promo_group: item?.promoGroup ?? null,
         on_hand_qty: toNullableNumber(item?.onHandQty),
         last_inv_date: lastInvDate,
-        last_counted_at: lastInvDate, // Seeds clean tracking baseline
-        // 'grade' column is omitted here, allowing Postgres schema DEFAULT ('B') to handle it initially
+        last_counted_at: lastInvDate,
         active: true,
         allow_cycle_count: true,
         image_url: item?.image_url ?? null,
@@ -110,9 +122,8 @@ async function runSanitizeItemBk() {
       });
     } else {
       // SCENARIO B: Item exists in both -> VERIFY AND CORRECT SHIFTS
-      // We explicitly leave 'grade' and 'last_counted_at' untouched to protect the system data
       const hasChanged =
-        match.active !== true || // in the sceanario where an item was previously soft-deleted but reappears in Azure SQL, we want to reactivate it and update all fields accordingly
+        match.active !== true || 
         match.gtin !== gtin ||
         match.upc_barcode !== (item?.upc_barcode != null ? String(item.upc_barcode) : null) ||
         match.description !== (item?.Description ?? null) ||
@@ -149,6 +160,7 @@ async function runSanitizeItemBk() {
           on_hand_qty: toNullableNumber(item?.onHandQty),
           last_inv_date: lastInvDate,
           image_url: item?.image_url ?? null,
+          active: true, // Auto-reactivate if it reappeared in system feed
           sync_date: db.fn.now()
         });
       }
@@ -160,7 +172,6 @@ async function runSanitizeItemBk() {
   const logEntriesToInsert = [];
 
   for (const [key, pgItem] of pgMap.entries()) {
-    // Only target items that are currently active
     if (!trackedAzureKeys.has(key) && pgItem.active !== false) {
       idsToRemove.push(pgItem.id);
       logEntriesToInsert.push({
@@ -174,41 +185,38 @@ async function runSanitizeItemBk() {
     }
   }
 
-  // Execution Batch update:
+  console.log(`Summary: Inserts: ${rowsToInsert.length} | Updates: ${rowsToUpdate.length} | Deletions & Logs: ${idsToRemove.length}`);
+
+  // Execute Deletions and Future Counts Purge
   if (idsToRemove.length > 0) {
     await db.transaction(async (trx) => {
-      // ✅ FIX: Swap out .del() for a safe soft-delete update statement
       await trx("item_bk")
         .whereIn("id", idsToRemove)
         .update({ active: false, sync_date: db.fn.now() });
 
-      // 2. Clear uncounted instances from future manually scheduled cycles
       const removedCount = await trx("cycle_count_items")
         .whereIn("product_id", idsToRemove)
         .whereIn("instance_id", function () {
           this.select("id")
             .from("cycle_count_instance")
-            .where("date", ">", todayDateStr); // Filters for future dates strictly ahead of today
+            .where("date", ">", todayDateStr);
         })
-        .andWhere("count_completed", false) // Protects historical updates if edge execution windows overlap
+        .andWhere("count_completed", false)
         .del();
 
       if (removedCount > 0) {
         console.log(`[FUTURE COUNT PURGE] Removed ${removedCount} scheduled item entries from upcoming cycles.`);
       }
 
-      // Still write to the historical audit log
       const logChunks = chunkArray(logEntriesToInsert, 200);
       for (const batch of logChunks) {
         await trx("deleted_items_log").insert(batch);
       }
     });
-    console.log(` Successfully soft-deleted ${idsToRemove.length} records and wrote to logs.`);
+    console.log(`Successfully soft-deleted ${idsToRemove.length} records and wrote to logs.`);
   }
 
-  // 6. Execution Batches
-  console.log(`Summary: Inserts: ${rowsToInsert.length} | Updates: ${rowsToUpdate.length} | Deletions & Logs: ${idsToRemove.length}`);
-
+  // Execute Inserts
   if (rowsToInsert.length > 0) {
     const insertChunks = chunkArray(rowsToInsert, 200);
     for (const batch of insertChunks) {
@@ -216,28 +224,12 @@ async function runSanitizeItemBk() {
     }
   }
 
+  // Execute Updates
   if (rowsToUpdate.length > 0) {
     for (const row of rowsToUpdate) {
       const { id, ...data } = row;
       await db("item_bk").where({ id }).update(data);
     }
-  }
-
-  // Execution Batch update:
-  if (idsToRemove.length > 0) {
-    await db.transaction(async (trx) => {
-      // ✅ FIX: Swap out .del() for a safe soft-delete update statement
-      await trx("item_bk")
-        .whereIn("id", idsToRemove)
-        .update({ active: false, sync_date: db.fn.now() });
-
-      // Still write to the historical audit log
-      const logChunks = chunkArray(logEntriesToInsert, 200);
-      for (const batch of logChunks) {
-        await trx("deleted_items_log").insert(batch);
-      }
-    });
-    console.log(` Successfully soft-deleted ${idsToRemove.length} records and wrote to logs.`);
   }
 
   console.log("Sanitization complete.");
