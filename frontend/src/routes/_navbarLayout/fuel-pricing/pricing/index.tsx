@@ -226,7 +226,7 @@ function FuelPricingPanel() {
           </div>
           <h3 className="text-xs font-bold text-slate-800 uppercase tracking-wider">Access Restrictions Enforced</h3>
           <p className="text-[11px] text-slate-400 font-medium max-w-xs mt-1 leading-relaxed">
-            You do not have access to set new fuel prices. Please consult internal coordination leads to extend account operational access settings.
+            You do not have access to set new fuel prices. Kindly contact the administrator for more information.
           </p>
         </div>
       )}
