@@ -1124,7 +1124,7 @@ async function getSanitizationBackupData() {
   try {
     const pool = await getPool();
     const query = `
-SELECT 
+      SELECT 
         CI.[UPC],
         CI.[Station_SK],
         CI.[On Hand Qty] AS onHandQty,
@@ -1160,7 +1160,7 @@ SELECT
         AND MI.[Category ID] 
           NOT IN (0, 121, 130, 131, 133, 134, 152, 153, 155, 157, 158, 175, 176, 
                   200, 201, 202, 203, 204, 205, 206, 207, 208, 209, 210, 213, 
-                  214, 216, 218, 219, 220, 800, 999, 5001, 5002, 5003, 10000)
+                  214, 216, 218, 219, 220, 800, 999, 1000, 5001, 5002, 5003, 10000)
     `;
 
     const result = await pool.request().query(query);
