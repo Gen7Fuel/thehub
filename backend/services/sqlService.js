@@ -1124,7 +1124,7 @@ async function getSanitizationBackupData() {
   try {
     const pool = await getPool();
     const query = `
-SELECT 
+      SELECT 
         CI.[UPC],
         CI.[Station_SK],
         CI.[On Hand Qty] AS onHandQty,
