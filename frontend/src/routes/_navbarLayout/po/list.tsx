@@ -48,6 +48,7 @@ function RouteComponent() {
     amount: number;
     description: string;
     vehicleMakeModel: string;
+    licensePlate?: string;
     signature: string;
     receipt: string;
     poNumber: string;
@@ -297,11 +298,13 @@ function RouteComponent() {
         <thead>
           <tr className="bg-gray-100">
             <th className="border-dashed border-b border-gray-300 px-4 py-2">Date</th>
-            <th className="border-dashed border-b border-gray-300 px-4 py-2">Fleet Card Number/PO Number</th>
+            <th className="border-dashed border-b border-gray-300 px-4 py-2">Card / PO</th>
             <th className="border-dashed border-b border-gray-300 px-4 py-2">Customer Name</th>
             <th className="border-dashed border-b border-gray-300 px-4 py-2">Driver Name</th>
             <th className="border-dashed border-b border-gray-300 px-4 py-2">Quantity</th>
             <th className="border-dashed border-b border-gray-300 px-4 py-2">Amount</th>
+            <th className="border-dashed border-b border-gray-300 px-4 py-2">Vehicle</th>
+            <th className="border-dashed border-b border-gray-300 px-4 py-2">Plate</th>
             {showActionsColumn && (
               <th className="border-dashed border-b border-gray-300 px-4 py-2">Actions</th>
             )}
@@ -321,6 +324,8 @@ function RouteComponent() {
                 <td className="border-dashed border-t border-gray-300 px-4 py-2">{order.driverName}</td>
                 <td className="border-dashed border-t border-gray-300 px-4 py-2">{order.quantity}</td>
                 <td className="border-dashed border-t border-gray-300 px-4 py-2">{order.amount.toFixed(2)}</td>
+                <td className="border-dashed border-t border-gray-300 px-4 py-2">{order.vehicleMakeModel}</td>
+                <td className="border-dashed border-t border-gray-300 px-4 py-2">{order.licensePlate}</td>
                 {showActionsColumn && (
                   <td className="border-dashed border-t border-gray-300 px-4 py-2 space-x-2">
                     {order.requestReceipt && (
@@ -360,7 +365,7 @@ function RouteComponent() {
             ))
           ) : (
             <tr>
-              <td colSpan={7} className="border-dashed border-t border-gray-300 px-4 py-2 text-center">
+              <td colSpan={9} className="border-dashed border-t border-gray-300 px-4 py-2 text-center">
                 No purchase orders available.
               </td>
             </tr>
