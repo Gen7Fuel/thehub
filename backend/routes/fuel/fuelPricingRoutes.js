@@ -1,6 +1,7 @@
 const express = require('express');
 const router = express.Router();
 const Location = require('../../models/Location');
+const User = require("../../models/User");         // Ensure correct path to your User model
 const { getFuelPricingDate } = require('../../services/sqlService');
 const { getPg } = require("../../config/pg");
 
@@ -149,6 +150,131 @@ router.get('/current/:locationId', async (req, res) => {
   }
 });
 
+router.get('/check-pending-verification', async (req, res) => {
+  const db = getPg();
+  const userEmail = req.user?.email;
+
+  if (!userEmail) {
+    return res.status(401).json({ message: "Unauthorized user session context." });
+  }
+
+  try {
+    const locationDoc = await Location.findOne({
+      $or: [
+        { email: userEmail },
+        { managerEmails: userEmail }
+      ]
+    });
+
+    if (!locationDoc) {
+      return res.status(200).json({ requiresVerification: false });
+    }
+
+    const locationMongoId = String(locationDoc._id);
+
+    // 1. Look for any log rows created in the last 6 hours that are missing an image url
+    const unverifiedLogs = await db('fuel_price_logs')
+      .where({ site: locationMongoId })
+      .whereNull('image_url')
+      .where('created_at', '>=', db.raw("NOW() - INTERVAL '6 hours'"))
+      .orderBy('id', 'asc');
+
+    // If there are no unverified structural logs in the last 6 hours, 
+    // it means any recent action was completely unchanged, so we clear the dialog box!
+    if (!unverifiedLogs || unverifiedLogs.length === 0) {
+      return res.status(200).json({ requiresVerification: false });
+    }
+
+    // 2. Reconstruct the accurate delta state from those active unverified rows
+    const unverifiedGradesMap = unverifiedLogs.reduce((acc, log) => {
+      const frontendKey = Object.keys(GRADE_MAP).find(key => GRADE_MAP[key] === log.grade) || log.grade;
+      acc[frontendKey] = parseFloat(log.price);
+      return acc;
+    }, {});
+
+    const currentPrices = await currentPriceModel.getCurrentPricesBySite(locationMongoId);
+    const changedGrades = [];
+    const unchangedGrades = [];
+
+    // 3. Re-hydrate the full 5 grades accurately for display matching
+    for (const r of currentPrices) {
+      const frontendKey = Object.keys(GRADE_MAP).find(key => GRADE_MAP[key] === r.grade) || r.grade;
+      const currentPriceNum = parseFloat(r.price);
+      const wasChanged = unverifiedGradesMap[frontendKey] !== undefined;
+
+      // Pull the old price by checking the log row right before our unverified change row
+      let exactOldPrice = currentPriceNum;
+      if (wasChanged) {
+        const previousLog = await db('fuel_price_logs')
+          .where({ site: locationMongoId, grade: r.grade })
+          .whereNotNull('image_url') // Find the last confirmed baseline price
+          .orderBy('id', 'desc')
+          .first();
+        if (previousLog) exactOldPrice = parseFloat(previousLog.price);
+      }
+
+      const itemPayload = {
+        gradeId: frontendKey,
+        label: frontendKey,
+        newPrice: currentPriceNum,
+        oldPrice: exactOldPrice
+      };
+
+      if (wasChanged) {
+        changedGrades.push(itemPayload);
+      } else {
+        unchangedGrades.push(itemPayload);
+      }
+    }
+
+    return res.status(200).json({
+      requiresVerification: true,
+      payload: {
+        stationName: locationDoc.stationName,
+        locationId: locationMongoId,
+        changedGrades: changedGrades,
+        unchangedGrades: unchangedGrades,
+        hasStructuralChanges: changedGrades.length > 0
+      }
+    });
+
+  } catch (err) {
+    console.error("Failed checkpoint state validation sequence:", err);
+    return res.status(500).json({ message: "Internal verification engine failure." });
+  }
+});
+
+router.put('/verify-price-receipt', async (req, res) => {
+  const db = getPg();
+  const userEmail = req.user?.email;
+  const { locationId, filename } = req.body;
+
+  if (!userEmail || !locationId || !filename) {
+    return res.status(400).json({ message: "Missing required verification data coordinates." });
+  }
+
+  try {
+    // Target rows for this site missing an image, strictly within a 6-hour safety buffer
+    const updatedRows = await db('fuel_price_logs')
+      .where({ site: locationId })
+      .whereNull('image_url') 
+      .where('created_at', '>=', db.raw("NOW() - INTERVAL '6 hours'"))
+      .update({
+        image_url: filename
+      });
+
+    console.log(`⛽ Safe Audit Update Complete. Site: ${locationId} | Rows Filled: ${updatedRows} within 6hr window.`);
+
+    return res.status(200).json({ 
+      success: true, 
+      message: `Successfully verified and locked ${updatedRows} fuel grade rows.` 
+    });
+  } catch (err) {
+    console.error("Critical failure during batch log image linking:", err);
+    return res.status(500).json({ message: "Failed to persist terminal verification asset." });
+  }
+});
+
 // =========================================================================
 // UPSERT WITH DELTA CHANGE-DETECTION CONSTRAINT
 // =========================================================================
@@ -156,8 +282,8 @@ router.post('/upsert-retail', async (req, res) => {
   const { locationId, stationName, prices } = req.body;
   const db = getPg();
 
-  if (!locationId || !prices || Object.keys(prices).length === 0) {
-    return res.status(400).json({ message: "Missing location identification or price payload parameters." });
+  if (!locationId || !prices) {
+    return res.status(400).json({ message: "Missing location identification parameters." });
   }
 
   const now = new Date();
@@ -165,54 +291,92 @@ router.post('/upsert-retail', async (req, res) => {
   const currentDayName = now.toLocaleDateString('en-US', { weekday: 'long' });
 
   try {
-    // 1. Pre-fetch existing state configurations to evaluate incoming deltas
-    const existingRows = await currentPriceModel.getCurrentPricesBySite(locationId);
-    const existingPricesMap = existingRows.reduce((acc, r) => {
-      acc[r.grade] = parseFloat(r.price);
-      return acc;
-    }, {});
+    const locationDoc = await Location.findById(locationId);
+    if (!locationDoc) {
+      return res.status(404).json({ message: "Target location context not found." });
+    }
 
+    const criticalEmails = [locationDoc.email, ...(locationDoc.managerEmails || [])].filter(Boolean);
+    const targetedUsers = await User.find({ email: { $in: criticalEmails } }, "_id email");
+    const uniqueUserIds = targetedUsers.map(u => String(u._id));
+
+    // Get the complete current state of all grades for this site
+    const existingRows = await currentPriceModel.getCurrentPricesBySite(locationId);
+    
+    const changedGradesList = [];
+    const unchangedGradesList = [];
     let databaseWritesExecutedCount = 0;
 
     await db.transaction(async (trx) => {
-      for (const [frontendCode, targetPrice] of Object.entries(prices)) {
-        if (targetPrice === null || targetPrice === undefined) continue;
+      // Loop through all globally known grades for this site rather than just the req.body snippet
+      for (const row of existingRows) {
+        // Find if this grade has a matching code in the display lookup mapping map
+        const frontendCode = Object.keys(GRADE_MAP).find(key => GRADE_MAP[key] === row.grade) || row.grade;
+        
+        const currentDbPrice = parseFloat(row.price);
+        // Look up what price was sent in the request body. If not provided, fall back to current price
+        const targetPriceRaw = prices[frontendCode];
+        const parsedTargetPrice = targetPriceRaw !== undefined && targetPriceRaw !== null ? parseFloat(targetPriceRaw) : currentDbPrice;
 
-        const dbGradeString = GRADE_MAP[frontendCode];
-        if (!dbGradeString) continue;
+        const itemStatePayload = {
+          gradeId: frontendCode,
+          label: frontendCode,
+          oldPrice: currentDbPrice,
+          newPrice: parsedTargetPrice
+        };
 
-        // 2. DELTA CHECK: Compare precision float values. If unchanged, bypass operations
-        const currentDbPrice = existingPricesMap[dbGradeString];
-        if (currentDbPrice !== undefined && currentDbPrice === targetPrice) {
-          continue;
+        // Delta Engine validation
+        if (currentDbPrice === parsedTargetPrice) {
+          unchangedGradesList.push(itemStatePayload);
+        } else {
+          databaseWritesExecutedCount++;
+          changedGradesList.push(itemStatePayload);
+
+          // Write changes to current prices ledger
+          await currentPriceModel.upsertCurrentPrice({
+            site: locationId,
+            grade: row.grade,
+            price: parsedTargetPrice
+          });
+
+          // Write changes to log tracking audit sheet
+          await logsModel.createLog({
+            date: dateSK,
+            day: currentDayName,
+            site: locationId,
+            grade: row.grade,
+            price: parsedTargetPrice,
+            image_url: null
+          });
         }
-
-        databaseWritesExecutedCount++;
-
-        // 3. Commit only if a structural modification occurred
-        await currentPriceModel.upsertCurrentPrice({
-          site: locationId,
-          grade: dbGradeString,
-          price: targetPrice
-        });
-
-        await logsModel.createLog({
-          date: dateSK,
-          day: currentDayName,
-          site: locationId,
-          grade: dbGradeString,
-          price: targetPrice,
-          image_url: null
-        });
       }
     });
 
-    console.log(`Updates committed to storage: ${databaseWritesExecutedCount} grades updated for ${stationName}.`);
-    res.status(200).json({ success: true, updatesApplied: databaseWritesExecutedCount });
+    // BROADCAST PIPELINE: This payload will now ALWAYS contain the full 5 grades
+    const io = req.app.get("io");
+    if (io && uniqueUserIds.length > 0) {
+      const socketPayload = {
+        stationName: stationName,
+        locationId: locationId,
+        changedGrades: changedGradesList,
+        unchangedGrades: unchangedGradesList,
+        hasStructuralChanges: changedGradesList.length > 0
+      };
+
+      uniqueUserIds.forEach((userId) => {
+        io.to(userId).emit("retail-price-published", socketPayload);
+      });
+    }
+
+    return res.status(200).json({
+      success: true,
+      updatesApplied: databaseWritesExecutedCount,
+      notifiedUserCount: uniqueUserIds.length
+    });
 
   } catch (err) {
-    console.error(`Transaction Pipeline Failed while updating retail prices for ${stationName}:`, err);
-    res.status(500).json({ message: "Persistence layer operational pipeline failure." });
+    console.error("Transaction Pipeline Failed:", err);
+    return res.status(500).json({ message: "Persistence layer failure." });
   }
 });
 
