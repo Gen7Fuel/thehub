@@ -684,6 +684,7 @@ type LotterySearch = {
 
 type LoaderData = {
   sellsLottery: boolean | null
+  isManitoba: boolean
   totals: Record<string, number> | null
   rows: any[]
   count: number
@@ -713,13 +714,15 @@ export const Route = createFileRoute('/_navbarLayout/cash-summary/lottery')({
   }),
   loaderDeps: ({ search: { site, date } }) => ({ site: site || '', date: date || '' }),
   loader: async ({ deps: { site, date } }): Promise<LoaderData> => {
-    if (!site || !date) return { sellsLottery: null, totals: null, rows: [], count: 0, status: null, error: null }
+    if (!site || !date) return { sellsLottery: null, isManitoba: false, totals: null, rows: [], count: 0, status: null, error: null }
 
     try {
       const token = localStorage.getItem('token') || ''
 
-      // 1) Check if site sells lottery
+      // 1) Check if site sells lottery and look up province
       let sellsLottery: boolean | null = null
+      let isManitoba = false // <-- Initialize the flag here
+
       try {
         const locResp = await fetch(`/api/locations?stationName=${encodeURIComponent(site)}`, {
           headers: token ? { Authorization: `Bearer ${token}` } : {},
@@ -727,8 +730,12 @@ export const Route = createFileRoute('/_navbarLayout/cash-summary/lottery')({
         if (locResp.ok) {
           const loc = await locResp.json()
           sellsLottery = Boolean(loc?.sellsLottery)
+
+          // Check if the province from locationSchema is Manitoba
+          isManitoba = loc?.province?.trim().toLowerCase() === 'manitoba'
+
           if (!sellsLottery) {
-            return { sellsLottery, totals: null, rows: [], count: 0, status: 200, error: null }
+            return { sellsLottery, isManitoba, totals: null, rows: [], count: 0, status: 200, error: null }
           }
         }
       } catch {
@@ -747,10 +754,10 @@ export const Route = createFileRoute('/_navbarLayout/cash-summary/lottery')({
       )
 
       if (resp.status === 403) {
-        return { sellsLottery, totals: null, rows: [], count: 0, status: 403, error: 'forbidden' }
+        return { sellsLottery, isManitoba, totals: null, rows: [], count: 0, status: 403, error: 'forbidden' }
       }
       if (!resp.ok) {
-        return { sellsLottery, totals: null, rows: [], count: 0, status: resp.status, error: `HTTP ${resp.status}` }
+        return { sellsLottery, isManitoba, totals: null, rows: [], count: 0, status: resp.status, error: `HTTP ${resp.status}` }
       }
 
       const data = await resp.json()
@@ -758,9 +765,9 @@ export const Route = createFileRoute('/_navbarLayout/cash-summary/lottery')({
       const rows = Array.isArray(data?.rows) ? data.rows : []
       const count = Number((data?.totals?.count ?? rows.length) || 0)
 
-      return { sellsLottery, totals, rows, count, status: 200, error: null }
+      return { sellsLottery, isManitoba, totals, rows, count, status: 200, error: null }
     } catch {
-      return { sellsLottery: null, totals: null, rows: [], count: 0, status: null, error: 'network' }
+      return { sellsLottery: null, isManitoba: false, totals: null, rows: [], count: 0, status: null, error: 'network' }
     }
   },
 })
@@ -771,8 +778,8 @@ function RouteComponent() {
   const navigate = useNavigate({ from: Route.fullPath })
 
   const { site: siteFromUrl, date: dateFromUrl } = Route.useSearch()
-  const { sellsLottery, totals, rows, count, status, error } = Route.useLoaderData() as LoaderData
-  // Global store
+  // Inside RouteComponent:
+  const { sellsLottery, isManitoba, totals, rows, count, status, error } = Route.useLoaderData() as LoaderData  // Global store
   const date = useFormStore((s) => s.date)
   const setDate = useFormStore((s) => s.setDate)
   const lotteryValues = useFormStore((s) => s.lotteryValues)
@@ -958,6 +965,7 @@ function RouteComponent() {
             lotteryData={lotteryValues}
             bullockData={bullock}
             isReadOnly={false}
+            isManitoba={isManitoba} // <-- Passing the flag down
           />
         </div>
       )}
@@ -967,11 +975,10 @@ function RouteComponent() {
           <div />
           <Link
             to="/cash-summary/lottery-images"
-            search={(prev: any) => ({ ...prev })}
-          // search={(prev: any) => {
-          //   const { id, ...rest } = prev || {}
-          //   return { ...rest, site: rest?.site, date: rest?.date }
-          // }}
+            search={(prev: any) => ({
+              ...prev,
+              isManitoba: isManitoba // Passing it explicitly here
+            })}
           >
             <Button>Next</Button>
           </Link>

@@ -675,6 +675,42 @@ async function getFuelCarrierFCS() {
   }
 }
 
+async function getFuelStationDiscounts() {
+  try {
+    const { getPool } = require('./sqlService'); 
+    const pool = await getPool();
+
+    // FULL OUTER JOIN on the 5 keys representing a unique station assignment row
+    const result = await pool.request().query(`
+      SELECT 
+        COALESCE(live.[Station_SK], stg.[Station_SK]) AS [Station_SK],
+        COALESCE(live.[Location], stg.[Location]) AS [Location],
+        COALESCE(live.[Province], stg.[Province]) AS [Province],
+        COALESCE(live.[Type], stg.[Type]) AS [Type],
+        COALESCE(live.[Fuel_Grade], stg.[Fuel_Grade]) AS [Fuel_Grade],
+        live.[Discounts] AS [Live_Discounts],
+        live.[Updated_At] AS [Live_Updated_At],
+        stg.[Discounts] AS [Stg_Discounts],
+        stg.[Updated_At] AS [Stg_Updated_At],
+        stg.[Schedule_Effective_From] AS [Schedule_Effective_From]
+      FROM [FUEL].[Station_Discounts] AS live
+      FULL OUTER JOIN [FUEL].[Stg_Station_Discounts] AS stg
+        ON  live.[Station_SK] = stg.[Station_SK]
+        AND live.[Location] = stg.[Location]
+        AND live.[Province] = stg.[Province]
+        AND (live.[Type] = stg.[Type] OR (live.[Type] IS NULL AND stg.[Type] IS NULL))
+        AND (live.[Fuel_Grade] = stg.[Fuel_Grade] OR (live.[Fuel_Grade] IS NULL AND stg.[Fuel_Grade] IS NULL))
+      WHERE live.[Station_SK] IS NOT NULL OR stg.[Station_SK] IS NOT NULL
+      ORDER BY live.[Station_SK]
+    `);
+
+    return result.recordset;
+  } catch (err) {
+    console.error('SQL error executing dual-table fetch for Station Discounts:', err);
+    return [];
+  }
+}
+
 
 /**
  * Fetch GTIN -> UPC list for items marked inactive on account.
@@ -1088,7 +1124,7 @@ async function getSanitizationBackupData() {
   try {
     const pool = await getPool();
     const query = `
-SELECT 
+      SELECT 
         CI.[UPC],
         CI.[Station_SK],
         CI.[On Hand Qty] AS onHandQty,
@@ -1124,7 +1160,7 @@ SELECT
         AND MI.[Category ID] 
           NOT IN (0, 121, 130, 131, 133, 134, 152, 153, 155, 157, 158, 175, 176, 
                   200, 201, 202, 203, 204, 205, 206, 207, 208, 209, 210, 213, 
-                  214, 216, 218, 219, 220, 800, 999, 5001, 5002, 5003, 10000)
+                  214, 216, 218, 219, 220, 800, 999, 1000, 5001, 5002, 5003, 10000)
     `;
 
     const result = await pool.request().query(query);
@@ -1263,4 +1299,5 @@ module.exports = {
   getFuelSupplierDiscounts,
   getFuelCarrierHaulage,
   getFuelCarrierFCS,
+  getFuelStationDiscounts,
 };
