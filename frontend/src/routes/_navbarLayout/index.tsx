@@ -537,30 +537,6 @@ function Section({ title, icon, children, accentColor }: { title: string; icon: 
 //         )}
 
 
-
-//         {/* Reports Section */}
-//         {/* {(access.module_daily_reports || access.module_reports) && ( //markpoint */}
-//         {/* {(access?.dailyReports || access?.reports) && (
-//           <Section title="Reports">
-//             <div className="flex flex-wrap gap-4">
-//               {access?.dailyReports && (
-//                 <Link to="/daily-reports">
-//                   <Button className="w-32 h-32 flex items-center justify-center break-words whitespace-normal text-center">
-//                     Daily Reports
-//                   </Button>
-//                 </Link>
-//               )} 
-//               {access?.reports && (
-//                 <Link to="/reports">
-//                   <Button className="w-32 h-32 flex items-center justify-center break-words whitespace-normal text-center">
-//                     Reports
-//                   </Button>
-//                 </Link>
-//               )}
-//             </div>
-//           </Section>
-//         )}  */}
-
 //         {/* Sales Section */}
 //         {/* {access.module_status && ( //markpoint */}
 //         {access?.status?.value && (
