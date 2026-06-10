@@ -57,12 +57,6 @@ router.post("/", async (req, res) => {
   } = req.body;
 
   try {
-    // Auto-numbering logic for Charlie's site only if both fields are missing
-    const isCharlies = stationName && stationName.trim().toLowerCase() === "charlie's";
-    if (isCharlies && (!poNumber || poNumber === '' || poNumber === '00000') && (!fleetCardNumber || fleetCardNumber === '')) {
-      poNumber = await Transaction.getNextPoNumberForSite(stationName);
-    }
-
     // Fleet upsert + change-notification (owned by backend so comparison happens before update)
     if (fleetCardNumber) {
       try {

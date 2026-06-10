@@ -277,15 +277,6 @@ describe('PO Form — index.tsx', () => {
     }, { timeout: 5000 })
   })
 
-  it("hides the number-type toggle and PO/fleet fields when stationName is charlies", async () => {
-    // isCharlies = stationName.trim().toLowerCase() === "charlies" (no apostrophe)
-    mockStore.stationName = 'charlies'
-    renderWithSuspense(<POForm />)
-    // Wait for the component to mount (Select Site heading is always rendered)
-    await waitFor(() => expect(screen.getByText(/select site/i)).toBeInTheDocument())
-    expect(screen.queryByTestId('otp-input')).not.toBeInTheDocument()
-  })
-
   it('shows a PO uniqueness error when the uniqueness API returns not-unique', async () => {
     mockStore.poNumber = '12345'
     mockAxiosGet.mockImplementation((url: string) => {

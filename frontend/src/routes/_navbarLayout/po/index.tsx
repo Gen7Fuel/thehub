@@ -199,9 +199,6 @@ function RouteComponent() {
     }
   };
 
-  // Only show number type and PO/fleet fields if not Charlie's
-  const isCharlies = stationName && stationName.trim().toLowerCase() === "charlies";
-
   const customerSuggestions = useMemo(() => {
     const q = customerName.trim().toLowerCase()
     if (!q || !Array.isArray(arCustomers)) return []
@@ -219,10 +216,7 @@ function RouteComponent() {
         />
       </div>
 
-      {/* Only show number type and PO/fleet fields if not Charlie's */}
-      {!isCharlies && (
-        <>
-          <div className="space-y-2">
+      <div className="space-y-2">
             <h2 className="text-lg font-bold">Select Number Type</h2>
             <Select value={numberType} onValueChange={(value) => setNumberType(value as 'fleet' | 'po')}>
               <SelectTrigger className="w-[180px]">
@@ -337,9 +331,6 @@ function RouteComponent() {
               )}
             </div>
           )}
-        </>
-      )}
-
       <div className="flex flex-row items-end gap-4">
         <div className="space-y-2">
           <h2 className="text-lg font-bold">Date</h2>
@@ -458,9 +449,9 @@ function RouteComponent() {
           <Button
             variant="outline"
             onClick={() => {
-              if (!isCharlies) setPoNumber(padFive(poNumber));
+              setPoNumber(padFive(poNumber));
             }}
-            disabled={!isCharlies && !!poError}
+            disabled={!!poError}
           >
             Next
           </Button>
@@ -489,10 +480,10 @@ function RouteComponent() {
           <Button
             className="bg-blue-600 hover:bg-blue-700 text-white"
             onClick={() => {
-              if (!isCharlies) setPoNumber(padFive(poNumber));
+              setPoNumber(padFive(poNumber));
               fileInputRef.current?.click();
             }}
-            disabled={(!isCharlies && !!poError) || !customerName || !driverName || quantity === 0 || (numberType === 'fleet' && cardStatus !== 'active')}
+            disabled={!!poError || !customerName || !driverName || quantity === 0 || (numberType === 'fleet' && cardStatus !== 'active')}
           >
             <Camera className="mr-2 h-4 w-4" />
             Upload Receipt
