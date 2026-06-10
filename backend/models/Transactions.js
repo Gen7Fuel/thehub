@@ -81,33 +81,5 @@ transactionSchema.index(
   }
 )
 
-// Static method to get next PO number for a site (atomic, per site)
-transactionSchema.statics.getNextPoNumberForSite = async function (stationName) {
-  if (!stationName) throw new Error('stationName is required for auto-numbering');
-  // Find the highest poNumber for this site, only for source: 'PO' and poNumber not empty
-  // Only consider numeric poNumbers >= 10000
-  const last = await this.findOne({
-    source: 'PO',
-    stationName,
-    poNumber: { $exists: true, $ne: '' }
-  })
-    .sort({
-      // Sort numerically descending, fallback to string sort if needed
-      poNumber: -1
-    })
-    .select('poNumber')
-    .lean();
-
-  let next = 10000;
-  if (last && last.poNumber) {
-    // Only increment if poNumber is a valid integer >= 10000
-    const parsed = parseInt(last.poNumber, 10);
-    if (!isNaN(parsed) && parsed >= 10000) {
-      next = parsed + 1;
-    }
-  }
-  return String(next);
-};
-
 const Transaction = mongoose.model("Transaction", transactionSchema);
 module.exports = Transaction;
