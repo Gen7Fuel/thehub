@@ -3,6 +3,7 @@ import { AlertTriangle, Clock, RefreshCw, Fuel, ArrowRight, Camera, CheckCircle2
 import Navbar from '@/components/custom/navbar'
 import MaintenanceBanner from '@/components/custom/MaintenanceBanner'
 import NotificationPopup from '@/components/custom/NotificationPopup'
+import FuelPriceTicker from '@/components/custom/FuelPriceTicker'
 import { getSocket } from "@/lib/websocket";
 import axios from 'axios'
 
@@ -66,12 +67,14 @@ function RouteComponent() {
     changedGrades: any[];
     unchangedGrades: any[];
     hasStructuralChanges: boolean;
-    batchTimestamp?: string; // Fed from your server re-hydration check loop
+    batchTimestamp?: string;
   } | null>(null);
 
-  // Native hardware camera capture local streams
+  // Native hardware camera capture state machine tracking
   const fileInputRef = useRef<HTMLInputElement>(null);
-  const [localReceiptBase64, setLocalReceiptBase64] = useState<string | null>(null);
+  const [activeUploadStep, setActiveUploadStep] = useState<'BULLOCH' | 'INFONET' | null>(null);
+  const [bullochBase64, setBullochBase64] = useState<string | null>(null);
+  const [infonetBase64, setInfonetBase64] = useState<string | null>(null);
   const [showCameraPreviewMode, setShowCameraPreviewMode] = useState(false);
 
   // --- RE-HYDRATION AND INITIALIZATION SYSTEM ---
@@ -97,14 +100,23 @@ function RouteComponent() {
     verifyPendingPriceStatus();
   }, [verifyPendingPriceStatus]);
 
-  // --- LIVE DATA ACCESS STREAM MUTATION TRACKING ---
+  // Helper trigger to accurately handle which report snapshot is being targeted
+  const triggerCameraHardwareCapture = (step: 'BULLOCH' | 'INFONET') => {
+    setActiveUploadStep(step);
+    fileInputRef.current?.click();
+  };
+
   const handleNativeCameraCapture = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file) {
       const reader = new FileReader();
       reader.onloadend = () => {
-        setLocalReceiptBase64(reader.result as string);
-        setShowCameraPreviewMode(true); // Switches content portal view to allow validation checks
+        if (activeUploadStep === 'BULLOCH') {
+          setBullochBase64(reader.result as string);
+        } else if (activeUploadStep === 'INFONET') {
+          setInfonetBase64(reader.result as string);
+        }
+        setShowCameraPreviewMode(true);
       };
       reader.readAsDataURL(file);
     }
@@ -114,37 +126,44 @@ function RouteComponent() {
     mutationFn: async () => {
       if (!pricePayload) return;
 
+      // Clean informational sweep logic pathway (Bypasses camera uploads entirely)
       if (!pricePayload.hasStructuralChanges) {
         setIsPriceOverlayActive(false);
         return;
       }
 
-      if (!localReceiptBase64) {
-        alert("Please capture a Bulloch terminal ticket snapshot before proceeding.");
+      if (!bullochBase64 || !infonetBase64) {
+        alert("Please make sure you have taken pictures of BOTH the Bulloch and InfoNet reports before submitting.");
         return;
       }
 
-      // 1. Upload to CDN
-      const { filename } = await uploadBase64Image(localReceiptBase64, `retail_verification_${Date.now()}.jpg`);
+      // 1. Upload both documents in parallel into the asset storage container paths
+      const [bullochRes, infonetRes] = await Promise.all([
+        uploadBase64Image(bullochBase64, `bulloch_verification_${Date.now()}.jpg`),
+        uploadBase64Image(infonetBase64, `infonet_verification_${Date.now()}.jpg`)
+      ]);
 
-      // 2. Clear all outstanding rows for this location
+      // 2. Transmit both filenames upstream to update the pending logs
       const token = localStorage.getItem('token');
       await axios.put('/api/fuel-pricing/verify-price-receipt', {
         locationId: pricePayload.locationId,
-        filename: filename
+        filename: bullochRes.filename,          // Bulloch report mapping
+        infonetFilename: infonetRes.filename     // InfoNet report mapping
       }, {
         headers: { Authorization: `Bearer ${token}` }
       });
     },
     onSuccess: () => {
       setIsPriceOverlayActive(false);
-      setLocalReceiptBase64(null);
+      setBullochBase64(null);
+      setInfonetBase64(null);
+      setActiveUploadStep(null);
       setShowCameraPreviewMode(false);
       setPricePayload(null);
     },
     onError: (err) => {
       console.error("Audit lock release failure:", err);
-      alert("Error logging terminal authorization sequence.");
+      alert("Something went wrong saving the report photos. Please check your network and try again.");
     }
   });
 
@@ -243,6 +262,9 @@ function RouteComponent() {
     <div className="flex flex-col min-h-screen relative">
       <Navbar />
 
+      {/* 2. Real-time Permissions-Scoped Fuel Pricing Marquee */}
+      <FuelPriceTicker />
+
       {showPopup && (
         <NotificationPopup
           message={`You have ${unreadCount} new notification${unreadCount > 1 ? 's' : ''} on the Hub.`}
@@ -258,7 +280,7 @@ function RouteComponent() {
         </main>
       </div>
 
-      {/* Hidden input file element configured to launch the device's default rear camera */}
+      {/* Camera Capture Input element configured for tablet lens overrides */}
       <input
         type="file"
         accept="image/*"
@@ -279,16 +301,17 @@ function RouteComponent() {
             <div className="space-y-4 animate-in fade-in duration-200 flex flex-col justify-between h-full">
               <DialogHeader>
                 <DialogTitle className="text-md font-black tracking-tight text-slate-900 uppercase flex items-center gap-2">
-                  <ImageIcon className="w-4 h-4 text-emerald-600" /> Verify Ticket Snapshot
+                  <ImageIcon className="w-4 h-4 text-emerald-600" />
+                  <span>Check Your Photo: {activeUploadStep === 'BULLOCH' ? 'Bulloch Report' : 'InfoNet Report'}</span>
                 </DialogTitle>
                 <DialogDescription className="text-xs font-semibold text-slate-400">
-                  Ensure pricing coordinates matches your Bulloch physical display ledger perfectly.
+                  Make sure the numbers in the picture match your computer screen before clicking confirm.
                 </DialogDescription>
               </DialogHeader>
 
               <div className="w-full h-[40vh] bg-slate-950 rounded-2xl overflow-hidden relative border border-slate-800">
                 <img
-                  src={localReceiptBase64 || ''}
+                  src={activeUploadStep === 'BULLOCH' ? (bullochBase64 || '') : (infonetBase64 || '')}
                   alt="Captured Terminal Receipt Preview"
                   className="w-full h-full object-contain"
                 />
@@ -301,18 +324,13 @@ function RouteComponent() {
                   disabled={submitTerminalVerificationMutation.isPending}
                   className="flex-1 rounded-xl border-slate-200 gap-1.5 font-bold"
                 >
-                  <RotateCcw className="w-4 h-4" /> Retake
+                  <RotateCcw className="w-4 h-4" /> Retake Photo
                 </Button>
                 <Button
-                  onClick={() => submitTerminalVerificationMutation.mutate()}
-                  disabled={submitTerminalVerificationMutation.isPending}
+                  onClick={() => setShowCameraPreviewMode(false)}
                   className="flex-1 bg-emerald-700 hover:bg-emerald-800 text-white rounded-xl font-bold tracking-tight shadow-md"
                 >
-                  {submitTerminalVerificationMutation.isPending ? (
-                    <><Loader2 className="w-4 h-4 animate-spin mr-1.5" /> Synchronizing...</>
-                  ) : (
-                    <><CheckCircle2 className="w-4 h-4 mr-1.5" /> Push & Clear Lock</>
-                  )}
+                  <CheckCircle2 className="w-4 h-4 mr-1.5" /> This Looks Good
                 </Button>
               </div>
             </div>
@@ -327,10 +345,10 @@ function RouteComponent() {
                     </div>
                     <div>
                       <DialogTitle className="text-lg font-black tracking-tight text-slate-900 uppercase">
-                        Price Release: <span className="text-sky-600 normal-case">{pricePayload?.stationName}</span>
+                        New Fuel Prices: <span className="text-sky-600 normal-case">{pricePayload?.stationName}</span>
                       </DialogTitle>
                       <DialogDescription className="text-xs font-semibold text-slate-400">
-                        New electronic metrics coordinates distributed to active controller targets.
+                        New gas price data has been sent to your station logs.
                       </DialogDescription>
                     </div>
                   </div>
@@ -338,21 +356,22 @@ function RouteComponent() {
 
                 {/* Main scroll container tracking grade configurations */}
                 <div className="space-y-4 max-h-[42vh] overflow-y-auto pr-1 select-none mt-4 scrollbar-thin">
+
                   {/* SECTION 1: CHANGED GRADE MATRICES */}
                   {pricePayload && pricePayload.changedGrades?.length > 0 && (
                     <div className="space-y-2">
                       <h4 className="text-xs font-black tracking-wider text-red-600 uppercase flex items-center gap-1.5">
                         <span className="w-1.5 h-1.5 rounded-full bg-red-500" />
-                        Changed Grades:
+                        Updated Prices:
                       </h4>
 
                       <div className="grid gap-2">
                         {pricePayload.changedGrades.map((item: any) => (
                           <div
                             key={item.gradeId}
-                            className="flex items-center justify-between p-3 bg-white border border-slate-200 rounded-2xl shadow-sm transition-all hover:border-slate-300"
+                            className="flex items-center justify-between p-3 bg-white border border-slate-200 rounded-2xl shadow-sm transition-all"
                           >
-                            <span className={`text-xs font-black px-3 py-1 rounded-md tracking-wider uppercase ${getGradePillBadgeStyle(item.gradeId)}`}>
+                            <span className={`text-xs font-black w-28 h-7 flex items-center justify-center text-center rounded-md tracking-wider uppercase shrink-0 ${getGradePillBadgeStyle(item.gradeId)}`}>
                               {DISPLAY_LABELS[item.gradeId] || item.label}
                             </span>
 
@@ -382,7 +401,7 @@ function RouteComponent() {
                     <div className="space-y-2 pt-1">
                       <h4 className="text-xs font-black tracking-wider text-amber-600 uppercase flex items-center gap-1.5">
                         <span className="w-1.5 h-1.5 rounded-full bg-amber-500" />
-                        Unchanged Grades:
+                        Unchanged Prices:
                       </h4>
 
                       <div className="grid gap-2">
@@ -391,7 +410,7 @@ function RouteComponent() {
                             key={item.gradeId}
                             className="flex items-center justify-between p-2.5 bg-slate-50/60 border border-slate-200/60 rounded-2xl"
                           >
-                            <span className={`text-[11px] font-extrabold px-2.5 py-0.5 rounded-md tracking-wide uppercase opacity-75 ${getGradePillBadgeStyle(item.gradeId)}`}>
+                            <span className={`text-[11px] font-extrabold w-28 h-6 flex items-center justify-center text-center rounded-md tracking-wide uppercase opacity-75 shrink-0 ${getGradePillBadgeStyle(item.gradeId)}`}>
                               {DISPLAY_LABELS[item.gradeId] || item.label}
                             </span>
 
@@ -400,7 +419,7 @@ function RouteComponent() {
                                 ${Number(item.newPrice).toFixed(3)}
                               </div>
                               <span className="text-[10px] font-black uppercase tracking-wider px-2 py-0.5 rounded bg-amber-50 text-amber-600 border border-amber-200/40">
-                                Unchanged
+                                Same Price
                               </span>
                             </div>
                           </div>
@@ -414,35 +433,67 @@ function RouteComponent() {
               {/* DYNAMIC ACTION FOOTER LOGIC PATHWAY */}
               <div className="pt-4 border-t border-slate-100 mt-2">
                 {pricePayload?.hasStructuralChanges ? (
-                  // LOGIC BLOCK A: STRUCTURAL DELTA MODIFICATIONS (MANDATORY CAMERA SNAPSHOT REQUIRED)
-                  <div className="flex flex-col sm:flex-row items-center justify-between gap-4 bg-red-50/60 dark:bg-red-950/10 p-4 rounded-2xl border border-red-100/60">
-                    <div className="flex items-start gap-2.5 text-left max-w-sm">
+                  // LOGIC BLOCK A: CAMERA ACTION PANEL (MANDATORY DUAL SNAPSHOT REQUIRED)
+                  <div className="space-y-3 bg-red-50/60 p-4 rounded-2xl border border-red-100/60">
+                    <div className="flex items-start gap-2.5 text-left pb-1">
                       <AlertTriangle className="w-5 h-5 text-red-600 flex-shrink-0 mt-0.5" />
                       <p className="text-xs font-bold leading-normal text-red-800">
-                        Kindly update the prices on your Bulloch physical terminal, then snap and upload a receipt image to release this interface layout lock.
+                        Please update the fuel prices on your physical Bulloch terminal screen along with the Infonet Terminal. Once finished, you must take and upload photos of both reports below to unlock the app.
                       </p>
                     </div>
-                    <Button
-                      onClick={() => fileInputRef.current?.click()}
-                      className="w-full sm:w-auto bg-red-600 hover:bg-red-700 text-white font-black tracking-tight rounded-xl px-5 gap-2 shadow-sm whitespace-nowrap"
-                    >
-                      <Camera className="w-4 h-4" /> Upload Receipt
-                    </Button>
+
+                    <div className="flex flex-col sm:flex-row gap-3 pt-1">
+                      <Button
+                        onClick={() => triggerCameraHardwareCapture('BULLOCH')}
+                        className={`flex-1 rounded-xl px-4 gap-2 font-black text-xs tracking-tight shadow-sm border whitespace-nowrap transition-all ${bullochBase64
+                          ? 'bg-emerald-50 text-emerald-700 border-emerald-200 hover:bg-emerald-100'
+                          : 'bg-white text-slate-800 border-slate-200 hover:bg-slate-50'
+                          }`}
+                      >
+                        <Camera className="w-4 h-4 shrink-0" />
+                        {bullochBase64 ? "✓ Bulloch Report Added" : "Take Photo: Bulloch Report"}
+                      </Button>
+
+                      <Button
+                        onClick={() => triggerCameraHardwareCapture('INFONET')}
+                        className={`flex-1 rounded-xl px-4 gap-2 font-black text-xs tracking-tight shadow-sm border whitespace-nowrap transition-all ${infonetBase64
+                          ? 'bg-emerald-50 text-emerald-700 border-emerald-200 hover:bg-emerald-100'
+                          : 'bg-white text-slate-800 border-slate-200 hover:bg-slate-50'
+                          }`}
+                      >
+                        <Camera className="w-4 h-4 shrink-0" />
+                        {infonetBase64 ? "✓ InfoNet Report Added" : "Take Photo: InfoNet Report"}
+                      </Button>
+                    </div>
+
+                    {bullochBase64 && infonetBase64 && (
+                      <Button
+                        onClick={() => submitTerminalVerificationMutation.mutate()}
+                        disabled={submitTerminalVerificationMutation.isPending}
+                        className="w-full mt-2 bg-slate-900 hover:bg-slate-800 text-white font-black text-xs tracking-wider uppercase rounded-xl h-10 gap-1.5 shadow-md"
+                      >
+                        {submitTerminalVerificationMutation.isPending ? (
+                          <><Loader2 className="w-4 h-4 animate-spin" /> Saving Reports...</>
+                        ) : (
+                          "Save & Complete Verification"
+                        )}
+                      </Button>
+                    )}
                   </div>
                 ) : (
-                  // LOGIC BLOCK B: INFORMATIONAL TRANSACTION (CLEAN SYSTEM STATUS CONFIRMATION SWEEP)
+                  // LOGIC BLOCK B: INFORMATIONAL SWEET CONFIRMATION
                   <div className="flex flex-col sm:flex-row items-center justify-between gap-4 bg-slate-50 p-4 rounded-2xl border border-slate-200/60">
                     <div className="flex items-start gap-2.5 text-left max-w-md">
                       <CheckCircle2 className="w-5 h-5 text-slate-500 flex-shrink-0 mt-0.5" />
                       <p className="text-xs font-semibold leading-normal text-slate-500">
-                        No structural pricing metrics updates were deployed during this ledger cycle sequence. Please verify accuracy parameters to clear this diagnostic modal.
+                        No gas prices were changed during this update. Please check the values above and confirm with the values in bulloch and infonet reports. Click confirm to close this message.
                       </p>
                     </div>
                     <Button
                       onClick={() => submitTerminalVerificationMutation.mutate()}
-                      className="w-full sm:w-auto bg-slate-900 hover:bg-slate-800 text-white font-black tracking-tight rounded-xl px-6 shadow-sm whitespace-nowrap"
+                      className="w-full sm:w-auto bg-slate-900 hover:bg-slate-800 text-white font-black tracking-tight rounded-xl px-6 h-10 shadow-sm whitespace-nowrap"
                     >
-                      I Confirm Prices
+                      I Confirm Prices match
                     </Button>
                   </div>
                 )}
@@ -455,7 +506,7 @@ function RouteComponent() {
       {/* --- FULL SCREEN LOCKDOWN OVERLAY --- */}
       {isLocked && (
         <div className="fixed inset-0 z-[99999] bg-slate-950/70 backdrop-blur-md flex items-center justify-center p-4 overflow-hidden">
-          <div className="bg-white dark:bg-slate-900 border-t-8 border-red-600 p-10 rounded-3xl shadow-2xl max-w-lg w-full text-center animate-in fade-in zoom-in duration-300">
+          <div className="bg-white dark:bg-slate-900 border-t-8 border-red-600 p-10 rounded-3xl shadow-2xl max-w-lg w-full text-center">
             <div className="w-20 h-20 bg-red-100 dark:bg-red-900/30 rounded-full flex items-center justify-center mx-auto mb-6">
               <AlertTriangle className="text-red-600 w-10 h-10 animate-bounce" />
             </div>

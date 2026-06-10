@@ -5,7 +5,7 @@ const TABLE = "fuel_price_logs";
 /**
  * Appends a new price alteration record to historical tracks.
  * No updates or deletions allowed.
- * @param {Object} logData - { date, day, site, grade, price, image_url }
+ * @param {Object} logData - { date, day, site, grade, price, image_url, infonet_image_url, posted_by }
  */
 const createLog = async (logData) => {
   return getPg()(TABLE)
@@ -15,7 +15,9 @@ const createLog = async (logData) => {
       site: logData.site,
       grade: logData.grade,
       price: logData.price,
-      image_url: logData.image_url || null
+      image_url: logData.image_url || null,
+      infonet_image_url: logData.infonet_image_url || null,
+      posted_by: logData.posted_by || null
     })
     .returning("*");
 };

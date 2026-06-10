@@ -11,6 +11,7 @@ const requestId = require("./middleware/requestId");
 
 //BullMQ for background email processing running
 require("./queues/emailQueue"); // Just runs the worker
+require("./queues/priceTimeoutQueue"); // Just runs the worker
 require('./cron_jobs/cycleCountCron'); //cron job for getting cso on hands for cyclecount
 // require('./cron_jobs/fuelInventoryReportCron'); //cron job for getting fuel inventory report and email to kellie
 require('./cron_jobs/auditIssueReportCron'); //cron job for getting previous months audit issue report and email to Ana
