@@ -64,7 +64,8 @@
       "Bash(Remove-Item -Force \"C:\\\\Users\\\\MohammadHasan\\\\workspace\\\\thehub\\\\frontend\\\\src\\\\context\\\\SignalContext.tsx\")",
       "Bash(Remove-Item -Force \"C:\\\\Users\\\\MohammadHasan\\\\workspace\\\\thehub\\\\frontend\\\\src\\\\lib\\\\webrtc.ts\")",
       "Bash(Remove-Item -Force \"C:\\\\Users\\\\MohammadHasan\\\\workspace\\\\thehub\\\\frontend\\\\src\\\\components\\\\custom\\\\videoCall.tsx\")",
-      "Bash(Remove-Item -Force \"C:\\\\Users\\\\MohammadHasan\\\\workspace\\\\thehub\\\\frontend\\\\src\\\\components\\\\custom\\\\IncomingCallModal.tsx\")"
+      "Bash(Remove-Item -Force \"C:\\\\Users\\\\MohammadHasan\\\\workspace\\\\thehub\\\\frontend\\\\src\\\\components\\\\custom\\\\IncomingCallModal.tsx\")",
+      "Skill(run)"
     ]
   }
 }
