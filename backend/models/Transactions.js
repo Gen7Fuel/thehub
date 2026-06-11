@@ -35,17 +35,28 @@ const transactionSchema = new mongoose.Schema({
     required: false, // optional new field for PO
     trim: true
   },
-  quantity: { 
-    type: Number, 
-    required: true // Quantity of product sold (e.g., litres)
+  purchaseType: {
+    type: String,
+    enum: ['fuel', 'non-fuel'],
+    default: 'fuel',
   },
-  amount: { 
-    type: Number, 
+  itemsDescription: {
+    type: String,
+    default: '',
+  },
+  quantity: {
+    type: Number,
+    required: false,
+    default: 0,
+  },
+  amount: {
+    type: Number,
     required: true // Total amount for the transaction
   },
-  productCode: { 
-    type: String, 
-    required: true // Code of the product sold (e.g., fuel type)
+  productCode: {
+    type: String,
+    required: false,
+    default: '',
   },
   // customerID: { type: String, required: false }, // Optional: Customer ID (commented out)
   trx: { 
