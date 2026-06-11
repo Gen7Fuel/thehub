@@ -219,25 +219,25 @@ function RouteComponent() {
 
   return (
     <div className="p-4 border border-dashed border-gray-300 rounded-md space-y-6">
-      {/* Site */}
-      <div className="space-y-2">
-        <h2 className="text-lg font-bold">Select Site</h2>
-        <LocationPicker
-          setStationName={(value) => setStationName(typeof value === 'string' ? value : '')}
-          value="stationName"
-        />
-      </div>
-
-      {/* Purchase Type */}
-      <div className="space-y-2">
-        <h2 className="text-lg font-bold">Purchase Type</h2>
-        <div className="flex rounded-md border border-input overflow-hidden w-fit">
-          <button type="button" onClick={() => setPurchaseType('fuel')} className={toggleClass(purchaseType === 'fuel')}>
-            Fuel
-          </button>
-          <button type="button" onClick={() => setPurchaseType('non-fuel')} className={toggleClass(purchaseType === 'non-fuel', 'border-l border-input')}>
-            Non-Fuel
-          </button>
+      {/* Site + Purchase Type on the same row */}
+      <div className="flex items-end justify-between gap-4">
+        <div className="space-y-2">
+          <h2 className="text-lg font-bold">Select Site</h2>
+          <LocationPicker
+            setStationName={(value) => setStationName(typeof value === 'string' ? value : '')}
+            value="stationName"
+          />
+        </div>
+        <div className="space-y-2 text-right">
+          <h2 className="text-lg font-bold">Purchase Type</h2>
+          <div className="flex rounded-md border border-input overflow-hidden w-fit ml-auto">
+            <button type="button" onClick={() => setPurchaseType('fuel')} className={toggleClass(purchaseType === 'fuel')}>
+              Fuel
+            </button>
+            <button type="button" onClick={() => setPurchaseType('non-fuel')} className={toggleClass(purchaseType === 'non-fuel', 'border-l border-input')}>
+              Non-Fuel
+            </button>
+          </div>
         </div>
       </div>
 
