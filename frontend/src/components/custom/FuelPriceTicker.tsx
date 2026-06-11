@@ -93,7 +93,7 @@ export default function FuelPriceTicker() {
     <div className="w-full overflow-hidden bg-slate-50 border-b border-slate-200 py-2 relative z-25 flex">
       <div 
         className="flex w-max animate-marquee pause-on-hover select-none items-center"
-        style={{ animationDuration: '55s' }} // Consistent, highly readable crawling velocity
+        style={{ animationDuration: '75s' }} // Consistent, highly readable crawling velocity
       >
         <TickerLayoutContent data={permittedTickerData} />
         <TickerLayoutContent data={permittedTickerData} />
