@@ -1,6 +1,7 @@
 import { Button } from '@/components/ui/button'
 import { useState, useEffect, useRef, useMemo } from 'react'
 import { Input } from '@/components/ui/input'
+import { Textarea } from '@/components/ui/textarea'
 import { InputOTP, InputOTPGroup, InputOTPSeparator, InputOTPSlot } from '@/components/ui/input-otp'
 import { Select, SelectContent, SelectGroup, SelectItem, SelectLabel, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { createFileRoute, Link, useNavigate } from '@tanstack/react-router'
@@ -81,6 +82,12 @@ function RouteComponent() {
 
   const fuelType = useFormStore((state) => state.fuelType)
   const setFuelType = useFormStore((state) => state.setFuelType)
+
+  const purchaseType = useFormStore((state) => state.purchaseType)
+  const setPurchaseType = useFormStore((state) => state.setPurchaseType)
+
+  const itemsDescription = useFormStore((state) => state.itemsDescription)
+  const setItemsDescription = useFormStore((state) => state.setItemsDescription)
 
   const receipt = useFormStore((state) => state.receipt)
   const setReceipt = useFormStore((state) => state.setReceipt)
@@ -214,6 +221,22 @@ function RouteComponent() {
           setStationName={(value) => setStationName(typeof value === 'string' ? value : '')}
           value="stationName"
         />
+      </div>
+
+      <div className="space-y-2">
+        <h2 className="text-lg font-bold">Purchase Type</h2>
+        <Select value={purchaseType} onValueChange={(value) => setPurchaseType(value as 'fuel' | 'non-fuel')}>
+          <SelectTrigger className="w-[180px]">
+            <SelectValue placeholder="Select Type" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectGroup>
+              <SelectLabel>Purchase Type</SelectLabel>
+              <SelectItem value="fuel">Fuel Purchase</SelectItem>
+              <SelectItem value="non-fuel">Non-Fuel Purchase</SelectItem>
+            </SelectGroup>
+          </SelectContent>
+        </Select>
       </div>
 
       <div className="space-y-2">
@@ -404,44 +427,68 @@ function RouteComponent() {
         />
       </div>
 
-      {/* Fuel Type */}
-      <div className="space-y-2">
-        <h2 className="text-lg font-bold">Fuel Type</h2>
-        <Select name="fuelType" value={fuelType} onValueChange={(value) => setFuelType(value)}>
-          <SelectTrigger className="w-[180px]">
-            <SelectValue placeholder="Select Grade" />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectGroup>
-              <SelectLabel>Fuel Grades</SelectLabel>
-              {data.products.map((product: Product) => (
-                <SelectItem key={product._id} value={product.code}>
-                  {product.description}
-                </SelectItem>
-              ))}
-            </SelectGroup>
-          </SelectContent>
-        </Select>
-      </div>
+      {/* Fuel Type — fuel purchases only */}
+      {purchaseType === 'fuel' ? (
+        <>
+          <div className="space-y-2">
+            <h2 className="text-lg font-bold">Fuel Type</h2>
+            <Select name="fuelType" value={fuelType} onValueChange={(value) => setFuelType(value)}>
+              <SelectTrigger className="w-[180px]">
+                <SelectValue placeholder="Select Grade" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectGroup>
+                  <SelectLabel>Fuel Grades</SelectLabel>
+                  {data.products.map((product: Product) => (
+                    <SelectItem key={product._id} value={product.code}>
+                      {product.description}
+                    </SelectItem>
+                  ))}
+                </SelectGroup>
+              </SelectContent>
+            </Select>
+          </div>
 
-      {/* Quantity & Amount */}
-      <div className="space-y-2">
-        <h2 className="text-lg font-bold">Quantity and Amount</h2>
-        <Input
-          type="number"
-          name="quantity"
-          placeholder="Quantity (Liters)"
-          value={quantity === 0 ? '' : quantity}
-          onChange={(e) => setQuantity(e.target.value === '' ? 0 : Number(e.target.value))}
-        />
-        <Input
-          type="number"
-          name="amount"
-          placeholder="Amount (CAD)"
-          value={amount === 0 ? '' : amount}
-          onChange={(e) => setAmount(e.target.value === '' ? 0 : Number(e.target.value))}
-        />
-      </div>
+          <div className="space-y-2">
+            <h2 className="text-lg font-bold">Quantity and Amount</h2>
+            <Input
+              type="number"
+              name="quantity"
+              placeholder="Quantity (Liters)"
+              value={quantity === 0 ? '' : quantity}
+              onChange={(e) => setQuantity(e.target.value === '' ? 0 : Number(e.target.value))}
+            />
+            <Input
+              type="number"
+              name="amount"
+              placeholder="Amount (CAD)"
+              value={amount === 0 ? '' : amount}
+              onChange={(e) => setAmount(e.target.value === '' ? 0 : Number(e.target.value))}
+            />
+          </div>
+        </>
+      ) : (
+        <div className="space-y-2">
+          <h2 className="text-lg font-bold">Items Sold</h2>
+          <Textarea
+            name="itemsDescription"
+            placeholder="Describe the items sold..."
+            value={itemsDescription}
+            onChange={(e) => setItemsDescription(e.target.value)}
+            rows={3}
+          />
+          <div className="space-y-2">
+            <h2 className="text-lg font-bold">Amount</h2>
+            <Input
+              type="number"
+              name="amount"
+              placeholder="Amount (CAD)"
+              value={amount === 0 ? '' : amount}
+              onChange={(e) => setAmount(e.target.value === '' ? 0 : Number(e.target.value))}
+            />
+          </div>
+        </div>
+      )}
 
       {/* Navigation
       <div className="flex justify-end">
@@ -483,7 +530,7 @@ function RouteComponent() {
               setPoNumber(padFive(poNumber));
               fileInputRef.current?.click();
             }}
-            disabled={!!poError || !customerName || !driverName || quantity === 0 || (numberType === 'fleet' && cardStatus !== 'active')}
+            disabled={!!poError || !customerName || !driverName || (purchaseType === 'fuel' ? quantity === 0 : !itemsDescription) || (numberType === 'fleet' && cardStatus !== 'active')}
           >
             <Camera className="mr-2 h-4 w-4" />
             Upload Receipt

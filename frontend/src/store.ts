@@ -28,6 +28,12 @@ type FormStore = {
     fuelType: string;
     setFuelType: (fuelType: string) => void;
 
+    purchaseType: 'fuel' | 'non-fuel';
+    setPurchaseType: (t: 'fuel' | 'non-fuel') => void;
+
+    itemsDescription: string;
+    setItemsDescription: (s: string) => void;
+
     resetForm: () => void;
 
     receipt: string | null;
@@ -129,6 +135,10 @@ export const useFormStore = create<FormStore>((set) => ({
     setAmount: (amount) => set({ amount }),
     fuelType: '',
     setFuelType: (fuelType) => set({ fuelType }),
+    purchaseType: 'fuel',
+    setPurchaseType: (purchaseType) => set({ purchaseType }),
+    itemsDescription: '',
+    setItemsDescription: (itemsDescription) => set({ itemsDescription }),
     receipt: null,
     setReceipt: (receipt) => set({ receipt }),
     signature: null,
@@ -144,6 +154,8 @@ export const useFormStore = create<FormStore>((set) => ({
         quantity: 0,
         amount: 0,
         fuelType: '',
+        purchaseType: 'fuel',
+        itemsDescription: '',
         receipt: null,
         signature: null,
     }),
