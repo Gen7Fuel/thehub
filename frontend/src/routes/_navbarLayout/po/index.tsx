@@ -1,8 +1,9 @@
 import { Button } from '@/components/ui/button'
 import { useState, useEffect, useRef, useMemo } from 'react'
 import { Input } from '@/components/ui/input'
+import { Textarea } from '@/components/ui/textarea'
 import { InputOTP, InputOTPGroup, InputOTPSeparator, InputOTPSlot } from '@/components/ui/input-otp'
-import { Select, SelectContent, SelectGroup, SelectItem, SelectLabel, SelectTrigger, SelectValue } from '@/components/ui/select'
+import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { createFileRoute, Link, useNavigate } from '@tanstack/react-router'
 import { useAuth } from '@/context/AuthContext'
 import { useSite } from '@/context/SiteContext'
@@ -81,6 +82,12 @@ function RouteComponent() {
 
   const fuelType = useFormStore((state) => state.fuelType)
   const setFuelType = useFormStore((state) => state.setFuelType)
+
+  const purchaseType = useFormStore((state) => state.purchaseType)
+  const setPurchaseType = useFormStore((state) => state.setPurchaseType)
+
+  const itemsDescription = useFormStore((state) => state.itemsDescription)
+  const setItemsDescription = useFormStore((state) => state.setItemsDescription)
 
   const receipt = useFormStore((state) => state.receipt)
   const setReceipt = useFormStore((state) => state.setReceipt)
@@ -205,163 +212,160 @@ function RouteComponent() {
     return arCustomers.filter((c) => c.name?.toLowerCase().includes(q))
   }, [customerName, arCustomers])
 
+  const toggleClass = (active: boolean, extra = '') =>
+    `px-4 py-2 text-sm font-medium transition-colors ${extra} ${
+      active ? 'bg-slate-800 text-white' : 'bg-background text-slate-700 hover:bg-slate-50'
+    }`
+
   return (
     <div className="p-4 border border-dashed border-gray-300 rounded-md space-y-6">
-      {/* Location Picker */}
-      <div className="space-y-2">
-        <h2 className="text-lg font-bold">Select Site</h2>
-        <LocationPicker
-          setStationName={(value) => setStationName(typeof value === 'string' ? value : '')}
-          value="stationName"
-        />
-      </div>
-
-      <div className="space-y-2">
-            <h2 className="text-lg font-bold">Select Number Type</h2>
-            <Select value={numberType} onValueChange={(value) => setNumberType(value as 'fleet' | 'po')}>
-              <SelectTrigger className="w-[180px]">
-                <SelectValue placeholder="Select Type" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectGroup>
-                  <SelectLabel>Number Type</SelectLabel>
-                  <SelectItem value="fleet">Fleet Card Number</SelectItem>
-                  <SelectItem value="po">PO Number</SelectItem>
-                </SelectGroup>
-              </SelectContent>
-            </Select>
-          </div>
-          {/* Conditional Number Input */}
-          {numberType === 'fleet' ? (
-            <div className="space-y-2">
-              <h2 className="text-lg font-bold">Fleet Card Number</h2>
-              <InputOTP
-                maxLength={16}
-                name="fleetCardNumber"
-                value={fleetCardNumber}
-                onChange={async (value) => {
-                  setFleetCardNumber(value)
-                  if (value.length === 16) {
-                    try {
-                      const token = localStorage.getItem('token')
-                      const res = await axios.get(`${domain}/api/fleet/verify/${value}`, {
-                        headers: { Authorization: `Bearer ${token}` },
-                      })
-                      setCardStatus(res.data.reason || res.data.status || 'not_found')
-                    } catch {
-                      setCardStatus('not_found')
-                    }
-                  } else {
-                    setCardStatus(null)
-                  }
-                }}
-                onBlur={handleBlur}
-              >
-                <InputOTPGroup>
-                  {[0, 1, 2, 3].map((i) => (
-                    <InputOTPSlot key={i} index={i} />
-                  ))}
-                </InputOTPGroup>
-                <InputOTPSeparator />
-                <InputOTPGroup>
-                  {[4, 5, 6, 7].map((i) => (
-                    <InputOTPSlot key={i} index={i} />
-                  ))}
-                </InputOTPGroup>
-                <InputOTPSeparator />
-                <InputOTPGroup>
-                  {[8, 9, 10, 11].map((i) => (
-                    <InputOTPSlot key={i} index={i} />
-                  ))}
-                </InputOTPGroup>
-                <InputOTPSeparator />
-                <InputOTPGroup>
-                  {[12, 13, 14, 15].map((i) => (
-                    <InputOTPSlot key={i} index={i} />
-                  ))}
-                </InputOTPGroup>
-              </InputOTP>
-              {cardStatus && (() => {
-                const cfg = statusConfig[cardStatus] ?? { label: cardStatus, className: 'text-gray-500' }
-                return <div className={`text-xs text-right ${cfg.className}`}>{cfg.label}</div>
-              })()}
-            </div>
-          ) : (
-            <div className="space-y-2">
-              <h2 className="text-lg font-bold">PO Number</h2>
-              <InputOTP
-                maxLength={5}
-                name="poNumber"
-                value={toFiveDigits(poNumber)}
-                onChange={(value) => {
-                  setPoNumber(toFiveDigits(value))
-                  if (poError) setPoError('')
-                }}
-                onBlur={async () => {
-                  const padded = padFive(poNumber)
-                  setPoNumber(padded)
-                  if (!stationName || !padded) return
-                  try {
-                    const res = await axios.get('/api/purchase-orders/unique', {
-                      params: { stationName, poNumber: padded },
-                      headers: {
-                        Authorization: `Bearer ${localStorage.getItem('token') || ''}`,
-                        'X-Required-Permission': 'po',
-                      },
-                    })
-                    if (res.data && res.data.unique === false) {
-                      setPoError('This PO number has already been used for this site.')
-                    } else {
-                      setPoError('')
-                    }
-                  } catch (e: any) {
-                    // non-fatal; show message and allow save to handle server-side conflict
-                    setPoError(e?.response?.data?.message || 'Could not validate PO number uniqueness')
-                  }
-                }}
-              >
-                <InputOTPGroup>
-                  {[0, 1, 2, 3, 4].map((i) => (
-                    <InputOTPSlot key={i} index={i} />
-                  ))}
-                </InputOTPGroup>
-              </InputOTP>
-              {poError && (
-                <div className="text-xs text-red-600">{poError}</div>
-              )}
-            </div>
-          )}
-      <div className="flex flex-row items-end gap-4">
+      {/* Site + Purchase Type on the same row */}
+      <div className="flex items-end justify-between gap-4">
         <div className="space-y-2">
-          <h2 className="text-lg font-bold">Date</h2>
-          <DatePicker
-            date={date}
-            setDate={(value) => {
-              if (typeof value === 'function') {
-                const newDate = value(date);
-                if (newDate) setDate(newDate);
-              } else {
-                setDate(value);
-              }
-            }}
+          <h2 className="text-lg font-bold">Select Site</h2>
+          <LocationPicker
+            setStationName={(value) => setStationName(typeof value === 'string' ? value : '')}
+            value="stationName"
           />
+        </div>
+        <div className="space-y-2 text-right">
+          <h2 className="text-lg font-bold">Purchase Type</h2>
+          <div className="flex rounded-md border border-input overflow-hidden w-fit ml-auto">
+            <button type="button" onClick={() => setPurchaseType('fuel')} className={toggleClass(purchaseType === 'fuel')}>
+              Fuel
+            </button>
+            <button type="button" onClick={() => setPurchaseType('non-fuel')} className={toggleClass(purchaseType === 'non-fuel', 'border-l border-input')}>
+              Non-Fuel
+            </button>
+          </div>
         </div>
       </div>
 
-      {/* Customer and Driver Info */}
+      {/* Number */}
+      <div className="space-y-3">
+        <h2 className="text-lg font-bold">Number</h2>
+        <div className="flex rounded-md border border-input overflow-hidden w-fit">
+          <button type="button" onClick={() => setNumberType('po')} className={toggleClass(numberType === 'po')}>
+            PO Number
+          </button>
+          <button type="button" onClick={() => setNumberType('fleet')} className={toggleClass(numberType === 'fleet', 'border-l border-input')}>
+            Fleet Card
+          </button>
+        </div>
+
+        {numberType === 'fleet' ? (
+          <div className="space-y-1">
+            <InputOTP
+              maxLength={16}
+              name="fleetCardNumber"
+              value={fleetCardNumber}
+              onChange={async (value) => {
+                setFleetCardNumber(value)
+                if (value.length === 16) {
+                  try {
+                    const token = localStorage.getItem('token')
+                    const res = await axios.get(`${domain}/api/fleet/verify/${value}`, {
+                      headers: { Authorization: `Bearer ${token}` },
+                    })
+                    setCardStatus(res.data.reason || res.data.status || 'not_found')
+                  } catch {
+                    setCardStatus('not_found')
+                  }
+                } else {
+                  setCardStatus(null)
+                }
+              }}
+              onBlur={handleBlur}
+            >
+              <InputOTPGroup>
+                {[0, 1, 2, 3].map((i) => <InputOTPSlot key={i} index={i} />)}
+              </InputOTPGroup>
+              <InputOTPSeparator />
+              <InputOTPGroup>
+                {[4, 5, 6, 7].map((i) => <InputOTPSlot key={i} index={i} />)}
+              </InputOTPGroup>
+              <InputOTPSeparator />
+              <InputOTPGroup>
+                {[8, 9, 10, 11].map((i) => <InputOTPSlot key={i} index={i} />)}
+              </InputOTPGroup>
+              <InputOTPSeparator />
+              <InputOTPGroup>
+                {[12, 13, 14, 15].map((i) => <InputOTPSlot key={i} index={i} />)}
+              </InputOTPGroup>
+            </InputOTP>
+            {cardStatus && (() => {
+              const cfg = statusConfig[cardStatus] ?? { label: cardStatus, className: 'text-gray-500' }
+              return <div className={`text-xs text-right ${cfg.className}`}>{cfg.label}</div>
+            })()}
+          </div>
+        ) : (
+          <div className="space-y-1">
+            <InputOTP
+              maxLength={5}
+              name="poNumber"
+              value={toFiveDigits(poNumber)}
+              onChange={(value) => {
+                setPoNumber(toFiveDigits(value))
+                if (poError) setPoError('')
+              }}
+              onBlur={async () => {
+                const padded = padFive(poNumber)
+                setPoNumber(padded)
+                if (!stationName || !padded) return
+                try {
+                  const res = await axios.get('/api/purchase-orders/unique', {
+                    params: { stationName, poNumber: padded },
+                    headers: {
+                      Authorization: `Bearer ${localStorage.getItem('token') || ''}`,
+                      'X-Required-Permission': 'po',
+                    },
+                  })
+                  if (res.data && res.data.unique === false) {
+                    setPoError('This PO number has already been used for this site.')
+                  } else {
+                    setPoError('')
+                  }
+                } catch (e: any) {
+                  setPoError(e?.response?.data?.message || 'Could not validate PO number uniqueness')
+                }
+              }}
+            >
+              <InputOTPGroup>
+                {[0, 1, 2, 3, 4].map((i) => <InputOTPSlot key={i} index={i} />)}
+              </InputOTPGroup>
+            </InputOTP>
+            {poError && <div className="text-xs text-red-600">{poError}</div>}
+          </div>
+        )}
+      </div>
+
+      {/* Date */}
       <div className="space-y-2">
-        <h2 className="text-lg font-bold">Customer and Driver Information</h2>
-        <div ref={customerNameRef} className="relative">
+        <h2 className="text-lg font-bold">Date</h2>
+        <DatePicker
+          date={date}
+          setDate={(value) => {
+            if (typeof value === 'function') {
+              const newDate = value(date);
+              if (newDate) setDate(newDate);
+            } else {
+              setDate(value);
+            }
+          }}
+        />
+      </div>
+
+      {/* Customer and Driver */}
+      <div className="space-y-3">
+        <h2 className="text-lg font-bold">Customer and Driver</h2>
+        <div ref={customerNameRef} className="relative space-y-1">
+          <label className="text-sm font-medium text-slate-700">Customer Name</label>
           <Input
             type="text"
             name="customerName"
-            placeholder="Customer Name"
             value={customerName}
             autoComplete="off"
-            onChange={(e) => {
-              setCustomerName(e.target.value)
-              setShowSuggestions(true)
-            }}
+            onChange={(e) => { setCustomerName(e.target.value); setShowSuggestions(true) }}
             onFocus={() => setShowSuggestions(true)}
           />
           {showSuggestions && customerSuggestions.length > 0 && (
@@ -370,10 +374,7 @@ function RouteComponent() {
                 <li
                   key={c._id}
                   className="px-3 py-2 text-sm cursor-pointer hover:bg-gray-100"
-                  onMouseDown={() => {
-                    setCustomerName(c.name)
-                    setShowSuggestions(false)
-                  }}
+                  onMouseDown={() => { setCustomerName(c.name); setShowSuggestions(false) }}
                 >
                   {c.name}
                 </li>
@@ -381,82 +382,108 @@ function RouteComponent() {
             </ul>
           )}
         </div>
-        <Input
-          type="text"
-          name="driverName"
-          placeholder="Driver Name"
-          value={driverName}
-          onChange={(e) => setDriverName(e.target.value)}
-        />
-        <Input
-          type="text"
-          name="vehicleInfo"
-          placeholder="Make & Model (optional)"
-          value={vehicleInfo}
-          onChange={(e) => setVehicleInfo(e.target.value)}
-        />
-        <Input
-          type="text"
-          name="licensePlate"
-          placeholder="License Plate (optional)"
-          value={licensePlate}
-          onChange={(e) => setLicensePlate(e.target.value)}
-        />
+        <div className="space-y-1">
+          <label className="text-sm font-medium text-slate-700">Driver Name</label>
+          <Input
+            type="text"
+            name="driverName"
+            value={driverName}
+            onChange={(e) => setDriverName(e.target.value)}
+          />
+        </div>
+        <div className="grid grid-cols-2 gap-3">
+          <div className="space-y-1">
+            <label className="text-sm font-medium text-slate-700">
+              Make & Model <span className="font-normal text-slate-400">(optional)</span>
+            </label>
+            <Input
+              type="text"
+              name="vehicleInfo"
+              value={vehicleInfo}
+              onChange={(e) => setVehicleInfo(e.target.value)}
+            />
+          </div>
+          <div className="space-y-1">
+            <label className="text-sm font-medium text-slate-700">
+              License Plate <span className="font-normal text-slate-400">(optional)</span>
+            </label>
+            <Input
+              type="text"
+              name="licensePlate"
+              value={licensePlate}
+              onChange={(e) => setLicensePlate(e.target.value)}
+            />
+          </div>
+        </div>
       </div>
 
-      {/* Fuel Type */}
-      <div className="space-y-2">
-        <h2 className="text-lg font-bold">Fuel Type</h2>
-        <Select name="fuelType" value={fuelType} onValueChange={(value) => setFuelType(value)}>
-          <SelectTrigger className="w-[180px]">
-            <SelectValue placeholder="Select Grade" />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectGroup>
-              <SelectLabel>Fuel Grades</SelectLabel>
-              {data.products.map((product: Product) => (
-                <SelectItem key={product._id} value={product.code}>
-                  {product.description}
-                </SelectItem>
-              ))}
-            </SelectGroup>
-          </SelectContent>
-        </Select>
-      </div>
+      {/* Fuel / Non-Fuel fields */}
+      {purchaseType === 'fuel' ? (
+        <>
+          <div className="space-y-2">
+            <h2 className="text-lg font-bold">Fuel Grade</h2>
+            <Select name="fuelType" value={fuelType} onValueChange={(value) => setFuelType(value)}>
+              <SelectTrigger className="w-[180px]">
+                <SelectValue placeholder="Select Grade" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectGroup>
+                  {data.products
+                    .filter((p: Product) => !p.description.toLowerCase().includes('propane'))
+                    .map((product: Product) => (
+                      <SelectItem key={product._id} value={product.code}>
+                        {product.description}
+                      </SelectItem>
+                    ))}
+                </SelectGroup>
+              </SelectContent>
+            </Select>
+          </div>
+          <div className="grid grid-cols-2 gap-3">
+            <div className="space-y-1">
+              <label className="text-sm font-medium text-slate-700">Quantity (L)</label>
+              <Input
+                type="number"
+                name="quantity"
+                value={quantity === 0 ? '' : quantity}
+                onChange={(e) => setQuantity(e.target.value === '' ? 0 : Number(e.target.value))}
+              />
+            </div>
+            <div className="space-y-1">
+              <label className="text-sm font-medium text-slate-700">Amount (CAD)</label>
+              <Input
+                type="number"
+                name="amount"
+                value={amount === 0 ? '' : amount}
+                onChange={(e) => setAmount(e.target.value === '' ? 0 : Number(e.target.value))}
+              />
+            </div>
+          </div>
+        </>
+      ) : (
+        <>
+          <div className="space-y-1">
+            <label className="text-sm font-medium text-slate-700">Items Sold</label>
+            <Textarea
+              name="itemsDescription"
+              placeholder="Describe the items sold..."
+              value={itemsDescription}
+              onChange={(e) => setItemsDescription(e.target.value)}
+              rows={3}
+            />
+          </div>
+          <div className="space-y-1">
+            <label className="text-sm font-medium text-slate-700">Amount (CAD)</label>
+            <Input
+              type="number"
+              name="amount"
+              value={amount === 0 ? '' : amount}
+              onChange={(e) => setAmount(e.target.value === '' ? 0 : Number(e.target.value))}
+            />
+          </div>
+        </>
+      )}
 
-      {/* Quantity & Amount */}
-      <div className="space-y-2">
-        <h2 className="text-lg font-bold">Quantity and Amount</h2>
-        <Input
-          type="number"
-          name="quantity"
-          placeholder="Quantity (Liters)"
-          value={quantity === 0 ? '' : quantity}
-          onChange={(e) => setQuantity(e.target.value === '' ? 0 : Number(e.target.value))}
-        />
-        <Input
-          type="number"
-          name="amount"
-          placeholder="Amount (CAD)"
-          value={amount === 0 ? '' : amount}
-          onChange={(e) => setAmount(e.target.value === '' ? 0 : Number(e.target.value))}
-        />
-      </div>
-
-      {/* Navigation
-      <div className="flex justify-end">
-        <Link to="/po/receipt">
-          <Button
-            variant="outline"
-            onClick={() => {
-              setPoNumber(padFive(poNumber));
-            }}
-            disabled={!!poError}
-          >
-            Next
-          </Button>
-        </Link>
-      </div> */}
       <div className="flex justify-end">
         <input
           type="file"
@@ -466,9 +493,7 @@ function RouteComponent() {
           ref={fileInputRef}
           onChange={handleCapture}
         />
-
         {receipt ? (
-          // If image exists, just go to preview
           <Link to="/po/receipt">
             <Button className="bg-slate-800 hover:bg-slate-900 text-white">
               <ExternalLink className="mr-2 h-4 w-4" />
@@ -476,14 +501,13 @@ function RouteComponent() {
             </Button>
           </Link>
         ) : (
-          // If no image, trigger camera
           <Button
             className="bg-blue-600 hover:bg-blue-700 text-white"
             onClick={() => {
               setPoNumber(padFive(poNumber));
               fileInputRef.current?.click();
             }}
-            disabled={!!poError || !customerName || !driverName || quantity === 0 || (numberType === 'fleet' && cardStatus !== 'active')}
+            disabled={!!poError || !customerName || !driverName || (purchaseType === 'fuel' ? quantity === 0 : !itemsDescription) || (numberType === 'fleet' && cardStatus !== 'active')}
           >
             <Camera className="mr-2 h-4 w-4" />
             Upload Receipt

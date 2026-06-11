@@ -34,12 +34,16 @@ function RouteComponent() {
   const fuelType = useFormStore((state) => state.fuelType);
   const date = useFormStore((state) => state.date);
   const stationName = useFormStore((state) => state.stationName);
+  const purchaseType = useFormStore((state) => state.purchaseType);
+  const itemsDescription = useFormStore((state) => state.itemsDescription);
 
   useEffect(() => {
-    if (!date || !customerName || !driverName || !fuelType || quantity === 0 || amount === 0) {
+    const fuelInvalid = purchaseType === 'fuel' && (!fuelType || quantity === 0);
+    const nonFuelInvalid = purchaseType === 'non-fuel' && !itemsDescription;
+    if (!date || !customerName || !driverName || amount === 0 || fuelInvalid || nonFuelInvalid) {
       navigate({ to: "/po" });
     }
-  }, [date, customerName, driverName, fuelType, quantity, amount]);
+  }, [date, customerName, driverName, fuelType, quantity, amount, purchaseType, itemsDescription]);
 
   // const capture = () => {
   //   if (webcamRef.current) {
@@ -105,16 +109,18 @@ function RouteComponent() {
             stationName: selectedStation,
             fleetCardNumber: fleetCardNumber || "",
             poNumber: poNumber || "",
-            quantity,
+            quantity: purchaseType === 'fuel' ? quantity : 0,
             amount,
-            productCode: fuelType,
+            productCode: purchaseType === 'fuel' ? fuelType : 'NON-FUEL',
             trx: "",
-            signature: "", // <<<<<< NO SIGNATURE
+            signature: "",
             receipt: filename,
             customerName,
             driverName,
             vehicleMakeModel: vehicleInfo,
             licensePlate,
+            purchaseType,
+            itemsDescription: purchaseType === 'non-fuel' ? itemsDescription : '',
           },
           { headers: authHeaders }
         )
@@ -237,7 +243,11 @@ function RouteComponent() {
         <p className="text-[11px] text-blue-700 font-medium uppercase tracking-wider">PO Summary</p>
         <div className="flex justify-between text-sm pt-1">
           <span className="font-bold">{customerName || 'N/A'}</span>
-          <span className="text-slate-600">{quantity}L • C${amount}</span>
+          {purchaseType === 'fuel' ? (
+            <span className="text-slate-600">{quantity}L • C${amount}</span>
+          ) : (
+            <span className="text-slate-600 max-w-[55%] text-right truncate">{itemsDescription} • C${amount}</span>
+          )}
         </div>
       </div>
 

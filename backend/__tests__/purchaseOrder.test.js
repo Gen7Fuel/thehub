@@ -36,10 +36,11 @@ describe('Transaction schema — field validation', () => {
     expect(err?.errors.customerName).toBeDefined()
   })
 
-  it('rejects a missing quantity', () => {
+  it('defaults quantity to 0 when absent (non-fuel POs)', () => {
     const { quantity, ...rest } = base()
-    const err = new Transaction(rest).validateSync()
-    expect(err?.errors.quantity).toBeDefined()
+    const trx = new Transaction(rest)
+    expect(trx.validateSync()).toBeUndefined()
+    expect(trx.quantity).toBe(0)
   })
 
   it('rejects a missing amount', () => {
@@ -48,10 +49,11 @@ describe('Transaction schema — field validation', () => {
     expect(err?.errors.amount).toBeDefined()
   })
 
-  it('rejects a missing productCode', () => {
+  it('defaults productCode to empty string when absent (non-fuel POs)', () => {
     const { productCode, ...rest } = base()
-    const err = new Transaction(rest).validateSync()
-    expect(err?.errors.productCode).toBeDefined()
+    const trx = new Transaction(rest)
+    expect(trx.validateSync()).toBeUndefined()
+    expect(trx.productCode).toBe('')
   })
 
   it('allows fleetCardNumber to be absent', () => {
@@ -71,6 +73,24 @@ describe('Transaction schema — field validation', () => {
   it('stores a poNumber string value', () => {
     const trx = new Transaction({ ...base(), poNumber: '10001' })
     expect(trx.poNumber).toBe('10001')
+  })
+
+  it('defaults purchaseType to fuel and itemsDescription to empty string', () => {
+    const trx = new Transaction(base())
+    expect(trx.purchaseType).toBe('fuel')
+    expect(trx.itemsDescription).toBe('')
+  })
+
+  it('accepts non-fuel purchaseType with an itemsDescription', () => {
+    const trx = new Transaction({ ...base(), purchaseType: 'non-fuel', itemsDescription: 'Motor oil, filters' })
+    expect(trx.validateSync()).toBeUndefined()
+    expect(trx.purchaseType).toBe('non-fuel')
+    expect(trx.itemsDescription).toBe('Motor oil, filters')
+  })
+
+  it('rejects an unrecognised purchaseType value', () => {
+    const err = new Transaction({ ...base(), purchaseType: 'other' }).validateSync()
+    expect(err?.errors.purchaseType).toBeDefined()
   })
 })
 

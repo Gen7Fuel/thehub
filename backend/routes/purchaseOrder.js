@@ -54,6 +54,8 @@ router.post("/", async (req, res) => {
     driverName,
     vehicleMakeModel,
     licensePlate,
+    purchaseType,
+    itemsDescription,
   } = req.body;
 
   try {
@@ -127,15 +129,17 @@ router.post("/", async (req, res) => {
       stationName,
       fleetCardNumber: fleetCardNumber || '',
       poNumber: poNumber || '',
-      quantity,
+      quantity: quantity ?? 0,
       amount,
-      productCode,
+      productCode: productCode || '',
       signature,
       receipt,
       customerName,
       driverName,
       vehicleMakeModel: vehicleMakeModel || '',
       licensePlate: licensePlate || '',
+      purchaseType: purchaseType || 'fuel',
+      itemsDescription: itemsDescription || '',
     });
 
     const savedOrder = await newOrder.save();

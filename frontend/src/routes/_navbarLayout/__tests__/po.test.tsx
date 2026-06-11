@@ -36,6 +36,10 @@ const {
     setAmount: vi.fn(),
     fuelType: 'UNL' as string,
     setFuelType: vi.fn(),
+    purchaseType: 'fuel' as 'fuel' | 'non-fuel',
+    setPurchaseType: vi.fn(),
+    itemsDescription: '' as string,
+    setItemsDescription: vi.fn(),
     receipt: 'data:image/png;base64,abc' as string | null,
     setReceipt: vi.fn(),
     signature: 'data:image/png;base64,sig' as string | null,
@@ -243,6 +247,8 @@ const resetStore = () => {
   mockStore.quantity = 50
   mockStore.amount = 100
   mockStore.fuelType = 'UNL'
+  mockStore.purchaseType = 'fuel'
+  mockStore.itemsDescription = ''
   mockStore.receipt = 'data:image/png;base64,abc'
   mockStore.signature = 'data:image/png;base64,sig'
   mockStore.date = new Date('2026-01-15')
