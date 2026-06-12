@@ -48,7 +48,7 @@
   },
   "scripts": {
     "start": "node app.js",
-    "dev": "npx nodemon -L app.js",
+    "dev": "npx nodemon -L --ignore 'sessions/*' app.js",
     "pg:migrate": "node ./scripts/pg-migrate.js",
     "test": "vitest run"
   },

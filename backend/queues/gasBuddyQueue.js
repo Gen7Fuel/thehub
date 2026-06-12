@@ -22,7 +22,7 @@ const gasBuddyWorker = new Worker(
     connection,
     concurrency: 1,
     // Add these safety thresholds to handle long running browser sessions cleanly:
-    stalledInterval: 30000, // Check for stalled jobs every 30 seconds (instead of default 15s)
+    stalledInterval: 45000, // Check for stalled jobs every 45 seconds (instead of default 15s)
     maxStalledCount: 1     // Limit the number of automatic retries if an actual stall occurs
   }
 );

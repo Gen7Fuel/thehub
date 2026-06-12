@@ -32,10 +32,15 @@ async function postPricesToGasBuddy({ gasBuddyStationId, prices }) {
     throw new Error(`❌ Missing session file! Please paste your JSON into: ${sessionPath}`);
   }
 
-  const fallbackPath = fs.existsSync("/usr/bin/chromium") ? "/usr/bin/chromium" : undefined;
+  // Inside utils/gasBuddyScrapper.js
+  const systemChromiumPath = fs.existsSync("/usr/bin/chromium-browser")
+    ? "/usr/bin/chromium-browser"
+    : fs.existsSync("/usr/bin/chromium")
+      ? "/usr/bin/chromium"
+      : undefined;
 
   const browser = await chromium.launch({
-    executablePath: fallbackPath,
+    executablePath: systemChromiumPath,
     headless: true,
     args: [
       "--no-sandbox",
@@ -147,7 +152,7 @@ async function postPricesToGasBuddy({ gasBuddyStationId, prices }) {
 
   } catch (error) {
     console.error("❌ CRITICAL PROCESS EXCEPTION:", error);
-    
+
     // Defensive Exception Screenshot Capturing
     try {
       const errorProofPath = path.resolve(__dirname, "../sessions/gasBuddy/failure_error_snapshot.png");
@@ -156,7 +161,7 @@ async function postPricesToGasBuddy({ gasBuddyStationId, prices }) {
     } catch (ssErr) {
       console.error("Could not write emergency snapshot:", ssErr);
     }
-    
+
     throw error;
   } finally {
     await browser.close();

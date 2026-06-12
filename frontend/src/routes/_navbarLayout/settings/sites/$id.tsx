@@ -64,6 +64,7 @@ function RouteComponent() {
     sellsLottery?: boolean;
     managerEmails: string[];
     province: string;
+    gasBuddyStationId?: string;
   } | null>(null);
 
   const [loading, setLoading] = useState(true);
@@ -114,7 +115,8 @@ function RouteComponent() {
     email: string;
     sellsLottery?: boolean;
     managerEmails: string[];
-    province: string
+    province: string;
+    gasBuddyStationId?: string;
   }
 
   const [formData, setFormData] = useState<LocationForm>({
@@ -128,7 +130,8 @@ function RouteComponent() {
     email: "",
     sellsLottery: false,
     managerEmails: [],
-    province: ""
+    province: "",
+    gasBuddyStationId: ""
   });
 
   const [timezones, setTimezones] = useState<string[]>([]);
@@ -168,6 +171,7 @@ function RouteComponent() {
         sellsLottery: !!location.sellsLottery,
         managerEmails: location.managerEmails || [],
         province: location.province || "Ontario",
+        gasBuddyStationId: location.gasBuddyStationId || "",
       });
       setManagerEmails(location.managerEmails || []);
       setOtp(location.managerCode?.toString() || "");
@@ -478,6 +482,20 @@ function RouteComponent() {
                   ))}
                 </SelectContent>
               </Select>
+            </div>
+            {/* 🚀 NEW: GASBUDDY STATION IDENTIFIER FIELD (Placed exactly before manager code) */}
+            <div>
+              <Label htmlFor="gasBuddyStationId" className="block font-medium mb-1">
+                GasBuddy Station ID
+              </Label>
+              <Input
+                id="gasBuddyStationId"
+                type="text"
+                placeholder="e.g., 205339"
+                value={formData.gasBuddyStationId || ""}
+                onChange={(e) => setFormData({ ...formData, gasBuddyStationId: e.target.value })}
+                className="border border-gray-300 rounded-md px-3 py-2 w-full focus:ring-2 focus:ring-blue-500 focus:outline-none"
+              />
             </div>
             <div>
               <Label className="block font-medium mb-1">Manager Code</Label>
