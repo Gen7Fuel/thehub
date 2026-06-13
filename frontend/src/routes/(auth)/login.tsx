@@ -1,5 +1,5 @@
 import { createFileRoute, useNavigate, redirect } from '@tanstack/react-router'
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { getSocket } from '@/lib/websocket';
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -13,7 +13,8 @@ import axios from 'axios'
 import { clearLocalDB } from "@/lib/orderRecIndexedDB";
 import { clearDashboardDB } from '@/lib/dashboardIndexedDB';
 import { useAuth } from '@/context/AuthContext';
-import { Loader2, ArrowRight, AlertTriangle } from "lucide-react"
+import { isActuallyOnline } from '@/lib/network';
+import { Loader2, ArrowRight, AlertTriangle, WifiOff } from "lucide-react"
 
 export const Route = createFileRoute('/(auth)/login')({
   loader: () => {
@@ -34,7 +35,28 @@ function RouteComponent() {
   const navigate = useNavigate()
   const { refreshAuth } = useAuth();
   const [maintInfo, setMaintInfo] = useState<{ active: boolean; endTime: string } | null>(null);
+  const [isOffline, setIsOffline] = useState(false);
   // const testEmails = ['daksh@gen7fuel.com', 'demo@demo.com'];
+
+  useEffect(() => {
+    let mounted = true;
+
+    const handleOffline = () => { if (mounted) setIsOffline(true); };
+    const handleOnline = async () => {
+      const ok = await isActuallyOnline();
+      if (mounted) setIsOffline(!ok);
+    };
+
+    handleOnline();
+
+    window.addEventListener('offline', handleOffline);
+    window.addEventListener('online', handleOnline);
+    return () => {
+      mounted = false;
+      window.removeEventListener('offline', handleOffline);
+      window.removeEventListener('online', handleOnline);
+    };
+  }, []);
 
   const handleIdentify = async (e?: React.FormEvent) => {
     e?.preventDefault()
@@ -118,6 +140,17 @@ function RouteComponent() {
   return (
     <div className="flex items-center justify-center h-screen bg-slate-50">
       <div className="max-w-md w-full p-8 bg-white border rounded-xl shadow-sm space-y-6">
+        {isOffline && (
+          <div className="bg-red-50 border border-red-200 rounded-lg p-3 flex items-start gap-3 animate-in fade-in slide-in-from-top-2 duration-300">
+            <WifiOff className="text-red-600 w-5 h-5 shrink-0 mt-0.5" />
+            <div>
+              <p className="text-xs font-bold text-red-900 uppercase tracking-tight">No Internet Connection</p>
+              <p className="text-[11px] text-red-800 leading-tight mt-0.5">
+                Check your connection and try again.
+              </p>
+            </div>
+          </div>
+        )}
         <div className="text-center space-y-2">
           <h2 className="text-2xl font-bold tracking-tight">Login</h2>
           <p className="text-sm text-muted-foreground">
