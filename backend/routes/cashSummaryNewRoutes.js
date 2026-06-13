@@ -11,6 +11,7 @@ const { parseSftReport } = require('../utils/parseSftReport')
 const { dateFromYMDLocal } = require('../utils/dateUtils')
 const { emailQueue } = require('../queues/emailQueue')
 const { generateCashSummaryPdf } = require('../utils/cashSummaryPdf')
+const { generateEodReportPdf } = require('../utils/eodReportWavers');
 const { generateShiftReportsPdf } = require('../utils/shiftReportsPdf')
 const { generateLotteryImagesPdf } = require('../utils/lotteryImagesPdf')
 const { getRefundTransactions, getShiftEmployees } = require('../services/sqlService');
@@ -749,6 +750,38 @@ router.post('/', async (req, res) => {
       report_canadian_cash: values.report_canadian_cash,
       exempted_tax: norm(exempted_tax),
       payouts: numOrUndef(values.payouts),
+      propaneSales: numOrUndef(parsed.propaneSales),
+      companyCoupon: numOrUndef(parsed.companyCoupon),
+
+      // NEW: Dynamic array mapping out key/value properties for tender configurations
+      tenders: [
+        { key: 'debit', value: numOrUndef(parsed.debit) },
+        { key: 'visa', value: numOrUndef(parsed.visa) },
+        { key: 'mastercard', value: numOrUndef(parsed.mastercard) },
+        { key: 'amex', value: numOrUndef(parsed.amex) }
+      ],
+
+      // ADD THIS LINE / BLOCK:
+      fuelGrades: parsed.fuelGrades
+        ? Object.entries(parsed.fuelGrades).map(([gradeName, data]) => ({
+          grade: gradeName,
+          volume: numOrUndef(data.volume),
+          amount: numOrUndef(data.amount)
+        }))
+        : [],
+
+      // ADD THIS LINE / BLOCK:
+      arCustomers: parsed.arCustomers
+        ? Object.entries(parsed.arCustomers).map(([name, incurred]) => ({
+          name: name,
+          incurred: numOrUndef(incurred)
+        }))
+        : [],
+
+      gst: numOrUndef(parsed.gst),
+      pst: numOrUndef(parsed.pst),
+      tobaccoCig: numOrUndef(parsed.tobaccoCig),
+      tobaccoOthers: numOrUndef(parsed.tobaccoOthers),
 
       // parsed SFT extras
       fuelSales: numOrUndef(parsed.fuelSales),
@@ -1110,6 +1143,19 @@ router.post('/submit/to/safesheet', async (req, res) => {
             })
           }
 
+          if (site === 'Wavers West' || site === 'Wavers East') {
+            try {
+              const eodWaversPdf = await generateEodReportPdf({ site, date });
+              attachments.push({
+                filename: `End-of-Day-Report-${site}-${date}.pdf`,
+                content: eodWaversPdf,
+                contentType: 'application/pdf',
+              });
+            } catch (eodErr) {
+              console.error('Failed generating customized Wavers EOD report attachment:', eodErr.message);
+            }
+          }
+
           if (depositSlip) attachments.push(depositSlip)
 
           let cc = ['mohammad@gen7fuel.com']
@@ -1386,20 +1432,20 @@ router.put('/:id', async (req, res) => {
     if (!shift_number) return res.status(400).json({ error: 'shift_number is required' })
     if (!date) return res.status(400).json({ error: 'date is required' })
 
+    // Helper: to number or undefined (leave missing values undefined in DB)
+    // CRITICAL: Defined at top so it is available within the SFTP try-catch block scope
+    const numOrUndef = (v) => {
+      const n = Number(v)
+      return Number.isFinite(n) ? n : undefined
+    }
+
     // 1️⃣ Load existing document
     const existing = await CashSummary.findById(req.params.id).lean()
     if (!existing) return res.status(404).json({ error: 'Not found' })
 
-    // 2️⃣ Determine if all five fields are missing (key does not exist)
-    // const allMissing = !('report_canadian_cash' in existing) &&
-    //                    !('item_sales' in existing) &&
-    //                    !('cash_back' in existing) &&
-    //                    !('loyalty' in existing) &&
-    //                    !('cpl_bulloch' in existing)
-
     let enrichedValues = {}
 
-    // 3️⃣ Call Office API only if all fields are missing
+    // 3️⃣ Call Office API
     if (site && shift_number) {
       try {
         const url = new URL(`/api/sftp/receive/${encodeURIComponent(shift_number)}`, OFFICE_SFTP_API_BASE)
@@ -1419,10 +1465,39 @@ router.put('/:id', async (req, res) => {
               loyalty: parsed.couponsAccepted,
               cpl_bulloch: parsed.fuelPriceOverrides,
               report_canadian_cash: parsed.canadianCash,
-              // station times parsed from SFT header (strings)
               stationStart: parsed.stationStart,
               stationEnd: parsed.stationEnd,
-              // all remaining parsed SFT fields (mirrors POST handler)
+              gst: parsed.gst,
+              pst: parsed.pst,
+              propaneSales: parsed.propaneSales,
+              companyCoupon: parsed.companyCoupon, // 👈 ADD THIS LINE
+
+              // NEW: Array mapping out key/value properties for tender configurations
+              tenders: [
+                { key: 'debit', value: numOrUndef(parsed.debit) },
+                { key: 'visa', value: numOrUndef(parsed.visa) },
+                { key: 'mastercard', value: numOrUndef(parsed.mastercard) },
+                { key: 'amex', value: numOrUndef(parsed.amex) }
+              ],
+
+              // NEW: Aggregated fuel grade allocations
+              fuelGrades: parsed.fuelGrades
+                ? Object.entries(parsed.fuelGrades).map(([gradeName, data]) => ({
+                  grade: gradeName,
+                  volume: numOrUndef(data.volume),
+                  amount: numOrUndef(data.amount)
+                }))
+                : [],
+
+              arCustomers: parsed.arCustomers
+                ? Object.entries(parsed.arCustomers).map(([name, incurred]) => ({
+                  name: name,
+                  incurred: numOrUndef(incurred)
+                }))
+                : [],
+              tobaccoCig: parsed.tobaccoCig,
+              tobaccoOthers: parsed.tobaccoOthers,
+
               fuelSales: parsed.fuelSales,
               dealGroupCplDiscounts: parsed.dealGroupCplDiscounts,
               fuelPriceOverrides: parsed.fuelPriceOverrides,
@@ -1451,13 +1526,11 @@ router.put('/:id', async (req, res) => {
               payouts: parsed.payouts,
               safedropsCount: parsed.safedrops?.count,
               safedropsAmount: parsed.safedrops?.amount,
-              // lottery fields
               lottoPayout: parsed.lottoPayout,
               onlineLottoTotal: parsed.onlineLottoTotal,
               instantLottTotal: parsed.instantLottTotal,
               dataWave: parsed.dataWave,
               feeDataWave: parsed.feeDataWave,
-              // voided transactions
               voidedTransactionsAmount: parsed.voidedTransactionsAmount,
               voidedTransactionsCount: parsed.voidedTransactionsCount,
               unsettledPrepays: parsed.unsettledPrepays,
@@ -1472,12 +1545,7 @@ router.put('/:id', async (req, res) => {
       }
     }
 
-    const numOrUndef = (v) => {
-      const n = Number(v)
-      return Number.isFinite(n) ? n : undefined
-    }
-
-    // 4️⃣ Merge final values — SFTP-parsed values always win over existing zeros
+    // 4️⃣ Merge final values — SFTP-parsed values always win over existing values
     const ev = enrichedValues
     const finalValues = {
       site,
@@ -1486,7 +1554,6 @@ router.put('/:id', async (req, res) => {
 
       canadian_cash_collected: norm(canadian_cash_collected),
 
-      // Preserve existing if not provided or parsed
       stationStart: ev.stationStart ?? (typeof req.body.stationStart === 'string' ? req.body.stationStart : undefined) ?? existing.stationStart,
       stationEnd: ev.stationEnd ?? (typeof req.body.stationEnd === 'string' ? req.body.stationEnd : undefined) ?? existing.stationEnd,
 
@@ -1498,12 +1565,23 @@ router.put('/:id', async (req, res) => {
 
       exempted_tax: norm(exempted_tax) ?? existing.exempted_tax,
 
-      // All remaining SFTP-parsed fields — fall back to existing if SFTP didn't return them
+      // NEW: Merge Strategy for arrays. Fall back completely to original array context if enrichment was skipped
+      tenders: ev.tenders ?? existing.tenders ?? [],
+      fuelGrades: ev.fuelGrades ?? existing.fuelGrades ?? [],
+      arCustomers: ev.arCustomers ?? existing.arCustomers ?? [],
+      companyCoupon: numOrUndef(ev.companyCoupon ?? existing.companyCoupon), // 👈 ADD THIS LINE
+
+      // All remaining SFTP-parsed fields
       fuelSales: numOrUndef(ev.fuelSales ?? existing.fuelSales),
       dealGroupCplDiscounts: numOrUndef(ev.dealGroupCplDiscounts ?? existing.dealGroupCplDiscounts),
       fuelPriceOverrides: numOrUndef(ev.fuelPriceOverrides ?? existing.fuelPriceOverrides),
       parsedItemSales: numOrUndef(ev.parsedItemSales ?? existing.parsedItemSales),
       depositTotal: numOrUndef(ev.depositTotal ?? existing.depositTotal),
+      gst: numOrUndef(ev.gst ?? existing.gst),
+      pst: numOrUndef(ev.pst ?? existing.pst),
+      tobaccoCig: numOrUndef(ev.tobaccoCig ?? existing.tobaccoCig),
+      tobaccoOthers: numOrUndef(ev.tobaccoOthers ?? existing.tobaccoOthers),
+      propaneSales: numOrUndef(ev.propaneSales ?? existing.propaneSales),
       pennyRounding: numOrUndef(ev.pennyRounding ?? existing.pennyRounding),
       totalSales: numOrUndef(ev.totalSales ?? existing.totalSales),
       afdCredit: numOrUndef(ev.afdCredit ?? existing.afdCredit),
@@ -1527,13 +1605,11 @@ router.put('/:id', async (req, res) => {
       payouts: numOrUndef(ev.payouts ?? existing.payouts),
       safedropsCount: numOrUndef(ev.safedropsCount ?? existing.safedropsCount),
       safedropsAmount: numOrUndef(ev.safedropsAmount ?? existing.safedropsAmount),
-      // lottery fields
       lottoPayout: norm(ev.lottoPayout ?? req.body.lottoPayout ?? existing.lottoPayout),
       onlineLottoTotal: norm(ev.onlineLottoTotal ?? req.body.onlineLottoTotal ?? existing.onlineLottoTotal),
       instantLottTotal: norm(ev.instantLottTotal ?? req.body.instantLottTotal ?? existing.instantLottTotal),
       dataWave: norm(ev.dataWave ?? req.body.dataWave ?? existing.dataWave),
       feeDataWave: norm(ev.feeDataWave ?? req.body.feeDataWave ?? existing.feeDataWave),
-      // voided transactions
       voidedTransactionsAmount: norm(ev.voidedTransactionsAmount ?? req.body.voidedTransactionsAmount ?? existing.voidedTransactionsAmount),
       voidedTransactionsCount: norm(ev.voidedTransactionsCount ?? req.body.voidedTransactionsCount ?? existing.voidedTransactionsCount),
       unsettledPrepays: norm(ev.unsettledPrepays ?? req.body.unsettledPrepays ?? existing.unsettledPrepays),
