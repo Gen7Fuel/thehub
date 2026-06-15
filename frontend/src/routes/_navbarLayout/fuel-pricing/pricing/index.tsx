@@ -3,9 +3,9 @@ import { createFileRoute, useNavigate } from '@tanstack/react-router'
 import { useSite } from '@/context/SiteContext'
 import { useAuth } from '@/context/AuthContext'
 import { useFuelPricingContext } from '@/context/FuelPricingContext'
-import { useQuery, useMutation } from '@tanstack/react-query'
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import axios from 'axios'
-import { Coins, Loader2, AlertCircle, Save, ShieldAlert, AlertTriangle } from 'lucide-react'
+import { Coins, Loader2, AlertCircle, Save, ShieldAlert, AlertTriangle, History, ImageIcon, Eye, MoveRight } from 'lucide-react'
 import { Card, CardContent } from "@/components/ui/card"
 import { Button } from '@/components/ui/button'
 import { toast } from "sonner"
@@ -15,7 +15,6 @@ import {
   InputOTPSlot,
   InputOTPSeparator,
 } from "@/components/ui/input-otp"
-// Import Dialog Primitives (Adjust paths according to your Shadcn layout structure)
 import {
   Dialog,
   DialogContent,
@@ -68,12 +67,13 @@ const formatStationTimestamp = (dateString: string | undefined, timeZoneString: 
 function FuelPricingPanel() {
   const { user } = useAuth()
   const access = user?.access || {}
+  const queryClient = useQueryClient()
   const { selectedSite } = useSite()
   const { recommendedPrices } = useFuelPricingContext()
   const [prices, setPrices] = useState<Record<string, string>>({})
 
-  // Track visibility state of the preview/confirmation dialog layer
   const [isConfirmOpen, setIsConfirmOpen] = useState(false)
+  const [isLogsOpen, setIsLogsOpen] = useState(false)
 
   const navigate = useNavigate()
   const canUpdateFuelPricing = access?.fuelPricing?.setFuelPrice;
@@ -126,6 +126,16 @@ function FuelPricingPanel() {
     enabled: !!locationMongoId && !!canUpdateFuelPricing
   })
 
+  const { data: historyLogPayload, isLoading: loadingLogs } = useQuery({
+    queryKey: ['fuel-pricing-history-logs', locationMongoId],
+    queryFn: async () => {
+      if (!locationMongoId) return null
+      const res = await axios.get(`/api/fuel-pricing/logs/${locationMongoId}`, authHeader)
+      return res.data?.logs || []
+    },
+    enabled: !!locationMongoId && isLogsOpen
+  })
+
   useEffect(() => {
     if (activePostgresPrices) {
       const initialFormValues: Record<string, string> = {}
@@ -146,7 +156,14 @@ function FuelPricingPanel() {
     },
     onSuccess: () => {
       toast.success("Retail Fuel Prices Dispatched")
-      setIsConfirmOpen(false) // Shut the modal overlay context on success
+      setIsConfirmOpen(false)
+
+      // 1. Invalidate and refetch the operational historical logs matrix
+      queryClient.invalidateQueries({
+        queryKey: ['fuel-pricing-history-logs', locationMongoId]
+      })
+
+      // 2. Refresh the current price forms matrix 
       reloadPostgres()
     },
     onError: (err: any) => {
@@ -159,20 +176,15 @@ function FuelPricingPanel() {
     setPrices(prev => ({ ...prev, [gradeId]: inputString }))
   }
 
-  // Intercept open trigger to run basic payload validation rules first
   const handleOpenConfirmationDialog = () => {
     if (!locationMongoId) return toast.error("MongoDB context identification failed.")
-
-    // Ensure there is at least one completed 4-digit input sequence before staging changes
     const dynamicEntries = Object.values(prices).filter(val => val && val.length === 4);
     if (dynamicEntries.length === 0) {
       return toast.error("Please provide at least one complete 4-digit grade rate.")
     }
-
     setIsConfirmOpen(true)
   }
 
-  // Fires only when the user commits to the change within the modal interface
   const handleExecuteConfirmedSubmission = () => {
     const parsedPricePayload: Record<string, number> = {}
     Object.entries(prices).forEach(([gradeId, rawString]) => {
@@ -194,7 +206,7 @@ function FuelPricingPanel() {
     <div className="h-full w-full bg-slate-50/50 p-3 flex flex-col overflow-hidden select-none">
 
       {/* HEADLINE ROW */}
-      <div className="pb-2 border-b border-slate-200/60 shrink-0">
+      <div className="pb-2 border-b border-slate-200/60 shrink-0 flex items-center justify-between gap-4">
         <h2 className="text-xs font-black tracking-wide text-slate-700 uppercase flex items-center gap-1.5 truncate">
           <Coins className="w-3.5 h-3.5 text-slate-500 shrink-0" />
           <span>Set Fuel Prices for</span>
@@ -202,6 +214,18 @@ function FuelPricingPanel() {
             {selectedSite || "None Selected"}
           </span>
         </h2>
+
+        {locationMongoId && canUpdateFuelPricing && (
+          <Button
+            type="button"
+            variant="outline"
+            onClick={() => setIsLogsOpen(true)}
+            className="h-7 text-[10px] font-black uppercase tracking-wider border-slate-200 bg-white hover:bg-slate-50 text-slate-600 rounded-lg shadow-sm px-2.5 flex items-center gap-1 shrink-0 transition-all"
+          >
+            <History className="w-3 h-3 text-slate-500" />
+            View Logs
+          </Button>
+        )}
       </div>
 
       {globalLoadingState && (
@@ -218,7 +242,7 @@ function FuelPricingPanel() {
         </div>
       )}
 
-      {/* REJECTION SCREEN IF USER DOES NOT HAVE SET EXPLICIT PERMISSION */}
+      {/* REJECTION SCREEN */}
       {!globalLoadingState && !canUpdateFuelPricing && (
         <div className="flex-1 flex flex-col items-center justify-center text-center p-6 mt-2 rounded-2xl border border-dashed border-slate-200 bg-white/50 max-h-[calc(100vh-100px)]">
           <div className="p-3 bg-rose-50 rounded-full border border-rose-100 mb-2.5">
@@ -231,7 +255,7 @@ function FuelPricingPanel() {
         </div>
       )}
 
-      {/* MAIN LAYOUT BLOCK */}
+      {/* MAIN FORM GRID ELEMENT */}
       {!globalLoadingState && canUpdateFuelPricing && dbLocation && (
         <div className="flex-1 min-h-0 mt-2">
           <div className="h-full overflow-y-auto pr-0.5 space-y-1.5 max-h-[calc(100vh-100px)] scrollbar-thin pb-2">
@@ -253,13 +277,10 @@ function FuelPricingPanel() {
               return (
                 <Card key={grade.id} className="border border-slate-200 shadow-sm bg-white overflow-hidden rounded-xl">
                   <CardContent className="py-1.5 px-2.5 space-y-1.5">
-
-                    {/* TOP LINE METRICS */}
                     <div className="flex items-center justify-between gap-1 w-full text-slate-700">
                       <span className={`text-[10px] font-extrabold px-2 py-0.5 rounded tracking-wide uppercase shrink-0 ${getFormGradeTheme(grade.lookup)}`}>
                         {grade.label}
                       </span>
-
                       <div className="flex items-center gap-3.5 pr-0.5 text-right">
                         <div>
                           <span className="text-[10px] font-bold text-slate-400 uppercase tracking-tight mr-1">Cur:</span>
@@ -281,17 +302,10 @@ function FuelPricingPanel() {
                       </div>
                     </div>
 
-                    {/* BOTTOM FORM ACTION ROW */}
                     <div className="flex items-center justify-between pt-1 border-t border-slate-100 gap-2">
                       <div className="flex items-center gap-1.5 pl-0.5">
-                        <span className="text-[10px] font-extrabold text-slate-400 uppercase tracking-wider">
-                          Target Input
-                        </span>
-                        {isUnchangedValue && (
-                          <span className="text-[10px] font-bold text-amber-500 normal-case tracking-normal">
-                            (unchanged)
-                          </span>
-                        )}
+                        <span className="text-[10px] font-extrabold text-slate-400 uppercase tracking-wider">Target Input</span>
+                        {isUnchangedValue && <span className="text-[10px] font-bold text-amber-500 normal-case">(unchanged)</span>}
                       </div>
 
                       <InputOTP
@@ -310,13 +324,11 @@ function FuelPricingPanel() {
                         </InputOTPGroup>
                       </InputOTP>
                     </div>
-
                   </CardContent>
                 </Card>
               )
             })}
 
-            {/* TRIGGER MODAL INSTEAD OF FIRING MUTATION DIRECTLY */}
             {dbLocation.availableGrades?.length > 0 && (
               <Button
                 onClick={handleOpenConfirmationDialog}
@@ -326,7 +338,6 @@ function FuelPricingPanel() {
                 Publish Price Updates
               </Button>
             )}
-
           </div>
         </div>
       )}
@@ -343,7 +354,6 @@ function FuelPricingPanel() {
             </DialogDescription>
           </DialogHeader>
 
-          {/* DELTA RECONCILIATION OVERVIEW */}
           <div className="border border-slate-100 rounded-xl overflow-hidden bg-slate-50/50 p-1.5 space-y-1.5">
             {dbLocation && SORTED_DISPLAY_GRADES.map((grade) => {
               const isSellsGrade = dbLocation.availableGrades?.includes(grade.lookup)
@@ -356,39 +366,26 @@ function FuelPricingPanel() {
               const formattedLiveCompareString = livePostgresVal ? String(livePostgresVal).replace('.', '') : ""
               const isUnchangedValue = cleanInputString !== "" && cleanInputString === formattedLiveCompareString
 
-              // Parse display rate string for preview line
               let displayPrice = "—"
               if (cleanInputString.length === 4) {
                 displayPrice = `$${cleanInputString.slice(0, 1)}.${cleanInputString.slice(1)}`
               }
 
               return (
-                <div
-                  key={grade.id}
-                  className="flex items-center justify-between py-1.5 px-2 text-[11px] bg-white rounded-xl border border-slate-200/60 shadow-sm"
-                >
-                  {/* GRADE IDENTIFICATION BADGE */}
+                <div key={grade.id} className="flex items-center justify-between py-1.5 px-2 text-[11px] bg-white rounded-xl border border-slate-200/60 shadow-sm">
                   <span className={`text-[9px] font-extrabold px-2 py-0.5 rounded tracking-wide uppercase shrink-0 ${getFormGradeTheme(grade.lookup)}`}>
                     {grade.label}
                   </span>
-
-                  {/* PRICE TRANSITION STATE */}
                   <div className="flex items-center gap-3 text-right">
                     <div>
                       <span className="text-[9px] font-bold text-slate-400 uppercase tracking-tight mr-1">Cur:</span>
-                      <span className="text-xs font-bold text-slate-500">
-                        {livePostgresVal ? `$${Number(livePostgresVal).toFixed(3)}` : '—'}
-                      </span>
+                      <span className="text-xs font-bold text-slate-500">{livePostgresVal ? `$${Number(livePostgresVal).toFixed(3)}` : '—'}</span>
                     </div>
-
                     <div className="border-l border-slate-200 pl-2.5 flex items-center gap-1.5">
                       <span className="text-[9px] font-bold text-slate-400 uppercase tracking-tight">New:</span>
-                      <span className={`text-xs font-black tracking-tight ${isUnchangedValue ? 'text-amber-600' : 'text-slate-800'}`}>
-                        {displayPrice}
-                      </span>
-
+                      <span className={`text-xs font-black tracking-tight ${isUnchangedValue ? 'text-amber-600' : 'text-slate-800'}`}>{displayPrice}</span>
                       {isUnchangedValue && (
-                        <span className="text-[9px] font-extrabold px-1.5 py-0.5 rounded tracking-wide uppercase bg-amber-50 text-amber-600 border border-amber-200/60 fallback-font">
+                        <span className="text-[9px] font-extrabold px-1.5 py-0.5 rounded tracking-wide uppercase bg-amber-50 text-amber-600 border border-amber-200/60">
                           unchanged
                         </span>
                       )}
@@ -399,7 +396,6 @@ function FuelPricingPanel() {
             })}
           </div>
 
-          {/* PERSISTENCE WARNING FOOTER */}
           <div className="p-2.5 rounded-xl border border-rose-100 bg-rose-50/60 flex items-start gap-2">
             <AlertTriangle className="w-3.5 h-3.5 text-rose-600 shrink-0 mt-0.5" />
             <span className="text-[10px] font-bold text-rose-700 leading-normal">
@@ -407,14 +403,13 @@ function FuelPricingPanel() {
             </span>
           </div>
 
-          {/* INTERACTION ROW */}
           <DialogFooter className="flex items-center justify-end gap-2 pt-1 border-t border-slate-100">
             <Button
               type="button"
               variant="outline"
               disabled={submitPricesMutation.isPending}
               onClick={() => setIsConfirmOpen(false)}
-              className="h-8 border-slate-200 text-slate-600 font-bold text-[11px] px-3.5 rounded-lg hover:bg-slate-50 transition-colors"
+              className="h-8 border-slate-200 text-slate-600 font-bold text-[11px] px-3.5 rounded-lg hover:bg-slate-50"
             >
               Cancel
             </Button>
@@ -422,20 +417,624 @@ function FuelPricingPanel() {
               type="button"
               disabled={submitPricesMutation.isPending}
               onClick={handleExecuteConfirmedSubmission}
-              className="h-8 bg-slate-900 hover:bg-blue-600 text-white font-bold text-[11px] px-3.5 rounded-lg transition-colors gap-1.5 shadow"
+              className="h-8 bg-slate-900 hover:bg-blue-600 text-white font-bold text-[11px] px-3.5 rounded-lg gap-1.5 shadow"
             >
               {submitPricesMutation.isPending ? (
                 <>
                   <Loader2 className="h-3 w-3 animate-spin" />
                   Syncing...
                 </>
-              ) : (
-                "Confirm & Publish"
-              )}
+              ) : ("Confirm & Publish")}
             </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {/* 📊 OPERATION AUDIT HISTORICAL LOGS DIALOG */}
+      <Dialog open={isLogsOpen} onOpenChange={setIsLogsOpen}>
+        <DialogContent
+          className="w-full max-w-[96vw] sm:max-w-[96vw] h-auto max-h-[90vh] bg-white rounded-2xl p-4 border border-slate-200 shadow-2xl flex flex-col gap-3 overflow-hidden"
+        >
+          <DialogHeader className="space-y-0.5 shrink-0 pb-2 border-b border-slate-100">
+            <DialogTitle className="text-xs font-black tracking-wider text-slate-800 uppercase flex items-center gap-2">
+              <History className="w-4 h-4 text-sky-600" />
+              Operational Pricing Logs Matrix &mdash; <span className="text-sky-600 normal-case tracking-normal font-black uppercase">{selectedSite}</span>
+            </DialogTitle>
+            <DialogDescription className="text-[11px] text-slate-400 font-medium">
+              Verifiable historical record mapping price changes, register synchronization events, and physical receipts imagery.
+            </DialogDescription>
+          </DialogHeader>
+
+          {/* TABLE LOG MATRIX MAIN CONTAINER - Removed rounded-xl and overflow-hidden, fixed scrolling propagation */}
+          <div className="w-full overflow-x-auto border border-slate-200 bg-slate-50/30 max-h-[calc(90vh-140px)] scrollbar-thin">
+            {loadingLogs ? (
+              <div className="py-20 flex flex-col items-center justify-center text-center text-slate-400 text-[11px] font-bold gap-2">
+                <Loader2 className="w-5 h-5 text-sky-600 animate-spin" />
+                Compiling historical ledger timelines...
+              </div>
+            ) : !historyLogPayload || historyLogPayload.length === 0 ? (
+              <div className="py-20 flex flex-col items-center justify-center text-center text-slate-400 text-[11px] font-bold gap-1">
+                <History className="w-6 h-6 text-slate-300" />
+                No logs recorded for this station location context.
+              </div>
+            ) : (
+              <table className="w-full min-w-[1200px] border-collapse text-left text-[11px]">
+                <thead className="bg-slate-100 text-slate-600 font-extrabold uppercase text-[10px] tracking-wider sticky top-0 z-10 border-b border-slate-200 shadow-sm">
+                  <tr>
+                    <th className="p-2.5">Date / Day</th>
+                    <th className="p-2.5">Grade</th>
+                    <th className="p-2.5">Price Transition Track</th>
+                    <th className="p-2.5">Posted By</th>
+                    <th className="p-2.5">Received By</th>
+                    <th className="p-2.5 text-center">Bulloch Pos</th>
+                    <th className="p-2.5 text-center">InfoNet Register</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-200/70 bg-white">
+                  {historyLogPayload.map((log: any) => (
+                    <tr key={log.id} className="hover:bg-slate-50/80 transition-colors tabular-nums text-slate-700">
+
+                      <td className="p-2.5 font-medium whitespace-nowrap">
+                        <div className="font-bold text-slate-900">
+                          {log.postedAt ? new Date(log.postedAt).toLocaleDateString('en-US', { month: 'short', day: '2-digit', year: 'numeric' }) : log.dateSK}
+                        </div>
+                        <div className="text-[10px] text-slate-400 font-semibold flex items-center gap-1">
+                          <span>{log.dayName}</span>
+                          <span>•</span>
+                          <span>{log.postedAt ? new Date(log.postedAt).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: false }) : '—'}</span>
+                        </div>
+                      </td>
+
+                      <td className="p-2.5 font-bold whitespace-nowrap">
+                        <span className={`text-[9px] font-black w-[76px] text-center inline-block py-0.5 rounded tracking-wide uppercase ${getFormGradeTheme(log.fuelGrade)}`}>
+                          {log.fuelGrade}
+                        </span>
+                      </td>
+
+                      <td className="p-2.5 whitespace-nowrap">
+                        <div className="flex items-center gap-2">
+                          <span className="font-semibold text-slate-400">
+                            {log.previousPrice !== null ? `$${Number(log.previousPrice).toFixed(3)}` : '—'}
+                          </span>
+                          <MoveRight className="w-3 h-3 text-slate-400 shrink-0" />
+                          <span className="font-black text-slate-900 text-sm">
+                            ${Number(log.currentPrice).toFixed(3)}
+                          </span>
+                        </div>
+                      </td>
+
+                      <td className="p-2.5 whitespace-nowrap">
+                        {log.postedBy ? (
+                          <div className="flex items-center gap-1.5">
+                            <div className="w-5 h-5 bg-sky-50 text-sky-700 border border-sky-100 rounded-full flex items-center justify-center text-[9px] font-black shrink-0">
+                              {log.postedBy.fullName.charAt(0)}
+                            </div>
+                            <div>
+                              <div className="font-bold text-slate-800">{log.postedBy.fullName}</div>
+                              <div className="text-[9px] text-slate-400 font-medium leading-none">{log.postedBy.email}</div>
+                            </div>
+                          </div>
+                        ) : (
+                          <span className="text-slate-400 font-semibold italic">System Agent</span>
+                        )}
+                      </td>
+
+                      <td className="p-2.5 whitespace-nowrap">
+                        {log.receivedBy ? (
+                          <div className="flex items-center gap-1.5">
+                            <div className="w-5 h-5 bg-emerald-50 text-emerald-700 border border-emerald-100 rounded-full flex items-center justify-center text-[9px] font-black shrink-0">
+                              {log.receivedBy.id === 'SYSTEM' ? '⚙️' : log.receivedBy.fullName.charAt(0)}
+                            </div>
+                            <div>
+                              <div className="font-bold text-slate-800">{log.receivedBy.fullName}</div>
+                              <div className="text-[9px] text-slate-400 font-medium leading-none">
+                                {log.receivedAt ? new Date(log.receivedAt).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: false }) : log.receivedBy.email}
+                              </div>
+                            </div>
+                          </div>
+                        ) : (
+                          <span className="text-amber-500 font-bold bg-amber-50 border border-amber-100 px-1.5 py-0.5 rounded text-[10px]">Awaiting Register Confirmation</span>
+                        )}
+                      </td>
+
+                      <td className="p-2.5 text-center">
+                        {log.imageUrl ? (
+                          <div
+                            onClick={() => window.open(`/cdn/download/${log.imageUrl}`, '_blank')}
+                            className="group relative w-12 h-8 mx-auto border border-slate-200 rounded-lg overflow-hidden cursor-pointer bg-slate-100 shadow-sm flex items-center justify-center"
+                            title="Click to view full image in a new tab"
+                          >
+                            <img src={`/cdn/download/${log.imageUrl}`} alt="Bulloch" className="w-full h-full object-cover group-hover:scale-105 transition-transform" />
+                            <div className="absolute inset-0 bg-slate-900/40 opacity-0 group-hover:opacity-100 flex items-center justify-center transition-opacity">
+                              <Eye className="w-3 h-3 text-white" />
+                            </div>
+                          </div>
+                        ) : (
+                          <div className="w-8 h-6 mx-auto rounded border border-dashed border-slate-200 flex items-center justify-center bg-slate-50 text-slate-300">
+                            <ImageIcon className="w-3 h-3" />
+                          </div>
+                        )}
+                      </td>
+
+                      <td className="p-2.5 text-center">
+                        {log.infonetImageUrl ? (
+                          <div
+                            onClick={() => window.open(`/cdn/download/${log.infonetImageUrl}`, '_blank')}
+                            className="group relative w-12 h-8 mx-auto border border-slate-200 rounded-lg overflow-hidden cursor-pointer bg-slate-100 shadow-sm flex items-center justify-center"
+                            title="Click to view full image in a new tab"
+                          >
+                            <img src={`/cdn/download/${log.infonetImageUrl}`} alt="InfoNet" className="w-full h-full object-cover group-hover:scale-105 transition-transform" />
+                            <div className="absolute inset-0 bg-slate-900/40 opacity-0 group-hover:opacity-100 flex items-center justify-center transition-opacity">
+                              <Eye className="w-3 h-3 text-white" />
+                            </div>
+                          </div>
+                        ) : (
+                          <div className="w-8 h-6 mx-auto rounded border border-dashed border-slate-200 flex items-center justify-center bg-slate-50 text-slate-300">
+                            <ImageIcon className="w-3 h-3" />
+                          </div>
+                        )}
+                      </td>
+
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            )}
+          </div>
+
+          <DialogFooter className="shrink-0 pt-2 border-t border-slate-100 flex items-center justify-end">
+            <Button
+              type="button"
+              onClick={() => setIsLogsOpen(false)}
+              className="h-8 bg-slate-900 hover:bg-slate-800 text-white font-bold text-[11px] px-4 rounded-lg"
+            >
+              Close Ledger Matrix
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
     </div>
   )
 }
+// import { useState, useEffect } from 'react'
+// import { createFileRoute, useNavigate } from '@tanstack/react-router'
+// import { useSite } from '@/context/SiteContext'
+// import { useAuth } from '@/context/AuthContext'
+// import { useFuelPricingContext } from '@/context/FuelPricingContext'
+// import { useQuery, useMutation } from '@tanstack/react-query'
+// import axios from 'axios'
+// import { Coins, Loader2, AlertCircle, Save, ShieldAlert, AlertTriangle } from 'lucide-react'
+// import { Card, CardContent } from "@/components/ui/card"
+// import { Button } from '@/components/ui/button'
+// import { toast } from "sonner"
+// import {
+//   InputOTP,
+//   InputOTPGroup,
+//   InputOTPSlot,
+//   InputOTPSeparator,
+// } from "@/components/ui/input-otp"
+// // Import Dialog Primitives (Adjust paths according to your Shadcn layout structure)
+// import {
+//   Dialog,
+//   DialogContent,
+//   DialogDescription,
+//   DialogHeader,
+//   DialogTitle,
+//   DialogFooter,
+// } from "@/components/ui/dialog"
+
+// export const Route = createFileRoute('/_navbarLayout/fuel-pricing/pricing/')({
+//   component: FuelPricingPanel,
+// })
+
+// const SORTED_DISPLAY_GRADES = [
+//   { id: 'REG', label: 'Regular', lookup: 'Regular' },
+//   { id: 'MID', label: 'Mid Grade', lookup: 'Mid Grade' },
+//   { id: 'PNL', label: 'Premium', lookup: 'Premium' },
+//   { id: 'DSL', label: 'Diesel', lookup: 'Diesel' },
+//   { id: 'DYED', label: 'Dyed Diesel', lookup: 'Dyed Diesel' }
+// ]
+
+// export const getFormGradeTheme = (grade: string) => {
+//   switch (grade) {
+//     case "Regular": return "bg-green-500 text-white"
+//     case "Premium": return "bg-red-500 text-white"
+//     case "Mid Grade": return "bg-gradient-to-r from-green-500 to-red-500 text-white"
+//     case "Diesel": return "bg-amber-400 text-slate-900"
+//     case "Dyed Diesel": return "bg-red-800 text-white"
+//     default: return "bg-slate-600 text-white"
+//   }
+// }
+
+// const formatStationTimestamp = (dateString: string | undefined, timeZoneString: string | undefined) => {
+//   if (!dateString) return '';
+//   try {
+//     const dateObj = new Date(dateString);
+//     return dateObj.toLocaleString('en-US', {
+//       month: 'short',
+//       day: '2-digit',
+//       hour: '2-digit',
+//       minute: '2-digit',
+//       hour12: false,
+//       timeZone: timeZoneString || undefined
+//     }).replace(',', '');
+//   } catch (e) {
+//     return '';
+//   }
+// };
+
+// function FuelPricingPanel() {
+//   const { user } = useAuth()
+//   const access = user?.access || {}
+//   const { selectedSite } = useSite()
+//   const { recommendedPrices } = useFuelPricingContext()
+//   const [prices, setPrices] = useState<Record<string, string>>({})
+
+//   // Track visibility state of the preview/confirmation dialog layer
+//   const [isConfirmOpen, setIsConfirmOpen] = useState(false)
+
+//   const navigate = useNavigate()
+//   const canUpdateFuelPricing = access?.fuelPricing?.setFuelPrice;
+
+//   const authHeader = {
+//     headers: {
+//       Authorization: `Bearer ${localStorage.getItem('token')}`,
+//       "X-Required-Permission": "fuelPricing.setFuelPrice"
+//     }
+//   };
+
+//   const handleAxiosErrorCheck = (err: any) => {
+//     if (axios.isAxiosError(err) && err.response?.status === 403) {
+//       navigate({ to: '/no-access' });
+//       return true;
+//     }
+//     return false;
+//   };
+
+//   const { data: dbLocation, isLoading: loadingMongo, isError: mongoError } = useQuery({
+//     queryKey: ['location-by-name', selectedSite],
+//     queryFn: async () => {
+//       if (!selectedSite) return null
+//       try {
+//         const res = await axios.get(`/api/locations/name/${encodeURIComponent(selectedSite)}`, authHeader)
+//         return res.data
+//       } catch (err) {
+//         if (handleAxiosErrorCheck(err)) return null;
+//         throw err;
+//       }
+//     },
+//     enabled: !!selectedSite
+//   })
+
+//   const locationMongoId = dbLocation?._id;
+//   const stationTimeZone = dbLocation?.timezone;
+
+//   const { data: activePostgresPrices, isLoading: loadingPostgres, refetch: reloadPostgres } = useQuery({
+//     queryKey: ['postgres-current-prices', locationMongoId],
+//     queryFn: async () => {
+//       if (!locationMongoId) return null
+//       try {
+//         const res = await axios.get(`/api/fuel-pricing/current/${locationMongoId}`, authHeader)
+//         return res.data
+//       } catch (err) {
+//         if (handleAxiosErrorCheck(err)) return null;
+//         throw err;
+//       }
+//     },
+//     enabled: !!locationMongoId && !!canUpdateFuelPricing
+//   })
+
+//   useEffect(() => {
+//     if (activePostgresPrices) {
+//       const initialFormValues: Record<string, string> = {}
+//       SORTED_DISPLAY_GRADES.forEach(g => {
+//         const rawRecord = activePostgresPrices[g.id]
+//         const val = rawRecord?.price !== undefined ? rawRecord.price : rawRecord;
+//         initialFormValues[g.id] = val ? String(val).replace('.', '') : ''
+//       })
+//       setPrices(initialFormValues)
+//     } else {
+//       setPrices({})
+//     }
+//   }, [activePostgresPrices])
+
+//   const submitPricesMutation = useMutation({
+//     mutationFn: async (payload: any) => {
+//       return (await axios.post('/api/fuel-pricing/upsert-retail', payload, authHeader)).data
+//     },
+//     onSuccess: () => {
+//       toast.success("Retail Fuel Prices Dispatched")
+//       setIsConfirmOpen(false) // Shut the modal overlay context on success
+//       reloadPostgres()
+//     },
+//     onError: (err: any) => {
+//       if (handleAxiosErrorCheck(err)) return;
+//       toast.error("Transmission Pipeline Failed")
+//     }
+//   })
+
+//   const handlePriceValueChange = (gradeId: string, inputString: string) => {
+//     setPrices(prev => ({ ...prev, [gradeId]: inputString }))
+//   }
+
+//   // Intercept open trigger to run basic payload validation rules first
+//   const handleOpenConfirmationDialog = () => {
+//     if (!locationMongoId) return toast.error("MongoDB context identification failed.")
+
+//     // Ensure there is at least one completed 4-digit input sequence before staging changes
+//     const dynamicEntries = Object.values(prices).filter(val => val && val.length === 4);
+//     if (dynamicEntries.length === 0) {
+//       return toast.error("Please provide at least one complete 4-digit grade rate.")
+//     }
+
+//     setIsConfirmOpen(true)
+//   }
+
+//   // Fires only when the user commits to the change within the modal interface
+//   const handleExecuteConfirmedSubmission = () => {
+//     const parsedPricePayload: Record<string, number> = {}
+//     Object.entries(prices).forEach(([gradeId, rawString]) => {
+//       if (rawString && rawString.length === 4) {
+//         parsedPricePayload[gradeId] = parseFloat(`${rawString.slice(0, 1)}.${rawString.slice(1)}`)
+//       }
+//     })
+
+//     submitPricesMutation.mutate({
+//       locationId: locationMongoId,
+//       stationName: selectedSite,
+//       prices: parsedPricePayload
+//     })
+//   }
+
+//   const globalLoadingState = loadingMongo || (loadingPostgres && canUpdateFuelPricing)
+
+//   return (
+//     <div className="h-full w-full bg-slate-50/50 p-3 flex flex-col overflow-hidden select-none">
+
+//       {/* HEADLINE ROW */}
+//       <div className="pb-2 border-b border-slate-200/60 shrink-0">
+//         <h2 className="text-xs font-black tracking-wide text-slate-700 uppercase flex items-center gap-1.5 truncate">
+//           <Coins className="w-3.5 h-3.5 text-slate-500 shrink-0" />
+//           <span>Set Fuel Prices for</span>
+//           <span className="text-sky-600 text-md font-black normal-case tracking-normal uppercase truncate">
+//             {selectedSite || "None Selected"}
+//           </span>
+//         </h2>
+//       </div>
+
+//       {globalLoadingState && (
+//         <div className="p-4 text-center text-[11px] font-semibold text-slate-400 flex items-center justify-center gap-2">
+//           <Loader2 className="h-3.5 w-3.5 animate-spin text-sky-600" />
+//           Consolidating fuel pricing sheets...
+//         </div>
+//       )}
+
+//       {mongoError && (
+//         <div className="m-2 p-2.5 rounded-xl border border-rose-200 bg-rose-50 text-[11px] font-medium text-rose-700 flex items-center gap-2">
+//           <AlertCircle className="w-3.5 h-3.5 text-rose-500 shrink-0" />
+//           Could not sync details for "{selectedSite}".
+//         </div>
+//       )}
+
+//       {/* REJECTION SCREEN IF USER DOES NOT HAVE SET EXPLICIT PERMISSION */}
+//       {!globalLoadingState && !canUpdateFuelPricing && (
+//         <div className="flex-1 flex flex-col items-center justify-center text-center p-6 mt-2 rounded-2xl border border-dashed border-slate-200 bg-white/50 max-h-[calc(100vh-100px)]">
+//           <div className="p-3 bg-rose-50 rounded-full border border-rose-100 mb-2.5">
+//             <ShieldAlert className="w-5 h-5 text-rose-600" />
+//           </div>
+//           <h3 className="text-xs font-bold text-slate-800 uppercase tracking-wider">Access Restrictions Enforced</h3>
+//           <p className="text-[11px] text-slate-400 font-medium max-w-xs mt-1 leading-relaxed">
+//             You do not have access to set new fuel prices. Kindly contact the administrator for more information.
+//           </p>
+//         </div>
+//       )}
+
+//       {/* MAIN LAYOUT BLOCK */}
+//       {!globalLoadingState && canUpdateFuelPricing && dbLocation && (
+//         <div className="flex-1 min-h-0 mt-2">
+//           <div className="h-full overflow-y-auto pr-0.5 space-y-1.5 max-h-[calc(100vh-100px)] scrollbar-thin pb-2">
+//             {SORTED_DISPLAY_GRADES.map((grade) => {
+//               const isSellsGrade = dbLocation.availableGrades?.includes(grade.lookup)
+//               if (!isSellsGrade) return null
+
+//               const suggestedPriceValue = recommendedPrices[grade.id]
+//               const liveDataRecord = activePostgresPrices?.[grade.id]
+//               const livePostgresVal = liveDataRecord?.price !== undefined ? liveDataRecord.price : liveDataRecord
+//               const rawTimestamp = liveDataRecord?.updatedAt
+
+//               const localFormattedTime = formatStationTimestamp(rawTimestamp, stationTimeZone)
+
+//               const cleanInputString = prices[grade.id] || ""
+//               const formattedLiveCompareString = livePostgresVal ? String(livePostgresVal).replace('.', '') : ""
+//               const isUnchangedValue = cleanInputString !== "" && cleanInputString === formattedLiveCompareString
+
+//               return (
+//                 <Card key={grade.id} className="border border-slate-200 shadow-sm bg-white overflow-hidden rounded-xl">
+//                   <CardContent className="py-1.5 px-2.5 space-y-1.5">
+
+//                     {/* TOP LINE METRICS */}
+//                     <div className="flex items-center justify-between gap-1 w-full text-slate-700">
+//                       <span className={`text-[10px] font-extrabold px-2 py-0.5 rounded tracking-wide uppercase shrink-0 ${getFormGradeTheme(grade.lookup)}`}>
+//                         {grade.label}
+//                       </span>
+
+//                       <div className="flex items-center gap-3.5 pr-0.5 text-right">
+//                         <div>
+//                           <span className="text-[10px] font-bold text-slate-400 uppercase tracking-tight mr-1">Cur:</span>
+//                           <span className="text-sm font-black text-slate-800">
+//                             {livePostgresVal ? `$${Number(livePostgresVal).toFixed(3)}` : '—'}
+//                           </span>
+//                           {localFormattedTime && (
+//                             <span className="text-[10px] font-bold text-slate-400 ml-1.5 tabular-nums">
+//                               ({localFormattedTime})
+//                             </span>
+//                           )}
+//                         </div>
+//                         <div className="border-l border-slate-200 pl-2.5">
+//                           <span className="text-[10px] font-bold text-slate-400 uppercase tracking-tight mr-1">Rec:</span>
+//                           <span className="text-sm font-black text-blue-600">
+//                             {suggestedPriceValue ? `$${Number(suggestedPriceValue).toFixed(3)}` : '—'}
+//                           </span>
+//                         </div>
+//                       </div>
+//                     </div>
+
+//                     {/* BOTTOM FORM ACTION ROW */}
+//                     <div className="flex items-center justify-between pt-1 border-t border-slate-100 gap-2">
+//                       <div className="flex items-center gap-1.5 pl-0.5">
+//                         <span className="text-[10px] font-extrabold text-slate-400 uppercase tracking-wider">
+//                           Target Input
+//                         </span>
+//                         {isUnchangedValue && (
+//                           <span className="text-[10px] font-bold text-amber-500 normal-case tracking-normal">
+//                             (unchanged)
+//                           </span>
+//                         )}
+//                       </div>
+
+//                       <InputOTP
+//                         maxLength={4}
+//                         value={cleanInputString}
+//                         onChange={(val) => handlePriceValueChange(grade.id, val)}
+//                       >
+//                         <InputOTPGroup className="bg-white scale-90 origin-right">
+//                           <InputOTPSlot index={0} className="w-8 h-8 text-xs font-black border-slate-200 focus:border-blue-500 rounded-l-lg" />
+//                         </InputOTPGroup>
+//                         <InputOTPSeparator className="text-slate-400 font-bold text-sm mx-0.5 scale-90" />
+//                         <InputOTPGroup className="bg-white scale-90 origin-right">
+//                           <InputOTPSlot index={1} className="w-8 h-8 text-xs font-bold border-slate-200" />
+//                           <InputOTPSlot index={2} className="w-8 h-8 text-xs font-bold border-slate-200" />
+//                           <InputOTPSlot index={3} className="w-8 h-8 text-xs font-bold border-slate-200 rounded-r-lg" />
+//                         </InputOTPGroup>
+//                       </InputOTP>
+//                     </div>
+
+//                   </CardContent>
+//                 </Card>
+//               )
+//             })}
+
+//             {/* TRIGGER MODAL INSTEAD OF FIRING MUTATION DIRECTLY */}
+//             {dbLocation.availableGrades?.length > 0 && (
+//               <Button
+//                 onClick={handleOpenConfirmationDialog}
+//                 className="w-full h-9 bg-slate-900 hover:bg-blue-600 text-white text-xs font-bold rounded-xl transition-all shadow-md shrink-0 gap-1.5 !mt-3"
+//               >
+//                 <Save className="h-3.5 w-3.5" />
+//                 Publish Price Updates
+//               </Button>
+//             )}
+
+//           </div>
+//         </div>
+//       )}
+
+//       {/* CONFIRMATION DIALOG PORTAL CONTAINER */}
+//       <Dialog open={isConfirmOpen} onOpenChange={setIsConfirmOpen}>
+//         <DialogContent className="max-w-md bg-white rounded-2xl p-4 border border-slate-200 shadow-xl gap-3">
+//           <DialogHeader className="space-y-1">
+//             <DialogTitle className="text-xs font-black tracking-wide text-slate-800 uppercase">
+//               Publishing Price for <span className="text-sky-600 normal-case uppercase">{selectedSite}</span>
+//             </DialogTitle>
+//             <DialogDescription className="text-[11px] text-slate-400 font-medium">
+//               Review current state transitions before final dispatch to production ledger tables.
+//             </DialogDescription>
+//           </DialogHeader>
+
+//           {/* DELTA RECONCILIATION OVERVIEW */}
+//           <div className="border border-slate-100 rounded-xl overflow-hidden bg-slate-50/50 p-1.5 space-y-1.5">
+//             {dbLocation && SORTED_DISPLAY_GRADES.map((grade) => {
+//               const isSellsGrade = dbLocation.availableGrades?.includes(grade.lookup)
+//               if (!isSellsGrade) return null
+
+//               const liveDataRecord = activePostgresPrices?.[grade.id]
+//               const livePostgresVal = liveDataRecord?.price !== undefined ? liveDataRecord.price : liveDataRecord
+
+//               const cleanInputString = prices[grade.id] || ""
+//               const formattedLiveCompareString = livePostgresVal ? String(livePostgresVal).replace('.', '') : ""
+//               const isUnchangedValue = cleanInputString !== "" && cleanInputString === formattedLiveCompareString
+
+//               // Parse display rate string for preview line
+//               let displayPrice = "—"
+//               if (cleanInputString.length === 4) {
+//                 displayPrice = `$${cleanInputString.slice(0, 1)}.${cleanInputString.slice(1)}`
+//               }
+
+//               return (
+//                 <div
+//                   key={grade.id}
+//                   className="flex items-center justify-between py-1.5 px-2 text-[11px] bg-white rounded-xl border border-slate-200/60 shadow-sm"
+//                 >
+//                   {/* GRADE IDENTIFICATION BADGE */}
+//                   <span className={`text-[9px] font-extrabold px-2 py-0.5 rounded tracking-wide uppercase shrink-0 ${getFormGradeTheme(grade.lookup)}`}>
+//                     {grade.label}
+//                   </span>
+
+//                   {/* PRICE TRANSITION STATE */}
+//                   <div className="flex items-center gap-3 text-right">
+//                     <div>
+//                       <span className="text-[9px] font-bold text-slate-400 uppercase tracking-tight mr-1">Cur:</span>
+//                       <span className="text-xs font-bold text-slate-500">
+//                         {livePostgresVal ? `$${Number(livePostgresVal).toFixed(3)}` : '—'}
+//                       </span>
+//                     </div>
+
+//                     <div className="border-l border-slate-200 pl-2.5 flex items-center gap-1.5">
+//                       <span className="text-[9px] font-bold text-slate-400 uppercase tracking-tight">New:</span>
+//                       <span className={`text-xs font-black tracking-tight ${isUnchangedValue ? 'text-amber-600' : 'text-slate-800'}`}>
+//                         {displayPrice}
+//                       </span>
+
+//                       {isUnchangedValue && (
+//                         <span className="text-[9px] font-extrabold px-1.5 py-0.5 rounded tracking-wide uppercase bg-amber-50 text-amber-600 border border-amber-200/60 fallback-font">
+//                           unchanged
+//                         </span>
+//                       )}
+//                     </div>
+//                   </div>
+//                 </div>
+//               )
+//             })}
+//           </div>
+
+//           {/* PERSISTENCE WARNING FOOTER */}
+//           <div className="p-2.5 rounded-xl border border-rose-100 bg-rose-50/60 flex items-start gap-2">
+//             <AlertTriangle className="w-3.5 h-3.5 text-rose-600 shrink-0 mt-0.5" />
+//             <span className="text-[10px] font-bold text-rose-700 leading-normal">
+//               WARNING: Once confirmed, changes will be published live and posted to the site for update.
+//             </span>
+//           </div>
+
+//           {/* INTERACTION ROW */}
+//           <DialogFooter className="flex items-center justify-end gap-2 pt-1 border-t border-slate-100">
+//             <Button
+//               type="button"
+//               variant="outline"
+//               disabled={submitPricesMutation.isPending}
+//               onClick={() => setIsConfirmOpen(false)}
+//               className="h-8 border-slate-200 text-slate-600 font-bold text-[11px] px-3.5 rounded-lg hover:bg-slate-50 transition-colors"
+//             >
+//               Cancel
+//             </Button>
+//             <Button
+//               type="button"
+//               disabled={submitPricesMutation.isPending}
+//               onClick={handleExecuteConfirmedSubmission}
+//               className="h-8 bg-slate-900 hover:bg-blue-600 text-white font-bold text-[11px] px-3.5 rounded-lg transition-colors gap-1.5 shadow"
+//             >
+//               {submitPricesMutation.isPending ? (
+//                 <>
+//                   <Loader2 className="h-3 w-3 animate-spin" />
+//                   Syncing...
+//                 </>
+//               ) : (
+//                 "Confirm & Publish"
+//               )}
+//             </Button>
+//           </DialogFooter>
+//         </DialogContent>
+//       </Dialog>
+//     </div>
+//   )
+// }

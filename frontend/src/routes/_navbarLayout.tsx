@@ -435,13 +435,18 @@ function RouteComponent() {
                 {pricePayload?.hasStructuralChanges ? (
                   // LOGIC BLOCK A: CAMERA ACTION PANEL (MANDATORY DUAL SNAPSHOT REQUIRED)
                   <div className="space-y-3 bg-red-50/60 p-4 rounded-2xl border border-red-100/60">
-                    <div className="flex items-start gap-2.5 text-left pb-1">
-                      <AlertTriangle className="w-5 h-5 text-red-600 flex-shrink-0 mt-0.5" />
-                      <p className="text-xs font-bold leading-normal text-red-800">
-                        Please update the fuel prices on your physical Bulloch terminal screen along with the Infonet Terminal. Once finished, you must take and upload photos of both reports below to unlock the app.
-                      </p>
-                    </div>
 
+                    {/* ⚠️ INITIAL INSTRUCTION PANEL: Hidden when both photos are attached */}
+                    {(!bullochBase64 || !infonetBase64) && (
+                      <div className="flex items-start gap-2.5 text-left pb-1">
+                        <AlertTriangle className="w-5 h-5 text-red-600 flex-shrink-0 mt-0.5" />
+                        <p className="text-xs font-bold leading-normal text-red-800">
+                          Please update the fuel prices on your physical Bulloch terminal screen along with the Infonet Terminal. Once finished, you must take and upload photos of both reports below to unlock the app.
+                        </p>
+                      </div>
+                    )}
+
+                    {/* PHOTO SNAPSHOT TRIGGERS */}
                     <div className="flex flex-col sm:flex-row gap-3 pt-1">
                       <Button
                         onClick={() => triggerCameraHardwareCapture('BULLOCH')}
@@ -466,18 +471,28 @@ function RouteComponent() {
                       </Button>
                     </div>
 
+                    {/* 🛑 LAYMAN POST-UPLOAD WARNING MATRIX: Shows only when both photos exist, positioned above save button */}
                     {bullochBase64 && infonetBase64 && (
-                      <Button
-                        onClick={() => submitTerminalVerificationMutation.mutate()}
-                        disabled={submitTerminalVerificationMutation.isPending}
-                        className="w-full mt-2 bg-slate-900 hover:bg-slate-800 text-white font-black text-xs tracking-wider uppercase rounded-xl h-10 gap-1.5 shadow-md"
-                      >
-                        {submitTerminalVerificationMutation.isPending ? (
-                          <><Loader2 className="w-4 h-4 animate-spin" /> Saving Reports...</>
-                        ) : (
-                          "Save & Complete Verification"
-                        )}
-                      </Button>
+                      <>
+                        <div className="mt-2 flex items-start gap-2.5 text-left bg-amber-50 border border-amber-200 p-3 rounded-xl animate-in fade-in slide-in-from-bottom-1 duration-200">
+                          <AlertTriangle className="w-4 h-4 text-amber-600 flex-shrink-0 mt-0.5" />
+                          <p className="text-[11px] font-bold leading-normal text-amber-900">
+                            Please make sure that the numbers on your Bulloch register match the InfoNet register screen perfectly. After you click the save button below, check outside on the front pumps and make sure the gas price changed correctly out there too.
+                          </p>
+                        </div>
+
+                        <Button
+                          onClick={() => submitTerminalVerificationMutation.mutate()}
+                          disabled={submitTerminalVerificationMutation.isPending}
+                          className="w-full mt-1 bg-slate-900 hover:bg-slate-800 text-white font-black text-xs tracking-wider uppercase rounded-xl h-10 gap-1.5 shadow-md"
+                        >
+                          {submitTerminalVerificationMutation.isPending ? (
+                            <><Loader2 className="w-4 h-4 animate-spin" /> Saving Reports...</>
+                          ) : (
+                            "Save & Complete Verification"
+                          )}
+                        </Button>
+                      </>
                     )}
                   </div>
                 ) : (

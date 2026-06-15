@@ -1,343 +1,21 @@
 {
   "cookies": [
     {
-      "name": "_GRECAPTCHA",
-      "value": "09AKhCRwis5Faqv5W7eBheG7PwUosNigLLsI2F8SkxrjCjBt0WAzEU2kJSXGyAZMBwfRbqyT4PWCU7rMM66CmRLv8",
-      "domain": "www.google.com",
-      "path": "/recaptcha",
-      "expires": 1796824654.203648,
-      "httpOnly": true,
-      "secure": true,
-      "sameSite": "None"
-    },
-    {
-      "name": "gbcsrf",
-      "value": "1.LhE5k9iokDrIlgP7",
-      "domain": ".gasbuddy.com",
-      "path": "/",
-      "expires": -1,
-      "httpOnly": true,
-      "secure": false,
-      "sameSite": "Lax"
-    },
-    {
-      "name": "_loc_ne",
-      "value": "false",
-      "domain": ".gasbuddy.com",
-      "path": "/",
-      "expires": 1815832640.507639,
-      "httpOnly": false,
-      "secure": true,
-      "sameSite": "None"
-    },
-    {
-      "name": "_loc_dat",
-      "value": "false",
-      "domain": ".gasbuddy.com",
-      "path": "/",
-      "expires": 1815832640.511079,
-      "httpOnly": false,
-      "secure": true,
-      "sameSite": "None"
-    },
-    {
-      "name": "_loc_iu",
-      "value": "%222c5445b5-6f8d-435d-8e1f-bca28c405e95%22",
-      "domain": ".gasbuddy.com",
-      "path": "/",
-      "expires": 1815762472.699276,
-      "httpOnly": false,
-      "secure": true,
-      "sameSite": "None"
-    },
-    {
-      "name": "_loc_pa",
-      "value": "1781202472",
-      "domain": ".gasbuddy.com",
-      "path": "/",
-      "expires": 1815762472.722685,
-      "httpOnly": false,
-      "secure": true,
-      "sameSite": "None"
-    },
-    {
-      "name": "_loc_cd",
-      "value": "[]",
-      "domain": ".gasbuddy.com",
-      "path": "/",
-      "expires": 1815762472.76244,
-      "httpOnly": false,
-      "secure": true,
-      "sameSite": "None"
-    },
-    {
-      "name": "_loc_fl",
-      "value": "[%22IAM_Account_Login%22]",
-      "domain": ".gasbuddy.com",
-      "path": "/",
-      "expires": 1815762472.813844,
-      "httpOnly": false,
-      "secure": true,
-      "sameSite": "None"
-    },
-    {
-      "name": "g_state",
-      "value": "{\"i_l\":0,\"i_ll\":1781202473476,\"i_b\":\"s5EqFA/zRW7fkckAYj1UtqnE9LCbxrMgG9/EWrqs7+k\",\"i_e\":{\"enable_itp_optimization\":0},\"i_et\":1781202473476}",
-      "domain": "iam.gasbuddy.com",
-      "path": "/",
-      "expires": 1796754473,
-      "httpOnly": false,
-      "secure": false,
-      "sameSite": "Lax"
-    },
-    {
-      "name": "_gbuser",
-      "value": "c44e2d62-65a0-11f1-9a74-57168efc36de",
-      "domain": ".gasbuddy.com",
-      "path": "/",
-      "expires": 1812738492.222619,
-      "httpOnly": true,
-      "secure": true,
-      "sameSite": "Lax"
-    },
-    {
-      "name": "connect.sid",
-      "value": "s%3ALFGxIe8wd93dzGBYj0Esk2ebrxN5AU8d.k8yE2wufr27L5%2BZqeDLaTnk6ARgYeWgjPQxG0SAFFpg",
-      "domain": ".gasbuddy.com",
-      "path": "/",
-      "expires": 1812738492.22285,
-      "httpOnly": true,
-      "secure": true,
-      "sameSite": "Lax"
-    },
-    {
-      "name": "_loc_ids",
-      "value": "{%22customer_id%22:%22g7fuel%22}",
-      "domain": ".gasbuddy.com",
-      "path": "/",
-      "expires": 1815762492.265168,
-      "httpOnly": false,
-      "secure": true,
-      "sameSite": "None"
-    },
-    {
-      "name": "_gcl_au",
-      "value": "1.1.995074074.1781202495",
-      "domain": ".gasbuddy.com",
-      "path": "/",
-      "expires": 1788978495,
-      "httpOnly": false,
-      "secure": false,
-      "sameSite": "Lax"
-    },
-    {
-      "name": "_gid",
-      "value": "GA1.2.1441933175.1781202496",
-      "domain": ".gasbuddy.com",
-      "path": "/",
-      "expires": 1781359053,
-      "httpOnly": false,
-      "secure": false,
-      "sameSite": "Lax"
-    },
-    {
-      "name": "_cfuvid",
-      "value": "tPKBlTzazzjUPny7KFl2BjD6_L6go9ZCegqzAdWraTw-1781210264.279454-1.0.1.1-CaKQ3M95y_C18DU4OXR_M5XTOThwKS9alY.d7jEv4PM",
-      "domain": ".gasbuddy.com",
-      "path": "/",
-      "expires": -1,
-      "httpOnly": true,
-      "secure": true,
-      "sameSite": "None"
-    },
-    {
-      "name": "ASP.NET_SessionId",
-      "value": "glgrfgmkedvyfzvia4bncoi1",
-      "domain": "images.gasbuddy.com",
-      "path": "/",
-      "expires": -1,
-      "httpOnly": true,
-      "secure": false,
-      "sameSite": "Lax"
-    },
-    {
-      "name": "g_state",
-      "value": "{\"i_l\":0,\"i_ll\":1781272640549,\"i_b\":\"xQTiucvyScX34bXX27TdJJjiCum/eNQYWn101KwzVlk\",\"i_e\":{\"enable_itp_optimization\":0},\"i_et\":1781210266533}",
-      "domain": "www.gasbuddy.com",
-      "path": "/",
-      "expires": 1796824640,
-      "httpOnly": false,
-      "secure": false,
-      "sameSite": "Lax"
-    },
-    {
-      "name": "cf_clearance",
-      "value": "EcSS7IJuj5WJSeJaqpf_vuGX_xtIUKaL2vcfX1WbaT4-1781272645-1.2.1.1-LO7w7kFDlVi4N2g0GPR_Vt5Szucz1hy2H0bexYdksV7fJPYNksJjXJDkyl1T6OjpNHchndsA68hzo4mHWPjr09iGQq_ymHIkBb4i04vjqOgxMUjHlU3WLuRkZMQWpPXmUNlbG3SYMxX1PNjQIFZkQ_hrbF.iPuAN4U4TBVdMopQMgNN44T2354_4pwb1yiUpjcEbV0kjwBYJsALhW9ISuGYJuEEAoLvIjZpd_nn5ZbSc925MJkeInGaB14LBt7XWT9yuZ9aIPSuege_SvIwgJPDkbqF8Gog2ZUvouUPmeGYOfH3RfR3wq_Y9cThSLdoKHXjYDwbeiGWgwZwgzMGIVw",
-      "domain": ".gasbuddy.com",
-      "path": "/",
-      "expires": 1812808641.679076,
-      "httpOnly": true,
-      "secure": true,
-      "sameSite": "None",
-      "partitionKey": "https://gasbuddy.com",
-      "_crHasCrossSiteAncestor": false
-    },
-    {
-      "name": "__cf_bm",
-      "value": "x6F3dO5mhvBBCPEavxWuqJsocYk40Ct0Cp38EpxOX3c-1781272645.759972-1.0.1.1-DNzkvK9qZ8NJEllGv7BkTYLGf22g_DP91DZF7F537SOwUb5uVtmtslVtT6MrQYCbIufItRfNUomRAil0I_0AOMlXcAPZlISXVv5WUPNXoF.fSRo7utZO8EyYpsTWGe7r",
-      "domain": ".gasbuddy.com",
-      "path": "/",
-      "expires": 1781274441.679555,
-      "httpOnly": true,
-      "secure": true,
-      "sameSite": "None"
-    },
-    {
-      "name": "_gat_UA-3201164-1",
-      "value": "1",
-      "domain": ".gasbuddy.com",
-      "path": "/",
-      "expires": 1781272704,
-      "httpOnly": false,
-      "secure": false,
-      "sameSite": "Lax"
-    },
-    {
-      "name": "_ga_V2LZ5H9RW6",
-      "value": "GS2.1.s1781272644$o3$g0$t1781272644$j60$l0$h0",
-      "domain": ".gasbuddy.com",
-      "path": "/",
-      "expires": 1815832645.040481,
-      "httpOnly": false,
-      "secure": false,
-      "sameSite": "Lax"
-    },
-    {
-      "name": "OptanonConsent",
-      "value": "isGpcEnabled=0&datestamp=Fri+Jun+12+2026+13%3A57%3A25+GMT%2B0000+(Coordinated+Universal+Time)&version=202309.1.0&browserGpcFlag=0&isIABGlobal=false&hosts=&consentId=0eaf7424-9098-4f45-a655-bd9e6e529b77&interactionCount=0&landingPath=NotLandingPage&groups=C0004%3A0%2CC0003%3A0%2CC0002%3A0%2CC0001%3A1&AwaitingReconsent=false",
-      "domain": ".gasbuddy.com",
-      "path": "/",
-      "expires": 1812808645,
-      "httpOnly": false,
-      "secure": false,
-      "sameSite": "Lax"
-    },
-    {
-      "name": "FCCDCF",
-      "value": "%5Bnull%2Cnull%2Cnull%2Cnull%2Cnull%2Cnull%2C%5B%5B32%2C%22%5B%5C%2210736897-63f9-4e6f-ad96-ab0a9ef4a164%5C%22%2C%5B1781202495%2C88000000%5D%5D%22%5D%5D%5D",
-      "domain": ".gasbuddy.com",
-      "path": "/",
-      "expires": 1814968645,
-      "httpOnly": false,
-      "secure": false,
-      "sameSite": "Lax"
-    },
-    {
-      "name": "IDE",
-      "value": "AHWqTUnJB1Jqs1VkezuvHn7NuNxeRNhCfladNJW2wvjIlqLCqPv4aPhwlPAo0r2WmVE",
-      "domain": ".doubleclick.net",
-      "path": "/",
-      "expires": 1815832646.392944,
-      "httpOnly": true,
-      "secure": true,
-      "sameSite": "None"
-    },
-    {
-      "name": "__gads",
-      "value": "ID=a185e4eba8d2126a:T=1781210274:RT=1781272650:S=ALNI_MbUk8sXLvbUyRRtUwwylUgD22Wa7A",
-      "domain": ".gasbuddy.com",
-      "path": "/",
-      "expires": 1814906274,
-      "httpOnly": false,
-      "secure": true,
-      "sameSite": "None"
-    },
-    {
-      "name": "__gpi",
-      "value": "UID=000013db43e4bb68:T=1781210274:RT=1781272650:S=ALNI_Mbzcdt_-lheZAhYEERFIQh0sE5NJA",
-      "domain": ".gasbuddy.com",
-      "path": "/",
-      "expires": 1814906274,
-      "httpOnly": false,
-      "secure": true,
-      "sameSite": "None"
-    },
-    {
-      "name": "__eoi",
-      "value": "ID=09f161e131b60bdd:T=1781210274:RT=1781272650:S=AA-AfjZNXRpvDAjj0sjH2teyMjaX",
-      "domain": ".gasbuddy.com",
-      "path": "/",
-      "expires": 1796762274,
-      "httpOnly": false,
-      "secure": true,
-      "sameSite": "None"
-    },
-    {
-      "name": "_loc_ct",
-      "value": "1781272647.083",
-      "domain": ".gasbuddy.com",
-      "path": "/",
-      "expires": 1815832647.090328,
-      "httpOnly": false,
-      "secure": true,
-      "sameSite": "None"
-    },
-    {
-      "name": "_loc_csu",
-      "value": "%22124481fb-6a09-4f48-81ec-39608e0c5f06%22",
-      "domain": ".gasbuddy.com",
-      "path": "/",
-      "expires": 1815832647.09526,
-      "httpOnly": false,
-      "secure": true,
-      "sameSite": "None"
-    },
-    {
-      "name": "_loc_cst",
-      "value": "1781272638",
-      "domain": ".gasbuddy.com",
-      "path": "/",
-      "expires": 1815832647.099644,
-      "httpOnly": false,
-      "secure": true,
-      "sameSite": "None"
-    },
-    {
-      "name": "_loc_csi",
-      "value": "5",
-      "domain": ".gasbuddy.com",
-      "path": "/",
-      "expires": 1815832647.100414,
-      "httpOnly": false,
-      "secure": true,
-      "sameSite": "None"
-    },
-    {
-      "name": "_loc_csq",
-      "value": "8",
-      "domain": ".gasbuddy.com",
-      "path": "/",
-      "expires": 1815832647.23088,
-      "httpOnly": false,
-      "secure": true,
-      "sameSite": "None"
-    },
-    {
-      "name": "FCNEC",
-      "value": "%5B%5B%22AKsRol9KE7EBl2pCRVsQH_m-4FwBAa-Vm0ngYclt54Fo87zTCA9miNhDJEhE_pCK4zdeUXgkFgilNk9NfveHP3Sa6yjNSaHojs7MwJf4CydPUmTeaouNTVTalnpcGPszvzcdS_-1ZWkeL09mzYtW5WFRWphHaTu89A%3D%3D%22%5D%5D",
-      "domain": ".gasbuddy.com",
-      "path": "/",
-      "expires": 1812808647,
-      "httpOnly": false,
-      "secure": false,
-      "sameSite": "Lax"
-    },
-    {
       "name": "_ga",
-      "value": "GA1.2.389929425.1781202495",
-      "domain": ".gasbuddy.com",
+      "value": "GA1.1.258518769.1781541960",
+      "domain": ".gasbuddybusiness.io",
       "path": "/",
-      "expires": 1815832653.770391,
+      "expires": 1816101959.773406,
+      "httpOnly": false,
+      "secure": false,
+      "sameSite": "Lax"
+    },
+    {
+      "name": "_ga_YS67XQ8B6Y",
+      "value": "GS2.1.s1781541959$o1$g1$t1781541980$j39$l0$h0",
+      "domain": ".gasbuddybusiness.io",
+      "path": "/",
+      "expires": 1816101980.75705,
       "httpOnly": false,
       "secure": false,
       "sameSite": "Lax"
@@ -345,81 +23,87 @@
   ],
   "origins": [
     {
-      "origin": "https://www.gasbuddy.com",
+      "origin": "https://dashboard.gasbuddybusiness.io",
       "localStorage": [
         {
-          "name": "lastShownMemberNameModal",
-          "value": "none"
+          "name": "org_logo_url",
+          "value": "\"https://images.gasbuddy.com/images/business-pages/vlooykpvlaxq.png\""
         },
         {
-          "name": "aps:3615:idVendors/enabled",
-          "value": "[\"pubcommon\"]"
+          "name": "current_org_id",
+          "value": "\"0thAwwzUn2s\""
         },
         {
-          "name": "nextHomeScreenCardInterval",
-          "value": ""
+          "name": "auth_context_id",
+          "value": "\"b6d3f734-23bd-4f20-9d2f-adaa44a18406\""
         },
         {
-          "name": "_pubcid_exp",
-          "value": "Sat, 12 Jun 2027 13:57:24 GMT"
+          "name": "selectedDateRange",
+          "value": "{\"label\":\"Last 30 days\",\"startDate\":\"2026-05-16\",\"endDate\":\"2026-06-15\"}"
         },
         {
-          "name": "gb_preferred_locale",
-          "value": "en"
+          "name": "department",
+          "value": "\"owner\""
         },
         {
-          "name": "lastShowPayPrices",
-          "value": "true"
+          "name": "station_prices_205339",
+          "value": "{\"saved_at\":\"2026-06-15T16:46:20Z\",\"prices\":[{\"long_name\":\"Regular\",\"short_name\":\"Reg\",\"fuel_product\":\"regular_gas\",\"price_unit\":\"cents_per_liter\",\"currency\":\"CAD\",\"credit\":{\"price\":155.9,\"posted_time\":\"2026-06-15T16:46:14.257+00:00\",\"nickname\":\"Owner\",\"stamp\":\"owner\"}},{\"long_name\":\"Midgrade\",\"short_name\":\"Mid\",\"fuel_product\":\"midgrade_gas\",\"price_unit\":\"cents_per_liter\",\"currency\":\"CAD\",\"credit\":{\"price\":174.9,\"posted_time\":\"2026-06-15T16:46:15.933+00:00\",\"nickname\":\"Owner\",\"stamp\":\"owner\"}},{\"long_name\":\"Premium\",\"short_name\":\"Pre\",\"fuel_product\":\"premium_gas\",\"price_unit\":\"cents_per_liter\",\"currency\":\"CAD\",\"credit\":{\"price\":184.9,\"posted_time\":\"2026-06-15T16:46:17.283+00:00\",\"nickname\":\"Owner\",\"stamp\":\"owner\"}},{\"long_name\":\"Diesel\",\"short_name\":\"Diesel\",\"fuel_product\":\"diesel\",\"price_unit\":\"cents_per_liter\",\"currency\":\"CAD\",\"credit\":{\"price\":186.9,\"posted_time\":\"2026-06-15T16:46:18.682+00:00\",\"nickname\":\"Owner\",\"stamp\":\"owner\"}}]}"
         },
         {
-          "name": "shownHomeScreenCards",
+          "name": "mostRecentComparisonMetric",
+          "value": "{\"key\":\"Prior Period\",\"text\":\"Prior Period\",\"metricApiName\":\"prior-period\",\"metricApiPath\":\"stations/comparison/prior-period\"}"
+        },
+        {
+          "name": "currentPageURL",
+          "value": "\"/client/home.html\""
+        },
+        {
+          "name": "org_solution_options",
           "value": "[]"
         },
         {
-          "name": "_gcl_ls",
-          "value": "{\"schema\":\"gcl\",\"version\":1,\"gsid_dc\":{\"value\":null,\"expires\":1781202794512,\"error\":9},\"gcl_ctr\":{\"value\":{\"value\":0,\"timeouts\":0,\"errors\":0,\"eopCount\":0,\"creationTimeMs\":1781202494521},\"expires\":1788978494521}}"
+          "name": "emergency_features",
+          "value": "false"
         },
         {
-          "name": "aps:3615:sessionMarker/marker",
-          "value": "4a1f5d62-40e5-4f67-ab51-582365cb4887_2026-06-11T20:37:49.275Z"
+          "name": "email",
+          "value": "\"hannah@gen7fuel.com\""
         },
         {
-          "name": "_grecaptcha",
-          "value": "09AKhCRwjc3gyNHhbRj0wE-2keWOjJTqq7hRtu6pt64P93d4sYU8G_SYgxeV1rA2S_9Sa9QGJ0x2yxau7u4JGGWENOfAU13Y3RTP6wCWEzhsyP4oafv6Et25LszThMoYvt"
+          "name": "role",
+          "value": "\"administrator\""
         },
         {
-          "name": "loglevel",
-          "value": "WARN"
+          "name": "title",
+          "value": "\"Social Media Manager\""
         },
         {
-          "name": "aps:3615:deviceSignal/sua",
-          "value": "{\"architecture\":\"x86\",\"bitness\":\"64\",\"mobile\":0,\"model\":\"\",\"source\":2,\"platform\":{\"brand\":\"Windows\",\"version\":[\"10\",\"0\"]},\"browsers\":[{\"brand\":\"Chromium\",\"version\":[\"149\",\"0\",\"7827\",\"53\"]},{\"brand\":\"Not)A;Brand\",\"version\":[\"24\",\"0\",\"0\",\"0\"]}]}"
+          "name": "username",
+          "value": "\"Hannah Durham\""
         },
         {
-          "name": "_pubcid",
-          "value": "5d5fbfda-063b-4324-8513-9ab86073661f"
-        }
-      ]
-    },
-    {
-      "origin": "https://iam.gasbuddy.com",
-      "localStorage": [
-        {
-          "name": "gb_preferred_locale",
-          "value": "en"
-        }
-      ]
-    },
-    {
-      "origin": "https://www.google.com",
-      "localStorage": [
-        {
-          "name": "rc::a",
-          "value": "NjhkeGMxMWpld29lbw=="
+          "name": "refresh_token",
+          "value": "\"jhATTeR2DBD-3KvcL80tDOMuBmptYWE5TqlG5UKY26RJq9hGZ0qR4vg07-JmoFxrtXkV4wf959NRugSC9cdiaRXmUvDVbOIpdo6QHDxSUabz5F9AnvalS-Tjup0EYahI96rQ\""
         },
         {
-          "name": "rc::f",
-          "value": "0aAJh6VkrYKnklD5Uw4JLxj04cUgo3s1HQuzBBIg9fDYNJfDV77ODAOcdjBoz30Mgx6oaGgpc"
+          "name": "org_name",
+          "value": "\"Gen7 Fuel LP\""
+        },
+        {
+          "name": "org_contract_status",
+          "value": "\"current\""
+        },
+        {
+          "name": "permissions",
+          "value": "[{\"name\":\"review_reply_free_form_text\",\"display_name\":\"Free-form text\",\"value\":true},{\"name\":\"can_edit_gas_prices\",\"display_name\":\"Update Gas Prices\",\"value\":true}]"
+        },
+        {
+          "name": "access_token",
+          "value": "\"jhAW-VY4mVPWl6aiQXg_VpsHRHQLggBonTz49esVUzduUAKu1uKIqDh3H80ISptljf6jrNvYbrcS1EyALx0otsTAghyBFWUb2SiSmAWXF16F3eUW-R07ezhp_3b56lDO7IKg\""
+        },
+        {
+          "name": "org_solutions",
+          "value": "[\"reputation-management\",\"listings\"]"
         }
       ]
     }
