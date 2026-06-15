@@ -1,6 +1,5 @@
 const { authSocket } = require('../middleware/authMiddleware');
 const setupTicketSocket = require('./ticketSocket');
-const setupSupportChatSocket = require('./supportChatSocket');
 
 const debug = process.env.SOCKET_DEBUG === 'true';
 
@@ -25,7 +24,6 @@ function setupSupportSocket(io) {
     });
 
     setupTicketSocket(socket, supportNamespace, isSupport);
-    setupSupportChatSocket(socket, supportNamespace, isSupport);
 
     socket.on('disconnect', () => {
       if (debug) console.log(`[socket] support disconnected: ${socket.user?.name}`);

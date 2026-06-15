@@ -212,7 +212,7 @@ function App() {
               accentColor="border-t-teal-500"
               icon={<LifeBuoy className="w-5 h-5 text-teal-600" />}
             >
-              <NavButton to="/support/chat" label="Live Chat" icon={MessageSquare} theme="teal" />
+              <NavButton to="/support/new" label="New Ticket" icon={MessageSquare} theme="teal" />
               <NavButton to="/support/list" label="My Tickets" icon={FileText} theme="teal" />
             </Section>
           )}
