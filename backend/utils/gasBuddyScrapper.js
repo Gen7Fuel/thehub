@@ -2,10 +2,40 @@ const { chromium } = require("playwright-extra");
 const stealth = require("puppeteer-extra-plugin-stealth")();
 const fs = require("fs");
 const path = require("path");
-const emailQueue = require("../queues/emailQueue");
+const { emailQueue } = require("../queues/emailQueue");
 
 // Inject stealth mode to mask Playwright's automation footprints
 chromium.use(stealth);
+
+/**
+ * Helper function to pipe a screenshot buffer directly into the isolated CDN container
+ * without touching your local repository's directory structure.
+ */
+async function uploadToCdn(fileBuffer, originalName) {
+  try {
+    const formData = new FormData();
+    // Convert memory buffer into a Blob format that fetch's FormData consumes natively
+    const fileBlob = new Blob([fileBuffer], { type: "image/png" });
+    formData.append("file", fileBlob, originalName);
+
+    // Hit the local CDN microservice container port (5001)
+    const response = await fetch("http://cdn:5001/cdn/upload", {
+      method: "POST",
+      body: formData,
+    });
+
+    if (!response.ok) {
+      throw new Error(`CDN server dropped connection with status: ${response.status}`);
+    }
+
+    const data = await response.json();
+    // Returns the clean accessibility URL link pointing to the file ID on your CDN
+    return `http://localhost:5001/cdn/download/${data.filename}`;
+  } catch (error) {
+    console.error("❌ Secondary Pipeline Error: Failed uploading image asset to CDN:", error);
+    return null; // Don't break the main thread if just the CDN upload fails
+  }
+}
 
 async function postPricesToGasBuddy({ gasBuddyStationId, prices }) {
   console.log("🤖 Initializing Headless Production Engine via Business State Ledger...");
@@ -46,68 +76,34 @@ async function postPricesToGasBuddy({ gasBuddyStationId, prices }) {
 
     await page.goto(businessUrl, { waitUntil: "networkidle", timeout: 60000 });
 
-    // 🚀 FIXED: Check if authentication tokens died and tripped redirect interception parameters
+    // Check if authentication tokens died and tripped redirect interception parameters
     if (page.url().includes("login.html") || page.url().includes("iam.gasbuddy.com")) {
-      console.log("🚨 Token expiration detected! Compiling critical email alert job...");
-
-      const expiredNoticeHtml = `
-        <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; border: 1px solid #f87171; border-radius: 16px; background-color: #ffffff;">
-          <div style="background-color: #fef2f2; border-left: 4px solid #dc2626; padding: 16px; border-radius: 8px; margin-bottom: 20px;">
-            <h2 style="color: #991b1b; margin: 0 0 8px 0; font-size: 18px; font-weight: 800; text-transform: uppercase;">
-              ⚠️ Critical: GasBuddy Session Expired
-            </h2>
-            <p style="color: #b91c1c; margin: 0; font-size: 14px; font-weight: 600; line-height: 1.5;">
-              The automation engine was redirected to the login interface while processing changes for Station ID: ${gasBuddyStationId}.
-            </p>
-          </div>
-
-          <div style="margin-bottom: 24px;">
-            <p style="font-size: 14px; color: #334155; line-height: 1.6;">
-              Your stored session tokens inside <code>gasbuddy-state.json</code> have expired or been revoked by the security gateway. Background pricing syncs will continue to fail until this is re-authenticated.
-            </p>
-          </div>
-
-          <div style="margin-bottom: 24px; text-align: center;">
-            <a href="https://dashboard.gasbuddybusiness.io/login.html" 
-               style="display: inline-block; background-color: #dc2626; color: #ffffff; padding: 12px 24px; font-weight: bold; font-size: 14px; text-decoration: none; border-radius: 8px; text-transform: uppercase;">
-              Re-authenticate GasBuddy Account
-            </a>
-          </div>
-
-          <div style="border-top: 1px solid #e2e8f0; padding-top: 16px; text-align: center;">
-            <span style="font-size: 11px; color: #94a3b8; font-style: italic;">
-              Automated system pipeline exception tracker — Gen 7 Fuel Hub Engine.
-            </span>
-          </div>
-        </div>
-      `;
-
-      // Dispatch alert payload down into your BullMQ system
-      await emailQueue.add(`gasbuddy-token-expired-${Date.now()}`, {
-        to: "daksh@gen7fuel.com",
-        subject: `🚨 System Alert: GasBuddy Session Expired (Station: ${gasBuddyStationId})`,
-        html: expiredNoticeHtml
-      });
-
-      console.log("📧 Token expiration notice safely queued into BullMQ.");
-      throw new Error("🚨 The dashboard was redirected to login! Your gasbuddy-state.json tokens have expired.");
+      throw new Error("AUTHENTICATION_EXPIRED: Your gasbuddy-state.json tokens have expired or been revoked by the gateway.");
     }
 
     console.log("⏱️ Standing by for 5 seconds to let state data render completely...");
     await page.waitForTimeout(5000);
+    // =========================================================================
+    // TESTING LAYER: CHOOSE ONE OF THE LINES BELOW TO RUN YOUR CYCLES
+    // =========================================================================
 
-    // Locate the Pencil Edit Button wrapper next to the "PRICES" section header text block
+    // ❌ TEST LINE (Causes a DOM_ELEMENT_MISSING error by breaking the selector name)
+    // const editBtnSelector = 'div.panel__panel___INVALID_SELECTOR_TESTING:has(h3:has-text("PRICES")) button.styles__buttonIcon___3NfYt';
+
+    // ✅ CORRECT PRODUCTION LINE (Commented out during your active testing rounds)
     const editBtnSelector = 'div.panel__panel___3Q2zW:has(h3:has-text("PRICES")) button.styles__buttonIcon___3NfYt';
+
+    // =========================================================================
+
     const editButton = page.locator(editBtnSelector).first();
 
     if (!(await editButton.isVisible())) {
-      throw new Error("❌ Fatal: Price control card or modal edit pencil element couldn't be indexed on the dashboard workspace UI.");
+      throw new Error("DOM_ELEMENT_MISSING: Price control card or modal edit pencil element couldn't be indexed on the workspace UI.");
     }
 
     console.log("✏️ Clicking the Price Configuration Card edit control node...");
     await editButton.click();
 
-    // 🚀 FIXED: Scopes selector via text presence filtering to break the strict 10-element tie violation
     const dialogModal = page.locator('div[role="dialog"][aria-modal="true"]').filter({ hasText: 'PRICES' });
     await dialogModal.waitFor({ state: "visible", timeout: 8000 });
     console.log("🔓 Pricing operational modification dialog overlay opened.");
@@ -117,17 +113,15 @@ async function postPricesToGasBuddy({ gasBuddyStationId, prices }) {
     for (let [fuelType, rawPrice] of Object.entries(prices)) {
       if (rawPrice === undefined || rawPrice === null) continue;
 
-      // 🚀 FIXED: Normalize variation spaces or casing formatting rules for "Mid Grade"
       let normalizedFuelType = fuelType.trim();
       if (normalizedFuelType.toLowerCase().replace(/[\s-]/g, "") === "midgrade") {
         normalizedFuelType = "Midgrade";
       }
 
-      // Target layout tracking columns safely using normalized names
       const fuelColumn = dialogModal.locator(`div.grid__column___nhz7X:has(h5:text-is("${normalizedFuelType}"))`);
 
       if (await fuelColumn.count() === 0) {
-        console.log(`⚠️ Grade column label matching [${fuelType}] (${normalizedFuelType}) wasn't identified inside the dashboard dialog panel. Skipping.`);
+        console.log(`⚠️ Grade column label matching [${fuelType}] (${normalizedFuelType}) wasn't identified. Skipping.`);
         continue;
       }
 
@@ -156,43 +150,32 @@ async function postPricesToGasBuddy({ gasBuddyStationId, prices }) {
       }
     }
 
-    // 🚀 FIXED: Target the checkbox toggle layer reliably using its literal label text string block
     const autoUpdateLabel = dialogModal.locator('label:has-text("Auto-update the price(s) for this price submission for today?")');
-
-    // Target the corresponding hidden checkbox element structurally via the parent wrapper block container
     const autoUpdateCheckbox = dialogModal.locator('div.checkbox__checkbox___2QDLE input[type="checkbox"]');
 
     if (await autoUpdateLabel.isVisible()) {
-      // Use .isChecked({ force: true }) to evaluate the state of visually hidden/styled input nodes safely
       const isAlreadyChecked = await autoUpdateCheckbox.isChecked({ force: true });
-
       if (!isAlreadyChecked) {
         console.log("📌 Syncing auto-update daily price locking toggle state to [ACTIVE]...");
-        // Click the visible descriptive text label node component directly to trigger the state change safely
         await autoUpdateLabel.click();
       } else {
         console.log("ℹ️ Auto-update price locking option toggle is already checked.");
       }
-    } else {
-      console.log("⚠️ Operational Warning: Auto-update locking option reference label was missing inside dialog workspace elements.");
     }
 
-    // 🚀 COMMENCING FINAL STATE WRITE TRANSACTION HANDSHAKE
     if (updatesCommitted > 0) {
       const saveButton = dialogModal.locator('button:has-text("Save Changes")');
-      await page.waitForTimeout(500); // Quick stabilization pause
+      await page.waitForTimeout(500);
 
       if (!(await saveButton.isDisabled())) {
         console.log("🚀 Dispatched initial 'Save Changes' layer...");
         await saveButton.click();
 
-        // 🚀 NEW: Dynamic handling for the 'Confirm Price Submission' secondary confirmation overlay
         const confirmationModal = page.locator('div[role="dialog"][aria-modal="true"]').filter({ hasText: 'Confirm Price Submission' });
 
         try {
-          // Wait briefly to see if the secondary verification modal gets mounted to the DOM sheet tree
           await confirmationModal.waitFor({ state: "visible", timeout: 4000 });
-          console.log("✋ Secondary confirmation barrier detected: 'Confirm Price Submission' overlay active.");
+          console.log("✋ Secondary confirmation barrier detected.");
 
           const submitPricesBtn = confirmationModal.locator('button:has-text("Submit Prices")');
           if (await submitPricesBtn.isVisible()) {
@@ -200,23 +183,24 @@ async function postPricesToGasBuddy({ gasBuddyStationId, prices }) {
             console.log("🔥 Final 'Submit Prices' handshake executed successfully!");
           }
         } catch (e) {
-          // If the checkbox wasn't activated or the dialog didn't show, the first save button click was enough
           console.log("ℹ️ No secondary confirmation barrier appeared. Relying on primary ledger save.");
         }
 
-        console.log("🥶 Freezing executor loop 5 seconds to cycle final updates...");
+        console.log("寒 Freezing executor loop 5 seconds to cycle final updates...");
         await page.waitForTimeout(5000);
 
-        // Capture audit log asset only at the very end of a successful iteration pipeline
-        const postSubmitProofPath = path.resolve(__dirname, `../sessions/gasBuddy/submission_proof_${gasBuddyStationId}.png`);
-        await page.screenshot({ path: postSubmitProofPath });
-        console.log(`📸 Audit validation screenshot output logged cleanly: ${postSubmitProofPath}`);
+        // 📸 AUDIT SUCCESS SCREENSHOT -> MEMORY BUFFER -> CDN CONTAINER
+        const successBuffer = await page.screenshot();
+        const cdnUrl = await uploadToCdn(successBuffer, `submission_proof_${gasBuddyStationId}.png`);
+
+        if (cdnUrl) {
+          console.log(`🎉 Success asset uploaded directly to CDN: ${cdnUrl}`);
+        }
 
         await context.storageState({ path: sessionPath });
-        console.log("💾 Cycle complete: Current updated session tokens saved cleanly back to json ledger.");
         console.log(`🎉 Success: Successfully executed (${updatesCommitted}) pricing shifts on GasBuddy Business Profile!`);
       } else {
-        throw new Error('❌ Failed processing changes: Save changes button context is locked/disabled in the DOM view.');
+        throw new Error('LEDGER_LOCKED: Save changes button context is locked or disabled in the DOM view.');
       }
     } else {
       console.log('🏁 Process wrapped: 0 structural values required active writing updates.');
@@ -225,14 +209,67 @@ async function postPricesToGasBuddy({ gasBuddyStationId, prices }) {
   } catch (error) {
     console.error("❌ CRITICAL DISPATCH EXCEPTION IN AUTO ENGINE:", error);
 
+    let emergencyCdnUrl = "";
     try {
-      const errorProofPath = path.resolve(__dirname, `../sessions/gasBuddy/failure_error_${gasBuddyStationId}.png`);
-      await page.screenshot({ path: errorProofPath, fullPage: true });
-      console.log(`📸 Emergency diagnostic trace screen saved to: ${errorProofPath}`);
+      // 📸 DIAGNOSTIC SCREENSHOT -> MEMORY BUFFER -> CDN CONTAINER
+      const errorBuffer = await page.screenshot({ fullPage: true });
+      emergencyCdnUrl = await uploadToCdn(errorBuffer, `failure_error_${gasBuddyStationId}.png`);
     } catch (ssErr) {
-      console.error("Unable to execute recovery screenshot dump:", ssErr);
+      console.error("Unable to execute memory buffer screenshot dump:", ssErr);
     }
 
+    // Determine the severity classification context for the title string
+    const isTokenError = error.message.includes("AUTHENTICATION_EXPIRED");
+    const errorTypeLabel = isTokenError ? "GasBuddy Session Expired" : "GasBuddy Execution Failure";
+
+    // 📬 GENERALIZED FAIL-SAFE RUNTIME ERROR EMAIL
+    const systemAlertHtml = `
+      <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; border: 1px solid #f87171; border-radius: 16px; background-color: #ffffff;">
+        <div style="background-color: #fef2f2; border-left: 4px solid #dc2626; padding: 16px; border-radius: 8px; margin-bottom: 20px;">
+          <h2 style="color: #991b1b; margin: 0 0 8px 0; font-size: 16px; font-weight: 800; text-transform: uppercase;">
+            ⚠️ Critical: ${errorTypeLabel}
+          </h2>
+          <p style="color: #b91c1c; margin: 0; font-size: 14px; font-weight: 600; line-height: 1.5;">
+            An exception interrupted the background sync process for GasBuddy Station ID: <strong>${gasBuddyStationId}</strong>.
+          </p>
+        </div>
+
+        <div style="margin-bottom: 24px; background-color: #f8fafc; border: 1px solid #e2e8f0; padding: 14px; border-radius: 8px;">
+          <strong style="color: #0f172a; font-size: 13px; text-transform: uppercase;">Error Technical Details:</strong>
+          <p style="font-family: monospace; font-size: 13px; color: #ef4444; margin: 8px 0 0 0; white-space: pre-wrap;">
+            ${error.message}
+          </p>
+        </div>
+
+        ${emergencyCdnUrl ? `
+          <div style="margin-bottom: 24px; text-align: center;">
+            <a href="${emergencyCdnUrl}" target="_blank"
+               style="display: inline-block; background-color: #dc2626; color: #ffffff; padding: 12px 20px; font-weight: bold; font-size: 13px; text-decoration: none; border-radius: 8px; text-transform: uppercase;">
+              🔍 View Diagnostic Screenshot Evidence
+            </a>
+          </div>
+        ` : `
+          <p style="font-size: 12px; color: #94a3b8; font-style: italic; margin-bottom: 24px;">
+            Note: Could not capture diagnostic screenshot because browser rendering context crashed.
+          </p>
+        `}
+
+        <div style="border-top: 1px solid #e2e8f0; padding-top: 16px; text-align: center;">
+          <span style="font-size: 11px; color: #94a3b8; font-style: italic;">
+            Automated operational alert pipeline — Gen 7 Fuel Hub System Engine.
+          </span>
+        </div>
+      </div>
+    `;
+
+    // Queue the generalized fallback payload into BullMQ immediately
+    await emailQueue.add(`gasbuddy-error-${Date.now()}`, {
+      to: "daksh@gen7fuel.com",
+      subject: `🚨 Hub Automation Sync Failure (Station: ${gasBuddyStationId})`,
+      html: systemAlertHtml
+    });
+
+    console.log("📧 Exception notification successfully offloaded to BullMQ framework channels.");
     throw error;
   } finally {
     await browser.close();
@@ -240,6 +277,252 @@ async function postPricesToGasBuddy({ gasBuddyStationId, prices }) {
 }
 
 module.exports = { postPricesToGasBuddy };
+
+
+// const { chromium } = require("playwright-extra");
+// const stealth = require("puppeteer-extra-plugin-stealth")();
+// const fs = require("fs");
+// const path = require("path");
+
+
+// // Inject stealth mode to mask Playwright's automation footprints
+// chromium.use(stealth);
+
+// async function postPricesToGasBuddy({ gasBuddyStationId, prices }) {
+//   console.log("🤖 Initializing Headless Production Engine via Business State Ledger...");
+
+//   const sessionPath = path.resolve(__dirname, "../sessions/gasBuddy/gasbuddy-state.json");
+
+//   if (!fs.existsSync(sessionPath)) {
+//     throw new Error(`❌ Missing session file! Please execute your login generator to create: ${sessionPath}`);
+//   }
+
+//   const systemChromiumPath = fs.existsSync("/usr/bin/chromium-browser")
+//     ? "/usr/bin/chromium-browser"
+//     : fs.existsSync("/usr/bin/chromium")
+//       ? "/usr/bin/chromium"
+//       : undefined;
+
+//   const browser = await chromium.launch({
+//     headless: true,
+//     executablePath: systemChromiumPath,
+//     args: [
+//       "--no-sandbox",
+//       "--disable-setuid-sandbox",
+//       "--disable-dev-shm-usage"
+//     ]
+//   });
+
+//   const context = await browser.newContext({
+//     storageState: sessionPath,
+//     viewport: { width: 1400, height: 1000 },
+//     userAgent: "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+//   });
+
+//   const page = await context.newPage();
+
+//   try {
+//     const businessUrl = `https://dashboard.gasbuddybusiness.io/client/station-profiles/station-profile?stationId=${gasBuddyStationId}`;
+//     console.log(`🔗 Navigating to Corporate Portal: ${businessUrl}`);
+
+//     await page.goto(businessUrl, { waitUntil: "networkidle", timeout: 60000 });
+
+//     // 🚀 FIXED: Check if authentication tokens died and tripped redirect interception parameters
+//     if (page.url().includes("login.html") || page.url().includes("iam.gasbuddy.com")) {
+//       console.log("🚨 Token expiration detected! Compiling critical email alert job...");
+
+//       const expiredNoticeHtml = `
+//         <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; border: 1px solid #f87171; border-radius: 16px; background-color: #ffffff;">
+//           <div style="background-color: #fef2f2; border-left: 4px solid #dc2626; padding: 16px; border-radius: 8px; margin-bottom: 20px;">
+//             <h2 style="color: #991b1b; margin: 0 0 8px 0; font-size: 18px; font-weight: 800; text-transform: uppercase;">
+//               ⚠️ Critical: GasBuddy Session Expired
+//             </h2>
+//             <p style="color: #b91c1c; margin: 0; font-size: 14px; font-weight: 600; line-height: 1.5;">
+//               The automation engine was redirected to the login interface while processing changes for Station ID: ${gasBuddyStationId}.
+//             </p>
+//           </div>
+
+//           <div style="margin-bottom: 24px;">
+//             <p style="font-size: 14px; color: #334155; line-height: 1.6;">
+//               Your stored session tokens inside <code>gasbuddy-state.json</code> have expired or been revoked by the security gateway. Background pricing syncs will continue to fail until this is re-authenticated.
+//             </p>
+//           </div>
+
+//           <div style="margin-bottom: 24px; text-align: center;">
+//             <a href="https://dashboard.gasbuddybusiness.io/login.html"
+//                style="display: inline-block; background-color: #dc2626; color: #ffffff; padding: 12px 24px; font-weight: bold; font-size: 14px; text-decoration: none; border-radius: 8px; text-transform: uppercase;">
+//               Re-authenticate GasBuddy Account
+//             </a>
+//           </div>
+
+//           <div style="border-top: 1px solid #e2e8f0; padding-top: 16px; text-align: center;">
+//             <span style="font-size: 11px; color: #94a3b8; font-style: italic;">
+//               Automated system pipeline exception tracker — Gen 7 Fuel Hub Engine.
+//             </span>
+//           </div>
+//         </div>
+//       `;
+
+//       // Dispatch alert payload down into your BullMQ system
+//       await emailQueue.add(`gasbuddy-token-expired-${Date.now()}`, {
+//         to: "daksh@gen7fuel.com",
+//         subject: `🚨 System Alert: GasBuddy Session Expired (Station: ${gasBuddyStationId})`,
+//         html: expiredNoticeHtml
+//       });
+
+//       console.log("📧 Token expiration notice safely queued into BullMQ.");
+//       throw new Error("🚨 The dashboard was redirected to login! Your gasbuddy-state.json tokens have expired.");
+//     }
+
+//     console.log("⏱️ Standing by for 5 seconds to let state data render completely...");
+//     await page.waitForTimeout(5000);
+
+//     // Locate the Pencil Edit Button wrapper next to the "PRICES" section header text block
+//     const editBtnSelector = 'div.panel__panel___3Q2zW:has(h3:has-text("PRICES")) button.styles__buttonIcon___3NfYt';
+//     const editButton = page.locator(editBtnSelector).first();
+
+//     if (!(await editButton.isVisible())) {
+//       throw new Error("❌ Fatal: Price control card or modal edit pencil element couldn't be indexed on the dashboard workspace UI.");
+//     }
+
+//     console.log("✏️ Clicking the Price Configuration Card edit control node...");
+//     await editButton.click();
+
+//     // 🚀 FIXED: Scopes selector via text presence filtering to break the strict 10-element tie violation
+//     const dialogModal = page.locator('div[role="dialog"][aria-modal="true"]').filter({ hasText: 'PRICES' });
+//     await dialogModal.waitFor({ state: "visible", timeout: 8000 });
+//     console.log("🔓 Pricing operational modification dialog overlay opened.");
+
+//     let updatesCommitted = 0;
+
+//     for (let [fuelType, rawPrice] of Object.entries(prices)) {
+//       if (rawPrice === undefined || rawPrice === null) continue;
+
+//       // 🚀 FIXED: Normalize variation spaces or casing formatting rules for "Mid Grade"
+//       let normalizedFuelType = fuelType.trim();
+//       if (normalizedFuelType.toLowerCase().replace(/[\s-]/g, "") === "midgrade") {
+//         normalizedFuelType = "Midgrade";
+//       }
+
+//       // Target layout tracking columns safely using normalized names
+//       const fuelColumn = dialogModal.locator(`div.grid__column___nhz7X:has(h5:text-is("${normalizedFuelType}"))`);
+
+//       if (await fuelColumn.count() === 0) {
+//         console.log(`⚠️ Grade column label matching [${fuelType}] (${normalizedFuelType}) wasn't identified inside the dashboard dialog panel. Skipping.`);
+//         continue;
+//       }
+
+//       const inputField = fuelColumn.locator('input[placeholder="Enter Price"]');
+
+//       if (await inputField.isVisible()) {
+//         const targetPriceString = String(rawPrice);
+
+//         await inputField.focus();
+//         await page.keyboard.press('Control+A');
+//         await page.keyboard.press('Meta+A');
+//         await page.keyboard.press('Backspace');
+
+//         await inputField.type(targetPriceString, { delay: 100 });
+
+//         const confirmButton = fuelColumn.locator('button:has-text("Confirm")');
+//         if (await confirmButton.isVisible()) {
+//           await confirmButton.click();
+//           console.log(` Staged change for ${normalizedFuelType} -> [${targetPriceString}]`);
+//           updatesCommitted++;
+//         } else {
+//           await inputField.dispatchEvent('change');
+//           await inputField.dispatchEvent('blur');
+//           updatesCommitted++;
+//         }
+//       }
+//     }
+
+//     // 🚀 FIXED: Target the checkbox toggle layer reliably using its literal label text string block
+//     const autoUpdateLabel = dialogModal.locator('label:has-text("Auto-update the price(s) for this price submission for today?")');
+
+//     // Target the corresponding hidden checkbox element structurally via the parent wrapper block container
+//     const autoUpdateCheckbox = dialogModal.locator('div.checkbox__checkbox___2QDLE input[type="checkbox"]');
+
+//     if (await autoUpdateLabel.isVisible()) {
+//       // Use .isChecked({ force: true }) to evaluate the state of visually hidden/styled input nodes safely
+//       const isAlreadyChecked = await autoUpdateCheckbox.isChecked({ force: true });
+
+//       if (!isAlreadyChecked) {
+//         console.log("📌 Syncing auto-update daily price locking toggle state to [ACTIVE]...");
+//         // Click the visible descriptive text label node component directly to trigger the state change safely
+//         await autoUpdateLabel.click();
+//       } else {
+//         console.log("ℹ️ Auto-update price locking option toggle is already checked.");
+//       }
+//     } else {
+//       console.log("⚠️ Operational Warning: Auto-update locking option reference label was missing inside dialog workspace elements.");
+//     }
+
+//     // 🚀 COMMENCING FINAL STATE WRITE TRANSACTION HANDSHAKE
+//     if (updatesCommitted > 0) {
+//       const saveButton = dialogModal.locator('button:has-text("Save Changes")');
+//       await page.waitForTimeout(500); // Quick stabilization pause
+
+//       if (!(await saveButton.isDisabled())) {
+//         console.log("🚀 Dispatched initial 'Save Changes' layer...");
+//         await saveButton.click();
+
+//         // 🚀 NEW: Dynamic handling for the 'Confirm Price Submission' secondary confirmation overlay
+//         const confirmationModal = page.locator('div[role="dialog"][aria-modal="true"]').filter({ hasText: 'Confirm Price Submission' });
+
+//         try {
+//           // Wait briefly to see if the secondary verification modal gets mounted to the DOM sheet tree
+//           await confirmationModal.waitFor({ state: "visible", timeout: 4000 });
+//           console.log("✋ Secondary confirmation barrier detected: 'Confirm Price Submission' overlay active.");
+
+//           const submitPricesBtn = confirmationModal.locator('button:has-text("Submit Prices")');
+//           if (await submitPricesBtn.isVisible()) {
+//             await submitPricesBtn.click();
+//             console.log("🔥 Final 'Submit Prices' handshake executed successfully!");
+//           }
+//         } catch (e) {
+//           // If the checkbox wasn't activated or the dialog didn't show, the first save button click was enough
+//           console.log("ℹ️ No secondary confirmation barrier appeared. Relying on primary ledger save.");
+//         }
+
+//         console.log("🥶 Freezing executor loop 5 seconds to cycle final updates...");
+//         await page.waitForTimeout(5000);
+
+//         // Capture audit log asset only at the very end of a successful iteration pipeline
+//         const postSubmitProofPath = path.resolve(__dirname, `../sessions/gasBuddy/submission_proof_${gasBuddyStationId}.png`);
+//         await page.screenshot({ path: postSubmitProofPath });
+//         console.log(`📸 Audit validation screenshot output logged cleanly: ${postSubmitProofPath}`);
+
+//         await context.storageState({ path: sessionPath });
+//         console.log("💾 Cycle complete: Current updated session tokens saved cleanly back to json ledger.");
+//         console.log(`🎉 Success: Successfully executed (${updatesCommitted}) pricing shifts on GasBuddy Business Profile!`);
+//       } else {
+//         throw new Error('❌ Failed processing changes: Save changes button context is locked/disabled in the DOM view.');
+//       }
+//     } else {
+//       console.log('🏁 Process wrapped: 0 structural values required active writing updates.');
+//     }
+
+//   } catch (error) {
+//     console.error("❌ CRITICAL DISPATCH EXCEPTION IN AUTO ENGINE:", error);
+
+//     try {
+//       const errorProofPath = path.resolve(__dirname, `../sessions/gasBuddy/failure_error_${gasBuddyStationId}.png`);
+//       await page.screenshot({ path: errorProofPath, fullPage: true });
+//       console.log(`📸 Emergency diagnostic trace screen saved to: ${errorProofPath}`);
+//     } catch (ssErr) {
+//       console.error("Unable to execute recovery screenshot dump:", ssErr);
+//     }
+
+//     throw error;
+//   } finally {
+//     await browser.close();
+//   }
+// }
+
+// module.exports = { postPricesToGasBuddy };
+
+
 // const { chromium } = require("playwright-extra");
 // const stealth = require("puppeteer-extra-plugin-stealth")();
 // const fs = require("fs");
@@ -411,355 +694,3 @@ module.exports = { postPricesToGasBuddy };
 // }
 
 // module.exports = { postPricesToGasBuddy };
-// const { chromium } = require("playwright");
-
-// // Exact text matching based on your screenshots
-// const GASBUDDY_SELECTOR_MAP = {
-//   "Regular": {
-//     input: 'div:has(> label:text-is("Regular")) + div input, input[aria-label="Regular"], label:text-is("Regular") + div input, input[name*="regular"]',
-//     confirmBtn: 'div:has(> label:text-is("Regular")) button:has-text("CONFIRM")'
-//   },
-//   "Mid Grade": { // Note: GasBuddy calls this "Midgrade" in the UI
-//     input: 'div:has(> label:has-text("Midgrade")) + div input, input[aria-label="Midgrade"], label:has-text("Midgrade") + div input, input[name*="midgrade"]',
-//     confirmBtn: 'div:has(> label:has-text("Midgrade")) button:has-text("CONFIRM")'
-//   },
-//   "Premium": {
-//     input: 'div:has(> label:text-is("Premium")) + div input, input[aria-label="Premium"], label:text-is("Premium") + div input, input[name*="premium"]',
-//     confirmBtn: 'div:has(> label:text-is("Premium")) button:has-text("CONFIRM")'
-//   },
-//   "Diesel": {
-//     input: 'div:has(> label:text-is("Diesel")) + div input, input[aria-label="Diesel"], label:text-is("Diesel") + div input, input[name*="diesel"]',
-//     confirmBtn: 'div:has(> label:text-is("Diesel")) button:has-text("CONFIRM")'
-//   }
-// };
-
-// async function postPricesToGasBuddy({ gasBuddyStationId, prices }) {
-//   if (!process.env.GASBUDDY_EMAIL || !process.env.GASBUDDY_PASSWORD) {
-//     throw new Error("Missing GASBUDDY_EMAIL or GASBUDDY_PASSWORD in environment variables.");
-//   }
-
-//   console.log(`🤖 Starting GasBuddy UI Flow for Station ID: ${gasBuddyStationId}`);
-
-//   const userDataDir = "./playwright_saved_session";
-
-//   // =========================================================================
-//   // UPDATED INITIALIZATION FOR DOCKER COMPATIBILITY
-//   // =========================================================================
-//   const context = await chromium.launchPersistentContext(userDataDir, {
-//     executablePath: "/usr/bin/chromium", // Points directly to your system binary
-//     headless: true,                      // True because Docker containers don't have visual UI screens
-//     args: [
-//       '--no-sandbox',                    // Overcomes Linux security sandbox restrictions inside Docker
-//       '--disable-setuid-sandbox',
-//       '--disable-dev-shm-usage'          // Prevents Chrome from crashing on low shared memory allocations
-//     ],
-//     viewport: { width: 1280, height: 900 },
-//     userAgent: "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36"
-//   });
-
-//   const page = await context.newPage();
-
-//   try {
-//     // 1. Force navigate straight to the verified login domain
-//     console.log("Navigating to GasBuddy Login Page...");
-//     await page.goto("https://www.gasbuddy.com/login", { waitUntil: "domcontentloaded", timeout: 30000 });
-//     await page.waitForTimeout(4000); // Allow time for React chunks and security challenges to settle
-
-//     // Locate elements using explicit test attributes from the DOM
-//     const loginEmailInput = page.locator('[data-testid="emailInput"], #email').first();
-
-//     if (await loginEmailInput.isVisible()) {
-//       console.log("🔐 Session missing. Initializing human-simulated login sequence...");
-
-//       // Clear cookie/banner barriers if visible
-//       const cookieAcceptBtn = page.locator('#onetrust-accept-btn-handler, button:has-text("Accept All Cookies")').first();
-//       if (await cookieAcceptBtn.isVisible()) {
-//         console.log("🍪 Dismissing cookie barrier...");
-//         await cookieAcceptBtn.click();
-//         await page.waitForTimeout(1000);
-//       }
-
-//       // Stealth Typing for Username/Email
-//       await loginEmailInput.click();
-//       await page.waitForTimeout(400);
-//       // Simulates real finger typings by inserting a random delay between 50ms and 150ms per character
-//       await page.keyboard.type(process.env.GASBUDDY_EMAIL, { delay: 110 });
-//       await page.waitForTimeout(500);
-
-//       // Stealth Typing for Password
-//       const passwordInput = page.locator('[data-testid="passwordInput"], #password').first();
-//       await passwordInput.click();
-//       await page.waitForTimeout(300);
-//       await page.keyboard.type(process.env.GASBUDDY_PASSWORD, { delay: 95 });
-//       await page.waitForTimeout(600);
-
-//       console.log("Submitting form parameters via structural pointer...");
-//       const loginSubmitBtn = page.locator('[data-test="loginButton"], button[type="submit"]').first();
-
-//       // Use physical mouse simulation instead of an artificial element.click()
-//       await loginSubmitBtn.hover();
-//       await page.waitForTimeout(200);
-//       await loginSubmitBtn.click({ force: true });
-
-//       console.log("Waiting for security routing resolution or form response errors...");
-
-//       // Defensively race the successful navigation against an inline firewall error block
-//       await Promise.race([
-//         // Promise A: Successful login redirect path
-//         page.waitForURL((url) => url.href.includes("gasbuddy.com") && !url.href.includes("/login"), { timeout: 35000 }),
-
-//         // Promise B: Detect if a 403 or server alert shows up on the screen
-//         (async () => {
-//           await page.waitForTimeout(5000); // give the page a brief window to process the post
-//           // Look for raw text strings or dynamic labels indicating a backend rejection
-//           const bodyText = await page.innerText('body');
-//           if (bodyText.includes("403") || bodyText.includes("Forbidden") || bodyText.includes("error")) {
-//             throw new Error("🚨 GasBuddy backend threw a 403 / security error directly on the login form layer.");
-//           }
-//           // Loop wait if it hasn't navigated yet
-//           await page.waitForTimeout(25000);
-//         })()
-//       ]);
-
-//       console.log("✅ Authenticated successfully. Session context captured.");
-//     } else {
-//       console.log("✨ Active session genuinely recovered (Form structure absent). Proceeding.");
-//     }
-
-//     // 2. Open Station Profile Page
-//     const stationUrl = `https://www.gasbuddy.com/station/${gasBuddyStationId}`;
-//     console.log(`🔗 Navigating to station page: ${stationUrl}`);
-//     await page.goto(stationUrl, { waitUntil: "domcontentloaded" });
-//     await page.waitForTimeout(4000);
-
-//     // 3. STEP 1: Interact with the now verified "REPORT PRICES" button
-//     const reportPricesBtnSelector = 'button:has-text("REPORT PRICES")';
-//     console.log("Locating the report action button element...");
-//     await page.waitForSelector(reportPricesBtnSelector, { timeout: 15000 });
-
-//     console.log("Clicking the reporting button...");
-//     await page.click(reportPricesBtnSelector);
-
-//     // 4. STEP 2: Handle the modal presentation overlay
-//     console.log("Waiting for price modification dialog container...");
-//     await page.waitForSelector('button:has-text("SUBMIT 0 PRICES"), button:has-text("SUBMIT")', { state: 'attached', timeout: 15000 });
-
-//     let fieldsUpdatedCount = 0;
-
-//     for (let [gradeName, priceValue] of Object.entries(prices)) {
-//       const mapping = GASBUDDY_SELECTOR_MAP[gradeName];
-//       if (!mapping) continue;
-
-//       const inputLocator = page.locator(mapping.input).first();
-
-//       if (await inputLocator.isVisible()) {
-//         console.log(`✏️ Modifying field for [${gradeName}] with value: ${priceValue}`);
-//         await inputLocator.click();
-//         await page.keyboard.press("Control+A");
-//         await page.keyboard.press("Backspace");
-//         await page.waitForTimeout(200);
-//         await page.keyboard.type(priceValue.toString(), { delay: 100 });
-//         fieldsUpdatedCount++;
-//       } else {
-//         console.log(`⚠️ Field locator for [${gradeName}] not visible in modal context.`);
-//       }
-//     }
-
-//     if (fieldsUpdatedCount > 0) {
-//       console.log("⏸️ Review phase: Pausing 5 seconds...");
-//       await page.waitForTimeout(5000);
-//       console.log("🚀 Executing final submission click event...");
-//       // await page.click(page.locator('button:has-text("SUBMIT")').first());
-//       console.log("🏁 Flow finished successfully.");
-//     } else {
-//       console.log("⏹️ No active fields were modified.");
-//     }
-
-//   } catch (error) {
-//     console.error("Critical execution error inside modal engine:", error);
-//     try {
-//       const screenshotPath = `/app/gasbuddy_error_snapshot.png`;
-//       await page.screenshot({ path: screenshotPath, fullPage: true });
-//       console.log(`📸 Saved debug screenshot to: ${screenshotPath}`);
-//     } catch (screenshotError) {
-//       console.error("Failed to capture error page screenshot:", screenshotError);
-//     }
-//     throw error;
-//   } finally {
-//     await context.close();
-//   }
-// }
-
-// // module.exports = { postPricesToGasBuddy };
-// const { chromium } = require("playwright");
-
-// const GASBUDDY_SELECTOR_MAP = {
-//   Regular: {
-//     input:
-//       'div:has(> label:text-is("Regular")) + div input'
-//   },
-
-//   "Mid Grade": {
-//     input:
-//       'div:has(> label:has-text("Midgrade")) + div input'
-//   },
-
-//   Premium: {
-//     input:
-//       'div:has(> label:text-is("Premium")) + div input'
-//   },
-
-//   Diesel: {
-//     input:
-//       'div:has(> label:text-is("Diesel")) + div input'
-//   }
-// };
-
-// async function postPricesToGasBuddy({
-//   gasBuddyStationId,
-//   prices
-// }) {
-//   console.log(
-//     "Opening saved session..."
-//   );
-
-//   const browser =
-//     await chromium.launch({
-//       headless: false
-//     });
-
-//   const context =
-//     await browser.newContext({
-//       storageState:
-//         "./gasbuddy-state.json",
-
-//       viewport: {
-//         width: 1400,
-//         height: 1000
-//       }
-//     });
-
-//   const page =
-//     await context.newPage();
-
-//   try {
-//     page.on(
-//       "response",
-//       async (res) => {
-//         if (
-//           res.status() >= 400
-//         ) {
-//           console.log(
-//             "HTTP",
-//             res.status(),
-//             res.url()
-//           );
-//         }
-//       }
-//     );
-
-//     const stationUrl =
-//       `https://www.gasbuddy.com/station/${gasBuddyStationId}`;
-
-//     console.log(
-//       "Opening:",
-//       stationUrl
-//     );
-
-//     await page.goto(
-//       stationUrl,
-//       {
-//         waitUntil:
-//           "networkidle"
-//       }
-//     );
-
-//     await page.waitForTimeout(
-//       3000
-//     );
-
-//     console.log(
-//       "Click REPORT PRICES"
-//     );
-
-//     await page
-//       .locator(
-//         'button:has-text("REPORT PRICES")'
-//       )
-//       .first()
-//       .click();
-
-//     await page.waitForTimeout(
-//       3000
-//     );
-
-//     let updated = 0;
-
-//     for (const [
-//       grade,
-//       price
-//     ] of Object.entries(
-//       prices
-//     )) {
-//       const mapping =
-//         GASBUDDY_SELECTOR_MAP[
-//           grade
-//         ];
-
-//       if (!mapping)
-//         continue;
-
-//       const input =
-//         page
-//           .locator(
-//             mapping.input
-//           )
-//           .first();
-
-//       if (
-//         await input.isVisible()
-//       ) {
-//         console.log(
-//           `Updating ${grade}`
-//         );
-
-//         await input.fill(
-//           String(price)
-//         );
-
-//         updated++;
-//       }
-//     }
-
-//     console.log(
-//       `${updated} fields updated`
-//     );
-
-//     console.log(
-//       "Waiting before submit..."
-//     );
-
-//     await page.waitForTimeout(
-//       10000
-//     );
-
-//     // Uncomment once verified
-//     /*
-//     await page
-//       .locator(
-//         'button:has-text("SUBMIT")'
-//       )
-//       .click();
-//     */
-
-//     console.log(
-//       "Finished"
-//     );
-//   } finally {
-//     await browser.close();
-//   }
-// }
-
-// module.exports = {
-//   postPricesToGasBuddy
-// };
