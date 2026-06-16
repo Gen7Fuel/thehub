@@ -32,7 +32,7 @@ router.post('/tickets', async (req, res) => {
     });
 
     await ticket.save();
-    await ticket.populate('userId', 'name email isSupport');
+    await ticket.populate('userId', 'firstName lastName email isSupport');
 
     const io = req.app.get('io');
     if (io) {
@@ -60,8 +60,8 @@ router.get('/tickets', async (req, res) => {
     }
 
     const tickets = await SupportTicket.find(filter)
-      .populate('userId', 'name email isSupport')
-      .populate('messages.sender', 'name email isSupport')
+      .populate('userId', 'firstName lastName email isSupport')
+      .populate('messages.sender', 'firstName lastName email isSupport')
       .sort({ createdAt: -1 });
 
     res.json({ success: true, data: { tickets } });
@@ -75,8 +75,8 @@ router.get('/tickets', async (req, res) => {
 router.get('/tickets/:id', async (req, res) => {
   try {
     const ticket = await SupportTicket.findById(req.params.id)
-      .populate('userId', 'name email isSupport')
-      .populate('messages.sender', 'name email isSupport');
+      .populate('userId', 'firstName lastName email isSupport')
+      .populate('messages.sender', 'firstName lastName email isSupport');
     if (!ticket) {
       return res.status(404).json({ success: false, message: 'Ticket not found.' });
     }
@@ -100,7 +100,7 @@ router.patch('/tickets/:id/status', async (req, res) => {
       req.params.id,
       { status },
       { new: true }
-    ).populate('userId', 'name email isSupport');
+    ).populate('userId', 'firstName lastName email isSupport');
     if (!ticket) {
       return res.status(404).json({ success: false, message: 'Ticket not found.' });
     }

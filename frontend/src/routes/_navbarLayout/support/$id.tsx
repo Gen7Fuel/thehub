@@ -116,7 +116,7 @@ function RouteComponent() {
                       <span className={idx === 0 ? 'font-semibold' : ''}>{msg.text}</span>
                     </div>
                     <div className="text-xs text-muted-foreground">
-                      {msg.sender?.name || 'User'} &middot; {new Date(msg.createdAt).toLocaleString()}
+                      {[msg.sender?.firstName, msg.sender?.lastName].filter(Boolean).join(' ') || msg.sender?.email || 'User'} &middot; {new Date(msg.createdAt).toLocaleString()}
                       {msg.sender?.isSupport ? ' (Support)' : ''}
                     </div>
                   </div>
