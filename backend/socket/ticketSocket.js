@@ -9,7 +9,7 @@ function setupTicketSocket(socket, namespace, isSupport) {
       }
 
       const ticket = await SupportTicket.findById(conversationId)
-        .populate('userId', 'name email');
+        .populate('userId', 'firstName lastName email');
 
       if (!ticket) {
         socket.emit('error', { message: 'Ticket not found' });
@@ -32,7 +32,7 @@ function setupTicketSocket(socket, namespace, isSupport) {
       ticket.messages.push(newMessage);
       await ticket.save();
 
-      await ticket.populate('messages.sender', 'name email isSupport');
+      await ticket.populate('messages.sender', 'firstName lastName email isSupport');
       const lastMsg = ticket.messages[ticket.messages.length - 1];
 
       namespace.to(conversationId).emit('new-message', lastMsg);
