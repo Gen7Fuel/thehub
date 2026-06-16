@@ -1,4 +1,5 @@
 import { createFileRoute, useNavigate } from '@tanstack/react-router'
+import Hls from 'hls.js'
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import axios from 'axios'
 import {
@@ -432,10 +433,13 @@ function VideoItemView({
   if (!raw) return null
   const src = toEmbedUrl(raw)
   const isEmbed = src.includes('youtube.com/embed') || src.includes('player.vimeo')
+  const isHls = !isEmbed && raw.includes('.m3u8')
 
   const videoRef = useRef<HTMLVideoElement>(null)
+  const hlsRef = useRef<Hls | null>(null)
   const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const hasCompletedRef = useRef(isCompleted)
+  const savedSecondsRef = useRef<number>(0)
   const [markedWatched, setMarkedWatched] = useState(isCompleted)
 
   const saveProgress = useCallback(
@@ -449,6 +453,7 @@ function VideoItemView({
     [employeeCode, courseId, item._id],
   )
 
+  // Fetch saved playback position; apply it once metadata is loaded (handleLoadedMetadata)
   useEffect(() => {
     if (isEmbed || !employeeCode) return
     axios
@@ -457,11 +462,37 @@ function VideoItemView({
         headers: makeAuthHeaders(),
       })
       .then((res) => {
-        const saved: number = res.data.progressSeconds ?? 0
-        if (saved > 0 && videoRef.current) videoRef.current.currentTime = saved
+        savedSecondsRef.current = res.data.progressSeconds ?? 0
       })
       .catch(() => {})
   }, [isEmbed, employeeCode, courseId, item._id])
+
+  // Set up hls.js for HLS streams (.m3u8). Safari uses its native HLS support.
+  useEffect(() => {
+    if (!isHls) return
+    const video = videoRef.current
+    if (!video) return
+
+    if (Hls.isSupported()) {
+      const hls = new Hls()
+      hlsRef.current = hls
+      hls.loadSource(src)
+      hls.attachMedia(video)
+      return () => {
+        hls.destroy()
+        hlsRef.current = null
+      }
+    } else if (video.canPlayType('application/vnd.apple.mpegurl')) {
+      video.src = src
+    }
+  }, [isHls, src])
+
+  // Seek to saved position once the video is ready to accept seeks
+  function handleLoadedMetadata() {
+    if (savedSecondsRef.current > 0 && videoRef.current) {
+      videoRef.current.currentTime = savedSecondsRef.current
+    }
+  }
 
   function handleTimeUpdate() {
     const v = videoRef.current
@@ -497,9 +528,10 @@ function VideoItemView({
         ) : (
           <video
             ref={videoRef}
-            src={src}
-            className="w-full cursor-pointer"
-            onClick={() => videoRef.current?.paused ? videoRef.current.play() : videoRef.current?.pause()}
+            src={isHls ? undefined : src}
+            className="w-full aspect-video bg-black"
+            controls
+            onLoadedMetadata={handleLoadedMetadata}
             onTimeUpdate={handleTimeUpdate}
             onPause={handlePause}
             onEnded={handleEnded}
