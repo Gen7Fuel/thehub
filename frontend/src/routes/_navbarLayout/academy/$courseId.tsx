@@ -529,8 +529,8 @@ function VideoItemView({
           <video
             ref={videoRef}
             src={isHls ? undefined : src}
-            className="w-full cursor-pointer"
-            onClick={() => videoRef.current?.paused ? videoRef.current.play() : videoRef.current?.pause()}
+            className="w-full aspect-video bg-black"
+            controls
             onLoadedMetadata={handleLoadedMetadata}
             onTimeUpdate={handleTimeUpdate}
             onPause={handlePause}
