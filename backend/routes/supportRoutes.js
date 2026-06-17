@@ -32,6 +32,12 @@ router.post('/tickets', async (req, res) => {
     });
 
     await ticket.save();
+    await ticket.populate('userId', 'firstName lastName email isSupport');
+
+    const io = req.app.get('io');
+    if (io) {
+      io.of('/support').to('support-staff').emit('ticket:new', ticket);
+    }
 
     res.status(201).json({ success: true, message: 'Ticket created successfully.', data: ticket });
   } catch (error) {
@@ -40,37 +46,28 @@ router.post('/tickets', async (req, res) => {
   }
 });
 
-// GET /api/support/tickets - Get all tickets, optionally filtered by site
+// GET /api/support/tickets - Get tickets (support staff sees all; users see their own)
 router.get('/tickets', async (req, res) => {
   try {
     const { site } = req.query;
+    const isStaff = req.user.isSupport || req.user.is_admin;
 
-    // If site is provided, filter by site, otherwise show user's own tickets
     let filter = {};
     if (site) {
       filter.site = site;
-    } else if (req.user && req.user.id) {
+    } else if (!isStaff) {
       filter.userId = req.user.id;
     }
 
     const tickets = await SupportTicket.find(filter)
-      .populate('userId', 'name email isSupport')
-      .populate('messages.sender', 'name email isSupport')
+      .populate('userId', 'firstName lastName email isSupport')
+      .populate('messages.sender', 'firstName lastName email isSupport')
       .sort({ createdAt: -1 });
 
-    res.json({
-      success: true,
-      data: {
-        tickets
-      }
-    });
+    res.json({ success: true, data: { tickets } });
   } catch (error) {
     console.error('Error fetching support tickets:', error);
-    res.status(500).json({
-      success: false,
-      message: 'Failed to fetch support tickets',
-      error: error.message
-    });
+    res.status(500).json({ success: false, message: 'Failed to fetch support tickets', error: error.message });
   }
 });
 
@@ -78,14 +75,38 @@ router.get('/tickets', async (req, res) => {
 router.get('/tickets/:id', async (req, res) => {
   try {
     const ticket = await SupportTicket.findById(req.params.id)
-      .populate('userId', 'name email isSupport')
-      .populate('messages.sender', 'name email isSupport');
+      .populate('userId', 'firstName lastName email isSupport')
+      .populate('messages.sender', 'firstName lastName email isSupport');
     if (!ticket) {
       return res.status(404).json({ success: false, message: 'Ticket not found.' });
     }
     res.json({ success: true, data: ticket });
   } catch (error) {
     res.status(500).json({ success: false, message: 'Failed to fetch ticket.', error: error.message });
+  }
+});
+
+// PATCH /api/support/tickets/:id/status - Update ticket status (support staff only)
+router.patch('/tickets/:id/status', async (req, res) => {
+  try {
+    if (!req.user.isSupport && !req.user.is_admin) {
+      return res.status(403).json({ success: false, message: 'Only support staff can update ticket status.' });
+    }
+    const { status } = req.body;
+    if (!['open', 'resolved', 'closed'].includes(status)) {
+      return res.status(400).json({ success: false, message: 'Invalid status.' });
+    }
+    const ticket = await SupportTicket.findByIdAndUpdate(
+      req.params.id,
+      { status },
+      { new: true }
+    ).populate('userId', 'firstName lastName email isSupport');
+    if (!ticket) {
+      return res.status(404).json({ success: false, message: 'Ticket not found.' });
+    }
+    res.json({ success: true, data: ticket });
+  } catch (error) {
+    res.status(500).json({ success: false, message: 'Failed to update ticket status.', error: error.message });
   }
 });
 
