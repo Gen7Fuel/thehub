@@ -9,20 +9,29 @@ const priceTimeoutWorker = new Worker(
   "priceTimeoutQueue",
   async (job) => {
     const db = getPg();
-    // Unpack the metadata along with the template components passed from the parent function
-    const { locationId, stationName, toEmail, ccEmails, subject, html } = job.data;
+    // Unpack hasInfonet along with the template components passed from the route payload
+    const { locationId, stationName, toEmail, ccEmails, subject, html, hasInfonet } = job.data;
 
-    console.log(`⏱️ Watchdog Evaluation: Checking log records for site: ${stationName}`);
+    // Default system behavior assumes a site has an InfoNet terminal unless explicitly set to false
+    const infoNetTerminalRequired = hasInfonet !== false;
+
+    console.log(`⏱️ Watchdog Evaluation: Checking log records for site: ${stationName} (Requires InfoNet: ${infoNetTerminalRequired})`);
 
     const outstandingUnverifiedRows = await db("fuel_price_logs")
       .where({ site: locationId })
       .andWhere((builder) => {
-        builder.whereNull("image_url").orWhereNull("infonet_image_url");
+        if (infoNetTerminalRequired) {
+          // Strict configuration check: True if either the Bulloch OR the InfoNet snapshot is missing
+          builder.whereNull("image_url").orWhereNull("infonet_image_url");
+        } else {
+          // Dynamic layout configuration check: Only flag if the Bulloch image is missing
+          builder.whereNull("image_url");
+        }
       })
       .where("created_at", ">=", db.raw("NOW() - INTERVAL '1 hour'"));
 
     if (!outstandingUnverifiedRows || outstandingUnverifiedRows.length === 0) {
-      console.log(`✅ Clean Match: ${stationName} uploaded all terminal reports in time.`);
+      console.log(`✅ Clean Match: ${stationName} uploaded all required terminal reports in time.`);
       return;
     }
 

@@ -12,6 +12,10 @@ const { emailQueue } = require('../../queues/emailQueue'); // Import emailQueue 
 const currentPriceModel = require("../../pg/models/fuelCurrentPrice");
 const logsModel = require("../../pg/models/fuelPriceLog");
 
+// --- GLOBAL ROUTE EXCEPTIONS CONFIGURATION ---
+// Add the specific location IDs (Mongo ID strings) that do not possess physical InfoNet terminal layers
+const SITES_WITHOUT_INFONET = ["687aa45d0d4d01e74f0b0e9b"];
+
 // Bi-directional dictionary to map Frontend Short Codes <-> Database Strings
 const GRADE_MAP = {
   'REG': 'Regular',
@@ -240,12 +244,21 @@ router.get('/check-pending-verification', async (req, res) => {
     }
 
     const locationMongoId = String(locationDoc._id);
+    
+    // Determine if this particular location bypasses InfoNet checks entirely
+    const hasInfonet = !SITES_WITHOUT_INFONET.includes(locationMongoId);
 
-    // 1. Look for any log rows created in the last 6 hours that are missing EITHER the Bulloch or InfoNet image URL
+    // 1. Look for any log rows created in the last 6 hours that are missing required images
     const unverifiedLogs = await db('fuel_price_logs')
       .where({ site: locationMongoId })
       .andWhere((builder) => {
-        builder.whereNull('image_url').orWhereNull('infonet_image_url');
+        if (hasInfonet) {
+          // Standard: Missing either the Bulloch report snapshot OR the InfoNet report snapshot
+          builder.whereNull('image_url').orWhereNull('infonet_image_url');
+        } else {
+          // Exception Site: Only require verification on the core Bulloch snapshot report
+          builder.whereNull('image_url');
+        }
       })
       .where('created_at', '>=', db.raw("NOW() - INTERVAL '6 hours'"))
       .orderBy('id', 'asc');
@@ -267,7 +280,7 @@ router.get('/check-pending-verification', async (req, res) => {
     const changedGrades = [];
     const unchangedGrades = [];
 
-    // 3. Re-hydrate the full 5 grades accurately for display matching
+    // 3. Re-hydrate the full grades accurately for display matching
     for (const r of currentPrices) {
       const frontendKey = Object.keys(GRADE_MAP).find(key => GRADE_MAP[key] === r.grade) || r.grade;
       const currentPriceNum = parseFloat(r.price);
@@ -276,12 +289,16 @@ router.get('/check-pending-verification', async (req, res) => {
       // Pull the old price by checking the log row right before our unverified change row
       let exactOldPrice = currentPriceNum;
       if (wasChanged) {
-        const previousLog = await db('fuel_price_logs')
+        const query = db('fuel_price_logs')
           .where({ site: locationMongoId, grade: r.grade })
-          .whereNotNull('image_url')
-          .whereNotNull('infonet_image_url') // Find the last confirmed baseline price with BOTH images
-          .orderBy('id', 'desc')
-          .first();
+          .whereNotNull('image_url');
+          
+        // Adapt baseline target matching strategy dynamically
+        if (hasInfonet) {
+          query.whereNotNull('infonet_image_url'); // Find last baseline containing BOTH confirmations
+        }
+
+        const previousLog = await query.orderBy('id', 'desc').first();
         if (previousLog) exactOldPrice = parseFloat(previousLog.price);
       }
 
@@ -306,7 +323,8 @@ router.get('/check-pending-verification', async (req, res) => {
         locationId: locationMongoId,
         changedGrades: changedGrades,
         unchangedGrades: unchangedGrades,
-        hasStructuralChanges: changedGrades.length > 0
+        hasStructuralChanges: changedGrades.length > 0,
+        hasInfonet: hasInfonet // Propagated cleanly to fix frontend conditional button lookups
       }
     });
 
@@ -315,6 +333,103 @@ router.get('/check-pending-verification', async (req, res) => {
     return res.status(500).json({ message: "Internal verification engine failure." });
   }
 });
+
+// router.get('/check-pending-verification', async (req, res) => {
+//   const db = getPg();
+//   const userEmail = req.user?.email;
+
+//   if (!userEmail) {
+//     return res.status(401).json({ message: "Unauthorized user session context." });
+//   }
+
+//   try {
+//     const locationDoc = await Location.findOne({
+//       $or: [
+//         { email: userEmail },
+//         { managerEmails: userEmail }
+//       ]
+//     });
+
+//     if (!locationDoc) {
+//       return res.status(200).json({ requiresVerification: false });
+//     }
+
+//     const locationMongoId = String(locationDoc._id);
+
+//     // 1. Look for any log rows created in the last 6 hours that are missing EITHER the Bulloch or InfoNet image URL
+//     const unverifiedLogs = await db('fuel_price_logs')
+//       .where({ site: locationMongoId })
+//       .andWhere((builder) => {
+//         builder.whereNull('image_url').orWhereNull('infonet_image_url');
+//       })
+//       .where('created_at', '>=', db.raw("NOW() - INTERVAL '6 hours'"))
+//       .orderBy('id', 'asc');
+
+//     // If there are no unverified structural logs in the last 6 hours, 
+//     // it means any recent action was completely unchanged, so we clear the dialog box!
+//     if (!unverifiedLogs || unverifiedLogs.length === 0) {
+//       return res.status(200).json({ requiresVerification: false });
+//     }
+
+//     // 2. Reconstruct the accurate delta state from those active unverified rows
+//     const unverifiedGradesMap = unverifiedLogs.reduce((acc, log) => {
+//       const frontendKey = Object.keys(GRADE_MAP).find(key => GRADE_MAP[key] === log.grade) || log.grade;
+//       acc[frontendKey] = parseFloat(log.price);
+//       return acc;
+//     }, {});
+
+//     const currentPrices = await currentPriceModel.getCurrentPricesBySite(locationMongoId);
+//     const changedGrades = [];
+//     const unchangedGrades = [];
+
+//     // 3. Re-hydrate the full 5 grades accurately for display matching
+//     for (const r of currentPrices) {
+//       const frontendKey = Object.keys(GRADE_MAP).find(key => GRADE_MAP[key] === r.grade) || r.grade;
+//       const currentPriceNum = parseFloat(r.price);
+//       const wasChanged = unverifiedGradesMap[frontendKey] !== undefined;
+
+//       // Pull the old price by checking the log row right before our unverified change row
+//       let exactOldPrice = currentPriceNum;
+//       if (wasChanged) {
+//         const previousLog = await db('fuel_price_logs')
+//           .where({ site: locationMongoId, grade: r.grade })
+//           .whereNotNull('image_url')
+//           .whereNotNull('infonet_image_url') // Find the last confirmed baseline price with BOTH images
+//           .orderBy('id', 'desc')
+//           .first();
+//         if (previousLog) exactOldPrice = parseFloat(previousLog.price);
+//       }
+
+//       const itemPayload = {
+//         gradeId: frontendKey,
+//         label: frontendKey,
+//         newPrice: currentPriceNum,
+//         oldPrice: exactOldPrice
+//       };
+
+//       if (wasChanged) {
+//         changedGrades.push(itemPayload);
+//       } else {
+//         unchangedGrades.push(itemPayload);
+//       }
+//     }
+
+//     return res.status(200).json({
+//       requiresVerification: true,
+//       payload: {
+//         stationName: locationDoc.stationName,
+//         locationId: locationMongoId,
+//         changedGrades: changedGrades,
+//         unchangedGrades: unchangedGrades,
+//         hasStructuralChanges: changedGrades.length > 0
+//       }
+//     });
+
+//   } catch (err) {
+//     console.error("Failed checkpoint state validation sequence:", err);
+//     return res.status(500).json({ message: "Internal verification engine failure." });
+//   }
+// });
 
 /**
  * GET /api/fuel-pricing/logs/:locationId
@@ -476,6 +591,8 @@ router.post('/upsert-retail', async (req, res) => {
     if (!locationDoc) {
       return res.status(404).json({ message: "Target location context not found." });
     }
+
+    const hasInfonet = !SITES_WITHOUT_INFONET.includes(locationId);
 
     const criticalEmails = [locationDoc.email, ...(locationDoc.managerEmails || [])].filter(Boolean);
     const targetedUsers = await User.find({ email: { $in: criticalEmails } }, "_id email");
@@ -756,9 +873,10 @@ router.post('/upsert-retail', async (req, res) => {
           ccEmails: baseCCEmails,
           // ccEmails: ["daksh@gen7fuel.com"],
           subject: `⛽ Urgent Reminder: Update & Verify Fuel Prices - ${targetStationName}`,
-          html: storeReminderHtml
-        },
-        {
+          html: storeReminderHtml,
+          hasInfonet: hasInfonet // 🚀 Target Flag
+        },                           
+        {                  
           delay: 15 * 60 * 1000, // 15-Minute delay
           removeOnComplete: true,
           removeOnFail: true
@@ -776,7 +894,8 @@ router.post('/upsert-retail', async (req, res) => {
           // toEmail: storeEmail,
           // ccEmails: ["daksh@gen7fuel.com"],
           subject: `🚨 Unverified Price Update Alert: ${targetStationName} (30 Mins Overdue)`,
-          html: adminEscalationHtml
+          html: adminEscalationHtml,
+          hasInfonet: hasInfonet // 🚀 Target Flag
         },
         {
           delay: 30 * 60 * 1000, // 30-Minute delay
@@ -786,9 +905,9 @@ router.post('/upsert-retail', async (req, res) => {
       );
 
       console.log(`⏱️ Multi-Tier Watchdog Initialized: Scheduled 15-min store reminder and 30-min admin alert for ${targetStationName}.`);
-     // -------------------------------------------------------------------------
-     // 🚀 3. MARKETING TEAM PRICE COMPARISON HIGHLIGHTS REPORT (NEW)
-    // -------------------------------------------------------------------------
+      // -------------------------------------------------------------------------
+      // 🚀 3. MARKETING TEAM PRICE COMPARISON HIGHLIGHTS REPORT (NEW)
+      // -------------------------------------------------------------------------
       let marketingRowsHtml = '';
 
       // Compile changed rows into view engine
@@ -877,7 +996,8 @@ router.post('/upsert-retail', async (req, res) => {
         locationId: locationId,
         changedGrades: changedGradesList,
         unchangedGrades: unchangedGradesList,
-        hasStructuralChanges: changedGradesList.length > 0
+        hasStructuralChanges: changedGradesList.length > 0,
+        hasInfonet: hasInfonet // 🚀 Socket Broadcast Flag payload
       };
 
       uniqueUserIds.forEach((userId) => {

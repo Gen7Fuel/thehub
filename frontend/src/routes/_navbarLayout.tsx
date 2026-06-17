@@ -67,6 +67,7 @@ function RouteComponent() {
     changedGrades: any[];
     unchangedGrades: any[];
     hasStructuralChanges: boolean;
+    hasInfonet?: boolean; // Added support flag parameter here
     batchTimestamp?: string;
   } | null>(null);
 
@@ -122,6 +123,7 @@ function RouteComponent() {
     }
   };
 
+  // 2. Adjust verification mutations block
   const submitTerminalVerificationMutation = useMutation({
     mutationFn: async () => {
       if (!pricePayload) return;
@@ -132,23 +134,40 @@ function RouteComponent() {
         return;
       }
 
-      if (!bullochBase64 || !infonetBase64) {
-        alert("Please make sure you have taken pictures of BOTH the Bulloch and InfoNet reports before submitting.");
-        return;
+      // Determine strict conditions based on terminal flag configuration layout
+      const requiresInfoNetUpload = pricePayload.hasInfonet !== false;
+
+      if (requiresInfoNetUpload) {
+        if (!bullochBase64 || !infonetBase64) {
+          alert("Please make sure you have taken pictures of BOTH the Bulloch and InfoNet reports before submitting.");
+          return;
+        }
+      } else {
+        if (!bullochBase64) {
+          alert("Please make sure you have taken a picture of the Bulloch report before submitting.");
+          return;
+        }
       }
 
-      // 1. Upload both documents in parallel into the asset storage container paths
-      const [bullochRes, infonetRes] = await Promise.all([
-        uploadBase64Image(bullochBase64, `bulloch_verification_${Date.now()}.jpg`),
-        uploadBase64Image(infonetBase64, `infonet_verification_${Date.now()}.jpg`)
-      ]);
+      // Parallel processing setup updates execution variables cleanly 
+      const uploadPromises = [
+        uploadBase64Image(bullochBase64, `bulloch_verification_${Date.now()}.jpg`)
+      ];
 
-      // 2. Transmit both filenames upstream to update the pending logs
+      if (requiresInfoNetUpload && infonetBase64) {
+        uploadPromises.push(
+          uploadBase64Image(infonetBase64, `infonet_verification_${Date.now()}.jpg`)
+        );
+      }
+
+      const [bullochRes, infonetRes] = await Promise.all(uploadPromises);
+
       const token = localStorage.getItem('token');
       await axios.put('/api/fuel-pricing/verify-price-receipt', {
         locationId: pricePayload.locationId,
-        filename: bullochRes.filename,          // Bulloch report mapping
-        infonetFilename: infonetRes.filename     // InfoNet report mapping
+        filename: bullochRes.filename,
+        // Pass null or clean empty string if site configuration bypasses infonet checks entirely
+        infonetFilename: requiresInfoNetUpload ? infonetRes?.filename : null
       }, {
         headers: { Authorization: `Bearer ${token}` }
       });
@@ -433,18 +452,23 @@ function RouteComponent() {
               {/* DYNAMIC ACTION FOOTER LOGIC PATHWAY */}
               <div className="pt-4 border-t border-slate-100 mt-2">
                 {pricePayload?.hasStructuralChanges ? (
-                  // LOGIC BLOCK A: CAMERA ACTION PANEL (MANDATORY DUAL SNAPSHOT REQUIRED)
+                  // LOGIC BLOCK A: CAMERA ACTION PANEL (MANDATORY SNAPSHOTS REQUIRED)
                   <div className="space-y-3 bg-red-50/60 p-4 rounded-2xl border border-red-100/60">
 
-                    {/* ⚠️ INITIAL INSTRUCTION PANEL: Hidden when both photos are attached */}
-                    {(!bullochBase64 || !infonetBase64) && (
-                      <div className="flex items-start gap-2.5 text-left pb-1">
-                        <AlertTriangle className="w-5 h-5 text-red-600 flex-shrink-0 mt-0.5" />
-                        <p className="text-xs font-bold leading-normal text-red-800">
-                          Please update the fuel prices on your physical Bulloch terminal screen along with the Infonet Terminal. Once finished, you must take and upload photos of both reports below to unlock the app.
-                        </p>
-                      </div>
-                    )}
+                    {/* ⚠️ INITIAL INSTRUCTION PANEL */}
+                    {((pricePayload?.hasInfonet !== false && (!bullochBase64 || !infonetBase64)) ||
+                      (pricePayload?.hasInfonet === false && !bullochBase64)) && (
+                        <div className="flex items-start gap-2.5 text-left pb-1">
+                          <AlertTriangle className="w-5 h-5 text-red-600 flex-shrink-0 mt-0.5" />
+                          <p className="text-xs font-bold leading-normal text-red-800">
+                            {pricePayload?.hasInfonet !== false ? (
+                              <span>Please update the fuel prices on your physical Bulloch terminal screen along with the Infonet Terminal. Once finished, you must take and upload photos of both reports below to unlock the app.</span>
+                            ) : (
+                              <span>Please update the fuel prices on your physical Bulloch terminal screen. Once finished, you must take and upload a photo of the Bulloch report below to unlock the app.</span>
+                            )}
+                          </p>
+                        </div>
+                      )}
 
                     {/* PHOTO SNAPSHOT TRIGGERS */}
                     <div className="flex flex-col sm:flex-row gap-3 pt-1">
@@ -459,41 +483,49 @@ function RouteComponent() {
                         {bullochBase64 ? "✓ Bulloch Report Added" : "Take Photo: Bulloch Report"}
                       </Button>
 
-                      <Button
-                        onClick={() => triggerCameraHardwareCapture('INFONET')}
-                        className={`flex-1 rounded-xl px-4 gap-2 font-black text-xs tracking-tight shadow-sm border whitespace-nowrap transition-all ${infonetBase64
-                          ? 'bg-emerald-50 text-emerald-700 border-emerald-200 hover:bg-emerald-100'
-                          : 'bg-white text-slate-800 border-slate-200 hover:bg-slate-50'
-                          }`}
-                      >
-                        <Camera className="w-4 h-4 shrink-0" />
-                        {infonetBase64 ? "✓ InfoNet Report Added" : "Take Photo: InfoNet Report"}
-                      </Button>
+                      {/* InfoNet Button wrapper - dynamically managed visibility */}
+                      {pricePayload?.hasInfonet !== false && (
+                        <Button
+                          onClick={() => triggerCameraHardwareCapture('INFONET')}
+                          className={`flex-1 rounded-xl px-4 gap-2 font-black text-xs tracking-tight shadow-sm border whitespace-nowrap transition-all ${infonetBase64
+                            ? 'bg-emerald-50 text-emerald-700 border-emerald-200 hover:bg-emerald-100'
+                            : 'bg-white text-slate-800 border-slate-200 hover:bg-slate-50'
+                            }`}
+                        >
+                          <Camera className="w-4 h-4 shrink-0" />
+                          {infonetBase64 ? "✓ InfoNet Report Added" : "Take Photo: InfoNet Report"}
+                        </Button>
+                      )}
                     </div>
 
-                    {/* 🛑 LAYMAN POST-UPLOAD WARNING MATRIX: Shows only when both photos exist, positioned above save button */}
-                    {bullochBase64 && infonetBase64 && (
-                      <>
-                        <div className="mt-2 flex items-start gap-2.5 text-left bg-amber-50 border border-amber-200 p-3 rounded-xl animate-in fade-in slide-in-from-bottom-1 duration-200">
-                          <AlertTriangle className="w-4 h-4 text-amber-600 flex-shrink-0 mt-0.5" />
-                          <p className="text-[11px] font-bold leading-normal text-amber-900">
-                            Please make sure that the numbers on your Bulloch register match the InfoNet register screen perfectly. After you click the save button below, check outside on the front pumps and make sure the gas price changed correctly out there too.
-                          </p>
-                        </div>
+                    {/* 🛑 POST-UPLOAD WARNING MATRIX: Shows when required uploads are gathered */}
+                    {((pricePayload?.hasInfonet !== false && bullochBase64 && infonetBase64) ||
+                      (pricePayload?.hasInfonet === false && bullochBase64)) && (
+                        <>
+                          <div className="mt-2 flex items-start gap-2.5 text-left bg-amber-50 border border-amber-200 p-3 rounded-xl animate-in fade-in slide-in-from-bottom-1 duration-200">
+                            <AlertTriangle className="w-4 h-4 text-amber-600 flex-shrink-0 mt-0.5" />
+                            <p className="text-[11px] font-bold leading-normal text-amber-900">
+                              {pricePayload?.hasInfonet !== false ? (
+                                <span>Please make sure that the numbers on your Bulloch register match the InfoNet register screen perfectly. After you click the save button below, check outside on the front pumps and make sure the gas price changed correctly out there too.</span>
+                              ) : (
+                                <span>Please make sure that the numbers on your Bulloch register match your screen perfectly. After you click the save button below, check outside on the front pumps and make sure the gas price changed correctly out there too.</span>
+                              )}
+                            </p>
+                          </div>
 
-                        <Button
-                          onClick={() => submitTerminalVerificationMutation.mutate()}
-                          disabled={submitTerminalVerificationMutation.isPending}
-                          className="w-full mt-1 bg-slate-900 hover:bg-slate-800 text-white font-black text-xs tracking-wider uppercase rounded-xl h-10 gap-1.5 shadow-md"
-                        >
-                          {submitTerminalVerificationMutation.isPending ? (
-                            <><Loader2 className="w-4 h-4 animate-spin" /> Saving Reports...</>
-                          ) : (
-                            "Save & Complete Verification"
-                          )}
-                        </Button>
-                      </>
-                    )}
+                          <Button
+                            onClick={() => submitTerminalVerificationMutation.mutate()}
+                            disabled={submitTerminalVerificationMutation.isPending}
+                            className="w-full mt-1 bg-slate-900 hover:bg-slate-800 text-white font-black text-xs tracking-wider uppercase rounded-xl h-10 gap-1.5 shadow-md"
+                          >
+                            {submitTerminalVerificationMutation.isPending ? (
+                              <><Loader2 className="w-4 h-4 animate-spin" /> Saving Reports...</>
+                            ) : (
+                              "Save & Complete Verification"
+                            )}
+                          </Button>
+                        </>
+                      )}
                   </div>
                 ) : (
                   // LOGIC BLOCK B: INFORMATIONAL SWEET CONFIRMATION
@@ -501,7 +533,11 @@ function RouteComponent() {
                     <div className="flex items-start gap-2.5 text-left max-w-md">
                       <CheckCircle2 className="w-5 h-5 text-slate-500 flex-shrink-0 mt-0.5" />
                       <p className="text-xs font-semibold leading-normal text-slate-500">
-                        No gas prices were changed during this update. Please check the values above and confirm with the values in bulloch and infonet reports. Click confirm to close this message.
+                        {pricePayload?.hasInfonet !== false ? (
+                          <span>No gas prices were changed during this update. Please check the values above and confirm with the values in bulloch and infonet reports. Click confirm to close this message.</span>
+                        ) : (
+                          <span>No gas prices were changed during this update. Please check the values above and confirm with the values in the bulloch report. Click confirm to close this message.</span>
+                        )}
                       </p>
                     </div>
                     <Button
