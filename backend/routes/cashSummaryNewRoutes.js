@@ -671,6 +671,7 @@ router.post('/', async (req, res) => {
       cpl_bulloch,
       exempted_tax,
       payouts,
+      chequesCashedOut, // 👈 ADD THIS LINE
     } = req.body || {}
 
     if (!shift_number) return res.status(400).json({ error: 'shift_number is required' })
@@ -684,6 +685,7 @@ router.post('/', async (req, res) => {
       cpl_bulloch: norm(cpl_bulloch),
       report_canadian_cash: undefined,
       payouts: norm(payouts),
+      chequesCashedOut: norm(chequesCashedOut), // 👈 ADD THIS LINE
     }
 
     let content = ''
@@ -782,6 +784,7 @@ router.post('/', async (req, res) => {
       pst: numOrUndef(parsed.pst),
       tobaccoCig: numOrUndef(parsed.tobaccoCig),
       tobaccoOthers: numOrUndef(parsed.tobaccoOthers),
+      chequesCashedOut: norm(chequesCashedOut),
 
       // parsed SFT extras
       fuelSales: numOrUndef(parsed.fuelSales),
@@ -1248,6 +1251,7 @@ router.get('/report', async (req, res) => {
       exempted_tax: sum('exempted_tax'),
       report_canadian_cash: sum('report_canadian_cash'),
       payouts: rows.reduce((a, r) => a + (r.payouts || 0), 0),
+      chequesCashedOut: sum('chequesCashedOut'),
       voidedTransactionsAmount: sum('voidedTransactionsAmount'),
     }
 
@@ -1427,6 +1431,7 @@ router.put('/:id', async (req, res) => {
       cpl_bulloch,
       exempted_tax,
       report_canadian_cash,
+      chequesCashedOut, // 👈 ADD THIS LINE
     } = req.body || {}
 
     if (!shift_number) return res.status(400).json({ error: 'shift_number is required' })
@@ -1562,7 +1567,7 @@ router.put('/:id', async (req, res) => {
       loyalty: norm(ev.loyalty ?? loyalty ?? existing.loyalty),
       cpl_bulloch: norm(ev.cpl_bulloch ?? cpl_bulloch ?? existing.cpl_bulloch),
       report_canadian_cash: norm(ev.report_canadian_cash ?? report_canadian_cash ?? existing.report_canadian_cash),
-
+      chequesCashedOut: norm(chequesCashedOut) ?? existing.chequesCashedOut, // 👈 ADD THIS LINE
       exempted_tax: norm(exempted_tax) ?? existing.exempted_tax,
 
       // NEW: Merge Strategy for arrays. Fall back completely to original array context if enrichment was skipped
