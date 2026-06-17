@@ -59,6 +59,7 @@ const CashSummarySchema = new mongoose.Schema(
     dataWave: { type: Number },
     feeDataWave: { type: Number },
     unsettledPrepays: { type: Number },
+    chequesCashedOut: { type: Number, default: 0 },
     createdBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User'},
   },
   { timestamps: true }
