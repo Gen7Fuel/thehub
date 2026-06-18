@@ -62,7 +62,7 @@ const styles = StyleSheet.create({
   },
   sectionHeaderRow: {
     flexDirection: 'row',
-    backgroundColor: '#E2F0D9', 
+    backgroundColor: '#E2F0D9',
     paddingVertical: 4,
     paddingHorizontal: 4,
     marginTop: 8,
@@ -89,10 +89,10 @@ const styles = StyleSheet.create({
   colAmount: { width: 90, textAlign: 'right' },
   textBold: { fontWeight: 'bold' },
   rowIndent: { paddingLeft: 12 },
-  
-  valPositive: { color: '#059669', fontWeight: 'bold' }, 
-  valNegative: { color: '#dc2626', fontWeight: 'bold' }, 
-  valZero: { color: '#6b7280', fontWeight: 'bold' },     
+
+  valPositive: { color: '#059669', fontWeight: 'bold' },
+  valNegative: { color: '#dc2626', fontWeight: 'bold' },
+  valZero: { color: '#6b7280', fontWeight: 'bold' },
 });
 
 function EodReportDoc({ site, date, data }) {
@@ -101,10 +101,10 @@ function EodReportDoc({ site, date, data }) {
     if (typeof amount === 'number') {
       amtStr = amount >= 0 ? `$${amount.toFixed(2)}` : `-$${Math.abs(amount).toFixed(2)}`;
     }
-    
+
     const qtyStr = typeof qty === 'number' ? qty.toFixed(2) : (qty || '');
     const rowStyle = isTotalHighlight ? styles.totalRow : styles.tableRow;
-    
+
     return h(View, { style: rowStyle },
       h(Text, { style: [styles.colDesc, isTotalHighlight && styles.textBold, isIndented && styles.rowIndent] }, desc),
       h(Text, { style: styles.colQty }, qtyStr),
@@ -164,17 +164,23 @@ function EodReportDoc({ site, date, data }) {
       renderRow('Fuel Sales', '', data.fuelSales, false, null, true),
       renderRow('Fuel Price Overrides', '', data.fuelPriceOverrides, false, null, true),
       renderRow('Item Sales', '', data.itemSales, false, null, true),
-      
+
       renderSubSectionHeader('Taxes'),
       renderRow('GST', '', data.gst, false, null, true),
       renderRow('PST', '', data.pst, false, null, true),
-      
+
       renderRow('Penny Rounding', '', data.pennyRounding, false, null, true),
       renderRow('Total Sales', '', data.totalSales, true, null, false),
 
       // 2. Over / Short Section Block
+      // 2. Over / Short Section Block with Manitoba contextual breakdown parameters
       renderSectionHeader('Over / Short'),
       renderRow('Ovr/Sh Cash', '', data.overShortCash, false, overShortStyle),
+      ...(data.isManitoba ? [
+        renderRow('Cash Collected', '', data.totalCanadianCashCollected, false, null, true),
+        renderRow('Cash Reported', '', data.reportCanadianCash, false, null, true),
+        renderRow('Cheques Cashed Out', '', data.chequesCashedOut, false, null, true)
+      ] : []),
 
       // 3. Tenders Section Block (Iterating through all gathered key/value options)
       renderSectionHeader('Tenders'),
@@ -182,20 +188,22 @@ function EodReportDoc({ site, date, data }) {
       renderRow('Cash', '', data.reportCanadianCash),
       renderRow('Total Tenders', '', totalTenders, true),
 
-      // 4. A/R Customers Section Block
+      // 4. A/R Customers Section Block (Filtering out $0 entries)
       renderSectionHeader('A/R Incurred'),
-      ...Object.entries(data.arCustomers).map(([custName, val]) => renderRow(custName, '', val)),
+      ...Object.entries(data.arCustomers)
+        .filter(([_, val]) => val !== 0) // 👈 Drops rows where the incurred amount is exactly 0
+        .map(([custName, val]) => renderRow(custName, '', val)),
       renderRow('Total A/R Incurred', '', totalAr, true),
 
       // 5. Sale by Department Section Block
       renderSectionHeader('Sale by Department'),
-      ...Object.entries(data.fuelGrades).map(([grade, info]) => 
+      ...Object.entries(data.fuelGrades).map(([grade, info]) =>
         renderRow(`Fuel sales: ${grade.toUpperCase()}`, info.volume, info.amount)
       ),
       renderRow('Tobacco Cig', '', data.tobaccoCig),
       renderRow('Tobacco Others', '', data.tobaccoOthers),
       renderRow('Propane Sales', '', data.propaneSales),
-      
+
       ...(data.sellsLottery ? [
         renderRow('Lottery Sales', '', data.lotterySales),
         renderRow('Lottery Payouts', '', data.lottoPayout)
@@ -204,7 +212,7 @@ function EodReportDoc({ site, date, data }) {
   );
 }
 
-async function generateEodReportPdf({ site, date }) {
+async function generateEodReportPdf({ site, date, isManitoba = false }) {
   const [yy, mm, dd] = String(date).split('-').map(Number);
   const start = new Date(yy, mm - 1, dd, 0, 0, 0, 0);
   const end = new Date(yy, mm - 1, dd + 1, 0, 0, 0, 0);
@@ -214,7 +222,7 @@ async function generateEodReportPdf({ site, date }) {
 
   const rows = await CashSummary.find({ site, date: { $gte: start, $lt: end } }).lean();
   const reportDoc = await CashSummaryReport.findOne({ site, date: start }).lean();
-  
+
   let lottery = null;
   if (sellsLottery) {
     lottery = await Lottery.findOne({ site, date }).lean();
@@ -225,24 +233,21 @@ async function generateEodReportPdf({ site, date }) {
   // 1️⃣ Aggregate Tenders Dynamically from BOTH flat keys and the sub-document array
   const tendersAgg = {};
   rows.forEach((r) => {
-    // Process the explicit sub-document sub-array block
     if (r.tenders && Array.isArray(r.tenders)) {
       r.tenders.forEach((t) => {
-        // Checking for schema match keys: t.key or fallback t.name
         const tenderKey = (t.key || t.name)?.toUpperCase().trim();
         if (tenderKey) {
           tendersAgg[tenderKey] = (tendersAgg[tenderKey] || 0) + (t.value || t.amount || 0);
         }
       });
     }
-    // Backward compatibility fallbacks for direct high-level schema object paths
     if (r.visa) tendersAgg['VISA'] = (tendersAgg['VISA'] || 0) + r.visa;
     if (r.mastercard) tendersAgg['MASTERCARD'] = (tendersAgg['MASTERCARD'] || 0) + r.mastercard;
     if (r.amex) tendersAgg['AMEX'] = (tendersAgg['AMEX'] || 0) + r.amex;
     if (r.debit) tendersAgg['DEBIT'] = (tendersAgg['DEBIT'] || 0) + r.debit;
   });
 
-  // 2️⃣ Aggregate Fuel Grades (Rounded down to 2 decimal points in display)
+  // 2️⃣ Aggregate Fuel Grades
   const fuelAgg = {};
   rows.forEach((r) => {
     if (r.fuelGrades && Array.isArray(r.fuelGrades)) {
@@ -270,27 +275,31 @@ async function generateEodReportPdf({ site, date }) {
     }
   });
 
-  // 4️⃣ Compute Manitoba Over / Short Variance Logic
+  // 4️⃣ Compute Manitoba Over / Short Variance Logic (Factoring in Cheques)
   const totalCanadianCashCollected = sum('canadian_cash_collected');
   const reportCanadianCash = sum('report_canadian_cash');
+  const chequesCashedOut = sum('chequesCashedOut');
   const unsettledPrepays = reportDoc?.unsettledPrepays || 0;
   const handheldDebit = reportDoc?.handheldDebit || 0;
 
+  // Add cheques to collected physical assets ONLY if it's a Manitoba site
+  const physicalAssets = totalCanadianCashCollected + (isManitoba ? chequesCashedOut : 0);
   let overShortCash = null;
 
   if (sellsLottery && lottery) {
     const onlineSalesBulloch = sum('onlineLottoTotal');
     const onlineOS = (onlineSalesBulloch || 0) - ((lottery.onlineLottoTotal || 0) - (lottery.onlineCancellations || 0));
-    const scratchOS = 0; 
+    const scratchOS = 0;
     const adjReported = (reportCanadianCash || 0) + onlineOS + scratchOS;
-    
-    overShortCash = totalCanadianCashCollected - adjReported + unsettledPrepays + handheldDebit;
+
+    overShortCash = physicalAssets - adjReported + unsettledPrepays + handheldDebit;
   } else {
-    overShortCash = totalCanadianCashCollected - reportCanadianCash + unsettledPrepays + handheldDebit;
+    overShortCash = physicalAssets - reportCanadianCash + unsettledPrepays + handheldDebit;
   }
 
   // 5️⃣ Bind Everything together into aggregatedData
   const aggregatedData = {
+    isManitoba, // Passed flag inside data context payload
     sellsLottery,
     fuelSales: sum('fuelSales'),
     fuelPriceOverrides: sum('fuelPriceOverrides'),
@@ -299,7 +308,9 @@ async function generateEodReportPdf({ site, date }) {
     pst: sum('pst'),
     pennyRounding: sum('pennyRounding'),
     totalSales: sum('totalSales') || sum('grandTotal'),
-    reportCanadianCash: reportCanadianCash,
+    totalCanadianCashCollected,
+    reportCanadianCash,
+    chequesCashedOut,
     overShortCash: typeof overShortCash === 'number' ? Number(overShortCash.toFixed(2)) : null,
     tenders: tendersAgg,
     fuelGrades: fuelAgg,

@@ -1148,7 +1148,7 @@ router.post('/submit/to/safesheet', async (req, res) => {
 
           if (site === 'Wavers West' || site === 'Wavers East') {
             try {
-              const eodWaversPdf = await generateEodReportPdf({ site, date });
+              const eodWaversPdf = await generateEodReportPdf({ site, date, isManitoba });
               attachments.push({
                 filename: `End-of-Day-Report-${site}-${date}.pdf`,
                 content: eodWaversPdf,
@@ -1175,9 +1175,9 @@ router.post('/submit/to/safesheet', async (req, res) => {
             }))
           )
           await emailQueue.add('sendCashSummaryEmail', {
-            to: CASH_SUMMARY_EMAILS.join(','),
-            cc,
-            // to: 'daksh@gen7fuel.com',
+            // to: CASH_SUMMARY_EMAILS.join(','),
+            // cc,
+            to: 'daksh@gen7fuel.com',
             subject: `Daily Report – ${site} – ${date}`,
             text: `Attached are the Cash Summary${shiftReportsPdf ? ', Shift Reports' : ''}${depositSlip ? ' and Bank Deposit Slip' : ''} for ${site} on ${date}.`,
             attachments: serializedAttachments,
