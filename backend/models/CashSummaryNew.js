@@ -44,6 +44,7 @@ const CashSummarySchema = new mongoose.Schema(
     tobaccoCig: { type: Number },
     tobaccoOthers: { type: Number },
     propaneSales: { type: Number },
+    bingoSales: { type: Number },
 
     // Parsed SFT values (no defaults; leave undefined if missing)
     fuelSales: { type: Number },

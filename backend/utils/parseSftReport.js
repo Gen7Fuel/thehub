@@ -470,13 +470,61 @@ const parsePropaneSales = (text) => {
   return totalPropane > 0 ? Number(totalPropane.toFixed(2)) : null;
 };
 
+/**
+ * HELPER: Isolates department 999 text block, scans individual line items 
+ * containing the keyword 'BINGO', and extracts and sums up their dollar values.
+ */
+const parseBingoSales = (text) => {
+  const lines = text.split(/\r?\n/);
+  let totalBingo = 0;
+  let inTargetDept = false;
+
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i];
+    const trimmed = line.trim();
+
+    // 1️⃣ Detect entry into department 999 block
+    if (/Department:\s*0*/i.test(line)) {
+      const matchId = line.replace(/^[^\d]+/, '').trim().replace(/^0+/, '');
+      if (matchId.startsWith('999')) {
+        inTargetDept = true;
+      } else {
+        inTargetDept = false; // Entered a different department block, stop tracking
+      }
+      continue;
+    }
+
+    if (inTargetDept) {
+      // 2️⃣ Exit condition for the current department block
+      if (/^-------/.test(trimmed) || /Grand\s+Total/i.test(trimmed)) {
+        inTargetDept = false;
+        continue;
+      }
+
+      // 3️⃣ Filter for lines containing 'BINGO'
+      if (/BINGO/i.test(trimmed)) {
+        // Extract the dollar amount at the end of the line (e.g. "$   96.00")
+        const moneyMatch = trimmed.match(/\$\s*([-\d.,]+)\s*$/);
+        if (moneyMatch) {
+          const value = toNumber(moneyMatch[1]);
+          if (value !== null) {
+            totalBingo += value;
+          }
+        }
+      }
+    }
+  }
+
+  return totalBingo > 0 ? Number(totalBingo.toFixed(2)) : null;
+};
+
 function parseSftReport(text) {
   const metrics = {
     fuelSales: pickNum(/^\s*Fuel sales\s+([-\d.,]+)\s*$/mi, text),
     companyCoupon: pickNum(/^\s*Company Coupon\s+([-\d.,]+)\s*$/mi, text),
     dealGroupCplDiscounts: pickNum(/^\s*Deal Group CPL discounts\s+([-\d.,]+)\s*$/mi, text),
     fuelPriceOverrides: pickNum(/^\s*Fuel Price Overrides\s+([-\d.,]+)\s*$/mi, text),
-    
+
 
     itemSales: pickNum(/^\s*Item Sales\s+([-\d.,]+)\s*$/mi, text),
     depositTotal: pickNum(/^\s*Deposit Total\s+([-\d.,]+)\s*$/mi, text),
@@ -561,7 +609,8 @@ function parseSftReport(text) {
       });
       return total > 0 ? Number(total.toFixed(2)) : null;
     })(),
-    propaneSales: parsePropaneSales(text)
+    propaneSales: parsePropaneSales(text),
+    bingoSales: parseBingoSales(text)
   }
 
   const pickStationDateTimeString = (label, t) => {

@@ -753,6 +753,7 @@ router.post('/', async (req, res) => {
       exempted_tax: norm(exempted_tax),
       payouts: numOrUndef(values.payouts),
       propaneSales: numOrUndef(parsed.propaneSales),
+      bingoSales: numOrUndef(parsed.bingoSales),
       companyCoupon: numOrUndef(parsed.companyCoupon),
 
       // NEW: Dynamic array mapping out key/value properties for tender configurations
@@ -1175,9 +1176,9 @@ router.post('/submit/to/safesheet', async (req, res) => {
             }))
           )
           await emailQueue.add('sendCashSummaryEmail', {
-            // to: CASH_SUMMARY_EMAILS.join(','),
-            // cc,
-            to: 'daksh@gen7fuel.com',
+            to: CASH_SUMMARY_EMAILS.join(','),
+            cc,
+            // to: 'daksh@gen7fuel.com',
             subject: `Daily Report – ${site} – ${date}`,
             text: `Attached are the Cash Summary${shiftReportsPdf ? ', Shift Reports' : ''}${depositSlip ? ' and Bank Deposit Slip' : ''} for ${site} on ${date}.`,
             attachments: serializedAttachments,
@@ -1475,6 +1476,7 @@ router.put('/:id', async (req, res) => {
               gst: parsed.gst,
               pst: parsed.pst,
               propaneSales: parsed.propaneSales,
+              bingoSales: parsed.bingoSales,
               companyCoupon: parsed.companyCoupon, // 👈 ADD THIS LINE
 
               // NEW: Array mapping out key/value properties for tender configurations
@@ -1587,6 +1589,7 @@ router.put('/:id', async (req, res) => {
       tobaccoCig: numOrUndef(ev.tobaccoCig ?? existing.tobaccoCig),
       tobaccoOthers: numOrUndef(ev.tobaccoOthers ?? existing.tobaccoOthers),
       propaneSales: numOrUndef(ev.propaneSales ?? existing.propaneSales),
+      bingoSales: numOrUndef(ev.bingoSales ?? existing.bingoSales),
       pennyRounding: numOrUndef(ev.pennyRounding ?? existing.pennyRounding),
       totalSales: numOrUndef(ev.totalSales ?? existing.totalSales),
       afdCredit: numOrUndef(ev.afdCredit ?? existing.afdCredit),
