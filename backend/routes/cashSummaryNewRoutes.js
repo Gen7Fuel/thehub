@@ -1317,6 +1317,63 @@ router.get('/payouts-check', async (req, res) => {
   }
 })
 
+router.get('/ar-check-range', async (req, res) => {
+  const { site, from, to } = req.query
+  if (!site || !from || !to) return res.status(400).json({ error: 'site, from, and to are required' })
+
+  try {
+    const location = await Location.findOne({ stationName: site }, { timezone: 1 }).lean()
+    const tz = location?.timezone || 'America/Toronto'
+
+    const csStart = new Date(from); csStart.setUTCHours(0, 0, 0, 0)
+    const csEnd = new Date(to); csEnd.setUTCHours(23, 59, 59, 999)
+    const txStart = DateTime.fromISO(from, { zone: tz }).startOf('day').toJSDate()
+    const txEnd = DateTime.fromISO(to, { zone: tz }).endOf('day').toJSDate()
+
+    const [csRows, txRows] = await Promise.all([
+      CashSummary.aggregate([
+        { $match: { site, date: { $gte: csStart, $lte: csEnd } } },
+        {
+          $group: {
+            _id: { $dateToString: { format: '%Y-%m-%d', date: '$date', timezone: 'UTC' } },
+            arIncurredTotal: { $sum: { $ifNull: ['$arIncurred', 0] } },
+          },
+        },
+      ]),
+      Transactions.aggregate([
+        { $match: { stationName: site, date: { $gte: txStart, $lte: txEnd } } },
+        {
+          $group: {
+            _id: { $dateToString: { format: '%Y-%m-%d', date: '$date', timezone: tz } },
+            transactionsTotal: { $sum: { $ifNull: ['$amount', 0] } },
+          },
+        },
+      ]),
+    ])
+
+    const csMap = Object.fromEntries(csRows.map((r) => [r._id, r.arIncurredTotal]))
+    const txMap = Object.fromEntries(txRows.map((r) => [r._id, r.transactionsTotal]))
+
+    const days = []
+    let current = DateTime.fromISO(from, { zone: 'UTC' }).startOf('day')
+    const last = DateTime.fromISO(to, { zone: 'UTC' }).startOf('day')
+    while (current <= last) {
+      const dateStr = current.toFormat('yyyy-MM-dd')
+      const ar = Math.round((csMap[dateStr] ?? 0) * 100) / 100
+      const tx = Math.round((txMap[dateStr] ?? 0) * 100) / 100
+      const match = Math.round(ar * 100) === Math.round(tx * 100)
+      const direction = match ? 'ok' : tx < ar ? 'hub' : 'bulloch'
+      days.push({ date: dateStr, arIncurredTotal: ar, transactionsTotal: tx, match, direction })
+      current = current.plus({ days: 1 })
+    }
+
+    res.json(days)
+  } catch (err) {
+    console.error('AR check range error:', err)
+    res.status(500).json({ error: 'Failed to check AR totals' })
+  }
+})
+
 router.get('/ar-check', async (req, res) => {
   const { site, date } = req.query
   if (!site || !date) return res.status(400).json({ error: 'site and date required' })
