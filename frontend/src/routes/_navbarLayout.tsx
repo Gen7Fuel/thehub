@@ -3,6 +3,7 @@ import { AlertTriangle, Clock, RefreshCw, Fuel, ArrowRight, Camera, CheckCircle2
 import Navbar from '@/components/custom/navbar'
 import MaintenanceBanner from '@/components/custom/MaintenanceBanner'
 import NotificationPopup from '@/components/custom/NotificationPopup'
+import { OfflineBanner } from '@/components/custom/OfflineBanner'
 import FuelPriceTicker from '@/components/custom/FuelPriceTicker'
 import { getSocket } from "@/lib/websocket";
 import axios from 'axios'
