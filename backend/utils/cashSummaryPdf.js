@@ -735,7 +735,10 @@ function AdjustedTotalsCards({ totals, lottery, bullock, unsettledPrepays, handh
   const adjReported = (totals.report_canadian_cash || 0) + onlineOS + scratchOS;
   const adjItemSales = (totals.item_sales || 0) + onlineOS + scratchOS;
   const adjPayouts = (totals.payouts || 0) + payoutOS;
-  const adjOS = (totals.canadian_cash_collected || 0) - adjReported + (unsettledPrepays || 0) + (handheldDebit || 0);
+  
+  // MANITOBA MATH ADJUSTMENT: Factor cheques into counted assets for final variance
+  const chequesVal = isManitoba ? (totals.chequesCashedOut || 0) : 0;
+  const adjOS = (totals.canadian_cash_collected || 0) + chequesVal - adjReported + (unsettledPrepays || 0) + (handheldDebit || 0);
 
   // Column 1: Cash flow (3 cards)
   const col1 = [
@@ -935,11 +938,22 @@ const styles = StyleSheet.create({
 
 })
 
-function TotalsCards({ totals, unsettledPrepays, handheldDebit }) {
-  const overShort = Number((totals.canadian_cash_collected || 0) - (totals.report_canadian_cash || 0) + (unsettledPrepays || 0) + (handheldDebit || 0))
-  const h = React.createElement
+function TotalsCards({ totals, unsettledPrepays, handheldDebit, isManitoba = false }) {
+  // MANITOBA MATH ADJUSTMENT: Include Cheques inside standard Over/Short calculation formula
+  const chequesVal = isManitoba ? (totals.chequesCashedOut || 0) : 0;
+  const overShort = Number((totals.canadian_cash_collected || 0) + chequesVal - (totals.report_canadian_cash || 0) + (unsettledPrepays || 0) + (handheldDebit || 0));
+
+  const h = React.createElement;
   const cards = [
     { label: 'Total Canadian Cash Counted', value: currency(totals.canadian_cash_collected) },
+  ];
+
+  // CONDITIONAL CHEQUES CARD ENTRY FOR MANITOBA SITES ONLY
+  if (isManitoba) {
+    cards.push({ label: 'Cheques Cashed Out', value: currency(totals.chequesCashedOut) });
+  }
+
+  cards.push(
     { label: 'Total Canadian Cash Reported', value: currency(totals.report_canadian_cash) },
     {
       label: 'Over/Short',
@@ -952,22 +966,21 @@ function TotalsCards({ totals, unsettledPrepays, handheldDebit }) {
     { label: 'Exempted Tax', value: currency(totals.exempted_tax) },
     { label: 'Payouts', value: currency(totals.payouts) },
     { label: 'Voided Transactions', value: currency(totals.voidedTransactionsAmount), color: (totals.voidedTransactionsAmount || 0) > 0 ? styles.valueBad : undefined },
-  ]
+  );
 
   if (typeof unsettledPrepays === 'number' && !Number.isNaN(unsettledPrepays)) {
     cards.push({
       label: 'Unsettled Prepays',
       value: currency(unsettledPrepays),
-    })
+    });
   }
   if (typeof handheldDebit === 'number' && !Number.isNaN(handheldDebit)) {
     cards.push({
       label: 'Handheld Debit',
       value: currency(handheldDebit),
-    })
+    });
   }
 
-  // Render in two columns, wrapping
   return h(
     View,
     { style: styles.grid },
@@ -979,7 +992,7 @@ function TotalsCards({ totals, unsettledPrepays, handheldDebit }) {
         h(Text, { style: [styles.value, c.color] }, c.value)
       )
     )
-  )
+  );
 }
 
 function ShiftsList({ rows }) {
@@ -1074,8 +1087,9 @@ function ReportDoc({ site, date, rows, totals, notes, lottery, bullock, unsettle
       ),
 
       // 1. Totals Section
+      // Inside your ReportDoc component: Change ONLY this line in the JSX/React element setup:
       h(Text, { style: styles.sectionTitle }, 'Totals'),
-      h(TotalsCards, { totals, unsettledPrepays, handheldDebit }),
+      h(TotalsCards, { totals, unsettledPrepays, handheldDebit, isManitoba }), // 👈 Added isManitoba prop
 
       // 2. Adjusted Totals Section
       lottery && h(React.Fragment, null,
@@ -1126,7 +1140,8 @@ async function generateCashSummaryPdf({ site, date, notes = '', isManitoba = fal
   const lottery = await Lottery.findOne({ site, date }).lean()
 
 
-  const sum = (k) => rows.reduce((a, r) => a + (typeof r[k] === 'number' ? r[k] : 0), 0)
+  // Inside generateCashSummaryPdf, update ONLY the totals object map initialization context:
+  const sum = (k) => rows.reduce((a, r) => a + (typeof r[k] === 'number' ? r[k] : 0), 0);
   const totals = {
     count: rows.length,
     canadian_cash_collected: sum('canadian_cash_collected'),
@@ -1137,9 +1152,9 @@ async function generateCashSummaryPdf({ site, date, notes = '', isManitoba = fal
     exempted_tax: sum('exempted_tax'),
     report_canadian_cash: sum('report_canadian_cash'),
     payouts: sum('payouts'),
+    chequesCashedOut: sum('chequesCashedOut'), // 👈 Accumulates database model property metrics
     voidedTransactionsAmount: sum('voidedTransactionsAmount'),
-  }
-
+  };
   // const instance = pdf(React.createElement(ReportDoc, { site, date, rows, totals, notes }))
   // Fetch report again if needed to read optional extras
   if (!reportDocForExtras) {

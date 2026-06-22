@@ -1,3 +1,356 @@
+// import { createFileRoute, useNavigate } from '@tanstack/react-router'
+// import { useEffect, useState } from 'react'
+// import { SitePicker } from '@/components/custom/sitePicker'
+// import { useSite } from '@/context/SiteContext'
+
+// type CashSummarySearch = { site: string; id?: string }
+
+// interface CashSummaryDoc {
+//   _id: string
+//   site?: string
+//   shift_number: string
+//   date: string
+//   canadian_cash_collected?: number
+//   item_sales?: number
+//   cash_back?: number
+//   loyalty?: number
+//   cpl_bulloch?: number
+//   exempted_tax?: number
+// }
+
+// export const Route = createFileRoute('/_navbarLayout/cash-summary/form')({
+//   component: RouteComponent,
+//   validateSearch: (search: Record<string, unknown>): CashSummarySearch => ({
+//     site: (search.site as string) || '',
+//     id: typeof search.id === 'string' ? search.id : undefined,
+//   }),
+//   loaderDeps: ({ search: { id } }) => ({ id }),
+//   loader: async ({ deps: { id } }) => {
+//     if (!id) return { existing: null as CashSummaryDoc | null, accessDenied: false };
+
+//     try {
+//       const res = await fetch(`/api/cash-summary/${id}`, {
+//         headers: {
+//           Authorization: `Bearer ${localStorage.getItem('token') || ''}`,
+//           "X-Required-Permission": "accounting.cashSummary.form"
+//         },
+//       });
+
+//       if (!res.ok) {
+//         if (res.status === 403) {
+//           return { existing: null, accessDenied: true };
+//         }
+//         return { existing: null, accessDenied: false };
+//       }
+
+//       return {
+//         existing: (await res.json()) as CashSummaryDoc,
+//         accessDenied: false
+//       };
+
+//     } catch {
+//       return { existing: null, accessDenied: false };
+//     }
+//   },
+// });
+
+// function RouteComponent() {
+//   const { site, id } = Route.useSearch()
+//   const navigate = useNavigate({ from: Route.fullPath })
+//   const { selectedSite } = useSite()
+
+//   useEffect(() => {
+//     if (!site && selectedSite) {
+//       navigate({ search: (prev: CashSummarySearch) => ({ ...prev, site: selectedSite }), replace: true })
+//     }
+//   }, [selectedSite])
+//   // const { existing } = Route.useLoaderData() as { existing: CashSummaryDoc | null }
+//   const { existing, accessDenied } = Route.useLoaderData() as {
+//     existing: CashSummaryDoc | null;
+//     accessDenied: boolean;
+//   };
+
+//   useEffect(() => {
+//     if (accessDenied) {
+//       navigate({ to: "/no-access" });
+//     }
+//   }, [accessDenied, navigate]);
+
+//   if (accessDenied) return null;
+
+//   const todayISO = () => {
+//     const d = new Date()
+//     return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+//   }
+
+//   const [shiftNumber, setShiftNumber] = useState('')
+//   const [date, setDate] = useState(todayISO())
+//   const [canadianCashCollected, setCanadianCashCollected] = useState('')
+//   const [itemSales, setItemSales] = useState('')
+//   const [cashBack, setCashBack] = useState('')
+//   const [loyalty, setLoyalty] = useState('')
+//   const [cplBulloch, setCplBulloch] = useState('')
+//   const [exemptedTax, setExemptedTax] = useState('')
+//   const [submitting, setSubmitting] = useState(false)
+//   const [error, setError] = useState<string | null>(null)
+//   const [success, setSuccess] = useState<string | null>(null)
+
+//   // Populate form when existing record loads, then auto-sync from SFTP if shift is present
+//   useEffect(() => {
+//     if (!existing) return
+
+//     setShiftNumber(existing.shift_number)
+//     setDate(existing.date.slice(0, 10))
+//     setCanadianCashCollected(toStr(existing.canadian_cash_collected))
+//     setItemSales(toStr(existing.item_sales))
+//     setCashBack(toStr(existing.cash_back))
+//     setLoyalty(toStr(existing.loyalty))
+//     setCplBulloch(toStr(existing.cpl_bulloch))
+//     setExemptedTax(toStr(existing.exempted_tax))
+//     setSuccess(null)
+//     setError(null)
+
+//     const shiftNum = existing.shift_number
+//     const dateStr = existing.date.slice(0, 10)
+
+//     ;(async () => {
+//       try {
+//         const qs = site ? `?site=${encodeURIComponent(site)}` : ''
+//         const checkRes = await fetch(`/api/sftp/check/${encodeURIComponent(shiftNum)}${qs}`, {
+//           headers: {
+//             Authorization: `Bearer ${localStorage.getItem('token') || ''}`,
+//             'X-Required-Permission': 'accounting.cashSummary.form',
+//           },
+//         })
+//         if (!checkRes.ok) return
+//         const { valid } = await checkRes.json()
+//         if (!valid) return
+
+//         const [yy, mm, dd] = dateStr.split('-').map(Number)
+//         const dateISO = new Date(yy, mm - 1, dd, 0, 0, 0, 0).toISOString()
+
+//         await fetch(`/api/cash-summary/${existing._id}`, {
+//           method: 'PUT',
+//           headers: {
+//             'Content-Type': 'application/json',
+//             Authorization: `Bearer ${localStorage.getItem('token') || ''}`,
+//             'X-Required-Permission': 'accounting.cashSummary.form',
+//           },
+//           body: JSON.stringify({
+//             site: site || undefined,
+//             shift_number: shiftNum,
+//             date: dateISO,
+//             canadian_cash_collected: existing.canadian_cash_collected,
+//             exempted_tax: existing.exempted_tax,
+//           }),
+//         })
+//       } catch {
+//         // silent — auto-sync is best-effort
+//       }
+//     })()
+//   }, [existing])
+
+//   const updateSite = (newSite: string) =>
+//     navigate({ search: (prev: CashSummarySearch) => ({ ...prev, site: newSite }) })
+
+//   const num = (v: string) => (v.trim() === '' ? undefined : Number(v.replace(/,/g, '')))
+//   const toStr = (v: number | undefined) => (v == null ? '' : String(v))
+
+//   const handleSubmit = async (e: React.FormEvent) => {
+//     e.preventDefault()
+//     setSubmitting(true)
+//     setError(null)
+//     setSuccess(null)
+
+//     if (!shiftNumber.trim()) {
+//       setError('Shift number required')
+//       setSubmitting(false)
+//       return
+//     }
+//     if (!date) {
+//       setError('Date required')
+//       setSubmitting(false)
+//       return
+//     }
+
+//     const toLocalMidnightISO = (dateStr: string) => {
+//       const [yy, mm, dd] = dateStr.split('-').map(Number)
+//       return new Date(yy, mm - 1, dd, 0, 0, 0, 0).toISOString()
+//     }
+
+//     const payload = {
+//       site: site || undefined,
+//       shift_number: shiftNumber.trim(),
+//       date: toLocalMidnightISO(date),
+//       canadian_cash_collected: num(canadianCashCollected),
+//       item_sales: num(itemSales),
+//       cash_back: num(cashBack),
+//       loyalty: num(loyalty),
+//       cpl_bulloch: num(cplBulloch),
+//       exempted_tax: num(exemptedTax),
+//     }
+
+//     try {
+//       const res = await fetch(id ? `/api/cash-summary/${id}` : '/api/cash-summary', {
+//         method: id ? 'PUT' : 'POST',
+//         headers: {
+//           'Content-Type': 'application/json',
+//           Authorization: `Bearer ${localStorage.getItem('token') || ''}`,
+//           "X-Required-Permission": "accounting.cashSummary.form"
+//         },
+//         body: JSON.stringify(payload),
+//       })
+//       if (res.status === 403) {
+//         // Redirect to no-access page
+//         navigate({ to: "/no-access" });
+//         return;
+//       }
+//       if (!res.ok) throw new Error(await res.text())
+
+//       await res.json()
+
+//       if (!id) {
+//         navigate({ to: '/cash-summary/list', search: { site } })
+//         return
+//       }
+
+//       setSuccess('Updated')
+//     } catch (err: any) {
+//       setError(err.message || 'Save failed')
+//     } finally {
+//       setSubmitting(false)
+//     }
+//   }
+
+//   const handleNew = () => {
+//     navigate({ search: { site, id: undefined } })
+//     setShiftNumber('')
+//     setDate(todayISO())
+//     setCanadianCashCollected('')
+//     setItemSales('')
+//     setCashBack('')
+//     setLoyalty('')
+//     setCplBulloch('')
+//     setExemptedTax('')
+//     setSuccess(null)
+//     setError(null)
+//   }
+
+//   // Validate the shift number on blur via secured endpoint
+//   const checkShift = async (value: string) => {
+//     const v = value.trim()
+//     if (!v) return
+//     try {
+//       const qs = site ? `?site=${encodeURIComponent(site)}` : ''
+//       const res = await fetch(`/api/sftp/check/${encodeURIComponent(v)}${qs}`, {
+//         headers: { Authorization: `Bearer ${localStorage.getItem('token') || ''}`,
+//                   "X-Required-Permission": "accounting.cashSummary.form" },
+//       })
+//       if (res.status === 403) {
+//         // Redirect to no-access page
+//         navigate({ to: "/no-access" });
+//         return;
+//       }
+//       if (!res.ok) throw new Error('Shift check failed')
+//       const { valid } = await res.json()
+//       setError(valid ? '' : 'This shift number seems to be invalid, please check again.')
+//     } catch {
+//       // On network/server error, do not block user
+//       setError('')
+//     }
+//   }
+
+//   return (
+//     <div className="pt-16 flex flex-col items-center w-full">
+//       <div className="w-full max-w-2xl space-y-6 p-4">
+//         <SitePicker
+//           value={site}
+//           onValueChange={updateSite}
+//           placeholder="Pick a site"
+//           label="Site"
+//           className="w-[220px]"
+//         />
+
+//         <form onSubmit={handleSubmit} className="space-y-5 border rounded-md p-4">
+//           <div className="flex justify-between items-center mb-2">
+//             <h2 className="text-sm font-semibold">
+//               {id ? `Edit Cash Summary (${shiftNumber || id})` : 'New Cash Summary'}
+//             </h2>
+//             {id && (
+//               <button
+//                 type="button"
+//                 onClick={handleNew}
+//                 className="text-xs px-2 py-1 border rounded hover:bg-muted"
+//               >
+//                 New
+//               </button>
+//             )}
+//           </div>
+
+//           <div className="grid gap-4 sm:grid-cols-2">
+//             <Field label="Shift Number *">
+//               <input
+//                 value={shiftNumber}
+//                 onChange={(e) => setShiftNumber(e.target.value)}
+//                 onBlur={() => checkShift(shiftNumber)}
+//                 className="w-full border rounded px-3 py-2"
+//                 required
+//               />
+//             </Field>
+//             <Field label="Date *">
+//               <input
+//                 type="date"
+//                 value={date}
+//                 onChange={(e) => setDate(e.target.value)}
+//                 className="w-full border rounded px-3 py-2"
+//                 required
+//               />
+//             </Field>
+//             <Field label="Canadian Cash Collected">
+//               <input
+//                 value={canadianCashCollected}
+//                 onChange={(e) => setCanadianCashCollected(e.target.value)}
+//                 className="w-full border rounded px-3 py-2"
+//                 inputMode="decimal"
+//               />
+//             </Field>
+
+//             <Field label="Infonet Exempted Tax">
+//               <input
+//                 value={exemptedTax}
+//                 onChange={(e) => setExemptedTax(e.target.value)}
+//                 className="w-full border rounded px-3 py-2"
+//                 inputMode="decimal"
+//               />
+//             </Field>
+//           </div>
+
+//           <div className="flex items-center gap-4">
+//             <button
+//               type="submit"
+//               disabled={submitting}
+//               className="px-4 py-2 rounded bg-primary text-primary-foreground disabled:opacity-50"
+//             >
+//               {submitting ? (id ? 'Updating…' : 'Saving…') : id ? 'Update' : 'Save'}
+//             </button>
+//             {error && <span className="text-red-600 text-sm">Error: {error}</span>}
+//             {success && <span className="text-green-600 text-sm">{success}</span>}
+//           </div>
+//         </form>
+//       </div>
+//     </div>
+//   )
+// }
+
+// function Field({ label, children }: { label: string; children: React.ReactNode }) {
+//   return (
+//     <div>
+//       <label className="block text-sm mb-1">{label}</label>
+//       {children}
+//     </div>
+//   )
+// }
+
 import { createFileRoute, useNavigate } from '@tanstack/react-router'
 import { useEffect, useState } from 'react'
 import { SitePicker } from '@/components/custom/sitePicker'
@@ -16,6 +369,7 @@ interface CashSummaryDoc {
   loyalty?: number
   cpl_bulloch?: number
   exempted_tax?: number
+  chequesCashedOut?: number // 👈 Added to interface
 }
 
 export const Route = createFileRoute('/_navbarLayout/cash-summary/form')({
@@ -64,7 +418,7 @@ function RouteComponent() {
       navigate({ search: (prev: CashSummarySearch) => ({ ...prev, site: selectedSite }), replace: true })
     }
   }, [selectedSite])
-  // const { existing } = Route.useLoaderData() as { existing: CashSummaryDoc | null }
+
   const { existing, accessDenied } = Route.useLoaderData() as {
     existing: CashSummaryDoc | null;
     accessDenied: boolean;
@@ -91,9 +445,13 @@ function RouteComponent() {
   const [loyalty, setLoyalty] = useState('')
   const [cplBulloch, setCplBulloch] = useState('')
   const [exemptedTax, setExemptedTax] = useState('')
+  const [chequesCashedOut, setChequesCashedOut] = useState('') // 👈 Added state hook
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [success, setSuccess] = useState<string | null>(null)
+
+  // Determine if the selected site is allowed to see the Cheques Cashed Out field
+  const showChequesField = site === 'Wavers East' || site === 'Wavers West'
 
   // Populate form when existing record loads, then auto-sync from SFTP if shift is present
   useEffect(() => {
@@ -107,47 +465,49 @@ function RouteComponent() {
     setLoyalty(toStr(existing.loyalty))
     setCplBulloch(toStr(existing.cpl_bulloch))
     setExemptedTax(toStr(existing.exempted_tax))
+    setChequesCashedOut(toStr(existing.chequesCashedOut)) // 👈 Sync existing data payload
     setSuccess(null)
     setError(null)
 
     const shiftNum = existing.shift_number
     const dateStr = existing.date.slice(0, 10)
 
-    ;(async () => {
-      try {
-        const qs = site ? `?site=${encodeURIComponent(site)}` : ''
-        const checkRes = await fetch(`/api/sftp/check/${encodeURIComponent(shiftNum)}${qs}`, {
-          headers: {
-            Authorization: `Bearer ${localStorage.getItem('token') || ''}`,
-            'X-Required-Permission': 'accounting.cashSummary.form',
-          },
-        })
-        if (!checkRes.ok) return
-        const { valid } = await checkRes.json()
-        if (!valid) return
+      ; (async () => {
+        try {
+          const qs = site ? `?site=${encodeURIComponent(site)}` : ''
+          const checkRes = await fetch(`/api/sftp/check/${encodeURIComponent(shiftNum)}${qs}`, {
+            headers: {
+              Authorization: `Bearer ${localStorage.getItem('token') || ''}`,
+              'X-Required-Permission': 'accounting.cashSummary.form',
+            },
+          })
+          if (!checkRes.ok) return
+          const { valid } = await checkRes.json()
+          if (!valid) return
 
-        const [yy, mm, dd] = dateStr.split('-').map(Number)
-        const dateISO = new Date(yy, mm - 1, dd, 0, 0, 0, 0).toISOString()
+          const [yy, mm, dd] = dateStr.split('-').map(Number)
+          const dateISO = new Date(yy, mm - 1, dd, 0, 0, 0, 0).toISOString()
 
-        await fetch(`/api/cash-summary/${existing._id}`, {
-          method: 'PUT',
-          headers: {
-            'Content-Type': 'application/json',
-            Authorization: `Bearer ${localStorage.getItem('token') || ''}`,
-            'X-Required-Permission': 'accounting.cashSummary.form',
-          },
-          body: JSON.stringify({
-            site: site || undefined,
-            shift_number: shiftNum,
-            date: dateISO,
-            canadian_cash_collected: existing.canadian_cash_collected,
-            exempted_tax: existing.exempted_tax,
-          }),
-        })
-      } catch {
-        // silent — auto-sync is best-effort
-      }
-    })()
+          await fetch(`/api/cash-summary/${existing._id}`, {
+            method: 'PUT',
+            headers: {
+              'Content-Type': 'application/json',
+              Authorization: `Bearer ${localStorage.getItem('token') || ''}`,
+              'X-Required-Permission': 'accounting.cashSummary.form',
+            },
+            body: JSON.stringify({
+              site: site || undefined,
+              shift_number: shiftNum,
+              date: dateISO,
+              canadian_cash_collected: existing.canadian_cash_collected,
+              exempted_tax: existing.exempted_tax,
+              chequesCashedOut: existing.chequesCashedOut, // 👈 Sync inside background auto-saver
+            }),
+          })
+        } catch {
+          // silent — auto-sync is best-effort
+        }
+      })()
   }, [existing])
 
   const updateSite = (newSite: string) =>
@@ -188,6 +548,7 @@ function RouteComponent() {
       loyalty: num(loyalty),
       cpl_bulloch: num(cplBulloch),
       exempted_tax: num(exemptedTax),
+      chequesCashedOut: showChequesField ? num(chequesCashedOut) : undefined, // 👈 Only send if tracking site
     }
 
     try {
@@ -201,7 +562,6 @@ function RouteComponent() {
         body: JSON.stringify(payload),
       })
       if (res.status === 403) {
-        // Redirect to no-access page
         navigate({ to: "/no-access" });
         return;
       }
@@ -232,6 +592,7 @@ function RouteComponent() {
     setLoyalty('')
     setCplBulloch('')
     setExemptedTax('')
+    setChequesCashedOut('') // 👈 Clear down hook context
     setSuccess(null)
     setError(null)
   }
@@ -243,18 +604,21 @@ function RouteComponent() {
     try {
       const qs = site ? `?site=${encodeURIComponent(site)}` : ''
       const res = await fetch(`/api/sftp/check/${encodeURIComponent(v)}${qs}`, {
-        headers: { Authorization: `Bearer ${localStorage.getItem('token') || ''}`,
-                  "X-Required-Permission": "accounting.cashSummary.form" },
+        headers: {
+          Authorization: `Bearer ${localStorage.getItem('token') || ''}`,
+          "X-Required-Permission": "accounting.cashSummary.form"
+        },
       })
       if (res.status === 403) {
-        // Redirect to no-access page
         navigate({ to: "/no-access" });
         return;
       }
       if (!res.ok) throw new Error('Shift check failed')
+
+      // ✅ FIXED: Changed checkRes to res
       const { valid } = await res.json()
       setError(valid ? '' : 'This shift number seems to be invalid, please check again.')
-    } catch {
+    } catch (err: any) { // ✅ FIXED: Added explicit any type to error block
       // On network/server error, do not block user
       setError('')
     }
@@ -323,6 +687,19 @@ function RouteComponent() {
                 inputMode="decimal"
               />
             </Field>
+
+            {/* ⚠️ CONDITIONAL RENDERING FOR WAVERS EAST / WEST STATIONS */}
+            {showChequesField && (
+              <Field label="Cheques Cashed Out">
+                <input
+                  value={chequesCashedOut}
+                  onChange={(e) => setChequesCashedOut(e.target.value)}
+                  className="w-full border rounded px-3 py-2 bg-amber-50/30 border-amber-200 focus:border-amber-500"
+                  inputMode="decimal"
+                  placeholder="0.00"
+                />
+              </Field>
+            )}
           </div>
 
           <div className="flex items-center gap-4">
