@@ -283,7 +283,7 @@ function RouteComponent() {
       />
       <h2 className="text-lg font-bold mb-2">Purchase Order List</h2>
 
-      <div className="flex justify-around gap-4 border-t border-dashed border-gray-300 mt-4 pt-4">
+      <div className="flex justify-between gap-4 border-t border-dashed border-gray-300 mt-4 pt-4">
         <DatePickerWithRange date={date} setDate={setDate} />
 
         <LocationPicker
@@ -292,6 +292,12 @@ function RouteComponent() {
           value="stationName"
           // {...(!access.component_po_location_filter ? { disabled: true } : {})}
         />
+      </div>
+
+      <div className="flex justify-between border-b border-dashed border-gray-300 py-2 mb-2 text-sm text-gray-600">
+        <span>{purchaseOrders.length} {purchaseOrders.length === 1 ? 'entry' : 'entries'}</span>
+        <span>Qty: {purchaseOrders.reduce((sum, o) => sum + o.quantity, 0).toFixed(3)}</span>
+        <span>Total: ${purchaseOrders.reduce((sum, o) => sum + o.amount, 0).toFixed(2)}</span>
       </div>
 
       <table className="table-auto w-full border-collapse border-0 mt-4">
