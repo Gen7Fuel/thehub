@@ -49,6 +49,7 @@ import { AlertTriangle, Clock, RefreshCw } from "lucide-react"
 import Navbar from '@/components/custom/navbar'
 import MaintenanceBanner from '@/components/custom/MaintenanceBanner'
 import NotificationPopup from '@/components/custom/NotificationPopup'
+import { OfflineBanner } from '@/components/custom/OfflineBanner'
 import { getSocket } from "@/lib/websocket";
 import axios from 'axios'
 
@@ -164,6 +165,7 @@ function RouteComponent() {
     <div className="flex flex-col min-h-screen relative">
       {/* Navbar stays visible but is covered by the overlay if isLocked is true */}
       <Navbar />
+      <OfflineBanner />
 
       {/* --- NOTIFICATION POPUP OVERLAY --- */}
       {showPopup && (
