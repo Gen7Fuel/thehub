@@ -14,7 +14,7 @@ const logsModel = require("../../pg/models/fuelPriceLog");
 
 // --- GLOBAL ROUTE EXCEPTIONS CONFIGURATION ---
 // Add the specific location IDs (Mongo ID strings) that do not possess physical InfoNet terminal layers
-const SITES_WITHOUT_INFONET = ["687aa45d0d4d01e74f0b0e9b"];
+const SITES_WITHOUT_INFONET = ["687aa45d0d4d01e74f0b0e9e"];
 
 // Bi-directional dictionary to map Frontend Short Codes <-> Database Strings
 const GRADE_MAP = {
@@ -244,7 +244,7 @@ router.get('/check-pending-verification', async (req, res) => {
     }
 
     const locationMongoId = String(locationDoc._id);
-    
+
     // Determine if this particular location bypasses InfoNet checks entirely
     const hasInfonet = !SITES_WITHOUT_INFONET.includes(locationMongoId);
 
@@ -292,7 +292,7 @@ router.get('/check-pending-verification', async (req, res) => {
         const query = db('fuel_price_logs')
           .where({ site: locationMongoId, grade: r.grade })
           .whereNotNull('image_url');
-          
+
         // Adapt baseline target matching strategy dynamically
         if (hasInfonet) {
           query.whereNotNull('infonet_image_url'); // Find last baseline containing BOTH confirmations
@@ -531,33 +531,43 @@ function receivedByMeta(log, receivedUser, siteMeta) {
   }
   return null;
 }
-
 router.put('/verify-price-receipt', async (req, res) => {
   const db = getPg();
   const userEmail = req.user?.email;
   const userIdStr = req.user?._id ? String(req.user._id) : null;
   const { locationId, filename, infonetFilename } = req.body;
 
-  if (!userEmail || !locationId || !filename || !infonetFilename) {
+  // 1. Determine if this site uses an InfoNet terminal dynamically
+  const hasInfonet = !SITES_WITHOUT_INFONET.includes(String(locationId));
+
+  // 2. Adjust standard parameter validations (infonetFilename is only mandatory if hasInfonet is true)
+  if (!userEmail || !locationId || !filename || (hasInfonet && !infonetFilename)) {
     return res.status(400).json({ message: "Missing required verification data coordinates." });
   }
 
   try {
-    // Target rows for this site missing EITHER image, strictly within a 6-hour safety buffer
+    // 3. Update the targeted log records using conditional filter constraints
     const updatedRows = await db('fuel_price_logs')
       .where({ site: locationId })
       .andWhere((builder) => {
-        builder.whereNull('image_url').orWhereNull('infonet_image_url');
+        if (hasInfonet) {
+          // Standard check: Target rows where either image string is missing
+          builder.whereNull('image_url').orWhereNull('infonet_image_url');
+        } else {
+          // Exception check: Target rows where only the primary Bulloch image string is missing
+          builder.whereNull('image_url');
+        }
       })
       .where('created_at', '>=', db.raw("NOW() - INTERVAL '6 hours'"))
       .update({
         image_url: filename,
-        infonet_image_url: infonetFilename,
+        // If it does not have InfoNet, save it explicitly as null (or keep a static string like 'N/A' if preferred)
+        infonet_image_url: hasInfonet ? infonetFilename : null,
         received_by: userIdStr,
         updated_at: db.raw('CURRENT_TIMESTAMP')
       });
 
-    console.log(`⛽ Safe Audit Update Complete. Site: ${locationId} | Rows Filled: ${updatedRows} within 6hr window.`);
+    console.log(`⛽ Safe Audit Update Complete. Site: ${locationId} (Has InfoNet: ${hasInfonet}) | Rows Filled: ${updatedRows} within 6hr window.`);
 
     return res.status(200).json({
       success: true,
@@ -676,317 +686,317 @@ router.post('/upsert-retail', async (req, res) => {
     // -------------------------------------------------------------------------
     // 🚀 UNCONDITIONAL GASBUDDY BACKGROUND BROADCAST (WITH SYSTEM INSULATION)
     // -------------------------------------------------------------------------
-    try {
-      if (locationDoc.gasBuddyStationId) {
-        const normalizedPrices = {};
+    // try {
+    //   if (locationDoc.gasBuddyStationId) {
+    //     const normalizedPrices = {};
 
-        for (const [feCode, numericPrice] of Object.entries(prices)) {
-          // Explicitly drop Dyed Diesel so we don't pass untaxed commercial fuel to GasBuddy
-          if (feCode === 'DYED') continue;
+    //     for (const [feCode, numericPrice] of Object.entries(prices)) {
+    //       // Explicitly drop Dyed Diesel so we don't pass untaxed commercial fuel to GasBuddy
+    //       if (feCode === 'DYED') continue;
 
-          // Lookup the readable name using your existing file-level GRADE_MAP (e.g., 'REG' -> 'Regular')
-          const gasBuddyLabel = GRADE_MAP[feCode];
+    //       // Lookup the readable name using your existing file-level GRADE_MAP (e.g., 'REG' -> 'Regular')
+    //       const gasBuddyLabel = GRADE_MAP[feCode];
 
-          // Pass the numeric decimal float (e.g., 1.532) directly to match your test harness format
-          if (gasBuddyLabel && numericPrice !== undefined && numericPrice !== null) {
-            normalizedPrices[gasBuddyLabel] = parseFloat(numericPrice);
-          }
-        }
+    //       // Pass the numeric decimal float (e.g., 1.532) directly to match your test harness format
+    //       if (gasBuddyLabel && numericPrice !== undefined && numericPrice !== null) {
+    //         normalizedPrices[gasBuddyLabel] = parseFloat(numericPrice);
+    //       }
+    //     }
 
-        // Verify we built a clean, qualified set of public fuel grades before pushing to Redis
-        if (Object.keys(normalizedPrices).length > 0) {
-          await gasBuddyQueue.add(
-            `gasbuddy-sync-${locationId}-${Date.now()}`,
-            {
-              gasBuddyStationId: locationDoc.gasBuddyStationId,
-              stationName: stationName,
-              prices: normalizedPrices // Dispatches clean format: { "Regular": 1.532, "Mid Grade": 1.694 }
-            },
-            {
-              removeOnComplete: true,
-              removeOnFail: false // Kept in BullMQ dashboard for fail-safe visual troubleshooting
-            }
-          );
-          console.log(`🤖 GasBuddy background verification job successfully queued for ${stationName}`);
-        } else {
-          console.log(`ℹ️ GasBuddy skipped: No qualifying public fuel grades provided in request payload.`);
-        }
-      } else {
-        console.log(`ℹ️ GasBuddy update skipped: No gasBuddyStationId configuration mapped for ${stationName}`);
-      }
-    } catch (gasBuddyQueueError) {
-      // 🛡️ Complete Isolation Guardrail
-      // Traps any Redis disconnects or BullMQ internal failures here so the main HTTP transaction remains unaffected.
-      console.error("💥 CRITICAL NON-BLOCKING EXCEPTION: GasBuddy queue dispatch failed.", gasBuddyQueueError);
-    }
+    //     // Verify we built a clean, qualified set of public fuel grades before pushing to Redis
+    //     if (Object.keys(normalizedPrices).length > 0) {
+    //       await gasBuddyQueue.add(
+    //         `gasbuddy-sync-${locationId}-${Date.now()}`,
+    //         {
+    //           gasBuddyStationId: locationDoc.gasBuddyStationId,
+    //           stationName: stationName,
+    //           prices: normalizedPrices // Dispatches clean format: { "Regular": 1.532, "Mid Grade": 1.694 }
+    //         },
+    //         {
+    //           removeOnComplete: true,
+    //           removeOnFail: false // Kept in BullMQ dashboard for fail-safe visual troubleshooting
+    //         }
+    //       );
+    //       console.log(`🤖 GasBuddy background verification job successfully queued for ${stationName}`);
+    //     } else {
+    //       console.log(`ℹ️ GasBuddy skipped: No qualifying public fuel grades provided in request payload.`);
+    //     }
+    //   } else {
+    //     console.log(`ℹ️ GasBuddy update skipped: No gasBuddyStationId configuration mapped for ${stationName}`);
+    //   }
+    // } catch (gasBuddyQueueError) {
+    //   // 🛡️ Complete Isolation Guardrail
+    //   // Traps any Redis disconnects or BullMQ internal failures here so the main HTTP transaction remains unaffected.
+    //   console.error("💥 CRITICAL NON-BLOCKING EXCEPTION: GasBuddy queue dispatch failed.", gasBuddyQueueError);
+    // }
 
-    // -------------------------------------------------------------------------
-    // DISPATCH NOTIFICATIONS & TIMER ON CHANGES DETECTED
-    // -------------------------------------------------------------------------
-    if (databaseWritesExecutedCount > 0) {
-      const storeEmail = locationDoc.email;
-      const targetStationName = stationName || locationDoc.stationName;
+    // // -------------------------------------------------------------------------
+    // // DISPATCH NOTIFICATIONS & TIMER ON CHANGES DETECTED
+    // // -------------------------------------------------------------------------
+    // if (databaseWritesExecutedCount > 0) {
+    //   const storeEmail = locationDoc.email;
+    //   const targetStationName = stationName || locationDoc.stationName;
 
-      // Dynamically compile CC targets (Manager emails + user session context email)
-      const baseCCEmails = Array.isArray(locationDoc.managerEmails) ? [...locationDoc.managerEmails, "kporter@gen7fuel.com", "daksh@gen7fuel.com"] : ["kporter@gen7fuel.com", "daksh@gen7fuel.com"];
+    //   // Dynamically compile CC targets (Manager emails + user session context email)
+    //   const baseCCEmails = Array.isArray(locationDoc.managerEmails) ? [...locationDoc.managerEmails, "kporter@gen7fuel.com", "daksh@gen7fuel.com"] : ["kporter@gen7fuel.com", "daksh@gen7fuel.com"];
 
-      // 1. Send IMMEDIATE general update alert to store, copying managers & admin
-      const initialNoticeHtml = `
-        <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; border: 1px solid #e2e8f0; border-radius: 16px; background-color: #ffffff;">
-          <div style="background-color: #f0fdf4; border-left: 4px solid #16a34a; padding: 16px; border-radius: 8px; margin-bottom: 20px;">
-            <h2 style="color: #14532d; margin: 0 0 8px 0; font-size: 18px; font-weight: 800; text-transform: uppercase;">
-              🔔 Notice: Fuel Prices Updated
-            </h2>
-            <p style="color: #166534; margin: 0; font-size: 14px; font-weight: 600; line-height: 1.5;">
-              New retail prices have just been published for your station location. Please update your system registers immediately.
-            </p>
-          </div>
+    //   // 1. Send IMMEDIATE general update alert to store, copying managers & admin
+    //   const initialNoticeHtml = `
+    //     <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; border: 1px solid #e2e8f0; border-radius: 16px; background-color: #ffffff;">
+    //       <div style="background-color: #f0fdf4; border-left: 4px solid #16a34a; padding: 16px; border-radius: 8px; margin-bottom: 20px;">
+    //         <h2 style="color: #14532d; margin: 0 0 8px 0; font-size: 18px; font-weight: 800; text-transform: uppercase;">
+    //           🔔 Notice: Fuel Prices Updated
+    //         </h2>
+    //         <p style="color: #166534; margin: 0; font-size: 14px; font-weight: 600; line-height: 1.5;">
+    //           New retail prices have just been published for your station location. Please update your system registers immediately.
+    //         </p>
+    //       </div>
 
-          <div style="margin-bottom: 24px;">
-            <table style="width: 100%; border-collapse: collapse;">
-              <tr>
-                <td style="padding: 6px 0; font-size: 13px; color: #64748b; font-weight: bold; width: 120px;">STATION SITE:</td>
-                <td style="padding: 6px 0; font-size: 14px; color: #0f172a; font-weight: bold;">${targetStationName}</td>
-              </tr>
-              <tr>
-                <td style="padding: 6px 0; font-size: 13px; color: #64748b; font-weight: bold;">STATUS:</td>
-                <td style="padding: 6px 0; font-size: 14px; color: #16a34a; font-weight: bold;">Awaiting Bulloch & InfoNet Snapshots</td>
-              </tr>
-            </table>
-          </div>
+    //       <div style="margin-bottom: 24px;">
+    //         <table style="width: 100%; border-collapse: collapse;">
+    //           <tr>
+    //             <td style="padding: 6px 0; font-size: 13px; color: #64748b; font-weight: bold; width: 120px;">STATION SITE:</td>
+    //             <td style="padding: 6px 0; font-size: 14px; color: #0f172a; font-weight: bold;">${targetStationName}</td>
+    //           </tr>
+    //           <tr>
+    //             <td style="padding: 6px 0; font-size: 13px; color: #64748b; font-weight: bold;">STATUS:</td>
+    //             <td style="padding: 6px 0; font-size: 14px; color: #16a34a; font-weight: bold;">Awaiting Bulloch & InfoNet Snapshots</td>
+    //           </tr>
+    //         </table>
+    //       </div>
 
-          <p style="font-size: 14px; color: #334155; line-height: 1.6; margin-bottom: 20px;">
-            Please log into the Gen7 Fuel Hub on your station account, finalize the price adjustments on your physical point-of-sale registers, and upload the required Bulloch and InfoNet receipt imagery to complete the audit cycle.
-          </p>
+    //       <p style="font-size: 14px; color: #334155; line-height: 1.6; margin-bottom: 20px;">
+    //         Please log into the Gen7 Fuel Hub on your station account, finalize the price adjustments on your physical point-of-sale registers, and upload the required Bulloch and InfoNet receipt imagery to complete the audit cycle.
+    //       </p>
 
-          <div style="border-top: 1px solid #e2e8f0; padding-top: 16px; text-align: center;">
-            <span style="font-size: 11px; color: #94a3b8; font-style: italic;">
-              Automated operational tracking notification — Gen 7 Fuel Hub System.
-            </span>
-          </div>
-        </div>
-      `;
+    //       <div style="border-top: 1px solid #e2e8f0; padding-top: 16px; text-align: center;">
+    //         <span style="font-size: 11px; color: #94a3b8; font-style: italic;">
+    //           Automated operational tracking notification — Gen 7 Fuel Hub System.
+    //         </span>
+    //       </div>
+    //     </div>
+    //   `;
 
-      await emailQueue.add(`immediate-price-notice-${locationId}-${Date.now()}`, {
-        to: storeEmail,
-        cc: baseCCEmails,
-        // to: "daksh@gen7fuel.com",
-        subject: `⛽ Notification: New Fuel Prices Published - ${targetStationName}`,
-        html: initialNoticeHtml
-      });
-      console.log(`📧 Immediate update notification queued into BullMQ for ${targetStationName}.`);
+    //   await emailQueue.add(`immediate-price-notice-${locationId}-${Date.now()}`, {
+    //     to: storeEmail,
+    //     cc: baseCCEmails,
+    //     // to: "daksh@gen7fuel.com",
+    //     subject: `⛽ Notification: New Fuel Prices Published - ${targetStationName}`,
+    //     html: initialNoticeHtml
+    //   });
+    //   console.log(`📧 Immediate update notification queued into BullMQ for ${targetStationName}.`);
 
-      // 2. WATCHDOG DELAYED TIMER PIPELINE (BULLMQ)
-      // Admin routing for the 30-min escalation
-      const primaryAdminEmail = "Mandy@gen7fuel.com";
-      const adminCCEmails = ["kellie@gen7fuel.com", "daksh@gen7fuel.com", "kporter@gen7fuel.com"];
+    //   // 2. WATCHDOG DELAYED TIMER PIPELINE (BULLMQ)
+    //   // Admin routing for the 30-min escalation
+    //   const primaryAdminEmail = "Mandy@gen7fuel.com";
+    //   const adminCCEmails = ["kellie@gen7fuel.com", "daksh@gen7fuel.com", "kporter@gen7fuel.com"];
 
-      // -------------------------------------------------------------------------
-      // 1. TEMPLATE: 15-Minute Store Reminder Email (Kept your exact style)
-      // -------------------------------------------------------------------------
-      const storeReminderHtml = `
-        <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; border: 1px solid #e2e8f0; border-radius: 16px; background-color: #ffffff;">
-          <div style="background-color: #fffbeb; border-left: 4px solid #d97706; padding: 16px; border-radius: 8px; margin-bottom: 20px;">
-            <h2 style="color: #92400e; margin: 0 0 8px 0; font-size: 18px; font-weight: 800; text-transform: uppercase;">
-              ⚠️ Action Required: Complete Fuel Price Update
-            </h2>
-            <p style="color: #78350f; margin: 0; font-size: 14px; font-weight: 600; line-height: 1.5;">
-              New retail prices were published for your station 15 minutes ago. This is a friendly reminder to ensure your registers are updated and your confirmation snapshots are uploaded.
-            </p>
-          </div>
+    //   // -------------------------------------------------------------------------
+    //   // 1. TEMPLATE: 15-Minute Store Reminder Email (Kept your exact style)
+    //   // -------------------------------------------------------------------------
+    //   const storeReminderHtml = `
+    //     <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; border: 1px solid #e2e8f0; border-radius: 16px; background-color: #ffffff;">
+    //       <div style="background-color: #fffbeb; border-left: 4px solid #d97706; padding: 16px; border-radius: 8px; margin-bottom: 20px;">
+    //         <h2 style="color: #92400e; margin: 0 0 8px 0; font-size: 18px; font-weight: 800; text-transform: uppercase;">
+    //           ⚠️ Action Required: Complete Fuel Price Update
+    //         </h2>
+    //         <p style="color: #78350f; margin: 0; font-size: 14px; font-weight: 600; line-height: 1.5;">
+    //           New retail prices were published for your station 15 minutes ago. This is a friendly reminder to ensure your registers are updated and your confirmation snapshots are uploaded.
+    //         </p>
+    //       </div>
 
-          <div style="margin-bottom: 24px;">
-            <table style="width: 100%; border-collapse: collapse;">
-              <tr>
-                <td style="padding: 6px 0; font-size: 13px; color: #64748b; font-weight: bold; width: 120px;">STATION SITE:</td>
-                <td style="padding: 6px 0; font-size: 14px; color: #0f172a; font-weight: bold;">${targetStationName}</td>
-              </tr>
-              <tr>
-                <td style="padding: 6px 0; font-size: 13px; color: #64748b; font-weight: bold;">STATUS:</td>
-                <td style="padding: 6px 0; font-size: 14px; color: #b45309; font-weight: bold;">Awaiting Bulloch & InfoNet Snapshots</td>
-              </tr>
-            </table>
-          </div>
+    //       <div style="margin-bottom: 24px;">
+    //         <table style="width: 100%; border-collapse: collapse;">
+    //           <tr>
+    //             <td style="padding: 6px 0; font-size: 13px; color: #64748b; font-weight: bold; width: 120px;">STATION SITE:</td>
+    //             <td style="padding: 6px 0; font-size: 14px; color: #0f172a; font-weight: bold;">${targetStationName}</td>
+    //           </tr>
+    //           <tr>
+    //             <td style="padding: 6px 0; font-size: 13px; color: #64748b; font-weight: bold;">STATUS:</td>
+    //             <td style="padding: 6px 0; font-size: 14px; color: #b45309; font-weight: bold;">Awaiting Bulloch & InfoNet Snapshots</td>
+    //           </tr>
+    //         </table>
+    //       </div>
 
-          <p style="font-size: 14px; color: #334155; line-height: 1.6; margin-bottom: 20px;">
-            Please log into the Gen7 Fuel Hub on your station account, and finalize the price adjustments on your registers, and upload the required receipt imagery to resolve this flag.
-          </p>
+    //       <p style="font-size: 14px; color: #334155; line-height: 1.6; margin-bottom: 20px;">
+    //         Please log into the Gen7 Fuel Hub on your station account, and finalize the price adjustments on your registers, and upload the required receipt imagery to resolve this flag.
+    //       </p>
 
-          <div style="border-top: 1px solid #e2e8f0; padding-top: 16px; text-align: center;">
-            <span style="font-size: 11px; color: #94a3b8; font-style: italic;">
-              Automated operational tracking reminder — Gen 7 Fuel Hub System.
-            </span>
-          </div>
-        </div>
-      `;
+    //       <div style="border-top: 1px solid #e2e8f0; padding-top: 16px; text-align: center;">
+    //         <span style="font-size: 11px; color: #94a3b8; font-style: italic;">
+    //           Automated operational tracking reminder — Gen 7 Fuel Hub System.
+    //         </span>
+    //       </div>
+    //     </div>
+    //   `;
 
-      // -------------------------------------------------------------------------
-      // 2. TEMPLATE: 30-Minute Admin Escalation Email (Plain & understandable)
-      // -------------------------------------------------------------------------
-      const adminEscalationHtml = `
-        <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; color: #334155; line-height: 1.6;">
-          <h2 style="color: #dc2626; font-size: 18px; margin-top: 0; font-weight: 800; text-transform: uppercase; tracking-tight">
-            🚨 Alert: Price Verification Overdue (30 Mins)
-          </h2>
-          
-          <p style="font-size: 14px; color: #334155;">
-            The pricing change you pushed to <strong>${targetStationName}</strong> remains unverified. 
-            The store has not uploaded any Bulloch or InfoNet register images to the Hub to complete the fuel price update workflow.
-          </p>
-          
-          <div style="background-color: #f8fafc; border: 1px solid #e2e8f0; padding: 14px; border-radius: 12px; margin: 18px 0; font-size: 13px;">
-            <table style="width: 100%; border-collapse: collapse;">
-              <tr>
-                <td style="padding: 4px 0; color: #64748b; font-weight: bold; width: 110px;">LOCATION:</td>
-                <td style="padding: 4px 0; color: #0f172a; font-weight: bold;">${targetStationName}</td>
-              </tr>
-              <tr>
-                <td style="padding: 4px 0; color: #64748b; font-weight: bold;">ELAPSED TIME:</td>
-                <td style="padding: 4px 0; color: #dc2626; font-weight: bold;">30 Minutes</td>
-              </tr>
-              <tr>
-                <td style="padding: 4px 0; color: #64748b; font-weight: bold;">STATUS:</td>
-                <td style="padding: 4px 0; color: #475569; font-weight: bold;">Awaiting Register Snapshots</td>
-              </tr>
-            </table>
-          </div>
-          
-          <div style="border-top: 1px solid #e2e8f0; padding-top: 14px; margin-top: 20px;">
-            <span style="font-size: 11px; color: #94a3b8; font-style: italic;">
-              Automated pricing supervisor log — Gen 7 Fuel Hub Operational Pipeline.
-            </span>
-          </div>
-        </div>
-      `;
+    //   // -------------------------------------------------------------------------
+    //   // 2. TEMPLATE: 30-Minute Admin Escalation Email (Plain & understandable)
+    //   // -------------------------------------------------------------------------
+    //   const adminEscalationHtml = `
+    //     <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; color: #334155; line-height: 1.6;">
+    //       <h2 style="color: #dc2626; font-size: 18px; margin-top: 0; font-weight: 800; text-transform: uppercase; tracking-tight">
+    //         🚨 Alert: Price Verification Overdue (30 Mins)
+    //       </h2>
 
-      // -------------------------------------------------------------------------
-      // SCHEDULE TASKS
-      // -------------------------------------------------------------------------
+    //       <p style="font-size: 14px; color: #334155;">
+    //         The pricing change you pushed to <strong>${targetStationName}</strong> remains unverified. 
+    //         The store has not uploaded any Bulloch or InfoNet register images to the Hub to complete the fuel price update workflow.
+    //       </p>
 
-      // Task A: 15-Minute Store Watchdog Reminder
-      await priceTimeoutQueue.add(
-        `timeout-reminder-${locationId}-${Date.now()}`,
-        {
-          locationId: locationId,
-          stationName: targetStationName,
-          toEmail: storeEmail,
-          ccEmails: baseCCEmails,
-          // ccEmails: ["daksh@gen7fuel.com"],
-          subject: `⛽ Urgent Reminder: Update & Verify Fuel Prices - ${targetStationName}`,
-          html: storeReminderHtml,
-          hasInfonet: hasInfonet // 🚀 Target Flag
-        },                           
-        {                  
-          delay: 15 * 60 * 1000, // 15-Minute delay
-          removeOnComplete: true,
-          removeOnFail: true
-        }
-      );
+    //       <div style="background-color: #f8fafc; border: 1px solid #e2e8f0; padding: 14px; border-radius: 12px; margin: 18px 0; font-size: 13px;">
+    //         <table style="width: 100%; border-collapse: collapse;">
+    //           <tr>
+    //             <td style="padding: 4px 0; color: #64748b; font-weight: bold; width: 110px;">LOCATION:</td>
+    //             <td style="padding: 4px 0; color: #0f172a; font-weight: bold;">${targetStationName}</td>
+    //           </tr>
+    //           <tr>
+    //             <td style="padding: 4px 0; color: #64748b; font-weight: bold;">ELAPSED TIME:</td>
+    //             <td style="padding: 4px 0; color: #dc2626; font-weight: bold;">30 Minutes</td>
+    //           </tr>
+    //           <tr>
+    //             <td style="padding: 4px 0; color: #64748b; font-weight: bold;">STATUS:</td>
+    //             <td style="padding: 4px 0; color: #475569; font-weight: bold;">Awaiting Register Snapshots</td>
+    //           </tr>
+    //         </table>
+    //       </div>
 
-      // Task B: 30-Minute Admin Escalation Watchdog
-      await priceTimeoutQueue.add(
-        `timeout-admin-escalation-${locationId}-${Date.now()}`,
-        {
-          locationId: locationId,
-          stationName: targetStationName,
-          toEmail: userEmail || primaryAdminEmail,
-          ccEmails: adminCCEmails,
-          // toEmail: storeEmail,
-          // ccEmails: ["daksh@gen7fuel.com"],
-          subject: `🚨 Unverified Price Update Alert: ${targetStationName} (30 Mins Overdue)`,
-          html: adminEscalationHtml,
-          hasInfonet: hasInfonet // 🚀 Target Flag
-        },
-        {
-          delay: 30 * 60 * 1000, // 30-Minute delay
-          removeOnComplete: true,
-          removeOnFail: true
-        }
-      );
+    //       <div style="border-top: 1px solid #e2e8f0; padding-top: 14px; margin-top: 20px;">
+    //         <span style="font-size: 11px; color: #94a3b8; font-style: italic;">
+    //           Automated pricing supervisor log — Gen 7 Fuel Hub Operational Pipeline.
+    //         </span>
+    //       </div>
+    //     </div>
+    //   `;
 
-      console.log(`⏱️ Multi-Tier Watchdog Initialized: Scheduled 15-min store reminder and 30-min admin alert for ${targetStationName}.`);
-      // -------------------------------------------------------------------------
-      // 🚀 3. MARKETING TEAM PRICE COMPARISON HIGHLIGHTS REPORT (NEW)
-      // -------------------------------------------------------------------------
-      let marketingRowsHtml = '';
+    //   // -------------------------------------------------------------------------
+    //   // SCHEDULE TASKS
+    //   // -------------------------------------------------------------------------
 
-      // Compile changed rows into view engine
-      for (const item of changedGradesList) {
-        const displayOld = item.oldPrice !== null ? `${Number(item.oldPrice).toFixed(4)}¢` : '--';
-        marketingRowsHtml += `
-          <tr style="border-bottom: 1px solid #f1f5f9;">
-            <td style="padding: 12px; font-size: 14px; font-weight: bold; color: #1e293b;">${item.label}</td>
-            <td style="padding: 12px; font-size: 14px; color: #64748b; text-decoration: line-through;">${displayOld}</td>
-            <td style="padding: 12px; font-size: 15px; font-weight: 800; color: #16a34a;">${Number(item.newPrice).toFixed(4)}¢</td>
-            <td style="padding: 12px; text-align: right;">
-              <span style="display: inline-block; background-color: #dcfce7; color: #15803d; font-size: 11px; font-weight: bold; padding: 4px 8px; border-radius: 6px; text-transform: uppercase;">
-                Updated
-              </span>
-            </td>
-          </tr>
-        `;
-      }
+    //   // Task A: 15-Minute Store Watchdog Reminder
+    //   await priceTimeoutQueue.add(
+    //     `timeout-reminder-${locationId}-${Date.now()}`,
+    //     {
+    //       locationId: locationId,
+    //       stationName: targetStationName,
+    //       toEmail: storeEmail,
+    //       ccEmails: baseCCEmails,
+    //       // ccEmails: ["daksh@gen7fuel.com"],
+    //       subject: `⛽ Urgent Reminder: Update & Verify Fuel Prices - ${targetStationName}`,
+    //       html: storeReminderHtml,
+    //       hasInfonet: hasInfonet // 🚀 Target Flag
+    //     },                           
+    //     {                  
+    //       delay: 15 * 60 * 1000, // 15-Minute delay
+    //       removeOnComplete: true,
+    //       removeOnFail: true
+    //     }
+    //   );
 
-      // Compile unchanged rows into view engine
-      for (const item of unchangedGradesList) {
-        marketingRowsHtml += `
-          <tr style="border-bottom: 1px solid #f1f5f9; background-color: #f8fafc;">
-            <td style="padding: 12px; font-size: 14px; font-weight: bold; color: #64748b;">${item.label}</td>
-            <td style="padding: 12px; font-size: 14px; color: #94a3b8;">--</td>
-            <td style="padding: 12px; font-size: 14px; font-weight: bold; color: #475569;">${Number(item.newPrice).toFixed(4)}¢</td>
-            <td style="padding: 12px; text-align: right;">
-              <span style="display: inline-block; background-color: #e2e8f0; color: #475569; font-size: 11px; font-weight: bold; padding: 4px 8px; border-radius: 6px; text-transform: uppercase;">
-                Unchanged
-              </span>
-            </td>
-          </tr>
-        `;
-      }
+    //   // Task B: 30-Minute Admin Escalation Watchdog
+    //   await priceTimeoutQueue.add(
+    //     `timeout-admin-escalation-${locationId}-${Date.now()}`,
+    //     {
+    //       locationId: locationId,
+    //       stationName: targetStationName,
+    //       toEmail: userEmail || primaryAdminEmail,
+    //       ccEmails: adminCCEmails,
+    //       // toEmail: storeEmail,
+    //       // ccEmails: ["daksh@gen7fuel.com"],
+    //       subject: `🚨 Unverified Price Update Alert: ${targetStationName} (30 Mins Overdue)`,
+    //       html: adminEscalationHtml,
+    //       hasInfonet: hasInfonet // 🚀 Target Flag
+    //     },
+    //     {
+    //       delay: 30 * 60 * 1000, // 30-Minute delay
+    //       removeOnComplete: true,
+    //       removeOnFail: true
+    //     }
+    //   );
 
-      const marketingReportHtml = `
-        <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; border: 1px solid #cbd5e1; border-radius: 16px; background-color: #ffffff;">
-          <div style="background-color: #f8fafc; border-bottom: 2px solid #e2e8f0; padding: 16px; border-radius: 12px 12px 0 0; margin-bottom: 20px;">
-            <h3 style="color: #334155; margin: 0 0 4px 0; font-size: 16px; font-weight: 800; text-transform: uppercase; letter-spacing: 0.5px;">
-              📊 Fuel Price Ledger
-            </h3>
-            <h2 style="color: #0f172a; margin: 0; font-size: 20px; font-weight: 900;">
-              ${targetStationName}
-            </h2>
-          </div>
+    //   console.log(`⏱️ Multi-Tier Watchdog Initialized: Scheduled 15-min store reminder and 30-min admin alert for ${targetStationName}.`);
+    //   // -------------------------------------------------------------------------
+    //   // 🚀 3. MARKETING TEAM PRICE COMPARISON HIGHLIGHTS REPORT (NEW)
+    //   // -------------------------------------------------------------------------
+    //   let marketingRowsHtml = '';
 
-          <p style="font-size: 14px; color: #475569; line-height: 1.5; margin-bottom: 20px;">
-            The retail pricing board for this station location has been altered. Here are the comparisons mapping against current vs old prices:
-          </p>
+    //   // Compile changed rows into view engine
+    //   for (const item of changedGradesList) {
+    //     const displayOld = item.oldPrice !== null ? `${Number(item.oldPrice).toFixed(4)}¢` : '--';
+    //     marketingRowsHtml += `
+    //       <tr style="border-bottom: 1px solid #f1f5f9;">
+    //         <td style="padding: 12px; font-size: 14px; font-weight: bold; color: #1e293b;">${item.label}</td>
+    //         <td style="padding: 12px; font-size: 14px; color: #64748b; text-decoration: line-through;">${displayOld}</td>
+    //         <td style="padding: 12px; font-size: 15px; font-weight: 800; color: #16a34a;">${Number(item.newPrice).toFixed(4)}¢</td>
+    //         <td style="padding: 12px; text-align: right;">
+    //           <span style="display: inline-block; background-color: #dcfce7; color: #15803d; font-size: 11px; font-weight: bold; padding: 4px 8px; border-radius: 6px; text-transform: uppercase;">
+    //             Updated
+    //           </span>
+    //         </td>
+    //       </tr>
+    //     `;
+    //   }
 
-          <table style="width: 100%; border-collapse: collapse; margin-bottom: 24px; text-align: left;">
-            <thead>
-              <tr style="background-color: #f1f5f9; border-bottom: 2px solid #cbd5e1;">
-                <th style="padding: 10px 12px; font-size: 12px; font-weight: bold; color: #475569; text-transform: uppercase;">Fuel Grade</th>
-                <th style="padding: 10px 12px; font-size: 12px; font-weight: bold; color: #475569; text-transform: uppercase;">Old Price</th>
-                <th style="padding: 10px 12px; font-size: 12px; font-weight: bold; color: #475569; text-transform: uppercase;">New Price</th>
-                <th style="padding: 10px 12px; font-size: 12px; font-weight: bold; color: #475569; text-transform: uppercase; text-align: right;">Status</th>
-              </tr>
-            </thead>
-            <tbody>
-              ${marketingRowsHtml}
-            </tbody>
-          </table>
+    //   // Compile unchanged rows into view engine
+    //   for (const item of unchangedGradesList) {
+    //     marketingRowsHtml += `
+    //       <tr style="border-bottom: 1px solid #f1f5f9; background-color: #f8fafc;">
+    //         <td style="padding: 12px; font-size: 14px; font-weight: bold; color: #64748b;">${item.label}</td>
+    //         <td style="padding: 12px; font-size: 14px; color: #94a3b8;">--</td>
+    //         <td style="padding: 12px; font-size: 14px; font-weight: bold; color: #475569;">${Number(item.newPrice).toFixed(4)}¢</td>
+    //         <td style="padding: 12px; text-align: right;">
+    //           <span style="display: inline-block; background-color: #e2e8f0; color: #475569; font-size: 11px; font-weight: bold; padding: 4px 8px; border-radius: 6px; text-transform: uppercase;">
+    //             Unchanged
+    //           </span>
+    //         </td>
+    //       </tr>
+    //     `;
+    //   }
 
-          <div style="border-top: 1px solid #e2e8f0; padding-top: 16px; text-align: center;">
-            <span style="font-size: 11px; color: #94a3b8; font-style: italic;">
-              Internal price distribution ledger — Gen 7 Fuel Hub Operational Network.
-            </span>
-          </div>
-        </div>
-      `;
+    //   const marketingReportHtml = `
+    //     <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; border: 1px solid #cbd5e1; border-radius: 16px; background-color: #ffffff;">
+    //       <div style="background-color: #f8fafc; border-bottom: 2px solid #e2e8f0; padding: 16px; border-radius: 12px 12px 0 0; margin-bottom: 20px;">
+    //         <h3 style="color: #334155; margin: 0 0 4px 0; font-size: 16px; font-weight: 800; text-transform: uppercase; letter-spacing: 0.5px;">
+    //           📊 Fuel Price Ledger
+    //         </h3>
+    //         <h2 style="color: #0f172a; margin: 0; font-size: 20px; font-weight: 900;">
+    //           ${targetStationName}
+    //         </h2>
+    //       </div>
 
-      await emailQueue.add(`marketing-price-sync-${locationId}-${Date.now()}`, {
-        to: "marketing@gen7fuel.com", // Keeping marketing layout to your email for initial preview testing
-        subject: `📊 Fuel Pricing Sync Summary: ${targetStationName}`,
-        html: marketingReportHtml
-      });
-      console.log(`📧 Marketing highlights overview report queued successfully into BullMQ for ${targetStationName}.`);
-    }
+    //       <p style="font-size: 14px; color: #475569; line-height: 1.5; margin-bottom: 20px;">
+    //         The retail pricing board for this station location has been altered. Here are the comparisons mapping against current vs old prices:
+    //       </p>
+
+    //       <table style="width: 100%; border-collapse: collapse; margin-bottom: 24px; text-align: left;">
+    //         <thead>
+    //           <tr style="background-color: #f1f5f9; border-bottom: 2px solid #cbd5e1;">
+    //             <th style="padding: 10px 12px; font-size: 12px; font-weight: bold; color: #475569; text-transform: uppercase;">Fuel Grade</th>
+    //             <th style="padding: 10px 12px; font-size: 12px; font-weight: bold; color: #475569; text-transform: uppercase;">Old Price</th>
+    //             <th style="padding: 10px 12px; font-size: 12px; font-weight: bold; color: #475569; text-transform: uppercase;">New Price</th>
+    //             <th style="padding: 10px 12px; font-size: 12px; font-weight: bold; color: #475569; text-transform: uppercase; text-align: right;">Status</th>
+    //           </tr>
+    //         </thead>
+    //         <tbody>
+    //           ${marketingRowsHtml}
+    //         </tbody>
+    //       </table>
+
+    //       <div style="border-top: 1px solid #e2e8f0; padding-top: 16px; text-align: center;">
+    //         <span style="font-size: 11px; color: #94a3b8; font-style: italic;">
+    //           Internal price distribution ledger — Gen 7 Fuel Hub Operational Network.
+    //         </span>
+    //       </div>
+    //     </div>
+    //   `;
+
+    //   await emailQueue.add(`marketing-price-sync-${locationId}-${Date.now()}`, {
+    //     to: "marketing@gen7fuel.com", // Keeping marketing layout to your email for initial preview testing
+    //     subject: `📊 Fuel Pricing Sync Summary: ${targetStationName}`,
+    //     html: marketingReportHtml
+    //   });
+    //   console.log(`📧 Marketing highlights overview report queued successfully into BullMQ for ${targetStationName}.`);
+    // }
 
     // BROADCAST PIPELINE: This payload will now ALWAYS contain the full 5 grades
     const io = req.app.get("io");
