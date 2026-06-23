@@ -53,6 +53,7 @@ type ReportData = {
     report_canadian_cash: number
     payouts: number
     voidedTransactionsAmount?: number
+    chequesCashedOut?: number
   }
   chickenDelightTip?: number
   report?: { notes?: string; submitted?: boolean; unsettledPrepays?: number; handheldDebit?: number }
@@ -595,8 +596,17 @@ function RouteComponent() {
       ? n.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })
       : '—'
 
+  // --- NEW: Dynamic Cheque-Adjusted Math Core ---
+  const isWaversChequeSite = site === 'Wavers East' || site === 'Wavers West';
+  const chequesValue = totals?.chequesCashedOut ?? 0;
+
+  // Standard variance calculation (Incorporate cheques as counted revenue if at a Wavers station)
   const overShort =
-    (totals?.canadian_cash_collected ?? 0) - (totals?.report_canadian_cash ?? 0) + (handheldDebit ?? 0) + (unsettledPrepays ?? 0)
+    (totals?.canadian_cash_collected ?? 0) +
+    (isWaversChequeSite ? chequesValue : 0) -
+    (totals?.report_canadian_cash ?? 0) +
+    (handheldDebit ?? 0) +
+    (unsettledPrepays ?? 0);
 
   const baseReportedCash = totals?.report_canadian_cash || 0
 
@@ -626,7 +636,8 @@ function RouteComponent() {
     (totals?.payouts || 0) + payoutOverShort
 
   const adjustedOverShort =
-    (totals?.canadian_cash_collected ?? 0) - // total cash collected
+    (totals?.canadian_cash_collected ?? 0) +
+    (isWaversChequeSite ? chequesValue : 0) -
     (adjustedReportedCash ?? 0) + (handheldDebit ?? 0) + (unsettledPrepays ?? 0)          // adjusted reported cash
 
   const osColor =
@@ -720,6 +731,13 @@ function RouteComponent() {
                   <Card title="Loyalty" value={fmtNum(totals?.loyalty)} />
                   <Card title="Exempted Tax" value={fmtNum(totals?.exempted_tax)} />
                   <Card title="Payouts" value={fmtNum(totals?.payouts)} />
+                  {/* ⚠️ CONDITIONAL CHEQUES DISPLAY BLOCK */}
+                  {isWaversChequeSite && (
+                    <Card
+                      title="Cheques Cashed Out"
+                      value={<span className="font-semibold text-amber-700">{fmtNum(totals?.chequesCashedOut)}</span>}
+                    />
+                  )}
                   <Card
                     title={<span className="font-bold text-black">Voided Transactions</span>}
                     value={

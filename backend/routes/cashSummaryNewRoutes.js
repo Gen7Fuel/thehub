@@ -671,6 +671,7 @@ router.post('/', async (req, res) => {
       cpl_bulloch,
       exempted_tax,
       payouts,
+      chequesCashedOut, // 👈 ADD THIS LINE
     } = req.body || {}
 
     if (!shift_number) return res.status(400).json({ error: 'shift_number is required' })
@@ -684,6 +685,7 @@ router.post('/', async (req, res) => {
       cpl_bulloch: norm(cpl_bulloch),
       report_canadian_cash: undefined,
       payouts: norm(payouts),
+      chequesCashedOut: norm(chequesCashedOut), // 👈 ADD THIS LINE
     }
 
     let content = ''
@@ -751,6 +753,7 @@ router.post('/', async (req, res) => {
       report_canadian_cash: values.report_canadian_cash,
       exempted_tax: norm(exempted_tax),
       payouts: numOrUndef(values.payouts),
+      chequesCashedOut: norm(chequesCashedOut),
 
       // parsed SFT extras
       fuelSales: numOrUndef(parsed.fuelSales),
@@ -1207,6 +1210,7 @@ router.get('/report', async (req, res) => {
       exempted_tax: sum('exempted_tax', regularRows),
       report_canadian_cash: sum('report_canadian_cash', regularRows),
       payouts: regularRows.reduce((a, r) => a + (r.payouts || 0), 0),
+      chequesCashedOut: sum('chequesCashedOut', regularRows),
       voidedTransactionsAmount: sum('voidedTransactionsAmount', regularRows),
     }
 
@@ -1449,6 +1453,7 @@ router.put('/:id', async (req, res) => {
       cpl_bulloch,
       exempted_tax,
       report_canadian_cash,
+      chequesCashedOut, // 👈 ADD THIS LINE
     } = req.body || {}
 
     if (!shift_number) return res.status(400).json({ error: 'shift_number is required' })
@@ -1564,7 +1569,7 @@ router.put('/:id', async (req, res) => {
       loyalty: norm(ev.loyalty ?? loyalty ?? existing.loyalty),
       cpl_bulloch: norm(ev.cpl_bulloch ?? cpl_bulloch ?? existing.cpl_bulloch),
       report_canadian_cash: norm(ev.report_canadian_cash ?? report_canadian_cash ?? existing.report_canadian_cash),
-
+      chequesCashedOut: norm(chequesCashedOut) ?? existing.chequesCashedOut, // 👈 ADD THIS LINE
       exempted_tax: norm(exempted_tax) ?? existing.exempted_tax,
 
       // All remaining SFTP-parsed fields — fall back to existing if SFTP didn't return them
