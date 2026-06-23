@@ -722,15 +722,20 @@ function RouteComponent() {
 
             {showCDCheckbox && (
               <Field label="Chicken Delight Shift">
-                <div className="flex items-center h-[42px]">
-                  <input
-                    type="checkbox"
-                    checked={isChickenDelight}
-                    onChange={(e) => setIsChickenDelight(e.target.checked)}
-                    className="h-4 w-4"
+                <button
+                  type="button"
+                  onClick={() => setIsChickenDelight(!isChickenDelight)}
+                  title={isChickenDelight ? 'Marked as Chicken Delight shift — click to unmark' : 'Click to mark as Chicken Delight shift'}
+                  className={`mt-1 block rounded overflow-hidden transition-all duration-200 cursor-pointer outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-1 ${
+                    isChickenDelight ? '' : 'grayscale opacity-50'
+                  }`}
+                >
+                  <img
+                    src="/assets/images/Chicken_Delight_Current_Logo.jpg"
+                    alt="Chicken Delight"
+                    className="h-10 w-auto"
                   />
-                  <span className="ml-2 text-sm text-muted-foreground">Exclude from over/short</span>
-                </div>
+                </button>
               </Field>
             )}
           </div>
