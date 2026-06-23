@@ -1,100 +1,195 @@
+const fs = require("fs");
 const { chromium } = require("playwright-extra");
 const stealth = require("puppeteer-extra-plugin-stealth")();
-const fs = require("fs");
 const path = require("path");
+const { emailQueue } = require("../queues/emailQueue"); // 💡 Integrated email background queue
 
-// Inject stealth engine configuration matching your GasBuddy baseline
 chromium.use(stealth);
 
-async function uploadInventoryToPetrosoft() {
-    console.log("🤖 Initializing Petrosoft Inventory Sync Engine...");
+/**
+ * Helper function to pipe a screenshot buffer directly into the isolated CDN container
+ * without touching your local repository's directory structure.
+ */
+async function uploadToCdn(fileBuffer, originalName) {
+  try {
+    const formData = new FormData();
+    const fileBlob = new Blob([fileBuffer], { type: "image/png" });
+    formData.append("file", fileBlob, originalName);
 
-    // Validate the targets and paths before spinning up the browser context
-    const csvFilePath = path.resolve(__dirname, "../tmp/DAX_INV_TEST(in).csv");
-    const tempDir = path.resolve(__dirname, "../tmp");
+    const response = await fetch("http://cdn:5001/cdn/upload", {
+      method: "POST",
+      body: formData,
+    });
 
-    if (!fs.existsSync(csvFilePath)) {
-        throw new Error(`❌ Target data payload missing at: ${csvFilePath}`);
+    if (!response.ok) {
+      throw new Error(`CDN server dropped connection with status: ${response.status}`);
     }
 
-    // Detect server/container native environment binaries automatically
-    const systemChromiumPath = fs.existsSync("/usr/bin/chromium-browser")
-        ? "/usr/bin/chromium-browser"
-        : fs.existsSync("/usr/bin/chromium")
-            ? "/usr/bin/chromium"
-            : undefined;
+    const data = await response.json();
+    return `http://app.gen7fuel.com/cdn/download/${data.filename}`;
+  } catch (error) {
+    console.error("❌ Secondary Pipeline Error: Failed uploading image asset to CDN:", error);
+    return null;
+  }
+}
 
-    const browser = await chromium.launch({
-        headless: true,
-        executablePath: systemChromiumPath,
-        args: [
-            "--no-sandbox",
-            "--disable-setuid-sandbox",
-            "--disable-dev-shm-usage"
-        ]
+/**
+ * Core Playwright Engine to pipe the generated memory buffer straight into Petrosoft
+ */
+async function uploadInventoryToPetrosoft({
+  targetStationCsoCode,
+  csvFileBuffer,
+}) {
+  console.log(`🤖 Initializing Petrosoft Pipeline Context for Station ID: ${targetStationCsoCode}...`);
+
+  // Detect server/container native environment binaries automatically
+  const systemChromiumPath =
+    process.env.CHROMIUM_PATH ||
+    (fs.existsSync("/usr/bin/chromium-browser")
+      ? "/usr/bin/chromium-browser"
+      : fs.existsSync("/usr/bin/chromium")
+        ? "/usr/bin/chromium"
+        : undefined);
+
+  console.log(`🌐 Pointing Playwright execution matrix to browser binary: ${systemChromiumPath || "Default Playwright Cache"}`);
+
+  const browser = await chromium.launch({
+    headless: true,
+    executablePath: systemChromiumPath,
+    args: [
+      "--no-sandbox",
+      "--disable-setuid-sandbox",
+      "--disable-dev-shm-usage",
+    ],
+  });
+
+  const context = await browser.newContext({
+    viewport: { width: 1400, height: 1000 },
+    userAgent:
+      "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+  });
+
+  const page = await context.newPage();
+
+  try {
+    // Auth Gateway
+    const loginUrl = "https://03.cstoreoffice.com";
+    await page.goto(loginUrl, { waitUntil: "networkidle", timeout: 60000 });
+    await page.waitForSelector("#username", {
+      state: "visible",
+      timeout: 15000,
+    });
+    await page.fill("#username", process.env.PETROSOFT_USERNAME);
+    await page.fill("#password", process.env.PETROSOFT_PASSWORD);
+    await page.click("#kc-login");
+    await page.waitForLoadState("networkidle");
+
+    // Dynamic Station Redirect
+    const importUrl = `https://03.cstoreoffice.com/app.php/inventory/import/${targetStationCsoCode}`;
+    await page.goto(importUrl, { waitUntil: "load" });
+    await page.waitForSelector("#oItemsFile", {
+      state: "visible",
+      timeout: 15000,
     });
 
-    // Create an isolated window space
-    const context = await browser.newContext({
-        viewport: { width: 1400, height: 1000 },
-        userAgent: "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+    console.log("📂 Injecting dynamic in-memory CSV buffer parameters directly into file input node...");
+
+    await page.setInputFiles("#oItemsFile", {
+      name: `INV_${targetStationCsoCode}_${Date.now()}.csv`,
+      mimeType: "text/csv",
+      buffer: csvFileBuffer,
     });
 
-    const page = await context.newPage();
+    const uploadButton = page.locator("#btnSubmit");
+    await uploadButton.waitFor({ state: "visible", timeout: 5000 });
+    await uploadButton.click();
 
+    // Verify Success Response
+    const successCloseBtn = page.locator('button.btn:has-text("Close Window")');
+    await successCloseBtn.waitFor({ state: "visible", timeout: 30000 });
+    console.log("✅ Petrosoft API upload handshake accepted.");
+
+    // Direct routing checkpoint capture
+    const trackingManagerUrl = `https://03.cstoreoffice.com/Inventory/inventorymanager/?Station=${targetStationCsoCode}#`;
+    await page.goto(trackingManagerUrl, {
+      waitUntil: "networkidle",
+      timeout: 45000,
+    });
+    await page.waitForTimeout(4000); // Let UI finish painting lists
+
+    // 📸 SUCCESS BUFFER SNAPSHOT -> CDN PIPELINE
+    const successBuffer = await page.screenshot({ fullPage: true });
+    const successCdnUrl = await uploadToCdn(successBuffer, `petrosoft_sync_verified_${targetStationCsoCode}.png`);
+    
+    if (successCdnUrl) {
+      console.log(`🎉 Audit track uploaded directly to CDN: ${successCdnUrl}`);
+    }
+
+    return { success: true, screenshotUrl: successCdnUrl };
+  } catch (error) {
+    console.error("❌ CRITICAL EXCEPTION IN PETROSOFT AUTOMATION PIPELINE:", error);
+    
+    let emergencyCdnUrl = "";
     try {
-        // 💡 Fix: Target the base root application to let Keycloak generate fresh runtime session variables
-        const loginUrl = "https://03.cstoreoffice.com";
-        console.log(`🔗 Navigating to Petrosoft Gateway: ${loginUrl}`);
-
-        // Step forward and wait until the dynamic redirects establish the user form inputs
-        await page.goto(loginUrl, { waitUntil: "networkidle", timeout: 60000 });
-
-        // Extra safeguard: Wait explicitly for the username block to verify routing finalized
-        console.log("⏱️ Confirming form input visibility...");
-        await page.waitForSelector("#username", { state: "visible", timeout: 15000 });
-
-        console.log("🔑 Injecting authorization credentials from .env context...");
-        await page.fill("#username", process.env.PETROSOFT_USERNAME);
-        await page.fill("#password", process.env.PETROSOFT_PASSWORD);
-
-        console.log("🚀 Submitting authentication payload sequence...");
-        await page.click("#kc-login");
-
-        console.log("⏱️ Waiting for internal network responses to stabilize...");
-        await page.waitForLoadState("networkidle");
-
-        // Capture explicit proof of the backend dashboard application view post-login
-        const screenshotPath = path.join(tempDir, `petrosoft_login_success_${Date.now()}.png`);
-        await page.screenshot({ path: screenshotPath, fullPage: true });
-        console.log(`📸 Audit checkpoint preserved safely to local disk: ${screenshotPath}`);
-
-        console.log(`ℹ️ [Ready for Next Step]: Verified active UI visibility.`);
-
-    } catch (error) {
-        console.error("❌ CRITICAL DISPATCH EXCEPTION IN PETROSOFT ENGINE:", error);
-
-        try {
-            const errorScreenshotPath = path.join(tempDir, `petrosoft_failure_${Date.now()}.png`);
-            await page.screenshot({ path: errorScreenshotPath, fullPage: true });
-            console.log(`📸 Diagnostic error state snapshot written safely to: ${errorScreenshotPath}`);
-        } catch (ssErr) {
-            console.error("Unable to execute diagnostic screenshot capture:", ssErr);
-        }
-
-        throw error;
-    } finally {
-        await browser.close();
-        console.log("🔒 Headless production engine shut down successfully.");
+      // 📸 FAILURE BUFFER SNAPSHOT -> CDN PIPELINE
+      const errorBuffer = await page.screenshot({ fullPage: true });
+      emergencyCdnUrl = await uploadToCdn(errorBuffer, `petrosoft_err_${targetStationCsoCode}.png`);
+    } catch (ssErr) {
+      console.error("Unable to execute memory buffer screenshot dump:", ssErr);
     }
+
+    // 📬 FORMAT INCIDENT NOTIFICATION MARKUP
+    const systemAlertHtml = `
+      <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; border: 1px solid #f87171; border-radius: 16px; background-color: #ffffff;">
+        <div style="background-color: #fef2f2; border-left: 4px solid #dc2626; padding: 16px; border-radius: 8px; margin-bottom: 20px;">
+          <h2 style="color: #991b1b; margin: 0 0 8px 0; font-size: 16px; font-weight: 800; text-transform: uppercase;">
+            ⚠️ Critical: Petrosoft Cycle Count Upload Failure
+          </h2>
+          <p style="color: #b91c1c; margin: 0; font-size: 14px; font-weight: 600; line-height: 1.5;">
+            An exception interrupted the automated browser process pushing counts to Petrosoft for Station CSO Code: <strong>${targetStationCsoCode}</strong>.
+          </p>
+        </div>
+
+        <div style="margin-bottom: 24px; background-color: #f8fafc; border: 1px solid #e2e8f0; padding: 14px; border-radius: 8px;">
+          <strong style="color: #0f172a; font-size: 13px; text-transform: uppercase;">Error Technical Details:</strong>
+          <p style="font-family: monospace; font-size: 13px; color: #ef4444; margin: 8px 0 0 0; white-space: pre-wrap;">
+            ${error.message}
+          </p>
+        </div>
+
+        ${emergencyCdnUrl ? `
+          <div style="margin-bottom: 24px; text-align: center;">
+            <a href="${emergencyCdnUrl}" target="_blank"
+               style="display: inline-block; background-color: #dc2626; color: #ffffff; padding: 12px 20px; font-weight: bold; font-size: 13px; text-decoration: none; border-radius: 8px; text-transform: uppercase;">
+              🔍 View Petrosoft Diagnostic Screenshot
+            </a>
+          </div>
+        ` : `
+          <p style="font-size: 12px; color: #94a3b8; font-style: italic; margin-bottom: 24px;">
+            Note: Could not capture diagnostic screenshot because browser rendering context crashed or hung.
+          </p>
+        `}
+
+        <div style="border-top: 1px solid #e2e8f0; padding-top: 16px; text-align: center;">
+          <span style="font-size: 11px; color: #94a3b8; font-style: italic;">
+            Automated operational alert pipeline — Gen 7 Fuel Hub System Engine.
+          </span>
+        </div>
+      </div>
+    `;
+
+    // Queue the mail drop task immediately
+    await emailQueue.add(`petrosoft-error-${Date.now()}`, {
+      to: "daksh@gen7fuel.com",
+      subject: `🚨 Hub Automation Sync Failure (Petrosoft Station: ${targetStationCsoCode})`,
+      html: systemAlertHtml
+    });
+
+    console.log("📧 Exception notification successfully offloaded to emailQueue channels.");
+    throw error;
+  } finally {
+    await browser.close();
+  }
 }
 
-// Export for manual script runner usage or integration testing
 module.exports = { uploadInventoryToPetrosoft };
-
-// Execute directly if processed from the terminal instance
-if (require.main === module) {
-    // Ensure your execution reads local variables if running outside the Docker Compose orchestration layer
-    require("dotenv").config();
-    uploadInventoryToPetrosoft();
-}

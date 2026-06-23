@@ -25,6 +25,7 @@ function RouteComponent() {
   const [movedToBottom, setMovedToBottom] = useState<string[]>([]);
   const [completedCategories, setCompletedCategories] = useState<string[]>([]);
   const [varianceMap, setVarianceMap] = useState<{ [key: number]: number }>({});
+  const [syncing, setSyncing] = useState(false);
 
   interface CycleCountFieldUpdateV2 {
     entryId: string;
@@ -352,6 +353,45 @@ function RouteComponent() {
     }
   };
 
+  // 🚀 Dedicated sync handler function
+  const handleFinalizeAndSync = async () => {
+    const confirmation = window.confirm(
+      "Make sure all the counts are correct and submit only when all counts for the day have been completed. This will create tickets for all the items which have been counted on the hub. Proceed with completion of the count?"
+    );
+    if (!confirmation) return;
+
+    setSyncing(true);
+    try {
+      // Captures today's date formatted as 'YYYY-MM-DD'
+      const todayStr = new Date().toISOString().split("T")[0];
+
+      const response = await axios.post(
+        "/api/cycle-count/finalize-and-sync",
+        {
+          siteName: site,
+          targetDate: todayStr,
+        },
+        {
+          headers: {
+            Authorization: `Bearer ${localStorage.getItem("token") || ""}`,
+            "X-Required-Permission": "cycleCount",
+          },
+        }
+      );
+
+      if (response.data.success) {
+        alert("Cycle Count pushed successfully!");
+      } else {
+        alert(`⚠️ Sync flagged: ${response.data.reason || "Unknown response processing state."}`);
+      }
+    } catch (err: any) {
+      console.error("Pipeline Sync Fault:", err);
+      alert(err.response?.data?.message || "❌ CRITICAL Exception running automated data transmission.");
+    } finally {
+      setSyncing(false);
+    }
+  };
+
   // Calculate overall progress for a top progress bar
   const totalCompleted = items.filter(item => isItemCountComplete(item, counts[item.entryId])).length;
   const overallPercent = items.length > 0 ? (totalCompleted / items.length) * 100 : 0;
@@ -370,7 +410,7 @@ function RouteComponent() {
         </div>
 
         <div className="flex flex-col items-end gap-2">
-          <div className="flex gap-2">
+          <div className="flex gap-2 items-center">
             <button
               onClick={() => toggleAll(true)}
               className="text-xs font-bold px-4 py-2 bg-white border border-gray-200 rounded-lg shadow-sm hover:bg-gray-50 transition-colors"
@@ -382,6 +422,18 @@ function RouteComponent() {
               className="text-xs font-bold px-4 py-2 bg-white border border-gray-200 rounded-lg shadow-sm hover:bg-gray-50 transition-colors"
             >
               Collapse All
+            </button>
+
+            {/* Clean button calling the isolated handler function */}
+            <button
+              disabled={overallPercent === 0 || syncing}
+              onClick={handleFinalizeAndSync}
+              className={`text-xs font-bold px-4 py-2 text-white rounded-lg shadow-md transition-all ${overallPercent === 0
+                  ? "bg-gray-300 cursor-not-allowed opacity-60"
+                  : "bg-emerald-600 hover:bg-emerald-700 active:scale-95"
+                }`}
+            >
+              {syncing ? "Processing Sync..." : "Finalize Counts"}
             </button>
           </div>
           <span className="text-sm font-bold text-blue-600 bg-blue-50 px-3 py-1 rounded-full">
