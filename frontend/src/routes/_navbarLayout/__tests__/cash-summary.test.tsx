@@ -69,6 +69,27 @@ vi.mock('@/components/custom/LotteryComparisionTable', () => ({
   LotteryComparisonTable: () => <div data-testid="lottery-table" />,
 }))
 
+vi.mock('@/components/custom/datePicker', () => ({
+  DatePicker: ({ date, setDate }: any) => {
+    const value = date
+      ? `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`
+      : ''
+    return (
+      <input
+        data-testid="date-picker"
+        type="date"
+        value={value}
+        onChange={(e) => {
+          if (!e.target.value) return
+          const [y, m, d] = e.target.value.split('-').map(Number)
+          setDate(new Date(y, m - 1, d, 0, 0, 0, 0))
+        }}
+        readOnly={!setDate}
+      />
+    )
+  },
+}))
+
 // ─── Component imports (after mocks) ─────────────────────────────────────────
 
 import { Route as IndexRoute } from '../cash-summary/index'
@@ -343,9 +364,8 @@ describe('Cash Summary Report — report.tsx', () => {
 
   it('renders the Date input with the current date value', async () => {
     renderWithSuspense(<CashSummaryReport />)
-    // The date input is pre-populated from the search param '2026-03-10'
     await waitFor(() =>
-      expect(screen.getByDisplayValue('2026-03-10')).toBeInTheDocument()
+      expect(screen.getByTestId('date-picker')).toHaveValue('2026-03-10')
     )
   })
 
