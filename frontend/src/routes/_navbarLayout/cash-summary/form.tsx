@@ -91,9 +91,20 @@ function RouteComponent() {
   const [loyalty, setLoyalty] = useState('')
   const [cplBulloch, setCplBulloch] = useState('')
   const [exemptedTax, setExemptedTax] = useState('')
+  const [isChickenDelight, setIsChickenDelight] = useState(false)
+  const [showCDCheckbox, setShowCDCheckbox] = useState(false)
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [success, setSuccess] = useState<string | null>(null)
+
+  // Fetch location config when site changes to determine if CD checkbox should be shown
+  useEffect(() => {
+    if (!site) return
+    fetch(`/api/locations?stationName=${encodeURIComponent(site)}`)
+      .then(r => r.json())
+      .then(loc => setShowCDCheckbox(!!loc?.chickenDelightSection))
+      .catch(() => {})
+  }, [site])
 
   // Populate form when existing record loads, then auto-sync from SFTP if shift is present
   useEffect(() => {
@@ -107,6 +118,7 @@ function RouteComponent() {
     setLoyalty(toStr(existing.loyalty))
     setCplBulloch(toStr(existing.cpl_bulloch))
     setExemptedTax(toStr(existing.exempted_tax))
+    setIsChickenDelight((existing as any).isChickenDelight ?? false)
     setSuccess(null)
     setError(null)
 
@@ -188,6 +200,7 @@ function RouteComponent() {
       loyalty: num(loyalty),
       cpl_bulloch: num(cplBulloch),
       exempted_tax: num(exemptedTax),
+      ...(showCDCheckbox ? { isChickenDelight } : {}),
     }
 
     try {
@@ -232,6 +245,7 @@ function RouteComponent() {
     setLoyalty('')
     setCplBulloch('')
     setExemptedTax('')
+    setIsChickenDelight(false)
     setSuccess(null)
     setError(null)
   }
@@ -323,6 +337,20 @@ function RouteComponent() {
                 inputMode="decimal"
               />
             </Field>
+
+            {showCDCheckbox && (
+              <Field label="Chicken Delight Shift">
+                <div className="flex items-center h-[42px]">
+                  <input
+                    type="checkbox"
+                    checked={isChickenDelight}
+                    onChange={(e) => setIsChickenDelight(e.target.checked)}
+                    className="h-4 w-4"
+                  />
+                  <span className="ml-2 text-sm text-muted-foreground">Exclude from over/short</span>
+                </div>
+              </Field>
+            )}
           </div>
 
           <div className="flex items-center gap-4">

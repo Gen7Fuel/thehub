@@ -59,6 +59,7 @@ const CashSummarySchema = new mongoose.Schema(
     dataWave: { type: Number },
     feeDataWave: { type: Number },
     unsettledPrepays: { type: Number },
+    isChickenDelight: { type: Boolean, default: false },
     createdBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User'},
   },
   { timestamps: true }

@@ -35,6 +35,7 @@ type Row = {
   exempted_tax?: number
   report_canadian_cash?: number
   payouts?: number
+  isChickenDelight?: boolean
 }
 
 type ReportData = {
@@ -53,6 +54,7 @@ type ReportData = {
     payouts: number
     voidedTransactionsAmount?: number
   }
+  chickenDelightTip?: number
   report?: { notes?: string; submitted?: boolean; unsettledPrepays?: number; handheldDebit?: number }
 }
 
@@ -530,6 +532,9 @@ function RouteComponent() {
   const rows = report?.rows ?? []
   const totals = report?.totals
   const hasRows = rows.length > 0
+  const regularRows = rows.filter(r => !r.isChickenDelight)
+  const cdRows = rows.filter(r => r.isChickenDelight)
+  const chickenDelightTip = report?.chickenDelightTip ?? 0
 
   useEffect(() => {
     const fetchLottery = async () => {
@@ -938,7 +943,7 @@ function RouteComponent() {
               <div>
                 <h3 className="text-sm font-semibold mb-2">Shifts</h3>
                 <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-                  {rows.map((r) => (
+                  {regularRows.map((r) => (
                     <div key={r._id} className="border rounded-md p-4 bg-card">
                       <div className="text-xs text-muted-foreground mb-1">Shift Number</div>
                       <div className="text-base font-semibold mb-3">{r.shift_number}</div>
@@ -951,6 +956,38 @@ function RouteComponent() {
                   ))}
                 </div>
               </div>
+
+              {cdRows.length > 0 && (
+                <div>
+                  <h3 className="text-sm font-semibold mb-2">Chicken Delight</h3>
+                  <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+                    {cdRows.map((r) => (
+                      <div key={r._id} className="border rounded-md p-4 bg-card">
+                        <div className="text-xs text-muted-foreground mb-1">Shift Number</div>
+                        <div className="text-base font-semibold mb-3">{r.shift_number}</div>
+                        <div className="grid gap-2 text-sm">
+                          <KV k="Pinpad Total (Collected)" v={fmtNum(r.canadian_cash_collected)} />
+                          <KV k="Bulloch Total (Reported)" v={fmtNum(r.report_canadian_cash)} />
+                          <KV
+                            k="Tips"
+                            v={
+                              <span className="text-green-600 font-semibold">
+                                {fmtNum((r.canadian_cash_collected ?? 0) - (r.report_canadian_cash ?? 0))}
+                              </span>
+                            }
+                          />
+                        </div>
+                      </div>
+                    ))}
+                    {cdRows.length > 1 && (
+                      <div className="border rounded-md p-4 bg-muted/40">
+                        <div className="text-xs text-muted-foreground mb-1">Total Tips</div>
+                        <div className="text-base font-semibold text-green-600">{fmtNum(chickenDelightTip)}</div>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )}
 
               <div>
                 <h3 className="text-sm font-semibold mb-2">Notes</h3>
