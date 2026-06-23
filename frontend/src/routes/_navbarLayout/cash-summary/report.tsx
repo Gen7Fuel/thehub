@@ -1,5 +1,6 @@
 import { createFileRoute, useNavigate } from '@tanstack/react-router'
 import { useMemo, useState, useEffect, useRef } from 'react'
+import { DatePicker } from '@/components/custom/datePicker'
 import { toast, Toaster } from 'sonner'
 import { SitePicker } from '@/components/custom/sitePicker'
 import { Button } from '@/components/ui/button';
@@ -521,7 +522,6 @@ function RouteComponent() {
 
   console.log('Site/date report:', site, date, voidedDetails)
 
-  const submitDisabled = submitState !== 'idle' || arCheckMatch === false || payoutsCheckMatch === false
   const submitLabel =
     submitState === 'idle' ? 'Submit' : submitState === 'submitting' ? 'Submitting...' : 'Submitted'
 
@@ -529,6 +529,21 @@ function RouteComponent() {
     navigate({ search: (prev: Search) => ({ ...prev, site: newSite }) })
   const updateDate = (newDate: string) =>
     navigate({ search: (prev: Search) => ({ ...prev, date: newDate }) })
+
+  const pickerDate = useMemo(() => {
+    if (!date) return undefined
+    const [yy, mm, dd] = date.split('-').map(Number)
+    return new Date(yy, mm - 1, dd, 0, 0, 0, 0)
+  }, [date])
+
+  const handleDateChange: React.Dispatch<React.SetStateAction<Date | undefined>> = (value) => {
+    const d = typeof value === 'function' ? value(pickerDate) : value
+    if (!d) return
+    const yy = d.getFullYear()
+    const mm = String(d.getMonth() + 1).padStart(2, '0')
+    const dd2 = String(d.getDate()).padStart(2, '0')
+    updateDate(`${yy}-${mm}-${dd2}`)
+  }
 
   const rows = report?.rows ?? []
   const totals = report?.totals
@@ -638,7 +653,12 @@ function RouteComponent() {
   const adjustedOverShort =
     (totals?.canadian_cash_collected ?? 0) +
     (isWaversChequeSite ? chequesValue : 0) -
-    (adjustedReportedCash ?? 0) + (handheldDebit ?? 0) + (unsettledPrepays ?? 0)          // adjusted reported cash
+    (adjustedReportedCash ?? 0) + (handheldDebit ?? 0) + (unsettledPrepays ?? 0)
+
+  const effectiveOverShort = lottery ? adjustedOverShort : overShort
+  const notesRequired = Math.abs(effectiveOverShort) > 25
+  const notesProvided = noteText.trim().length > 0
+  const submitDisabled = submitState !== 'idle' || arCheckMatch === false || payoutsCheckMatch === false || (notesRequired && !notesProvided)
 
   const osColor =
     overShort > 0 ? 'text-green-600' : overShort < 0 ? 'text-red-600' : 'text-muted-foreground'
@@ -670,11 +690,9 @@ function RouteComponent() {
           />
           <div>
             <label className="block text-sm mb-1">Date</label>
-            <input
-              type="date"
-              value={date}
-              onChange={(e) => updateDate(e.target.value)}
-              className="border rounded px-3 py-2"
+            <DatePicker
+              date={pickerDate}
+              setDate={handleDateChange}
             />
           </div>
           <div className="ml-auto flex flex-row gap-2">
@@ -1008,15 +1026,25 @@ function RouteComponent() {
               )}
 
               <div>
-                <h3 className="text-sm font-semibold mb-2">Notes</h3>
+                <h3 className="text-sm font-semibold mb-2">
+                  Notes
+                  {notesRequired && !submitted && (
+                    <span className="ml-2 text-amber-600 font-normal">*required</span>
+                  )}
+                </h3>
                 <textarea
-                  className="w-full min-h-[120px] border rounded px-3 py-2 text-sm"
+                  className={`w-full min-h-[120px] border rounded px-3 py-2 text-sm ${notesRequired && !notesProvided && !submitted ? 'border-amber-500 focus:outline-amber-500' : ''}`}
                   value={noteText}
                   onChange={(e) => setNoteText(e.target.value)}
                   onBlur={() => saveNotes(noteText)}
-                  placeholder="Add notes for this cash summary…"
+                  placeholder={notesRequired ? 'Required — explain the over/short variance…' : 'Add notes for this cash summary…'}
                   disabled={submitted}
                 />
+                {notesRequired && !notesProvided && !submitted && (
+                  <div className="mt-1 text-xs text-amber-600">
+                    Manager's notes are required when the over/short exceeds $25. The report cannot be submitted until an explanation is provided.
+                  </div>
+                )}
                 {submitted && (
                   <div className="mt-1 text-xs text-muted-foreground">
                     Notes are locked because this report is submitted.
