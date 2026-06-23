@@ -458,10 +458,15 @@ function RouteComponent() {
   // Fetch location config when site changes to determine if CD checkbox should be shown
   useEffect(() => {
     if (!site) return
-    fetch(`/api/locations?stationName=${encodeURIComponent(site)}`)
-      .then(r => r.json())
-      .then(loc => setShowCDCheckbox(!!loc?.chickenDelightSection))
-      .catch(() => {})
+    ;(async () => {
+      try {
+        const r = await fetch(`/api/locations?stationName=${encodeURIComponent(site)}`)
+        const loc = await r.json()
+        setShowCDCheckbox(!!loc?.chickenDelightSection)
+      } catch {
+        // silently ignore — checkbox stays hidden on fetch failure
+      }
+    })()
   }, [site])
 
   // Populate form when existing record loads, then auto-sync from SFTP if shift is present
