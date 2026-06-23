@@ -446,12 +446,28 @@ function RouteComponent() {
   const [cplBulloch, setCplBulloch] = useState('')
   const [exemptedTax, setExemptedTax] = useState('')
   const [chequesCashedOut, setChequesCashedOut] = useState('') // 👈 Added state hook
+  const [isChickenDelight, setIsChickenDelight] = useState(false)
+  const [showCDCheckbox, setShowCDCheckbox] = useState(false)
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [success, setSuccess] = useState<string | null>(null)
 
   // Determine if the selected site is allowed to see the Cheques Cashed Out field
   const showChequesField = site === 'Wavers East' || site === 'Wavers West'
+
+  // Fetch location config when site changes to determine if CD checkbox should be shown
+  useEffect(() => {
+    if (!site) return
+    ;(async () => {
+      try {
+        const r = await fetch(`/api/locations?stationName=${encodeURIComponent(site)}`)
+        const loc = await r.json()
+        setShowCDCheckbox(!!loc?.chickenDelightSection)
+      } catch {
+        // silently ignore — checkbox stays hidden on fetch failure
+      }
+    })()
+  }, [site])
 
   // Populate form when existing record loads, then auto-sync from SFTP if shift is present
   useEffect(() => {
@@ -466,6 +482,7 @@ function RouteComponent() {
     setCplBulloch(toStr(existing.cpl_bulloch))
     setExemptedTax(toStr(existing.exempted_tax))
     setChequesCashedOut(toStr(existing.chequesCashedOut)) // 👈 Sync existing data payload
+    setIsChickenDelight((existing as any).isChickenDelight ?? false)
     setSuccess(null)
     setError(null)
 
@@ -549,6 +566,7 @@ function RouteComponent() {
       cpl_bulloch: num(cplBulloch),
       exempted_tax: num(exemptedTax),
       chequesCashedOut: showChequesField ? num(chequesCashedOut) : undefined, // 👈 Only send if tracking site
+      ...(showCDCheckbox ? { isChickenDelight } : {}),
     }
 
     try {
@@ -593,6 +611,7 @@ function RouteComponent() {
     setCplBulloch('')
     setExemptedTax('')
     setChequesCashedOut('') // 👈 Clear down hook context
+    setIsChickenDelight(false)
     setSuccess(null)
     setError(null)
   }
@@ -698,6 +717,20 @@ function RouteComponent() {
                   inputMode="decimal"
                   placeholder="0.00"
                 />
+              </Field>
+            )}
+
+            {showCDCheckbox && (
+              <Field label="Chicken Delight Shift">
+                <div className="flex items-center h-[42px]">
+                  <input
+                    type="checkbox"
+                    checked={isChickenDelight}
+                    onChange={(e) => setIsChickenDelight(e.target.checked)}
+                    className="h-4 w-4"
+                  />
+                  <span className="ml-2 text-sm text-muted-foreground">Exclude from over/short</span>
+                </div>
               </Field>
             )}
           </div>
