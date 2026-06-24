@@ -916,7 +916,7 @@ function StationStrip({ location, date, racks }: { location: any, date: Date, ra
                         <div className="flex items-center gap-2">
                           <div className="flex items-center gap-1.5 overflow-x-auto no-scrollbar max-w-[500px]">
                             {order.items?.slice().sort((a: any, b: any) => {
-                              const priority: Record<string, number> = { 'Regular': 1, 'Premium': 2, 'Diesel': 3, 'Dyed Diesel': 4 };
+                              const priority: Record<string, number> = { 'Regular': 1, 'E15': 2, 'Premium': 3, 'Diesel': 4, 'Dyed Diesel': 5 };
                               return (priority[a.grade] || 99) - (priority[b.grade] || 99);
                             }).map((item: any) => {
                               const theme = getGradeTheme(item.grade);
@@ -1329,7 +1329,7 @@ export function UpdateStatusDialog({ order, open, initialStep, onOpenChange, loc
       }
       return axios.put(`/api/fuel-orders/${order._id}`, payload, authHeader);
     },
-    onSuccess: (_, variables) => {
+    onSuccess: (_, variables: any) => {
       // 1. Always invalidate the orders list so the UI badges update immediately
       queryClient.invalidateQueries({ 
         queryKey: ['workspace-orders', locationId] 

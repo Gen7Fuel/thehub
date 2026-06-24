@@ -13,7 +13,7 @@ export const Route = createFileRoute('/_navbarLayout/fuel-management/manage/rack
   component: EditRackComponent,
 })
 
-const AVAILABLE_GRADES = ["Regular", "Premium", "Diesel", "Dyed Diesel"]
+const AVAILABLE_GRADES = ["Regular", "E15", "Premium", "Diesel", "Dyed Diesel"]
 
 function EditRackComponent() {
   const { id } = Route.useParams()
