@@ -354,6 +354,7 @@
 import { createFileRoute, useNavigate } from '@tanstack/react-router'
 import { useEffect, useState } from 'react'
 import { SitePicker } from '@/components/custom/sitePicker'
+import { DatePicker } from '@/components/custom/datePicker'
 import { useSite } from '@/context/SiteContext'
 
 type CashSummarySearch = { site: string; id?: string }
@@ -432,13 +433,13 @@ function RouteComponent() {
 
   if (accessDenied) return null;
 
-  const todayISO = () => {
+  const todayLocalMidnight = () => {
     const d = new Date()
-    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+    return new Date(d.getFullYear(), d.getMonth(), d.getDate(), 0, 0, 0, 0)
   }
 
   const [shiftNumber, setShiftNumber] = useState('')
-  const [date, setDate] = useState(todayISO())
+  const [date, setDate] = useState<Date | undefined>(todayLocalMidnight())
   const [canadianCashCollected, setCanadianCashCollected] = useState('')
   const [itemSales, setItemSales] = useState('')
   const [cashBack, setCashBack] = useState('')
@@ -474,7 +475,8 @@ function RouteComponent() {
     if (!existing) return
 
     setShiftNumber(existing.shift_number)
-    setDate(existing.date.slice(0, 10))
+    const [yy, mm, dd] = existing.date.slice(0, 10).split('-').map(Number)
+    setDate(new Date(yy, mm - 1, dd, 0, 0, 0, 0))
     setCanadianCashCollected(toStr(existing.canadian_cash_collected))
     setItemSales(toStr(existing.item_sales))
     setCashBack(toStr(existing.cash_back))
@@ -550,10 +552,8 @@ function RouteComponent() {
       return
     }
 
-    const toLocalMidnightISO = (dateStr: string) => {
-      const [yy, mm, dd] = dateStr.split('-').map(Number)
-      return new Date(yy, mm - 1, dd, 0, 0, 0, 0).toISOString()
-    }
+    const toLocalMidnightISO = (d: Date) =>
+      new Date(d.getFullYear(), d.getMonth(), d.getDate(), 0, 0, 0, 0).toISOString()
 
     const payload = {
       site: site || undefined,
@@ -603,7 +603,7 @@ function RouteComponent() {
   const handleNew = () => {
     navigate({ search: { site, id: undefined } })
     setShiftNumber('')
-    setDate(todayISO())
+    setDate(todayLocalMidnight())
     setCanadianCashCollected('')
     setItemSales('')
     setCashBack('')
@@ -681,12 +681,10 @@ function RouteComponent() {
               />
             </Field>
             <Field label="Date *">
-              <input
-                type="date"
-                value={date}
-                onChange={(e) => setDate(e.target.value)}
-                className="w-full border rounded px-3 py-2"
-                required
+              <DatePicker
+                date={date}
+                setDate={setDate}
+                restrictToPast
               />
             </Field>
             <Field label="Canadian Cash Collected">
@@ -722,15 +720,20 @@ function RouteComponent() {
 
             {showCDCheckbox && (
               <Field label="Chicken Delight Shift">
-                <div className="flex items-center h-[42px]">
-                  <input
-                    type="checkbox"
-                    checked={isChickenDelight}
-                    onChange={(e) => setIsChickenDelight(e.target.checked)}
-                    className="h-4 w-4"
+                <button
+                  type="button"
+                  onClick={() => setIsChickenDelight(!isChickenDelight)}
+                  title={isChickenDelight ? 'Marked as Chicken Delight shift — click to unmark' : 'Click to mark as Chicken Delight shift'}
+                  className={`mt-1 block rounded overflow-hidden transition-all duration-200 cursor-pointer outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-1 ${
+                    isChickenDelight ? '' : 'grayscale opacity-50'
+                  }`}
+                >
+                  <img
+                    src="/assets/images/Chicken_Delight_Current_Logo.jpg"
+                    alt="Chicken Delight"
+                    className="h-10 w-auto"
                   />
-                  <span className="ml-2 text-sm text-muted-foreground">Exclude from over/short</span>
-                </div>
+                </button>
               </Field>
             )}
           </div>
