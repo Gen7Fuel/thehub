@@ -69,6 +69,25 @@ vi.mock('@/components/custom/LotteryComparisionTable', () => ({
   LotteryComparisonTable: () => <div data-testid="lottery-table" />,
 }))
 
+vi.mock('input-otp', () => ({
+  REGEXP_ONLY_DIGITS: '^[0-9]*$',
+}))
+
+vi.mock('@/components/ui/input-otp', () => ({
+  InputOTP: ({ value, onChange, onBlur }: any) => (
+    <input
+      data-testid="shift-otp-input"
+      type="text"
+      value={value ?? ''}
+      onChange={(e) => onChange?.(e.target.value)}
+      onBlur={onBlur}
+      maxLength={5}
+    />
+  ),
+  InputOTPGroup: ({ children }: any) => <>{children}</>,
+  InputOTPSlot: () => null,
+}))
+
 vi.mock('@/components/custom/datePicker', () => ({
   DatePicker: ({ date, setDate }: any) => {
     const value = date
