@@ -36,6 +36,7 @@ type Row = {
   exempted_tax?: number
   report_canadian_cash?: number
   payouts?: number
+  pinpadTotal?: number
   isChickenDelight?: boolean
 }
 
@@ -1002,13 +1003,18 @@ function RouteComponent() {
                         <div className="text-xs text-muted-foreground mb-1">Shift Number</div>
                         <div className="text-base font-semibold mb-3">{r.shift_number}</div>
                         <div className="grid gap-2 text-sm">
-                          <KV k="Pinpad Total (Collected)" v={fmtNum(r.canadian_cash_collected)} />
-                          <KV k="Bulloch Total (Reported)" v={fmtNum(r.report_canadian_cash)} />
+                          <KV k="Cash Collected" v={fmtNum(r.canadian_cash_collected)} />
+                          <KV k="Pinpad Total" v={fmtNum(r.pinpadTotal)} />
+                          <KV k="Bulloch Reported" v={fmtNum(r.report_canadian_cash)} />
                           <KV
                             k="Tips"
                             v={
                               <span className="text-green-600 font-semibold">
-                                {fmtNum((r.canadian_cash_collected ?? 0) - (r.report_canadian_cash ?? 0))}
+                                {fmtNum(
+                                  (r.canadian_cash_collected ?? 0) +
+                                  (r.pinpadTotal ?? 0) -
+                                  (r.report_canadian_cash ?? 0)
+                                )}
                               </span>
                             }
                           />
