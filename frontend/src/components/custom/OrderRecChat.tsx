@@ -142,7 +142,7 @@ export function OrderRecChat({
 
       const res = await axios.post(
         `/api/order-rec/${orderRecId}/comments`,
-        { text: text.trim() || ' ', photos: results as string[] },
+        { text: text.trim(), photos: results as string[] },
         { headers: { Authorization: `Bearer ${localStorage.getItem('token')}` } }
       )
       onCommentsUpdate(res.data.comments)

@@ -364,9 +364,10 @@ router.get('/over-short', async (req, res) => {
       }, {});
     }
 
-    // 6️⃣ Group Shift Totals by Date
+    // 6️⃣ Group Shift Totals by Date (Chicken Delight shifts are excluded)
     const byDate = {};
     for (const shift of shifts) {
+      if (shift.isChickenDelight) continue
       const d = new Date(shift.date);
       d.setHours(0, 0, 0, 0);
       const key = d.toISOString();
@@ -671,6 +672,8 @@ router.post('/', async (req, res) => {
       exempted_tax,
       payouts,
       chequesCashedOut, // 👈 ADD THIS LINE
+      pinpadTotal,
+      pinpadPhoto,
     } = req.body || {}
 
     if (!shift_number) return res.status(400).json({ error: 'shift_number is required' })
@@ -741,6 +744,9 @@ router.post('/', async (req, res) => {
       shift_number: String(shift_number),
       date: new Date(date),
       createdBy: userId,
+      isChickenDelight: req.body.isChickenDelight === true,
+      pinpadTotal: norm(pinpadTotal),
+      pinpadPhoto: typeof pinpadPhoto === 'string' ? pinpadPhoto : undefined,
 
       // existing primary fields (now enriched)
       canadian_cash_collected: values.canadian_cash_collected,
@@ -1194,20 +1200,29 @@ router.get('/report', async (req, res) => {
       .sort({ shift_number: 1 })
       .lean()
 
-    const sum = (k) => rows.reduce((a, r) => a + (typeof r[k] === 'number' ? r[k] : 0), 0)
+    const regularRows = rows.filter(r => !r.isChickenDelight)
+    const cdRows = rows.filter(r => r.isChickenDelight)
+
+    const sum = (k, arr) => arr.reduce((a, r) => a + (typeof r[k] === 'number' ? r[k] : 0), 0)
     const totals = {
-      count: rows.length,
-      canadian_cash_collected: sum('canadian_cash_collected'),
-      item_sales: sum('item_sales'),
-      cash_back: sum('cash_back'),
-      loyalty: sum('loyalty'),
-      cpl_bulloch: sum('cpl_bulloch'),
-      exempted_tax: sum('exempted_tax'),
-      report_canadian_cash: sum('report_canadian_cash'),
-      payouts: rows.reduce((a, r) => a + (r.payouts || 0), 0),
-      chequesCashedOut: sum('chequesCashedOut'),
-      voidedTransactionsAmount: sum('voidedTransactionsAmount'),
+      count: regularRows.length,
+      canadian_cash_collected: sum('canadian_cash_collected', regularRows),
+      item_sales: sum('item_sales', regularRows),
+      cash_back: sum('cash_back', regularRows),
+      loyalty: sum('loyalty', regularRows),
+      cpl_bulloch: sum('cpl_bulloch', regularRows),
+      exempted_tax: sum('exempted_tax', regularRows),
+      report_canadian_cash: sum('report_canadian_cash', regularRows),
+      payouts: regularRows.reduce((a, r) => a + (r.payouts || 0), 0),
+      chequesCashedOut: sum('chequesCashedOut', regularRows),
+      voidedTransactionsAmount: sum('voidedTransactionsAmount', regularRows),
     }
+
+    const chickenDelightTip = cdRows.reduce(
+      (acc, r) =>
+        acc + (r.canadian_cash_collected ?? 0) + (r.pinpadTotal ?? 0) - (r.report_canadian_cash ?? 0),
+      0
+    )
 
     // Fetch or create the single report for site+day (normalized date)
     const reportDate = start // store normalized day start
@@ -1218,6 +1233,7 @@ router.get('/report', async (req, res) => {
       date,
       rows,
       totals,
+      chickenDelightTip,
       report: reportDoc || null, // contains notes + submitted
     })
   } catch (err) {
@@ -1443,6 +1459,8 @@ router.put('/:id', async (req, res) => {
       exempted_tax,
       report_canadian_cash,
       chequesCashedOut, // 👈 ADD THIS LINE
+      pinpadTotal,
+      pinpadPhoto,
     } = req.body || {}
 
     if (!shift_number) return res.status(400).json({ error: 'shift_number is required' })
@@ -1545,6 +1563,9 @@ router.put('/:id', async (req, res) => {
       site,
       shift_number: String(shift_number),
       date: new Date(date),
+      isChickenDelight: req.body.isChickenDelight === true ? true : (existing.isChickenDelight ?? false),
+      pinpadTotal: norm(pinpadTotal) ?? existing.pinpadTotal,
+      pinpadPhoto: typeof pinpadPhoto === 'string' ? pinpadPhoto : existing.pinpadPhoto,
 
       canadian_cash_collected: norm(canadian_cash_collected),
 
