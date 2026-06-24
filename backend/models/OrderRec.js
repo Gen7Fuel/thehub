@@ -37,7 +37,7 @@ const CategorySchema = new mongoose.Schema({
  * Represents a comment on an order reconciliation.
  */
 const CommentSchema = new mongoose.Schema({
-  text: { type: String, required: true },           // Comment text
+  text: { type: String },                            // Comment text
   author: { type: String },                         // Author's display name
   senderRole: { type: String },                     // Role name of the sender at time of posting
   timestamp: { type: Date, default: new Date() },   // When the comment was made
