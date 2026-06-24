@@ -1,54 +1,60 @@
-const express = require('express');
-const mongoose = require('mongoose');
+const express = require("express");
+const mongoose = require("mongoose");
 const router = express.Router();
-const Location = require('../../models/Location');
-const FuelStationTank = require('../../models/fuel/FuelStationTank');
-const FuelSales = require('../../models/fuel/FuelSales');
-const FuelOrder = require('../../models/fuel/FuelOrder');
-const { getLiveTankVolumes, getSingleTankHistoryByDay } = require('../../services/supaBaseService');
-const { runDailyFuelSync } = require('../../manual/oldDailyFuelSync');
-const { subDays, format } = require('date-fns');
-const moment = require('moment-timezone');
-
+const Location = require("../../models/Location");
+const FuelStationTank = require("../../models/fuel/FuelStationTank");
+const FuelSales = require("../../models/fuel/FuelSales");
+const FuelOrder = require("../../models/fuel/FuelOrder");
+const {
+  getLiveTankVolumes,
+  getSingleTankHistoryByDay,
+} = require("../../services/supaBaseService");
+const { runDailyFuelSync } = require("../../manual/oldDailyFuelSync");
+const { subDays, format } = require("date-fns");
+const moment = require("moment-timezone");
 
 // @route   GET /api/fuel-station-tanks/all-locations
 // @desc    Get only "store" locations with their fuel rack/carrier + tank count
-router.get('/all-locations', async (req, res) => {
+router.get("/all-locations", async (req, res) => {
   try {
     // 1. Filter by type: 'store' to ignore offices/other entities
-    const locations = await Location.find({ type: 'store' })
-      .populate('defaultFuelRack', 'rackName')
-      .populate('defaultFuelCarrier', 'carrierName')
+    const locations = await Location.find({ type: "store" })
+      .populate("defaultFuelRack", "rackName")
+      .populate("defaultFuelCarrier", "carrierName")
       .lean();
 
     // 2. Get IDs of the filtered locations to narrow down the aggregation
-    const storeIds = locations.map(loc => loc._id);
+    const storeIds = locations.map((loc) => loc._id);
 
     // 3. Get tank counts only for these specific stores
     const tankCounts = await FuelStationTank.aggregate([
       {
-        $match: { stationId: { $in: storeIds } }
+        $match: { stationId: { $in: storeIds } },
       },
       {
         $group: {
           _id: "$stationId",
           count: { $sum: 1 },
           // Collect all fuel grades and then use $addToSet to get unique ones
-          availableGrades: { $addToSet: "$grade" }
-        }
-      }
+          availableGrades: { $addToSet: "$grade" },
+        },
+      },
     ]);
 
     // 4. Merge the counts into the store objects
-    const merged = locations.map(loc => {
-      const data = tankCounts.find(t => t._id.toString() === loc._id.toString());
-      return {
-        ...loc,
-        tankCount: data ? data.count : 0,
-        // Default to empty array if no tanks found
-        availableStationGrades: data ? data.availableGrades : []
-      };
-    }).filter(loc => loc.tankCount > 0);
+    const merged = locations
+      .map((loc) => {
+        const data = tankCounts.find(
+          (t) => t._id.toString() === loc._id.toString(),
+        );
+        return {
+          ...loc,
+          tankCount: data ? data.count : 0,
+          // Default to empty array if no tanks found
+          availableStationGrades: data ? data.availableGrades : [],
+        };
+      })
+      .filter((loc) => loc.tankCount > 0);
 
     res.json(merged);
   } catch (err) {
@@ -57,40 +63,42 @@ router.get('/all-locations', async (req, res) => {
 });
 
 // This route will filter in manage configuration to show all stations without any filter
-router.get('/stations', async (req, res) => {
+router.get("/stations", async (req, res) => {
   try {
     // 1. Filter by type: 'store' to ignore offices/other entities
-    const locations = await Location.find({ type: 'store' })
-      .populate('defaultFuelRack', 'rackName')
-      .populate('defaultFuelCarrier', 'carrierName')
+    const locations = await Location.find({ type: "store" })
+      .populate("defaultFuelRack", "rackName")
+      .populate("defaultFuelCarrier", "carrierName")
       .lean();
 
     // 2. Get IDs of the filtered locations to narrow down the aggregation
-    const storeIds = locations.map(loc => loc._id);
+    const storeIds = locations.map((loc) => loc._id);
 
     // 3. Get tank counts only for these specific stores
     const tankCounts = await FuelStationTank.aggregate([
       {
-        $match: { stationId: { $in: storeIds } }
+        $match: { stationId: { $in: storeIds } },
       },
       {
         $group: {
           _id: "$stationId",
           count: { $sum: 1 },
           // Collect all fuel grades and then use $addToSet to get unique ones
-          availableGrades: { $addToSet: "$grade" }
-        }
-      }
+          availableGrades: { $addToSet: "$grade" },
+        },
+      },
     ]);
 
     // 4. Merge the counts into the store objects
-    const merged = locations.map(loc => {
-      const data = tankCounts.find(t => t._id.toString() === loc._id.toString());
+    const merged = locations.map((loc) => {
+      const data = tankCounts.find(
+        (t) => t._id.toString() === loc._id.toString(),
+      );
       return {
         ...loc,
         tankCount: data ? data.count : 0,
         // Default to empty array if no tanks found
-        availableStationGrades: data ? data.availableGrades : []
+        availableStationGrades: data ? data.availableGrades : [],
       };
     });
 
@@ -102,7 +110,9 @@ router.get('/stations', async (req, res) => {
 
 // Native Helper: Get 3-week average for a specific day of week
 async function getAverageSales(stationId, targetDate) {
-  const dayOfWeek = new Intl.DateTimeFormat('en-US', { weekday: 'long' }).format(targetDate);
+  const dayOfWeek = new Intl.DateTimeFormat("en-US", {
+    weekday: "long",
+  }).format(targetDate);
   const startOfTarget = new Date(targetDate);
   startOfTarget.setHours(0, 0, 0, 0);
 
@@ -110,7 +120,7 @@ async function getAverageSales(stationId, targetDate) {
   const pastSales = await FuelSales.find({
     stationId,
     dayOfWeek,
-    date: { $lt: startOfTarget }
+    date: { $lt: startOfTarget },
   })
     .sort({ date: -1 })
     .limit(5)
@@ -120,8 +130,8 @@ async function getAverageSales(stationId, targetDate) {
 
   // 1. Group volumes by grade across all fetched days
   const gradeVolumes = {};
-  pastSales.forEach(record => {
-    record.salesData.forEach(item => {
+  pastSales.forEach((record) => {
+    record.salesData.forEach((item) => {
       if (!gradeVolumes[item.grade]) gradeVolumes[item.grade] = [];
       // Only collect values > 0
       if (item.volume && item.volume > 0) {
@@ -132,16 +142,17 @@ async function getAverageSales(stationId, targetDate) {
 
   const averages = {};
 
-  Object.keys(gradeVolumes).forEach(grade => {
+  Object.keys(gradeVolumes).forEach((grade) => {
     let volumes = gradeVolumes[grade];
 
-    if (volumes.length > 2) { // Need at least 3 points to detect an outlier effectively
+    if (volumes.length > 2) {
+      // Need at least 3 points to detect an outlier effectively
       volumes = volumes.filter((val, index, self) => {
         const others = self.filter((_, i) => i !== index);
         const avgOfOthers = others.reduce((a, b) => a + b, 0) / others.length;
 
-        const isTooLow = val < (avgOfOthers * 0.5);   // 50% below average
-        const isTooHigh = val > (avgOfOthers * 1.5);  // 50% above average
+        const isTooLow = val < avgOfOthers * 0.5; // 50% below average
+        const isTooHigh = val > avgOfOthers * 1.5; // 50% above average
 
         return !isTooLow && !isTooHigh;
       });
@@ -163,21 +174,23 @@ async function getAverageSales(stationId, targetDate) {
  * GET /api/fuel-station-tanks/history/:tankId
  * Fetches time-series volume data for a specific tank using Supabase
  */
-router.get('/history/:tankId', async (req, res) => {
+router.get("/history/:tankId", async (req, res) => {
   try {
     const { tankId } = req.params;
     const { date } = req.query; // Expecting format 'YYYY-MM-DD'
 
     // 1. Fetch Tank & Location metadata from MongoDB
     // We populate 'stationId' to get the csoCode (station_sk)
-    const tank = await FuelStationTank.findById(tankId).populate('stationId');
+    const tank = await FuelStationTank.findById(tankId).populate("stationId");
 
     if (!tank) {
       return res.status(404).json({ message: "Tank configuration not found" });
     }
 
     if (!tank.stationId || !tank.stationId.csoCode) {
-      return res.status(400).json({ message: "Station CSO Code mapping is missing" });
+      return res
+        .status(400)
+        .json({ message: "Station CSO Code mapping is missing" });
     }
 
     // 2. Call your existing Supabase Service function
@@ -185,17 +198,16 @@ router.get('/history/:tankId', async (req, res) => {
     const historyData = await getSingleTankHistoryByDay(
       tank.stationId.csoCode,
       tank.tankNo,
-      date
+      date,
     );
 
     // 3. Return the array of readings to the frontend chart
     res.json(historyData);
-
   } catch (err) {
-    console.error('Error in Tank History Route:', err);
+    console.error("Error in Tank History Route:", err);
     res.status(500).json({
       message: "Internal Server Error fetching tank history",
-      error: err.message
+      error: err.message,
     });
   }
 });
@@ -263,18 +275,21 @@ router.get('/history/:tankId', async (req, res) => {
 //   }
 // });
 
-
-router.get('/reconciliation/:stationId', async (req, res) => {
+router.get("/reconciliation/:stationId", async (req, res) => {
   try {
     const { stationId } = req.params;
     const sId = new mongoose.Types.ObjectId(stationId);
 
-    const location = await Location.findById(sId).select('timezone').lean();
-    const tz = location?.timezone || 'America/Toronto';
+    const location = await Location.findById(sId).select("timezone").lean();
+    const tz = location?.timezone || "America/Toronto";
 
     // 1. Define the overall search window (Last 15 days) based on Station Time
-    const startOfWindow = moment.tz(tz).subtract(15, 'days').startOf('day').toDate();
-    const endOfWindow = moment.tz(tz).startOf('day').toDate();
+    const startOfWindow = moment
+      .tz(tz)
+      .subtract(15, "days")
+      .startOf("day")
+      .toDate();
+    const endOfWindow = moment.tz(tz).startOf("day").toDate();
 
     // 2. Fetch all necessary data in parallel
     const [tanks, sales, orders] = await Promise.all([
@@ -282,57 +297,69 @@ router.get('/reconciliation/:stationId', async (req, res) => {
       FuelSales.find({
         stationId: sId,
         date: { $gte: startOfWindow, $lt: endOfWindow },
-        isLive: false
-      }).sort({ date: -1 }).lean(),
+        isLive: false,
+      })
+        .sort({ date: -1 })
+        .lean(),
       FuelOrder.find({
         station: sId,
         estimatedDeliveryDate: { $gte: startOfWindow, $lt: endOfWindow },
-        currentStatus: 'Delivered'
-      }).lean()
+        currentStatus: "Delivered",
+      }).lean(),
     ]);
 
     // Helper: Force date to a simple YYYY-MM-DD string using UTC baseline
     const getSimpleDateString = (date) => {
       if (!date) return null;
-      return moment.utc(date).format('YYYY-MM-DD');
+      return moment.utc(date).format("YYYY-MM-DD");
     };
 
     // 3. Process the reconciliation data
-    const reconciliationData = sales.map(saleDay => {
+    const reconciliationData = sales.map((saleDay) => {
       // Use UTC format for the sale day as the anchor (e.g., "2026-04-28")
       const saleDateStr = getSimpleDateString(saleDay.date);
 
       return {
         date: saleDay.date,
-        grades: saleDay.salesData.map(s => {
-          const gradeTanks = tanks.filter(t => t.grade === s.grade);
+        grades: saleDay.salesData.map((s) => {
+          const gradeTanks = tanks.filter((t) => t.grade === s.grade);
           let openingSum = 0;
           let closingSum = 0;
 
           // A. Deliveries: Filter using the simple UTC date string
           const dayDeliveries = orders
-            .filter(o => {
+            .filter((o) => {
               const orderDateStr = getSimpleDateString(o.estimatedDeliveryDate);
               return orderDateStr === saleDateStr;
             })
             .reduce((sum, o) => {
-              const item = o.items.find(i => i.grade === s.grade);
-              return sum + (item?.ltrs || 0);
+              // --- E15 RECONCILIATION TWEAK ---
+              // If we are evaluating the Regular grade, grab both Regular and E15 volumes
+              const itemsToSum = o.items.filter(
+                (i) =>
+                  i.grade === s.grade ||
+                  (s.grade === "Regular" && i.grade === "E15"),
+              );
+              const orderVolume = itemsToSum.reduce(
+                (acc, i) => acc + (i.ltrs || 0),
+                0,
+              );
+              return sum + orderVolume;
             }, 0);
 
           // B. Tank Readings: Match historical records to the same UTC date string
-          gradeTanks.forEach(tank => {
-            const hist = tank.historicalVolume?.find(h =>
-              getSimpleDateString(h.date) === saleDateStr
+          gradeTanks.forEach((tank) => {
+            const hist = tank.historicalVolume?.find(
+              (h) => getSimpleDateString(h.date) === saleDateStr,
             );
             if (hist) {
-              openingSum += (hist.openingVolume || 0);
-              closingSum += (hist.closingVolume || 0);
+              openingSum += hist.openingVolume || 0;
+              closingSum += hist.closingVolume || 0;
             }
           });
 
           // C. Math: (Opening + Inbound) - Closing = Outbound (Physical Draw)
-          const physicalDraw = (openingSum + dayDeliveries) - closingSum;
+          const physicalDraw = openingSum + dayDeliveries - closingSum;
 
           return {
             grade: s.grade,
@@ -342,9 +369,9 @@ router.get('/reconciliation/:stationId', async (req, res) => {
             salesVolume: s.volume || 0,
             physicalDraw: physicalDraw,
             // Variance: How much "extra" or "less" left the tank vs what was sold
-            variance: physicalDraw - (s.volume || 0)
+            variance: physicalDraw - (s.volume || 0),
           };
-        })
+        }),
       };
     });
 
@@ -355,48 +382,54 @@ router.get('/reconciliation/:stationId', async (req, res) => {
   }
 });
 
-router.get('/station/:stationId', async (req, res) => {
+router.get("/station/:stationId", async (req, res) => {
   try {
     const { stationId } = req.params;
     const { date: dateStr } = req.query; // Expecting "YYYY-MM-DD" from frontend
 
     // 1. Setup Station Timezone
-    const station = await Location.findById(stationId).select('timezone').lean();
-    const tz = station?.timezone || 'America/Toronto';
+    const station = await Location.findById(stationId)
+      .select("timezone")
+      .lean();
+    const tz = station?.timezone || "America/Toronto";
 
     // 2. Define Time Markers in Station Local Time
-    const stationNow = moment.tz(tz).startOf('day');
-    const targetDate = moment.tz(dateStr, tz).startOf('day');
+    const stationNow = moment.tz(tz).startOf("day");
+    const targetDate = moment.tz(dateStr, tz).startOf("day");
 
-    const isPast = targetDate.isBefore(stationNow, 'day');
-    const isToday = targetDate.isSame(stationNow, 'day');
-    const isFuture = targetDate.isAfter(stationNow, 'day');
+    const isPast = targetDate.isBefore(stationNow, "day");
+    const isToday = targetDate.isSame(stationNow, "day");
+    const isFuture = targetDate.isAfter(stationNow, "day");
 
-    const dateStrnew = targetDate.format('YYYY-MM-DD');
+    const dateStrnew = targetDate.format("YYYY-MM-DD");
 
     // 3. Fetch Base Data
     const [tanks, avgSales] = await Promise.all([
       FuelStationTank.find({ stationId }).lean(),
-      getAverageSales(stationId, targetDate.toDate())
+      getAverageSales(stationId, targetDate.toDate()),
     ]);
 
     // 4. Projection Pipeline (for Future dates)
     let gradePipeline = {};
     if (isFuture || isToday) {
-      const todayStr = stationNow.format('YYYY-MM-DD');
+      const todayStr = stationNow.format("YYYY-MM-DD");
 
       // Step A: Initialize with Today's Opening Volume
-      tanks.forEach(tank => {
-        const todayHist = tank.historicalVolume?.find(h =>
-          new Date(h.date).toISOString().split('T')[0] === todayStr
+      tanks.forEach((tank) => {
+        const todayHist = tank.historicalVolume?.find(
+          (h) => new Date(h.date).toISOString().split("T")[0] === todayStr,
         );
         let startVol = todayHist?.openingVolume || 0;
 
         // --- FALLBACK LOGIC ---
         if (startVol === 0) {
-          const yesterdayStr = stationNow.clone().subtract(1, 'day').format('YYYY-MM-DD');
-          const yesterdayHist = tank.historicalVolume?.find(h =>
-            new Date(h.date).toISOString().split('T')[0] === yesterdayStr
+          const yesterdayStr = stationNow
+            .clone()
+            .subtract(1, "day")
+            .format("YYYY-MM-DD");
+          const yesterdayHist = tank.historicalVolume?.find(
+            (h) =>
+              new Date(h.date).toISOString().split("T")[0] === yesterdayStr,
           );
 
           if (yesterdayHist && yesterdayHist.closingVolume > 0) {
@@ -407,98 +440,120 @@ router.get('/station/:stationId', async (req, res) => {
       });
 
       // Step B: IMPORTANT - Add Today's deliveries and subtract Today's sales
-      const todayAvgSales = await getAverageSales(stationId, stationNow.toDate());
+      const todayAvgSales = await getAverageSales(
+        stationId,
+        stationNow.toDate(),
+      );
       const todayOrders = await FuelOrder.find({
         station: stationId,
-        currentStatus: { $ne: 'Cancelled' },
+        currentStatus: { $ne: "Cancelled" },
         estimatedDeliveryDate: {
-          $gte: stationNow.clone().startOf('day').toDate(),
-          $lte: stationNow.clone().endOf('day').toDate()
-        }
+          $gte: stationNow.clone().startOf("day").toDate(),
+          $lte: stationNow.clone().endOf("day").toDate(),
+        },
       }).lean();
 
-      Object.keys(gradePipeline).forEach(grade => {
+      Object.keys(gradePipeline).forEach((grade) => {
         const todayOrderVol = todayOrders.reduce((sum, o) => {
           // --- E15 LOGIC TWEAK ---
           // If compiling for Regular, match both Regular and E15 items
-          const itemsToSum = o.items.filter(i => 
-            i.grade === grade || (grade === "Regular" && i.grade === "E15")
+          const itemsToSum = o.items.filter(
+            (i) =>
+              i.grade === grade || (grade === "Regular" && i.grade === "E15"),
           );
-          const orderVolume = itemsToSum.reduce((acc, i) => acc + (i.ltrs || 0), 0);
+          const orderVolume = itemsToSum.reduce(
+            (acc, i) => acc + (i.ltrs || 0),
+            0,
+          );
           return sum + orderVolume;
         }, 0);
 
         // Move the needle from Opening -> Estimated Closing of Today
-        gradePipeline[grade] = (gradePipeline[grade] + todayOrderVol) - (todayAvgSales[grade] || 0);
+        gradePipeline[grade] =
+          gradePipeline[grade] + todayOrderVol - (todayAvgSales[grade] || 0);
       });
 
       // Step C: If we are looking further than tomorrow, loop through the gap
       if (isFuture) {
-        let cursor = stationNow.clone().add(1, 'day'); // Start from Tomorrow
-        while (cursor.isBefore(targetDate, 'day')) {
+        let cursor = stationNow.clone().add(1, "day"); // Start from Tomorrow
+        while (cursor.isBefore(targetDate, "day")) {
           const dayAvg = await getAverageSales(stationId, cursor.toDate());
           const dayOrders = await FuelOrder.find({
             station: stationId,
-            currentStatus: { $ne: 'Cancelled' },
+            currentStatus: { $ne: "Cancelled" },
             estimatedDeliveryDate: {
-              $gte: cursor.clone().startOf('day').toDate(),
-              $lte: cursor.clone().endOf('day').toDate()
-            }
+              $gte: cursor.clone().startOf("day").toDate(),
+              $lte: cursor.clone().endOf("day").toDate(),
+            },
           }).lean();
 
-          Object.keys(gradePipeline).forEach(grade => {
+          Object.keys(gradePipeline).forEach((grade) => {
             const dailyOrderVol = dayOrders.reduce((sum, o) => {
               // --- E15 LOGIC TWEAK ---
               // If compiling for Regular, match both Regular and E15 items
-              const itemsToSum = o.items.filter(i => 
-                i.grade === grade || (grade === "Regular" && i.grade === "E15")
+              const itemsToSum = o.items.filter(
+                (i) =>
+                  i.grade === grade ||
+                  (grade === "Regular" && i.grade === "E15"),
               );
-              const orderVolume = itemsToSum.reduce((acc, i) => acc + (i.ltrs || 0), 0);
+              const orderVolume = itemsToSum.reduce(
+                (acc, i) => acc + (i.ltrs || 0),
+                0,
+              );
               return sum + orderVolume;
             }, 0);
 
-            gradePipeline[grade] = (gradePipeline[grade] + dailyOrderVol) - (dayAvg[grade] || 0);
+            gradePipeline[grade] =
+              gradePipeline[grade] + dailyOrderVol - (dayAvg[grade] || 0);
           });
-          cursor.add(1, 'day');
+          cursor.add(1, "day");
         }
       }
     }
 
     // 5. Fetch Target Day Records
-    const startOfTarget = targetDate.clone().startOf('day').toDate();
-    const endOfTarget = targetDate.clone().endOf('day').toDate();
+    const startOfTarget = targetDate.clone().startOf("day").toDate();
+    const endOfTarget = targetDate.clone().endOf("day").toDate();
     const utcMidnight = new Date(`${dateStr}T00:00:00.000Z`);
 
     const [orders, actualSalesRecord] = await Promise.all([
       FuelOrder.find({
         station: stationId,
-        currentStatus: { $ne: 'Cancelled' },
-        estimatedDeliveryDate: { $gte: startOfTarget, $lte: endOfTarget }
+        currentStatus: { $ne: "Cancelled" },
+        estimatedDeliveryDate: { $gte: startOfTarget, $lte: endOfTarget },
       }).lean(),
 
       FuelSales.findOne({
         stationId,
-        date: { $in: [utcMidnight, startOfTarget] }
-      }).lean()
+        date: { $in: [utcMidnight, startOfTarget] },
+      }).lean(),
     ]);
 
     // 6. Enrichment Logic
-    const enrichedTanks = tanks.map(tank => {
+    const enrichedTanks = tanks.map((tank) => {
       let openingL = 0;
       let estSalesL = 0;
       let currentSalesL = 0;
       let closingL = 0;
 
-      const tanksOfSameGrade = tanks.filter(t => t.grade === tank.grade).length || 1;
-      const salesEntry = actualSalesRecord?.salesData?.find(s => s.grade === tank.grade);
+      const tanksOfSameGrade =
+        tanks.filter((t) => t.grade === tank.grade).length || 1;
+      const salesEntry = actualSalesRecord?.salesData?.find(
+        (s) => s.grade === tank.grade,
+      );
 
       // --- E15 LOGIC TWEAK ---
       // If the tank grade is Regular, look up both Regular and E15 volumes within target day orders
       const totalGradeOrders = orders.reduce((sum, o) => {
-        const itemsToSum = o.items.filter(i => 
-          i.grade === tank.grade || (tank.grade === "Regular" && i.grade === "E15")
+        const itemsToSum = o.items.filter(
+          (i) =>
+            i.grade === tank.grade ||
+            (tank.grade === "Regular" && i.grade === "E15"),
         );
-        const orderVolume = itemsToSum.reduce((acc, i) => acc + (i.ltrs || 0), 0);
+        const orderVolume = itemsToSum.reduce(
+          (acc, i) => acc + (i.ltrs || 0),
+          0,
+        );
         return sum + orderVolume;
       }, 0);
 
@@ -506,21 +561,24 @@ router.get('/station/:stationId', async (req, res) => {
 
       // --- STRATEGIC COMPILATION WINDOWS ---
       if (isPast || isToday) {
-        const hist = tank.historicalVolume?.find(h => {
+        const hist = tank.historicalVolume?.find((h) => {
           if (!h.date) return false;
-          const dbDateStr = new Date(h.date).toISOString().split('T')[0];
+          const dbDateStr = new Date(h.date).toISOString().split("T")[0];
           return dbDateStr === dateStr;
         });
 
         if (hist) {
           openingL = hist.openingVolume || 0;
-          closingL = isPast ? (hist.closingVolume || 0) : 0;
+          closingL = isPast ? hist.closingVolume || 0 : 0;
 
           if (isToday && openingL === 0) {
-            const yesterdayStr = targetDate.clone().subtract(1, 'day').format('YYYY-MM-DD');
-            const yesterdayHist = tank.historicalVolume?.find(h => {
+            const yesterdayStr = targetDate
+              .clone()
+              .subtract(1, "day")
+              .format("YYYY-MM-DD");
+            const yesterdayHist = tank.historicalVolume?.find((h) => {
               if (!h.date) return false;
-              const dbStr = new Date(h.date).toISOString().split('T')[0];
+              const dbStr = new Date(h.date).toISOString().split("T")[0];
               return dbStr === yesterdayStr;
             });
 
@@ -529,10 +587,13 @@ router.get('/station/:stationId', async (req, res) => {
             }
           }
         } else if (isToday) {
-          const yesterdayStr = targetDate.clone().subtract(1, 'day').format('YYYY-MM-DD');
-          const yesterdayHist = tank.historicalVolume?.find(h => {
+          const yesterdayStr = targetDate
+            .clone()
+            .subtract(1, "day")
+            .format("YYYY-MM-DD");
+          const yesterdayHist = tank.historicalVolume?.find((h) => {
             if (!h.date) return false;
-            const dbStr = new Date(h.date).toISOString().split('T')[0];
+            const dbStr = new Date(h.date).toISOString().split("T")[0];
             return dbStr === yesterdayStr;
           });
           openingL = yesterdayHist?.closingVolume || 0;
@@ -542,14 +603,15 @@ router.get('/station/:stationId', async (req, res) => {
           estSalesL = (salesEntry?.volume || 0) / tanksOfSameGrade;
         } else {
           estSalesL = (avgSales[tank.grade] || 0) / tanksOfSameGrade;
-          currentSalesL = (actualSalesRecord?.isLive) ? (salesEntry?.volume || 0) / tanksOfSameGrade : 0;
-          closingL = (openingL + splitOrders) - estSalesL;
+          currentSalesL = actualSalesRecord?.isLive
+            ? (salesEntry?.volume || 0) / tanksOfSameGrade
+            : 0;
+          closingL = openingL + splitOrders - estSalesL;
         }
-      }
-      else if (isFuture) {
+      } else if (isFuture) {
         openingL = (gradePipeline[tank.grade] || 0) / tanksOfSameGrade;
         estSalesL = (avgSales[tank.grade] || 0) / tanksOfSameGrade;
-        closingL = (openingL + splitOrders) - estSalesL;
+        closingL = openingL + splitOrders - estSalesL;
       }
 
       return {
@@ -565,9 +627,8 @@ router.get('/station/:stationId', async (req, res) => {
     res.json({
       tanks: enrichedTanks,
       lastTransaction: actualSalesRecord?.lastTransactionAt || null,
-      stationToday: stationNow.format('YYYY-MM-DD')
+      stationToday: stationNow.format("YYYY-MM-DD"),
     });
-
   } catch (err) {
     res.status(500).json({ message: err.message });
   }
@@ -919,15 +980,16 @@ router.get('/station/:stationId', async (req, res) => {
 //   }
 // });
 
-router.get('/sync-all-volumes', async (req, res) => {
+router.get("/sync-all-volumes", async (req, res) => {
   try {
     const liveReadings = await getLiveTankVolumes();
-    const allTanks = await FuelStationTank.find({}).populate('stationId');
+    const allTanks = await FuelStationTank.find({}).populate("stationId");
 
     const updatePromises = allTanks.map(async (tank) => {
-      const reading = liveReadings.find(r =>
-        r.Station_SK === tank.stationId?.csoCode &&
-        Number(r.Tank_No) === tank.tankNo
+      const reading = liveReadings.find(
+        (r) =>
+          r.Station_SK === tank.stationId?.csoCode &&
+          Number(r.Tank_No) === tank.tankNo,
       );
 
       // Default state
@@ -935,21 +997,30 @@ router.get('/sync-all-volumes', async (req, res) => {
       let currentVolume = tank.currentVolume;
 
       // 1. Calculate Station Context
-      const stationTimezone = tank.stationId?.timezone || 'UTC';
-      const nowAtStation = new Intl.DateTimeFormat('en-CA', {
+      const stationTimezone = tank.stationId?.timezone || "UTC";
+      const nowAtStation = new Intl.DateTimeFormat("en-CA", {
         timeZone: stationTimezone,
-        year: 'numeric', month: '2-digit', day: '2-digit'
+        year: "numeric",
+        month: "2-digit",
+        day: "2-digit",
       }).format(new Date());
-      const yesterdayAtStation = format(subDays(new Date(nowAtStation), 1), 'yyyy-MM-dd');
+      const yesterdayAtStation = format(
+        subDays(new Date(nowAtStation), 1),
+        "yyyy-MM-dd",
+      );
 
       // 2. Logic Check - Check Supabase Freshness
-      const isSupabaseFresh = reading && (reading.ReadingDate === nowAtStation || reading.ReadingDate === yesterdayAtStation);
+      const isSupabaseFresh =
+        reading &&
+        (reading.ReadingDate === nowAtStation ||
+          reading.ReadingDate === yesterdayAtStation);
 
       if (isSupabaseFresh) {
         // PRIORITY 1: Supabase has current/yesterday data
-        statusString = reading.ReadingDate === nowAtStation
-          ? `${reading.ReadingDate} ${reading.ReadingTime}`
-          : `${reading.ReadingDate} ${reading.ReadingTime} (Yesterday)`;
+        statusString =
+          reading.ReadingDate === nowAtStation
+            ? `${reading.ReadingDate} ${reading.ReadingTime}`
+            : `${reading.ReadingDate} ${reading.ReadingTime} (Yesterday)`;
         currentVolume = Math.round(reading.Volume);
       } else if (tank.lastUpdatedVolumeReadingDateTime?.includes("(Manual)")) {
         // PRIORITY 2: Supabase is stale/missing, but we have a Manual reading record
@@ -960,30 +1031,33 @@ router.get('/sync-all-volumes', async (req, res) => {
         if (manualDateStr === nowAtStation) {
           // It's from today - Keep the original manual string as is
           statusString = tank.lastUpdatedVolumeReadingDateTime;
-        }
-        else if (manualDateStr === yesterdayAtStation) {
+        } else if (manualDateStr === yesterdayAtStation) {
           // It's from yesterday - Inject the (Yesterday) tag if not already present
-          statusString = tank.lastUpdatedVolumeReadingDateTime.includes("(Yesterday)")
+          statusString = tank.lastUpdatedVolumeReadingDateTime.includes(
+            "(Yesterday)",
+          )
             ? tank.lastUpdatedVolumeReadingDateTime
             : `${manualDateStr} ${manualTimeStr} (Yesterday) (Manual)`;
-        }
-        else {
+        } else {
           // Too old
           statusString = "No latest reading available";
         }
-      }
-      else {
+      } else {
         statusString = "No latest reading available";
       }
 
-      const updatedDoc = await FuelStationTank.findByIdAndUpdate(tank._id, {
-        currentVolume: currentVolume,
-        lastUpdatedVolumeReadingDateTime: statusString
-      }, { new: true }).populate('stationId');
+      const updatedDoc = await FuelStationTank.findByIdAndUpdate(
+        tank._id,
+        {
+          currentVolume: currentVolume,
+          lastUpdatedVolumeReadingDateTime: statusString,
+        },
+        { new: true },
+      ).populate("stationId");
 
       return {
         ...updatedDoc.toObject(),
-        stationName: updatedDoc.stationId?.stationName || "Unknown"
+        stationName: updatedDoc.stationId?.stationName || "Unknown",
       };
     });
 
@@ -996,11 +1070,11 @@ router.get('/sync-all-volumes', async (req, res) => {
 
 // @route   GET /api/fuel-station-tanks/location/:id
 // @desc    Get location fuel settings and its tanks
-router.get('/location/:id', async (req, res) => {
+router.get("/location/:id", async (req, res) => {
   try {
     const location = await Location.findById(req.params.id)
-      .populate('defaultFuelRack')
-      .populate('defaultFuelCarrier');
+      .populate("defaultFuelRack")
+      .populate("defaultFuelCarrier");
     const tanks = await FuelStationTank.find({ stationId: req.params.id });
     res.json({ location, tanks });
   } catch (err) {
@@ -1010,13 +1084,25 @@ router.get('/location/:id', async (req, res) => {
 
 // @route   PUT /api/fuel-station-tanks/location/:id
 // @desc    Update only the 4 allowed fuel-related fields for a Location
-router.put('/location/:id', async (req, res) => {
-  const { fuelStationNumber, address, defaultFuelRack, defaultFuelCarrier, fuelCustomerName } = req.body;
+router.put("/location/:id", async (req, res) => {
+  const {
+    fuelStationNumber,
+    address,
+    defaultFuelRack,
+    defaultFuelCarrier,
+    fuelCustomerName,
+  } = req.body;
   try {
     const updated = await Location.findByIdAndUpdate(
       req.params.id,
-      { fuelStationNumber, address, defaultFuelRack, defaultFuelCarrier, fuelCustomerName },
-      { new: true }
+      {
+        fuelStationNumber,
+        address,
+        defaultFuelRack,
+        defaultFuelCarrier,
+        fuelCustomerName,
+      },
+      { new: true },
     );
     res.json(updated);
   } catch (err) {
@@ -1026,7 +1112,7 @@ router.put('/location/:id', async (req, res) => {
 
 // @route   POST /api/fuel-station-tanks/tanks
 // @desc    Add a new tank to a station
-router.post('/tanks', async (req, res) => {
+router.post("/tanks", async (req, res) => {
   try {
     const newTank = new FuelStationTank(req.body);
     const saved = await newTank.save();
@@ -1038,9 +1124,13 @@ router.post('/tanks', async (req, res) => {
 
 // @route   PUT /api/fuel-station-tanks/tanks/:id
 // @desc    Update tank details (capacity, ullage, etc)
-router.put('/tanks/:id', async (req, res) => {
+router.put("/tanks/:id", async (req, res) => {
   try {
-    const updated = await FuelStationTank.findByIdAndUpdate(req.params.id, req.body, { new: true });
+    const updated = await FuelStationTank.findByIdAndUpdate(
+      req.params.id,
+      req.body,
+      { new: true },
+    );
     res.json(updated);
   } catch (err) {
     res.status(400).json({ message: err.message });
@@ -1048,7 +1138,7 @@ router.put('/tanks/:id', async (req, res) => {
 });
 
 // for attempting manual override of current volume with a timestamp note in the UI during atg failure
-router.patch('/manual-update/:tankId', async (req, res) => {
+router.patch("/manual-update/:tankId", async (req, res) => {
   try {
     const { volume, manualTime, manualDate } = req.body;
 
@@ -1059,9 +1149,9 @@ router.patch('/manual-update/:tankId', async (req, res) => {
       req.params.tankId,
       {
         currentVolume: Number(volume),
-        lastUpdatedVolumeReadingDateTime: statusString
+        lastUpdatedVolumeReadingDateTime: statusString,
       },
-      { new: true }
+      { new: true },
     );
 
     res.json(updatedTank);
@@ -1071,7 +1161,7 @@ router.patch('/manual-update/:tankId', async (req, res) => {
 });
 
 // @route   DELETE /api/fuel-station-tanks/tanks/:id
-router.delete('/tanks/:id', async (req, res) => {
+router.delete("/tanks/:id", async (req, res) => {
   try {
     await FuelStationTank.findByIdAndDelete(req.params.id);
     res.json({ message: "Tank removed" });
@@ -1081,17 +1171,21 @@ router.delete('/tanks/:id', async (req, res) => {
 });
 
 // router.post('/manual-daily-sync', async (req, res) => { ... })
-router.post('/manual-daily-sync', async (req, res) => {
+router.post("/manual-daily-sync", async (req, res) => {
   try {
-    console.log('--- 🚀 [MANUAL TRIGGER] Daily Fuel Sync & Archive ---');
+    console.log("--- 🚀 [MANUAL TRIGGER] Daily Fuel Sync & Archive ---");
 
     // Call the function logic here
     await runDailyFuelSync();
 
-    res.json({ message: "Daily fuel sync and archive completed successfully." });
+    res.json({
+      message: "Daily fuel sync and archive completed successfully.",
+    });
   } catch (err) {
     console.error("Manual Sync Error:", err);
-    res.status(500).json({ error: "Failed to complete manual sync: " + err.message });
+    res
+      .status(500)
+      .json({ error: "Failed to complete manual sync: " + err.message });
   }
 });
 

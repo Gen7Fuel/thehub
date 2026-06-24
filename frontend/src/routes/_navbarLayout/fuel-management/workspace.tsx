@@ -1,32 +1,80 @@
-import { useState, useMemo, useEffect, useRef } from 'react';
-import { createFileRoute, Link } from '@tanstack/react-router';
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'; // Recommended for fetching
-import axios from 'axios';
+import { useState, useMemo, useEffect, useRef } from "react";
+import { createFileRoute, Link } from "@tanstack/react-router";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query"; // Recommended for fetching
+import axios from "axios";
 import { cn } from "@/lib/utils";
 import {
-  Search, X, ChevronLeft, ChevronRight, Building2,
-  Settings2, Filter, History, ArrowRight
-} from 'lucide-react';
+  Search,
+  X,
+  ChevronLeft,
+  ChevronRight,
+  Building2,
+  Settings2,
+  Filter,
+  History,
+  ArrowRight,
+} from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Checkbox } from "@/components/ui/checkbox";
 import {
-  Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogFooter
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+  DialogFooter,
 } from "@/components/ui/dialog";
-import { format, addDays, isAfter, startOfDay, subDays, isBefore } from "date-fns";
-import { WorkspaceDatePicker, DatePicker } from '@/components/custom/datePicker';
-import { XCircle, MessageSquare, User, Loader2, RefreshCw, Truck, Clock, Edit3, CheckCircle2, PackagePlus, AlertTriangle, FileText, Download } from 'lucide-react';
+import {
+  format,
+  addDays,
+  isAfter,
+  startOfDay,
+  subDays,
+  isBefore,
+} from "date-fns";
+import {
+  WorkspaceDatePicker,
+  DatePicker,
+} from "@/components/custom/datePicker";
+import {
+  XCircle,
+  MessageSquare,
+  User,
+  Loader2,
+  RefreshCw,
+  Truck,
+  Clock,
+  Edit3,
+  CheckCircle2,
+  PackagePlus,
+  AlertTriangle,
+  FileText,
+  Download,
+} from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 // import { Label } from "@/components/ui/label";
-import { getGradeTheme } from "./manage/locations/$id"
-import { POPreviewDocument, formatPDFDate, getISODateOnly } from "@/components/custom/fuelPoPDF"
-import { PDFViewer, PDFDownloadLink } from '@react-pdf/renderer';
-import { formatInTimeZone, toZonedTime } from 'date-fns-tz';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Textarea } from '@/components/ui/textarea';
+import { getGradeTheme } from "./manage/locations/$id";
+import {
+  POPreviewDocument,
+  formatPDFDate,
+  getISODateOnly,
+} from "@/components/custom/fuelPoPDF";
+import { PDFViewer, PDFDownloadLink } from "@react-pdf/renderer";
+import { formatInTimeZone, toZonedTime } from "date-fns-tz";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import { Textarea } from "@/components/ui/textarea";
 
-export const Route = createFileRoute('/_navbarLayout/fuel-management/workspace')({
+export const Route = createFileRoute(
+  "/_navbarLayout/fuel-management/workspace",
+)({
   component: WorkspaceComponent,
 });
 
@@ -38,16 +86,21 @@ interface RescheduleDialogProps {
 }
 
 const authHeader = {
-  headers: { Authorization: `Bearer ${localStorage.getItem('token')}` }
+  headers: { Authorization: `Bearer ${localStorage.getItem("token")}` },
 };
 
 export const getStatusColor = (status: string) => {
   switch (status) {
-    case 'Created': return 'bg-yellow-100 text-yellow-600 border-yellow-200'; // Neutral for new orders
-    case 'In Transit': return 'bg-blue-100 text-blue-700 border-blue-200';
-    case 'Delivered': return 'bg-green-100 text-green-700 border-green-200';
-    case 'Cancelled': return 'bg-red-100 text-red-700 border-red-200';
-    default: return 'bg-slate-100 text-slate-500';
+    case "Created":
+      return "bg-yellow-100 text-yellow-600 border-yellow-200"; // Neutral for new orders
+    case "In Transit":
+      return "bg-blue-100 text-blue-700 border-blue-200";
+    case "Delivered":
+      return "bg-green-100 text-green-700 border-green-200";
+    case "Cancelled":
+      return "bg-red-100 text-red-700 border-red-200";
+    default:
+      return "bg-slate-100 text-slate-500";
   }
 };
 
@@ -56,14 +109,17 @@ function WorkspaceComponent() {
   const [stationSearch, setStationSearch] = useState("");
   const [selectedStationIds, setSelectedStationIds] = useState<string[]>([]);
   const authHeader = {
-    headers: { Authorization: `Bearer ${localStorage.getItem('token')}` }
+    headers: { Authorization: `Bearer ${localStorage.getItem("token")}` },
   };
 
   // 1. Fetch Real Locations from your Backend
   const { data: locations = [], isLoading: isLocationsLoading } = useQuery({
-    queryKey: ['all-locations'],
+    queryKey: ["all-locations"],
     queryFn: async () => {
-      const res = await axios.get('/api/fuel-station-tanks/all-locations', authHeader);
+      const res = await axios.get(
+        "/api/fuel-station-tanks/all-locations",
+        authHeader,
+      );
       return res.data;
     },
     retry: 2,
@@ -71,9 +127,9 @@ function WorkspaceComponent() {
 
   // Fetch all racks once at the top level
   const { data: racks = [] } = useQuery({
-    queryKey: ['all-racks'],
+    queryKey: ["all-racks"],
     queryFn: async () => {
-      const res = await axios.get('/api/fuel-racks', authHeader);
+      const res = await axios.get("/api/fuel-racks", authHeader);
       return res.data;
     },
     staleTime: 5 * 60 * 1000, // Optional: Keep data fresh for 5 minutes
@@ -84,7 +140,7 @@ function WorkspaceComponent() {
   const sortedSelectedStations = useMemo(() => {
     // 1. Map IDs to full objects
     const selectedLocs = selectedStationIds
-      .map(id => locations.find((l: any) => l._id === id))
+      .map((id) => locations.find((l: any) => l._id === id))
       .filter(Boolean);
 
     // 2. Sort logic
@@ -126,7 +182,7 @@ function WorkspaceComponent() {
   // Filter locations for the Dialog Search
   const filteredLocations = useMemo(() => {
     return locations.filter((loc: any) =>
-      loc.stationName.toLowerCase().includes(stationSearch.toLowerCase())
+      loc.stationName.toLowerCase().includes(stationSearch.toLowerCase()),
     );
   }, [locations, stationSearch]);
 
@@ -141,8 +197,8 @@ function WorkspaceComponent() {
   };
 
   const toggleStation = (id: string) => {
-    setSelectedStationIds(prev =>
-      prev.includes(id) ? prev.filter(i => i !== id) : [...prev, id]
+    setSelectedStationIds((prev) =>
+      prev.includes(id) ? prev.filter((i) => i !== id) : [...prev, id],
     );
   };
 
@@ -158,18 +214,17 @@ function WorkspaceComponent() {
   return (
     // "w-full" and no max-width ensures it hits the edges of the screen
     <div className="w-full min-h-screen bg-[#f8fafc] pb-10">
-
       {/* HEADER SECTION: CONTROL CENTER */}
       <div className="w-full bg-white border-b sticky top-0 z-30 shadow-sm">
         <div className="w-full px-6 py-4 flex flex-col gap-4">
-
           <div className="flex flex-col lg:flex-row lg:items-end justify-between gap-6">
-
             {/* Left: Station Selection Logic */}
             {/* Left: Station Selection Logic */}
             <div className="flex-1 space-y-3">
               <div className="flex items-center justify-between">
-                <div className="flex items-center gap-6"> {/* Increased gap to separate Title and Legend */}
+                <div className="flex items-center gap-6">
+                  {" "}
+                  {/* Increased gap to separate Title and Legend */}
                   <div className="flex items-center gap-2">
                     <div className="bg-blue-600 p-1.5 rounded-lg">
                       <Building2 className="h-5 w-5 text-white" />
@@ -178,7 +233,6 @@ function WorkspaceComponent() {
                       Fuel Workspace
                     </h1>
                   </div>
-
                   {/* --- INVENTORY LEGEND --- */}
                   <div className="hidden md:flex items-center gap-4 px-4 py-1.5 bg-slate-100/80 border border-slate-200 rounded-xl">
                     <span className="text-[10px] font-black text-slate-400 uppercase tracking-wider border-r border-slate-300 pr-4">
@@ -188,32 +242,44 @@ function WorkspaceComponent() {
                     {/* Critical Low */}
                     <div className="flex items-center gap-1.5">
                       <div className="w-2 h-2 rounded-full bg-red-500 animate-ping" />
-                      <span className="text-[10px] font-bold text-slate-600">Critical Low</span>
+                      <span className="text-[10px] font-bold text-slate-600">
+                        Critical Low
+                      </span>
                     </div>
 
                     {/* Physical Overflow */}
                     <div className="flex items-center gap-1.5">
                       <div className="w-2 h-2 rounded-full bg-orange-400 border border-orange-600 animate-pulse" />
-                      <span className="text-[10px] font-bold text-slate-600">Overflow Risk</span>
+                      <span className="text-[10px] font-bold text-slate-600">
+                        Overflow Risk
+                      </span>
                     </div>
 
                     {/* Above Max */}
                     <div className="flex items-center gap-1.5">
                       <div className="w-1.5 h-1.5 rounded-full bg-amber-400" />
-                      <span className="text-[10px] font-bold text-slate-600">Above Max</span>
+                      <span className="text-[10px] font-bold text-slate-600">
+                        Above Max
+                      </span>
                     </div>
 
                     {/* Live Data Indicator */}
                     <div className="flex items-center gap-1.5 ml-2 border-l border-slate-300 pl-4">
                       <div className="w-1.5 h-1.5 rounded-full bg-blue-600" />
-                      <span className="text-[10px] font-bold text-blue-600 uppercase">Live Sales</span>
+                      <span className="text-[10px] font-bold text-blue-600 uppercase">
+                        Live Sales
+                      </span>
                     </div>
                   </div>
                 </div>
 
                 <Dialog>
                   <DialogTrigger asChild>
-                    <Button variant="outline" size="sm" className="border-blue-200 text-blue-700 hover:bg-blue-50 font-bold gap-2">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="border-blue-200 text-blue-700 hover:bg-blue-50 font-bold gap-2"
+                    >
                       <Settings2 className="h-4 w-4" />
                       Manage Sites
                     </Button>
@@ -230,7 +296,9 @@ function WorkspaceComponent() {
                         onClick={toggleAll}
                         className="text-[10px] font-black uppercase tracking-tighter text-blue-600 hover:bg-blue-50"
                       >
-                        {selectedStationIds.length === locations.length ? "Deselect All" : "Select All"}
+                        {selectedStationIds.length === locations.length
+                          ? "Deselect All"
+                          : "Select All"}
                       </Button>
                     </DialogHeader>
 
@@ -251,16 +319,21 @@ function WorkspaceComponent() {
                         return (
                           <div
                             key={loc._id}
-                            className={`flex items-center justify-between p-4 border-2 rounded-xl cursor-pointer transition-all ${selectedStationIds.includes(loc._id)
-                              ? "border-blue-500 bg-blue-50/50 shadow-md"
-                              : hasNoTanks
-                                ? "border-slate-50 bg-slate-50/30 opacity-60 grayscale" // Dim out empty stations
-                                : "border-slate-100 hover:border-slate-300"
-                              }`}
-                            onClick={() => !hasNoTanks && toggleStation(loc._id)} // Prevent clicking if no tanks
+                            className={`flex items-center justify-between p-4 border-2 rounded-xl cursor-pointer transition-all ${
+                              selectedStationIds.includes(loc._id)
+                                ? "border-blue-500 bg-blue-50/50 shadow-md"
+                                : hasNoTanks
+                                  ? "border-slate-50 bg-slate-50/30 opacity-60 grayscale" // Dim out empty stations
+                                  : "border-slate-100 hover:border-slate-300"
+                            }`}
+                            onClick={() =>
+                              !hasNoTanks && toggleStation(loc._id)
+                            } // Prevent clicking if no tanks
                           >
                             <div className="flex flex-col">
-                              <span className={`font-bold ${hasNoTanks ? 'text-slate-400' : 'text-slate-800'}`}>
+                              <span
+                                className={`font-bold ${hasNoTanks ? "text-slate-400" : "text-slate-800"}`}
+                              >
                                 {loc.stationName}
                               </span>
                               <span className="text-[10px] text-slate-500 font-mono uppercase">
@@ -269,7 +342,9 @@ function WorkspaceComponent() {
                             </div>
 
                             {hasNoTanks ? (
-                              <span className="text-[8px] font-black uppercase text-slate-400 bg-slate-100 px-2 py-1 rounded">Inactive</span>
+                              <span className="text-[8px] font-black uppercase text-slate-400 bg-slate-100 px-2 py-1 rounded">
+                                Inactive
+                              </span>
                             ) : (
                               <Checkbox
                                 checked={selectedStationIds.includes(loc._id)}
@@ -287,12 +362,18 @@ function WorkspaceComponent() {
               {/* Tag Cloud for Selected Stations */}
               <div className="flex flex-wrap gap-2 min-h-[54px] p-3 bg-slate-50 rounded-xl border-2 border-dashed border-slate-200 items-center">
                 {selectedStationIds.length === 0 ? (
-                  <span className="text-sm text-slate-400 italic px-2">No stations selected. Click 'Manage Sites' to populate your workspace.</span>
+                  <span className="text-sm text-slate-400 italic px-2">
+                    No stations selected. Click 'Manage Sites' to populate your
+                    workspace.
+                  </span>
                 ) : (
-                  selectedStationIds.map(id => {
+                  selectedStationIds.map((id) => {
                     const loc = locations.find((l: any) => l._id === id);
                     return (
-                      <div key={id} className="flex items-center gap-2 bg-white border-2 border-blue-100 pl-4 pr-2 py-1.5 rounded-full text-xs font-black text-blue-800 shadow-sm animate-in fade-in zoom-in duration-200">
+                      <div
+                        key={id}
+                        className="flex items-center gap-2 bg-white border-2 border-blue-100 pl-4 pr-2 py-1.5 rounded-full text-xs font-black text-blue-800 shadow-sm animate-in fade-in zoom-in duration-200"
+                      >
                         {loc?.stationName}
                         <button
                           onClick={() => toggleStation(id)}
@@ -309,7 +390,9 @@ function WorkspaceComponent() {
 
             {/* Right: Date Selection Navigation */}
             <div className="flex flex-col items-center lg:items-end gap-2 shrink-0">
-              <p className="text-[10px] font-black uppercase text-slate-400 tracking-[0.2em]">Viewing Data For</p>
+              <p className="text-[10px] font-black uppercase text-slate-400 tracking-[0.2em]">
+                Viewing Data For
+              </p>
               <div className="flex items-center gap-3 bg-white-900 p-2 rounded-2xl shadow-xl border-4">
                 <Button
                   variant="ghost"
@@ -321,7 +404,10 @@ function WorkspaceComponent() {
                 </Button>
 
                 <div className="flex items-center gap-2 px-2">
-                  <WorkspaceDatePicker date={selectedDate} setDate={setSelectedDate} />
+                  <WorkspaceDatePicker
+                    date={selectedDate}
+                    setDate={setSelectedDate}
+                  />
                 </div>
 
                 <Button
@@ -334,10 +420,9 @@ function WorkspaceComponent() {
                 </Button>
               </div>
             </div>
-
           </div>
         </div>
-      </div >
+      </div>
 
       {/* WORKSPACE STRIPS AREA */}
       {/* < div className="w-full px-0 py-0 space-y-0" >
@@ -362,12 +447,16 @@ function WorkspaceComponent() {
         {isLocationsLoading ? (
           <div className="w-full h-96 border-4 border-dashed rounded-3xl flex flex-col items-center justify-center text-slate-300">
             <Loader2 className="h-10 w-10 mb-4 animate-spin opacity-40" />
-            <p className="text-xl font-bold italic opacity-50">Loading workspace stations...</p>
+            <p className="text-xl font-bold italic opacity-50">
+              Loading workspace stations...
+            </p>
           </div>
         ) : selectedStationIds.length === 0 ? (
           <div className="w-full h-96 border-4 border-dashed rounded-3xl flex flex-col items-center justify-center text-slate-300">
             <Building2 className="h-20 w-20 mb-4 opacity-20" />
-            <p className="text-xl font-bold italic opacity-30">Select stations above to begin operations</p>
+            <p className="text-xl font-bold italic opacity-30">
+              Select stations above to begin operations
+            </p>
           </div>
         ) : (
           // Use the sorted objects here
@@ -381,48 +470,64 @@ function WorkspaceComponent() {
           ))
         )}
       </div>
-    </div >
+    </div>
   );
 }
 
-function StationStrip({ location, date, racks }: { location: any, date: Date, racks: any[] }) {
-
+function StationStrip({
+  location,
+  date,
+  racks,
+}: {
+  location: any;
+  date: Date;
+  racks: any[];
+}) {
   const [rescheduleOrder, setRescheduleOrder] = useState<any>(null);
-  const [viewingCommentsOrder, setViewingCommentsOrder] = useState<any | null>(null);
+  const [viewingCommentsOrder, setViewingCommentsOrder] = useState<any | null>(
+    null,
+  );
   const [updateStatusOrder, setUpdateStatusOrder] = useState<any>(null);
   const [editQtyOrder, setEditQtyOrder] = useState<any>(null);
   const [viewingPO, setViewingPO] = useState<any | null>(null);
-  const [stationTime, setStationTime] = useState('');
+  const [stationTime, setStationTime] = useState("");
   // State to track which order is currently being edited for logistics metadata
   const [editMetaOrder, setEditMetaOrder] = useState<any | null>(null);
 
   // 1. Add a state to track if we should return to status dialog after editing
   const [returnToStatus, setReturnToStatus] = useState(false);
-  const [resumeStep, setResumeStep] = useState<'schedule' | 'quantities' | 'final' | null>(null);
+  const [resumeStep, setResumeStep] = useState<
+    "schedule" | "quantities" | "final" | null
+  >(null);
 
   const openRescheduleFromStatus = (order: any) => {
     setReturnToStatus(true);
-    setResumeStep('schedule'); // We want to go back to step 1
+    setResumeStep("schedule"); // We want to go back to step 1
     setUpdateStatusOrder(null);
     setRescheduleOrder(order);
   };
 
   const openEditQtyFromStatus = (order: any) => {
     setReturnToStatus(true);
-    setResumeStep('quantities'); // We want to go back to step 2
+    setResumeStep("quantities"); // We want to go back to step 2
     setUpdateStatusOrder(null);
     setEditQtyOrder(order);
   };
 
-  const stationTz = location.timezone || 'America/Toronto';
-  const selectedDateStr = format(date, 'yyyy-MM-dd');
+  const stationTz = location.timezone || "America/Toronto";
+  const selectedDateStr = format(date, "yyyy-MM-dd");
 
-  const { data: tankResponse, isLoading: isTanksLoading, isError: isTanksError, isFetching: isTanksFetching } = useQuery({
-    queryKey: ['station-tanks', location?._id, selectedDateStr],
+  const {
+    data: tankResponse,
+    isLoading: isTanksLoading,
+    isError: isTanksError,
+    isFetching: isTanksFetching,
+  } = useQuery({
+    queryKey: ["station-tanks", location?._id, selectedDateStr],
     queryFn: async () => {
       const res = await axios.get(
         `/api/fuel-station-tanks/station/${location._id}?date=${selectedDateStr}`,
-        authHeader
+        authHeader,
       );
       return res.data;
     },
@@ -431,7 +536,9 @@ function StationStrip({ location, date, racks }: { location: any, date: Date, ra
   });
 
   // Use the date provided by the SERVER
-  const stationTodayStr = tankResponse?.stationToday || formatInTimeZone(new Date(), stationTz, 'yyyy-MM-dd');
+  const stationTodayStr =
+    tankResponse?.stationToday ||
+    formatInTimeZone(new Date(), stationTz, "yyyy-MM-dd");
 
   // Now comparisons are relative to the SERVER clock
   const isToday = selectedDateStr === stationTodayStr;
@@ -458,34 +565,42 @@ function StationStrip({ location, date, racks }: { location: any, date: Date, ra
           closing: 0,
           minLimit: 0,
           maxLimit: 0,
-          totalCapacity: 0
+          totalCapacity: 0,
         };
       }
       // Summing values from the enriched backend fields
-      summary[gradeKey].opening += (tank.openingL || 0);
-      summary[gradeKey].estSales += (tank.estSalesL || 0);
-      summary[gradeKey].currentSales += (tank.currentSalesL || 0);
-      summary[gradeKey].closing += (tank.closingL || 0);
-      summary[gradeKey].minLimit += (tank.minVolumeCapacity || 0);
-      summary[gradeKey].maxLimit += (tank.maxVolumeCapacity || 0);
-      summary[gradeKey].totalCapacity += (tank.tankCapacity || 0);
+      summary[gradeKey].opening += tank.openingL || 0;
+      summary[gradeKey].estSales += tank.estSalesL || 0;
+      summary[gradeKey].currentSales += tank.currentSalesL || 0;
+      summary[gradeKey].closing += tank.closingL || 0;
+      summary[gradeKey].minLimit += tank.minVolumeCapacity || 0;
+      summary[gradeKey].maxLimit += tank.maxVolumeCapacity || 0;
+      summary[gradeKey].totalCapacity += tank.tankCapacity || 0;
     });
 
     return Object.values(summary).sort((a: any, b: any) => {
       const priority: Record<string, number> = {
-        'Regular': 1, 'Premium': 2, 'Diesel': 3, 'Dyed Diesel': 4
+        Regular: 1,
+        Premium: 2,
+        Diesel: 3,
+        "Dyed Diesel": 4,
       };
       return (priority[a.grade] || 99) - (priority[b.grade] || 99);
     });
   }, [tanks]);
 
   // Fetch Orders (Your existing logic)
-  const { data: orders = [], isLoading, isFetching, isError } = useQuery({
-    queryKey: ['workspace-orders', location?._id, dateParam], // Use dateParam
+  const {
+    data: orders = [],
+    isLoading,
+    isFetching,
+    isError,
+  } = useQuery({
+    queryKey: ["workspace-orders", location?._id, dateParam], // Use dateParam
     queryFn: async () => {
       const res = await axios.get(
         `/api/fuel-orders/workspace-orders?stationId=${location._id}&date=${dateParam}`, // Send string, not ISO
-        authHeader
+        authHeader,
       );
       return res.data;
     },
@@ -494,17 +609,18 @@ function StationStrip({ location, date, racks }: { location: any, date: Date, ra
   });
 
   const getRowStatusColor = (item: any) => {
-    if (isPast) return 'hover:bg-slate-50/50';
+    if (isPast) return "hover:bg-slate-50/50";
 
-    const isCriticalLow = item.closing <= item.minLimit || item.opening <= item.minLimit;
+    const isCriticalLow =
+      item.closing <= item.minLimit || item.opening <= item.minLimit;
     const isPhysicalOverflow = item.closing > item.totalCapacity;
     const isAboveMaxLimit = item.closing > item.maxLimit;
 
-    if (isCriticalLow) return 'bg-red-50/80 hover:bg-red-100/80';
-    if (isPhysicalOverflow) return 'bg-orange-50/90 hover:bg-orange-100/90'; // Brighter for overflow
-    if (isAboveMaxLimit) return 'bg-amber-50/80 hover:bg-amber-100/80';
+    if (isCriticalLow) return "bg-red-50/80 hover:bg-red-100/80";
+    if (isPhysicalOverflow) return "bg-orange-50/90 hover:bg-orange-100/90"; // Brighter for overflow
+    if (isAboveMaxLimit) return "bg-amber-50/80 hover:bg-amber-100/80";
 
-    return 'hover:bg-slate-50/50';
+    return "hover:bg-slate-50/50";
   };
 
   const queryClient = useQueryClient();
@@ -515,25 +631,27 @@ function StationStrip({ location, date, racks }: { location: any, date: Date, ra
     },
     onSuccess: () => {
       // Refresh the tank query to show updated currentSales and closing volumes
-      queryClient.invalidateQueries({ queryKey: ['station-tanks', location?._id] });
+      queryClient.invalidateQueries({
+        queryKey: ["station-tanks", location?._id],
+      });
       // toast.success("Sales Synced");
-    }
+    },
   });
 
   const gradeMap: Record<string, string> = {
-    'Regular': 'REG',
-    'Premium': 'PUL',
-    'Diesel': 'ULSD',
-    'Dyed Diesel': 'DYED'
+    Regular: "REG",
+    Premium: "PUL",
+    Diesel: "ULSD",
+    "Dyed Diesel": "DYED",
   };
 
   useEffect(() => {
-    const tz = location?.timezone || 'America/Toronto';
+    const tz = location?.timezone || "America/Toronto";
 
     const updateClock = () => {
       const now = new Date();
       // 'MMM do' adds the ordinal (st, nd, rd, th) for the date
-      const formatted = formatInTimeZone(now, tz, 'MMM do, h:mm:ss a');
+      const formatted = formatInTimeZone(now, tz, "MMM do, h:mm:ss a");
       setStationTime(formatted);
     };
 
@@ -564,16 +682,16 @@ function StationStrip({ location, date, racks }: { location: any, date: Date, ra
     <>
       <Card className="w-full border-2 rounded-2xl gap-0 py-0 overflow-hidden shadow-lg border-slate-200/60 hover:border-blue-300 transition-all duration-300">
         <CardContent className="p-0 flex flex-col xl:flex-row">
-
           {/* LEFT SIDE: STATION INFO & INVENTORY - Tightened padding and flex */}
           <div className="w-full xl:w-2/5 p-3 bg-slate-50/50 border-r border-slate-100 flex flex-col justify-between">
             <div>
-              <div className="flex items-center gap-3 mb-2"> {/* Reduced margin from mb-6 */}
+              <div className="flex items-center gap-3 mb-2">
+                {" "}
+                {/* Reduced margin from mb-6 */}
                 {/* Station Number Badge */}
                 <div className="bg-white px-2 py-1 rounded-xl border-2 border-slate-100 shadow-sm font-black text-blue-700 font-mono text-lg mt-1">
-                  {location?.fuelStationNumber || '00'}
+                  {location?.fuelStationNumber || "00"}
                 </div>
-
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center justify-between gap-4">
                     <div className="flex flex-col min-w-0">
@@ -599,7 +717,7 @@ function StationStrip({ location, date, racks }: { location: any, date: Date, ra
                           Station Local
                         </span>
                         <span className="text-[12px] font-mono font-black tracking-tighter uppercase whitespace-nowrap">
-                          {stationTime || 'Syncing...'}
+                          {stationTime || "Syncing..."}
                         </span>
                       </div>
                     </div>
@@ -612,13 +730,15 @@ function StationStrip({ location, date, racks }: { location: any, date: Date, ra
                 <table className="w-full text-left border-collapse">
                   <thead>
                     <tr className="bg-slate-100/50 border-b border-slate-200">
-                      <th className="py-1.5 px-3 text-[9px] font-black text-slate-500 uppercase">Grade</th>
+                      <th className="py-1.5 px-3 text-[9px] font-black text-slate-500 uppercase">
+                        Grade
+                      </th>
                       <th className="py-1.5 px-3 text-[9px] font-black text-slate-500 uppercase text-right">
-                        {isFuture ? 'Est Opening' : 'Opening'} (L)
+                        {isFuture ? "Est Opening" : "Opening"} (L)
                       </th>
                       {/* Label changes: "Sales" for past, "Est Sales" for now/future */}
                       <th className="py-1.5 px-3 text-[9px] font-black text-slate-500 uppercase text-right">
-                        {isPast ? 'Sales' : 'Est Sales'} (L)
+                        {isPast ? "Sales" : "Est Sales"} (L)
                       </th>
                       {/* Hide Current column if not Today */}
                       {isToday && (
@@ -627,12 +747,13 @@ function StationStrip({ location, date, racks }: { location: any, date: Date, ra
                             <div className="flex items-center gap-1">
                               <span>Current (L)</span>
                               {/* Check for the string and split by either 'T' or a space ' ' */}
-                              {lastTxAt && typeof lastTxAt === 'string' && (
+                              {lastTxAt && typeof lastTxAt === "string" && (
                                 <span className="text-[8px] font-bold text-blue-500 lowercase">
-                                  [{lastTxAt.includes('T')
-                                    ? lastTxAt.split('T')[1]?.substring(0, 5)
-                                    : lastTxAt.split(' ')[1]?.substring(0, 5)
-                                  }]
+                                  [
+                                  {lastTxAt.includes("T")
+                                    ? lastTxAt.split("T")[1]?.substring(0, 5)
+                                    : lastTxAt.split(" ")[1]?.substring(0, 5)}
+                                  ]
                                 </span>
                               )}
                             </div>
@@ -644,26 +765,34 @@ function StationStrip({ location, date, racks }: { location: any, date: Date, ra
                               disabled={syncMutation.isPending}
                               className="hover:text-blue-600 transition-colors disabled:opacity-50"
                             >
-                              <RefreshCw className={`h-2.5 w-2.5 ${syncMutation.isPending ? 'animate-spin' : ''}`} />
+                              <RefreshCw
+                                className={`h-2.5 w-2.5 ${syncMutation.isPending ? "animate-spin" : ""}`}
+                              />
                             </button>
                           </div>
                         </th>
                       )}
                       <th className="py-1.5 px-3 text-[9px] font-black text-slate-500 uppercase text-right">
-                        {isPast ? 'Closing' : 'Est Closing'} (L)
+                        {isPast ? "Closing" : "Est Closing"} (L)
                       </th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-100">
                     {isTanksLoading ? (
                       <tr>
-                        <td colSpan={isToday ? 5 : 4} className="p-4 text-center">
+                        <td
+                          colSpan={isToday ? 5 : 4}
+                          className="p-4 text-center"
+                        >
                           <Loader2 className="h-4 w-4 animate-spin mx-auto text-slate-300" />
                         </td>
                       </tr>
                     ) : isTanksError ? (
                       <tr>
-                        <td colSpan={isToday ? 5 : 4} className="p-4 text-center text-[10px] font-bold uppercase text-red-400">
+                        <td
+                          colSpan={isToday ? 5 : 4}
+                          className="p-4 text-center text-[10px] font-bold uppercase text-red-400"
+                        >
                           Unable to load tank data
                         </td>
                       </tr>
@@ -673,29 +802,50 @@ function StationStrip({ location, date, racks }: { location: any, date: Date, ra
                         const rowColorClass = getRowStatusColor(item);
 
                         // Status Flags
-                        const isLow = !isPast && (item.closing <= item.minLimit);
-                        const isOverflow = !isPast && (item.closing > item.totalCapacity);
-                        const isWarning = !isPast && (item.closing > item.maxLimit && !isOverflow);
+                        const isLow = !isPast && item.closing <= item.minLimit;
+                        const isOverflow =
+                          !isPast && item.closing > item.totalCapacity;
+                        const isWarning =
+                          !isPast &&
+                          item.closing > item.maxLimit &&
+                          !isOverflow;
 
                         return (
-                          <tr key={item.grade} className={`${rowColorClass} transition-colors`}>
+                          <tr
+                            key={item.grade}
+                            className={`${rowColorClass} transition-colors`}
+                          >
                             <td className="py-1.5 px-3 flex items-center gap-2">
                               <span
                                 className={`text-[10px] font-black px-1.5 py-0.5 rounded border ${theme.label}`}
-                                style={{ backgroundColor: `${theme.raw}15`, borderColor: `${theme.raw}30` }}
+                                style={{
+                                  backgroundColor: `${theme.raw}15`,
+                                  borderColor: `${theme.raw}30`,
+                                }}
                               >
-                                {gradeMap[item.grade] || item.grade}
+                                {item.grade === "Regular"
+                                  ? "REG | E15"
+                                  : gradeMap[item.grade] || item.grade}
                               </span>
 
                               {/* ALERT DOTS */}
                               {isLow && (
-                                <div className="w-2 h-2 rounded-full bg-red-500 animate-ping" title="Low Inventory" />
+                                <div
+                                  className="w-2 h-2 rounded-full bg-red-500 animate-ping"
+                                  title="Low Inventory"
+                                />
                               )}
                               {isOverflow && (
-                                <div className="w-2 h-2 rounded-full bg-orange-400 animate-pulse border border-orange-600" title="Physical Overflow Warning" />
+                                <div
+                                  className="w-2 h-2 rounded-full bg-orange-400 animate-pulse border border-orange-600"
+                                  title="Physical Overflow Warning"
+                                />
                               )}
                               {isWarning && (
-                                <div className="w-1.5 h-1.5 rounded-full bg-amber-400" title="Above Max Limit" />
+                                <div
+                                  className="w-1.5 h-1.5 rounded-full bg-amber-400"
+                                  title="Above Max Limit"
+                                />
                               )}
                             </td>
 
@@ -713,8 +863,10 @@ function StationStrip({ location, date, racks }: { location: any, date: Date, ra
                               </td>
                             )}
 
-                            <td className={`py-1.5 px-3 text-right font-mono text-[11px] font-black 
-                            ${isLow ? 'text-red-600' : isOverflow ? 'text-yellow-700' : 'text-slate-800'}`}>
+                            <td
+                              className={`py-1.5 px-3 text-right font-mono text-[11px] font-black 
+                            ${isLow ? "text-red-600" : isOverflow ? "text-yellow-700" : "text-slate-800"}`}
+                            >
                               {item.closing.toLocaleString()}
                             </td>
                           </tr>
@@ -734,7 +886,10 @@ function StationStrip({ location, date, racks }: { location: any, date: Date, ra
                 className="w-full border-dashed border-2 text-blue-600 font-bold hover:bg-blue-50 transition-all text-xs h-9"
                 asChild
               >
-                <Link to="/fuel-management/volume" search={{ site: location?.stationName }}>
+                <Link
+                  to="/fuel-management/volume"
+                  search={{ site: location?.stationName }}
+                >
                   View Current Tanks Volume
                 </Link>
               </Button>
@@ -748,66 +903,111 @@ function StationStrip({ location, date, racks }: { location: any, date: Date, ra
                 <div className="p-1.5 bg-blue-50 rounded-lg">
                   <Truck className="h-5 w-5 text-blue-600" />
                 </div>
-                <h3 className="text-sm font-black uppercase tracking-wide text-slate-700">Delivery Schedule</h3>
+                <h3 className="text-sm font-black uppercase tracking-wide text-slate-700">
+                  Delivery Schedule
+                </h3>
                 {!isLoading && (
-                  <Badge variant="secondary" className="rounded-full bg-slate-100 text-[10px] text-slate-500 px-2 h-5 font-bold">
+                  <Badge
+                    variant="secondary"
+                    className="rounded-full bg-slate-100 text-[10px] text-slate-500 px-2 h-5 font-bold"
+                  >
                     {orders.length} LOADS
                   </Badge>
                 )}
               </div>
-              {(isLoading || isFetching || isTanksFetching) && <Loader2 className="h-4 w-4 animate-spin text-blue-600" />}
+              {(isLoading || isFetching || isTanksFetching) && (
+                <Loader2 className="h-4 w-4 animate-spin text-blue-600" />
+              )}
             </div>
 
             {/* SCROLLABLE CONTAINER START */}
-            <div className={`space-y-2 overflow-y-auto pr-1 transition-all duration-300 ${orders.length > 1 ? 'max-h-[240px]' : 'max-h-fit'
-              } scrollbar-thin scrollbar-thumb-slate-200 scrollbar-track-transparent hover:scrollbar-thumb-slate-300`}>
+            <div
+              className={`space-y-2 overflow-y-auto pr-1 transition-all duration-300 ${
+                orders.length > 1 ? "max-h-[240px]" : "max-h-fit"
+              } scrollbar-thin scrollbar-thumb-slate-200 scrollbar-track-transparent hover:scrollbar-thumb-slate-300`}
+            >
               {isLoading ? (
-                [1, 2].map((i) => <div key={i} className="h-28 w-full bg-slate-50 animate-pulse rounded-2xl border border-slate-100" />)
+                [1, 2].map((i) => (
+                  <div
+                    key={i}
+                    className="h-28 w-full bg-slate-50 animate-pulse rounded-2xl border border-slate-100"
+                  />
+                ))
               ) : isError ? (
                 <div className="flex flex-col items-center justify-center py-12 text-red-300 border-2 border-dashed rounded-2xl bg-red-50/30">
-                  <p className="font-bold italic text-sm text-red-400">Unable to load orders for this date</p>
+                  <p className="font-bold italic text-sm text-red-400">
+                    Unable to load orders for this date
+                  </p>
                 </div>
               ) : orders.length === 0 ? (
                 <div className="flex flex-col items-center justify-center py-12 text-slate-300 border-2 border-dashed rounded-2xl bg-slate-50/30">
-                  <p className="font-bold italic text-sm text-slate-400">No orders scheduled for this date</p>
+                  <p className="font-bold italic text-sm text-slate-400">
+                    No orders scheduled for this date
+                  </p>
                 </div>
               ) : (
                 orders.map((order: any) => {
-                  const stationTz = location.timezone || 'America/Toronto';
+                  const stationTz = location.timezone || "America/Toronto";
 
                   // 1. Convert DB dates to simple YYYY-MM-DD strings relative to the Station
-                  const estDate = formatInTimeZone(new Date(order.estimatedDeliveryDate), stationTz, 'yyyy-MM-dd');
-                  const origDate = formatInTimeZone(new Date(order.originalDeliveryDate), stationTz, 'yyyy-MM-dd');
+                  const estDate = formatInTimeZone(
+                    new Date(order.estimatedDeliveryDate),
+                    stationTz,
+                    "yyyy-MM-dd",
+                  );
+                  const origDate = formatInTimeZone(
+                    new Date(order.originalDeliveryDate),
+                    stationTz,
+                    "yyyy-MM-dd",
+                  );
 
                   // 2. Format the active 'date' prop from your page
-                  const activeDateStr = format(date, 'yyyy-MM-dd');
+                  const activeDateStr = format(date, "yyyy-MM-dd");
 
-                  const isDelivered = order.currentStatus === 'Delivered' || order.currentStatus === 'Cancelled';
-                  const wasMovedFromHere = origDate === activeDateStr && estDate !== activeDateStr;
-                  const arrivedHereFromHistory = estDate === activeDateStr && origDate !== activeDateStr;
+                  const isDelivered =
+                    order.currentStatus === "Delivered" ||
+                    order.currentStatus === "Cancelled";
+                  const wasMovedFromHere =
+                    origDate === activeDateStr && estDate !== activeDateStr;
+                  const arrivedHereFromHistory =
+                    estDate === activeDateStr && origDate !== activeDateStr;
 
                   // Use your formatSafeDate helper for display labels
                   const formatSafeDate = (dateInput: string | Date) => {
-                    return formatInTimeZone(new Date(dateInput), stationTz, 'EEE, MMM do');
+                    return formatInTimeZone(
+                      new Date(dateInput),
+                      stationTz,
+                      "EEE, MMM do",
+                    );
                   };
 
                   // --- UI Rendering follows your existing logic ---
                   if (wasMovedFromHere) {
                     return (
-                      <div key={order._id} className="flex items-center justify-between p-3 bg-slate-50/50 border-2 border-dashed border-slate-200 rounded-xl">
+                      <div
+                        key={order._id}
+                        className="flex items-center justify-between p-3 bg-slate-50/50 border-2 border-dashed border-slate-200 rounded-xl"
+                      >
                         <div className="flex items-center gap-3">
                           <div className="p-1 bg-orange-100 rounded">
                             <ArrowRight className="h-3 w-3 text-orange-600" />
                           </div>
-                          <span className="font-black text-slate-500 text-sm tracking-tight">{order.poNumber}</span>
-                          <Badge className={`text-[10px] font-black uppercase px-1.5 py-0 shadow-none border opacity-60 ${getStatusColor(order.currentStatus)}`}>
+                          <span className="font-black text-slate-500 text-sm tracking-tight">
+                            {order.poNumber}
+                          </span>
+                          <Badge
+                            className={`text-[10px] font-black uppercase px-1.5 py-0 shadow-none border opacity-60 ${getStatusColor(order.currentStatus)}`}
+                          >
                             {order.currentStatus}
                           </Badge>
                         </div>
 
                         <div className="text-[10px] font-black text-orange-600 uppercase flex items-center gap-1">
                           {/* MOVED TO <span className="underline">{format(new Date(order.estimatedDeliveryDate), 'EEE, MMM do')}</span> */}
-                          MOVED TO <span className="underline">{formatSafeDate(order.estimatedDeliveryDate)}</span>
+                          MOVED TO{" "}
+                          <span className="underline">
+                            {formatSafeDate(order.estimatedDeliveryDate)}
+                          </span>
                         </div>
                       </div>
                     );
@@ -815,20 +1015,28 @@ function StationStrip({ location, date, racks }: { location: any, date: Date, ra
 
                   // --- 2. FULL CARD VIEW (For orders actually scheduled for today) ---
                   return (
-                    <div key={order._id} className="group border-2 border-slate-100 rounded-2xl p-2.5 flex flex-col gap-2 hover:border-blue-400 hover:shadow-md transition-all duration-300 bg-white">
+                    <div
+                      key={order._id}
+                      className="group border-2 border-slate-100 rounded-2xl p-2.5 flex flex-col gap-2 hover:border-blue-400 hover:shadow-md transition-all duration-300 bg-white"
+                    >
                       {/* Arrived Here Indicator */}
                       {arrivedHereFromHistory && (
                         <div className="flex items-center gap-2 text-[10px] font-black text-blue-500 uppercase">
                           <History className="h-3 w-3" />
-                          Originally for {formatSafeDate(order.originalDeliveryDate)}
+                          Originally for{" "}
+                          {formatSafeDate(order.originalDeliveryDate)}
                         </div>
                       )}
 
                       {/* LINE 1: IDENTIFIERS & STATUS ACTIONS */}
                       <div className="flex items-center justify-between gap-4">
                         <div className="flex items-center gap-2">
-                          <span className="font-black text-slate-900 text-lg tracking-tight">{order.poNumber}</span>
-                          <Badge className={`text-[12px] font-black uppercase px-2 py-0.5 shadow-none border ${getStatusColor(order.currentStatus)}`}>
+                          <span className="font-black text-slate-900 text-lg tracking-tight">
+                            {order.poNumber}
+                          </span>
+                          <Badge
+                            className={`text-[12px] font-black uppercase px-2 py-0.5 shadow-none border ${getStatusColor(order.currentStatus)}`}
+                          >
                             {order.currentStatus}
                           </Badge>
                           <Button
@@ -845,13 +1053,21 @@ function StationStrip({ location, date, racks }: { location: any, date: Date, ra
                         {/* Metadata Breadcrumbs */}
                         <div className="hidden md:flex items-center gap-2">
                           <div className="flex items-center gap-2 text-[11px] font-bold text-slate-400 bg-slate-50/50 px-2 py-0.5 rounded-full border border-slate-100">
-                            <span className="text-blue-500 uppercase">{order.supplier?.supplierName || 'No Supplier'}</span>
+                            <span className="text-blue-500 uppercase">
+                              {order.supplier?.supplierName || "No Supplier"}
+                            </span>
                             <span className="text-slate-300">•</span>
-                            <span className="text-blue-500 uppercase">{order.rack?.rackName || 'No Rack'}</span>
+                            <span className="text-blue-500 uppercase">
+                              {order.rack?.rackName || "No Rack"}
+                            </span>
                             <span className="text-slate-300">•</span>
-                            <span className="text-blue-500 uppercase">{order.rack?.rackLocation || 'No Rack'}</span>
+                            <span className="text-blue-500 uppercase">
+                              {order.rack?.rackLocation || "No Rack"}
+                            </span>
                             <span className="text-slate-300">•</span>
-                            <span className="text-blue-500 uppercase">{order.carrier?.carrierName || 'No Carrier'}</span>
+                            <span className="text-blue-500 uppercase">
+                              {order.carrier?.carrierName || "No Carrier"}
+                            </span>
                           </div>
 
                           {/* NEW EDIT META BUTTON */}
@@ -888,7 +1104,8 @@ function StationStrip({ location, date, racks }: { location: any, date: Date, ra
                           <div className="flex flex-col">
                             <div className="flex items-center gap-2">
                               <span className="font-black text-slate-700 text-[15px] tracking-tight">
-                                {order.estimatedDeliveryWindow?.start} — {order.estimatedDeliveryWindow?.end}
+                                {order.estimatedDeliveryWindow?.start} —{" "}
+                                {order.estimatedDeliveryWindow?.end}
                               </span>
                               <Button
                                 variant="ghost"
@@ -906,7 +1123,9 @@ function StationStrip({ location, date, racks }: { location: any, date: Date, ra
                                 className="h-5 px-1.5 text-[11px] font-black uppercase text-slate-500 hover:text-blue-600 flex items-center gap-1 bg-slate-50 hover:bg-slate-100 rounded-md"
                               >
                                 <MessageSquare className="h-3 w-3" />
-                                <span>Comments ({order.comments?.length || 0})</span>
+                                <span>
+                                  Comments ({order.comments?.length || 0})
+                                </span>
                               </Button>
                             </div>
                           </div>
@@ -915,22 +1134,47 @@ function StationStrip({ location, date, racks }: { location: any, date: Date, ra
                         {/* RIGHT: Fuel Qtys */}
                         <div className="flex items-center gap-2">
                           <div className="flex items-center gap-1.5 overflow-x-auto no-scrollbar max-w-[500px]">
-                            {order.items?.slice().sort((a: any, b: any) => {
-                              const priority: Record<string, number> = { 'Regular': 1, 'E15': 2, 'Premium': 3, 'Diesel': 4, 'Dyed Diesel': 5 };
-                              return (priority[a.grade] || 99) - (priority[b.grade] || 99);
-                            }).map((item: any) => {
-                              const theme = getGradeTheme(item.grade);
-                              return (
-                                <div key={item.grade} className="flex items-center gap-2 px-2 py-1 rounded-lg border" style={{ backgroundColor: `${theme.raw}10`, borderColor: `${theme.raw}25` }}>
-                                  <span className={`text-[12px] font-black uppercase tracking-tight ${theme.label}`}>
-                                    {item.grade.replace('Dyed Diesel', 'DYED').replace('Regular', 'REG').replace('Premium', 'PUL').replace('Diesel', 'ULSD')}
-                                  </span>
-                                  <span className="font-mono font-black text-slate-900 text-[12px]">
-                                    {(item.ltrs || 0).toLocaleString()}
-                                  </span>
-                                </div>
-                              );
-                            })}
+                            {order.items
+                              ?.slice()
+                              .sort((a: any, b: any) => {
+                                const priority: Record<string, number> = {
+                                  Regular: 1,
+                                  E15: 2,
+                                  Premium: 3,
+                                  Diesel: 4,
+                                  "Dyed Diesel": 5,
+                                };
+                                return (
+                                  (priority[a.grade] || 99) -
+                                  (priority[b.grade] || 99)
+                                );
+                              })
+                              .map((item: any) => {
+                                const theme = getGradeTheme(item.grade);
+                                return (
+                                  <div
+                                    key={item.grade}
+                                    className="flex items-center gap-2 px-2 py-1 rounded-lg border"
+                                    style={{
+                                      backgroundColor: `${theme.raw}10`,
+                                      borderColor: `${theme.raw}25`,
+                                    }}
+                                  >
+                                    <span
+                                      className={`text-[12px] font-black uppercase tracking-tight ${theme.label}`}
+                                    >
+                                      {item.grade
+                                        .replace("Dyed Diesel", "DYED")
+                                        .replace("Regular", "REG")
+                                        .replace("Premium", "PUL")
+                                        .replace("Diesel", "ULSD")}
+                                    </span>
+                                    <span className="font-mono font-black text-slate-900 text-[12px]">
+                                      {(item.ltrs || 0).toLocaleString()}
+                                    </span>
+                                  </div>
+                                );
+                              })}
                           </div>
                           <Button
                             variant="outline"
@@ -950,7 +1194,7 @@ function StationStrip({ location, date, racks }: { location: any, date: Date, ra
             {/* SCROLLABLE CONTAINER END */}
           </div>
         </CardContent>
-      </Card >
+      </Card>
       {/* RENDER THE DIALOGS IF STATE EXISTS */}
       {rescheduleOrder && (
         <RescheduleDialog
@@ -980,9 +1224,12 @@ function StationStrip({ location, date, racks }: { location: any, date: Date, ra
       )} */}
       {updateStatusOrder && (
         <UpdateStatusDialog
-          // CRITICAL: Find the LATEST order data from your main list/query 
+          // CRITICAL: Find the LATEST order data from your main list/query
           // so the "Edited" values show up immediately.
-          order={orders?.find((o: any) => o._id === updateStatusOrder._id) || updateStatusOrder}
+          order={
+            orders?.find((o: any) => o._id === updateStatusOrder._id) ||
+            updateStatusOrder
+          }
           open={!!updateStatusOrder}
           initialStep={resumeStep} // Pass the step we want to land on
           onOpenChange={(open: any) => {
@@ -1000,9 +1247,14 @@ function StationStrip({ location, date, racks }: { location: any, date: Date, ra
 
       {viewingCommentsOrder && (
         <OrderCommentsDialog
-          order={orders?.find((o: any) => o._id === viewingCommentsOrder._id) || viewingCommentsOrder}
+          order={
+            orders?.find((o: any) => o._id === viewingCommentsOrder._id) ||
+            viewingCommentsOrder
+          }
           open={!!viewingCommentsOrder}
-          onOpenChange={(open: boolean) => !open && setViewingCommentsOrder(null)}
+          onOpenChange={(open: boolean) =>
+            !open && setViewingCommentsOrder(null)
+          }
           locationId={location._id}
         />
       )}
@@ -1012,7 +1264,7 @@ function StationStrip({ location, date, racks }: { location: any, date: Date, ra
           order={editQtyOrder}
           open={!!editQtyOrder}
           // onOpenChange={(open: any) => !open && setEditQtyOrder(null)}
-          onOpenChange={((open: any) => {
+          onOpenChange={(open: any) => {
             if (!open) {
               setEditQtyOrder(null);
               if (returnToStatus) {
@@ -1020,7 +1272,7 @@ function StationStrip({ location, date, racks }: { location: any, date: Date, ra
                 setReturnToStatus(false); // <--- Clear it here!
               }
             }
-          })}
+          }}
           locationId={location._id}
         />
       )}
@@ -1034,7 +1286,9 @@ function StationStrip({ location, date, racks }: { location: any, date: Date, ra
           racks={racks} // Ensure the 'racks' list is available in the parent component
           onUpdateSuccess={() => {
             // Refresh the specific station data after a successful save
-            queryClient.invalidateQueries({ queryKey: ['workspace-orders', location._id] });
+            queryClient.invalidateQueries({
+              queryKey: ["workspace-orders", location._id],
+            });
           }}
         />
       )}
@@ -1104,86 +1358,110 @@ function StationStrip({ location, date, racks }: { location: any, date: Date, ra
           </DialogFooter>
         </DialogContent>
       </Dialog> */}
-      <Dialog open={!!viewingPO} onOpenChange={(open) => !open && setViewingPO(null)}>
-        <DialogContent className="max-w-5xl h-[90vh] flex flex-col p-0"> {/* p-0 to control spacing better */}
+      <Dialog
+        open={!!viewingPO}
+        onOpenChange={(open) => !open && setViewingPO(null)}
+      >
+        <DialogContent className="max-w-5xl h-[90vh] flex flex-col p-0">
+          {" "}
+          {/* p-0 to control spacing better */}
           <DialogHeader className="p-6 pb-2">
             <DialogTitle className="flex items-center gap-2">
               <FileText className="h-5 w-5 text-blue-600" />
               PO Record Preview - {viewingPO?.poNumber}
             </DialogTitle>
           </DialogHeader>
+          {viewingPO &&
+            (() => {
+              const activeBadge = viewingPO.supplier?.supplierBadges?.find(
+                (b: any) => b.badgeNumber === viewingPO.badgeNo,
+              );
 
-          {viewingPO && (() => {
-            const activeBadge = viewingPO.supplier?.supplierBadges?.find(
-              (b: any) => b.badgeNumber === viewingPO.badgeNo
-            );
+              const commonProps = {
+                data: {
+                  deliveryDate: getISODateOnly(viewingPO.originalDeliveryDate),
+                  poNumber: viewingPO.poNumber,
+                  badgeNo: viewingPO.badgeNo || "",
+                  startTime: viewingPO.originalDeliveryWindow?.start || "",
+                  endTime: viewingPO.originalDeliveryWindow?.end || "",
+                  items: viewingPO.items || [],
+                },
+                // We use the same fallback logic as your logs
+                selectedStation: viewingPO.stationId || viewingPO.station,
+                carrierName: viewingPO.carrier?.carrierName,
+                rackName: viewingPO.rack?.rackName,
+                rackLocation: viewingPO.rack?.rackLocation,
+                carrierBookworksId: viewingPO.carrier?.carrierId,
+                supplierBookworksId: activeBadge?.accountingId || "N/A",
+              };
 
-            const commonProps = {
-              data: {
-                deliveryDate: getISODateOnly(viewingPO.originalDeliveryDate),
-                poNumber: viewingPO.poNumber,
-                badgeNo: viewingPO.badgeNo || '',
-                startTime: viewingPO.originalDeliveryWindow?.start || '',
-                endTime: viewingPO.originalDeliveryWindow?.end || '',
-                items: viewingPO.items || []
-              },
-              // We use the same fallback logic as your logs
-              selectedStation: viewingPO.stationId || viewingPO.station,
-              carrierName: viewingPO.carrier?.carrierName,
-              rackName: viewingPO.rack?.rackName,
-              rackLocation: viewingPO.rack?.rackLocation,
-              carrierBookworksId: viewingPO.carrier?.carrierId,
-              supplierBookworksId: activeBadge?.accountingId || 'N/A'
-            };
+              return (
+                <>
+                  {/* Scrollable Area for PDF */}
+                  <div className="flex-1 border-y bg-slate-100 overflow-hidden">
+                    <PDFViewer
+                      width="100%"
+                      height="100%"
+                      showToolbar={false}
+                      style={{ border: "none" }}
+                    >
+                      <POPreviewDocument {...commonProps} />
+                    </PDFViewer>
+                  </div>
 
-            return (
-              <>
-                {/* Scrollable Area for PDF */}
-                <div className="flex-1 border-y bg-slate-100 overflow-hidden">
-                  <PDFViewer width="100%" height="100%" showToolbar={false} style={{ border: 'none' }}>
-                    <POPreviewDocument {...commonProps} />
-                  </PDFViewer>
-                </div>
+                  {/* Footer moved OUTSIDE the viewer container */}
+                  <div className="p-4 flex justify-end items-center gap-2 bg-white">
+                    <Button variant="ghost" onClick={() => setViewingPO(null)}>
+                      Close
+                    </Button>
 
-                {/* Footer moved OUTSIDE the viewer container */}
-                <div className="p-4 flex justify-end items-center gap-2 bg-white">
-                  <Button variant="ghost" onClick={() => setViewingPO(null)}>
-                    Close
-                  </Button>
-
-                  <PDFDownloadLink
-                    document={<POPreviewDocument {...commonProps} />}
-                    fileName={`Fuel Order Form NSP ${commonProps.selectedStation?.fuelCustomerName || 'Order'} ${formatPDFDate(getISODateOnly(viewingPO.originalDeliveryDate), false)}.pdf`}
-                  >
-                    {({ loading }) => (
-                      <Button className="bg-blue-600 hover:bg-blue-700" disabled={loading}>
-                        <Download className="h-4 w-4 mr-2" />
-                        {loading ? "Preparing..." : "Download PDF"}
-                      </Button>
-                    )}
-                  </PDFDownloadLink>
-                </div>
-              </>
-            );
-          })()}
+                    <PDFDownloadLink
+                      document={<POPreviewDocument {...commonProps} />}
+                      fileName={`Fuel Order Form NSP ${commonProps.selectedStation?.fuelCustomerName || "Order"} ${formatPDFDate(getISODateOnly(viewingPO.originalDeliveryDate), false)}.pdf`}
+                    >
+                      {({ loading }) => (
+                        <Button
+                          className="bg-blue-600 hover:bg-blue-700"
+                          disabled={loading}
+                        >
+                          <Download className="h-4 w-4 mr-2" />
+                          {loading ? "Preparing..." : "Download PDF"}
+                        </Button>
+                      )}
+                    </PDFDownloadLink>
+                  </div>
+                </>
+              );
+            })()}
         </DialogContent>
       </Dialog>
     </>
   );
 }
 
-export function RescheduleDialog({ order, isOpen, onOpenChange, locationId }: RescheduleDialogProps) {
+export function RescheduleDialog({
+  order,
+  isOpen,
+  onOpenChange,
+  locationId,
+}: RescheduleDialogProps) {
   const [date, setDate] = useState<Date | undefined>(() => {
     // Use the existing order date but ensure it's treated as local for the picker
-    return order.estimatedDeliveryDate ? new Date(order.estimatedDeliveryDate) : new Date();
+    return order.estimatedDeliveryDate
+      ? new Date(order.estimatedDeliveryDate)
+      : new Date();
   });
-  const [window, setWindow] = useState(order.estimatedDeliveryWindow || { start: "08:00", end: "12:00" });
+  const [window, setWindow] = useState(
+    order.estimatedDeliveryWindow || { start: "08:00", end: "12:00" },
+  );
 
   const queryClient = useQueryClient();
-  const authHeader = { headers: { Authorization: `Bearer ${localStorage.getItem('token')}` } };
+  const authHeader = {
+    headers: { Authorization: `Bearer ${localStorage.getItem("token")}` },
+  };
 
   const allowedMinDate = useMemo(() => {
-    const tz = order.station?.timezone || 'America/Toronto';
+    const tz = order.station?.timezone || "America/Toronto";
 
     // 1. Get current time in the Station's Timezone
     const nowInStationTz = toZonedTime(new Date(), tz);
@@ -1200,27 +1478,31 @@ export function RescheduleDialog({ order, isOpen, onOpenChange, locationId }: Re
     },
     onSuccess: () => {
       // Refresh both orders and tanks (since est closing depends on order dates)
-      queryClient.invalidateQueries({ queryKey: ['workspace-orders', locationId] });
-      queryClient.invalidateQueries({ queryKey: ['station-tanks', locationId] });
+      queryClient.invalidateQueries({
+        queryKey: ["workspace-orders", locationId],
+      });
+      queryClient.invalidateQueries({
+        queryKey: ["station-tanks", locationId],
+      });
       onOpenChange(false);
-    }
+    },
   });
 
   const isInvalidDate = useMemo(() => {
     if (!date) return false;
     return isBefore(startOfDay(date), allowedMinDate);
-  }, [date, allowedMinDate])
+  }, [date, allowedMinDate]);
 
   const handleConfirm = () => {
     if (!date || isInvalidDate) return;
     // Use a library like 'date-fns' or just format it manually to YYYY-MM-DD
     // This ensures we send "2026-04-25" instead of an ISO string with a timezone
-    const dateString = format(date, 'yyyy-MM-dd');
+    const dateString = format(date, "yyyy-MM-dd");
 
     // 4. Proceed with mutation if validation passes
     mutation.mutate({
       estimatedDeliveryDate: dateString, // Send the string!
-      estimatedDeliveryWindow: window
+      estimatedDeliveryWindow: window,
     });
   };
 
@@ -1238,30 +1520,34 @@ export function RescheduleDialog({ order, isOpen, onOpenChange, locationId }: Re
             <label className="text-[10px] font-black uppercase text-slate-400 tracking-wider">
               Move to Date
             </label>
-            <DatePicker
-              date={date}
-              setDate={setDate}
-            />
+            <DatePicker date={date} setDate={setDate} />
             {/* 3. The Error Message */}
             {isInvalidDate && (
               <span className="text-[10px] text-red-500 font-bold uppercase mt-1 animate-in fade-in slide-in-from-top-1">
-                ⚠️ Date cannot be earlier than yesterday ({format(allowedMinDate, 'MMM do')})
+                ⚠️ Date cannot be earlier than yesterday (
+                {format(allowedMinDate, "MMM do")})
               </span>
             )}
           </div>
 
           <div className="grid grid-cols-2 gap-4">
             <div className="flex flex-col gap-2">
-              <label className="text-[10px] font-black uppercase text-slate-400 tracking-wider">Window Start</label>
+              <label className="text-[10px] font-black uppercase text-slate-400 tracking-wider">
+                Window Start
+              </label>
               <Input
                 type="time"
                 className="font-bold"
                 value={window.start}
-                onChange={(e) => setWindow({ ...window, start: e.target.value })}
+                onChange={(e) =>
+                  setWindow({ ...window, start: e.target.value })
+                }
               />
             </div>
             <div className="flex flex-col gap-2">
-              <label className="text-[10px] font-black uppercase text-slate-400 tracking-wider">Window End</label>
+              <label className="text-[10px] font-black uppercase text-slate-400 tracking-wider">
+                Window End
+              </label>
               <Input
                 type="time"
                 className="font-bold"
@@ -1293,63 +1579,99 @@ export function RescheduleDialog({ order, isOpen, onOpenChange, locationId }: Re
 //   onUpdate: (newStatus: string) => void;
 // }
 
-export function UpdateStatusDialog({ order, open, initialStep, onOpenChange, locationId, onEditSchedule, onEditQty }: any) {
-  const [pendingStatus, setPendingStatus] = useState<string | null>(initialStep ? 'Delivered' : null);
-  const [confirmStep, setConfirmStep] = useState<'schedule' | 'quantities' | 'final'>(initialStep || 'schedule');
-  const [cancelReason, setCancelReason] = useState('');
+export function UpdateStatusDialog({
+  order,
+  open,
+  initialStep,
+  onOpenChange,
+  locationId,
+  onEditSchedule,
+  onEditQty,
+}: any) {
+  const [pendingStatus, setPendingStatus] = useState<string | null>(
+    initialStep ? "Delivered" : null,
+  );
+  const [confirmStep, setConfirmStep] = useState<
+    "schedule" | "quantities" | "final"
+  >(initialStep || "schedule");
+  const [cancelReason, setCancelReason] = useState("");
 
   const queryClient = useQueryClient();
 
   const statuses = [
-    { id: 'Created', label: 'Created', icon: PackagePlus, color: 'text-slate-500', bg: 'bg-slate-50' },
-    { id: 'In Transit', label: 'In Transit', icon: Truck, color: 'text-blue-500', bg: 'bg-blue-50' },
-    { id: 'Delivered', label: 'Delivered', icon: CheckCircle2, color: 'text-green-500', bg: 'bg-green-50' },
+    {
+      id: "Created",
+      label: "Created",
+      icon: PackagePlus,
+      color: "text-slate-500",
+      bg: "bg-slate-50",
+    },
+    {
+      id: "In Transit",
+      label: "In Transit",
+      icon: Truck,
+      color: "text-blue-500",
+      bg: "bg-blue-50",
+    },
+    {
+      id: "Delivered",
+      label: "Delivered",
+      icon: CheckCircle2,
+      color: "text-green-500",
+      bg: "bg-green-50",
+    },
   ];
 
   useEffect(() => {
     if (open) {
       if (initialStep) {
-        setPendingStatus('Delivered');
+        setPendingStatus("Delivered");
         setConfirmStep(initialStep);
       } else {
         setPendingStatus(null);
-        setConfirmStep('schedule');
+        setConfirmStep("schedule");
       }
-      setCancelReason('');
+      setCancelReason("");
     }
   }, [open, initialStep]);
 
-  const currentIndex = statuses.findIndex(s => s.id === order.currentStatus);
+  const currentIndex = statuses.findIndex((s) => s.id === order.currentStatus);
 
   const mutation = useMutation({
-    mutationFn: async ({ status, commentText }: { status: string, commentText?: string }) => {
+    mutationFn: async ({
+      status,
+      commentText,
+    }: {
+      status: string;
+      commentText?: string;
+    }) => {
       const payload: any = { currentStatus: status };
       if (commentText?.trim()) {
         payload.comment = { text: commentText.trim() };
       }
       return axios.put(`/api/fuel-orders/${order._id}`, payload, authHeader);
     },
-    onSuccess: (_, variables: any) => {
+    onSuccess: (_:any, variables: any) => {
       // 1. Always invalidate the orders list so the UI badges update immediately
-      queryClient.invalidateQueries({ 
-        queryKey: ['workspace-orders', locationId] 
+      queryClient.invalidateQueries({
+        queryKey: ["workspace-orders", locationId],
       });
 
-      // 2. Only trigger the heavy tank re-calculation query if the status 
+      // 2. Only trigger the heavy tank re-calculation query if the status
       // reached a volume-altering terminal endpoint ('Cancelled' )
-      if (variables.status === 'Cancelled') {
+      if (variables.status === "Cancelled") {
         queryClient.invalidateQueries({
-          queryKey: ['station-tanks', locationId]
+          queryKey: ["station-tanks", locationId],
         });
       }
 
       // 3. Close the dialog layout
       onOpenChange(false);
-    }
+    },
   });
 
   const renderStep = () => {
-    if (pendingStatus === 'Cancelled') {
+    if (pendingStatus === "Cancelled") {
       return (
         <div className="space-y-4 animate-in fade-in zoom-in-95 duration-200">
           <div className="p-4 bg-red-50 border-2 border-red-100 rounded-2xl flex flex-col gap-2">
@@ -1357,7 +1679,8 @@ export function UpdateStatusDialog({ order, open, initialStep, onOpenChange, loc
               <XCircle className="h-4 w-4" /> Cancel Order Processing
             </div>
             <p className="text-sm text-red-900 leading-tight">
-              Are you sure you want to cancel PO <span className="font-black">{order.poNumber}</span>?
+              Are you sure you want to cancel PO{" "}
+              <span className="font-black">{order.poNumber}</span>?
             </p>
           </div>
 
@@ -1374,18 +1697,29 @@ export function UpdateStatusDialog({ order, open, initialStep, onOpenChange, loc
           </div>
 
           <Button
-            onClick={() => mutation.mutate({ status: 'Cancelled', commentText: cancelReason })}
+            onClick={() =>
+              mutation.mutate({
+                status: "Cancelled",
+                commentText: cancelReason,
+              })
+            }
             disabled={!cancelReason.trim() || mutation.isPending}
             className="w-full h-12 bg-red-600 hover:bg-red-700 text-white font-black uppercase tracking-wide disabled:opacity-50"
           >
             Confirm Permanent Cancellation
           </Button>
-          <Button variant="ghost" onClick={() => setPendingStatus(null)} className="w-full text-slate-400 font-black uppercase">Go Back</Button>
+          <Button
+            variant="ghost"
+            onClick={() => setPendingStatus(null)}
+            className="w-full text-slate-400 font-black uppercase"
+          >
+            Go Back
+          </Button>
         </div>
       );
     }
 
-    if (pendingStatus === 'In Transit') {
+    if (pendingStatus === "In Transit") {
       return (
         <div className="space-y-4">
           <div className="p-4 bg-blue-50 border-2 border-blue-100 rounded-2xl flex flex-col gap-2">
@@ -1393,63 +1727,117 @@ export function UpdateStatusDialog({ order, open, initialStep, onOpenChange, loc
               <Truck className="h-4 w-4" /> Status Update
             </div>
             <p className="text-sm text-blue-900 font-medium leading-tight">
-              Move PO <span className="font-black">{order.poNumber}</span> to <span className="font-black uppercase">In Transit</span>?
+              Move PO <span className="font-black">{order.poNumber}</span> to{" "}
+              <span className="font-black uppercase">In Transit</span>?
             </p>
           </div>
-          <Button onClick={() => mutation.mutate({ status: 'In Transit' })} className="w-full h-12 bg-blue-600 font-black uppercase">Confirm Transit</Button>
-          <Button variant="ghost" onClick={() => setPendingStatus(null)} className="w-full text-slate-400 font-black uppercase">Go Back</Button>
+          <Button
+            onClick={() => mutation.mutate({ status: "In Transit" })}
+            className="w-full h-12 bg-blue-600 font-black uppercase"
+          >
+            Confirm Transit
+          </Button>
+          <Button
+            variant="ghost"
+            onClick={() => setPendingStatus(null)}
+            className="w-full text-slate-400 font-black uppercase"
+          >
+            Go Back
+          </Button>
         </div>
       );
     }
 
     switch (confirmStep) {
-      case 'schedule':
+      case "schedule":
         return (
           <div className="space-y-4 animate-in fade-in slide-in-from-bottom-2 duration-300">
             <div className="p-4 bg-slate-50 border-2 border-slate-200 rounded-2xl">
-              <label className="text-[10px] font-black uppercase text-slate-400">Step 1: Verify Delivery Window</label>
+              <label className="text-[10px] font-black uppercase text-slate-400">
+                Step 1: Verify Delivery Window
+              </label>
               <div className="flex items-center justify-between mt-2">
                 <div className="flex flex-col">
                   <span className="text-lg font-black text-slate-800">
-                    {order.estimatedDeliveryWindow?.start} — {order.estimatedDeliveryWindow?.end}
+                    {order.estimatedDeliveryWindow?.start} —{" "}
+                    {order.estimatedDeliveryWindow?.end}
                   </span>
                 </div>
-                <Button variant="outline" size="sm" onClick={() => onEditSchedule(order)} className="h-8 border-blue-200 text-blue-600 font-black uppercase text-[10px]">Change</Button>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => onEditSchedule(order)}
+                  className="h-8 border-blue-200 text-blue-600 font-black uppercase text-[10px]"
+                >
+                  Change
+                </Button>
               </div>
             </div>
-            <Button onClick={() => setConfirmStep('quantities')} className="w-full h-12 bg-slate-900 font-black uppercase tracking-widest">Confirm & Continue</Button>
+            <Button
+              onClick={() => setConfirmStep("quantities")}
+              className="w-full h-12 bg-slate-900 font-black uppercase tracking-widest"
+            >
+              Confirm & Continue
+            </Button>
           </div>
         );
 
-      case 'quantities':
+      case "quantities":
         return (
           <div className="space-y-4 animate-in fade-in slide-in-from-right-4 duration-300">
             <div className="p-4 bg-slate-50 border-2 border-slate-200 rounded-2xl">
-              <label className="text-[10px] font-black uppercase text-slate-400">Step 2: Confirm Drop Quantities</label>
+              <label className="text-[10px] font-black uppercase text-slate-400">
+                Step 2: Confirm Drop Quantities
+              </label>
               <div className="space-y-2 mt-3 border-t pt-2">
                 {order.items?.map((item: any) => (
-                  <div key={item.grade} className="flex justify-between font-mono text-sm font-black">
+                  <div
+                    key={item.grade}
+                    className="flex justify-between font-mono text-sm font-black"
+                  >
                     <span className="text-slate-500">{item.grade}</span>
-                    <span className="text-slate-900">{item.ltrs.toLocaleString()} L</span>
+                    <span className="text-slate-900">
+                      {item.ltrs.toLocaleString()} L
+                    </span>
                   </div>
                 ))}
               </div>
-              <Button variant="outline" size="sm" onClick={() => onEditQty(order)} className="w-full mt-4 h-8 text-[10px] font-black uppercase border-blue-200 text-blue-600">Adjust Quantities</Button>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => onEditQty(order)}
+                className="w-full mt-4 h-8 text-[10px] font-black uppercase border-blue-200 text-blue-600"
+              >
+                Adjust Quantities
+              </Button>
             </div>
-            <Button onClick={() => setConfirmStep('final')} className="w-full h-12 bg-slate-900 font-black uppercase tracking-widest">Totals are Correct</Button>
+            <Button
+              onClick={() => setConfirmStep("final")}
+              className="w-full h-12 bg-slate-900 font-black uppercase tracking-widest"
+            >
+              Totals are Correct
+            </Button>
           </div>
         );
 
-      case 'final':
+      case "final":
         return (
           <div className="space-y-4">
             <div className="p-4 bg-amber-50 border-2 border-amber-100 rounded-2xl">
               <div className="flex items-center gap-2 text-amber-700 font-black text-xs uppercase mb-1">
                 <AlertTriangle className="h-4 w-4" /> Final Warning
               </div>
-              <p className="text-sm text-amber-900 leading-tight">This will update inventory and <strong>lock</strong> this order permanently.</p>
+              <p className="text-sm text-amber-900 leading-tight">
+                This will update inventory and <strong>lock</strong> this order
+                permanently.
+              </p>
             </div>
-            <Button onClick={() => mutation.mutate({ status: 'Delivered' })} className="w-full h-14 bg-green-600 hover:bg-green-700 font-black uppercase text-lg shadow-lg">Confirm & Finalize</Button>
+            <Button
+              onClick={() => mutation.mutate({ status: "Delivered" })}
+              className="w-full h-14 bg-green-600 hover:bg-green-700 font-black uppercase text-lg shadow-lg"
+            >
+              Confirm & Finalize
+            </Button>
           </div>
         );
     }
@@ -1462,7 +1850,9 @@ export function UpdateStatusDialog({ order, open, initialStep, onOpenChange, loc
           <DialogTitle className="text-xl font-black uppercase italic tracking-tight">
             {pendingStatus ? "Verify Details" : "Update Status"}
           </DialogTitle>
-          <p className="text-[10px] font-bold text-slate-400 uppercase">PO: {order.poNumber}</p>
+          <p className="text-[10px] font-bold text-slate-400 uppercase">
+            PO: {order.poNumber}
+          </p>
         </DialogHeader>
 
         <div className="py-4">
@@ -1470,7 +1860,9 @@ export function UpdateStatusDialog({ order, open, initialStep, onOpenChange, loc
             <div className="flex flex-col gap-3">
               {statuses.map((status, index) => {
                 const isCurrent = order.currentStatus === status.id;
-                const isDisabled = order.currentStatus === 'Cancelled' || index !== currentIndex + 1;
+                const isDisabled =
+                  order.currentStatus === "Cancelled" ||
+                  index !== currentIndex + 1;
 
                 return (
                   <Button
@@ -1478,62 +1870,92 @@ export function UpdateStatusDialog({ order, open, initialStep, onOpenChange, loc
                     variant={isCurrent ? "default" : "outline"}
                     disabled={isDisabled || mutation.isPending}
                     onClick={() => setPendingStatus(status.id)}
-                    className={`h-16 justify-start gap-4 border-2 transition-all ${isCurrent ? 'border-blue-600 bg-blue-50/50 text-blue-700' : 'hover:border-blue-300'
-                      }`}
+                    className={`h-16 justify-start gap-4 border-2 transition-all ${
+                      isCurrent
+                        ? "border-blue-600 bg-blue-50/50 text-blue-700"
+                        : "hover:border-blue-300"
+                    }`}
                   >
                     <status.icon className={`h-6 w-6 ${status.color}`} />
                     <div className="flex flex-col items-start">
-                      <span className="font-black uppercase text-xs tracking-widest">{status.label}</span>
-                      {isCurrent && <span className="text-[10px] font-bold opacity-60">CURRENT POSITION</span>}
-                      {isDisabled && !isCurrent && <span className="text-[10px] font-bold text-slate-300">LOCKED</span>}
+                      <span className="font-black uppercase text-xs tracking-widest">
+                        {status.label}
+                      </span>
+                      {isCurrent && (
+                        <span className="text-[10px] font-bold opacity-60">
+                          CURRENT POSITION
+                        </span>
+                      )}
+                      {isDisabled && !isCurrent && (
+                        <span className="text-[10px] font-bold text-slate-300">
+                          LOCKED
+                        </span>
+                      )}
                     </div>
                   </Button>
                 );
               })}
 
-              {order.currentStatus === 'Created' && (
+              {order.currentStatus === "Created" && (
                 <Button
                   variant="outline"
-                  onClick={() => setPendingStatus('Cancelled')}
+                  onClick={() => setPendingStatus("Cancelled")}
                   disabled={mutation.isPending}
                   className="h-16 justify-start gap-4 border-2 border-dashed border-red-200 hover:border-red-400 hover:bg-red-50/30 text-red-600 transition-all rounded-xl mt-1"
                 >
                   <XCircle className="h-6 w-6 text-red-500" />
                   <div className="flex flex-col items-start">
-                    <span className="font-black uppercase text-xs tracking-widest">Cancel Order</span>
-                    <span className="text-[10px] font-bold text-red-400">AVAILABLE ONLY IN CREATED STATUS</span>
+                    <span className="font-black uppercase text-xs tracking-widest">
+                      Cancel Order
+                    </span>
+                    <span className="text-[10px] font-bold text-red-400">
+                      AVAILABLE ONLY IN CREATED STATUS
+                    </span>
                   </div>
                 </Button>
               )}
             </div>
-          ) : renderStep()}
+          ) : (
+            renderStep()
+          )}
         </div>
       </DialogContent>
     </Dialog>
   );
 }
 
-export function OrderCommentsDialog({ order, open, onOpenChange, locationId }: any) {
-  const [newComment, setNewComment] = useState('');
+export function OrderCommentsDialog({
+  order,
+  open,
+  onOpenChange,
+  locationId,
+}: any) {
+  const [newComment, setNewComment] = useState("");
   const queryClient = useQueryClient();
 
   useEffect(() => {
     if (open) {
-      setNewComment('');
+      setNewComment("");
     }
   }, [open]);
 
   const mutation = useMutation({
     mutationFn: async (text: string) => {
       // Frontend only passes the text textblock. The backend maps req.user session properties.
-      return axios.put(`/api/fuel-orders/${order._id}`, {
-        comment: { text: text.trim() }
-      }, authHeader);
+      return axios.put(
+        `/api/fuel-orders/${order._id}`,
+        {
+          comment: { text: text.trim() },
+        },
+        authHeader,
+      );
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['workspace-orders', locationId] });
-      setNewComment('');
-    }
+      queryClient.invalidateQueries({
+        queryKey: ["workspace-orders", locationId],
+      });
+      setNewComment("");
+    },
   });
 
   const handlePostComment = () => {
@@ -1549,27 +1971,37 @@ export function OrderCommentsDialog({ order, open, onOpenChange, locationId }: a
             <MessageSquare className="h-5 w-5 text-blue-600" />
             <span>PO Comments Log</span>
           </DialogTitle>
-          <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">PO: {order?.poNumber}</p>
+          <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">
+            PO: {order?.poNumber}
+          </p>
         </DialogHeader>
 
         <div className="p-4 flex-1 overflow-y-auto space-y-4">
           <div className="space-y-2 max-h-[300px] overflow-y-auto pr-1 text-xs">
             {order?.comments && order.comments.length > 0 ? (
               order.comments.map((c: any, idx: number) => (
-                <div key={c._id || idx} className="p-3 bg-slate-50 rounded-xl border border-slate-100 flex flex-col gap-1.5 animate-in fade-in-50 duration-200">
+                <div
+                  key={c._id || idx}
+                  className="p-3 bg-slate-50 rounded-xl border border-slate-100 flex flex-col gap-1.5 animate-in fade-in-50 duration-200"
+                >
                   <div className="flex items-center justify-between text-[10px] font-bold">
                     <span className="text-slate-700 flex items-center gap-1">
                       <User className="h-3 w-3 text-slate-400" /> {c.author}
                     </span>
                     <span className="text-slate-400 font-mono flex items-center gap-1">
-                      <Clock className="h-2.5 w-2.5" /> {format(new Date(c.timestamp), 'MMM d, h:mm a')}
+                      <Clock className="h-2.5 w-2.5" />{" "}
+                      {format(new Date(c.timestamp), "MMM d, h:mm a")}
                     </span>
                   </div>
-                  <p className="text-slate-600 font-medium leading-normal解决 whitespace-pre-wrap">{c.text}</p>
+                  <p className="text-slate-600 font-medium leading-normal解决 whitespace-pre-wrap">
+                    {c.text}
+                  </p>
                 </div>
               ))
             ) : (
-              <p className="text-slate-400 italic text-center py-6">No workflow comments submitted yet.</p>
+              <p className="text-slate-400 italic text-center py-6">
+                No workflow comments submitted yet.
+              </p>
             )}
           </div>
         </div>
@@ -1581,7 +2013,7 @@ export function OrderCommentsDialog({ order, open, onOpenChange, locationId }: a
             placeholder="Type a workflow update comment..."
             value={newComment}
             onChange={(e) => setNewComment(e.target.value)}
-            onKeyDown={(e) => e.key === 'Enter' && handlePostComment()}
+            onKeyDown={(e) => e.key === "Enter" && handlePostComment()}
             className="flex-1 h-9 px-3 border border-slate-200 bg-white rounded-xl text-xs font-medium focus:outline-none focus:border-blue-400 disabled:opacity-60"
             disabled={mutation.isPending}
           />
@@ -1731,15 +2163,27 @@ export function OrderCommentsDialog({ order, open, onOpenChange, locationId }: a
 //   );
 // }
 
-export function EditMetaDialog({ order, isOpen, onOpenChange, racks, onUpdateSuccess }: any) {
-  const [selectedRack, setSelectedRack] = useState(order.rack?._id || order.rack);
+export function EditMetaDialog({
+  order,
+  isOpen,
+  onOpenChange,
+  racks,
+  onUpdateSuccess,
+}: any) {
+  const [selectedRack, setSelectedRack] = useState(
+    order.rack?._id || order.rack,
+  );
   const [suppliers, setSuppliers] = useState<any[]>([]);
-  const [selectedSupplier, setSelectedSupplier] = useState(order.supplier?._id || order.supplier);
-  const [badgeNo, setBadgeNo] = useState(order.badgeNo || '');
-  const [carrierName, _] = useState(order.carrier?.carrierName || 'No Carrier');
+  const [selectedSupplier, setSelectedSupplier] = useState(
+    order.supplier?._id || order.supplier,
+  );
+  const [badgeNo, setBadgeNo] = useState(order.badgeNo || "");
+  const [carrierName, _] = useState(order.carrier?.carrierName || "No Carrier");
   const [loading, setLoading] = useState(false);
 
-  const authHeader = { headers: { Authorization: `Bearer ${localStorage.getItem('token')}` } };
+  const authHeader = {
+    headers: { Authorization: `Bearer ${localStorage.getItem("token")}` },
+  };
 
   // Initialize and handle Rack changes
   const handleRackChange = async (rackId: string) => {
@@ -1748,7 +2192,10 @@ export function EditMetaDialog({ order, isOpen, onOpenChange, racks, onUpdateSuc
       setSelectedRack(rackId);
 
       // 1. Fetch Suppliers for this Rack
-      const supRes = await axios.get(`/api/fuel-suppliers?associatedRack=${rackId}`, authHeader);
+      const supRes = await axios.get(
+        `/api/fuel-suppliers?associatedRack=${rackId}`,
+        authHeader,
+      );
       const rackSuppliers = supRes.data;
       setSuppliers(rackSuppliers);
 
@@ -1757,11 +2204,15 @@ export function EditMetaDialog({ order, isOpen, onOpenChange, racks, onUpdateSuc
       const rackData = rackRes.data;
 
       // 3. Set Defaults
-      const defaultSup = rackSuppliers.find((s: any) => s._id === rackData.defaultSupplier) || rackSuppliers[0];
-      setSelectedSupplier(defaultSup?._id || '');
+      const defaultSup =
+        rackSuppliers.find((s: any) => s._id === rackData.defaultSupplier) ||
+        rackSuppliers[0];
+      setSelectedSupplier(defaultSup?._id || "");
 
-      const defaultBadge = defaultSup?.supplierBadges?.find((b: any) => b.isDefault) || defaultSup?.supplierBadges?.[0];
-      setBadgeNo(defaultBadge?.badgeNumber || '');
+      const defaultBadge =
+        defaultSup?.supplierBadges?.find((b: any) => b.isDefault) ||
+        defaultSup?.supplierBadges?.[0];
+      setBadgeNo(defaultBadge?.badgeNumber || "");
 
       setLoading(false);
     } catch (err) {
@@ -1773,9 +2224,11 @@ export function EditMetaDialog({ order, isOpen, onOpenChange, racks, onUpdateSuc
   // Handle manual supplier change
   const handleSupplierChange = (supId: string) => {
     setSelectedSupplier(supId);
-    const sup = suppliers.find(s => s._id === supId);
-    const defaultBadge = sup?.supplierBadges?.find((b: any) => b.isDefault) || sup?.supplierBadges?.[0];
-    setBadgeNo(defaultBadge?.badgeNumber || '');
+    const sup = suppliers.find((s) => s._id === supId);
+    const defaultBadge =
+      sup?.supplierBadges?.find((b: any) => b.isDefault) ||
+      sup?.supplierBadges?.[0];
+    setBadgeNo(defaultBadge?.badgeNumber || "");
   };
 
   // Initial load
@@ -1787,11 +2240,15 @@ export function EditMetaDialog({ order, isOpen, onOpenChange, racks, onUpdateSuc
 
   const handleSave = async () => {
     try {
-      await axios.put(`/api/fuel-orders/${order._id}`, {
-        rack: selectedRack,
-        supplier: selectedSupplier,
-        badgeNo: badgeNo
-      }, authHeader);
+      await axios.put(
+        `/api/fuel-orders/${order._id}`,
+        {
+          rack: selectedRack,
+          supplier: selectedSupplier,
+          badgeNo: badgeNo,
+        },
+        authHeader,
+      );
       onUpdateSuccess();
       onOpenChange(false);
     } catch (err) {
@@ -1803,20 +2260,30 @@ export function EditMetaDialog({ order, isOpen, onOpenChange, racks, onUpdateSuc
     <Dialog open={isOpen} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-[425px] font-sans">
         <DialogHeader>
-          <DialogTitle className="font-black uppercase tracking-tight">Edit Order Logistics</DialogTitle>
+          <DialogTitle className="font-black uppercase tracking-tight">
+            Edit Order Logistics
+          </DialogTitle>
         </DialogHeader>
 
         <div className="space-y-4 py-4">
           {/* RACK SELECTOR */}
           <div className="space-y-1">
-            <label className="text-[10px] font-black uppercase text-slate-400">Fuel Rack</label>
+            <label className="text-[10px] font-black uppercase text-slate-400">
+              Fuel Rack
+            </label>
             <Select value={selectedRack} onValueChange={handleRackChange}>
               <SelectTrigger className="font-bold">
                 <SelectValue placeholder="Select Rack" />
               </SelectTrigger>
               <SelectContent>
                 {racks.map((r: any) => (
-                  <SelectItem key={r._id} value={r._id} className="font-bold uppercase">{r.rackName} ({r.rackLocation})</SelectItem>
+                  <SelectItem
+                    key={r._id}
+                    value={r._id}
+                    className="font-bold uppercase"
+                  >
+                    {r.rackName} ({r.rackLocation})
+                  </SelectItem>
                 ))}
               </SelectContent>
             </Select>
@@ -1824,14 +2291,26 @@ export function EditMetaDialog({ order, isOpen, onOpenChange, racks, onUpdateSuc
 
           {/* SUPPLIER SELECTOR */}
           <div className="space-y-1">
-            <label className="text-[10px] font-black uppercase text-slate-400">Supplier</label>
-            <Select value={selectedSupplier} onValueChange={handleSupplierChange} disabled={loading}>
+            <label className="text-[10px] font-black uppercase text-slate-400">
+              Supplier
+            </label>
+            <Select
+              value={selectedSupplier}
+              onValueChange={handleSupplierChange}
+              disabled={loading}
+            >
               <SelectTrigger className="font-bold">
                 <SelectValue placeholder="Select Supplier" />
               </SelectTrigger>
               <SelectContent>
                 {suppliers.map((s: any) => (
-                  <SelectItem key={s._id} value={s._id} className="font-bold uppercase">{s.supplierName}</SelectItem>
+                  <SelectItem
+                    key={s._id}
+                    value={s._id}
+                    className="font-bold uppercase"
+                  >
+                    {s.supplierName}
+                  </SelectItem>
                 ))}
               </SelectContent>
             </Select>
@@ -1857,14 +2336,18 @@ export function EditMetaDialog({ order, isOpen, onOpenChange, racks, onUpdateSuc
                   to map through their specific badges 
                 */}
                 {suppliers
-                  .find(s => s._id === selectedSupplier)
+                  .find((s) => s._id === selectedSupplier)
                   ?.supplierBadges.map((b: any) => (
                     <SelectItem key={b.badgeNumber} value={b.badgeNumber}>
                       <div className="flex items-center gap-2">
                         <span className="font-bold">{b.badgeNumber}</span>
-                        <span className="text-slate-400 text-xs truncate">— {b.badgeName}</span>
+                        <span className="text-slate-400 text-xs truncate">
+                          — {b.badgeName}
+                        </span>
                         {b.isDefault && (
-                          <span className="text-[8px] bg-blue-100 text-blue-600 px-1 rounded">DEF</span>
+                          <span className="text-[8px] bg-blue-100 text-blue-600 px-1 rounded">
+                            DEF
+                          </span>
                         )}
                       </div>
                     </SelectItem>
@@ -1875,14 +2358,19 @@ export function EditMetaDialog({ order, isOpen, onOpenChange, racks, onUpdateSuc
 
           {/* CARRIER (VIEW ONLY) */}
           <div className="space-y-1 opacity-60">
-            <label className="text-[10px] font-black uppercase text-slate-400">Carrier (Read Only)</label>
+            <label className="text-[10px] font-black uppercase text-slate-400">
+              Carrier (Read Only)
+            </label>
             <div className="h-10 px-3 flex items-center bg-slate-50 border rounded-md font-bold text-slate-500">
               {carrierName}
             </div>
           </div>
         </div>
 
-        <Button onClick={handleSave} className="w-full font-black uppercase h-12 bg-blue-600">
+        <Button
+          onClick={handleSave}
+          className="w-full font-black uppercase h-12 bg-blue-600"
+        >
           Save Changes
         </Button>
       </DialogContent>
@@ -1891,12 +2379,13 @@ export function EditMetaDialog({ order, isOpen, onOpenChange, racks, onUpdateSuc
 }
 
 // 1. Defined Sort Order & Abbreviations
-export const gradeConfig: Record<string, { priority: number; short: string }> = {
-  'Regular': { priority: 1, short: 'REG' },
-  'Premium': { priority: 2, short: 'PUL' },
-  'Diesel': { priority: 3, short: 'ULSD' },
-  'Dyed Diesel': { priority: 4, short: 'DYED' }
-};
+export const gradeConfig: Record<string, { priority: number; short: string }> =
+  {
+    Regular: { priority: 1, short: "REG" },
+    Premium: { priority: 2, short: "PUL" },
+    Diesel: { priority: 3, short: "ULSD" },
+    "Dyed Diesel": { priority: 4, short: "DYED" },
+  };
 
 export function EditQtyDialog({ order, open, onOpenChange, locationId }: any) {
   const queryClient = useQueryClient();
@@ -1906,7 +2395,10 @@ export function EditQtyDialog({ order, open, onOpenChange, locationId }: any) {
     if (order?.items) {
       // 2. Sort items based on the defined priority before setting state
       const sortedItems = [...order.items].sort((a, b) => {
-        return (gradeConfig[a.grade]?.priority || 99) - (gradeConfig[b.grade]?.priority || 99);
+        return (
+          (gradeConfig[a.grade]?.priority || 99) -
+          (gradeConfig[b.grade]?.priority || 99)
+        );
       });
       setItems(sortedItems);
     }
@@ -1914,27 +2406,41 @@ export function EditQtyDialog({ order, open, onOpenChange, locationId }: any) {
 
   const mutation = useMutation({
     mutationFn: async (updatedItems: any[]) => {
-      return axios.put(`/api/fuel-orders/${order._id}`, { items: updatedItems }, authHeader);
+      return axios.put(
+        `/api/fuel-orders/${order._id}`,
+        { items: updatedItems },
+        authHeader,
+      );
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['workspace-orders', locationId] });
-      queryClient.invalidateQueries({ queryKey: ['station-tanks', locationId] });
+      queryClient.invalidateQueries({
+        queryKey: ["workspace-orders", locationId],
+      });
+      queryClient.invalidateQueries({
+        queryKey: ["station-tanks", locationId],
+      });
       onOpenChange(false);
-    }
+    },
   });
 
   const handleQtyChange = (grade: string, value: string) => {
-    setItems(prev => prev.map(item =>
-      item.grade === grade ? { ...item, ltrs: parseInt(value) || 0 } : item
-    ));
+    setItems((prev) =>
+      prev.map((item) =>
+        item.grade === grade ? { ...item, ltrs: parseInt(value) || 0 } : item,
+      ),
+    );
   };
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-[425px]">
         <DialogHeader>
-          <DialogTitle className="font-black uppercase italic tracking-tight">Edit Fuel Quantities</DialogTitle>
-          <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Adjust Liters for PO: {order?.poNumber}</p>
+          <DialogTitle className="font-black uppercase italic tracking-tight">
+            Edit Fuel Quantities
+          </DialogTitle>
+          <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">
+            Adjust Liters for PO: {order?.poNumber}
+          </p>
         </DialogHeader>
 
         <div className="grid gap-5 py-6">
@@ -1943,13 +2449,22 @@ export function EditQtyDialog({ order, open, onOpenChange, locationId }: any) {
             const shortName = gradeConfig[item.grade]?.short || item.grade;
 
             return (
-              <div key={item.grade} className="grid grid-cols-4 items-center gap-4">
+              <div
+                key={item.grade}
+                className="grid grid-cols-4 items-center gap-4"
+              >
                 {/* 3. Styled Label using your existing Theme */}
                 <div className="text-right">
                   <Badge
                     variant="outline"
-                    className={cn("uppercase text-[10px] font-black px-2 py-1 shadow-none", theme.label)}
-                    style={{ backgroundColor: `${theme.raw}10`, borderColor: `${theme.raw}40` }}
+                    className={cn(
+                      "uppercase text-[10px] font-black px-2 py-1 shadow-none",
+                      theme.label,
+                    )}
+                    style={{
+                      backgroundColor: `${theme.raw}10`,
+                      borderColor: `${theme.raw}40`,
+                    }}
                   >
                     {shortName}
                   </Badge>
@@ -1960,15 +2475,17 @@ export function EditQtyDialog({ order, open, onOpenChange, locationId }: any) {
                     type="number"
                     className={cn(
                       "font-mono font-black text-xl h-14 pr-14 transition-all border-2",
-                      "focus-visible:ring-0 focus-visible:ring-offset-0"
+                      "focus-visible:ring-0 focus-visible:ring-offset-0",
                     )}
                     style={{
                       borderColor: `${theme.raw}20`,
                       // When user focuses, highlight with the grade color
-                      borderLeft: `6px solid ${theme.raw}`
+                      borderLeft: `6px solid ${theme.raw}`,
                     }}
                     value={item.ltrs}
-                    onChange={(e) => handleQtyChange(item.grade, e.target.value)}
+                    onChange={(e) =>
+                      handleQtyChange(item.grade, e.target.value)
+                    }
                   />
                   <span className="absolute right-4 top-1/2 -translate-y-1/2 text-[10px] font-black text-slate-300 group-hover:text-slate-400 transition-colors">
                     LTRS
@@ -1985,7 +2502,11 @@ export function EditQtyDialog({ order, open, onOpenChange, locationId }: any) {
             onClick={() => mutation.mutate(items)}
             className="w-full h-14 font-black uppercase bg-slate-900 hover:bg-blue-600 transition-all text-sm tracking-widest"
           >
-            {mutation.isPending ? <Loader2 className="h-5 w-5 animate-spin" /> : "Update Order Totals"}
+            {mutation.isPending ? (
+              <Loader2 className="h-5 w-5 animate-spin" />
+            ) : (
+              "Update Order Totals"
+            )}
           </Button>
         </DialogFooter>
       </DialogContent>

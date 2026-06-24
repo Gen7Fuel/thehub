@@ -6,6 +6,8 @@ import { cn } from "@/lib/utils"
 
 const DialogOverlayPrimitive = DialogPrimitive.Overlay as React.ElementType
 const DialogContentPrimitive = DialogPrimitive.Content as React.ElementType
+const DialogTriggerPrimitive = DialogPrimitive.Trigger as React.ElementType
+const DialogPortalPrimitive = DialogPrimitive.Portal as React.ElementType
 const DialogClosePrimitive = DialogPrimitive.Close as React.ElementType
 const DialogTitlePrimitive = DialogPrimitive.Title as React.ElementType
 const DialogDescriptionPrimitive =
@@ -19,20 +21,30 @@ function Dialog({
 
 function DialogTrigger({
   ...props
-}: React.ComponentProps<typeof DialogPrimitive.Trigger>) {
-  return <DialogPrimitive.Trigger data-slot="dialog-trigger" {...props} />
+}: React.ComponentPropsWithoutRef<"button"> & {
+  asChild?: boolean
+  children?: React.ReactNode
+}) {
+  return <DialogTriggerPrimitive data-slot="dialog-trigger" {...props} />
 }
 
 function DialogPortal({
   ...props
-}: React.ComponentProps<typeof DialogPrimitive.Portal>) {
-  return <DialogPrimitive.Portal data-slot="dialog-portal" {...props} />
+}: {
+  children?: React.ReactNode
+  container?: HTMLElement | null
+  forceMount?: true
+}) {
+  return <DialogPortalPrimitive data-slot="dialog-portal" {...props} />
 }
 
 function DialogClose({
   ...props
-}: React.ComponentProps<typeof DialogPrimitive.Close>) {
-  return <DialogPrimitive.Close data-slot="dialog-close" {...props} />
+}: React.ComponentPropsWithoutRef<"button"> & {
+  asChild?: boolean
+  children?: React.ReactNode
+}) {
+  return <DialogClosePrimitive data-slot="dialog-close" {...props} />
 }
 
 function DialogOverlay({
