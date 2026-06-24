@@ -352,9 +352,12 @@
 // }
 
 import { createFileRoute, useNavigate } from '@tanstack/react-router'
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { SitePicker } from '@/components/custom/sitePicker'
 import { DatePicker } from '@/components/custom/datePicker'
+import { InputOTP, InputOTPGroup, InputOTPSlot } from '@/components/ui/input-otp'
+import { REGEXP_ONLY_DIGITS } from 'input-otp'
+import { ImagePlus, Image as ImageIcon } from 'lucide-react'
 import { useSite } from '@/context/SiteContext'
 
 type CashSummarySearch = { site: string; id?: string }
@@ -447,7 +450,42 @@ function RouteComponent() {
   const [cplBulloch, setCplBulloch] = useState('')
   const [exemptedTax, setExemptedTax] = useState('')
   const [chequesCashedOut, setChequesCashedOut] = useState('') // 👈 Added state hook
+  const [pinpadTotal, setPinpadTotal] = useState('')
+  const [pinpadPhoto, setPinpadPhoto] = useState<string | null>(null)
   const [isChickenDelight, setIsChickenDelight] = useState(false)
+
+  const cameraInputRef = useRef<HTMLInputElement>(null)
+  const longPressTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+
+  const handleLongPressStart = () => {
+    longPressTimerRef.current = setTimeout(() => {
+      cameraInputRef.current?.click()
+      longPressTimerRef.current = null
+    }, 500)
+  }
+  const handleLongPressEnd = () => {
+    if (longPressTimerRef.current) {
+      clearTimeout(longPressTimerRef.current)
+      longPressTimerRef.current = null
+    }
+  }
+
+  const handleCameraUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    if (!file) return
+    const formData = new FormData()
+    formData.append('file', file)
+    try {
+      const res = await fetch('/cdn/upload', { method: 'POST', body: formData })
+      if (!res.ok) throw new Error('Upload failed')
+      const data = await res.json()
+      setPinpadPhoto(data.filename)
+    } catch (err) {
+      console.error(err)
+      alert('Failed to upload image')
+    }
+    e.target.value = ''
+  }
   const [showCDCheckbox, setShowCDCheckbox] = useState(false)
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -484,6 +522,8 @@ function RouteComponent() {
     setCplBulloch(toStr(existing.cpl_bulloch))
     setExemptedTax(toStr(existing.exempted_tax))
     setChequesCashedOut(toStr(existing.chequesCashedOut)) // 👈 Sync existing data payload
+    setPinpadTotal(toStr((existing as any).pinpadTotal))
+    setPinpadPhoto((existing as any).pinpadPhoto ?? null)
     setIsChickenDelight((existing as any).isChickenDelight ?? false)
     setSuccess(null)
     setError(null)
@@ -564,8 +604,10 @@ function RouteComponent() {
       cash_back: num(cashBack),
       loyalty: num(loyalty),
       cpl_bulloch: num(cplBulloch),
-      exempted_tax: num(exemptedTax),
-      chequesCashedOut: showChequesField ? num(chequesCashedOut) : undefined, // 👈 Only send if tracking site
+      chequesCashedOut: showChequesField ? num(chequesCashedOut) : undefined,
+      ...(showCDCheckbox && isChickenDelight
+        ? { pinpadTotal: num(pinpadTotal), pinpadPhoto: pinpadPhoto ?? undefined }
+        : { exempted_tax: num(exemptedTax) }),
       ...(showCDCheckbox ? { isChickenDelight } : {}),
     }
 
@@ -611,6 +653,8 @@ function RouteComponent() {
     setCplBulloch('')
     setExemptedTax('')
     setChequesCashedOut('') // 👈 Clear down hook context
+    setPinpadTotal('')
+    setPinpadPhoto(null)
     setIsChickenDelight(false)
     setSuccess(null)
     setError(null)
@@ -659,26 +703,48 @@ function RouteComponent() {
             <h2 className="text-sm font-semibold">
               {id ? `Edit Cash Summary (${shiftNumber || id})` : 'New Cash Summary'}
             </h2>
-            {id && (
-              <button
-                type="button"
-                onClick={handleNew}
-                className="text-xs px-2 py-1 border rounded hover:bg-muted"
-              >
-                New
-              </button>
-            )}
+            <div className="flex items-center gap-2">
+              {showCDCheckbox && (
+                <button
+                  type="button"
+                  onClick={() => setIsChickenDelight(!isChickenDelight)}
+                  title={isChickenDelight ? 'Marked as Chicken Delight shift — click to unmark' : 'Click to mark as Chicken Delight shift'}
+                  className={`block rounded overflow-hidden transition-all duration-200 cursor-pointer outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-1 ${
+                    isChickenDelight ? '' : 'grayscale opacity-50'
+                  }`}
+                >
+                  <img
+                    src="/assets/images/Chicken_Delight_Current_Logo.jpg"
+                    alt="Chicken Delight"
+                    className="h-7 w-auto"
+                  />
+                </button>
+              )}
+              {id && (
+                <button
+                  type="button"
+                  onClick={handleNew}
+                  className="text-xs px-2 py-1 border rounded hover:bg-muted"
+                >
+                  New
+                </button>
+              )}
+            </div>
           </div>
 
           <div className="grid gap-4 sm:grid-cols-2">
             <Field label="Shift Number *">
-              <input
+              <InputOTP
+                maxLength={5}
+                pattern={REGEXP_ONLY_DIGITS}
                 value={shiftNumber}
-                onChange={(e) => setShiftNumber(e.target.value)}
+                onChange={setShiftNumber}
                 onBlur={() => checkShift(shiftNumber)}
-                className="w-full border rounded px-3 py-2"
-                required
-              />
+              >
+                <InputOTPGroup>
+                  {[0, 1, 2, 3, 4].map(i => <InputOTPSlot key={i} index={i} />)}
+                </InputOTPGroup>
+              </InputOTP>
             </Field>
             <Field label="Date *">
               <DatePicker
@@ -696,16 +762,52 @@ function RouteComponent() {
               />
             </Field>
 
-            <Field label="Infonet Exempted Tax">
-              <input
-                value={exemptedTax}
-                onChange={(e) => setExemptedTax(e.target.value)}
-                className="w-full border rounded px-3 py-2"
-                inputMode="decimal"
-              />
-            </Field>
+            {showCDCheckbox && isChickenDelight ? (
+              <Field label="Pinpad Total">
+                <div className="flex items-center gap-2">
+                  <input
+                    value={pinpadTotal}
+                    onChange={(e) => setPinpadTotal(e.target.value)}
+                    className="flex-1 min-w-0 border rounded px-3 py-2"
+                    inputMode="decimal"
+                    placeholder="0.00"
+                  />
+                  {!pinpadPhoto ? (
+                    <button
+                      type="button"
+                      onClick={() => cameraInputRef.current?.click()}
+                      title="Upload pinpad receipt photo"
+                      className="flex-shrink-0 flex items-center justify-center w-10 h-10 border rounded border-blue-500 text-blue-600 hover:bg-blue-50"
+                    >
+                      <ImagePlus className="w-4 h-4" />
+                    </button>
+                  ) : (
+                    <button
+                      type="button"
+                      onClick={() => window.open(`/cdn/download/${pinpadPhoto}`, '_blank')}
+                      onContextMenu={(e) => { e.preventDefault(); cameraInputRef.current?.click() }}
+                      onTouchStart={handleLongPressStart}
+                      onTouchEnd={handleLongPressEnd}
+                      onTouchMove={handleLongPressEnd}
+                      title="View pinpad receipt photo (long press to replace)"
+                      className="flex-shrink-0 flex items-center justify-center w-10 h-10 rounded bg-green-600 hover:bg-green-700 text-white"
+                    >
+                      <ImageIcon className="w-4 h-4" />
+                    </button>
+                  )}
+                </div>
+              </Field>
+            ) : (
+              <Field label="Infonet Exempted Tax">
+                <input
+                  value={exemptedTax}
+                  onChange={(e) => setExemptedTax(e.target.value)}
+                  className="w-full border rounded px-3 py-2"
+                  inputMode="decimal"
+                />
+              </Field>
+            )}
 
-            {/* ⚠️ CONDITIONAL RENDERING FOR WAVERS EAST / WEST STATIONS */}
             {showChequesField && (
               <Field label="Cheques Cashed Out">
                 <input
@@ -715,25 +817,6 @@ function RouteComponent() {
                   inputMode="decimal"
                   placeholder="0.00"
                 />
-              </Field>
-            )}
-
-            {showCDCheckbox && (
-              <Field label="Chicken Delight Shift">
-                <button
-                  type="button"
-                  onClick={() => setIsChickenDelight(!isChickenDelight)}
-                  title={isChickenDelight ? 'Marked as Chicken Delight shift — click to unmark' : 'Click to mark as Chicken Delight shift'}
-                  className={`mt-1 block rounded overflow-hidden transition-all duration-200 cursor-pointer outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-1 ${
-                    isChickenDelight ? '' : 'grayscale opacity-50'
-                  }`}
-                >
-                  <img
-                    src="/assets/images/Chicken_Delight_Current_Logo.jpg"
-                    alt="Chicken Delight"
-                    className="h-10 w-auto"
-                  />
-                </button>
               </Field>
             )}
           </div>
@@ -749,6 +832,15 @@ function RouteComponent() {
             {error && <span className="text-red-600 text-sm">Error: {error}</span>}
             {success && <span className="text-green-600 text-sm">{success}</span>}
           </div>
+
+          <input
+            ref={cameraInputRef}
+            type="file"
+            accept="image/*"
+            capture="environment"
+            className="hidden"
+            onChange={handleCameraUpload}
+          />
         </form>
       </div>
     </div>

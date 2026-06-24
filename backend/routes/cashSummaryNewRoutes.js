@@ -672,6 +672,8 @@ router.post('/', async (req, res) => {
       exempted_tax,
       payouts,
       chequesCashedOut, // 👈 ADD THIS LINE
+      pinpadTotal,
+      pinpadPhoto,
     } = req.body || {}
 
     if (!shift_number) return res.status(400).json({ error: 'shift_number is required' })
@@ -743,6 +745,8 @@ router.post('/', async (req, res) => {
       date: new Date(date),
       createdBy: userId,
       isChickenDelight: req.body.isChickenDelight === true,
+      pinpadTotal: norm(pinpadTotal),
+      pinpadPhoto: typeof pinpadPhoto === 'string' ? pinpadPhoto : undefined,
 
       // existing primary fields (now enriched)
       canadian_cash_collected: values.canadian_cash_collected,
@@ -1215,7 +1219,8 @@ router.get('/report', async (req, res) => {
     }
 
     const chickenDelightTip = cdRows.reduce(
-      (acc, r) => acc + (r.canadian_cash_collected ?? 0) - (r.report_canadian_cash ?? 0),
+      (acc, r) =>
+        acc + (r.canadian_cash_collected ?? 0) + (r.pinpadTotal ?? 0) - (r.report_canadian_cash ?? 0),
       0
     )
 
@@ -1454,6 +1459,8 @@ router.put('/:id', async (req, res) => {
       exempted_tax,
       report_canadian_cash,
       chequesCashedOut, // 👈 ADD THIS LINE
+      pinpadTotal,
+      pinpadPhoto,
     } = req.body || {}
 
     if (!shift_number) return res.status(400).json({ error: 'shift_number is required' })
@@ -1557,6 +1564,8 @@ router.put('/:id', async (req, res) => {
       shift_number: String(shift_number),
       date: new Date(date),
       isChickenDelight: req.body.isChickenDelight === true ? true : (existing.isChickenDelight ?? false),
+      pinpadTotal: norm(pinpadTotal) ?? existing.pinpadTotal,
+      pinpadPhoto: typeof pinpadPhoto === 'string' ? pinpadPhoto : existing.pinpadPhoto,
 
       canadian_cash_collected: norm(canadian_cash_collected),
 
