@@ -304,13 +304,27 @@ function RouteComponent() {
       setPricePayload(data);
       setIsPriceOverlayActive(true);
     };
+    // 🚀 NEW: Clears and closes the dialog when another account verifies the pricing
+    const handleRetailPriceVerifiedEvent = (data: { locationId: string }) => {
+      console.log("🔓 Pricing verification processed by another terminal session:", data);
+      
+      // Safety verification: Ensure this matches the station the layout is managing
+      setIsPriceOverlayActive(false);
+      setBullochBase64(null);
+      setInfonetBase64(null);
+      setActiveUploadStep(null);
+      setShowCameraPreviewMode(false);
+      setPricePayload(null);
+    };
 
     socket.on("new-notification", handleNewNotification);
     socket.on("retail-price-published", handleRetailPriceEvent);
+    socket.on("retail-price-verified", handleRetailPriceVerifiedEvent); // 🚀 Bind new event handler
 
     return () => {
       socket.off("new-notification", handleNewNotification);
       socket.off("retail-price-published", handleRetailPriceEvent);
+      socket.off("retail-price-verified", handleRetailPriceVerifiedEvent); // 🚀 Unbind event handler
     };
   }, [fetchUnreadSummary]);
 

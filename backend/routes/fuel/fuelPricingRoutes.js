@@ -1,13 +1,13 @@
-const express = require('express');
+const express = require("express");
 const router = express.Router();
-const Location = require('../../models/Location');
-const User = require("../../models/User");         // Ensure correct path to your User model
-const { getFuelPricingDate } = require('../../services/sqlService');
+const Location = require("../../models/Location");
+const User = require("../../models/User"); // Ensure correct path to your User model
+const { getFuelPricingDate } = require("../../services/sqlService");
 const { getPg } = require("../../config/pg");
-const { priceTimeoutQueue } = require('../../queues/priceTimeoutQueue');
+const { priceTimeoutQueue } = require("../../queues/priceTimeoutQueue");
 const { gasBuddyQueue } = require("../../queues/gasBuddyQueue");
-const { emailQueue } = require('../../queues/emailQueue'); // Import emailQueue for the immediate notification
-const { calculateCustomRecPrice } = require('../../utils/fuelPriceRecLogic');
+const { emailQueue } = require("../../queues/emailQueue"); // Import emailQueue for the immediate notification
+const { calculateCustomRecPrice } = require("../../utils/fuelPriceRecLogic");
 // Import your custom model layer functions to keep routes lean
 const currentPriceModel = require("../../pg/models/fuelCurrentPrice");
 const logsModel = require("../../pg/models/fuelPriceLog");
@@ -18,16 +18,16 @@ const SITES_WITHOUT_INFONET = ["687aa45d0d4d01e74f0b0e9e"];
 
 // Bi-directional dictionary to map Frontend Short Codes <-> Database Strings
 const GRADE_MAP = {
-  'REG': 'Regular',
-  'MID': 'Mid Grade',
-  'PNL': 'Premium',
-  'DSL': 'Diesel',
-  'DYED': 'Dyed Diesel'
+  REG: "Regular",
+  MID: "Mid Grade",
+  PNL: "Premium",
+  DSL: "Diesel",
+  DYED: "Dyed Diesel",
 };
 
 // Reverse map for incoming database rows (e.g., 'Regular' -> 'REG')
 const REVERSE_GRADE_MAP = Object.fromEntries(
-  Object.entries(GRADE_MAP).map(([key, value]) => [value, key])
+  Object.entries(GRADE_MAP).map(([key, value]) => [value, key]),
 );
 
 // =========================================================================
@@ -133,9 +133,9 @@ const REVERSE_GRADE_MAP = Object.fromEntries(
 // =========================================================================
 // 1. PRIMARY FUEL PRICING GRID DASHBOARD ROUTE
 // =========================================================================
-router.get('/', async (req, res) => {
+router.get("/", async (req, res) => {
   try {
-    const stores = await Location.find({ type: 'store' }).lean();
+    const stores = await Location.find({ type: "store" }).lean();
     if (!stores.length) {
       return res.status(200).json({ stations: [], pricingData: {} });
     }
@@ -144,8 +144,8 @@ router.get('/', async (req, res) => {
     if (!dateSK) {
       const today = new Date();
       const yyyy = today.getFullYear();
-      const mm = String(today.getMonth() + 1).padStart(2, '0');
-      const dd = String(today.getDate()).padStart(2, '0');
+      const mm = String(today.getMonth() + 1).padStart(2, "0");
+      const dd = String(today.getDate()).padStart(2, "0");
       dateSK = `${yyyy}${mm}${dd}`;
     }
 
@@ -154,7 +154,7 @@ router.get('/', async (req, res) => {
 
     // First group all raw rows cleanly by Station_SK -> Fuel Grade
     const rawGroupedMap = {};
-    rows.forEach(row => {
+    rows.forEach((row) => {
       const cso = row.Station_SK != null ? String(row.Station_SK).trim() : null;
       const grade = row.Type != null ? String(row.Type).trim() : null;
       if (!cso || !grade) return;
@@ -167,37 +167,44 @@ router.get('/', async (req, res) => {
     const pricingMap = {};
 
     // Standard loop to assemble your baseline dashboard pricing schema payload
-    rows.forEach(row => {
+    rows.forEach((row) => {
       const cso = row.Station_SK != null ? String(row.Station_SK).trim() : null;
       const grade = row.Type != null ? String(row.Type).trim() : null;
 
       if (!cso || !grade) return;
       if (!pricingMap[cso]) pricingMap[cso] = {};
 
-      const rowUpdatedAt = row['UpdatedAt'] ? new Date(row['UpdatedAt']) : null;
+      const rowUpdatedAt = row["UpdatedAt"] ? new Date(row["UpdatedAt"]) : null;
 
       if (!pricingMap[cso][grade]) {
         // Calculate the dynamic recommended price overrides using our row collection rules
-        const customPriceResult = calculateCustomRecPrice(cso, grade, rawGroupedMap[cso][grade]);
+        const customPriceResult = calculateCustomRecPrice(
+          cso,
+          grade,
+          rawGroupedMap[cso][grade],
+        );
 
         pricingMap[cso][grade] = {
           updatedAt: rowUpdatedAt ? rowUpdatedAt.toISOString() : null,
           metrics: {
-            landedCost: row['Landed Cost'],
-            prevLandedCost: row['T-1 Landed Cost'],
+            landedCost: row["Landed Cost"],
+            prevLandedCost: row["T-1 Landed Cost"],
             rackPrice: row["Today's Rack"],
             prevRackPrice: row["T-1's Rack"],
             // Use dynamic override value; if it results in null, gracefully fall back to the DB default 'Rec Price'
-            recPrice: customPriceResult.recPrice !== null ? customPriceResult.recPrice : row['Rec Price'],
+            recPrice:
+              customPriceResult.recPrice !== null
+                ? customPriceResult.recPrice
+                : row["Rec Price"],
             priceExplanation: customPriceResult.explanation,
-            low: row['Low'],
-            prevLow: row['T-1 Low'],
-            avg: row['Avg'],
-            prevAvg: row['T-1 Avg'],
-            high: row['High'],
-            prevHigh: row['T-1 High'],
+            low: row["Low"],
+            prevLow: row["T-1 Low"],
+            avg: row["Avg"],
+            prevAvg: row["T-1 Avg"],
+            high: row["High"],
+            prevHigh: row["T-1 High"],
           },
-          competitors: []
+          competitors: [],
         };
       } else {
         if (rowUpdatedAt) {
@@ -211,79 +218,96 @@ router.get('/', async (req, res) => {
         }
       }
 
-      if (row.Competitor && String(row.Competitor).trim().toUpperCase() !== 'NULL') {
-        const compTypeRaw = row['Competitor Type'] != null ? String(row['Competitor Type']).trim() : '';
+      if (
+        row.Competitor &&
+        String(row.Competitor).trim().toUpperCase() !== "NULL"
+      ) {
+        const compTypeRaw =
+          row["Competitor Type"] != null
+            ? String(row["Competitor Type"]).trim()
+            : "";
 
-        let assignedType = 'City Area';
-        if (compTypeRaw === 'Local Reserve') {
-          assignedType = 'Reserve Area';
-        } else if (compTypeRaw === 'Local City') {
-          assignedType = 'City Area';
+        let assignedType = "City Area";
+        if (compTypeRaw === "Local Reserve") {
+          assignedType = "Reserve Area";
+        } else if (compTypeRaw === "Local City") {
+          assignedType = "City Area";
         }
 
         pricingMap[cso][grade].competitors.push({
           type: assignedType,
           name: String(row.Competitor).trim(),
-          address: row['Competitor Address'] != null && String(row['Competitor Address']).toUpperCase() !== 'NULL'
-            ? String(row['Competitor Address']).trim()
-            : 'N/A',
-          price: row['Competitor Price'],
-          updatedDate: row['C_Updated Date'] && String(row['C_Updated Date']).toUpperCase() !== 'NULL' ? row['C_Updated Date'] : 'N/A',
-          updatedTime: row['C_Updated Time'] && String(row['C_Updated Time']).toUpperCase() !== 'NULL' ? row['C_Updated Time'] : 'N/A'
+          address:
+            row["Competitor Address"] != null &&
+            String(row["Competitor Address"]).toUpperCase() !== "NULL"
+              ? String(row["Competitor Address"]).trim()
+              : "N/A",
+          price: row["Competitor Price"],
+          updatedDate:
+            row["C_Updated Date"] &&
+            String(row["C_Updated Date"]).toUpperCase() !== "NULL"
+              ? row["C_Updated Date"]
+              : "N/A",
+          updatedTime:
+            row["C_Updated Time"] &&
+            String(row["C_Updated Time"]).toUpperCase() !== "NULL"
+              ? row["C_Updated Time"]
+              : "N/A",
         });
       }
     });
 
     return res.status(200).json({
-      stations: stores.map(s => ({
+      stations: stores.map((s) => ({
         csoCode: s.csoCode,
         stationName: s.stationName,
-        address: s.address
+        address: s.address,
       })),
-      pricingData: pricingMap
+      pricingData: pricingMap,
     });
-
   } catch (error) {
     console.error("Error processing fuel pricing metrics:", error);
-    return res.status(500).json({ error: "Internal server error assembly failed." });
+    return res
+      .status(500)
+      .json({ error: "Internal server error assembly failed." });
   }
 });
 
-router.get('/prices-ticker', async (req, res) => {
+router.get("/prices-ticker", async (req, res) => {
   try {
     const db = getPg();
 
     // 1. Fetch all current active records from PostgreSQL first
-    const currentPrices = await db('fuel_current_price')
-      .orderBy('site')
-      .orderBy('grade');
+    const currentPrices = await db("fuel_current_price")
+      .orderBy("site")
+      .orderBy("grade");
 
     if (!currentPrices || currentPrices.length === 0) {
       return res.json([]);
     }
 
     // Extract unique site IDs present in the pricing dataset
-    const uniqueSiteIds = [...new Set(currentPrices.map(row => row.site))];
+    const uniqueSiteIds = [...new Set(currentPrices.map((row) => row.site))];
 
     // 2. Query MongoDB ONLY for these active sites, making sure type is "store"
     const locations = await Location.find(
       {
         _id: { $in: uniqueSiteIds },
-        type: "store"
+        type: "store",
       },
-      '_id stationName'
+      "_id stationName",
     );
 
     // Map Mongo object IDs to their real station names for quick lookup
     const locationNameMap = {};
-    locations.forEach(loc => {
+    locations.forEach((loc) => {
       locationNameMap[loc._id.toString()] = loc.stationName;
     });
 
     // 3. Group fuel metrics by station name, filtering out any records without a resolved store name
     const groupedTickerData = {};
 
-    currentPrices.forEach(row => {
+    currentPrices.forEach((row) => {
       const resolvedStationName = locationNameMap[row.site];
 
       // If the location ID didn't match a type: "store" document in Mongo, exclude it
@@ -296,28 +320,34 @@ router.get('/prices-ticker', async (req, res) => {
       groupedTickerData[resolvedStationName].push({
         grade: row.grade,
         price: parseFloat(row.price).toFixed(3),
-        updatedAt: row.updated_at
+        updatedAt: row.updated_at,
       });
     });
 
     // 4. Flatten the dictionary into the iterable list structure your frontend ticker expects
-    const resultPayload = Object.entries(groupedTickerData).map(([name, grades]) => ({
-      stationName: name,
-      grades: grades
-    }));
+    const resultPayload = Object.entries(groupedTickerData).map(
+      ([name, grades]) => ({
+        stationName: name,
+        grades: grades,
+      }),
+    );
 
     return res.status(200).json(resultPayload);
-
   } catch (err) {
-    console.error("Failed compiling global pricing marquee data from reversed flow:", err);
-    return res.status(500).json({ message: "Ticker data aggregation breakdown." });
+    console.error(
+      "Failed compiling global pricing marquee data from reversed flow:",
+      err,
+    );
+    return res
+      .status(500)
+      .json({ message: "Ticker data aggregation breakdown." });
   }
 });
 
 // =========================================================================
 // RETRIEVE CURRENT ACTIVE PRICE CONFIGURATIONS BY MONGO ID
 // =========================================================================
-router.get('/current/:locationId', async (req, res) => {
+router.get("/current/:locationId", async (req, res) => {
   const { locationId } = req.params;
   try {
     const rows = await currentPriceModel.getCurrentPricesBySite(locationId);
@@ -328,7 +358,7 @@ router.get('/current/:locationId', async (req, res) => {
       if (frontendCode) {
         acc[frontendCode] = {
           price: parseFloat(row.price),
-          updatedAt: row.updated_at
+          updatedAt: row.updated_at,
         };
       }
       return acc;
@@ -341,20 +371,19 @@ router.get('/current/:locationId', async (req, res) => {
   }
 });
 
-router.get('/check-pending-verification', async (req, res) => {
+router.get("/check-pending-verification", async (req, res) => {
   const db = getPg();
   const userEmail = req.user?.email;
 
   if (!userEmail) {
-    return res.status(401).json({ message: "Unauthorized user session context." });
+    return res
+      .status(401)
+      .json({ message: "Unauthorized user session context." });
   }
 
   try {
     const locationDoc = await Location.findOne({
-      $or: [
-        { email: userEmail },
-        { managerEmails: userEmail }
-      ]
+      $or: [{ email: userEmail }, { managerEmails: userEmail }],
     });
 
     if (!locationDoc) {
@@ -367,21 +396,21 @@ router.get('/check-pending-verification', async (req, res) => {
     const hasInfonet = !SITES_WITHOUT_INFONET.includes(locationMongoId);
 
     // 1. Look for any log rows created in the last 6 hours that are missing required images
-    const unverifiedLogs = await db('fuel_price_logs')
+    const unverifiedLogs = await db("fuel_price_logs")
       .where({ site: locationMongoId })
       .andWhere((builder) => {
         if (hasInfonet) {
           // Standard: Missing either the Bulloch report snapshot OR the InfoNet report snapshot
-          builder.whereNull('image_url').orWhereNull('infonet_image_url');
+          builder.whereNull("image_url").orWhereNull("infonet_image_url");
         } else {
           // Exception Site: Only require verification on the core Bulloch snapshot report
-          builder.whereNull('image_url');
+          builder.whereNull("image_url");
         }
       })
-      .where('created_at', '>=', db.raw("NOW() - INTERVAL '6 hours'"))
-      .orderBy('id', 'asc');
+      .where("created_at", ">=", db.raw("NOW() - INTERVAL '6 hours'"))
+      .orderBy("id", "asc");
 
-    // If there are no unverified structural logs in the last 6 hours, 
+    // If there are no unverified structural logs in the last 6 hours,
     // it means any recent action was completely unchanged, so we clear the dialog box!
     if (!unverifiedLogs || unverifiedLogs.length === 0) {
       return res.status(200).json({ requiresVerification: false });
@@ -389,34 +418,39 @@ router.get('/check-pending-verification', async (req, res) => {
 
     // 2. Reconstruct the accurate delta state from those active unverified rows
     const unverifiedGradesMap = unverifiedLogs.reduce((acc, log) => {
-      const frontendKey = Object.keys(GRADE_MAP).find(key => GRADE_MAP[key] === log.grade) || log.grade;
+      const frontendKey =
+        Object.keys(GRADE_MAP).find((key) => GRADE_MAP[key] === log.grade) ||
+        log.grade;
       acc[frontendKey] = parseFloat(log.price);
       return acc;
     }, {});
 
-    const currentPrices = await currentPriceModel.getCurrentPricesBySite(locationMongoId);
+    const currentPrices =
+      await currentPriceModel.getCurrentPricesBySite(locationMongoId);
     const changedGrades = [];
     const unchangedGrades = [];
 
     // 3. Re-hydrate the full grades accurately for display matching
     for (const r of currentPrices) {
-      const frontendKey = Object.keys(GRADE_MAP).find(key => GRADE_MAP[key] === r.grade) || r.grade;
+      const frontendKey =
+        Object.keys(GRADE_MAP).find((key) => GRADE_MAP[key] === r.grade) ||
+        r.grade;
       const currentPriceNum = parseFloat(r.price);
       const wasChanged = unverifiedGradesMap[frontendKey] !== undefined;
 
       // Pull the old price by checking the log row right before our unverified change row
       let exactOldPrice = currentPriceNum;
       if (wasChanged) {
-        const query = db('fuel_price_logs')
+        const query = db("fuel_price_logs")
           .where({ site: locationMongoId, grade: r.grade })
-          .whereNotNull('image_url');
+          .whereNotNull("image_url");
 
         // Adapt baseline target matching strategy dynamically
         if (hasInfonet) {
-          query.whereNotNull('infonet_image_url'); // Find last baseline containing BOTH confirmations
+          query.whereNotNull("infonet_image_url"); // Find last baseline containing BOTH confirmations
         }
 
-        const previousLog = await query.orderBy('id', 'desc').first();
+        const previousLog = await query.orderBy("id", "desc").first();
         if (previousLog) exactOldPrice = parseFloat(previousLog.price);
       }
 
@@ -424,7 +458,7 @@ router.get('/check-pending-verification', async (req, res) => {
         gradeId: frontendKey,
         label: frontendKey,
         newPrice: currentPriceNum,
-        oldPrice: exactOldPrice
+        oldPrice: exactOldPrice,
       };
 
       if (wasChanged) {
@@ -442,13 +476,14 @@ router.get('/check-pending-verification', async (req, res) => {
         changedGrades: changedGrades,
         unchangedGrades: unchangedGrades,
         hasStructuralChanges: changedGrades.length > 0,
-        hasInfonet: hasInfonet // Propagated cleanly to fix frontend conditional button lookups
-      }
+        hasInfonet: hasInfonet, // Propagated cleanly to fix frontend conditional button lookups
+      },
     });
-
   } catch (err) {
     console.error("Failed checkpoint state validation sequence:", err);
-    return res.status(500).json({ message: "Internal verification engine failure." });
+    return res
+      .status(500)
+      .json({ message: "Internal verification engine failure." });
   }
 });
 
@@ -483,7 +518,7 @@ router.get('/check-pending-verification', async (req, res) => {
 //       .where('created_at', '>=', db.raw("NOW() - INTERVAL '6 hours'"))
 //       .orderBy('id', 'asc');
 
-//     // If there are no unverified structural logs in the last 6 hours, 
+//     // If there are no unverified structural logs in the last 6 hours,
 //     // it means any recent action was completely unchanged, so we clear the dialog box!
 //     if (!unverifiedLogs || unverifiedLogs.length === 0) {
 //       return res.status(200).json({ requiresVerification: false });
@@ -553,7 +588,7 @@ router.get('/check-pending-verification', async (req, res) => {
  * GET /api/fuel-pricing/logs/:locationId
  * Fetches historical pricing logs for a specific site and hydrates Mongo identity fields
  */
-router.get('/logs/:locationId', async (req, res) => {
+router.get("/logs/:locationId", async (req, res) => {
   const { locationId } = req.params;
 
   try {
@@ -568,7 +603,7 @@ router.get('/logs/:locationId', async (req, res) => {
     const uniqueUserIds = new Set();
     uniqueUserIds.add(locationId); // The site itself is a Location ID
 
-    rawLogs.forEach(log => {
+    rawLogs.forEach((log) => {
       if (log.posted_by) uniqueUserIds.add(log.posted_by);
       if (log.received_by) uniqueUserIds.add(log.received_by);
     });
@@ -577,19 +612,23 @@ router.get('/logs/:locationId', async (req, res) => {
 
     // 3. Query Mongo in parallel batches
     const [locations, users] = await Promise.all([
-      Location.find({ _id: { $in: idList } }, 'stationName email').lean(),
-      User.find({ _id: { $in: idList } }, 'firstName lastName email').lean()
+      Location.find({ _id: { $in: idList } }, "stationName email").lean(),
+      User.find({ _id: { $in: idList } }, "firstName lastName email").lean(),
     ]);
 
     // 4. Create optimized hash lookups for quick dictionary access
-    const locationMap = new Map(locations.map(loc => [String(loc._id), loc]));
-    const userMap = new Map(users.map(u => [String(u._id), u]));
+    const locationMap = new Map(locations.map((loc) => [String(loc._id), loc]));
+    const userMap = new Map(users.map((u) => [String(u._id), u]));
 
     // 5. Stitch, format, and align the fields specifically for your frontend layout
-    const formattedLogs = rawLogs.map(log => {
+    const formattedLogs = rawLogs.map((log) => {
       const siteMeta = locationMap.get(String(log.site));
-      const postedUser = log.posted_by ? userMap.get(String(log.posted_by)) : null;
-      const receivedUser = log.received_by ? userMap.get(String(log.received_by)) : null;
+      const postedUser = log.posted_by
+        ? userMap.get(String(log.posted_by))
+        : null;
+      const receivedUser = log.received_by
+        ? userMap.get(String(log.received_by))
+        : null;
 
       return {
         id: log.id,
@@ -597,7 +636,8 @@ router.get('/logs/:locationId', async (req, res) => {
         dayName: log.day,
         fuelGrade: log.grade,
         currentPrice: parseFloat(log.price),
-        previousPrice: log.old_price !== null ? parseFloat(log.old_price) : null,
+        previousPrice:
+          log.old_price !== null ? parseFloat(log.old_price) : null,
 
         // Image Snapshots previews
         imageUrl: log.image_url || null,
@@ -606,30 +646,36 @@ router.get('/logs/:locationId', async (req, res) => {
         // Hydrated Business Entities
         stationContext: {
           id: log.site,
-          stationName: siteMeta ? siteMeta.stationName : 'Unknown Station'
+          stationName: siteMeta ? siteMeta.stationName : "Unknown Station",
         },
-        postedBy: postedUser ? {
-          id: log.posted_by,
-          fullName: `${postedUser.firstName} ${postedUser.lastName}`.trim(),
-          email: postedUser.email
-        } : null,
+        postedBy: postedUser
+          ? {
+              id: log.posted_by,
+              fullName: `${postedUser.firstName} ${postedUser.lastName}`.trim(),
+              email: postedUser.email,
+            }
+          : null,
         receivedBy: receivedByMeta(log, receivedUser, siteMeta),
 
         // ⏱️ Aligned Timestamp Semantics
-        postedAt: log.created_at,   // Created At = Sent/Posted Time
-        receivedAt: log.updated_at  // Updated At = Final Register Sync Time
+        postedAt: log.created_at, // Created At = Sent/Posted Time
+        receivedAt: log.updated_at, // Updated At = Final Register Sync Time
       };
     });
 
     return res.status(200).json({
       success: true,
       count: formattedLogs.length,
-      logs: formattedLogs
+      logs: formattedLogs,
     });
-
   } catch (error) {
-    console.error(`💥 Failed to aggregate pricing log history matrix for location ${locationId}:`, error);
-    return res.status(500).json({ message: "Internal metadata compilation failure." });
+    console.error(
+      `💥 Failed to aggregate pricing log history matrix for location ${locationId}:`,
+      error,
+    );
+    return res
+      .status(500)
+      .json({ message: "Internal metadata compilation failure." });
   }
 });
 
@@ -641,15 +687,22 @@ function receivedByMeta(log, receivedUser, siteMeta) {
     return {
       id: log.received_by,
       fullName: `${receivedUser.firstName} ${receivedUser.lastName}`.trim(),
-      email: receivedUser.email
+      email: receivedUser.email,
     };
   }
-  if (log.received_by === 'SYSTEM' || (!log.received_by && log.infonet_image_url)) {
-    return { id: 'SYSTEM', fullName: 'Automated Hub Register Sync', email: 'system@gen7fuel.com' };
+  if (
+    log.received_by === "SYSTEM" ||
+    (!log.received_by && log.infonet_image_url)
+  ) {
+    return {
+      id: "SYSTEM",
+      fullName: "Automated Hub Register Sync",
+      email: "system@gen7fuel.com",
+    };
   }
   return null;
 }
-router.put('/verify-price-receipt', async (req, res) => {
+router.put("/verify-price-receipt", async (req, res) => {
   const db = getPg();
   const userEmail = req.user?.email;
   const userIdStr = req.user?._id ? String(req.user._id) : null;
@@ -659,76 +712,121 @@ router.put('/verify-price-receipt', async (req, res) => {
   const hasInfonet = !SITES_WITHOUT_INFONET.includes(String(locationId));
 
   // 2. Adjust standard parameter validations (infonetFilename is only mandatory if hasInfonet is true)
-  if (!userEmail || !locationId || !filename || (hasInfonet && !infonetFilename)) {
-    return res.status(400).json({ message: "Missing required verification data coordinates." });
+  if (
+    !userEmail ||
+    !locationId ||
+    !filename ||
+    (hasInfonet && !infonetFilename)
+  ) {
+    return res
+      .status(400)
+      .json({ message: "Missing required verification data coordinates." });
   }
 
   try {
     // 3. Update the targeted log records using conditional filter constraints
-    const updatedRows = await db('fuel_price_logs')
+    const updatedRows = await db("fuel_price_logs")
       .where({ site: locationId })
       .andWhere((builder) => {
         if (hasInfonet) {
           // Standard check: Target rows where either image string is missing
-          builder.whereNull('image_url').orWhereNull('infonet_image_url');
+          builder.whereNull("image_url").orWhereNull("infonet_image_url");
         } else {
           // Exception check: Target rows where only the primary Bulloch image string is missing
-          builder.whereNull('image_url');
+          builder.whereNull("image_url");
         }
       })
-      .where('created_at', '>=', db.raw("NOW() - INTERVAL '6 hours'"))
+      .where("created_at", ">=", db.raw("NOW() - INTERVAL '6 hours'"))
       .update({
         image_url: filename,
         // If it does not have InfoNet, save it explicitly as null (or keep a static string like 'N/A' if preferred)
         infonet_image_url: hasInfonet ? infonetFilename : null,
         received_by: userIdStr,
-        updated_at: db.raw('CURRENT_TIMESTAMP')
+        updated_at: db.raw("CURRENT_TIMESTAMP"),
       });
 
-    console.log(`⛽ Safe Audit Update Complete. Site: ${locationId} (Has InfoNet: ${hasInfonet}) | Rows Filled: ${updatedRows} within 6hr window.`);
+    console.log(
+      `⛽ Safe Audit Update Complete. Site: ${locationId} (Has InfoNet: ${hasInfonet}) | Rows Filled: ${updatedRows} within 6hr window.`,
+    );
+    // 🚀 NEW: Real-time broadcast to unlock all manager and main accounts on other devices
+    const locationDoc = await Location.findById(locationId);
+    if (locationDoc) {
+      const criticalEmails = [
+        locationDoc.email,
+        ...(locationDoc.managerEmails || []),
+      ].filter(Boolean);
+      const targetedUsers = await User.find(
+        { email: { $in: criticalEmails } },
+        "_id",
+      );
+      const uniqueUserIds = targetedUsers.map((u) => String(u._id));
 
+      const io = req.app.get("io");
+      if (io && uniqueUserIds.length > 0) {
+        uniqueUserIds.forEach((userId) => {
+          // Emit unlock message targeting each channel room
+          io.to(userId).emit("retail-price-verified", { locationId });
+        });
+      }
+    }
     return res.status(200).json({
       success: true,
-      message: `Successfully verified and locked ${updatedRows} fuel grade rows.`
+      message: `Successfully verified and locked ${updatedRows} fuel grade rows.`,
     });
   } catch (err) {
     console.error("Critical failure during batch log image linking:", err);
-    return res.status(500).json({ message: "Failed to persist terminal verification asset." });
+    return res
+      .status(500)
+      .json({ message: "Failed to persist terminal verification asset." });
   }
 });
 
 // =========================================================================
 // UPSERT WITH DELTA CHANGE-DETECTION CONSTRAINT
 // =========================================================================
-router.post('/upsert-retail', async (req, res) => {
+router.post("/upsert-retail", async (req, res) => {
   const { locationId, stationName, prices } = req.body;
   const db = getPg();
   const postedByUserIdStr = req.user?._id ? String(req.user._id) : null;
   const userEmail = req.user?.email;
 
   if (!locationId || !prices) {
-    return res.status(400).json({ message: "Missing location identification parameters." });
+    return res
+      .status(400)
+      .json({ message: "Missing location identification parameters." });
   }
 
   const now = new Date();
-  const dateSK = parseInt(`${now.getFullYear()}${String(now.getMonth() + 1).padStart(2, '0')}${String(now.getDate()).padStart(2, '0')}`, 10);
-  const currentDayName = now.toLocaleDateString('en-US', { weekday: 'long' });
+  const dateSK = parseInt(
+    `${now.getFullYear()}${String(now.getMonth() + 1).padStart(2, "0")}${String(now.getDate()).padStart(2, "0")}`,
+    10,
+  );
+  const currentDayName = now.toLocaleDateString("en-US", { weekday: "long" });
 
   try {
     const locationDoc = await Location.findById(locationId);
     if (!locationDoc) {
-      return res.status(404).json({ message: "Target location context not found." });
+      return res
+        .status(404)
+        .json({ message: "Target location context not found." });
     }
 
     const hasInfonet = !SITES_WITHOUT_INFONET.includes(locationId);
 
-    const criticalEmails = [locationDoc.email, ...(locationDoc.managerEmails || [])].filter(Boolean);
-    const targetedUsers = await User.find({ email: { $in: criticalEmails } }, "_id email");
-    const uniqueUserIds = targetedUsers.map(u => String(u._id));
+    const criticalEmails = [
+      locationDoc.email,
+      ...(locationDoc.managerEmails || []),
+    ].filter(Boolean);
+    const targetedUsers = await User.find(
+      { email: { $in: criticalEmails } },
+      "_id email",
+    );
+    const uniqueUserIds = targetedUsers.map((u) => String(u._id));
 
-    // 🚀 FIX STEP 1: Pass the transaction manager here if your model layer supports it, 
+    // 🚀 FIX STEP 1: Pass the transaction manager here if your model layer supports it,
     // to guarantee you aren't pulling from a dirty/stale outside read pool.
-    const existingRows = await currentPriceModel.getCurrentPricesBySite(locationId);
+    const existingRows =
+      await currentPriceModel.getCurrentPricesBySite(locationId);
 
     const changedGradesList = [];
     const unchangedGradesList = [];
@@ -741,13 +839,22 @@ router.post('/upsert-retail', async (req, res) => {
         const correspondingDbGradeName = GRADE_MAP[frontendCode];
 
         // Find if this grade already has a record in the database for this site
-        const matchingDbRow = existingRows.find(row => String(row.grade).trim() === String(correspondingDbGradeName).trim());
+        const matchingDbRow = existingRows.find(
+          (row) =>
+            String(row.grade).trim() ===
+            String(correspondingDbGradeName).trim(),
+        );
 
         // 🚀 FIX STEP 2: Strict parsing check. If matchingDbRow exists and has a price, use it.
         // Check for both null/undefined AND make sure it's not an empty string check.
-        const hasValidPriceRecord = matchingDbRow && matchingDbRow.price !== null && matchingDbRow.price !== undefined;
+        const hasValidPriceRecord =
+          matchingDbRow &&
+          matchingDbRow.price !== null &&
+          matchingDbRow.price !== undefined;
 
-        const currentDbPrice = hasValidPriceRecord ? parseFloat(matchingDbRow.price) : 0;
+        const currentDbPrice = hasValidPriceRecord
+          ? parseFloat(matchingDbRow.price)
+          : 0;
         const isNewRecordForSite = !hasValidPriceRecord;
 
         const targetPriceRaw = prices[frontendCode];
@@ -758,18 +865,19 @@ router.post('/upsert-retail', async (req, res) => {
           }
         }
 
-        const parsedTargetPrice = targetPriceRaw !== undefined && targetPriceRaw !== null
-          ? parseFloat(targetPriceRaw)
-          : currentDbPrice;
+        const parsedTargetPrice =
+          targetPriceRaw !== undefined && targetPriceRaw !== null
+            ? parseFloat(targetPriceRaw)
+            : currentDbPrice;
 
         const itemStatePayload = {
           gradeId: frontendCode,
           label: correspondingDbGradeName,
           oldPrice: isNewRecordForSite ? null : currentDbPrice, // 🚀 Will now accurately bind currentDbPrice float
-          newPrice: parsedTargetPrice
+          newPrice: parsedTargetPrice,
         };
 
-        // Delta Engine Validation: 
+        // Delta Engine Validation:
         if (!isNewRecordForSite && currentDbPrice === parsedTargetPrice) {
           unchangedGradesList.push(itemStatePayload);
         } else {
@@ -777,26 +885,32 @@ router.post('/upsert-retail', async (req, res) => {
           changedGradesList.push(itemStatePayload);
 
           // Pass structural fallback tracking arguments down to SQL layer
-          await currentPriceModel.upsertCurrentPrice({
-            site: locationId,
-            grade: correspondingDbGradeName,
-            price: parsedTargetPrice,
-            old_price: isNewRecordForSite ? null : currentDbPrice,
-            last_updated_by: postedByUserIdStr
-          }, trx);
+          await currentPriceModel.upsertCurrentPrice(
+            {
+              site: locationId,
+              grade: correspondingDbGradeName,
+              price: parsedTargetPrice,
+              old_price: isNewRecordForSite ? null : currentDbPrice,
+              last_updated_by: postedByUserIdStr,
+            },
+            trx,
+          );
 
           // Persist historical snapshot directly into audit logger row
-          await logsModel.createLog({
-            date: dateSK,
-            day: currentDayName,
-            site: locationId,
-            grade: correspondingDbGradeName,
-            price: parsedTargetPrice,
-            old_price: isNewRecordForSite ? null : currentDbPrice,
-            image_url: null,
-            infonet_image_url: null,
-            posted_by: postedByUserIdStr
-          }, trx);
+          await logsModel.createLog(
+            {
+              date: dateSK,
+              day: currentDayName,
+              site: locationId,
+              grade: correspondingDbGradeName,
+              price: parsedTargetPrice,
+              old_price: isNewRecordForSite ? null : currentDbPrice,
+              image_url: null,
+              infonet_image_url: null,
+              posted_by: postedByUserIdStr,
+            },
+            trx,
+          );
         }
       }
     });
@@ -958,7 +1072,7 @@ router.post('/upsert-retail', async (req, res) => {
     //       </h2>
 
     //       <p style="font-size: 14px; color: #334155;">
-    //         The pricing change you pushed to <strong>${targetStationName}</strong> remains unverified. 
+    //         The pricing change you pushed to <strong>${targetStationName}</strong> remains unverified.
     //         The store has not uploaded any Bulloch or InfoNet register images to the Hub to complete the fuel price update workflow.
     //       </p>
 
@@ -1003,8 +1117,8 @@ router.post('/upsert-retail', async (req, res) => {
     //       subject: `⛽ Urgent Reminder: Update & Verify Fuel Prices - ${targetStationName}`,
     //       html: storeReminderHtml,
     //       hasInfonet: hasInfonet // 🚀 Target Flag
-    //     },                           
-    //     {                  
+    //     },
+    //     {
     //       delay: 15 * 60 * 1000, // 15-Minute delay
     //       removeOnComplete: true,
     //       removeOnFail: true
@@ -1125,7 +1239,7 @@ router.post('/upsert-retail', async (req, res) => {
         changedGrades: changedGradesList,
         unchangedGrades: unchangedGradesList,
         hasStructuralChanges: changedGradesList.length > 0,
-        hasInfonet: hasInfonet // 🚀 Socket Broadcast Flag payload
+        hasInfonet: hasInfonet, // 🚀 Socket Broadcast Flag payload
       };
 
       uniqueUserIds.forEach((userId) => {
@@ -1136,9 +1250,8 @@ router.post('/upsert-retail', async (req, res) => {
     return res.status(200).json({
       success: true,
       updatesApplied: databaseWritesExecutedCount,
-      notifiedUserCount: uniqueUserIds.length
+      notifiedUserCount: uniqueUserIds.length,
     });
-
   } catch (err) {
     console.error("Transaction Pipeline Failed:", err);
     return res.status(500).json({ message: "Persistence layer failure." });
