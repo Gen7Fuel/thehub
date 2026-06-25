@@ -30,7 +30,7 @@ async function uploadToCdn(fileBuffer, originalName) {
 
     const data = await response.json();
     // Returns the clean accessibility URL link pointing to the file ID on your CDN
-    return `http://localhost:5001/cdn/download/${data.filename}`;
+    return `https://app.gen7fuel.com/cdn/download/${data.filename}`;
   } catch (error) {
     console.error("❌ Secondary Pipeline Error: Failed uploading image asset to CDN:", error);
     return null; // Don't break the main thread if just the CDN upload fails
