@@ -1,17 +1,33 @@
-import { useState, useCallback, useEffect, useRef } from 'react'
-import { AlertTriangle, Clock, RefreshCw, Fuel, ArrowRight, Camera, CheckCircle2, Loader2, Image as ImageIcon, RotateCcw } from "lucide-react"
-import Navbar from '@/components/custom/navbar'
-import MaintenanceBanner from '@/components/custom/MaintenanceBanner'
-import NotificationPopup from '@/components/custom/NotificationPopup'
-import { OfflineBanner } from '@/components/custom/OfflineBanner'
-import FuelPriceTicker from '@/components/custom/FuelPriceTicker'
+import { useState, useCallback, useEffect, useRef } from "react";
+import {
+  AlertTriangle,
+  Clock,
+  RefreshCw,
+  Fuel,
+  ArrowRight,
+  Camera,
+  CheckCircle2,
+  Loader2,
+  Image as ImageIcon,
+  RotateCcw,
+} from "lucide-react";
+import Navbar from "@/components/custom/navbar";
+import MaintenanceBanner from "@/components/custom/MaintenanceBanner";
+import NotificationPopup from "@/components/custom/NotificationPopup";
+import { OfflineBanner } from "@/components/custom/OfflineBanner";
+import FuelPriceTicker from "@/components/custom/FuelPriceTicker";
 import { getSocket } from "@/lib/websocket";
-import axios from 'axios'
+import axios from "axios";
 
-import { createFileRoute, Outlet, redirect, useNavigate } from '@tanstack/react-router'
-import { Button } from '@/components/ui/button'
-import { useMutation } from '@tanstack/react-query'
-import { uploadBase64Image } from "@/lib/utils" // Reusing your global utility file stream asset uploader
+import {
+  createFileRoute,
+  Outlet,
+  redirect,
+  useNavigate,
+} from "@tanstack/react-router";
+import { Button } from "@/components/ui/button";
+import { useMutation } from "@tanstack/react-query";
+import { uploadBase64Image } from "@/lib/utils"; // Reusing your global utility file stream asset uploader
 
 import {
   Dialog,
@@ -19,30 +35,41 @@ import {
   DialogDescription,
   DialogHeader,
   DialogTitle,
-} from "@/components/ui/dialog"
+} from "@/components/ui/dialog";
 
-export const Route = createFileRoute('/_navbarLayout')({
+export const Route = createFileRoute("/_navbarLayout")({
   loader: () => {
-    const token = localStorage.getItem('token')
+    const token = localStorage.getItem("token");
     if (!token) {
-      throw redirect({ to: '/login' })
+      throw redirect({ to: "/login" });
     }
-    return null
+    return null;
   },
   component: RouteComponent,
-})
+});
 
 // Dynamic class lookup for fuel grade styles matching your internal layout parameters
 const getGradePillBadgeStyle = (gradeLabel: string) => {
   switch (gradeLabel) {
-    case "Regular": case "REG": return "bg-green-500 text-white"
-    case "Premium": case "PNL": return "bg-red-500 text-white"
-    case "Mid Grade": case "MID": return "bg-gradient-to-r from-green-500 to-red-500 text-white"
-    case "Diesel": case "DSL": return "bg-amber-400 text-slate-900"
-    case "Dyed Diesel": case "DYED": return "bg-red-800 text-white"
-    default: return "bg-slate-600 text-white"
+    case "Regular":
+    case "REG":
+      return "bg-green-500 text-white";
+    case "Premium":
+    case "PNL":
+      return "bg-red-500 text-white";
+    case "Mid Grade":
+    case "MID":
+      return "bg-gradient-to-r from-green-500 to-red-500 text-white";
+    case "Diesel":
+    case "DSL":
+      return "bg-amber-400 text-slate-900";
+    case "Dyed Diesel":
+    case "DYED":
+      return "bg-red-800 text-white";
+    default:
+      return "bg-slate-600 text-white";
   }
-}
+};
 
 // Clean labels mapping dictionary helper for layout standardization
 const DISPLAY_LABELS: Record<string, string> = {
@@ -50,8 +77,8 @@ const DISPLAY_LABELS: Record<string, string> = {
   MID: "Mid Grade",
   PNL: "Premium",
   DSL: "Diesel",
-  DYED: "Dyed Diesel"
-}
+  DYED: "Dyed Diesel",
+};
 
 function RouteComponent() {
   const [isLocked, setIsLocked] = useState(false);
@@ -74,7 +101,9 @@ function RouteComponent() {
 
   // Native hardware camera capture state machine tracking
   const fileInputRef = useRef<HTMLInputElement>(null);
-  const [activeUploadStep, setActiveUploadStep] = useState<'BULLOCH' | 'INFONET' | null>(null);
+  const [activeUploadStep, setActiveUploadStep] = useState<
+    "BULLOCH" | "INFONET" | null
+  >(null);
   const [bullochBase64, setBullochBase64] = useState<string | null>(null);
   const [infonetBase64, setInfonetBase64] = useState<string | null>(null);
   const [showCameraPreviewMode, setShowCameraPreviewMode] = useState(false);
@@ -82,19 +111,25 @@ function RouteComponent() {
   // --- RE-HYDRATION AND INITIALIZATION SYSTEM ---
   const verifyPendingPriceStatus = useCallback(async () => {
     try {
-      const token = localStorage.getItem('token');
+      const token = localStorage.getItem("token");
       if (!token) return;
 
-      const res = await axios.get('/api/fuel-pricing/check-pending-verification', {
-        headers: { Authorization: `Bearer ${token}` }
-      });
+      const res = await axios.get(
+        "/api/fuel-pricing/check-pending-verification",
+        {
+          headers: { Authorization: `Bearer ${token}` },
+        },
+      );
 
       if (res.data?.requiresVerification && res.data?.payload) {
         setPricePayload(res.data.payload);
         setIsPriceOverlayActive(true);
       }
     } catch (err) {
-      console.error("Failed verifying outstanding verification status logs:", err);
+      console.error(
+        "Failed verifying outstanding verification status logs:",
+        err,
+      );
     }
   }, []);
 
@@ -103,19 +138,21 @@ function RouteComponent() {
   }, [verifyPendingPriceStatus]);
 
   // Helper trigger to accurately handle which report snapshot is being targeted
-  const triggerCameraHardwareCapture = (step: 'BULLOCH' | 'INFONET') => {
+  const triggerCameraHardwareCapture = (step: "BULLOCH" | "INFONET") => {
     setActiveUploadStep(step);
     fileInputRef.current?.click();
   };
 
-  const handleNativeCameraCapture = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleNativeCameraCapture = (
+    e: React.ChangeEvent<HTMLInputElement>,
+  ) => {
     const file = e.target.files?.[0];
     if (file) {
       const reader = new FileReader();
       reader.onloadend = () => {
-        if (activeUploadStep === 'BULLOCH') {
+        if (activeUploadStep === "BULLOCH") {
           setBullochBase64(reader.result as string);
-        } else if (activeUploadStep === 'INFONET') {
+        } else if (activeUploadStep === "INFONET") {
           setInfonetBase64(reader.result as string);
         }
         setShowCameraPreviewMode(true);
@@ -140,38 +177,52 @@ function RouteComponent() {
 
       if (requiresInfoNetUpload) {
         if (!bullochBase64 || !infonetBase64) {
-          alert("Please make sure you have taken pictures of BOTH the Bulloch and InfoNet reports before submitting.");
+          alert(
+            "Please make sure you have taken pictures of BOTH the Bulloch and InfoNet reports before submitting.",
+          );
           return;
         }
       } else {
         if (!bullochBase64) {
-          alert("Please make sure you have taken a picture of the Bulloch report before submitting.");
+          alert(
+            "Please make sure you have taken a picture of the Bulloch report before submitting.",
+          );
           return;
         }
       }
 
-      // Parallel processing setup updates execution variables cleanly 
+      // Parallel processing setup updates execution variables cleanly
       const uploadPromises = [
-        uploadBase64Image(bullochBase64, `bulloch_verification_${Date.now()}.jpg`)
+        uploadBase64Image(
+          bullochBase64,
+          `bulloch_verification_${Date.now()}.jpg`,
+        ),
       ];
 
       if (requiresInfoNetUpload && infonetBase64) {
         uploadPromises.push(
-          uploadBase64Image(infonetBase64, `infonet_verification_${Date.now()}.jpg`)
+          uploadBase64Image(
+            infonetBase64,
+            `infonet_verification_${Date.now()}.jpg`,
+          ),
         );
       }
 
       const [bullochRes, infonetRes] = await Promise.all(uploadPromises);
 
-      const token = localStorage.getItem('token');
-      await axios.put('/api/fuel-pricing/verify-price-receipt', {
-        locationId: pricePayload.locationId,
-        filename: bullochRes.filename,
-        // Pass null or clean empty string if site configuration bypasses infonet checks entirely
-        infonetFilename: requiresInfoNetUpload ? infonetRes?.filename : null
-      }, {
-        headers: { Authorization: `Bearer ${token}` }
-      });
+      const token = localStorage.getItem("token");
+      await axios.put(
+        "/api/fuel-pricing/verify-price-receipt",
+        {
+          locationId: pricePayload.locationId,
+          filename: bullochRes.filename,
+          // Pass null or clean empty string if site configuration bypasses infonet checks entirely
+          infonetFilename: requiresInfoNetUpload ? infonetRes?.filename : null,
+        },
+        {
+          headers: { Authorization: `Bearer ${token}` },
+        },
+      );
     },
     onSuccess: () => {
       setIsPriceOverlayActive(false);
@@ -181,10 +232,12 @@ function RouteComponent() {
       setShowCameraPreviewMode(false);
       setPricePayload(null);
     },
-    onError: (err) => {
+    onError: (err: any) => {
       console.error("Audit lock release failure:", err);
-      alert("Something went wrong saving the report photos. Please check your network and try again.");
-    }
+      alert(
+        "Something went wrong saving the report photos. Please check your network and try again.",
+      );
+    },
   });
 
   const handleStatusChange = useCallback((locked: boolean, details?: any) => {
@@ -198,15 +251,15 @@ function RouteComponent() {
   const notificationSound = useRef<HTMLAudioElement | null>(null);
 
   useEffect(() => {
-    notificationSound.current = new Audio('/assets/sounds/notification1.mp3');
+    notificationSound.current = new Audio("/assets/sounds/notification1.mp3");
     notificationSound.current.volume = 0.5;
   }, []);
 
   const fetchUnreadSummary = useCallback(async () => {
     try {
-      const token = localStorage.getItem('token');
-      const res = await axios.get('/api/notification/unread-summary', {
-        headers: { Authorization: `Bearer ${token || ''}` }
+      const token = localStorage.getItem("token");
+      const res = await axios.get("/api/notification/unread-summary", {
+        headers: { Authorization: `Bearer ${token || ""}` },
       });
 
       const count = res.data.unreadCount;
@@ -214,7 +267,7 @@ function RouteComponent() {
         setUnreadCount(count);
         setShowPopup(true);
         if (notificationSound.current) {
-          notificationSound.current.play().catch(err => {
+          notificationSound.current.play().catch((err) => {
             console.warn("Audio play blocked by browser:", err);
           });
         }
@@ -240,7 +293,7 @@ function RouteComponent() {
       // Whenever ANY new notification hits, refresh the smart count
       fetchUnreadSummary();
       // Also update the navbar count
-      window.dispatchEvent(new Event('notificationRead'));
+      window.dispatchEvent(new Event("notificationRead"));
     };
 
     const handleRetailPriceEvent = (data: any) => {
@@ -264,10 +317,14 @@ function RouteComponent() {
   const handleDismiss = useCallback(async () => {
     setShowPopup(false);
     try {
-      const token = localStorage.getItem('token');
-      await axios.post('/api/notification/dismiss-summary', {}, {
-        headers: { Authorization: `Bearer ${token}` }
-      });
+      const token = localStorage.getItem("token");
+      await axios.post(
+        "/api/notification/dismiss-summary",
+        {},
+        {
+          headers: { Authorization: `Bearer ${token}` },
+        },
+      );
     } catch (err) {
       console.error("Error updating summary marker:", err);
     }
@@ -275,19 +332,20 @@ function RouteComponent() {
 
   const handleView = () => {
     handleDismiss();
-    navigate({ to: '/notification' });
+    navigate({ to: "/notification" });
   };
 
   return (
     <div className="flex flex-col min-h-screen relative">
       <Navbar />
+      <OfflineBanner />
 
       {/* 2. Real-time Permissions-Scoped Fuel Pricing Marquee */}
       <FuelPriceTicker />
 
       {showPopup && (
         <NotificationPopup
-          message={`You have ${unreadCount} new notification${unreadCount > 1 ? 's' : ''} on the Hub.`}
+          message={`You have ${unreadCount} new notification${unreadCount > 1 ? "s" : ""} on the Hub.`}
           onClose={handleDismiss}
           onView={handleView}
         />
@@ -310,11 +368,18 @@ function RouteComponent() {
         onChange={handleNativeCameraCapture}
       />
 
-      <Dialog open={isPriceOverlayActive} onOpenChange={() => { }}>
+      <Dialog
+        open={isPriceOverlayActive}
+        onOpenChange={(open) => {
+          // If the user tries to close the modal by clicking outside or hitting ESC,
+          // open will be false. Intercept it here and do nothing.
+          if (!open) return;
+        }}
+      >
         <DialogContent
           className="max-w-2xl bg-white border border-slate-200 shadow-2xl p-6 rounded-3xl gap-4 flex flex-col justify-between"
-          onPointerDownOutside={(e) => e.preventDefault()}
-          onEscapeKeyDown={(e) => e.preventDefault()}
+          // onPointerDownOutside={(e: any) => e.preventDefault()}
+          // onEscapeKeyDown={(e: any) => e.preventDefault()}
         >
           {/* CAMERA INTERCEPT PREVIEW OVERLAY VIEW */}
           {showCameraPreviewMode ? (
@@ -322,16 +387,26 @@ function RouteComponent() {
               <DialogHeader>
                 <DialogTitle className="text-md font-black tracking-tight text-slate-900 uppercase flex items-center gap-2">
                   <ImageIcon className="w-4 h-4 text-emerald-600" />
-                  <span>Check Your Photo: {activeUploadStep === 'BULLOCH' ? 'Bulloch Report' : 'InfoNet Report'}</span>
+                  <span>
+                    Check Your Photo:{" "}
+                    {activeUploadStep === "BULLOCH"
+                      ? "Bulloch Report"
+                      : "InfoNet Report"}
+                  </span>
                 </DialogTitle>
                 <DialogDescription className="text-xs font-semibold text-slate-400">
-                  Make sure the numbers in the picture match your computer screen before clicking confirm.
+                  Make sure the numbers in the picture match your computer
+                  screen before clicking confirm.
                 </DialogDescription>
               </DialogHeader>
 
               <div className="w-full h-[40vh] bg-slate-950 rounded-2xl overflow-hidden relative border border-slate-800">
                 <img
-                  src={activeUploadStep === 'BULLOCH' ? (bullochBase64 || '') : (infonetBase64 || '')}
+                  src={
+                    activeUploadStep === "BULLOCH"
+                      ? bullochBase64 || ""
+                      : infonetBase64 || ""
+                  }
                   alt="Captured Terminal Receipt Preview"
                   className="w-full h-full object-contain"
                 />
@@ -365,7 +440,10 @@ function RouteComponent() {
                     </div>
                     <div>
                       <DialogTitle className="text-lg font-black tracking-tight text-slate-900 uppercase">
-                        New Fuel Prices: <span className="text-sky-600 normal-case">{pricePayload?.stationName}</span>
+                        New Fuel Prices:{" "}
+                        <span className="text-sky-600 normal-case">
+                          {pricePayload?.stationName}
+                        </span>
                       </DialogTitle>
                       <DialogDescription className="text-xs font-semibold text-slate-400">
                         New gas price data has been sent to your station logs.
@@ -376,7 +454,6 @@ function RouteComponent() {
 
                 {/* Main scroll container tracking grade configurations */}
                 <div className="space-y-4 max-h-[42vh] overflow-y-auto pr-1 select-none mt-4 scrollbar-thin">
-
                   {/* SECTION 1: CHANGED GRADE MATRICES */}
                   {pricePayload && pricePayload.changedGrades?.length > 0 && (
                     <div className="space-y-2">
@@ -391,20 +468,28 @@ function RouteComponent() {
                             key={item.gradeId}
                             className="flex items-center justify-between p-3 bg-white border border-slate-200 rounded-2xl shadow-sm transition-all"
                           >
-                            <span className={`text-xs font-black w-28 h-7 flex items-center justify-center text-center rounded-md tracking-wider uppercase shrink-0 ${getGradePillBadgeStyle(item.gradeId)}`}>
+                            <span
+                              className={`text-xs font-black w-28 h-7 flex items-center justify-center text-center rounded-md tracking-wider uppercase shrink-0 ${getGradePillBadgeStyle(item.gradeId)}`}
+                            >
                               {DISPLAY_LABELS[item.gradeId] || item.label}
                             </span>
 
                             <div className="flex items-center gap-4 text-sm font-bold tracking-tight">
                               <div className="text-slate-400">
-                                <span className="text-[10px] uppercase font-bold tracking-wide mr-1">Old:</span>
+                                <span className="text-[10px] uppercase font-bold tracking-wide mr-1">
+                                  Old:
+                                </span>
                                 <span className="line-through font-mono">
-                                  {item.oldPrice ? `$${Number(item.oldPrice).toFixed(3)}` : '—'}
+                                  {item.oldPrice
+                                    ? `$${Number(item.oldPrice).toFixed(3)}`
+                                    : "—"}
                                 </span>
                               </div>
                               <ArrowRight className="w-4 h-4 text-slate-300" />
                               <div className="text-slate-900 bg-red-50/60 px-3 py-1 rounded-xl border border-red-100/60 flex items-center">
-                                <span className="text-[10px] uppercase font-black tracking-wide text-red-500 mr-1.5">New:</span>
+                                <span className="text-[10px] uppercase font-black tracking-wide text-red-500 mr-1.5">
+                                  New:
+                                </span>
                                 <span className="text-base font-black font-mono tracking-tight text-red-600">
                                   ${Number(item.newPrice).toFixed(3)}
                                 </span>
@@ -430,7 +515,9 @@ function RouteComponent() {
                             key={item.gradeId}
                             className="flex items-center justify-between p-2.5 bg-slate-50/60 border border-slate-200/60 rounded-2xl"
                           >
-                            <span className={`text-[11px] font-extrabold w-28 h-6 flex items-center justify-center text-center rounded-md tracking-wide uppercase opacity-75 shrink-0 ${getGradePillBadgeStyle(item.gradeId)}`}>
+                            <span
+                              className={`text-[11px] font-extrabold w-28 h-6 flex items-center justify-center text-center rounded-md tracking-wide uppercase opacity-75 shrink-0 ${getGradePillBadgeStyle(item.gradeId)}`}
+                            >
                               {DISPLAY_LABELS[item.gradeId] || item.label}
                             </span>
 
@@ -455,78 +542,120 @@ function RouteComponent() {
                 {pricePayload?.hasStructuralChanges ? (
                   // LOGIC BLOCK A: CAMERA ACTION PANEL (MANDATORY SNAPSHOTS REQUIRED)
                   <div className="space-y-3 bg-red-50/60 p-4 rounded-2xl border border-red-100/60">
-
                     {/* ⚠️ INITIAL INSTRUCTION PANEL */}
-                    {((pricePayload?.hasInfonet !== false && (!bullochBase64 || !infonetBase64)) ||
-                      (pricePayload?.hasInfonet === false && !bullochBase64)) && (
-                        <div className="flex items-start gap-2.5 text-left pb-1">
-                          <AlertTriangle className="w-5 h-5 text-red-600 flex-shrink-0 mt-0.5" />
-                          <p className="text-xs font-bold leading-normal text-red-800">
-                            {pricePayload?.hasInfonet !== false ? (
-                              <span>Please update the fuel prices on your physical Bulloch terminal screen along with the Infonet Terminal. Once finished, you must take and upload photos of both reports below to unlock the app.</span>
-                            ) : (
-                              <span>Please update the fuel prices on your physical Bulloch terminal screen. Once finished, you must take and upload a photo of the Bulloch report below to unlock the app.</span>
-                            )}
-                          </p>
-                        </div>
-                      )}
+                    {((pricePayload?.hasInfonet !== false &&
+                      (!bullochBase64 || !infonetBase64)) ||
+                      (pricePayload?.hasInfonet === false &&
+                        !bullochBase64)) && (
+                      <div className="flex items-start gap-2.5 text-left pb-1">
+                        <AlertTriangle className="w-5 h-5 text-red-600 flex-shrink-0 mt-0.5" />
+                        <p className="text-xs font-bold leading-normal text-red-800">
+                          {pricePayload?.hasInfonet !== false ? (
+                            <span>
+                              Please update the fuel prices on your physical
+                              Bulloch terminal screen along with the Infonet
+                              Terminal. Once finished, you must take and upload
+                              photos of both reports below to unlock the app.
+                            </span>
+                          ) : (
+                            <span>
+                              Please update the fuel prices on your physical
+                              Bulloch terminal screen. Once finished, you must
+                              take and upload a photo of the Bulloch report
+                              below to unlock the app.
+                            </span>
+                          )}
+                        </p>
+                      </div>
+                    )}
 
                     {/* PHOTO SNAPSHOT TRIGGERS */}
                     <div className="flex flex-col sm:flex-row gap-3 pt-1">
                       <Button
-                        onClick={() => triggerCameraHardwareCapture('BULLOCH')}
-                        className={`flex-1 rounded-xl px-4 gap-2 font-black text-xs tracking-tight shadow-sm border whitespace-nowrap transition-all ${bullochBase64
-                          ? 'bg-emerald-50 text-emerald-700 border-emerald-200 hover:bg-emerald-100'
-                          : 'bg-white text-slate-800 border-slate-200 hover:bg-slate-50'
-                          }`}
+                        onClick={() => triggerCameraHardwareCapture("BULLOCH")}
+                        className={`flex-1 rounded-xl px-4 gap-2 font-black text-xs tracking-tight shadow-sm border whitespace-nowrap transition-all ${
+                          bullochBase64
+                            ? "bg-emerald-50 text-emerald-700 border-emerald-200 hover:bg-emerald-100"
+                            : "bg-white text-slate-800 border-slate-200 hover:bg-slate-50"
+                        }`}
                       >
                         <Camera className="w-4 h-4 shrink-0" />
-                        {bullochBase64 ? "✓ Bulloch Report Added" : "Take Photo: Bulloch Report"}
+                        {bullochBase64
+                          ? "✓ Bulloch Report Added"
+                          : "Take Photo: Bulloch Report"}
                       </Button>
 
                       {/* InfoNet Button wrapper - dynamically managed visibility */}
                       {pricePayload?.hasInfonet !== false && (
                         <Button
-                          onClick={() => triggerCameraHardwareCapture('INFONET')}
-                          className={`flex-1 rounded-xl px-4 gap-2 font-black text-xs tracking-tight shadow-sm border whitespace-nowrap transition-all ${infonetBase64
-                            ? 'bg-emerald-50 text-emerald-700 border-emerald-200 hover:bg-emerald-100'
-                            : 'bg-white text-slate-800 border-slate-200 hover:bg-slate-50'
-                            }`}
+                          onClick={() =>
+                            triggerCameraHardwareCapture("INFONET")
+                          }
+                          className={`flex-1 rounded-xl px-4 gap-2 font-black text-xs tracking-tight shadow-sm border whitespace-nowrap transition-all ${
+                            infonetBase64
+                              ? "bg-emerald-50 text-emerald-700 border-emerald-200 hover:bg-emerald-100"
+                              : "bg-white text-slate-800 border-slate-200 hover:bg-slate-50"
+                          }`}
                         >
                           <Camera className="w-4 h-4 shrink-0" />
-                          {infonetBase64 ? "✓ InfoNet Report Added" : "Take Photo: InfoNet Report"}
+                          {infonetBase64
+                            ? "✓ InfoNet Report Added"
+                            : "Take Photo: InfoNet Report"}
                         </Button>
                       )}
                     </div>
 
                     {/* 🛑 POST-UPLOAD WARNING MATRIX: Shows when required uploads are gathered */}
-                    {((pricePayload?.hasInfonet !== false && bullochBase64 && infonetBase64) ||
-                      (pricePayload?.hasInfonet === false && bullochBase64)) && (
-                        <>
-                          <div className="mt-2 flex items-start gap-2.5 text-left bg-amber-50 border border-amber-200 p-3 rounded-xl animate-in fade-in slide-in-from-bottom-1 duration-200">
-                            <AlertTriangle className="w-4 h-4 text-amber-600 flex-shrink-0 mt-0.5" />
-                            <p className="text-[11px] font-bold leading-normal text-amber-900">
-                              {pricePayload?.hasInfonet !== false ? (
-                                <span>Please make sure that the numbers on your Bulloch register match the InfoNet register screen perfectly. After you click the save button below, check outside on the front pumps and make sure the gas price changed correctly out there too.</span>
-                              ) : (
-                                <span>Please make sure that the numbers on your Bulloch register match your screen perfectly. After you click the save button below, check outside on the front pumps and make sure the gas price changed correctly out there too.</span>
-                              )}
-                            </p>
-                          </div>
-
-                          <Button
-                            onClick={() => submitTerminalVerificationMutation.mutate()}
-                            disabled={submitTerminalVerificationMutation.isPending}
-                            className="w-full mt-1 bg-slate-900 hover:bg-slate-800 text-white font-black text-xs tracking-wider uppercase rounded-xl h-10 gap-1.5 shadow-md"
-                          >
-                            {submitTerminalVerificationMutation.isPending ? (
-                              <><Loader2 className="w-4 h-4 animate-spin" /> Saving Reports...</>
+                    {((pricePayload?.hasInfonet !== false &&
+                      bullochBase64 &&
+                      infonetBase64) ||
+                      (pricePayload?.hasInfonet === false &&
+                        bullochBase64)) && (
+                      <>
+                        <div className="mt-2 flex items-start gap-2.5 text-left bg-amber-50 border border-amber-200 p-3 rounded-xl animate-in fade-in slide-in-from-bottom-1 duration-200">
+                          <AlertTriangle className="w-4 h-4 text-amber-600 flex-shrink-0 mt-0.5" />
+                          <p className="text-[11px] font-bold leading-normal text-amber-900">
+                            {pricePayload?.hasInfonet !== false ? (
+                              <span>
+                                Please make sure that the numbers on your
+                                Bulloch register match the InfoNet register
+                                screen perfectly. After you click the save
+                                button below, check outside on the front pumps
+                                and make sure the gas price changed correctly
+                                out there too.
+                              </span>
                             ) : (
-                              "Save & Complete Verification"
+                              <span>
+                                Please make sure that the numbers on your
+                                Bulloch register match your screen perfectly.
+                                After you click the save button below, check
+                                outside on the front pumps and make sure the gas
+                                price changed correctly out there too.
+                              </span>
                             )}
-                          </Button>
-                        </>
-                      )}
+                          </p>
+                        </div>
+
+                        <Button
+                          onClick={() =>
+                            submitTerminalVerificationMutation.mutate()
+                          }
+                          disabled={
+                            submitTerminalVerificationMutation.isPending
+                          }
+                          className="w-full mt-1 bg-slate-900 hover:bg-slate-800 text-white font-black text-xs tracking-wider uppercase rounded-xl h-10 gap-1.5 shadow-md"
+                        >
+                          {submitTerminalVerificationMutation.isPending ? (
+                            <>
+                              <Loader2 className="w-4 h-4 animate-spin" />{" "}
+                              Saving Reports...
+                            </>
+                          ) : (
+                            "Save & Complete Verification"
+                          )}
+                        </Button>
+                      </>
+                    )}
                   </div>
                 ) : (
                   // LOGIC BLOCK B: INFORMATIONAL SWEET CONFIRMATION
@@ -535,14 +664,26 @@ function RouteComponent() {
                       <CheckCircle2 className="w-5 h-5 text-slate-500 flex-shrink-0 mt-0.5" />
                       <p className="text-xs font-semibold leading-normal text-slate-500">
                         {pricePayload?.hasInfonet !== false ? (
-                          <span>No gas prices were changed during this update. Please check the values above and confirm with the values in bulloch and infonet reports. Click confirm to close this message.</span>
+                          <span>
+                            No gas prices were changed during this update.
+                            Please check the values above and confirm with the
+                            values in bulloch and infonet reports. Click confirm
+                            to close this message.
+                          </span>
                         ) : (
-                          <span>No gas prices were changed during this update. Please check the values above and confirm with the values in the bulloch report. Click confirm to close this message.</span>
+                          <span>
+                            No gas prices were changed during this update.
+                            Please check the values above and confirm with the
+                            values in the bulloch report. Click confirm to close
+                            this message.
+                          </span>
                         )}
                       </p>
                     </div>
                     <Button
-                      onClick={() => submitTerminalVerificationMutation.mutate()}
+                      onClick={() =>
+                        submitTerminalVerificationMutation.mutate()
+                      }
                       className="w-full sm:w-auto bg-slate-900 hover:bg-slate-800 text-white font-black tracking-tight rounded-xl px-6 h-10 shadow-sm whitespace-nowrap"
                     >
                       I Confirm Prices match
@@ -568,8 +709,9 @@ function RouteComponent() {
             </h2>
 
             <p className="text-slate-600 dark:text-slate-400 mb-8 leading-relaxed">
-              The Hub is currently undergoing essential maintenance to improve your experience.
-              To protect your data, all interactions are paused until the update is complete.
+              The Hub is currently undergoing essential maintenance to improve
+              your experience. To protect your data, all interactions are paused
+              until the update is complete.
             </p>
 
             {maintDetails?.scheduleClose ? (
@@ -580,7 +722,10 @@ function RouteComponent() {
                     Estimated Availability
                   </p>
                   <p className="font-mono text-xl font-bold text-slate-800 dark:text-slate-200">
-                    {new Date(maintDetails.scheduleClose).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                    {new Date(maintDetails.scheduleClose).toLocaleTimeString(
+                      [],
+                      { hour: "2-digit", minute: "2-digit" },
+                    )}
                   </p>
                 </div>
               </div>
@@ -591,7 +736,8 @@ function RouteComponent() {
                   <span className="font-bold">Almost there!</span>
                 </div>
                 <p className="text-sm text-amber-800/80 dark:text-amber-400/80">
-                  The update is taking slightly longer than expected. We are finalizing the system and will be back online shortly.
+                  The update is taking slightly longer than expected. We are
+                  finalizing the system and will be back online shortly.
                 </p>
               </div>
             )}
@@ -614,7 +760,7 @@ function RouteComponent() {
         </div>
       )}
     </div>
-  )
+  );
 }
 // import { useState, useCallback, useEffect, useRef } from 'react'
 // import { AlertTriangle, Clock, RefreshCw } from "lucide-react"
