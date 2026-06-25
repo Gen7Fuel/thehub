@@ -29,6 +29,8 @@ const locationSchema = new mongoose.Schema({
   province: { type: String, required: true},
   defaultFuelRack: { type: mongoose.Schema.Types.ObjectId, ref: "FuelRack" },
   defaultFuelCarrier: { type: mongoose.Schema.Types.ObjectId, ref: "FuelCarrier" },
+  availableGrades: [{ type: String, default: [] }],
+  gasBuddyStationId: { type: String, required: false },
 });
 
 // Export the Location model based on the schema

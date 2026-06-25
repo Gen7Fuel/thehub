@@ -1,0 +1,115 @@
+{
+  "cookies": [
+    {
+      "name": "_ga",
+      "value": "GA1.1.258518769.1781541960",
+      "domain": ".gasbuddybusiness.io",
+      "path": "/",
+      "expires": 1816181783.077035,
+      "httpOnly": false,
+      "secure": false,
+      "sameSite": "Lax"
+    },
+    {
+      "name": "_ga_YS67XQ8B6Y",
+      "value": "GS2.1.s1781621782$o2$g1$t1781621802$j40$l0$h0",
+      "domain": ".gasbuddybusiness.io",
+      "path": "/",
+      "expires": 1816181802.486228,
+      "httpOnly": false,
+      "secure": false,
+      "sameSite": "Lax"
+    }
+  ],
+  "origins": [
+    {
+      "origin": "https://dashboard.gasbuddybusiness.io",
+      "localStorage": [
+        {
+          "name": "org_logo_url",
+          "value": "\"https://images.gasbuddy.com/images/business-pages/vlooykpvlaxq.png\""
+        },
+        {
+          "name": "current_org_id",
+          "value": "\"0thAwwzUn2s\""
+        },
+        {
+          "name": "auth_context_id",
+          "value": "\"b6d3f734-23bd-4f20-9d2f-adaa44a18406\""
+        },
+        {
+          "name": "selectedDateRange",
+          "value": "{\"label\":\"Last 30 days\",\"startDate\":\"2026-05-16\",\"endDate\":\"2026-06-15\"}"
+        },
+        {
+          "name": "department",
+          "value": "\"owner\""
+        },
+        {
+          "name": "station_prices_205339",
+          "value": "{\"saved_at\":\"2026-06-15T16:46:20Z\",\"prices\":[{\"long_name\":\"Regular\",\"short_name\":\"Reg\",\"fuel_product\":\"regular_gas\",\"price_unit\":\"cents_per_liter\",\"currency\":\"CAD\",\"credit\":{\"price\":155.9,\"posted_time\":\"2026-06-15T16:46:14.257+00:00\",\"nickname\":\"Owner\",\"stamp\":\"owner\"}},{\"long_name\":\"Midgrade\",\"short_name\":\"Mid\",\"fuel_product\":\"midgrade_gas\",\"price_unit\":\"cents_per_liter\",\"currency\":\"CAD\",\"credit\":{\"price\":174.9,\"posted_time\":\"2026-06-15T16:46:15.933+00:00\",\"nickname\":\"Owner\",\"stamp\":\"owner\"}},{\"long_name\":\"Premium\",\"short_name\":\"Pre\",\"fuel_product\":\"premium_gas\",\"price_unit\":\"cents_per_liter\",\"currency\":\"CAD\",\"credit\":{\"price\":184.9,\"posted_time\":\"2026-06-15T16:46:17.283+00:00\",\"nickname\":\"Owner\",\"stamp\":\"owner\"}},{\"long_name\":\"Diesel\",\"short_name\":\"Diesel\",\"fuel_product\":\"diesel\",\"price_unit\":\"cents_per_liter\",\"currency\":\"CAD\",\"credit\":{\"price\":186.9,\"posted_time\":\"2026-06-15T16:46:18.682+00:00\",\"nickname\":\"Owner\",\"stamp\":\"owner\"}}]}"
+        },
+        {
+          "name": "mostRecentComparisonMetric",
+          "value": "{\"key\":\"Prior Period\",\"text\":\"Prior Period\",\"metricApiName\":\"prior-period\",\"metricApiPath\":\"stations/comparison/prior-period\"}"
+        },
+        {
+          "name": "currentPageURL",
+          "value": "\"https://dashboard.gasbuddybusiness.io/client/station-profiles/station-profile?stationId=197585\""
+        },
+        {
+          "name": "org_solution_options",
+          "value": "[]"
+        },
+        {
+          "name": "emergency_features",
+          "value": "false"
+        },
+        {
+          "name": "email",
+          "value": "\"hannah@gen7fuel.com\""
+        },
+        {
+          "name": "role",
+          "value": "\"administrator\""
+        },
+        {
+          "name": "title",
+          "value": "\"Social Media Manager\""
+        },
+        {
+          "name": "username",
+          "value": "\"Hannah Durham\""
+        },
+        {
+          "name": "refresh_token",
+          "value": "\"jhAVNbuilJt7ZRZeDg_r4cixEiiEfHwFK352o9M6vq9x1yCTDyKG6CGLHu5DIU34j4e605QGdkaJ0jOXBT7S3TMAoa9RGWyeoq2hANjbYD7FulyjzOzCMm0AzqgqWV4sEvdQ\""
+        },
+        {
+          "name": "org_name",
+          "value": "\"Gen7 Fuel LP\""
+        },
+        {
+          "name": "org_contract_status",
+          "value": "\"current\""
+        },
+        {
+          "name": "permissions",
+          "value": "[{\"name\":\"review_reply_free_form_text\",\"display_name\":\"Free-form text\",\"value\":true},{\"name\":\"can_edit_gas_prices\",\"display_name\":\"Update Gas Prices\",\"value\":true}]"
+        },
+        {
+          "name": "access_token",
+          "value": "\"jhAcGJWywr-z442FtR2k11Dkq14_1gF9CsXnf3X3X2VrBIcx4rD5tQbYvGqbe2BIlkbojMMppLmwz_BA4RHqHV5phECko8KQ40D8-5VQXp1V3-9jXLjpdPmzC9skLgUDPLTw\""
+        },
+        {
+          "name": "station_prices_197585",
+          "value": "{\"saved_at\":\"2026-06-16T14:56:42Z\",\"prices\":[{\"long_name\":\"Regular\",\"short_name\":\"Reg\",\"fuel_product\":\"regular_gas\",\"price_unit\":\"cents_per_liter\",\"currency\":\"CAD\",\"credit\":{\"price\":157.9,\"posted_time\":\"2026-06-16T14:56:37.714+00:00\",\"nickname\":\"Owner\",\"stamp\":\"owner\"}},{\"long_name\":\"Midgrade\",\"short_name\":\"Mid\",\"fuel_product\":\"midgrade_gas\",\"price_unit\":\"cents_per_liter\",\"currency\":\"CAD\",\"credit\":{\"price\":167.9,\"posted_time\":\"2026-06-16T14:56:39.200+00:00\",\"nickname\":\"Owner\",\"stamp\":\"owner\"}},{\"long_name\":\"Premium\",\"short_name\":\"Pre\",\"fuel_product\":\"premium_gas\",\"price_unit\":\"cents_per_liter\",\"currency\":\"CAD\",\"credit\":{\"price\":177.9,\"posted_time\":\"2026-06-16T14:56:40.562+00:00\",\"nickname\":\"Owner\",\"stamp\":\"owner\"}}]}"
+        },
+        {
+          "name": "org_solutions",
+          "value": "[\"reputation-management\",\"listings\"]"
+        }
+      ]
+    }
+  ]
+}

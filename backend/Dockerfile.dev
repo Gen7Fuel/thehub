@@ -1,7 +1,24 @@
 FROM node:20-alpine
+
+# 1. Install chromium and system libraries required for headless browser interaction on Alpine
+RUN apk add --no-cache \
+    chromium \
+    nss \
+    freetype \
+    harfbuzz \
+    ca-certificates \
+    ttf-freefont
+
+# 2. Prevent Playwright from wasting space downloading its own custom binary copies
+ENV PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD=1
+
 WORKDIR /app
+
 COPY package*.json ./
+
 RUN npm install
 RUN npm install -g nodemon
+
 COPY . .
+
 CMD ["npm", "run", "dev"]

@@ -1084,23 +1084,53 @@ router.get("/location/:id", async (req, res) => {
 
 // @route   PUT /api/fuel-station-tanks/location/:id
 // @desc    Update only the 4 allowed fuel-related fields for a Location
+// router.put('/location/:id', async (req, res) => {
+//   const { fuelStationNumber, address, defaultFuelRack, defaultFuelCarrier, fuelCustomerName } = req.body;
+//   try {
+//     const updated = await Location.findByIdAndUpdate(
+//       req.params.id,
+//       { fuelStationNumber, address, defaultFuelRack, defaultFuelCarrier, fuelCustomerName },
+//       { new: true }
+//     );
+//     res.json(updated);
+//   } catch (err) {
+//     res.status(400).json({ message: err.message });
+//   }
+// });
+// @route   PUT /api/fuel-station-tanks/location/:id
+// @desc    Update allowed fuel-related fields for a Location including available selling grades
 router.put("/location/:id", async (req, res) => {
   const {
+   
     fuelStationNumber,
+   
     address,
+   
     defaultFuelRack,
+   
     defaultFuelCarrier,
+   
     fuelCustomerName,
+    availableGrades // Destructured here
+ ,
   } = req.body;
+
   try {
     const updated = await Location.findByIdAndUpdate(
       req.params.id,
       {
+       
         fuelStationNumber,
+       
         address,
+       
         defaultFuelRack,
+       
         defaultFuelCarrier,
+       
         fuelCustomerName,
+
+        availableGrades // Included in update document payload
       },
       { new: true },
     );
