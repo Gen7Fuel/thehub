@@ -104,7 +104,15 @@ async function postPricesToGasBuddy({ gasBuddyStationId, prices }) {
     console.log("✏️ Clicking the Price Configuration Card edit control node...");
     await editButton.click();
 
-    const dialogModal = page.locator('div[role="dialog"][aria-modal="true"]').filter({ hasText: 'PRICES' });
+    // ⚡ FIX: Add the :visible pseudo-class filter and grab the primary active layer node
+    const dialogModal = page
+      .locator('div[role="dialog"][aria-modal="true"]:visible')
+      .filter({ hasText: 'PRICES' })
+      .first();
+
+    // Give the layout engine a split-second transition buffer to fully settle the animation
+    await page.waitForTimeout(1000); 
+
     await dialogModal.waitFor({ state: "visible", timeout: 8000 });
     console.log("🔓 Pricing operational modification dialog overlay opened.");
 
