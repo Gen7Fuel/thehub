@@ -306,8 +306,11 @@ function RouteComponent() {
     };
     // 🚀 NEW: Clears and closes the dialog when another account verifies the pricing
     const handleRetailPriceVerifiedEvent = (data: { locationId: string }) => {
-      console.log("🔓 Pricing verification processed by another terminal session:", data);
-      
+      console.log(
+        "🔓 Pricing verification processed by another terminal session:",
+        data,
+      );
+
       // Safety verification: Ensure this matches the station the layout is managing
       setIsPriceOverlayActive(false);
       setBullochBase64(null);
@@ -618,6 +621,22 @@ function RouteComponent() {
                         </Button>
                       )}
                     </div>
+
+                    {/* 🚀 NEW: SAFETY ESCAPE HATCH (Only displays when images haven't been uploaded locally yet) */}
+                    {((pricePayload?.hasInfonet !== false &&
+                      (!bullochBase64 || !infonetBase64)) ||
+                      (pricePayload?.hasInfonet === false &&
+                        !bullochBase64)) && (
+                      <div className="pt-1 flex justify-end">
+                        <Button
+                          variant="ghost"
+                          onClick={verifyPendingPriceStatus}
+                          className="text-xs font-bold text-slate-500 hover:text-slate-800 hover:bg-slate-200/50 rounded-xl px-3 h-8 gap-1"
+                        >
+                          <RefreshCw className="w-3.5 h-3.5" /> Already Uploaded on Another Device?
+                        </Button>
+                      </div>
+                    )}
 
                     {/* 🛑 POST-UPLOAD WARNING MATRIX: Shows when required uploads are gathered */}
                     {((pricePayload?.hasInfonet !== false &&

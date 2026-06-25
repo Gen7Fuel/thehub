@@ -918,49 +918,49 @@ router.post("/upsert-retail", async (req, res) => {
     // -------------------------------------------------------------------------
     // 🚀 UNCONDITIONAL GASBUDDY BACKGROUND BROADCAST (WITH SYSTEM INSULATION)
     // -------------------------------------------------------------------------
-    // try {
-    //   if (locationDoc.gasBuddyStationId) {
-    //     const normalizedPrices = {};
+    try {
+      if (locationDoc.gasBuddyStationId) {
+        const normalizedPrices = {};
 
-    //     for (const [feCode, numericPrice] of Object.entries(prices)) {
-    //       // Explicitly drop Dyed Diesel so we don't pass untaxed commercial fuel to GasBuddy
-    //       if (feCode === 'DYED') continue;
+        for (const [feCode, numericPrice] of Object.entries(prices)) {
+          // Explicitly drop Dyed Diesel so we don't pass untaxed commercial fuel to GasBuddy
+          if (feCode === 'DYED') continue;
 
-    //       // Lookup the readable name using your existing file-level GRADE_MAP (e.g., 'REG' -> 'Regular')
-    //       const gasBuddyLabel = GRADE_MAP[feCode];
+          // Lookup the readable name using your existing file-level GRADE_MAP (e.g., 'REG' -> 'Regular')
+          const gasBuddyLabel = GRADE_MAP[feCode];
 
-    //       // Pass the numeric decimal float (e.g., 1.532) directly to match your test harness format
-    //       if (gasBuddyLabel && numericPrice !== undefined && numericPrice !== null) {
-    //         normalizedPrices[gasBuddyLabel] = parseFloat(numericPrice);
-    //       }
-    //     }
+          // Pass the numeric decimal float (e.g., 1.532) directly to match your test harness format
+          if (gasBuddyLabel && numericPrice !== undefined && numericPrice !== null) {
+            normalizedPrices[gasBuddyLabel] = parseFloat(numericPrice);
+          }
+        }
 
-    //     // Verify we built a clean, qualified set of public fuel grades before pushing to Redis
-    //     if (Object.keys(normalizedPrices).length > 0) {
-    //       await gasBuddyQueue.add(
-    //         `gasbuddy-sync-${locationId}-${Date.now()}`,
-    //         {
-    //           gasBuddyStationId: locationDoc.gasBuddyStationId,
-    //           stationName: stationName,
-    //           prices: normalizedPrices // Dispatches clean format: { "Regular": 1.532, "Mid Grade": 1.694 }
-    //         },
-    //         {
-    //           removeOnComplete: true,
-    //           removeOnFail: false // Kept in BullMQ dashboard for fail-safe visual troubleshooting
-    //         }
-    //       );
-    //       console.log(`🤖 GasBuddy background verification job successfully queued for ${stationName}`);
-    //     } else {
-    //       console.log(`ℹ️ GasBuddy skipped: No qualifying public fuel grades provided in request payload.`);
-    //     }
-    //   } else {
-    //     console.log(`ℹ️ GasBuddy update skipped: No gasBuddyStationId configuration mapped for ${stationName}`);
-    //   }
-    // } catch (gasBuddyQueueError) {
-    //   // 🛡️ Complete Isolation Guardrail
-    //   // Traps any Redis disconnects or BullMQ internal failures here so the main HTTP transaction remains unaffected.
-    //   console.error("💥 CRITICAL NON-BLOCKING EXCEPTION: GasBuddy queue dispatch failed.", gasBuddyQueueError);
-    // }
+        // Verify we built a clean, qualified set of public fuel grades before pushing to Redis
+        if (Object.keys(normalizedPrices).length > 0) {
+          await gasBuddyQueue.add(
+            `gasbuddy-sync-${locationId}-${Date.now()}`,
+            {
+              gasBuddyStationId: locationDoc.gasBuddyStationId,
+              stationName: stationName,
+              prices: normalizedPrices // Dispatches clean format: { "Regular": 1.532, "Mid Grade": 1.694 }
+            },
+            {
+              removeOnComplete: true,
+              removeOnFail: false // Kept in BullMQ dashboard for fail-safe visual troubleshooting
+            }
+          );
+          console.log(`🤖 GasBuddy background verification job successfully queued for ${stationName}`);
+        } else {
+          console.log(`ℹ️ GasBuddy skipped: No qualifying public fuel grades provided in request payload.`);
+        }
+      } else {
+        console.log(`ℹ️ GasBuddy update skipped: No gasBuddyStationId configuration mapped for ${stationName}`);
+      }
+    } catch (gasBuddyQueueError) {
+      // 🛡️ Complete Isolation Guardrail
+      // Traps any Redis disconnects or BullMQ internal failures here so the main HTTP transaction remains unaffected.
+      console.error("💥 CRITICAL NON-BLOCKING EXCEPTION: GasBuddy queue dispatch failed.", gasBuddyQueueError);
+    }
 
     // // -------------------------------------------------------------------------
     // // DISPATCH NOTIFICATIONS & TIMER ON CHANGES DETECTED
