@@ -128,9 +128,10 @@ function FuelPricingDashboard() {
     },
   });
 
-  const stations = (data?.stations || []).filter(
-    (station: any) => station.stationName !== "Test Lab",
-  );
+  const stations = (data?.stations || [])
+  // .filter(
+  //   (station: any) => station.stationName !== "Test Lab",
+  // );
   const pricingData = data?.pricingData || {};
 
   // 3. Keep site context perfectly synchronized on initial render
