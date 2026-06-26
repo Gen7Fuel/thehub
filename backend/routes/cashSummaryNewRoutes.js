@@ -365,9 +365,10 @@ router.get('/over-short', async (req, res) => {
       }, {});
     }
 
-    // 6️⃣ Group Shift Totals by Date
+    // 6️⃣ Group Shift Totals by Date (Chicken Delight shifts are excluded)
     const byDate = {};
     for (const shift of shifts) {
+      if (shift.isChickenDelight) continue
       const d = new Date(shift.date);
       d.setHours(0, 0, 0, 0);
       const key = d.toISOString();
@@ -672,6 +673,8 @@ router.post('/', async (req, res) => {
       exempted_tax,
       payouts,
       chequesCashedOut, // 👈 ADD THIS LINE
+      pinpadTotal,
+      pinpadPhoto,
     } = req.body || {}
 
     if (!shift_number) return res.status(400).json({ error: 'shift_number is required' })
@@ -742,6 +745,9 @@ router.post('/', async (req, res) => {
       shift_number: String(shift_number),
       date: new Date(date),
       createdBy: userId,
+      isChickenDelight: req.body.isChickenDelight === true,
+      pinpadTotal: norm(pinpadTotal),
+      pinpadPhoto: typeof pinpadPhoto === 'string' ? pinpadPhoto : undefined,
 
       // existing primary fields (now enriched)
       canadian_cash_collected: values.canadian_cash_collected,
@@ -1241,20 +1247,29 @@ router.get('/report', async (req, res) => {
       .sort({ shift_number: 1 })
       .lean()
 
-    const sum = (k) => rows.reduce((a, r) => a + (typeof r[k] === 'number' ? r[k] : 0), 0)
+    const regularRows = rows.filter(r => !r.isChickenDelight)
+    const cdRows = rows.filter(r => r.isChickenDelight)
+
+    const sum = (k, arr) => arr.reduce((a, r) => a + (typeof r[k] === 'number' ? r[k] : 0), 0)
     const totals = {
-      count: rows.length,
-      canadian_cash_collected: sum('canadian_cash_collected'),
-      item_sales: sum('item_sales'),
-      cash_back: sum('cash_back'),
-      loyalty: sum('loyalty'),
-      cpl_bulloch: sum('cpl_bulloch'),
-      exempted_tax: sum('exempted_tax'),
-      report_canadian_cash: sum('report_canadian_cash'),
-      payouts: rows.reduce((a, r) => a + (r.payouts || 0), 0),
-      chequesCashedOut: sum('chequesCashedOut'),
-      voidedTransactionsAmount: sum('voidedTransactionsAmount'),
+      count: regularRows.length,
+      canadian_cash_collected: sum('canadian_cash_collected', regularRows),
+      item_sales: sum('item_sales', regularRows),
+      cash_back: sum('cash_back', regularRows),
+      loyalty: sum('loyalty', regularRows),
+      cpl_bulloch: sum('cpl_bulloch', regularRows),
+      exempted_tax: sum('exempted_tax', regularRows),
+      report_canadian_cash: sum('report_canadian_cash', regularRows),
+      payouts: regularRows.reduce((a, r) => a + (r.payouts || 0), 0),
+      chequesCashedOut: sum('chequesCashedOut', regularRows),
+      voidedTransactionsAmount: sum('voidedTransactionsAmount', regularRows),
     }
+
+    const chickenDelightTip = cdRows.reduce(
+      (acc, r) =>
+        acc + (r.canadian_cash_collected ?? 0) + (r.pinpadTotal ?? 0) - (r.report_canadian_cash ?? 0),
+      0
+    )
 
     // Fetch or create the single report for site+day (normalized date)
     const reportDate = start // store normalized day start
@@ -1265,6 +1280,7 @@ router.get('/report', async (req, res) => {
       date,
       rows,
       totals,
+      chickenDelightTip,
       report: reportDoc || null, // contains notes + submitted
     })
   } catch (err) {
@@ -1368,6 +1384,63 @@ router.get('/payouts-check', async (req, res) => {
   }
 })
 
+router.get('/ar-check-range', async (req, res) => {
+  const { site, from, to } = req.query
+  if (!site || !from || !to) return res.status(400).json({ error: 'site, from, and to are required' })
+
+  try {
+    const location = await Location.findOne({ stationName: site }, { timezone: 1 }).lean()
+    const tz = location?.timezone || 'America/Toronto'
+
+    const csStart = new Date(from); csStart.setUTCHours(0, 0, 0, 0)
+    const csEnd = new Date(to); csEnd.setUTCHours(23, 59, 59, 999)
+    const txStart = DateTime.fromISO(from, { zone: tz }).startOf('day').toJSDate()
+    const txEnd = DateTime.fromISO(to, { zone: tz }).endOf('day').toJSDate()
+
+    const [csRows, txRows] = await Promise.all([
+      CashSummary.aggregate([
+        { $match: { site, date: { $gte: csStart, $lte: csEnd } } },
+        {
+          $group: {
+            _id: { $dateToString: { format: '%Y-%m-%d', date: '$date', timezone: 'UTC' } },
+            arIncurredTotal: { $sum: { $ifNull: ['$arIncurred', 0] } },
+          },
+        },
+      ]),
+      Transactions.aggregate([
+        { $match: { stationName: site, date: { $gte: txStart, $lte: txEnd } } },
+        {
+          $group: {
+            _id: { $dateToString: { format: '%Y-%m-%d', date: '$date', timezone: tz } },
+            transactionsTotal: { $sum: { $ifNull: ['$amount', 0] } },
+          },
+        },
+      ]),
+    ])
+
+    const csMap = Object.fromEntries(csRows.map((r) => [r._id, r.arIncurredTotal]))
+    const txMap = Object.fromEntries(txRows.map((r) => [r._id, r.transactionsTotal]))
+
+    const days = []
+    let current = DateTime.fromISO(from, { zone: 'UTC' }).startOf('day')
+    const last = DateTime.fromISO(to, { zone: 'UTC' }).startOf('day')
+    while (current <= last) {
+      const dateStr = current.toFormat('yyyy-MM-dd')
+      const ar = Math.round((csMap[dateStr] ?? 0) * 100) / 100
+      const tx = Math.round((txMap[dateStr] ?? 0) * 100) / 100
+      const match = Math.round(ar * 100) === Math.round(tx * 100)
+      const direction = match ? 'ok' : tx < ar ? 'hub' : 'bulloch'
+      days.push({ date: dateStr, arIncurredTotal: ar, transactionsTotal: tx, match, direction })
+      current = current.plus({ days: 1 })
+    }
+
+    res.json(days)
+  } catch (err) {
+    console.error('AR check range error:', err)
+    res.status(500).json({ error: 'Failed to check AR totals' })
+  }
+})
+
 router.get('/ar-check', async (req, res) => {
   const { site, date } = req.query
   if (!site || !date) return res.status(400).json({ error: 'site and date required' })
@@ -1433,6 +1506,8 @@ router.put('/:id', async (req, res) => {
       exempted_tax,
       report_canadian_cash,
       chequesCashedOut, // 👈 ADD THIS LINE
+      pinpadTotal,
+      pinpadPhoto,
     } = req.body || {}
 
     if (!shift_number) return res.status(400).json({ error: 'shift_number is required' })
@@ -1558,6 +1633,9 @@ router.put('/:id', async (req, res) => {
       site,
       shift_number: String(shift_number),
       date: new Date(date),
+      isChickenDelight: req.body.isChickenDelight === true ? true : (existing.isChickenDelight ?? false),
+      pinpadTotal: norm(pinpadTotal) ?? existing.pinpadTotal,
+      pinpadPhoto: typeof pinpadPhoto === 'string' ? pinpadPhoto : existing.pinpadPhoto,
 
       canadian_cash_collected: norm(canadian_cash_collected),
 

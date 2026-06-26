@@ -137,10 +137,10 @@ describe('OrderRec schema — item validation', () => {
 // ─── CommentSchema validation ─────────────────────────────────────────────────
 
 describe('OrderRec schema — comment validation', () => {
-  it('rejects a comment with missing text', () => {
-    const doc = new OrderRec(base({ comments: [{ text: '' }] }))
+  it('accepts a comment with no text (photo-only)', () => {
+    const doc = new OrderRec(base({ comments: [{ photos: ['abc.jpg'] }] }))
     const err = doc.validateSync()
-    expect(err?.errors['comments.0.text']).toBeDefined()
+    expect(err?.errors['comments.0.text']).toBeUndefined()
   })
 
   it('accepts a valid comment', () => {

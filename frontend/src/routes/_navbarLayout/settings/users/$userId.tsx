@@ -297,6 +297,10 @@ export function RouteComponent() {
   return (
     <div className="flex justify-center w-full">
       <div className="w-full max-w-5xl bg-white rounded-3xl shadow-lg border border-gray-200 p-8 space-y-8">
+        <div>
+          <h1 className="text-2xl font-bold text-gray-900">{user.firstName} {user.lastName}</h1>
+          <p className="text-sm text-gray-500">{user.email}</p>
+        </div>
         {/* PASSWORD RESET */}
         {/* <Card className="rounded-2xl shadow-sm border border-gray-200">
           <CardHeader>

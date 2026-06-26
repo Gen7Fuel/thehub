@@ -215,6 +215,7 @@ export const POPreviewDocument: React.FC<POPreviewProps> = ({
             </View>
             {[
               { label: 'RUL (Regular)', key: 'Regular' },
+              { label: 'E15', key: 'E15' },
               { label: 'PUL (Premium)', key: 'Premium' },
               { label: 'ULSD (Diesel)', key: 'Diesel' },
               { label: 'DYED (Dyed)', key: 'Dyed Diesel' }

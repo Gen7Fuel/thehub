@@ -1,29 +1,52 @@
 import {
   useState,
   // useEffect, useMemo
-} from 'react';
+} from "react";
 import { cn } from "@/lib/utils";
-import { createFileRoute } from '@tanstack/react-router';
-import { useQuery } from "@tanstack/react-query"
-import axios from 'axios';
+import { createFileRoute } from "@tanstack/react-router";
+import { useQuery } from "@tanstack/react-query";
+import axios from "axios";
 import {
-  Building2, Truck, Fuel, RefreshCw, AlertTriangle, ShieldCheck, Download
+  Building2,
+  Truck,
+  Fuel,
+  RefreshCw,
+  AlertTriangle,
+  ShieldCheck,
+  Download,
   // Hash, Save,  CheckCircle2, Calendar, Clock
-} from 'lucide-react';
+} from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Switch } from "@/components/ui/switch";
-import { Badge } from "@/components/ui/badge"
+import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
-import { getGradeTheme } from "./manage/locations/$id"
+import { getGradeTheme } from "./manage/locations/$id";
 // import { gradeConfig } from "./workspace"
-import { PDFViewer, PDFDownloadLink, pdf } from '@react-pdf/renderer';
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
-import { POPreviewDocument, formatPDFDate } from "@/components/custom/fuelPoPDF"
+import { PDFViewer, PDFDownloadLink, pdf } from "@react-pdf/renderer";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogFooter,
+} from "@/components/ui/dialog";
+import {
+  POPreviewDocument,
+  formatPDFDate,
+} from "@/components/custom/fuelPoPDF";
 
-export const Route = createFileRoute('/_navbarLayout/fuel-management/create-order')({
+export const Route = createFileRoute(
+  "/_navbarLayout/fuel-management/create-order",
+)({
   component: CreateFuelOrder,
 });
 
@@ -57,8 +80,8 @@ interface FuelOrderFormData {
   endTime: string;
   rackId: string;
   supplierId: string;
-  isMultiBadge: boolean;      // New: Toggle state
-  secondaryBadgeNo: string;   // New: Store the selected second badge
+  isMultiBadge: boolean; // New: Toggle state
+  secondaryBadgeNo: string; // New: Store the selected second badge
   badgeNo: string;
   carrierId: string;
   poNumber: string;
@@ -86,7 +109,6 @@ interface FuelSupplier {
   supplierBadges: SupplierBadge[]; // Array of badges inside the supplier
 }
 
-
 function CreateFuelOrder() {
   // --- State Management ---
   const [racks, setRacks] = useState<any[]>([]);
@@ -105,61 +127,138 @@ function CreateFuelOrder() {
 
   const [isSplit, setIsSplit] = useState(false);
   const [formData, setFormData] = useState<FuelOrderFormData>({
-    stationId: '',
-    orderDate: new Date().toISOString().split('T')[0],
-    deliveryDate: '',
-    startTime: '08:00',
-    endTime: '12:00',
-    rackId: '',
-    supplierId: '',
+    stationId: "",
+    orderDate: new Date().toISOString().split("T")[0],
+    deliveryDate: "",
+    startTime: "08:00",
+    endTime: "12:00",
+    rackId: "",
+    supplierId: "",
     isMultiBadge: false,
-    secondaryBadgeNo: '',
-    badgeNo: '',
-    carrierId: '',
-    poNumber: '',
-    secondaryPoNumber: '', // NEW: Secondary PO (Single Mode)
+    secondaryBadgeNo: "",
+    badgeNo: "",
+    carrierId: "",
+    poNumber: "",
+    secondaryPoNumber: "", // NEW: Secondary PO (Single Mode)
     items: [],
     projections: {}, // Initialize as empty object
     splits: [
-      { stationId: '', poNumber: '', secondaryPoNumber: '', items: [], projections: {} },
-      { stationId: '', poNumber: '', secondaryPoNumber: '', items: [], projections: {} }
+      {
+        stationId: "",
+        poNumber: "",
+        secondaryPoNumber: "",
+        items: [],
+        projections: {},
+      },
+      {
+        stationId: "",
+        poNumber: "",
+        secondaryPoNumber: "",
+        items: [],
+        projections: {},
+      },
     ],
     secondaryItems: [],
     secondarySplits: [
-      { stationId: '', poNumber: '', secondaryPoNumber: '', items: [], projections: {} },
-      { stationId: '', poNumber: '', secondaryPoNumber: '', items: [], projections: {} }
-    ]
+      {
+        stationId: "",
+        poNumber: "",
+        secondaryPoNumber: "",
+        items: [],
+        projections: {},
+      },
+      {
+        stationId: "",
+        poNumber: "",
+        secondaryPoNumber: "",
+        items: [],
+        projections: {},
+      },
+    ],
   });
 
   const authHeader = {
-    headers: { Authorization: `Bearer ${localStorage.getItem('token')}` }
+    headers: { Authorization: `Bearer ${localStorage.getItem("token")}` },
   };
 
   const [_, setProjections] = useState<Record<string, GradeProjection>>({});
   // --- Fetch Locations using TanStack Query ---
   const { data: locations = [], isLoading: isLoadingLocations } = useQuery({
-    queryKey: ['locations-list'],
+    queryKey: ["locations-list"],
     queryFn: async () => {
-      const res = await axios.get('/api/fuel-station-tanks/all-locations', authHeader);
+      const res = await axios.get(
+        "/api/fuel-station-tanks/all-locations",
+        authHeader,
+      );
       return res.data;
     },
-    staleTime: 0
+    staleTime: 0,
   });
 
   // --- Cascading Logic: Station Selection ---
   // Inside your RouteComponent...
 
+  const getDynamicStationGrades = (
+    stationGrades: string[],
+    rackGrades: string[],
+    badgeGrades: string[],
+  ) => {
+    const dynamic = [...(stationGrades || [])];
+
+    // Rule: Rack has E15, Badge has E15, and Station has "Regular"
+    const allowsSummerE15 =
+      rackGrades.includes("E15") &&
+      badgeGrades.includes("E15") &&
+      dynamic.includes("Regular");
+
+    if (allowsSummerE15 && !dynamic.includes("E15")) {
+      dynamic.push("E15");
+    }
+    return dynamic;
+  };
+
   const handleStationChange = async (stationId: string, index: number) => {
     const station = locations.find((s: any) => s._id === stationId);
     if (!station) return;
+    let logisticsDefaults:
+      | {
+          rack: any;
+          rackSuppliers: FuelSupplier[];
+          supplierId: string;
+          badgeNo: string;
+        }
+      | undefined;
 
-    // 1. Immediate State Update (Optimistic)
-    setFormData(prev => {
+    // 1. Immediate State Update (Optimistic with Dynamic E15 check)
+    setFormData((prev) => {
+      const currentRack = racks.find((r) => r._id === prev.rackId);
+      const rackGrades = currentRack?.availableGrades || [];
+
+      const selectedSup = suppliers.find((s) => s._id === prev.supplierId);
+      const currentBadge = selectedSup?.supplierBadges?.find(
+        (b) => b.badgeNumber === prev.badgeNo,
+      );
+      const badgeGrades = currentBadge?.availableGrades || [];
+
+      // Evaluate dynamic station grades before setting initial arrays
+      const dynamicStationGrades = getDynamicStationGrades(
+        station.availableStationGrades || [],
+        rackGrades,
+        badgeGrades,
+      );
+
       const newSplits = [...prev.splits];
       newSplits[index] = {
-        ...newSplits[index],
+        ...(newSplits[index] || { items: [] }),
         stationId,
-        items: (station.availableStationGrades || []).map((grade: string) => ({ grade, ltrs: 0 })),
+        items: dynamicStationGrades
+          .filter((grade: string) => rackGrades.includes(grade))
+          .map((grade: string) => {
+            const existing = prev.splits[index]?.items?.find(
+              (i) => i.grade === grade,
+            );
+            return { grade, ltrs: existing?.ltrs || 0 };
+          }),
       };
       return { ...prev, splits: newSplits };
     });
@@ -167,34 +266,47 @@ function CreateFuelOrder() {
     // 2. Global Logistics (Only for the first station/master)
     if (index === 0) {
       try {
-        const racksRes = await axios.get('/api/fuel-racks', authHeader);
+        const racksRes = await axios.get("/api/fuel-racks", authHeader);
         setRacks(racksRes.data);
-        const defaultRackId = station.defaultFuelRack?._id || station.defaultFuelRack || '';
-        const stationDefaultCarrierId = station.defaultFuelCarrier?._id || station.defaultFuelCarrier || '';
+        const defaultRackId =
+          station.defaultFuelRack?._id || station.defaultFuelRack || "";
+        const stationDefaultCarrierId =
+          station.defaultFuelCarrier?._id || station.defaultFuelCarrier || "";
 
-        setFormData(prev => ({
+        setFormData((prev) => ({
           ...prev,
-          stationId: stationId, // Sync root stationId
+          stationId: stationId,
           rackId: defaultRackId,
           carrierId: stationDefaultCarrierId,
         }));
 
         if (defaultRackId) {
-          handleRackChange(defaultRackId, stationId, stationDefaultCarrierId);
+          logisticsDefaults = await handleRackChange(
+            defaultRackId,
+            stationId,
+            stationDefaultCarrierId,
+          );
         }
-        setPreSelectedFields(['rackId', 'carrierId']);
+        setPreSelectedFields(["rackId", "carrierId"]);
       } catch (err) {
         console.error("Master Station Logistics Error:", err);
       }
     }
-    // 2. Sync PO and Projections
-    await syncStationData(stationId, index, formData.orderDate, formData.deliveryDate);
+
+    // 3. Sync PO and Projections (This will re-run filtering cleanly)
+    await syncStationData(
+      stationId,
+      index,
+      formData.orderDate,
+      formData.deliveryDate,
+      logisticsDefaults,
+    );
   };
 
   const handleRackChange = async (
     rackId: string,
     currentStationId?: string,
-    passedCarrierId?: string
+    passedCarrierId?: string,
   ) => {
     try {
       const rackRes = await axios.get(`/api/fuel-racks/${rackId}`, authHeader);
@@ -202,39 +314,59 @@ function CreateFuelOrder() {
       const rackGrades = rack.availableGrades || [];
       const rackCarriers = rack.associatedCarriers || [];
 
-      const supplierRes = await axios.get(`/api/fuel-suppliers?associatedRack=${rackId}`, authHeader);
+      const supplierRes = await axios.get(
+        `/api/fuel-suppliers?associatedRack=${rackId}`,
+        authHeader,
+      );
       const rackSuppliers = supplierRes.data;
 
       setSuppliers(rackSuppliers);
       setCarriers(rackCarriers);
 
       // 1. Logistics Defaults (Supplier & Badge)
-      const defaultSup = rackSuppliers.find((s: any) => s._id === rack.defaultSupplier) || rackSuppliers[0];
-      const defaultBadge = defaultSup?.supplierBadges?.find((b: any) => b.isDefault) || defaultSup?.supplierBadges?.[0];
+      const defaultSup =
+        rackSuppliers.find((s: any) => s._id === rack.defaultSupplier) ||
+        rackSuppliers[0];
+      const defaultBadge =
+        defaultSup?.supplierBadges?.find((b: any) => b.isDefault) ||
+        defaultSup?.supplierBadges?.[0];
+      const defaultBadgeGrades = defaultBadge?.availableGrades || []; // Get grades for dynamic check
 
-      // 2. Carrier Logic: Determine which carrier to auto-select
+      // 2. Carrier Logic...
       const targetStationId = currentStationId || formData.stationId;
       const station = locations.find((s: any) => s._id === targetStationId);
+      const carrierToVerify =
+        passedCarrierId ||
+        station?.defaultFuelCarrier?._id ||
+        station?.defaultFuelCarrier ||
+        "";
+      const isAllowed = rackCarriers.some(
+        (c: any) => c._id === carrierToVerify,
+      );
+      const finalCarrierId = isAllowed
+        ? carrierToVerify
+        : rackCarriers[0]?._id || "";
 
-      // Check if the passed ID or station default is valid for this specific rack
-      const carrierToVerify = passedCarrierId || station?.defaultFuelCarrier?._id || station?.defaultFuelCarrier || '';
-      const isAllowed = rackCarriers.some((c: any) => c._id === carrierToVerify);
-
-      // Fallback to the first carrier in the rack list if the default isn't allowed
-      const finalCarrierId = isAllowed ? carrierToVerify : (rackCarriers[0]?._id || '');
-
-      setFormData(prev => {
-        // 3. Update all active splits with the new Rack's filtered grades
+      setFormData((prev) => {
+        // 3. Update all active splits with the new Rack's dynamically evaluated grades
         const updatedSplits = prev.splits.map((split) => {
           if (!split.stationId) return split;
 
-          const splitStation = locations.find((l: any) => l._id === split.stationId);
-          const stationGrades = splitStation?.availableStationGrades || [];
+          const splitStation = locations.find(
+            (l: any) => l._id === split.stationId,
+          );
+
+          // DYNAMIC TWEAK HERE
+          const dynamicStationGrades = getDynamicStationGrades(
+            splitStation?.availableStationGrades || [],
+            rackGrades,
+            defaultBadgeGrades,
+          );
 
           const newFilteredItems = rackGrades
-            .filter((g: string) => stationGrades.includes(g))
+            .filter((g: string) => dynamicStationGrades.includes(g))
             .map((g: string) => {
-              const existing = split.items.find(i => i.grade === g);
+              const existing = split.items.find((i) => i.grade === g);
               return { grade: g, ltrs: existing?.ltrs || 0 };
             });
 
@@ -244,19 +376,21 @@ function CreateFuelOrder() {
         const update: FuelOrderFormData = {
           ...prev,
           rackId,
-          supplierId: defaultSup?._id || '',
-          badgeNo: defaultBadge?.badgeNumber || '',
+          supplierId: defaultSup?._id || "",
+          badgeNo: defaultBadge?.badgeNumber || "",
           carrierId: finalCarrierId,
           splits: updatedSplits,
-          // RESET MULTI-BADGE STATE
           isMultiBadge: false,
-          secondaryBadgeNo: '',
-          secondaryItems: updatedSplits[0]?.items.map((i: any) => ({ ...i, ltrs: 0 })) || [],
-          secondarySplits: updatedSplits.map(s => ({ ...s, items: s.items.map((i: any) => ({ ...i, ltrs: 0 })) }))
+          secondaryBadgeNo: "",
+          secondaryItems:
+            updatedSplits[0]?.items.map((i: any) => ({ ...i, ltrs: 0 })) || [],
+          secondarySplits: updatedSplits.map((s) => ({
+            ...s,
+            items: s.items.map((i: any) => ({ ...i, ltrs: 0 })),
+          })),
         };
 
-        // Sync root level for single mode
-        if (!isSplit) {
+      if (!isSplit && updatedSplits[0]) {
           update.items = updatedSplits[0].items;
           update.carrierId = finalCarrierId;
         }
@@ -264,74 +398,130 @@ function CreateFuelOrder() {
         return update;
       });
 
+      return {
+        rack,
+        rackSuppliers,
+        supplierId: defaultSup?._id || "",
+        badgeNo: defaultBadge?.badgeNumber || "",
+      };
     } catch (err) {
       console.error("Error in Rack domino chain:", err);
+      return undefined;
     }
   };
 
-  // New handler for when the user manually changes the supplier
   const handleSupplierChange = (supplierId: string) => {
-    const selectedSup = suppliers.find(s => s._id === supplierId);
+    const selectedSup = suppliers.find((s) => s._id === supplierId);
+    const defaultBadge =
+      selectedSup?.supplierBadges?.find((b) => b.isDefault) ||
+      selectedSup?.supplierBadges?.[0];
+    const badgeGrades = defaultBadge?.availableGrades || [];
 
-    // Find default badge, or just pick the first one if no default exists
-    const defaultBadge = selectedSup?.supplierBadges?.find(b => b.isDefault)
-      || selectedSup?.supplierBadges?.[0];
+    setFormData((prev) => {
+      const currentRack = racks.find((r) => r._id === prev.rackId);
+      const rackGrades = currentRack?.availableGrades || [];
 
-    setFormData(prev => ({
-      ...prev,
-      supplierId,
-      badgeNo: defaultBadge?.badgeNumber || '',
-      // RESET MULTI-BADGE STATE
-      isMultiBadge: false,
-      secondaryBadgeNo: '',
-      secondaryPoNumber: '',
-      // Clear secondary quantities to ensure clean state
-      secondaryItems: prev.items.map(i => ({ ...i, ltrs: 0 })),
-      secondarySplits: prev.splits.map(s => ({ ...s, items: s.items.map(i => ({ ...i, ltrs: 0 })) }))
-    }));
+      // Recalculate and filter current primary splits tracking configurations
+      const updatedSplits = prev.splits.map((split) => {
+        if (!split.stationId) return split;
+
+        const splitStation = locations.find(
+          (l: any) => l._id === split.stationId,
+        );
+        const dynamicStationGrades = getDynamicStationGrades(
+          splitStation?.availableStationGrades || [],
+          rackGrades,
+          badgeGrades,
+        );
+
+        const newFilteredItems = rackGrades
+          .filter((g: string) => dynamicStationGrades.includes(g))
+          .map((g: string) => {
+            const existing = split.items.find((i) => i.grade === g);
+            return { grade: g, ltrs: existing?.ltrs || 0 };
+          });
+
+        return { ...split, items: newFilteredItems };
+      });
+
+      const update = {
+        ...prev,
+        supplierId,
+        badgeNo: defaultBadge?.badgeNumber || "",
+        splits: updatedSplits,
+        isMultiBadge: false,
+        secondaryBadgeNo: "",
+        secondaryPoNumber: "",
+        secondaryItems: (updatedSplits[0]?.items || prev.items).map((i:any) => ({
+          ...i,
+          ltrs: 0,
+        })),
+        secondarySplits: updatedSplits.map((s) => ({
+          ...s,
+          items: s.items.map((i:any) => ({ ...i, ltrs: 0 })),
+        })),
+      };
+
+      if (!isSplit && updatedSplits[0]) {
+        update.items = updatedSplits[0].items;
+      }
+
+      return update;
+    });
   };
 
   // ADD THIS HELPER ABOVE YOUR COMPONENT
-  const getPONumberHelper = async (station: any, oDate: string, dDate: string, authHeader: any) => {
-    if (!station || !oDate || !dDate) return { po: '', finalOrderDate: oDate };
+  const getPONumberHelper = async (
+    station: any,
+    oDate: string,
+    dDate: string,
+    authHeader: any,
+  ) => {
+    if (!station || !oDate || !dDate) return { po: "", finalOrderDate: oDate };
 
     const getFormattedPart = (dateStr: string) => {
-      const dateObj = new Date(dateStr + 'T00:00:00');
-      const mm = (dateObj.getMonth() + 1).toString().padStart(2, '0');
-      const dd = dateObj.getDate().toString().padStart(2, '0');
+      const dateObj = new Date(dateStr + "T00:00:00");
+      const mm = (dateObj.getMonth() + 1).toString().padStart(2, "0");
+      const dd = dateObj.getDate().toString().padStart(2, "0");
       const yy = dateObj.getFullYear().toString().slice(-2);
       return `${mm}${dd}${yy}`;
     };
 
-    const stationNum = String(station.fuelStationNumber).padStart(2, '0');
+    const stationNum = String(station.fuelStationNumber).padStart(2, "0");
 
     try {
       const res = await axios.get(
         `/api/fuel-orders/check-existing?stationId=${station._id}&orderDate=${oDate}`,
-        authHeader
+        authHeader,
       );
       const { count, existingOrders } = res.data;
 
       if (count > 0) {
         const differentDeliveryDate = existingOrders.find((order: any) => {
           if (!order.originalDeliveryDate) return false;
-          const existingD = new Date(order.originalDeliveryDate).toISOString().split('T')[0];
+          const existingD = new Date(order.originalDeliveryDate)
+            .toISOString()
+            .split("T")[0];
           return existingD !== dDate;
         });
 
         const sameDeliveryDate = existingOrders.find((order: any) => {
           if (!order.originalDeliveryDate) return false;
-          const existingD = new Date(order.originalDeliveryDate).toISOString().split('T')[0];
+          const existingD = new Date(order.originalDeliveryDate)
+            .toISOString()
+            .split("T")[0];
           return existingD === dDate;
         });
 
         // CRITICAL: Handle Date Shift
         if (differentDeliveryDate) {
-          const tomorrow = new Date(oDate + 'T00:00:00');
+          const tomorrow = new Date(oDate + "T00:00:00");
           tomorrow.setDate(tomorrow.getDate() + 1);
-          const tomorrowStr = tomorrow.toISOString().split('T')[0];
+          const tomorrowStr = tomorrow.toISOString().split("T")[0];
 
-          alert(`CRITICAL: Station ${station.stationName} has an order for this date with a different delivery date. Moving Order Date to tomorrow (${tomorrowStr}).`);
+          alert(
+            `CRITICAL: Station ${station.stationName} has an order for this date with a different delivery date. Moving Order Date to tomorrow (${tomorrowStr}).`,
+          );
 
           // Recursive call with new date
           return getPONumberHelper(station, tomorrowStr, dDate, authHeader);
@@ -340,12 +530,14 @@ function CreateFuelOrder() {
         // Handle Multiple Loads same day
         if (sameDeliveryDate) {
           const nextLoad = count + 1;
-          const confirm = window.confirm(`Station ${station.stationName}: Already a load for ${dDate}. Create Load #${nextLoad}?`);
-          if (!confirm) return { po: '', finalOrderDate: oDate };
+          const confirm = window.confirm(
+            `Station ${station.stationName}: Already a load for ${dDate}. Create Load #${nextLoad}?`,
+          );
+          if (!confirm) return { po: "", finalOrderDate: oDate };
 
           return {
             po: `NSP${getFormattedPart(oDate)}-${stationNum}${nextLoad}`,
-            finalOrderDate: oDate
+            finalOrderDate: oDate,
           };
         }
       }
@@ -353,42 +545,65 @@ function CreateFuelOrder() {
       // Default Case
       return {
         po: `NSP${getFormattedPart(oDate)}-${stationNum}${count + 1}`,
-        finalOrderDate: oDate
+        finalOrderDate: oDate,
       };
-
     } catch (err) {
       console.error("PO Helper Error", err);
-      return { po: 'ERROR', finalOrderDate: oDate };
+      return { po: "ERROR", finalOrderDate: oDate };
     }
   };
 
   // --- 1. Reset Logic ---
   const handleReset = () => {
     setFormData({
-      stationId: '',
-      orderDate: new Date().toISOString().split('T')[0],
-      deliveryDate: '',
-      startTime: '08:00',
-      endTime: '12:00',
-      rackId: '',
-      supplierId: '',
+      stationId: "",
+      orderDate: new Date().toISOString().split("T")[0],
+      deliveryDate: "",
+      startTime: "08:00",
+      endTime: "12:00",
+      rackId: "",
+      supplierId: "",
       isMultiBadge: false,
-      secondaryBadgeNo: '',
-      badgeNo: '',
-      carrierId: '',
-      poNumber: '',
-      secondaryPoNumber: '', // NEW: Secondary PO (Single Mode)
+      secondaryBadgeNo: "",
+      badgeNo: "",
+      carrierId: "",
+      poNumber: "",
+      secondaryPoNumber: "", // NEW: Secondary PO (Single Mode)
       items: [],
       projections: {}, // Initialize as empty object
       splits: [
-        { stationId: '', poNumber: '', secondaryPoNumber: '', items: [], projections: {} },
-        { stationId: '', poNumber: '', secondaryPoNumber: '', items: [], projections: {} }
+        {
+          stationId: "",
+          poNumber: "",
+          secondaryPoNumber: "",
+          items: [],
+          projections: {},
+        },
+        {
+          stationId: "",
+          poNumber: "",
+          secondaryPoNumber: "",
+          items: [],
+          projections: {},
+        },
       ],
       secondaryItems: [],
       secondarySplits: [
-        { stationId: '', poNumber: '', secondaryPoNumber: '', items: [], projections: {} },
-        { stationId: '', poNumber: '', secondaryPoNumber: '', items: [], projections: {} }
-      ]
+        {
+          stationId: "",
+          poNumber: "",
+          secondaryPoNumber: "",
+          items: [],
+          projections: {},
+        },
+        {
+          stationId: "",
+          poNumber: "",
+          secondaryPoNumber: "",
+          items: [],
+          projections: {},
+        },
+      ],
     });
     setRacks([]);
     setCarriers([]);
@@ -400,15 +615,25 @@ function CreateFuelOrder() {
   const handleSubmit = async () => {
     // 1. Validation Logic
     if (isSplit) {
-      const hasMissingSplit = formData.splits.some(s => !s.stationId || !s.poNumber);
-      const hasMissingSecondarySplit = formData.isMultiBadge && formData.splits.some(s => !s.secondaryPoNumber);
+      const hasMissingSplit = formData.splits.some(
+        (s) => !s.stationId || !s.poNumber,
+      );
+      const hasMissingSecondarySplit =
+        formData.isMultiBadge &&
+        formData.splits.some((s) => !s.secondaryPoNumber);
 
       if (hasMissingSplit || hasMissingSecondarySplit) {
-        alert("Please ensure all stations and PO numbers (including secondary badges) are set.");
+        alert(
+          "Please ensure all stations and PO numbers (including secondary badges) are set.",
+        );
         return;
       }
     } else {
-      if (!formData.stationId || !formData.poNumber || (formData.isMultiBadge && !formData.secondaryPoNumber)) {
+      if (
+        !formData.stationId ||
+        !formData.poNumber ||
+        (formData.isMultiBadge && !formData.secondaryPoNumber)
+      ) {
         alert("Please ensure the Station and all required PO numbers are set.");
         return;
       }
@@ -419,8 +644,13 @@ function CreateFuelOrder() {
       const orderSections: any[] = [];
 
       // Helper: Only adds to the array if there is actual volume
-      const addOrder = (stationId: string, items: any[], po: string, badgeNo: string) => {
-        if (items.some(i => (i.ltrs || 0) > 0)) {
+      const addOrder = (
+        stationId: string,
+        items: any[],
+        po: string,
+        badgeNo: string,
+      ) => {
+        if (items.some((i) => (i.ltrs || 0) > 0)) {
           orderSections.push({ stationId, items, poNumber: po, badgeNo });
         }
       };
@@ -428,15 +658,35 @@ function CreateFuelOrder() {
       // Build the list
       if (isSplit) {
         formData.splits.forEach((split, idx) => {
-          addOrder(split.stationId, split.items, split.poNumber, formData.badgeNo);
+          addOrder(
+            split.stationId,
+            split.items,
+            split.poNumber,
+            formData.badgeNo,
+          );
           if (formData.isMultiBadge) {
-            addOrder(split.stationId, formData.secondarySplits[idx].items, split.secondaryPoNumber, formData.secondaryBadgeNo);
+            addOrder(
+              split.stationId,
+              formData.secondarySplits[idx].items,
+              split.secondaryPoNumber,
+              formData.secondaryBadgeNo,
+            );
           }
         });
       } else {
-        addOrder(formData.stationId, formData.items, formData.poNumber, formData.badgeNo);
+        addOrder(
+          formData.stationId,
+          formData.items,
+          formData.poNumber,
+          formData.badgeNo,
+        );
         if (formData.isMultiBadge) {
-          addOrder(formData.stationId, formData.secondaryItems, formData.secondaryPoNumber, formData.secondaryBadgeNo);
+          addOrder(
+            formData.stationId,
+            formData.secondaryItems,
+            formData.secondaryPoNumber,
+            formData.secondaryBadgeNo,
+          );
         }
       }
 
@@ -446,65 +696,76 @@ function CreateFuelOrder() {
       }
 
       // 3. Generate PDFs for each identified section
-      const processedOrders = await Promise.all(orderSections.map(async (section) => {
-        const stationObj = locations.find((l: any) => l._id === section.stationId);
+      const processedOrders = await Promise.all(
+        orderSections.map(async (section) => {
+          const stationObj = locations.find(
+            (l: any) => l._id === section.stationId,
+          );
 
-        // Find the specific accounting ID for the badge used in this section
-        const badgeData = selectedSupplier?.supplierBadges?.find(b => b.badgeNumber === section.badgeNo);
-        const supplierAccountingId = badgeData?.accountingId || '';
+          // Find the specific accounting ID for the badge used in this section
+          const badgeData = selectedSupplier?.supplierBadges?.find(
+            (b) => b.badgeNumber === section.badgeNo,
+          );
+          const supplierAccountingId = badgeData?.accountingId || "";
 
-        const doc = (
-          <POPreviewDocument
-            data={{
-              ...formData,
-              poNumber: section.poNumber,
-              items: section.items,
-              badgeNo: section.badgeNo
-            }}
-            selectedStation={stationObj}
-            carrierName={selectedCarrier?.carrierName}
-            rackName={selectedRack?.rackName}
-            rackLocation={selectedRack?.rackLocation}
-            carrierBookworksId={selectedCarrier?.carrierId}
-            supplierBookworksId={supplierAccountingId}
-          />
-        );
+          const doc = (
+            <POPreviewDocument
+              data={{
+                ...formData,
+                poNumber: section.poNumber,
+                items: section.items,
+                badgeNo: section.badgeNo,
+              }}
+              selectedStation={stationObj}
+              carrierName={selectedCarrier?.carrierName}
+              rackName={selectedRack?.rackName}
+              rackLocation={selectedRack?.rackLocation}
+              carrierBookworksId={selectedCarrier?.carrierId}
+              supplierBookworksId={supplierAccountingId}
+            />
+          );
 
-        const blob = await pdf(doc).toBlob();
+          const blob = await pdf(doc).toBlob();
 
-        return new Promise((resolve) => {
-          const reader = new FileReader();
-          reader.readAsDataURL(blob);
-          reader.onloadend = () => {
-            resolve({
-              stationId: section.stationId,
-              items: section.items,
-              poNumber: section.poNumber,
-              badgeNo: section.badgeNo,
-              pdfBase64: (reader.result as string).split(',')[1],
-              customerName: stationObj?.fuelCustomerName || 'Station'
-            });
-          };
-        });
-      }));
+          return new Promise((resolve) => {
+            const reader = new FileReader();
+            reader.readAsDataURL(blob);
+            reader.onloadend = () => {
+              resolve({
+                stationId: section.stationId,
+                items: section.items,
+                poNumber: section.poNumber,
+                badgeNo: section.badgeNo,
+                pdfBase64: (reader.result as string).split(",")[1],
+                customerName: stationObj?.fuelCustomerName || "Station",
+              });
+            };
+          });
+        }),
+      );
 
       // 4. Send combined payload
       const payload = {
         ...formData,
         isSplit,
-        orders: processedOrders // Array containing 1, 2, or 4 orders
+        orders: processedOrders, // Array containing 1, 2, or 4 orders
       };
 
-      const response = await axios.post('/api/fuel-orders', payload, authHeader);
+      const response = await axios.post(
+        "/api/fuel-orders",
+        payload,
+        authHeader,
+      );
 
       const res = response.data;
 
       if (response.status === 201) {
-        alert(`Success! ${processedOrders.length} Order(s) created and Email Order draft pushed to ${res.pushedTo}'s Inbox.`);
+        alert(
+          `Success! ${processedOrders.length} Order(s) created and Email Order draft pushed to ${res.pushedTo}'s Inbox.`,
+        );
         handleReset();
         setIsPreviewOpen(false);
       }
-
     } catch (err: any) {
       alert(err.response?.data?.message || "Failed to save orders.");
       console.error(err);
@@ -513,23 +774,31 @@ function CreateFuelOrder() {
     }
   };
 
-  const refreshAllPONumbers = async (newOrderDate: string, newDeliveryDate: string) => {
+  const refreshAllPONumbers = async (
+    newOrderDate: string,
+    newDeliveryDate: string,
+  ) => {
     let currentOrderDate = newOrderDate;
 
     // 1. Logic for Single Mode / Primary Station
     if (formData.stationId) {
       const station = locations.find((s: any) => s._id === formData.stationId);
-      const result = await getPONumberHelper(station, currentOrderDate, newDeliveryDate, authHeader);
+      const result = await getPONumberHelper(
+        station,
+        currentOrderDate,
+        newDeliveryDate,
+        authHeader,
+      );
 
       // Update global date if helper shifted it
       if (result.finalOrderDate !== currentOrderDate) {
         currentOrderDate = result.finalOrderDate;
       }
 
-      setFormData(prev => ({
+      setFormData((prev) => ({
         ...prev,
         poNumber: result.po,
-        orderDate: currentOrderDate
+        orderDate: currentOrderDate,
       }));
     }
 
@@ -542,27 +811,32 @@ function CreateFuelOrder() {
       if (!split.stationId) continue;
 
       const station = locations.find((s: any) => s._id === split.stationId);
-      const result = await getPONumberHelper(station, currentOrderDate, newDeliveryDate, authHeader);
+      const result = await getPONumberHelper(
+        station,
+        currentOrderDate,
+        newDeliveryDate,
+        authHeader,
+      );
 
       // If any station in the split forces a date change, we must update the whole truck
       if (result.finalOrderDate !== currentOrderDate) {
         currentOrderDate = result.finalOrderDate;
-        // If date changed, we technically need to re-verify previous stations in the loop, 
+        // If date changed, we technically need to re-verify previous stations in the loop,
         // but usually the first station (Master) governs this.
       }
 
       updatedSplits[i] = { ...split, poNumber: result.po };
     }
 
-    setFormData(prev => ({
+    setFormData((prev) => ({
       ...prev,
       splits: updatedSplits,
-      orderDate: currentOrderDate
+      orderDate: currentOrderDate,
     }));
   };
 
   const generateSecondaryPO = (primaryPO: string): string => {
-    if (!primaryPO || primaryPO === 'ERROR') return '';
+    if (!primaryPO || primaryPO === "ERROR") return "";
 
     // Extract the base string and the last character (the load number)
     const base = primaryPO.slice(0, -1);
@@ -572,13 +846,25 @@ function CreateFuelOrder() {
     return `${base}${loadNum + 1}`;
   };
 
-  const syncStationData = async (stationId: string, index: number, orderDate: string, deliveryDate: string) => {
+  const syncStationData = async (
+    stationId: string,
+    index: number,
+    orderDate: string,
+    deliveryDate: string,
+    logisticsDefaults?: {
+      rack: any;
+      rackSuppliers: FuelSupplier[];
+      supplierId: string;
+      badgeNo: string;
+    },
+  ) => {
     const station = locations.find((s: any) => s._id === stationId);
     if (!station) return;
 
     // 1. Get the current Rack data to know which grades are supported
     // We look at the master rackId in formData
-    const currentRack = racks.find(r => r._id === formData.rackId);
+    const currentRack =
+      logisticsDefaults?.rack || racks.find((r) => r._id === formData.rackId);
     const rackGrades = currentRack?.availableGrades || [];
     const stationGrades = station.availableStationGrades || [];
 
@@ -586,62 +872,129 @@ function CreateFuelOrder() {
     tasks.push(getPONumberHelper(station, orderDate, deliveryDate, authHeader));
 
     if (deliveryDate) {
-      tasks.push(axios.get(`/api/fuel-station-tanks/station/${stationId}?date=${deliveryDate}`, authHeader));
+      tasks.push(
+        axios.get(
+          `/api/fuel-station-tanks/station/${stationId}?date=${deliveryDate}`,
+          authHeader,
+        ),
+      );
     }
 
     try {
       const [poData, projRes] = await Promise.all(tasks);
 
-      const groupedProjections = projRes?.data.tanks.reduce((acc: any, tank: any) => {
-        if (!acc[tank.grade]) acc[tank.grade] = { opening: 0, sales: 0, capacity: 0, closing: 0 };
-        acc[tank.grade].opening += tank.openingL;
-        acc[tank.grade].sales += tank.estSalesL;
-        acc[tank.grade].capacity += tank.maxVolumeCapacity;
-        acc[tank.grade].closing += tank.closingL;
-        return acc;
-      }, {}) || {};
+      const groupedProjections =
+        projRes?.data.tanks.reduce((acc: any, tank: any) => {
+          if (!acc[tank.grade])
+            acc[tank.grade] = { opening: 0, sales: 0, capacity: 0, closing: 0 };
+          acc[tank.grade].opening += tank.openingL;
+          acc[tank.grade].sales += tank.estSalesL;
+          acc[tank.grade].capacity += tank.maxVolumeCapacity;
+          acc[tank.grade].closing += tank.closingL;
+          return acc;
+        }, {}) || {};
 
       // Inside syncStationData ...
-      setFormData(prev => {
-        const filteredItems = stationGrades
+      // setFormData((prev) => {
+      //   const filteredItems = stationGrades
+      //     .filter((grade: string) => rackGrades.includes(grade))
+      //     .map((grade: string) => {
+      //       const existing = prev.splits[index]?.items.find(
+      //         (i) => i.grade === grade,
+      //       );
+      //       return { grade, ltrs: existing?.ltrs || 0 };
+      //     });
+      setFormData((prev) => {
+        // Determine if E15 is logistically available upstream
+        // const currentRack = racks.find((r) => r._id === formData.rackId);
+        // const rackGrades = currentRack?.availableGrades || [];
+
+        const activeSupplierId =
+          logisticsDefaults?.supplierId || prev.supplierId || formData.supplierId;
+        const activeBadgeNo =
+          logisticsDefaults?.badgeNo || prev.badgeNo || formData.badgeNo;
+        const supplierList = logisticsDefaults?.rackSuppliers || suppliers;
+        const selectedSup = supplierList.find((s) => s._id === activeSupplierId);
+        const currentBadge = selectedSup?.supplierBadges?.find(
+          (b) => b.badgeNumber === activeBadgeNo,
+        );
+        const badgeGrades = currentBadge?.availableGrades || [];
+
+        // Check condition: Rack has E15, Badge has E15, and Station has "Regular"
+        const allowsSummerE15 =
+          rackGrades.includes("E15") &&
+          badgeGrades.includes("E15") &&
+          stationGrades.includes("Regular");
+
+        // Dynamic evaluation checklist
+        let dynamicStationGrades = [...stationGrades];
+        if (allowsSummerE15 && !dynamicStationGrades.includes("E15")) {
+          dynamicStationGrades.push("E15");
+        }
+
+        const filteredItems = dynamicStationGrades
           .filter((grade: string) => rackGrades.includes(grade))
           .map((grade: string) => {
-            const existing = prev.splits[index]?.items.find(i => i.grade === grade);
+            const existing = prev.splits[index]?.items.find(
+              (i) => i.grade === grade,
+            );
             return { grade, ltrs: existing?.ltrs || 0 };
           });
-
         // NEW: Prepare the secondary items for this station
         const secondaryFilteredItems = filteredItems.map((item: any) => ({
           grade: item.grade,
-          ltrs: prev.secondarySplits[index]?.items.find(i => i.grade === item.grade)?.ltrs || 0
+          ltrs:
+            prev.secondarySplits[index]?.items.find(
+              (i) => i.grade === item.grade,
+            )?.ltrs || 0,
         }));
 
         const primaryPO = poData.po;
-        const secondaryPO = prev.isMultiBadge ? generateSecondaryPO(primaryPO) : '';
+        const secondaryPO = prev.isMultiBadge
+          ? generateSecondaryPO(primaryPO)
+          : "";
 
-        const newSplits = [...prev.splits];
+        // const newSplits = [...prev.splits];
+        // newSplits[index] = {
+        //   ...newSplits[index],
+        //   stationId,
+        //   poNumber: primaryPO,
+        //   secondaryPoNumber: secondaryPO, // Store the second PO
+        //   projections: groupedProjections,
+        //   items: filteredItems,
+        // };
+
+        // // FIX: Update the secondarySplits array for the specific index
+        // const newSecondarySplits = [...prev.secondarySplits];
+        // newSecondarySplits[index] = {
+        //   ...newSecondarySplits[index],
+        //   stationId, // keep IDs in sync
+        //   items: secondaryFilteredItems,
+        // };
+        // Ensure array slots exist safely
+        const newSplits = [...(prev.splits || [])];
+        const newSecondarySplits = [...(prev.secondarySplits || [])];
+
         newSplits[index] = {
-          ...newSplits[index],
+          ...(newSplits[index] || { items: [] }), // Safe structural fallback
           stationId,
           poNumber: primaryPO,
-          secondaryPoNumber: secondaryPO, // Store the second PO
+          secondaryPoNumber: secondaryPO,
           projections: groupedProjections,
-          items: filteredItems
+          items: filteredItems,
         };
 
-        // FIX: Update the secondarySplits array for the specific index
-        const newSecondarySplits = [...prev.secondarySplits];
         newSecondarySplits[index] = {
-          ...newSecondarySplits[index],
-          stationId, // keep IDs in sync
-          items: secondaryFilteredItems
+          ...(newSecondarySplits[index] || { items: [] }), // Safe structural fallback
+          stationId,
+          items: secondaryFilteredItems,
         };
 
         const update = {
           ...prev,
           splits: newSplits,
           secondarySplits: newSecondarySplits, // Apply the fix here
-          orderDate: poData.finalOrderDate
+          orderDate: poData.finalOrderDate,
         };
 
         if (!isSplit && index === 0) {
@@ -661,12 +1014,13 @@ function CreateFuelOrder() {
     }
   };
 
-
   // Find selected details for the PDF
-  const selectedStation = locations.find((s: any) => s._id === formData.stationId);
-  const selectedCarrier = carriers.find(c => c._id === formData.carrierId);
-  const selectedRack = racks.find(r => r._id === formData.rackId);
-  const selectedSupplier = suppliers.find(s => s._id === formData.supplierId);
+  const selectedStation = locations.find(
+    (s: any) => s._id === formData.stationId,
+  );
+  const selectedCarrier = carriers.find((c) => c._id === formData.carrierId);
+  const selectedRack = racks.find((r) => r._id === formData.rackId);
+  const selectedSupplier = suppliers.find((s) => s._id === formData.supplierId);
   // Find the accountingId for the current badge selected
   // const activeBadge = selectedSupplier?.supplierBadges?.find(
   //   (b: any) => b.badgeNumber === formData.badgeNo
@@ -689,33 +1043,38 @@ function CreateFuelOrder() {
   // Change your toggle function to accept the current split state
   const toggleMultiBadge = (val: boolean, currentIsSplit: boolean) => {
     // 1. Validation Logic
-    const selectedSup = suppliers.find(s => s._id === formData.supplierId);
+    const selectedSup = suppliers.find((s) => s._id === formData.supplierId);
     const badgeCount = selectedSup?.supplierBadges?.length || 0;
 
     if (val && badgeCount < 2) {
-      alert("The current supplier only has one badge. Kindly add another badge in configuration to proceed.");
+      alert(
+        "The current supplier only has one badge. Kindly add another badge in configuration to proceed.",
+      );
       return; // Block execution and don't flip the toggle
     }
 
     // 2. State Update Logic
-    setFormData(prev => {
+    setFormData((prev) => {
       // Auto-identify the second badge (different from the currently selected one)
-      const nextBadge = (val && badgeCount >= 2)
-        ? selectedSup?.supplierBadges.find(b => b.badgeNumber !== prev.badgeNo)?.badgeNumber || ''
-        : '';
+      const nextBadge =
+        val && badgeCount >= 2
+          ? selectedSup?.supplierBadges.find(
+              (b) => b.badgeNumber !== prev.badgeNo,
+            )?.badgeNumber || ""
+          : "";
 
       const newState = {
         ...prev,
         isMultiBadge: val,
-        secondaryBadgeNo: nextBadge
+        secondaryBadgeNo: nextBadge,
       };
 
       // 3. PO Generation Logic (only if enabling)
       if (val) {
         if (currentIsSplit) {
-          newState.splits = prev.splits.map(s => ({
+          newState.splits = prev.splits.map((s) => ({
             ...s,
-            secondaryPoNumber: generateSecondaryPO(s.poNumber)
+            secondaryPoNumber: generateSecondaryPO(s.poNumber),
           }));
         } else {
           newState.secondaryPoNumber = generateSecondaryPO(prev.poNumber);
@@ -723,12 +1082,12 @@ function CreateFuelOrder() {
       } else {
         // Clean up secondary POs if disabling
         if (currentIsSplit) {
-          newState.splits = prev.splits.map(s => ({
+          newState.splits = prev.splits.map((s) => ({
             ...s,
-            secondaryPoNumber: ''
+            secondaryPoNumber: "",
           }));
         } else {
-          newState.secondaryPoNumber = '';
+          newState.secondaryPoNumber = "";
         }
       }
 
@@ -737,28 +1096,52 @@ function CreateFuelOrder() {
   };
 
   // Helper to filter grades by badge capabilities
-  const getBadgeCompatibleItems = (items: any[], badgeNo: string, supplierId: string) => {
-    const supplier = suppliers.find(s => s._id === supplierId);
-    const badge = supplier?.supplierBadges?.find(b => b.badgeNumber === badgeNo);
-    // Assuming your badge object has an 'allowedGrades' array
+  // const getBadgeCompatibleItems = (
+  //   items: any[],
+  //   badgeNo: string,
+  //   supplierId: string,
+  // ) => {
+  //   const supplier = suppliers.find((s) => s._id === supplierId);
+  //   const badge = supplier?.supplierBadges?.find(
+  //     (b) => b.badgeNumber === badgeNo,
+  //   );
+  //   // Assuming your badge object has an 'allowedGrades' array
+  //   const allowed = badge?.availableGrades || [];
+  //   return items.filter((item) => allowed.includes(item.grade));
+  // };
+  const getBadgeCompatibleItems = (
+    items: any[],
+    badgeNo: string,
+    supplierId: string,
+  ) => {
+    const supplier = suppliers.find((s) => s._id === supplierId);
+    const badge = supplier?.supplierBadges?.find(
+      (b) => b.badgeNumber === badgeNo,
+    );
     const allowed = badge?.availableGrades || [];
-    return items.filter(item => allowed.includes(item.grade));
+
+    return items.filter((item) => allowed.includes(item.grade));
   };
 
-  const handleQtyChange = (sectionIdx: number, grade: string, value: number, isSecondary: boolean) => {
-    setFormData(prev => {
+  const handleQtyChange = (
+    sectionIdx: number,
+    grade: string,
+    value: number,
+    isSecondary: boolean,
+  ) => {
+    setFormData((prev) => {
       // 1. Handle SPLIT Mode
       if (isSplit) {
-        const targetArrayKey = isSecondary ? 'secondarySplits' : 'splits';
+        const targetArrayKey = isSecondary ? "secondarySplits" : "splits";
 
         const updatedSplits = prev[targetArrayKey].map((section, sIdx) => {
           if (sIdx !== sectionIdx) return section;
 
           return {
             ...section,
-            items: section.items.map(item =>
-              item.grade === grade ? { ...item, ltrs: value } : item
-            )
+            items: section.items.map((item) =>
+              item.grade === grade ? { ...item, ltrs: value } : item,
+            ),
           };
         });
 
@@ -766,18 +1149,20 @@ function CreateFuelOrder() {
       }
 
       // 2. Handle SINGLE Mode
-      const targetItemsKey = isSecondary ? 'secondaryItems' : 'items';
+      const targetItemsKey = isSecondary ? "secondaryItems" : "items";
 
       return {
         ...prev,
-        [targetItemsKey]: prev[targetItemsKey].map(item =>
-          item.grade === grade ? { ...item, ltrs: value } : item
-        )
+        [targetItemsKey]: prev[targetItemsKey].map((item) =>
+          item.grade === grade ? { ...item, ltrs: value } : item,
+        ),
       };
     });
   };
 
-  const GRADE_ORDER = ["Regular", "Premium", "Diesel", "Dyed Diesel"];
+  // const GRADE_ORDER = ["Regular", "Premium", "Diesel", "Dyed Diesel"];
+  // Find this constant in your file and append "E15"
+  const GRADE_ORDER = ["Regular", "E15", "Premium", "Diesel", "Dyed Diesel"];
 
   const sortGrades = (items: FuelOrderItem[]) => {
     return [...items].sort((a, b) => {
@@ -788,17 +1173,21 @@ function CreateFuelOrder() {
     });
   };
 
-  const hasVolume = (items: any[]) => items.some(item => (item.ltrs || 0) > 0);
+  const hasVolume = (items: any[]) =>
+    items.some((item) => (item.ltrs || 0) > 0);
 
   // CSS for the highlight (Add to your global CSS or use a Tailwind class)
   // @keyframes pulse-highlight { 0% { box-shadow: 0 0 0 0 rgba(59, 130, 246, 0.5); } 70% { box-shadow: 0 0 0 10px rgba(59, 130, 246, 0); } 100% { box-shadow: 0 0 0 0 rgba(59, 130, 246, 0); } }
-  const highlightClass = "animate-pulse ring-2 ring-blue-500 ring-offset-2 border-blue-500";
+  const highlightClass =
+    "animate-pulse ring-2 ring-blue-500 ring-offset-2 border-blue-500";
 
   return (
     <div className="p-6 space-y-6 max-w-[1600px] mx-auto">
       <div className="flex justify-between items-center">
         <div className="space-y-1">
-          <h1 className="text-3xl font-bold tracking-tight">Create Fuel Order</h1>
+          <h1 className="text-3xl font-bold tracking-tight">
+            Create Fuel Order
+          </h1>
           {/* NEW: Split Load Toggle */}
           <div className="flex items-center gap-2 bg-slate-100 p-1 rounded-lg w-fit border">
             <Button
@@ -812,7 +1201,10 @@ function CreateFuelOrder() {
             <Button
               variant={isSplit ? "secondary" : "ghost"}
               size="sm"
-              className={cn("h-7 px-3", isSplit && "bg-white shadow-sm text-blue-600")}
+              className={cn(
+                "h-7 px-3",
+                isSplit && "bg-white shadow-sm text-blue-600",
+              )}
               onClick={() => setIsSplit(true)}
             >
               Split Load
@@ -846,33 +1238,63 @@ function CreateFuelOrder() {
               </DialogHeader>
               <div className="space-y-4 py-4">
                 <div className="grid grid-cols-2 gap-y-3 text-sm border-b pb-4">
-                  <div className="font-semibold text-muted-foreground">Rack:</div>
+                  <div className="font-semibold text-muted-foreground">
+                    Rack:
+                  </div>
                   <div className="font-bold">{selectedRack?.rackName}</div>
-                  <div className="font-semibold text-muted-foreground">Carrier:</div>
-                  <div className="font-bold">{selectedCarrier?.carrierName}</div>
-                  <div className="font-semibold text-muted-foreground">Supplier:</div>
-                  <div className="font-bold">{selectedSupplier?.supplierName}</div>
+                  <div className="font-semibold text-muted-foreground">
+                    Carrier:
+                  </div>
+                  <div className="font-bold">
+                    {selectedCarrier?.carrierName}
+                  </div>
+                  <div className="font-semibold text-muted-foreground">
+                    Supplier:
+                  </div>
+                  <div className="font-bold">
+                    {selectedSupplier?.supplierName}
+                  </div>
                 </div>
 
                 <div className="space-y-2">
-                  <Label className="text-[10px] uppercase font-black text-slate-400">Loading Badges</Label>
+                  <Label className="text-[10px] uppercase font-black text-slate-400">
+                    Loading Badges
+                  </Label>
                   <div className="flex flex-col gap-2">
                     <div className="flex justify-between items-center p-2 bg-blue-50 rounded border border-blue-100">
-                      <span className="text-xs font-bold text-blue-700">Primary Badge</span>
-                      <span className="font-mono font-bold">{formData.badgeNo}</span>
+                      <span className="text-xs font-bold text-blue-700">
+                        Primary Badge
+                      </span>
+                      <span className="font-mono font-bold">
+                        {formData.badgeNo}
+                      </span>
                     </div>
                     {formData.isMultiBadge && (
                       <div className="flex justify-between items-center p-2 bg-orange-50 rounded border border-orange-100">
-                        <span className="text-xs font-bold text-orange-700">Secondary Badge</span>
-                        <span className="font-mono font-bold">{formData.secondaryBadgeNo}</span>
+                        <span className="text-xs font-bold text-orange-700">
+                          Secondary Badge
+                        </span>
+                        <span className="font-mono font-bold">
+                          {formData.secondaryBadgeNo}
+                        </span>
                       </div>
                     )}
                   </div>
                 </div>
               </div>
               <DialogFooter>
-                <Button variant="outline" onClick={() => setIsVerifyOpen(false)}>Edit</Button>
-                <Button className="bg-blue-600" onClick={handleConfirmLogistics}>Confirm & Preview</Button>
+                <Button
+                  variant="outline"
+                  onClick={() => setIsVerifyOpen(false)}
+                >
+                  Edit
+                </Button>
+                <Button
+                  className="bg-blue-600"
+                  onClick={handleConfirmLogistics}
+                >
+                  Confirm & Preview
+                </Button>
               </DialogFooter>
             </DialogContent>
           </Dialog>
@@ -882,10 +1304,15 @@ function CreateFuelOrder() {
               {(() => {
                 // Logic to determine which Site and Badge combinations actually exist
                 const validSplits = isSplit
-                  ? formData.splits.map((s, idx) => ({
-                    idx,
-                    hasData: hasVolume(s.items) || (formData.isMultiBadge && hasVolume(formData.secondarySplits[idx].items))
-                  })).filter(s => s.hasData)
+                  ? formData.splits
+                      .map((s, idx) => ({
+                        idx,
+                        hasData:
+                          hasVolume(s.items) ||
+                          (formData.isMultiBadge &&
+                            hasVolume(formData.secondarySplits[idx].items)),
+                      }))
+                      .filter((s) => s.hasData)
                   : [];
 
                 // 1. Check volume for all possible combinations
@@ -898,12 +1325,20 @@ function CreateFuelOrder() {
                   : hasVolume(formData.secondaryItems);
 
                 // 2. SMART INDEX RESOLUTION
-                // If the currently selected badge has no volume, but the other one does, 
+                // If the currently selected badge has no volume, but the other one does,
                 // we "pivot" the view temporarily for the preview logic.
                 let effectiveBadgeIdx = activeBadgeIdx;
-                if (!badge1HasVolume && badge2HasVolume && activeBadgeIdx === 0) {
+                if (
+                  !badge1HasVolume &&
+                  badge2HasVolume &&
+                  activeBadgeIdx === 0
+                ) {
                   effectiveBadgeIdx = 1;
-                } else if (!badge2HasVolume && badge1HasVolume && activeBadgeIdx === 1) {
+                } else if (
+                  !badge2HasVolume &&
+                  badge1HasVolume &&
+                  activeBadgeIdx === 1
+                ) {
                   effectiveBadgeIdx = 0;
                 }
 
@@ -911,29 +1346,44 @@ function CreateFuelOrder() {
                 const isPrimary = effectiveBadgeIdx === 0;
 
                 const currentStation = isSplit
-                  ? locations.find((l: any) => l._id === formData.splits[activeSplitIdx].stationId)
+                  ? locations.find(
+                      (l: any) =>
+                        l._id === formData.splits[activeSplitIdx].stationId,
+                    )
                   : selectedStation;
 
-                const currentStationName = currentStation?.fuelCustomerName || "Unknown Station";
+                const currentStationName =
+                  currentStation?.fuelCustomerName || "Unknown Station";
 
-                const currentBadge = isPrimary ? formData.badgeNo : formData.secondaryBadgeNo;
+                const currentBadge = isPrimary
+                  ? formData.badgeNo
+                  : formData.secondaryBadgeNo;
 
                 // Resolve PO and Items using the effective isPrimary
                 const currentPo = isSplit
-                  ? (isPrimary ? formData.splits[activeSplitIdx].poNumber : formData.splits[activeSplitIdx].secondaryPoNumber)
-                  : (isPrimary ? formData.poNumber : formData.secondaryPoNumber);
+                  ? isPrimary
+                    ? formData.splits[activeSplitIdx].poNumber
+                    : formData.splits[activeSplitIdx].secondaryPoNumber
+                  : isPrimary
+                    ? formData.poNumber
+                    : formData.secondaryPoNumber;
 
                 const currentItems = isSplit
-                  ? (isPrimary ? formData.splits[activeSplitIdx].items : formData.secondarySplits[activeSplitIdx].items)
-                  : (isPrimary ? formData.items : formData.secondaryItems);
+                  ? isPrimary
+                    ? formData.splits[activeSplitIdx].items
+                    : formData.secondarySplits[activeSplitIdx].items
+                  : isPrimary
+                    ? formData.items
+                    : formData.secondaryItems;
 
                 // 3. Resolve Accounting IDs
                 const activeBadgeData = selectedSupplier?.supplierBadges?.find(
-                  (b: any) => b.badgeNumber === currentBadge
+                  (b: any) => b.badgeNumber === currentBadge,
                 );
 
-                const displaySupplierAccountingId = activeBadgeData?.accountingId || '';
-                const displayCarrierId = selectedCarrier?.carrierId || '';
+                const displaySupplierAccountingId =
+                  activeBadgeData?.accountingId || "";
+                const displayCarrierId = selectedCarrier?.carrierId || "";
 
                 return (
                   <>
@@ -946,10 +1396,14 @@ function CreateFuelOrder() {
                           <span className="px-2 py-0.5 bg-blue-100 text-blue-700 rounded text-[10px] font-black uppercase">
                             {currentStationName}
                           </span>
-                          <span className={cn(
-                            "px-2 py-0.5 rounded text-[10px] font-black uppercase",
-                            activeBadgeIdx === 0 ? "bg-slate-100 text-slate-600" : "bg-orange-100 text-orange-700"
-                          )}>
+                          <span
+                            className={cn(
+                              "px-2 py-0.5 rounded text-[10px] font-black uppercase",
+                              activeBadgeIdx === 0
+                                ? "bg-slate-100 text-slate-600"
+                                : "bg-orange-100 text-orange-700",
+                            )}
+                          >
                             Badge: {currentBadge}
                           </span>
                         </div>
@@ -959,16 +1413,33 @@ function CreateFuelOrder() {
                         {/* SITE TOGGLE: Only show sites that have volume in at least one badge */}
                         {isSplit && validSplits.length > 1 && (
                           <div className="flex flex-col gap-1 items-center">
-                            <span className="text-[9px] font-bold text-slate-400 uppercase">Select Delivery Site</span>
+                            <span className="text-[9px] font-bold text-slate-400 uppercase">
+                              Select Delivery Site
+                            </span>
                             <div className="flex bg-slate-100 p-1 rounded-lg border">
                               {formData.splits.map((split, idx) => {
-                                if (!hasVolume(split.items) && !hasVolume(formData.secondarySplits[idx].items)) return null;
-                                const name = locations.find((l: any) => l._id === split.stationId)?.fuelCustomerName || `Site ${idx + 1}`;
+                                if (
+                                  !hasVolume(split.items) &&
+                                  !hasVolume(
+                                    formData.secondarySplits[idx].items,
+                                  )
+                                )
+                                  return null;
+                                const name =
+                                  locations.find(
+                                    (l: any) => l._id === split.stationId,
+                                  )?.fuelCustomerName || `Site ${idx + 1}`;
                                 return (
                                   <Button
                                     key={idx}
-                                    variant="ghost" size="sm"
-                                    className={cn("h-7 px-3 text-[10px] font-bold transition-all", activeSplitIdx === idx ? "bg-white text-blue-600 shadow-sm" : "text-slate-500")}
+                                    variant="ghost"
+                                    size="sm"
+                                    className={cn(
+                                      "h-7 px-3 text-[10px] font-bold transition-all",
+                                      activeSplitIdx === idx
+                                        ? "bg-white text-blue-600 shadow-sm"
+                                        : "text-slate-500",
+                                    )}
                                     onClick={() => setActiveSplitIdx(idx)}
                                   >
                                     {name}
@@ -980,30 +1451,42 @@ function CreateFuelOrder() {
                         )}
 
                         {/* BADGE TOGGLE: Only show badge buttons if they actually have volume for THIS station */}
-                        {formData.isMultiBadge && badge1HasVolume && badge2HasVolume && (
-                          <div className="flex flex-col gap-1 items-center">
-                            <span className="text-[9px] font-bold text-slate-400 uppercase">Select Loading Badge</span>
-                            <div className="flex bg-slate-100 p-1 rounded-lg border">
-                              <Button
-                                variant="ghost"
-                                className={cn(
-                                  "h-7 px-4 text-[10px] font-bold",
-                                  effectiveBadgeIdx === 0 ? "bg-white text-blue-600 shadow-sm" : "text-slate-500"
-                                )}
-                                onClick={() => setActiveBadgeIdx(0)}
-                              >
-                                {formData.badgeNo}
-                              </Button>
-                              <Button
-                                variant="ghost" size="sm"
-                                className={cn("h-7 px-4 text-[10px] font-bold", activeBadgeIdx === 1 ? "bg-white text-orange-600" : "text-slate-500")}
-                                onClick={() => setActiveBadgeIdx(1)}
-                              >
-                                {formData.secondaryBadgeNo}
-                              </Button>
+                        {formData.isMultiBadge &&
+                          badge1HasVolume &&
+                          badge2HasVolume && (
+                            <div className="flex flex-col gap-1 items-center">
+                              <span className="text-[9px] font-bold text-slate-400 uppercase">
+                                Select Loading Badge
+                              </span>
+                              <div className="flex bg-slate-100 p-1 rounded-lg border">
+                                <Button
+                                  variant="ghost"
+                                  className={cn(
+                                    "h-7 px-4 text-[10px] font-bold",
+                                    effectiveBadgeIdx === 0
+                                      ? "bg-white text-blue-600 shadow-sm"
+                                      : "text-slate-500",
+                                  )}
+                                  onClick={() => setActiveBadgeIdx(0)}
+                                >
+                                  {formData.badgeNo}
+                                </Button>
+                                <Button
+                                  variant="ghost"
+                                  size="sm"
+                                  className={cn(
+                                    "h-7 px-4 text-[10px] font-bold",
+                                    activeBadgeIdx === 1
+                                      ? "bg-white text-orange-600"
+                                      : "text-slate-500",
+                                  )}
+                                  onClick={() => setActiveBadgeIdx(1)}
+                                >
+                                  {formData.secondaryBadgeNo}
+                                </Button>
+                              </div>
                             </div>
-                          </div>
-                        )}
+                          )}
                       </div>
                     </DialogHeader>
 
@@ -1047,16 +1530,30 @@ function CreateFuelOrder() {
                         fileName={`Fuel Order Form ${currentPo} - ${currentStationName} - ${formatPDFDate(formData.deliveryDate, false)}.pdf`}
                       >
                         {({ loading }) => (
-                          <Button variant="outline" disabled={loading} className="border-blue-200 text-blue-600 hover:bg-blue-50">
+                          <Button
+                            variant="outline"
+                            disabled={loading}
+                            className="border-blue-200 text-blue-600 hover:bg-blue-50"
+                          >
                             <Download className="w-4 h-4 mr-2" />
-                            {loading ? "Generating..." : `Download PO for ${currentStationName} - ${currentBadge}`}
+                            {loading
+                              ? "Generating..."
+                              : `Download PO for ${currentStationName} - ${currentBadge}`}
                           </Button>
                         )}
                       </PDFDownloadLink>
 
                       <div className="flex gap-2">
-                        <Button variant="ghost" onClick={() => setIsPreviewOpen(false)}>Back</Button>
-                        <Button className="bg-green-600 hover:bg-green-700 font-bold" onClick={handleSubmit}>
+                        <Button
+                          variant="ghost"
+                          onClick={() => setIsPreviewOpen(false)}
+                        >
+                          Back
+                        </Button>
+                        <Button
+                          className="bg-green-600 hover:bg-green-700 font-bold"
+                          onClick={handleSubmit}
+                        >
                           Finalize All Orders
                         </Button>
                       </div>
@@ -1070,12 +1567,15 @@ function CreateFuelOrder() {
       </div>
 
       <div className="grid grid-cols-12 gap-6 items-start">
-
         {/* LEFT COLUMN: Logistics & Form */}
-        <div className={cn(
-          "col-span-12 transition-all duration-300",
-          (isSplit || formData.isMultiBadge) ? "lg:col-span-5 xl:col-span-6" : "lg:col-span-8"
-        )}>
+        <div
+          className={cn(
+            "col-span-12 transition-all duration-300",
+            isSplit || formData.isMultiBadge
+              ? "lg:col-span-5 xl:col-span-6"
+              : "lg:col-span-8",
+          )}
+        >
           <Card>
             <CardHeader className="pb-3 border-b">
               <CardTitle className="text-lg flex items-center gap-2">
@@ -1084,14 +1584,15 @@ function CreateFuelOrder() {
               </CardTitle>
             </CardHeader>
             <CardContent className="pt-6 space-y-6">
-
               {/* DYNAMIC STATION SELECTORS */}
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                 {!isSplit ? (
                   // --- SINGLE MODE ---
                   <div className="space-y-3 p-3 border rounded-xl bg-slate-50/50 border-blue-100">
                     <div className="space-y-2">
-                      <Label className="text-blue-700 font-bold">Select Station</Label>
+                      <Label className="text-blue-700 font-bold">
+                        Select Station
+                      </Label>
                       <Select
                         value={formData.stationId}
                         onValueChange={(v) => handleStationChange(v, 0)}
@@ -1103,7 +1604,10 @@ function CreateFuelOrder() {
                         <SelectContent>
                           {(locations || []).map((s: any) => (
                             <SelectItem key={s._id} value={s._id}>
-                              {s.stationName} <span className="text-xs text-muted-foreground ml-2">({s.tankCount} Tanks)</span>
+                              {s.stationName}{" "}
+                              <span className="text-xs text-muted-foreground ml-2">
+                                ({s.tankCount} Tanks)
+                              </span>
                             </SelectItem>
                           ))}
                         </SelectContent>
@@ -1122,7 +1626,12 @@ function CreateFuelOrder() {
                               <ShieldCheck className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-blue-500" />
                               <Input
                                 value={formData.poNumber}
-                                onChange={(e) => setFormData(prev => ({ ...prev, poNumber: e.target.value }))}
+                                onChange={(e) =>
+                                  setFormData((prev) => ({
+                                    ...prev,
+                                    poNumber: e.target.value,
+                                  }))
+                                }
                                 className="h-8 pl-8 font-mono text-xs font-bold border-blue-200 focus-visible:ring-blue-500 bg-white"
                               />
                             </div>
@@ -1131,7 +1640,12 @@ function CreateFuelOrder() {
                               variant="outline"
                               type="button"
                               className="h-8 w-8 border-blue-200 text-blue-600 hover:bg-blue-50"
-                              onClick={() => refreshAllPONumbers(formData.orderDate, formData.deliveryDate)}
+                              onClick={() =>
+                                refreshAllPONumbers(
+                                  formData.orderDate,
+                                  formData.deliveryDate,
+                                )
+                              }
                             >
                               <RefreshCw className="w-3.5 h-3.5" />
                             </Button>
@@ -1148,7 +1662,12 @@ function CreateFuelOrder() {
                               <ShieldCheck className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-orange-500" />
                               <Input
                                 value={formData.secondaryPoNumber}
-                                onChange={(e) => setFormData(prev => ({ ...prev, secondaryPoNumber: e.target.value }))}
+                                onChange={(e) =>
+                                  setFormData((prev) => ({
+                                    ...prev,
+                                    secondaryPoNumber: e.target.value,
+                                  }))
+                                }
                                 className="h-8 pl-8 font-mono text-xs font-bold border-orange-200 focus-visible:ring-orange-500 bg-orange-50/30"
                               />
                             </div>
@@ -1160,7 +1679,10 @@ function CreateFuelOrder() {
                 ) : (
                   // --- SPLIT MODE ---
                   formData.splits.map((split, idx) => (
-                    <div key={idx} className="space-y-3 p-3 border rounded-xl bg-slate-50/50 border-blue-100">
+                    <div
+                      key={idx}
+                      className="space-y-3 p-3 border rounded-xl bg-slate-50/50 border-blue-100"
+                    >
                       <div className="space-y-2">
                         <Label className="text-blue-700 font-bold">
                           Station {idx + 1} {idx === 0 && "(Main Station)"}
@@ -1171,11 +1693,15 @@ function CreateFuelOrder() {
                           disabled={isLoadingLocations}
                         >
                           <SelectTrigger className="bg-white">
-                            <SelectValue placeholder={`Select Station ${idx + 1}...`} />
+                            <SelectValue
+                              placeholder={`Select Station ${idx + 1}...`}
+                            />
                           </SelectTrigger>
                           <SelectContent>
                             {(locations || []).map((s: any) => (
-                              <SelectItem key={s._id} value={s._id}>{s.stationName}</SelectItem>
+                              <SelectItem key={s._id} value={s._id}>
+                                {s.stationName}
+                              </SelectItem>
                             ))}
                           </SelectContent>
                         </Select>
@@ -1195,9 +1721,12 @@ function CreateFuelOrder() {
                                   value={split.poNumber}
                                   onChange={(e) => {
                                     const val = e.target.value;
-                                    setFormData(prev => {
+                                    setFormData((prev) => {
                                       const newSplits = [...prev.splits];
-                                      newSplits[idx] = { ...newSplits[idx], poNumber: val };
+                                      newSplits[idx] = {
+                                        ...newSplits[idx],
+                                        poNumber: val,
+                                      };
                                       return { ...prev, splits: newSplits };
                                     });
                                   }}
@@ -1209,7 +1738,12 @@ function CreateFuelOrder() {
                                 variant="outline"
                                 type="button"
                                 className="h-8 w-8 border-blue-200 text-blue-600 hover:bg-blue-50"
-                                onClick={() => refreshAllPONumbers(formData.orderDate, formData.deliveryDate)}
+                                onClick={() =>
+                                  refreshAllPONumbers(
+                                    formData.orderDate,
+                                    formData.deliveryDate,
+                                  )
+                                }
                               >
                                 <RefreshCw className="w-3.5 h-3.5" />
                               </Button>
@@ -1228,9 +1762,12 @@ function CreateFuelOrder() {
                                   value={split.secondaryPoNumber}
                                   onChange={(e) => {
                                     const val = e.target.value;
-                                    setFormData(prev => {
+                                    setFormData((prev) => {
                                       const newSplits = [...prev.splits];
-                                      newSplits[idx] = { ...newSplits[idx], secondaryPoNumber: val };
+                                      newSplits[idx] = {
+                                        ...newSplits[idx],
+                                        secondaryPoNumber: val,
+                                      };
                                       return { ...prev, splits: newSplits };
                                     });
                                   }}
@@ -1255,12 +1792,20 @@ function CreateFuelOrder() {
                     value={formData.orderDate}
                     onChange={(e) => {
                       const newDate = e.target.value;
-                      setFormData(prev => ({ ...prev, orderDate: newDate }));
+                      setFormData((prev) => ({ ...prev, orderDate: newDate }));
 
                       // Refresh PO for all active stations
-                      const activeStations = isSplit ? formData.splits : [{ stationId: formData.stationId }];
+                      const activeStations = isSplit
+                        ? formData.splits
+                        : [{ stationId: formData.stationId }];
                       activeStations.forEach((s, idx) => {
-                        if (s.stationId) syncStationData(s.stationId, idx, newDate, formData.deliveryDate);
+                        if (s.stationId)
+                          syncStationData(
+                            s.stationId,
+                            idx,
+                            newDate,
+                            formData.deliveryDate,
+                          );
                       });
                     }}
                   />
@@ -1273,12 +1818,23 @@ function CreateFuelOrder() {
                     value={formData.deliveryDate}
                     onChange={(e) => {
                       const newDelDate = e.target.value;
-                      setFormData(prev => ({ ...prev, deliveryDate: newDelDate }));
+                      setFormData((prev) => ({
+                        ...prev,
+                        deliveryDate: newDelDate,
+                      }));
 
                       // Refresh PO and Projections for all active stations
-                      const activeStations = isSplit ? formData.splits : [{ stationId: formData.stationId }];
+                      const activeStations = isSplit
+                        ? formData.splits
+                        : [{ stationId: formData.stationId }];
                       activeStations.forEach((s, idx) => {
-                        if (s.stationId) syncStationData(s.stationId, idx, formData.orderDate, newDelDate);
+                        if (s.stationId)
+                          syncStationData(
+                            s.stationId,
+                            idx,
+                            formData.orderDate,
+                            newDelDate,
+                          );
                       });
                     }}
                   />
@@ -1287,11 +1843,23 @@ function CreateFuelOrder() {
                 {/* Window Start/End remain as they don't affect PO numbers */}
                 <div className="space-y-2">
                   <Label>Window Start</Label>
-                  <Input type="time" value={formData.startTime} onChange={(e) => setFormData({ ...formData, startTime: e.target.value })} />
+                  <Input
+                    type="time"
+                    value={formData.startTime}
+                    onChange={(e) =>
+                      setFormData({ ...formData, startTime: e.target.value })
+                    }
+                  />
                 </div>
                 <div className="space-y-2">
                   <Label>Window End</Label>
-                  <Input type="time" value={formData.endTime} onChange={(e) => setFormData({ ...formData, endTime: e.target.value })} />
+                  <Input
+                    type="time"
+                    value={formData.endTime}
+                    onChange={(e) =>
+                      setFormData({ ...formData, endTime: e.target.value })
+                    }
+                  />
                 </div>
               </div>
             </CardContent>
@@ -1306,7 +1874,10 @@ function CreateFuelOrder() {
 
               {/* TOGGLE MOVED TO HEADER */}
               <div className="flex items-center gap-2 bg-slate-100 px-3 py-1.5 rounded-lg border border-slate-200">
-                <Label htmlFor="multi-badge" className="text-[10px] font-black uppercase text-slate-500 tracking-tight">
+                <Label
+                  htmlFor="multi-badge"
+                  className="text-[10px] font-black uppercase text-slate-500 tracking-tight"
+                >
                   Multi-Badge Load
                 </Label>
                 <Switch
@@ -1323,21 +1894,30 @@ function CreateFuelOrder() {
               <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-x-8 gap-y-6">
                 {/* 1. Fuel Rack */}
                 <div className="space-y-2">
-                  <Label className="text-muted-foreground text-xs uppercase tracking-wide">Fuel Rack</Label>
+                  <Label className="text-muted-foreground text-xs uppercase tracking-wide">
+                    Fuel Rack
+                  </Label>
                   <Select
                     value={formData.rackId}
                     onValueChange={(v) => {
                       handleRackChange(v);
-                      setPreSelectedFields(prev => prev.filter(f => f !== 'rackId'));
+                      setPreSelectedFields((prev) =>
+                        prev.filter((f) => f !== "rackId"),
+                      );
                     }}
                   >
-                    <SelectTrigger className={cn("w-full transition-all duration-500", preSelectedFields.includes('rackId') && highlightClass)}>
+                    <SelectTrigger
+                      className={cn(
+                        "w-full transition-all duration-500",
+                        preSelectedFields.includes("rackId") && highlightClass,
+                      )}
+                    >
                       <SelectValue placeholder="Select Rack" />
                     </SelectTrigger>
                     <SelectContent>
                       {racks.map((r: any) => (
                         <SelectItem key={r._id} value={r._id}>
-                          {r.rackName} - {r.rackLocation || ''}
+                          {r.rackName} - {r.rackLocation || ""}
                         </SelectItem>
                       ))}
                     </SelectContent>
@@ -1346,8 +1926,13 @@ function CreateFuelOrder() {
 
                 {/* 2. Supplier */}
                 <div className="space-y-2">
-                  <Label className="text-muted-foreground text-xs uppercase tracking-wide">Supplier</Label>
-                  <Select value={formData.supplierId} onValueChange={handleSupplierChange}>
+                  <Label className="text-muted-foreground text-xs uppercase tracking-wide">
+                    Supplier
+                  </Label>
+                  <Select
+                    value={formData.supplierId}
+                    onValueChange={handleSupplierChange}
+                  >
                     <SelectTrigger className="w-full">
                       <SelectValue placeholder="Select Supplier" />
                     </SelectTrigger>
@@ -1364,10 +1949,14 @@ function CreateFuelOrder() {
                 {/* 3. Badge Selector (Conditionally rendered here only for Single Badge) */}
                 {!formData.isMultiBadge && (
                   <div className="space-y-2">
-                    <Label className="text-muted-foreground text-xs uppercase tracking-wide">Badge Number</Label>
+                    <Label className="text-muted-foreground text-xs uppercase tracking-wide">
+                      Badge Number
+                    </Label>
                     <Select
                       value={formData.badgeNo}
-                      onValueChange={(v) => setFormData({ ...formData, badgeNo: v })}
+                      onValueChange={(v) =>
+                        setFormData({ ...formData, badgeNo: v })
+                      }
                     >
                       <SelectTrigger className="font-mono w-full overflow-hidden">
                         <div className="truncate text-left">
@@ -1375,29 +1964,57 @@ function CreateFuelOrder() {
                         </div>
                       </SelectTrigger>
                       <SelectContent>
-                        {suppliers.find(s => s._id === formData.supplierId)?.supplierBadges.map((b) => (
-                          <SelectItem key={b.badgeNumber} value={b.badgeNumber}>
-                            <span className="font-bold">{b.badgeNumber}</span>
-                            <span className="text-muted-foreground text-xs ml-2">— {b.badgeName}</span>
-                          </SelectItem>
-                        ))}
+                        {suppliers
+                          .find((s) => s._id === formData.supplierId)
+                          ?.supplierBadges.map((b) => (
+                            <SelectItem
+                              key={b.badgeNumber}
+                              value={b.badgeNumber}
+                            >
+                              <span className="font-bold">{b.badgeNumber}</span>
+                              <span className="text-muted-foreground text-xs ml-2">
+                                — {b.badgeName}
+                              </span>
+                            </SelectItem>
+                          ))}
                       </SelectContent>
                     </Select>
                   </div>
                 )}
 
                 {/* 4. Carrier */}
-                <div className={cn("space-y-2", formData.isMultiBadge && "xl:col-start-4")}>
-                  <Label className="text-muted-foreground text-xs uppercase tracking-wide">Carrier</Label>
+                <div
+                  className={cn(
+                    "space-y-2",
+                    formData.isMultiBadge && "xl:col-start-4",
+                  )}
+                >
+                  <Label className="text-muted-foreground text-xs uppercase tracking-wide">
+                    Carrier
+                  </Label>
                   <Select
                     value={formData.carrierId}
                     onValueChange={(v) => {
                       setFormData({ ...formData, carrierId: v });
-                      setPreSelectedFields(prev => prev.filter(f => f !== 'carrierId'));
+                      setPreSelectedFields((prev) =>
+                        prev.filter((f) => f !== "carrierId"),
+                      );
                     }}
                   >
-                    <SelectTrigger className={cn("w-full transition-all duration-500", preSelectedFields.includes('carrierId') && highlightClass)}>
-                      <SelectValue placeholder={carriers.length > 0 ? "Select Carrier" : "No carriers available"} />
+                    <SelectTrigger
+                      className={cn(
+                        "w-full transition-all duration-500",
+                        preSelectedFields.includes("carrierId") &&
+                          highlightClass,
+                      )}
+                    >
+                      <SelectValue
+                        placeholder={
+                          carriers.length > 0
+                            ? "Select Carrier"
+                            : "No carriers available"
+                        }
+                      />
                     </SelectTrigger>
                     <SelectContent>
                       {carriers.map((c: any) => (
@@ -1416,21 +2033,37 @@ function CreateFuelOrder() {
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
                     {/* Primary Badge in the split row */}
                     <div className="space-y-2">
-                      <Label className="text-slate-600 text-xs font-bold uppercase tracking-wide">Primary Badge</Label>
+                      <Label className="text-slate-600 text-xs font-bold uppercase tracking-wide">
+                        Primary Badge
+                      </Label>
                       <Select
                         value={formData.badgeNo}
-                        onValueChange={(v) => setFormData({ ...formData, badgeNo: v })}
+                        onValueChange={(v) =>
+                          setFormData({ ...formData, badgeNo: v })
+                        }
                       >
                         <SelectTrigger className="font-mono w-full">
                           <SelectValue placeholder="Select Primary Badge" />
                         </SelectTrigger>
                         <SelectContent>
-                          {suppliers.find(s => s._id === formData.supplierId)?.supplierBadges.map((b) => (
-                            <SelectItem key={b.badgeNumber} value={b.badgeNumber} disabled={b.badgeNumber === formData.secondaryBadgeNo}>
-                              <span className="font-bold">{b.badgeNumber}</span>
-                              <span className="text-muted-foreground text-xs ml-2">— {b.badgeName}</span>
-                            </SelectItem>
-                          ))}
+                          {suppliers
+                            .find((s) => s._id === formData.supplierId)
+                            ?.supplierBadges.map((b) => (
+                              <SelectItem
+                                key={b.badgeNumber}
+                                value={b.badgeNumber}
+                                disabled={
+                                  b.badgeNumber === formData.secondaryBadgeNo
+                                }
+                              >
+                                <span className="font-bold">
+                                  {b.badgeNumber}
+                                </span>
+                                <span className="text-muted-foreground text-xs ml-2">
+                                  — {b.badgeName}
+                                </span>
+                              </SelectItem>
+                            ))}
                         </SelectContent>
                       </Select>
                     </div>
@@ -1443,18 +2076,30 @@ function CreateFuelOrder() {
                       </Label>
                       <Select
                         value={formData.secondaryBadgeNo}
-                        onValueChange={(v) => setFormData({ ...formData, secondaryBadgeNo: v })}
+                        onValueChange={(v) =>
+                          setFormData({ ...formData, secondaryBadgeNo: v })
+                        }
                       >
                         <SelectTrigger className="font-mono w-full border-blue-200 bg-blue-50/30">
                           <SelectValue placeholder="Select Secondary Badge" />
                         </SelectTrigger>
                         <SelectContent>
-                          {suppliers.find(s => s._id === formData.supplierId)?.supplierBadges.map((b) => (
-                            <SelectItem key={b.badgeNumber} value={b.badgeNumber} disabled={b.badgeNumber === formData.badgeNo}>
-                              <span className="font-bold">{b.badgeNumber}</span>
-                              <span className="text-muted-foreground text-xs ml-2">— {b.badgeName}</span>
-                            </SelectItem>
-                          ))}
+                          {suppliers
+                            .find((s) => s._id === formData.supplierId)
+                            ?.supplierBadges.map((b) => (
+                              <SelectItem
+                                key={b.badgeNumber}
+                                value={b.badgeNumber}
+                                disabled={b.badgeNumber === formData.badgeNo}
+                              >
+                                <span className="font-bold">
+                                  {b.badgeNumber}
+                                </span>
+                                <span className="text-muted-foreground text-xs ml-2">
+                                  — {b.badgeName}
+                                </span>
+                              </SelectItem>
+                            ))}
                         </SelectContent>
                       </Select>
                     </div>
@@ -1466,12 +2111,16 @@ function CreateFuelOrder() {
         </div>
 
         {/* RIGHT COLUMN: Order Quantities */}
-        <div className={cn(
-          "col-span-12 transition-all duration-300",
-          // CRITICAL: Ensure Left (5) + Right (7) = 12
-          (isSplit || formData.isMultiBadge) ? "lg:col-span-7 xl:col-span-6" : "lg:col-span-4"
-          // "lg:col-span-7 xl:col-span-6"
-        )}>
+        <div
+          className={cn(
+            "col-span-12 transition-all duration-300",
+            // CRITICAL: Ensure Left (5) + Right (7) = 12
+            isSplit || formData.isMultiBadge
+              ? "lg:col-span-7 xl:col-span-6"
+              : "lg:col-span-4",
+            // "lg:col-span-7 xl:col-span-6"
+          )}
+        >
           <Card className="h-full border-blue-100 bg-blue-50/30 flex flex-col">
             <CardHeader className="pb-3 border-b bg-white">
               <CardTitle className="text-lg flex items-center gap-2">
@@ -1481,40 +2130,54 @@ function CreateFuelOrder() {
             </CardHeader>
 
             <CardContent className={cn("pt-4 flex-1 space-y-6")}>
-              {(isSplit ? formData.splits : [{
-                stationId: formData.stationId,
-                items: formData.items,
-                secondaryItems: formData.secondaryItems,
-                projections: formData.projections,
-                poNumber: formData.poNumber
-              }]).map((section, sIdx) => {
+              {(isSplit
+                ? formData.splits
+                : [
+                    {
+                      stationId: formData.stationId,
+                      items: formData.items,
+                      secondaryItems: formData.secondaryItems,
+                      projections: formData.projections,
+                      poNumber: formData.poNumber,
+                    },
+                  ]
+              ).map((section, sIdx) => {
                 if (!section.stationId) return null;
 
-                const sectionStation = locations.find((l: any) => l._id === section.stationId);
+                const sectionStation = locations.find(
+                  (l: any) => l._id === section.stationId,
+                );
 
                 // Dynamic Badge Configuration
                 const badgeConfigs = [
                   {
-                    id: 'primary',
+                    id: "primary",
                     badge: formData.badgeNo,
-                    // section.items correctly points to splits[sIdx].items in split mode 
+                    // section.items correctly points to splits[sIdx].items in split mode
                     // or formData.items in single mode because of your wrapper array.
                     items: section.items || [],
-                    isSecondary: false
+                    isSecondary: false,
                   },
-                  ...(formData.isMultiBadge ? [{
-                    id: 'secondary',
-                    badge: formData.secondaryBadgeNo,
-                    // FIX: We must explicitly grab the secondary items for THIS station index
-                    items: isSplit
-                      ? (formData.secondarySplits?.[sIdx]?.items || [])
-                      : (formData.secondaryItems || []),
-                    isSecondary: true
-                  }] : [])
+                  ...(formData.isMultiBadge
+                    ? [
+                        {
+                          id: "secondary",
+                          badge: formData.secondaryBadgeNo,
+                          // FIX: We must explicitly grab the secondary items for THIS station index
+                          items: isSplit
+                            ? formData.secondarySplits?.[sIdx]?.items || []
+                            : formData.secondaryItems || [],
+                          isSecondary: true,
+                        },
+                      ]
+                    : []),
                 ];
 
                 return (
-                  <div key={sIdx} className="space-y-4 border-b pb-6 last:border-0">
+                  <div
+                    key={sIdx}
+                    className="space-y-4 border-b pb-6 last:border-0"
+                  >
                     {/* Station Header */}
                     <div className="flex justify-between items-center bg-slate-50 p-2 rounded-lg border">
                       <span className="text-xs font-black text-blue-800 uppercase">
@@ -1526,145 +2189,255 @@ function CreateFuelOrder() {
                     </div>
 
                     {/* LAYOUT LOGIC: If not multi-badge, use 1 column. If multi-badge, use 2 columns */}
-                    <div className={cn(
-                      "grid gap-4",
-                      // If only 1 badge is active, use 1 col (full width). If 2, use 2 cols.
-                      formData.isMultiBadge ? "grid-cols-1 xl:grid-cols-2" : "grid-cols-1"
-                    )}>
+                    <div
+                      className={cn(
+                        "grid gap-4",
+                        // If only 1 badge is active, use 1 col (full width). If 2, use 2 cols.
+                        formData.isMultiBadge
+                          ? "grid-cols-1 xl:grid-cols-2"
+                          : "grid-cols-1",
+                      )}
+                    >
                       {badgeConfigs.map((bc) => {
                         // 1. FILTER: Badge Compatibility
                         // 2. SORT: Apply your GRADE_ORDER sorting
-                        const rawCompatible = getBadgeCompatibleItems(bc.items || [], bc.badge, formData.supplierId);
+                        const rawCompatible = getBadgeCompatibleItems(
+                          bc.items || [],
+                          bc.badge,
+                          formData.supplierId,
+                        );
                         const sortedCompatible = sortGrades(rawCompatible);
 
-                        // If a badge is selected but has no compatible items, we still show the header 
+                        // If a badge is selected but has no compatible items, we still show the header
                         // but might want a placeholder.
-                        return (bc.badge && (
-                          <div key={bc.id} className={cn(
-                            "space-y-3 p-3 rounded-xl border border-dashed transition-all",
-                            bc.isSecondary ? "bg-blue-50/40 border-blue-200" : "bg-white border-slate-300"
-                          )}>
-                            <div className="flex items-center justify-between">
-                              <span className="text-[10px] font-bold text-slate-500 uppercase tracking-tight">
-                                Badge: <span className="text-slate-900 font-mono">{bc.badge}</span>
-                              </span>
-                              <Badge variant={bc.isSecondary ? "default" : "outline"} className="text-[8px] h-4 uppercase">
-                                {bc.isSecondary ? 'Secondary' : 'Primary'}
-                              </Badge>
-                            </div>
-
-                            {/* {sortedCompatible.length > 0 ? sortedCompatible.map((item) => { */}
-                            {sortedCompatible.length > 0 ? (
-                              <>
-                                {sortedCompatible.map((item) => {
-                                  const theme = getGradeTheme(item.grade);
-                                  const projection = section.projections?.[item.grade] || { opening: 0, sales: 0, capacity: 0, closing: 0 };
-
-                                  // Find total volume for this grade across BOTH badges for inventory calculation
-                                  const otherBadgeItems = bc.isSecondary
-                                    ? (section.items || [])
-                                    : (isSplit ? (formData.secondarySplits?.[sIdx]?.items || []) : (formData.secondaryItems || []));
-
-                                  const otherQty = Number(otherBadgeItems?.find(i => i.grade === item.grade)?.ltrs || 0);
-                                  const currentQty = Number(item.ltrs) || 0;
-                                  const finalClosing = projection.closing + currentQty + otherQty;
-
-                                  return (
-                                    <div key={item.grade} className="p-2 bg-white rounded-lg border shadow-sm relative overflow-hidden">
-                                      <div className={cn("absolute left-0 top-0 bottom-0 w-1", theme.color)} />
-
-                                      <div className="flex items-center justify-between gap-4">
-                                        <div className="flex flex-col">
-                                          <span className="text-[12px] font-black uppercase italic">{item.grade}</span>
-                                          {otherQty > 0 && (
-                                            <span className="text-[8px] text-blue-500 font-bold">
-                                              +{otherQty.toLocaleString()} L (Other Badge)
-                                            </span>
-                                          )}
-                                        </div>
-
-                                        <Input
-                                          type="number"
-                                          className="h-7 w-24 text-right font-mono font-bold text-sm border-blue-200 focus-visible:ring-blue-500"
-                                          value={item.ltrs || ''}
-                                          onChange={(e) => handleQtyChange(sIdx, item.grade, Number(e.target.value), bc.isSecondary)}
-                                        />
-                                      </div>
-
-                                      {/* Grid for Opening, Sales, and Closing */}
-                                      <div className="grid grid-cols-3 gap-1 mt-2 pt-2 border-t border-slate-100">
-                                        <div className="flex flex-col">
-                                          <span className="text-[9px] font-bold text-slate-400 uppercase leading-none mb-1">
-                                            Est. Opening
-                                          </span>
-                                          <span className={cn("font-mono font-bold text-slate-700", isSplit ? "text-[10px]" : "text-xs")}>
-                                            {projection.opening.toLocaleString()}
-                                          </span>
-                                        </div>
-
-                                        <div className="flex flex-col">
-                                          <span className="text-[9px] font-bold text-slate-400 uppercase leading-none mb-1">
-                                            Est. Sales
-                                          </span>
-                                          <span className={cn("font-mono font-bold text-red-500", isSplit ? "text-[10px]" : "text-xs")}>
-                                            -{projection.sales.toLocaleString()}
-                                          </span>
-                                        </div>
-
-                                        <div className="flex flex-col items-end">
-                                          <span className="text-[9px] font-bold text-blue-500 uppercase leading-none mb-1">
-                                            Est. Closing
-                                          </span>
-                                          <span className={cn(
-                                            "font-mono font-black",
-                                            isSplit ? "text-[10px]" : "text-xs",
-                                            projection.capacity > 0 && finalClosing > projection.capacity ? "text-orange-600" : "text-blue-600"
-                                          )}>
-                                            {finalClosing.toLocaleString()}
-                                          </span>
-                                        </div>
-                                      </div>
-
-                                      {/* Overflow Risk Alert */}
-                                      {projection.capacity > 0 && finalClosing > projection.capacity && (
-                                        <div className="mt-2 flex items-center gap-1.5 text-[9px] font-black text-orange-600 uppercase bg-orange-50 px-2 py-1 rounded border border-orange-100">
-                                          <AlertTriangle className="h-3 w-3" />
-                                          Overflow Risk: Exceeds {projection.capacity.toLocaleString()}L Capacity
-                                        </div>
-                                      )}
-                                    </div>
-                                  );
-                                })}
-                                {/* ADDED: Total sum for this specific Badge/Station combination */}
-                                {(() => {
-                                  const badgeTotal = sortedCompatible.reduce((sum, item) => sum + (Number(item.ltrs) || 0), 0);
-
-                                  return (
-                                    <div className={cn(
-                                      "mt-4 pt-3 border-t border-dashed flex justify-between items-center px-1",
-                                      bc.isSecondary ? "border-blue-200" : "border-slate-200"
-                                    )}>
-                                      <span className="text-[9px] font-black uppercase text-slate-400 tracking-wider">
-                                        {bc.isSecondary ? "Secondary Total" : "Primary Total"}
-                                      </span>
-                                      <span className={cn(
-                                        "font-black font-mono",
-                                        isSplit ? "text-sm" : "text-base",
-                                        bc.isSecondary ? "text-blue-600" : "text-slate-700"
-                                      )}>
-                                        {badgeTotal.toLocaleString()} <span className="text-[10px] font-bold">L</span>
-                                      </span>
-                                    </div>
-                                  );
-                                })()}
-                              </>
-                            ) : (
-                              <div className="text-[10px] text-slate-400 italic py-4 text-center">
-                                No compatible grades for this badge
+                        return (
+                          bc.badge && (
+                            <div
+                              key={bc.id}
+                              className={cn(
+                                "space-y-3 p-3 rounded-xl border border-dashed transition-all",
+                                bc.isSecondary
+                                  ? "bg-blue-50/40 border-blue-200"
+                                  : "bg-white border-slate-300",
+                              )}
+                            >
+                              <div className="flex items-center justify-between">
+                                <span className="text-[10px] font-bold text-slate-500 uppercase tracking-tight">
+                                  Badge:{" "}
+                                  <span className="text-slate-900 font-mono">
+                                    {bc.badge}
+                                  </span>
+                                </span>
+                                <Badge
+                                  variant={
+                                    bc.isSecondary ? "default" : "outline"
+                                  }
+                                  className="text-[8px] h-4 uppercase"
+                                >
+                                  {bc.isSecondary ? "Secondary" : "Primary"}
+                                </Badge>
                               </div>
-                            )}
-                          </div>
-                        ))
+
+                              {/* {sortedCompatible.length > 0 ? sortedCompatible.map((item) => { */}
+                              {sortedCompatible.length > 0 ? (
+                                <>
+                                  {sortedCompatible.map((item) => {
+                                    const theme = getGradeTheme(item.grade);
+
+                                    // CRITICAL TWEAK: If the entry line is E15, look up the projection data using the "Regular" key
+                                    const projectionKey =
+                                      item.grade === "E15"
+                                        ? "Regular"
+                                        : item.grade;
+                                    const projection = section.projections?.[
+                                      projectionKey
+                                    ] || {
+                                      opening: 0,
+                                      sales: 0,
+                                      capacity: 0,
+                                      closing: 0,
+                                    };
+
+                                    // Find total volume for this grade across BOTH badges for inventory calculation
+                                    const otherBadgeItems = bc.isSecondary
+                                      ? section.items || []
+                                      : isSplit
+                                        ? formData.secondarySplits?.[sIdx]
+                                            ?.items || []
+                                        : formData.secondaryItems || [];
+
+                                    const otherQty = Number(
+                                      otherBadgeItems?.find(
+                                        (i) => i.grade === item.grade,
+                                      )?.ltrs || 0,
+                                    );
+                                    const currentQty = Number(item.ltrs) || 0;
+
+                                    // This smoothly adds E15 volume into the Regular physical tank closing estimation metrics automatically!
+                                    const finalClosing =
+                                      projection.closing +
+                                      currentQty +
+                                      otherQty;
+
+                                    return (
+                                      <div
+                                        key={item.grade}
+                                        className="p-2 bg-white rounded-lg border shadow-sm relative overflow-hidden"
+                                      >
+                                        <div
+                                          className={cn(
+                                            "absolute left-0 top-0 bottom-0 w-1",
+                                            theme.color,
+                                          )}
+                                        />
+
+                                        <div className="flex items-center justify-between gap-4">
+                                          <div className="flex flex-col">
+                                            <span className="text-[12px] font-black uppercase italic">
+                                              {item.grade}
+                                            </span>
+                                            {otherQty > 0 && (
+                                              <span className="text-[8px] text-blue-500 font-bold">
+                                                +{otherQty.toLocaleString()} L
+                                                (Other Badge)
+                                              </span>
+                                            )}
+                                          </div>
+
+                                          <Input
+                                            type="number"
+                                            className="h-7 w-24 text-right font-mono font-bold text-sm border-blue-200 focus-visible:ring-blue-500"
+                                            value={item.ltrs || ""}
+                                            onChange={(e) =>
+                                              handleQtyChange(
+                                                sIdx,
+                                                item.grade,
+                                                Number(e.target.value),
+                                                bc.isSecondary,
+                                              )
+                                            }
+                                          />
+                                        </div>
+
+                                        {/* Grid for Opening, Sales, and Closing */}
+                                        <div className="grid grid-cols-3 gap-1 mt-2 pt-2 border-t border-slate-100">
+                                          <div className="flex flex-col">
+                                            <span className="text-[9px] font-bold text-slate-400 uppercase leading-none mb-1">
+                                              Est. Opening
+                                            </span>
+                                            <span
+                                              className={cn(
+                                                "font-mono font-bold text-slate-700",
+                                                isSplit
+                                                  ? "text-[10px]"
+                                                  : "text-xs",
+                                              )}
+                                            >
+                                              {projection.opening.toLocaleString()}
+                                            </span>
+                                          </div>
+
+                                          <div className="flex flex-col">
+                                            <span className="text-[9px] font-bold text-slate-400 uppercase leading-none mb-1">
+                                              Est. Sales
+                                            </span>
+                                            <span
+                                              className={cn(
+                                                "font-mono font-bold text-red-500",
+                                                isSplit
+                                                  ? "text-[10px]"
+                                                  : "text-xs",
+                                              )}
+                                            >
+                                              -
+                                              {projection.sales.toLocaleString()}
+                                            </span>
+                                          </div>
+
+                                          <div className="flex flex-col items-end">
+                                            <span className="text-[9px] font-bold text-blue-500 uppercase leading-none mb-1">
+                                              Est. Closing
+                                            </span>
+                                            <span
+                                              className={cn(
+                                                "font-mono font-black",
+                                                isSplit
+                                                  ? "text-[10px]"
+                                                  : "text-xs",
+                                                projection.capacity > 0 &&
+                                                  finalClosing >
+                                                    projection.capacity
+                                                  ? "text-orange-600"
+                                                  : "text-blue-600",
+                                              )}
+                                            >
+                                              {finalClosing.toLocaleString()}
+                                            </span>
+                                          </div>
+                                        </div>
+
+                                        {/* Overflow Risk Alert */}
+                                        {projection.capacity > 0 &&
+                                          finalClosing >
+                                            projection.capacity && (
+                                            <div className="mt-2 flex items-center gap-1.5 text-[9px] font-black text-orange-600 uppercase bg-orange-50 px-2 py-1 rounded border border-orange-100">
+                                              <AlertTriangle className="h-3 w-3" />
+                                              Overflow Risk: Exceeds{" "}
+                                              {projection.capacity.toLocaleString()}
+                                              L Capacity
+                                            </div>
+                                          )}
+                                      </div>
+                                    );
+                                  })}
+                                  {/* ADDED: Total sum for this specific Badge/Station combination */}
+                                  {(() => {
+                                    const badgeTotal = sortedCompatible.reduce(
+                                      (sum, item) =>
+                                        sum + (Number(item.ltrs) || 0),
+                                      0,
+                                    );
+
+                                    return (
+                                      <div
+                                        className={cn(
+                                          "mt-4 pt-3 border-t border-dashed flex justify-between items-center px-1",
+                                          bc.isSecondary
+                                            ? "border-blue-200"
+                                            : "border-slate-200",
+                                        )}
+                                      >
+                                        <span className="text-[9px] font-black uppercase text-slate-400 tracking-wider">
+                                          {bc.isSecondary
+                                            ? "Secondary Total"
+                                            : "Primary Total"}
+                                        </span>
+                                        <span
+                                          className={cn(
+                                            "font-black font-mono",
+                                            isSplit ? "text-sm" : "text-base",
+                                            bc.isSecondary
+                                              ? "text-blue-600"
+                                              : "text-slate-700",
+                                          )}
+                                        >
+                                          {badgeTotal.toLocaleString()}{" "}
+                                          <span className="text-[10px] font-bold">
+                                            L
+                                          </span>
+                                        </span>
+                                      </div>
+                                    );
+                                  })()}
+                                </>
+                              ) : (
+                                <div className="text-[10px] text-slate-400 italic py-4 text-center">
+                                  No compatible grades for this badge
+                                </div>
+                              )}
+                            </div>
+                          )
+                        );
                       })}
                     </div>
                   </div>
@@ -1760,7 +2533,6 @@ function CreateFuelOrder() {
 //   associatedRack: string;
 //   supplierBadges: SupplierBadge[]; // Array of badges inside the supplier
 // }
-
 
 // function CreateFuelOrder() {
 //   // --- State Management ---
@@ -2258,7 +3030,6 @@ function CreateFuelOrder() {
 //     }
 //   };
 
-
 //   // Find selected details for the PDF
 //   const selectedStation = locations.find((s: any) => s._id === formData.stationId);
 //   const selectedCarrier = carriers.find(c => c._id === formData.carrierId);
@@ -2316,7 +3087,6 @@ function CreateFuelOrder() {
 //   // CSS for the highlight (Add to your global CSS or use a Tailwind class)
 //   // @keyframes pulse-highlight { 0% { box-shadow: 0 0 0 0 rgba(59, 130, 246, 0.5); } 70% { box-shadow: 0 0 0 10px rgba(59, 130, 246, 0); } 100% { box-shadow: 0 0 0 0 rgba(59, 130, 246, 0); } }
 //   const highlightClass = "animate-pulse ring-2 ring-blue-500 ring-offset-2 border-blue-500";
-
 
 //   return (
 //     <div className="p-6 space-y-6 max-w-[1600px] mx-auto">

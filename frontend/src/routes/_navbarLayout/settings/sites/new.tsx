@@ -49,6 +49,7 @@ function NewSiteRouteComponent() {
     email: "",
     sellsLottery: false,
     managerEmails: [] as string[],
+    gasBuddyStationId: "", // 🚀 NEW: State tracker variable initialized as optional empty string
   });
   const [managerCode, setManagerCode] = useState("");
   const [loading, setLoading] = useState(false);
@@ -150,7 +151,7 @@ function NewSiteRouteComponent() {
           <Label>CSO Code</Label>
           <Input name="csoCode" value={formData.csoCode} onChange={handleChange} required />
         </div>
-        
+
         {/* PROVINCE SELECTION */}
         <div>
           <Label>Province</Label>
@@ -226,6 +227,22 @@ function NewSiteRouteComponent() {
             <span className={`inline-block w-4 h-4 bg-white rounded-full transform transition-transform duration-150 ${formData.sellsLottery ? 'translate-x-6' : 'translate-x-1'}`} />
           </button>
         </div>
+
+        {/* 🚀 NEW: GASBUDDY STATION IDENTIFIER INTERACTIVE NODAL NODE (Optional field positioned before Manager Pin validation block) */}
+        <div>
+          <Label htmlFor="gasBuddyStationId">GasBuddy Station ID</Label>
+          <Input 
+            id="gasBuddyStationId"
+            name="gasBuddyStationId" 
+            placeholder="e.g., 205339 (Optional)" 
+            value={formData.gasBuddyStationId} 
+            onChange={handleChange} 
+          />
+          <p className="text-[11px] text-gray-400 mt-1">
+            Leave blank if this location won't sync live pricing metrics with public maps.
+          </p>
+        </div>
+        
         <div>
           <Label className="block font-medium mb-1">Manager Code</Label>
           <div className="flex justify-center">
