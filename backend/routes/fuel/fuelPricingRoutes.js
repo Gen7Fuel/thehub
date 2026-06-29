@@ -364,39 +364,51 @@ router.get("/prices-ticker", async (req, res) => {
 //     res.status(500).json({ message: "Internal record lookup failure." });
 //   }
 // });
-// =========================================================================
-// RETRIEVE CURRENT ACTIVE PRICE CONFIGURATIONS BY MONGO ID (WITH SCHEDULES)
-// =========================================================================
+// Make sure to import moment-timezone at the top of your file if not already present:
+// const moment = require("moment-timezone");
+// const Location = require("../models/Location"); // Ensure you can access the location collection
+
 router.get("/current/:locationId", async (req, res) => {
   const { locationId } = req.params;
   try {
+    // 1. Fetch the station profile to discover its actual local timezone context
+    const locationDoc = await Location.findById(locationId);
+    const targetTimezone = locationDoc?.timezone || "America/Toronto";
+
     const rows = await currentPriceModel.getCurrentPricesBySite(locationId);
 
-    // Group rows by active vs scheduled status
     const activeCurrentPrices = rows.reduce((acc, row) => {
       const frontendCode = REVERSE_GRADE_MAP[row.grade];
       if (!frontendCode) return acc;
 
-      // Initialize the object container for this fuel grade if not present
-      if (!acc[frontendCode]) {
-        acc[frontendCode] = {
-          price: null,
-          updatedAt: null,
-          scheduled: null
-        };
-      }
+      acc[frontendCode] = {
+        price: row.price ? parseFloat(row.price) : null,
+        updatedAt: row.updated_at,
+        scheduled: null,
+      };
 
-      // Check if this record is a future scheduled price change
-      // (Assumes your model/query flags rows, e.g., via a status, is_scheduled boolean, or future effective date)
-      if (row.is_scheduled || new Date(row.effective_date || row.scheduled_datetime) > new Date()) {
+      const hasSchedule =
+        row.is_scheduled ||
+        (row.scheduled_date_time &&
+          new Date(row.scheduled_date_time) > new Date());
+
+      if (
+        hasSchedule &&
+        row.scheduled_price !== null &&
+        row.scheduled_price !== undefined
+      ) {
+        // 2. Convert the absolute database timestamp into the station's literal local format
+        // This drops the 'Z' offset constraint so it displays identically for all corporate users
+        const stationLocalTimeStr = row.scheduled_date_time
+          ? moment(row.scheduled_date_time)
+              .tz(targetTimezone)
+              .format("YYYY-MM-DDTHH:mm:ss")
+          : "N/A";
+
         acc[frontendCode].scheduled = {
-          price: parseFloat(row.price),
-          scheduledAt: row.scheduled_datetime || row.effective_date,
+          price: parseFloat(row.scheduled_price),
+          scheduledAt: stationLocalTimeStr, // e.g., "2026-06-30T16:17:00"
         };
-      } else {
-        // Otherwise, it's the live active counter price
-        acc[frontendCode].price = parseFloat(row.price);
-        acc[frontendCode].updatedAt = row.updated_at;
       }
 
       return acc;
@@ -1422,32 +1434,33 @@ router.post("/upsert-retail", async (req, res) => {
 // -------------------------------------------------------------------------
 // ROUTE 1: CANCEL / DELETE ENTIRE SITE SCHEDULE
 // -------------------------------------------------------------------------
-router.delete("/cancel-schedule", async (req, res) => {
-  const { locationId } = req.body;
+// Backend Route Update (If choosing Option B)
+router.delete("/cancel-schedule/:locationId", async (req, res) => {
+  const { locationId } = req.params; // Extracts directly out of the URL path slug
   const db = getPg();
 
   if (!locationId) {
-    return res.status(400).json({ message: "Missing location parameter context." });
+    return res
+      .status(400)
+      .json({ message: "Missing location parameter context." });
   }
 
   try {
-    // Clear all scheduling records for this site. 
-    // Any existing BullMQ job still in Redis will now safely auto-abort on wake.
-    await db("fuel_current_price")
-      .where({ site: locationId })
-      .update({
-        is_scheduled: false,
-        scheduled_date_time: null,
-        scheduled_price: null
-      });
+    await db("fuel_current_price").where({ site: locationId }).update({
+      is_scheduled: false,
+      scheduled_date_time: null,
+      scheduled_price: null,
+    });
 
     return res.status(200).json({
       success: true,
-      message: "All pending scheduled price updates for this location have been successfully deleted."
+      message: "All pending scheduled price updates for this location have been successfully deleted.",
     });
   } catch (err) {
     console.error("Failed to cancel station schedule:", err);
-    return res.status(500).json({ message: "Persistence engine operation failure during removal." });
+    return res
+      .status(500)
+      .json({ message: "Persistence engine operation failure during removal." });
   }
 });
 
@@ -1457,31 +1470,66 @@ router.delete("/cancel-schedule", async (req, res) => {
 router.put("/edit-schedule-prices", async (req, res) => {
   const { locationId, prices, scheduledDateTime } = req.body;
   const db = getPg();
+  const postedByUserIdStr = req.user?._id ? String(req.user._id) : null;
+  const userEmail = req.user?.email;
 
   if (!locationId || !prices || !scheduledDateTime) {
-    return res.status(400).json({ message: "Missing required modification parameters." });
+    return res
+      .status(400)
+      .json({ message: "Missing required modification parameters." });
   }
 
   try {
-    // 1. Fetch current database schedule to verify lock consistency
-    const existingRows = await db("fuel_current_price")
-      .where({ site: locationId, is_scheduled: true });
+    // 1. Fetch Location Context to obtain the valid Timezone configuration
+    const locationDoc = await Location.findById(locationId);
+    if (!locationDoc) {
+      return res
+        .status(404)
+        .json({ message: "Target location context not found." });
+    }
+    const targetTimezone = locationDoc.timezone || "America/Toronto";
+    const stationName = locationDoc.name || "Station";
+
+    // 2. Fetch current database row state to ensure an active schedule even exists
+    const existingRows = await db("fuel_current_price").where({
+      site: locationId,
+      is_scheduled: true,
+    });
 
     if (!existingRows || existingRows.length === 0) {
-      return res.status(400).json({ message: "No active schedule found to modify for this location." });
+      return res
+        .status(400)
+        .json({
+          message: "No active schedule found to modify for this location.",
+        });
     }
 
-    // 2. Concurrency Lock Verification: Check if scheduledDateTime matches database precisely
-    const dbTimeStr = new Date(existingRows[0].scheduled_date_time).toISOString();
-    const clientProvidedTimeStr = new Date(scheduledDateTime).toISOString();
+    // 3. Check if the execution time window has actually shifted
+    const incomingTargetTime = moment.tz(scheduledDateTime, targetTimezone);
+    const existingDbTime = moment(existingRows[0].scheduled_date_time).tz(targetTimezone);
 
-    if (dbTimeStr !== clientProvidedTimeStr) {
-      return res.status(409).json({ 
-        message: "Schedule state mismatch. The schedule timeline has been altered or replaced by another coordinator." 
-      });
+    // Compare down to the minute to avoid slight millisecond/second mismatches
+    const isTimeChanged = !incomingTargetTime.isSame(existingDbTime, "minute");
+    
+    let calculatedDelayMs = 0;
+    const dbTimestamp = incomingTargetTime.toDate();
+
+    if (isTimeChanged) {
+      const nowInStationTZ = moment().tz(targetTimezone);
+      calculatedDelayMs = incomingTargetTime.diff(nowInStationTZ);
+
+      if (calculatedDelayMs <= 0) {
+        return res
+          .status(400)
+          .json({ message: "Scheduled date and time must be in the future." });
+      }
+
+      // Subtract 10-second safety cushion buffer
+      const safetyBufferMs = 10 * 1000;
+      calculatedDelayMs = Math.max(0, calculatedDelayMs - safetyBufferMs);
     }
 
-    // 3. Perform atomic bulk updates to prices ONLY (preserving original scheduled_date_time)
+    // 4. Execute atomic updates modifying target price parameters (and time if changed)
     const masterFrontendCodes = Object.keys(GRADE_MAP);
 
     await db.transaction(async (trx) => {
@@ -1490,23 +1538,61 @@ router.put("/edit-schedule-prices", async (req, res) => {
         const targetPriceRaw = prices[frontendCode];
 
         if (targetPriceRaw !== undefined && targetPriceRaw !== null) {
+          const updatePayload = {
+            scheduled_price: parseFloat(targetPriceRaw)
+          };
+
+          // Only overwrite the timestamp row column if the user explicitly picked a new time
+          if (isTimeChanged) {
+            updatePayload.scheduled_date_time = dbTimestamp;
+          }
+
           await trx("fuel_current_price")
-            .where({ site: locationId, grade: correspondingDbGradeName, is_scheduled: true })
-            .update({
-              scheduled_price: parseFloat(targetPriceRaw)
-            });
+            .where({
+              site: locationId,
+              grade: correspondingDbGradeName,
+              is_scheduled: true,
+            })
+            .update(updatePayload);
         }
       }
     });
 
+    // 5. Conditional Queue Dispatching
+    if (isTimeChanged) {
+      // Dispatch a brand new worker trigger task because the timeline moved
+      await priceScheduleQueue.add(
+        `execute-scheduled-price-${locationId}-${Date.now()}`,
+        {
+          locationId,
+          stationName,
+          postedByUserIdStr,
+          userEmail,
+          isSocketEnabled: true,
+          lockScheduledDateTime: dbTimestamp.toISOString(), // ✅ New Validation Lock
+        },
+        {
+          delay: calculatedDelayMs,
+          removeOnComplete: true,
+          removeOnFail: false,
+        },
+      );
+    }
+
     return res.status(200).json({
       success: true,
-      message: "Scheduled price parameters successfully updated. Original target execution window preserved."
+      message: isTimeChanged
+        ? `Scheduled pricing and execution timeline modified successfully. Next execution in ~${Math.round(calculatedDelayMs / 1000)}s.`
+        : "Scheduled prices updated cleanly. Original target execution window preserved with no extra queue overhead.",
+      isScheduled: true,
     });
-
   } catch (err) {
     console.error("Failed to modify schedule price elements:", err);
-    return res.status(500).json({ message: "Persistence engine operation failure during modification." });
+    return res
+      .status(500)
+      .json({
+        message: "Persistence engine operation failure during modification.",
+      });
   }
 });
 

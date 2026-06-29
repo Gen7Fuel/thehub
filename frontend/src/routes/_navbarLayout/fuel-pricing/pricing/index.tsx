@@ -1622,6 +1622,41 @@ const formatStationTimestamp = (
   }
 };
 
+const formatRawStationString = (dateTimeStr: string | undefined) => {
+  if (!dateTimeStr || dateTimeStr === "N/A") return "";
+  try {
+    // Splits "2026-06-30T13:17:00" -> ["2026-06-30", "13:17:00"]
+    const [datePart, timePart] = dateTimeStr.split("T");
+    if (!timePart) return dateTimeStr;
+
+    // Isolate hours and minutes
+    const [hour, minute] = timePart.split(":");
+
+    // Convert date part to a cleaner display format (e.g., "Jun 30")
+    const [, month, day] = datePart.split("-");
+    const months = [
+      "Jan",
+      "Feb",
+      "Mar",
+      "Apr",
+      "May",
+      "Jun",
+      "Jul",
+      "Aug",
+      "Sep",
+      "Oct",
+      "Nov",
+      "Dec",
+    ];
+    const monthLabel = months[parseInt(month, 10) - 1];
+
+    // Return format: "Jun 30 13:17" (Matching your hour12: false requirement)
+    return `${monthLabel} ${day} ${hour}:${minute}`;
+  } catch (e) {
+    return dateTimeStr || "";
+  }
+};
+
 function FuelPricingPanel() {
   const { user } = useAuth();
   const access = user?.access || {};
@@ -1740,36 +1775,53 @@ function FuelPricingPanel() {
     enabled: !!locationMongoId && isLogsOpen,
   });
 
-  // Sync InputOTP fields
+  // Sync InputOTP fields and Date settings
   useEffect(() => {
     if (activePostgresPrices) {
       const initialFormValues: Record<string, string> = {};
       const initialEditValues: Record<string, string> = {};
+      let rawBackendScheduledDate: string | null = null;
 
       SORTED_DISPLAY_GRADES.forEach((g) => {
         const rawRecord = activePostgresPrices[g.id];
-        const val =
-          rawRecord?.price !== undefined ? rawRecord.price : rawRecord;
-        initialFormValues[g.id] = val ? String(val).replace(".", "") : "";
+        const livePriceVal =
+          rawRecord && typeof rawRecord === "object"
+            ? rawRecord.price
+            : rawRecord;
 
-        // Setup edit parameters state container
-        if (rawRecord?.scheduled) {
+        initialFormValues[g.id] = livePriceVal
+          ? String(livePriceVal).replace(".", "")
+          : "";
+
+        if (
+          rawRecord?.scheduled?.price !== undefined &&
+          rawRecord?.scheduled?.price !== null
+        ) {
           initialEditValues[g.id] = String(rawRecord.scheduled.price).replace(
             ".",
             "",
           );
+          // Grab the literal local string formatted by the backend
+          if (rawRecord.scheduled.scheduledAt) {
+            rawBackendScheduledDate = rawRecord.scheduled.scheduledAt;
+          }
         } else {
-          initialEditValues[g.id] = val ? String(val).replace(".", "") : "";
+          initialEditValues[g.id] = livePriceVal
+            ? String(livePriceVal).replace(".", "")
+            : "";
         }
       });
+
       setPrices(initialFormValues);
       setEditScheduledPrices(initialEditValues);
 
-      if (activeScheduleTargetDate) {
-        // Convert ISO window payload to input local fallback sequence string shell
-        setScheduledDateTime(
-          new Date(activeScheduleTargetDate).toISOString().slice(0, 16),
-        );
+      // Syncing the date picker state variable safely
+      if (rawBackendScheduledDate) {
+        // The backend delivers 'YYYY-MM-DDTHH:mm:ss'.
+        // Slice to 16 characters ('YYYY-MM-DDTHH:mm') for HTML5 input compatibility.
+        setScheduledDateTime(String(rawBackendScheduledDate).slice(0, 16));
+      } else if (activeScheduleTargetDate) {
+        setScheduledDateTime(String(activeScheduleTargetDate).slice(0, 16));
       }
     } else {
       setPrices({});
@@ -1886,8 +1938,9 @@ function FuelPricingPanel() {
   const handleExecuteUpdateSchedule = (e: React.FormEvent) => {
     e.preventDefault();
     if (!validatePriceEntries(editScheduledPrices)) return;
-    if (!scheduledDateTime)
+    if (!scheduledDateTime) {
       return toast.error("Time zone configuration window blank.");
+    }
 
     const parsedPricePayload: Record<string, number> = {};
     Object.entries(editScheduledPrices).forEach(([gradeId, rawString]) => {
@@ -1898,12 +1951,14 @@ function FuelPricingPanel() {
       }
     });
 
+    // Match the route path precisely and unify req.body structure
     submitPricesMutation.mutate({
       method: "put",
-      route: `/api/fuel-pricing/schedule/${locationMongoId}`,
+      route: "/api/fuel-pricing/edit-schedule-prices",
       payload: {
+        locationId: locationMongoId,
         prices: parsedPricePayload,
-        scheduledDateTime,
+        scheduledDateTime, // Local wall-clock string: "YYYY-MM-DDTHH:mm"
       },
     });
   };
@@ -1911,7 +1966,7 @@ function FuelPricingPanel() {
   const handleExecuteDeleteSchedule = () => {
     submitPricesMutation.mutate({
       method: "delete",
-      route: `/api/fuel-pricing/schedule/${locationMongoId}`,
+      route: `/api/fuel-pricing/cancel-schedule/${locationMongoId}`,
       payload: null,
     });
   };
@@ -1987,18 +2042,19 @@ function FuelPricingPanel() {
               const suggestedPriceValue = recommendedPrices[grade.id];
               const liveDataRecord = activePostgresPrices?.[grade.id];
               const livePostgresVal = liveDataRecord?.price;
-              const rawTimestamp = liveDataRecord?.updatedAt;
+              const rawTimestamp = liveDataRecord?.updatedAt; // This remains a UTC ISO object stream
 
               const scheduledRecord = liveDataRecord?.scheduled;
 
+              // ✅ Keeps standard parsing since updatedAt is a standard absolute UTC time
               const localFormattedTime = formatStationTimestamp(
                 rawTimestamp,
                 stationTimeZone,
               );
 
-              const localFormattedScheduledTime = formatStationTimestamp(
+              // ✅ FIX: Use the direct text formatter to preserve the frozen wall-clock string
+              const localFormattedScheduledTime = formatRawStationString(
                 scheduledRecord?.scheduledAt,
-                stationTimeZone,
               );
 
               const cleanInputString = prices[grade.id] || "";
@@ -2012,69 +2068,56 @@ function FuelPricingPanel() {
               return (
                 <Card
                   key={grade.id}
-                  className="border border-slate-200 shadow-sm bg-white overflow-hidden rounded-xl"
+                  className="border border-slate-200/80 shadow-sm bg-white overflow-hidden rounded-xl"
                 >
-                  <CardContent className="py-1.5 px-2.5 space-y-1.5">
+                  {/* Tightened CardContent Padding */}
+                  <CardContent className="py-1 px-2 space-y-1">
                     <div className="flex items-center justify-between gap-1 w-full text-slate-700">
                       <span
-                        className={`text-[10px] font-extrabold px-2 py-0.5 rounded tracking-wide uppercase shrink-0 ${getFormGradeTheme(grade.lookup)}`}
+                        className={`text-[9px] font-black px-1.5 py-0.5 rounded tracking-wide uppercase shrink-0 ${getFormGradeTheme(grade.lookup)}`}
                       >
                         {grade.label}
                       </span>
 
                       <div className="flex flex-col items-end text-right">
-                        <div className="flex items-center gap-3.5 pr-0.5">
+                        <div className="flex items-center gap-2 pr-0.5">
                           <div>
-                            <span className="text-[10px] font-bold text-slate-400 uppercase tracking-tight mr-1">
+                            <span className="text-[9px] font-bold text-slate-400 uppercase tracking-tight mr-0.5">
                               Cur:
                             </span>
-                            <span className="text-sm font-black text-slate-800">
+                            <span className="text-xs font-black text-slate-800">
                               {livePostgresVal
                                 ? `$${Number(livePostgresVal).toFixed(3)}`
                                 : "—"}
                             </span>
                             {localFormattedTime && (
-                              <span className="text-[10px] font-bold text-slate-400 ml-1.5 tabular-nums">
+                              <span className="text-[9px] font-bold text-slate-400 ml-1 tabular-nums">
                                 ({localFormattedTime})
                               </span>
                             )}
                           </div>
-                          <div className="border-l border-slate-200 pl-2.5">
-                            <span className="text-[10px] font-bold text-slate-400 uppercase tracking-tight mr-1">
+                          <div className="border-l border-slate-200 pl-2">
+                            <span className="text-[9px] font-bold text-slate-400 uppercase tracking-tight mr-0.5">
                               Rec:
                             </span>
-                            <span className="text-sm font-black text-blue-600">
+                            <span className="text-xs font-black text-blue-600">
                               {suggestedPriceValue
                                 ? `$${Number(suggestedPriceValue).toFixed(3)}`
                                 : "—"}
                             </span>
                           </div>
                         </div>
-
-                        {/* INLINE SPECIFIC PENDING SCHEDULE FIELD ROW */}
-                        {scheduledRecord && (
-                          <div className="mt-0.5 pt-0.5 border-t border-dashed border-slate-100 text-[10px] text-amber-600 font-bold flex items-center gap-1.5">
-                            <span className="uppercase tracking-tight text-[9px] text-slate-400 font-extrabold">
-                              Scheduled Label:
-                            </span>
-                            <span>
-                              ${Number(scheduledRecord.price).toFixed(3)}
-                            </span>
-                            <span className="font-medium text-slate-400 font-mono">
-                              ({localFormattedScheduledTime})
-                            </span>
-                          </div>
-                        )}
                       </div>
                     </div>
 
-                    <div className="flex items-center justify-between pt-1 border-t border-slate-100 gap-2">
-                      <div className="flex items-center gap-1.5 pl-0.5">
-                        <span className="text-[10px] font-extrabold text-slate-400 uppercase tracking-wider">
+                    {/* TARGET INPUT ROW (Lowered top padding) */}
+                    <div className="flex items-center justify-between pt-0.5 border-t border-slate-100 gap-2">
+                      <div className="flex items-center gap-1 pl-0.5">
+                        <span className="text-[9px] font-extrabold text-slate-400 uppercase tracking-wider">
                           Target Input
                         </span>
                         {isUnchangedValue && (
-                          <span className="text-[10px] font-bold text-amber-500 normal-case">
+                          <span className="text-[9px] font-bold text-amber-500 normal-case">
                             (unchanged)
                           </span>
                         )}
@@ -2087,29 +2130,49 @@ function FuelPricingPanel() {
                           handlePriceValueChange(grade.id, val)
                         }
                       >
-                        <InputOTPGroup className="bg-white scale-90 origin-right">
+                        {/* Scaled scale-90 to scale-85 to tightly fit components */}
+                        <InputOTPGroup className="bg-white scale-85 origin-right">
                           <InputOTPSlot
                             index={0}
-                            className="w-8 h-8 text-xs font-black border-slate-200 focus:border-blue-500 rounded-l-lg"
+                            className="w-7 h-7 text-xs font-black border-slate-200 focus:border-blue-500 rounded-l-md"
                           />
                         </InputOTPGroup>
-                        <InputOTPSeparator className="text-slate-400 font-bold text-sm mx-0.5 scale-90" />
-                        <InputOTPGroup className="bg-white scale-90 origin-right">
+                        <InputOTPSeparator className="text-slate-400 font-bold text-xs mx-0.5 scale-85" />
+                        <InputOTPGroup className="bg-white scale-85 origin-right">
                           <InputOTPSlot
                             index={1}
-                            className="w-8 h-8 text-xs font-bold border-slate-200"
+                            className="w-7 h-7 text-xs font-bold border-slate-200"
                           />
                           <InputOTPSlot
                             index={2}
-                            className="w-8 h-8 text-xs font-bold border-slate-200"
+                            className="w-7 h-7 text-xs font-bold border-slate-200"
                           />
                           <InputOTPSlot
                             index={3}
-                            className="w-8 h-8 text-xs font-bold border-slate-200 rounded-r-lg"
+                            className="w-7 h-7 text-xs font-bold border-slate-200 rounded-r-md"
                           />
                         </InputOTPGroup>
                       </InputOTP>
                     </div>
+
+                    {/* COMPACT BOTTOM ANCHOR SCHEDULE VIEW */}
+                    {scheduledRecord && (
+                      <div className="mt-0.5 pt-1 border-t border-dashed border-slate-100 text-[9px] text-amber-600 font-bold flex items-center justify-between w-full">
+                        <span className="uppercase tracking-tight text-[8px] text-slate-400 font-extrabold">
+                          Scheduled Price:
+                        </span>
+                        <div className="flex items-center gap-1">
+                          <span className="text-[11px] font-black text-amber-600 bg-amber-50/70 px-1 py-0.25 rounded border border-amber-200/50">
+                            ${Number(scheduledRecord.price).toFixed(3)}
+                          </span>
+                          {localFormattedScheduledTime && (
+                            <span className="font-medium text-slate-400 font-mono text-[9px] tracking-tight">
+                              ({localFormattedScheduledTime})
+                            </span>
+                          )}
+                        </div>
+                      </div>
+                    )}
                   </CardContent>
                 </Card>
               );
