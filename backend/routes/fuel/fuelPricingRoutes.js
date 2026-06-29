@@ -1332,8 +1332,6 @@ router.post("/upsert-retail", async (req, res) => {
     // Determine target location timezone (fallback to Americas/Toronto index configurations)
     const targetTimezone = locationDoc.timezone || "America/Toronto";
     const io = req.app.get("io");
-    console.log("Scheduled?", isScheduled);
-    console.log("Scheduled Date Time", scheduledDateTime);
 
     // -------------------------------------------------------------------------
     // BRANCH A: DELAYED TASK SCHEDULING PIPELINE (Per-Grade Rows)
