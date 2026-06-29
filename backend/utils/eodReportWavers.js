@@ -194,6 +194,15 @@ function EodReportDoc({ site, date, data }) {
         renderRow('Cash Reported', data.reportCanadianCash, false, null, true),
         renderRow('Cheques Cashed Out', data.chequesCashedOut, false, null, true)
       ] : []),
+      // Conditionally render Adj. Fuel variance if it skips past the 0.01 rounded zero threshold
+      ...(Math.abs(data.adjFuelVariance) > 0.01 ? [
+        renderRow(
+          'Adj. Fuel', 
+          data.adjFuelVariance, 
+          false, 
+          null // 👈 Dropped color styles so it prints with default text styles
+        )
+      ] : []),
 
       // 3. Tenders Section Block
       renderSectionHeader('Tenders'),
@@ -410,6 +419,16 @@ async function generateEodReportPdf({ site, date, isManitoba = false }) {
     overShortCash = physicalAssets - reportCanadianCash + unsettledPrepays + handheldDebit;
   }
 
+  // FUEL ADJ VARIANCE LOGIC:
+  // Inverted calculation to properly show missing/under adjustments as a negative sign
+  const fuelSales = sum('fuelSales');
+  const fuelPriceOverrides = sum('fuelPriceOverrides');
+  const adjFuelCalculated = fuelSales + fuelPriceOverrides;
+  
+  // Matrix Grand Total Amount minus the POS Adjusted Sales
+  const matrixGrandTotalAmount = fuelRemittanceTotals.totalAmount;
+  const adjFuelVariance = matrixGrandTotalAmount - adjFuelCalculated;
+
   // 5️⃣ Formula calculation (Deducting Bingo Sales to avoid duplicate reporting)
   const merchandiseSalesOthers = itemSales - (tobaccoCig + tobaccoOthers + propaneSales + bingoSales + lotSales);
 
@@ -417,8 +436,8 @@ async function generateEodReportPdf({ site, date, isManitoba = false }) {
   const aggregatedData = {
     isManitoba,
     sellsLottery,
-    fuelSales: sum('fuelSales'),
-    fuelPriceOverrides: sum('fuelPriceOverrides'),
+    fuelSales,
+    fuelPriceOverrides,
     itemSales,
     gst: sum('gst'),
     pst: sum('pst'),
@@ -428,6 +447,7 @@ async function generateEodReportPdf({ site, date, isManitoba = false }) {
     reportCanadianCash,
     chequesCashedOut,
     overShortCash: typeof overShortCash === 'number' ? Number(overShortCash.toFixed(2)) : null,
+    adjFuelVariance: typeof adjFuelVariance === 'number' ? Number(adjFuelVariance.toFixed(2)) : 0, // 👈 Added attribute metrics
     tenders: tendersAgg,
     arCustomers: arCustomersAgg,
     tobaccoCig,
