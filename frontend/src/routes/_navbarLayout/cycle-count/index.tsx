@@ -4,10 +4,16 @@ import { useAuth } from "@/context/AuthContext";
 import { getSocket } from "@/lib/websocket";
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
 import CycleCountTableGroup from "@/components/custom/CycleCountTableGroup"; // Our new helper
-import { Check, CheckCircle2, Star, ArrowDownToLine } from "lucide-react";
+import { Check, CheckCircle2, Star, ArrowDownToLine, Info } from "lucide-react";
 import { useSite } from '@/context/SiteContext';
 import { LocationPicker } from "@/components/custom/locationPicker";
 import axios from "axios";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 
 export const Route = createFileRoute('/_navbarLayout/cycle-count/')({
   component: RouteComponent,
@@ -26,6 +32,7 @@ function RouteComponent() {
   const [completedCategories, setCompletedCategories] = useState<string[]>([]);
   const [varianceMap, setVarianceMap] = useState<{ [key: number]: number }>({});
   const [syncing, setSyncing] = useState(false);
+  const [showWelcomeModal, setShowWelcomeModal] = useState(true);
 
   interface CycleCountFieldUpdateV2 {
     entryId: string;
@@ -400,6 +407,40 @@ function RouteComponent() {
 
   return (
     <div className="p-4 max-w-5xl mx-auto pb-32">
+      {/* 💡 DISCLAIMER POPUP MODAL */}
+      <Dialog open={showWelcomeModal} onOpenChange={setShowWelcomeModal}>
+        <DialogContent className="max-w-md p-6 bg-white rounded-xl shadow-xl border">
+          <DialogHeader className="flex flex-row items-center gap-3 border-b pb-3">
+            <div className="p-2 bg-blue-50 text-blue-600 rounded-lg">
+              <Info className="w-5 h-5" />
+            </div>
+            <DialogTitle className="text-xl font-black text-gray-900 tracking-tight">
+              Important: Process Change
+            </DialogTitle>
+          </DialogHeader>
+          
+          <div className="py-4 space-y-4 text-sm leading-relaxed text-gray-600">
+            <p>
+              We have upgraded our system workflow. You <strong>no longer need to use your handheld scanner device's Retail 360 app</strong> to log items for your regular inventory updates. 
+            </p>
+            <p className="bg-amber-50 border border-amber-200 text-amber-900 p-3 rounded-lg font-medium">
+              Simply input all of your physical stock numbers directly into the input fields here on the Hub interface.
+            </p>
+            <p>
+              Once you have finished checking every inventory category, you must click the green <strong>"Finalize Counts" button at the top of the page</strong> to submit the daily batch, generate tickets, and automatically push your final counts to the system.
+            </p>
+          </div>
+
+          <div className="pt-3 flex justify-end">
+            <button
+              onClick={() => setShowWelcomeModal(false)}
+              className="w-full sm:w-auto px-5 py-2.5 bg-blue-600 hover:bg-blue-700 active:scale-98 text-white text-sm font-bold rounded-lg shadow-md transition-all"
+            >
+              Ok, I understand
+            </button>
+          </div>
+        </DialogContent>
+      </Dialog>
       {/* HEADER SECTION */}
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-6">
         <div>
