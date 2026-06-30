@@ -900,8 +900,8 @@ router.put('/:id/status', async (req, res) => {
 router.post('/:id/comments', async (req, res) => {
   try {
     const { text, photos } = req.body;
-    if (!text || text.trim() === '') {
-      return res.status(400).json({ message: 'Comment text is required' });
+    if (!text?.trim() && (!Array.isArray(photos) || photos.length === 0)) {
+      return res.status(400).json({ message: 'Please provide a message or attach a photo.' });
     }
 
     const orderRec = await OrderRec.findById(req.params.id);

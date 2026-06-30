@@ -142,7 +142,7 @@ router.put("/:id", async (req, res) => {
 // POST /api/locations
 router.post("/", async (req, res) => {
   try {
-    const { type, stationName, legalName, INDNumber, kardpollCode, csoCode, timezone, email, managerCode, sellsLottery, managerEmails, province } = req.body;
+    const { type, stationName, legalName, INDNumber, kardpollCode, csoCode, timezone, email, managerCode, sellsLottery, managerEmails, province, gasBuddyStationId } = req.body;
 
     // Basic validation
     if (!type || !stationName || !legalName || !INDNumber || !csoCode || !timezone || !email || !managerCode || !province) {
@@ -162,7 +162,8 @@ router.post("/", async (req, res) => {
       managerCode,
       sellsLottery: !!sellsLottery,
       managerEmails: managerEmails || [],
-      province
+      province,
+      gasBuddyStationId: gasBuddyStationId || "" // 🚀 NEW: Assigned fallback default string mapping
     });
 
     await location.save();

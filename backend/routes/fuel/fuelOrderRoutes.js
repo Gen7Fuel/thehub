@@ -396,7 +396,7 @@ router.post('/', async (req, res) => {
       isSplit, orders // Each order now contains its own badgeNo
     } = req.body;
 
-    const GRADE_ORDER = ["Regular", "Premium", "Diesel", "Dyed Diesel"];
+    const GRADE_ORDER = ["Regular", "E15", "Premium", "Diesel", "Dyed Diesel"];
 
     // 1. Duplicate & Logistics Check
     const poNumbers = orders.map(o => o.poNumber);
