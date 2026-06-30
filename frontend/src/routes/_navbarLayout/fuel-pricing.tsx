@@ -128,7 +128,7 @@ function FuelPricingDashboard() {
     },
   });
 
-  const stations = (data?.stations || [])
+  const stations = data?.stations || [];
   // .filter(
   //   (station: any) => station.stationName !== "Test Lab",
   // );
@@ -327,7 +327,44 @@ function FuelPricingDashboard() {
                       landedCost={currentGradeData.metrics.landedCost}
                       priceExplanation={
                         currentGradeData.metrics.priceExplanation
-                      } // <--- Pass the backend text here
+                      }
+                    />
+
+                    {/* ================= INSERTED ROW: TOMORROW'S FUEL SPECS ================= */}
+                    <h2 className="col-span-3 text-[13px] font-bold tracking-widest text-slate-400 uppercase pl-0.5 mt-2 flex items-center justify-between">
+                      <span>Tomorrow's Fuel Specs</span>
+                    </h2>
+                    <MetricCard
+                      title="Tomorrow's Rack Price"
+                      current={currentGradeData.metrics.tomorrowRackPrice}
+                      today={currentGradeData.metrics.rackPrice}
+                      variant="rack"
+                      isTomorrow
+                      tooltipContent={marketPriceDefinitions}
+                    />
+                    <MetricCard
+                      title="Tomorrow's Landed Cost"
+                      current={currentGradeData.metrics.tomorrowLandedCost}
+                      today={currentGradeData.metrics.landedCost}
+                      variant="landed"
+                      isTomorrow
+                      tooltipContent={marketPriceDefinitions}
+                    />
+                    <MetricCard
+                      title="Tomorrow's Suggested Price"
+                      current={currentGradeData.metrics.tomorrowRecPrice}
+                      today={currentGradeData.metrics.recPrice}
+                      isSuggested
+                      isTomorrow
+                      selectedGrade={selectedGrade}
+                      lowMarketPrice={currentGradeData.metrics.low} // Keeping LIP configuration identical
+                      landedCost={
+                        currentGradeData.metrics.tomorrowLandedCost ||
+                        currentGradeData.metrics.landedCost
+                      }
+                      priceExplanation={
+                        currentGradeData.metrics.tomorrowPriceExplanation
+                      }
                     />
 
                     {/* ================= ROW 2: LOCAL MARKET PRICES ================= */}
@@ -408,6 +445,539 @@ function FuelPricingDashboard() {
     </FuelPricingContext.Provider>
   );
 }
+interface TooltipItem {
+  label: string;
+  description: string;
+}
+
+function MetricCard({
+  title,
+  current,
+  yesterday,
+  today, // <-- Added today prop
+  isSuggested,
+  lowMarketPrice,
+  landedCost,
+  selectedGrade,
+  variant,
+  tooltipContent,
+  priceExplanation,
+  isTomorrow, // <-- Added isTomorrow flag
+}: {
+  title: string;
+  current: number;
+  yesterday?: number;
+  today?: number; // <-- Added today type
+  isSuggested?: boolean;
+  lowMarketPrice?: number;
+  landedCost?: number;
+  rackPrice?: number;
+  selectedGrade?: string;
+  variant?: "landed" | "rack" | "market";
+  tooltipContent?: TooltipItem[];
+  priceExplanation?: string;
+  isTomorrow?: boolean; // <-- Added isTomorrow type
+}) {
+  const currentVal = current || 0;
+  const comparisonVal = isTomorrow ? today || 0 : yesterday || 0;
+  const variance = currentVal - comparisonVal;
+
+  let colorClasses = "border-slate-200 bg-white";
+  if (variant === "market")
+    colorClasses =
+      "border-amber-200 border-l-[5px] border-l-amber-500 bg-white";
+  if (variant === "landed")
+    colorClasses =
+      "border-indigo-200 border-l-[5px] border-l-indigo-500 bg-white";
+  if (variant === "rack")
+    colorClasses =
+      "border-violet-200 border-l-[5px] border-l-violet-500 bg-white";
+
+  const renderTooltip = (itemsToRender: TooltipItem[]) => {
+    if (!itemsToRender || itemsToRender.length === 0) return null;
+    return (
+      <div className="relative group ml-1.5 inline-block overflow-visible">
+        <HelpCircle
+          size={13}
+          className="text-slate-400 hover:text-slate-600 cursor-help transition-colors"
+        />
+        <div className="absolute top-full left-1/2 -translate-x-1/4 mt-2 hidden group-hover:block w-64 bg-white border border-slate-200 text-slate-700 rounded-lg p-2.5 shadow-xl z-[9999] pointer-events-none text-left">
+          <div className="space-y-2">
+            {itemsToRender.map((item, idx) => (
+              <div key={idx} className="text-[10px] leading-relaxed">
+                <span className="font-bold text-slate-900 block">
+                  {item.label}
+                </span>
+                <span className="text-slate-500">{item.description}</span>
+              </div>
+            ))}
+          </div>
+          <div className="absolute bottom-full left-1/4 -translate-x-1/2 border-4 border-transparent border-b-white" />
+          <div className="absolute bottom-full left-1/4 -translate-x-1/2 border-4 border-transparent border-b-slate-200 -z-10 translate-y-[-1px]" />
+        </div>
+      </div>
+    );
+  };
+
+  if (isSuggested) {
+    const hasMarketPrice = lowMarketPrice && lowMarketPrice !== 0;
+    const calculatedSuggestedPrice = hasMarketPrice ? lowMarketPrice - 0.01 : 0;
+    const impliedMargin = hasMarketPrice
+      ? ((calculatedSuggestedPrice - (landedCost || 0)) / (landedCost || 1)) *
+        100
+      : 0;
+
+    const recPriceVal = currentVal;
+    const landedCostVal = landedCost || 0;
+    const currentRecMargin =
+      landedCostVal > 0
+        ? ((recPriceVal - landedCostVal) / landedCostVal) * 100
+        : 0;
+
+    const gradeLookup =
+      GRADES.find((g) => g.id === selectedGrade)?.lookup || "Regular";
+    const gradeTheme = getGradeTheme(gradeLookup);
+
+    const dynamicSuggestedTooltip = [
+      {
+        label: "Price Explanation",
+        description:
+          priceExplanation || "By adding 12% margin to the Landed cost",
+      },
+      {
+        label: "Low Indexed Price",
+        description:
+          "Calculated using today's market low threshold adjusted down by $0.01.",
+      },
+      {
+        label: "LIP Margin",
+        description:
+          "The explicit margin yielded when evaluating LIP positioning against true landed costs.",
+      },
+    ];
+
+    return (
+      <Card
+        className={`
+        shadow-none
+        border
+        border-l-[5px]
+        transition-all duration-300
+        min-h-[92px]
+        h-[110px]
+        overflow-visible
+        ${gradeTheme.border}
+        ${gradeTheme.light}
+      `}
+      >
+        <CardContent className="h-full pt-2.5 pb-2.5 px-3 flex flex-col justify-between bg-transparent space-y-0 overflow-visible">
+          <div className="flex items-center justify-between w-full overflow-visible">
+            <div className="flex items-center overflow-visible">
+              <span className="text-[11px] font-extrabold text-slate-700 uppercase tracking-wide">
+                {title}
+              </span>
+              {renderTooltip(dynamicSuggestedTooltip)}
+            </div>
+
+            <div className="text-right text-[11px] font-medium text-slate-600">
+              Low Indexed Price:{" "}
+              <span className="font-bold text-slate-800">
+                {hasMarketPrice
+                  ? `$${calculatedSuggestedPrice.toFixed(4)}`
+                  : "-"}
+              </span>
+            </div>
+          </div>
+
+          <div className="flex items-center justify-between w-full self-end">
+            <div className="flex items-center space-x-2">
+              {currentVal === 0 ? (
+                <span className="text-xs font-bold text-slate-400 italic">
+                  Not available yet
+                </span>
+              ) : (
+                <span className="text-lg font-black text-slate-900 tracking-tight">
+                  ${currentVal.toFixed(4)}
+                </span>
+              )}
+
+              {currentVal > 0 && landedCostVal > 0 && (
+                <span className="text-[10px] font-bold text-indigo-700 bg-indigo-50 border border-indigo-200/60 px-1.5 py-0.5 rounded whitespace-nowrap">
+                  Margin: {currentRecMargin.toFixed(2)}%
+                </span>
+              )}
+            </div>
+
+            <div className="text-right">
+              <span className="text-[11px] font-black text-cyan-800 bg-cyan-100/80 border border-cyan-200/60 px-1.5 py-0.5 rounded shadow-2xs">
+                LIP Margin:{" "}
+                {hasMarketPrice ? `${impliedMargin.toFixed(2)}%` : "-"}
+              </span>
+            </div>
+          </div>
+        </CardContent>
+      </Card>
+    );
+  }
+
+  return (
+    <Card className={`shadow-none border overflow-visible ${colorClasses}`}>
+      <CardContent className="pt-1.5 pb-2.5 px-3 flex items-center justify-between w-full overflow-visible">
+        <div className="space-y-0.5 overflow-visible">
+          <div className="flex items-center overflow-visible">
+            <div className="text-[11px] font-extrabold text-slate-600 uppercase tracking-wide">
+              {title}
+            </div>
+            {renderTooltip(tooltipContent || [])}
+          </div>
+          {currentVal === 0 ? (
+            <div className="text-xs font-bold text-slate-400 italic mt-1">
+              Not available yet
+            </div>
+          ) : (
+            <div className="text-lg font-black text-slate-900 tracking-tight">
+              ${currentVal.toFixed(4)}
+            </div>
+          )}
+        </div>
+
+        <div className="text-right flex flex-col items-end justify-center space-y-0.5">
+          {currentVal === 0 ? (
+            <span className="text-[10px] font-medium text-amber-600 bg-amber-50 border border-amber-100 px-1.5 py-0.5 rounded italic">
+              Price not updated
+            </span>
+          ) : variance !== 0 ? (
+            <span
+              className={`text-[10px] font-bold flex items-center px-1.5 py-0.5 rounded ${variance > 0 ? "text-rose-600 bg-rose-50" : "text-emerald-600 bg-emerald-50"}`}
+            >
+              {variance > 0 ? (
+                <ArrowUpRight size={12} className="mr-0.5" />
+              ) : (
+                <ArrowDownRight size={12} className="mr-0.5" />
+              )}
+              ${Math.abs(variance).toFixed(4)}
+            </span>
+          ) : (
+            <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-slate-100 text-slate-500 border border-slate-200/40">
+              {isTomorrow ? "Same as Today" : "Same as Yesterday"}
+            </span>
+          )}
+          <div className="text-[13px] font-medium text-slate-400">
+            {isTomorrow ? "Today: " : "Yesterday: "}{" "}
+            <span className="font-semibold text-slate-600">
+              ${comparisonVal.toFixed(4)}
+            </span>
+          </div>
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
+
+// function MetricCard({
+//   title,
+//   current,
+//   yesterday,
+//   isSuggested,
+//   lowMarketPrice,
+//   landedCost,
+//   selectedGrade,
+//   variant,
+//   tooltipContent,
+//   priceExplanation, // <--- Added here
+// }: {
+//   title: string;
+//   current: number;
+//   yesterday: number;
+//   isSuggested?: boolean;
+//   lowMarketPrice?: number;
+//   landedCost?: number;
+//   rackPrice?: number;
+//   selectedGrade?: string;
+//   variant?: "landed" | "rack" | "market";
+//   tooltipContent?: TooltipItem[];
+//   priceExplanation?: string; // <--- Added here
+// }) {
+//   const currentVal = current || 0;
+//   const yesterdayVal = yesterday || 0;
+//   const variance = currentVal - yesterdayVal;
+
+//   let colorClasses = "border-slate-200 bg-white";
+//   if (variant === "market")
+//     colorClasses =
+//       "border-amber-200 border-l-[5px] border-l-amber-500 bg-white";
+//   if (variant === "landed")
+//     colorClasses =
+//       "border-indigo-200 border-l-[5px] border-l-indigo-500 bg-white";
+//   if (variant === "rack")
+//     colorClasses =
+//       "border-violet-200 border-l-[5px] border-l-violet-500 bg-white";
+
+//   // CHANGED: Clean, elegant light-gray tooltip design
+//   const renderTooltip = (itemsToRender: TooltipItem[]) => {
+//     if (!itemsToRender || itemsToRender.length === 0) return null;
+//     return (
+//       <div className="relative group ml-1.5 inline-block overflow-visible">
+//         <HelpCircle
+//           size={13}
+//           className="text-slate-400 hover:text-slate-600 cursor-help transition-colors"
+//         />
+//         <div className="absolute top-full left-1/2 -translate-x-1/4 mt-2 hidden group-hover:block w-64 bg-white border border-slate-200 text-slate-700 rounded-lg p-2.5 shadow-xl z-[9999] pointer-events-none text-left">
+//           <div className="space-y-2">
+//             {itemsToRender.map((item, idx) => (
+//               <div key={idx} className="text-[10px] leading-relaxed">
+//                 <span className="font-bold text-slate-900 block">
+//                   {item.label}
+//                 </span>
+//                 <span className="text-slate-500">{item.description}</span>
+//               </div>
+//             ))}
+//           </div>
+//           {/* Light-gray triangle pointer */}
+//           <div className="absolute bottom-full left-1/4 -translate-x-1/2 border-4 border-transparent border-b-white" />
+//           <div className="absolute bottom-full left-1/4 -translate-x-1/2 border-4 border-transparent border-b-slate-200 -z-10 translate-y-[-1px]" />
+//         </div>
+//       </div>
+//     );
+//   };
+
+//   if (isSuggested) {
+//     const hasMarketPrice = lowMarketPrice && lowMarketPrice !== 0;
+//     const calculatedSuggestedPrice = hasMarketPrice ? lowMarketPrice - 0.01 : 0;
+//     const impliedMargin = hasMarketPrice
+//       ? ((calculatedSuggestedPrice - (landedCost || 0)) / (landedCost || 1)) *
+//         100
+//       : 0;
+
+//     // NEW: Calculate the real-time margin of the active recommended price over the landed cost
+//     const recPriceVal = currentVal;
+//     const landedCostVal = landedCost || 0;
+//     const currentRecMargin =
+//       landedCostVal > 0
+//         ? ((recPriceVal - landedCostVal) / landedCostVal) * 100
+//         : 0;
+
+//     const gradeLookup =
+//       GRADES.find((g) => g.id === selectedGrade)?.lookup || "Regular";
+//     const gradeTheme = getGradeTheme(gradeLookup);
+
+//     const dynamicSuggestedTooltip = [
+//       {
+//         label: "Price Explanation",
+//         description:
+//           priceExplanation || "By adding 12% margin to the Landed cost",
+//       },
+//       {
+//         label: "Low Indexed Price",
+//         description:
+//           "Calculated using today's market low threshold adjusted down by $0.01.",
+//       },
+//       {
+//         label: "LIP Margin",
+//         description:
+//           "The explicit margin yielded when evaluating LIP positioning against true landed costs.",
+//       },
+//     ];
+
+//     return (
+//       <Card
+//         className={`
+//         shadow-none
+//         border
+//         border-l-[5px]
+//         transition-all duration-300
+//         min-h-[92px]
+//         h-[110px]
+//         overflow-visible
+//         ${gradeTheme.border}
+//         ${gradeTheme.light}
+//       `}
+//       >
+//         <CardContent className="h-full pt-2.5 pb-2.5 px-3 flex flex-col justify-between bg-transparent space-y-0 overflow-visible">
+//           <div className="flex items-center justify-between w-full overflow-visible">
+//             <div className="flex items-center overflow-visible">
+//               <span className="text-[11px] font-extrabold text-slate-700 uppercase tracking-wide">
+//                 {title}
+//               </span>
+//               {renderTooltip(dynamicSuggestedTooltip)}
+//             </div>
+
+//             <div className="text-right text-[11px] font-medium text-slate-600">
+//               Low Indexed Price:{" "}
+//               <span className="font-bold text-slate-800">
+//                 {hasMarketPrice
+//                   ? `$${calculatedSuggestedPrice.toFixed(4)}`
+//                   : "-"}
+//               </span>
+//             </div>
+//           </div>
+
+//           <div className="flex items-center justify-between w-full self-end">
+//             <div className="flex items-center space-x-2">
+//               {currentVal === 0 ? (
+//                 <span className="text-xs font-bold text-slate-400 italic">
+//                   No price data yet
+//                 </span>
+//               ) : (
+//                 <span className="text-lg font-black text-slate-900 tracking-tight">
+//                   ${currentVal.toFixed(4)}
+//                 </span>
+//               )}
+
+//               {/* ADDED: Dynamic recommended price margin badge for easy comparison */}
+//               {currentVal > 0 && landedCostVal > 0 && (
+//                 <span className="text-[10px] font-bold text-indigo-700 bg-indigo-50 border border-indigo-200/60 px-1.5 py-0.5 rounded whitespace-nowrap">
+//                   Margin: {currentRecMargin.toFixed(2)}%
+//                 </span>
+//               )}
+//             </div>
+
+//             <div className="text-right">
+//               <span className="text-[11px] font-black text-cyan-800 bg-cyan-100/80 border border-cyan-200/60 px-1.5 py-0.5 rounded shadow-2xs">
+//                 LIP Margin:{" "}
+//                 {hasMarketPrice ? `${impliedMargin.toFixed(2)}%` : "-"}
+//               </span>
+//             </div>
+//           </div>
+//         </CardContent>
+//       </Card>
+//     );
+//   }
+
+//   return (
+//     <Card className={`shadow-none border overflow-visible ${colorClasses}`}>
+//       <CardContent className="pt-1.5 pb-2.5 px-3 flex items-center justify-between w-full overflow-visible">
+//         <div className="space-y-0.5 overflow-visible">
+//           <div className="flex items-center overflow-visible">
+//             <div className="text-[11px] font-extrabold text-slate-600 uppercase tracking-wide">
+//               {title}
+//             </div>
+//             {renderTooltip(tooltipContent || [])}
+//           </div>
+//           {currentVal === 0 ? (
+//             <div className="text-xs font-bold text-slate-400 italic mt-1">
+//               No price data yet
+//             </div>
+//           ) : (
+//             <div className="text-lg font-black text-slate-900 tracking-tight">
+//               ${currentVal.toFixed(4)}
+//             </div>
+//           )}
+//         </div>
+
+//         <div className="text-right flex flex-col items-end justify-center space-y-0.5">
+//           {currentVal === 0 ? (
+//             <span className="text-[10px] font-medium text-amber-600 bg-amber-50 border border-amber-100 px-1.5 py-0.5 rounded italic">
+//               Price not updated
+//             </span>
+//           ) : variance !== 0 ? (
+//             <span
+//               className={`text-[10px] font-bold flex items-center px-1.5 py-0.5 rounded ${variance > 0 ? "text-rose-600 bg-rose-50" : "text-emerald-600 bg-emerald-50"}`}
+//             >
+//               {variance > 0 ? (
+//                 <ArrowUpRight size={12} className="mr-0.5" />
+//               ) : (
+//                 <ArrowDownRight size={12} className="mr-0.5" />
+//               )}
+//               ${Math.abs(variance).toFixed(4)}
+//             </span>
+//           ) : (
+//             <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-slate-100 text-slate-500 border border-slate-200/40">
+//               Same as Yesterday
+//             </span>
+//           )}
+//           <div className="text-[13px] font-medium text-slate-400">
+//             Yesterday:{" "}
+//             <span className="font-semibold text-slate-600">
+//               ${yesterdayVal.toFixed(4)}
+//             </span>
+//           </div>
+//         </div>
+//       </CardContent>
+//     </Card>
+//   );
+// }
+
+function CompetitorTable({ data }: { data: any[] }) {
+  if (!data || data.length === 0) {
+    return (
+      <div className="text-center py-2 text-[10px] font-medium text-slate-400 bg-slate-50 rounded-lg">
+        No competitor metrics matching criteria.
+      </div>
+    );
+  }
+
+  return (
+    <div className="border border-slate-100 rounded-lg overflow-hidden shadow-none w-full">
+      <Table className="w-full table-fixed">
+        <TableHeader className="bg-slate-50/70">
+          <TableRow className="hover:bg-transparent border-slate-100">
+            <TableHead className="w-[30%] h-6 text-[9px] font-bold uppercase tracking-wider text-slate-400 py-0.5">
+              Name
+            </TableHead>
+            <TableHead className="w-[35%] h-6 text-[9px] font-bold uppercase tracking-wider text-slate-400 py-0.5">
+              Address
+            </TableHead>
+            <TableHead className="w-[15%] h-6 text-[9px] font-bold uppercase tracking-wider text-slate-400 py-0.5">
+              Price
+            </TableHead>
+            <TableHead className="w-[20%] h-6 text-[9px] font-bold uppercase tracking-wider text-slate-400 py-0.5 text-right">
+              Last Updated
+            </TableHead>
+          </TableRow>
+        </TableHeader>
+        <TableBody>
+          {data.map((row, index) => (
+            <TableRow
+              key={index}
+              className="border-slate-100/60 even:bg-slate-50/40 hover:bg-slate-50/80 transition-colors"
+            >
+              <TableCell className="w-[30%] py-1 text-xs font-bold text-slate-700 truncate">
+                {row.name}
+              </TableCell>
+              <TableCell className="w-[35%] py-1 text-xs text-slate-400 truncate">
+                {row.address}
+              </TableCell>
+              <TableCell className="w-[15%] py-1 text-xs font-black text-slate-900 bg-amber-50/20">
+                <span className="font-mono font-bold text-slate-800">
+                  ${Number(row.price).toFixed(4)}
+                </span>
+              </TableCell>
+              <TableCell className="w-[20%] py-1 text-[11px] text-slate-400 font-medium whitespace-nowrap text-right truncate">
+                {row.updatedDate} <span className="text-slate-200">|</span>{" "}
+                {row.updatedTime}
+              </TableCell>
+            </TableRow>
+          ))}
+        </TableBody>
+      </Table>
+    </div>
+  );
+}
+
+const getHoursSinceLastFeedUpdate = (
+  updatedAtString?: string | null,
+): string => {
+  if (!updatedAtString) {
+    return "Update time unavailable";
+  }
+
+  const dbUtcDate = new Date(updatedAtString);
+
+  if (isNaN(dbUtcDate.getTime())) {
+    return "Update time unavailable";
+  }
+
+  const localizedTime = dbUtcDate.toLocaleString(undefined, {
+    month: "short",
+    day: "numeric",
+    hour: "numeric",
+    minute: "2-digit",
+    hour12: true,
+  });
+
+  return `Last Updated at ${localizedTime}`;
+};
 
 // interface TooltipItem {
 //   label: string;
@@ -573,315 +1143,6 @@ function FuelPricingDashboard() {
 //     </Card>
 //   )
 // }
-interface TooltipItem {
-  label: string;
-  description: string;
-}
-
-function MetricCard({
-  title,
-  current,
-  yesterday,
-  isSuggested,
-  lowMarketPrice,
-  landedCost,
-  selectedGrade,
-  variant,
-  tooltipContent,
-  priceExplanation, // <--- Added here
-}: {
-  title: string;
-  current: number;
-  yesterday: number;
-  isSuggested?: boolean;
-  lowMarketPrice?: number;
-  landedCost?: number;
-  rackPrice?: number;
-  selectedGrade?: string;
-  variant?: "landed" | "rack" | "market";
-  tooltipContent?: TooltipItem[];
-  priceExplanation?: string; // <--- Added here
-}) {
-  const currentVal = current || 0;
-  const yesterdayVal = yesterday || 0;
-  const variance = currentVal - yesterdayVal;
-
-  let colorClasses = "border-slate-200 bg-white";
-  if (variant === "market")
-    colorClasses =
-      "border-amber-200 border-l-[5px] border-l-amber-500 bg-white";
-  if (variant === "landed")
-    colorClasses =
-      "border-indigo-200 border-l-[5px] border-l-indigo-500 bg-white";
-  if (variant === "rack")
-    colorClasses =
-      "border-violet-200 border-l-[5px] border-l-violet-500 bg-white";
-
-  // CHANGED: Clean, elegant light-gray tooltip design
-  const renderTooltip = (itemsToRender: TooltipItem[]) => {
-    if (!itemsToRender || itemsToRender.length === 0) return null;
-    return (
-      <div className="relative group ml-1.5 inline-block overflow-visible">
-        <HelpCircle
-          size={13}
-          className="text-slate-400 hover:text-slate-600 cursor-help transition-colors"
-        />
-        <div className="absolute top-full left-1/2 -translate-x-1/4 mt-2 hidden group-hover:block w-64 bg-white border border-slate-200 text-slate-700 rounded-lg p-2.5 shadow-xl z-[9999] pointer-events-none text-left">
-          <div className="space-y-2">
-            {itemsToRender.map((item, idx) => (
-              <div key={idx} className="text-[10px] leading-relaxed">
-                <span className="font-bold text-slate-900 block">
-                  {item.label}
-                </span>
-                <span className="text-slate-500">{item.description}</span>
-              </div>
-            ))}
-          </div>
-          {/* Light-gray triangle pointer */}
-          <div className="absolute bottom-full left-1/4 -translate-x-1/2 border-4 border-transparent border-b-white" />
-          <div className="absolute bottom-full left-1/4 -translate-x-1/2 border-4 border-transparent border-b-slate-200 -z-10 translate-y-[-1px]" />
-        </div>
-      </div>
-    );
-  };
-
-  if (isSuggested) {
-    const hasMarketPrice = lowMarketPrice && lowMarketPrice !== 0;
-    const calculatedSuggestedPrice = hasMarketPrice ? lowMarketPrice - 0.01 : 0;
-    const impliedMargin = hasMarketPrice
-      ? ((calculatedSuggestedPrice - (landedCost || 0)) / (landedCost || 1)) *
-        100
-      : 0;
-
-    // NEW: Calculate the real-time margin of the active recommended price over the landed cost
-    const recPriceVal = currentVal;
-    const landedCostVal = landedCost || 0;
-    const currentRecMargin =
-      landedCostVal > 0
-        ? ((recPriceVal - landedCostVal) / landedCostVal) * 100
-        : 0;
-
-    const gradeLookup =
-      GRADES.find((g) => g.id === selectedGrade)?.lookup || "Regular";
-    const gradeTheme = getGradeTheme(gradeLookup);
-
-    const dynamicSuggestedTooltip = [
-      {
-        label: "Price Explanation",
-        description:
-          priceExplanation || "By adding 12% margin to the Landed cost",
-      },
-      {
-        label: "Low Indexed Price",
-        description:
-          "Calculated using today's market low threshold adjusted down by $0.01.",
-      },
-      {
-        label: "LIP Margin",
-        description:
-          "The explicit margin yielded when evaluating LIP positioning against true landed costs.",
-      },
-    ];
-
-    return (
-      <Card
-        className={`
-        shadow-none
-        border
-        border-l-[5px]
-        transition-all duration-300
-        min-h-[92px]
-        h-[110px]
-        overflow-visible
-        ${gradeTheme.border}
-        ${gradeTheme.light}
-      `}
-      >
-        <CardContent className="h-full pt-2.5 pb-2.5 px-3 flex flex-col justify-between bg-transparent space-y-0 overflow-visible">
-          <div className="flex items-center justify-between w-full overflow-visible">
-            <div className="flex items-center overflow-visible">
-              <span className="text-[11px] font-extrabold text-slate-700 uppercase tracking-wide">
-                {title}
-              </span>
-              {renderTooltip(dynamicSuggestedTooltip)}
-            </div>
-
-            <div className="text-right text-[11px] font-medium text-slate-600">
-              Low Indexed Price:{" "}
-              <span className="font-bold text-slate-800">
-                {hasMarketPrice
-                  ? `$${calculatedSuggestedPrice.toFixed(4)}`
-                  : "-"}
-              </span>
-            </div>
-          </div>
-
-          <div className="flex items-center justify-between w-full self-end">
-            <div className="flex items-center space-x-2">
-              {currentVal === 0 ? (
-                <span className="text-xs font-bold text-slate-400 italic">
-                  No price data yet
-                </span>
-              ) : (
-                <span className="text-lg font-black text-slate-900 tracking-tight">
-                  ${currentVal.toFixed(4)}
-                </span>
-              )}
-
-              {/* ADDED: Dynamic recommended price margin badge for easy comparison */}
-              {currentVal > 0 && landedCostVal > 0 && (
-                <span className="text-[10px] font-bold text-indigo-700 bg-indigo-50 border border-indigo-200/60 px-1.5 py-0.5 rounded whitespace-nowrap">
-                  Margin: {currentRecMargin.toFixed(2)}%
-                </span>
-              )}
-            </div>
-
-            <div className="text-right">
-              <span className="text-[11px] font-black text-cyan-800 bg-cyan-100/80 border border-cyan-200/60 px-1.5 py-0.5 rounded shadow-2xs">
-                LIP Margin:{" "}
-                {hasMarketPrice ? `${impliedMargin.toFixed(2)}%` : "-"}
-              </span>
-            </div>
-          </div>
-        </CardContent>
-      </Card>
-    );
-  }
-
-  return (
-    <Card className={`shadow-none border overflow-visible ${colorClasses}`}>
-      <CardContent className="pt-1.5 pb-2.5 px-3 flex items-center justify-between w-full overflow-visible">
-        <div className="space-y-0.5 overflow-visible">
-          <div className="flex items-center overflow-visible">
-            <div className="text-[11px] font-extrabold text-slate-600 uppercase tracking-wide">
-              {title}
-            </div>
-            {renderTooltip(tooltipContent || [])}
-          </div>
-          {currentVal === 0 ? (
-            <div className="text-xs font-bold text-slate-400 italic mt-1">
-              No price data yet
-            </div>
-          ) : (
-            <div className="text-lg font-black text-slate-900 tracking-tight">
-              ${currentVal.toFixed(4)}
-            </div>
-          )}
-        </div>
-
-        <div className="text-right flex flex-col items-end justify-center space-y-0.5">
-          {currentVal === 0 ? (
-            <span className="text-[10px] font-medium text-amber-600 bg-amber-50 border border-amber-100 px-1.5 py-0.5 rounded italic">
-              Price not updated
-            </span>
-          ) : variance !== 0 ? (
-            <span
-              className={`text-[10px] font-bold flex items-center px-1.5 py-0.5 rounded ${variance > 0 ? "text-rose-600 bg-rose-50" : "text-emerald-600 bg-emerald-50"}`}
-            >
-              {variance > 0 ? (
-                <ArrowUpRight size={12} className="mr-0.5" />
-              ) : (
-                <ArrowDownRight size={12} className="mr-0.5" />
-              )}
-              ${Math.abs(variance).toFixed(4)}
-            </span>
-          ) : (
-            <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-slate-100 text-slate-500 border border-slate-200/40">
-              Same as Yesterday
-            </span>
-          )}
-          <div className="text-[13px] font-medium text-slate-400">
-            Yesterday:{" "}
-            <span className="font-semibold text-slate-600">
-              ${yesterdayVal.toFixed(4)}
-            </span>
-          </div>
-        </div>
-      </CardContent>
-    </Card>
-  );
-}
-
-function CompetitorTable({ data }: { data: any[] }) {
-  if (!data || data.length === 0) {
-    return (
-      <div className="text-center py-2 text-[10px] font-medium text-slate-400 bg-slate-50 rounded-lg">
-        No competitor metrics matching criteria.
-      </div>
-    );
-  }
-
-  return (
-    <div className="border border-slate-100 rounded-lg overflow-hidden shadow-none w-full">
-      <Table className="w-full table-fixed">
-        <TableHeader className="bg-slate-50/70">
-          <TableRow className="hover:bg-transparent border-slate-100">
-            <TableHead className="w-[30%] h-6 text-[9px] font-bold uppercase tracking-wider text-slate-400 py-0.5">
-              Name
-            </TableHead>
-            <TableHead className="w-[35%] h-6 text-[9px] font-bold uppercase tracking-wider text-slate-400 py-0.5">
-              Address
-            </TableHead>
-            <TableHead className="w-[15%] h-6 text-[9px] font-bold uppercase tracking-wider text-slate-400 py-0.5">
-              Price
-            </TableHead>
-            <TableHead className="w-[20%] h-6 text-[9px] font-bold uppercase tracking-wider text-slate-400 py-0.5 text-right">
-              Last Updated
-            </TableHead>
-          </TableRow>
-        </TableHeader>
-        <TableBody>
-          {data.map((row, index) => (
-            <TableRow
-              key={index}
-              className="border-slate-100/60 even:bg-slate-50/40 hover:bg-slate-50/80 transition-colors"
-            >
-              <TableCell className="w-[30%] py-1 text-xs font-bold text-slate-700 truncate">
-                {row.name}
-              </TableCell>
-              <TableCell className="w-[35%] py-1 text-xs text-slate-400 truncate">
-                {row.address}
-              </TableCell>
-              <TableCell className="w-[15%] py-1 text-xs font-black text-slate-900 bg-amber-50/20">
-                <span className="font-mono font-bold text-slate-800">
-                  ${Number(row.price).toFixed(4)}
-                </span>
-              </TableCell>
-              <TableCell className="w-[20%] py-1 text-[11px] text-slate-400 font-medium whitespace-nowrap text-right truncate">
-                {row.updatedDate} <span className="text-slate-200">|</span>{" "}
-                {row.updatedTime}
-              </TableCell>
-            </TableRow>
-          ))}
-        </TableBody>
-      </Table>
-    </div>
-  );
-}
-
-const getHoursSinceLastFeedUpdate = (
-  updatedAtString?: string | null,
-): string => {
-  if (!updatedAtString) {
-    return "Update time unavailable";
-  }
-
-  const dbUtcDate = new Date(updatedAtString);
-
-  if (isNaN(dbUtcDate.getTime())) {
-    return "Update time unavailable";
-  }
-
-  const localizedTime = dbUtcDate.toLocaleString(undefined, {
-    month: "short",
-    day: "numeric",
-    hour: "numeric",
-    minute: "2-digit",
-    hour12: true,
-  });
-
-  return `Last Updated at ${localizedTime}`;
-};
 
 // Strict UTC data source feed schedule
 // const DATA_FEED_SCHEDULE_UTC = [9, 13, 16, 19, 22];

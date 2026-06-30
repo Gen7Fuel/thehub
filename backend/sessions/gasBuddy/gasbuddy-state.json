@@ -5,17 +5,17 @@
       "value": "GA1.1.719526070.1782418009",
       "domain": ".gasbuddybusiness.io",
       "path": "/",
-      "expires": 1816978112.959148,
+      "expires": 1817060036.994379,
       "httpOnly": false,
       "secure": false,
       "sameSite": "Lax"
     },
     {
       "name": "_ga_YS67XQ8B6Y",
-      "value": "GS2.1.s1782418009$o1$g1$t1782418136$j36$l0$h0",
+      "value": "GS2.1.s1782500035$o2$g1$t1782500051$j44$l0$h0",
       "domain": ".gasbuddybusiness.io",
       "path": "/",
-      "expires": 1816978136.818151,
+      "expires": 1817060051.877933,
       "httpOnly": false,
       "secure": false,
       "sameSite": "Lax"
@@ -47,7 +47,7 @@
         },
         {
           "name": "station_prices_205339",
-          "value": "{\"saved_at\":\"2026-06-25T20:08:57Z\",\"prices\":[{\"long_name\":\"Regular\",\"short_name\":\"Reg\",\"fuel_product\":\"regular_gas\",\"price_unit\":\"cents_per_liter\",\"currency\":\"CAD\",\"credit\":{\"price\":149.9,\"posted_time\":\"2026-06-25T20:08:53.749+00:00\",\"nickname\":\"Owner\",\"stamp\":\"owner\"}},{\"long_name\":\"Midgrade\",\"short_name\":\"Mid\",\"fuel_product\":\"midgrade_gas\",\"price_unit\":\"cents_per_liter\",\"currency\":\"CAD\",\"credit\":{\"price\":168.9,\"posted_time\":\"2026-06-25T20:08:54.400+00:00\",\"nickname\":\"Owner\",\"stamp\":\"owner\"}},{\"long_name\":\"Premium\",\"short_name\":\"Pre\",\"fuel_product\":\"premium_gas\",\"price_unit\":\"cents_per_liter\",\"currency\":\"CAD\",\"credit\":{\"price\":178.9,\"posted_time\":\"2026-06-25T20:08:55.088+00:00\",\"nickname\":\"Owner\",\"stamp\":\"owner\"}},{\"long_name\":\"Diesel\",\"short_name\":\"Diesel\",\"fuel_product\":\"diesel\",\"price_unit\":\"cents_per_liter\",\"currency\":\"CAD\",\"credit\":{\"price\":184.9,\"posted_time\":\"2026-06-25T20:08:55.768+00:00\",\"nickname\":\"Owner\",\"stamp\":\"owner\"}}]}"
+          "value": "{\"saved_at\":\"2026-06-26T18:54:12Z\",\"prices\":[{\"long_name\":\"Regular\",\"short_name\":\"Reg\",\"fuel_product\":\"regular_gas\",\"price_unit\":\"cents_per_liter\",\"currency\":\"CAD\",\"credit\":{\"price\":149.9,\"posted_time\":\"2026-06-26T18:54:05.963+00:00\",\"nickname\":\"Owner\",\"stamp\":\"owner\"}},{\"long_name\":\"Midgrade\",\"short_name\":\"Mid\",\"fuel_product\":\"midgrade_gas\",\"price_unit\":\"cents_per_liter\",\"currency\":\"CAD\",\"credit\":{\"price\":168.9,\"posted_time\":\"2026-06-26T18:54:07.289+00:00\",\"nickname\":\"Owner\",\"stamp\":\"owner\"}},{\"long_name\":\"Premium\",\"short_name\":\"Pre\",\"fuel_product\":\"premium_gas\",\"price_unit\":\"cents_per_liter\",\"currency\":\"CAD\",\"credit\":{\"price\":178.9,\"posted_time\":\"2026-06-26T18:54:08.527+00:00\",\"nickname\":\"Owner\",\"stamp\":\"owner\"}},{\"long_name\":\"Diesel\",\"short_name\":\"Diesel\",\"fuel_product\":\"diesel\",\"price_unit\":\"cents_per_liter\",\"currency\":\"CAD\",\"credit\":{\"price\":184.9,\"posted_time\":\"2026-06-26T18:54:09.746+00:00\",\"nickname\":\"Owner\",\"stamp\":\"owner\"}}]}"
         },
         {
           "name": "mostRecentComparisonMetric",
@@ -55,7 +55,7 @@
         },
         {
           "name": "currentPageURL",
-          "value": "\"/client/home.html\""
+          "value": "\"https://dashboard.gasbuddybusiness.io/client/station-profiles/station-profile?stationId=205339\""
         },
         {
           "name": "org_solution_options",
@@ -83,7 +83,7 @@
         },
         {
           "name": "refresh_token",
-          "value": "\"jhARHEN2UOnjc8dssUj8_x01Pcy7Ysh0OrrK6TeEAOFj8awjyKwz_1PlWTIT71HLCXiyYmC31-vMYBqJ8rZcQTJJuHvV_pu5Z42ehteqaU9Dybm-pbMXos464uPWS90OBl1w\""
+          "value": "\"jhAftV2Id4QxK1f8Oki-rNrr0z8vmyr2eVcMD2lqjs3J47xvpY5Mw8yeyeW_POr2fKz6N1puiVzrpSbHbOzg-IY1rx7e7bwhNhcWncAviSRPVIRsaBKFYfSxfckBKALuYijQ\""
         },
         {
           "name": "org_name",
@@ -99,7 +99,7 @@
         },
         {
           "name": "access_token",
-          "value": "\"jhAbYRc5VsL4wkrMtZCIDweEJ4BxM_i9LkAtiLMc_kRHa01nqxS8ay4AEYVxOQmmeY20jg-4mH_-z4QAUoV4if2rTGYMXtYki1t-v8kxfwa0RSQdeLNbVaMrbQxp2wCiQFJQ\""
+          "value": "\"jhAZyNWoWDHxzgtwQcCX58KioAiR-vV8160wZzDYL3BM50Q7PerHW20CvAU-COC0sf5NRUS3z6ompVyrrzhGs8QLp_-AlXITmLi9G9kipQh1WIMVAJe9t84R3Zk_ut_4TeYg\""
         },
         {
           "name": "org_solutions",
