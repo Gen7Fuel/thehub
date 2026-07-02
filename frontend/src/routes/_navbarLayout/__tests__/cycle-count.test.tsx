@@ -148,6 +148,13 @@ vi.mock('xlsx', () => ({
   writeFile: vi.fn(),
 }))
 
+vi.mock("@/components/ui/dialog", () => ({
+  Dialog: ({ children, open }: any) => open ? <>{children}</> : null,
+  DialogContent: ({ children }: any) => <div data-testid="mock-dialog-content">{children}</div>,
+  DialogHeader: ({ children }: any) => <div>{children}</div>,
+  DialogTitle: ({ children }: any) => <h2>{children}</h2>,
+}))
+
 import { Route as IndexRoute } from '../cycle-count/index'
 import { Route as ReportRoute } from '../cycle-count/report'
 import { Route as InventoryRoute } from '../cycle-count/inventory'
