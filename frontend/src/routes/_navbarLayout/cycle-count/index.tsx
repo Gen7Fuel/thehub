@@ -421,10 +421,10 @@ function RouteComponent() {
           
           <div className="py-4 space-y-4 text-sm leading-relaxed text-gray-600">
             <p>
-              We have upgraded our system workflow. You <strong>no longer need to use your handheld scanner device's Retail 360 app</strong> to log items for your regular inventory updates. 
+              We have upgraded our system workflow. You <strong>no longer need to use your handheld scanner device's Retail 360 app</strong> to create baskets for your regular inventory updates. 
             </p>
             <p className="bg-amber-50 border border-amber-200 text-amber-900 p-3 rounded-lg font-medium">
-              Simply input all of your physical stock numbers directly into the input fields here on the Hub interface.
+              Simply input all of your physical stock numbers directly into the input fields here on the Hub.
             </p>
             <p>
               Once you have finished checking every inventory category, you must click the green <strong>"Finalize Counts" button at the top of the page</strong> to submit the daily batch, generate tickets, and automatically push your final counts to the system.
