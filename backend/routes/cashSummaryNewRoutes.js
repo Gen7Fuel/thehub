@@ -1463,12 +1463,18 @@ router.put('/:id', async (req, res) => {
       pinpadPhoto,
     } = req.body || {}
 
-    if (!shift_number) return res.status(400).json({ error: 'shift_number is required' })
-    if (!date) return res.status(400).json({ error: 'date is required' })
-
     // 1️⃣ Load existing document
     const existing = await CashSummary.findById(req.params.id).lean()
     if (!existing) return res.status(404).json({ error: 'Not found' })
+
+    // Fall back to the existing record's identity fields when the caller omits them
+    // (e.g. the "refetch" action only sends { refetch: true })
+    const finalSite = site ?? existing.site
+    const finalShiftNumber = shift_number ?? existing.shift_number
+    const finalDate = date ?? existing.date
+
+    if (!finalShiftNumber) return res.status(400).json({ error: 'shift_number is required' })
+    if (!finalDate) return res.status(400).json({ error: 'date is required' })
 
     // 2️⃣ Determine if all five fields are missing (key does not exist)
     // const allMissing = !('report_canadian_cash' in existing) &&
@@ -1480,10 +1486,10 @@ router.put('/:id', async (req, res) => {
     let enrichedValues = {}
 
     // 3️⃣ Call Office API only if all fields are missing
-    if (site && shift_number) {
+    if (finalSite && finalShiftNumber) {
       try {
-        const url = new URL(`/api/sftp/receive/${encodeURIComponent(shift_number)}`, OFFICE_SFTP_API_BASE)
-        url.searchParams.set('site', site)
+        const url = new URL(`/api/sftp/receive/${encodeURIComponent(finalShiftNumber)}`, OFFICE_SFTP_API_BASE)
+        url.searchParams.set('site', finalSite)
         url.searchParams.set('type', 'sft')
 
         const resp = await fetchWithTimeout(url.toString())
@@ -1560,9 +1566,9 @@ router.put('/:id', async (req, res) => {
     // 4️⃣ Merge final values — SFTP-parsed values always win over existing zeros
     const ev = enrichedValues
     const finalValues = {
-      site,
-      shift_number: String(shift_number),
-      date: new Date(date),
+      site: finalSite,
+      shift_number: String(finalShiftNumber),
+      date: new Date(finalDate),
       isChickenDelight: req.body.isChickenDelight === true ? true : (existing.isChickenDelight ?? false),
       pinpadTotal: norm(pinpadTotal) ?? existing.pinpadTotal,
       pinpadPhoto: typeof pinpadPhoto === 'string' ? pinpadPhoto : existing.pinpadPhoto,
