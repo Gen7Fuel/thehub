@@ -754,6 +754,8 @@ jobs:
             export NEXT_PUBLIC_SUPABASE_URL="${{ secrets.NEXT_PUBLIC_SUPABASE_URL }}"
             export SUPABASE_SERVICE_ROLE_KEY="${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}"
             export GOOGLE_API_KEY="${{ secrets.GOOGLE_API_KEY }}"
+            export PETROSOFT_USERNAME="${{ secrets.PETROSOFT_USERNAME }}"
+            export PETROSOFT_PASSWORD="${{ secrets.PETROSOFT_PASSWORD }}"
 
             # ---- 3. Infrastructure Isolation Guard ----
             echo "Verifying database infrastructure..."
