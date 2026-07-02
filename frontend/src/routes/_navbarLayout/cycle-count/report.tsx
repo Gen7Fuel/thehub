@@ -547,19 +547,21 @@ function RouteComponent() {
                   defaultValue={site}
                 />
                 {/* 💡 ADMIN FORCED WORKER DISTRIBUTOR BUTTON */}
-                <button
-                  type="button"
-                  onClick={handleFinalizeAndSync}
-                  disabled={syncing || !site || items.length === 0}
-                  className="flex items-center gap-1.5 px-4 py-2 bg-blue-600 hover:bg-blue-700 disabled:bg-slate-100 disabled:text-slate-400 font-bold border border-transparent text-white rounded-xl transition-all text-xs shadow-xs cursor-pointer disabled:cursor-not-allowed shrink-0 h-9"
-                >
-                  <RefreshCw
-                    className={`w-3.5 h-3.5 ${syncing ? "animate-spin" : ""}`}
-                  />
-                  <span>
-                    {syncing ? "Pushing Counts..." : "Generate CSO Ticket"}
-                  </span>
-                </button>
+                {user?.access?.cycleCount?.report?.generateCsoTicket && (
+                  <button
+                    type="button"
+                    onClick={handleFinalizeAndSync}
+                    disabled={syncing || !site || items.length === 0}
+                    className="flex items-center gap-1.5 px-4 py-2 bg-blue-600 hover:bg-blue-700 disabled:bg-slate-100 disabled:text-slate-400 font-bold border border-transparent text-white rounded-xl transition-all text-xs shadow-xs cursor-pointer disabled:cursor-not-allowed shrink-0 h-9"
+                  >
+                    <RefreshCw
+                      className={`w-3.5 h-3.5 ${syncing ? "animate-spin" : ""}`}
+                    />
+                    <span>
+                      {syncing ? "Pushing Counts..." : "Generate CSO Ticket"}
+                    </span>
+                  </button>
+                )}
               </div>
             </div>
 
