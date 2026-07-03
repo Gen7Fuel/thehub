@@ -26,7 +26,8 @@ import {
   Coins,
   Fuel,
   LifeBuoy,
-  Settings
+  Settings,
+  FileUp,
 } from 'lucide-react'
 
 export const Route = createFileRoute('/_navbarLayout/')({
@@ -118,7 +119,7 @@ function App() {
           )}
 
           {/* INVENTORY - INDIGO */}
-          {(access?.orderRec?.value || access?.cycleCount?.value || access?.vendor || access?.category || access?.writeOff?.value) && (
+          {(access?.orderRec?.value || access?.cycleCount?.value || access?.vendor || access?.category || access?.writeOff?.value || access?.uploadInvoice?.value) && (
             <Section 
               title="Inventory" 
               accentColor="border-t-indigo-500"
@@ -137,6 +138,16 @@ function App() {
               {access?.vendor && <NavButton to="/vendor" label="Vendors" icon={Truck} theme="indigo" />}
               {access?.category && <NavButton to="/category" label="Categories" icon={Tags} theme="indigo" />}
               {access?.writeOff?.value && <NavButton to="/write-off" label="Write Offs" icon={FileText} theme="indigo" />}
+              
+              {/* NEW MODULE: Upload Invoice */}
+              {access?.uploadInvoice?.value && (
+                <NavButton 
+                  to="/upload-invoice" 
+                  label="Upload Invoice" 
+                  icon={FileUp} 
+                  theme="indigo" 
+                />
+              )}
             </Section>
           )}
 
