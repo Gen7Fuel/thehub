@@ -93,6 +93,7 @@ function RouteComponent() {
     { to: '/settings/permissions', label: 'Permissions' },
     { to: '/settings/sites', label: 'Sites' },
     { to: '/settings/roles', label: 'Roles' },
+    { to: '/settings/quick-customers', label: 'Quick Customers' },
   ]
 
   return (
