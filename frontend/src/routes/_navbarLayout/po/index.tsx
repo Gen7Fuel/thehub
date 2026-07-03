@@ -25,6 +25,13 @@ interface ArCustomer {
   name: string
 }
 
+interface QuickSelectCustomer {
+  _id: string
+  name: string
+  fleetCardNumber: string
+  order: number
+}
+
 async function loader() {
   try {
     // add authorization header with bearer token
@@ -101,6 +108,8 @@ function RouteComponent() {
   const [arCustomers, setArCustomers] = useState<ArCustomer[]>([])
   const [showSuggestions, setShowSuggestions] = useState(false)
   const customerNameRef = useRef<HTMLDivElement>(null)
+  const [quickSelectCustomers, setQuickSelectCustomers] = useState<QuickSelectCustomer[]>([])
+  const [selectedQuickCustomerId, setSelectedQuickCustomerId] = useState<string | null>(null)
 
   const statusConfig: Record<string, { label: string; className: string }> = {
     active:    { label: 'Active',         className: 'text-green-600' },
@@ -156,6 +165,17 @@ function RouteComponent() {
   }, [])
 
   useEffect(() => {
+    if (!stationName) { setQuickSelectCustomers([]); return }
+    const token = localStorage.getItem('token')
+    axios.get(`${domain}/api/ar-customers/quick-select`, {
+      params: { stationName },
+      headers: { Authorization: `Bearer ${token}` },
+    }).then((res) => {
+      if (Array.isArray(res?.data)) setQuickSelectCustomers(res.data)
+    }).catch(() => setQuickSelectCustomers([]))
+  }, [stationName])
+
+  useEffect(() => {
     const handleClickOutside = (e: MouseEvent) => {
       if (customerNameRef.current && !customerNameRef.current.contains(e.target as Node)) {
         setShowSuggestions(false)
@@ -167,11 +187,16 @@ function RouteComponent() {
 
   useEffect(() => {
     if (numberType === 'fleet') {
-      setFleetCardNumber('777689000000')
+      if (!fleetCardNumber) {
+        setFleetCardNumber('777689000000')
+        setCardStatus(null)
+      }
+      // else: already populated (e.g. by a quick-select tap) — leave it and its status alone
     } else {
       setFleetCardNumber('')
+      setCardStatus(null)
     }
-    setCardStatus(null)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [numberType])
 
   // Helpers for 5-digit numeric PO input
@@ -205,6 +230,21 @@ function RouteComponent() {
       reader.readAsDataURL(file);
     }
   };
+
+  const handleQuickCustomerTap = (qc: QuickSelectCustomer) => {
+    setCustomerName(qc.name)
+    setSelectedQuickCustomerId(qc._id)
+    setShowSuggestions(false)
+    if (qc.fleetCardNumber) {
+      setNumberType('fleet')
+      setFleetCardNumber(qc.fleetCardNumber)
+      setCardStatus('active') // trust admin-curated data; bypasses the live verify call by design
+    } else {
+      setNumberType('po')
+      setFleetCardNumber('')
+      setCardStatus(null)
+    }
+  }
 
   const customerSuggestions = useMemo(() => {
     const q = customerName.trim().toLowerCase()
@@ -245,10 +285,10 @@ function RouteComponent() {
       <div className="space-y-3">
         <h2 className="text-lg font-bold">Number</h2>
         <div className="flex rounded-md border border-input overflow-hidden w-fit">
-          <button type="button" onClick={() => setNumberType('po')} className={toggleClass(numberType === 'po')}>
+          <button type="button" onClick={() => { setNumberType('po'); setSelectedQuickCustomerId(null) }} className={toggleClass(numberType === 'po')}>
             PO Number
           </button>
-          <button type="button" onClick={() => setNumberType('fleet')} className={toggleClass(numberType === 'fleet', 'border-l border-input')}>
+          <button type="button" onClick={() => { setNumberType('fleet'); setSelectedQuickCustomerId(null) }} className={toggleClass(numberType === 'fleet', 'border-l border-input')}>
             Fleet Card
           </button>
         </div>
@@ -261,6 +301,7 @@ function RouteComponent() {
               value={fleetCardNumber}
               onChange={async (value) => {
                 setFleetCardNumber(value)
+                setSelectedQuickCustomerId(null)
                 if (value.length === 16) {
                   try {
                     const token = localStorage.getItem('token')
@@ -358,6 +399,23 @@ function RouteComponent() {
       {/* Customer and Driver */}
       <div className="space-y-3">
         <h2 className="text-lg font-bold">Customer and Driver</h2>
+        {quickSelectCustomers.length > 0 && (
+          <div className="space-y-1">
+            <label className="text-sm font-medium text-slate-700">Quick Select</label>
+            <div className="flex flex-wrap gap-2">
+              {quickSelectCustomers.map((qc) => (
+                <button
+                  key={qc._id}
+                  type="button"
+                  onClick={() => handleQuickCustomerTap(qc)}
+                  className={toggleClass(selectedQuickCustomerId === qc._id, 'rounded-md border border-input')}
+                >
+                  {qc.name}
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
         <div ref={customerNameRef} className="relative space-y-1">
           <label className="text-sm font-medium text-slate-700">Customer Name</label>
           <Input
@@ -365,7 +423,7 @@ function RouteComponent() {
             name="customerName"
             value={customerName}
             autoComplete="off"
-            onChange={(e) => { setCustomerName(e.target.value); setShowSuggestions(true) }}
+            onChange={(e) => { setCustomerName(e.target.value); setShowSuggestions(true); setSelectedQuickCustomerId(null) }}
             onFocus={() => setShowSuggestions(true)}
           />
           {showSuggestions && customerSuggestions.length > 0 && (
@@ -374,7 +432,7 @@ function RouteComponent() {
                 <li
                   key={c._id}
                   className="px-3 py-2 text-sm cursor-pointer hover:bg-gray-100"
-                  onMouseDown={() => { setCustomerName(c.name); setShowSuggestions(false) }}
+                  onMouseDown={() => { setCustomerName(c.name); setShowSuggestions(false); setSelectedQuickCustomerId(null) }}
                 >
                   {c.name}
                 </li>
