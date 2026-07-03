@@ -12,6 +12,8 @@ const { updateCycleCountCSO } = require('../cron_jobs/cycleCountCron');
 const ProductCategory = require('../models/ProductCategory');
 const { getPg } = require("../config/pg");
 const moment = require("moment-timezone");
+const { syncPostgresCountsToPetrosoft } = require('../utils/uploadCountToCStore'); // Adjust path to our function
+
 
 const upload = multer({ storage: multer.memoryStorage() });
 
@@ -1041,6 +1043,50 @@ router.put('/schedules/details/:id/items', async (req, res) => {
   } catch (err) {
     console.error("Critical error appending item sets:", err);
     return res.status(500).json({ message: "Internal server error completing transaction sequence." });
+  }
+});
+
+/**
+ * @route POST /api/cycle-count/finalize-and-sync
+ * @desc Resolves local runtime location references and initiates the Petrosoft sync engine.
+ */
+router.post('/finalize-and-sync', async (req, res) => {
+  try {
+    const { siteName, targetDate } = req.body;
+
+    if (!siteName || !targetDate) {
+      return res.status(400).json({ 
+        success: false, 
+        message: "Crucial context variables missing: 'siteName' and 'targetDate' must be supplied." 
+      });
+    }
+
+    // 1. Locate the structural location profile context via matching station name string values
+    const locationDoc = await Location.findOne({ stationName: siteName }).lean();
+    if (!locationDoc) {
+      return res.status(404).json({ 
+        success: false, 
+        message: `No active location identifier maps to station profile: "${siteName}"` 
+      });
+    }
+
+    const locationIdStr = locationDoc._id.toString();
+
+    console.log(`📡 Instantiating database-to-browser push pipeline hook for ${siteName} (${locationIdStr})`);
+
+    // 2. Direct-invoke our orchestrator processing helper sequence
+    // Note: Per your instructions, this runs inline for testing; we will convert this to a BullMQ payload worker next!
+    const result = await syncPostgresCountsToPetrosoft(locationIdStr, targetDate);
+
+    return res.status(200).json(result);
+
+  } catch (error) {
+    console.error("❌ API Router Exception handling automation initialization:", error);
+    return res.status(500).json({ 
+      success: false, 
+      message: "Internal tracking server exception occurred running script actions.",
+      error: error.message 
+    });
   }
 });
 
