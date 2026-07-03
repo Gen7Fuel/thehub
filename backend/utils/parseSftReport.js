@@ -335,15 +335,15 @@ const parseFuelGrades = (text) => {
 
 /**
  * BULLETPROOF SPLIT HELPER: Isolates the block, separates lines directly,
- * and processes rows token-by-token to ensure the first line never gets skipped.
+ * and processes rows token-by-token to capture both Incurred and Paid metrics.
  */
 const parseArCustomers = (text) => {
   // 1️⃣ Extract everything from 'A/R Customers' down to 'POS TOTALS'
   const blockMatch = text.match(/A\/R\s+Customers[\s\S]*?(?=POS\s+TOTALS)/i);
-  if (!blockMatch) return null;
+  if (!blockMatch) return [];
 
   const blockText = blockMatch[0];
-  const customers = {};
+  const customersArray = [];
 
   // 2️⃣ Break the block cleanly into individual rows
   const lines = blockText.split(/\r?\n/);
@@ -367,19 +367,24 @@ const parseArCustomers = (text) => {
       // Verify that both trailing text items are numbers
       if (/^[-\d.,]+$/.test(incurredStr) && /^[-\d.,]+$/.test(paidStr)) {
         const incurredValue = toNumber(incurredStr);
+        const paidValue = toNumber(paidStr);
 
         // Re-assemble the remaining leading elements into the Customer Name string
         const nameTokens = tokens.slice(0, tokens.length - 2);
         const custName = nameTokens.join(' ').trim();
 
-        if (custName && incurredValue !== null) {
-          customers[custName] = incurredValue;
+        if (custName) {
+          customersArray.push({
+            name: custName,
+            incurred: incurredValue !== null ? Number(incurredValue.toFixed(2)) : 0,
+            paid: paidValue !== null ? Number(paidValue.toFixed(2)) : 0
+          });
         }
       }
     }
   }
 
-  return Object.keys(customers).length > 0 ? customers : null;
+  return customersArray;
 };
 
 /**
@@ -585,7 +590,7 @@ function parseSftReport(text) {
     mastercard: pickPosTotalSales('MASTERCARD', text),
     amex: pickPosTotalSales('AMEX', text),
     fuelGrades: parseFuelGrades(text),
-    arCustomers: parseArCustomers(text),
+    arCustomers: parseArCustomers(text) || [],
 
     // ADD THIS SECTION:
     tobaccoCig: (() => {

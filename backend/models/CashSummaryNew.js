@@ -15,7 +15,8 @@ const FuelGradeItemSchema = new mongoose.Schema({
 
 const ArCustomerItemSchema = new mongoose.Schema({
   name: { type: String, required: true },
-  incurred: { type: Number, default: null }
+  incurred: { type: Number, default: null },
+  paid: { type: Number, default: null }
 }, { _id: false });
 
 // Shift entry (multiple per site+day)

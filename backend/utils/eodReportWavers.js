@@ -110,7 +110,11 @@ const styles = StyleSheet.create({
 
   fuelColDesc: { width: 85, textAlign: 'left' },
   fuelColVal: { width: 52, textAlign: 'right' },
-  fuelColWide: { width: 58, textAlign: 'right' }
+  fuelColWide: { width: 58, textAlign: 'right' },
+
+  // A/R Layout Grid Column Alignments
+  arColName: { flex: 1, textAlign: 'left' },
+  arColAmt: { width: 90, textAlign: 'right' }
 });
 
 function EodReportDoc({ site, date, data }) {
@@ -141,7 +145,10 @@ function EodReportDoc({ site, date, data }) {
   };
 
   const totalTenders = Object.values(data.tenders).reduce((a, b) => a + (b || 0), 0) + (data.reportCanadianCash || 0);
-  const totalAr = Object.values(data.arCustomers).reduce((a, b) => a + (b || 0), 0);
+  
+  // Calculate A/R Grand Totals from object properties
+  const totalArIncurred = Object.values(data.arCustomers).reduce((sum, item) => sum + (item.incurred || 0), 0);
+  const totalArPaid = Object.values(data.arCustomers).reduce((sum, item) => sum + (item.paid || 0), 0);
 
   let overShortStyle = styles.valZero;
   if (data.overShortCash > 0.01) overShortStyle = styles.valPositive;
@@ -192,16 +199,10 @@ function EodReportDoc({ site, date, data }) {
       ...(data.isManitoba ? [
         renderRow('Cash Collected', data.totalCanadianCashCollected, false, null, true),
         renderRow('Cash Reported', data.reportCanadianCash, false, null, true),
-        renderRow('Cheques Cashed Out', data.chequesCashedOut, false, null, true)
+        renderRow('Cheques CashedOut', data.chequesCashedOut, false, null, true)
       ] : []),
-      // Conditionally render Adj. Fuel variance if it skips past the 0.01 rounded zero threshold
       ...(Math.abs(data.adjFuelVariance) > 0.01 ? [
-        renderRow(
-          'Adj. Fuel', 
-          data.adjFuelVariance, 
-          false, 
-          null // 👈 Dropped color styles so it prints with default text styles
-        )
+        renderRow('Adj. Fuel', data.adjFuelVariance, false, null)
       ] : []),
 
       // 3. Tenders Section Block
@@ -210,12 +211,27 @@ function EodReportDoc({ site, date, data }) {
       renderRow('Cash', data.reportCanadianCash),
       renderRow('Total Tenders', totalTenders, true),
 
-      // 4. A/R Customers Section Block
-      renderSectionHeader('A/R Incurred'),
+      // 4. UPDATED: A/R Details Section Block (Multi-Column Grid View Layout)
+      renderSectionHeader('A/R Details'),
+      h(View, { style: [styles.tableRow, styles.textBold, { borderBottomWidth: 0.5, borderBottomColor: '#333333', paddingBottom: 2 }] },
+        h(Text, { style: styles.arColName }, 'A/R Customer'),
+        h(Text, { style: styles.arColAmt }, 'Incurred'),
+        h(Text, { style: styles.arColAmt }, 'Paid')
+      ),
       ...Object.entries(data.arCustomers)
-        .filter(([_, val]) => val !== 0)
-        .map(([custName, val]) => renderRow(custName, val)),
-      renderRow('Total A/R Incurred', totalAr, true),
+        .filter(([_, item]) => (item.incurred !== 0 || item.paid !== 0))
+        .map(([custName, item]) => 
+          h(View, { key: custName, style: styles.tableRow },
+            h(Text, { style: styles.arColName }, custName),
+            h(Text, { style: styles.arColAmt }, item.incurred >= 0 ? `$${item.incurred.toFixed(2)}` : `-$${Math.abs(item.incurred).toFixed(2)}`),
+            h(Text, { style: styles.arColAmt }, item.paid >= 0 ? `$${item.paid.toFixed(2)}` : `-$${Math.abs(item.paid).toFixed(2)}`)
+          )
+        ),
+      h(View, { style: styles.totalRow },
+        h(Text, { style: [styles.arColName, styles.textBold] }, 'Total A/R'),
+        h(Text, { style: [styles.arColAmt, styles.textBold] }, totalArIncurred >= 0 ? `$${totalArIncurred.toFixed(2)}` : `-$${Math.abs(totalArIncurred).toFixed(2)}`),
+        h(Text, { style: [styles.arColAmt, styles.textBold] }, totalArPaid >= 0 ? `$${totalArPaid.toFixed(2)}` : `-$${Math.abs(totalArPaid).toFixed(2)}`)
+      ),
 
       // 5. Sale by Department Section Block
       renderSectionHeader('Sale by Department'),
@@ -233,7 +249,6 @@ function EodReportDoc({ site, date, data }) {
       // 6. Fuel Sales by Grade Remittance Section Matrix
       renderSectionHeader('Fuel Sales by Grade'),
 
-      // Top Label Bracket
       h(View, { style: [styles.fuelGridRow, styles.fuelGridHeaderGroup, { marginTop: 4, paddingBottom: 0 }] },
         h(Text, { style: styles.fuelColDesc }, 'Description'),
         h(Text, { style: [styles.fuelColVal, { width: 104, textAlign: 'center', borderBottomWidth: 0.5, borderBottomColor: '#000000' }] }, 'Total Sales'),
@@ -243,7 +258,6 @@ function EodReportDoc({ site, date, data }) {
         h(Text, { style: [styles.fuelColWide, { fontWeight: 'bold', textAlign: 'right' }] }, 'Remittable')
       ),
 
-      // Secondary metric label bracket
       h(View, { style: [styles.fuelGridRow, { borderBottomWidth: 1, borderBottomColor: '#000000', paddingBottom: 2, paddingTop: 1 }] },
         h(Text, { style: styles.fuelColDesc }, ''),
         h(Text, { style: styles.fuelColVal }, 'Liters'), h(Text, { style: styles.fuelColVal }, 'Amount'),
@@ -253,7 +267,6 @@ function EodReportDoc({ site, date, data }) {
         h(Text, { style: styles.fuelColWide }, 'GST (5%)')
       ),
 
-      // Map single day data line items
       data.fuelRemittanceRows.map((row, idx) =>
         h(View, { key: idx, style: styles.fuelGridRow },
           h(Text, { style: styles.fuelColDesc }, row.description),
@@ -268,7 +281,6 @@ function EodReportDoc({ site, date, data }) {
         )
       ),
 
-      // Grand Totals Bottom Row for Fuel Sales Matrix
       h(View, { style: [styles.totalRow, { backgroundColor: '#F2F2F2', paddingVertical: 4, marginTop: 2 }] },
         h(Text, { style: [styles.fuelColDesc, styles.textBold] }, 'Grand Totals'),
         h(Text, { style: [styles.fuelColVal, styles.textBold] }, data.fuelRemittanceTotals.totalLitres.toFixed(3)),
@@ -320,21 +332,24 @@ async function generateEodReportPdf({ site, date, isManitoba = false }) {
     if (r.debit) tendersAgg['DEBIT'] = (tendersAgg['DEBIT'] || 0) + r.debit;
   });
 
-  // 2️⃣ Aggregate A/R Customer sub-document arrays safely
+  // 2️⃣ UPDATED: Aggregate A/R Customer objects supporting nested incurred & paid totals
   const arCustomersAgg = {};
   rows.forEach((r) => {
     if (r.arCustomers && Array.isArray(r.arCustomers)) {
       r.arCustomers.forEach((cust) => {
         const custName = cust.name?.trim();
-        const amt = cust.incurred;
-        if (custName && typeof amt === 'number') {
-          arCustomersAgg[custName] = (arCustomersAgg[custName] || 0) + amt;
+        if (custName) {
+          if (!arCustomersAgg[custName]) {
+            arCustomersAgg[custName] = { incurred: 0, paid: 0 };
+          }
+          arCustomersAgg[custName].incurred += (typeof cust.incurred === 'number' ? cust.incurred : 0);
+          arCustomersAgg[custName].paid += (typeof cust.paid === 'number' ? cust.paid : 0);
         }
       });
     }
   });
 
-  // 3️⃣ Fetch & Pivot SQL Remittance Fuel Grade Data for this Single Day
+  // 3️⃣ Fetch & Pivot SQL Remittance Fuel Grade Data
   const fuelRemittanceRows = [];
   const fuelRemittanceTotals = {
     totalLitres: 0, totalAmount: 0,
@@ -419,17 +434,14 @@ async function generateEodReportPdf({ site, date, isManitoba = false }) {
     overShortCash = physicalAssets - reportCanadianCash + unsettledPrepays + handheldDebit;
   }
 
-  // FUEL ADJ VARIANCE LOGIC:
-  // Inverted calculation to properly show missing/under adjustments as a negative sign
   const fuelSales = sum('fuelSales');
   const fuelPriceOverrides = sum('fuelPriceOverrides');
   const adjFuelCalculated = fuelSales + fuelPriceOverrides;
   
-  // Matrix Grand Total Amount minus the POS Adjusted Sales
   const matrixGrandTotalAmount = fuelRemittanceTotals.totalAmount;
   const adjFuelVariance = matrixGrandTotalAmount - adjFuelCalculated;
 
-  // 5️⃣ Formula calculation (Deducting Bingo Sales to avoid duplicate reporting)
+  // 5️⃣ Formula calculation
   const merchandiseSalesOthers = itemSales - (tobaccoCig + tobaccoOthers + propaneSales + bingoSales + lotSales);
 
   // 6️⃣ Bind data structures together
@@ -447,9 +459,9 @@ async function generateEodReportPdf({ site, date, isManitoba = false }) {
     reportCanadianCash,
     chequesCashedOut,
     overShortCash: typeof overShortCash === 'number' ? Number(overShortCash.toFixed(2)) : null,
-    adjFuelVariance: typeof adjFuelVariance === 'number' ? Number(adjFuelVariance.toFixed(2)) : 0, // 👈 Added attribute metrics
+    adjFuelVariance: typeof adjFuelVariance === 'number' ? Number(adjFuelVariance.toFixed(2)) : 0,
     tenders: tendersAgg,
-    arCustomers: arCustomersAgg,
+    arCustomers: arCustomersAgg, // Contains structured entries: { Name: { incurred, paid } }
     tobaccoCig,
     tobaccoOthers,
     propaneSales,

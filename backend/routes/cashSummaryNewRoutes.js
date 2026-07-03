@@ -779,11 +779,12 @@ router.post('/', async (req, res) => {
         }))
         : [],
 
-      // ADD THIS LINE / BLOCK:
-      arCustomers: parsed.arCustomers
-        ? Object.entries(parsed.arCustomers).map(([name, incurred]) => ({
-          name: name,
-          incurred: numOrUndef(incurred)
+      // FIXED: Directly map over the parsed array of objects
+      arCustomers: Array.isArray(parsed.arCustomers)
+        ? parsed.arCustomers.map((cust) => ({
+          name: cust.name,
+          incurred: numOrUndef(cust.incurred),
+          paid: numOrUndef(cust.paid)
         }))
         : [],
 
@@ -1577,10 +1578,12 @@ router.put('/:id', async (req, res) => {
                 }))
                 : [],
 
-              arCustomers: parsed.arCustomers
-                ? Object.entries(parsed.arCustomers).map(([name, incurred]) => ({
-                  name: name,
-                  incurred: numOrUndef(incurred)
+              // FIXED: Map over array properties directly and fix the 'paid' value typo
+              arCustomers: Array.isArray(parsed.arCustomers)
+                ? parsed.arCustomers.map((cust) => ({
+                  name: cust.name,
+                  incurred: numOrUndef(cust.incurred),
+                  paid: numOrUndef(cust.paid)
                 }))
                 : [],
               tobaccoCig: parsed.tobaccoCig,
