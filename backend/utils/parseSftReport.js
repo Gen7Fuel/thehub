@@ -543,7 +543,15 @@ function parseSftReport(text) {
 
     afdCredit: pickNum(/^\s*AFD Credit\s+([-\d.,]+)\s*$/mi, text),
     afdDebit: pickNum(/^\s*AFD Debit\s+([-\d.,]+)\s*$/mi, text),
-    afdGiftCard: pickNum(/^\s*AFD Gift Card\s+([-\d.,]+)\s*$/mi, text),
+    // afdGiftCard: pickNum(/^\s*AFD\s*Gift\s*Card\s*[:\-]?\s*\$?\s*([-\d.,]+)\s*$/mi, text),
+    // AFD GC column aggregates two possible shift line items: "AFD Gift Card" and "Ackroo Redeemed".
+    // Either, both, or neither may be present on a given shift; combine whichever are found.
+    afdGiftCard: (() => {
+      const afdGiftCardLine = pickNum(/^\s*AFD Gift Card\s+([-\d.,]+)\s*$/mi, text)
+      const ackrooRedeemed = pickNum(/^\s*Ackroo Redeemed\s+([-\d.,]+)\s*$/mi, text)
+      if (afdGiftCardLine == null && ackrooRedeemed == null) return null
+      return (afdGiftCardLine || 0) + (ackrooRedeemed || 0)
+    })(),
     kioskCredit: pickNum(/^\s*Kiosk Credit\s+([-\d.,]+)\s*$/mi, text),
     kioskDebit: pickNum(/^\s*Kiosk Debit\s+([-\d.,]+)\s*$/mi, text),
     kioskGiftCard: pickNum(/^\s*Kiosk Gift Card\s+([-\d.,]+)\s*$/mi, text),
