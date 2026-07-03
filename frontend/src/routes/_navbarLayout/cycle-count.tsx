@@ -62,13 +62,13 @@ function RouteComponent() {
           <Button
             {...(!isInventoryActive && { variant: 'outline' } as object)}
             // className={access.component_cycle_count_console ? 'rounded-none' : 'rounded-l-none'} //markpoint
-            className={access?.cycleCount?.report ? 'rounded-none' : 'rounded-l-none'}
+            className={access?.cycleCount?.report?.value ? 'rounded-none' : 'rounded-l-none'}
           >
             Inventory
           </Button>
         </Link>
 
-        {access?.cycleCount?.report && (
+        {access?.cycleCount?.report?.value && (
           <Link
             to="/cycle-count/report"
             activeOptions={{ exact: true }}

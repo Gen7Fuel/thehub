@@ -4,10 +4,16 @@ import { useAuth } from "@/context/AuthContext";
 import { getSocket } from "@/lib/websocket";
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
 import CycleCountTableGroup from "@/components/custom/CycleCountTableGroup"; // Our new helper
-import { Check, CheckCircle2, Star, ArrowDownToLine } from "lucide-react";
+import { Check, CheckCircle2, Star, ArrowDownToLine, Info } from "lucide-react";
 import { useSite } from '@/context/SiteContext';
 import { LocationPicker } from "@/components/custom/locationPicker";
 import axios from "axios";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 
 export const Route = createFileRoute('/_navbarLayout/cycle-count/')({
   component: RouteComponent,
@@ -25,6 +31,8 @@ function RouteComponent() {
   const [movedToBottom, setMovedToBottom] = useState<string[]>([]);
   const [completedCategories, setCompletedCategories] = useState<string[]>([]);
   const [varianceMap, setVarianceMap] = useState<{ [key: number]: number }>({});
+  const [syncing, setSyncing] = useState(false);
+  const [showWelcomeModal, setShowWelcomeModal] = useState(true);
 
   interface CycleCountFieldUpdateV2 {
     entryId: string;
@@ -352,6 +360,45 @@ function RouteComponent() {
     }
   };
 
+  // 🚀 Dedicated sync handler function
+  const handleFinalizeAndSync = async () => {
+    const confirmation = window.confirm(
+      "Make sure all the counts are correct and submit only when all counts for the day have been completed. This will create tickets for all the items which have been counted on the hub. Proceed with completion of the count?"
+    );
+    if (!confirmation) return;
+
+    setSyncing(true);
+    try {
+      // Captures today's date formatted as 'YYYY-MM-DD'
+      const todayStr = new Date().toISOString().split("T")[0];
+
+      const response = await axios.post(
+        "/api/cycle-count/finalize-and-sync",
+        {
+          siteName: site,
+          targetDate: todayStr,
+        },
+        {
+          headers: {
+            Authorization: `Bearer ${localStorage.getItem("token") || ""}`,
+            "X-Required-Permission": "cycleCount",
+          },
+        }
+      );
+
+      if (response.data.success) {
+        alert("Cycle Count pushed successfully!");
+      } else {
+        alert(`⚠️ Sync flagged: ${response.data.reason || "Unknown response processing state."}`);
+      }
+    } catch (err: any) {
+      console.error("Pipeline Sync Fault:", err);
+      alert(err.response?.data?.message || "❌ CRITICAL Exception running automated data transmission.");
+    } finally {
+      setSyncing(false);
+    }
+  };
+
   // Calculate overall progress for a top progress bar
   const totalCompleted = items.filter(item => isItemCountComplete(item, counts[item.entryId])).length;
   const overallPercent = items.length > 0 ? (totalCompleted / items.length) * 100 : 0;
@@ -360,6 +407,40 @@ function RouteComponent() {
 
   return (
     <div className="p-4 max-w-5xl mx-auto pb-32">
+      {/* 💡 DISCLAIMER POPUP MODAL */}
+      <Dialog open={showWelcomeModal} onOpenChange={setShowWelcomeModal}>
+        <DialogContent className="max-w-md p-6 bg-white rounded-xl shadow-xl border">
+          <DialogHeader className="flex flex-row items-center gap-3 border-b pb-3">
+            <div className="p-2 bg-blue-50 text-blue-600 rounded-lg">
+              <Info className="w-5 h-5" />
+            </div>
+            <DialogTitle className="text-xl font-black text-gray-900 tracking-tight">
+              Important: Process Change
+            </DialogTitle>
+          </DialogHeader>
+          
+          <div className="py-4 space-y-4 text-sm leading-relaxed text-gray-600">
+            <p>
+              We have upgraded our system workflow. You <strong>no longer need to use your handheld scanner device's Retail 360 app</strong> to create baskets for your regular inventory updates. 
+            </p>
+            <p className="bg-amber-50 border border-amber-200 text-amber-900 p-3 rounded-lg font-medium">
+              Simply input all of your physical stock numbers directly into the input fields here on the Hub.
+            </p>
+            <p>
+              Once you have finished checking every inventory category, you must click the green <strong>"Finalize Counts" button at the top of the page</strong> to submit the daily batch, generate tickets, and automatically push your final counts to the system.
+            </p>
+          </div>
+
+          <div className="pt-3 flex justify-end">
+            <button
+              onClick={() => setShowWelcomeModal(false)}
+              className="w-full sm:w-auto px-5 py-2.5 bg-blue-600 hover:bg-blue-700 active:scale-98 text-white text-sm font-bold rounded-lg shadow-md transition-all"
+            >
+              Ok, I understand
+            </button>
+          </div>
+        </DialogContent>
+      </Dialog>
       {/* HEADER SECTION */}
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-6">
         <div>
@@ -370,7 +451,7 @@ function RouteComponent() {
         </div>
 
         <div className="flex flex-col items-end gap-2">
-          <div className="flex gap-2">
+          <div className="flex gap-2 items-center">
             <button
               onClick={() => toggleAll(true)}
               className="text-xs font-bold px-4 py-2 bg-white border border-gray-200 rounded-lg shadow-sm hover:bg-gray-50 transition-colors"
@@ -382,6 +463,18 @@ function RouteComponent() {
               className="text-xs font-bold px-4 py-2 bg-white border border-gray-200 rounded-lg shadow-sm hover:bg-gray-50 transition-colors"
             >
               Collapse All
+            </button>
+
+            {/* Clean button calling the isolated handler function */}
+            <button
+              disabled={overallPercent === 0 || syncing}
+              onClick={handleFinalizeAndSync}
+              className={`text-xs font-bold px-4 py-2 text-white rounded-lg shadow-md transition-all ${overallPercent === 0
+                  ? "bg-gray-300 cursor-not-allowed opacity-60"
+                  : "bg-emerald-600 hover:bg-emerald-700 active:scale-95"
+                }`}
+            >
+              {syncing ? "Processing Sync..." : "Finalize Counts"}
             </button>
           </div>
           <span className="text-sm font-bold text-blue-600 bg-blue-50 px-3 py-1 rounded-full">
