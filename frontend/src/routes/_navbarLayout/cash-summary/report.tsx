@@ -612,6 +612,9 @@ function RouteComponent() {
       ? n.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })
       : '—'
 
+  const shiftReportUrl = (shiftNumber: string) =>
+    `https://app.gen7fuel.com/sftp?site=${encodeURIComponent(site)}&type=sft&shift=${encodeURIComponent(`"${shiftNumber}"`)}`
+
   // --- NEW: Dynamic Cheque-Adjusted Math Core ---
   const isWaversChequeSite = site === 'Wavers East' || site === 'Wavers West';
   const chequesValue = totals?.chequesCashedOut ?? 0;
@@ -983,7 +986,16 @@ function RouteComponent() {
                   {regularRows.map((r) => (
                     <div key={r._id} className="border rounded-md p-4 bg-card">
                       <div className="text-xs text-muted-foreground mb-1">Shift Number</div>
-                      <div className="text-base font-semibold mb-3">{r.shift_number}</div>
+                      <div className="text-base font-semibold mb-3">
+                        <a
+                          href={shiftReportUrl(r.shift_number)}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="text-blue-600 underline hover:text-blue-800"
+                        >
+                          {r.shift_number}
+                        </a>
+                      </div>
                       <div className="grid gap-2 text-sm">
                         <KV k="Canadian Cash Counted" v={fmtNum(r.canadian_cash_collected)} />
                         <KV k="Canadian Cash Reported" v={fmtNum(r.report_canadian_cash)} />
@@ -1001,7 +1013,16 @@ function RouteComponent() {
                     {cdRows.map((r) => (
                       <div key={r._id} className="border rounded-md p-4 bg-card">
                         <div className="text-xs text-muted-foreground mb-1">Shift Number</div>
-                        <div className="text-base font-semibold mb-3">{r.shift_number}</div>
+                        <div className="text-base font-semibold mb-3">
+                          <a
+                            href={shiftReportUrl(r.shift_number)}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="text-blue-600 underline hover:text-blue-800"
+                          >
+                            {r.shift_number}
+                          </a>
+                        </div>
                         <div className="grid gap-2 text-sm">
                           <KV k="Cash Collected" v={fmtNum(r.canadian_cash_collected)} />
                           <KV k="Pinpad Total" v={fmtNum(r.pinpadTotal)} />
