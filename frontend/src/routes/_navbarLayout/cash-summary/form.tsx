@@ -591,6 +591,11 @@ function RouteComponent() {
       setSubmitting(false)
       return
     }
+    if (showCDCheckbox && isChickenDelight && !pinpadPhoto) {
+      setError('A pinpad receipt photo is required for Chicken Delight shifts')
+      setSubmitting(false)
+      return
+    }
 
     const toLocalMidnightISO = (d: Date) =>
       new Date(d.getFullYear(), d.getMonth(), d.getDate(), 0, 0, 0, 0).toISOString()
@@ -763,7 +768,7 @@ function RouteComponent() {
             </Field>
 
             {showCDCheckbox && isChickenDelight ? (
-              <Field label="Pinpad Total">
+              <Field label="Pinpad Total (photo required) *">
                 <div className="flex items-center gap-2">
                   <input
                     value={pinpadTotal}
@@ -776,8 +781,8 @@ function RouteComponent() {
                     <button
                       type="button"
                       onClick={() => cameraInputRef.current?.click()}
-                      title="Upload pinpad receipt photo"
-                      className="flex-shrink-0 flex items-center justify-center w-10 h-10 border rounded border-blue-500 text-blue-600 hover:bg-blue-50"
+                      title="Upload pinpad receipt photo (required)"
+                      className="flex-shrink-0 flex items-center justify-center w-10 h-10 border rounded border-amber-500 text-amber-600 hover:bg-amber-50"
                     >
                       <ImagePlus className="w-4 h-4" />
                     </button>
@@ -796,6 +801,11 @@ function RouteComponent() {
                     </button>
                   )}
                 </div>
+                {!pinpadPhoto && (
+                  <div className="mt-1 text-xs text-amber-600">
+                    Photo required — tap the icon to attach the pinpad receipt.
+                  </div>
+                )}
               </Field>
             ) : (
               <Field label="Infonet Exempted Tax">
