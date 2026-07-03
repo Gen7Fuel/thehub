@@ -615,6 +615,8 @@ function RouteComponent() {
   const shiftReportUrl = (shiftNumber: string) =>
     `https://app.gen7fuel.com/sftp?site=${encodeURIComponent(site)}&type=sft&shift=${encodeURIComponent(`"${shiftNumber}"`)}`
 
+  const canViewShiftReport = !!access?.accounting?.cashSummary?.report?.viewShiftReport
+
   // --- NEW: Dynamic Cheque-Adjusted Math Core ---
   const isWaversChequeSite = site === 'Wavers East' || site === 'Wavers West';
   const chequesValue = totals?.chequesCashedOut ?? 0;
@@ -987,14 +989,7 @@ function RouteComponent() {
                     <div key={r._id} className="border rounded-md p-4 bg-card">
                       <div className="text-xs text-muted-foreground mb-1">Shift Number</div>
                       <div className="text-base font-semibold mb-3">
-                        <a
-                          href={shiftReportUrl(r.shift_number)}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="text-blue-600 underline hover:text-blue-800"
-                        >
-                          {r.shift_number}
-                        </a>
+                        <ShiftNumber shiftNumber={r.shift_number} url={shiftReportUrl(r.shift_number)} clickable={canViewShiftReport} />
                       </div>
                       <div className="grid gap-2 text-sm">
                         <KV k="Canadian Cash Counted" v={fmtNum(r.canadian_cash_collected)} />
@@ -1014,14 +1009,7 @@ function RouteComponent() {
                       <div key={r._id} className="border rounded-md p-4 bg-card">
                         <div className="text-xs text-muted-foreground mb-1">Shift Number</div>
                         <div className="text-base font-semibold mb-3">
-                          <a
-                            href={shiftReportUrl(r.shift_number)}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="text-blue-600 underline hover:text-blue-800"
-                          >
-                            {r.shift_number}
-                          </a>
+                          <ShiftNumber shiftNumber={r.shift_number} url={shiftReportUrl(r.shift_number)} clickable={canViewShiftReport} />
                         </div>
                         <div className="grid gap-2 text-sm">
                           <KV k="Cash Collected" v={fmtNum(r.canadian_cash_collected)} />
@@ -1119,6 +1107,22 @@ function RouteComponent() {
 //     </div>
 //   )
 // }
+
+function ShiftNumber({ shiftNumber, url, clickable }: { shiftNumber: string; url: string; clickable: boolean }) {
+  if (!clickable) {
+    return <span>{shiftNumber}</span>
+  }
+  return (
+    <a
+      href={url}
+      target="_blank"
+      rel="noopener noreferrer"
+      className="text-blue-600 underline hover:text-blue-800"
+    >
+      {shiftNumber}
+    </a>
+  )
+}
 
 function KV({ k, v }: { k: string; v: React.ReactNode }) {
   return (
