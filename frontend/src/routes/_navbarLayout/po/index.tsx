@@ -231,7 +231,19 @@ function RouteComponent() {
     }
   };
 
+  const resetNumberSection = () => {
+    setSelectedQuickCustomerId(null)
+    setNumberType('po')
+    setFleetCardNumber('')
+    setCardStatus(null)
+  }
+
   const handleQuickCustomerTap = (qc: QuickSelectCustomer) => {
+    if (selectedQuickCustomerId === qc._id) {
+      resetNumberSection()
+      setCustomerName('')
+      return
+    }
     setCustomerName(qc.name)
     setSelectedQuickCustomerId(qc._id)
     setShowSuggestions(false)
@@ -281,119 +293,119 @@ function RouteComponent() {
         </div>
       </div>
 
-      {/* Number */}
-      <div className="space-y-3">
-        <h2 className="text-lg font-bold">Number</h2>
-        <div className="flex rounded-md border border-input overflow-hidden w-fit">
-          <button type="button" onClick={() => { setNumberType('po'); setSelectedQuickCustomerId(null) }} className={toggleClass(numberType === 'po')}>
-            PO Number
-          </button>
-          <button type="button" onClick={() => { setNumberType('fleet'); setSelectedQuickCustomerId(null) }} className={toggleClass(numberType === 'fleet', 'border-l border-input')}>
-            Fleet Card
-          </button>
-        </div>
-
-        {numberType === 'fleet' ? (
-          <div className="space-y-1">
-            <InputOTP
-              maxLength={16}
-              name="fleetCardNumber"
-              value={fleetCardNumber}
-              onChange={async (value) => {
-                setFleetCardNumber(value)
-                setSelectedQuickCustomerId(null)
-                if (value.length === 16) {
-                  try {
-                    const token = localStorage.getItem('token')
-                    const res = await axios.get(`${domain}/api/fleet/verify/${value}`, {
-                      headers: { Authorization: `Bearer ${token}` },
-                    })
-                    setCardStatus(res.data.reason || res.data.status || 'not_found')
-                  } catch {
-                    setCardStatus('not_found')
-                  }
-                } else {
-                  setCardStatus(null)
-                }
-              }}
-              onBlur={handleBlur}
-            >
-              <InputOTPGroup>
-                {[0, 1, 2, 3].map((i) => <InputOTPSlot key={i} index={i} />)}
-              </InputOTPGroup>
-              <InputOTPSeparator />
-              <InputOTPGroup>
-                {[4, 5, 6, 7].map((i) => <InputOTPSlot key={i} index={i} />)}
-              </InputOTPGroup>
-              <InputOTPSeparator />
-              <InputOTPGroup>
-                {[8, 9, 10, 11].map((i) => <InputOTPSlot key={i} index={i} />)}
-              </InputOTPGroup>
-              <InputOTPSeparator />
-              <InputOTPGroup>
-                {[12, 13, 14, 15].map((i) => <InputOTPSlot key={i} index={i} />)}
-              </InputOTPGroup>
-            </InputOTP>
-            {cardStatus && (() => {
-              const cfg = statusConfig[cardStatus] ?? { label: cardStatus, className: 'text-gray-500' }
-              return <div className={`text-xs text-right ${cfg.className}`}>{cfg.label}</div>
-            })()}
+      {/* Number + Date on the same row */}
+      <div className="flex items-end justify-between gap-4">
+        <div className={`space-y-3 transition-opacity duration-500 ${selectedQuickCustomerId ? 'opacity-0 pointer-events-none' : 'opacity-100'}`}>
+          <h2 className="text-lg font-bold">Number</h2>
+          <div className="flex rounded-md border border-input overflow-hidden w-fit">
+            <button type="button" onClick={() => { setNumberType('po'); setSelectedQuickCustomerId(null) }} className={toggleClass(numberType === 'po')}>
+              PO Number
+            </button>
+            <button type="button" onClick={() => { setNumberType('fleet'); setSelectedQuickCustomerId(null) }} className={toggleClass(numberType === 'fleet', 'border-l border-input')}>
+              Fleet Card
+            </button>
           </div>
-        ) : (
-          <div className="space-y-1">
-            <InputOTP
-              maxLength={5}
-              name="poNumber"
-              value={toFiveDigits(poNumber)}
-              onChange={(value) => {
-                setPoNumber(toFiveDigits(value))
-                if (poError) setPoError('')
-              }}
-              onBlur={async () => {
-                const padded = padFive(poNumber)
-                setPoNumber(padded)
-                if (!stationName || !padded) return
-                try {
-                  const res = await axios.get('/api/purchase-orders/unique', {
-                    params: { stationName, poNumber: padded },
-                    headers: {
-                      Authorization: `Bearer ${localStorage.getItem('token') || ''}`,
-                      'X-Required-Permission': 'po',
-                    },
-                  })
-                  if (res.data && res.data.unique === false) {
-                    setPoError('This PO number has already been used for this site.')
+
+          {numberType === 'fleet' ? (
+            <div className="space-y-1">
+              <InputOTP
+                maxLength={16}
+                name="fleetCardNumber"
+                value={fleetCardNumber}
+                onChange={async (value) => {
+                  setFleetCardNumber(value)
+                  setSelectedQuickCustomerId(null)
+                  if (value.length === 16) {
+                    try {
+                      const token = localStorage.getItem('token')
+                      const res = await axios.get(`${domain}/api/fleet/verify/${value}`, {
+                        headers: { Authorization: `Bearer ${token}` },
+                      })
+                      setCardStatus(res.data.reason || res.data.status || 'not_found')
+                    } catch {
+                      setCardStatus('not_found')
+                    }
                   } else {
-                    setPoError('')
+                    setCardStatus(null)
                   }
-                } catch (e: any) {
-                  setPoError(e?.response?.data?.message || 'Could not validate PO number uniqueness')
-                }
-              }}
-            >
-              <InputOTPGroup>
-                {[0, 1, 2, 3, 4].map((i) => <InputOTPSlot key={i} index={i} />)}
-              </InputOTPGroup>
-            </InputOTP>
-            {poError && <div className="text-xs text-red-600">{poError}</div>}
-          </div>
-        )}
-      </div>
-
-      {/* Date */}
-      <div className="space-y-2">
-        <h2 className="text-lg font-bold">Date</h2>
-        <DatePicker
-          date={date}
-          setDate={(value) => {
-            if (typeof value === 'function') {
-              const newDate = value(date);
-              if (newDate) setDate(newDate);
-            } else {
-              setDate(value);
-            }
-          }}
-        />
+                }}
+                onBlur={handleBlur}
+              >
+                <InputOTPGroup>
+                  {[0, 1, 2, 3].map((i) => <InputOTPSlot key={i} index={i} />)}
+                </InputOTPGroup>
+                <InputOTPSeparator />
+                <InputOTPGroup>
+                  {[4, 5, 6, 7].map((i) => <InputOTPSlot key={i} index={i} />)}
+                </InputOTPGroup>
+                <InputOTPSeparator />
+                <InputOTPGroup>
+                  {[8, 9, 10, 11].map((i) => <InputOTPSlot key={i} index={i} />)}
+                </InputOTPGroup>
+                <InputOTPSeparator />
+                <InputOTPGroup>
+                  {[12, 13, 14, 15].map((i) => <InputOTPSlot key={i} index={i} />)}
+                </InputOTPGroup>
+              </InputOTP>
+              {cardStatus && (() => {
+                const cfg = statusConfig[cardStatus] ?? { label: cardStatus, className: 'text-gray-500' }
+                return <div className={`text-xs text-right ${cfg.className}`}>{cfg.label}</div>
+              })()}
+            </div>
+          ) : (
+            <div className="space-y-1">
+              <InputOTP
+                maxLength={5}
+                name="poNumber"
+                value={toFiveDigits(poNumber)}
+                onChange={(value) => {
+                  setPoNumber(toFiveDigits(value))
+                  if (poError) setPoError('')
+                }}
+                onBlur={async () => {
+                  const padded = padFive(poNumber)
+                  setPoNumber(padded)
+                  if (!stationName || !padded) return
+                  try {
+                    const res = await axios.get('/api/purchase-orders/unique', {
+                      params: { stationName, poNumber: padded },
+                      headers: {
+                        Authorization: `Bearer ${localStorage.getItem('token') || ''}`,
+                        'X-Required-Permission': 'po',
+                      },
+                    })
+                    if (res.data && res.data.unique === false) {
+                      setPoError('This PO number has already been used for this site.')
+                    } else {
+                      setPoError('')
+                    }
+                  } catch (e: any) {
+                    setPoError(e?.response?.data?.message || 'Could not validate PO number uniqueness')
+                  }
+                }}
+              >
+                <InputOTPGroup>
+                  {[0, 1, 2, 3, 4].map((i) => <InputOTPSlot key={i} index={i} />)}
+                </InputOTPGroup>
+              </InputOTP>
+              {poError && <div className="text-xs text-red-600">{poError}</div>}
+            </div>
+          )}
+        </div>
+        <div className="space-y-2 text-right">
+          <h2 className="text-lg font-bold">Date</h2>
+          <DatePicker
+            date={date}
+            setDate={(value) => {
+              if (typeof value === 'function') {
+                const newDate = value(date);
+                if (newDate) setDate(newDate);
+              } else {
+                setDate(value);
+              }
+            }}
+          />
+        </div>
       </div>
 
       {/* Customer and Driver */}
@@ -423,7 +435,7 @@ function RouteComponent() {
             name="customerName"
             value={customerName}
             autoComplete="off"
-            onChange={(e) => { setCustomerName(e.target.value); setShowSuggestions(true); setSelectedQuickCustomerId(null) }}
+            onChange={(e) => { setCustomerName(e.target.value); setShowSuggestions(true); if (selectedQuickCustomerId) resetNumberSection() }}
             onFocus={() => setShowSuggestions(true)}
           />
           {showSuggestions && customerSuggestions.length > 0 && (
@@ -432,7 +444,7 @@ function RouteComponent() {
                 <li
                   key={c._id}
                   className="px-3 py-2 text-sm cursor-pointer hover:bg-gray-100"
-                  onMouseDown={() => { setCustomerName(c.name); setShowSuggestions(false); setSelectedQuickCustomerId(null) }}
+                  onMouseDown={() => { setCustomerName(c.name); setShowSuggestions(false); if (selectedQuickCustomerId) resetNumberSection() }}
                 >
                   {c.name}
                 </li>
