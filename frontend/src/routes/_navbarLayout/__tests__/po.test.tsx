@@ -353,12 +353,33 @@ describe('PO Form — index.tsx', () => {
     })
 
     renderWithSuspense(<POForm />)
-    const quickBtn = await waitFor(() => screen.getByRole('button', { name: 'Acme Co' }), { timeout: 5000 })
+    const quickBtn = await waitFor(() => screen.getByRole('button', { name: 'Acme' }), { timeout: 5000 })
     fireEvent.click(quickBtn)
 
     await waitFor(() => expect(mockStore.setCustomerName).toHaveBeenCalledWith('Acme Co'))
     expect(mockStore.setFleetCardNumber).not.toHaveBeenCalledWith('1234567890123456')
     expect(screen.queryByTestId('otp-input')).not.toBeInTheDocument()
+  })
+
+  it('shows only the first word of a customer name on the quick-select button', async () => {
+    mockAxiosGet.mockImplementation((url: string) => {
+      if (url.includes('quick-select')) {
+        return Promise.resolve({
+          data: [{ _id: 'qc1', name: 'Batchewana Frist Nation of Ojibways', fleetCardNumber: '', order: 0 }],
+        })
+      }
+      return Promise.resolve({ data: [] })
+    })
+
+    renderWithSuspense(<POForm />)
+
+    await waitFor(() =>
+      expect(screen.getByRole('button', { name: 'Batchewana' })).toBeInTheDocument()
+    , { timeout: 5000 })
+    expect(screen.queryByText('Batchewana Frist Nation of Ojibways')).not.toBeInTheDocument()
+
+    fireEvent.click(screen.getByRole('button', { name: 'Batchewana' }))
+    expect(mockStore.setCustomerName).toHaveBeenCalledWith('Batchewana Frist Nation of Ojibways')
   })
 
   it('does not pad poNumber to "00000" when clicking Upload Receipt on site "Rankin"', async () => {
