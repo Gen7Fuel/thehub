@@ -87,7 +87,6 @@ router.post('/', async (req, res) => {
       paymentMethod,
       amount,
       images: images || [],
-      createdAt: date ? new Date(date) : undefined,
       date: dateStr,
     });
 
@@ -100,13 +99,7 @@ router.post('/', async (req, res) => {
       try {
         const siteName = populatedPayable?.location?.stationName
         if (siteName) {
-          // derive local YYYY-MM-DD from createdAt
-          const created = new Date(populatedPayable.createdAt)
-          const y = created.getFullYear()
-          const m = String(created.getMonth() + 1).padStart(2, '0')
-          const d = String(created.getDate()).padStart(2, '0')
-          const ymd = `${y}-${m}-${d}`
-          const entryDate = date // 23:59:59.999 local
+          const entryDate = populatedPayable.date
 
           let sheet = await Safesheet.findOne({ site: siteName })
           if (!sheet) {
@@ -162,17 +155,15 @@ router.post('/', async (req, res) => {
 // PUT update payable
 router.put('/:id', async (req, res) => {
   try {
-    const { vendorName, location, notes, paymentMethod, amount, images, createdAt, date: dateField, requestInvoice } = req.body;
+    const { vendorName, location, notes, paymentMethod, amount, images, date: dateField, requestInvoice } = req.body;
 
     // Validation
     if (amount !== undefined && amount < 0) {
       return res.status(400).json({ error: 'Amount must be non-negative' });
     }
 
-    console.log('[PUT /payables/:id] body:', req.body);
-
-    // Extra permission check: changing createdAt requires payables.changeDate
-    if (createdAt !== undefined) {
+    // Extra permission check: changing the business date requires payables.changeDate
+    if (dateField !== undefined) {
       const permissionMap = getPermissionMap();
       const permId = permissionMap.get('payables.changeDate');
       if (!permId || !hasEffectiveAccess(req.user, req.user.role, permId)) {
@@ -188,27 +179,11 @@ router.put('/:id', async (req, res) => {
     if (amount !== undefined) updateData.amount = amount;
     if (images !== undefined) updateData.images = images;
     if (requestInvoice !== undefined) updateData.requestInvoice = requestInvoice;
-    if (createdAt !== undefined) updateData.createdAt = new Date(createdAt);
     if (dateField !== undefined) updateData.date = String(dateField).slice(0, 10);
 
-    console.log('[PUT /payables/:id] updateData:', updateData);
-
     const before = await Payable.findById(req.params.id).lean();
-    console.log('[PUT /payables/:id] before.createdAt:', before?.createdAt);
 
     const updateOptions = { new: true, runValidators: true };
-    if (createdAt !== undefined) updateOptions.timestamps = false;
-
-    console.log('[PUT /payables/:id] updateOptions:', updateOptions);
-
-    // If createdAt is being updated, bypass Mongoose timestamps via native driver
-    if (createdAt !== undefined) {
-      await Payable.collection.updateOne(
-        { _id: new mongoose.Types.ObjectId(req.params.id) },
-        { $set: { createdAt: new Date(createdAt) } }
-      );
-      delete updateData.createdAt;
-    }
 
     const payable = await Payable.findByIdAndUpdate(
       req.params.id,
@@ -216,8 +191,6 @@ router.put('/:id', async (req, res) => {
       updateOptions
     ).populate('location', 'stationName csoCode email');
 
-    console.log('[PUT /payables/:id] after.createdAt:', payable?.createdAt);
-    
     if (!payable) {
       return res.status(404).json({ error: 'Payable not found' });
     }
@@ -261,7 +234,7 @@ router.put('/:id', async (req, res) => {
             vendorName: payable.vendorName,
             paymentMethod: payable.paymentMethod,
             amount: (payable.amount || 0).toFixed(2),
-            date: new Date(payable.createdAt).toLocaleDateString('en-CA', { timeZone: 'UTC' }),
+            date: payable.date || new Date(payable.createdAt).toLocaleDateString('en-CA', { timeZone: 'UTC' }),
             redirectUrl,
           },
           type: 'system',
@@ -322,16 +295,7 @@ router.get('/stats/summary', async (req, res) => {
     if (location) matchFilter.location = new mongoose.Types.ObjectId(location);
     
     if (date) {
-      const startOfDay = new Date(date);
-      startOfDay.setUTCHours(0, 0, 0, 0);
-
-      const endOfDay = new Date(date);
-      endOfDay.setUTCHours(23, 59, 59, 999);
-      
-      matchFilter.createdAt = {
-        $gte: startOfDay,
-        $lte: endOfDay
-      };
+      matchFilter.date = String(date).slice(0, 10);
     }
     
     const stats = await Payable.aggregate([
