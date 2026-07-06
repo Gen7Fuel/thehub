@@ -46,7 +46,7 @@ const {
     setSignature: vi.fn(),
     date: new Date('2026-01-15') as Date | undefined,
     setDate: vi.fn(),
-    stationName: 'Rankin' as string,
+    stationName: 'TestSite' as string,
     setStationName: vi.fn(),
     resetForm: vi.fn(),
   }
@@ -252,7 +252,7 @@ const resetStore = () => {
   mockStore.receipt = 'data:image/png;base64,abc'
   mockStore.signature = 'data:image/png;base64,sig'
   mockStore.date = new Date('2026-01-15')
-  mockStore.stationName = 'Rankin'
+  mockStore.stationName = 'TestSite'
 }
 
 const POForm = (IndexRoute as any).component as React.ComponentType
@@ -327,6 +327,49 @@ describe('PO Form — index.tsx', () => {
       const uploadBtn = screen.getByRole('button', { name: /upload receipt/i })
       expect(uploadBtn).toBeDisabled()
     }, { timeout: 5000 })
+  })
+
+  it('does not render the Number section or OTP input for site "Rankin"', async () => {
+    mockStore.stationName = 'Rankin'
+    renderWithSuspense(<POForm />)
+
+    await waitFor(() => {
+      expect(screen.getByTestId('date-picker')).toBeInTheDocument()
+    }, { timeout: 5000 })
+
+    expect(screen.queryByText('Number')).not.toBeInTheDocument()
+    expect(screen.queryByTestId('otp-input')).not.toBeInTheDocument()
+  })
+
+  it('does not auto-fill a fleet card from quick-select on site "Rankin"', async () => {
+    mockStore.stationName = 'Rankin'
+    mockAxiosGet.mockImplementation((url: string) => {
+      if (url.includes('quick-select')) {
+        return Promise.resolve({
+          data: [{ _id: 'qc1', name: 'Acme Co', fleetCardNumber: '1234567890123456', order: 0 }],
+        })
+      }
+      return Promise.resolve({ data: [] })
+    })
+
+    renderWithSuspense(<POForm />)
+    const quickBtn = await waitFor(() => screen.getByRole('button', { name: 'Acme Co' }), { timeout: 5000 })
+    fireEvent.click(quickBtn)
+
+    await waitFor(() => expect(mockStore.setCustomerName).toHaveBeenCalledWith('Acme Co'))
+    expect(mockStore.setFleetCardNumber).not.toHaveBeenCalledWith('1234567890123456')
+    expect(screen.queryByTestId('otp-input')).not.toBeInTheDocument()
+  })
+
+  it('does not pad poNumber to "00000" when clicking Upload Receipt on site "Rankin"', async () => {
+    mockStore.stationName = 'Rankin'
+    mockStore.receipt = null
+    renderWithSuspense(<POForm />)
+
+    const uploadBtn = await waitFor(() => screen.getByRole('button', { name: /upload receipt/i }), { timeout: 5000 })
+    fireEvent.click(uploadBtn)
+
+    expect(mockStore.setPoNumber).not.toHaveBeenCalledWith('00000')
   })
 })
 
