@@ -450,102 +450,48 @@ async function getCategoryNumbersFromSQL() {
 
 // /app/services/sqlService.js
 
-// async function getFuelPricingDate(date) {
-//   const pool = await getPool();
-
-//   try {
-//     // 1. Rename this variable from 'sql' to 'queryText' to avoid the scope collision
-//     const queryText = `
-//       SELECT [Station_SK]
-//             ,[Date_SK]
-//             ,[Provider]
-//             ,[Location]
-//             ,[Type]
-//             ,[Effective Date]
-//             ,[T-1's Rack]
-//             ,[Today's Rack]
-//             ,[Prev Close]
-//             ,[T-1 Landed Cost]
-//             ,[Landed Cost]
-//             ,[Rec Price]
-//             ,[Low]
-//             ,[T-1 Low]
-//             ,[Avg]
-//             ,[T-1 Avg]
-//             ,[High]
-//             ,[T-1 High]
-//             ,[Competitor Type]
-//             ,[Competitor]
-//             ,[Competitor Address]
-//             ,[Competitor Price]
-//             ,[C_Updated Date]
-//             ,[C_Updated Time]
-//             ,[UpdatedAt]
-//       FROM [FUEL].[Fuel_Pricing] WHERE [Date_SK] = @date
-//     `;
-
-//     const request = pool.request();
-
-//     // 2. Now 'sql.VarChar' correctly references the global mssql module instance
-//     request.input("date", sql.VarChar, date);
-
-//     // 3. Pass the renamed query variable into the driver execution method
-//     const result = await request.query(queryText);
-//     return result;
-//   } catch (err) {
-//     console.error("SQL error:", err);
-//     return { recordset: [] };
-//   }
-// }
 async function getFuelPricingDate(date) {
   const pool = await getPool();
 
   try {
+    // 1. Rename this variable from 'sql' to 'queryText' to avoid the scope collision
     const queryText = `
-      SELECT fp.[Station_SK]
-            ,fp.[Date_SK]
-            ,fp.[Provider]
-            ,fp.[Location]
-            ,fp.[Type]
-            ,fp.[Effective Date]
-            ,fp.[T-1's Rack]
-            ,fp.[Today's Rack]
-            -- ⬇️ Populated from the Tomorrow PriceSheet table
-            ,fpt.[Rack] AS [T+1's Rack]
-            ,fp.[Prev Close]
-            ,fp.[T-1 Landed Cost]
-            ,fp.[Landed Cost]
-            -- ⬇️ Populated from the Tomorrow PriceSheet table
-            ,fpt.[Landed Price] AS [T+1's Landed Cost]
-            ,fp.[Rec Price]
-            ,fp.[Low]
-            ,fp.[T-1 Low]
-            ,fp.[Avg]
-            ,fp.[T-1 Avg]
-            ,fp.[High]
-            ,fp.[T-1 High]
-            ,fp.[Competitor Type]
-            ,fp.[Competitor]
-            ,fp.[Competitor Address]
-            ,fp.[Competitor Price]
-            ,fp.[C_Updated Date]
-            ,fp.[C_Updated Time]
-            ,fp.[UpdatedAt]
-      FROM [FUEL].[Fuel_Pricing] fp
-      LEFT JOIN [FUEL].[Fuel_PriceSheet_Tomorrow] fpt 
-        ON fp.[Station_SK] = fpt.[Station_SK]
-        AND fp.[Pickup] = fpt.[Pickup]
-        AND fp.[Carrier] = fpt.[Carrier]
-        AND fp.[Type] = fpt.[Type]
-        AND fp.[Location] = fpt.[Location] -- Matching location ensures spec alignment
-        AND fpt.[ReceivedDate_SK] = @date
-        AND fpt.[Effective Date] = DATEADD(day, 1, CONVERT(DATE, fpt.[ReceivedDate_SK], 112))
-      WHERE fp.[Date_SK] = @date
+      SELECT [Station_SK]
+            ,[Date_SK]
+            ,[Provider]
+            ,[Location]
+            ,[Type]
+            ,[Effective Date]
+            ,[T-1's Rack]
+            ,[Today's Rack]
+            ,[Prev Close]
+            ,[T-1 Landed Cost]
+            ,[Landed Cost]
+            ,[Rec Price]
+            ,[Low]
+            ,[T-1 Low]
+            ,[Avg]
+            ,[T-1 Avg]
+            ,[High]
+            ,[T-1 High]
+            ,[Competitor Type]
+            ,[Competitor]
+            ,[Competitor Address]
+            ,[Competitor Price]
+            ,[C_Updated Date]
+            ,[C_Updated Time]
+            ,[UpdatedAt]
+            ,[T+1 Rack] AS [T+1's Rack]
+            ,[T+1 Landed Cost] AS [T+1's Landed Cost]
+      FROM [FUEL].[Fuel_Pricing] WHERE [Date_SK] = @date
     `;
 
     const request = pool.request();
+
+    // 2. Now 'sql.VarChar' correctly references the global mssql module instance
     request.input("date", sql.VarChar, date);
 
+    // 3. Pass the renamed query variable into the driver execution method
     const result = await request.query(queryText);
     return result;
   } catch (err) {
@@ -553,6 +499,62 @@ async function getFuelPricingDate(date) {
     return { recordset: [] };
   }
 }
+// async function getFuelPricingDate(date) {
+//   const pool = await getPool();
+
+//   try {
+//     const queryText = `
+//       SELECT fp.[Station_SK]
+//             ,fp.[Date_SK]
+//             ,fp.[Provider]
+//             ,fp.[Location]
+//             ,fp.[Type]
+//             ,fp.[Effective Date]
+//             ,fp.[T-1's Rack]
+//             ,fp.[Today's Rack]
+//             -- ⬇️ Populated from the Tomorrow PriceSheet table
+//             ,fpt.[Rack] AS [T+1's Rack]
+//             ,fp.[Prev Close]
+//             ,fp.[T-1 Landed Cost]
+//             ,fp.[Landed Cost]
+//             -- ⬇️ Populated from the Tomorrow PriceSheet table
+//             ,fpt.[Landed Price] AS [T+1's Landed Cost]
+//             ,fp.[Rec Price]
+//             ,fp.[Low]
+//             ,fp.[T-1 Low]
+//             ,fp.[Avg]
+//             ,fp.[T-1 Avg]
+//             ,fp.[High]
+//             ,fp.[T-1 High]
+//             ,fp.[Competitor Type]
+//             ,fp.[Competitor]
+//             ,fp.[Competitor Address]
+//             ,fp.[Competitor Price]
+//             ,fp.[C_Updated Date]
+//             ,fp.[C_Updated Time]
+//             ,fp.[UpdatedAt]
+//       FROM [FUEL].[Fuel_Pricing] fp
+//       LEFT JOIN [FUEL].[Fuel_PriceSheet_Tomorrow] fpt 
+//         ON fp.[Station_SK] = fpt.[Station_SK]
+//         AND fp.[Pickup] = fpt.[Pickup]
+//         AND fp.[Carrier] = fpt.[Carrier]
+//         AND fp.[Type] = fpt.[Type]
+//         AND fp.[Location] = fpt.[Location] -- Matching location ensures spec alignment
+//         AND fpt.[ReceivedDate_SK] = @date
+//         AND fpt.[Effective Date] = DATEADD(day, 1, CONVERT(DATE, fpt.[ReceivedDate_SK], 112))
+//       WHERE fp.[Date_SK] = @date
+//     `;
+
+//     const request = pool.request();
+//     request.input("date", sql.VarChar, date);
+
+//     const result = await request.query(queryText);
+//     return result;
+//   } catch (err) {
+//     console.error("SQL error:", err);
+//     return { recordset: [] };
+//   }
+// }
 
 
 async function getFuelInventoryReportPreviousDay() {
@@ -733,7 +735,7 @@ async function getFuelCarrierFCS() {
 
 async function getFuelStationDiscounts() {
   try {
-    const { getPool } = require('./sqlService'); 
+    const { getPool } = require('./sqlService');
     const pool = await getPool();
 
     // FULL OUTER JOIN on the 5 keys representing a unique station assignment row
@@ -1227,6 +1229,91 @@ async function getSanitizationBackupData() {
   }
 }
 
+/**
+ * Fetches the aggregated fuel sales and rollup treaty/non-treaty totals
+ * for a specific station and target date, accounting for both regular sales and refunds.
+ * * @param {string} csoCode - The Station_SK identifier (e.g., '78205')
+ * @param {string|Date} targetDate - The date to fetch data for (e.g., '2026-06-15')
+ * @returns {Promise<Array>} The aggregated report dataset
+ */
+async function getFuelSalesRollupReport(csoCode, targetDate) {
+  const pool = await getPool();
+
+  // Convert date string/object safely to 'YYYYMMDD' string format for Date_SK mapping
+  const formattedDateString = formatDateForDB(targetDate.toString());
+
+  const result = await pool.request()
+    .input("csoCode", sql.VarChar, csoCode)
+    .input("targetDate", sql.Char(8), formattedDateString)
+    .query(`
+      WITH status_discount_transactions AS (
+          -- Step 1: Identify transaction IDs that contain a Status Discount
+          SELECT DISTINCT [Transaction ID]
+          FROM [CSO].[Stg_CashRegisterJournal]
+          WHERE [Date_SK] = @targetDate
+            AND [Station_SK] = @csoCode
+            AND [Item Description] = 'STATUS DISCOUNT'
+            AND [Transaction ID] IS NOT NULL
+      ),
+
+      extracted_fuel_sales AS (
+          -- Step 2: Filter and map the large table, adjusting values for Refund events
+          SELECT 
+              -- Invert the sign if it's a refund event so it subtracts from totals
+              CASE 
+                  WHEN s.[Event] LIKE '%Refund%' THEN -1 * ABS(s.[Sales Amount])
+                  ELSE s.[Sales Amount]
+              END AS cte_sales_amount,
+              
+              CASE 
+                  WHEN s.[Event] LIKE '%Refund%' THEN -1 * ABS(s.[Sales Quantity])
+                  ELSE s.[Sales Quantity]
+              END AS cte_sales_quantity,
+              
+              CASE 
+                  WHEN [Item Description] LIKE '%DYED%' THEN 'Dyed Diesel'
+                  WHEN [Item Description] LIKE '%DIESEL%' OR [Item Description] LIKE '%ULSD%' THEN 'Diesel'
+                  WHEN [Fuel Type] = 'REG' THEN 'Regular'
+                  WHEN [Fuel Type] = 'PNL' THEN 'Premium'
+                  WHEN [Fuel Type] = 'MID' THEN 'Midgrade'
+                  ELSE COALESCE([Fuel Type], 'Unknown Grade')
+              END AS final_grade,
+              CASE 
+                  WHEN d.[Transaction ID] IS NOT NULL THEN 'Treaty Sale'
+                  ELSE 'Non Treaty Sale'
+              END AS sale_category
+          FROM [CSO].[Stg_CashRegisterJournal] s
+          LEFT JOIN status_discount_transactions d ON s.[Transaction ID] = d.[Transaction ID]
+          WHERE s.[Date_SK] = @targetDate
+            AND s.[Station_SK] = @csoCode
+            -- Included both SaleEvent and Refund events
+            AND (s.[Event] LIKE 'SaleEvent%' OR s.[Event] LIKE '%Refund%')
+            AND s.[Transaction Type] LIKE 'Fuel%'
+            -- Ensure we don't pick up flat 0 quantity baseline rows
+            AND s.[Sales Quantity] <> 0
+      )
+
+      -- Step 3: Perform the final ROLLUP aggregation
+      SELECT 
+          COALESCE(sale_category, 'GRAND TOTAL') AS sale_category,
+          CASE 
+              WHEN sale_category IS NULL THEN 'All Categories'
+              ELSE COALESCE(final_grade, 'All Grades') 
+          END AS fuel_grade,
+          CAST(SUM(COALESCE(cte_sales_amount, 0.00)) AS DECIMAL(18,2)) AS total_dollar_amount,
+          CAST(SUM(COALESCE(cte_sales_quantity, 0.0000)) AS DECIMAL(18,4)) AS total_volume
+      FROM extracted_fuel_sales
+      GROUP BY ROLLUP(sale_category, final_grade)
+      ORDER BY 
+          CASE WHEN sale_category IS NULL THEN 1 ELSE 0 END, 
+          sale_category, 
+          CASE WHEN final_grade IS NULL THEN 1 ELSE 0 END,
+          fuel_grade;
+    `);
+
+  return result.recordset;
+}
+
 function formatDateForDB(dateString) {
   // input: "2025-11-14"
   // output: "20251114"
@@ -1356,4 +1443,5 @@ module.exports = {
   getFuelCarrierHaulage,
   getFuelCarrierFCS,
   getFuelStationDiscounts,
+  getFuelSalesRollupReport,
 };

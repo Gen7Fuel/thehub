@@ -327,10 +327,10 @@ function RouteComponent() {
         {isManitoba ? (
           <Button
             onClick={() => {
-              if (lotteryImages.length === 0) {
-                alert("Please capture at least one Lottery Report image before submitting.");
-                return;
-              }
+              // if (lotteryImages.length === 0) {
+              //   alert("Please capture at least one Lottery Report image before submitting.");
+              //   return;
+              // }
               handleManitobaSubmit();
             }}
             disabled={isSubmitting}
