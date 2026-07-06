@@ -540,7 +540,7 @@ function RouteComponent() {
                       onHelpClick={() => setHelpConfig({
                         title: 'Debit Reference',
                         desc: '', // Uses global layout structure inside FieldHelpDialog below
-                        img: '\\public\\cd_images\\debit.jpg'
+                        img: '\\cd_images\\debit.jpg'
                       })}
                     >
                       <input
@@ -558,7 +558,7 @@ function RouteComponent() {
                       onHelpClick={() => setHelpConfig({
                         title: 'Visa Reference',
                         desc: '',
-                        img: '\\public\\cd_images\\visa.jpg'
+                        img: '\\cd_images\\visa.jpg'
                       })}
                     >
                       <input
@@ -576,7 +576,7 @@ function RouteComponent() {
                       onHelpClick={() => setHelpConfig({
                         title: 'Mastercard Reference',
                         desc: '',
-                        img: '\\public\\cd_images\\mastercard.jpg'
+                        img: '\\cd_images\\mastercard.jpg'
                       })}
                     >
                       <input
@@ -594,7 +594,7 @@ function RouteComponent() {
                       onHelpClick={() => setHelpConfig({
                         title: 'Amex Reference',
                         desc: '',
-                        img: '\\public\\cd_images\\amex.jpg' // Falls back cleanly if amex image is not uniquely specified
+                        img: '\\cd_images\\amex.jpg' // Falls back cleanly if amex image is not uniquely specified
                       })}
                     >
                       <input
