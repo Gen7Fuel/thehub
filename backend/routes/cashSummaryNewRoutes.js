@@ -571,6 +571,9 @@ router.get('/payables-comparison', async (req, res) => {
     const start = new Date(end);
     start.setDate(start.getDate() - 20);
 
+    const startStr = start.toISOString().split('T')[0];
+    const endStr = end.toISOString().split('T')[0];
+
     const reports = await CashSummaryReport.find({
       site,
       submitted: true,
@@ -587,7 +590,7 @@ router.get('/payables-comparison', async (req, res) => {
     const payables = await Payable.find({
       location: locationInfo?._id,
       paymentMethod: 'till',
-      createdAt: { $gte: start, $lt: new Date(end.getTime() + 24 * 60 * 60 * 1000) },
+      date: { $gte: startStr, $lte: endStr },
     }).lean();
 
     let lotteryMap = {};
@@ -617,10 +620,8 @@ router.get('/payables-comparison', async (req, res) => {
     // 2️⃣ Aggregate Payables Module entries
     const payablesModuleByDate = {};
     for (const p of payables) {
-      const d = new Date(p.createdAt);
-      d.setHours(0, 0, 0, 0);
-      const key = d.toISOString();
-      payablesModuleByDate[key] = (payablesModuleByDate[key] || 0) + (p.amount || 0);
+      if (!p.date) continue;
+      payablesModuleByDate[p.date] = (payablesModuleByDate[p.date] || 0) + (p.amount || 0);
     }
 
     // 3️⃣ Build Final Data
@@ -629,7 +630,7 @@ router.get('/payables-comparison', async (req, res) => {
       const dateStr = isoKey.split('T')[0];
 
       const rawPosPayout = posByDate[isoKey] || 0;
-      let internalTotal = payablesModuleByDate[isoKey] || 0;
+      let internalTotal = payablesModuleByDate[dateStr] || 0;
 
       // Add Lottery Actuals to the Internal side
       if (sellsLottery && lotteryMap[dateStr]) {

@@ -98,3 +98,22 @@ describe('Payable schema — field validation', () => {
     expect(doc.paymentMethod).toBe('safe')
   })
 })
+
+describe('Payable schema — date field', () => {
+  it('accepts a plain "yyyy-mm-dd" date string', () => {
+    const doc = new Payable(base({ date: '2026-07-06' }))
+    expect(doc.validateSync()).toBeUndefined()
+    expect(doc.date).toBe('2026-07-06')
+  })
+
+  it('allows date to be absent', () => {
+    const doc = new Payable(base())
+    expect(doc.validateSync()).toBeUndefined()
+    expect(doc.date).toBeUndefined()
+  })
+
+  it('stores date as an unstructured string (no format enforcement)', () => {
+    const doc = new Payable(base({ date: 'not-a-real-date' }))
+    expect(doc.validateSync()).toBeUndefined()
+  })
+})
