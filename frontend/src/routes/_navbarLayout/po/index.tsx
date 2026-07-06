@@ -282,6 +282,10 @@ function RouteComponent() {
       active ? 'bg-slate-800 text-white' : 'bg-background text-slate-700 hover:bg-slate-50'
     }`
 
+  // Quick-select buttons show only the first word of the customer's full name
+  // (e.g. "Batchewana" for "Batchewana Frist Nation of Ojibways") to keep the row compact.
+  const firstWord = (name: string) => name.trim().split(' ')[0] || name
+
   return (
     <div className="p-4 border border-dashed border-gray-300 rounded-md space-y-6">
       {/* Site + Purchase Type on the same row */}
@@ -440,7 +444,7 @@ function RouteComponent() {
                   onClick={() => handleQuickCustomerTap(qc)}
                   className={toggleClass(selectedQuickCustomerId === qc._id, 'rounded-md border border-input')}
                 >
-                  {qc.name}
+                  {firstWord(qc.name)}
                 </button>
               ))}
             </div>
