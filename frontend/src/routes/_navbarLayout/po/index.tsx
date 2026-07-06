@@ -294,7 +294,7 @@ function RouteComponent() {
       </div>
 
       {/* Number + Date on the same row */}
-      <div className="flex items-end justify-between gap-4">
+      <div className="flex items-start justify-between gap-4">
         <div className={`space-y-3 transition-opacity duration-500 ${selectedQuickCustomerId ? 'opacity-0 pointer-events-none' : 'opacity-100'}`}>
           <h2 className="text-lg font-bold">Number</h2>
           <div className="flex rounded-md border border-input overflow-hidden w-fit">
