@@ -38,6 +38,8 @@ type Row = {
   payouts?: number
   pinpadTotal?: number
   isChickenDelight?: boolean
+  chickenDelightTips?: number      
+  pinpadPhoto?: string
 }
 
 type ReportData = {
@@ -1005,31 +1007,42 @@ function RouteComponent() {
                 <div>
                   <h3 className="text-sm font-semibold mb-2">Chicken Delight</h3>
                   <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-                    {cdRows.map((r) => (
-                      <div key={r._id} className="border rounded-md p-4 bg-card">
-                        <div className="text-xs text-muted-foreground mb-1">Shift Number</div>
-                        <div className="text-base font-semibold mb-3">
-                          <ShiftNumber shiftNumber={r.shift_number} url={shiftReportUrl(r.shift_number)} clickable={canViewShiftReport} />
+                    {cdRows.map((r) => {
+                      // Calculate Shift Over/Short: (Cash Collected + Tips) - Bulloch Reported
+                      const cashCollected = r.canadian_cash_collected ?? 0
+                      const tips = r.chickenDelightTips ?? 0
+                      const bullochReported = r.report_canadian_cash ?? 0
+                      const variance = (cashCollected + tips) - bullochReported
+                      
+                      const isShort = variance < 0
+
+                      return (
+                        <div key={r._id} className="border rounded-md p-4 bg-card">
+                          <div className="text-xs text-muted-foreground mb-1">Shift Number</div>
+                          <div className="text-base font-semibold mb-3">
+                            <ShiftNumber 
+                              shiftNumber={r.shift_number} 
+                              url={shiftReportUrl(r.shift_number)} 
+                              clickable={canViewShiftReport} 
+                            />
+                          </div>
+                          <div className="grid gap-2 text-sm">
+                            <KV k="Cash Collected" v={fmtNum(cashCollected)} />
+                            <KV k="Tips" v={<span className="text-green-600 font-semibold">{fmtNum(tips)}</span>} />
+                            <KV k="Bulloch Reported" v={fmtNum(bullochReported)} />
+                            <KV
+                              k="Shift Over/Short"
+                              v={
+                                <span className={`font-semibold ${isShort ? 'text-red-600' : 'text-green-600'}`}>
+                                  {variance > 0 ? `+${fmtNum(variance)}` : fmtNum(variance)}
+                                </span>
+                              }
+                            />
+                          </div>
                         </div>
-                        <div className="grid gap-2 text-sm">
-                          <KV k="Cash Collected" v={fmtNum(r.canadian_cash_collected)} />
-                          <KV k="Pinpad Total" v={fmtNum(r.pinpadTotal)} />
-                          <KV k="Bulloch Reported" v={fmtNum(r.report_canadian_cash)} />
-                          <KV
-                            k="Tips"
-                            v={
-                              <span className="text-green-600 font-semibold">
-                                {fmtNum(
-                                  (r.canadian_cash_collected ?? 0) +
-                                  (r.pinpadTotal ?? 0) -
-                                  (r.report_canadian_cash ?? 0)
-                                )}
-                              </span>
-                            }
-                          />
-                        </div>
-                      </div>
-                    ))}
+                      )
+                    })}
+                    
                     {cdRows.length > 1 && (
                       <div className="border rounded-md p-4 bg-muted/40">
                         <div className="text-xs text-muted-foreground mb-1">Total Tips</div>

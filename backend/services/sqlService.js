@@ -450,102 +450,48 @@ async function getCategoryNumbersFromSQL() {
 
 // /app/services/sqlService.js
 
-// async function getFuelPricingDate(date) {
-//   const pool = await getPool();
-
-//   try {
-//     // 1. Rename this variable from 'sql' to 'queryText' to avoid the scope collision
-//     const queryText = `
-//       SELECT [Station_SK]
-//             ,[Date_SK]
-//             ,[Provider]
-//             ,[Location]
-//             ,[Type]
-//             ,[Effective Date]
-//             ,[T-1's Rack]
-//             ,[Today's Rack]
-//             ,[Prev Close]
-//             ,[T-1 Landed Cost]
-//             ,[Landed Cost]
-//             ,[Rec Price]
-//             ,[Low]
-//             ,[T-1 Low]
-//             ,[Avg]
-//             ,[T-1 Avg]
-//             ,[High]
-//             ,[T-1 High]
-//             ,[Competitor Type]
-//             ,[Competitor]
-//             ,[Competitor Address]
-//             ,[Competitor Price]
-//             ,[C_Updated Date]
-//             ,[C_Updated Time]
-//             ,[UpdatedAt]
-//       FROM [FUEL].[Fuel_Pricing] WHERE [Date_SK] = @date
-//     `;
-
-//     const request = pool.request();
-
-//     // 2. Now 'sql.VarChar' correctly references the global mssql module instance
-//     request.input("date", sql.VarChar, date);
-
-//     // 3. Pass the renamed query variable into the driver execution method
-//     const result = await request.query(queryText);
-//     return result;
-//   } catch (err) {
-//     console.error("SQL error:", err);
-//     return { recordset: [] };
-//   }
-// }
 async function getFuelPricingDate(date) {
   const pool = await getPool();
 
   try {
+    // 1. Rename this variable from 'sql' to 'queryText' to avoid the scope collision
     const queryText = `
-      SELECT fp.[Station_SK]
-            ,fp.[Date_SK]
-            ,fp.[Provider]
-            ,fp.[Location]
-            ,fp.[Type]
-            ,fp.[Effective Date]
-            ,fp.[T-1's Rack]
-            ,fp.[Today's Rack]
-            -- ⬇️ Populated from the Tomorrow PriceSheet table
-            ,fpt.[Rack] AS [T+1's Rack]
-            ,fp.[Prev Close]
-            ,fp.[T-1 Landed Cost]
-            ,fp.[Landed Cost]
-            -- ⬇️ Populated from the Tomorrow PriceSheet table
-            ,fpt.[Landed Price] AS [T+1's Landed Cost]
-            ,fp.[Rec Price]
-            ,fp.[Low]
-            ,fp.[T-1 Low]
-            ,fp.[Avg]
-            ,fp.[T-1 Avg]
-            ,fp.[High]
-            ,fp.[T-1 High]
-            ,fp.[Competitor Type]
-            ,fp.[Competitor]
-            ,fp.[Competitor Address]
-            ,fp.[Competitor Price]
-            ,fp.[C_Updated Date]
-            ,fp.[C_Updated Time]
-            ,fp.[UpdatedAt]
-      FROM [FUEL].[Fuel_Pricing] fp
-      LEFT JOIN [FUEL].[Fuel_PriceSheet_Tomorrow] fpt 
-        ON fp.[Station_SK] = fpt.[Station_SK]
-        AND fp.[Pickup] = fpt.[Pickup]
-        AND fp.[Carrier] = fpt.[Carrier]
-        AND fp.[Type] = fpt.[Type]
-        AND fp.[Location] = fpt.[Location] -- Matching location ensures spec alignment
-        AND fpt.[ReceivedDate_SK] = @date
-        AND fpt.[Effective Date] = DATEADD(day, 1, CONVERT(DATE, fpt.[ReceivedDate_SK], 112))
-      WHERE fp.[Date_SK] = @date
+      SELECT [Station_SK]
+            ,[Date_SK]
+            ,[Provider]
+            ,[Location]
+            ,[Type]
+            ,[Effective Date]
+            ,[T-1's Rack]
+            ,[Today's Rack]
+            ,[Prev Close]
+            ,[T-1 Landed Cost]
+            ,[Landed Cost]
+            ,[Rec Price]
+            ,[Low]
+            ,[T-1 Low]
+            ,[Avg]
+            ,[T-1 Avg]
+            ,[High]
+            ,[T-1 High]
+            ,[Competitor Type]
+            ,[Competitor]
+            ,[Competitor Address]
+            ,[Competitor Price]
+            ,[C_Updated Date]
+            ,[C_Updated Time]
+            ,[UpdatedAt]
+            ,[T+1 Rack] AS [T+1's Rack]
+            ,[T+1 Landed Cost] AS [T+1's Landed Cost]
+      FROM [FUEL].[Fuel_Pricing] WHERE [Date_SK] = @date
     `;
 
     const request = pool.request();
+
+    // 2. Now 'sql.VarChar' correctly references the global mssql module instance
     request.input("date", sql.VarChar, date);
 
+    // 3. Pass the renamed query variable into the driver execution method
     const result = await request.query(queryText);
     return result;
   } catch (err) {
@@ -553,6 +499,62 @@ async function getFuelPricingDate(date) {
     return { recordset: [] };
   }
 }
+// async function getFuelPricingDate(date) {
+//   const pool = await getPool();
+
+//   try {
+//     const queryText = `
+//       SELECT fp.[Station_SK]
+//             ,fp.[Date_SK]
+//             ,fp.[Provider]
+//             ,fp.[Location]
+//             ,fp.[Type]
+//             ,fp.[Effective Date]
+//             ,fp.[T-1's Rack]
+//             ,fp.[Today's Rack]
+//             -- ⬇️ Populated from the Tomorrow PriceSheet table
+//             ,fpt.[Rack] AS [T+1's Rack]
+//             ,fp.[Prev Close]
+//             ,fp.[T-1 Landed Cost]
+//             ,fp.[Landed Cost]
+//             -- ⬇️ Populated from the Tomorrow PriceSheet table
+//             ,fpt.[Landed Price] AS [T+1's Landed Cost]
+//             ,fp.[Rec Price]
+//             ,fp.[Low]
+//             ,fp.[T-1 Low]
+//             ,fp.[Avg]
+//             ,fp.[T-1 Avg]
+//             ,fp.[High]
+//             ,fp.[T-1 High]
+//             ,fp.[Competitor Type]
+//             ,fp.[Competitor]
+//             ,fp.[Competitor Address]
+//             ,fp.[Competitor Price]
+//             ,fp.[C_Updated Date]
+//             ,fp.[C_Updated Time]
+//             ,fp.[UpdatedAt]
+//       FROM [FUEL].[Fuel_Pricing] fp
+//       LEFT JOIN [FUEL].[Fuel_PriceSheet_Tomorrow] fpt 
+//         ON fp.[Station_SK] = fpt.[Station_SK]
+//         AND fp.[Pickup] = fpt.[Pickup]
+//         AND fp.[Carrier] = fpt.[Carrier]
+//         AND fp.[Type] = fpt.[Type]
+//         AND fp.[Location] = fpt.[Location] -- Matching location ensures spec alignment
+//         AND fpt.[ReceivedDate_SK] = @date
+//         AND fpt.[Effective Date] = DATEADD(day, 1, CONVERT(DATE, fpt.[ReceivedDate_SK], 112))
+//       WHERE fp.[Date_SK] = @date
+//     `;
+
+//     const request = pool.request();
+//     request.input("date", sql.VarChar, date);
+
+//     const result = await request.query(queryText);
+//     return result;
+//   } catch (err) {
+//     console.error("SQL error:", err);
+//     return { recordset: [] };
+//   }
+// }
 
 
 async function getFuelInventoryReportPreviousDay() {

@@ -94,6 +94,7 @@ const CashSummarySchema = new mongoose.Schema(
     pinpadTotal: { type: Number },
     pinpadPhoto: { type: String },
     isChickenDelight: { type: Boolean, default: false },
+    chickenDelightTips: { type: Number },
     createdBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
   },
   { timestamps: true }

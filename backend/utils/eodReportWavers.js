@@ -305,7 +305,7 @@ async function generateEodReportPdf({ site, date, isManitoba = false }) {
   const sellsLottery = locationDoc?.sellsLottery === true;
   const csoCode = locationDoc?.csoCode;
 
-  const rows = await CashSummary.find({ site, date: { $gte: start, $lt: end } }).lean();
+  const rows = await CashSummary.find({ site, date: { $gte: start, $lt: end }, isChickenDelight: false }).lean();
   const reportDoc = await CashSummaryReport.findOne({ site, date: start }).lean();
 
   let lottery = null;
