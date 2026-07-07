@@ -369,14 +369,14 @@ function RouteComponent() {
 
     setSyncing(true);
     try {
-      // Captures today's date formatted as 'YYYY-MM-DD'
-      const todayStr = new Date().toISOString().split("T")[0];
+      // // Captures today's date formatted as 'YYYY-MM-DD'
+      // const todayStr = new Date().toISOString().split("T")[0];
 
       const response = await axios.post(
         "/api/cycle-count/finalize-and-sync",
         {
           siteName: site,
-          targetDate: todayStr,
+          // targetDate: todayStr,
         },
         {
           headers: {
