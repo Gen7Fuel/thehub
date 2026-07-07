@@ -376,6 +376,7 @@ router.get('/over-short', async (req, res) => {
       if (!byDate[key]) {
         byDate[key] = {
           canadian_cash_collected: 0,
+          chequesCashedOut: 0,
           report_canadian_cash: 0,
           shiftOnlineTotal: 0,
           shiftInstantTotal: 0,
@@ -384,6 +385,7 @@ router.get('/over-short', async (req, res) => {
       }
 
       byDate[key].canadian_cash_collected += shift.canadian_cash_collected || 0;
+      byDate[key].chequesCashedOut += shift.chequesCashedOut || 0;
       byDate[key].report_canadian_cash += shift.report_canadian_cash || 0;
       byDate[key].shiftOnlineTotal += shift.onlineLottoTotal || 0;
       byDate[key].shiftInstantTotal += shift.instantLottTotal || 0;
@@ -396,6 +398,7 @@ router.get('/over-short', async (req, res) => {
       const dateStr = isoKey.split('T')[0];
       const totals = byDate[isoKey] || {
         canadian_cash_collected: 0,
+        chequesCashedOut: 0,
         report_canadian_cash: 0,
         shiftOnlineTotal: 0,
         shiftInstantTotal: 0,
@@ -406,6 +409,7 @@ router.get('/over-short', async (req, res) => {
       // We add manual adjustments from the report to the physical cash collected in shifts
       const adjustedCollected =
         totals.canadian_cash_collected +
+        totals.chequesCashedOut +
         (r.unsettledPrepays || 0) +
         (r.handheldDebit || 0);
 
@@ -1164,7 +1168,7 @@ router.post('/submit/to/safesheet', async (req, res) => {
 
           if (depositSlip) attachments.push(depositSlip)
 
-          let cc = ['mohammad@gen7fuel.com']
+          let cc = ['mohammad@gen7fuel.com', 'daksh@gen7fuel.com', 'kellie@gen7fuel.com'];
 
           if (site === 'Oliver' || site === 'Osoyoos') {
             cc.push('ZBaptiste@oib.ca');
