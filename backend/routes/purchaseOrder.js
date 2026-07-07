@@ -370,7 +370,20 @@ router.get("/", async (req, res) => {
   const filter = { source: "PO", stationName };
 
   if (startDate && endDate) {
-    filter.dateStr = { $gte: toDateStr(startDate), $lte: toDateStr(endDate) };
+    // Backward compatibility: pre-migration docs have no dateStr, so match
+    // those against the old Date-range logic instead of excluding them.
+    const isYmd = (s) => /^\d{4}-\d{2}-\d{2}$/.test(s);
+    const start = isYmd(startDate)
+      ? DateTime.fromISO(`${startDate}T00:00:00`, { zone: TIMEZONE }).toJSDate()
+      : new Date(startDate);
+    const end = isYmd(endDate)
+      ? DateTime.fromISO(`${endDate}T00:00:00`, { zone: TIMEZONE }).plus({ days: 1 }).toJSDate()
+      : new Date(new Date(endDate).setDate(new Date(endDate).getDate() + 1));
+
+    filter.$or = [
+      { dateStr: { $gte: toDateStr(startDate), $lte: toDateStr(endDate) } },
+      { dateStr: { $exists: false }, date: { $gte: start, $lt: end } },
+    ];
   }
 
   try {

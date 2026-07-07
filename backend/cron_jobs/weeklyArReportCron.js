@@ -99,11 +99,19 @@ async function sendWeeklyArReport() {
   const siteHtmlBlocks = [];
 
   for (const site of SITES) {
+    // Backward compatibility: pre-migration docs have no dateStr, so match
+    // those against the old Date-range logic instead of excluding them.
+    const startDateObj = DateTime.fromISO(startDate, { zone: TIMEZONE }).startOf("day").toJSDate();
+    const endDateObj = DateTime.fromISO(endDate, { zone: TIMEZONE }).endOf("day").toJSDate();
+
     const transactions = await Transaction.find({
       source: "PO",
       stationName: site,
-      dateStr: { $gte: startDate, $lte: endDate },
       poNumber: { $exists: true, $nin: [null, ""] },
+      $or: [
+        { dateStr: { $gte: startDate, $lte: endDate } },
+        { dateStr: { $exists: false }, date: { $gte: startDateObj, $lte: endDateObj } },
+      ],
     }).sort({ date: 1 }).lean();
 
     // Generate a PDF for each transaction
