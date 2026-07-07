@@ -1072,7 +1072,7 @@ function RouteComponent() {
           const uom = Number(item.unitInCase) === 1 ? "EA" : "CS";
           const quantity = Number(item.casesToOrder) || 0;
 
-          return [item.sku ?? "", upc, uom, quantity, 0].join("\t");
+          return [item.vin ?? "", upc, uom, quantity, 0].join("\t");
         })
         .filter((row: string | null): row is string => row !== null)
     );
