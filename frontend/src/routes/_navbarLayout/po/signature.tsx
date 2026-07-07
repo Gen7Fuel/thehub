@@ -8,6 +8,7 @@ import SignatureCanvas from 'react-signature-canvas';
 import { domain } from '@/lib/constants';
 import { Loader2 } from 'lucide-react';
 import axios from "axios"
+import { format } from 'date-fns'
 import { useAuth } from "@/context/AuthContext";
 
 export const Route = createFileRoute('/_navbarLayout/po/signature')({
@@ -75,7 +76,7 @@ function RouteComponent() {
       const poResponse = await authAxios(() =>
         axios.post(`${domain}/api/purchase-orders`, {
           source: 'PO',
-          date,
+          date: date ? format(date, 'yyyy-MM-dd') : format(new Date(), 'yyyy-MM-dd'),
           stationName,
           fleetCardNumber: fleetCardNumber || '', 
           poNumber: poNumber || '',

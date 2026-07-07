@@ -59,6 +59,7 @@ const styles = StyleSheet.create({
 
 interface Order {
   date: string;
+  dateStr?: string;
   customerName: string;
   fleetCardNumber: string;
   driverName: string;
@@ -81,7 +82,7 @@ const PurchaseOrderFormPDF = ({ order }: { order: Order }) => (
       <View style={styles.table}>
         <View style={styles.row}>
           <Text style={styles.cellLabel}>Date</Text>
-          <Text style={styles.cellValue}>{order.date.split('T')[0]}</Text>
+          <Text style={styles.cellValue}>{order.dateStr || order.date.split('T')[0]}</Text>
         </View>
         <View style={styles.row}>
           <Text style={styles.cellLabel}>Customer Name</Text>

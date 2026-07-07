@@ -582,12 +582,17 @@ router.get('/entries', async (req, res) => {
     // 4) Receivables total from Transactions (source: 'PO') for stationName/site and day range
     let totalReceivablesAmount = 0
     try {
+      // Backward compatibility: pre-migration docs have no dateStr, so match
+      // those against the old Date-range logic instead of excluding them.
       const [txAgg] = await Transactions.aggregate([
         {
           $match: {
             source: 'PO',
             stationName: site,
-            date: { $gte: start, $lte: end },
+            $or: [
+              { dateStr: date },
+              { dateStr: { $exists: false }, date: { $gte: start, $lte: end } },
+            ],
           },
         },
         { $group: { _id: null, total: { $sum: { $ifNull: ['$amount', 0] } } } },

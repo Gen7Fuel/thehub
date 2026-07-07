@@ -12,7 +12,6 @@ import { Trash2, Camera, Loader2 } from 'lucide-react'
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog'
 import { Label } from '@/components/ui/label'
 import { getStartAndEndOfToday, uploadBase64Image } from '@/lib/utils'
-import { DateTime } from 'luxon'
 import axios from "axios"
 import { useAuth } from "@/context/AuthContext";
 import { useSite } from "@/context/SiteContext";
@@ -21,6 +20,14 @@ import { formatFleetCardNumber } from '@/lib/utils';
 export const Route = createFileRoute('/_navbarLayout/po/list')({
   component: RouteComponent,
 })
+
+const toYmd = (d: string | Date) => {
+  const x = new Date(d as any)
+  const y = x.getFullYear()
+  const m = String(x.getMonth() + 1).padStart(2, '0')
+  const dd = String(x.getDate()).padStart(2, '0')
+  return `${y}-${m}-${dd}`
+}
 
 function RouteComponent() {
   const { user } = useAuth()
@@ -36,11 +43,12 @@ function RouteComponent() {
   // const poData = Route.useLoaderData() as any;
 
   const [stationName, setStationName] = React.useState<string>(selectedSite || user?.location || "");
-  const [timezone, setTimezone] = React.useState<string>(user?.timezone || "America/Toronto");
+  const [, setTimezone] = React.useState<string>(user?.timezone || "America/Toronto");
   const [purchaseOrders, setPurchaseOrders] = React.useState<
     {
     _id?: string;
     date: string;
+    dateStr?: string;
     fleetCardNumber: string;
     customerName: string;
     driverName: string;
@@ -60,23 +68,13 @@ function RouteComponent() {
     console.log('fetchPurchaseOrders called with:', date, stationName);
     if (!date?.from || !date?.to || !stationName) return;
 
-    // Convert day boundaries in station timezone -> UTC instants
-    const toYmd = (d: Date) => {
-      const y = d.getFullYear()
-      const m = String(d.getMonth() + 1).padStart(2, '0')
-      const day = String(d.getDate()).padStart(2, '0')
-      return `${y}-${m}-${day}`
-    }
-    const startUtc = DateTime.fromISO(`${toYmd(date.from)}T00:00:00`, { zone: timezone }).toUTC().toJSDate()
-    const endUtc = DateTime.fromISO(`${toYmd(date.to)}T00:00:00`, { zone: timezone }).toUTC().toJSDate()
-
     try {
       // add authorization header with bearer token
       const response = await axios.get(
         `/api/purchase-orders`, {
           params: {
-            startDate: startUtc.toISOString(),
-            endDate: endUtc.toISOString(),
+            startDate: toYmd(date.from),
+            endDate: toYmd(date.to),
             stationName
           },
           headers: {
@@ -100,6 +98,7 @@ function RouteComponent() {
 
   const generatePDF = async (order: {
     date: string;
+    dateStr?: string;
     fleetCardNumber: string;
     poNumber: string;
     customerName: string;
@@ -147,7 +146,8 @@ function RouteComponent() {
 
   const deleteOrder = async (order: any) => {
     if (!access?.po?.delete) return
-    const ok = window.confirm(`Delete PO entry dated ${new Date(order.date).toLocaleDateString()}? This cannot be undone.`)
+    const dateLabel = order.dateStr || new Date(order.date).toLocaleDateString('en-CA', { timeZone: 'UTC' })
+    const ok = window.confirm(`Delete PO entry dated ${dateLabel}? This cannot be undone.`)
     if (!ok) return
     try {
       setPendingDelete(prev => new Set(prev).add(order._id))
@@ -230,17 +230,9 @@ function RouteComponent() {
   const [selectedOrder, setSelectedOrder] = React.useState<any | null>(null)
   const [newDate, setNewDate] = React.useState<string>('')
 
-  const toYmd = (d: string | Date) => {
-    const x = new Date(d as any)
-    const y = x.getFullYear()
-    const m = String(x.getMonth() + 1).padStart(2, '0')
-    const dd = String(x.getDate()).padStart(2, '0')
-    return `${y}-${m}-${dd}`
-  }
-
   const onChangeDateClick = (order: any) => {
     setSelectedOrder(order)
-    setNewDate(toYmd(order.date))
+    setNewDate(order.dateStr || toYmd(order.date))
     setChangeDateOpen(true)
   }
 
@@ -258,7 +250,7 @@ function RouteComponent() {
         }
       )
       const updated = res.data
-      setPurchaseOrders(prev => prev.map(o => (o as any)._id === selectedOrder._id ? { ...o, date: updated.date } : o))
+      setPurchaseOrders(prev => prev.map(o => (o as any)._id === selectedOrder._id ? { ...o, date: updated.date, dateStr: updated.dateStr } : o))
 
       setChangeDateOpen(false)
       setSelectedOrder(null)
@@ -321,9 +313,7 @@ function RouteComponent() {
             purchaseOrders.map((order, index) => (
               <tr key={index} className="hover:bg-gray-50">
                 <td className="border-dashed border-t border-gray-300 px-4 py-2">{
-                  DateTime.fromISO(order.date, { zone: 'utc' })
-                    .setZone(timezone)
-                    .toFormat('yyyy-MM-dd')
+                  order.dateStr || new Date(order.date).toLocaleDateString('en-CA', { timeZone: 'UTC' })
                 }</td>
                 <td className="border-dashed border-t border-gray-300 px-4 py-2">{formatFleetCardNumber(order.fleetCardNumber) || order.poNumber}</td>
                 <td className="border-dashed border-t border-gray-300 px-4 py-2">{order.customerName}</td>

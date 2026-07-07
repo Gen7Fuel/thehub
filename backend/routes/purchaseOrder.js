@@ -8,10 +8,32 @@ const TIMEZONE = "America/Toronto";
 const Location = require("../models/Location");
 const { pushNotification } = require("../services/notificationService");
 const { emailQueue } = require('../queues/emailQueue');
+const { getPermissionMap } = require('../utils/permissionStore');
 
 const escapeHtml = (s = '') =>
   String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
            .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+
+// Helper: check if a user has effective access to a permId
+function hasEffectiveAccess(user, role, permId) {
+  const userOverride = user.customPermissionsArray?.find(p => p.permId === permId);
+  if (userOverride !== undefined) return userOverride.value;
+  if (role && role.permissionsArray) {
+    const roleSetting = role.permissionsArray.find(p => p.permId === permId);
+    return roleSetting ? roleSetting.value : false;
+  }
+  return false;
+}
+
+// Derive a "YYYY-MM-DD" business date string from a raw request value
+const toDateStr = (raw) => String(raw).slice(0, 10);
+
+// Legacy bridge: keep `date` (Date, required) populated for PO docs so other
+// consumers that still read `Transaction.date` (e.g. AR-check aggregation,
+// which spans both PO and Kardpoll) keep working. Noon UTC keeps the derived
+// instant on the same local calendar day for all Canadian station timezones
+// (UTC-4..-8) — do not reuse this trick for non-Canadian sites.
+const dateStrToLegacyDate = (dateStr) => new Date(`${dateStr}T12:00:00.000Z`);
 
 // Create a purchase order
 // router.post("/", async (req, res) => {
@@ -123,9 +145,17 @@ router.post("/", async (req, res) => {
       }
     }
 
+    let dateStr;
+    let legacyDate = date;
+    if (source === 'PO') {
+      dateStr = date ? toDateStr(date) : DateTime.now().setZone(TIMEZONE).toFormat('yyyy-MM-dd');
+      legacyDate = dateStrToLegacyDate(dateStr);
+    }
+
     const newOrder = new Transaction({
       source,
-      date,
+      date: legacyDate,
+      dateStr,
       stationName,
       fleetCardNumber: fleetCardNumber || '',
       poNumber: poNumber || '',
@@ -189,46 +219,21 @@ router.put("/:id", express.json(), async (req, res) => {
       return res.status(400).json({ message: "No valid fields to update." })
     }
 
-    // If changing date, preserve original UTC time for PO
+    // If changing date, require a valid "YYYY-MM-DD" string and the po.changeDate permission
     if (Object.prototype.hasOwnProperty.call(updates, 'date')) {
-      const existing = await Transaction.findById(id).select('date source')
-      if (!existing) {
-        return res.status(404).json({ message: "Purchase order not found." })
-      }
-
-      // Parse incoming new date (accepts 'YYYY-MM-DD' or ISO string)
-      const raw = updates.date
-      let newDateParsed
-      if (typeof raw === 'string') {
-        if (/^\d{4}-\d{2}-\d{2}$/.test(raw)) {
-          newDateParsed = new Date(`${raw}T00:00:00Z`)
-        } else {
-          newDateParsed = new Date(raw)
-        }
-      } else {
-        newDateParsed = new Date(raw)
-      }
-      if (Number.isNaN(newDateParsed.getTime())) {
+      const dateStr = toDateStr(updates.date)
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(dateStr)) {
         return res.status(400).json({ message: "Invalid date format." })
       }
 
-      // For PO only: keep original UTC time component
-      if (existing.source === 'PO' && existing.date instanceof Date && !Number.isNaN(existing.date.getTime())) {
-        const h = existing.date.getUTCHours()
-        const m = existing.date.getUTCMinutes()
-        const s = existing.date.getUTCSeconds()
-        const ms = existing.date.getUTCMilliseconds()
-        const combined = new Date(Date.UTC(
-          newDateParsed.getUTCFullYear(),
-          newDateParsed.getUTCMonth(),
-          newDateParsed.getUTCDate(),
-          h, m, s, ms
-        ))
-        updates.date = combined
-      } else {
-        // Non-PO or missing original time: just use parsed new date
-        updates.date = newDateParsed
+      const permissionMap = getPermissionMap();
+      const permId = permissionMap.get('po.changeDate');
+      if (!permId || !hasEffectiveAccess(req.user, req.user.role, permId)) {
+        return res.status(403).json({ message: "You do not have permission to change the PO date." });
       }
+
+      updates.dateStr = dateStr
+      updates.date = dateStrToLegacyDate(dateStr)
     }
 
     const updatedOrder = await Transaction.findByIdAndUpdate(
@@ -257,7 +262,7 @@ router.put("/:id", express.json(), async (req, res) => {
               poNumber: updatedOrder.poNumber || String(updatedOrder._id),
               customerName: updatedOrder.customerName || '',
               amount: (updatedOrder.amount || 0).toFixed(2),
-              date: new Date(updatedOrder.date).toLocaleDateString('en-CA', { timeZone: 'UTC' }),
+              date: updatedOrder.dateStr || new Date(updatedOrder.date).toLocaleDateString('en-CA', { timeZone: 'UTC' }),
               redirectUrl,
             },
             type: 'system',
@@ -365,6 +370,8 @@ router.get("/", async (req, res) => {
   const filter = { source: "PO", stationName };
 
   if (startDate && endDate) {
+    // Backward compatibility: pre-migration docs have no dateStr, so match
+    // those against the old Date-range logic instead of excluding them.
     const isYmd = (s) => /^\d{4}-\d{2}-\d{2}$/.test(s);
     const start = isYmd(startDate)
       ? DateTime.fromISO(`${startDate}T00:00:00`, { zone: TIMEZONE }).toJSDate()
@@ -372,13 +379,17 @@ router.get("/", async (req, res) => {
     const end = isYmd(endDate)
       ? DateTime.fromISO(`${endDate}T00:00:00`, { zone: TIMEZONE }).plus({ days: 1 }).toJSDate()
       : new Date(new Date(endDate).setDate(new Date(endDate).getDate() + 1));
-    filter.date = { $gte: start, $lt: end };
+
+    filter.$or = [
+      { dateStr: { $gte: toDateStr(startDate), $lte: toDateStr(endDate) } },
+      { dateStr: { $exists: false }, date: { $gte: start, $lt: end } },
+    ];
   }
 
   try {
     const orders = await Transaction.find(filter)
-      .select('fleetCardNumber driverName customerName vehicleMakeModel licensePlate productCode quantity amount signature date receipt poNumber requestReceipt')
-      .sort({ date: -1 });
+      .select('fleetCardNumber driverName customerName vehicleMakeModel licensePlate productCode quantity amount signature date dateStr receipt poNumber requestReceipt')
+      .sort({ date: -1, _id: -1 });
 
     const fleetCardNumbers = orders
       .filter(o => o.fleetCardNumber) // only get non-empty fleet cards
