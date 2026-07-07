@@ -11,6 +11,7 @@ const { parseSftReport } = require('../utils/parseSftReport')
 const { dateFromYMDLocal } = require('../utils/dateUtils')
 const { emailQueue } = require('../queues/emailQueue')
 const { generateCashSummaryPdf } = require('../utils/cashSummaryPdf')
+const { generateEodReportPdf } = require('../utils/eodReportWavers');
 const { generateShiftReportsPdf } = require('../utils/shiftReportsPdf')
 const { generateLotteryImagesPdf } = require('../utils/lotteryImagesPdf')
 const { getRefundTransactions, getShiftEmployees } = require('../services/sqlService');
@@ -655,7 +656,6 @@ router.get('/payables-comparison', async (req, res) => {
 
 router.post('/', async (req, res) => {
   try {
-
     const userId = req.user._id;
     if (!userId) {
       return res.status(401).json({ error: 'User identification missing' });
@@ -672,9 +672,12 @@ router.post('/', async (req, res) => {
       cpl_bulloch,
       exempted_tax,
       payouts,
-      chequesCashedOut, // 👈 ADD THIS LINE
+      chequesCashedOut,
       pinpadTotal,
       pinpadPhoto,
+      isChickenDelight,
+      chickenDelightTips, // 👈 Destructured frontend payload key
+      tenders,          
     } = req.body || {}
 
     if (!shift_number) return res.status(400).json({ error: 'shift_number is required' })
@@ -688,7 +691,7 @@ router.post('/', async (req, res) => {
       cpl_bulloch: norm(cpl_bulloch),
       report_canadian_cash: undefined,
       payouts: norm(payouts),
-      chequesCashedOut: norm(chequesCashedOut), // 👈 ADD THIS LINE
+      chequesCashedOut: norm(chequesCashedOut),
     }
 
     let content = ''
@@ -700,14 +703,12 @@ router.post('/', async (req, res) => {
         const url = new URL(`/api/sftp/receive/${encodeURIComponent(shift_number)}`, OFFICE_SFTP_API_BASE)
         url.searchParams.set('site', site)
         url.searchParams.set('type', 'sft')
-        // console.log(`Fetching SFTP report for site=${site}, shift_number=${shift_number}`)
 
         const resp = await fetchWithTimeout(url.toString())
         if (resp.ok) {
           const data = await resp.json()
           content = String(data?.content || '').replace(/^\uFEFF/, '')
           parsed = parseSftReport(content)
-          // console.log('Parsed SFT report:', parsed)
 
           values = {
             canadian_cash_collected: values.canadian_cash_collected, // keep user counted
@@ -727,26 +728,47 @@ router.post('/', async (req, res) => {
       }
     } else {
       console.log("WARNING: Skipping Office SFTP enrichment due to missing site or shift_number")
-      console.log("Site:", site, "Shift Number:", shift_number)
     }
 
-    // Helper: to number or undefined (leave missing values undefined in DB)
-    const numOrUndef = (v) => {
-      const n = Number(v)
-      return Number.isFinite(n) ? n : undefined
+    // 💡 CHICKEN DELIGHT SPECIAL CALCULATIONS BLOCK
+    let finalTenders = [
+      { key: 'debit', value: norm(parsed.debit) },
+      { key: 'visa', value: norm(parsed.visa) },
+      { key: 'mastercard', value: norm(parsed.mastercard) },
+      { key: 'amex', value: norm(parsed.amex) }
+    ]
+
+    const isCDShift = isChickenDelight === true
+
+    if (isCDShift) {
+      // 1. Map tenders array directly from frontend payload values using global norm helper
+      if (Array.isArray(tenders)) {
+        finalTenders = tenders.map(t => ({
+          key: t.key,
+          value: norm(t.value)
+        }))
+      }
+
+      // 2. Calculate frontend tender sum
+      const frontendTendersSum = finalTenders.reduce((sum, t) => sum + (t.value || 0), 0)
+      
+      // 3. Extract tips value safely
+      const parsedTips = norm(chickenDelightTips) || 0
+
+      // 4. Formula: baseCashReport - (tendersSum - tips)
+      const baseCashReport = values.report_canadian_cash ?? 0
+      values.report_canadian_cash = baseCashReport - (frontendTendersSum - parsedTips)
     }
 
-    // ...inside POST create handler, after parseSftReport(content):
-    // parsed = parseSftReport(content) || {}
-
-    // Build the document USING enriched values
+    // Build the document USING enriched & adjusted values
     const doc = new CashSummary({
       site,
       shift_number: String(shift_number),
       date: new Date(date),
       createdBy: userId,
-      isChickenDelight: req.body.isChickenDelight === true,
-      pinpadTotal: norm(pinpadTotal),
+      isChickenDelight: isCDShift,
+      chickenDelightTips: isCDShift ? norm(chickenDelightTips) : undefined, // 💾 Save tips value to DB
+      pinpadTotal: isCDShift ? undefined : norm(pinpadTotal), 
       pinpadPhoto: typeof pinpadPhoto === 'string' ? pinpadPhoto : undefined,
 
       // existing primary fields (now enriched)
@@ -755,73 +777,80 @@ router.post('/', async (req, res) => {
       cash_back: values.cash_back,
       loyalty: values.loyalty,
       cpl_bulloch: values.cpl_bulloch,
-      report_canadian_cash: values.report_canadian_cash,
-      exempted_tax: norm(exempted_tax),
-      payouts: numOrUndef(values.payouts),
-      chequesCashedOut: norm(chequesCashedOut),
+      report_canadian_cash: values.report_canadian_cash, 
+      exempted_tax: isCDShift ? undefined : norm(exempted_tax), 
+      payouts: norm(values.payouts),
+      propaneSales: norm(parsed.propaneSales),
+      bingoSales: norm(parsed.bingoSales),
+      companyCoupon: norm(parsed.companyCoupon),
+
+      // Updated dynamic array pairing mapping
+      tenders: finalTenders,
+
+      fuelGrades: parsed.fuelGrades
+        ? Object.entries(parsed.fuelGrades).map(([gradeName, data]) => ({
+          grade: gradeName,
+          volume: norm(data.volume),
+          amount: norm(data.amount)
+        }))
+        : [],
+
+      arCustomers: Array.isArray(parsed.arCustomers)
+        ? parsed.arCustomers.map((cust) => ({
+          name: cust.name,
+          incurred: norm(cust.incurred),
+          paid: norm(cust.paid)
+        }))
+        : [],
+
+      gst: norm(parsed.gst),
+      pst: norm(parsed.pst),
+      tobaccoCig: norm(parsed.tobaccoCig),
+      tobaccoOthers: norm(parsed.tobaccoOthers),
+      chequesCashedOut: isCDShift ? undefined : norm(chequesCashedOut), 
 
       // parsed SFT extras
-      fuelSales: numOrUndef(parsed.fuelSales),
-      dealGroupCplDiscounts: numOrUndef(parsed.dealGroupCplDiscounts),
-      fuelPriceOverrides: numOrUndef(parsed.fuelPriceOverrides),
-      parsedItemSales: numOrUndef(parsed.itemSales),
-      depositTotal: numOrUndef(parsed.depositTotal),
-      pennyRounding: numOrUndef(parsed.pennyRounding),
-      totalSales: numOrUndef(parsed.totalSales),
-      afdCredit: numOrUndef(parsed.afdCredit),
-      afdDebit: numOrUndef(parsed.afdDebit),
-      kioskCredit: numOrUndef(parsed.kioskCredit),
-      kioskDebit: numOrUndef(parsed.kioskDebit),
-      afdGiftCard: numOrUndef(parsed.afdGiftCard),
-      kioskGiftCard: numOrUndef(parsed.kioskGiftCard),
-      totalPos: numOrUndef(parsed.totalPos),
-      arIncurred: numOrUndef(parsed.arIncurred),
-      grandTotal: numOrUndef(parsed.grandTotal),
-      // Native cpl miss
-      missedCpl: numOrUndef(parsed.missedCpl),
-      couponsAccepted: numOrUndef(parsed.couponsAccepted),
-      giftCertificates: numOrUndef(parsed.giftCertificates),
-      cashOffCoupons: numOrUndef(parsed.cashOffCoupons),
-      otherCoupons: numOrUndef(parsed.otherCoupons),
-      canadianCash: numOrUndef((parsed.canadianCash || 0) + (parsed.usCash || 0)),
-      cashOnHand: numOrUndef(parsed.cashOnHand),
-      parsedCashBack: numOrUndef(parsed.cashBack),
-      parsedPayouts: numOrUndef(parsed.payouts),
-      safedropsCount: numOrUndef(parsed.safedrops?.count),
-      safedropsAmount: numOrUndef(parsed.safedrops?.amount),
-      // SHIFT STATISTICS: Voided Transactions
-      voidedTransactionsAmount: numOrUndef(parsed.voidedTransactionsAmount),
-      voidedTransactionsCount: numOrUndef(parsed.voidedTransactionsCount),
-      // Station times (strings) if present
+      fuelSales: norm(parsed.fuelSales),
+      dealGroupCplDiscounts: norm(parsed.dealGroupCplDiscounts),
+      fuelPriceOverrides: norm(parsed.fuelPriceOverrides),
+      parsedItemSales: norm(parsed.itemSales),
+      depositTotal: norm(parsed.depositTotal),
+      pennyRounding: norm(parsed.pennyRounding),
+      totalSales: norm(parsed.totalSales),
+      afdCredit: norm(parsed.afdCredit),
+      afdDebit: norm(parsed.afdDebit),
+      kioskCredit: norm(parsed.kioskCredit),
+      kioskDebit: norm(parsed.kioskDebit),
+      afdGiftCard: norm(parsed.afdGiftCard),
+      kioskGiftCard: norm(parsed.kioskGiftCard),
+      totalPos: norm(parsed.totalPos),
+      arIncurred: norm(parsed.arIncurred),
+      grandTotal: norm(parsed.grandTotal),
+      missedCpl: norm(parsed.missedCpl),
+      couponsAccepted: norm(parsed.couponsAccepted),
+      giftCertificates: norm(parsed.giftCertificates),
+      cashOffCoupons: norm(parsed.cashOffCoupons),
+      otherCoupons: norm(parsed.otherCoupons),
+      canadianCash: norm((parsed.canadianCash || 0) + (parsed.usCash || 0)),
+      cashOnHand: norm(parsed.cashOnHand),
+      parsedCashBack: norm(parsed.cashBack),
+      parsedPayouts: norm(parsed.payouts),
+      safedropsCount: norm(parsed.safedrops?.count),
+      safedropsAmount: norm(parsed.safedrops?.amount),
+      voidedTransactionsAmount: norm(parsed.voidedTransactionsAmount),
+      voidedTransactionsCount: norm(parsed.voidedTransactionsCount),
       ...(typeof parsed.stationStart === 'string' ? { stationStart: parsed.stationStart } : {}),
       ...(typeof parsed.stationEnd === 'string' ? { stationEnd: parsed.stationEnd } : {}),
-      // Lottery / Bulloch parsed values
-      lottoPayout: numOrUndef(parsed.lottoPayout),
-      onlineLottoTotal: numOrUndef(parsed.onlineLottoTotal),
-      instantLottTotal: numOrUndef(parsed.instantLottTotal),
-      dataWave: numOrUndef(parsed.dataWave),
-      feeDataWave: numOrUndef(parsed.feeDataWave),
-      unsettledPrepays: numOrUndef(parsed.unsettledPrepays),
+      lottoPayout: norm(parsed.lottoPayout),
+      onlineLottoTotal: norm(parsed.onlineLottoTotal),
+      instantLottTotal: norm(parsed.instantLottTotal),
+      dataWave: norm(parsed.dataWave),
+      feeDataWave: norm(parsed.feeDataWave),
+      unsettledPrepays: norm(parsed.unsettledPrepays),
     })
 
-    // const doc = new CashSummary({
-    //   site,
-    //   shift_number: String(shift_number),
-    //   date: new Date(date),
-    //   canadian_cash_collected: values.canadian_cash_collected,
-    //   item_sales: values.item_sales,
-    //   cash_back: values.cash_back,
-    //   loyalty: values.loyalty,
-    //   cpl_bulloch: values.cpl_bulloch,
-    //   report_canadian_cash: values.report_canadian_cash,
-    //   exempted_tax: norm(exempted_tax),
-    //   payouts: values.payouts,
-    // })
-
     const saved = await doc.save()
-
     await upsertDailyDepositForSiteDate(site, date).catch(() => { })
-
     res.status(201).json(saved)
   } catch (err) {
     console.error('CashSummary create error:', err)
@@ -1120,6 +1149,19 @@ router.post('/submit/to/safesheet', async (req, res) => {
             })
           }
 
+          if (site === 'Wavers West' || site === 'Wavers East') {
+            try {
+              const eodWaversPdf = await generateEodReportPdf({ site, date, isManitoba });
+              attachments.push({
+                filename: `End-of-Day-Report-${site}-${date}.pdf`,
+                content: eodWaversPdf,
+                contentType: 'application/pdf',
+              });
+            } catch (eodErr) {
+              console.error('Failed generating customized Wavers EOD report attachment:', eodErr.message);
+            }
+          }
+
           if (depositSlip) attachments.push(depositSlip)
 
           let cc = ['mohammad@gen7fuel.com']
@@ -1219,9 +1261,9 @@ router.get('/report', async (req, res) => {
       voidedTransactionsAmount: sum('voidedTransactionsAmount', regularRows),
     }
 
+    // 🌟 Updated to sum your explicit DB tips parameter directly
     const chickenDelightTip = cdRows.reduce(
-      (acc, r) =>
-        acc + (r.canadian_cash_collected ?? 0) + (r.pinpadTotal ?? 0) - (r.report_canadian_cash ?? 0),
+      (acc, r) => acc + (r.chickenDelightTips ?? 0),
       0
     )
 
@@ -1459,17 +1501,18 @@ router.put('/:id', async (req, res) => {
       cpl_bulloch,
       exempted_tax,
       report_canadian_cash,
-      chequesCashedOut, // 👈 ADD THIS LINE
+      chequesCashedOut,
       pinpadTotal,
       pinpadPhoto,
+      isChickenDelight,
+      chickenDelightTips, // 👈 Extract the new tips field from payload
+      tenders, 
     } = req.body || {}
 
     // 1️⃣ Load existing document
     const existing = await CashSummary.findById(req.params.id).lean()
     if (!existing) return res.status(404).json({ error: 'Not found' })
 
-    // Fall back to the existing record's identity fields when the caller omits them
-    // (e.g. the "refetch" action only sends { refetch: true })
     const finalSite = site ?? existing.site
     const finalShiftNumber = shift_number ?? existing.shift_number
     const finalDate = date ?? existing.date
@@ -1477,17 +1520,10 @@ router.put('/:id', async (req, res) => {
     if (!finalShiftNumber) return res.status(400).json({ error: 'shift_number is required' })
     if (!finalDate) return res.status(400).json({ error: 'date is required' })
 
-    // 2️⃣ Determine if all five fields are missing (key does not exist)
-    // const allMissing = !('report_canadian_cash' in existing) &&
-    //                    !('item_sales' in existing) &&
-    //                    !('cash_back' in existing) &&
-    //                    !('loyalty' in existing) &&
-    //                    !('cpl_bulloch' in existing)
-
     let enrichedValues = {}
 
-    // 3️⃣ Call Office API only if all fields are missing
-    if (finalSite && finalShiftNumber) {
+    // 3️⃣ Call Office API
+    if (site && shift_number) {
       try {
         const url = new URL(`/api/sftp/receive/${encodeURIComponent(finalShiftNumber)}`, OFFICE_SFTP_API_BASE)
         url.searchParams.set('site', finalSite)
@@ -1506,10 +1542,39 @@ router.put('/:id', async (req, res) => {
               loyalty: parsed.couponsAccepted,
               cpl_bulloch: parsed.fuelPriceOverrides,
               report_canadian_cash: parsed.canadianCash,
-              // station times parsed from SFT header (strings)
               stationStart: parsed.stationStart,
               stationEnd: parsed.stationEnd,
-              // all remaining parsed SFT fields (mirrors POST handler)
+              gst: parsed.gst,
+              pst: parsed.pst,
+              propaneSales: parsed.propaneSales,
+              bingoSales: parsed.bingoSales,
+              companyCoupon: parsed.companyCoupon,
+
+              tenders: [
+                { key: 'debit', value: norm(parsed.debit) },
+                { key: 'visa', value: norm(parsed.visa) },
+                { key: 'mastercard', value: norm(parsed.mastercard) },
+                { key: 'amex', value: norm(parsed.amex) }
+              ],
+
+              fuelGrades: parsed.fuelGrades
+                ? Object.entries(parsed.fuelGrades).map(([gradeName, data]) => ({
+                  grade: gradeName,
+                  volume: norm(data.volume),
+                  amount: norm(data.amount)
+                }))
+                : [],
+
+              arCustomers: Array.isArray(parsed.arCustomers)
+                ? parsed.arCustomers.map((cust) => ({
+                  name: cust.name,
+                  incurred: norm(cust.incurred),
+                  paid: norm(cust.paid)
+                }))
+                : [],
+              tobaccoCig: parsed.tobaccoCig,
+              tobaccoOthers: parsed.tobaccoOthers,
+
               fuelSales: parsed.fuelSales,
               dealGroupCplDiscounts: parsed.dealGroupCplDiscounts,
               fuelPriceOverrides: parsed.fuelPriceOverrides,
@@ -1538,13 +1603,11 @@ router.put('/:id', async (req, res) => {
               payouts: parsed.payouts,
               safedropsCount: parsed.safedrops?.count,
               safedropsAmount: parsed.safedrops?.amount,
-              // lottery fields
               lottoPayout: parsed.lottoPayout,
               onlineLottoTotal: parsed.onlineLottoTotal,
               instantLottTotal: parsed.instantLottTotal,
               dataWave: parsed.dataWave,
               feeDataWave: parsed.feeDataWave,
-              // voided transactions
               voidedTransactionsAmount: parsed.voidedTransactionsAmount,
               voidedTransactionsCount: parsed.voidedTransactionsCount,
               unsettledPrepays: parsed.unsettledPrepays,
@@ -1559,24 +1622,43 @@ router.put('/:id', async (req, res) => {
       }
     }
 
-    const numOrUndef = (v) => {
-      const n = Number(v)
-      return Number.isFinite(n) ? n : undefined
+    // 4️⃣ Merge final values — SFTP-parsed values always win over existing values
+    const ev = enrichedValues
+    const isCDShift = isChickenDelight === true ? true : (req.body.isChickenDelight === true ? true : (existing.isChickenDelight ?? false))
+
+    // Compute basic base values before processing any CD specific updates
+    let baseReportCash = norm(ev.report_canadian_cash ?? report_canadian_cash ?? existing.report_canadian_cash)
+    let finalTenders = ev.tenders ?? tenders ?? existing.tenders ?? []
+
+    // 💡 CHICKEN DELIGHT SPECIAL CALCULATIONS BLOCK
+    if (isCDShift) {
+      if (Array.isArray(tenders)) {
+        finalTenders = tenders.map(t => ({
+          key: t.key,
+          value: norm(t.value)
+        }))
+      }
+      const frontendTendersSum = finalTenders.reduce((sum, t) => sum + (t.value || 0), 0)
+      
+      // Extract the updated tips mapping from request body or default fallback parameter
+      const parsedTips = norm(chickenDelightTips ?? existing.chickenDelightTips) || 0
+
+      // Formula: baseCashReport - (tendersSum - tips)
+      const rawCashTotal = norm(ev.report_canadian_cash ?? report_canadian_cash ?? existing.report_canadian_cash) ?? 0
+      baseReportCash = rawCashTotal - (frontendTendersSum - parsedTips)
     }
 
-    // 4️⃣ Merge final values — SFTP-parsed values always win over existing zeros
-    const ev = enrichedValues
     const finalValues = {
       site: finalSite,
       shift_number: String(finalShiftNumber),
       date: new Date(finalDate),
-      isChickenDelight: req.body.isChickenDelight === true ? true : (existing.isChickenDelight ?? false),
-      pinpadTotal: norm(pinpadTotal) ?? existing.pinpadTotal,
+      isChickenDelight: isCDShift,
+      chickenDelightTips: isCDShift ? norm(chickenDelightTips ?? existing.chickenDelightTips) : undefined, // 💾 Save tips value to DB
+      pinpadTotal: isCDShift ? undefined : (norm(pinpadTotal) ?? existing.pinpadTotal),
       pinpadPhoto: typeof pinpadPhoto === 'string' ? pinpadPhoto : existing.pinpadPhoto,
 
       canadian_cash_collected: norm(canadian_cash_collected),
 
-      // Preserve existing if not provided or parsed
       stationStart: ev.stationStart ?? (typeof req.body.stationStart === 'string' ? req.body.stationStart : undefined) ?? existing.stationStart,
       stationEnd: ev.stationEnd ?? (typeof req.body.stationEnd === 'string' ? req.body.stationEnd : undefined) ?? existing.stationEnd,
 
@@ -1584,46 +1666,55 @@ router.put('/:id', async (req, res) => {
       cash_back: norm(ev.cash_back ?? cash_back ?? existing.cash_back),
       loyalty: norm(ev.loyalty ?? loyalty ?? existing.loyalty),
       cpl_bulloch: norm(ev.cpl_bulloch ?? cpl_bulloch ?? existing.cpl_bulloch),
-      report_canadian_cash: norm(ev.report_canadian_cash ?? report_canadian_cash ?? existing.report_canadian_cash),
-      chequesCashedOut: norm(chequesCashedOut) ?? existing.chequesCashedOut, // 👈 ADD THIS LINE
-      exempted_tax: norm(exempted_tax) ?? existing.exempted_tax,
+      report_canadian_cash: baseReportCash, 
+      chequesCashedOut: isCDShift ? undefined : (norm(chequesCashedOut) ?? existing.chequesCashedOut),
+      exempted_tax: isCDShift ? undefined : (norm(exempted_tax) ?? existing.exempted_tax),
 
-      // All remaining SFTP-parsed fields — fall back to existing if SFTP didn't return them
-      fuelSales: numOrUndef(ev.fuelSales ?? existing.fuelSales),
-      dealGroupCplDiscounts: numOrUndef(ev.dealGroupCplDiscounts ?? existing.dealGroupCplDiscounts),
-      fuelPriceOverrides: numOrUndef(ev.fuelPriceOverrides ?? existing.fuelPriceOverrides),
-      parsedItemSales: numOrUndef(ev.parsedItemSales ?? existing.parsedItemSales),
-      depositTotal: numOrUndef(ev.depositTotal ?? existing.depositTotal),
-      pennyRounding: numOrUndef(ev.pennyRounding ?? existing.pennyRounding),
-      totalSales: numOrUndef(ev.totalSales ?? existing.totalSales),
-      afdCredit: numOrUndef(ev.afdCredit ?? existing.afdCredit),
-      afdDebit: numOrUndef(ev.afdDebit ?? existing.afdDebit),
-      kioskCredit: numOrUndef(ev.kioskCredit ?? existing.kioskCredit),
-      kioskDebit: numOrUndef(ev.kioskDebit ?? existing.kioskDebit),
-      afdGiftCard: numOrUndef(ev.afdGiftCard ?? existing.afdGiftCard),
-      kioskGiftCard: numOrUndef(ev.kioskGiftCard ?? existing.kioskGiftCard),
-      totalPos: numOrUndef(ev.totalPos ?? existing.totalPos),
-      arIncurred: numOrUndef(ev.arIncurred ?? existing.arIncurred),
-      grandTotal: numOrUndef(ev.grandTotal ?? existing.grandTotal),
-      missedCpl: numOrUndef(ev.missedCpl ?? existing.missedCpl),
-      couponsAccepted: numOrUndef(ev.couponsAccepted ?? existing.couponsAccepted),
-      giftCertificates: numOrUndef(ev.giftCertificates ?? existing.giftCertificates),
-      cashOffCoupons: numOrUndef(ev.cashOffCoupons ?? existing.cashOffCoupons),
-      otherCoupons: numOrUndef(ev.otherCoupons ?? existing.otherCoupons),
-      canadianCash: numOrUndef(ev.canadianCash ?? existing.canadianCash),
-      cashOnHand: numOrUndef(ev.cashOnHand ?? existing.cashOnHand),
-      parsedCashBack: numOrUndef(ev.parsedCashBack ?? existing.parsedCashBack),
-      parsedPayouts: numOrUndef(ev.parsedPayouts ?? existing.parsedPayouts),
-      payouts: numOrUndef(ev.payouts ?? existing.payouts),
-      safedropsCount: numOrUndef(ev.safedropsCount ?? existing.safedropsCount),
-      safedropsAmount: numOrUndef(ev.safedropsAmount ?? existing.safedropsAmount),
-      // lottery fields
+      tenders: finalTenders,
+      fuelGrades: ev.fuelGrades ?? existing.fuelGrades ?? [],
+      arCustomers: ev.arCustomers ?? existing.arCustomers ?? [],
+      companyCoupon: norm(ev.companyCoupon ?? existing.companyCoupon),
+
+      // All remaining SFTP-parsed fields
+      fuelSales: norm(ev.fuelSales ?? existing.fuelSales),
+      dealGroupCplDiscounts: norm(ev.dealGroupCplDiscounts ?? existing.dealGroupCplDiscounts),
+      fuelPriceOverrides: norm(ev.fuelPriceOverrides ?? existing.fuelPriceOverrides),
+      parsedItemSales: norm(ev.parsedItemSales ?? existing.parsedItemSales),
+      depositTotal: norm(ev.depositTotal ?? existing.depositTotal),
+      gst: norm(ev.gst ?? existing.gst),
+      pst: norm(ev.pst ?? existing.pst),
+      tobaccoCig: norm(ev.tobaccoCig ?? existing.tobaccoCig),
+      tobaccoOthers: norm(ev.tobaccoOthers ?? existing.tobaccoOthers),
+      propaneSales: norm(ev.propaneSales ?? existing.propaneSales),
+      bingoSales: norm(ev.bingoSales ?? existing.bingoSales),
+      pennyRounding: norm(ev.pennyRounding ?? existing.pennyRounding),
+      totalSales: norm(ev.totalSales ?? existing.totalSales),
+      afdCredit: norm(ev.afdCredit ?? existing.afdCredit),
+      afdDebit: norm(ev.afdDebit ?? existing.afdDebit),
+      kioskCredit: norm(ev.kioskCredit ?? existing.kioskCredit),
+      kioskDebit: norm(ev.kioskDebit ?? existing.kioskDebit),
+      afdGiftCard: norm(ev.afdGiftCard ?? existing.afdGiftCard),
+      kioskGiftCard: norm(ev.kioskGiftCard ?? existing.kioskGiftCard),
+      totalPos: norm(ev.totalPos ?? existing.totalPos),
+      arIncurred: norm(ev.arIncurred ?? existing.arIncurred),
+      grandTotal: norm(ev.grandTotal ?? existing.grandTotal),
+      missedCpl: norm(ev.missedCpl ?? existing.missedCpl),
+      couponsAccepted: norm(ev.couponsAccepted ?? existing.couponsAccepted),
+      giftCertificates: norm(ev.giftCertificates ?? existing.giftCertificates),
+      cashOffCoupons: norm(ev.cashOffCoupons ?? existing.cashOffCoupons),
+      otherCoupons: norm(ev.otherCoupons ?? existing.otherCoupons),
+      canadianCash: norm(ev.canadianCash ?? existing.canadianCash),
+      cashOnHand: norm(ev.cashOnHand ?? existing.cashOnHand),
+      parsedCashBack: norm(ev.parsedCashBack ?? existing.parsedCashBack),
+      parsedPayouts: norm(ev.parsedPayouts ?? existing.parsedPayouts),
+      payouts: norm(ev.payouts ?? existing.payouts),
+      safedropsCount: norm(ev.safedropsCount ?? existing.safedropsCount),
+      safedropsAmount: norm(ev.safedropsAmount ?? existing.safedropsAmount),
       lottoPayout: norm(ev.lottoPayout ?? req.body.lottoPayout ?? existing.lottoPayout),
       onlineLottoTotal: norm(ev.onlineLottoTotal ?? req.body.onlineLottoTotal ?? existing.onlineLottoTotal),
       instantLottTotal: norm(ev.instantLottTotal ?? req.body.instantLottTotal ?? existing.instantLottTotal),
       dataWave: norm(ev.dataWave ?? req.body.dataWave ?? existing.dataWave),
       feeDataWave: norm(ev.feeDataWave ?? req.body.feeDataWave ?? existing.feeDataWave),
-      // voided transactions
       voidedTransactionsAmount: norm(ev.voidedTransactionsAmount ?? req.body.voidedTransactionsAmount ?? existing.voidedTransactionsAmount),
       voidedTransactionsCount: norm(ev.voidedTransactionsCount ?? req.body.voidedTransactionsCount ?? existing.voidedTransactionsCount),
       unsettledPrepays: norm(ev.unsettledPrepays ?? req.body.unsettledPrepays ?? existing.unsettledPrepays),

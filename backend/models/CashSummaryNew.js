@@ -1,5 +1,24 @@
 const mongoose = require('mongoose')
 
+// Sub-schema for standard key-value pairings within tenders array
+const TenderItemSchema = new mongoose.Schema({
+  key: { type: String, required: true },   // e.g., 'debit', 'visa', 'mastercard', 'amex'
+  value: { type: Number, default: null }   // Parsed dollar metric
+}, { _id: false }) // Disable _id for sub-documents to keep records clean
+
+// Sub-schema for mapping nested fuel metrics arrays
+const FuelGradeItemSchema = new mongoose.Schema({
+  grade: { type: String, required: true }, // e.g., 'regular', 'diesel', 'premium'
+  volume: { type: Number, default: null },
+  amount: { type: Number, default: null }
+}, { _id: false });
+
+const ArCustomerItemSchema = new mongoose.Schema({
+  name: { type: String, required: true },
+  incurred: { type: Number, default: null },
+  paid: { type: Number, default: null }
+}, { _id: false });
+
 // Shift entry (multiple per site+day)
 const CashSummarySchema = new mongoose.Schema(
   {
@@ -19,12 +38,24 @@ const CashSummarySchema = new mongoose.Schema(
     report_canadian_cash: { type: Number },
     payouts: { type: Number },
 
+    // NEW: Tenders field storing key-value pairs
+    tenders: [TenderItemSchema],
+    fuelGrades: [FuelGradeItemSchema],
+    arCustomers: [ArCustomerItemSchema],
+    tobaccoCig: { type: Number },
+    tobaccoOthers: { type: Number },
+    propaneSales: { type: Number },
+    bingoSales: { type: Number },
+
     // Parsed SFT values (no defaults; leave undefined if missing)
     fuelSales: { type: Number },
+    companyCoupon: { type: Number }, 
     dealGroupCplDiscounts: { type: Number },
     fuelPriceOverrides: { type: Number },
     parsedItemSales: { type: Number },
     depositTotal: { type: Number },
+    gst: { type: Number },
+    pst: { type: Number },
     pennyRounding: { type: Number },
     totalSales: { type: Number },
     afdCredit: { type: Number },
@@ -63,7 +94,8 @@ const CashSummarySchema = new mongoose.Schema(
     pinpadTotal: { type: Number },
     pinpadPhoto: { type: String },
     isChickenDelight: { type: Boolean, default: false },
-    createdBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User'},
+    chickenDelightTips: { type: Number },
+    createdBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
   },
   { timestamps: true }
 )
@@ -84,7 +116,7 @@ const CashSummaryReportSchema = new mongoose.Schema(
     handheldDebit: { type: Number },
     submitted: { type: Boolean, default: false },
     submittedAt: { type: Date },
-    submittedBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User'},
+    submittedBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
   },
   { timestamps: true }
 )
