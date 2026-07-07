@@ -60,6 +60,7 @@ const logsRoute = require("./routes/logsRoute");
 const sageRoutes = require("./routes/sageRoutes");
 const notificationRoutes = require("./routes/notificationRoutes");
 const userGroupRoutes = require("./routes/userGroupRoutes");
+const invoiceUploadRoutes = require("./routes/invoiceUploadRoutes");
 const fuelCarrierRoutes = require("./routes/fuel/fuelCarrierRoutes");
 const fuelRackRoutes = require("./routes/fuel/fuelRackRoutes");
 const fuelSupplierRoutes = require("./routes/fuel/fuelSupplierRoutes");
@@ -145,6 +146,7 @@ app.use("/api/roles", roleRoutes);
 app.use("/api/logs", logsRoute);
 app.use("/api/notification", notificationRoutes);
 app.use("/api/user-groups", userGroupRoutes);
+app.use("/api/invoice-upload", invoiceUploadRoutes);  
 
 // Reporting
 app.use("/api/sales-summary", salesSummaryRoutes);
