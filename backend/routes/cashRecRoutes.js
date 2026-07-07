@@ -587,7 +587,7 @@ router.get('/entries', async (req, res) => {
           $match: {
             source: 'PO',
             stationName: site,
-            date: { $gte: start, $lte: end },
+            dateStr: date,
           },
         },
         { $group: { _id: null, total: { $sum: { $ifNull: ['$amount', 0] } } } },

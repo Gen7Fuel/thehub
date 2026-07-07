@@ -10,6 +10,7 @@ import { useRef } from 'react'
 // import Webcam from "react-webcam"
 import { useFormStore } from '@/store'
 import { Button } from '@/components/ui/button'
+import { format } from 'date-fns'
 
 export const Route = createFileRoute('/_navbarLayout/po/receipt')({
   component: RouteComponent,
@@ -105,7 +106,7 @@ function RouteComponent() {
           `${domain}/api/purchase-orders`,
           {
             source: "PO",
-            date,
+            date: date ? format(date, 'yyyy-MM-dd') : format(new Date(), 'yyyy-MM-dd'),
             stationName: selectedStation,
             fleetCardNumber: fleetCardNumber || "",
             poNumber: poNumber || "",

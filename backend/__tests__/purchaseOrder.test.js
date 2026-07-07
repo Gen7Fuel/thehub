@@ -94,3 +94,46 @@ describe('Transaction schema — field validation', () => {
   })
 })
 
+// ─── dateStr field ────────────────────────────────────────────────────────
+
+describe('Transaction schema — dateStr field', () => {
+  const base = () => ({
+    source: 'PO',
+    date: new Date('2026-01-15T12:00:00Z'),
+    stationName: 'Rankin',
+    customerName: 'Jane Doe',
+    quantity: 50,
+    amount: 100.0,
+    productCode: 'UNL',
+  })
+
+  it('accepts a plain "yyyy-mm-dd" date string', () => {
+    const doc = new Transaction({ ...base(), dateStr: '2026-01-15' })
+    expect(doc.validateSync()).toBeUndefined()
+    expect(doc.dateStr).toBe('2026-01-15')
+  })
+
+  it('allows dateStr to be absent', () => {
+    const doc = new Transaction(base())
+    expect(doc.validateSync()).toBeUndefined()
+    expect(doc.dateStr).toBeUndefined()
+  })
+
+  it('stores dateStr as an unstructured string (no format enforcement)', () => {
+    const doc = new Transaction({ ...base(), dateStr: 'not-a-real-date' })
+    expect(doc.validateSync()).toBeUndefined()
+  })
+
+  it('still requires date and allows a missing dateStr on Kardpoll docs', () => {
+    const doc = new Transaction({ ...base(), source: 'Kardpoll' })
+    expect(doc.validateSync()).toBeUndefined()
+    expect(doc.dateStr).toBeUndefined()
+  })
+
+  it('still rejects a missing date, regardless of dateStr', () => {
+    const { date, ...rest } = base()
+    const err = new Transaction({ ...rest, dateStr: '2026-01-15' }).validateSync()
+    expect(err?.errors.date).toBeDefined()
+  })
+})
+
