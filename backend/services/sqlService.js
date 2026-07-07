@@ -1313,6 +1313,92 @@ async function getFuelSalesRollupReport(csoCode, targetDate) {
 
   return result.recordset;
 }
+// async function getFuelSalesRollupReport(csoCode, targetDate) {
+//   const pool = await getPool();
+
+//   // Convert date string/object safely to 'YYYYMMDD' string format for Date_SK mapping
+//   const formattedDateString = formatDateForDB(targetDate.toString());
+
+//   const result = await pool.request()
+//     .input("csoCode", sql.VarChar, csoCode)
+//     .input("targetDate", sql.Char(8), formattedDateString)
+//     .query(`
+//       WITH date_range AS (
+//           -- TEMPORARY LOCAL FIX: Calculate targetDate + 1 day dynamically inside SQL
+//           SELECT 
+//             @targetDate AS start_date,
+//             CONVERT(VARCHAR(8), DATEADD(day, 1, CONVERT(DATE, @targetDate, 112)), 112) AS end_date
+//       ),
+
+//       status_discount_transactions AS (
+//           -- Step 1: Identify transaction IDs that contain a Status Discount across BOTH days
+//           SELECT DISTINCT [Transaction ID]
+//           FROM [CSO].[Stg_CashRegisterJournal]
+//           CROSS JOIN date_range
+//           WHERE [Date_SK] BETWEEN start_date AND end_date
+//             AND [Station_SK] = @csoCode
+//             AND [Item Description] = 'STATUS DISCOUNT'
+//             AND [Transaction ID] IS NOT NULL
+//       ),
+
+//       extracted_fuel_sales AS (
+//           -- Step 2: Filter and map across the 2-day target range
+//           SELECT 
+//               -- Invert the sign if it's a refund event so it subtracts from totals
+//               CASE 
+//                   WHEN s.[Event] LIKE '%Refund%' THEN -1 * ABS(s.[Sales Amount])
+//                   ELSE s.[Sales Amount]
+//               END AS cte_sales_amount,
+              
+//               CASE 
+//                   WHEN s.[Event] LIKE '%Refund%' THEN -1 * ABS(s.[Sales Quantity])
+//                   ELSE s.[Sales Quantity]
+//               END AS cte_sales_quantity,
+              
+//               CASE 
+//                   WHEN [Item Description] LIKE '%DYED%' THEN 'Dyed Diesel'
+//                   WHEN [Item Description] LIKE '%DIESEL%' OR [Item Description] LIKE '%ULSD%' THEN 'Diesel'
+//                   WHEN [Fuel Type] = 'REG' THEN 'Regular | E15' -- Frontend preference display mapping
+//                   WHEN [Fuel Type] = 'PNL' THEN 'Premium'
+//                   WHEN [Fuel Type] = 'MID' THEN 'Midgrade'
+//                   ELSE COALESCE([Fuel Type], 'Unknown Grade')
+//               END AS final_grade,
+//               CASE 
+//                   WHEN d.[Transaction ID] IS NOT NULL THEN 'Treaty Sale'
+//                   ELSE 'Non Treaty Sale'
+//               END AS sale_category
+//           FROM [CSO].[Stg_CashRegisterJournal] s
+//           CROSS JOIN date_range
+//           LEFT JOIN status_discount_transactions d ON s.[Transaction ID] = d.[Transaction ID]
+//           WHERE s.[Date_SK] BETWEEN start_date AND end_date
+//             AND s.[Station_SK] = @csoCode
+//             -- Included both SaleEvent and Refund events
+//             AND (s.[Event] LIKE 'SaleEvent%' OR s.[Event] LIKE '%Refund%')
+//             AND s.[Transaction Type] LIKE 'Fuel%'
+//             -- Ensure we don't pick up flat 0 quantity baseline rows
+//             AND s.[Sales Quantity] <> 0
+//       )
+
+//       -- Step 3: Perform the final ROLLUP aggregation
+//       SELECT 
+//           COALESCE(sale_category, 'GRAND TOTAL') AS sale_category,
+//           CASE 
+//               WHEN sale_category IS NULL THEN 'All Categories'
+//               ELSE COALESCE(final_grade, 'All Grades') 
+//           END AS fuel_grade,
+//           CAST(SUM(COALESCE(cte_sales_amount, 0.00)) AS DECIMAL(18,2)) AS total_dollar_amount,
+//           CAST(SUM(COALESCE(cte_sales_quantity, 0.0000)) AS DECIMAL(18,4)) AS total_volume
+//       FROM extracted_fuel_sales
+//       GROUP BY ROLLUP(sale_category, final_grade)
+//       ORDER BY 
+//           CASE WHEN sale_category IS NULL THEN 1 ELSE 0 END, 
+//           sale_category, 
+//           CASE WHEN final_grade IS NULL THEN 1 ELSE 0 END,
+//           fuel_grade;
+//     `);
+
+//   return result.recordset;
+// }
 
 function formatDateForDB(dateString) {
   // input: "2025-11-14"
