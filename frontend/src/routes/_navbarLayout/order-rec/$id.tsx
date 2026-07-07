@@ -1061,6 +1061,12 @@ function RouteComponent() {
       return cleaned.length < 14 ? cleaned.padStart(14, "0") : cleaned;
     };
 
+    // Strip non-breaking spaces / zero-width characters that sometimes sneak
+    // into vendor data — Excel reads this file as ANSI text (no BOM), so a
+    // UTF-8-encoded U+00A0 renders as a stray "A" instead of a blank space.
+    const cleanText = (raw: string): string =>
+      (raw ?? "").replace(/[\u00A0\u200B-\u200D\uFEFF]/g, "").trim();
+
     // Flatten all items from all categories into tab-delimited rows
     const rows: string[] = orderRec.categories.flatMap((cat: any) =>
       cat.items
@@ -1072,7 +1078,7 @@ function RouteComponent() {
           const uom = Number(item.unitInCase) === 1 ? "EA" : "CS";
           const quantity = Number(item.casesToOrder) || 0;
 
-          return [item.sku ?? "", upc, uom, quantity, 0].join("\t");
+          return [cleanText(item.vin), upc, uom, quantity, 0].join("\t");
         })
         .filter((row: string | null): row is string => row !== null)
     );
