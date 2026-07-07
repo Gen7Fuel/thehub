@@ -1048,16 +1048,17 @@ router.put('/schedules/details/:id/items', async (req, res) => {
 
 /**
  * @route POST /api/cycle-count/finalize-and-sync
- * @desc Resolves local runtime location references and initiates the Petrosoft sync engine.
+ * @desc Resolves local runtime location references, applies timezone fallbacks, and initiates the Petrosoft sync engine.
  */
 router.post('/finalize-and-sync', async (req, res) => {
   try {
+    // 💡 targetDate is now optional in the destructuring
     const { siteName, targetDate } = req.body;
 
-    if (!siteName || !targetDate) {
+    if (!siteName) {
       return res.status(400).json({ 
         success: false, 
-        message: "Crucial context variables missing: 'siteName' and 'targetDate' must be supplied." 
+        message: "Crucial context variables missing: 'siteName' must be supplied." 
       });
     }
 
@@ -1070,13 +1071,23 @@ router.post('/finalize-and-sync', async (req, res) => {
       });
     }
 
+    // 💡 Fallback Strategy: Use the explicit targetDate string if sent (Report Page), 
+    // otherwise calculate 'today' relative to the station's registered timezone (Live Count Page)
+    let finalizedDate = targetDate;
+    
+    if (!finalizedDate) {
+      const stationTimezone = locationDoc.timezone || 'UTC';
+      finalizedDate = moment().tz(stationTimezone).format('YYYY-MM-DD');
+      console.log(`⏰ No explicit date sent. Fallback to station timezone (${stationTimezone}) computed date: ${finalizedDate}`);
+    } else {
+      console.log(`📅 Explicit date provided by client request: ${finalizedDate}`);
+    }
+
     const locationIdStr = locationDoc._id.toString();
+    console.log(`📡 Instantiating database-to-browser push pipeline hook for ${siteName} (${locationIdStr}) on target date: ${finalizedDate}`);
 
-    console.log(`📡 Instantiating database-to-browser push pipeline hook for ${siteName} (${locationIdStr})`);
-
-    // 2. Direct-invoke our orchestrator processing helper sequence
-    // Note: Per your instructions, this runs inline for testing; we will convert this to a BullMQ payload worker next!
-    const result = await syncPostgresCountsToPetrosoft(locationIdStr, targetDate);
+    // 2. Direct-invoke our orchestrator processing helper sequence using the resolved date string
+    const result = await syncPostgresCountsToPetrosoft(locationIdStr, finalizedDate);
 
     return res.status(200).json(result);
 

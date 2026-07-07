@@ -1132,7 +1132,7 @@ async function generateCashSummaryPdf({ site, date, notes = '', isManitoba = fal
     reportDocForExtras = reportDoc
   }
 
-  const rows = await CashSummary.find({ site, date: { $gte: start, $lt: end } })
+  const rows = await CashSummary.find({ site, date: { $gte: start, $lt: end }, isChickenDelight: false })
     .sort({ shift_number: 1 })
     .lean()
   const bullock = aggregateBullock(rows)

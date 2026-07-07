@@ -1053,47 +1053,41 @@ function RouteComponent() {
   function handleTemplate(): void {
     if (!orderRec) return;
 
-    // Flatten all items from all categories
-    const items = orderRec.categories.flatMap((cat: any) =>
+    // Left-pad a cleaned GTIN to a 14-character UPC. Returns null if the
+    // value is missing or non-numeric, so the row can be skipped.
+    const toUpc14 = (raw: string): string | null => {
+      const cleaned = (raw ?? "").replace(/\s+/g, "");
+      if (!/^\d+$/.test(cleaned)) return null;
+      return cleaned.length < 14 ? cleaned.padStart(14, "0") : cleaned;
+    };
+
+    // Flatten all items from all categories into tab-delimited rows
+    const rows: string[] = orderRec.categories.flatMap((cat: any) =>
       cat.items
         .filter((item: any) => Number(item.casesToOrder) > 0) // <-- Skip if casesToOrder is 0
         .map((item: any) => {
-          // Process UPC (GTIN): remove spaces, take substring from index 2, ensure 12 digits
-          let upc = (item.gtin ?? "").replace(/\s+/g, "");
-          if (upc.length > 12) upc = upc.substring(2);
-          if (!/^\d{12}$/.test(upc)) return null; // Only include valid 12-digit UPCs
+          const upc = toUpc14(item.gtin);
+          if (upc === null) return null; // Skip missing/non-numeric GTIN
 
-          return {
-            QuantityOrdered: Number(item.casesToOrder) || 1,
-            ItemId: item.itemId ?? null,
-            IsBc: true,
-            Sku: item.sku ?? "",
-            Upc: upc,
-            Upc2: item.upc2 ?? null
-          };
+          const uom = Number(item.unitInCase) === 1 ? "EA" : "CS";
+          const quantity = Number(item.casesToOrder) || 0;
+
+          return [item.sku ?? "", upc, uom, quantity, 0].join("\t");
         })
-        .filter(Boolean) // Remove nulls (invalid UPCs)
+        .filter((row: string | null): row is string => row !== null)
     );
 
-    const orderData = {
-      Version: "3.0",
-      ModifiedDate: new Date().toISOString(),
-      Data: {
-        Items: items,
-        OrderType: 1,
-        PurchaseOrderNo: "",
-        Sic1: "",
-        Sic2: "",
-        Notes: "",
-        SeparateInvoice: false
-      }
-    };
+    const header = ["SKU", "UPC", "UOM", "Quantity", "Shelf Tags"].join("\t");
+    const content = [header, ...rows].join("\r\n");
 
-    const blob = new Blob([JSON.stringify(orderData, null, 2)], { type: "application/json" });
+    // Saved with a .xls extension so double-clicking opens it directly in
+    // Excel — Excel sniffs the content and parses the tab-delimited text
+    // into cells rather than requiring a real binary workbook format.
+    const blob = new Blob([content], { type: "application/vnd.ms-excel" });
     const url = URL.createObjectURL(blob);
     const link = document.createElement("a");
     link.href = url;
-    link.download = `${orderRec.filename || "order"}.order`;
+    link.download = `${orderRec.filename || "order"}.xls`;
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);

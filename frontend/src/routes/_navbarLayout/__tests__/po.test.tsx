@@ -44,9 +44,12 @@ const {
     setReceipt: vi.fn(),
     signature: 'data:image/png;base64,sig' as string | null,
     setSignature: vi.fn(),
-    date: new Date('2026-01-15') as Date | undefined,
+    // Local-midnight construction, matching how the Calendar picker actually
+    // produces dates — new Date('2026-01-15') would parse as UTC midnight and
+    // shift a day in negative-UTC-offset timezones.
+    date: new Date(2026, 0, 15) as Date | undefined,
     setDate: vi.fn(),
-    stationName: 'Rankin' as string,
+    stationName: 'TestSite' as string,
     setStationName: vi.fn(),
     resetForm: vi.fn(),
   }
@@ -251,8 +254,8 @@ const resetStore = () => {
   mockStore.itemsDescription = ''
   mockStore.receipt = 'data:image/png;base64,abc'
   mockStore.signature = 'data:image/png;base64,sig'
-  mockStore.date = new Date('2026-01-15')
-  mockStore.stationName = 'Rankin'
+  mockStore.date = new Date(2026, 0, 15)
+  mockStore.stationName = 'TestSite'
 }
 
 const POForm = (IndexRoute as any).component as React.ComponentType
@@ -327,6 +330,70 @@ describe('PO Form — index.tsx', () => {
       const uploadBtn = screen.getByRole('button', { name: /upload receipt/i })
       expect(uploadBtn).toBeDisabled()
     }, { timeout: 5000 })
+  })
+
+  it('does not render the Number section or OTP input for site "Rankin"', async () => {
+    mockStore.stationName = 'Rankin'
+    renderWithSuspense(<POForm />)
+
+    await waitFor(() => {
+      expect(screen.getByTestId('date-picker')).toBeInTheDocument()
+    }, { timeout: 5000 })
+
+    expect(screen.queryByText('Number')).not.toBeInTheDocument()
+    expect(screen.queryByTestId('otp-input')).not.toBeInTheDocument()
+  })
+
+  it('does not auto-fill a fleet card from quick-select on site "Rankin"', async () => {
+    mockStore.stationName = 'Rankin'
+    mockAxiosGet.mockImplementation((url: string) => {
+      if (url.includes('quick-select')) {
+        return Promise.resolve({
+          data: [{ _id: 'qc1', name: 'Acme Co', fleetCardNumber: '1234567890123456', order: 0 }],
+        })
+      }
+      return Promise.resolve({ data: [] })
+    })
+
+    renderWithSuspense(<POForm />)
+    const quickBtn = await waitFor(() => screen.getByRole('button', { name: 'Acme' }), { timeout: 5000 })
+    fireEvent.click(quickBtn)
+
+    await waitFor(() => expect(mockStore.setCustomerName).toHaveBeenCalledWith('Acme Co'))
+    expect(mockStore.setFleetCardNumber).not.toHaveBeenCalledWith('1234567890123456')
+    expect(screen.queryByTestId('otp-input')).not.toBeInTheDocument()
+  })
+
+  it('shows only the first word of a customer name on the quick-select button', async () => {
+    mockAxiosGet.mockImplementation((url: string) => {
+      if (url.includes('quick-select')) {
+        return Promise.resolve({
+          data: [{ _id: 'qc1', name: 'Batchewana Frist Nation of Ojibways', fleetCardNumber: '', order: 0 }],
+        })
+      }
+      return Promise.resolve({ data: [] })
+    })
+
+    renderWithSuspense(<POForm />)
+
+    await waitFor(() =>
+      expect(screen.getByRole('button', { name: 'Batchewana' })).toBeInTheDocument()
+    , { timeout: 5000 })
+    expect(screen.queryByText('Batchewana Frist Nation of Ojibways')).not.toBeInTheDocument()
+
+    fireEvent.click(screen.getByRole('button', { name: 'Batchewana' }))
+    expect(mockStore.setCustomerName).toHaveBeenCalledWith('Batchewana Frist Nation of Ojibways')
+  })
+
+  it('does not pad poNumber to "00000" when clicking Upload Receipt on site "Rankin"', async () => {
+    mockStore.stationName = 'Rankin'
+    mockStore.receipt = null
+    renderWithSuspense(<POForm />)
+
+    const uploadBtn = await waitFor(() => screen.getByRole('button', { name: /upload receipt/i }), { timeout: 5000 })
+    fireEvent.click(uploadBtn)
+
+    expect(mockStore.setPoNumber).not.toHaveBeenCalledWith('00000')
   })
 })
 
@@ -423,6 +490,57 @@ describe('PO List — list.tsx', () => {
       expect(mockNavigate).toHaveBeenCalledWith({ to: '/no-access' })
     )
   })
+
+  it('sends startDate/endDate as plain "yyyy-MM-dd" strings', async () => {
+    renderWithSuspense(<POList />)
+    await waitFor(() =>
+      expect(mockAxiosGet).toHaveBeenCalledWith(
+        expect.stringContaining('/api/purchase-orders'),
+        expect.objectContaining({
+          params: expect.objectContaining({
+            startDate: expect.stringMatching(/^\d{4}-\d{2}-\d{2}$/),
+            endDate: expect.stringMatching(/^\d{4}-\d{2}-\d{2}$/),
+          }),
+        })
+      )
+    )
+  })
+
+  it('prefers dateStr over the legacy date field when displaying a row', async () => {
+    mockAxiosGet.mockResolvedValue({
+      status: 200,
+      data: [{ ...sampleOrders[0], date: '2026-01-15T12:00:00Z', dateStr: '2026-01-16' }],
+    })
+    renderWithSuspense(<POList />)
+    await waitFor(() => expect(screen.getByText('2026-01-16')).toBeInTheDocument())
+  })
+
+  it('falls back to a UTC-derived date when dateStr is absent (legacy row)', async () => {
+    renderWithSuspense(<POList />)
+    await waitFor(() => expect(screen.getByText('2026-01-15')).toBeInTheDocument())
+  })
+
+  it('sends a plain "yyyy-mm-dd" string when saving a changed date', async () => {
+    mockAxiosPut.mockResolvedValue({
+      data: { ...sampleOrders[0], date: '2026-02-01T12:00:00.000Z', dateStr: '2026-02-01' },
+    })
+    renderWithSuspense(<POList />)
+    await waitFor(() => expect(screen.getByText('Jane Doe')).toBeInTheDocument())
+
+    fireEvent.click(screen.getByRole('button', { name: /change date/i }))
+    const dateInput = screen.getByLabelText('Date') as HTMLInputElement
+    fireEvent.change(dateInput, { target: { value: '2026-02-01' } })
+    fireEvent.click(screen.getByRole('button', { name: /^save$/i }))
+
+    await waitFor(() =>
+      expect(mockAxiosPut).toHaveBeenCalledWith(
+        expect.stringContaining('/api/purchase-orders/order-1'),
+        { date: '2026-02-01' },
+        expect.any(Object)
+      )
+    )
+    await waitFor(() => expect(screen.getByText('2026-02-01')).toBeInTheDocument())
+  })
 })
 
 // ─── PO Signature (signature.tsx) ─────────────────────────────────────────────
@@ -470,6 +588,20 @@ describe('PO Signature — signature.tsx', () => {
     )
     await waitFor(() =>
       expect(mockNavigate).toHaveBeenCalledWith({ to: '/po/list' })
+    )
+  })
+
+  it('sends date as a plain "yyyy-MM-dd" string, not a full datetime', async () => {
+    renderWithQuery(<POSignature />)
+
+    fireEvent.click(screen.getByRole('button', { name: /submit/i }))
+
+    await waitFor(() =>
+      expect(mockAxiosPost).toHaveBeenCalledWith(
+        expect.stringContaining('/api/purchase-orders'),
+        expect.objectContaining({ date: '2026-01-15' }),
+        expect.any(Object)
+      )
     )
   })
 })
@@ -540,6 +672,21 @@ describe('PO Receipt — receipt.tsx', () => {
     )
     await waitFor(() =>
       expect(mockNavigate).toHaveBeenCalledWith({ to: '/po/list' })
+    )
+  })
+
+  it('sends date as a plain "yyyy-MM-dd" string, not a full datetime', async () => {
+    renderWithQuery(<POReceipt />)
+
+    const submitBtn = screen.getByRole('button', { name: /finalize|submit/i })
+    fireEvent.click(submitBtn)
+
+    await waitFor(() =>
+      expect(mockAxiosPost).toHaveBeenCalledWith(
+        expect.stringContaining('/api/purchase-orders'),
+        expect.objectContaining({ date: '2026-01-15' }),
+        expect.any(Object)
+      )
     )
   })
 })

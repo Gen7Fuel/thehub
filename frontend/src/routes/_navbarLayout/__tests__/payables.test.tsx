@@ -9,6 +9,7 @@ const {
   mockStore,
   mockAxiosGet,
   mockAxiosPost,
+  mockAxiosPut,
   mockUploadBase64Image,
   mockUseAuth,
 } = vi.hoisted(() => {
@@ -43,6 +44,7 @@ const {
     mockStore,
     mockAxiosGet: vi.fn(),
     mockAxiosPost: vi.fn(),
+    mockAxiosPut: vi.fn(),
     mockUploadBase64Image: vi.fn().mockResolvedValue({ filename: 'uploaded.jpg' }),
     mockUseAuth,
   }
@@ -76,6 +78,7 @@ vi.mock('axios', () => ({
   default: {
     get: mockAxiosGet,
     post: mockAxiosPost,
+    put: mockAxiosPut,
   },
 }))
 
@@ -117,7 +120,9 @@ vi.mock('@/components/custom/PayablePDF', () => ({
 }))
 
 vi.mock('@/components/ui/calendar', () => ({
-  Calendar: () => <div data-testid="calendar" />,
+  Calendar: (props: any) => (
+    <div data-testid="calendar" onClick={() => props.onSelect?.(new Date(2026, 2, 15))} />
+  ),
 }))
 
 vi.mock('@/components/ui/popover', () => ({
@@ -257,6 +262,18 @@ describe('Payable List — list.tsx', () => {
     },
   ]
 
+  const samplePayableWithDate = {
+    _id: 'pay-2',
+    vendorName: 'Circle K',
+    location: { _id: 'loc-1', stationName: 'Rankin', csoCode: 'RNK' },
+    paymentMethod: 'safe',
+    amount: 75,
+    images: [],
+    createdAt: '2026-03-11T12:00:00Z',
+    date: '2026-03-11',
+    notes: '',
+  }
+
   beforeEach(() => {
     resetStore()
     vi.clearAllMocks()
@@ -321,6 +338,41 @@ describe('Payable List — list.tsx', () => {
     renderWithSuspense(<PayableList />)
     await waitFor(() =>
       expect(mockNavigate).toHaveBeenCalledWith({ to: '/no-access' })
+    )
+  })
+
+  it('displays payable.date directly when present, instead of deriving it from createdAt', async () => {
+    mockAxiosGet
+      .mockReset()
+      .mockResolvedValueOnce({ data: [{ _id: 'loc-1', stationName: 'Rankin' }] })
+      .mockResolvedValueOnce({ data: [samplePayableWithDate] })
+
+    renderWithSuspense(<PayableList />)
+    await waitFor(() =>
+      expect(screen.getByText('2026-03-11')).toBeInTheDocument()
+    )
+  })
+
+  it('sends { date }, not createdAt, when the date popover is used to change a payable date', async () => {
+    mockUseAuth.mockReturnValue({
+      user: { id: 'u1', location: 'Rankin', timezone: 'America/Toronto', access: { payables: { changeDate: true } } },
+    })
+    mockAxiosPut.mockResolvedValue({ data: { ...samplePayables[0], date: '2026-03-15' } })
+
+    renderWithSuspense(<PayableList />)
+    await waitFor(() =>
+      expect(screen.getByText('Shell Canada')).toBeInTheDocument(),
+      { timeout: 5000 }
+    )
+
+    fireEvent.click(screen.getByTestId('calendar'))
+
+    await waitFor(() =>
+      expect(mockAxiosPut).toHaveBeenCalledWith(
+        expect.stringContaining('/api/payables/pay-1'),
+        { date: '2026-03-15' },
+        expect.any(Object)
+      )
     )
   })
 })

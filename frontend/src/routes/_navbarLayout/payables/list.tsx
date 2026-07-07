@@ -122,20 +122,24 @@ function RouteComponent() {
     }
   }
 
+  const ymdToLocalDate = (ymd: string) => {
+    const [y, m, d] = ymd.split('-').map(Number)
+    return new Date(y, (m || 1) - 1, d || 1)
+  }
+
   const updatePayableDate = async (payableId: string, newDate: Date) => {
     try {
       const token = localStorage.getItem('token')
-      const payload = { createdAt: newDate.toISOString() }
-      console.log('[updatePayableDate] PUT', `${domain}/api/payables/${payableId}`, payload)
-      const response = await axios.put(`${domain}/api/payables/${payableId}`, payload, {
+      const dateStr = format(newDate, 'yyyy-MM-dd')
+      const payload = { date: dateStr }
+      await axios.put(`${domain}/api/payables/${payableId}`, payload, {
         headers: {
           Authorization: `Bearer ${token}`,
           'X-Required-Permission': 'payables',
         },
       })
-      console.log('[updatePayableDate] response:', response.data)
       setPayables(prev =>
-        prev.map(p => p._id === payableId ? { ...p, createdAt: newDate.toISOString() } : p)
+        prev.map(p => p._id === payableId ? { ...p, date: dateStr } : p)
       )
       setDateEditOpenId(null)
     } catch (error: any) {
@@ -439,7 +443,7 @@ function RouteComponent() {
                         <PopoverContent className="w-auto p-0" align="end">
                           <Calendar
                             mode="single"
-                            selected={new Date(payable.createdAt)}
+                            selected={payable.date ? ymdToLocalDate(payable.date) : new Date(payable.createdAt)}
                             onSelect={(day) => {
                               if (day) updatePayableDate(payable._id, day)
                             }}
