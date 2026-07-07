@@ -44,7 +44,10 @@ const {
     setReceipt: vi.fn(),
     signature: 'data:image/png;base64,sig' as string | null,
     setSignature: vi.fn(),
-    date: new Date('2026-01-15') as Date | undefined,
+    // Local-midnight construction, matching how the Calendar picker actually
+    // produces dates — new Date('2026-01-15') would parse as UTC midnight and
+    // shift a day in negative-UTC-offset timezones.
+    date: new Date(2026, 0, 15) as Date | undefined,
     setDate: vi.fn(),
     stationName: 'TestSite' as string,
     setStationName: vi.fn(),
@@ -251,7 +254,7 @@ const resetStore = () => {
   mockStore.itemsDescription = ''
   mockStore.receipt = 'data:image/png;base64,abc'
   mockStore.signature = 'data:image/png;base64,sig'
-  mockStore.date = new Date('2026-01-15')
+  mockStore.date = new Date(2026, 0, 15)
   mockStore.stationName = 'TestSite'
 }
 
@@ -487,6 +490,57 @@ describe('PO List — list.tsx', () => {
       expect(mockNavigate).toHaveBeenCalledWith({ to: '/no-access' })
     )
   })
+
+  it('sends startDate/endDate as plain "yyyy-MM-dd" strings', async () => {
+    renderWithSuspense(<POList />)
+    await waitFor(() =>
+      expect(mockAxiosGet).toHaveBeenCalledWith(
+        expect.stringContaining('/api/purchase-orders'),
+        expect.objectContaining({
+          params: expect.objectContaining({
+            startDate: expect.stringMatching(/^\d{4}-\d{2}-\d{2}$/),
+            endDate: expect.stringMatching(/^\d{4}-\d{2}-\d{2}$/),
+          }),
+        })
+      )
+    )
+  })
+
+  it('prefers dateStr over the legacy date field when displaying a row', async () => {
+    mockAxiosGet.mockResolvedValue({
+      status: 200,
+      data: [{ ...sampleOrders[0], date: '2026-01-15T12:00:00Z', dateStr: '2026-01-16' }],
+    })
+    renderWithSuspense(<POList />)
+    await waitFor(() => expect(screen.getByText('2026-01-16')).toBeInTheDocument())
+  })
+
+  it('falls back to a UTC-derived date when dateStr is absent (legacy row)', async () => {
+    renderWithSuspense(<POList />)
+    await waitFor(() => expect(screen.getByText('2026-01-15')).toBeInTheDocument())
+  })
+
+  it('sends a plain "yyyy-mm-dd" string when saving a changed date', async () => {
+    mockAxiosPut.mockResolvedValue({
+      data: { ...sampleOrders[0], date: '2026-02-01T12:00:00.000Z', dateStr: '2026-02-01' },
+    })
+    renderWithSuspense(<POList />)
+    await waitFor(() => expect(screen.getByText('Jane Doe')).toBeInTheDocument())
+
+    fireEvent.click(screen.getByRole('button', { name: /change date/i }))
+    const dateInput = screen.getByLabelText('Date') as HTMLInputElement
+    fireEvent.change(dateInput, { target: { value: '2026-02-01' } })
+    fireEvent.click(screen.getByRole('button', { name: /^save$/i }))
+
+    await waitFor(() =>
+      expect(mockAxiosPut).toHaveBeenCalledWith(
+        expect.stringContaining('/api/purchase-orders/order-1'),
+        { date: '2026-02-01' },
+        expect.any(Object)
+      )
+    )
+    await waitFor(() => expect(screen.getByText('2026-02-01')).toBeInTheDocument())
+  })
 })
 
 // ─── PO Signature (signature.tsx) ─────────────────────────────────────────────
@@ -534,6 +588,20 @@ describe('PO Signature — signature.tsx', () => {
     )
     await waitFor(() =>
       expect(mockNavigate).toHaveBeenCalledWith({ to: '/po/list' })
+    )
+  })
+
+  it('sends date as a plain "yyyy-MM-dd" string, not a full datetime', async () => {
+    renderWithQuery(<POSignature />)
+
+    fireEvent.click(screen.getByRole('button', { name: /submit/i }))
+
+    await waitFor(() =>
+      expect(mockAxiosPost).toHaveBeenCalledWith(
+        expect.stringContaining('/api/purchase-orders'),
+        expect.objectContaining({ date: '2026-01-15' }),
+        expect.any(Object)
+      )
     )
   })
 })
@@ -604,6 +672,21 @@ describe('PO Receipt — receipt.tsx', () => {
     )
     await waitFor(() =>
       expect(mockNavigate).toHaveBeenCalledWith({ to: '/po/list' })
+    )
+  })
+
+  it('sends date as a plain "yyyy-MM-dd" string, not a full datetime', async () => {
+    renderWithQuery(<POReceipt />)
+
+    const submitBtn = screen.getByRole('button', { name: /finalize|submit/i })
+    fireEvent.click(submitBtn)
+
+    await waitFor(() =>
+      expect(mockAxiosPost).toHaveBeenCalledWith(
+        expect.stringContaining('/api/purchase-orders'),
+        expect.objectContaining({ date: '2026-01-15' }),
+        expect.any(Object)
+      )
     )
   })
 })

@@ -14,9 +14,16 @@ const transactionSchema = new mongoose.Schema({
     required: true, 
     enum: ["PO", "Kardpoll"] // Source of the transaction: Purchase Order or Kardpoll system
   },
-  date: { 
-    type: Date, 
+  date: {
+    type: Date,
     required: true // Date and time of the transaction
+  },
+  // Business date for PO entries only, "YYYY-MM-DD", timezone-safe.
+  // `date` above is still kept in sync (derived at noon UTC) for PO docs because
+  // other consumers (e.g. AR-check aggregation) read across both PO and Kardpoll
+  // via `date` without a dateStr equivalent for Kardpoll. Not used for Kardpoll docs.
+  dateStr: {
+    type: String,
   },
   stationName: { 
     type: String, 
@@ -91,6 +98,9 @@ transactionSchema.index(
     },
   }
 )
+
+// Supports PO date-range queries/filters without affecting Kardpoll docs
+transactionSchema.index({ source: 1, dateStr: 1 })
 
 const Transaction = mongoose.model("Transaction", transactionSchema);
 module.exports = Transaction;

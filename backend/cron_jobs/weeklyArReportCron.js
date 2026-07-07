@@ -99,13 +99,10 @@ async function sendWeeklyArReport() {
   const siteHtmlBlocks = [];
 
   for (const site of SITES) {
-    const startDateObj = DateTime.fromISO(startDate, { zone: TIMEZONE }).startOf("day").toJSDate();
-    const endDateObj = DateTime.fromISO(endDate, { zone: TIMEZONE }).endOf("day").toJSDate();
-
     const transactions = await Transaction.find({
       source: "PO",
       stationName: site,
-      date: { $gte: startDateObj, $lte: endDateObj },
+      dateStr: { $gte: startDate, $lte: endDate },
       poNumber: { $exists: true, $nin: [null, ""] },
     }).sort({ date: 1 }).lean();
 
