@@ -4,16 +4,16 @@ import { useAuth } from "@/context/AuthContext";
 import { getSocket } from "@/lib/websocket";
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
 import CycleCountTableGroup from "@/components/custom/CycleCountTableGroup"; // Our new helper
-import { Check, CheckCircle2, Star, ArrowDownToLine, Info } from "lucide-react";
+import { Check, CheckCircle2, Star, ArrowDownToLine } from "lucide-react";
 import { useSite } from '@/context/SiteContext';
 import { LocationPicker } from "@/components/custom/locationPicker";
 import axios from "axios";
-import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
+// import {
+//   Dialog,
+//   DialogContent,
+//   DialogHeader,
+//   DialogTitle,
+// } from "@/components/ui/dialog";
 
 export const Route = createFileRoute('/_navbarLayout/cycle-count/')({
   component: RouteComponent,
@@ -32,7 +32,7 @@ function RouteComponent() {
   const [completedCategories, setCompletedCategories] = useState<string[]>([]);
   const [varianceMap, setVarianceMap] = useState<{ [key: number]: number }>({});
   const [syncing, setSyncing] = useState(false);
-  const [showWelcomeModal, setShowWelcomeModal] = useState(true);
+  // const [showWelcomeModal, setShowWelcomeModal] = useState(true);
 
   interface CycleCountFieldUpdateV2 {
     entryId: string;
@@ -408,7 +408,7 @@ function RouteComponent() {
   return (
     <div className="p-4 max-w-5xl mx-auto pb-32">
       {/* 💡 DISCLAIMER POPUP MODAL */}
-      <Dialog open={showWelcomeModal} onOpenChange={setShowWelcomeModal}>
+      {/* <Dialog open={showWelcomeModal} onOpenChange={setShowWelcomeModal}>
         <DialogContent className="max-w-md p-6 bg-white rounded-xl shadow-xl border">
           <DialogHeader className="flex flex-row items-center gap-3 border-b pb-3">
             <div className="p-2 bg-blue-50 text-blue-600 rounded-lg">
@@ -440,7 +440,7 @@ function RouteComponent() {
             </button>
           </div>
         </DialogContent>
-      </Dialog>
+      </Dialog> */}
       {/* HEADER SECTION */}
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-6">
         <div>
