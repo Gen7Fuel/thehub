@@ -1,7 +1,7 @@
 const mongoose = require('mongoose');
 
 const CsoInvoiceSchema = new mongoose.Schema({
-  siteMongoId: {
+  site: {
     type: mongoose.Schema.Types.ObjectId,
     ref: 'Location',
     required: true,
@@ -15,6 +15,11 @@ const CsoInvoiceSchema = new mongoose.Schema({
   // 🚀 Updated: Stored as a clean 'YYYY-MM-DD' string to avoid UTC time-zone shifts
   invoiceDate: {
     type: String,
+    required: true,
+    trim: true
+  },
+  siteCsoCode: { 
+    type: String, 
     required: true,
     trim: true
   },

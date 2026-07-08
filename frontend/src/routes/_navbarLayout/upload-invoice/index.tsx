@@ -545,6 +545,9 @@ import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { DatePicker } from "@/components/custom/datePicker";
+import { useSite } from "@/context/SiteContext";
+import { LocationPicker } from "@/components/custom/locationPicker";
+import { useAuth } from "@/context/AuthContext";
 import {
   Select,
   SelectContent,
@@ -579,7 +582,10 @@ export const Route = createFileRoute("/_navbarLayout/upload-invoice/")({
 });
 
 function RouteComponent() {
+  const { user } = useAuth();
   const navigate = useNavigate();
+  const { selectedSite } = useSite();
+  const [site, setSite] = useState(selectedSite || user?.location || "");
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   // ----------------------------------------------------
@@ -701,7 +707,9 @@ function RouteComponent() {
   // ----------------------------------------------------
   // 🚀 Submission Pipeline
   // ----------------------------------------------------
+  // Add "site" to the validation criteria
   const isFormValid =
+    site && // 🚀 Enforces that a location is actively selected
     invoiceDate &&
     vendorCode &&
     docNumber &&
@@ -717,17 +725,18 @@ function RouteComponent() {
     try {
       setIsSubmitting(true);
 
-      // 🚀 Format Date to safe ISO string so the backend can split it cleanly 
-      // without timezone shifting problems.
       const payload = {
-        invoiceDate: invoiceDate ? invoiceDate.toISOString() : new Date().toISOString(),
+        siteName: site, // 🚀 Explicitly passing station name (e.g. "Station Alpha")
+        invoiceDate: invoiceDate
+          ? invoiceDate.toISOString()
+          : new Date().toISOString(),
         vendorCode,
-        vendorName, 
+        vendorName,
         docNumber,
         methodOfPayment: mop,
         checkNumber: mop === "check" ? checkNumber : null,
         totalCost: Number(cost),
-        invoiceImages, 
+        invoiceImages,
       };
 
       const token = localStorage.getItem("token");
@@ -747,14 +756,16 @@ function RouteComponent() {
       }
 
       if (json.success) {
-        // 🚀 Replaced toast with standard native alert block
-        alert(`Invoice Submitted Successfully!\nRecord saved under Reference ID: ${json.invoiceId}`);
+        alert(
+          `Invoice Submitted Successfully!\nRecord saved under Reference ID: ${json.invoiceId}`,
+        );
         navigate({ to: "/upload-invoice/list" });
       }
     } catch (err: any) {
       console.error("Final submission pipeline failure:", err);
-      // 🚀 Replaced toast with standard native alert block
-      alert(`Submission Failed:\n${err.message || "An unexpected error occurred saving invoice."}`);
+      alert(
+        `Submission Failed:\n${err.message || "An unexpected error occurred saving invoice."}`,
+      );
     } finally {
       setIsSubmitting(false);
     }
@@ -779,6 +790,18 @@ function RouteComponent() {
             Invoice Metadata
           </h2>
           <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-4 items-end">
+            {/* 🚀 Field 0: Location Picker Wrapper */}
+            <div className="flex flex-col space-y-1.5 w-full">
+              <span className="text-xs font-semibold text-slate-600">
+                Selected Station
+              </span>
+              <LocationPicker
+                setStationName={setSite}
+                value="stationName"
+                defaultValue={site}
+              />
+            </div>
+
             {/* Field 1: Invoice Date */}
             <div className="flex flex-col space-y-1.5 w-full">
               <span className="text-xs font-semibold text-slate-600">
