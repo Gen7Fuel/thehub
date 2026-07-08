@@ -1408,10 +1408,18 @@ router.get('/ar-check-range', async (req, res) => {
         },
       ]),
       Transactions.aggregate([
-        { $match: { stationName: site, date: { $gte: txStart, $lte: txEnd } } },
+        {
+          $match: {
+            stationName: site,
+            $or: [
+              { dateStr: { $gte: from, $lte: to } },
+              { dateStr: { $exists: false }, date: { $gte: txStart, $lte: txEnd } },
+            ],
+          },
+        },
         {
           $group: {
-            _id: { $dateToString: { format: '%Y-%m-%d', date: '$date', timezone: tz } },
+            _id: { $ifNull: ['$dateStr', { $dateToString: { format: '%Y-%m-%d', date: '$date', timezone: tz } }] },
             transactionsTotal: { $sum: { $ifNull: ['$amount', 0] } },
           },
         },
@@ -1456,13 +1464,23 @@ router.get('/ar-check', async (req, res) => {
 
     // Transactions are stored as exact submission timestamps in UTC, so we must
     // query using the site's local timezone day boundaries, not UTC midnight.
+    // Fallback branch covers PO docs (and all Kardpoll docs) that predate the
+    // dateStr migration and don't have a dateStr field yet.
     const location = await Location.findOne({ stationName: site }, { timezone: 1 }).lean()
     const tz = location?.timezone || 'America/Toronto'
     const txStart = DateTime.fromISO(date, { zone: tz }).startOf('day').toJSDate()
     const txEnd = DateTime.fromISO(date, { zone: tz }).endOf('day').toJSDate()
 
     const [txAgg] = await Transactions.aggregate([
-      { $match: { stationName: site, date: { $gte: txStart, $lte: txEnd } } },
+      {
+        $match: {
+          stationName: site,
+          $or: [
+            { dateStr: date },
+            { dateStr: { $exists: false }, date: { $gte: txStart, $lte: txEnd } },
+          ],
+        },
+      },
       { $group: { _id: null, total: { $sum: { $ifNull: ['$amount', 0] } } } },
     ])
 
