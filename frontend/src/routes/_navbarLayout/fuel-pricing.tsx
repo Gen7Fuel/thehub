@@ -169,6 +169,281 @@ function FuelPricingDashboard() {
     );
   }
 
+  // return (
+  //   // 1. PLACE PROVIDER AROUND EVERYTHING AT THE ROOT RETURN
+  //   <FuelPricingContext.Provider value={{ selectedCso, recommendedPrices }}>
+  //     <div
+  //       className="grid h-full w-full bg-[#f8fafc] overflow-hidden"
+  //       style={{ gridTemplateColumns: "minmax(0, 1fr) 380px" }}
+  //     >
+  //       <div className="min-w-0 p-6 border-r border-slate-200 flex flex-col space-y-5 overflow-hidden">
+  //         {/* TOP: HORIZONTAL GRADE SELECTOR ROW */}
+  //         <div className="grid grid-cols-4 gap-4 w-full">
+  //           {GRADES.map((grade) => {
+  //             const isAvailable = activeGradesAtStation.includes(grade.id);
+  //             const isSelected = selectedGrade === grade.id;
+  //             const theme = getGradeTheme(grade.lookup);
+  //             const IconComponent = theme.icon;
+
+  //             return (
+  //               <button
+  //                 key={grade.id}
+  //                 onClick={() => isAvailable && setSelectedGrade(grade.id)}
+  //                 disabled={!isAvailable}
+  //                 className={`p-4 rounded-xl border text-left transition-all duration-200 flex items-start justify-between relative overflow-hidden ${
+  //                   isSelected
+  //                     ? `${theme.color} text-white border-transparent shadow-md transform scale-[1.01]`
+  //                     : isAvailable
+  //                       ? "bg-white border-slate-200 hover:border-slate-300 text-slate-700"
+  //                       : "bg-slate-100 border-slate-200 opacity-40 cursor-not-allowed text-slate-400"
+  //                 }`}
+  //               >
+  //                 <div className="z-10">
+  //                   <div
+  //                     className={`text-[10px] font-bold uppercase tracking-wider ${isSelected ? "text-white/80" : "text-slate-400"}`}
+  //                   >
+  //                     Grade Configuration
+  //                   </div>
+  //                   <div className="text-xl font-black mt-0.5">
+  //                     {grade.label}
+  //                   </div>
+  //                   <div
+  //                     className={`text-[10px] mt-2 font-semibold tracking-wide ${isSelected ? "text-white/90" : theme.label}`}
+  //                   >
+  //                     {isAvailable ? "● Grade Available" : "✕ Not Available"}
+  //                   </div>
+  //                 </div>
+  //                 <IconComponent
+  //                   className={`w-8 h-8 shrink-0 mt-1 opacity-25 ${isSelected ? "text-white" : theme.label}`}
+  //                 />
+  //               </button>
+  //             );
+  //           })}
+  //         </div>
+
+  //         {/* WORKSPACE AREA */}
+  //         <div className="flex flex-row items-start space-x-4 w-full min-w-0 overflow-hidden text-slate-700">
+  //           {/* LEFT COMPONENT: STATION LIST */}
+  //           <div className="w-[280px] shrink-0 flex flex-col gap-2 max-h-[82vh] overflow-y-auto pr-1 scrollbar-thin">
+  //             <div className="text-[10px] font-extrabold uppercase text-slate-400 tracking-widest pl-1 pb-1 border-b border-slate-100">
+  //               Station Locations
+  //             </div>
+  //             {stations.map((station: any) => {
+  //               const isSelected = selectedCso === station.csoCode;
+  //               return (
+  //                 <button
+  //                   key={station.csoCode}
+  //                   onClick={() => {
+  //                     setSelectedCso(station.csoCode);
+  //                     setSelectedSite(station.stationName); // 4. Update global site context when clicked
+  //                     const targetStationData =
+  //                       pricingData[station.csoCode] || {};
+  //                     const available = Object.keys(targetStationData);
+  //                     if (
+  //                       available.length > 0 &&
+  //                       !available.includes(selectedGrade)
+  //                     ) {
+  //                       setSelectedGrade(available[0]);
+  //                     }
+  //                   }}
+  //                   className={`p-3 rounded-xl border text-left transition-all duration-150 flex flex-col space-y-1 relative group ${
+  //                     isSelected
+  //                       ? "bg-slate-900 border-slate-900 text-white shadow-md"
+  //                       : "bg-white border-slate-200 hover:border-slate-300 text-slate-700 hover:bg-slate-50/50"
+  //                   }`}
+  //                 >
+  //                   <div className="flex items-center justify-between w-full">
+  //                     <span className="text-xs font-black uppercase tracking-wide line-clamp-1 flex-1">
+  //                       {station.stationName}
+  //                     </span>
+  //                     <div
+  //                       className={`p-1 rounded-md ${isSelected ? "bg-slate-800 text-sky-400" : "bg-slate-50 text-slate-400 group-hover:bg-slate-100 group-hover:text-slate-500"}`}
+  //                     >
+  //                       <Fuel className="w-3.5 h-3.5 shrink-0" />
+  //                     </div>
+  //                   </div>
+  //                   <span
+  //                     className={`text-[10px] font-medium leading-normal ${isSelected ? "text-slate-300" : "text-slate-400"}`}
+  //                   >
+  //                     {station.address || "No location configured"}
+  //                   </span>
+  //                 </button>
+  //               );
+  //             })}
+  //           </div>
+
+  //           {/* RIGHT COMPONENT: DATA CARDS & TABLES */}
+  //           <div className="flex-1 min-w-0 overflow-visible">
+  //             {!currentGradeData ? (
+  //               <Card className="border-amber-200 bg-amber-50/50">
+  //                 <CardContent className="flex flex-col items-center justify-center p-8 text-center text-amber-800">
+  //                   <AlertTriangle className="w-10 h-10 text-amber-500 mb-2" />
+  //                   <p className="font-bold uppercase tracking-wider text-xs mb-1">
+  //                     Grade Context Warning
+  //                   </p>
+  //                   <p className="text-[11px] max-w-md text-amber-700 leading-relaxed">
+  //                     Kindly change the grade to view data. This specific fuel
+  //                     grade configuration is not available for this individual
+  //                     station interface.
+  //                   </p>
+  //                 </CardContent>
+  //               </Card>
+  //             ) : (
+  //               <div className="space-y-4 w-full overflow-visible">
+  //                 {/* HORIZONTAL SECTIONS: COMPACT 3x2 METRIC CARDS GRID */}
+  //                 <div className="grid grid-cols-3 gap-3 items-start w-full overflow-visible relative">
+  //                   {/* ================= ROW 1: FUEL SPECS ================= */}
+  //                   <h2 className="col-span-3 text-[13px] font-bold tracking-widest text-slate-400 uppercase pl-0.5 mt-2 flex items-center justify-between">
+  //                     <span>Fuel Specs</span>
+  //                     <span className="text-[11px] font-medium text-slate-400/80 normal-case tracking-normal pr-1">
+  //                       (
+  //                       {getHoursSinceLastFeedUpdate(
+  //                         currentGradeData?.updatedAt,
+  //                       )}
+  //                       )
+  //                     </span>
+  //                   </h2>
+  //                   <MetricCard
+  //                     title="Rack Price"
+  //                     current={currentGradeData.metrics.rackPrice}
+  //                     yesterday={currentGradeData.metrics.prevRackPrice}
+  //                     variant="rack"
+  //                     tooltipContent={marketPriceDefinitions}
+  //                   />
+  //                   <MetricCard
+  //                     title="Landed Cost"
+  //                     current={currentGradeData.metrics.landedCost}
+  //                     yesterday={currentGradeData.metrics.prevLandedCost}
+  //                     variant="landed"
+  //                     tooltipContent={marketPriceDefinitions}
+  //                   />
+  //                   <MetricCard
+  //                     title="Suggested Price"
+  //                     current={currentGradeData.metrics.recPrice}
+  //                     yesterday={currentGradeData.metrics.recPrice}
+  //                     isSuggested
+  //                     selectedGrade={selectedGrade}
+  //                     lowMarketPrice={currentGradeData.metrics.low}
+  //                     landedCost={currentGradeData.metrics.landedCost}
+  //                     priceExplanation={
+  //                       currentGradeData.metrics.priceExplanation
+  //                     }
+  //                   />
+
+  //                   {/* ================= INSERTED ROW: TOMORROW'S FUEL SPECS ================= */}
+  //                   <h2 className="col-span-3 text-[13px] font-bold tracking-widest text-slate-400 uppercase pl-0.5 mt-2 flex items-center justify-between">
+  //                     <span>Tomorrow's Fuel Specs</span>
+  //                   </h2>
+  //                   <MetricCard
+  //                     title="Tomorrow's Rack Price"
+  //                     current={currentGradeData.metrics.tomorrowRackPrice}
+  //                     today={currentGradeData.metrics.rackPrice}
+  //                     variant="rack"
+  //                     isTomorrow
+  //                     tooltipContent={marketPriceDefinitions}
+  //                   />
+  //                   <MetricCard
+  //                     title="Tomorrow's Landed Cost"
+  //                     current={currentGradeData.metrics.tomorrowLandedCost}
+  //                     today={currentGradeData.metrics.landedCost}
+  //                     variant="landed"
+  //                     isTomorrow
+  //                     tooltipContent={marketPriceDefinitions}
+  //                   />
+  //                   <MetricCard
+  //                     title="Tomorrow's Suggested Price"
+  //                     current={currentGradeData.metrics.tomorrowRecPrice}
+  //                     today={currentGradeData.metrics.recPrice}
+  //                     isSuggested
+  //                     isTomorrow
+  //                     selectedGrade={selectedGrade}
+  //                     lowMarketPrice={currentGradeData.metrics.low} // Keeping LIP configuration identical
+  //                     landedCost={
+  //                       currentGradeData.metrics.tomorrowLandedCost ||
+  //                       currentGradeData.metrics.landedCost
+  //                     }
+  //                     priceExplanation={
+  //                       currentGradeData.metrics.tomorrowPriceExplanation
+  //                     }
+  //                   />
+
+  //                   {/* ================= ROW 2: LOCAL MARKET PRICES ================= */}
+  //                   <h2 className="col-span-3 text-[13px] font-bold tracking-widest text-slate-400 uppercase pl-0.5 flex items-center justify-between">
+  //                     <span>Local Market Price</span>
+  //                     <span className="text-[11px] font-medium text-slate-400/80 normal-case tracking-normal pr-1">
+  //                       (
+  //                       {getHoursSinceLastFeedUpdate(
+  //                         currentGradeData?.updatedAt,
+  //                       )}
+  //                       )
+  //                     </span>
+  //                   </h2>
+
+  //                   <MetricCard
+  //                     title="Low Price"
+  //                     current={currentGradeData.metrics.low}
+  //                     yesterday={currentGradeData.metrics.prevLow}
+  //                     variant="market"
+  //                     tooltipContent={marketPriceDefinitions}
+  //                   />
+  //                   <MetricCard
+  //                     title="Average Price"
+  //                     current={currentGradeData.metrics.avg}
+  //                     yesterday={currentGradeData.metrics.prevAvg}
+  //                     variant="market"
+  //                     tooltipContent={marketPriceDefinitions}
+  //                   />
+  //                   <MetricCard
+  //                     title="High Price"
+  //                     current={currentGradeData.metrics.high}
+  //                     yesterday={currentGradeData.metrics.prevHigh}
+  //                     variant="market"
+  //                     tooltipContent={marketPriceDefinitions}
+  //                   />
+  //                 </div>
+
+  //                 {/* COMPETITOR TABLES FRAME */}
+  //                 <div className="space-y-1.5 w-full">
+  //                   <h2 className="text-[13px] font-bold tracking-widest text-slate-400 uppercase pl-0.5">
+  //                     Competitor Pricing
+  //                   </h2>
+  //                   <div className="space-y-3 bg-white p-3 rounded-xl border border-slate-200 shadow-sm w-full">
+  //                     <div>
+  //                       <h4 className="text-[11px] font-extrabold text-sky-700 tracking-wider uppercase mb-1 pl-0.5">
+  //                         Reserve Area
+  //                       </h4>
+  //                       <CompetitorTable
+  //                         data={currentGradeData.competitors.filter(
+  //                           (c: any) => c.type === "Reserve Area",
+  //                         )}
+  //                       />
+  //                     </div>
+
+  //                     <div className="border-t border-slate-100 pt-2">
+  //                       <h4 className="text-[11px] font-extrabold text-indigo-700 tracking-wider uppercase mb-1 pl-0.5">
+  //                         City Area
+  //                       </h4>
+  //                       <CompetitorTable
+  //                         data={currentGradeData.competitors.filter(
+  //                           (c: any) => c.type === "City Area",
+  //                         )}
+  //                       />
+  //                     </div>
+  //                   </div>
+  //                 </div>
+  //               </div>
+  //             )}
+  //           </div>
+  //         </div>
+  //       </div>
+
+  //       {/* RIGHT PANEL: OUTLET VIEW */}
+  //       <aside className="w-[380px] min-w-0 border-l border-slate-200 bg-slate-50/50 overflow-y-auto">
+  //         <Outlet />
+  //       </aside>
+  //     </div>
+  //   </FuelPricingContext.Provider>
+  // );
   return (
     // 1. PLACE PROVIDER AROUND EVERYTHING AT THE ROOT RETURN
     <FuelPricingContext.Provider value={{ selectedCso, recommendedPrices }}>
@@ -223,10 +498,10 @@ function FuelPricingDashboard() {
 
           {/* WORKSPACE AREA */}
           <div className="flex flex-row items-start space-x-4 w-full min-w-0 overflow-hidden text-slate-700">
-            {/* LEFT COMPONENT: STATION LIST */}
-            <div className="w-[280px] shrink-0 flex flex-col gap-2 max-h-[82vh] overflow-y-auto pr-1 scrollbar-thin">
+            {/* LEFT COMPONENT: STATION LIST (Reduced to w-[180px] for landscape table views) */}
+            <div className="w-[180px] shrink-0 flex flex-col gap-2 max-h-[82vh] overflow-y-auto pr-1 scrollbar-thin">
               <div className="text-[10px] font-extrabold uppercase text-slate-400 tracking-widest pl-1 pb-1 border-b border-slate-100">
-                Station Locations
+                Stations
               </div>
               {stations.map((station: any) => {
                 const isSelected = selectedCso === station.csoCode;
@@ -235,7 +510,7 @@ function FuelPricingDashboard() {
                     key={station.csoCode}
                     onClick={() => {
                       setSelectedCso(station.csoCode);
-                      setSelectedSite(station.stationName); // 4. Update global site context when clicked
+                      setSelectedSite(station.stationName);
                       const targetStationData =
                         pricingData[station.csoCode] || {};
                       const available = Object.keys(targetStationData);
@@ -246,34 +521,30 @@ function FuelPricingDashboard() {
                         setSelectedGrade(available[0]);
                       }
                     }}
-                    className={`p-3 rounded-xl border text-left transition-all duration-150 flex flex-col space-y-1 relative group ${
+                    className={`p-2.5 rounded-xl border text-left transition-all duration-150 flex flex-col space-y-1 relative group ${
                       isSelected
                         ? "bg-slate-900 border-slate-900 text-white shadow-md"
                         : "bg-white border-slate-200 hover:border-slate-300 text-slate-700 hover:bg-slate-50/50"
                     }`}
                   >
-                    <div className="flex items-center justify-between w-full">
-                      <span className="text-xs font-black uppercase tracking-wide line-clamp-1 flex-1">
+                    <div className="flex items-center justify-between w-full gap-1">
+                      <span className="text-xs font-black uppercase tracking-wide line-clamp-2 flex-1 leading-tight">
                         {station.stationName}
                       </span>
                       <div
-                        className={`p-1 rounded-md ${isSelected ? "bg-slate-800 text-sky-400" : "bg-slate-50 text-slate-400 group-hover:bg-slate-100 group-hover:text-slate-500"}`}
+                        className={`p-1 rounded-md shrink-0 ${isSelected ? "bg-slate-800 text-sky-400" : "bg-slate-50 text-slate-400 group-hover:bg-slate-100 group-hover:text-slate-500"}`}
                       >
-                        <Fuel className="w-3.5 h-3.5 shrink-0" />
+                        <Fuel className="w-3.5 h-3.5" />
                       </div>
                     </div>
-                    <span
-                      className={`text-[10px] font-medium leading-normal ${isSelected ? "text-slate-300" : "text-slate-400"}`}
-                    >
-                      {station.address || "No location configured"}
-                    </span>
+                    {/* ADDRESS REMOVED FROM HERE */}
                   </button>
                 );
               })}
             </div>
 
-            {/* RIGHT COMPONENT: DATA CARDS & TABLES */}
-            <div className="flex-1 min-w-0 overflow-visible">
+            {/* MIDDLE COMPONENT: DATA CARDS & TABLES (Will flex and take up remaining space smoothly) */}
+            <div className="flex-1 min-w-0 w-full overflow-visible">
               {!currentGradeData ? (
                 <Card className="border-amber-200 bg-amber-50/50">
                   <CardContent className="flex flex-col items-center justify-center p-8 text-center text-amber-800">
@@ -318,7 +589,7 @@ function FuelPricingDashboard() {
                       tooltipContent={marketPriceDefinitions}
                     />
                     <MetricCard
-                      title="Suggested Price"
+                      title="Rec. Price"
                       current={currentGradeData.metrics.recPrice}
                       yesterday={currentGradeData.metrics.recPrice}
                       isSuggested
@@ -335,7 +606,7 @@ function FuelPricingDashboard() {
                       <span>Tomorrow's Fuel Specs</span>
                     </h2>
                     <MetricCard
-                      title="Tomorrow's Rack Price"
+                      title="Rack Price"
                       current={currentGradeData.metrics.tomorrowRackPrice}
                       today={currentGradeData.metrics.rackPrice}
                       variant="rack"
@@ -343,7 +614,7 @@ function FuelPricingDashboard() {
                       tooltipContent={marketPriceDefinitions}
                     />
                     <MetricCard
-                      title="Tomorrow's Landed Cost"
+                      title="Landed Cost"
                       current={currentGradeData.metrics.tomorrowLandedCost}
                       today={currentGradeData.metrics.landedCost}
                       variant="landed"
@@ -351,13 +622,13 @@ function FuelPricingDashboard() {
                       tooltipContent={marketPriceDefinitions}
                     />
                     <MetricCard
-                      title="Tomorrow's Suggested Price"
+                      title="Rec. Price"
                       current={currentGradeData.metrics.tomorrowRecPrice}
                       today={currentGradeData.metrics.recPrice}
                       isSuggested
                       isTomorrow
                       selectedGrade={selectedGrade}
-                      lowMarketPrice={currentGradeData.metrics.low} // Keeping LIP configuration identical
+                      lowMarketPrice={currentGradeData.metrics.low}
                       landedCost={
                         currentGradeData.metrics.tomorrowLandedCost ||
                         currentGradeData.metrics.landedCost
@@ -387,7 +658,7 @@ function FuelPricingDashboard() {
                       tooltipContent={marketPriceDefinitions}
                     />
                     <MetricCard
-                      title="Average Price"
+                      title="Avg. Price"
                       current={currentGradeData.metrics.avg}
                       yesterday={currentGradeData.metrics.prevAvg}
                       variant="market"
@@ -456,7 +727,7 @@ function MetricCard({
   yesterday,
   today, // <-- Added today prop
   isSuggested,
-  lowMarketPrice,
+  // lowMarketPrice,
   landedCost,
   selectedGrade,
   variant,
@@ -520,12 +791,12 @@ function MetricCard({
   };
 
   if (isSuggested) {
-    const hasMarketPrice = lowMarketPrice && lowMarketPrice !== 0;
-    const calculatedSuggestedPrice = hasMarketPrice ? lowMarketPrice - 0.01 : 0;
-    const impliedMargin = hasMarketPrice
-      ? ((calculatedSuggestedPrice - (landedCost || 0)) / (landedCost || 1)) *
-        100
-      : 0;
+    // const hasMarketPrice = lowMarketPrice && lowMarketPrice !== 0;
+    // const calculatedSuggestedPrice = hasMarketPrice ? lowMarketPrice - 0.01 : 0;
+    // const impliedMargin = hasMarketPrice
+    //   ? ((calculatedSuggestedPrice - (landedCost || 0)) / (landedCost || 1)) *
+    //     100
+    //   : 0;
 
     const recPriceVal = currentVal;
     const landedCostVal = landedCost || 0;
@@ -545,7 +816,7 @@ function MetricCard({
           priceExplanation || "By adding 12% margin to the Landed cost",
       },
       {
-        label: "Low Indexed Price",
+        label: "LIP",
         description:
           "Calculated using today's market low threshold adjusted down by $0.01.",
       },
@@ -579,21 +850,21 @@ function MetricCard({
               {renderTooltip(dynamicSuggestedTooltip)}
             </div>
 
-            <div className="text-right text-[11px] font-medium text-slate-600">
-              Low Indexed Price:{" "}
+            {/* <div className="text-right text-[11px] font-medium text-slate-600">
+              LIP:{" "}
               <span className="font-bold text-slate-800">
                 {hasMarketPrice
                   ? `$${calculatedSuggestedPrice.toFixed(4)}`
                   : "-"}
               </span>
-            </div>
+            </div> */}
           </div>
 
           <div className="flex items-center justify-between w-full self-end">
             <div className="flex items-center space-x-2">
               {currentVal === 0 ? (
                 <span className="text-xs font-bold text-slate-400 italic">
-                  Not available yet
+                  N/A
                 </span>
               ) : (
                 <span className="text-lg font-black text-slate-900 tracking-tight">
@@ -603,17 +874,18 @@ function MetricCard({
 
               {currentVal > 0 && landedCostVal > 0 && (
                 <span className="text-[10px] font-bold text-indigo-700 bg-indigo-50 border border-indigo-200/60 px-1.5 py-0.5 rounded whitespace-nowrap">
-                  Margin: {currentRecMargin.toFixed(2)}%
+                  {/* Margin: {currentRecMargin.toFixed(2)}% */}
+                  {currentRecMargin.toFixed(2)}%
                 </span>
               )}
             </div>
 
-            <div className="text-right">
+            {/* <div className="text-right">
               <span className="text-[11px] font-black text-cyan-800 bg-cyan-100/80 border border-cyan-200/60 px-1.5 py-0.5 rounded shadow-2xs">
                 LIP Margin:{" "}
                 {hasMarketPrice ? `${impliedMargin.toFixed(2)}%` : "-"}
               </span>
-            </div>
+            </div> */}
           </div>
         </CardContent>
       </Card>
@@ -632,7 +904,7 @@ function MetricCard({
           </div>
           {currentVal === 0 ? (
             <div className="text-xs font-bold text-slate-400 italic mt-1">
-              Not available yet
+              N/A
             </div>
           ) : (
             <div className="text-lg font-black text-slate-900 tracking-tight">
@@ -644,7 +916,7 @@ function MetricCard({
         <div className="text-right flex flex-col items-end justify-center space-y-0.5">
           {currentVal === 0 ? (
             <span className="text-[10px] font-medium text-amber-600 bg-amber-50 border border-amber-100 px-1.5 py-0.5 rounded italic">
-              Price not updated
+              No update
             </span>
           ) : variance !== 0 ? (
             <span
@@ -659,7 +931,7 @@ function MetricCard({
             </span>
           ) : (
             <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-slate-100 text-slate-500 border border-slate-200/40">
-              {isTomorrow ? "Same as Today" : "Same as Yesterday"}
+              {isTomorrow ? "No Change" : "No Change"}
             </span>
           )}
           <div className="text-[13px] font-medium text-slate-400">
