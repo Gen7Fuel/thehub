@@ -397,6 +397,7 @@ async function processInvoiceAutomation({ invoiceId }) {
     siteCsoCode, // Target Petrosoft station code (e.g., '78207')
     invoiceDate, // Stored Date format: 'YYYY-MM-DD'
     vendorCode,
+    vendorName,
     docNumber,
     methodOfPayment, // 'check', 'cash', 'credit', etc.
     checkNumber,
@@ -753,8 +754,61 @@ async function processInvoiceAutomation({ invoiceId }) {
     );
     // Wait for the document upload modal window to disappear from the layout completely
     await modalWindow.waitFor({ state: "hidden", timeout: 20000 });
-    await page.waitForTimeout(3000); // Small extra buffer for the underlying scanner data grid to refresh views
+    await page.waitForTimeout(4000); // Give the background grid tables ample breathing room to refresh data rows
 
+    // =========================================================================
+    // GRID RECORD ROW VERIFICATION HANDSHAKE
+    // =========================================================================
+    console.log(
+      `🔍 Verification Phase: Scanning the grid view matrix to validate submission matching Vendor: "${vendorName}" and Doc #: "${docNumber}"`,
+    );
+
+    // Locate the cells of the active grid layout container
+    const dataTableRows = page.locator(
+      ".x-grid-view table.x-grid-table tr.x-grid-row",
+    );
+    const totalGridRows = await dataTableRows.count();
+
+    let submissionConfirmed = false;
+
+    for (let i = 0; i < totalGridRows; i++) {
+      const row = dataTableRows.nth(i);
+
+      // Extract the cell inner values cleanly (Column 2 is index 1, Column 3 is index 2)
+      const currentVendorCellText = await row
+        .locator("td.x-grid-cell")
+        .nth(1)
+        .innerText();
+      const currentDocNumCellText = await row
+        .locator("td.x-grid-cell")
+        .nth(2)
+        .innerText();
+
+      const cleanedGridVendor = currentVendorCellText.trim().toLowerCase();
+      const cleanedGridDocNum = currentDocNumCellText.trim().toLowerCase();
+
+      const expectedVendor = vendorName.trim().toLowerCase();
+      const expectedDocNum = docNumber.trim().toLowerCase();
+
+      // Flexible validation: verify vendor text matches closely and doc number matches explicitly
+      if (
+        (cleanedGridVendor.includes(expectedVendor) ||
+          expectedVendor.includes(cleanedGridVendor)) &&
+        cleanedGridDocNum === expectedDocNum
+      ) {
+        console.log(
+          `✅ System verified matching grid trace! Row match found -> Vendor: "${currentVendorCellText.trim()}" | Doc #: "${currentDocNumCellText.trim()}"`,
+        );
+        submissionConfirmed = true;
+        break;
+      }
+    }
+
+    if (!submissionConfirmed) {
+      throw new Error(
+        `Critical Verification Fault: Automated document save tracking row failed to materialize inside the CSO spreadsheet view context for Doc #: "${docNumber}".`,
+      );
+    }
     // =========================================================================
     // SCREENSHOT EVIDENCE PROOFS & CLEAN UP WORKSPACE
     // =========================================================================
