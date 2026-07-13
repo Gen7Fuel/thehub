@@ -1,7 +1,7 @@
 const express = require("express");
 const router = express.Router();
 const { getLatestCsoVendorsList } = require("../services/sqlService");
-const { processInvoiceAutomation } = require("../utils/csoInvoiceUpload");
+const { csoInvoiceQueue } = require("../queues/csoInvoiceQueue");
 const CsoInvoice = require("../models/CsoInvoice");
 const Location = require("../models/Location");
 
@@ -42,7 +42,7 @@ router.post("/submit", async (req, res) => {
     const userMongoId = req.user?._id;
 
     const {
-      siteName, // 🚀 Received from the LocationPicker element context
+      siteName,
       invoiceDate,
       vendorCode,
       vendorName,
@@ -79,22 +79,17 @@ router.post("/submit", async (req, res) => {
         });
     }
 
-    // 🚀 Dynamic Database Lookup via unique stationName string
+    // Dynamic Database Lookup via unique stationName string
     const targetLocation = await Location.findOne({ stationName: siteName });
     if (!targetLocation) {
-      return res
-        .status(404)
-        .json({
-          success: false,
-          error: `Configured location matching '${siteName}' could not be resolved.`,
-        });
+      return res.status(404).json({
+        success: false,
+        error: `Configured location matching '${siteName}' could not be resolved.`,
+      });
     }
 
     const siteMongoId = targetLocation._id;
-    // 💡 Provision: Captured code ready for downstream automated accounting tasks
     const targetCsoCode = targetLocation.csoCode || null;
-
-    // Extract clean YYYY-MM-DD format part from frontend string payload
     const dateStringOnly = invoiceDate.split("T")[0];
     const uploadedFilenames = [];
 
@@ -122,7 +117,6 @@ router.post("/submit", async (req, res) => {
         }
 
         const data = await response.json();
-
         if (data.filename) {
           uploadedFilenames.push(data.filename);
         } else {
@@ -131,9 +125,9 @@ router.post("/submit", async (req, res) => {
       }
     }
 
-    // Persist to MongoDB
+    // Persist to MongoDB with early 'pending_api_upload' operational status flags
     const newInvoice = new CsoInvoice({
-      site: siteMongoId, // Resolved database object ID string pointer
+      site: siteMongoId,
       siteCsoCode: targetCsoCode,
       submittedByMongoId: userMongoId,
       invoiceDate: dateStringOnly,
@@ -145,17 +139,28 @@ router.post("/submit", async (req, res) => {
       totalCost: Number(totalCost),
       images: uploadedFilenames,
       status: "pending_api_upload",
-      // Note: If you want to log targetCsoCode into the invoice record schema,
-      // make sure to add "csoCode: { type: String }" directly to models/CsoInvoice.js.
     });
 
     await newInvoice.save();
 
-    await processInvoiceAutomation({ invoiceId: newInvoice._id });
+    // 🚀 BullMQ Offloading Step: Safely buffer job details to Redis
+    console.log(
+      `📡 Offloading execution loop trace to background worker thread for Invoice: ${newInvoice._id}`,
+    );
+    await csoInvoiceQueue.add(
+      `invoice-upload-${newInvoice._id}-${Date.now()}`,
+      { invoiceId: newInvoice._id },
+      {
+        attempts: 1, // Keep single delivery attempts to avoid accidental duplicate form actions
+        removeOnComplete: true, // Auto-purge jobs from system on success to clean Redis memory profiles
+        removeOnFail: false, // Retain trace failures inside dashboard metrics for logging analysis
+      },
+    );
 
+    // Promptly return response to ensure standard instant page feedback
     return res.json({
       success: true,
-      message: "Invoice successfully processed and saved to database.",
+      message: "Your invoice has been submitted successfully! We are processing the upload in the background now. You will be notified automatically as soon as it completes, or you can check the List page to view the current status.",
       invoiceId: newInvoice._id,
     });
   } catch (err) {
@@ -163,12 +168,10 @@ router.post("/submit", async (req, res) => {
       "❌ Secondary Pipeline Error: Failed uploading image asset to CDN:",
       err,
     );
-    return res
-      .status(500)
-      .json({
-        success: false,
-        error: err.message || "Internal server error during upload sequence.",
-      });
+    return res.status(500).json({
+      success: false,
+      error: err.message || "Internal server error during upload sequence.",
+    });
   }
 });
 

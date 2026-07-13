@@ -668,7 +668,7 @@ async function processInvoiceAutomation({ invoiceId }) {
       );
     } catch (dropdownError) {
       throw new Error(
-        `Invalid vendor or vendor not available: The vendor lookup code "${vendorCode}" failed to materialize matching list options within the UI drop matrix.`,
+        `Vendor Code "${vendorCode}" was not found or is not available in CSO.`,
       );
     }
 
@@ -696,14 +696,7 @@ async function processInvoiceAutomation({ invoiceId }) {
     try {
       await mopBoundListOption.waitFor({ state: "visible", timeout: 5000 });
       await mopBoundListOption.first().click();
-      console.log(
-        `✅ Method of Payment dropdown selection resolved successfully.`,
-      );
     } catch (mopDropdownError) {
-      // Fallback: If filtering hid the item, attempt manual option iteration
-      console.log(
-        `⚠️ Text filter matching failed for "${methodOfPayment}". Attempting manual option iteration...`,
-      );
       const backupOption = page
         .locator(".x-boundlist-item")
         .filter({ hasText: methodOfPayment });
@@ -711,7 +704,7 @@ async function processInvoiceAutomation({ invoiceId }) {
         await backupOption.first().click();
       } else {
         throw new Error(
-          `Invalid MOP selection: "${methodOfPayment}" could not be found or matched in the dropdown options.`,
+          `Invalid Payment Method: "${methodOfPayment}" is not supported or not available.`,
         );
       }
     }
@@ -721,6 +714,11 @@ async function processInvoiceAutomation({ invoiceId }) {
       console.log(
         `🔍 MOP evaluated as 'check'. Waiting for target field input[name="check_number"] to append to DOM...`,
       );
+      if (!checkNumber) {
+        throw new Error(
+          `Check number is missing for the selected 'check' payment method.`,
+        );
+      }
       const checkField = modalWindow.locator('input[name="check_number"]');
 
       // Explicitly wait for ExtJS layout generation rendering routine to complete
@@ -806,13 +804,13 @@ async function processInvoiceAutomation({ invoiceId }) {
 
     if (!submissionConfirmed) {
       throw new Error(
-        `Critical Verification Fault: Automated document save tracking row failed to materialize inside the CSO spreadsheet view context for Doc #: "${docNumber}".`,
+        `Invoice saved, but could not be verified in the CSO table. Please check if Document #${docNumber} exists in CSO.`,
       );
     }
+
     // =========================================================================
     // SCREENSHOT EVIDENCE PROOFS & CLEAN UP WORKSPACE
     // =========================================================================
-
     const screenshotPath = path.join(
       outputDir,
       `phase2_success_${siteCsoCode}_${invoiceId}.png`,
@@ -821,6 +819,13 @@ async function processInvoiceAutomation({ invoiceId }) {
     console.log(
       `📸 Process completion snapshot recorded under services directory: ${screenshotPath}`,
     );
+
+    // 🚀 Update status to success in MongoDB
+    console.log(`💾 Persisting database update status to: uploaded_to_cso`);
+    await CsoInvoice.findByIdAndUpdate(invoiceId, {
+      status: "uploaded_to_cso",
+      csoUploadError: null,
+    });
 
     localFilePaths.forEach((filePath) => {
       if (fs.existsSync(filePath)) fs.unlinkSync(filePath);
@@ -844,8 +849,48 @@ async function processInvoiceAutomation({ invoiceId }) {
       console.error("Failed writing fallback diagnostic screenshots:", ssErr);
     }
 
-    // Guarding: Don't dispatch error notifications if it was a programmatic retry redirection
+    // Guarding: Don't dispatch error notifications or fail state if it was a programmatic retry redirection
     if (!error.message.includes("RETRY_PHASE_1")) {
+      // =======================================================================
+      // 🚀 ERROR CLASSIFICATION ENGINE (User vs System Error)
+      // =======================================================================
+      let formattedUserError = error.message;
+
+      // Identify user errors based on known validation phrases
+      const isUserError =
+        error.message.includes("Vendor Code") ||
+        error.message.includes("Invalid Payment Method") ||
+        error.message.includes("Check number is missing") ||
+        error.message.includes("could not be verified");
+
+      if (!isUserError) {
+        // Classify Playwright timeouts, network breaks, or navigation issues as System Errors
+        if (
+          error.message.includes("Timeout") ||
+          error.message.includes("waiting for selector")
+        ) {
+          formattedUserError =
+            "System Error: CStoreOffice portal responded slowly or failed to load required components. Please try again later.";
+        } else if (
+          error.message.includes("kc-login") ||
+          error.message.includes("username")
+        ) {
+          formattedUserError =
+            "System Error: CStoreOffice portal authentication failed or login screen was unreachable.";
+        } else {
+          formattedUserError = `System Error: ${error.message}`;
+        }
+      }
+
+      console.log(`💾 Persisting database error status to: failed_cso_upload`);
+      console.log(`📝 Formatted Error Message: "${formattedUserError}"`);
+
+      // Save user-friendly message directly into MongoDB for UI display
+      await CsoInvoice.findByIdAndUpdate(invoiceId, {
+        status: "failed_cso_upload",
+        csoUploadError: formattedUserError,
+      });
+
       const systemAlertHtml = `
         <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; border: 1px solid #f87171; border-radius: 16px; background-color: #ffffff;">
           <div style="background-color: #fef2f2; border-left: 4px solid #dc2626; padding: 16px; border-radius: 8px; margin-bottom: 20px;">
@@ -857,8 +902,12 @@ async function processInvoiceAutomation({ invoiceId }) {
             </p>
           </div>
           <div style="margin-bottom: 24px; background-color: #f8fafc; border: 1px solid #e2e8f0; padding: 14px; border-radius: 8px;">
-            <strong style="color: #0f172a; font-size: 13px; text-transform: uppercase;">Error Blueprint Context:</strong>
-            <p style="font-family: monospace; font-size: 13px; color: #ef4444; margin: 8px 0 0 0; white-space: pre-wrap;">${error.message}</p>
+            <strong style="color: #0f172a; font-size: 13px; text-transform: uppercase;">Frontend User Error:</strong>
+            <p style="font-family: monospace; font-size: 13px; color: #dc2626; margin: 8px 0 0 0; white-space: pre-wrap;">${formattedUserError}</p>
+          </div>
+          <div style="margin-bottom: 24px; background-color: #f8fafc; border: 1px solid #e2e8f0; padding: 14px; border-radius: 8px;">
+            <strong style="color: #0f172a; font-size: 13px; text-transform: uppercase;">Raw Technical Trace:</strong>
+            <p style="font-family: monospace; font-size: 12px; color: #64748b; margin: 8px 0 0 0; white-space: pre-wrap;">${error.stack || error.message}</p>
           </div>
         </div>
       `;
