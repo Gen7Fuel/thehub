@@ -108,6 +108,7 @@ async function sendWeeklyArReport() {
       source: "PO",
       stationName: site,
       poNumber: { $exists: true, $nin: [null, ""] },
+      deletedAt: null,
       $or: [
         { dateStr: { $gte: startDate, $lte: endDate } },
         { dateStr: { $exists: false }, date: { $gte: startDateObj, $lte: endDateObj } },

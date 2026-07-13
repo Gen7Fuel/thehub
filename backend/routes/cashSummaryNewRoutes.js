@@ -1411,6 +1411,7 @@ router.get('/ar-check-range', async (req, res) => {
         {
           $match: {
             stationName: site,
+            deletedAt: null,
             $or: [
               { dateStr: { $gte: from, $lte: to } },
               { dateStr: { $exists: false }, date: { $gte: txStart, $lte: txEnd } },
@@ -1475,6 +1476,7 @@ router.get('/ar-check', async (req, res) => {
       {
         $match: {
           stationName: site,
+          deletedAt: null,
           $or: [
             { dateStr: date },
             { dateStr: { $exists: false }, date: { $gte: txStart, $lte: txEnd } },

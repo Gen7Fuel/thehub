@@ -1,4 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
+import mongoose from 'mongoose'
 // Import the model directly — no DB connection required.
 // Do NOT import config/db.js here.
 import Transaction from '../models/Transactions.js'
@@ -134,6 +135,35 @@ describe('Transaction schema — dateStr field', () => {
     const { date, ...rest } = base()
     const err = new Transaction({ ...rest, dateStr: '2026-01-15' }).validateSync()
     expect(err?.errors.date).toBeDefined()
+  })
+})
+
+// ─── soft delete fields ────────────────────────────────────────────────────
+
+describe('Transaction schema — soft delete fields', () => {
+  const base = () => ({
+    source: 'PO',
+    date: new Date('2026-01-15T12:00:00Z'),
+    stationName: 'Rankin',
+    customerName: 'Jane Doe',
+    quantity: 50,
+    amount: 100.0,
+    productCode: 'UNL',
+  })
+
+  it('defaults deletedAt and deletedBy to null', () => {
+    const doc = new Transaction(base())
+    expect(doc.validateSync()).toBeUndefined()
+    expect(doc.deletedAt).toBeNull()
+    expect(doc.deletedBy).toBeNull()
+  })
+
+  it('accepts a deletedAt date and deletedBy ObjectId', () => {
+    const deletedBy = new mongoose.Types.ObjectId()
+    const doc = new Transaction({ ...base(), deletedAt: new Date('2026-02-01T00:00:00Z'), deletedBy })
+    expect(doc.validateSync()).toBeUndefined()
+    expect(doc.deletedAt).toBeInstanceOf(Date)
+    expect(doc.deletedBy.toString()).toBe(deletedBy.toString())
   })
 })
 

@@ -236,8 +236,8 @@ router.put("/:id", express.json(), async (req, res) => {
       updates.date = dateStrToLegacyDate(dateStr)
     }
 
-    const updatedOrder = await Transaction.findByIdAndUpdate(
-      id,
+    const updatedOrder = await Transaction.findOneAndUpdate(
+      { _id: id, deletedAt: null },
       { $set: updates },
       { new: true, runValidators: true }
     )
@@ -367,7 +367,7 @@ router.put("/:id", express.json(), async (req, res) => {
 
 router.get("/", async (req, res) => {
   const { startDate, endDate, stationName } = req.query;
-  const filter = { source: "PO", stationName };
+  const filter = { source: "PO", stationName, deletedAt: null };
 
   if (startDate && endDate) {
     // Backward compatibility: pre-migration docs have no dateStr, so match
@@ -443,7 +443,7 @@ router.get('/unique', async (req, res) => {
       return res.status(400).json({ message: 'stationName and poNumber are required' })
     }
 
-    const existing = await Transaction.findOne({ source: 'PO', stationName, poNumber }).select('_id').lean()
+    const existing = await Transaction.findOne({ source: 'PO', stationName, poNumber, deletedAt: null }).select('_id').lean()
     return res.json({ unique: !existing })
   } catch (err) {
     console.error('GET /api/purchase-orders/unique failed:', err)
@@ -459,7 +459,7 @@ router.get("/:id", async (req, res) => {
     // const order = await Transaction.findById(id)
     //   .populate('fleet', 'fleetCardNumber driverName customerName customerId vehicleMakeModel')
     //   .populate('product', 'description');
-    const order = await Transaction.findById(id).select('fleetCardNumber productCode quantity amount signature');
+    const order = await Transaction.findOne({ _id: id, deletedAt: null }).select('fleetCardNumber productCode quantity amount signature');
 
     if (!order) {
       return res.status(404).json({ message: "Purchase order not found." });
@@ -493,13 +493,18 @@ router.get("/:id", async (req, res) => {
   }
 });
 
-// Delete a purchase order by ID
+// Soft-delete a purchase order by ID — flags the doc instead of removing it so a
+// mistaken delete (site managers now have this access) can be fixed at the DB level.
 router.delete('/:id', async (req, res) => {
   try {
     const { id } = req.params
     if (!id) return res.status(400).json({ message: 'ID is required' })
 
-    const deleted = await Transaction.findByIdAndDelete(id)
+    const deleted = await Transaction.findOneAndUpdate(
+      { _id: id, source: 'PO', deletedAt: null },
+      { $set: { deletedAt: new Date(), deletedBy: req.user._id } },
+      { new: true }
+    )
     if (!deleted) {
       return res.status(404).json({ message: 'Purchase order not found.' })
     }
