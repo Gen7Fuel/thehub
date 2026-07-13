@@ -147,7 +147,7 @@ function RouteComponent() {
   const deleteOrder = async (order: any) => {
     if (!access?.po?.delete) return
     const dateLabel = order.dateStr || new Date(order.date).toLocaleDateString('en-CA', { timeZone: 'UTC' })
-    const ok = window.confirm(`Delete PO entry dated ${dateLabel}? This cannot be undone.`)
+    const ok = window.confirm(`Delete PO entry dated ${dateLabel}? It will be removed from this list.`)
     if (!ok) return
     try {
       setPendingDelete(prev => new Set(prev).add(order._id))

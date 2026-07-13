@@ -140,7 +140,7 @@ router.get("/", async (req, res) => {
 // Get all transactions with optional date and location filters
 router.get("/all", async (req, res) => {
   const { startDate, endDate, stationName } = req.query;
-  const filter = { stationName };
+  const filter = { stationName, deletedAt: null };
 
   if (startDate && endDate) {
     const start = new Date(startDate);
