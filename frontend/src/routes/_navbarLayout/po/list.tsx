@@ -8,7 +8,7 @@ import { LocationPicker } from '@/components/custom/locationPicker'
 import PurchaseOrderPDF from '@/components/custom/poForm'
 import { pdf } from '@react-pdf/renderer'
 import { Button } from '@/components/ui/button'
-import { Trash2, Camera, Loader2 } from 'lucide-react'
+import { Trash2, Camera, Loader2, Calendar } from 'lucide-react'
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog'
 import { Label } from '@/components/ui/label'
 import { getStartAndEndOfToday, uploadBase64Image } from '@/lib/utils'
@@ -340,7 +340,16 @@ function RouteComponent() {
                       <Button onClick={() => generatePDF(order)}>PDF</Button>
                     )}
                     {access?.po?.changeDate && (
-                      <Button variant="outline" onClick={() => onChangeDateClick(order)}>Change Date</Button>
+                      <Button
+                        variant="outline"
+                        size="icon"
+                        onClick={() => onChangeDateClick(order)}
+                        title="Change Date"
+                        aria-label="Change Date"
+                      >
+                        <Calendar className="h-4 w-4" />
+                        <span className="sr-only">Change Date</span>
+                      </Button>
                     )}
                     {access?.po?.delete && (
                       <Button
