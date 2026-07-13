@@ -37,6 +37,7 @@ function RouteComponent() {
   const [error, setError] = useState<string | null>(null)
   const [editItem, setEditItem] = useState<{ catIdx: number, itemIdx: number } | null>(null)
   const [notifying, setNotifying] = useState<boolean>(false)
+  const [generatingTemplate, setGeneratingTemplate] = useState<boolean>(false)
 
   const navigate = useNavigate()
   // const [switchLoading, setSwitchLoading] = useState(false);
@@ -1050,7 +1051,7 @@ function RouteComponent() {
   if (error) return <div>{error}</div>
   if (!orderRec) return <div>Not found</div>
 
-  function handleTemplate(): void {
+  async function handleTemplate(): Promise<void> {
     if (!orderRec) return;
 
     // Left-pad a cleaned GTIN to a 14-character UPC. Returns null if the
@@ -1067,21 +1068,57 @@ function RouteComponent() {
     const cleanText = (raw: string): string =>
       (raw ?? "").replace(/[\u00A0\u200B-\u200D\uFEFF]/g, "").trim();
 
-    // Flatten all items from all categories into tab-delimited rows
-    const rows: string[] = orderRec.categories.flatMap((cat: any) =>
+    // Flatten all items from all categories, skipping casesToOrder <= 0 and
+    // missing/non-numeric GTINs, before looking up UOM/MOQ data.
+    const candidates: { item: any; upc: string }[] = [];
+    orderRec.categories.forEach((cat: any) =>
       cat.items
-        .filter((item: any) => Number(item.casesToOrder) > 0) // <-- Skip if casesToOrder is 0
-        .map((item: any) => {
+        .filter((item: any) => Number(item.casesToOrder) > 0)
+        .forEach((item: any) => {
           const upc = toUpc14(item.gtin);
-          if (upc === null) return null; // Skip missing/non-numeric GTIN
-
-          const uom = Number(item.unitInCase) === 1 ? "EA" : "CS";
-          const quantity = Number(item.casesToOrder) || 0;
-
-          return [cleanText(item.vin), upc, uom, quantity, 0].join("\t");
+          if (upc !== null) candidates.push({ item, upc });
         })
-        .filter((row: string | null): row is string => row !== null)
     );
+
+    // Look up UOM + Case/Each MOQ from the CoreMark price book (Azure SQL)
+    // for every candidate UPC. On any failure, fall back to blank UOM and no
+    // MOQ enforcement for all items — same as the per-item no-match case.
+    let priceBook: Record<string, { uom: string; caseMoq: number; eachMoq: number }> = {};
+    setGeneratingTemplate(true);
+    try {
+      const uniqueUpcs = [...new Set(candidates.map((c) => c.upc))];
+      const res = await axios.post(
+        "/api/order-rec/coremark-price-book",
+        { upcs: uniqueUpcs },
+        {
+          headers: {
+            Authorization: `Bearer ${localStorage.getItem("token")}`,
+            "X-Required-Permission": "orderRec.id",
+          },
+        }
+      );
+      priceBook = res.data || {};
+    } catch (err) {
+      console.error("Failed to fetch CoreMark price book data:", err);
+    } finally {
+      setGeneratingTemplate(false);
+    }
+
+    const rows: string[] = candidates.map(({ item, upc }) => {
+      const match = priceBook[upc];
+      const quantityOrdered = Number(item.casesToOrder) || 0;
+
+      // No match in the price book: include the item, but leave UOM blank
+      // and don't enforce any minimum order quantity.
+      if (!match) {
+        return [cleanText(item.vin), upc, "", quantityOrdered, 0].join("\t");
+      }
+
+      const moq = match.uom === "EA" ? match.eachMoq : match.caseMoq;
+      const quantity = Math.max(quantityOrdered, moq);
+
+      return [cleanText(item.vin), upc, match.uom, quantity, 0].join("\t");
+    });
 
     const header = ["SKU", "UPC", "UOM", "Quantity", "Shelf Tags"].join("\t");
     const content = [header, ...rows].join("\r\n");
@@ -1131,9 +1168,10 @@ function RouteComponent() {
           {orderRec.filename?.includes('Core-Mark') && (
             <Button
               variant="outline"
+              disabled={generatingTemplate}
               onClick={handleTemplate}
             >
-              Template
+              {generatingTemplate ? 'Generating...' : 'Template'}
             </Button>
           )}
           <Button
