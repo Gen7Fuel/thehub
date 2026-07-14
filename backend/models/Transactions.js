@@ -83,18 +83,31 @@ const transactionSchema = new mongoose.Schema({
     required: false,
     default: false,
   },
+  deletedAt: {
+    type: Date,
+    default: null,
+  },
+  deletedBy: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'User',
+    default: null,
+  },
 });
 
-// Ensure uniqueness of PO number scoped to station for PO-sourced docs with non-empty values
-// Allows multiple docs without poNumber or with source !== 'PO'
+// Ensure uniqueness of PO number scoped to station for PO-sourced docs with non-empty values.
+// Allows multiple docs without poNumber or with source !== 'PO', and frees up the PO number
+// again once the doc is soft-deleted (deletedAt set) so a corrected re-entry isn't blocked.
+// Note: partialFilterExpression only supports $eq/$exists/$gt/$gte/$lt/$lte/$type/$and — no
+// $ne — so "non-empty string" is expressed as $gt: '' (every non-empty string sorts after '').
 transactionSchema.index(
   { stationName: 1, poNumber: 1 },
   {
     unique: true,
     partialFilterExpression: {
       source: 'PO',
-      stationName: { $exists: true, $ne: '' },
-      poNumber: { $exists: true, $ne: '' },
+      stationName: { $exists: true, $gt: '' },
+      poNumber: { $exists: true, $gt: '' },
+      deletedAt: null,
     },
   }
 )
