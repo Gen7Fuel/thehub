@@ -194,7 +194,7 @@ router.get('/tax-exempt-report', async (req, res) => {
 
       dailyData[dateKey].totalExemptedTax += (shift.exempted_tax || 0);
       dailyData[dateKey].totalItemSales += (shift.item_sales || 0);
-      dailyData[dateKey].totalCplBulloch += (shift.cpl_bulloch || 0);
+      dailyData[dateKey].totalCplBulloch += (shift.dealGroupCplDiscounts || 0);
       if (shift.shift_number) {
         dailyData[dateKey].shiftNumbers.push(shift.shift_number);
       }
@@ -719,7 +719,7 @@ router.post('/', async (req, res) => {
             item_sales: parsed.itemSales ?? values.item_sales,
             cash_back: parsed.cashBack ?? values.cash_back,
             loyalty: parsed.couponsAccepted ?? values.loyalty,
-            cpl_bulloch: parsed.fuelPriceOverrides ?? values.cpl_bulloch,
+            cpl_bulloch: parsed.dealGroupCplDiscounts ?? values.cpl_bulloch,
             report_canadian_cash: parsed.canadianCash ?? values.report_canadian_cash,
             payouts: parsed.payouts ?? values.payouts,
           }
@@ -878,7 +878,7 @@ router.get('/', async (req, res) => {
     const docs = await CashSummary
       .find({ site })
       .sort({ date: -1, createdAt: -1 })
-      .limit(30)
+      .limit(80)
       .lean()
 
     res.json(docs)
@@ -1411,6 +1411,7 @@ router.get('/ar-check-range', async (req, res) => {
         {
           $match: {
             stationName: site,
+            deletedAt: null,
             $or: [
               { dateStr: { $gte: from, $lte: to } },
               { dateStr: { $exists: false }, date: { $gte: txStart, $lte: txEnd } },
@@ -1475,6 +1476,7 @@ router.get('/ar-check', async (req, res) => {
       {
         $match: {
           stationName: site,
+          deletedAt: null,
           $or: [
             { dateStr: date },
             { dateStr: { $exists: false }, date: { $gte: txStart, $lte: txEnd } },
@@ -1562,7 +1564,7 @@ router.put('/:id', async (req, res) => {
               item_sales: parsed.itemSales,
               cash_back: parsed.cashBack,
               loyalty: parsed.couponsAccepted,
-              cpl_bulloch: parsed.fuelPriceOverrides,
+              cpl_bulloch: parsed.dealGroupCplDiscounts,
               report_canadian_cash: parsed.canadianCash,
               stationStart: parsed.stationStart,
               stationEnd: parsed.stationEnd,

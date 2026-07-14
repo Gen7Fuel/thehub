@@ -885,6 +885,44 @@ async function getInventoryOnHandForActiveUPCsAndStation(upcs = [], stationSk) {
   }
 }
 
+/**
+ * Batch-fetches UOM and MOQ data from the CoreMark price book view for a list
+ * of 14-digit UPCs, keyed by UPC for O(1) lookup.
+ * @param {string[]} upcs - 14-digit UPC strings
+ * @returns {Promise<Record<string, { uom: string, caseMoq: number, eachMoq: number }>>}
+ */
+async function getCoreMarkPriceBookByUPCs(upcs = []) {
+  if (!upcs.length) return {};
+  try {
+    const pool = await getPool();
+    const request = pool.request();
+    const params = upcs.map((_, idx) => `@p${idx}`).join(',');
+    upcs.forEach((upc, idx) => request.input(`p${idx}`, sql.VarChar, upc));
+
+    const query = `
+      SELECT [UPC], [UOM], [Case MOQ] AS caseMoq, [Each MOQ] AS eachMoq
+      FROM [CSO].[CoreMarkPriceBook]
+      WHERE [UPC] IN (${params})
+    `;
+    const result = await request.query(query);
+
+    const data = {};
+    for (const row of result.recordset) {
+      const upc = String(row.UPC || '').trim();
+      if (!upc) continue;
+      data[upc] = {
+        uom: row.UOM != null ? String(row.UOM).trim() : '',
+        caseMoq: row.caseMoq != null ? Number(row.caseMoq) : 0,
+        eachMoq: row.eachMoq != null ? Number(row.eachMoq) : 0,
+      };
+    }
+    return data;
+  } catch (err) {
+    console.error('SQL error in getCoreMarkPriceBookByUPCs:', err);
+    return {};
+  }
+}
+
 async function retry(fn, retries = 2, delay = 250) {
   try {
     return await fn();
@@ -1554,4 +1592,5 @@ module.exports = {
   getFuelStationDiscounts,
   getFuelSalesRollupReport,
   getLatestCsoVendorsList,
+  getCoreMarkPriceBookByUPCs,
 };

@@ -7,7 +7,7 @@ const CycleCount = require('../models/CycleCount');
 const ProductCategory = require('../models/ProductCategory');
 const Role = require('../models/Role');
 const User = require('../models/User');
-const { getUPC_barcode } = require('../services/sqlService');
+const { getUPC_barcode, getCoreMarkPriceBookByUPCs } = require('../services/sqlService');
 const { calcSingleVendorLeadTime } = require('../utils/calcSingleVendorLeadTime');
 const { pushNotification } = require('../services/notificationService');
 
@@ -32,6 +32,21 @@ router.get('/', async (req, res) => {
     res.json(orderRecs);
   } catch (err) {
     res.status(500).json({ message: err.message });
+  }
+});
+
+// POST /api/order-rec/coremark-price-book — batch UOM/MOQ lookup for the CoreMark template export
+router.post('/coremark-price-book', async (req, res) => {
+  try {
+    const { upcs } = req.body;
+    if (!Array.isArray(upcs) || upcs.length === 0) {
+      return res.status(400).json({ message: 'upcs array is required' });
+    }
+    const data = await getCoreMarkPriceBookByUPCs(upcs);
+    res.json(data);
+  } catch (err) {
+    console.error('POST /api/order-rec/coremark-price-book failed:', err);
+    res.status(500).json({ message: 'Failed to fetch CoreMark price book data.' });
   }
 });
 

@@ -589,6 +589,7 @@ router.get('/entries', async (req, res) => {
           $match: {
             source: 'PO',
             stationName: site,
+            deletedAt: null,
             $or: [
               { dateStr: date },
               { dateStr: { $exists: false }, date: { $gte: start, $lte: end } },
