@@ -194,7 +194,7 @@ router.get('/tax-exempt-report', async (req, res) => {
 
       dailyData[dateKey].totalExemptedTax += (shift.exempted_tax || 0);
       dailyData[dateKey].totalItemSales += (shift.item_sales || 0);
-      dailyData[dateKey].totalCplBulloch += (shift.cpl_bulloch || 0);
+      dailyData[dateKey].totalCplBulloch += (shift.dealGroupCplDiscounts || 0);
       if (shift.shift_number) {
         dailyData[dateKey].shiftNumbers.push(shift.shift_number);
       }
@@ -719,7 +719,7 @@ router.post('/', async (req, res) => {
             item_sales: parsed.itemSales ?? values.item_sales,
             cash_back: parsed.cashBack ?? values.cash_back,
             loyalty: parsed.couponsAccepted ?? values.loyalty,
-            cpl_bulloch: parsed.fuelPriceOverrides ?? values.cpl_bulloch,
+            cpl_bulloch: parsed.dealGroupCplDiscounts ?? values.cpl_bulloch,
             report_canadian_cash: parsed.canadianCash ?? values.report_canadian_cash,
             payouts: parsed.payouts ?? values.payouts,
           }
@@ -878,7 +878,7 @@ router.get('/', async (req, res) => {
     const docs = await CashSummary
       .find({ site })
       .sort({ date: -1, createdAt: -1 })
-      .limit(30)
+      .limit(80)
       .lean()
 
     res.json(docs)
@@ -1168,7 +1168,7 @@ router.post('/submit/to/safesheet', async (req, res) => {
 
           if (depositSlip) attachments.push(depositSlip)
 
-          let cc = ['mohammad@gen7fuel.com', 'daksh@gen7fuel.com', 'kellie@gen7fuel.com'];
+          let cc = ['mohammad@gen7fuel.com', 'daksh@gen7fuel.com'];
 
           if (site === 'Oliver' || site === 'Osoyoos') {
             cc.push('ZBaptiste@oib.ca');
@@ -1564,7 +1564,7 @@ router.put('/:id', async (req, res) => {
               item_sales: parsed.itemSales,
               cash_back: parsed.cashBack,
               loyalty: parsed.couponsAccepted,
-              cpl_bulloch: parsed.fuelPriceOverrides,
+              cpl_bulloch: parsed.dealGroupCplDiscounts,
               report_canadian_cash: parsed.canadianCash,
               stationStart: parsed.stationStart,
               stationEnd: parsed.stationEnd,
