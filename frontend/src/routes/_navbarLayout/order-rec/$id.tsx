@@ -1114,10 +1114,15 @@ function RouteComponent() {
         return [cleanText(item.vin), upc, "", quantityOrdered, 0].join("\t");
       }
 
-      const moq = match.uom === "EA" ? match.eachMoq : match.caseMoq;
+      // A case that only holds 1 unit isn't really a "case" — always export
+      // it as EA regardless of what the price book says, and enforce the
+      // each-unit MOQ to match.
+      const isSingleUnitCase = Number(item.unitInCase) === 1;
+      const uom = isSingleUnitCase ? "EA" : match.uom;
+      const moq = isSingleUnitCase || match.uom === "EA" ? match.eachMoq : match.caseMoq;
       const quantity = Math.max(quantityOrdered, moq);
 
-      return [cleanText(item.vin), upc, match.uom, quantity, 0].join("\t");
+      return [cleanText(item.vin), upc, uom, quantity, 0].join("\t");
     });
 
     const header = ["SKU", "UPC", "UOM", "Quantity", "Shelf Tags"].join("\t");
