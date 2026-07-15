@@ -308,4 +308,28 @@ describe('ATM List — rendering', () => {
     // Amount appears in both the row and the total line — use getAllByText
     expect(screen.getAllByText(/1,500\.00/).length).toBeGreaterThan(0)
   })
+
+  it('prefers the "site" field over "stationName" when both are present', async () => {
+    mockAxiosGet.mockResolvedValue({
+      data: [
+        {
+          _id: 'atm-2',
+          date: '2026-04-01',
+          amount: 750,
+          source: 'safe',
+          stationName: 'Rankin',
+          site: 'Rankin Fuel Bar',
+          createdBy: 'staff@gen7.com',
+          image: null,
+          createdAt: '2026-04-01T10:00:00Z',
+        },
+      ],
+    })
+    renderWithSuspense(<ATMListComponent />)
+    await waitFor(
+      () => expect(screen.getByText('Rankin Fuel Bar')).toBeInTheDocument(),
+      { timeout: 5000 },
+    )
+    expect(screen.queryByText('Rankin')).not.toBeInTheDocument()
+  })
 })

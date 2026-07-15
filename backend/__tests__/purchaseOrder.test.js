@@ -95,6 +95,36 @@ describe('Transaction schema — field validation', () => {
   })
 })
 
+// ─── site alias sync ──────────────────────────────────────────────────────
+// Uses the async .validate() (not .validateSync()) because attachSiteAlias's
+// pre('validate') hook that syncs site <- stationName only fires under the
+// async validate path.
+
+describe('Transaction — site alias sync', () => {
+  /** Minimal valid PO transaction */
+  const base = () => ({
+    source: 'PO',
+    date: new Date('2026-01-15T12:00:00Z'),
+    stationName: 'Rankin',
+    customerName: 'Jane Doe',
+    quantity: 50,
+    amount: 100.0,
+    productCode: 'UNL',
+  })
+
+  it('syncs site from stationName after async validate()', async () => {
+    const doc = new Transaction(base())
+    await doc.validate()
+    expect(doc.site).toBe('Rankin')
+  })
+
+  it('preserves an explicitly different site value set alongside stationName', async () => {
+    const doc = new Transaction({ ...base(), site: 'OtherSite' })
+    await doc.validate()
+    expect(doc.site).toBe('OtherSite')
+  })
+})
+
 // ─── dateStr field ────────────────────────────────────────────────────────
 
 describe('Transaction schema — dateStr field', () => {

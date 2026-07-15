@@ -68,7 +68,12 @@
       "Skill(run)",
       "Bash(docker exec mongo *)",
       "Skill(artifact-design)",
-      "Artifact"
+      "Artifact",
+      "Bash(git log *)",
+      "Read(//tmp/**)",
+      "Bash(echo \"EXIT:$?\")",
+      "Bash(git show *)",
+      "Bash(grep -i 'order-rec/$id')"
     ]
   }
 }
