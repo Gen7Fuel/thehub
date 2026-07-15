@@ -138,7 +138,7 @@ function FuelPricingDashboard() {
   useEffect(() => {
     if (stations.length > 0 && !selectedCso) {
       setSelectedCso(stations[0].csoCode);
-      setSelectedSite(stations[0].stationName); // Set initial global site matching the selected CSO
+      setSelectedSite(stations[0].site ?? stations[0].stationName); // Set initial global site matching the selected CSO
     }
   }, [stations, selectedCso, setSelectedSite]);
 
@@ -235,7 +235,7 @@ function FuelPricingDashboard() {
                     key={station.csoCode}
                     onClick={() => {
                       setSelectedCso(station.csoCode);
-                      setSelectedSite(station.stationName); // 4. Update global site context when clicked
+                      setSelectedSite(station.site ?? station.stationName); // 4. Update global site context when clicked
                       const targetStationData =
                         pricingData[station.csoCode] || {};
                       const available = Object.keys(targetStationData);
@@ -254,7 +254,7 @@ function FuelPricingDashboard() {
                   >
                     <div className="flex items-center justify-between w-full">
                       <span className="text-xs font-black uppercase tracking-wide line-clamp-1 flex-1">
-                        {station.stationName}
+                        {station.site ?? station.stationName}
                       </span>
                       <div
                         className={`p-1 rounded-md ${isSelected ? "bg-slate-800 text-sky-400" : "bg-slate-50 text-slate-400 group-hover:bg-slate-100 group-hover:text-slate-500"}`}

@@ -1,4 +1,5 @@
 const mongoose = require("mongoose");
+const { attachSiteAlias } = require("../utils/attachSiteAlias");
 
 /**
  * StatusSale Schema
@@ -37,6 +38,7 @@ const StatusSaleSchema = new mongoose.Schema(
       required: true,
       trim: true, // Removes extra spaces from the station name
     },
+    site: { type: String, trim: true }, // Additive alias of stationName, auto-synced
     notes: {
       type: String,
       trim: true, // Removes extra spaces from notes
@@ -46,6 +48,8 @@ const StatusSaleSchema = new mongoose.Schema(
   },
   { timestamps: true } // Automatically adds createdAt and updatedAt fields
 );
+
+attachSiteAlias(StatusSaleSchema, "stationName");
 
 // Export the StatusSale model based on the schema
 module.exports = mongoose.model("StatusSale", StatusSaleSchema);

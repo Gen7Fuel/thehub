@@ -366,8 +366,14 @@ router.put("/:id", express.json(), async (req, res) => {
 // });
 
 router.get("/", async (req, res) => {
-  const { startDate, endDate, stationName } = req.query;
-  const filter = { source: "PO", stationName, deletedAt: null };
+  const { startDate, endDate, stationName, site } = req.query;
+  // Accept `site` as an alias for `stationName` — Desk calls this endpoint
+  // with either name depending on the page. Without this, a `site=`-only
+  // request silently drops the station filter (Mongoose omits an `undefined`
+  // key), returning every station's POs instead of just the selected one.
+  const stationFilter = stationName || site;
+  const filter = { source: "PO", deletedAt: null };
+  if (stationFilter) filter.stationName = stationFilter;
 
   if (startDate && endDate) {
     // Backward compatibility: pre-migration docs have no dateStr, so match

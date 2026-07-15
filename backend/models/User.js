@@ -64,6 +64,7 @@
 // module.exports = mongoose.model("User", userSchema);
 const mongoose = require("mongoose");
 const bcrypt = require("bcryptjs");
+const { attachSiteAlias } = require("../utils/attachSiteAlias");
 
 const permissionNodeSchema = new mongoose.Schema({
   name: { type: String, required: true },
@@ -94,6 +95,7 @@ const userSchema = new mongoose.Schema({
   is_admin: { type: Boolean, default: false },
   isSupport: { type: Boolean, default: false },
   stationName: { type: String, required: true },
+  site: { type: String }, // Additive alias of stationName, auto-synced
 
   role: {
     type: mongoose.Schema.Types.ObjectId,
@@ -150,5 +152,7 @@ userSchema.pre("save", async function () {
   const salt = await bcrypt.genSalt(10);
   this.password = await bcrypt.hash(this.password, salt);
 });
+
+attachSiteAlias(userSchema, "stationName");
 
 module.exports = mongoose.model("User", userSchema);
