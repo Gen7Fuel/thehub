@@ -1,4 +1,5 @@
 const mongoose = require('mongoose');
+const { attachSiteAlias } = require('../utils/attachSiteAlias');
 
 /**
  * StationSupplySchema
@@ -25,6 +26,7 @@ const VendorSchema = new mongoose.Schema({
     // required: true
   },
   location: { type: String, required: true }, // Associated station/location
+  site: { type: String }, // Additive alias of location, auto-synced
   station_supplies: [StationSupplySchema],    // Supplies this vendor provides to stations
   email_order: { type: Boolean, default: false }, // Whether orders are placed by email
   email: { type: String },                        // Vendor's email address
@@ -40,9 +42,12 @@ const VendorSchema = new mongoose.Schema({
 }, { timestamps: true });                         // Adds createdAt and updatedAt fields
 
 VendorSchema.index(
-  { name: 1, location: 1 }, 
+  { name: 1, location: 1 },
   { unique: true }
 );
+
+attachSiteAlias(VendorSchema, 'location');
+
 // Create and export the Vendor model
 const Vendor = mongoose.model('Vendor', VendorSchema);
 

@@ -1,17 +1,18 @@
 const mongoose = require("mongoose");
+const { attachSiteAlias } = require("../utils/attachSiteAlias");
 
 /**
  * Transaction Schema
  * Represents a fuel or purchase order transaction.
  * Stores details about the transaction source, date, station, fleet card, product, and payment.
- * 
+ *
  * Note: Object references were not used for stationName, fleetCardNumber, and productCode
  * because refreshing the data was breaking the link.
  */
 const transactionSchema = new mongoose.Schema({
-  source: { 
-    type: String, 
-    required: true, 
+  source: {
+    type: String,
+    required: true,
     enum: ["PO", "Kardpoll"] // Source of the transaction: Purchase Order or Kardpoll system
   },
   date: {
@@ -25,12 +26,13 @@ const transactionSchema = new mongoose.Schema({
   dateStr: {
     type: String,
   },
-  stationName: { 
-    type: String, 
+  stationName: {
+    type: String,
     required: true // Name of the station where the transaction occurred
   },
-  fleetCardNumber: { 
-    type: String, 
+  site: { type: String }, // Additive alias of stationName, auto-synced
+  fleetCardNumber: {
+    type: String,
     required: false // optional now
   },
   driverName: { type: String, required: false },                   // Name of the driver (optional)
@@ -66,12 +68,12 @@ const transactionSchema = new mongoose.Schema({
     default: '',
   },
   // customerID: { type: String, required: false }, // Optional: Customer ID (commented out)
-  trx: { 
-    type: String, 
+  trx: {
+    type: String,
     required: false // Optional: Transaction reference number
   },
-  signature: { 
-    type: String, 
+  signature: {
+    type: String,
     required: false // Optional: Base64-encoded signature image
   },
   receipt: {
@@ -114,6 +116,8 @@ transactionSchema.index(
 
 // Supports PO date-range queries/filters without affecting Kardpoll docs
 transactionSchema.index({ source: 1, dateStr: 1 })
+
+attachSiteAlias(transactionSchema, "stationName");
 
 const Transaction = mongoose.model("Transaction", transactionSchema);
 module.exports = Transaction;

@@ -1,4 +1,5 @@
 const mongoose = require("mongoose");
+const { attachSiteAlias } = require("../utils/attachSiteAlias");
 
 /**
  * Location Schema
@@ -8,6 +9,7 @@ const mongoose = require("mongoose");
 const locationSchema = new mongoose.Schema({
   type: { type: String, required: true },             // Type of location (e.g., "station", "office")
   stationName: { type: String, required: true },      // Display name of the station/location
+  site: { type: String },                              // Additive alias of stationName, auto-synced
   legalName: { type: String, required: true },        // Legal name of the entity
   INDNumber: { type: String, required: true, unique: true }, // Unique IND number for the location
   kardpollCode: { type: String, required: false },    // Kardpoll system code (optional)
@@ -32,6 +34,8 @@ const locationSchema = new mongoose.Schema({
   availableGrades: [{ type: String, default: [] }],
   gasBuddyStationId: { type: String, required: false },
 });
+
+attachSiteAlias(locationSchema, "stationName");
 
 // Export the Location model based on the schema
 module.exports = mongoose.model("Location", locationSchema);

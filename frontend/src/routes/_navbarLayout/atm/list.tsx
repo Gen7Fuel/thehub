@@ -20,6 +20,7 @@ interface ATMRecord {
   source: 'till' | 'safe'
   image: string | null
   stationName: string
+  site?: string
   createdBy: string
   createdAt: string
 }
@@ -131,7 +132,7 @@ function RouteComponent() {
               records.map((record) => (
                 <tr key={record._id} className="border-b last:border-0 hover:bg-gray-50">
                   <td className="px-4 py-3 whitespace-nowrap">{record.date}</td>
-                  <td className="px-4 py-3">{record.stationName}</td>
+                  <td className="px-4 py-3">{record.site ?? record.stationName}</td>
                   <td className="px-4 py-3">
                     <span
                       className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-medium ${

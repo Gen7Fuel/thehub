@@ -1,4 +1,5 @@
 const mongoose = require('mongoose');
+const { attachSiteAlias } = require('../utils/attachSiteAlias');
 
 const ActionLogSchema = new mongoose.Schema(
   {
@@ -7,6 +8,7 @@ const ActionLogSchema = new mongoose.Schema(
     role: { type: String },
     locationId: { type: mongoose.Schema.Types.ObjectId, ref: 'Location', index: true },
     locationName: { type: String },
+    site: { type: String }, // Additive alias of locationName, auto-synced
 
     action: {
       type: String,
@@ -50,5 +52,7 @@ ActionLogSchema.index({ userId: 1, createdAt: -1 });
 ActionLogSchema.index({ action: 1, createdAt: -1 });
 ActionLogSchema.index({ success: 1, createdAt: -1 });
 ActionLogSchema.index({ expiresAt: 1 }, { expireAfterSeconds: 0 });
+
+attachSiteAlias(ActionLogSchema, 'locationName');
 
 module.exports = mongoose.model('ActionLog', ActionLogSchema);
