@@ -78,6 +78,38 @@ describe('ArCustomer — quickSelectSites', () => {
     const err = doc.validateSync()
     expect(err?.errors['quickSelectSites.0.stationName']).toBeDefined()
   })
+
+  // These use the async .validate() (not .validateSync()) because the
+  // per-entry site <- stationName sync runs in a pre('validate') hook that
+  // only fires under the async validate path.
+  it('syncs site from stationName per entry after async validate()', async () => {
+    const doc = new ArCustomer(base({ quickSelectSites: [{ stationName: 'Rankin', order: 0 }] }))
+    await doc.validate()
+    expect(doc.quickSelectSites[0].site).toBe('Rankin')
+  })
+
+  it('syncs site independently per entry for multiple sites after async validate()', async () => {
+    const doc = new ArCustomer(base({
+      quickSelectSites: [
+        { stationName: 'Rankin', order: 0 },
+        { stationName: 'Couchiching', order: 2 },
+      ],
+    }))
+    await doc.validate()
+    expect(doc.quickSelectSites[0].site).toBe('Rankin')
+    expect(doc.quickSelectSites[1].site).toBe('Couchiching')
+  })
+
+  // Mirrors the shared attachSiteAlias helper's isModified()-based override
+  // protection: an explicitly-different site set alongside stationName in
+  // the same write survives validate() rather than being clobbered back.
+  it('preserves an explicitly different site value set alongside stationName', async () => {
+    const doc = new ArCustomer(base({
+      quickSelectSites: [{ stationName: 'Rankin', site: 'OtherSite', order: 0 }],
+    }))
+    await doc.validate()
+    expect(doc.quickSelectSites[0].site).toBe('OtherSite')
+  })
 })
 
 // ─── Defaults (existing fields, unaffected by the new fields) ─────────────────

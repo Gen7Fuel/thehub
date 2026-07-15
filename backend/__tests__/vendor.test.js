@@ -163,3 +163,19 @@ describe('Vendor — optional fields', () => {
     expect(doc.validateSync()).toBeUndefined()
   })
 })
+
+// ─── site alias sync ───────────────────────────────────────────────────────────
+
+describe('Vendor — site alias sync', () => {
+  it('syncs site from location on validate', async () => {
+    const doc = new Vendor(base())
+    await doc.validate()
+    expect(doc.site).toBe('Rankin')
+  })
+
+  it('preserves an explicitly different site set alongside location', async () => {
+    const doc = new Vendor(base({ site: 'SomeOtherSite' }))
+    await doc.validate()
+    expect(doc.site).toBe('SomeOtherSite')
+  })
+})
