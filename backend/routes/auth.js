@@ -142,7 +142,7 @@ router.post("/register", async (req, res) => {
 //     // Fetch location and timezone
 //     let timezone = null;
 //     if (user.stationName) {
-//       const location = await Location.findOne({ stationName: user.stationName });
+//       const location = await Location.findOne({ site: user.site ?? user.stationName });
 //       timezone = location?.timezone || null;
 //     }
 
@@ -203,7 +203,7 @@ router.post("/login", async (req, res) => {
     // Fetch location & timezone
     let timezone = null;
     if (user.stationName) {
-      const location = await Location.findOne({ stationName: user.stationName });
+      const location = await Location.findOne({ site: user.site ?? user.stationName });
       timezone = location?.timezone || null;
     }
 
@@ -394,7 +394,7 @@ router.post("/refresh-token", async (req, res) => {
     const mergedPermissions = await getMergedPermissionsTreeArray(user);
     let timezone = null;
     if (user.stationName) {
-      const location = await Location.findOne({ stationName: user.stationName });
+      const location = await Location.findOne({ site: user.site ?? user.stationName });
       timezone = location?.timezone || null;
     }
 

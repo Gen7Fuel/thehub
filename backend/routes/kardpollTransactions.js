@@ -86,7 +86,7 @@ router.get("/", async (req, res) => {
   }
 
   if (stationName) {
-    const locationRecord = await Location.findOne({ stationName: stationName });
+    const locationRecord = await Location.findOne({ site: stationName });
     if (locationRecord) {
       filter.stationName = locationRecord.stationName;
     } else {

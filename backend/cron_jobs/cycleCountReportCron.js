@@ -18,12 +18,12 @@ const updateCycleCountCSO = async () => {
 
     // 1. Fetch active monitoring store list from Mongo to handle specific timezones
     const locations = await Location.find({
-      stationName: { $nin: excludedSites },
+      site: { $nin: excludedSites },
       type: "store"
     }).lean();
 
     for (const loc of locations) {
-      const { stationName: siteName, timezone, _id: siteMongoId } = loc;
+      const { site: siteName, timezone, _id: siteMongoId } = loc;
       if (!timezone || !siteMongoId) continue;
 
       const mongoSiteIdStr = siteMongoId.toString();

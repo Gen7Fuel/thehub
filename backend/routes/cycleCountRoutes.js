@@ -79,7 +79,7 @@ router.get('/daily-items', async (req, res) => {
     if (!site) return res.status(400).json({ message: "site is required" });
 
     // Get location object to determine the site's timezone
-    const location = await Location.findOne({ stationName: site.toString().trim() });
+    const location = await Location.findOne({ site: site.toString().trim() });
     const siteTimezone = location?.timezone || 'UTC';
 
     // Compare user timezone with site timezone
@@ -345,7 +345,7 @@ router.get('/daily-items-v2', async (req, res) => {
 
     // 1. Get Site & Categories from Mongo
     const [location, mongoCategories] = await Promise.all([
-      Location.findOne({ stationName: site }),
+      Location.findOne({ site }),
       ProductCategory.find({}).lean()
     ]);
 
@@ -414,7 +414,7 @@ router.get('/item-bk', async (req, res) => {
 
     // 1. Get Site details and Mongo categories simultaneously
     const [location, mongoCategories] = await Promise.all([
-      Location.findOne({ stationName: site }),
+      Location.findOne({ site }),
       ProductCategory.find({}).lean()
     ]);
 
@@ -601,7 +601,7 @@ router.get('/groups/preview-items', async (req, res) => {
 
     // 1. Resolve Site details and Mongo categories concurrently
     const [location, mongoCategories] = await Promise.all([
-      Location.findOne({ stationName: site }),
+      Location.findOne({ site }),
       ProductCategory.find({}).lean()
     ]);
 
@@ -666,7 +666,7 @@ router.get('/instances', async (req, res) => {
       return res.status(400).json({ message: "Site parameter is required" });
     }
 
-    const location = await Location.findOne({ stationName: site });
+    const location = await Location.findOne({ site });
     if (!location) {
       return res.status(404).json({ message: `Location '${site}' not found` });
     }
@@ -712,7 +712,7 @@ router.get('/schedules/check-date', async (req, res) => {
       return res.status(400).json({ message: "Site and date string are required" });
     }
 
-    const location = await Location.findOne({ stationName: site });
+    const location = await Location.findOne({ site });
     if (!location) {
       return res.status(404).json({ message: "Location structure not found" });
     }
@@ -1063,7 +1063,7 @@ router.post('/finalize-and-sync', async (req, res) => {
     }
 
     // 1. Locate the structural location profile context via matching station name string values
-    const locationDoc = await Location.findOne({ stationName: siteName }).lean();
+    const locationDoc = await Location.findOne({ site: siteName }).lean();
     if (!locationDoc) {
       return res.status(404).json({ 
         success: false, 
@@ -1113,7 +1113,7 @@ router.post('/schedules/create', async (req, res) => {
     }
 
     // Resolve site context to grab Mongo ID mapping target
-    const location = await Location.findOne({ stationName: site });
+    const location = await Location.findOne({ site });
     if (!location) {
       return res.status(404).json({ message: "Selected location context not recognized" });
     }
@@ -1856,7 +1856,7 @@ router.get('/v2/daily-counts', async (req, res) => {
     }
     const db = getPg();
 
-    const locationDoc = await Location.findOne({ stationName: site }).lean();
+    const locationDoc = await Location.findOne({ site }).lean();
     if (!locationDoc) {
       return res.status(404).json({ success: false, message: `Location profile not found for site: ${site}` });
     }
@@ -1950,7 +1950,7 @@ router.get("/daily-report", async (req, res) => {
 
   try {
     // 1. Resolve the text site name to its MongoDB ID string reference
-    const locationDoc = await Location.findOne({ stationName: site }).lean();
+    const locationDoc = await Location.findOne({ site }).lean();
     if (!locationDoc) {
       return res.status(404).json({ success: false, message: `Location profile not found for site: ${site}` });
     }
@@ -2429,7 +2429,7 @@ router.get('/search', async (req, res) => {
 
     // 1. Resolve the human-readable site name to its master Mongo ID string
     const locationDoc = await Location.findOne({
-      stationName: site
+      site
     }).lean();
 
     // console.log(`Resolved location for site "${site}":`, locationDoc);

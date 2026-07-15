@@ -247,7 +247,7 @@ router.put("/:id", express.json(), async (req, res) => {
     }
 
     if (updates.requestReceipt === true) {
-      Location.findOne({ stationName: updatedOrder.stationName }, 'email stationName').lean()
+      Location.findOne({ site: updatedOrder.site ?? updatedOrder.stationName }, 'email stationName').lean()
         .then(location => {
           if (!location?.email) return
           const redirectUrl = `https://app.gen7fuel.com/po/list`
