@@ -102,6 +102,8 @@ Auth context is at `frontend/src/context/AuthContext` — use `useAuth()` to get
 - Azure Blob Storage for file backups
 - MSSQL (external, not in Docker) for legacy data
 
+**auth-backend shares backend's models, not its own copies.** `auth-backend/models/` is a tracked-but-empty directory; `compose.dev.yaml`/`compose.yaml` bind-mount `backend/models` (and `backend/utils/attachSiteAlias.js`) straight into the auth-backend container at runtime. If a model file gains a new `require("../utils/...")`, that util file needs a matching bind mount added to both compose files' `auth-backend` service, or auth-backend will crash at startup with `MODULE_NOT_FOUND`. Also note `backend` and `auth-backend` run different major Mongoose versions (8 vs 9) with independent `node_modules` — any code shared this way must avoid Mongoose 9's removed callback-style (`next`) middleware.
+
 ### CDN Service
 
 Simple Express app (`cdn/index.js`). Files stored on disk in `uploads/`. Supports multipart and base64 upload. Admin endpoints (`GET /cdn/files`, `DELETE /cdn/delete/:id`) require `Authorization: Bearer <CDN_ADMIN_TOKEN>` (set via environment variable).

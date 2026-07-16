@@ -99,6 +99,7 @@ services:
       - FORCE_COLOR=1
     volumes:
       - ./backend/models:/app/models:ro
+      - ./backend/utils/attachSiteAlias.js:/app/utils/attachSiteAlias.js:ro
     depends_on:
       - mongo
     healthcheck:

@@ -1,6 +1,8 @@
 import axios from "axios";
 import { useMutation } from "@tanstack/react-query";
 import { uploadBase64Image } from "@/lib/utils";
+import { isActuallyOnline } from "@/lib/network";
+import { savePendingAction } from "@/lib/orderRecIndexedDB";
 import { domain } from "@/lib/constants";
 import { Camera, Loader2 } from "lucide-react";
 import { useEffect } from 'react'
@@ -77,63 +79,74 @@ function RouteComponent() {
     mutationFn: async () => {
       if (!receipt) throw new Error("Please upload a receipt before submitting.");
 
-      const { filename } = await uploadBase64Image(receipt, "receipt.jpg");
+      // Fleet upsert and change-notification are handled by the backend POST /api/purchase-orders.
+
+      // Use selected stationName from store, fallback to 'Rankin' if empty
+      const selectedStation = stationName || "Rankin";
+
+      const payload = {
+        source: "PO",
+        date: date ? format(date, 'yyyy-MM-dd') : format(new Date(), 'yyyy-MM-dd'),
+        stationName: selectedStation,
+        fleetCardNumber: fleetCardNumber || "",
+        poNumber: poNumber || "",
+        quantity: purchaseType === 'fuel' ? quantity : 0,
+        amount,
+        productCode: purchaseType === 'fuel' ? fuelType : 'NON-FUEL',
+        trx: "",
+        signature: "",
+        customerName,
+        driverName,
+        vehicleMakeModel: vehicleInfo,
+        licensePlate,
+        purchaseType,
+        itemsDescription: purchaseType === 'non-fuel' ? itemsDescription : '',
+      };
+
+      // Offline: skip the network calls entirely and queue the whole submission
+      // (payload + receipt image) for the background sync loop to replay later.
+      if (!(await isActuallyOnline())) {
+        await savePendingAction({ type: "CREATE_PURCHASE_ORDER", receipt, payload, queuedAt: Date.now() });
+        return { queued: true };
+      }
 
       const authHeaders = {
         Authorization: `Bearer ${localStorage.getItem("token")}`,
         "X-Required-Permission": "po",
       };
 
-      const authAxios = async (fn: () => Promise<any>) => {
-        try {
-          return await fn();
-        } catch (err: any) {
-          if (axios.isAxiosError(err) && err.response?.status === 403) {
-            navigate({ to: "/no-access" });
-          }
+      try {
+        const { filename } = await uploadBase64Image(receipt, "receipt.jpg");
+
+        const poResponse = await axios.post(
+          `${domain}/api/purchase-orders`,
+          { ...payload, receipt: filename },
+          { headers: authHeaders }
+        );
+
+        if (poResponse.status !== 200 && poResponse.status !== 201) {
+          throw new Error("Failed to create purchase order");
+        }
+
+        return { queued: false, data: poResponse.data };
+      } catch (err: any) {
+        if (axios.isAxiosError(err) && err.response?.status === 403) {
+          navigate({ to: "/no-access" });
           throw err;
         }
-      };
-
-      // Fleet upsert and change-notification are now handled by the backend POST /api/purchase-orders.
-
-      // Use selected stationName from store, fallback to 'Rankin' if empty
-      const selectedStation = stationName || "Rankin";
-
-      // ---- Submit PO without signature ----
-      const poResponse = await authAxios(() =>
-        axios.post(
-          `${domain}/api/purchase-orders`,
-          {
-            source: "PO",
-            date: date ? format(date, 'yyyy-MM-dd') : format(new Date(), 'yyyy-MM-dd'),
-            stationName: selectedStation,
-            fleetCardNumber: fleetCardNumber || "",
-            poNumber: poNumber || "",
-            quantity: purchaseType === 'fuel' ? quantity : 0,
-            amount,
-            productCode: purchaseType === 'fuel' ? fuelType : 'NON-FUEL',
-            trx: "",
-            signature: "",
-            receipt: filename,
-            customerName,
-            driverName,
-            vehicleMakeModel: vehicleInfo,
-            licensePlate,
-            purchaseType,
-            itemsDescription: purchaseType === 'non-fuel' ? itemsDescription : '',
-          },
-          { headers: authHeaders }
-        )
-      );
-
-      if (poResponse.status !== 200 && poResponse.status !== 201) {
-        throw new Error("Failed to create purchase order");
+        // Connection dropped mid-submit (no response at all) — don't lose the
+        // entry, fall back to the offline queue instead of erroring out.
+        if (axios.isAxiosError(err) && !err.response) {
+          await savePendingAction({ type: "CREATE_PURCHASE_ORDER", receipt, payload, queuedAt: Date.now() });
+          return { queued: true };
+        }
+        throw err;
       }
-
-      return poResponse.data;
     },
-    onSuccess: () => {
+    onSuccess: (result: any) => {
+      if (result?.queued) {
+        alert("You're offline — this purchase order has been saved and will be submitted automatically once you're back online.");
+      }
       navigate({ to: "/po/list" });
     },
     onError: () => {

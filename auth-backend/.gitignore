@@ -1,2 +1,11 @@
 .env
 node_modules
+
+# Docker (dev) auto-creates this as an empty placeholder on the host the first
+# time `docker compose -f compose.dev.yaml up auth-backend` runs, because
+# ./auth-backend:/app is a live directory mount and the more specific
+# ./backend/utils/attachSiteAlias.js:/app/utils/attachSiteAlias.js mount needs
+# a real target to land on. The actual file lives in backend/utils and is
+# bind-mounted over this path inside the container — never edit or commit
+# real content here.
+utils/attachSiteAlias.js
