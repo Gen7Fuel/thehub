@@ -301,7 +301,7 @@ async function generateEodReportPdf({ site, date, isManitoba = false }) {
   const start = new Date(yy, mm - 1, dd, 0, 0, 0, 0);
   const end = new Date(yy, mm - 1, dd + 1, 0, 0, 0, 0);
 
-  const locationDoc = await Location.findOne({ stationName: site }).lean();
+  const locationDoc = await Location.findOne({ site }).lean();
   const sellsLottery = locationDoc?.sellsLottery === true;
   const csoCode = locationDoc?.csoCode;
 

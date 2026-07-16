@@ -91,6 +91,7 @@ function RouteComponent() {
   const [isPriceOverlayActive, setIsPriceOverlayActive] = useState(false);
   const [pricePayload, setPricePayload] = useState<{
     stationName: string;
+    site?: string;
     locationId: string;
     changedGrades: any[];
     unchangedGrades: any[];
@@ -459,7 +460,7 @@ function RouteComponent() {
                       <DialogTitle className="text-lg font-black tracking-tight text-slate-900 uppercase">
                         New Fuel Prices:{" "}
                         <span className="text-sky-600 normal-case">
-                          {pricePayload?.stationName}
+                          {pricePayload?.site ?? pricePayload?.stationName}
                         </span>
                       </DialogTitle>
                       <DialogDescription className="text-xs font-semibold text-slate-400">

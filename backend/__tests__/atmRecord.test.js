@@ -104,3 +104,19 @@ describe('ATMRecord — defaults', () => {
     expect(doc.image).toBe('cdn-uuid-123.jpg')
   })
 })
+
+// ─── site alias sync ───────────────────────────────────────────────────────────
+
+describe('ATMRecord — site alias sync', () => {
+  it('syncs site from stationName on validate', async () => {
+    const doc = new ATMRecord(base())
+    await doc.validate()
+    expect(doc.site).toBe('Rankin')
+  })
+
+  it('preserves an explicitly different site set alongside stationName', async () => {
+    const doc = new ATMRecord(base({ site: 'SomeOtherSite' }))
+    await doc.validate()
+    expect(doc.site).toBe('SomeOtherSite')
+  })
+})

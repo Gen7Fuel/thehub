@@ -236,7 +236,7 @@ router.get('/voided-transactions-details', async (req, res) => {
       return res.status(400).json({ error: 'Site and Date are required' });
     }
 
-    const location = await Location.findOne({ stationName: site });
+    const location = await Location.findOne({ site });
     if (!location || !location.csoCode) {
       return res.status(404).json({ error: 'Location or CSO Code not found' });
     }
@@ -286,7 +286,7 @@ router.get('/over-short', async (req, res) => {
     if (!site) return res.status(400).json({ error: 'site is required' });
 
     // 1️⃣ Check if site sells lottery
-    const location = await Location.findOne({ stationName: site }).lean();
+    const location = await Location.findOne({ site }).lean();
     const sellsLottery = location?.sellsLottery || false;
     const csoCode = location?.csoCode;
 
@@ -567,7 +567,7 @@ router.get('/payables-comparison', async (req, res) => {
     const { site } = req.query;
     if (!site) return res.status(400).json({ error: 'site is required' });
 
-    const locationInfo = await Location.findOne({ stationName: site }).lean();
+    const locationInfo = await Location.findOne({ site }).lean();
     const sellsLottery = locationInfo?.sellsLottery || false;
 
     const end = new Date();
@@ -1045,7 +1045,7 @@ router.post('/submit/to/safesheet', async (req, res) => {
     let isManitoba = false;
     try {
       // Accessing your location database directly on the backend
-      const loc = await Location.findOne({ stationName: site }).lean();
+      const loc = await Location.findOne({ site }).lean();
       isManitoba = loc?.province?.trim().toLowerCase() === 'manitoba';
     } catch (locErr) {
       console.error('Backend location lookup for province failed:', locErr?.message || locErr);
@@ -1358,7 +1358,7 @@ router.get('/payouts-check', async (req, res) => {
     const start = new Date(date); start.setUTCHours(0, 0, 0, 0)
     const end = new Date(date); end.setUTCHours(23, 59, 59, 999)
 
-    const location = await Location.findOne({ stationName: site }).lean()
+    const location = await Location.findOne({ site }).lean()
 
     const [shiftAgg] = await CashSummary.aggregate([
       { $match: { site, date: { $gte: start, $lte: end } } },
@@ -1389,7 +1389,7 @@ router.get('/ar-check-range', async (req, res) => {
   if (!site || !from || !to) return res.status(400).json({ error: 'site, from, and to are required' })
 
   try {
-    const location = await Location.findOne({ stationName: site }, { timezone: 1 }).lean()
+    const location = await Location.findOne({ site }, { timezone: 1 }).lean()
     const tz = location?.timezone || 'America/Toronto'
 
     const csStart = new Date(from); csStart.setUTCHours(0, 0, 0, 0)
@@ -1467,7 +1467,7 @@ router.get('/ar-check', async (req, res) => {
     // query using the site's local timezone day boundaries, not UTC midnight.
     // Fallback branch covers PO docs (and all Kardpoll docs) that predate the
     // dateStr migration and don't have a dateStr field yet.
-    const location = await Location.findOne({ stationName: site }, { timezone: 1 }).lean()
+    const location = await Location.findOne({ site }, { timezone: 1 }).lean()
     const tz = location?.timezone || 'America/Toronto'
     const txStart = DateTime.fromISO(date, { zone: tz }).startOf('day').toJSDate()
     const txEnd = DateTime.fromISO(date, { zone: tz }).endOf('day').toJSDate()

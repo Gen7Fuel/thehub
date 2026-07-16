@@ -227,7 +227,7 @@ router.post('/request-again', async (req, res) => {
 
   try {
     const location = await Location.findOne(
-      { stationName: site },
+      { site },
       { email: 1, stationName: 1, managerEmails: 1 }
     ).lean();
 

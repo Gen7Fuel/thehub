@@ -213,7 +213,7 @@ router.post("/check-code", async (req, res) => {
       return res.status(400).json({ error: "Missing location or code" });
     }
 
-    const locationDoc = await Location.findOne({ stationName: location }).lean();
+    const locationDoc = await Location.findOne({ site: location }).lean();
 
     if (!locationDoc) {
       return res.status(404).json({ error: "Location not found" });

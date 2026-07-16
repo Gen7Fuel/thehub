@@ -11,6 +11,7 @@ interface FuelGradePrice {
 
 interface TickerStationRecord {
   stationName: string;
+  site?: string;
   grades: FuelGradePrice[];
 }
 
@@ -80,7 +81,7 @@ export default function FuelPriceTicker() {
 
   const permittedTickerData = useMemo(() => {
     const siteAccess = user?.access?.site_access || {};
-    return allTickerData.filter((station) => siteAccess[station.stationName] === true);
+    return allTickerData.filter((station) => siteAccess[station.site ?? station.stationName] === true);
   }, [allTickerData, user]);
 
   if (!permittedTickerData || permittedTickerData.length === 0) return null;
@@ -122,12 +123,12 @@ function TickerLayoutContent({ data }: { data: TickerStationRecord[] }) {
         });
 
         return (
-          <div key={`${station.stationName}-${sIdx}`} className="flex items-center gap-5">
-            
+          <div key={`${station.site ?? station.stationName}-${sIdx}`} className="flex items-center gap-5">
+
             {/* Professional Station Identity Tag */}
             <div className="flex items-center gap-1 text-xs font-bold text-slate-800 tracking-tight shrink-0">
               <span className="text-slate-400 text-xs">🏢</span>
-              <span className="uppercase font-mono tracking-wide">{station.stationName}</span>
+              <span className="uppercase font-mono tracking-wide">{station.site ?? station.stationName}</span>
             </div>
             
             {/* Sequential Pricing Streams */}

@@ -429,6 +429,7 @@ router.get("/", async (req, res) => {
       stations: stores.map((s) => ({
         csoCode: s.csoCode,
         stationName: s.stationName,
+        site: s.site,
         address: s.address,
       })),
       pricingData: pricingMap,
@@ -463,13 +464,13 @@ router.get("/prices-ticker", async (req, res) => {
         _id: { $in: uniqueSiteIds },
         type: "store",
       },
-      "_id stationName",
+      "_id stationName site",
     );
 
     // Map Mongo object IDs to their real station names for quick lookup
     const locationNameMap = {};
     locations.forEach((loc) => {
-      locationNameMap[loc._id.toString()] = loc.stationName;
+      locationNameMap[loc._id.toString()] = loc.site ?? loc.stationName;
     });
 
     // 3. Group fuel metrics by station name, filtering out any records without a resolved store name
@@ -496,6 +497,7 @@ router.get("/prices-ticker", async (req, res) => {
     const resultPayload = Object.entries(groupedTickerData).map(
       ([name, grades]) => ({
         stationName: name,
+        site: name,
         grades: grades,
       }),
     );
@@ -696,6 +698,7 @@ router.get("/check-pending-verification", async (req, res) => {
       requiresVerification: true,
       payload: {
         stationName: locationDoc.stationName,
+        site: locationDoc.site,
         locationId: locationMongoId,
         changedGrades: changedGrades,
         unchangedGrades: unchangedGrades,
