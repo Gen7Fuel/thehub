@@ -460,6 +460,23 @@ export async function syncPendingActions() {
             console.log("✅ Synced and refreshed UPDATE_ORDER_REC order record:", latest.id);
           }
 
+          else if (action.type === "CREATE_PURCHASE_ORDER") {
+            const { filename } = await uploadBase64Image(action.receipt, "receipt.jpg");
+
+            await axios.post(
+              "/api/purchase-orders",
+              { ...action.payload, receipt: filename },
+              {
+                headers: {
+                  Authorization: `Bearer ${localStorage.getItem("token")}`,
+                  "X-Required-Permission": "po",
+                },
+              }
+            );
+
+            console.log("✅ Synced CREATE_PURCHASE_ORDER for", action.payload?.customerName);
+          }
+
           else if (action.type === "SAVE_EXTRA_NOTE") {
             // 🔹 Perform backend update
             const res = await axios.patch(

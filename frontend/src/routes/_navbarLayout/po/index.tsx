@@ -32,6 +32,12 @@ interface QuickSelectCustomer {
   order: number
 }
 
+const PRODUCTS_CACHE_KEY = 'po_cachedProducts'
+
+// Sites with no PO Number / Fleet Card concept — the Number section is hidden
+// entirely and neither field is submitted with the purchase order.
+const NO_PO_NUMBER_SITES = ['Rankin', 'Sarnia', 'Walpole']
+
 async function loader() {
   try {
     // add authorization header with bearer token
@@ -42,10 +48,18 @@ async function loader() {
       }
     })
     const products: Product[] = response.data
+    localStorage.setItem(PRODUCTS_CACHE_KEY, JSON.stringify(products))
 
     return { products }
   } catch (error) {
-    return { products: [] }
+    // Offline (or request failed) — fall back to whatever we last fetched
+    // successfully, so the fuel grade dropdown isn't empty while offline.
+    try {
+      const cached = localStorage.getItem(PRODUCTS_CACHE_KEY)
+      return { products: cached ? JSON.parse(cached) : [] }
+    } catch {
+      return { products: [] }
+    }
   }
 }
 
@@ -102,7 +116,7 @@ function RouteComponent() {
   const data = Route.useLoaderData()
   const stationName = useFormStore((state) => state.stationName)
   const setStationName = useFormStore((state) => state.setStationName)
-  const isRankin = stationName === 'Rankin'
+  const isNoPoNumberSite = NO_PO_NUMBER_SITES.includes(stationName)
 
   const [poError, setPoError] = useState<string>('')
   const [cardStatus, setCardStatus] = useState<string | null>(null)
@@ -119,6 +133,7 @@ function RouteComponent() {
     stolen:    { label: 'Stolen',         className: 'text-red-600' },
     cancelled: { label: 'Cancelled',      className: 'text-gray-500' },
     not_found: { label: 'Card not found', className: 'text-red-600' },
+    offline:   { label: 'Offline — will verify when synced', className: 'text-amber-600' },
   }
 
   const handleBlur = async () => {
@@ -239,17 +254,17 @@ function RouteComponent() {
     setCardStatus(null)
   }
 
-  // Rankin has no PO Number / Fleet Card concept. The store persists across
-  // client-side nav, so force-clear stale values the instant the active site
-  // becomes Rankin (e.g. user typed something on another site, then switched).
+  // NO_PO_NUMBER_SITES have no PO Number / Fleet Card concept. The store persists
+  // across client-side nav, so force-clear stale values the instant the active
+  // site becomes one of them (e.g. user typed something on another site, then switched).
   useEffect(() => {
-    if (isRankin) {
+    if (isNoPoNumberSite) {
       resetNumberSection()
       setPoNumber('')
       setPoError('')
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isRankin])
+  }, [isNoPoNumberSite])
 
   const handleQuickCustomerTap = (qc: QuickSelectCustomer) => {
     if (selectedQuickCustomerId === qc._id) {
@@ -260,7 +275,7 @@ function RouteComponent() {
     setCustomerName(qc.name)
     setSelectedQuickCustomerId(qc._id)
     setShowSuggestions(false)
-    if (qc.fleetCardNumber && !isRankin) {
+    if (qc.fleetCardNumber && !isNoPoNumberSite) {
       setNumberType('fleet')
       setFleetCardNumber(qc.fleetCardNumber)
       setCardStatus('active') // trust admin-curated data; bypasses the live verify call by design
@@ -313,8 +328,8 @@ function RouteComponent() {
       {/* Number + Date on the same row */}
       <div className="flex items-start justify-between gap-4">
         <div className={`space-y-3 transition-opacity duration-500 ${selectedQuickCustomerId ? 'opacity-0 pointer-events-none' : 'opacity-100'}`}>
-          {/* Rankin has no PO Number / Fleet Card entry */}
-          {!isRankin && (
+          {/* NO_PO_NUMBER_SITES have no PO Number / Fleet Card entry */}
+          {!isNoPoNumberSite && (
             <>
               <h2 className="text-lg font-bold">Number</h2>
               <div className="flex rounded-md border border-input overflow-hidden w-fit">
@@ -342,8 +357,11 @@ function RouteComponent() {
                             headers: { Authorization: `Bearer ${token}` },
                           })
                           setCardStatus(res.data.reason || res.data.status || 'not_found')
-                        } catch {
-                          setCardStatus('not_found')
+                        } catch (e) {
+                          // No response at all means we couldn't reach the server (offline) —
+                          // don't permanently block the form; the backend upserts/validates
+                          // the fleet card again when this PO is created/synced.
+                          setCardStatus(axios.isAxiosError(e) && !e.response ? 'offline' : 'not_found')
                         }
                       } else {
                         setCardStatus(null)
@@ -400,7 +418,13 @@ function RouteComponent() {
                           setPoError('')
                         }
                       } catch (e: any) {
-                        setPoError(e?.response?.data?.message || 'Could not validate PO number uniqueness')
+                        // No response at all means we're offline — can't validate uniqueness
+                        // right now, so don't block; the backend still enforces it on submit/sync.
+                        if (axios.isAxiosError(e) && !e.response) {
+                          setPoError('')
+                        } else {
+                          setPoError(e?.response?.data?.message || 'Could not validate PO number uniqueness')
+                        }
                       }
                     }}
                   >
@@ -597,13 +621,14 @@ function RouteComponent() {
             className="bg-blue-600 hover:bg-blue-700 text-white"
             onClick={() => {
               // Only pad when the user is actually on the PO Number path for a site that shows it.
-              // Rankin never shows the Number section, and the Fleet Card path never touches poNumber —
-              // padding an untouched empty value to "00000" would submit a non-empty poNumber that
-              // collides with the backend's per-station unique index on every subsequent submission.
-              if (!isRankin && numberType === 'po') setPoNumber(padFive(poNumber));
+              // NO_PO_NUMBER_SITES never show the Number section, and the Fleet Card path never
+              // touches poNumber — padding an untouched empty value to "00000" would submit a
+              // non-empty poNumber that collides with the backend's per-station unique index on
+              // every subsequent submission.
+              if (!isNoPoNumberSite && numberType === 'po') setPoNumber(padFive(poNumber));
               fileInputRef.current?.click();
             }}
-            disabled={!!poError || !customerName || !driverName || (purchaseType === 'fuel' ? quantity === 0 : !itemsDescription) || (numberType === 'fleet' && cardStatus !== 'active')}
+            disabled={!!poError || !customerName || !driverName || (purchaseType === 'fuel' ? quantity === 0 : !itemsDescription) || (numberType === 'fleet' && cardStatus !== 'active' && cardStatus !== 'offline')}
           >
             <Camera className="mr-2 h-4 w-4" />
             Upload Receipt
