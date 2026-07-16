@@ -121,7 +121,7 @@ function RouteComponent() {
         const poResponse = await axios.post(
           `${domain}/api/purchase-orders`,
           { ...payload, receipt: filename },
-          { headers: authHeaders }
+          { headers: authHeaders, timeout: 15000 }
         );
 
         if (poResponse.status !== 200 && poResponse.status !== 201) {
@@ -143,10 +143,12 @@ function RouteComponent() {
         throw err;
       }
     },
-    onSuccess: (result: any) => {
-      if (result?.queued) {
-        alert("You're offline — this purchase order has been saved and will be submitted automatically once you're back online.");
-      }
+    onSuccess: () => {
+      // No blocking alert() here on purpose — a native alert() freezes the tab
+      // (including the "Saving..." → idle repaint) until manually dismissed,
+      // which on a device with no visible dialog chrome can look identical to
+      // the submit being permanently stuck. The list page's amber "Pending
+      // sync" row is the queued-item confirmation instead.
       navigate({ to: "/po/list" });
     },
     onError: () => {
