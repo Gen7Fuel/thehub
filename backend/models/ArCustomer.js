@@ -14,6 +14,11 @@ const ArCustomerSchema = new mongoose.Schema({
     stationName: { type: String, required: true, trim: true },
     site:        { type: String }, // Additive alias of stationName, auto-synced
     order:       { type: Number, default: 0 },
+    // Optional short text for the PO form's quick-select button. Falls back to
+    // the customer's own first name word (see po/index.tsx firstWord()) when
+    // blank — only needed when that default doesn't read well (e.g. a legal
+    // name like "Three fires development corporation" wanting "Three Fires").
+    label:       { type: String, trim: true, default: '' },
     _id: false,
   }],
 }, { timestamps: true })

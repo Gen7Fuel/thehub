@@ -29,6 +29,7 @@ interface QuickSelectCustomer {
   _id: string
   name: string
   fleetCardNumber: string
+  label?: string
   order: number
 }
 
@@ -36,7 +37,7 @@ const PRODUCTS_CACHE_KEY = 'po_cachedProducts'
 
 // Sites with no PO Number / Fleet Card concept — the Number section is hidden
 // entirely and neither field is submitted with the purchase order.
-const NO_PO_NUMBER_SITES = ['Rankin', 'Sarnia', 'Walpole']
+const NO_PO_NUMBER_SITES = ['Rankin', 'Sarnia', 'Walpole', 'Jocko Point']
 
 async function loader() {
   try {
@@ -297,9 +298,12 @@ function RouteComponent() {
       active ? 'bg-slate-800 text-white' : 'bg-background text-slate-700 hover:bg-slate-50'
     }`
 
-  // Quick-select buttons show only the first word of the customer's full name
-  // (e.g. "Batchewana" for "Batchewana Frist Nation of Ojibways") to keep the row compact.
+  // Quick-select buttons default to showing only the first word of the customer's
+  // full name (e.g. "Batchewana" for "Batchewana Frist Nation of Ojibways") to keep
+  // the row compact — a custom `label` (set in Settings > Quick-Select Customers)
+  // overrides this when the first word alone doesn't read well.
   const firstWord = (name: string) => name.trim().split(' ')[0] || name
+  const quickSelectLabel = (qc: QuickSelectCustomer) => qc.label || firstWord(qc.name)
 
   return (
     <div className="p-4 border border-dashed border-gray-300 rounded-md space-y-6">
@@ -468,7 +472,7 @@ function RouteComponent() {
                   onClick={() => handleQuickCustomerTap(qc)}
                   className={toggleClass(selectedQuickCustomerId === qc._id, 'rounded-md border border-input')}
                 >
-                  {firstWord(qc.name)}
+                  {quickSelectLabel(qc)}
                 </button>
               ))}
             </div>
