@@ -16,6 +16,9 @@ const {
   mockAxiosPut,
   mockUploadBase64Image,
   mockUseAuth,
+  mockIsActuallyOnline,
+  mockSavePendingAction,
+  mockGetPendingActions,
 } = vi.hoisted(() => {
   const mockStore = {
     fleetCardNumber: '' as string,
@@ -77,6 +80,10 @@ const {
     mockAxiosPut: vi.fn(),
     mockUploadBase64Image: vi.fn().mockResolvedValue({ filename: 'uploaded.jpg' }),
     mockUseAuth,
+    // Default: "online" so existing submit tests exercise the normal network path.
+    mockIsActuallyOnline: vi.fn().mockResolvedValue(true),
+    mockSavePendingAction: vi.fn().mockResolvedValue(undefined),
+    mockGetPendingActions: vi.fn().mockResolvedValue([]),
   }
 })
 
@@ -138,6 +145,22 @@ vi.mock('@/lib/utils', async (importOriginal) => {
 
 vi.mock('@/lib/constants', () => ({
   domain: 'http://localhost:5000',
+}))
+
+vi.mock('@/lib/network', () => ({
+  isActuallyOnline: mockIsActuallyOnline,
+}))
+
+vi.mock('@/lib/orderRecIndexedDB', () => ({
+  getDB: vi.fn(),
+  saveOrderRec: vi.fn(),
+  getOrderRecById: vi.fn(),
+  savePendingAction: mockSavePendingAction,
+  getPendingActions: mockGetPendingActions,
+  clearPendingActions: vi.fn(),
+  hasPendingActionsForId: vi.fn().mockResolvedValue(false),
+  deletePendingActionsForId: vi.fn(),
+  clearLocalDB: vi.fn(),
 }))
 
 // Stub SignatureCanvas — expose all methods that signature.tsx calls on the ref.
@@ -332,8 +355,8 @@ describe('PO Form — index.tsx', () => {
     }, { timeout: 5000 })
   })
 
-  it('does not render the Number section or OTP input for site "Rankin"', async () => {
-    mockStore.stationName = 'Rankin'
+  it.each(['Rankin', 'Sarnia', 'Walpole'])('does not render the Number section or OTP input for site "%s"', async (site) => {
+    mockStore.stationName = site
     renderWithSuspense(<POForm />)
 
     await waitFor(() => {
@@ -344,8 +367,8 @@ describe('PO Form — index.tsx', () => {
     expect(screen.queryByTestId('otp-input')).not.toBeInTheDocument()
   })
 
-  it('does not auto-fill a fleet card from quick-select on site "Rankin"', async () => {
-    mockStore.stationName = 'Rankin'
+  it.each(['Rankin', 'Sarnia', 'Walpole'])('does not auto-fill a fleet card from quick-select on site "%s"', async (site) => {
+    mockStore.stationName = site
     mockAxiosGet.mockImplementation((url: string) => {
       if (url.includes('quick-select')) {
         return Promise.resolve({
@@ -385,8 +408,8 @@ describe('PO Form — index.tsx', () => {
     expect(mockStore.setCustomerName).toHaveBeenCalledWith('Batchewana Frist Nation of Ojibways')
   })
 
-  it('does not pad poNumber to "00000" when clicking Upload Receipt on site "Rankin"', async () => {
-    mockStore.stationName = 'Rankin'
+  it.each(['Rankin', 'Sarnia', 'Walpole'])('does not pad poNumber to "00000" when clicking Upload Receipt on site "%s"', async (site) => {
+    mockStore.stationName = site
     mockStore.receipt = null
     renderWithSuspense(<POForm />)
 
@@ -541,6 +564,50 @@ describe('PO List — list.tsx', () => {
     )
     await waitFor(() => expect(screen.getByText('2026-02-01')).toBeInTheDocument())
   })
+
+  it('keeps showing previously loaded orders when a refresh fetch fails (offline)', async () => {
+    renderWithSuspense(<POList />)
+    await waitFor(() => expect(screen.getByText('Jane Doe')).toBeInTheDocument())
+
+    // Simulate the connection dropping on a subsequent refresh (e.g. switching site).
+    mockAxiosGet.mockRejectedValueOnce(Object.assign(new Error('Network Error'), { isAxiosErr: true }))
+    fireEvent.click(screen.getByTestId('location-picker'))
+
+    // The table should still show the last successfully fetched order, not blank out.
+    await waitFor(() => expect(screen.getByText('Jane Doe')).toBeInTheDocument())
+  })
+
+  it('shows a queued purchase order from the offline sync queue as "Pending sync"', async () => {
+    mockAxiosGet.mockResolvedValue({ status: 200, data: [] })
+    mockGetPendingActions.mockResolvedValueOnce([
+      {
+        type: 'CREATE_PURCHASE_ORDER',
+        queuedAt: 12345,
+        receipt: 'data:image/png;base64,queued',
+        payload: {
+          source: 'PO',
+          date: '2026-01-01',
+          stationName: 'Rankin',
+          fleetCardNumber: '',
+          poNumber: '99999',
+          quantity: 25,
+          amount: 50,
+          productCode: 'UNL',
+          customerName: 'Offline Customer',
+          driverName: 'Offline Driver',
+          vehicleMakeModel: '',
+          licensePlate: '',
+          purchaseType: 'fuel',
+          itemsDescription: '',
+        },
+      },
+    ])
+
+    renderWithSuspense(<POList />)
+
+    await waitFor(() => expect(screen.getByText('Offline Customer')).toBeInTheDocument())
+    expect(screen.getAllByText(/pending sync/i).length).toBeGreaterThan(0)
+  })
 })
 
 // ─── PO Signature (signature.tsx) ─────────────────────────────────────────────
@@ -688,5 +755,44 @@ describe('PO Receipt — receipt.tsx', () => {
         expect.any(Object)
       )
     )
+  })
+
+  it('queues the purchase order for offline sync instead of posting when offline', async () => {
+    mockIsActuallyOnline.mockResolvedValueOnce(false)
+
+    renderWithQuery(<POReceipt />)
+
+    const submitBtn = screen.getByRole('button', { name: /finalize|submit/i })
+    fireEvent.click(submitBtn)
+
+    await waitFor(() =>
+      expect(mockSavePendingAction).toHaveBeenCalledWith(
+        expect.objectContaining({
+          type: 'CREATE_PURCHASE_ORDER',
+          receipt: 'data:image/png;base64,abc',
+          payload: expect.objectContaining({ source: 'PO', stationName: 'TestSite' }),
+        })
+      )
+    )
+    expect(mockAxiosPost).not.toHaveBeenCalled()
+    expect(mockUploadBase64Image).not.toHaveBeenCalled()
+    await waitFor(() => expect(mockNavigate).toHaveBeenCalledWith({ to: '/po/list' }))
+  })
+
+  it('falls back to the offline queue when the network request cannot reach the server', async () => {
+    const networkError = Object.assign(new Error('Network Error'), { isAxiosErr: true })
+    mockAxiosPost.mockRejectedValueOnce(networkError)
+
+    renderWithQuery(<POReceipt />)
+
+    const submitBtn = screen.getByRole('button', { name: /finalize|submit/i })
+    fireEvent.click(submitBtn)
+
+    await waitFor(() =>
+      expect(mockSavePendingAction).toHaveBeenCalledWith(
+        expect.objectContaining({ type: 'CREATE_PURCHASE_ORDER' })
+      )
+    )
+    await waitFor(() => expect(mockNavigate).toHaveBeenCalledWith({ to: '/po/list' }))
   })
 })

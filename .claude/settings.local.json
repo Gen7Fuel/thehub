@@ -73,7 +73,13 @@
       "Read(//tmp/**)",
       "Bash(echo \"EXIT:$?\")",
       "Bash(git show *)",
-      "Bash(grep -i 'order-rec/$id')"
+      "Bash(grep -i 'order-rec/$id')",
+      "Bash(pandoc --version)",
+      "Bash(python -c \"import docx; print\\('python-docx available'\\)\")",
+      "Bash(npm --version)",
+      "Bash(mkdir -p docs)",
+      "Bash(cp \"C:\\\\Users\\\\MOHAMM~1\\\\AppData\\\\Local\\\\Temp\\\\claude\\\\C--Users-MohammadHasan-workspace-thehub\\\\e44568f1-59c2-4905-9594-ff732a28220b\\\\scratchpad\\\\Hub-NonServiceCustomer-Access.docx\" \"docs/non_service_customers_modules.docx\")",
+      "Bash(cd C:\\\\Users\\\\MOHAMM~1\\\\AppData\\\\Local\\\\Temp\\\\claude\\\\C--Users-MohammadHasan-workspace-thehub\\\\e44568f1-59c2-4905-9594-ff732a28220b\\\\scratchpad *)"
     ]
   }
 }
