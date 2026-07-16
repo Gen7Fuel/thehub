@@ -757,7 +757,7 @@ function RouteComponent() {
 
       if (json.success) {
         alert(
-          `Invoice Submitted Successfully!\nRecord saved under Reference ID: ${json.invoiceId}`,
+          `${json.message}`,
         );
         navigate({ to: "/upload-invoice/list" });
       }

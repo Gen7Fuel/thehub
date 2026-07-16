@@ -160,7 +160,7 @@ router.post("/submit", async (req, res) => {
     // Promptly return response to ensure standard instant page feedback
     return res.json({
       success: true,
-      message: "Your invoice has been submitted successfully! We are processing the upload in the background now. You will be notified automatically as soon as it completes, or you can check the List page to view the current status.",
+      message: "Your invoice has been submitted successfully! We are processing the upload in the background now.\nYou will be notified automatically as soon as it completes, or you can check the List page to view the current status.",
       invoiceId: newInvoice._id,
     });
   } catch (err) {
