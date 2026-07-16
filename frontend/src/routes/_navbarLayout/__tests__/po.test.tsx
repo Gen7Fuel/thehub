@@ -355,7 +355,7 @@ describe('PO Form — index.tsx', () => {
     }, { timeout: 5000 })
   })
 
-  it.each(['Rankin', 'Sarnia', 'Walpole'])('does not render the Number section or OTP input for site "%s"', async (site) => {
+  it.each(['Rankin', 'Sarnia', 'Walpole', 'Jocko Point'])('does not render the Number section or OTP input for site "%s"', async (site) => {
     mockStore.stationName = site
     renderWithSuspense(<POForm />)
 
@@ -367,7 +367,7 @@ describe('PO Form — index.tsx', () => {
     expect(screen.queryByTestId('otp-input')).not.toBeInTheDocument()
   })
 
-  it.each(['Rankin', 'Sarnia', 'Walpole'])('does not auto-fill a fleet card from quick-select on site "%s"', async (site) => {
+  it.each(['Rankin', 'Sarnia', 'Walpole', 'Jocko Point'])('does not auto-fill a fleet card from quick-select on site "%s"', async (site) => {
     mockStore.stationName = site
     mockAxiosGet.mockImplementation((url: string) => {
       if (url.includes('quick-select')) {
@@ -408,7 +408,26 @@ describe('PO Form — index.tsx', () => {
     expect(mockStore.setCustomerName).toHaveBeenCalledWith('Batchewana Frist Nation of Ojibways')
   })
 
-  it.each(['Rankin', 'Sarnia', 'Walpole'])('does not pad poNumber to "00000" when clicking Upload Receipt on site "%s"', async (site) => {
+  it('shows a custom label on the quick-select button instead of the first word, when set', async () => {
+    mockAxiosGet.mockImplementation((url: string) => {
+      if (url.includes('quick-select')) {
+        return Promise.resolve({
+          data: [{ _id: 'qc1', name: 'Three fires development corporation', fleetCardNumber: '', label: 'Three Fires', order: 0 }],
+        })
+      }
+      return Promise.resolve({ data: [] })
+    })
+
+    renderWithSuspense(<POForm />)
+
+    const quickBtn = await waitFor(() => screen.getByRole('button', { name: 'Three Fires' }), { timeout: 5000 })
+    expect(screen.queryByText('Three', { selector: 'button' })).not.toBeInTheDocument()
+
+    fireEvent.click(quickBtn)
+    expect(mockStore.setCustomerName).toHaveBeenCalledWith('Three fires development corporation')
+  })
+
+  it.each(['Rankin', 'Sarnia', 'Walpole', 'Jocko Point'])('does not pad poNumber to "00000" when clicking Upload Receipt on site "%s"', async (site) => {
     mockStore.stationName = site
     mockStore.receipt = null
     renderWithSuspense(<POForm />)

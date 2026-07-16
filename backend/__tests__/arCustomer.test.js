@@ -79,6 +79,30 @@ describe('ArCustomer — quickSelectSites', () => {
     expect(err?.errors['quickSelectSites.0.stationName']).toBeDefined()
   })
 
+  it('defaults label to an empty string when omitted', () => {
+    const doc = new ArCustomer(base({ quickSelectSites: [{ stationName: 'Walpole', order: 0 }] }))
+    expect(doc.quickSelectSites[0].label).toBe('')
+  })
+
+  it('accepts a custom label and trims it', () => {
+    const doc = new ArCustomer(base({
+      quickSelectSites: [{ stationName: 'Walpole', order: 0, label: '  Three Fires  ' }],
+    }))
+    expect(doc.validateSync()).toBeUndefined()
+    expect(doc.quickSelectSites[0].label).toBe('Three Fires')
+  })
+
+  it('supports independent labels per site entry', () => {
+    const doc = new ArCustomer(base({
+      quickSelectSites: [
+        { stationName: 'Walpole', order: 0, label: 'Three Fires' },
+        { stationName: 'Rankin', order: 0 },
+      ],
+    }))
+    expect(doc.quickSelectSites[0].label).toBe('Three Fires')
+    expect(doc.quickSelectSites[1].label).toBe('')
+  })
+
   // These use the async .validate() (not .validateSync()) because the
   // per-entry site <- stationName sync runs in a pre('validate') hook that
   // only fires under the async validate path.
