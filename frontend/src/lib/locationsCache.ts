@@ -27,10 +27,16 @@ export function getCachedLocations<T = any>(): T[] {
 // Fire-and-forget: warms the cache as early as possible on every app load,
 // regardless of auth state. A failure here (offline, or a first-ever load
 // with nothing cached yet) is expected and silently ignored — readers just
-// fall back to whatever was cached last time, or an empty list.
+// fall back to whatever was cached last time, or an empty list. The 5s
+// timeout matters even though this is fire-and-forget: without it, a
+// reachable-but-not-actually-online connection (dead router, captive
+// portal) can leave this fetch hanging indefinitely instead of failing,
+// so it never gets around to warming the cache at all — see network.ts's
+// isActuallyOnline() for the same pattern already used elsewhere here.
 export function prefetchLocations(): void {
   fetch('/api/locations', {
     headers: { Authorization: `Bearer ${localStorage.getItem('token')}` },
+    signal: AbortSignal.timeout(5000),
   })
     .then((res) => (res.ok ? res.json() : Promise.reject(res)))
     .then((data) => saveCachedLocations(data))
