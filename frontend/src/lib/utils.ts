@@ -17,7 +17,12 @@ export async function uploadBase64Image(base64Data: string | null, fileName: str
   }, {
     headers: {
       Authorization: `Bearer ${localStorage.getItem('token')}`
-    }
+    },
+    // Bounds how long a caller waits before treating the connection as
+    // unreachable (e.g. to fall back to an offline queue) — axios has no
+    // timeout by default, so a stalled connection would otherwise hang far
+    // longer than the browser's own "no network" detection.
+    timeout: 15000,
   });
   console.log('Uploaded file info:', response.data);
   return response.data;

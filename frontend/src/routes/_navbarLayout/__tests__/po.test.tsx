@@ -761,6 +761,21 @@ describe('PO Receipt — receipt.tsx', () => {
     )
   })
 
+  it('bounds the PO submit request with a timeout, so a false "online" reading cannot hang forever', async () => {
+    renderWithQuery(<POReceipt />)
+
+    const submitBtn = screen.getByRole('button', { name: /finalize|submit/i })
+    fireEvent.click(submitBtn)
+
+    await waitFor(() =>
+      expect(mockAxiosPost).toHaveBeenCalledWith(
+        expect.stringContaining('/api/purchase-orders'),
+        expect.any(Object),
+        expect.objectContaining({ timeout: expect.any(Number) })
+      )
+    )
+  })
+
   it('sends date as a plain "yyyy-MM-dd" string, not a full datetime', async () => {
     renderWithQuery(<POReceipt />)
 
@@ -778,6 +793,11 @@ describe('PO Receipt — receipt.tsx', () => {
 
   it('queues the purchase order for offline sync instead of posting when offline', async () => {
     mockIsActuallyOnline.mockResolvedValueOnce(false)
+    // A blocking window.alert() freezes the tab's repaint until dismissed —
+    // on a device with no visible dialog chrome that looks identical to the
+    // submit being permanently stuck on "Saving...". Confirm the offline
+    // success path never calls it (regression test for that exact bug).
+    const alertSpy = vi.spyOn(window, 'alert').mockImplementation(() => {})
 
     renderWithQuery(<POReceipt />)
 
@@ -796,6 +816,9 @@ describe('PO Receipt — receipt.tsx', () => {
     expect(mockAxiosPost).not.toHaveBeenCalled()
     expect(mockUploadBase64Image).not.toHaveBeenCalled()
     await waitFor(() => expect(mockNavigate).toHaveBeenCalledWith({ to: '/po/list' }))
+    expect(alertSpy).not.toHaveBeenCalled()
+
+    alertSpy.mockRestore()
   })
 
   it('falls back to the offline queue when the network request cannot reach the server', async () => {
