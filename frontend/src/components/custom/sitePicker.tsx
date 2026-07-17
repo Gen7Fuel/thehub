@@ -11,6 +11,7 @@ import {
 import { useNavigate } from '@tanstack/react-router'
 import { useAuth } from "@/context/AuthContext"
 import { useSite } from "@/context/SiteContext"
+import { getCachedLocations, saveCachedLocations } from "@/lib/locationsCache"
 
 interface Location {
   _id: string
@@ -60,10 +61,21 @@ export function SitePicker({
         })
         if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`)
         const data = await response.json()
+        saveCachedLocations(data)
         setLocations(data)
       } catch (error) {
         console.error('Error fetching locations:', error)
-        setError('Failed to load locations')
+        // Offline (or request failed) — fall back to the last successful
+        // fetch instead of showing a permanent error, so the picker isn't
+        // empty just because this particular page load couldn't reach the
+        // server. Only surface the error message if there's truly nothing
+        // to fall back on.
+        const cached = getCachedLocations<Location>()
+        if (cached.length > 0) {
+          setLocations(cached)
+        } else {
+          setError('Failed to load locations')
+        }
       } finally {
         setLoading(false)
       }

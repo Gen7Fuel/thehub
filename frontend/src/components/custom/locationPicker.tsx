@@ -98,6 +98,7 @@ import {
 import axios from "axios";
 import { useAuth } from "@/context/AuthContext";
 import { useSite } from "@/context/SiteContext";
+import { getCachedLocations, saveCachedLocations } from "@/lib/locationsCache";
 
 interface Location {
   _id: string;
@@ -190,10 +191,19 @@ export function LocationPicker({
 }
 
 const fetchLocations = async () => {
-  const response = await axios.get("/api/locations", {
-    headers: {
-      Authorization: `Bearer ${localStorage.getItem("token")}`,
-    },
-  });
-  return response.data;
+  try {
+    const response = await axios.get("/api/locations", {
+      headers: {
+        Authorization: `Bearer ${localStorage.getItem("token")}`,
+      },
+    });
+    saveCachedLocations(response.data);
+    return response.data;
+  } catch {
+    // Offline (or request failed) — fall back to the last successful fetch,
+    // warmed as early as app boot (see prefetchLocations in main.tsx), so
+    // the picker isn't empty just because this particular page load couldn't
+    // reach the server.
+    return getCachedLocations();
+  }
 };
