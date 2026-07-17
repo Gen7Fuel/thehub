@@ -3,6 +3,11 @@ import ReactDOM from 'react-dom/client'
 import { RouterProvider, createRouter } from '@tanstack/react-router'
 import { AuthProvider } from '@/context/AuthContext'
 import { SiteProvider } from '@/context/SiteContext'
+import { prefetchLocations } from '@/lib/locationsCache'
+
+// Warms the offline site-list cache as soon as the app boots — before login,
+// before routing — since GET /api/locations doesn't require auth.
+prefetchLocations()
 
 // Import the generated route tree
 import { routeTree } from './routeTree.gen'
