@@ -13,6 +13,7 @@ import { DatePicker } from '@/components/custom/datePicker';
 import { LocationPicker } from '@/components/custom/locationPicker';
 import { domain } from '@/lib/constants'
 import { Camera, ExternalLink } from 'lucide-react'
+import { getCachedArCustomers, saveCachedArCustomers } from '@/lib/arCustomersCache'
 
 interface Product {
   _id: string
@@ -34,6 +35,7 @@ interface QuickSelectCustomer {
 }
 
 const PRODUCTS_CACHE_KEY = 'po_cachedProducts'
+const QUICK_SELECT_CACHE_PREFIX = 'po_cachedQuickSelect_'
 
 // Sites with no PO Number / Fleet Card concept — the Number section is hidden
 // entirely and neither field is submitted with the purchase order.
@@ -121,7 +123,11 @@ function RouteComponent() {
 
   const [poError, setPoError] = useState<string>('')
   const [cardStatus, setCardStatus] = useState<string | null>(null)
-  const [arCustomers, setArCustomers] = useState<ArCustomer[]>([])
+  // Seeded from the offline cache so the autocomplete has data immediately on
+  // render (it's likely already warm — see the eager prefetch in
+  // AuthContext.tsx, fired as soon as login resolves) instead of waiting for
+  // this page's own fetch below to succeed or fail first.
+  const [arCustomers, setArCustomers] = useState<ArCustomer[]>(() => getCachedArCustomers<ArCustomer>())
   const [showSuggestions, setShowSuggestions] = useState(false)
   const customerNameRef = useRef<HTMLDivElement>(null)
   const [quickSelectCustomers, setQuickSelectCustomers] = useState<QuickSelectCustomer[]>([])
@@ -177,19 +183,38 @@ function RouteComponent() {
         headers: { Authorization: `Bearer ${token}` },
       })
     ).then((res) => {
-      if (Array.isArray(res?.data)) setArCustomers(res.data)
-    }).catch(() => {})
+      if (Array.isArray(res?.data)) {
+        setArCustomers(res.data)
+        saveCachedArCustomers(res.data)
+      }
+    }).catch(() => {
+      // Offline (or request failed) — the arCustomers state is already
+      // seeded from the same cache above, so there's nothing more to do here.
+    })
   }, [])
 
   useEffect(() => {
     if (!stationName) { setQuickSelectCustomers([]); return }
     const token = localStorage.getItem('token')
+    const cacheKey = `${QUICK_SELECT_CACHE_PREFIX}${stationName}`
     axios.get(`${domain}/api/ar-customers/quick-select`, {
       params: { stationName },
       headers: { Authorization: `Bearer ${token}` },
     }).then((res) => {
-      if (Array.isArray(res?.data)) setQuickSelectCustomers(res.data)
-    }).catch(() => setQuickSelectCustomers([]))
+      if (Array.isArray(res?.data)) {
+        setQuickSelectCustomers(res.data)
+        localStorage.setItem(cacheKey, JSON.stringify(res.data))
+      }
+    }).catch(() => {
+      // Offline (or request failed) — fall back to this station's last
+      // successful fetch instead of clearing the quick-select buttons.
+      try {
+        const cached = localStorage.getItem(cacheKey)
+        setQuickSelectCustomers(cached ? JSON.parse(cached) : [])
+      } catch {
+        setQuickSelectCustomers([])
+      }
+    })
   }, [stationName])
 
   useEffect(() => {
