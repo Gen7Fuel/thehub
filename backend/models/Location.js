@@ -1,30 +1,27 @@
 const mongoose = require("mongoose");
 const { attachSiteAlias } = require("../utils/attachSiteAlias");
 
-/**
- * Location Schema
- * Represents a physical or legal location (station/site) in the system.
- * Each document stores identifying and contact information for a location.
- */
+// Define a clean sub-schema for granular device control
+const pushoverDeviceSchema = new mongoose.Schema({
+  deviceName: { type: String, required: true },
+  notificationEnabled: { type: Boolean, default: true }
+});
+
 const locationSchema = new mongoose.Schema({
-  type: { type: String, required: true },             // Type of location (e.g., "station", "office")
-  stationName: { type: String, required: true },      // Display name of the station/location
-  site: { type: String },                              // Additive alias of stationName, auto-synced
-  legalName: { type: String, required: true },        // Legal name of the entity
-  INDNumber: { type: String, required: true, unique: true }, // Unique IND number for the location
-  kardpollCode: { type: String, required: false },    // Kardpoll system code (optional)
-  csoCode: { type: String, required: true, unique: true },   // Unique CSO code for the location
-  timezone: { type: String, required: true },         // Timezone of the location
-  email: { type: String, required: true },          // Contact email for the location
-  managerEmails: [{ type: String }],                  // Array of Manager Emails
-  managerCode: { type: Number, required: true },    // Four digit code for manager's dashboard
-  // Indicates whether this site sells lottery tickets and therefore requires
-  // a lottery reconciliation to be provided when submitting daily reports.
+  type: { type: String, required: true },
+  stationName: { type: String, required: true },
+  site: { type: String },
+  legalName: { type: String, required: true },
+  INDNumber: { type: String, required: true, unique: true },
+  kardpollCode: { type: String, required: false },
+  csoCode: { type: String, required: true, unique: true },
+  timezone: { type: String, required: true },
+  email: { type: String, required: true },
+  managerEmails: [{ type: String }],
+  managerCode: { type: Number, required: true },
   sellsLottery: { type: Boolean, default: false },
-  // Indicates whether this site has a Chicken Delight section whose shift is
-  // excluded from the daily over/short and tracked separately as tips.
   chickenDelightSection: { type: Boolean, default: false },
-  safeMaxBalance: { type: Number, default: 25000 }, // Maximum safe balance for the location
+  safeMaxBalance: { type: Number, default: 25000 },
   fuelStationNumber: { type: String, unique: true },
   fuelCustomerName: { type: String },
   address: { type: String },
@@ -33,9 +30,12 @@ const locationSchema = new mongoose.Schema({
   defaultFuelCarrier: { type: mongoose.Schema.Types.ObjectId, ref: "FuelCarrier" },
   availableGrades: [{ type: String, default: [] }],
   gasBuddyStationId: { type: String, required: false },
+
+  // --- Pushover Core Extensions ---
+  pushOverUserKey: { type: String, default: null }, 
+  devices: [pushoverDeviceSchema]
 });
 
 attachSiteAlias(locationSchema, "stationName");
 
-// Export the Location model based on the schema
 module.exports = mongoose.model("Location", locationSchema);
