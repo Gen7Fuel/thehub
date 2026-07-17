@@ -3,6 +3,8 @@ import { TanStackRouterDevtools } from '@tanstack/react-router-devtools'
 import { PwaInstallBanner } from '@/components/custom/PwaInstallBanner'
 import { Button } from '@/components/ui/button'
 import { WifiOff } from 'lucide-react'
+import { useEffect } from 'react'
+import { prefetchLocations } from '@/lib/locationsCache'
 
 // Matches the "couldn't fetch a lazy-loaded route chunk" error across
 // browsers (Chrome: "Failed to fetch dynamically imported module", Firefox:
@@ -35,13 +37,28 @@ function RootErrorComponent({ error }: { error: Error }) {
   return <ErrorComponent error={error} />
 }
 
-export const Route = createRootRoute({
-  component: () => (
+function RootComponent() {
+  // Warms the offline site-list cache from a real React lifecycle hook.
+  // main.tsx also fires this as raw top-level module code, as early as
+  // physically possible (before React even mounts), but that alone proved
+  // unreliable in practice — this effect is the dependable trigger, since
+  // it runs on every route __root wraps (login included) via the normal
+  // mount lifecycle rather than racing page-load timing. GET /api/locations
+  // requires no auth, so there's nothing gating this on login state.
+  useEffect(() => {
+    prefetchLocations()
+  }, [])
+
+  return (
     <>
       <PwaInstallBanner />
       <Outlet />
       <TanStackRouterDevtools />
     </>
-  ),
+  )
+}
+
+export const Route = createRootRoute({
+  component: RootComponent,
   errorComponent: RootErrorComponent,
 })
