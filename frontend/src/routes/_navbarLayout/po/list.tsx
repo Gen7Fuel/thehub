@@ -8,7 +8,7 @@ import { LocationPicker } from '@/components/custom/locationPicker'
 import PurchaseOrderPDF from '@/components/custom/poForm'
 import { pdf } from '@react-pdf/renderer'
 import { Button } from '@/components/ui/button'
-import { Trash2, Camera, Loader2, Calendar } from 'lucide-react'
+import { Trash2, Camera, Loader2, Calendar, AlertTriangle } from 'lucide-react'
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog'
 import { Label } from '@/components/ui/label'
 import { getStartAndEndOfToday, uploadBase64Image } from '@/lib/utils'
@@ -16,7 +16,7 @@ import axios from "axios"
 import { useAuth } from "@/context/AuthContext";
 import { useSite } from "@/context/SiteContext";
 import { formatFleetCardNumber } from '@/lib/utils';
-import { getPendingActions } from '@/lib/orderRecIndexedDB';
+import { getPendingActions, deletePendingAction } from '@/lib/orderRecIndexedDB';
 
 export const Route = createFileRoute('/_navbarLayout/po/list')({
   component: RouteComponent,
@@ -135,33 +135,52 @@ function RouteComponent() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [pendingPOs.length]);
 
-  const pendingRows = pendingPOs
+  const filteredPendingActions = pendingPOs
     .filter((a: any) => a?.payload?.stationName === stationName)
     .filter((a: any) => {
       if (!date?.from || !date?.to) return true;
       const d = a?.payload?.date;
       return d && d >= toYmd(date.from) && d <= toYmd(date.to);
-    })
-    .map((a: any) => ({
-      _id: `pending-${a.queuedAt}`,
-      date: a.payload.date,
-      dateStr: a.payload.date,
-      fleetCardNumber: a.payload.fleetCardNumber,
-      poNumber: a.payload.poNumber,
-      customerName: a.payload.customerName,
-      driverName: a.payload.driverName,
-      quantity: a.payload.quantity,
-      amount: a.payload.amount,
-      description: a.payload.purchaseType === 'non-fuel' ? a.payload.itemsDescription : a.payload.productCode,
-      vehicleMakeModel: a.payload.vehicleMakeModel,
-      licensePlate: a.payload.licensePlate,
-      signature: a.payload.signature,
-      receipt: '',
-      requestReceipt: false,
-      pending: true as const,
-    }));
+    });
 
-  const allOrders = [...pendingRows, ...purchaseOrders];
+  const mapPendingAction = (a: any) => ({
+    _id: `pending-${a.queuedAt}`,
+    date: a.payload.date,
+    dateStr: a.payload.date,
+    fleetCardNumber: a.payload.fleetCardNumber,
+    poNumber: a.payload.poNumber,
+    customerName: a.payload.customerName,
+    driverName: a.payload.driverName,
+    quantity: a.payload.quantity,
+    amount: a.payload.amount,
+    description: a.payload.purchaseType === 'non-fuel' ? a.payload.itemsDescription : a.payload.productCode,
+    vehicleMakeModel: a.payload.vehicleMakeModel,
+    licensePlate: a.payload.licensePlate,
+    signature: a.payload.signature,
+    receipt: '',
+    requestReceipt: false,
+    pending: !a.failed,
+    failed: !!a.failed,
+    failureReason: a.failureReason,
+    _key: a._key,
+  });
+
+  // Permanently-failed submissions (e.g. 403 permission denied, 409
+  // duplicate PO number) will never succeed no matter how many times the
+  // background sync retries — surfaced separately so they don't sit as an
+  // unexplained "pending" spinner forever.
+  const pendingRows = filteredPendingActions.filter((a: any) => !a.failed).map(mapPendingAction);
+  const failedRows = filteredPendingActions.filter((a: any) => a.failed).map(mapPendingAction);
+
+  const allOrders = [...failedRows, ...pendingRows, ...purchaseOrders];
+
+  const dismissFailedPO = async (key: any) => {
+    if (key == null) return;
+    const ok = window.confirm('Remove this failed purchase order from the queue? It was never submitted — re-enter it manually if it still needs to be recorded.');
+    if (!ok) return;
+    await deletePendingAction(key);
+    refreshPendingPOs();
+  };
 
   const generatePDF = async (order: {
     date: string;
@@ -328,7 +347,7 @@ function RouteComponent() {
     }
   }
 
-  const showActionsColumn = !!(access?.po?.pdf || access?.po?.changeDate || access?.po?.delete || purchaseOrders.some(o => o.requestReceipt) || pendingRows.length > 0)
+  const showActionsColumn = !!(access?.po?.pdf || access?.po?.changeDate || access?.po?.delete || purchaseOrders.some(o => o.requestReceipt) || pendingRows.length > 0 || failedRows.length > 0)
 
   return (
     <div className="p-4 border border-dashed border-gray-300 rounded-md">
@@ -357,7 +376,10 @@ function RouteComponent() {
         <span>
           {allOrders.length} {allOrders.length === 1 ? 'entry' : 'entries'}
           {pendingRows.length > 0 && (
-            <span className="text-amber-600"> ({pendingRows.length} pending sync)</span>
+            <span className="text-amber-600"> ({pendingRows.length} pending upload)</span>
+          )}
+          {failedRows.length > 0 && (
+            <span className="text-red-600"> ({failedRows.length} failed)</span>
           )}
         </span>
         <span>Qty: {allOrders.reduce((sum, o) => sum + o.quantity, 0).toFixed(3)}</span>
@@ -383,7 +405,7 @@ function RouteComponent() {
         <tbody>
           {allOrders.length > 0 ? (
             allOrders.map((order: any, index) => (
-              <tr key={order._id ?? index} className={order.pending ? 'bg-amber-50 hover:bg-amber-100' : 'hover:bg-gray-50'}>
+              <tr key={order._id ?? index} className={order.failed ? 'bg-red-50 hover:bg-red-100' : order.pending ? 'bg-amber-50 hover:bg-amber-100' : 'hover:bg-gray-50'}>
                 <td className="border-dashed border-t border-gray-300 px-4 py-2">{
                   order.dateStr || new Date(order.date).toLocaleDateString('en-CA', { timeZone: 'UTC' })
                 }</td>
@@ -396,10 +418,30 @@ function RouteComponent() {
                 <td className="border-dashed border-t border-gray-300 px-4 py-2">{order.licensePlate}</td>
                 {showActionsColumn && (
                   <td className="border-dashed border-t border-gray-300 px-4 py-2 space-x-2">
-                    {order.pending ? (
+                    {order.failed ? (
+                      <span className="text-xs font-medium text-red-700 inline-flex flex-col items-start gap-0.5">
+                        <span className="inline-flex items-center gap-1">
+                          <AlertTriangle className="h-3 w-3" />
+                          Upload failed
+                        </span>
+                        {order.failureReason && (
+                          <span className="text-[10px] text-red-600 max-w-[180px] truncate" title={order.failureReason}>
+                            {order.failureReason}
+                          </span>
+                        )}
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          className="h-6 px-1 text-[10px] text-red-700"
+                          onClick={() => dismissFailedPO(order._key)}
+                        >
+                          Dismiss
+                        </Button>
+                      </span>
+                    ) : order.pending ? (
                       <span className="text-xs font-medium text-amber-700 inline-flex items-center gap-1">
                         <Loader2 className="h-3 w-3 animate-spin" />
-                        Pending sync
+                        Pending upload
                       </span>
                     ) : (
                       <>

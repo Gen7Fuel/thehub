@@ -4,8 +4,7 @@ import { useCallback, useEffect, useState } from 'react'
 import { isTokenExpired } from '../../lib/utils'
 import axios from 'axios'
 import { getSocket } from "@/lib/websocket";
-import { syncPendingActions } from "@/lib/utils"
-import { isActuallyOnline } from "@/lib/network";
+import { triggerBackgroundSync } from "@/lib/utils"
 import { useAuth } from "@/context/AuthContext";
 import { HelpCircle, LogOut, Settings as SettingsIcon, LayoutDashboard, Home as HomeIcon, KeyRound, ExternalLink, Bell } from 'lucide-react'
 import { clearLocalDB } from "@/lib/orderRecIndexedDB";
@@ -81,31 +80,22 @@ export default function Navbar() {
 
 
 
-  // checking for api health and syncing db once in online mode every 1 mins
+  // Global background sync trigger — this navbar is rendered on every
+  // authenticated page (_navbarLayout.tsx), so this is what makes the
+  // offline queue (purchase orders, order rec edits, ...) sync regardless of
+  // which module the user is currently in, not just while on that module's
+  // own page. triggerBackgroundSync() checks connectivity itself and is a
+  // no-op if genuinely offline.
   useEffect(() => {
-    // 1️⃣ Sync when back online
-    const handleOnline = async () => {
-      const online = await isActuallyOnline();
-      if (online) {
-        console.log("🌐 Online — attempting background sync...");
-        syncPendingActions();
-      } else {
-        console.warn("⚠️ Still offline — skipping sync");
-      }
+    const handleOnline = () => {
+      console.log("🌐 Online — attempting background sync...");
+      triggerBackgroundSync();
     };
 
     window.addEventListener("online", handleOnline);
 
-    // Also sync every 1 minute if actually online
-    const interval = setInterval(async () => {
-      const online = await isActuallyOnline();
-      console.log("checking for backend connectivity:", online)
-      if (online) {
-        console.log("Running updates")
-        syncPendingActions();
-      } else {
-        console.warn("⚠️ Offline during periodic check — skipping sync");
-      }
+    const interval = setInterval(() => {
+      triggerBackgroundSync();
     }, 15 * 1000); // 15 sec
 
     return () => {
