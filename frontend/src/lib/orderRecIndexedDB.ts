@@ -41,13 +41,53 @@ export const savePendingAction = async (action: any) => {
   await tx.done;
 };
 
-// ✅ Get all pending actions
-export const getPendingActions = async () => {
+// Enumerate pending actions together with their real IndexedDB keys, so a
+// single entry can be deleted/patched without disturbing the rest of the
+// queue. The store is autoIncrement (no keyPath), so getAll() alone never
+// surfaces keys — getAllKeys() does, in the same result order.
+export const getPendingActionEntries = async (): Promise<{ key: number; action: any }[]> => {
   const db = await getDB();
-  return db.getAll(PENDING_STORE);
+  const tx = db.transaction(PENDING_STORE, 'readonly');
+  const keys = await tx.store.getAllKeys();
+  const actions = await tx.store.getAll();
+  await tx.done;
+  return keys.map((key, i) => ({ key: key as number, action: actions[i] }));
 };
 
-// ✅ Clear all pending actions after successful sync
+// Delete exactly one pending action by its IndexedDB key. Prefer this over
+// clearPendingActions() when acting on specific entries — a blanket clear()
+// can silently drop actions queued concurrently by other code.
+export const deletePendingAction = async (key: number): Promise<void> => {
+  const db = await getDB();
+  const tx = db.transaction(PENDING_STORE, 'readwrite');
+  await tx.store.delete(key);
+  await tx.done;
+};
+
+// Patch a single pending action in place (e.g. to mark a permanent sync
+// failure) without touching its key or any other queued entry.
+export const updatePendingAction = async (key: number, patch: Record<string, any>): Promise<void> => {
+  const db = await getDB();
+  const tx = db.transaction(PENDING_STORE, 'readwrite');
+  const existing = await tx.store.get(key);
+  if (existing) {
+    await tx.store.put({ ...existing, ...patch }, key);
+  }
+  await tx.done;
+};
+
+// ✅ Get all pending actions. Each object additively includes `_key` (its
+// IndexedDB key) so callers that need to delete/patch a specific entry
+// (e.g. dismissing one failed purchase order) can do so via
+// deletePendingAction/updatePendingAction without affecting the rest.
+export const getPendingActions = async () => {
+  const entries = await getPendingActionEntries();
+  return entries.map(({ key, action }) => ({ ...action, _key: key }));
+};
+
+// Clear all pending actions. Kept for compatibility, but prefer
+// deletePendingAction(key) for anything acting on specific entries — this
+// wipes the entire store, which can drop actions added concurrently.
 export const clearPendingActions = async () => {
   const db = await getDB();
   const tx = db.transaction(PENDING_STORE, 'readwrite');
@@ -66,7 +106,10 @@ export const hasPendingActionsForId = async (orderId: string) => {
   const db = await getDB();
   const actions = await db.getAll(PENDING_STORE);
 
-  return actions.some(a => a.orderId === orderId);
+  // Exclude permanently-failed entries — otherwise a 403/404 on a TOGGLE_ITEM
+  // would leave this flag set forever, permanently blocking this order from
+  // ever refreshing from the server again.
+  return actions.some(a => a.orderId === orderId && !a.failed);
 };
 
 // delete any pending actions for a order rec if order is deleted
