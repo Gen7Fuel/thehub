@@ -199,11 +199,19 @@ const fetchLocations = async () => {
     });
     saveCachedLocations(response.data);
     return response.data;
-  } catch {
+  } catch (err) {
     // Offline (or request failed) — fall back to the last successful fetch,
     // warmed as early as app boot (see prefetchLocations in main.tsx), so
     // the picker isn't empty just because this particular page load couldn't
-    // reach the server.
-    return getCachedLocations();
+    // reach the server. Only treat this as a "successful" result when the
+    // cache actually has something in it — React Query marks whatever this
+    // function returns as fresh data for the global 5-minute staleTime, so
+    // returning an empty array here would look identical to a real success
+    // and block any retry (remount, reconnect, window refocus) until that
+    // window expires. Re-throwing on a genuinely empty cache instead lets
+    // React Query's normal retry/refetchOnReconnect behavior keep trying.
+    const cached = getCachedLocations();
+    if (cached.length > 0) return cached;
+    throw err;
   }
 };
