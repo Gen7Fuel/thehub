@@ -11,6 +11,7 @@ import {
 import { useNavigate } from '@tanstack/react-router'
 import { useAuth } from "@/context/AuthContext"
 import { useSite } from "@/context/SiteContext"
+import { getCachedLocations, saveCachedLocations } from "@/lib/locationsCache"
 
 interface Location {
   _id: string
@@ -32,8 +33,14 @@ export function SitePicker({
   label = "Sites",
   className = "w-[180px]"
 }: SitePickerProps) {
-  const [locations, setLocations] = useState<Location[]>([])
-  const [loading, setLoading] = useState(true)
+  // Seeded from the offline cache so the picker shows data immediately on
+  // render instead of depending on the live fetch below ever settling — a
+  // fetch to a host that's reachable at the network layer but not actually
+  // online (dead router, captive portal — common on a tablet's Wi-Fi, unlike
+  // a clean "no connection" disconnect) can hang far longer than a user will
+  // wait, and previously nothing was shown until that fetch's catch block ran.
+  const [locations, setLocations] = useState<Location[]>(() => getCachedLocations<Location>())
+  const [loading, setLoading] = useState(() => getCachedLocations<Location>().length === 0)
   const [error, setError] = useState<string | null>(null)
   const { user } = useAuth()
   const { selectedSite, setSelectedSite } = useSite()
@@ -51,19 +58,37 @@ export function SitePicker({
   useEffect(() => {
     const fetchLocations = async () => {
       try {
-        setLoading(true)
         setError(null)
         const response = await fetch('/api/locations', {
           headers: {
             Authorization: `Bearer ${localStorage.getItem('token')}`
-          }
+          },
+          // Bounds how long a reachable-but-not-actually-online connection
+          // (dead Wi-Fi router, captive portal) can hang this request —
+          // without this, a hung fetch would never reach the catch block
+          // below at all. See network.ts's isActuallyOnline() for the same
+          // pattern already established elsewhere in this codebase.
+          signal: AbortSignal.timeout(5000),
         })
         if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`)
         const data = await response.json()
+        saveCachedLocations(data)
         setLocations(data)
       } catch (error) {
         console.error('Error fetching locations:', error)
-        setError('Failed to load locations')
+        // Offline (or request failed) — fall back to the last successful
+        // fetch instead of showing a permanent error, so the picker isn't
+        // empty just because this particular page load couldn't reach the
+        // server. Only surface the error message if there's truly nothing
+        // to fall back on. (locations/loading already start seeded from this
+        // same cache — this branch mainly matters for a stale-but-nonempty
+        // cache growing stale further, or a genuinely first-ever load.)
+        const cached = getCachedLocations<Location>()
+        if (cached.length > 0) {
+          setLocations(cached)
+        } else {
+          setError('Failed to load locations')
+        }
       } finally {
         setLoading(false)
       }
