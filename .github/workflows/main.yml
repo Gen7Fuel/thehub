@@ -756,6 +756,8 @@ jobs:
             export GOOGLE_API_KEY="${{ secrets.GOOGLE_API_KEY }}"
             export PETROSOFT_USERNAME="${{ secrets.PETROSOFT_USERNAME }}"
             export PETROSOFT_PASSWORD="${{ secrets.PETROSOFT_PASSWORD }}"
+            export GASBUDDY_EMAIL="${{ secrets.GASBUDDY_EMAIL }}"
+            export GASBUDDY_PASSWORD="${{ secrets.GASBUDDY_PASSWORD }}"
 
             # ---- 3. Infrastructure Isolation Guard ----
             echo "Verifying database infrastructure..."
