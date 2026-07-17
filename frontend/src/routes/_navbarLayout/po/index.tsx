@@ -39,7 +39,7 @@ const QUICK_SELECT_CACHE_PREFIX = 'po_cachedQuickSelect_'
 
 // Sites with no PO Number / Fleet Card concept — the Number section is hidden
 // entirely and neither field is submitted with the purchase order.
-const NO_PO_NUMBER_SITES = ['Rankin', 'Sarnia', 'Walpole', 'Jocko Point']
+const NO_PO_NUMBER_SITES = ['Rankin', 'Sarnia', 'Walpole', 'Jocko Point', 'Charlies']
 
 async function loader() {
   try {

@@ -363,7 +363,7 @@ describe('PO Form — index.tsx', () => {
     }, { timeout: 5000 })
   })
 
-  it.each(['Rankin', 'Sarnia', 'Walpole', 'Jocko Point'])('does not render the Number section or OTP input for site "%s"', async (site) => {
+  it.each(['Rankin', 'Sarnia', 'Walpole', 'Jocko Point', 'Charlies'])('does not render the Number section or OTP input for site "%s"', async (site) => {
     mockStore.stationName = site
     renderWithSuspense(<POForm />)
 
@@ -375,7 +375,7 @@ describe('PO Form — index.tsx', () => {
     expect(screen.queryByTestId('otp-input')).not.toBeInTheDocument()
   })
 
-  it.each(['Rankin', 'Sarnia', 'Walpole', 'Jocko Point'])('does not auto-fill a fleet card from quick-select on site "%s"', async (site) => {
+  it.each(['Rankin', 'Sarnia', 'Walpole', 'Jocko Point', 'Charlies'])('does not auto-fill a fleet card from quick-select on site "%s"', async (site) => {
     mockStore.stationName = site
     mockAxiosGet.mockImplementation((url: string) => {
       if (url.includes('quick-select')) {
@@ -493,7 +493,7 @@ describe('PO Form — index.tsx', () => {
     expect(mockStore.setCustomerName).toHaveBeenCalledWith('Three fires development corporation')
   })
 
-  it.each(['Rankin', 'Sarnia', 'Walpole', 'Jocko Point'])('does not pad poNumber to "00000" when clicking Upload Receipt on site "%s"', async (site) => {
+  it.each(['Rankin', 'Sarnia', 'Walpole', 'Jocko Point', 'Charlies'])('does not pad poNumber to "00000" when clicking Upload Receipt on site "%s"', async (site) => {
     mockStore.stationName = site
     mockStore.receipt = null
     renderWithSuspense(<POForm />)
