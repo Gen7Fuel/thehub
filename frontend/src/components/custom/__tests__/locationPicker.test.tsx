@@ -80,4 +80,29 @@ describe('LocationPicker — offline query caching', () => {
     })
     expect(JSON.parse(localStorage.getItem('cachedLocations') || 'null')).toEqual(fetched)
   })
+
+  // Regression coverage: even with the error-vs-success fix above, the query
+  // still started as `undefined`/isPending until fetchLocations() settled —
+  // fine for a fetch that fails fast, but a fetch to a host that's reachable
+  // at the network layer but not actually online (dead router, captive
+  // portal) can hang far longer than a user will wait, with nothing to show
+  // in the meantime despite a warm cache sitting right there. `initialData`
+  // means the query has cached data synchronously on the very first render,
+  // independent of whether/when the live fetch ever settles.
+  it('has the cached data available immediately, synchronously on first render, even while the live fetch is still hung', () => {
+    const cached = [{ _id: '3', stationName: 'Walpole', csoCode: '003', timezone: 'America/Toronto' }]
+    localStorage.setItem('cachedLocations', JSON.stringify(cached))
+    mockAxiosGet.mockReturnValue(new Promise(() => {})) // never resolves — simulates a hung request
+    const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } })
+
+    renderPicker(queryClient)
+
+    // No waitFor — this must be true immediately, before any microtask runs.
+    const state = queryClient.getQueryState(['locations'])
+    expect(state?.status).toBe('success')
+    expect(state?.data).toEqual(cached)
+    // Still marked stale (not trusted for the full 5-minute staleTime), so a
+    // real background refetch attempt still happens.
+    expect(state?.dataUpdatedAt).toBe(0)
+  })
 })

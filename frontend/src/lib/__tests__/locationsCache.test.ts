@@ -72,4 +72,20 @@ describe('prefetchLocations', () => {
     expect(() => prefetchLocations()).not.toThrow()
     await new Promise((r) => setTimeout(r, 0))
   })
+
+  // Regression coverage: without a bounded signal, a fetch to a host that's
+  // reachable at the network layer but not actually online (dead router,
+  // captive portal) can hang indefinitely instead of failing, so this
+  // fire-and-forget prefetch would never get around to warming the cache at
+  // all for that session.
+  it('bounds the request with an abort signal, so a hung connection cannot block this indefinitely', () => {
+    const fetchSpy = vi.fn().mockResolvedValue({ ok: true, json: () => Promise.resolve([]) })
+    vi.stubGlobal('fetch', fetchSpy)
+
+    prefetchLocations()
+
+    expect(fetchSpy).toHaveBeenCalledWith('/api/locations', expect.objectContaining({
+      signal: expect.any(AbortSignal),
+    }))
+  })
 })
