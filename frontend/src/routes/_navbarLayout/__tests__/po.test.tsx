@@ -408,6 +408,64 @@ describe('PO Form — index.tsx', () => {
     expect(mockStore.setCustomerName).toHaveBeenCalledWith('Batchewana Frist Nation of Ojibways')
   })
 
+  it('falls back to the cached AR customer list when the fetch fails (offline)', async () => {
+    localStorage.setItem('po_cachedArCustomers', JSON.stringify([{ _id: 'c1', name: 'Jane Doe Trucking' }]))
+    mockAxiosGet.mockImplementation((url: string) => {
+      if (url.includes('ar-customers/quick-select')) return Promise.resolve({ data: [] })
+      if (url.includes('ar-customers')) {
+        return Promise.reject(Object.assign(new Error('Network Error'), { isAxiosErr: true }))
+      }
+      return Promise.resolve({ data: [] })
+    })
+
+    renderWithSuspense(<POForm />)
+
+    const nameInput = await waitFor(() => screen.getByDisplayValue('Jane Doe'), { timeout: 5000 })
+    fireEvent.focus(nameInput)
+
+    await waitFor(() => expect(screen.getByText('Jane Doe Trucking')).toBeInTheDocument())
+
+    localStorage.removeItem('po_cachedArCustomers')
+  })
+
+  it('caches the AR customer list to localStorage on a successful fetch', async () => {
+    localStorage.removeItem('po_cachedArCustomers')
+    const fetchedCustomers = [{ _id: 'c2', name: 'Acme Co' }]
+    mockAxiosGet.mockImplementation((url: string) => {
+      if (url.includes('ar-customers/quick-select')) return Promise.resolve({ data: [] })
+      if (url.includes('ar-customers')) return Promise.resolve({ data: fetchedCustomers })
+      return Promise.resolve({ data: [] })
+    })
+
+    renderWithSuspense(<POForm />)
+
+    await waitFor(() => {
+      const cached = localStorage.getItem('po_cachedArCustomers')
+      expect(cached ? JSON.parse(cached) : null).toEqual(fetchedCustomers)
+    }, { timeout: 5000 })
+  })
+
+  it('falls back to the cached quick-select list for a station when the fetch fails (offline)', async () => {
+    // mockStore.stationName defaults to 'TestSite' (see resetStore)
+    localStorage.setItem('po_cachedQuickSelect_TestSite', JSON.stringify([
+      { _id: 'qc1', name: 'Cached Customer', fleetCardNumber: '', order: 0 },
+    ]))
+    mockAxiosGet.mockImplementation((url: string) => {
+      if (url.includes('ar-customers/quick-select')) {
+        return Promise.reject(Object.assign(new Error('Network Error'), { isAxiosErr: true }))
+      }
+      return Promise.resolve({ data: [] })
+    })
+
+    renderWithSuspense(<POForm />)
+
+    await waitFor(() =>
+      expect(screen.getByRole('button', { name: 'Cached' })).toBeInTheDocument()
+    , { timeout: 5000 })
+
+    localStorage.removeItem('po_cachedQuickSelect_TestSite')
+  })
+
   it('shows a custom label on the quick-select button instead of the first word, when set', async () => {
     mockAxiosGet.mockImplementation((url: string) => {
       if (url.includes('quick-select')) {
