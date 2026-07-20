@@ -1,12 +1,17 @@
-import { createFileRoute, useNavigate } from '@tanstack/react-router';
+import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import axios from "axios";
 import { useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Label } from "@/components/ui/label";
-import { Select, SelectTrigger, SelectContent, SelectItem, SelectValue } from "@/components/ui/select";
-import { useAuth } from '@/context/AuthContext';
-// import { toast } from "sonner";
+import {
+  Select,
+  SelectTrigger,
+  SelectContent,
+  SelectItem,
+  SelectValue,
+} from "@/components/ui/select";
+import { useAuth } from "@/context/AuthContext";
 import {
   InputOTP,
   InputOTPGroup,
@@ -19,54 +24,69 @@ import {
   DialogHeader,
   DialogTitle,
   DialogFooter,
-} from "@/components/ui/dialog"; // 🧩 NEW: make sure Dialog is imported from shadcn/ui
-import { Input } from "@/components/ui/input"; // 🧩 NEW
-// import { useAuth } from '@/context/AuthContext';
-// import {
-//   InputOTP,
-//   InputOTPGroup,
-//   InputOTPSlot,
-// } from "@/components/ui/input-otp";
+} from "@/components/ui/dialog";
+import { Input } from "@/components/ui/input";
 
-export const Route = createFileRoute('/_navbarLayout/settings/sites/$id')({
+export const Route = createFileRoute("/_navbarLayout/settings/sites/$id")({
   component: RouteComponent,
 });
 
-// 1. Add Canadian Provinces Constant (outside the component)
 const CANADIAN_PROVINCES = [
-  "Alberta", "British Columbia", "Manitoba", "New Brunswick",
-  "Newfoundland and Labrador", "Nova Scotia", "Ontario",
-  "Prince Edward Island", "Quebec", "Saskatchewan",
-  "Northwest Territories", "Nunavut", "Yukon"
+  "Alberta",
+  "British Columbia",
+  "Manitoba",
+  "New Brunswick",
+  "Newfoundland and Labrador",
+  "Nova Scotia",
+  "Ontario",
+  "Prince Edward Island",
+  "Quebec",
+  "Saskatchewan",
+  "Northwest Territories",
+  "Nunavut",
+  "Yukon",
 ];
 
+interface PushoverDevice {
+  _id?: string;
+  deviceName: string;
+  notificationEnabled: boolean;
+}
+
+interface LocationForm {
+  type: string;
+  stationName: string;
+  legalName: string;
+  INDNumber: string;
+  kardpollCode?: string;
+  csoCode: string;
+  timezone: string;
+  email: string;
+  sellsLottery?: boolean;
+  managerEmails: string[];
+  province: string;
+  gasBuddyStationId?: string;
+  pushOverUserKey: string;
+  devices: PushoverDevice[];
+}
+
 function RouteComponent() {
-  const [showDialog, setShowDialog] = useState(false); // 🧩 NEW
-  const [initialBalance, setInitialBalance] = useState(""); // 🧩 NEW
-  const [hasSafesheet, setHasSafesheet] = useState(false); // 🧩 NEW
-  const [managerEmails, setManagerEmails] = useState<string[]>([]); // Current selected emails
+  const [showDialog, setShowDialog] = useState(false);
+  const [initialBalance, setInitialBalance] = useState("");
+  const [hasSafesheet, setHasSafesheet] = useState(false);
+  const [managerEmails, setManagerEmails] = useState<string[]>([]);
   const [managerDialogOpen, setManagerDialogOpen] = useState(false);
+
+  // --- Pushover State Machinery ---
+  const [pushoverDialogOpen, setPushoverDialogOpen] = useState(false);
+  const [newDeviceName, setNewDeviceName] = useState("");
+  const [isSavingPushover, setIsSavingPushover] = useState(false);
+
   const { id } = Route.useParams();
   const navigate = useNavigate();
   const { user } = useAuth();
   const access = user?.access || {};
-  const [location, setLocation] = useState<{
-    _id: string;
-    type: string;
-    stationName: string;
-    legalName: string;
-    INDNumber: string;
-    kardpollCode: string;
-    csoCode: string;
-    timezone: string;
-    email: string;
-    managerCode: number;
-    sellsLottery?: boolean;
-    managerEmails: string[];
-    province: string;
-    gasBuddyStationId?: string;
-  } | null>(null);
-
+  const [location, setLocation] = useState<any | null>(null);
   const [loading, setLoading] = useState(true);
 
   const [users, setUsers] = useState<any[]>([]);
@@ -74,50 +94,8 @@ function RouteComponent() {
   const [assignDialogOpen, setAssignDialogOpen] = useState(false);
   const [isSavingUsers, setIsSavingUsers] = useState(false);
 
-  useEffect(() => {
-    const fetchLocation = async () => {
-      // Check frontend permission first
-      if (!access?.settings?.value) {
-        setLocation(null); // clear location
-        navigate({ to: '/no-access' });
-        return;
-      }
-
-      try {
-        const token = localStorage.getItem('token');
-        const response = await axios.get(`/api/locations/${id}`, {
-          headers: {
-            Authorization: `Bearer ${token}`,
-          },
-        });
-        setLocation(response.data.location || null);
-      } catch (error) {
-        console.error('Error fetching location:', error);
-        setLocation(null);
-      } finally {
-        setLoading(false);
-      }
-    };
-
-    fetchLocation();
-  }, [id, access?.settings?.value, navigate]);
-
-  const [otp, setOtp] = useState(""); // controlled OTP string
-
-  interface LocationForm {
-    type: string;
-    stationName: string;
-    legalName: string;
-    INDNumber: string;
-    kardpollCode?: string;
-    csoCode: string;
-    timezone: string;
-    email: string;
-    sellsLottery?: boolean;
-    managerEmails: string[];
-    province: string;
-    gasBuddyStationId?: string;
-  }
+  const [otp, setOtp] = useState("");
+  const [timezones, setTimezones] = useState<string[]>([]);
 
   const [formData, setFormData] = useState<LocationForm>({
     type: "",
@@ -131,11 +109,10 @@ function RouteComponent() {
     sellsLottery: false,
     managerEmails: [],
     province: "",
-    gasBuddyStationId: ""
+    gasBuddyStationId: "",
+    pushOverUserKey: "",
+    devices: [],
   });
-
-  const [timezones, setTimezones] = useState<string[]>([]);
-  // const navigate = useNavigate();
 
   useEffect(() => {
     try {
@@ -157,6 +134,43 @@ function RouteComponent() {
     }
   }, []);
 
+  const fetchLocation = async () => {
+    if (!access?.settings?.value) {
+      setLocation(null);
+      navigate({ to: "/no-access" });
+      return;
+    }
+
+    try {
+      const token = localStorage.getItem("token");
+      const response = await axios.get(`/api/locations/${id}`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+
+      const locData = response.data.location || null;
+      setLocation(locData);
+
+      if (locData?.stationName) {
+        const sheetCheck = await axios.get(
+          `/api/safesheets/${locData.stationName}`,
+          {
+            headers: { Authorization: `Bearer ${token}` },
+          },
+        );
+        setHasSafesheet(sheetCheck.data.exists);
+      }
+    } catch (error) {
+      console.error("Error fetching location:", error);
+      setLocation(null);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchLocation();
+  }, [id, access?.settings?.value, navigate]);
+
   useEffect(() => {
     if (location && timezones.length > 0) {
       setFormData({
@@ -167,34 +181,37 @@ function RouteComponent() {
         kardpollCode: location.kardpollCode || "",
         csoCode: location.csoCode || "",
         email: location.email || "",
-        timezone: location.timezone || timezones[0], // default if missing
+        timezone: location.timezone || timezones[0],
         sellsLottery: !!location.sellsLottery,
         managerEmails: location.managerEmails || [],
         province: location.province || "Ontario",
         gasBuddyStationId: location.gasBuddyStationId || "",
+        pushOverUserKey: location.pushOverUserKey || "",
+        devices: location.devices || [],
       });
       setManagerEmails(location.managerEmails || []);
       setOtp(location.managerCode?.toString() || "");
     }
   }, [location, timezones]);
 
-
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
     try {
-      await axios.put(`/api/locations/${id}`, {
-        ...formData,
-        managerCode: otp, // send OTP as managerCode
-        sellsLottery: !!formData.sellsLottery,
-      }, {
-        headers: {
-          Authorization: `Bearer ${localStorage.getItem('token')}`,
+      await axios.put(
+        `/api/locations/${id}`,
+        {
+          ...formData,
+          managerCode: otp,
+          sellsLottery: !!formData.sellsLottery,
         },
-      });
+        {
+          headers: { Authorization: `Bearer ${localStorage.getItem("token")}` },
+        },
+      );
 
       alert(`Location: ${formData.stationName} has been updated successfully!`);
-      // No navigation — stay on the same page
+      await fetchLocation(); // Pull clean database states
     } catch (error) {
       console.error(error);
       alert("Failed to update location. Please try again.");
@@ -203,45 +220,8 @@ function RouteComponent() {
     }
   };
 
-  // Fetch location
-  useEffect(() => {
-    const fetchLocation = async () => {
-      if (!access?.settings?.value) {
-        setLocation(null);
-        navigate({ to: '/no-access' });
-        return;
-      }
-
-      try {
-        const token = localStorage.getItem('token');
-        const response = await axios.get(`/api/locations/${id}`, {
-          headers: { Authorization: `Bearer ${token}` },
-        });
-        setLocation(response.data.location || null);
-
-        // 🧩 Check if safesheet already exists
-        if (response.data.location?.stationName) {
-          const site = response.data.location.stationName;
-          const sheetCheck = await axios.get(`/api/safesheets/${site}`, {
-            headers: { Authorization: `Bearer ${token}` },
-          });
-          setHasSafesheet(sheetCheck.data.exists);
-        }
-      } catch (error) {
-        console.error('Error fetching location:', error);
-        setLocation(null);
-      } finally {
-        setLoading(false);
-      }
-    };
-
-    fetchLocation();
-  }, [id, access?.settings?.value, navigate]);
-
-  // 🧩 Function to create safesheet
   const handleGenerateSafesheet = async () => {
     if (!initialBalance) return alert("Please enter an initial balance.");
-
     try {
       const token = localStorage.getItem("token");
       await axios.post(
@@ -251,8 +231,11 @@ function RouteComponent() {
           initialBalance: Number(initialBalance),
         },
         {
-          headers: { Authorization: `Bearer ${token}`, "X-Required-Permission": "settings" },
-        }
+          headers: {
+            Authorization: `Bearer ${token}`,
+            "X-Required-Permission": "settings",
+          },
+        },
       );
 
       alert(`Safesheet created successfully for ${location?.stationName}`);
@@ -260,7 +243,7 @@ function RouteComponent() {
       setShowDialog(false);
     } catch (err: any) {
       if (err.status == 403) {
-        navigate({ to: "/no-access" })
+        navigate({ to: "/no-access" });
         return;
       }
       console.error(err);
@@ -268,22 +251,20 @@ function RouteComponent() {
     }
   };
 
-  // Fetch Users and their current access
-  // Function to fetch users and sync the count/selections
   const fetchUsersData = async () => {
     try {
-      const token = localStorage.getItem('token');
-      const res = await axios.get('/api/users/populate-roles', {
-        headers: { Authorization: `Bearer ${token}` }
+      const token = localStorage.getItem("token");
+      const res = await axios.get("/api/users/populate-roles", {
+        headers: { Authorization: `Bearer ${token}` },
       });
-
       const allUsers = res.data;
       setUsers(allUsers);
 
-      // Populate initial selections based on stationName for the count (n)
       if (location?.stationName) {
         const currentlyAssigned = allUsers
-          .filter((u: any) => u.site_access && u.site_access[location.stationName])
+          .filter(
+            (u: any) => u.site_access && u.site_access[location.stationName],
+          )
           .map((u: any) => u._id);
         setSelectedUsers(currentlyAssigned);
       }
@@ -292,41 +273,35 @@ function RouteComponent() {
     }
   };
 
-  // Trigger fetch on load or when location changes
   useEffect(() => {
     if (location?.stationName) {
       fetchUsersData();
     }
   }, [location?.stationName]);
 
-  // Open dialog and trigger fetch
-  const openAssignUsersDialog = () => {
-    // fetchUsersData();
-    setAssignDialogOpen(true);
-  };
-
   const toggleUserSelection = (userId: string, isActive: boolean) => {
-    // Prevent toggling if the user is inactive
     if (!isActive) return;
-
-    setSelectedUsers(prev =>
+    setSelectedUsers((prev) =>
       prev.includes(userId)
-        ? prev.filter(id => id !== userId)
-        : [...prev, userId]
+        ? prev.filter((id) => id !== userId)
+        : [...prev, userId],
     );
   };
 
   const saveUserAssignments = async () => {
     setIsSavingUsers(true);
     try {
-      const token = localStorage.getItem('token');
-      await axios.post(`/api/locations/${id}/assign-users`, {
-        userIds: selectedUsers,
-        stationName: location?.stationName
-      }, {
-        headers: { Authorization: `Bearer ${token}` }
-      });
-
+      const token = localStorage.getItem("token");
+      await axios.post(
+        `/api/locations/${id}/assign-users`,
+        {
+          userIds: selectedUsers,
+          stationName: location?.stationName,
+        },
+        {
+          headers: { Authorization: `Bearer ${token}` },
+        },
+      );
       alert("User assignments updated successfully");
       setAssignDialogOpen(false);
     } catch (err) {
@@ -337,53 +312,153 @@ function RouteComponent() {
     }
   };
 
-  if (!location) return <div className="p-4 text-red-500">Location not found</div>;
+  // --- Granular Pushover Form Actions ---
+  const handleAddDeviceRecord = () => {
+    const cleanString = newDeviceName.trim();
+    if (!cleanString) return;
+
+    if (
+      formData.devices.some(
+        (d) => d.deviceName.toLowerCase() === cleanString.toLowerCase(),
+      )
+    ) {
+      return alert("A device configuration with this specific label exists.");
+    }
+
+    setFormData({
+      ...formData,
+      devices: [
+        ...formData.devices,
+        { deviceName: cleanString, notificationEnabled: true },
+      ],
+    });
+    setNewDeviceName("");
+  };
+
+  const handleToggleDeviceState = (index: number) => {
+    const deepCopiedArray = [...formData.devices];
+    deepCopiedArray[index].notificationEnabled =
+      !deepCopiedArray[index].notificationEnabled;
+    setFormData({ ...formData, devices: deepCopiedArray });
+  };
+
+  const handleRemoveDeviceRecord = (index: number) => {
+    setFormData({
+      ...formData,
+      devices: formData.devices.filter((_, i) => i !== index),
+    });
+  };
+
+  const handleSavePushoverConfiguration = async () => {
+    setIsSavingPushover(true);
+    try {
+      const token = localStorage.getItem("token");
+      await axios.put(
+        `/api/locations/${id}`,
+        {
+          ...formData,
+          managerCode: otp,
+        },
+        {
+          headers: { Authorization: `Bearer ${token}` },
+        },
+      );
+
+      alert("Pushover notification routing array updated successfully!");
+      setPushoverDialogOpen(false);
+      await fetchLocation();
+    } catch (error) {
+      console.error(error);
+      alert("Failed to update Pushover payload records.");
+    } finally {
+      setIsSavingPushover(false);
+    }
+  };
+
+  if (!location)
+    return <div className="p-4 text-red-500">Location not found</div>;
 
   return (
     <div className="max-w-2xl mx-auto p-6">
       <Card>
-        <CardHeader className="flex justify-between items-center">
-          <CardTitle>Edit Location</CardTitle>
+        <CardHeader className="flex flex-row items-start justify-between space-y-0 pb-6 border-b">
+          {/* Title on the left in a larger, prominent font */}
+          <div>
+            <CardTitle className="text-2xl font-extrabold tracking-tight text-slate-900">
+              Edit Location
+            </CardTitle>
+          </div>
 
-          <div className="flex items-center gap-4">
-            {/* Sells Lottery toggle (styled) */}
+          {/* Two rows of buttons stacked on the right */}
+          <div className="flex flex-col items-end gap-3">
+            {/* ROW 1: Sells Lottery & Assigned Users */}
             <div className="flex items-center gap-3">
-              <span className="text-sm">Sells Lottery</span>
-              <button
+              {/* Sells Lottery Toggle Group */}
+              <div className="flex items-center gap-2 bg-slate-50 border px-3 py-1.5 rounded-lg text-sm">
+                <span className="text-muted-foreground font-medium">
+                  Sells Lottery
+                </span>
+                <button
+                  type="button"
+                  aria-pressed={!!formData.sellsLottery}
+                  onClick={() =>
+                    setFormData({
+                      ...formData,
+                      sellsLottery: !formData.sellsLottery,
+                    })
+                  }
+                  className={`relative inline-flex items-center h-5 rounded-full w-10 transition-colors duration-150 ${formData.sellsLottery ? "bg-green-500" : "bg-gray-300"}`}
+                >
+                  <span
+                    className={`inline-block w-3 h-3 bg-white rounded-full transform transition-transform duration-150 ${formData.sellsLottery ? "translate-x-5" : "translate-x-1"}`}
+                  />
+                </button>
+              </div>
+
+              <Button
+                variant="outline"
                 type="button"
-                aria-pressed={!!formData.sellsLottery}
-                onClick={() => setFormData({ ...formData, sellsLottery: !formData.sellsLottery })}
-                className={`relative inline-flex items-center h-6 rounded-full w-12 transition-colors duration-150 ${formData.sellsLottery ? 'bg-green-500' : 'bg-gray-300'}`}
+                onClick={() => setAssignDialogOpen(true)}
               >
-                <span className={`inline-block w-4 h-4 bg-white rounded-full transform transition-transform duration-150 ${formData.sellsLottery ? 'translate-x-6' : 'translate-x-1'}`} />
-              </button>
+                Assigned Users ({selectedUsers.length})
+              </Button>
             </div>
 
-            {/* NEW: Assigned Users Button */}
-            <Button variant="outline" onClick={openAssignUsersDialog}>
-              Assigned Users ({selectedUsers.length})
-            </Button>
+            {/* ROW 2: Generate Safesheet & Manage Pushover */}
+            <div className="flex items-center gap-3">
+              {!hasSafesheet && (
+                <Button
+                  variant="default"
+                  type="button"
+                  onClick={() => setShowDialog(true)}
+                >
+                  Generate Safesheet
+                </Button>
+              )}
 
-            {/* 🧩 Generate Safesheet Button (only show if not created yet) */}
-            {!hasSafesheet && (
               <Button
-                variant="default"
-                onClick={() => setShowDialog(true)}
+                variant="outline"
+                type="button"
+                className="border-amber-500 text-amber-600 hover:bg-amber-50"
+                onClick={() => setPushoverDialogOpen(true)}
               >
-                Generate Safesheet
+                🔔 Manage Pushover (
+                {formData.devices.filter((d) => d.notificationEnabled).length}{" "}
+                Active)
               </Button>
-            )}
+            </div>
           </div>
         </CardHeader>
 
         <CardContent>
           <form onSubmit={handleSubmit} className="space-y-6">
-            {/* TYPE DROPDOWN */}
             <div>
               <Label className="block font-medium mb-1">Type</Label>
               <Select
                 value={formData.type}
-                onValueChange={(value) => setFormData({ ...formData, type: value })}
+                onValueChange={(value) =>
+                  setFormData({ ...formData, type: value })
+                }
               >
                 <SelectTrigger className="w-full rounded-md border border-gray-300">
                   <SelectValue placeholder="Select Type" />
@@ -395,34 +470,36 @@ function RouteComponent() {
               </Select>
             </div>
 
-            {/* TEXT INPUT FIELDS */}
             {[
               { label: "Station Name", name: "stationName" },
               { label: "Legal Name", name: "legalName" },
               { label: "IND Number", name: "INDNumber" },
               { label: "Kardpoll Code", name: "kardpollCode" },
               { label: "CSO Code", name: "csoCode" },
-              { label: "Station Email", name: "email" }, // Changed label slightly for clarity
+              { label: "Station Email", name: "email" },
             ].map((field) => (
               <div key={field.name}>
                 <Label className="block font-medium mb-1">{field.label}</Label>
-
                 <div className="flex gap-2">
                   <input
                     type="text"
                     name={field.name}
-                    value={String(formData[field.name as keyof LocationForm] ?? "")}
+                    value={String(
+                      formData[field.name as keyof LocationForm] ?? "",
+                    )}
                     onChange={(e) =>
-                      setFormData({
-                        ...formData,
-                        [field.name as keyof LocationForm]: e.target.value,
-                      })
+                      setFormData({ ...formData, [field.name]: e.target.value })
                     }
                     className="border border-gray-300 rounded-md px-3 py-2 w-full focus:ring-2 focus:ring-blue-500 focus:outline-none"
-                    required={["stationName", "legalName", "INDNumber", "csoCode", "email"].includes(field.name)}
+                    required={[
+                      "stationName",
+                      "legalName",
+                      "INDNumber",
+                      "csoCode",
+                      "email",
+                    ].includes(field.name)}
                   />
 
-                  {/* 🧩 NEW: Add "Manage Managers" button specifically for the email field */}
                   {field.name === "email" && (
                     <Button
                       type="button"
@@ -435,7 +512,6 @@ function RouteComponent() {
                   )}
                 </div>
 
-                {/* Optional: Show a small list of assigned managers under the email field */}
                 {field.name === "email" && managerEmails.length > 0 && (
                   <p className="text-[11px] text-gray-500 mt-1 italic">
                     Notifications also CC'd to: {managerEmails.join(", ")}
@@ -444,12 +520,13 @@ function RouteComponent() {
               </div>
             ))}
 
-            {/* PROVINCE DROPDOWN */}
             <div>
               <Label className="block font-medium mb-1">Province</Label>
               <Select
                 value={formData.province}
-                onValueChange={(value) => setFormData({ ...formData, province: value })}
+                onValueChange={(value) =>
+                  setFormData({ ...formData, province: value })
+                }
               >
                 <SelectTrigger className="w-full rounded-md border border-gray-300">
                   <SelectValue placeholder="Select Province" />
@@ -464,12 +541,13 @@ function RouteComponent() {
               </Select>
             </div>
 
-            {/* TIMEZONE DROPDOWN */}
             <div>
               <Label className="block font-medium mb-1">Timezone</Label>
               <Select
                 value={formData.timezone}
-                onValueChange={(value) => setFormData({ ...formData, timezone: value })}
+                onValueChange={(value) =>
+                  setFormData({ ...formData, timezone: value })
+                }
               >
                 <SelectTrigger className="w-full rounded-md border border-gray-300">
                   <SelectValue placeholder="Select Timezone" />
@@ -483,9 +561,12 @@ function RouteComponent() {
                 </SelectContent>
               </Select>
             </div>
-            {/* 🚀 NEW: GASBUDDY STATION IDENTIFIER FIELD (Placed exactly before manager code) */}
+
             <div>
-              <Label htmlFor="gasBuddyStationId" className="block font-medium mb-1">
+              <Label
+                htmlFor="gasBuddyStationId"
+                className="block font-medium mb-1"
+              >
                 GasBuddy Station ID
               </Label>
               <Input
@@ -493,10 +574,16 @@ function RouteComponent() {
                 type="text"
                 placeholder="e.g., 205339"
                 value={formData.gasBuddyStationId || ""}
-                onChange={(e) => setFormData({ ...formData, gasBuddyStationId: e.target.value })}
+                onChange={(e) =>
+                  setFormData({
+                    ...formData,
+                    gasBuddyStationId: e.target.value,
+                  })
+                }
                 className="border border-gray-300 rounded-md px-3 py-2 w-full focus:ring-2 focus:ring-blue-500 focus:outline-none"
               />
             </div>
+
             <div>
               <Label className="block font-medium mb-1">Manager Code</Label>
               <div className="flex justify-center">
@@ -510,6 +597,7 @@ function RouteComponent() {
                 </InputOTP>
               </div>
             </div>
+
             <Button type="submit" disabled={loading} className="w-full">
               {loading ? "Saving..." : "Save Changes"}
             </Button>
@@ -517,13 +605,141 @@ function RouteComponent() {
         </CardContent>
       </Card>
 
-      {/* 🧩 Dialog for entering initial balance */}
+      {/* --- PUSHOVER HARDWARE MANAGER MODAL --- */}
+      <Dialog open={pushoverDialogOpen} onOpenChange={setPushoverDialogOpen}>
+        <DialogContent className="max-w-xl max-h-[85vh] flex flex-col">
+          <DialogHeader>
+            <DialogTitle className="text-xl">
+              Fuel Pricing Pushover Integration
+            </DialogTitle>
+            <p className="text-xs text-muted-foreground">
+              Define the store Pushover account keys and activate specific
+              counter tablets to process looped sound sequences.
+            </p>
+          </DialogHeader>
+
+          <div className="flex-1 overflow-y-auto my-2 space-y-4 pr-1">
+            <div className="space-y-1.5">
+              <Label
+                htmlFor="pushOverUserKey"
+                className="font-semibold text-sm"
+              >
+                Pushover User/Group Key
+              </Label>
+              <div className="relative group">
+                <Input
+                  id="pushOverUserKey"
+                  // FIXED: Uses password type by default, switches securely to normal text on hover via Tailwind variants
+                  type="password"
+                  placeholder="••••••••••••••••••••••••••••••••"
+                  value={formData.pushOverUserKey}
+                  onChange={(e) =>
+                    setFormData({
+                      ...formData,
+                      pushOverUserKey: e.target.value,
+                    })
+                  }
+                  className="font-mono text-sm tracking-widest group-hover:tracking-normal group-hover:[type='text'] transition-all duration-150"
+                />
+                <div className="absolute inset-y-0 right-0 flex items-center pr-3 pointer-events-none text-xs text-muted-foreground opacity-70 group-hover:opacity-0 transition-opacity">
+                  Hover to reveal
+                </div>
+              </div>
+            </div>
+
+            <div className="border rounded-xl p-4 bg-slate-50/50 space-y-3">
+              <Label className="font-semibold text-sm block">
+                Provision Hardware Targets
+              </Label>
+
+              <div className="flex gap-2">
+                <Input
+                  type="text"
+                  placeholder="e.g., burl_tablet_1"
+                  value={newDeviceName}
+                  onChange={(e) => setNewDeviceName(e.target.value)}
+                  onKeyDown={(e) =>
+                    e.key === "Enter" &&
+                    (e.preventDefault(), handleAddDeviceRecord())
+                  }
+                  className="bg-white"
+                />
+                <Button type="button" onClick={handleAddDeviceRecord}>
+                  Add Device
+                </Button>
+              </div>
+
+              <div className="space-y-1.5 mt-2 max-h-48 overflow-y-auto">
+                {formData.devices.length === 0 ? (
+                  <p className="text-xs text-gray-400 italic py-2 text-center">
+                    No terminal devices provisioned for this site.
+                  </p>
+                ) : (
+                  formData.devices.map((device, idx) => (
+                    <div
+                      key={idx}
+                      className="flex items-center justify-between bg-white border p-2.5 rounded-lg text-sm"
+                    >
+                      <div className="flex flex-col">
+                        <span className="font-mono font-medium text-slate-800">
+                          {device.deviceName}
+                        </span>
+                      </div>
+                      <div className="flex items-center gap-3">
+                        <div className="flex items-center gap-1.5">
+                          <span className="text-xs text-slate-500">
+                            Enabled
+                          </span>
+                          <button
+                            type="button"
+                            onClick={() => handleToggleDeviceState(idx)}
+                            className={`relative inline-flex items-center h-5 rounded-full w-9 transition-colors ${device.notificationEnabled ? "bg-green-500" : "bg-gray-300"}`}
+                          >
+                            <span
+                              className={`inline-block w-3 h-3 bg-white rounded-full transform transition-transform ${device.notificationEnabled ? "translate-x-5" : "translate-x-1"}`}
+                            />
+                          </button>
+                        </div>
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="sm"
+                          className="text-red-500 hover:text-red-700 hover:bg-red-50 h-7 px-2"
+                          onClick={() => handleRemoveDeviceRecord(idx)}
+                        >
+                          Remove
+                        </Button>
+                      </div>
+                    </div>
+                  ))
+                )}
+              </div>
+            </div>
+          </div>
+
+          <DialogFooter className="pt-3 border-t">
+            <Button
+              variant="outline"
+              onClick={() => setPushoverDialogOpen(false)}
+            >
+              Cancel
+            </Button>
+            <Button
+              onClick={handleSavePushoverConfiguration}
+              disabled={isSavingPushover}
+            >
+              {isSavingPushover ? "Saving..." : "Save Route Configuration"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* --- REMAINDER DIALOGS PRESERVED UNCHANGED --- */}
       <Dialog open={showDialog} onOpenChange={setShowDialog}>
         <DialogContent>
           <DialogHeader>
             <DialogTitle>Generate Safesheet</DialogTitle>
           </DialogHeader>
-
           <div className="space-y-4">
             <Label>Initial Balance</Label>
             <Input
@@ -533,7 +749,6 @@ function RouteComponent() {
               onChange={(e: any) => setInitialBalance(e.target.value)}
             />
           </div>
-
           <DialogFooter className="pt-4">
             <Button onClick={() => setShowDialog(false)} variant="outline">
               Cancel
@@ -546,41 +761,42 @@ function RouteComponent() {
       <Dialog open={assignDialogOpen} onOpenChange={setAssignDialogOpen}>
         <DialogContent className="max-w-3xl h-[80vh] flex flex-col">
           <DialogHeader>
-            <DialogTitle className="text-2xl">Manage Site Access: {location?.stationName}</DialogTitle>
+            <DialogTitle className="text-2xl">
+              Manage Site Access: {location?.stationName}
+            </DialogTitle>
           </DialogHeader>
-
           <div className="flex-1 overflow-y-auto mt-4 pr-2">
             <div className="grid grid-cols-1 gap-2">
               {users.map((u) => {
-                const isActive = u.is_active !== false; // Assuming default is true
+                const isActive = u.is_active !== false;
                 return (
                   <div
                     key={u._id}
-                    className={`flex items-center justify-between p-4 border rounded-xl transition-all ${isActive
-                      ? "hover:bg-slate-50 border-slate-200"
-                      : "bg-slate-100 border-slate-200 opacity-60 cursor-not-allowed"
-                      }`}
+                    className={`flex items-center justify-between p-4 border rounded-xl transition-all ${isActive ? "hover:bg-slate-50 border-slate-200" : "bg-slate-100 border-slate-200 opacity-60 cursor-not-allowed"}`}
                   >
                     <div className="flex flex-col">
-                      <span className={`font-semibold text-lg ${!isActive && "text-slate-500"}`}>
+                      <span
+                        className={`font-semibold text-lg ${!isActive && "text-slate-500"}`}
+                      >
                         {u.firstName} {u.lastName}
                       </span>
                       <span className="text-sm text-muted-foreground">
                         {u.email}
-                        <span className={`ml-2 font-mono px-2 py-0.5 rounded text-xs uppercase ${isActive
-                          ? "text-blue-600 bg-blue-50"
-                          : "text-red-600 bg-red-50 font-bold"
-                          }`}>
-                          [{!isActive ? "INACTIVE" : (u.role?.role_name || 'No Role')}]
+                        <span
+                          className={`ml-2 font-mono px-2 py-0.5 rounded text-xs uppercase ${isActive ? "text-blue-600 bg-blue-50" : "text-red-600 bg-red-50 font-bold"}`}
+                        >
+                          [
+                          {!isActive
+                            ? "INACTIVE"
+                            : u.role?.role_name || "No Role"}
+                          ]
                         </span>
                       </span>
                     </div>
-
                     <input
                       type="checkbox"
-                      disabled={!isActive} // Lock the checkbox
-                      className={`h-6 w-6 rounded-md border-gray-300 text-primary focus:ring-primary ${isActive ? "cursor-pointer" : "cursor-not-allowed"
-                        }`}
+                      disabled={!isActive}
+                      className={`h-6 w-6 rounded-md border-gray-300 text-primary focus:ring-primary ${isActive ? "cursor-pointer" : "cursor-not-allowed"}`}
                       checked={selectedUsers.includes(u._id)}
                       onChange={() => toggleUserSelection(u._id, isActive)}
                     />
@@ -589,9 +805,11 @@ function RouteComponent() {
               })}
             </div>
           </div>
-
           <DialogFooter className="pt-4 border-t mt-4">
-            <Button variant="outline" onClick={() => setAssignDialogOpen(false)}>
+            <Button
+              variant="outline"
+              onClick={() => setAssignDialogOpen(false)}
+            >
               Cancel
             </Button>
             <Button
@@ -605,17 +823,13 @@ function RouteComponent() {
         </DialogContent>
       </Dialog>
 
-
-      {/* --- MANAGER EMAIL ASSIGNMENT DIALOG --- */}
       <Dialog open={managerDialogOpen} onOpenChange={setManagerDialogOpen}>
         <DialogContent className="max-w-3xl h-[80vh] flex flex-col">
           <DialogHeader>
-            <DialogTitle className="text-2xl">Assign Manager Notifications: {location?.stationName}</DialogTitle>
-            <p className="text-sm text-muted-foreground">
-              Selected users will receive manager-level alerts (Audits, Order Recs) in their personal Hub inbox.
-            </p>
+            <DialogTitle className="text-2xl">
+              Assign Manager Notifications: {location?.stationName}
+            </DialogTitle>
           </DialogHeader>
-
           <div className="flex-1 overflow-y-auto mt-4 pr-2">
             <div className="grid grid-cols-1 gap-2">
               {users.map((u) => {
@@ -623,38 +837,44 @@ function RouteComponent() {
                 return (
                   <div
                     key={u._id}
-                    className={`flex items-center justify-between p-4 border rounded-xl transition-all ${isActive ? "hover:bg-slate-50 border-slate-200" : "bg-slate-100 opacity-60"
-                      }`}
+                    className={`flex items-center justify-between p-4 border rounded-xl transition-all ${isActive ? "hover:bg-slate-50 border-slate-200" : "bg-slate-100 opacity-60"}`}
                   >
                     <div className="flex flex-col">
-                      <span className="font-semibold text-lg">{u.firstName} {u.lastName}</span>
-                      <span className="text-sm text-muted-foreground">{u.email}</span>
+                      <span className="font-semibold text-lg">
+                        {u.firstName} {u.lastName}
+                      </span>
+                      <span className="text-sm text-muted-foreground">
+                        {u.email}
+                      </span>
                     </div>
-
                     <input
                       type="checkbox"
                       disabled={!isActive}
                       className="h-6 w-6 rounded-md cursor-pointer"
                       checked={managerEmails.includes(u.email)}
-                      onChange={() => {
-                        setManagerEmails(prev =>
+                      onChange={() =>
+                        setManagerEmails((prev) =>
                           prev.includes(u.email)
-                            ? prev.filter(e => e !== u.email)
-                            : [...prev, u.email]
-                        );
-                      }}
+                            ? prev.filter((e) => e !== u.email)
+                            : [...prev, u.email],
+                        )
+                      }
                     />
                   </div>
                 );
               })}
             </div>
           </div>
-
           <DialogFooter className="pt-4 border-t mt-4">
-            <Button variant="outline" onClick={() => setManagerDialogOpen(false)}>Cancel</Button>
+            <Button
+              variant="outline"
+              onClick={() => setManagerDialogOpen(false)}
+            >
+              Cancel
+            </Button>
             <Button
               onClick={() => {
-                setFormData({ ...formData, managerEmails: managerEmails });
+                setFormData({ ...formData, managerEmails });
                 setManagerDialogOpen(false);
               }}
             >

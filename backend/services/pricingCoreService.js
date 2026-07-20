@@ -8,6 +8,7 @@ const User = require("../models/User");
 const { gasBuddyQueue } = require("../queues/gasBuddyQueue"); 
 const { emailQueue } = require("../queues/emailQueue");
 const { priceTimeoutQueue } = require("../queues/priceTimeoutQueue");
+const { fuelNotificationQueue } = require("../queues/fuelNotificationQueue");
 const currentPriceModel = require("../pg/models/fuelCurrentPrice");
 const logsModel = require("../pg/models/fuelPriceLog");
 
@@ -136,7 +137,26 @@ export async function executeRetailPriceUpdate({
     }
   });
 
-  // Background systems (GasBuddy, Email, Sockets)
+  // Background systems (Pushover, GasBuddy, Email, Sockets)
+  try {
+    // --- PUSHOVER TABLET NOTIFICATION QUEUE DISPATCH ---
+    // Trigger alarms only if actual structural data rows were saved
+    if (databaseWritesExecutedCount > 0) {
+      const targetStationName = stationName || locationDoc.stationName;
+      
+      await fuelNotificationQueue.add(
+        `pushover-alert-${locationId}-${Date.now()}`,
+        {
+          locationId: String(locationId),
+          stationName: targetStationName
+        },
+        { removeOnComplete: true, removeOnFail: false }
+      );
+    }
+  } catch (err) {
+    console.error("Non-blocking operational failure (Pushover Queue Dispatch):", err);
+  }
+
   try {
     if (locationDoc.gasBuddyStationId) {
       const normalizedPrices = {};
