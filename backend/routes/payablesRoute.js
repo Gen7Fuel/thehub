@@ -110,6 +110,7 @@ router.post('/', async (req, res) => {
             date: entryDate,
             description: `Payout - ${vendorName}`,
             cashExpenseOut: Number(populatedPayable.amount || 0),
+            payableId: savedPayable._id,
           })
           console.log('Entering into safesheet');
           await sheet.save()
@@ -256,11 +257,38 @@ router.put('/:id', async (req, res) => {
 // DELETE payable
 router.delete('/:id', async (req, res) => {
   try {
-    const payable = await Payable.findByIdAndDelete(req.params.id);
-    
+    const payable = await Payable.findById(req.params.id);
+
     if (!payable) {
       return res.status(404).json({ error: 'Payable not found' });
     }
+
+    // Cascade step first (strict): remove any linked Safesheet entry before deleting the
+    // payable itself. If this fails, abort without deleting the payable so nothing orphans.
+    let cascadeSheet;
+    try {
+      cascadeSheet = await Safesheet.findOneAndUpdate(
+        { 'entries.payableId': payable._id },
+        { $pull: { entries: { payableId: payable._id } } }
+      );
+    } catch (cascadeErr) {
+      try {
+        await logAction(req, {
+          action: 'delete',
+          resourceType: 'payable',
+          resourceId: payable._id,
+          success: false,
+          statusCode: 500,
+          message: `Payable delete aborted: failed to remove linked safesheet entry (payableId=${payable._id}): ${cascadeErr?.message || cascadeErr}`,
+        });
+      } catch (_) {}
+      return res.status(500).json({ error: 'Failed to remove linked safesheet entry; payable was not deleted.' });
+    }
+    // cascadeSheet === null just means no linked entry exists (paymentMethod wasn't 'safe',
+    // or the best-effort write at creation time failed) — not an error, proceed normally.
+
+    await Payable.findByIdAndDelete(payable._id);
+
     // Audit log (success)
     try {
       await logAction(req, {
@@ -278,6 +306,19 @@ router.delete('/:id', async (req, res) => {
         },
       });
     } catch (e) {}
+
+    if (cascadeSheet) {
+      try {
+        await logAction(req, {
+          action: 'delete',
+          resourceType: 'safesheet',
+          resourceId: cascadeSheet._id,
+          success: true,
+          statusCode: 200,
+          message: `Safesheet entry cascade-deleted (linked to payable ${payable._id}, vendor: ${payable.vendorName})`,
+        });
+      } catch (e) {}
+    }
 
     res.json({ message: 'Payable deleted successfully', deletedPayable: payable });
   } catch (error) {

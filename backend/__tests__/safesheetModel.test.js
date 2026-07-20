@@ -2,6 +2,7 @@ import { describe, it, expect } from 'vitest'
 // Import the model directly — no DB connection required for instance method tests.
 // Do NOT import config/db.js here; that would attempt to connect to MongoDB.
 import Safesheet from '../models/Safesheet.js'
+import mongoose from 'mongoose'
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -90,6 +91,30 @@ describe('Safesheet.getEntriesWithRunningBalance', () => {
     const result = sheet.getEntriesWithRunningBalance()
     // 0.1 + 0.2 in raw floating point would be 0.30000000000000004
     expect(result[1].cashOnHandSafe).toBe(0.3)
+  })
+})
+
+// ─── entries.payableId (cascade-delete link) ──────────────────────────────────
+
+describe('Safesheet entry schema — payableId field', () => {
+  it('accepts a valid ObjectId for payableId', () => {
+    const sheet = makeSheet([makeEntry({ payableId: new mongoose.Types.ObjectId() })])
+    expect(sheet.validateSync()).toBeUndefined()
+  })
+
+  it('defaults payableId to null when omitted', () => {
+    const sheet = makeSheet([makeEntry()])
+    expect(sheet.entries[0].payableId).toBeNull()
+  })
+
+  it('accepts an explicit null payableId', () => {
+    const sheet = makeSheet([makeEntry({ payableId: null })])
+    expect(sheet.validateSync()).toBeUndefined()
+  })
+
+  it('rejects a malformed (non-ObjectId) payableId', () => {
+    const err = makeSheet([makeEntry({ payableId: 'not-an-id' })]).validateSync()
+    expect(err?.errors['entries.0.payableId']).toBeDefined()
   })
 })
 

@@ -1,6 +1,7 @@
 const express = require('express');
 const router = express.Router();
 const Safesheet = require('../models/Safesheet');
+const Payable = require('../models/Payables');
 const { logAction } = require('../middleware/actionLogger');
 
 
@@ -335,6 +336,28 @@ router.delete('/site/:site/entries/:entryId', async (req, res) => {
 
     const beforeEntry = entry.toObject();
 
+    // Cascade step first (strict): delete the linked Payable before removing/saving the
+    // entry. If this fails, abort without touching the safesheet so nothing orphans.
+    let deletedPayable = null;
+    if (beforeEntry.payableId) {
+      try {
+        deletedPayable = await Payable.findByIdAndDelete(beforeEntry.payableId);
+        // null just means the linked payable is already gone/stale — not an error.
+      } catch (cascadeErr) {
+        try {
+          await logAction(req, {
+            action: 'delete',
+            resourceType: 'safesheet',
+            resourceId: sheet._id,
+            success: false,
+            statusCode: 500,
+            message: `Safesheet entry delete aborted: failed to delete linked payable (payableId=${beforeEntry.payableId}): ${cascadeErr?.message || cascadeErr}`,
+          });
+        } catch (_) { }
+        return res.status(500).json({ error: 'Failed to delete linked payable; safesheet entry was not removed.' });
+      }
+    }
+
     sheet.entries.pull({ _id: entryId });
     await sheet.save();
 
@@ -358,6 +381,25 @@ router.delete('/site/:site/entries/:entryId', async (req, res) => {
         },
       });
     } catch (e) { }
+
+    if (deletedPayable) {
+      try {
+        await logAction(req, {
+          action: 'delete',
+          resourceType: 'payable',
+          resourceId: deletedPayable._id,
+          success: true,
+          statusCode: 200,
+          message: `Payable cascade-deleted (linked to safesheet entry ${entryId} for site: ${site})`,
+          before: {
+            vendorName: deletedPayable.vendorName,
+            amount: deletedPayable.amount,
+            paymentMethod: deletedPayable.paymentMethod,
+            location: deletedPayable.location?.toString(),
+          },
+        });
+      } catch (e) { }
+    }
 
     return res.json({ entries: entriesWithRunning });
   } catch (err) {
