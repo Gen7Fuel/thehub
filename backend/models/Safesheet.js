@@ -20,6 +20,7 @@ const EntrySchema = new Schema({
   cashDepositBank: { type: Number, default: 0 },
   photo: { type: String, default: '' },
   assignedDate: { type: String }, // Store as local string, not Date
+  payableId: { type: Schema.Types.ObjectId, ref: 'Payable', default: null }, // Links this entry back to the Payable that created it, if any
 }, { timestamps: true });
 
 /**
@@ -31,6 +32,9 @@ const SafesheetSchema = new Schema({
   initialBalance: { type: Number, default: 0 }, // starting safe balance before entries
   entries: { type: [EntrySchema], default: [] },
 }, { timestamps: true });
+
+// Supports cascade-delete lookups: find the sheet containing an entry linked to a given payableId
+SafesheetSchema.index({ 'entries.payableId': 1 });
 
 // Normalize money fields on every save
 /**

@@ -1,2 +1,6 @@
+<<<<<<< HEAD
 node_modules
 dist
+=======
+.env
+>>>>>>> origin/main

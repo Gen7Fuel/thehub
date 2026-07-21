@@ -27,9 +27,29 @@ export default defineConfig({
     VitePWA({
       registerType: 'autoUpdate',
       manifest: false,
+      // Lets the service worker actually run under `vite dev` too (off by
+      // default), so offline behavior can be tested locally without a full
+      // production build/deploy.
+      devOptions: {
+        enabled: true,
+        type: 'module',
+      },
       workbox: {
         globPatterns: ['**/*.{js,css,html,ico,png,svg,woff2}'],
-        navigateFallback: null,
+        // `null` (the previous value) disables the SPA offline fallback
+        // entirely: a hard reload/deep link, or a route whose code-split
+        // chunk hasn't been fetched into memory yet in the current tab
+        // (e.g. navigating to /po/list without ever having visited it this
+        // session), would fail outright while offline instead of being
+        // served the cached app shell. Every built route chunk is already
+        // in the precache (globPatterns above), so falling back to the
+        // cached index.html lets TanStack Router boot and resolve the
+        // requested route from that same precache.
+        navigateFallback: 'index.html',
+        // Real backend calls are same-origin fetch/XHR, not navigations, so
+        // this denylist is belt-and-suspenders: it keeps the SPA fallback
+        // from ever being served for an actual navigation to a non-SPA path.
+        navigateFallbackDenylist: [/^\/api\//, /^\/cdn\//, /^\/login-auth\//],
       },
     }),
   ],

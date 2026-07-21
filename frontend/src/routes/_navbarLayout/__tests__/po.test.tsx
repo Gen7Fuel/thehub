@@ -16,6 +16,11 @@ const {
   mockAxiosPut,
   mockUploadBase64Image,
   mockUseAuth,
+  mockIsActuallyOnline,
+  mockSavePendingAction,
+  mockGetPendingActions,
+  mockTriggerBackgroundSync,
+  mockDeletePendingAction,
 } = vi.hoisted(() => {
   const mockStore = {
     fleetCardNumber: '' as string,
@@ -77,6 +82,12 @@ const {
     mockAxiosPut: vi.fn(),
     mockUploadBase64Image: vi.fn().mockResolvedValue({ filename: 'uploaded.jpg' }),
     mockUseAuth,
+    // Default: "online" so existing submit tests exercise the normal network path.
+    mockIsActuallyOnline: vi.fn().mockResolvedValue(true),
+    mockSavePendingAction: vi.fn().mockResolvedValue(undefined),
+    mockGetPendingActions: vi.fn().mockResolvedValue([]),
+    mockTriggerBackgroundSync: vi.fn().mockResolvedValue(undefined),
+    mockDeletePendingAction: vi.fn().mockResolvedValue(undefined),
   }
 })
 
@@ -133,11 +144,31 @@ vi.mock('@/lib/utils', async (importOriginal) => {
     }),
     uploadBase64Image: mockUploadBase64Image,
     formatFleetCardNumber: (num: string) => num || '',
+    triggerBackgroundSync: mockTriggerBackgroundSync,
   }
 })
 
 vi.mock('@/lib/constants', () => ({
   domain: 'http://localhost:5000',
+}))
+
+vi.mock('@/lib/network', () => ({
+  isActuallyOnline: mockIsActuallyOnline,
+}))
+
+vi.mock('@/lib/orderRecIndexedDB', () => ({
+  getDB: vi.fn(),
+  saveOrderRec: vi.fn(),
+  getOrderRecById: vi.fn(),
+  savePendingAction: mockSavePendingAction,
+  getPendingActions: mockGetPendingActions,
+  getPendingActionEntries: vi.fn().mockResolvedValue([]),
+  deletePendingAction: mockDeletePendingAction,
+  updatePendingAction: vi.fn().mockResolvedValue(undefined),
+  clearPendingActions: vi.fn(),
+  hasPendingActionsForId: vi.fn().mockResolvedValue(false),
+  deletePendingActionsForId: vi.fn(),
+  clearLocalDB: vi.fn(),
 }))
 
 // Stub SignatureCanvas — expose all methods that signature.tsx calls on the ref.
@@ -332,8 +363,8 @@ describe('PO Form — index.tsx', () => {
     }, { timeout: 5000 })
   })
 
-  it('does not render the Number section or OTP input for site "Rankin"', async () => {
-    mockStore.stationName = 'Rankin'
+  it.each(['Rankin', 'Sarnia', 'Walpole', 'Jocko Point', 'Charlies'])('does not render the Number section or OTP input for site "%s"', async (site) => {
+    mockStore.stationName = site
     renderWithSuspense(<POForm />)
 
     await waitFor(() => {
@@ -344,8 +375,8 @@ describe('PO Form — index.tsx', () => {
     expect(screen.queryByTestId('otp-input')).not.toBeInTheDocument()
   })
 
-  it('does not auto-fill a fleet card from quick-select on site "Rankin"', async () => {
-    mockStore.stationName = 'Rankin'
+  it.each(['Rankin', 'Sarnia', 'Walpole', 'Jocko Point', 'Charlies'])('does not auto-fill a fleet card from quick-select on site "%s"', async (site) => {
+    mockStore.stationName = site
     mockAxiosGet.mockImplementation((url: string) => {
       if (url.includes('quick-select')) {
         return Promise.resolve({
@@ -385,8 +416,85 @@ describe('PO Form — index.tsx', () => {
     expect(mockStore.setCustomerName).toHaveBeenCalledWith('Batchewana Frist Nation of Ojibways')
   })
 
-  it('does not pad poNumber to "00000" when clicking Upload Receipt on site "Rankin"', async () => {
-    mockStore.stationName = 'Rankin'
+  it('falls back to the cached AR customer list when the fetch fails (offline)', async () => {
+    localStorage.setItem('po_cachedArCustomers', JSON.stringify([{ _id: 'c1', name: 'Jane Doe Trucking' }]))
+    mockAxiosGet.mockImplementation((url: string) => {
+      if (url.includes('ar-customers/quick-select')) return Promise.resolve({ data: [] })
+      if (url.includes('ar-customers')) {
+        return Promise.reject(Object.assign(new Error('Network Error'), { isAxiosErr: true }))
+      }
+      return Promise.resolve({ data: [] })
+    })
+
+    renderWithSuspense(<POForm />)
+
+    const nameInput = await waitFor(() => screen.getByDisplayValue('Jane Doe'), { timeout: 5000 })
+    fireEvent.focus(nameInput)
+
+    await waitFor(() => expect(screen.getByText('Jane Doe Trucking')).toBeInTheDocument())
+
+    localStorage.removeItem('po_cachedArCustomers')
+  })
+
+  it('caches the AR customer list to localStorage on a successful fetch', async () => {
+    localStorage.removeItem('po_cachedArCustomers')
+    const fetchedCustomers = [{ _id: 'c2', name: 'Acme Co' }]
+    mockAxiosGet.mockImplementation((url: string) => {
+      if (url.includes('ar-customers/quick-select')) return Promise.resolve({ data: [] })
+      if (url.includes('ar-customers')) return Promise.resolve({ data: fetchedCustomers })
+      return Promise.resolve({ data: [] })
+    })
+
+    renderWithSuspense(<POForm />)
+
+    await waitFor(() => {
+      const cached = localStorage.getItem('po_cachedArCustomers')
+      expect(cached ? JSON.parse(cached) : null).toEqual(fetchedCustomers)
+    }, { timeout: 5000 })
+  })
+
+  it('falls back to the cached quick-select list for a station when the fetch fails (offline)', async () => {
+    // mockStore.stationName defaults to 'TestSite' (see resetStore)
+    localStorage.setItem('po_cachedQuickSelect_TestSite', JSON.stringify([
+      { _id: 'qc1', name: 'Cached Customer', fleetCardNumber: '', order: 0 },
+    ]))
+    mockAxiosGet.mockImplementation((url: string) => {
+      if (url.includes('ar-customers/quick-select')) {
+        return Promise.reject(Object.assign(new Error('Network Error'), { isAxiosErr: true }))
+      }
+      return Promise.resolve({ data: [] })
+    })
+
+    renderWithSuspense(<POForm />)
+
+    await waitFor(() =>
+      expect(screen.getByRole('button', { name: 'Cached' })).toBeInTheDocument()
+    , { timeout: 5000 })
+
+    localStorage.removeItem('po_cachedQuickSelect_TestSite')
+  })
+
+  it('shows a custom label on the quick-select button instead of the first word, when set', async () => {
+    mockAxiosGet.mockImplementation((url: string) => {
+      if (url.includes('quick-select')) {
+        return Promise.resolve({
+          data: [{ _id: 'qc1', name: 'Three fires development corporation', fleetCardNumber: '', label: 'Three Fires', order: 0 }],
+        })
+      }
+      return Promise.resolve({ data: [] })
+    })
+
+    renderWithSuspense(<POForm />)
+
+    const quickBtn = await waitFor(() => screen.getByRole('button', { name: 'Three Fires' }), { timeout: 5000 })
+    expect(screen.queryByText('Three', { selector: 'button' })).not.toBeInTheDocument()
+
+    fireEvent.click(quickBtn)
+    expect(mockStore.setCustomerName).toHaveBeenCalledWith('Three fires development corporation')
+  })
+
+  it.each(['Rankin', 'Sarnia', 'Walpole', 'Jocko Point', 'Charlies'])('does not pad poNumber to "00000" when clicking Upload Receipt on site "%s"', async (site) => {
+    mockStore.stationName = site
     mockStore.receipt = null
     renderWithSuspense(<POForm />)
 
@@ -541,6 +649,88 @@ describe('PO List — list.tsx', () => {
     )
     await waitFor(() => expect(screen.getByText('2026-02-01')).toBeInTheDocument())
   })
+
+  it('keeps showing previously loaded orders when a refresh fetch fails (offline)', async () => {
+    renderWithSuspense(<POList />)
+    await waitFor(() => expect(screen.getByText('Jane Doe')).toBeInTheDocument())
+
+    // Simulate the connection dropping on a subsequent refresh (e.g. switching site).
+    mockAxiosGet.mockRejectedValueOnce(Object.assign(new Error('Network Error'), { isAxiosErr: true }))
+    fireEvent.click(screen.getByTestId('location-picker'))
+
+    // The table should still show the last successfully fetched order, not blank out.
+    await waitFor(() => expect(screen.getByText('Jane Doe')).toBeInTheDocument())
+  })
+
+  it('shows a queued purchase order from the offline sync queue as "Pending upload"', async () => {
+    mockAxiosGet.mockResolvedValue({ status: 200, data: [] })
+    mockGetPendingActions.mockResolvedValueOnce([
+      {
+        type: 'CREATE_PURCHASE_ORDER',
+        queuedAt: 12345,
+        receipt: 'data:image/png;base64,queued',
+        payload: {
+          source: 'PO',
+          date: '2026-01-01',
+          stationName: 'Rankin',
+          fleetCardNumber: '',
+          poNumber: '99999',
+          quantity: 25,
+          amount: 50,
+          productCode: 'UNL',
+          customerName: 'Offline Customer',
+          driverName: 'Offline Driver',
+          vehicleMakeModel: '',
+          licensePlate: '',
+          purchaseType: 'fuel',
+          itemsDescription: '',
+        },
+      },
+    ])
+
+    renderWithSuspense(<POList />)
+
+    await waitFor(() => expect(screen.getByText('Offline Customer')).toBeInTheDocument())
+    expect(screen.getAllByText(/pending upload/i).length).toBeGreaterThan(0)
+  })
+
+  it('shows a permanently-failed purchase order with red/error styling and its reason, separate from the pending count', async () => {
+    mockAxiosGet.mockResolvedValue({ status: 200, data: [] })
+    mockGetPendingActions.mockResolvedValueOnce([
+      {
+        type: 'CREATE_PURCHASE_ORDER',
+        queuedAt: 54321,
+        receipt: 'data:image/png;base64,failed',
+        failed: true,
+        failureReason: 'PO number already exists.',
+        _key: 7,
+        payload: {
+          source: 'PO',
+          date: '2026-01-01',
+          stationName: 'Rankin',
+          fleetCardNumber: '',
+          poNumber: '11111',
+          quantity: 10,
+          amount: 20,
+          productCode: 'UNL',
+          customerName: 'Failed Customer',
+          driverName: 'Failed Driver',
+          vehicleMakeModel: '',
+          licensePlate: '',
+          purchaseType: 'fuel',
+          itemsDescription: '',
+        },
+      },
+    ])
+
+    renderWithSuspense(<POList />)
+
+    await waitFor(() => expect(screen.getByText('Failed Customer')).toBeInTheDocument())
+    expect(screen.getByText(/upload failed/i)).toBeInTheDocument()
+    expect(screen.getByText('PO number already exists.')).toBeInTheDocument()
+    // Not counted as "pending upload" — it's terminal, not in progress.
+    expect(screen.queryByText(/pending upload/i)).not.toBeInTheDocument()
+  })
 })
 
 // ─── PO Signature (signature.tsx) ─────────────────────────────────────────────
@@ -616,7 +806,6 @@ describe('PO Receipt — receipt.tsx', () => {
     mockUseAuth.mockReturnValue({
       user: { id: 'u1', location: 'Rankin', timezone: 'America/Toronto', access: {} },
     })
-    mockAxiosPost.mockResolvedValue({ status: 201, data: { _id: 'txn-2' } })
   })
 
   it('redirects to /po when required form fields are missing', async () => {
@@ -657,22 +846,65 @@ describe('PO Receipt — receipt.tsx', () => {
     expect(submitBtn).toBeDisabled()
   })
 
-  it('calls POST /api/purchase-orders and navigates to /po/list on success', async () => {
+  // The submit handler no longer makes any network call at all — it always
+  // saves locally first (see receipt.tsx). These tests replace the old
+  // ones that exercised a live axios.post path, which no longer exists.
+
+  it('always saves the purchase order to the local queue immediately, regardless of connectivity', async () => {
+    // A blocking window.alert() freezes the tab's repaint until dismissed —
+    // on a device with no visible dialog chrome that looks identical to the
+    // submit being permanently stuck on "Saving...". Confirm the success
+    // path never calls it (regression test for that exact bug).
+    const alertSpy = vi.spyOn(window, 'alert').mockImplementation(() => {})
+
     renderWithQuery(<POReceipt />)
 
     const submitBtn = screen.getByRole('button', { name: /finalize|submit/i })
     fireEvent.click(submitBtn)
 
     await waitFor(() =>
-      expect(mockAxiosPost).toHaveBeenCalledWith(
-        expect.stringContaining('/api/purchase-orders'),
-        expect.objectContaining({ source: 'PO', signature: '', vehicleMakeModel: 'Ford F-150', licensePlate: '' }),
-        expect.any(Object)
+      expect(mockSavePendingAction).toHaveBeenCalledWith(
+        expect.objectContaining({
+          type: 'CREATE_PURCHASE_ORDER',
+          receipt: 'data:image/png;base64,abc',
+          payload: expect.objectContaining({ source: 'PO', stationName: 'TestSite' }),
+        })
       )
     )
-    await waitFor(() =>
-      expect(mockNavigate).toHaveBeenCalledWith({ to: '/po/list' })
-    )
+    await waitFor(() => expect(mockNavigate).toHaveBeenCalledWith({ to: '/po/list' }))
+    expect(alertSpy).not.toHaveBeenCalled()
+
+    alertSpy.mockRestore()
+  })
+
+  it('never calls axios/uploadBase64Image directly, even when isActuallyOnline resolves true', async () => {
+    mockIsActuallyOnline.mockResolvedValue(true)
+
+    renderWithQuery(<POReceipt />)
+
+    const submitBtn = screen.getByRole('button', { name: /finalize|submit/i })
+    fireEvent.click(submitBtn)
+
+    await waitFor(() => expect(mockSavePendingAction).toHaveBeenCalled())
+    expect(mockAxiosPost).not.toHaveBeenCalled()
+    expect(mockUploadBase64Image).not.toHaveBeenCalled()
+  })
+
+  it('triggers a background sync attempt after queuing, without blocking navigation', async () => {
+    // Never resolves — proves navigation doesn't wait on this at all, which
+    // is the concrete regression test for the stuck-"Saving..." bug: the fix
+    // isn't "make the network check faster," it's "don't have one in the
+    // critical path at all."
+    mockTriggerBackgroundSync.mockReturnValue(new Promise(() => {}))
+
+    renderWithQuery(<POReceipt />)
+
+    const submitBtn = screen.getByRole('button', { name: /finalize|submit/i })
+    fireEvent.click(submitBtn)
+
+    await waitFor(() => expect(mockSavePendingAction).toHaveBeenCalled())
+    await waitFor(() => expect(mockNavigate).toHaveBeenCalledWith({ to: '/po/list' }))
+    expect(mockTriggerBackgroundSync).toHaveBeenCalled()
   })
 
   it('sends date as a plain "yyyy-MM-dd" string, not a full datetime', async () => {
@@ -682,11 +914,20 @@ describe('PO Receipt — receipt.tsx', () => {
     fireEvent.click(submitBtn)
 
     await waitFor(() =>
-      expect(mockAxiosPost).toHaveBeenCalledWith(
-        expect.stringContaining('/api/purchase-orders'),
-        expect.objectContaining({ date: '2026-01-15' }),
-        expect.any(Object)
+      expect(mockSavePendingAction).toHaveBeenCalledWith(
+        expect.objectContaining({ payload: expect.objectContaining({ date: '2026-01-15' }) })
       )
     )
+  })
+
+  it('double-clicking Finalize & Submit only queues one pending action', async () => {
+    renderWithQuery(<POReceipt />)
+
+    const submitBtn = screen.getByRole('button', { name: /finalize|submit/i })
+    fireEvent.click(submitBtn)
+    fireEvent.click(submitBtn)
+
+    await waitFor(() => expect(mockSavePendingAction).toHaveBeenCalled())
+    expect(mockSavePendingAction).toHaveBeenCalledTimes(1)
   })
 })

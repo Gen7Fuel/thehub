@@ -12,6 +12,7 @@ interface QuickSelectEntry {
   _id: string
   name: string
   fleetCardNumber: string
+  label: string
   order: number
 }
 
@@ -65,11 +66,14 @@ function RouteComponent() {
 
   const [entries, setEntries] = useState<QuickSelectEntry[]>(initialEntries);
   const [fleetCardDrafts, setFleetCardDrafts] = useState<Record<string, string>>({});
+  const [labelDrafts, setLabelDrafts] = useState<Record<string, string>>({});
   const [savingId, setSavingId] = useState<string | null>(null);
+  const [savingLabelId, setSavingLabelId] = useState<string | null>(null);
 
   useEffect(() => {
     setEntries(initialEntries);
     setFleetCardDrafts(Object.fromEntries(initialEntries.map((e) => [e._id, e.fleetCardNumber || ''])));
+    setLabelDrafts(Object.fromEntries(initialEntries.map((e) => [e._id, e.label || ''])));
   }, [initialEntries]);
 
   const refresh = async () => {
@@ -156,6 +160,25 @@ function RouteComponent() {
     }
   };
 
+  const handleSaveLabel = async (entry: QuickSelectEntry) => {
+    const draft = (labelDrafts[entry._id] || '').trim();
+    setSavingLabelId(entry._id);
+    try {
+      await axios.put(`/api/ar-customers/${entry._id}/quick-select/label`, { stationName, label: draft }, {
+        headers: authHeaders(),
+      });
+      await refresh();
+    } catch (error: any) {
+      if (axios.isAxiosError(error) && error.response?.status === 403) {
+        navigate({ to: '/no-access' });
+        return;
+      }
+      alert(error?.response?.data?.error || 'Failed to save button label.');
+    } finally {
+      setSavingLabelId(null);
+    }
+  };
+
   const handleSaveFleetCard = async (entry: QuickSelectEntry) => {
     const draft = (fleetCardDrafts[entry._id] || '').trim();
     if (draft && !/^\d{16}$/.test(draft)) {
@@ -237,6 +260,23 @@ function RouteComponent() {
 
               <div className="flex-1">
                 <div className="font-medium">{entry.name}</div>
+                <div className="flex items-center gap-2 mt-1">
+                  <input
+                    type="text"
+                    value={labelDrafts[entry._id] ?? ''}
+                    onChange={(e) => setLabelDrafts((prev) => ({ ...prev, [entry._id]: e.target.value }))}
+                    placeholder={`Button text (default: "${entry.name.trim().split(' ')[0] || entry.name}")`}
+                    className="border border-gray-300 rounded-md p-1 text-sm w-64"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => handleSaveLabel(entry)}
+                    disabled={savingLabelId === entry._id}
+                    className="bg-blue-500 text-white px-2 py-1 rounded-md text-sm disabled:opacity-50"
+                  >
+                    {savingLabelId === entry._id ? 'Saving...' : 'Save'}
+                  </button>
+                </div>
               </div>
 
               <div className="flex items-center gap-2">

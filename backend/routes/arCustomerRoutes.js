@@ -23,12 +23,16 @@ router.get('/quick-select', async (req, res) => {
       .select('name fleetCardNumber quickSelectSites')
 
     const result = customers
-      .map((c) => ({
-        _id: c._id,
-        name: c.name,
-        fleetCardNumber: c.fleetCardNumber || '',
-        order: c.quickSelectSites.find((s) => s.stationName === stationName)?.order ?? 0,
-      }))
+      .map((c) => {
+        const entry = c.quickSelectSites.find((s) => s.stationName === stationName)
+        return {
+          _id: c._id,
+          name: c.name,
+          fleetCardNumber: c.fleetCardNumber || '',
+          label: entry?.label || '',
+          order: entry?.order ?? 0,
+        }
+      })
       .sort((a, b) => a.order - b.order)
 
     res.json(result)
@@ -115,7 +119,7 @@ router.post('/sync', async (req, res) => {
 // POST /:id/quick-select — add this customer as a quick-select button for a site
 router.post('/:id/quick-select', async (req, res) => {
   try {
-    const { stationName } = req.body
+    const { stationName, label } = req.body
     if (!stationName) return res.status(400).json({ error: 'stationName is required' })
 
     const customer = await ArCustomer.findById(req.params.id)
@@ -132,9 +136,28 @@ router.post('/:id/quick-select', async (req, res) => {
       return entry ? Math.max(max, entry.order) : max
     }, -1)
 
-    customer.quickSelectSites.push({ stationName, order: maxOrder + 1 })
+    customer.quickSelectSites.push({ stationName, order: maxOrder + 1, label: (label || '').trim() })
     await customer.save()
     res.status(201).json(customer)
+  } catch (error) {
+    res.status(500).json({ error: error.message })
+  }
+})
+
+// PUT /:id/quick-select/label — set/clear this customer's quick-select button
+// text for a site, overriding the default (first word of the customer's name)
+router.put('/:id/quick-select/label', async (req, res) => {
+  try {
+    const { stationName, label } = req.body
+    if (!stationName) return res.status(400).json({ error: 'stationName is required' })
+
+    const customer = await ArCustomer.findOneAndUpdate(
+      { _id: req.params.id, 'quickSelectSites.stationName': stationName },
+      { $set: { 'quickSelectSites.$.label': (label || '').trim() } },
+      { new: true }
+    )
+    if (!customer) return res.status(404).json({ error: 'Customer or quick-select entry not found' })
+    res.json(customer)
   } catch (error) {
     res.status(500).json({ error: error.message })
   }
@@ -192,12 +215,16 @@ router.put('/quick-select/move', async (req, res) => {
     const customers = await ArCustomer.find({ 'quickSelectSites.stationName': stationName })
       .select('name fleetCardNumber quickSelectSites')
     const result = customers
-      .map((c) => ({
-        _id: c._id,
-        name: c.name,
-        fleetCardNumber: c.fleetCardNumber || '',
-        order: c.quickSelectSites.find((s) => s.stationName === stationName)?.order ?? 0,
-      }))
+      .map((c) => {
+        const entry = c.quickSelectSites.find((s) => s.stationName === stationName)
+        return {
+          _id: c._id,
+          name: c.name,
+          fleetCardNumber: c.fleetCardNumber || '',
+          label: entry?.label || '',
+          order: entry?.order ?? 0,
+        }
+      })
       .sort((a2, b2) => a2.order - b2.order)
     res.json(result)
   } catch (error) {

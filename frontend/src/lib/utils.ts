@@ -3,7 +3,8 @@ import { twMerge } from "tailwind-merge"
 import { domain } from "@/lib/constants"
 import { jwtDecode } from "jwt-decode"
 import axios from "axios"
-import { getDB, clearPendingActions, saveOrderRec } from "@/lib/orderRecIndexedDB"
+import { getPendingActionEntries, deletePendingAction, updatePendingAction, saveOrderRec } from "@/lib/orderRecIndexedDB"
+import { isActuallyOnline } from "@/lib/network"
 // import { useAuth } from "@/context/AuthContext";
 
 export function cn(...inputs: ClassValue[]) {
@@ -17,7 +18,12 @@ export async function uploadBase64Image(base64Data: string | null, fileName: str
   }, {
     headers: {
       Authorization: `Bearer ${localStorage.getItem('token')}`
-    }
+    },
+    // Bounds how long a caller waits before treating the connection as
+    // unreachable (e.g. to fall back to an offline queue) — axios has no
+    // timeout by default, so a stalled connection would otherwise hang far
+    // longer than the browser's own "no network" detection.
+    timeout: 60000,
   });
   console.log('Uploaded file info:', response.data);
   return response.data;
@@ -411,92 +417,162 @@ export function camelCaseToCapitalized(text: String) {
     .join(' ');
 }
 
-//function for syncing order rec with the mongo db
-export async function syncPendingActions() {
-    let pending;
+// Replays a single queued action against the backend. Shared by
+// syncPendingActions()'s loop below — kept as its own function so the loop
+// body stays readable.
+async function syncOneAction(action: any): Promise<void> {
+  const authHeader = { Authorization: `Bearer ${localStorage.getItem("token")}` };
 
-    do {
+  if (action.type === "TOGGLE_ITEM") {
+    await axios.put(
+      `/api/order-rec/${action.orderId}/item/${action.catIdx}/${action.itemIdx}`,
+      { completed: action.completed, isChanged: action.isChanged },
+      { headers: authHeader }
+    );
+    const res = await axios.get(`/api/order-rec/${action.orderId}`, { headers: authHeader });
+    const latest = { ...res.data, id: res.data._id, _id: res.data._id };
+    await saveOrderRec(latest);
+    console.log("✅ Synced and refreshed TOGGLE_ITEM order record:", latest.id);
+  }
+
+  else if (action.type === "UPDATE_ORDER_REC") {
+    const orderId = action.id;
+    const res = await axios.put(
+      `/api/order-rec/${orderId}`,
+      { categories: action.payload.categories },
+      { headers: authHeader }
+    );
+    const latest = { ...res.data, id: res.data._id, _id: res.data._id };
+    await saveOrderRec(latest);
+    console.log("✅ Synced and refreshed UPDATE_ORDER_REC order record:", latest.id);
+  }
+
+  else if (action.type === "CREATE_PURCHASE_ORDER") {
+    const { filename } = await uploadBase64Image(action.receipt, "receipt.jpg");
+    await axios.post(
+      "/api/purchase-orders",
+      { ...action.payload, receipt: filename },
+      { headers: { ...authHeader, "X-Required-Permission": "po" } }
+    );
+    console.log("✅ Synced CREATE_PURCHASE_ORDER for", action.payload?.customerName);
+  }
+
+  else if (action.type === "SAVE_EXTRA_NOTE") {
+    const res = await axios.patch(
+      `/api/order-rec/${action.orderId}`,
+      { extraItemsNote: action.note },
+      { headers: authHeader }
+    );
+    const latest = { ...res.data, id: res.data._id, _id: res.data._id };
+    await saveOrderRec(latest);
+    console.log("✅ Synced and refreshed SAVE_EXTRA_NOTE order record:", latest.id);
+  }
+
+  else {
+    throw new Error(`Unknown pending action type: ${action.type}`);
+  }
+}
+
+// HTTP failures that will NEVER succeed no matter how many times we retry —
+// e.g. 403 (permission denied) and 409 (duplicate PO number, see
+// backend/routes/purchaseOrder.js). Leaving these queued forever would mean
+// a silent, unexplained "pending" limbo with no path to resolution.
+// Everything else (no response at all = network/timeout, 5xx, 408, 429) is
+// transient and stays queued for the next pass.
+function isPermanentFailure(err: unknown): boolean {
+  if (axios.isAxiosError(err)) {
+    const status = err.response?.status;
+    if (status == null) return false; // network/timeout — retryable
+    if (status === 408 || status === 429) return false; // explicitly transient
+    return status >= 400 && status < 500;
+  }
+  // A non-axios error means our own sync code threw (e.g. an unrecognized
+  // action.type) — retrying won't fix that either.
+  return true;
+}
+
+function describeSyncFailure(err: unknown): string {
+  if (axios.isAxiosError(err)) {
+    return err.response?.data?.message || err.message || "Sync failed.";
+  }
+  return err instanceof Error ? err.message : "Sync failed.";
+}
+
+// Guards against overlapping sync passes — syncPendingActions() can now be
+// triggered from multiple places close together (a submit's own
+// triggerBackgroundSync(), the navbar's `online` listener, and its 15s
+// poll), and without this a fast-firing pair of calls could both pick up
+// the same pending action and, e.g., upload the same receipt photo twice.
+let syncInFlight = false;
+
+//function for syncing queued offline actions (order rec + purchase orders) with the backend
+export async function syncPendingActions() {
+  if (syncInFlight) {
+    console.log("🛰️ Sync already in progress — skipping overlapping call");
+    return;
+  }
+  syncInFlight = true;
+
+  try {
+    // Loops passes until a pass makes zero progress (nothing left to sync,
+    // or everything remaining is a transient failure) — re-reading the
+    // queue fresh every pass means anything queued concurrently (e.g. a
+    // second PO submitted mid-sync) is picked up instead of lost, unlike
+    // the previous snapshot+clear()-the-whole-store design.
+    while (true) {
       await new Promise(res => setTimeout(res, 300));
 
-      const db = await getDB();
-      const tx = db.transaction("pendingActions", "readonly");
-      pending = await tx.store.getAll();
+      const entries = await getPendingActionEntries();
+      const actionable = entries.filter(({ action }) => !action.failed);
+      if (!actionable.length) break;
 
-      if (!pending.length) break;
+      console.log(`🛰️ Syncing ${actionable.length} pending actions...`);
+      let madeProgress = false;
 
-      console.log(`🛰️ Syncing ${pending.length} pending actions...`);
-      const failed: any[] = [];
-
-      for (const action of pending) {
+      for (const { key, action } of actionable) {
         try {
-          if (action.type === "TOGGLE_ITEM") {
-            // 🔹 Perform backend update
-            await axios.put(
-              `/api/order-rec/${action.orderId}/item/${action.catIdx}/${action.itemIdx}`,
-              { completed: action.completed, isChanged: action.isChanged },
-              { headers: { Authorization: `Bearer ${localStorage.getItem("token")}` } }
-            );
-
-            // 🔹 Fetch the latest record from backend and cache it
-            const res = await axios.get(`/api/order-rec/${action.orderId}`, {
-              headers: { Authorization: `Bearer ${localStorage.getItem("token")}` },
-            });
-            const latest = { ...res.data, id: res.data._id, _id: res.data._id };
-            await saveOrderRec(latest);
-
-            console.log("✅ Synced and refreshed TOGEL_ITEM order record:", latest.id);
-          }
-
-          else if (action.type === "UPDATE_ORDER_REC") {
-            const orderId = action.id;
-            const res = await axios.put(
-              `/api/order-rec/${orderId}`,
-              { categories: action.payload.categories },
-              { headers: { Authorization: `Bearer ${localStorage.getItem("token")}` } }
-            );
-
-            const latest = { ...res.data, id: res.data._id, _id: res.data._id  };
-            await saveOrderRec(latest);
-            console.log("✅ Synced and refreshed UPDATE_ORDER_REC order record:", latest.id);
-          }
-
-          else if (action.type === "SAVE_EXTRA_NOTE") {
-            // 🔹 Perform backend update
-            const res = await axios.patch(
-              `/api/order-rec/${action.orderId}`,
-              { extraItemsNote: action.note },
-              { headers: { Authorization: `Bearer ${localStorage.getItem("token")}` } }
-            );
-
-            // 🔹 Fetch latest record from backend and cache it
-            // const res = await axios.get(`/api/order-rec/${action.orderId}`, {
-            //   headers: { Authorization: `Bearer ${localStorage.getItem("token")}` },
-            // });
-            const latest = { ...res.data, id: res.data._id, _id: res.data._id };
-            await saveOrderRec(latest);
-            console.log("✅ Synced and refreshed SAVE_EXTRA_NOTE order record:", latest.id);
-          }
-
+          await syncOneAction(action);
+          await deletePendingAction(key); // remove ONLY this entry
+          madeProgress = true;
         } catch (err) {
-          console.error("⚠️ Failed syncing", action, err);
-          failed.push(action);
+          if (isPermanentFailure(err)) {
+            await updatePendingAction(key, {
+              failed: true,
+              failureReason: describeSyncFailure(err),
+              failedAt: Date.now(),
+            });
+            madeProgress = true; // resolved into a terminal state, not stuck
+            console.error("🛑 Permanent failure, will not retry:", action.type, key, err);
+          } else {
+            console.warn("⚠️ Transient failure, left queued for retry:", action.type, key, err);
+          }
         }
       }
 
-      // ✅ Clear successful ones
-      await clearPendingActions();
-
-      // 🔁 Requeue failed ones
-      if (failed.length) {
-        const dbw = await getDB();
-        const txw = dbw.transaction("pendingActions", "readwrite");
-        for (const f of failed) await txw.store.add(f);
-        await txw.done;
-        console.warn(`🔁 ${failed.length} actions retained for retry`);
-        break;
-      }
-    } while (pending.length > 0);
-
-    console.log("✅ Pending sync done");
+      // Nothing changed this pass — whatever's left is a transient failure
+      // that just failed again. Stop instead of hot-looping; the next
+      // `online` event / 15s poll / triggerBackgroundSync() call retries.
+      if (!madeProgress) break;
+    }
+  } finally {
+    syncInFlight = false;
   }
+
+  console.log("✅ Pending sync pass done");
+}
+
+// Best-effort background sync trigger, meant to be called WITHOUT awaiting
+// (fire-and-forget). isActuallyOnline() can itself take up to ~12s on a
+// degraded connection, but since callers don't await this, that delay is
+// invisible to them — it only affects how soon a genuinely-online user's
+// queued item leaves the "pending" state.
+export async function triggerBackgroundSync(): Promise<void> {
+  try {
+    if (await isActuallyOnline()) {
+      await syncPendingActions();
+    }
+  } catch (err) {
+    console.warn("Background sync attempt failed to start:", err);
+  }
+}
 

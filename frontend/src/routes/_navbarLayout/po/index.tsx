@@ -13,6 +13,7 @@ import { DatePicker } from '@/components/custom/datePicker';
 import { LocationPicker } from '@/components/custom/locationPicker';
 import { domain } from '@/lib/constants'
 import { Camera, ExternalLink } from 'lucide-react'
+import { getCachedArCustomers, saveCachedArCustomers } from '@/lib/arCustomersCache'
 
 interface Product {
   _id: string
@@ -29,8 +30,16 @@ interface QuickSelectCustomer {
   _id: string
   name: string
   fleetCardNumber: string
+  label?: string
   order: number
 }
+
+const PRODUCTS_CACHE_KEY = 'po_cachedProducts'
+const QUICK_SELECT_CACHE_PREFIX = 'po_cachedQuickSelect_'
+
+// Sites with no PO Number / Fleet Card concept — the Number section is hidden
+// entirely and neither field is submitted with the purchase order.
+const NO_PO_NUMBER_SITES = ['Rankin', 'Sarnia', 'Walpole', 'Jocko Point', 'Charlies']
 
 async function loader() {
   try {
@@ -42,10 +51,18 @@ async function loader() {
       }
     })
     const products: Product[] = response.data
+    localStorage.setItem(PRODUCTS_CACHE_KEY, JSON.stringify(products))
 
     return { products }
   } catch (error) {
-    return { products: [] }
+    // Offline (or request failed) — fall back to whatever we last fetched
+    // successfully, so the fuel grade dropdown isn't empty while offline.
+    try {
+      const cached = localStorage.getItem(PRODUCTS_CACHE_KEY)
+      return { products: cached ? JSON.parse(cached) : [] }
+    } catch {
+      return { products: [] }
+    }
   }
 }
 
@@ -102,11 +119,15 @@ function RouteComponent() {
   const data = Route.useLoaderData()
   const stationName = useFormStore((state) => state.stationName)
   const setStationName = useFormStore((state) => state.setStationName)
-  const isRankin = stationName === 'Rankin'
+  const isNoPoNumberSite = NO_PO_NUMBER_SITES.includes(stationName)
 
   const [poError, setPoError] = useState<string>('')
   const [cardStatus, setCardStatus] = useState<string | null>(null)
-  const [arCustomers, setArCustomers] = useState<ArCustomer[]>([])
+  // Seeded from the offline cache so the autocomplete has data immediately on
+  // render (it's likely already warm — see the eager prefetch in
+  // AuthContext.tsx, fired as soon as login resolves) instead of waiting for
+  // this page's own fetch below to succeed or fail first.
+  const [arCustomers, setArCustomers] = useState<ArCustomer[]>(() => getCachedArCustomers<ArCustomer>())
   const [showSuggestions, setShowSuggestions] = useState(false)
   const customerNameRef = useRef<HTMLDivElement>(null)
   const [quickSelectCustomers, setQuickSelectCustomers] = useState<QuickSelectCustomer[]>([])
@@ -119,6 +140,7 @@ function RouteComponent() {
     stolen:    { label: 'Stolen',         className: 'text-red-600' },
     cancelled: { label: 'Cancelled',      className: 'text-gray-500' },
     not_found: { label: 'Card not found', className: 'text-red-600' },
+    offline:   { label: 'Offline — will verify when synced', className: 'text-amber-600' },
   }
 
   const handleBlur = async () => {
@@ -161,19 +183,38 @@ function RouteComponent() {
         headers: { Authorization: `Bearer ${token}` },
       })
     ).then((res) => {
-      if (Array.isArray(res?.data)) setArCustomers(res.data)
-    }).catch(() => {})
+      if (Array.isArray(res?.data)) {
+        setArCustomers(res.data)
+        saveCachedArCustomers(res.data)
+      }
+    }).catch(() => {
+      // Offline (or request failed) — the arCustomers state is already
+      // seeded from the same cache above, so there's nothing more to do here.
+    })
   }, [])
 
   useEffect(() => {
     if (!stationName) { setQuickSelectCustomers([]); return }
     const token = localStorage.getItem('token')
+    const cacheKey = `${QUICK_SELECT_CACHE_PREFIX}${stationName}`
     axios.get(`${domain}/api/ar-customers/quick-select`, {
       params: { stationName },
       headers: { Authorization: `Bearer ${token}` },
     }).then((res) => {
-      if (Array.isArray(res?.data)) setQuickSelectCustomers(res.data)
-    }).catch(() => setQuickSelectCustomers([]))
+      if (Array.isArray(res?.data)) {
+        setQuickSelectCustomers(res.data)
+        localStorage.setItem(cacheKey, JSON.stringify(res.data))
+      }
+    }).catch(() => {
+      // Offline (or request failed) — fall back to this station's last
+      // successful fetch instead of clearing the quick-select buttons.
+      try {
+        const cached = localStorage.getItem(cacheKey)
+        setQuickSelectCustomers(cached ? JSON.parse(cached) : [])
+      } catch {
+        setQuickSelectCustomers([])
+      }
+    })
   }, [stationName])
 
   useEffect(() => {
@@ -239,17 +280,17 @@ function RouteComponent() {
     setCardStatus(null)
   }
 
-  // Rankin has no PO Number / Fleet Card concept. The store persists across
-  // client-side nav, so force-clear stale values the instant the active site
-  // becomes Rankin (e.g. user typed something on another site, then switched).
+  // NO_PO_NUMBER_SITES have no PO Number / Fleet Card concept. The store persists
+  // across client-side nav, so force-clear stale values the instant the active
+  // site becomes one of them (e.g. user typed something on another site, then switched).
   useEffect(() => {
-    if (isRankin) {
+    if (isNoPoNumberSite) {
       resetNumberSection()
       setPoNumber('')
       setPoError('')
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isRankin])
+  }, [isNoPoNumberSite])
 
   const handleQuickCustomerTap = (qc: QuickSelectCustomer) => {
     if (selectedQuickCustomerId === qc._id) {
@@ -260,7 +301,7 @@ function RouteComponent() {
     setCustomerName(qc.name)
     setSelectedQuickCustomerId(qc._id)
     setShowSuggestions(false)
-    if (qc.fleetCardNumber && !isRankin) {
+    if (qc.fleetCardNumber && !isNoPoNumberSite) {
       setNumberType('fleet')
       setFleetCardNumber(qc.fleetCardNumber)
       setCardStatus('active') // trust admin-curated data; bypasses the live verify call by design
@@ -282,9 +323,12 @@ function RouteComponent() {
       active ? 'bg-slate-800 text-white' : 'bg-background text-slate-700 hover:bg-slate-50'
     }`
 
-  // Quick-select buttons show only the first word of the customer's full name
-  // (e.g. "Batchewana" for "Batchewana Frist Nation of Ojibways") to keep the row compact.
+  // Quick-select buttons default to showing only the first word of the customer's
+  // full name (e.g. "Batchewana" for "Batchewana Frist Nation of Ojibways") to keep
+  // the row compact — a custom `label` (set in Settings > Quick-Select Customers)
+  // overrides this when the first word alone doesn't read well.
   const firstWord = (name: string) => name.trim().split(' ')[0] || name
+  const quickSelectLabel = (qc: QuickSelectCustomer) => qc.label || firstWord(qc.name)
 
   return (
     <div className="p-4 border border-dashed border-gray-300 rounded-md space-y-6">
@@ -313,8 +357,8 @@ function RouteComponent() {
       {/* Number + Date on the same row */}
       <div className="flex items-start justify-between gap-4">
         <div className={`space-y-3 transition-opacity duration-500 ${selectedQuickCustomerId ? 'opacity-0 pointer-events-none' : 'opacity-100'}`}>
-          {/* Rankin has no PO Number / Fleet Card entry */}
-          {!isRankin && (
+          {/* NO_PO_NUMBER_SITES have no PO Number / Fleet Card entry */}
+          {!isNoPoNumberSite && (
             <>
               <h2 className="text-lg font-bold">Number</h2>
               <div className="flex rounded-md border border-input overflow-hidden w-fit">
@@ -342,8 +386,11 @@ function RouteComponent() {
                             headers: { Authorization: `Bearer ${token}` },
                           })
                           setCardStatus(res.data.reason || res.data.status || 'not_found')
-                        } catch {
-                          setCardStatus('not_found')
+                        } catch (e) {
+                          // No response at all means we couldn't reach the server (offline) —
+                          // don't permanently block the form; the backend upserts/validates
+                          // the fleet card again when this PO is created/synced.
+                          setCardStatus(axios.isAxiosError(e) && !e.response ? 'offline' : 'not_found')
                         }
                       } else {
                         setCardStatus(null)
@@ -400,7 +447,13 @@ function RouteComponent() {
                           setPoError('')
                         }
                       } catch (e: any) {
-                        setPoError(e?.response?.data?.message || 'Could not validate PO number uniqueness')
+                        // No response at all means we're offline — can't validate uniqueness
+                        // right now, so don't block; the backend still enforces it on submit/sync.
+                        if (axios.isAxiosError(e) && !e.response) {
+                          setPoError('')
+                        } else {
+                          setPoError(e?.response?.data?.message || 'Could not validate PO number uniqueness')
+                        }
                       }
                     }}
                   >
@@ -444,7 +497,7 @@ function RouteComponent() {
                   onClick={() => handleQuickCustomerTap(qc)}
                   className={toggleClass(selectedQuickCustomerId === qc._id, 'rounded-md border border-input')}
                 >
-                  {firstWord(qc.name)}
+                  {quickSelectLabel(qc)}
                 </button>
               ))}
             </div>
@@ -597,13 +650,14 @@ function RouteComponent() {
             className="bg-blue-600 hover:bg-blue-700 text-white"
             onClick={() => {
               // Only pad when the user is actually on the PO Number path for a site that shows it.
-              // Rankin never shows the Number section, and the Fleet Card path never touches poNumber —
-              // padding an untouched empty value to "00000" would submit a non-empty poNumber that
-              // collides with the backend's per-station unique index on every subsequent submission.
-              if (!isRankin && numberType === 'po') setPoNumber(padFive(poNumber));
+              // NO_PO_NUMBER_SITES never show the Number section, and the Fleet Card path never
+              // touches poNumber — padding an untouched empty value to "00000" would submit a
+              // non-empty poNumber that collides with the backend's per-station unique index on
+              // every subsequent submission.
+              if (!isNoPoNumberSite && numberType === 'po') setPoNumber(padFive(poNumber));
               fileInputRef.current?.click();
             }}
-            disabled={!!poError || !customerName || !driverName || (purchaseType === 'fuel' ? quantity === 0 : !itemsDescription) || (numberType === 'fleet' && cardStatus !== 'active')}
+            disabled={!!poError || !customerName || !driverName || (purchaseType === 'fuel' ? quantity === 0 : !itemsDescription) || (numberType === 'fleet' && cardStatus !== 'active' && cardStatus !== 'offline')}
           >
             <Camera className="mr-2 h-4 w-4" />
             Upload Receipt
