@@ -25,6 +25,60 @@ router.get("/vendors", async (req, res) => {
   }
 });
 
+// GET /api/invoice-upload/list?siteId=...&fromDate=2026-07-21&toDate=2026-07-22
+// GET /api/invoice-upload/list?siteName=...&fromDate=YYYY-MM-DD&toDate=YYYY-MM-DD
+// GET /api/invoice-upload/list
+router.get("/list", async (req, res) => {
+  try {
+    const { siteName, fromDate, toDate } = req.query;
+    // Build dynamic MongoDB query object
+    const query = {};
+
+    // 1. Resolve siteName string to Location ObjectId if provided
+    if (siteName && siteName !== "all" && siteName.trim() !== "") {
+      // Case-insensitive regex search to avoid slight casing or whitespace mismatches
+      const targetLocation = await Location.findOne({
+        stationName: { $regex: new RegExp(`^${siteName.trim()}$`, "i") },
+      });
+
+      if (!targetLocation) {
+        console.warn(
+          `⚠️ [INVOICE LIST API] Location matching '${siteName}' not found in DB.`
+        );
+        return res.status(404).json({
+          success: false,
+          error: `Configured location matching '${siteName}' could not be resolved.`,
+        });
+      }
+      query.site = targetLocation._id;
+    }
+
+    // 2. String-based Date Range Filtering ('YYYY-MM-DD')
+    if (fromDate || toDate) {
+      query.invoiceDate = {};
+      if (fromDate) query.invoiceDate.$gte = String(fromDate).trim();
+      if (toDate) query.invoiceDate.$lte = String(toDate).trim();
+    }
+
+    // Query DB
+    const invoices = await CsoInvoice.find(query)
+      .populate("site", "stationName csoCode")
+      .populate("submittedByMongoId", "name email")
+      .sort({ invoiceDate: -1, createdAt: -1 });
+
+    return res.status(200).json({
+      success: true,
+      data: invoices,
+    });
+  } catch (err) {
+    console.error("❌ [INVOICE LIST API] Error fetching filtered invoice list:", err);
+    return res.status(500).json({
+      success: false,
+      error: "Failed to retrieve invoice records.",
+    });
+  }
+});
+
 // Helper: Convert Frontend Base64 DataURL to Node Buffer & Extract MIME metadata
 const dataURLToBuffer = (dataurl) => {
   const arr = dataurl.split(",");
