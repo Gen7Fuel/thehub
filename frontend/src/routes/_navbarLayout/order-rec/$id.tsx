@@ -1515,8 +1515,16 @@ function RouteComponent() {
                         </Button>
                         <Input
                           type="number"
+                          step={1}
+                          inputMode="numeric"
                           value={item[field]}
-                          onChange={e => handleChange(catIdx, itemIdx, field, Number(e.target.value))}
+                          onChange={e => {
+                            const parsed = parseInt(e.target.value, 10)
+                            handleChange(catIdx, itemIdx, field, isNaN(parsed) ? 0 : parsed)
+                          }}
+                          onKeyDown={e => {
+                            if (e.key === '.' || e.key === ',') e.preventDefault()
+                          }}
                           onFocus={e => e.target.select()}
                           className="w-24 text-center text-gray-900 font-semibold disabled:text-gray-900"
                         />
