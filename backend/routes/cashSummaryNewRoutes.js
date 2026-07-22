@@ -12,6 +12,7 @@ const { dateFromYMDLocal } = require('../utils/dateUtils')
 const { emailQueue } = require('../queues/emailQueue')
 const { generateCashSummaryPdf } = require('../utils/cashSummaryPdf')
 const { generateEodReportPdf } = require('../utils/eodReportWavers');
+const { generateChickenDelightEodReportPdf } = require('../utils/eodCDReportWavers');
 const { generateShiftReportsPdf } = require('../utils/shiftReportsPdf')
 const { generateLotteryImagesPdf } = require('../utils/lotteryImagesPdf')
 const { getRefundTransactions, getShiftEmployees } = require('../services/sqlService');
@@ -1164,6 +1165,19 @@ router.post('/submit/to/safesheet', async (req, res) => {
             } catch (eodErr) {
               console.error('Failed generating customized Wavers EOD report attachment:', eodErr.message);
             }
+            // Chicken Delight EOD Report - ONLY for Wavers West
+            if (site === 'Wavers West') {
+              try {
+                const eodChickenDelightPdf = await generateChickenDelightEodReportPdf({ site, date });
+                attachments.push({
+                  filename: `Chicken-Delight-End-of-Day-Report-${site}-${date}.pdf`,
+                  content: eodChickenDelightPdf,
+                  contentType: 'application/pdf',
+                });
+              } catch (cdErr) {
+                console.error('Failed generating Chicken Delight EOD report attachment:', cdErr.message);
+              }
+            }
           }
 
           if (depositSlip) attachments.push(depositSlip)
@@ -1664,12 +1678,17 @@ router.put('/:id', async (req, res) => {
       }
       const frontendTendersSum = finalTenders.reduce((sum, t) => sum + (t.value || 0), 0)
       
-      // Extract the updated tips mapping from request body or default fallback parameter
       const parsedTips = norm(chickenDelightTips ?? existing.chickenDelightTips) || 0
 
-      // Formula: baseCashReport - (tendersSum - tips)
-      const rawCashTotal = norm(ev.report_canadian_cash ?? report_canadian_cash ?? existing.report_canadian_cash) ?? 0
-      baseReportCash = rawCashTotal - (frontendTendersSum - parsedTips)
+      // ✅ FIX: Only subtract if we have a fresh raw value (from SFTP `ev` or explicit payload `report_canadian_cash`).
+      // If falling back to `existing.report_canadian_cash`, it's ALREADY subtracted—do NOT subtract again!
+      if (ev.report_canadian_cash !== undefined || report_canadian_cash !== undefined) {
+        const rawCashTotal = norm(ev.report_canadian_cash ?? report_canadian_cash) ?? 0
+        baseReportCash = rawCashTotal - (frontendTendersSum - parsedTips)
+      } else {
+        // Leave existing baseReportCash as-is when refetching without raw cash updates
+        baseReportCash = existing.report_canadian_cash
+      }
     }
 
     const finalValues = {
