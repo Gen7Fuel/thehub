@@ -1,8 +1,11 @@
 const express = require('express')
 const router = express.Router()
+const multer = require('multer')
+const upload = multer({ storage: multer.memoryStorage() })
 const Location = require("../models/Location");
 const { emailQueue } = require('../queues/emailQueue');
 const { pushNotification } = require("../services/notificationService");
+const { cdnUploadQueue } = require("../queues/cdnUploadQueue");
 
 // JSON body parsing
 router.use(express.json({ limit: '1mb' }))
@@ -38,33 +41,82 @@ const isYmd = (s) => typeof s === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(s)
 
 // POST /api/fuel-rec/capture
 // body: { site: string, date: 'YYYY-MM-DD', photo: string, bolNumber: string }  // photo = filename from CDN
-router.post('/capture', async (req, res) => {
+// router.post('/capture', async (req, res) => {
+//   const site = String(req.body?.site || '').trim()
+//   const date = String(req.body?.date || '').trim()
+//   const filename = String(req.body?.photo || '').trim()
+//   const bolNumber = String(req.body?.bolNumber || '').trim()
+
+//   if (!site || !isYmd(date) || !filename || !bolNumber) {
+//     return res.status(400).json({ error: 'site, date (YYYY-MM-DD), photo filename and bolNumber are required' })
+//   }
+
+//   try {
+//     const BOLPhoto = await getBOLPhoto()
+//     const saved = await BOLPhoto.findOneAndUpdate(
+//       { site, date, filename },
+//       { $setOnInsert: { site, date, filename }, $set: { bolNumber } },
+//       { new: true, upsert: true }
+//     ).lean()
+
+//     return res.status(200).json({ saved: true, photo: saved })
+//   } catch (e) {
+//     if (e && e.code === 11000) {
+//       const BOLPhoto = await getBOLPhoto()
+//       const existing = await BOLPhoto.findOne({ site, date, filename }).lean()
+//       return res.status(200).json({ saved: true, photo: existing })
+//     }
+//     console.error('fuelRec.capture error:', e)
+//     return res.status(500).json({ error: 'Failed to save BOL photo' })
+//   }
+// })
+// POST /api/fuel-rec/capture
+router.post('/capture', upload.single('file'), async (req, res) => {
   const site = String(req.body?.site || '').trim()
   const date = String(req.body?.date || '').trim()
-  const filename = String(req.body?.photo || '').trim()
   const bolNumber = String(req.body?.bolNumber || '').trim()
+  const file = req.file
 
-  if (!site || !isYmd(date) || !filename || !bolNumber) {
-    return res.status(400).json({ error: 'site, date (YYYY-MM-DD), photo filename and bolNumber are required' })
+  if (!site || !isYmd(date) || !bolNumber || !file) {
+    return res.status(400).json({ error: 'site, date, bolNumber, and image file are required' })
   }
+
+  // Temporary placeholder string until CDN generates and returns the real filename
+  const tempFilename = `pending-${site}-${date}-${Date.now()}.jpg`
 
   try {
     const BOLPhoto = await getBOLPhoto()
+
+    // 1. Save or update DB record immediately
     const saved = await BOLPhoto.findOneAndUpdate(
-      { site, date, filename },
-      { $setOnInsert: { site, date, filename }, $set: { bolNumber } },
+      { site, date, bolNumber },
+      { 
+        $setOnInsert: { site, date, bolNumber }, 
+        $set: { filename: tempFilename, uploadStatus: 'pending' } 
+      },
       { new: true, upsert: true }
     ).lean()
 
+    // 2. Offload CDN upload to BullMQ worker asynchronously
+    await cdnUploadQueue.add(
+      'upload-bol-photo',
+      {
+        recordId: saved._id,
+        originalName: `fuel-rec-${site}-${date}.jpg`,
+        buffer: file.buffer, // BullMQ automatically serializes Buffer to JSON { type: 'Buffer', data: [...] }
+        mimeType: file.mimetype || 'image/jpeg',
+      },
+      {
+        attempts: 5,
+        backoff: { type: 'exponential', delay: 3000 },
+      }
+    )
+
+    // Return instant success response to user
     return res.status(200).json({ saved: true, photo: saved })
   } catch (e) {
-    if (e && e.code === 11000) {
-      const BOLPhoto = await getBOLPhoto()
-      const existing = await BOLPhoto.findOne({ site, date, filename }).lean()
-      return res.status(200).json({ saved: true, photo: existing })
-    }
     console.error('fuelRec.capture error:', e)
-    return res.status(500).json({ error: 'Failed to save BOL photo' })
+    return res.status(500).json({ error: 'Failed to save BOL record' })
   }
 })
 
