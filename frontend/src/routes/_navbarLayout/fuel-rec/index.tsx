@@ -5,7 +5,8 @@ import { format } from 'date-fns'
 import { Button } from '@/components/ui/button'
 import { SitePicker } from '@/components/custom/sitePicker'
 import { DatePicker } from '@/components/custom/datePicker'
-import { uploadBase64Image } from '@/lib/utils'
+// import { uploadBase64Image } from '@/lib/utils'
+import { compressImage } from '@/lib/compressImage'
 import { Loader2, Camera, CheckCircle2, RotateCcw } from 'lucide-react'
 
 type Search = { site: string; date: string }
@@ -26,6 +27,7 @@ function RouteComponent() {
   const navigate = useNavigate({ from: Route.fullPath })
   const setSearch = (next: Partial<Search>) => navigate({ search: (prev: any) => ({ ...prev, ...next }) })
   const { selectedSite } = useSite()
+  const [compressedBlob, setCompressedBlob] = React.useState<Blob | null>(null)
 
   React.useEffect(() => {
     if (!site && selectedSite) setSearch({ site: selectedSite })
@@ -41,48 +43,97 @@ function RouteComponent() {
     return new Date(y, (m || 1) - 1, d || 1)
   }, [date])
 
-  // Convert Native File to Base64 to keep your existing upload utility compatible
-  const handleCapture = (e: React.ChangeEvent<HTMLInputElement>) => {
+  // // Convert Native File to Base64 to keep your existing upload utility compatible
+  // const handleCapture = (e: React.ChangeEvent<HTMLInputElement>) => {
+  //   const file = e.target.files?.[0]
+  //   if (!file) return
+
+  //   const reader = new FileReader()
+  //   reader.onloadend = () => {
+  //     setPhoto(reader.result as string)
+  //   }
+  //   reader.readAsDataURL(file)
+  // }
+
+  const handleCapture = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]
     if (!file) return
 
-    const reader = new FileReader()
-    reader.onloadend = () => {
-      setPhoto(reader.result as string)
+    try {
+      // Compress immediately upon capture
+      const compressed = await compressImage(file, 1600, 0.75)
+      setCompressedBlob(compressed)
+      setPhoto(URL.createObjectURL(compressed)) // Preview URL
+    } catch (err) {
+      alert('Failed to process captured image.')
     }
-    reader.readAsDataURL(file)
   }
 
   const triggerCamera = () => {
     cameraInputRef.current?.click()
   }
 
+  // const save = async () => {
+  //   if (!photo || !site || !date || saving || !bolNumber.trim()) return
+  //   setSaving(true)
+  //   try {
+  //     // Maintaining your exact naming convention
+  //     const { filename } = await uploadBase64Image(photo, `fuel-rec-${site}-${date}.jpg`)
+
+  //     const res = await fetch('/api/fuel-rec/capture', {
+  //       method: 'POST',
+  //       headers: {
+  //         'Content-Type': 'application/json',
+  //         Authorization: `Bearer ${localStorage.getItem('token') || ''}`,
+  //         'X-Required-Permission': 'accounting.fuelRec.bol',
+  //       },
+  //       body: JSON.stringify({
+  //         site,
+  //         date,
+  //         photo: filename,
+  //         bolNumber: bolNumber.trim()
+  //       }),
+  //     })
+  //     if (res.status === 403) {
+  //       // Redirect to no-access page
+  //       navigate({ to: "/no-access" });
+  //       return;
+  //     }
+  //     if (!res.ok) throw new Error(await res.text().catch(() => `HTTP ${res.status}`))
+
+  //     navigate({ to: '/fuel-rec/list', search: { site } })
+  //   } catch (e: any) {
+  //     alert(`Save failed: ${e?.message || e}`)
+  //     setSaving(false)
+  //   }
+  // }
   const save = async () => {
-    if (!photo || !site || !date || saving || !bolNumber.trim()) return
+    if (!compressedBlob || !site || !date || saving || !bolNumber.trim()) return
     setSaving(true)
+
     try {
-      // Maintaining your exact naming convention
-      const { filename } = await uploadBase64Image(photo, `fuel-rec-${site}-${date}.jpg`)
+      const formData = new FormData()
+      const targetFilename = `fuel-rec-${site}-${date}.jpg`
+
+      formData.append('file', compressedBlob, targetFilename)
+      formData.append('site', site)
+      formData.append('date', date)
+      formData.append('bolNumber', bolNumber.trim())
 
       const res = await fetch('/api/fuel-rec/capture', {
         method: 'POST',
         headers: {
-          'Content-Type': 'application/json',
           Authorization: `Bearer ${localStorage.getItem('token') || ''}`,
           'X-Required-Permission': 'accounting.fuelRec.bol',
         },
-        body: JSON.stringify({
-          site,
-          date,
-          photo: filename,
-          bolNumber: bolNumber.trim()
-        }),
+        body: formData, // Sending multipart/form-data (no base64 overhead)
       })
+
       if (res.status === 403) {
-        // Redirect to no-access page
-        navigate({ to: "/no-access" });
-        return;
+        navigate({ to: "/no-access" })
+        return
       }
+
       if (!res.ok) throw new Error(await res.text().catch(() => `HTTP ${res.status}`))
 
       navigate({ to: '/fuel-rec/list', search: { site } })
