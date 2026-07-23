@@ -4,6 +4,7 @@ import { Input } from '@/components/ui/input'
 import { Textarea } from '@/components/ui/textarea'
 import { InputOTP, InputOTPGroup, InputOTPSeparator, InputOTPSlot } from '@/components/ui/input-otp'
 import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
+import { Switch } from '@/components/ui/switch'
 import { createFileRoute, Link, useNavigate } from '@tanstack/react-router'
 import { useAuth } from '@/context/AuthContext'
 import { useSite } from '@/context/SiteContext'
@@ -40,6 +41,13 @@ const QUICK_SELECT_CACHE_PREFIX = 'po_cachedQuickSelect_'
 // Sites with no PO Number / Fleet Card concept — the Number section is hidden
 // entirely and neither field is submitted with the purchase order.
 const NO_PO_NUMBER_SITES = ['Rankin', 'Sarnia', 'Walpole', 'Jocko Point', 'Charlies']
+
+// Fleet-card-only flow (no PO Number) with a "customer doesn't have their
+// card" opt-out that feeds fleet-card-coverage analytics. Dormant until we
+// flip FLEET_CARD_ONLY_ENABLED on for the real sites — fill in the site
+// names below when that day comes.
+const FLEET_CARD_ONLY_ENABLED = true
+const FLEET_CARD_ONLY_SITES: string[] = ['Test Lab']
 
 async function loader() {
   try {
@@ -78,6 +86,9 @@ function RouteComponent() {
 
   const fleetCardNumber = useFormStore((state) => state.fleetCardNumber)
   const setFleetCardNumber = useFormStore((state) => state.setFleetCardNumber)
+
+  const noFleetCard = useFormStore((state) => state.noFleetCard)
+  const setNoFleetCard = useFormStore((state) => state.setNoFleetCard)
 
   const date = useFormStore((state) => state.date)
   const setDate = useFormStore((state) => state.setDate)
@@ -120,6 +131,7 @@ function RouteComponent() {
   const stationName = useFormStore((state) => state.stationName)
   const setStationName = useFormStore((state) => state.setStationName)
   const isNoPoNumberSite = NO_PO_NUMBER_SITES.includes(stationName)
+  const isFleetCardOnlySite = FLEET_CARD_ONLY_ENABLED && FLEET_CARD_ONLY_SITES.includes(stationName)
 
   const [poError, setPoError] = useState<string>('')
   const [cardStatus, setCardStatus] = useState<string | null>(null)
@@ -143,8 +155,13 @@ function RouteComponent() {
     offline:   { label: 'Offline — will verify when synced', className: 'text-amber-600' },
   }
 
+  // Whether the Fleet Card OTP input is actually on screen right now —
+  // either the classic toggle is set to 'fleet', or this is a
+  // FLEET_CARD_ONLY_SITES site and the customer hasn't opted out of having one.
+  const showingFleetCardInput = isFleetCardOnlySite ? !noFleetCard : numberType === 'fleet'
+
   const handleBlur = async () => {
-    if (numberType !== 'fleet') return // only for fleet cards
+    if (!showingFleetCardInput) return // only for fleet cards
 
     const token = localStorage.getItem('token')
     const response = await axios.get(`${domain}/api/fleet/getByCardNumber/${fleetCardNumber}`, {
@@ -228,7 +245,7 @@ function RouteComponent() {
   }, [])
 
   useEffect(() => {
-    if (numberType === 'fleet') {
+    if (showingFleetCardInput) {
       if (!fleetCardNumber) {
         setFleetCardNumber('777689000000')
         setCardStatus(null)
@@ -239,7 +256,16 @@ function RouteComponent() {
       setCardStatus(null)
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [numberType])
+  }, [showingFleetCardInput])
+
+  // FLEET_CARD_ONLY_SITES use their own Fleet-Card-only flow (no PO Number
+  // toggle). Force-clear the "no fleet card" analytics flag whenever the
+  // active site isn't one of them, so it never leaks into an unrelated
+  // site's submission (e.g. user opted out, then switched to a regular site).
+  useEffect(() => {
+    if (!isFleetCardOnlySite) setNoFleetCard(false)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isFleetCardOnlySite])
 
   // Helpers for 5-digit numeric PO input
   const toFiveDigits = (s: string) => {
@@ -277,6 +303,7 @@ function RouteComponent() {
     setSelectedQuickCustomerId(null)
     setNumberType('po')
     setFleetCardNumber('')
+    setNoFleetCard(false)
     setCardStatus(null)
   }
 
@@ -304,10 +331,12 @@ function RouteComponent() {
     if (qc.fleetCardNumber && !isNoPoNumberSite) {
       setNumberType('fleet')
       setFleetCardNumber(qc.fleetCardNumber)
+      setNoFleetCard(false)
       setCardStatus('active') // trust admin-curated data; bypasses the live verify call by design
     } else {
       setNumberType('po')
       setFleetCardNumber('')
+      setNoFleetCard(false)
       setCardStatus(null)
     }
   }
@@ -329,6 +358,59 @@ function RouteComponent() {
   // overrides this when the first word alone doesn't read well.
   const firstWord = (name: string) => name.trim().split(' ')[0] || name
   const quickSelectLabel = (qc: QuickSelectCustomer) => qc.label || firstWord(qc.name)
+
+  // Shared by the classic PO/Fleet toggle and the FLEET_CARD_ONLY_SITES flow —
+  // same 16-digit OTP entry + live verify-on-change + status line either way.
+  const renderFleetCardInput = () => (
+    <div className="space-y-1">
+      <InputOTP
+        maxLength={16}
+        name="fleetCardNumber"
+        value={fleetCardNumber}
+        onChange={async (value) => {
+          setFleetCardNumber(value)
+          setSelectedQuickCustomerId(null)
+          if (value.length === 16) {
+            try {
+              const token = localStorage.getItem('token')
+              const res = await axios.get(`${domain}/api/fleet/verify/${value}`, {
+                headers: { Authorization: `Bearer ${token}` },
+              })
+              setCardStatus(res.data.reason || res.data.status || 'not_found')
+            } catch (e) {
+              // No response at all means we couldn't reach the server (offline) —
+              // don't permanently block the form; the backend upserts/validates
+              // the fleet card again when this PO is created/synced.
+              setCardStatus(axios.isAxiosError(e) && !e.response ? 'offline' : 'not_found')
+            }
+          } else {
+            setCardStatus(null)
+          }
+        }}
+        onBlur={handleBlur}
+      >
+        <InputOTPGroup>
+          {[0, 1, 2, 3].map((i) => <InputOTPSlot key={i} index={i} />)}
+        </InputOTPGroup>
+        <InputOTPSeparator />
+        <InputOTPGroup>
+          {[4, 5, 6, 7].map((i) => <InputOTPSlot key={i} index={i} />)}
+        </InputOTPGroup>
+        <InputOTPSeparator />
+        <InputOTPGroup>
+          {[8, 9, 10, 11].map((i) => <InputOTPSlot key={i} index={i} />)}
+        </InputOTPGroup>
+        <InputOTPSeparator />
+        <InputOTPGroup>
+          {[12, 13, 14, 15].map((i) => <InputOTPSlot key={i} index={i} />)}
+        </InputOTPGroup>
+      </InputOTP>
+      {cardStatus && (() => {
+        const cfg = statusConfig[cardStatus] ?? { label: cardStatus, className: 'text-gray-500' }
+        return <div className={`text-xs text-right ${cfg.className}`}>{cfg.label}</div>
+      })()}
+    </div>
+  )
 
   return (
     <div className="p-4 border border-dashed border-gray-300 rounded-md space-y-6">
@@ -358,7 +440,25 @@ function RouteComponent() {
       <div className="flex items-start justify-between gap-4">
         <div className={`space-y-3 transition-opacity duration-500 ${selectedQuickCustomerId ? 'opacity-0 pointer-events-none' : 'opacity-100'}`}>
           {/* NO_PO_NUMBER_SITES have no PO Number / Fleet Card entry */}
-          {!isNoPoNumberSite && (
+          {!isNoPoNumberSite && isFleetCardOnlySite && (
+            <>
+              <h2 className="text-lg font-bold">Fleet Card</h2>
+              <div className="flex items-center gap-2">
+                <Switch checked={!noFleetCard} onCheckedChange={(checked) => setNoFleetCard(!checked)} />
+                <span className="text-sm text-slate-700">Customer has fleet card</span>
+              </div>
+
+              {!noFleetCard ? (
+                renderFleetCardInput()
+              ) : (
+                <div className="text-xs text-slate-500 max-w-[220px]">
+                  No fleet card — recorded for reporting.
+                </div>
+              )}
+            </>
+          )}
+
+          {!isNoPoNumberSite && !isFleetCardOnlySite && (
             <>
               <h2 className="text-lg font-bold">Number</h2>
               <div className="flex rounded-md border border-input overflow-hidden w-fit">
@@ -371,54 +471,7 @@ function RouteComponent() {
               </div>
 
               {numberType === 'fleet' ? (
-                <div className="space-y-1">
-                  <InputOTP
-                    maxLength={16}
-                    name="fleetCardNumber"
-                    value={fleetCardNumber}
-                    onChange={async (value) => {
-                      setFleetCardNumber(value)
-                      setSelectedQuickCustomerId(null)
-                      if (value.length === 16) {
-                        try {
-                          const token = localStorage.getItem('token')
-                          const res = await axios.get(`${domain}/api/fleet/verify/${value}`, {
-                            headers: { Authorization: `Bearer ${token}` },
-                          })
-                          setCardStatus(res.data.reason || res.data.status || 'not_found')
-                        } catch (e) {
-                          // No response at all means we couldn't reach the server (offline) —
-                          // don't permanently block the form; the backend upserts/validates
-                          // the fleet card again when this PO is created/synced.
-                          setCardStatus(axios.isAxiosError(e) && !e.response ? 'offline' : 'not_found')
-                        }
-                      } else {
-                        setCardStatus(null)
-                      }
-                    }}
-                    onBlur={handleBlur}
-                  >
-                    <InputOTPGroup>
-                      {[0, 1, 2, 3].map((i) => <InputOTPSlot key={i} index={i} />)}
-                    </InputOTPGroup>
-                    <InputOTPSeparator />
-                    <InputOTPGroup>
-                      {[4, 5, 6, 7].map((i) => <InputOTPSlot key={i} index={i} />)}
-                    </InputOTPGroup>
-                    <InputOTPSeparator />
-                    <InputOTPGroup>
-                      {[8, 9, 10, 11].map((i) => <InputOTPSlot key={i} index={i} />)}
-                    </InputOTPGroup>
-                    <InputOTPSeparator />
-                    <InputOTPGroup>
-                      {[12, 13, 14, 15].map((i) => <InputOTPSlot key={i} index={i} />)}
-                    </InputOTPGroup>
-                  </InputOTP>
-                  {cardStatus && (() => {
-                    const cfg = statusConfig[cardStatus] ?? { label: cardStatus, className: 'text-gray-500' }
-                    return <div className={`text-xs text-right ${cfg.className}`}>{cfg.label}</div>
-                  })()}
-                </div>
+                renderFleetCardInput()
               ) : (
                 <div className="space-y-1">
                   <InputOTP
@@ -650,14 +703,14 @@ function RouteComponent() {
             className="bg-blue-600 hover:bg-blue-700 text-white"
             onClick={() => {
               // Only pad when the user is actually on the PO Number path for a site that shows it.
-              // NO_PO_NUMBER_SITES never show the Number section, and the Fleet Card path never
-              // touches poNumber — padding an untouched empty value to "00000" would submit a
-              // non-empty poNumber that collides with the backend's per-station unique index on
-              // every subsequent submission.
-              if (!isNoPoNumberSite && numberType === 'po') setPoNumber(padFive(poNumber));
+              // NO_PO_NUMBER_SITES and FLEET_CARD_ONLY_SITES never show the PO Number path, and
+              // the Fleet Card path never touches poNumber — padding an untouched empty value to
+              // "00000" would submit a non-empty poNumber that collides with the backend's
+              // per-station unique index on every subsequent submission.
+              if (!isNoPoNumberSite && !isFleetCardOnlySite && numberType === 'po') setPoNumber(padFive(poNumber));
               fileInputRef.current?.click();
             }}
-            disabled={!!poError || !customerName || !driverName || (purchaseType === 'fuel' ? quantity === 0 : !itemsDescription) || (numberType === 'fleet' && cardStatus !== 'active' && cardStatus !== 'offline')}
+            disabled={!!poError || !customerName || !driverName || (purchaseType === 'fuel' ? quantity === 0 : !itemsDescription) || (isFleetCardOnlySite ? (!noFleetCard && cardStatus !== 'active' && cardStatus !== 'offline') : (numberType === 'fleet' && cardStatus !== 'active' && cardStatus !== 'offline'))}
           >
             <Camera className="mr-2 h-4 w-4" />
             Upload Receipt

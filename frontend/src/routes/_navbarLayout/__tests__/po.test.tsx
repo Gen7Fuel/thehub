@@ -25,6 +25,8 @@ const {
   const mockStore = {
     fleetCardNumber: '' as string,
     setFleetCardNumber: vi.fn(),
+    noFleetCard: false as boolean,
+    setNoFleetCard: vi.fn(),
     poNumber: '' as string,
     setPoNumber: vi.fn(),
     customerName: 'Jane Doe' as string,

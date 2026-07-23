@@ -35,6 +35,10 @@ const transactionSchema = new mongoose.Schema({
     type: String,
     required: false // optional now
   },
+  noFleetCard: {
+    type: Boolean,
+    default: false // true = customer confirmed they did not have their fleet card
+  },
   driverName: { type: String, required: false },                   // Name of the driver (optional)
   customerName: { type: String, required: true },                   // Customer ID (optional)
   vehicleMakeModel: { type: String, required: false },

@@ -64,6 +64,7 @@ router.post("/", async (req, res) => {
   let {
     fleetCardNumber,
     poNumber,
+    noFleetCard,
     date,
     quantity,
     amount,
@@ -159,6 +160,7 @@ router.post("/", async (req, res) => {
       stationName,
       fleetCardNumber: fleetCardNumber || '',
       poNumber: poNumber || '',
+      noFleetCard: !!noFleetCard,
       quantity: quantity ?? 0,
       amount,
       productCode: productCode || '',
@@ -192,6 +194,7 @@ router.put("/:id", express.json(), async (req, res) => {
     const allowed = [
       'fleetCardNumber',
       'poNumber',
+      'noFleetCard',
       'date',
       'quantity',
       'amount',
@@ -394,7 +397,7 @@ router.get("/", async (req, res) => {
 
   try {
     const orders = await Transaction.find(filter)
-      .select('fleetCardNumber driverName customerName vehicleMakeModel licensePlate productCode quantity amount signature date dateStr receipt poNumber requestReceipt')
+      .select('fleetCardNumber noFleetCard driverName customerName vehicleMakeModel licensePlate productCode quantity amount signature date dateStr receipt poNumber requestReceipt')
       .sort({ date: -1, _id: -1 });
 
     const fleetCardNumbers = orders
