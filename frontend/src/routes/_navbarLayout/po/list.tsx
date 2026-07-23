@@ -51,6 +51,7 @@ function RouteComponent() {
     date: string;
     dateStr?: string;
     fleetCardNumber: string;
+    noFleetCard?: boolean;
     customerName: string;
     driverName: string;
     quantity: number;
@@ -148,6 +149,7 @@ function RouteComponent() {
     date: a.payload.date,
     dateStr: a.payload.date,
     fleetCardNumber: a.payload.fleetCardNumber,
+    noFleetCard: a.payload.noFleetCard,
     poNumber: a.payload.poNumber,
     customerName: a.payload.customerName,
     driverName: a.payload.driverName,
@@ -409,7 +411,7 @@ function RouteComponent() {
                 <td className="border-dashed border-t border-gray-300 px-4 py-2">{
                   order.dateStr || new Date(order.date).toLocaleDateString('en-CA', { timeZone: 'UTC' })
                 }</td>
-                <td className="border-dashed border-t border-gray-300 px-4 py-2">{formatFleetCardNumber(order.fleetCardNumber) || order.poNumber}</td>
+                <td className="border-dashed border-t border-gray-300 px-4 py-2">{order.noFleetCard ? 'No Fleet Card' : (formatFleetCardNumber(order.fleetCardNumber) || order.poNumber)}</td>
                 <td className="border-dashed border-t border-gray-300 px-4 py-2">{order.customerName}</td>
                 <td className="border-dashed border-t border-gray-300 px-4 py-2">{order.driverName}</td>
                 <td className="border-dashed border-t border-gray-300 px-4 py-2">{order.quantity}</td>
