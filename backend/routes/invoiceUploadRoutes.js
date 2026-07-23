@@ -88,6 +88,46 @@ const dataURLToBuffer = (dataurl) => {
   return { buffer, mime };
 };
 
+// GET /api/invoice-upload/:id
+router.get("/:id", async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    // Fetch invoice from MongoDB and populate site name reference
+    const invoice = await CsoInvoice.findById(id).populate("site", "stationName");
+
+    if (!invoice) {
+      return res.status(404).json({
+        success: false,
+        error: "Invoice not found",
+      });
+    }
+
+    return res.status(200).json({
+      success: true,
+      data: {
+        _id: invoice._id,
+        siteName: invoice.site?.stationName || "",
+        invoiceDate: invoice.invoiceDate,
+        vendorCode: invoice.vendorCode,
+        vendorName: invoice.vendorName,
+        docNumber: invoice.docNumber,
+        methodOfPayment: invoice.methodOfPayment,
+        checkNumber: invoice.checkNumber || "",
+        totalCost: invoice.totalCost,
+        images: invoice.images || [],
+        status: invoice.status,
+      },
+    });
+  } catch (err) {
+    console.error("Error fetching invoice details:", err);
+    return res.status(500).json({
+      success: false,
+      error: "Failed to retrieve invoice record",
+    });
+  }
+});
+
 // ---------------------------------------------------------
 // POST /api/invoice-upload/submit
 // ---------------------------------------------------------
@@ -225,6 +265,149 @@ router.post("/submit", async (req, res) => {
     return res.status(500).json({
       success: false,
       error: err.message || "Internal server error during upload sequence.",
+    });
+  }
+});
+
+// PUT /api/invoice-upload/:id
+router.put("/:id", async (req, res) => {
+  try {
+    const { id } = req.params;
+    const userMongoId = req.user?._id;
+
+    const {
+      siteName,
+      invoiceDate,
+      vendorCode,
+      vendorName,
+      docNumber,
+      methodOfPayment,
+      checkNumber,
+      totalCost,
+      invoiceImages,
+    } = req.body;
+
+    // Safety checks
+    if (!siteName) {
+      return res.status(400).json({
+        success: false,
+        error: "Station location targeting context is required.",
+      });
+    }
+    if (!invoiceImages || invoiceImages.length === 0) {
+      return res.status(400).json({
+        success: false,
+        error: "At least one invoice image is required.",
+      });
+    }
+    if (methodOfPayment === "check" && !checkNumber) {
+      return res.status(400).json({
+        success: false,
+        error: "Check number is required for check payments.",
+      });
+    }
+
+    // Verify invoice exists
+    const existingInvoice = await CsoInvoice.findById(id);
+    if (!existingInvoice) {
+      return res.status(404).json({
+        success: false,
+        error: "Invoice not found.",
+      });
+    }
+
+    // Resolve location
+    const targetLocation = await Location.findOne({ stationName: siteName });
+    if (!targetLocation) {
+      return res.status(404).json({
+        success: false,
+        error: `Configured location matching '${siteName}' could not be resolved.`,
+      });
+    }
+
+    const siteMongoId = targetLocation._id;
+    const targetCsoCode = targetLocation.csoCode || null;
+    const dateStringOnly = invoiceDate.split("T")[0];
+    const finalFilenames = [];
+
+    // Process images: Retain existing CDN filenames and upload new Base64 assets
+    for (let i = 0; i < invoiceImages.length; i++) {
+      const imgStr = invoiceImages[i];
+
+      if (imgStr.startsWith("data:")) {
+        // Base64 string -> Upload to CDN container
+        const { buffer, mime } = dataURLToBuffer(imgStr);
+        const originalName = `inv-${vendorCode}-${docNumber}-${dateStringOnly}-${i}.png`;
+
+        const formData = new FormData();
+        const fileBlob = new Blob([buffer], { type: mime });
+        formData.append("file", fileBlob, originalName);
+
+        const response = await fetch("http://cdn:5001/cdn/upload", {
+          method: "POST",
+          body: formData,
+        });
+
+        if (!response.ok) {
+          throw new Error(
+            `CDN server dropped connection with status: ${response.status}`
+          );
+        }
+
+        const data = await response.json();
+        if (data.filename) {
+          finalFilenames.push(data.filename);
+        } else {
+          throw new Error("CDN response missing filename field.");
+        }
+      } else {
+        // Existing filename from previously saved uploads
+        finalFilenames.push(imgStr);
+      }
+    }
+
+    // Update document fields & reset execution status flag
+    // (Note: `logs` array is explicitly PRESERVED so subsequent runs append rather than overwrite)
+    existingInvoice.site = siteMongoId;
+    existingInvoice.siteCsoCode = targetCsoCode;
+    existingInvoice.submittedByMongoId = userMongoId || existingInvoice.submittedByMongoId;
+    existingInvoice.invoiceDate = dateStringOnly;
+    existingInvoice.vendorCode = vendorCode;
+    existingInvoice.vendorName = vendorName;
+    existingInvoice.docNumber = docNumber;
+    existingInvoice.methodOfPayment = methodOfPayment;
+    existingInvoice.checkNumber = methodOfPayment === "check" ? checkNumber : null;
+    existingInvoice.totalCost = Number(totalCost);
+    existingInvoice.images = finalFilenames;
+    existingInvoice.status = "pending_api_upload";
+
+    await existingInvoice.save();
+
+    // 🚀 Offload execution to BullMQ queue worker
+    console.log(
+      `📡 Re-offloading execution loop trace to background worker thread for Invoice: ${existingInvoice._id}`
+    );
+    await csoInvoiceQueue.add(
+      `invoice-upload-${existingInvoice._id}-${Date.now()}`,
+      { invoiceId: existingInvoice._id },
+      {
+        attempts: 1,
+        removeOnComplete: true,
+        removeOnFail: false,
+      }
+    );
+
+    return res.json({
+      success: true,
+      message:
+        "Your invoice has been updated and resubmitted successfully! The upload pipeline has been triggered in the background.",
+      invoiceId: existingInvoice._id,
+    });
+  } catch (err) {
+    console.error("❌ Update Route Error:", err);
+    return res.status(500).json({
+      success: false,
+      error: err.message || "Internal server error during invoice update.",
     });
   }
 });
