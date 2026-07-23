@@ -18,17 +18,33 @@ import {
   XCircle,
   Clock,
   Building,
-  CreditCard,
-  DollarSign,
   Calendar,
   RefreshCw,
   AlertTriangle,
   Filter,
+  Terminal,
+  Bug,
+  Image as ImageIcon,
+  ChevronDown,
+  ChevronUp,
+  ExternalLink,
 } from "lucide-react";
 
 export const Route = createFileRoute("/_navbarLayout/upload-invoice/list")({
   component: RouteComponent,
 });
+
+export interface ExecutionLog {
+  _id?: string;
+  attemptNumber: number;
+  timestamp: string;
+  status: "uploaded_to_cso" | "failed_cso_upload" | "retry_phase";
+  errorCategory: "USER_ERROR" | "SYSTEM_ERROR" | "RETRY_EVENT" | "NONE";
+  message?: string | null;
+  rawError?: string | null;
+  errorScreenshotFilename?: string | null;
+  executionStep?: string | null;
+}
 
 interface InvoiceItem {
   _id: string;
@@ -51,6 +67,7 @@ interface InvoiceItem {
   images: string[];
   status: "pending_api_upload" | "uploaded_to_cso" | "failed_cso_upload";
   csoUploadError?: string | null;
+  logs?: ExecutionLog[];
   createdAt: string;
 }
 
@@ -66,6 +83,9 @@ const formatDateToString = (date?: Date): string => {
 function RouteComponent() {
   const { user } = useAuth();
   const { selectedSite } = useSite();
+
+  // Permission check for viewing logs
+  const canViewLogs = Boolean(user?.access?.uploadInvoice?.list?.viewErrorLogs);
 
   // Location Picker State synced with global Auth/Site context
   const [site, setSite] = useState<string>(
@@ -83,10 +103,19 @@ function RouteComponent() {
   // List Data & Modal View States
   const [invoices, setInvoices] = useState<InvoiceItem[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
+
+  // Dialog States
   const [selectedInvoice, setSelectedInvoice] = useState<InvoiceItem | null>(
     null,
   );
+  const [selectedLogsInvoice, setSelectedLogsInvoice] =
+    useState<InvoiceItem | null>(null);
   const [activeImage, setActiveImage] = useState<string | null>(null);
+
+  // Expanded raw errors state for logs modal
+  const [expandedRawErrors, setExpandedRawErrors] = useState<
+    Record<number, boolean>
+  >({});
 
   // Sync site local state if global selectedSite changes
   useEffect(() => {
@@ -96,7 +125,6 @@ function RouteComponent() {
   }, [selectedSite]);
 
   // Fetch Filtered Invoices
-  // Fetch Filtered Invoices with Auth Token Handshake
   const fetchInvoices = useCallback(async () => {
     setLoading(true);
     try {
@@ -129,10 +157,13 @@ function RouteComponent() {
     }
   }, [site, fromDate, toDate]);
 
-  // Trigger search on filter update
   useEffect(() => {
     fetchInvoices();
   }, [fetchInvoices]);
+
+  const toggleRawError = (index: number) => {
+    setExpandedRawErrors((prev) => ({ ...prev, [index]: !prev[index] }));
+  };
 
   const getStatusBadge = (
     status: InvoiceItem["status"],
@@ -159,6 +190,35 @@ function RouteComponent() {
         return (
           <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold bg-amber-50 text-amber-700 border border-amber-200 animate-pulse">
             <Clock className="w-3.5 h-3.5" /> In Progress
+          </span>
+        );
+    }
+  };
+
+  const getErrorCategoryBadge = (category: ExecutionLog["errorCategory"]) => {
+    switch (category) {
+      case "USER_ERROR":
+        return (
+          <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-amber-100 text-amber-800 border border-amber-300">
+            USER ERROR
+          </span>
+        );
+      case "SYSTEM_ERROR":
+        return (
+          <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-rose-100 text-rose-800 border border-rose-300">
+            SYSTEM ERROR
+          </span>
+        );
+      case "RETRY_EVENT":
+        return (
+          <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-blue-100 text-blue-800 border border-blue-300">
+            RETRY EVENT
+          </span>
+        );
+      default:
+        return (
+          <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-slate-100 text-slate-600 border border-slate-200">
+            INFO
           </span>
         );
     }
@@ -197,7 +257,6 @@ function RouteComponent() {
         </div>
 
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4 items-end">
-          {/* Station LocationPicker Component */}
           <div className="space-y-1.5">
             <label className="text-xs font-semibold text-slate-600 flex items-center gap-1">
               <Building className="w-3.5 h-3.5" /> Station Location
@@ -209,7 +268,6 @@ function RouteComponent() {
             />
           </div>
 
-          {/* Custom DatePicker - From Date */}
           <div className="space-y-1.5">
             <label className="text-xs font-semibold text-slate-600 flex items-center gap-1">
               <Calendar className="w-3.5 h-3.5" /> From Date
@@ -224,7 +282,6 @@ function RouteComponent() {
             />
           </div>
 
-          {/* Custom DatePicker - To Date */}
           <div className="space-y-1.5">
             <label className="text-xs font-semibold text-slate-600 flex items-center gap-1">
               <Calendar className="w-3.5 h-3.5" /> To Date
@@ -298,19 +355,47 @@ function RouteComponent() {
                       {getStatusBadge(inv.status, inv.csoUploadError)}
                     </td>
                     <td className="py-4 px-4 text-right whitespace-nowrap">
-                      <Button
-                        size="sm"
-                        variant="secondary"
-                        onClick={() => {
-                          setSelectedInvoice(inv);
-                          if (inv.images && inv.images.length > 0) {
-                            setActiveImage(inv.images[0]);
-                          }
-                        }}
-                        className="inline-flex items-center gap-1.5 text-xs text-indigo-600 bg-indigo-50 hover:bg-indigo-100 border-none"
-                      >
-                        <Eye className="w-3.5 h-3.5" /> View Details
-                      </Button>
+                      <div className="flex items-center justify-end gap-1.5">
+                        {/* View Details Icon Button */}
+                        <Button
+                          size="icon"
+                          variant="secondary"
+                          title="View Details"
+                          onClick={() => {
+                            setSelectedInvoice(inv);
+                            if (inv.images && inv.images.length > 0) {
+                              setActiveImage(inv.images[0]);
+                            }
+                          }}
+                          className="w-8 h-8 rounded-lg text-indigo-600 bg-indigo-50 hover:bg-indigo-100 border-none"
+                        >
+                          <Eye className="w-4 h-4" />
+                        </Button>
+
+                        {/* Permission Controlled Execution Logs Button */}
+                        {canViewLogs && (
+                          <Button
+                            size="icon"
+                            variant="secondary"
+                            title="View Execution & Error Logs"
+                            onClick={() => {
+                              setSelectedLogsInvoice(inv);
+                              setExpandedRawErrors({});
+                            }}
+                            className="w-8 h-8 rounded-lg text-amber-700 bg-amber-50 hover:bg-amber-100 border-none relative"
+                          >
+                            <Terminal className="w-4 h-4" />
+                            {inv.logs && inv.logs.length > 0 && (
+                              <span className="absolute -top-1 -right-1 flex h-3 w-3">
+                                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-amber-400 opacity-75"></span>
+                                <span className="relative inline-flex rounded-full h-3 w-3 bg-amber-500 text-[8px] text-white font-bold items-center justify-center">
+                                  {inv.logs.length}
+                                </span>
+                              </span>
+                            )}
+                          </Button>
+                        )}
+                      </div>
                     </td>
                   </tr>
                 ))}
@@ -344,7 +429,6 @@ function RouteComponent() {
 
           {selectedInvoice && (
             <div className="p-6 overflow-y-auto max-h-[75vh] space-y-6">
-              {/* Error Context Box */}
               {selectedInvoice.status === "failed_cso_upload" &&
                 selectedInvoice.csoUploadError && (
                   <div className="p-4 rounded-xl bg-rose-50 border border-rose-200 flex items-start gap-3 text-rose-800">
@@ -361,18 +445,31 @@ function RouteComponent() {
                 )}
 
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                {/* Images Viewer */}
+                {/* Inside the View Details Dialog - Document Image Section */}
                 <div className="space-y-3">
                   <h3 className="text-xs font-bold text-slate-400 uppercase tracking-wider">
                     Attached Document Images ({selectedInvoice.images.length})
                   </h3>
                   {activeImage ? (
-                    <div className="border border-slate-200 rounded-xl overflow-hidden bg-slate-900 h-72 flex items-center justify-center relative">
-                      <img
-                        src={`/cdn/download/${activeImage}`}
-                        alt="Invoice Document Copy"
-                        className="max-h-full max-w-full object-contain"
-                      />
+                    <div className="space-y-2">
+                      <div className="border border-slate-200 rounded-xl overflow-hidden bg-slate-900 h-72 flex items-center justify-center relative">
+                        <img
+                          src={`/cdn/download/${activeImage}`}
+                          alt="Invoice Document Copy"
+                          className="max-h-full max-w-full object-contain"
+                        />
+                      </div>
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        className="w-full flex items-center justify-center gap-2 text-xs font-medium text-slate-700 bg-white border-slate-200 hover:bg-slate-50"
+                        onClick={() =>
+                          window.open(`/cdn/download/${activeImage}`, "_blank")
+                        }
+                      >
+                        <ExternalLink className="w-3.5 h-3.5" /> Open in New Tab
+                      </Button>
                     </div>
                   ) : (
                     <div className="h-72 border border-slate-200 rounded-xl flex items-center justify-center bg-slate-50 text-slate-400 text-xs">
@@ -403,7 +500,6 @@ function RouteComponent() {
                   )}
                 </div>
 
-                {/* Info Fields */}
                 <div className="space-y-4">
                   <h3 className="text-xs font-bold text-slate-400 uppercase tracking-wider">
                     Invoice Metadata & Summary
@@ -489,6 +585,158 @@ function RouteComponent() {
 
           <div className="p-4 border-t border-slate-100 bg-slate-50/50 flex justify-end">
             <Button variant="outline" onClick={() => setSelectedInvoice(null)}>
+              Close
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Permission Controlled Admin Execution Logs Dialog */}
+      <Dialog
+        open={!!selectedLogsInvoice}
+        onOpenChange={(open) => !open && setSelectedLogsInvoice(null)}
+      >
+        <DialogContent className="max-w-5xl w-full p-0 overflow-hidden rounded-2xl bg-white">
+          <DialogHeader className="p-5 border-b border-slate-100 bg-slate-50/80">
+            <DialogTitle className="flex items-center gap-3 text-lg font-bold text-slate-900">
+              <div className="p-2 bg-amber-50 text-amber-700 rounded-lg border border-amber-200">
+                <Terminal className="w-5 h-5" />
+              </div>
+              <div>
+                <span>Execution Audit & Error Logs</span>
+                <p className="text-xs font-normal text-slate-500 mt-0.5">
+                  Doc #:{" "}
+                  <span className="font-mono text-amber-700 font-semibold">
+                    {selectedLogsInvoice?.docNumber}
+                  </span>{" "}
+                  | Vendor: {selectedLogsInvoice?.vendorName}
+                </p>
+              </div>
+            </DialogTitle>
+          </DialogHeader>
+
+          <div className="p-6 overflow-y-auto max-h-[80vh] space-y-6 bg-slate-50/50 text-slate-800">
+            {!selectedLogsInvoice?.logs ||
+            selectedLogsInvoice.logs.length === 0 ? (
+              <div className="py-12 text-center text-slate-400 space-y-2">
+                <Bug className="w-10 h-10 mx-auto text-slate-300" />
+                <p className="font-semibold text-slate-600">
+                  No execution traces recorded
+                </p>
+                <p className="text-xs text-slate-400">
+                  This task was either completed without logged retry events or
+                  is awaiting dispatch.
+                </p>
+              </div>
+            ) : (
+              <div className="space-y-4">
+                {selectedLogsInvoice.logs.map((log, index) => (
+                  <div
+                    key={log._id || index}
+                    className="border border-slate-200 bg-white rounded-xl overflow-hidden shadow-sm"
+                  >
+                    {/* Log Attempt Top Bar */}
+                    <div className="p-4 bg-slate-50 border-b border-slate-100 flex flex-wrap items-center justify-between gap-3">
+                      <div className="flex items-center gap-2.5">
+                        <span className="font-mono text-xs px-2.5 py-1 rounded bg-slate-200 text-slate-800 font-bold">
+                          Attempt #{log.attemptNumber}
+                        </span>
+                        {getErrorCategoryBadge(log.errorCategory)}
+                        {log.executionStep && (
+                          <span className="font-mono text-[11px] px-2 py-0.5 rounded bg-slate-100 text-slate-600 border border-slate-200">
+                            STEP: {log.executionStep}
+                          </span>
+                        )}
+                      </div>
+
+                      <span className="text-xs text-slate-400 font-mono">
+                        {new Date(log.timestamp).toLocaleString()}
+                      </span>
+                    </div>
+
+                    <div className="p-5 space-y-4 text-xs">
+                      {/* Formatted Message */}
+                      {log.message && (
+                        <div>
+                          <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400 block mb-1">
+                            Operational Context
+                          </span>
+                          <p className="text-slate-800 font-medium bg-slate-50 p-3 rounded-lg border border-slate-100">
+                            {log.message}
+                          </p>
+                        </div>
+                      )}
+
+                      {/* Raw Error Stack Trace Toggle Section */}
+                      {log.rawError && (
+                        <div>
+                          <button
+                            onClick={() => toggleRawError(index)}
+                            className="flex items-center justify-between w-full text-[10px] font-bold uppercase tracking-wider text-rose-600 hover:text-rose-700 transition-colors py-1"
+                          >
+                            <span className="flex items-center gap-1.5">
+                              <Bug className="w-3.5 h-3.5" /> Technical Raw
+                              Error / Stack Trace
+                            </span>
+                            {expandedRawErrors[index] ? (
+                              <ChevronUp className="w-3.5 h-3.5" />
+                            ) : (
+                              <ChevronDown className="w-3.5 h-3.5" />
+                            )}
+                          </button>
+
+                          {expandedRawErrors[index] && (
+                            <pre className="mt-2 p-3 bg-rose-50/50 rounded-lg border border-rose-200 text-rose-800 font-mono text-[11px] overflow-x-auto whitespace-pre-wrap leading-relaxed max-h-48">
+                              {log.rawError}
+                            </pre>
+                          )}
+                        </div>
+                      )}
+
+                      {/* Automation Error Screenshot */}
+                      {log.errorScreenshotFilename && (
+                        <div className="pt-2 space-y-2">
+                          <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400 flex items-center gap-1.5">
+                            <ImageIcon className="w-3.5 h-3.5 text-indigo-600" />{" "}
+                            Automation Execution Snapshot
+                          </span>
+                          <div className="border border-slate-200 rounded-xl overflow-hidden bg-slate-900 min-h-[350px] max-h-[500px] flex items-center justify-center p-2">
+                            <img
+                              src={`/cdn/download/${log.errorScreenshotFilename}`}
+                              alt={`Error Attempt ${log.attemptNumber}`}
+                              className="max-h-[480px] max-w-full object-contain rounded"
+                            />
+                          </div>
+                          <Button
+                            type="button"
+                            variant="outline"
+                            size="sm"
+                            className="w-full flex items-center justify-center gap-2 text-xs font-medium text-slate-700 bg-white border-slate-200 hover:bg-slate-50"
+                            onClick={() =>
+                              window.open(
+                                `/cdn/download/${log.errorScreenshotFilename}`,
+                                "_blank",
+                              )
+                            }
+                          >
+                            <ExternalLink className="w-3.5 h-3.5" /> Open
+                            Screenshot in New Tab
+                          </Button>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+
+          <div className="p-4 border-t border-slate-100 bg-slate-50/80 flex justify-end">
+            <Button
+              variant="outline"
+              onClick={() => setSelectedLogsInvoice(null)}
+              className="bg-white border-slate-200 text-slate-700 hover:bg-slate-100"
+            >
               Close
             </Button>
           </div>

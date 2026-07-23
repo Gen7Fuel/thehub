@@ -40,13 +40,13 @@ function RouteComponent() {
         <Link to="/upload-invoice" activeOptions={{ exact: true }}>
           <Button
             {...(!isUploadActive && ({ variant: "outline" } as object))}
-            className={access?.uploadInvoice?.list ? "rounded-r-none" : ""}
+            className={access?.uploadInvoice?.list?.value ? "rounded-r-none" : ""}
           >
             Upload
           </Button>
         </Link>
 
-        {access?.uploadInvoice?.list && (
+        {access?.uploadInvoice?.list?.value && (
           <Link to="/upload-invoice/list" activeOptions={{ exact: true }}>
             <Button
               {...(!isListActive && ({ variant: "outline" } as object))}
