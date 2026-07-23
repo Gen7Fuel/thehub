@@ -4,6 +4,9 @@ type FormStore = {
     fleetCardNumber: string;
     setFleetCardNumber: (name: string) => void;
 
+    noFleetCard: boolean;
+    setNoFleetCard: (value: boolean) => void;
+
     poNumber: string;
     setPoNumber: (name: string) => void;
 
@@ -117,6 +120,8 @@ type FormStore = {
 export const useFormStore = create<FormStore>((set) => ({
     fleetCardNumber: '',
     setFleetCardNumber: (fleetCardNumber) => set({ fleetCardNumber }),
+    noFleetCard: false,
+    setNoFleetCard: (noFleetCard) => set({ noFleetCard }),
     poNumber: '',
     setPoNumber: (poNumber) => set({ poNumber }),
     stationName: '',
@@ -145,6 +150,7 @@ export const useFormStore = create<FormStore>((set) => ({
     setSignature: (signature) => set({ signature }),
     resetForm: () => set({
         fleetCardNumber: '',
+        noFleetCard: false,
         poNumber: '',
         stationName: '',
         customerName: '',

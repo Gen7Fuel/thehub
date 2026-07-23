@@ -21,6 +21,7 @@ function RouteComponent() {
   const receipt = useFormStore((state) => state.receipt);
 
   const fleetCardNumber = useFormStore((state) => state.fleetCardNumber);
+  const noFleetCard = useFormStore((state) => state.noFleetCard);
   const poNumber = useFormStore((state) => state.poNumber);
   const customerName = useFormStore((state) => state.customerName);
   const driverName = useFormStore((state) => state.driverName);
@@ -69,6 +70,7 @@ function RouteComponent() {
       date: date ? format(date, 'yyyy-MM-dd') : format(new Date(), 'yyyy-MM-dd'),
       stationName: selectedStation,
       fleetCardNumber: fleetCardNumber || "",
+      noFleetCard: noFleetCard || false,
       poNumber: poNumber || "",
       quantity: purchaseType === 'fuel' ? quantity : 0,
       amount,
