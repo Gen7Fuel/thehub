@@ -651,17 +651,18 @@ function RouteComponent() {
                           <p className="text-[11px] font-bold leading-normal text-amber-900">
                             {pricePayload?.hasInfonet !== false ? (
                               <span>
-                                Please make sure that the numbers on your
-                                Bulloch register match the InfoNet register
-                                screen perfectly. After you click the save
+                                Please make sure that the prices on your
+                                Bulloch receipt and the InfoNet receipt match
+                                perfectly with prices on your Hub screen. 
+                                After you click the save
                                 button below, check outside on the front pumps
-                                and make sure the gas price changed correctly
+                                and make sure the gas prices changed correctly
                                 out there too.
                               </span>
                             ) : (
                               <span>
                                 Please make sure that the numbers on your
-                                Bulloch register match your screen perfectly.
+                                Bulloch register match your hub screen perfectly.
                                 After you click the save button below, check
                                 outside on the front pumps and make sure the gas
                                 price changed correctly out there too.
