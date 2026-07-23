@@ -4,6 +4,7 @@ const fs = require("fs");
 const path = require("path");
 const { emailQueue } = require("../queues/emailQueue");
 const GasBuddySession = require("../models/GasBuddySession"); 
+const { uploadToCdn } = require("./uploadToCdn");
 const { runAutoLogin } = require("./gasBuddyLoginScrapper"); // Imports your automated DB login script
 
 // Inject stealth mode to mask Playwright's automation footprints
@@ -12,28 +13,28 @@ chromium.use(stealth);
 /**
  * Helper function to pipe a screenshot buffer directly into the isolated CDN container
  */
-async function uploadToCdn(fileBuffer, originalName) {
-  try {
-    const formData = new FormData();
-    const fileBlob = new Blob([fileBuffer], { type: "image/png" });
-    formData.append("file", fileBlob, originalName);
+// async function uploadToCdn(fileBuffer, originalName) {
+//   try {
+//     const formData = new FormData();
+//     const fileBlob = new Blob([fileBuffer], { type: "image/png" });
+//     formData.append("file", fileBlob, originalName);
 
-    const response = await fetch("http://cdn:5001/cdn/upload", {
-      method: "POST",
-      body: formData,
-    });
+//     const response = await fetch("http://cdn:5001/cdn/upload", {
+//       method: "POST",
+//       body: formData,
+//     });
 
-    if (!response.ok) {
-      throw new Error(`CDN server dropped connection with status: ${response.status}`);
-    }
+//     if (!response.ok) {
+//       throw new Error(`CDN server dropped connection with status: ${response.status}`);
+//     }
 
-    const data = await response.json();
-    return `https://app.gen7fuel.com/cdn/download/${data.filename}`;
-  } catch (error) {
-    console.error("❌ Secondary Pipeline Error: Failed uploading image asset to CDN:", error);
-    return null; 
-  }
-}
+//     const data = await response.json();
+//     return `https://app.gen7fuel.com/cdn/download/${data.filename}`;
+//   } catch (error) {
+//     console.error("❌ Secondary Pipeline Error: Failed uploading image asset to CDN:", error);
+//     return null; 
+//   }
+// }
 
 /**
  * Core Price Submission Runner

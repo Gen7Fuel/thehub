@@ -7,7 +7,7 @@ const { emailQueue } = require("../queues/emailQueue");
 
 // Import the CDN helper function dynamically from your main scraper
 // (Ensures we don't duplicate upload logic across files)
-const { uploadToCdn } = require("./gasBuddyScrapper");
+const { uploadToCdn } = require("./uploadToCdn");
 
 // Ensure environment variables are loaded if running locally
 require("dotenv").config();
