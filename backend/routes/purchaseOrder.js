@@ -460,6 +460,97 @@ router.get('/unique', async (req, res) => {
   }
 })
 
+// Fleet card compliance report — per-customer counts of visits with vs.
+// without a fleet card, for the Desk "Fleet Card Compliance" page. Placed
+// before GET /:id — Express matches routes in registration order, so a
+// named route after the :id catch-all would be swallowed as an id value.
+router.get('/fleet-card-report', async (req, res) => {
+  const { startDate, endDate, stationName, site } = req.query;
+  const stationFilter = stationName || site; // same alias convention as GET /
+
+  const filter = { source: 'PO', deletedAt: null };
+  if (stationFilter) filter.stationName = stationFilter;
+
+  // Restrict to rows actually relevant to fleet-card tracking. Without this,
+  // ordinary PO-Number-only transactions (unrelated to fleet cards) would
+  // pollute the customer report.
+  const cardTrackingOr = [
+    { fleetCardNumber: { $exists: true, $ne: '' } },
+    { noFleetCard: true },
+  ];
+
+  if (startDate && endDate) {
+    const isYmd = (s) => /^\d{4}-\d{2}-\d{2}$/.test(s);
+    const start = isYmd(startDate)
+      ? DateTime.fromISO(`${startDate}T00:00:00`, { zone: TIMEZONE }).toJSDate()
+      : new Date(startDate);
+    const end = isYmd(endDate)
+      ? DateTime.fromISO(`${endDate}T00:00:00`, { zone: TIMEZONE }).plus({ days: 1 }).toJSDate()
+      : new Date(new Date(endDate).setDate(new Date(endDate).getDate() + 1));
+
+    const dateRangeOr = [
+      { dateStr: { $gte: toDateStr(startDate), $lte: toDateStr(endDate) } },
+      { dateStr: { $exists: false }, date: { $gte: start, $lt: end } },
+    ];
+
+    // Two `$or` clauses can't be sibling keys on one object literal — the
+    // second `$or:` assignment would silently clobber the first before the
+    // query ever reaches Mongo. $and keeps both independently in force.
+    filter.$and = [{ $or: cardTrackingOr }, { $or: dateRangeOr }];
+  } else {
+    filter.$or = cardTrackingOr;
+  }
+
+  try {
+    const rows = await Transaction.aggregate([
+      { $match: filter },
+      // Deterministic pre-sort so $first below is reproducible run-to-run —
+      // Mongo doesn't guarantee $group input order without an explicit
+      // preceding $sort. Earliest-dated doc's casing/whitespace wins as the
+      // display name for each normalized customer key.
+      { $sort: { date: 1 } },
+      {
+        $addFields: {
+          // customerName is free text with no foreign key, so the same real
+          // customer can fragment across rows on casing/whitespace — this
+          // trim+lowercase grouping key reduces but doesn't fully solve that.
+          _custKey: { $toLower: { $trim: { input: { $ifNull: ['$customerName', 'Unknown'] } } } },
+          _custDisplay: { $trim: { input: { $ifNull: ['$customerName', 'Unknown'] } } },
+          _hasCard: {
+            $cond: [{ $gt: [{ $strLenCP: { $ifNull: ['$fleetCardNumber', ''] } }, 0] }, 1, 0],
+          },
+        },
+      },
+      {
+        $group: {
+          _id: '$_custKey',
+          customerName: { $first: '$_custDisplay' },
+          totalVisits: { $sum: 1 },
+          // Not mutually exclusive with withoutCard at the schema/route level
+          // (POST / stores noFleetCard independent of fleetCardNumber), so a
+          // bad submission could in theory count toward both — surfaced as-is
+          // rather than picking an arbitrary precedence rule.
+          withCard: { $sum: '$_hasCard' },
+          withoutCard: { $sum: { $cond: ['$noFleetCard', 1, 0] } },
+          lastVisitDateStr: {
+            $max: {
+              $ifNull: ['$dateStr', { $dateToString: { format: '%Y-%m-%d', date: '$date', timezone: TIMEZONE } }],
+            },
+          },
+          stationNames: { $addToSet: '$stationName' },
+        },
+      },
+      { $project: { _id: 0, customerName: 1, totalVisits: 1, withCard: 1, withoutCard: 1, lastVisitDateStr: 1, stationNames: 1 } },
+      { $sort: { withoutCard: -1, totalVisits: -1 } },
+    ]);
+
+    res.status(200).json(rows);
+  } catch (err) {
+    console.error('GET /api/purchase-orders/fleet-card-report failed:', err);
+    res.status(500).json({ message: 'Failed to build fleet card report.' });
+  }
+});
+
 // Get a single purchase order by ID
 router.get("/:id", async (req, res) => {
   const { id } = req.params;

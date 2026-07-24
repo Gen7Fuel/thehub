@@ -447,10 +447,11 @@ function RouteComponent() {
                 <Switch checked={!noFleetCard} onCheckedChange={(checked) => setNoFleetCard(!checked)} />
                 <span className="text-sm text-slate-700">Customer has fleet card</span>
               </div>
-
-              {!noFleetCard ? (
-                renderFleetCardInput()
-              ) : (
+              {/* The 16-slot OTP itself renders below, outside this row —
+                  see after the Number/Date row — so it doesn't share
+                  horizontal space with the Date picker and overflow on
+                  narrower (tablet) viewports. */}
+              {noFleetCard && (
                 <div className="text-xs text-slate-500 max-w-[220px]">
                   No fleet card — recorded for reporting.
                 </div>
@@ -535,6 +536,15 @@ function RouteComponent() {
           />
         </div>
       </div>
+
+      {/* Fleet Card number entry, on its own full-width row below Number + Date —
+          the 16-slot OTP is too wide to share a row with the Date picker on
+          narrower (tablet) viewports without overflowing. */}
+      {!isNoPoNumberSite && isFleetCardOnlySite && !noFleetCard && (
+        <div className={`transition-opacity duration-500 ${selectedQuickCustomerId ? 'opacity-0 pointer-events-none' : 'opacity-100'}`}>
+          {renderFleetCardInput()}
+        </div>
+      )}
 
       {/* Customer and Driver */}
       <div className="space-y-3">
