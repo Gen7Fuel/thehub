@@ -369,6 +369,9 @@ const { chromium } = require("playwright-extra");
 const stealth = require("puppeteer-extra-plugin-stealth")();
 const { emailQueue } = require("../queues/emailQueue");
 const CsoInvoice = require("../models/CsoInvoice");
+const User = require("../models/User"); 
+const Location = require("../models/Location"); // Make sure to import your Location model
+const { pushNotification } = require("../services/notificationService");
 
 // Inject stealth plugin layers into the chromium driver bundle
 chromium.use(stealth);
@@ -398,7 +401,7 @@ async function uploadBufferToCDN(buffer, filename) {
  * @param {object} params
  * @param {string} params.invoiceId - The MongoDB ObjectId instance of the CsoInvoice
  */
-async function processInvoiceAutomation({ invoiceId }) {
+async function processInvoiceAutomation({ invoiceId, io }) {
   console.log(
     `🤖 Initializing Docflow Processing Pipeline for Invoice ID: ${invoiceId}...`
   );
@@ -412,6 +415,59 @@ async function processInvoiceAutomation({ invoiceId }) {
   }
 
   const currentAttempt = (invoice.logs ? invoice.logs.length : 0) + 1;
+
+  // =========================================================================
+  // MAX ATTEMPTS GUARD: STOP EXECUTION IF CURRENT ATTEMPT REACHES 4
+  // =========================================================================
+  if (currentAttempt >= 4) {
+    const maxAttemptErrorMsg = `Maximum retry attempts reached (${currentAttempt - 1}/3). Automation halted for this invoice. Kindly contact admin for more information`;
+    console.warn(`🛑 ${maxAttemptErrorMsg} [Invoice ID: ${invoiceId}]`);
+
+    const maxAttemptLogEntry = {
+      attemptNumber: currentAttempt,
+      timestamp: new Date(),
+      status: "failed_cso_upload",
+      errorCategory: "MAX_ATTEMPTS_EXCEEDED",
+      message: maxAttemptErrorMsg,
+      rawError: maxAttemptErrorMsg,
+      errorScreenshotFilename: null,
+      executionStep: "ATTEMPT_LIMIT_GUARD",
+    };
+
+    await CsoInvoice.findByIdAndUpdate(invoiceId, {
+      status: "failed_cso_upload",
+      csoUploadError: maxAttemptErrorMsg,
+      $push: { logs: maxAttemptLogEntry },
+    });
+
+    const maxAttemptAlertHtml = `
+      <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; border: 1px solid #f87171; border-radius: 16px; background-color: #ffffff;">
+        <div style="background-color: #fef2f2; border-left: 4px solid #dc2626; padding: 16px; border-radius: 8px; margin-bottom: 20px;">
+          <h2 style="color: #991b1b; margin: 0 0 8px 0; font-size: 16px; font-weight: 800; text-transform: uppercase;">
+            🛑 Max Retries Exceeded: Invoice Input Halted
+          </h2>
+          <p style="color: #b91c1c; margin: 0; font-size: 14px; font-weight: 600; line-height: 1.5;">
+            Automation halted after reaching 3 failed attempts for Station CSO Code: <strong>${invoice.siteCsoCode}</strong>.
+          </p>
+        </div>
+        <div style="margin-bottom: 24px; background-color: #f8fafc; border: 1px solid #e2e8f0; padding: 14px; border-radius: 8px;">
+          <strong style="color: #0f172a; font-size: 13px; text-transform: uppercase;">Invoice Doc #:</strong>
+          <p style="font-family: monospace; font-size: 13px; color: #0284c7; margin: 4px 0 12px 0;">${invoice.docNumber}</p>
+          <strong style="color: #0f172a; font-size: 13px; text-transform: uppercase;">Reason:</strong>
+          <p style="font-family: monospace; font-size: 13px; color: #dc2626; margin: 8px 0 0 0;">${maxAttemptErrorMsg}</p>
+        </div>
+      </div>
+    `;
+
+    await emailQueue.add(`docflow-max-attempts-${Date.now()}`, {
+      to: "daksh@gen7fuel.com",
+      subject: `🛑 Max Retries Reached (Station: ${invoice.siteCsoCode}, Doc: ${invoice.docNumber})`,
+      html: maxAttemptAlertHtml,
+    });
+
+    return { success: false, reason: "MAX_ATTEMPTS_EXCEEDED" };
+  }
+
   let currentExecutionStep = "INITIALIZATION";
 
   const {
@@ -560,8 +616,7 @@ async function processInvoiceAutomation({ invoiceId }) {
 
     currentExecutionStep = "CDN_IMAGE_STREAMING";
     console.log(`📥 Downloading ${images.length} image payloads directly into RAM...`);
-    
-    // Download image buffers into memory array directly
+
     const inMemoryFiles = [];
     for (let i = 0; i < images.length; i++) {
       const filename = images[i];
@@ -575,7 +630,6 @@ async function processInvoiceAutomation({ invoiceId }) {
       });
     }
 
-    // Set input files directly using Playwright buffer payload objects (No Local Disk IO)
     await modalWindow.locator(".imgButtonUpload button").click();
     const fileInputHandle = modalWindow.locator("input.x-form-file-input");
     await fileInputHandle.setInputFiles(inMemoryFiles);
@@ -701,6 +755,25 @@ async function processInvoiceAutomation({ invoiceId }) {
     }
 
     // =========================================================================
+    // CAPTURE SUCCESS SNAPSHOT & UPLOAD TO CDN
+    // =========================================================================
+    let cdnSuccessScreenshotFilename = null;
+    try {
+      console.log("📸 Capturing verification snapshot proof directly into RAM...");
+      const successBuffer = await page.screenshot({ fullPage: true });
+      const originalSuccessScreenshotName = `success-inv-${siteCsoCode}-${invoiceId}-att${currentAttempt}.png`;
+
+      console.log("☁️ Uploading verification snapshot proof directly to CDN...");
+      cdnSuccessScreenshotFilename = await uploadBufferToCDN(
+        successBuffer,
+        originalSuccessScreenshotName
+      );
+      console.log(`✅ Verification proof saved on CDN: ${cdnSuccessScreenshotFilename}`);
+    } catch (ssErr) {
+      console.error("Failed uploading success proof to CDN:", ssErr.message);
+    }
+
+    // =========================================================================
     // PERSIST SUCCESS STATE & AUDIT LOG TO MONGO
     // =========================================================================
     console.log(`💾 Persisting database update status to: uploaded_to_cso`);
@@ -712,15 +785,58 @@ async function processInvoiceAutomation({ invoiceId }) {
       errorCategory: "NONE",
       message: "Invoice successfully processed and verified in CSO table.",
       rawError: null,
-      errorScreenshotFilename: null,
+      errorScreenshotFilename: cdnSuccessScreenshotFilename,
       executionStep: "SUCCESS",
     };
 
-    await CsoInvoice.findByIdAndUpdate(invoiceId, {
-      status: "uploaded_to_cso",
-      csoUploadError: null,
-      $push: { logs: successLogEntry },
-    });
+    const updatedInvoice = await CsoInvoice.findByIdAndUpdate(
+      invoiceId,
+      {
+        status: "uploaded_to_cso",
+        csoUploadError: null,
+        $push: { logs: successLogEntry },
+      },
+      { new: true }
+    );
+
+    // =========================================================================
+    // SEND SUCCESS NOTIFICATION TO USER & ADMIN
+    // =========================================================================
+    try {
+      const uploader = await User.findById(updatedInvoice.submittedByMongoId);
+      const recipientEmails = [];
+      if (uploader && uploader.email) {
+        recipientEmails.push(uploader.email);
+      }
+      recipientEmails.push("daksh@gen7fuel.com");
+
+      // Resolve CSO Code to Station Name
+      let resolvedStationName = updatedInvoice.siteCsoCode; // Fallback
+      const locationDoc = await Location.findOne({ csoCode: updatedInvoice.siteCsoCode });
+      if (locationDoc && locationDoc.stationName) {
+        resolvedStationName = locationDoc.stationName;
+      }
+
+      // const io = req.app.get("io");
+
+      await pushNotification({
+        io,
+        recipientEmails,
+        slug: "invoice-upload-success",
+        subject: `✅ Invoice Uploaded Successfully (Doc #${updatedInvoice.docNumber})`,
+        fieldValues: {
+          siteName: resolvedStationName, // Pushing human-readable name
+          docNumber: updatedInvoice.docNumber,
+          vendorName: updatedInvoice.vendorName,
+          vendorCode: updatedInvoice.vendorCode,
+          totalCost: updatedInvoice.totalCost.toFixed(2),
+          invoiceDate: updatedInvoice.invoiceDate,
+        },
+        type: "system",
+      });
+    } catch (notifErr) {
+      console.error("⚠️ Failed to dispatch success notification:", notifErr.message);
+    }
 
     await browser.close();
     return { success: true };
@@ -812,37 +928,55 @@ async function processInvoiceAutomation({ invoiceId }) {
     };
 
     console.log(`💾 Persisting database error status and log entry...`);
-    await CsoInvoice.findByIdAndUpdate(invoiceId, {
-      status: "failed_cso_upload",
-      csoUploadError: formattedUserError,
-      $push: { logs: failureLogEntry },
-    });
+    const failedInvoice = await CsoInvoice.findByIdAndUpdate(
+      invoiceId,
+      {
+        status: "failed_cso_upload",
+        csoUploadError: formattedUserError,
+        $push: { logs: failureLogEntry },
+      },
+      { new: true }
+    );
 
-    // Send error notification alert
-    const systemAlertHtml = `
-      <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; border: 1px solid #f87171; border-radius: 16px; background-color: #ffffff;">
-        <div style="background-color: #fef2f2; border-left: 4px solid #dc2626; padding: 16px; border-radius: 8px; margin-bottom: 20px;">
-          <h2 style="color: #991b1b; margin: 0 0 8px 0; font-size: 16px; font-weight: 800; text-transform: uppercase;">
-            ⚠️ Critical Failure: Invoice Input Engine Exception
-          </h2>
-          <p style="color: #b91c1c; margin: 0; font-size: 14px; font-weight: 600; line-height: 1.5;">
-            An automation fault suspended script operations processing invoice updates for Station CSO Code: <strong>${siteCsoCode}</strong>.
-          </p>
-        </div>
-        <div style="margin-bottom: 24px; background-color: #f8fafc; border: 1px solid #e2e8f0; padding: 14px; border-radius: 8px;">
-          <strong style="color: #0f172a; font-size: 13px; text-transform: uppercase;">Failed Step Context:</strong>
-          <p style="font-family: monospace; font-size: 13px; color: #0284c7; margin: 4px 0 12px 0;">${currentExecutionStep} (Attempt #${currentAttempt})</p>
-          <strong style="color: #0f172a; font-size: 13px; text-transform: uppercase;">Frontend User Error:</strong>
-          <p style="font-family: monospace; font-size: 13px; color: #dc2626; margin: 8px 0 0 0; white-space: pre-wrap;">${formattedUserError}</p>
-        </div>
-      </div>
-    `;
+    // =========================================================================
+    // SEND FAILURE NOTIFICATION TO USER & ADMIN
+    // =========================================================================
+    try {
+      const uploader = await User.findById(failedInvoice.submittedByMongoId);
+      const recipientEmails = [];
+      if (uploader && uploader.email) {
+        recipientEmails.push(uploader.email);
+      }
+      recipientEmails.push("daksh@gen7fuel.com");
 
-    await emailQueue.add(`docflow-error-${Date.now()}`, {
-      to: "daksh@gen7fuel.com",
-      subject: `🚨 Hub Automation Pipeline Breakpoint (Station: ${siteCsoCode})`,
-      html: systemAlertHtml,
-    });
+      // Resolve CSO Code to Station Name
+      let resolvedStationName = failedInvoice.siteCsoCode; // Fallback
+      const locationDoc = await Location.findOne({ csoCode: failedInvoice.siteCsoCode });
+      if (locationDoc && locationDoc.stationName) {
+        resolvedStationName = locationDoc.stationName;
+      }
+
+      // const io = req.app.get("io");
+
+      await pushNotification({
+        io,
+        recipientEmails,
+        slug: "invoice-upload-failed",
+        subject: `🚨 Upload Failed: Invoice Doc #${failedInvoice.docNumber} (Attempt #${currentAttempt})`,
+        fieldValues: {
+          siteName: resolvedStationName, // Pushing human-readable name
+          docNumber: failedInvoice.docNumber,
+          vendorName: failedInvoice.vendorName,
+          vendorCode: failedInvoice.vendorCode,
+          invoiceDate: failedInvoice.invoiceDate, // Added invoice date mapping
+          attemptNumber: currentAttempt,
+          errorMessage: formattedUserError,
+        },
+        type: "system",
+      });
+    } catch (notifErr) {
+      console.error("⚠️ Failed to dispatch failure notification:", notifErr.message);
+    }
 
     await browser.close();
     throw error;

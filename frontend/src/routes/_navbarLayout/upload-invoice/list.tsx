@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from "react";
-import { createFileRoute } from "@tanstack/react-router";
+import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { Button } from "@/components/ui/button";
 import { DatePicker } from "@/components/custom/datePicker";
 import { useSite } from "@/context/SiteContext";
@@ -28,6 +28,7 @@ import {
   ChevronDown,
   ChevronUp,
   ExternalLink,
+  RotateCcw,
 } from "lucide-react";
 
 export const Route = createFileRoute("/_navbarLayout/upload-invoice/list")({
@@ -83,6 +84,7 @@ const formatDateToString = (date?: Date): string => {
 function RouteComponent() {
   const { user } = useAuth();
   const { selectedSite } = useSite();
+  const navigate = useNavigate();
 
   // Permission check for viewing logs
   const canViewLogs = Boolean(user?.access?.uploadInvoice?.list?.viewErrorLogs);
@@ -329,76 +331,100 @@ function RouteComponent() {
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
-                {invoices.map((inv) => (
-                  <tr
-                    key={inv._id}
-                    className="hover:bg-slate-50/60 transition-colors"
-                  >
-                    <td className="py-4 px-4 font-medium text-slate-800 whitespace-nowrap">
-                      {inv.invoiceDate}
-                    </td>
-                    <td className="py-4 px-4 text-slate-600 font-mono text-xs whitespace-nowrap">
-                      {inv.docNumber}
-                    </td>
-                    <td className="py-4 px-4 text-slate-900 font-semibold">
-                      <div className="truncate max-w-[180px] sm:max-w-xs">
-                        {inv.vendorName}
-                        <span className="block text-xs font-normal text-slate-400">
-                          Code: {inv.vendorCode}
-                        </span>
-                      </div>
-                    </td>
-                    <td className="py-4 px-4 font-bold text-slate-900 whitespace-nowrap">
-                      ${inv.totalCost.toFixed(2)}
-                    </td>
-                    <td className="py-4 px-4 whitespace-nowrap">
-                      {getStatusBadge(inv.status, inv.csoUploadError)}
-                    </td>
-                    <td className="py-4 px-4 text-right whitespace-nowrap">
-                      <div className="flex items-center justify-end gap-1.5">
-                        {/* View Details Icon Button */}
-                        <Button
-                          size="icon"
-                          variant="secondary"
-                          title="View Details"
-                          onClick={() => {
-                            setSelectedInvoice(inv);
-                            if (inv.images && inv.images.length > 0) {
-                              setActiveImage(inv.images[0]);
-                            }
-                          }}
-                          className="w-8 h-8 rounded-lg text-indigo-600 bg-indigo-50 hover:bg-indigo-100 border-none"
-                        >
-                          <Eye className="w-4 h-4" />
-                        </Button>
+                {invoices.map((inv) => {
+                  const attemptCount = inv.logs ? inv.logs.length : 0;
+                  const canRetry =
+                    inv.status === "failed_cso_upload" && attemptCount < 3;
 
-                        {/* Permission Controlled Execution Logs Button */}
-                        {canViewLogs && (
+                  return (
+                    <tr
+                      key={inv._id}
+                      className="hover:bg-slate-50/60 transition-colors"
+                    >
+                      <td className="py-4 px-4 font-medium text-slate-800 whitespace-nowrap">
+                        {inv.invoiceDate}
+                      </td>
+                      <td className="py-4 px-4 text-slate-600 font-mono text-xs whitespace-nowrap">
+                        {inv.docNumber}
+                      </td>
+                      <td className="py-4 px-4 text-slate-900 font-semibold">
+                        <div className="truncate max-w-[180px] sm:max-w-xs">
+                          {inv.vendorName}
+                          <span className="block text-xs font-normal text-slate-400">
+                            Code: {inv.vendorCode}
+                          </span>
+                        </div>
+                      </td>
+                      <td className="py-4 px-4 font-bold text-slate-900 whitespace-nowrap">
+                        ${inv.totalCost.toFixed(2)}
+                      </td>
+                      <td className="py-4 px-4 whitespace-nowrap">
+                        {getStatusBadge(inv.status, inv.csoUploadError)}
+                      </td>
+                      <td className="py-4 px-4 text-right whitespace-nowrap">
+                        <div className="flex items-center justify-end gap-1.5">
+                          {/* Retry Button: Appears only if failed_cso_upload & attempts < 3 */}
+                          {canRetry && (
+                            <Button
+                              size="icon"
+                              variant="secondary"
+                              title="Retry / Re-submit Request"
+                              onClick={() =>
+                                navigate({
+                                  to: "/upload-invoice/$id",
+                                  params: { id: inv._id },
+                                })
+                              }
+                              className="w-8 h-8 rounded-lg text-rose-700 bg-rose-50 hover:bg-rose-100 border-none"
+                            >
+                              <RotateCcw className="w-4 h-4" />
+                            </Button>
+                          )}
+
+                          {/* View Details Icon Button */}
                           <Button
                             size="icon"
                             variant="secondary"
-                            title="View Execution & Error Logs"
+                            title="View Details"
                             onClick={() => {
-                              setSelectedLogsInvoice(inv);
-                              setExpandedRawErrors({});
+                              setSelectedInvoice(inv);
+                              if (inv.images && inv.images.length > 0) {
+                                setActiveImage(inv.images[0]);
+                              }
                             }}
-                            className="w-8 h-8 rounded-lg text-amber-700 bg-amber-50 hover:bg-amber-100 border-none relative"
+                            className="w-8 h-8 rounded-lg text-indigo-600 bg-indigo-50 hover:bg-indigo-100 border-none"
                           >
-                            <Terminal className="w-4 h-4" />
-                            {inv.logs && inv.logs.length > 0 && (
-                              <span className="absolute -top-1 -right-1 flex h-3 w-3">
-                                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-amber-400 opacity-75"></span>
-                                <span className="relative inline-flex rounded-full h-3 w-3 bg-amber-500 text-[8px] text-white font-bold items-center justify-center">
-                                  {inv.logs.length}
-                                </span>
-                              </span>
-                            )}
+                            <Eye className="w-4 h-4" />
                           </Button>
-                        )}
-                      </div>
-                    </td>
-                  </tr>
-                ))}
+
+                          {/* Permission Controlled Execution Logs Button */}
+                          {canViewLogs && (
+                            <Button
+                              size="icon"
+                              variant="secondary"
+                              title="View Execution & Error Logs"
+                              onClick={() => {
+                                setSelectedLogsInvoice(inv);
+                                setExpandedRawErrors({});
+                              }}
+                              className="w-8 h-8 rounded-lg text-amber-700 bg-amber-50 hover:bg-amber-100 border-none relative"
+                            >
+                              <Terminal className="w-4 h-4" />
+                              {inv.logs && inv.logs.length > 0 && (
+                                <span className="absolute -top-1 -right-1 flex h-3 w-3">
+                                  <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-amber-400 opacity-75"></span>
+                                  <span className="relative inline-flex rounded-full h-3 w-3 bg-amber-500 text-[8px] text-white font-bold items-center justify-center">
+                                    {inv.logs.length}
+                                  </span>
+                                </span>
+                              )}
+                            </Button>
+                          )}
+                        </div>
+                      </td>
+                    </tr>
+                  );
+                })}
               </tbody>
             </table>
           </div>
@@ -445,7 +471,7 @@ function RouteComponent() {
                 )}
 
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                {/* Inside the View Details Dialog - Document Image Section */}
+                {/* Document Image Section */}
                 <div className="space-y-3">
                   <h3 className="text-xs font-bold text-slate-400 uppercase tracking-wider">
                     Attached Document Images ({selectedInvoice.images.length})
