@@ -79,7 +79,8 @@
       "Bash(npm --version)",
       "Bash(mkdir -p docs)",
       "Bash(cp \"C:\\\\Users\\\\MOHAMM~1\\\\AppData\\\\Local\\\\Temp\\\\claude\\\\C--Users-MohammadHasan-workspace-thehub\\\\e44568f1-59c2-4905-9594-ff732a28220b\\\\scratchpad\\\\Hub-NonServiceCustomer-Access.docx\" \"docs/non_service_customers_modules.docx\")",
-      "Bash(cd C:\\\\Users\\\\MOHAMM~1\\\\AppData\\\\Local\\\\Temp\\\\claude\\\\C--Users-MohammadHasan-workspace-thehub\\\\e44568f1-59c2-4905-9594-ff732a28220b\\\\scratchpad *)"
+      "Bash(cd C:\\\\Users\\\\MOHAMM~1\\\\AppData\\\\Local\\\\Temp\\\\claude\\\\C--Users-MohammadHasan-workspace-thehub\\\\e44568f1-59c2-4905-9594-ff732a28220b\\\\scratchpad *)",
+      "Bash(grep *)"
     ]
   }
 }
