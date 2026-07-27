@@ -1480,6 +1480,29 @@ function transformTimePeriodData(data) {
   return transformed;
 }
 
+async function getLatestCsoVendorsList() {
+  try {
+    const pool = await getPool();
+    const query = `
+      SELECT [VendorCode]
+            ,[VendorName]
+            ,[Fuel]
+            ,[Expenses]
+            ,[Merchandise]
+            ,[Lottery]
+            ,[Items QTY]
+            ,[EDI Compatible]
+            ,[Wholesaler]
+      FROM [CSO].[Vendor_List]
+    `;
+    const result = await pool.request().query(query);
+    return result.recordset;
+  } catch (err) {
+    console.error("SQL error fetching backup data:", err);
+    throw err;
+  }
+}
+
 async function getAllSQLData(csoCode, dates) {
   const pool = await getPool();
 
@@ -1568,5 +1591,6 @@ module.exports = {
   getFuelCarrierFCS,
   getFuelStationDiscounts,
   getFuelSalesRollupReport,
+  getLatestCsoVendorsList,
   getCoreMarkPriceBookByUPCs,
 };
