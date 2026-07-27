@@ -4,6 +4,7 @@ const uuid = require('uuid');
 const path = require('path');
 const cors = require('cors');
 const fs = require('fs');
+const sharp = require('sharp'); // Added for PNG conversion
 
 // this app is only for CDN services
 const app = express();
@@ -24,6 +25,8 @@ const storage = multer.diskStorage({
 });
 
 const upload = multer({ storage: storage });    //Multer helps in multipart/form-data uploads when the uploads are coming from a form.
+
+const memoryUpload = multer({ storage: multer.memoryStorage() });
 
 // Admin auth middleware — set CDN_ADMIN_TOKEN in your container's environment variables
 const ADMIN_TOKEN = process.env.CDN_ADMIN_TOKEN;
@@ -81,6 +84,31 @@ app.post('/cdn/upload-base64', (req, res) => {
     const fileInfo = { filename: `${uniqueSuffix}${fileExtension}` };
     res.json(fileInfo);  // Return file info with ID
   });
+});
+
+// =========================================================================
+// NEW ENDPOINT: /cdn/upload-png (Converts any image type into true PNG format)
+// =========================================================================
+app.post('/cdn/upload-png', memoryUpload.single('file'), async (req, res) => {
+  if (!req.file) {
+    return res.status(400).json({ error: 'No file uploaded' });
+  }
+
+  try {
+    const uniqueSuffix = uuid.v4();
+    const filename = `${uniqueSuffix}.png`;
+    const outputPath = path.join(__dirname, 'uploads', filename);
+
+    // Convert incoming buffer (JPG, JPEG, WEBP, etc.) directly into a standard PNG file
+    await sharp(req.file.buffer)
+      .toFormat('png')
+      .toFile(outputPath);
+
+    return res.json({ filename });
+  } catch (err) {
+    console.error('Error converting image to PNG:', err);
+    return res.status(500).json({ error: 'Failed to process and convert image to PNG' });
+  }
 });
 
 // Admin: list all uploaded files with pagination

@@ -199,7 +199,8 @@ router.post("/submit", async (req, res) => {
         const fileBlob = new Blob([buffer], { type: mime });
         formData.append("file", fileBlob, originalName);
 
-        const response = await fetch("http://cdn:5001/cdn/upload", {
+        // 🎯 Target the new PNG conversion endpoint
+        const response = await fetch("http://cdn:5001/cdn/upload-png", {
           method: "POST",
           body: formData,
         });
@@ -335,7 +336,7 @@ router.put("/:id", async (req, res) => {
       const imgStr = invoiceImages[i];
 
       if (imgStr.startsWith("data:")) {
-        // Base64 string -> Upload to CDN container
+        // Base64 string -> Upload to CDN container via new PNG endpoint
         const { buffer, mime } = dataURLToBuffer(imgStr);
         const originalName = `inv-${vendorCode}-${docNumber}-${dateStringOnly}-${i}.png`;
 
@@ -343,7 +344,8 @@ router.put("/:id", async (req, res) => {
         const fileBlob = new Blob([buffer], { type: mime });
         formData.append("file", fileBlob, originalName);
 
-        const response = await fetch("http://cdn:5001/cdn/upload", {
+        // 🎯 Target the new PNG conversion endpoint
+        const response = await fetch("http://cdn:5001/cdn/upload-png", {
           method: "POST",
           body: formData,
         });
