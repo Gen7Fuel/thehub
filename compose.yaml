@@ -113,7 +113,7 @@ services:
 
   cdn:
     container_name: cdn
-    build: ./cdn
+    image: ${CDN_IMAGE}
     volumes:
       - uploads:/app/uploads
     ports:
