@@ -555,9 +555,11 @@ jobs:
     outputs:
       backend: ${{ steps.filter.outputs.backend }}
       auth-backend: ${{ steps.filter.outputs.auth-backend }}
+      cdn: ${{ steps.filter.outputs.cdn }} # 👈 Added
       frontend: ${{ steps.filter.outputs.frontend }}
       backend-image: ${{ steps.images.outputs.backend-image }}
       auth-backend-image: ${{ steps.images.outputs.auth-backend-image }}
+      cdn-image: ${{ steps.images.outputs.cdn-image }} # 👈 Added
       owner: ${{ steps.images.outputs.owner }}
     steps:
       - uses: actions/checkout@v4
@@ -570,6 +572,8 @@ jobs:
               - 'backend/**'
             auth-backend:
               - 'auth-backend/**'
+            cdn:
+              - 'cdn/**' # 👈 Added filter
             frontend:
               - 'frontend/**'
 
@@ -586,6 +590,12 @@ jobs:
             echo "auth-backend-image=ghcr.io/${OWNER}/thehub-auth-backend:${{ github.sha }}" >> $GITHUB_OUTPUT
           else
             echo "auth-backend-image=ghcr.io/${OWNER}/thehub-auth-backend:latest" >> $GITHUB_OUTPUT
+          fi
+          # Added CDN image tagging
+          if [ "${{ steps.filter.outputs.cdn }}" = "true" ]; then
+            echo "cdn-image=ghcr.io/${OWNER}/thehub-cdn:${{ github.sha }}" >> $GITHUB_OUTPUT
+          else
+            echo "cdn-image=ghcr.io/${OWNER}/thehub-cdn:latest" >> $GITHUB_OUTPUT
           fi
 
   build-frontend:
@@ -676,13 +686,42 @@ jobs:
             ghcr.io/${{ needs.check-changes.outputs.owner }}/thehub-auth-backend:latest
           cache-from: type=gha,scope=auth-backend
           cache-to: type=gha,mode=max,scope=auth-backend
+  
+  build-cdn:
+      runs-on: ubuntu-latest
+      needs: check-changes
+      if: needs.check-changes.outputs.cdn == 'true'
+      permissions:
+        contents: read
+        packages: write
+      steps:
+        - uses: actions/checkout@v4
+
+        - uses: docker/setup-buildx-action@v3
+
+        - uses: docker/login-action@v3
+          with:
+            registry: ghcr.io
+            username: ${{ github.actor }}
+            password: ${{ secrets.GITHUB_TOKEN }}
+
+        - name: Build and push cdn
+          uses: docker/build-push-action@v6
+          with:
+            context: ./cdn
+            push: true
+            tags: |
+              ${{ needs.check-changes.outputs.cdn-image }}
+              ghcr.io/${{ needs.check-changes.outputs.owner }}/thehub-cdn:latest
+            cache-from: type=gha,scope=cdn
+            cache-to: type=gha,mode=max,scope=cdn
 
   # ==========================================
   # CONSOLIDATED DEPLOYMENT
   # ==========================================
   deploy:
     runs-on: ubuntu-latest
-    needs: [check-changes, build-frontend, build-backend, build-auth-backend]
+    needs: [check-changes, build-frontend, build-backend, build-auth-backend, build-cdn] # 👈 Added build-cdn
     if: |
       always() &&
       !contains(needs.*.result, 'failure') &&
@@ -729,6 +768,7 @@ jobs:
             # ---- 2. Global Environment Injection (Prevents Compose validation crashes) ----
             export BACKEND_IMAGE="${{ needs.check-changes.outputs.backend-image }}"
             export AUTH_BACKEND_IMAGE="${{ needs.check-changes.outputs.auth-backend-image }}"
+            export CDN_IMAGE="${{ needs.check-changes.outputs.cdn-image }}" # Added
             export MONGO_URI="${{ secrets.MONGO_URI }}"
             export JWT_SECRET="${{ secrets.JWT_SECRET }}"
             export SQL_SERVER="${{ secrets.SQL_SERVER }}"
@@ -773,6 +813,10 @@ jobs:
                 echo "Pre-fetching updated main backend layer..."
                 docker pull $BACKEND_IMAGE
             fi
+            if [ "${{ needs.check-changes.outputs.cdn }}" = "true" ]; then
+                echo "Pre-fetching updated cdn layer..."
+                docker pull $CDN_IMAGE
+            fi
 
             # ---- 5. Hot Swapping Container Lifecycles (<1s Downtime) ----
             if [ "${{ needs.check-changes.outputs.auth-backend }}" = "true" ]; then
@@ -788,6 +832,11 @@ jobs:
                     echo "Running relational engine incremental schemas..."
                     docker compose exec -T backend node scripts/pg-migrate.js
                 fi
+            fi
+
+            if [ "${{ needs.check-changes.outputs.cdn }}" = "true" ]; then
+                echo "Swapping CDN instance..."
+                docker compose up -d --no-deps cdn
             fi
 
             # ---- 6. Atomic Routing Layer Refresh (Caddy) ----
