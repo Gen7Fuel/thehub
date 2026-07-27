@@ -1,27 +1,37 @@
-import { createFileRoute, Link, Outlet, useMatchRoute } from '@tanstack/react-router'
-import { Button } from '@/components/ui/button'
+import {
+  createFileRoute,
+  Link,
+  Outlet,
+  useMatchRoute,
+} from "@tanstack/react-router";
+import { Button } from "@/components/ui/button";
 import { useAuth } from "@/context/AuthContext";
 
-export const Route = createFileRoute('/_navbarLayout/fuel-management')({
+export const Route = createFileRoute("/_navbarLayout/fuel-management")({
   component: RouteComponent,
-})
+});
 
 function RouteComponent() {
   // Hook to match the current route for button highlighting
   const matchRoute = useMatchRoute();
 
   // Determine if each tab is active
-  const isCreateOrderActive = matchRoute({ to: '/fuel-management/create-order' });
-  const isWorkspaceActive = matchRoute({ to: '/fuel-management/workspace' });
-  const isVolumeActive = matchRoute({ to: '/fuel-management/volume' });
-  const isManageActive = matchRoute({ to: '/fuel-management/manage' });
-  const isOrderPipelineActive = matchRoute({ to: '/fuel-management/order-pipeline' });
+  const isCreateOrderActive = matchRoute({
+    to: "/fuel-management/create-order",
+  });
+  const isWorkspaceActive = matchRoute({ to: "/fuel-management/workspace" });
+  const isVolumeActive = matchRoute({ to: "/fuel-management/volume" });
+  const isManageActive = matchRoute({ to: "/fuel-management/manage" });
+  const isStatisticsActive = matchRoute({ to: "/fuel-management/statistics" });
+  const isOrderPipelineActive = matchRoute({
+    to: "/fuel-management/order-pipeline",
+  });
 
   const { user } = useAuth();
 
   // Retrieve access permissions from Auth provider
   // const access = user?.access || "{}" //markpoint
-  const access = user?.access || {}
+  const access = user?.access || {};
 
   return (
     <div className="pt-5 flex flex-col items-center">
@@ -29,9 +39,12 @@ function RouteComponent() {
       <div className="flex mb-4">
         {/* Create Order tab button */}
         {access?.fuelManagement?.createOrder && (
-          <Link to="/fuel-management/create-order" activeOptions={{ exact: true }}>
+          <Link
+            to="/fuel-management/create-order"
+            activeOptions={{ exact: true }}
+          >
             <Button
-              {...(!isCreateOrderActive && { variant: 'outline' } as object)}
+              {...(!isCreateOrderActive && ({ variant: "outline" } as object))}
               className="rounded-r-none"
             >
               Create Order
@@ -43,12 +56,16 @@ function RouteComponent() {
           <Link
             to="/fuel-management/workspace"
             activeOptions={{ exact: true }}
-            search={{ site: user?.location || ''}}
+            search={{ site: user?.location || "" }}
           >
             <Button
-              {...(!isWorkspaceActive && { variant: 'outline' } as object)}
+              {...(!isWorkspaceActive && ({ variant: "outline" } as object))}
               // className={access.component_cycle_count_console ? 'rounded-none' : 'rounded-l-none'} //markpoint
-              className={access?.fuelManagement?.volume ? 'rounded-none' : 'rounded-l-none'}
+              className={
+                access?.fuelManagement?.volume
+                  ? "rounded-none"
+                  : "rounded-l-none"
+              }
             >
               Workspace
             </Button>
@@ -61,9 +78,14 @@ function RouteComponent() {
             activeOptions={{ exact: true }}
           >
             <Button
-              {...(!isOrderPipelineActive && { variant: 'outline' } as object)}
+              {...(!isOrderPipelineActive &&
+                ({ variant: "outline" } as object))}
               // className={access.component_cycle_count_console ? 'rounded-none' : 'rounded-l-none'} //markpoint
-              className={access?.fuelManagement?.volume ? 'rounded-none' : 'rounded-l-none'}
+              className={
+                access?.fuelManagement?.volume
+                  ? "rounded-none"
+                  : "rounded-l-none"
+              }
             >
               Order Pipeline
             </Button>
@@ -74,12 +96,16 @@ function RouteComponent() {
           <Link
             to="/fuel-management/volume"
             activeOptions={{ exact: true }}
-            search={{ site: user?.location || ''}}
+            search={{ site: user?.location || "" }}
           >
             <Button
-              {...(!isVolumeActive && { variant: 'outline' } as object)}
+              {...(!isVolumeActive && ({ variant: "outline" } as object))}
               // className={access.component_cycle_count_console ? 'rounded-none' : 'rounded-l-none'} //markpoint
-              className={access?.fuelManagement?.manage ? 'rounded-none' : 'rounded-l-none'}
+              className={
+                access?.fuelManagement?.manage
+                  ? "rounded-none"
+                  : "rounded-l-none"
+              }
             >
               Tank Volume
             </Button>
@@ -89,10 +115,25 @@ function RouteComponent() {
         {access?.fuelManagement?.manage && (
           <Link to="/fuel-management/manage" activeOptions={{ exact: true }}>
             <Button
-              {...(!isManageActive && { variant: 'outline' } as object)}
-              className="rounded-l-none"
+              {...(!isManageActive && ({ variant: "outline" } as object))}
+              className={
+                access?.fuelManagement?.statistics
+                  ? "rounded-none"
+                  : "rounded-l-none"
+              }
             >
               Manage Configuration
+            </Button>
+          </Link>
+        )}
+
+        {access?.fuelManagement?.statistics && (
+          <Link to="/fuel-management/statistics" activeOptions={{ exact: true }}>
+            <Button
+              {...(!isStatisticsActive && ({ variant: "outline" } as object))}
+              className="rounded-l-none"
+            >
+              Statistics
             </Button>
           </Link>
         )}
@@ -100,5 +141,5 @@ function RouteComponent() {
       {/* Render the nested route content */}
       <Outlet />
     </div>
-  )
+  );
 }
