@@ -68,6 +68,7 @@ const fuelSupplierRoutes = require("./routes/fuel/fuelSupplierRoutes");
 const fuelStationTankRoutes = require("./routes/fuel/fuelStationTankRoutes");
 const fuelOrderRoutes = require("./routes/fuel/fuelOrderRoutes");
 const fuelSaleRoutes = require("./routes/fuel/fuelSaleRoutes");
+const fuelStatisticsRoutes = require("./routes/fuel/fuelStatisticsRoutes");
 const fuelPriceRoutes = require("./routes/fuel/fuelPricingRoutes");
 const fuelSettingsRoutes = require("./routes/fuel/fuelSettingsRoutes");
 
@@ -173,6 +174,7 @@ app.use('/api/fuel-racks', fuelRackRoutes);
 app.use('/api/fuel-suppliers', fuelSupplierRoutes);
 app.use('/api/fuel-station-tanks', fuelStationTankRoutes);
 app.use('/api/fuel-orders', fuelOrderRoutes);
+app.use('/api/fuel-statistics', fuelStatisticsRoutes);
 app.use('/api/fuel-sales', fuelSaleRoutes);
 app.use('/api/fuel-settings', fuelSettingsRoutes);
 // Misc
