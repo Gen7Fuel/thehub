@@ -97,7 +97,7 @@ function generateReportForFuelType(rawRows, targetFuelType, outputPdfPath, repor
 
     // Company Information in ALL CAPS
     doc.font('Helvetica-Bold').fontSize(8.5)
-       .text('BROKENHEAD COMMUNITY STORE', 340, 36, { align: 'right', width: 160 })
+       .text('WAVERS OF BROKENHEAD', 340, 36, { align: 'right', width: 160 })
        .font('Helvetica').fontSize(8)
        .text('SCANTERBURY, MB, R0E 1W0', 340, 58, { align: 'right', width: 160 });
 
@@ -110,11 +110,11 @@ function generateReportForFuelType(rawRows, targetFuelType, outputPdfPath, repor
     // Metadata details in ALL CAPS
     let metaY = 65;
     doc.font('Helvetica-Bold').fontSize(8.5).text('FROM: ', 60, metaY, { continued: true })
-       .font('Helvetica').text('JUNE 09, 2026');
+       .font('Helvetica').text('JULY 01, 2026');
 
     metaY += 12;
     doc.font('Helvetica-Bold').text('TO: ', 74, metaY, { continued: true })
-       .font('Helvetica').text('JUNE 30, 2026');
+       .font('Helvetica').text('JULY 15, 2026');
 
     metaY += 12;
     doc.font('Helvetica-Bold').text('PERIOD: ', 56, metaY, { continued: true })
@@ -228,9 +228,9 @@ function generatePdfReports() {
   const rawRows = XLSX.utils.sheet_to_json(workbook.Sheets[sheetName]);
 
   const fuelGrades = [
-    { type: 'REGULAR', fileName: 'Infonet Report by Client - Regular - BROKENHEAD COMMUNITY STORE.pdf', title: 'INFONET REPORT BY CLIENT - REGULAR' },
-    { type: 'DIESEL', fileName: 'Infonet Report by Client - Diesel - BROKENHEAD COMMUNITY STORE.pdf', title: 'INFONET REPORT BY CLIENT - DIESEL' },
-    { type: 'PREMIUM', fileName: 'Infonet Report by Client - Premium - BROKENHEAD COMMUNITY STORE.pdf', title: 'INFONET REPORT BY CLIENT - PREMIUM' }
+    { type: 'REGULAR', fileName: 'Infonet Report by Client - Regular - WAVERS OF BROKENHEAD.pdf', title: 'INFONET REPORT BY CLIENT - REGULAR' },
+    { type: 'DIESEL', fileName: 'Infonet Report by Client - Diesel - WAVERS OF BROKENHEAD.pdf', title: 'INFONET REPORT BY CLIENT - DIESEL' },
+    { type: 'PREMIUM', fileName: 'Infonet Report by Client - Premium - WAVERS OF BROKENHEAD.pdf', title: 'INFONET REPORT BY CLIENT - PREMIUM' }
   ];
 
   fuelGrades.forEach(grade => {
