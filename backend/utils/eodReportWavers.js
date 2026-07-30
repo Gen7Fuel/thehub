@@ -8,6 +8,20 @@ const { getFuelSalesRollupReport } = require('../services/sqlService');
 
 const h = React.createElement;
 
+// Helper function to map site names for PDF display
+const formatReportSiteName = (rawSite) => {
+  if (!rawSite) return '';
+  const cleanSite = rawSite.trim().toLowerCase();
+  
+  if (cleanSite === 'wavers west') {
+    return 'Wavers of Brokenhead';
+  }
+  if (cleanSite === 'wavers east') {
+    return 'Brokenhead Community Store';
+  }
+  return rawSite;
+};
+
 const styles = StyleSheet.create({
   page: {
     padding: 30,
@@ -118,6 +132,8 @@ const styles = StyleSheet.create({
 });
 
 function EodReportDoc({ site, date, data }) {
+  const displaySiteName = formatReportSiteName(site);
+
   const renderRow = (desc, amount, isTotalHighlight = false, customAmountStyle = null, isIndented = false) => {
     let amtStr = '';
     if (typeof amount === 'number') {
@@ -160,10 +176,10 @@ function EodReportDoc({ site, date, data }) {
       h(View, { style: styles.headerContainer },
         h(View, { style: styles.headerRow },
           h(Text, { style: styles.titleText }, 'End of day'),
-          h(Text, { style: styles.rightHeaderText }, `REPORT FOR ${site.toUpperCase()}`)
+          h(Text, { style: styles.rightHeaderText }, `REPORT FOR ${displaySiteName.toUpperCase()}`)
         ),
         h(View, { style: styles.headerRow },
-          h(Text, null, `Station: ${site}`),
+          h(Text, null, `Station: ${displaySiteName}`),
           h(Text, { style: styles.rightHeaderText }, `Period: Daily`)
         ),
         h(View, { style: styles.headerRow },
