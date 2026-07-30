@@ -1,5 +1,5 @@
 import { createFileRoute, useNavigate } from '@tanstack/react-router'
-import { useState, useCallback } from 'react'
+import { useState, useCallback, useEffect } from 'react'
 import { useDropzone } from 'react-dropzone'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
@@ -210,7 +210,10 @@ function RouteComponent() {
   const [vendor, setVendor] = useState<string>('')
   const [includeStationSupplies, setIncludeStationSupplies] = useState(false);
   const navigate = useNavigate()
-
+  // Inside RouteComponent:
+  useEffect(() => {
+    setVendor(''); // Clear vendor whenever site changes
+  }, [site]);
   // 1. Fetch vendors here so we can "see" the names associated with the IDs
   // const { data: vendors } = useQuery({
   //   queryKey: ['vendors', site],
@@ -273,13 +276,33 @@ function RouteComponent() {
   })
 
   const handleSubmit = async () => {
-    if (!uploadedFile || !site || !vendor) return;
+    // 1. Check for missing required inputs
+    const missingFields: string[] = [];
+    if (!site) missingFields.push('Site');
+    if (!vendor) missingFields.push('Vendor');
+    if (!uploadedFile) missingFields.push('CSV File');
+
+    if (missingFields.length > 0 || !uploadedFile) {
+      const alertMessage = `Please select/provide the following required field(s): ${missingFields.join(', ')}`;
+      setError(alertMessage);
+      toast.error(alertMessage, {
+        style: {
+          '--normal-bg': 'color-mix(in oklab, var(--destructive) 10%, var(--background))',
+          '--normal-text': 'var(--destructive)',
+          '--normal-border': 'var(--destructive)'
+        } as React.CSSProperties
+      });
+      return;
+    }
+
+    // TypeScript now knows file is strictly of type 'File'
+    const fileToUpload = uploadedFile;
 
     setError(null);
     setIsProcessing(true);
 
     try {
-      const csvContent = await uploadedFile.text();
+      const csvContent = await fileToUpload.text();
       const categories = parseOrderRecCSV(csvContent);
       //temporary patch for PCG orders
       // const categories = (isPCGVendor)
