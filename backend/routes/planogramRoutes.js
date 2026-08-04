@@ -129,7 +129,6 @@ router.post('/', upload.single('file'), async (req, res) => {
       perSheet: parsed.perSheet,
       rejectedCells: parsed.rejectedCells,
       headerDetected: parsed.headerDetected,
-      suspiciousGtins: parsed.suspiciousGtins,
     })
   } catch (err) {
     console.error('[planogram] upload failed:', err)
