@@ -145,18 +145,15 @@ function parsePlanogramWorkbook(buffer) {
     perSheet.push({ sheet: s.name, accepted })
   }
 
-  const items = [...byGtin.values()]
-
+  // Note: heavily zero-padded GTINs (e.g. "000000000338") are legitimate short
+  // internal codes, not placeholders — they normalize and match like any other.
+  // Don't add a "suspicious leading zeros" warning here; it only cries wolf.
   return {
-    items,
+    items: [...byGtin.values()],
     sheetNames: wb.SheetNames,
     perSheet,
     rejectedCells,
     headerDetected: withHeader.length > 0,
-    // Placeholder IDs (e.g. "000000000338") are real rows in real planograms,
-    // but they can never match an order-rec GTIN, so those products would flag
-    // forever. Surfacing them at upload turns a mystery into a data fix.
-    suspiciousGtins: items.filter((i) => /^0{9}/.test(i.gtin)).map((i) => i.gtin),
   }
 }
 

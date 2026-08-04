@@ -2,7 +2,7 @@ import { createFileRoute } from '@tanstack/react-router'
 import { useCallback, useEffect, useState } from 'react'
 import { useDropzone } from 'react-dropzone'
 import axios from 'axios'
-import { FileText, Upload, X, AlertTriangle, CheckCircle2 } from 'lucide-react'
+import { FileText, Upload, X, CheckCircle2 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import {
   Card,
@@ -23,7 +23,6 @@ type UploadResult = {
   perSheet: Array<{ sheet: string; accepted: number }>
   rejectedCells: number
   headerDetected: boolean
-  suspiciousGtins: Array<string>
 }
 
 type ExistingPlanogram = {
@@ -302,22 +301,6 @@ function RouteComponent() {
                   </li>
                 ))}
               </ul>
-
-              {result.suspiciousGtins.length > 0 && (
-                <div className="mt-3 pt-3 border-t border-green-200">
-                  <p className="text-amber-800 font-medium flex items-center gap-2">
-                    <AlertTriangle className="h-4 w-4" />
-                    {result.suspiciousGtins.length} placeholder GTIN
-                    {result.suspiciousGtins.length === 1 ? '' : 's'}
-                  </p>
-                  <p className="text-amber-700 mt-1">
-                    These can never match a real product, so those items will
-                    always flag. Worth fixing in the source file:{' '}
-                    {result.suspiciousGtins.slice(0, 5).join(', ')}
-                    {result.suspiciousGtins.length > 5 ? '…' : ''}
-                  </p>
-                </div>
-              )}
             </div>
           )}
         </CardContent>

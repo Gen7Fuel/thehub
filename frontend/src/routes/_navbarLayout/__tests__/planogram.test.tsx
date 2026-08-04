@@ -130,7 +130,6 @@ describe('Planogram upload page', () => {
         perSheet: [{ sheet: 'Aisle 1', accepted: 60 }],
         rejectedCells: 3,
         headerDetected: true,
-        suspiciousGtins: [],
       },
     })
 
@@ -151,7 +150,7 @@ describe('Planogram upload page', () => {
     expect(opts.headers['X-Required-Permission']).toBe('planogram.upload')
   })
 
-  it('reports the saved GTIN count and any placeholder GTINs', async () => {
+  it('reports the saved GTIN count and the per-sheet breakdown', async () => {
     mockAxiosPost.mockResolvedValue({
       data: {
         message: 'ok',
@@ -162,7 +161,6 @@ describe('Planogram upload page', () => {
         perSheet: [{ sheet: 'Aisle 1', accepted: 60 }],
         rejectedCells: 3,
         headerDetected: true,
-        suspiciousGtins: ['00000000000338'],
       },
     })
 
@@ -178,7 +176,7 @@ describe('Planogram upload page', () => {
     await waitFor(() =>
       expect(screen.getByText(/60 GTINs saved for Silver Grizzly/i)).toBeInTheDocument(),
     )
-    expect(screen.getByText(/1 placeholder GTIN/i)).toBeInTheDocument()
+    expect(screen.getByText(/Aisle 1: 60 products/i)).toBeInTheDocument()
   })
 
   // A big shrink is the signal for a wrong or truncated file, so it must not
@@ -208,7 +206,7 @@ describe('Planogram upload page', () => {
       data: {
         message: 'ok', site: 'Silver Grizzly', gtinCount: 5, previousCount: 60,
         sheetNames: ['Aisle 1'], perSheet: [{ sheet: 'Aisle 1', accepted: 5 }],
-        rejectedCells: 0, headerDetected: true, suspiciousGtins: [],
+        rejectedCells: 0, headerDetected: true,
       },
     })
     fireEvent.click(screen.getByRole('button', { name: /Replace anyway/i }))

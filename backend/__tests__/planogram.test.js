@@ -181,9 +181,9 @@ describe('parsePlanogramWorkbook', () => {
     expect(res.items.map((i) => i.gtin)).toEqual(['00073100001079'])
   })
 
-  // Placeholder IDs are real rows in real planograms; they can never match an
-  // order-rec GTIN, so they are surfaced at upload instead of flagging forever.
-  it('reports placeholder GTINs as suspicious', () => {
+  // Heavily zero-padded GTINs are real short internal codes, not placeholders.
+  // They must be kept and must match an order-rec item for the same product.
+  it('keeps heavily zero-padded GTINs as ordinary products', () => {
     const res = parsePlanogramWorkbook(
       workbook({
         'Aisle 1': [
@@ -193,7 +193,7 @@ describe('parsePlanogramWorkbook', () => {
         ],
       }),
     )
-    expect(res.suspiciousGtins).toEqual(['00000000000338'])
+    expect(res.items.map((i) => i.gtin)).toEqual(['00000000000338', '00810127980310'])
   })
 
   it('returns no items for a workbook with no usable GTINs', () => {
@@ -233,6 +233,17 @@ describe('isOffPlanogram', () => {
 
   it('never flags station supplies', () => {
     expect(isOffPlanogram('999999999999', planogram, true)).toBe(false)
+  })
+
+  // Regression: '000000000338' is a real product, not a placeholder. Whatever
+  // width the two sides store it at, it must resolve to one key and not flag.
+  it('matches a heavily zero-padded GTIN that is a real product', () => {
+    const withShortCode = new Set([normalizeGtin('000000000338')])
+    expect([...withShortCode][0]).toBe('00000000000338')
+
+    for (const variant of ['000000000338', '00000000000338', '0000000000338', 338]) {
+      expect(isOffPlanogram(variant, withShortCode, false)).toBe(false)
+    }
   })
 
   it('fails open on a GTIN it cannot read', () => {
