@@ -1329,7 +1329,13 @@ function RouteComponent() {
                     {cat.items.map((item: any, itemIdx: number) => (
                       <tr
                         key={itemIdx}
-                        className="cursor-pointer hover:bg-gray-100 transition-all"
+                        // Strict === true: docs predating this field (including
+                        // ones replayed from the offline cache) have undefined
+                        // here and must render clean, not flagged.
+                        className={`cursor-pointer transition-all ${item.offPlanogram === true
+                          ? "bg-red-50 hover:bg-red-100"
+                          : "hover:bg-gray-100"
+                          }`}
                         onClick={() => handleRowClick(catIdx, itemIdx, item.completed)}
                         style={{ height: '56px' }}
                       >
@@ -1339,6 +1345,16 @@ function RouteComponent() {
                           <span>{item.gtin}</span>
                           <span>{item.vin}</span>
                           <span className='font-bold'>{item.itemName}</span>
+                          {/* The row tint alone isn't enough: several cells below
+                              hardcode bg-cyan-100 and paint over it. */}
+                          {item.offPlanogram === true && (
+                            <span
+                              className="text-[10px] font-bold text-red-700 bg-red-100 rounded px-1 w-fit mt-1"
+                              title="This item is not on the site's planogram"
+                            >
+                              OFF PLANOGRAM
+                            </span>
+                          )}
                         </td>
                         {/* DYNAMIC STRAIN CELL */}
                         {cat.items.some((i: any) => i.strainName) && (

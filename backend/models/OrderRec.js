@@ -18,7 +18,11 @@ const ItemSchema = new mongoose.Schema({
   unitInCase: { type: Number, default: 0 },         // Units per case
   casesToOrder: { type: Number, default: 0 },       // Number of cases to order
   casesToOrderOld: { type: Number, default: 0 },    // Previous number of cases to order
-  completed: { type: Boolean, default: false }      // Whether this item is completed
+  completed: { type: Boolean, default: false },     // Whether this item is completed
+  // True when this GTIN is absent from the site's planogram. Defaults to false
+  // so that documents predating this field — including ones replayed from the
+  // offline IndexedDB cache — read as "not flagged" rather than lighting up.
+  offPlanogram: { type: Boolean, default: false }
 });
 
 /**
@@ -78,7 +82,10 @@ const OrderReconciliationSchema = new mongoose.Schema({
   comments: {
     type: [CommentSchema],
     default: []
-  }                                                 // Array of comments
+  },                                                // Array of comments
+  // When the planogram check last ran. null means it never did — either the
+  // site had no planogram on file, or the doc predates the feature.
+  planogramCheckedAt: { type: Date, default: null }
 });
 
 /**

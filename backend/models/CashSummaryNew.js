@@ -73,6 +73,7 @@ const CashSummarySchema = new mongoose.Schema(
     couponsAccepted: { type: Number },
     giftCertificates: { type: Number },
     cashOffCoupons: { type: Number },
+    gasolineCoupons: { type: Number },
     otherCoupons: { type: Number },
     canadianCash: { type: Number },
     cashOnHand: { type: Number },

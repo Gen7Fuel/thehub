@@ -527,6 +527,7 @@ router.get('/entries', async (req, res) => {
       'couponsAccepted',
       'giftCertificates',
       'cashOffCoupons',
+      'gasolineCoupons',
       'otherCoupons',
       'canadianCash',
       'cashOnHand',
@@ -670,8 +671,11 @@ router.get('/entries', async (req, res) => {
     const totalSalesNum = Number(cashSummary?.totals?.totalSales) || 0
     const missedCpl = Number(cashSummary?.totals?.missedCpl) || 0
     const otherCoupons = Number(cashSummary?.totals?.otherCoupons) || 0
-    // Include both couponsAccepted and giftCertificates in balanceCheck
-    const balanceCheck = totalPos + reportCanadianCash + couponsAccepted + giftCertificates + payouts - totalSalesNum + (Number(totalReceivablesAmount) || 0) + missedCpl + otherCoupons
+    const gasolineCoupons = Number(cashSummary?.totals?.gasolineCoupons) || 0
+    const cashOffCoupons = Number(cashSummary?.totals?.cashOffCoupons) || 0
+    // balanceCheck includes every coupon/gift-certificate component that makes up
+    // the Coupons column on the cash-rec pages, so the two always agree.
+    const balanceCheck = totalPos + reportCanadianCash + couponsAccepted + giftCertificates + payouts - totalSalesNum + (Number(totalReceivablesAmount) || 0) + missedCpl + otherCoupons + gasolineCoupons + cashOffCoupons
 
     // Compute adjusted over/short for lottery sites
     let adjustedOverShort = null
