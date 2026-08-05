@@ -446,10 +446,17 @@ function FuelPricingDashboard() {
   // );
   return (
     // 1. PLACE PROVIDER AROUND EVERYTHING AT THE ROOT RETURN
+    // <FuelPricingContext.Provider value={{ selectedCso, recommendedPrices }}>
+    //   <div
+    //     className="grid h-full w-full bg-[#f8fafc] overflow-hidden"
+    //     style={{ gridTemplateColumns: "minmax(0, 1fr) 380px" }}
+    //   >
+    //     <div className="min-w-0 p-6 border-r border-slate-200 flex flex-col space-y-5 overflow-hidden">
     <FuelPricingContext.Provider value={{ selectedCso, recommendedPrices }}>
       <div
         className="grid h-full w-full bg-[#f8fafc] overflow-hidden"
-        style={{ gridTemplateColumns: "minmax(0, 1fr) 380px" }}
+        /* Adjusted from 380px to 440px for better tablet usability */
+        style={{ gridTemplateColumns: "minmax(0, 1fr) 440px" }}
       >
         <div className="min-w-0 p-6 border-r border-slate-200 flex flex-col space-y-5 overflow-hidden">
           {/* TOP: HORIZONTAL GRADE SELECTOR ROW */}
@@ -709,7 +716,8 @@ function FuelPricingDashboard() {
         </div>
 
         {/* RIGHT PANEL: OUTLET VIEW */}
-        <aside className="w-[380px] min-w-0 border-l border-slate-200 bg-slate-50/50 overflow-y-auto">
+        {/* Updated w-[380px] -> w-[440px] to match the grid column template */}
+        <aside className="w-[440px] min-w-0 border-l border-slate-200 bg-slate-50/50 overflow-y-auto">
           <Outlet />
         </aside>
       </div>
