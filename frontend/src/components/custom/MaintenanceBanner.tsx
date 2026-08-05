@@ -217,6 +217,7 @@ function BannerContent({ activeMaintenance, timeLeft }: any) {
     </div>
   );
 }
+
 // import { useEffect, useState, useCallback } from 'react';
 // import axios from 'axios';
 // import { getSocket } from "@/lib/websocket";
