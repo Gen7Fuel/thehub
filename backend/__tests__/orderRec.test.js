@@ -125,6 +125,20 @@ describe('OrderRec schema — item validation', () => {
     expect(doc.categories[0].items[0].completed).toBe(false)
   })
 
+  // Must default to false, not true: documents predating this field — including
+  // ones replayed from the offline IndexedDB cache through PUT /:id, which
+  // replaces the whole categories array — would otherwise render every row as
+  // off-planogram.
+  it('defaults item offPlanogram to false', () => {
+    const doc = new OrderRec(withItem())
+    expect(doc.categories[0].items[0].offPlanogram).toBe(false)
+  })
+
+  it('stores an explicit offPlanogram flag', () => {
+    const doc = new OrderRec(withItem({ offPlanogram: true }))
+    expect(doc.categories[0].items[0].offPlanogram).toBe(true)
+  })
+
   it('stores provided item field values', () => {
     const doc = new OrderRec(withItem({ onHandQty: 10, casesToOrder: 3, unitInCase: 12 }))
     const item = doc.categories[0].items[0]

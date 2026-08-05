@@ -28,6 +28,7 @@ import {
   LifeBuoy,
   Settings,
   FileUp,
+  LayoutGrid,
 } from 'lucide-react'
 
 export const Route = createFileRoute('/_navbarLayout/')({
@@ -119,7 +120,7 @@ function App() {
           )}
 
           {/* INVENTORY - INDIGO */}
-          {(access?.orderRec?.value || access?.cycleCount?.value || access?.vendor || access?.category || access?.writeOff?.value || access?.uploadInvoice?.value) && (
+          {(access?.orderRec?.value || access?.cycleCount?.value || access?.vendor || access?.category || access?.writeOff?.value || access?.uploadInvoice?.value || access?.planogram?.value) && (
             <Section 
               title="Inventory" 
               accentColor="border-t-indigo-500"
@@ -141,11 +142,21 @@ function App() {
               
               {/* NEW MODULE: Upload Invoice */}
               {access?.uploadInvoice?.value && (
-                <NavButton 
-                  to="/upload-invoice" 
-                  label="Upload Invoice" 
-                  icon={FileUp} 
-                  theme="indigo" 
+                <NavButton
+                  to="/upload-invoice"
+                  label="Upload Invoice"
+                  icon={FileUp}
+                  theme="indigo"
+                />
+              )}
+
+              {/* NEW MODULE: Planogram */}
+              {access?.planogram?.value && (
+                <NavButton
+                  to="/planogram"
+                  label="Planogram"
+                  icon={LayoutGrid}
+                  theme="indigo"
                 />
               )}
             </Section>

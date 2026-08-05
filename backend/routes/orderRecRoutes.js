@@ -8,6 +8,7 @@ const ProductCategory = require('../models/ProductCategory');
 const Role = require('../models/Role');
 const User = require('../models/User');
 const { getUPC_barcode, getCoreMarkPriceBookByUPCs } = require('../services/sqlService');
+const { isOffPlanogram, loadPlanogramGtinSet } = require('../utils/planogram');
 const { calcSingleVendorLeadTime } = require('../utils/calcSingleVendorLeadTime');
 const { pushNotification } = require('../services/notificationService');
 
@@ -724,6 +725,22 @@ router.post('/', async (req, res) => {
       console.log("Found vendorDoc:", vendorDoc);
     }
 
+    // -------------------------------------------------------------------
+    // 1b. Snapshot which categories are station supplies, BEFORE step 2.
+    //
+    // Station supplies are exempt from the planogram check, but step 2 can
+    // change cat.number out from under us: the injected 5001 block has no
+    // `name` (see above), so if no ProductCategory has Number 5001, step 2
+    // falls through to findOne({ Name: undefined }) — which Mongoose reduces
+    // to findOne({}) and matches an arbitrary category. Capturing the indexes
+    // now keeps the exemption correct either way. Indexes stay aligned since
+    // step 2 mutates in place and step 3 is a .map().
+    // -------------------------------------------------------------------
+    const stationSupplyIdx = new Set();
+    categories.forEach((cat, i) => {
+      if (String(cat?.number ?? '') === '5001') stationSupplyIdx.add(i);
+    });
+
     // ------------------------------------------
     // 2. VALIDATE CATEGORY NUMBER & NAME
     // ------------------------------------------
@@ -770,16 +787,37 @@ router.post('/', async (req, res) => {
     });
 
     // ------------------------------------------
-    // 4. Add old quantities to items
+    // 4. Add old quantities + planogram flags to items
     // ------------------------------------------
-    const categoriesWithOld = categories.map(category => ({
-      ...category,
-      items: category.items.map(item => ({
-        ...item,
-        onHandQtyOld: item.onHandQty,
-        casesToOrderOld: item.casesToOrder,
-      })),
-    }));
+    // One query for the whole order rec; membership is then an O(1) Set hit.
+    // A null set means the site has no planogram on file, in which case nothing
+    // is flagged at all.
+    let planogramGtins = null;
+    try {
+      planogramGtins = await loadPlanogramGtinSet(site);
+    } catch (e) {
+      // Fail open — a planogram lookup must never block order rec creation.
+      console.error('[planogram] lookup failed for site', site, e);
+      planogramGtins = null;
+    }
+
+    const categoriesWithOld = categories.map((category, catIdx) => {
+      // String() is required: at this point category.number is the raw JS
+      // Number copied off ProductCategory.Number (a Number path), not the
+      // string "5001" — Mongoose has not cast it to the schema type yet.
+      const isStationSupply =
+        stationSupplyIdx.has(catIdx) || String(category.number ?? '') === '5001';
+
+      return {
+        ...category,
+        items: category.items.map(item => ({
+          ...item,
+          onHandQtyOld: item.onHandQty,
+          casesToOrderOld: item.casesToOrder,
+          offPlanogram: isOffPlanogram(item.gtin, planogramGtins, isStationSupply),
+        })),
+      };
+    });
 
     // ------------------------------------------
     // 5. CREATE ORDERREC DOCUMENT
@@ -791,7 +829,8 @@ router.post('/', async (req, res) => {
       email,
       currentStatus: "Created",
       statusHistory: [{ status: "Created", timestamp: new Date() }],
-      comments: []
+      comments: [],
+      planogramCheckedAt: planogramGtins ? new Date() : null
     });
 
     await orderRec.save();
@@ -800,7 +839,12 @@ router.post('/', async (req, res) => {
     const io = req.app.get("io");
     if (io) io.emit("orderCreated", orderRec);
 
-    res.status(201).json(orderRec);
+    // planogramApplied tells the caller whether the check actually ran. Without
+    // it, a site-name mismatch looks exactly like a clean order rec.
+    res.status(201).json({
+      ...orderRec.toObject(),
+      planogramApplied: !!planogramGtins
+    });
 
   } catch (err) {
     console.error(err);

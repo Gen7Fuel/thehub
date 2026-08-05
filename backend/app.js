@@ -74,6 +74,7 @@ const fuelSettingsRoutes = require("./routes/fuel/fuelSettingsRoutes");
 const { auth } = require("./middleware/authMiddleware");
 
 const cycleCountRoutes = require('./routes/cycleCountRoutes');
+const planogramRoutes = require('./routes/planogramRoutes');
 const permissionRoutes = require("./routes/permissionRoutes");
 const selectTemplateRoutes = require("./routes/audit/selectTemplateRoutes");
 const writeOffRoutes = require("./routes/writeOffRoutes");
@@ -140,6 +141,7 @@ app.use("/api/ar-customers", arCustomerRoutes);
 app.use("/api/order-rec", orderRecRoutes);
 app.use("/api/vendors", vendorRoutes);
 app.use("/api/cycle-count", cycleCountRoutes);
+app.use("/api/planogram", planogramRoutes);
 app.use("/api/audit/select-templates", selectTemplateRoutes);
 app.use("/api/audit", auditRoutes);
 app.use("/api/permissions", permissionRoutes);
