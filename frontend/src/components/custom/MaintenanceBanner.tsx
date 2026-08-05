@@ -13,15 +13,139 @@ export default function MaintenanceBanner({ onStatusChange }: MaintenanceBannerP
   const [timeLeft, setTimeLeft] = useState<string>("");
   const { user } = useAuth();
 
-  const checkMaintenance = useCallback(async () => {
-    try {
-      const token = localStorage.getItem('token');
-      if (!token) {
-        setActiveMaintenance(null);
-        onStatusChange?.(false);
-        return;
-      }
+  // const checkMaintenance = useCallback(async () => {
+  //   try {
+  //     const token = localStorage.getItem('token');
+  //     if (!token) {
+  //       setActiveMaintenance(null);
+  //       onStatusChange?.(false);
+  //       return;
+  //     }
 
+  //     const { data } = await axios.get('/api/maintenance', {
+  //       headers: { Authorization: `Bearer ${token}` }
+  //     });
+
+  //     const now = new Date();
+  //     const oneHourAgo = new Date(now.getTime() - 60 * 60 * 1000);
+  //     const twentyFourHoursFromNow = new Date(now.getTime() + 24 * 60 * 60 * 1000);
+
+  //     const potentialMaintenances = data.filter((m: any) => {
+  //       if (m.status === 'ongoing') return true;
+  //       if (m.status === 'completed' && m.actualEnd) {
+  //         return new Date(m.actualEnd) > oneHourAgo;
+  //       }
+  //       if (m.status === 'cancelled') {
+  //         const updatedAt = new Date(m.updatedAt);
+  //         const startDate = new Date(m.scheduleStart);
+  //         return updatedAt > oneHourAgo && (startDate <= twentyFourHoursFromNow || m.notificationSent === true);
+  //       }
+  //       if (m.status === 'scheduled') {
+  //         const startDate = new Date(m.scheduleStart);
+  //         return startDate > now && startDate <= twentyFourHoursFromNow;
+  //       }
+  //       return false;
+  //     });
+
+  //     const sorted = potentialMaintenances.sort((a: any, b: any) => {
+  //       const priority: Record<string, number> = { ongoing: 1, scheduled: 2, completed: 3, cancelled: 4 };
+  //       if (priority[a.status] !== priority[b.status]) return priority[a.status] - priority[b.status];
+  //       return new Date(a.scheduleStart).getTime() - new Date(b.scheduleStart).getTime();
+  //     });
+
+  //     const topPriority = sorted[0] || null;
+  //     setActiveMaintenance(topPriority);
+
+  //     // --- LOCKDOWN & BYPASS LOGIC ---
+  //     // if (topPriority?.status === 'ongoing') {
+  //     //   // Store beacon for resilience (as discussed)
+  //     //   localStorage.setItem('hub_maint_beacon', topPriority.scheduleClose);
+
+  //     //   // Check permission: settings -> maintenance
+  //     //   const canBypass = user?.access?.settings?.maintenance === true;
+
+  //     //   if (canBypass) {
+  //     //     onStatusChange?.(false); // Admin: show banner but NO overlay
+  //     //   } else {
+  //     //     onStatusChange?.(true, topPriority); // Regular User: Show overlay
+  //     //   }
+  //     // } else {
+  //     //   localStorage.removeItem('hub_maint_beacon');
+  //     //   onStatusChange?.(false);
+  //     // }
+
+  //     // --- LOCKDOWN & BYPASS LOGIC ---
+  //     if (topPriority?.status === 'ongoing') {
+  //       const canBypass = user?.access?.settings?.maintenance === true;
+
+  //       if (canBypass) {
+  //         // Admin: Store privileged flag, remove regular lock
+  //         localStorage.setItem('hub_maint_privileged', 'admin');
+  //         localStorage.removeItem('hub_maint_beacon');
+  //         onStatusChange?.(false);
+  //       } else {
+  //         // Regular User: Store regular lock, remove privileged flag (safety)
+  //         localStorage.setItem('hub_maint_beacon', topPriority.scheduleClose);
+  //         localStorage.removeItem('hub_maint_privileged');
+  //         onStatusChange?.(true, topPriority);
+  //       }
+  //     } else {
+  //       // Clear everything when maintenance is officially over
+  //       localStorage.removeItem('hub_maint_beacon');
+  //       localStorage.removeItem('hub_maint_privileged');
+  //       onStatusChange?.(false);
+  //     }
+  //   } catch (err: any) {
+  //     console.error("Banner fetch error:", err);
+
+  //     // === RESET STATE ON ANY ERROR (Auth, Network, Timeout, etc.) ===
+  //     setActiveMaintenance(null);
+  //     localStorage.removeItem('hub_maint_beacon');
+  //     localStorage.removeItem('hub_maint_privileged');
+  //     onStatusChange?.(false);
+
+  //     // === STRICT 503 CHECK: Only trigger lockdown if server explicitly returns 503 Maintenance ===
+  //     if (err.response?.status === 503) {
+  //       const maintData = err.response.data;
+  //       localStorage.setItem('hub_maint_beacon', maintData.endTime);
+  //       const ongoingDetails = {
+  //         status: 'ongoing',
+  //         scheduleClose: maintData.endTime
+  //       };
+  //       setActiveMaintenance(ongoingDetails);
+  //       onStatusChange?.(true, ongoingDetails);
+  //     }
+  //   }
+  // }, [user, onStatusChange]);
+
+  const checkMaintenance = useCallback(async () => {
+    const token = localStorage.getItem('token');
+    if (!token) {
+      setActiveMaintenance(null);
+      onStatusChange?.(false);
+      return;
+    }
+
+    // Helper to process ongoing status for regular user vs admin
+    const applyLockdownLogic = (maintData: any) => {
+      // Check permission from user token / context
+      const canBypass = user?.access?.settings?.maintenance === true;
+
+      if (canBypass) {
+        localStorage.setItem('hub_maint_privileged', 'admin');
+        localStorage.removeItem('hub_maint_beacon');
+        setActiveMaintenance(maintData);
+        onStatusChange?.(false); // Admin: Keep banner, no blocking overlay
+      } else {
+        localStorage.setItem('hub_maint_beacon', maintData.scheduleClose || '');
+        localStorage.removeItem('hub_maint_privileged');
+        setActiveMaintenance(maintData);
+        onStatusChange?.(true, maintData); // Regular User: Show blocking overlay
+      }
+    };
+
+    try {
+      // 1. Primary Attempt: Query Main Backend
       const { data } = await axios.get('/api/maintenance', {
         headers: { Authorization: `Bearer ${token}` }
       });
@@ -50,70 +174,66 @@ export default function MaintenanceBanner({ onStatusChange }: MaintenanceBannerP
       const sorted = potentialMaintenances.sort((a: any, b: any) => {
         const priority: Record<string, number> = { ongoing: 1, scheduled: 2, completed: 3, cancelled: 4 };
         if (priority[a.status] !== priority[b.status]) return priority[a.status] - priority[b.status];
-        return new Date(a.scheduleStart).getTime() - new Date(b.scheduleStart).getTime();
+        return new Date(a.scheduleStart).getTime() - new Date(a.scheduleStart).getTime();
       });
 
       const topPriority = sorted[0] || null;
-      setActiveMaintenance(topPriority);
 
-      // --- LOCKDOWN & BYPASS LOGIC ---
-      // if (topPriority?.status === 'ongoing') {
-      //   // Store beacon for resilience (as discussed)
-      //   localStorage.setItem('hub_maint_beacon', topPriority.scheduleClose);
-
-      //   // Check permission: settings -> maintenance
-      //   const canBypass = user?.access?.settings?.maintenance === true;
-
-      //   if (canBypass) {
-      //     onStatusChange?.(false); // Admin: show banner but NO overlay
-      //   } else {
-      //     onStatusChange?.(true, topPriority); // Regular User: Show overlay
-      //   }
-      // } else {
-      //   localStorage.removeItem('hub_maint_beacon');
-      //   onStatusChange?.(false);
-      // }
-
-      // --- LOCKDOWN & BYPASS LOGIC ---
       if (topPriority?.status === 'ongoing') {
-        const canBypass = user?.access?.settings?.maintenance === true;
-
-        if (canBypass) {
-          // Admin: Store privileged flag, remove regular lock
-          localStorage.setItem('hub_maint_privileged', 'admin');
-          localStorage.removeItem('hub_maint_beacon');
-          onStatusChange?.(false);
-        } else {
-          // Regular User: Store regular lock, remove privileged flag (safety)
-          localStorage.setItem('hub_maint_beacon', topPriority.scheduleClose);
-          localStorage.removeItem('hub_maint_privileged');
-          onStatusChange?.(true, topPriority);
-        }
+        applyLockdownLogic(topPriority);
       } else {
-        // Clear everything when maintenance is officially over
+        // Officially ended/cleared by server response
+        setActiveMaintenance(topPriority);
         localStorage.removeItem('hub_maint_beacon');
         localStorage.removeItem('hub_maint_privileged');
         onStatusChange?.(false);
       }
-    } catch (err: any) {
-      console.error("Banner fetch error:", err);
 
-      // === RESET STATE ON ANY ERROR (Auth, Network, Timeout, etc.) ===
-      setActiveMaintenance(null);
-      localStorage.removeItem('hub_maint_beacon');
-      localStorage.removeItem('hub_maint_privileged');
-      onStatusChange?.(false);
+    } catch (primaryErr: any) {
+      console.warn("Main backend unavailable for maintenance check. Falling back to auth-backend...", primaryErr);
 
-      // === STRICT 503 CHECK: Only trigger lockdown if server explicitly returns 503 Maintenance ===
-      if (err.response?.status === 503) {
-        const maintData = err.response.data;
-        localStorage.setItem('hub_maint_beacon', maintData.endTime);
-        const ongoingDetails = {
-          status: 'ongoing',
-          scheduleClose: maintData.endTime
-        };
-        setActiveMaintenance(ongoingDetails);
-        onStatusChange?.(true, ongoingDetails);
+      try {
+        // 2. Fallback Attempt: Query Auth-Backend Endpoint
+        const { data: authData } = await axios.get('/login-auth/maintenance-status', {
+          headers: { Authorization: `Bearer ${token}` }
+        });
+
+        if (authData.active && authData.maintenance) {
+          applyLockdownLogic(authData.maintenance);
+          return;
+        } else {
+          // Auth backend responded cleanly and verified maintenance is NOT active
+          setActiveMaintenance(null);
+          localStorage.removeItem('hub_maint_beacon');
+          localStorage.removeItem('hub_maint_privileged');
+          onStatusChange?.(false);
+          return;
+        }
+
+      } catch (fallbackErr: any) {
+        console.error("Both primary backend and auth-backend failed to respond:", fallbackErr);
+
+        // 3. FAIL-SAFE BEACON CHECK
+        // If BOTH backends are unreachable (e.g. database down or network crash), 
+        // check if we previously set a local beacon for this session.
+        const existingBeacon = localStorage.getItem('hub_maint_beacon');
+        const isPrivileged = localStorage.getItem('hub_maint_privileged') === 'admin';
+
+        if (existingBeacon && !isPrivileged) {
+          // Enforce existing maintenance lock rather than kicking user into an broken app
+          const fallbackMaintenanceObj = {
+            status: 'ongoing',
+            scheduleClose: existingBeacon,
+            title: 'System Maintenance',
+            message: 'The system is undergoing maintenance. Please try again shortly.'
+          };
+          setActiveMaintenance(fallbackMaintenanceObj);
+          onStatusChange?.(true, fallbackMaintenanceObj);
+        } else {
+          // Reset only if no active beacon existed prior to the outage
+          setActiveMaintenance(null);
+          onStatusChange?.(false);
+        }
       }
     }
   }, [user, onStatusChange]);
