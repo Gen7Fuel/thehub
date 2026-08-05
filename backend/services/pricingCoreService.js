@@ -157,6 +157,7 @@ export async function executeRetailPriceUpdate({
     console.error("Non-blocking operational failure (Pushover Queue Dispatch):", err);
   }
 
+  // --- In executeRetailPriceUpdate inside server file ---
   try {
     if (locationDoc.gasBuddyStationId) {
       const normalizedPrices = {};
@@ -166,9 +167,12 @@ export async function executeRetailPriceUpdate({
         if (
           gasBuddyLabel &&
           numericPrice !== undefined &&
-          numericPrice !== null
+          numericPrice !== null &&
+          !isNaN(numericPrice)
         ) {
-          normalizedPrices[gasBuddyLabel] = parseFloat(numericPrice);
+          // Convert dollar input (1.549) to cents (154.9) without float rounding errors
+          const priceInCents = Number((parseFloat(numericPrice) * 100).toFixed(1));
+          normalizedPrices[gasBuddyLabel] = priceInCents;
         }
       }
 
