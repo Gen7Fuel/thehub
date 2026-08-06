@@ -572,7 +572,13 @@ function parseSftReport(text) {
     payouts: pickNum(/^\s*Payouts\s+([-\d.,]+)\s*$/mi, text),
     unsettledPrepays: pickNum(/^\s*Unsettled Prepays\s+([-\d.,]+)\s*$/mi, text),
 
-    lottoPayout: pickNum(/^\s*lotto\s*payouts?\s*[:\-]?\s*\$?\s*([-\d.,]+)\s*$/mi, text),
+    lottoPayout: (() => {
+      const payout = pickNum(/^\s*lotto\s*payouts?\s*[:\-]?\s*\$?\s*([-\d.,]+)\s*$/mi, text);
+      const win = pickNum(/^\s*LOTTO WIN\s+([-\d.,]+)\s*$/mi, text);
+
+      if (payout == null && win == null) return null;
+      return Number(((payout || 0) + (win || 0)).toFixed(2));
+    })(),
 
     onlineLottoTotal: (() => {
       const m = text.match(

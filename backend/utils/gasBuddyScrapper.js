@@ -137,11 +137,15 @@ async function attemptPricePost({ gasBuddyStationId, prices }) {
       if (await inputField.isVisible()) {
         const targetPriceString = String(rawPrice);
 
+        // 1. Fully focus and clear the input field reliably
         await inputField.focus();
+        await inputField.fill(''); // Playwright native clear
+        
+        // Fallback clear in case GasBuddy uses custom masked inputs
         await page.keyboard.press('Control+A');
-        await page.keyboard.press('Meta+A');
         await page.keyboard.press('Backspace');
 
+        // 2. Type the clean target price string (e.g. "154.9")
         await inputField.type(targetPriceString, { delay: 100 });
 
         const confirmButton = fuelColumn.locator('button:has-text("Confirm")');
