@@ -48,6 +48,15 @@ const transactionSchema = new mongoose.Schema({
     required: false, // optional new field for PO
     trim: true
   },
+  // Set only on PO docs whose station enforces per-station PO-number uniqueness.
+  // Exists purely to drive the partial unique index below: partialFilterExpression
+  // cannot express "stationName not in [...]" ($nin unsupported), so the route
+  // stamps this $eq-able marker at write time. See backend/constants/poSites.js.
+  // Deliberately has no default — it must be genuinely absent on exempt docs so
+  // the partial filter skips them.
+  poUniqueEnforced: {
+    type: Boolean,
+  },
   purchaseType: {
     type: String,
     enum: ['fuel', 'non-fuel'],
@@ -103,14 +112,27 @@ const transactionSchema = new mongoose.Schema({
 // Ensure uniqueness of PO number scoped to station for PO-sourced docs with non-empty values.
 // Allows multiple docs without poNumber or with source !== 'PO', and frees up the PO number
 // again once the doc is soft-deleted (deletedAt set) so a corrected re-entry isn't blocked.
-// Note: partialFilterExpression only supports $eq/$exists/$gt/$gte/$lt/$lte/$type/$and — no
-// $ne — so "non-empty string" is expressed as $gt: '' (every non-empty string sorts after '').
+//
+// `poUniqueEnforced: true` is what exempts a site: partialFilterExpression only supports
+// $eq/$exists/$gt/$gte/$lt/$lte/$type/$and — no $ne/$nin — so "unique except at these
+// stations" can't be written directly. Instead the route stamps this marker on writes whose
+// station enforces uniqueness, and omits it for the sites listed in backend/constants/poSites.js
+// (Wavers West / Wavers East, whose externally issued PO books recycle numbers); docs without
+// the marker simply fall outside this index. The same $-operator limitation is why "non-empty
+// string" is expressed as $gt: '' (every non-empty string sorts after '').
+//
+// Named explicitly: the auto-derived name (stationName_1_poNumber_1) belongs to the older
+// marker-less version of this index, and recreating that name with different options throws
+// IndexOptionsConflict, which Mongoose's autoIndex swallows silently. Deployments carrying the
+// old index need backend/manual/backfillPoUniqueEnforced.js to backfill and swap them over.
 transactionSchema.index(
   { stationName: 1, poNumber: 1 },
   {
+    name: 'po_station_number_unique_enforced',
     unique: true,
     partialFilterExpression: {
       source: 'PO',
+      poUniqueEnforced: true,
       stationName: { $exists: true, $gt: '' },
       poNumber: { $exists: true, $gt: '' },
       deletedAt: null,

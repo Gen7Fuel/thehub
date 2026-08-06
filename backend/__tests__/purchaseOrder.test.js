@@ -3,6 +3,7 @@ import mongoose from 'mongoose'
 // Import the model directly — no DB connection required.
 // Do NOT import config/db.js here.
 import Transaction from '../models/Transactions.js'
+import { DUPLICATE_PO_ALLOWED_SITES, enforcesPoUniqueness } from '../constants/poSites.js'
 
 // ─── Schema validation ────────────────────────────────────────────────────────
 
@@ -74,6 +75,21 @@ describe('Transaction schema — field validation', () => {
   it('stores a poNumber string value', () => {
     const trx = new Transaction({ ...base(), poNumber: '10001' })
     expect(trx.poNumber).toBe('10001')
+  })
+
+  // poUniqueEnforced must stay absent unless a writer stamps it — the partial unique
+  // index keys on `poUniqueEnforced: true`, so a default would silently pull exempt
+  // sites' docs back into the index.
+  it('leaves poUniqueEnforced undefined when not supplied', () => {
+    const trx = new Transaction({ ...base(), poNumber: '10001' })
+    expect(trx.validateSync()).toBeUndefined()
+    expect(trx.poUniqueEnforced).toBeUndefined()
+  })
+
+  it('stores poUniqueEnforced when stamped true', () => {
+    const trx = new Transaction({ ...base(), poNumber: '10001', poUniqueEnforced: true })
+    expect(trx.validateSync()).toBeUndefined()
+    expect(trx.poUniqueEnforced).toBe(true)
   })
 
   it('defaults purchaseType to fuel and itemsDescription to empty string', () => {
@@ -194,6 +210,43 @@ describe('Transaction schema — soft delete fields', () => {
     expect(doc.validateSync()).toBeUndefined()
     expect(doc.deletedAt).toBeInstanceOf(Date)
     expect(doc.deletedBy.toString()).toBe(deletedBy.toString())
+  })
+})
+
+// ─── PO-number uniqueness exemption ────────────────────────────────────────
+// Decides whether a write gets the poUniqueEnforced marker, i.e. whether the
+// partial unique index applies to it at all.
+
+describe('enforcesPoUniqueness', () => {
+  it('exempts every site in DUPLICATE_PO_ALLOWED_SITES', () => {
+    for (const site of DUPLICATE_PO_ALLOWED_SITES) {
+      expect(enforcesPoUniqueness(site)).toBe(false)
+    }
+  })
+
+  it('exempts Wavers West and Wavers East by name', () => {
+    expect(enforcesPoUniqueness('Wavers West')).toBe(false)
+    expect(enforcesPoUniqueness('Wavers East')).toBe(false)
+  })
+
+  it('trims surrounding whitespace before matching', () => {
+    expect(enforcesPoUniqueness('  Wavers East  ')).toBe(false)
+  })
+
+  it('is case-sensitive — an unexpected casing stays enforced rather than silently exempt', () => {
+    expect(enforcesPoUniqueness('wavers east')).toBe(true)
+  })
+
+  it('enforces uniqueness for every other site', () => {
+    for (const site of ['Rankin', 'Sarnia', 'Couchiching', 'Walpole', 'Oliver']) {
+      expect(enforcesPoUniqueness(site)).toBe(true)
+    }
+  })
+
+  it('enforces uniqueness for empty or missing station names', () => {
+    expect(enforcesPoUniqueness('')).toBe(true)
+    expect(enforcesPoUniqueness(undefined)).toBe(true)
+    expect(enforcesPoUniqueness(null)).toBe(true)
   })
 })
 
