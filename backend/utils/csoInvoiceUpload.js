@@ -662,13 +662,28 @@ async function processInvoiceAutomation({ invoiceId, io }) {
     await vendorInput.type(vendorCode, { delay: 100 });
     await page.waitForTimeout(1000);
 
-    const boundListOption = page.locator(".x-boundlist-item").filter({ hasText: vendorCode });
+    // Exact match for (vendorCode) inside ExtJS option text, e.g. "Saputo(10547)"
+    const vendorRegExp = new RegExp(`\\(${vendorCode}\\)`);
+    const boundListOption = page
+      .locator(".x-boundlist-item")
+      .filter({ hasText: vendorRegExp });
 
     try {
       await boundListOption.waitFor({ state: "visible", timeout: 6000 });
       await boundListOption.first().click();
     } catch (dropdownError) {
-      throw new Error(`Vendor Code "${vendorCode}" was not found or is not available in CSO.`);
+      // Fallback: If code matching fails, try matching Vendor Name or standard strict string
+      const backupVendorOption = page
+        .locator(".x-boundlist-item")
+        .filter({ hasText: vendorName });
+
+      if ((await backupVendorOption.count()) > 0) {
+        await backupVendorOption.first().click();
+      } else {
+        throw new Error(
+          `Vendor Code "${vendorCode}" (${vendorName}) was not found or is not available in CSO.`
+        );
+      }
     }
 
     // Fill Doc Number
