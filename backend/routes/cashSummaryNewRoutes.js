@@ -16,6 +16,13 @@ const { generateChickenDelightEodReportPdf } = require('../utils/eodCDReportWave
 const { generateShiftReportsPdf } = require('../utils/shiftReportsPdf')
 const { generateLotteryImagesPdf } = require('../utils/lotteryImagesPdf')
 const { getRefundTransactions, getShiftEmployees } = require('../services/sqlService');
+const {
+  buildArPaidReport,
+  AR_PAID_REPORT_SITES,
+  MIN_MONTH,
+  MONTH_RE,
+  monthWindowUtc,
+} = require('../utils/arPaidReport');
 
 const path = require('path')
 
@@ -1513,6 +1520,50 @@ router.get('/ar-check', async (req, res) => {
   } catch (err) {
     console.error('AR check error:', err)
     res.status(500).json({ error: 'Failed to check AR totals' })
+  }
+})
+
+// Monthly A/R paid report for the two Wavers sites — every A/R customer entry
+// with a non-zero `paid` amount, grouped by site. Consumed by Desk's
+// "A/R Paid Report" page, which renders the .docx client-side.
+//
+// MUST stay above router.get('/:id') below, or Express hands 'ar-paid-report'
+// to findById and the request 500s on a CastError.
+router.get('/ar-paid-report', async (req, res) => {
+  try {
+    const month = String(req.query.month || '')
+
+    if (!MONTH_RE.test(month)) {
+      return res.status(400).json({ error: 'month must be YYYY-MM' })
+    }
+    // `paid` was first persisted 2026-07-03; earlier shifts have paid: null, so an
+    // older month would report zero payments rather than the truth.
+    if (month < MIN_MONTH) {
+      return res
+        .status(400)
+        .json({ error: `Reports are only available from ${MIN_MONTH} onward` })
+    }
+
+    const { start, end } = monthWindowUtc(month)
+    const sites = AR_PAID_REPORT_SITES.map((s) => s.site)
+
+    // No isChickenDelight filter — a payment taken on a Chicken Delight shift is
+    // still a payment, and the report's job is to find every one of them.
+    const docs = await CashSummary.find(
+      { site: { $in: sites }, date: { $gte: start, $lt: end } },
+      { site: 1, shift_number: 1, date: 1, arCustomers: 1 },
+    ).lean()
+
+    const report = buildArPaidReport({
+      month,
+      siteConfigs: AR_PAID_REPORT_SITES,
+      docs,
+    })
+
+    res.json({ ...report, generatedAt: new Date().toISOString() })
+  } catch (err) {
+    console.error('AR paid report error:', err)
+    res.status(500).json({ error: 'Failed to build A/R paid report' })
   }
 })
 
