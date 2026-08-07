@@ -6,18 +6,7 @@ const Location = require('../models/Location');
 const h = React.createElement;
 
 // Helper function to map site names for PDF display
-const formatReportSiteName = (rawSite) => {
-  if (!rawSite) return '';
-  const cleanSite = rawSite.trim().toLowerCase();
-  
-  if (cleanSite === 'wavers west') {
-    return 'Wavers of Brokenhead';
-  }
-  if (cleanSite === 'wavers east') {
-    return 'Brokenhead Community Store';
-  }
-  return rawSite;
-};
+const { formatReportSiteName } = require('./siteDisplayName');
 
 const styles = StyleSheet.create({
   page: {
