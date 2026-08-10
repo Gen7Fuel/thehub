@@ -9,6 +9,7 @@ const Location = require("../models/Location");
 const { pushNotification } = require("../services/notificationService");
 const { emailQueue } = require('../queues/emailQueue');
 const { getPermissionMap } = require('../utils/permissionStore');
+const { enforcesPoUniqueness } = require('../constants/poSites');
 
 const escapeHtml = (s = '') =>
   String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
@@ -160,6 +161,10 @@ router.post("/", async (req, res) => {
       stationName,
       fleetCardNumber: fleetCardNumber || '',
       poNumber: poNumber || '',
+      // Marker that puts this doc under the per-station PO-number unique index.
+      // Left undefined (and so never persisted) for the sites that legitimately
+      // repeat PO numbers — see backend/constants/poSites.js.
+      poUniqueEnforced: source === 'PO' && poNumber && enforcesPoUniqueness(stationName) ? true : undefined,
       noFleetCard: !!noFleetCard,
       quantity: quantity ?? 0,
       amount,
@@ -239,9 +244,30 @@ router.put("/:id", express.json(), async (req, res) => {
       updates.date = dateStrToLegacyDate(dateStr)
     }
 
+    // stationName and poNumber are both editable, so the unique-index marker has to be
+    // recomputed against the doc's post-update state — reading through to the current doc
+    // for whichever of the two the request didn't supply.
+    const current = await Transaction.findOne({ _id: id, deletedAt: null })
+      .select('source stationName poNumber').lean()
+
+    if (!current) {
+      return res.status(404).json({ message: "Purchase order not found." })
+    }
+
+    const nextSource = updates.source ?? current.source
+    const nextStation = updates.stationName ?? current.stationName
+    const nextPoNumber = updates.poNumber ?? current.poNumber
+
+    const enforced = nextSource === 'PO' && nextPoNumber && enforcesPoUniqueness(nextStation)
+    if (enforced) updates.poUniqueEnforced = true
+
+    // Moving a PO onto an exempt site (or clearing its number) has to drop the marker,
+    // or the doc stays in the index. $set and $unset must never name the same field.
+    const ops = enforced ? { $set: updates } : { $set: updates, $unset: { poUniqueEnforced: '' } }
+
     const updatedOrder = await Transaction.findOneAndUpdate(
       { _id: id, deletedAt: null },
-      { $set: updates },
+      ops,
       { new: true, runValidators: true }
     )
 
@@ -450,6 +476,13 @@ router.get('/unique', async (req, res) => {
 
     if (!stationName || !poNumber) {
       return res.status(400).json({ message: 'stationName and poNumber are required' })
+    }
+
+    // Sites in DUPLICATE_PO_ALLOWED_SITES legitimately repeat PO numbers, so there is
+    // nothing to violate — report unique and let the form through. Keeping this here
+    // rather than in the client leaves the backend as the single source of truth.
+    if (!enforcesPoUniqueness(stationName)) {
+      return res.json({ unique: true })
     }
 
     const existing = await Transaction.findOne({ source: 'PO', stationName, poNumber, deletedAt: null }).select('_id').lean()
