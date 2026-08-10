@@ -23,7 +23,7 @@ const updateCycleCountCSO = async () => {
     }).lean();
 
     for (const loc of locations) {
-      const { site: siteName, timezone, _id: siteMongoId } = loc;
+      const { site: siteName, timezone, _id: siteMongoId, csoCode } = loc;
       if (!timezone || !siteMongoId) continue;
 
       const mongoSiteIdStr = siteMongoId.toString();
@@ -64,8 +64,7 @@ const updateCycleCountCSO = async () => {
 
       // 3. Hit Azure SQL to gather yesterday's closing snapshots
       console.log(`-> Querying Azure SQL for ${uniqueGtins.length} metrics at ${siteName}...`);
-      const csoDataMap = await getOnHandBulkCSOData(siteName, uniqueGtins);
-
+      const csoDataMap = await getOnHandBulkCSOData(csoCode, uniqueGtins, yesterdayStr);
       let updateCount = 0;
 
       // 4. Update item_bk logs systematically
