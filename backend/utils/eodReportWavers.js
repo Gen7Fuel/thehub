@@ -761,19 +761,19 @@ async function fetchEodDataForDate({ site, date, isManitoba = false }) {
   const bingoSales = sum("bingoSales");
   const itemSales = sum("item_sales") || sum("parsedItemSales");
 
-  if (sellsLottery && lottery) {
-    const onlineSalesBulloch = sum("onlineLottoTotal");
-    const onlineOS =
-      (onlineSalesBulloch || 0) -
-      ((lottery.onlineLottoTotal || 0) - (lottery.onlineCancellations || 0));
-    const scratchOS = 0;
-    const adjReported = (reportCanadianCash || 0) + onlineOS + scratchOS;
-    overShortCash =
-      physicalAssets - adjReported + unsettledPrepays + handheldDebit;
-  } else {
+  // if (sellsLottery && lottery) {
+  //   const onlineSalesBulloch = sum("onlineLottoTotal");
+  //   const onlineOS =
+  //     (onlineSalesBulloch || 0) -
+  //     ((lottery.onlineLottoTotal || 0) - (lottery.onlineCancellations || 0));
+  //   const scratchOS = 0;
+  //   const adjReported = (reportCanadianCash || 0) + onlineOS + scratchOS;
+  //   overShortCash =
+  //     physicalAssets - adjReported + unsettledPrepays + handheldDebit;
+  // } else {
     overShortCash =
       physicalAssets - reportCanadianCash + unsettledPrepays + handheldDebit;
-  }
+  // }
 
   const fuelSales = sum("fuelSales");
   const fuelPriceOverrides = sum("fuelPriceOverrides");

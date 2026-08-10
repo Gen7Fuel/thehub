@@ -26,7 +26,7 @@ function formatNumber(val) {
 
 function generatePdfReport() {
   const inputExcelPath = path.join(__dirname, 'infonet_flatten.xlsx');
-  const outputPdfPath = path.join(__dirname, 'Admin Fee by Client - WAVERS OF BROKENHEAD.pdf');
+  const outputPdfPath = path.join(__dirname, 'Admin Fee by Client - BROKENHEAD COMMUNITY STORE - July 16 to 31 2026.pdf');
 
   console.log(`Reading flattened Excel file from: ${inputExcelPath}`);
 
@@ -125,7 +125,7 @@ function generatePdfReport() {
 
     // Company Information in ALL CAPS
     doc.font('Helvetica-Bold').fontSize(8.5)
-       .text('WAVERS OF BROKENHEAD', 340, 36, { align: 'right', width: 160 })
+       .text('BROKENHEAD COMMUNITY STORE', 340, 36, { align: 'right', width: 160 })
        .font('Helvetica').fontSize(8)
        .text('SCANTERBURY, MB, R0E 1W0', 340, 58, { align: 'right', width: 160 });
 
@@ -138,11 +138,11 @@ function generatePdfReport() {
     // Metadata details in ALL CAPS
     let metaY = 65;
     doc.font('Helvetica-Bold').fontSize(8.5).text('FROM: ', 60, metaY, { continued: true })
-       .font('Helvetica').text('JULY 01, 2026');
+       .font('Helvetica').text('JULY 16, 2026');
 
     metaY += 12;
     doc.font('Helvetica-Bold').text('TO: ', 74, metaY, { continued: true })
-       .font('Helvetica').text('JULY  15, 2026');
+       .font('Helvetica').text('JULY  31, 2026');
 
     metaY += 12;
     doc.font('Helvetica-Bold').text('PERIOD: ', 56, metaY, { continued: true })

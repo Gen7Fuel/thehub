@@ -879,7 +879,7 @@ function RouteComponent() {
                 </div>
               </div>
 
-              {lottery && (
+              {lottery && !['Wavers West', 'Wavers East'].includes(site) && (
                 <div className="rounded-lg bg-gray-100 p-4 shadow-sm">
                   <h3 className="text-sm font-semibold mb-4">Adjusted Totals (After Lottery)</h3>
                   <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">

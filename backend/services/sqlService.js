@@ -217,22 +217,32 @@ async function getBulkCSOData(site, gtins = []) {
   }
 }
 
-async function getOnHandBulkCSOData(siteName, gtins = []) {
-  if (!gtins.length) return {};
+/**
+ * @param {string} csoCode - Station_SK code
+ * @param {string[]} gtins - Array of GTIN strings
+ * @param {string} targetDate - Date string "YYYY-MM-DD"
+ */
+async function getOnHandBulkCSOData(csoCode, gtins = [], targetDate) {
+  if (!gtins.length || !csoCode || !targetDate) return {};
+
   try {
     const pool = await getPool();
 
-    // Sanitize and wrap strings safely for cross-db query mapping
-    const list = gtins.map(u => `'${u.replace(/'/g, "''")}'`).join(",");
+    // Convert "2026-07-31" -> "20260731" locally
+    const targetDateSK = Number(formatDateForDB(targetDate));
+
+    // Sanitize GTINs for SQL IN clause
+    const formattedGtins = gtins.map(u => `'${String(u).replace(/'/g, "''")}'`).join(",");
 
     const query = `
       SELECT 
           [GTIN] AS gtin, 
           [On Hand Qty] AS qty,
-          [Retail] AS unitPrice
+          [Unit Retail] AS unitPrice
       FROM [CSO].[Current_Inventory]
-      WHERE [Station] = '${siteName.replace(/'/g, "''")}' 
-        AND [GTIN] IN (${list})
+      WHERE [Station_SK] = '${String(csoCode).replace(/'/g, "''")}' 
+        AND [GTIN] IN (${formattedGtins})
+        AND [Date_SK] = ${targetDateSK}
     `;
 
     const result = await pool.request().query(query);
@@ -247,7 +257,7 @@ async function getOnHandBulkCSOData(siteName, gtins = []) {
     }
     return data;
   } catch (err) {
-    console.error(`SQL error in getOnHandBulkCSOData for site ${siteName}:`, err);
+    console.error(`SQL error in getOnHandBulkCSOData for station ${csoCode}:`, err);
     return {};
   }
 }
