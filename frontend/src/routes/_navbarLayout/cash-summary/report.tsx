@@ -466,7 +466,7 @@ function RouteComponent() {
   useEffect(() => {
     setPayoutsCheckMatch(null)
     toast.dismiss('payouts-check-mismatch')
-    if (!site || !date || ['Oliver', 'Osoyoos'].includes(site)) return
+    if (!site || !date || ['Oliver', 'Osoyoos', 'Wavers East', 'Wavers West'].includes(site)) return
 
     const check = async () => {
       try {
