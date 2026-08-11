@@ -1192,8 +1192,15 @@ router.post('/submit/to/safesheet', async (req, res) => {
 
           let cc = ['mohammad@gen7fuel.com', 'daksh@gen7fuel.com'];
 
-          if (site === 'Oliver' || site === 'Osoyoos') {
-            cc.push('ZBaptiste@oib.ca');
+          const SITE_CC_MAP = {
+            Oliver: ['ZBaptiste@oib.ca'],
+            Osoyoos: ['ZBaptiste@oib.ca'],
+            'Wavers West': ['office@wavers.ca'],
+            'Wavers East': ['manager@boncommunitystore.ca'],
+          };
+
+          if (SITE_CC_MAP[site]) {
+            cc.push(...SITE_CC_MAP[site]);
           }
           const serializedAttachments = await Promise.all(
             attachments.map(async (att) => ({
