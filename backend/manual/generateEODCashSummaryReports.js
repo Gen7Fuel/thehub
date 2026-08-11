@@ -14,10 +14,10 @@ const {
 // CONFIGURATION VARIABLES (UPDATE AS NEEDED)
 // ==========================================
 const SITE = 'Wavers West';
-const START_DATE = '2026-07-01'; // YYYY-MM-DD
+const START_DATE = '2026-07-11'; // YYYY-MM-DD
 const END_DATE = '2026-07-15';   // YYYY-MM-DD
 const IS_MANITOBA = true;
-const OUTPUT_DIR = path.join(__dirname, '../output_pdfs');
+const OUTPUT_DIR = path.join(__dirname, '../output_pdfs_west_11to15_july');
 // ==========================================
 
 // Date range loop helper
@@ -59,7 +59,7 @@ async function run() {
       dailyDataList.push(dailyData);
 
       const pdfBuffer = await generateEodReportBuffer({ site: SITE, date, data: dailyData });
-      const filePath = path.join(OUTPUT_DIR, `${SITE}_${date}.pdf`);
+      const filePath = path.join(OUTPUT_DIR, `End-of-Day-Report-${SITE}-${date}.pdf`);
       fs.writeFileSync(filePath, pdfBuffer);
     }
 
