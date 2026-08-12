@@ -466,7 +466,7 @@ function RouteComponent() {
   useEffect(() => {
     setPayoutsCheckMatch(null)
     toast.dismiss('payouts-check-mismatch')
-    if (!site || !date || ['Oliver', 'Osoyoos'].includes(site)) return
+    if (!site || !date || ['Oliver', 'Osoyoos', 'Wavers East', 'Wavers West'].includes(site)) return
 
     const check = async () => {
       try {
@@ -663,8 +663,11 @@ function RouteComponent() {
     (isWaversChequeSite ? chequesValue : 0) -
     (adjustedReportedCash ?? 0) + (handheldDebit ?? 0) + (unsettledPrepays ?? 0)
 
-  const effectiveOverShort = lottery ? adjustedOverShort : overShort
-  const notesRequired = Math.abs(effectiveOverShort) > 25
+  // Exclude Wavers West from using adjustedOverShort
+  const isWaversWest = site === 'Wavers West';
+  const effectiveOverShort = lottery && !isWaversWest ? adjustedOverShort : overShort;
+
+  const notesRequired = Math.abs(effectiveOverShort) > 25;
   const notesProvided = noteText.trim().length > 0
   const submitDisabled = submitState !== 'idle' || arCheckMatch === false || payoutsCheckMatch === false || (notesRequired && !notesProvided)
 
@@ -879,7 +882,7 @@ function RouteComponent() {
                 </div>
               </div>
 
-              {lottery && (
+              {lottery && !['Wavers West', 'Wavers East'].includes(site) && (
                 <div className="rounded-lg bg-gray-100 p-4 shadow-sm">
                   <h3 className="text-sm font-semibold mb-4">Adjusted Totals (After Lottery)</h3>
                   <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">

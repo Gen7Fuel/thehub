@@ -5,6 +5,16 @@ const Location = require('../models/Location');
 
 const h = React.createElement;
 
+// Helper to safely stream React-PDF output into a Node Buffer
+async function streamToBuffer(stream) {
+  return new Promise((resolve, reject) => {
+    const chunks = [];
+    stream.on('data', (chunk) => chunks.push(chunk));
+    stream.on('end', () => resolve(Buffer.concat(chunks)));
+    stream.on('error', (err) => reject(err));
+  });
+}
+
 // Helper function to map site names for PDF display
 const { formatReportSiteName } = require('./siteDisplayName');
 
@@ -134,11 +144,11 @@ function ChickenDelightEodDoc({ site, date, data }) {
     );
   };
 
-  const totalTenders = Object.values(data.tenders).reduce((a, b) => a + (b || 0), 0) + (data.reportedCash || 0);
+  const totalTenders = Object.values(data.tenders || {}).reduce((a, b) => a + (b || 0), 0) + (data.reportedCash || 0);
 
-  const totalArIncurred = Object.values(data.arCustomers).reduce((sum, item) => sum + (item.incurred || 0), 0);
-  const totalArPaid = Object.values(data.arCustomers).reduce((sum, item) => sum + (item.paid || 0), 0);
-  const activeArEntries = Object.entries(data.arCustomers).filter(([_, item]) => (item.incurred !== 0 || item.paid !== 0));
+  const totalArIncurred = Object.values(data.arCustomers || {}).reduce((sum, item) => sum + (item.incurred || 0), 0);
+  const totalArPaid = Object.values(data.arCustomers || {}).reduce((sum, item) => sum + (item.paid || 0), 0);
+  const activeArEntries = Object.entries(data.arCustomers || {}).filter(([_, item]) => (item.incurred !== 0 || item.paid !== 0));
 
   let overShortStyle = styles.valZero;
   if (data.overShortCash > 0.01) overShortStyle = styles.valPositive;
@@ -192,7 +202,7 @@ function ChickenDelightEodDoc({ site, date, data }) {
 
       // 3. Tenders Section Block
       renderSectionHeader('Tenders'),
-      ...Object.entries(data.tenders).map(([name, val]) => renderRow(name, val)),
+      ...Object.entries(data.tenders || {}).map(([name, val]) => renderRow(name, val)),
       renderRow('Cash', data.reportedCash),
       renderRow('Total Tenders', totalTenders, true),
 
@@ -216,18 +226,19 @@ function ChickenDelightEodDoc({ site, date, data }) {
         h(Text, { style: [styles.arColAmt, styles.textBold] }, totalArPaid >= 0 ? `$${totalArPaid.toFixed(2)}` : `-$${Math.abs(totalArPaid).toFixed(2)}`)
       ),
 
-      // Display note when Over/Short is significant & no AR details are recorded
       showArMissingNote && h(Text, { style: styles.warningNote }, '* Note: Over/Short threshold exceeded $50, but A/R details were not entered during the shift.')
     )
   );
 }
 
-async function generateChickenDelightEodReportPdf({ site, date }) {
+/**
+ * 1. Data Fetcher for single date Chicken Delight shifts
+ */
+async function fetchChickenDelightEodDataForDate({ site, date }) {
   const [yy, mm, dd] = String(date).split('-').map(Number);
   const start = new Date(yy, mm - 1, dd, 0, 0, 0, 0);
   const end = new Date(yy, mm - 1, dd + 1, 0, 0, 0, 0);
 
-  // 1️⃣ Fetch Chicken Delight shifts only
   const rows = await CashSummary.find({ 
     site, 
     date: { $gte: start, $lt: end }, 
@@ -236,18 +247,13 @@ async function generateChickenDelightEodReportPdf({ site, date }) {
 
   const sum = (k) => rows.reduce((a, r) => a + (typeof r[k] === 'number' ? r[k] : 0), 0);
 
-  // 2️⃣ Aggregate Tenders
   const tendersAgg = {};
-
   rows.forEach((r) => {
     if (r.tenders && Array.isArray(r.tenders)) {
       r.tenders.forEach((t) => {
         const tenderKey = (t.key || t.name)?.toUpperCase().trim();
         const val = typeof t.value === 'number' ? t.value : (typeof t.amount === 'number' ? t.amount : 0);
-        
-        if (tenderKey) {
-          tendersAgg[tenderKey] = (tendersAgg[tenderKey] || 0) + val;
-        }
+        if (tenderKey) tendersAgg[tenderKey] = (tendersAgg[tenderKey] || 0) + val;
       });
     }
 
@@ -257,7 +263,6 @@ async function generateChickenDelightEodReportPdf({ site, date }) {
     if (r.debit) tendersAgg['DEBIT'] = (tendersAgg['DEBIT'] || 0) + r.debit;
   });
 
-  // 3️⃣ Aggregate A/R Customers
   const arCustomersAgg = {};
   rows.forEach((r) => {
     if (r.arCustomers && Array.isArray(r.arCustomers)) {
@@ -274,20 +279,13 @@ async function generateChickenDelightEodReportPdf({ site, date }) {
     }
   });
 
-  // 4️⃣ Metrics & Formulas
   const canadianCashCollected = sum('canadian_cash_collected');
-  
-  // report_canadian_cash is ALREADY saved as: rawTotal - (tendersSum - tips)
   const reportedCash = sum('report_canadian_cash');
   const chickenDelightTips = sum('chickenDelightTips');
-
-  // Over / Short calculation: (Cash Collected + Tips) - Cash Reported
   const overShortCash = (canadianCashCollected + chickenDelightTips) - reportedCash;
-
   const itemSales = sum('item_sales') || sum('parsedItemSales');
 
-  // 5️⃣ Bind aggregated data
-  const aggregatedData = {
+  return {
     itemSales,
     gst: sum('gst'),
     pst: sum('pst'),
@@ -300,9 +298,87 @@ async function generateChickenDelightEodReportPdf({ site, date }) {
     tenders: tendersAgg,
     arCustomers: arCustomersAgg,
   };
-
-  const instance = pdf(h(ChickenDelightEodDoc, { site, date, data: aggregatedData }));
-  return await instance.toBuffer();
 }
 
-module.exports = { generateChickenDelightEodReportPdf };
+/**
+ * 2. Cumulative Data Combiner for multiple days
+ */
+function combineChickenDelightEodData(dailyDataList) {
+  const combined = {
+    itemSales: 0,
+    gst: 0,
+    pst: 0,
+    pennyRounding: 0,
+    totalSales: 0,
+    canadianCashCollected: 0,
+    chickenDelightTips: 0,
+    reportedCash: 0,
+    overShortCash: 0,
+    tenders: {},
+    arCustomers: {}
+  };
+
+  dailyDataList.forEach((day) => {
+    if (!day) return;
+    combined.itemSales += (day.itemSales || 0);
+    combined.gst += (day.gst || 0);
+    combined.pst += (day.pst || 0);
+    combined.pennyRounding += (day.pennyRounding || 0);
+    combined.totalSales += (day.totalSales || 0);
+    combined.canadianCashCollected += (day.canadianCashCollected || 0);
+    combined.chickenDelightTips += (day.chickenDelightTips || 0);
+    combined.reportedCash += (day.reportedCash || 0);
+
+    // Combine Tenders
+    if (day.tenders) {
+      Object.entries(day.tenders).forEach(([k, v]) => {
+        combined.tenders[k] = (combined.tenders[k] || 0) + (v || 0);
+      });
+    }
+
+    // Combine AR Customers
+    if (day.arCustomers) {
+      Object.entries(day.arCustomers).forEach(([custName, item]) => {
+        if (!combined.arCustomers[custName]) {
+          combined.arCustomers[custName] = { incurred: 0, paid: 0 };
+        }
+        combined.arCustomers[custName].incurred += (item.incurred || 0);
+        combined.arCustomers[custName].paid += (item.paid || 0);
+      });
+    }
+  });
+
+  // Re-calculate Over/Short for cumulative dataset
+  combined.overShortCash = Number(((combined.canadianCashCollected + combined.chickenDelightTips) - combined.reportedCash).toFixed(2));
+
+  return combined;
+}
+
+/**
+ * 3. Render Buffer Function
+ */
+async function generateChickenDelightEodReportBuffer({ site, date, data }) {
+  const instance = pdf(h(ChickenDelightEodDoc, { site, date, data }));
+  const result = await instance.toBuffer();
+
+  if (Buffer.isBuffer(result)) {
+    return result;
+  }
+
+  return await streamToBuffer(result);
+}
+
+/**
+ * 4. Primary Function (UNCHANGED SIGNATURE AND PURPOSE FOR MAIN ROUTE)
+ */
+async function generateChickenDelightEodReportPdf({ site, date }) {
+  const data = await fetchChickenDelightEodDataForDate({ site, date });
+  return await generateChickenDelightEodReportBuffer({ site, date, data });
+}
+
+module.exports = {
+  generateChickenDelightEodReportPdf, // Main route entrypoint (100% backward-compatible)
+  fetchChickenDelightEodDataForDate,
+  combineChickenDelightEodData,
+  generateChickenDelightEodReportBuffer
+};
