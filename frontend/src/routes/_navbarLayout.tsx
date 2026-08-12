@@ -353,14 +353,28 @@ function RouteComponent() {
     navigate({ to: "/notification" });
   };
 
+  const [showTicker, setShowTicker] = useState<boolean>(() => {
+    const stored = localStorage.getItem("showFuelTicker");
+    return stored === null ? true : stored === "true";
+  });
+
+  useEffect(() => {
+    const syncTickerState = () => {
+      const stored = localStorage.getItem("showFuelTicker");
+      setShowTicker(stored === null ? true : stored === "true");
+    };
+
+    window.addEventListener("fuelTickerToggle", syncTickerState);
+    return () => window.removeEventListener("fuelTickerToggle", syncTickerState);
+  }, []);
+
   return (
     <div className="flex flex-col min-h-screen relative">
       <Navbar />
       <OfflineBanner />
 
       {/* 2. Real-time Permissions-Scoped Fuel Pricing Marquee */}
-      <FuelPriceTicker />
-
+      {showTicker && <FuelPriceTicker />}
       {showPopup && (
         <NotificationPopup
           message={`You have ${unreadCount} new notification${unreadCount > 1 ? "s" : ""} on the Hub.`}
