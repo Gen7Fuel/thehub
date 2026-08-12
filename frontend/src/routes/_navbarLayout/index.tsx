@@ -1,4 +1,5 @@
 import React from 'react'
+import { useState, useEffect } from "react";
 import { createFileRoute, Link } from '@tanstack/react-router'
 import { Button } from '@/components/ui/button'
 import { useAuth } from "@/context/AuthContext"
@@ -35,9 +36,44 @@ export const Route = createFileRoute('/_navbarLayout/')({
   component: App,
 })
 
+/**
+ * Custom hook to detect if current viewport width qualifies as Desktop/Tablet (>= 768px)
+ */
+function useIsDesktopOrTablet() {
+  const [isDesktop, setIsDesktop] = useState<boolean>(() => {
+    if (typeof window !== 'undefined') {
+      return window.innerWidth >= 1025; // Tailwind 'md' breakpoint
+    }
+    return true;
+  });
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+
+    const handleResize = () => {
+      setIsDesktop(window.innerWidth >= 1025);
+    };
+
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
+  }, []);
+
+  return isDesktop;
+}
+
 function App() {
   const { user } = useAuth();
   const access = user?.access || {}
+  const isDesktopOrTablet = useIsDesktopOrTablet();
+
+  // Determine permissions and target route dynamically based on screen resolution
+  const canShowFuelPricing = isDesktopOrTablet
+    ? Boolean(access?.fuelPricing?.value)
+    : Boolean(access?.fuelPricing?.setFuelPrice);
+
+  const fuelPricingTargetRoute = isDesktopOrTablet
+    ? '/fuel-pricing'
+    : '/fuel-pricing-mobile';
 
   return (
     <div className="min-h-screen bg-[#f8fafc]">
@@ -174,7 +210,7 @@ function App() {
           )}
 
           {/* FUEL OPERATIONS - SKY */}
-          {(access?.fuelManagement?.value || access?.fuelPricing?.value) && (
+          {(access?.fuelManagement?.value || canShowFuelPricing || access?.fuelSettings?.value) && (
             <Section 
               title="Fuel Operations" 
               accentColor="border-t-sky-500"
@@ -189,15 +225,18 @@ function App() {
                   search={{ site: user?.location || '' }} 
                 />
               )}
-              {access?.fuelPricing?.value && (
+              
+              {/* DYNAMIC FUEL PRICING NAV BUTTON */}
+              {canShowFuelPricing && (
                 <NavButton 
-                  to="/fuel-pricing" 
+                  to={fuelPricingTargetRoute} 
                   label="Fuel Pricing" 
                   icon={Coins} 
                   theme="sky" 
                   search={{ site: user?.location || '' }} 
                 />
               )}
+
               {access?.fuelSettings?.value && (
                 <NavButton 
                   to="/fuel-settings" 
