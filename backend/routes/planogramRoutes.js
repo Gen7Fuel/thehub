@@ -8,6 +8,8 @@ const Location = require('../models/Location')
 const {
   parsePlanogramWorkbook,
   normalizeGtin,
+  planogramKey,
+  isOffPlanogram,
   loadPlanogramGtinSet,
 } = require('../utils/planogram')
 
@@ -188,6 +190,11 @@ router.post('/recheck/:orderRecId', async (req, res) => {
     let changed = 0
     let exempt = 0
     let unparseable = 0
+    // Which side of the crtCode/gtin fallback each item was matched on. The
+    // dry run exists to tell you whether the two files are keyed the same way,
+    // and that question is now per-item rather than per-order-rec.
+    let byCrtCode = 0
+    let byGtin = 0
     const samples = []
 
     ;(orderRec.categories || []).forEach((cat, ci) => {
@@ -197,15 +204,19 @@ router.post('/recheck/:orderRecId', async (req, res) => {
         total++
 
         if (isStationSupply) exempt++
-        else if (normalizeGtin(item.gtin) === null) unparseable++
+        else if (planogramKey(item) === null) unparseable++
+        else if (normalizeGtin(item.crtCode) !== null) byCrtCode++
+        else byGtin++
 
-        const next = isOffPlanogram(item.gtin, planogramGtins, isStationSupply)
+        const next = isOffPlanogram(item, planogramGtins, isStationSupply)
 
         if (next) {
           flagged++
           if (samples.length < 20) {
             samples.push({
               gtin: item.gtin,
+              crtCode: item.crtCode || '',
+              matchedOn: planogramKey(item),
               itemName: item.itemName,
               category: cat.number,
             })
@@ -242,6 +253,8 @@ router.post('/recheck/:orderRecId', async (req, res) => {
       changed,
       exempt,
       unparseable,
+      byCrtCode,
+      byGtin,
       planogramSize: planogramGtins.size,
       samples,
     })

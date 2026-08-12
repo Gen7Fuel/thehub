@@ -158,19 +158,45 @@ function parsePlanogramWorkbook(buffer) {
 }
 
 /**
+ * The identifier an order-rec item is matched on: crtCode when the item has a
+ * readable one, otherwise gtin.
+ *
+ * The planogram's "Product ID" column is a MIXED identifier space, not one kind
+ * of number. It lists whichever code identifies the form of the product that
+ * actually occupies the shelf: a carton code for cigarettes sold by the carton,
+ * and a plain GTIN for tins, pouches and bags. Measured against the Silver
+ * Grizzly Back Wall planogram, 21 of its 60 rows are carton codes and 33 are
+ * GTINs — so a rule that used either one alone would silently miss half the
+ * shelf.
+ *
+ * The fallback direction matters. Every order-rec item has a gtin, but only
+ * items with a CRT sub-row have a crtCode, and for those the gtin is the PACK
+ * barcode, which the planogram never lists (it matched 0 of 46 in that sample).
+ * So crtCode wins whenever it is present, and gtin covers everything else.
+ */
+function planogramKey(item) {
+  if (!item) return null
+  const crt = normalizeGtin(item.crtCode)
+  return crt !== null ? crt : normalizeGtin(item.gtin)
+}
+
+/**
  * The single rule for whether an order-rec item counts as off-planogram.
  *
  * Both the order-rec create path and the recheck endpoint call this, so the
  * flag written at creation can never disagree with the flag written later.
  *
  * Fails open in every uncertain case: no planogram for the site, a station
- * supply, or a GTIN we can't read all yield false rather than a guess.
+ * supply, or an item with no readable code at all yield false rather than a
+ * guess. An unreadable crtCode is not itself a failure — a CSV export that
+ * mangled column B into "6.80085E+11" fails normalizeGtin, and the item falls
+ * back to its gtin rather than being flagged on a value we could not read.
  */
-function isOffPlanogram(rawGtin, planogramGtins, isStationSupply) {
+function isOffPlanogram(item, planogramGtins, isStationSupply) {
   if (!planogramGtins || isStationSupply) return false
-  const gtin = normalizeGtin(rawGtin)
-  if (gtin === null) return false
-  return !planogramGtins.has(gtin)
+  const key = planogramKey(item)
+  if (key === null) return false
+  return !planogramGtins.has(key)
 }
 
 /**
@@ -189,6 +215,7 @@ async function loadPlanogramGtinSet(site) {
 module.exports = {
   normalizeGtin,
   parsePlanogramWorkbook,
+  planogramKey,
   isOffPlanogram,
   loadPlanogramGtinSet,
 }

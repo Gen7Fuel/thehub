@@ -6,6 +6,11 @@ const mongoose = require('mongoose');
  */
 const ItemSchema = new mongoose.Schema({
   gtin: { type: String, required: true },           // Global Trade Item Number
+  // Column B of the item's CRT ("carton") sub-row in the order rec file, when it
+  // has one. This — not gtin — is what the planogram lists for anything sold by
+  // the carton; gtin on those rows is the PACK barcode, which never appears on a
+  // planogram. Empty for items with no CRT row (all Chew, most Cannabis).
+  crtCode: { type: String, default: '' },
   vin: { type: String, default: '' },               // Vendor Item Number
   itemName: { type: String, default: '' },          // Name of the item
   strainName: { type: String, default: '' },        // Strain name (only for pcg items)

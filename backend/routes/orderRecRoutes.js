@@ -814,7 +814,7 @@ router.post('/', async (req, res) => {
           ...item,
           onHandQtyOld: item.onHandQty,
           casesToOrderOld: item.casesToOrder,
-          offPlanogram: isOffPlanogram(item.gtin, planogramGtins, isStationSupply),
+          offPlanogram: isOffPlanogram(item, planogramGtins, isStationSupply),
         })),
       };
     });
