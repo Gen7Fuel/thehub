@@ -6,7 +6,7 @@ import axios from 'axios'
 import { getSocket } from "@/lib/websocket";
 import { triggerBackgroundSync } from "@/lib/utils"
 import { useAuth } from "@/context/AuthContext";
-import { HelpCircle, LogOut, Settings as SettingsIcon, LayoutDashboard, Home as HomeIcon, KeyRound, ExternalLink, Bell } from 'lucide-react'
+import { HelpCircle, LogOut, Settings as SettingsIcon, LayoutDashboard, Home as HomeIcon, KeyRound, ExternalLink, Bell, Fuel } from 'lucide-react'
 import { clearLocalDB } from "@/lib/orderRecIndexedDB";
 import {
   Dialog,
@@ -25,6 +25,19 @@ export default function Navbar() {
   const [forceLogoutMessage, setForceLogoutMessage] = useState<string | null>(null);
   // Inside your Navbar Component
   const [unreadCount, setUnreadCount] = useState(0);
+
+  // LocalStorage Fuel Ticker Toggle State
+  const [showFuelTicker, setShowFuelTicker] = useState<boolean>(() => {
+    const stored = localStorage.getItem('showFuelTicker');
+    return stored === null ? true : stored === 'true';
+  });
+
+  const handleToggleFuelTicker = () => {
+    const nextValue = !showFuelTicker;
+    setShowFuelTicker(nextValue);
+    localStorage.setItem('showFuelTicker', String(nextValue));
+    window.dispatchEvent(new Event('fuelTickerToggle'));
+  };
 
   useEffect(() => {
     const fetchUnreadCount = async () => {
@@ -382,7 +395,34 @@ export default function Navbar() {
         </h1>
 
         {/* Right-side navigation buttons */}
-        <span className="flex gap-4">
+        <span className="flex gap-4 items-center">
+          {/* Fuel Price Ticker Toggle Button */}
+          {access?.toggleFuelPriceTicker && (
+            <div className="relative group flex items-center">
+              <Button
+                variant={showFuelTicker ? "default" : "outline"}
+                size="icon"
+                onClick={handleToggleFuelTicker}
+                className={`transition-colors ${
+                  showFuelTicker 
+                    ? "bg-slate-900 text-white hover:bg-slate-800" 
+                    : "text-slate-400 hover:text-slate-700"
+                }`}
+              >
+                <Fuel className="h-5 w-5" />
+              </Button>
+
+              {/* Tooltip rendered to the left of the button */}
+              <div className="absolute right-full mr-2 top-1/2 -translate-y-1/2 hidden group-hover:flex items-center z-50 pointer-events-none">
+                <div className="bg-slate-900 text-white text-xs rounded py-1 px-2.5 whitespace-nowrap shadow-md">
+                  {showFuelTicker ? "Hide Fuel Price Ticker" : "Show Fuel Price Ticker"}
+                </div>
+                {/* Small right-facing arrow pointing to the button */}
+                <div className="w-2 h-2 bg-slate-900 rotate-45 -ml-1"></div>
+              </div>
+            </div>
+          )}
+
           {/* Notification Button */}
           {access?.notification?.value && (
             <Button
