@@ -3,7 +3,12 @@ import XLSX from 'xlsx'
 // Import the model directly — no DB connection required for schema validation tests.
 // Do NOT import config/db.js here.
 import Planogram from '../models/Planogram.js'
-import { normalizeGtin, parsePlanogramWorkbook, isOffPlanogram } from '../utils/planogram.js'
+import {
+  normalizeGtin,
+  parsePlanogramWorkbook,
+  planogramKey,
+  isOffPlanogram,
+} from '../utils/planogram.js'
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -206,33 +211,63 @@ describe('parsePlanogramWorkbook', () => {
 
 // ─── isOffPlanogram ───────────────────────────────────────────────────────────
 
+describe('planogramKey', () => {
+  it('prefers crtCode over gtin when the item has one', () => {
+    expect(planogramKey({ gtin: '00001911605605', crtCode: '1966850289' })).toBe(
+      '00001966850289',
+    )
+  })
+
+  it('falls back to gtin when there is no crtCode', () => {
+    for (const crtCode of ['', null, undefined]) {
+      expect(planogramKey({ gtin: '00042100008715', crtCode })).toBe('00042100008715')
+    }
+  })
+
+  // A CSV that has been through Excel renders column B as "6.80085E+11" — the
+  // real digits are already gone. Falling back to the gtin is the only honest
+  // move; matching on the mangled text would flag a real product.
+  it('falls back to gtin when the crtCode is unreadable', () => {
+    expect(planogramKey({ gtin: '00042100008715', crtCode: '6.80085E+11' })).toBe(
+      '00042100008715',
+    )
+    expect(planogramKey({ gtin: '00042100008715', crtCode: '↑' })).toBe('00042100008715')
+  })
+
+  it('is null only when neither code is readable', () => {
+    expect(planogramKey({ gtin: '', crtCode: '' })).toBeNull()
+    expect(planogramKey({ gtin: 'not-a-gtin', crtCode: '↑' })).toBeNull()
+    expect(planogramKey(null)).toBeNull()
+  })
+})
+
 describe('isOffPlanogram', () => {
   // The planogram stores canonical GTIN-14 keys.
   const planogram = new Set(['00810127980310', '00073100001079'])
 
   it('flags a GTIN that is not in the planogram', () => {
-    expect(isOffPlanogram('999999999999', planogram, false)).toBe(true)
+    expect(isOffPlanogram({ gtin: '999999999999' }, planogram, false)).toBe(true)
   })
 
   it('does not flag a GTIN that is in the planogram', () => {
-    expect(isOffPlanogram('810127980310', planogram, false)).toBe(false)
+    expect(isOffPlanogram({ gtin: '810127980310' }, planogram, false)).toBe(false)
   })
 
   // The order rec stores '073100001079' while Excel may have given the
   // planogram 73100001079. Both must resolve to the same key.
   it('matches across the leading-zero/number-typing split', () => {
-    expect(isOffPlanogram('073100001079', planogram, false)).toBe(false)
-    expect(isOffPlanogram(73100001079, planogram, false)).toBe(false)
+    expect(isOffPlanogram({ gtin: '073100001079' }, planogram, false)).toBe(false)
+    expect(isOffPlanogram({ gtin: 73100001079 }, planogram, false)).toBe(false)
   })
 
   // Decision: a site with no planogram is skipped entirely rather than having
   // every item flagged.
   it('flags nothing when the site has no planogram', () => {
-    expect(isOffPlanogram('999999999999', null, false)).toBe(false)
+    expect(isOffPlanogram({ gtin: '999999999999' }, null, false)).toBe(false)
   })
 
   it('never flags station supplies', () => {
-    expect(isOffPlanogram('999999999999', planogram, true)).toBe(false)
+    expect(isOffPlanogram({ gtin: '999999999999' }, planogram, true)).toBe(false)
   })
 
   // Regression: '000000000338' is a real product, not a placeholder. Whatever
@@ -242,14 +277,52 @@ describe('isOffPlanogram', () => {
     expect([...withShortCode][0]).toBe('00000000000338')
 
     for (const variant of ['000000000338', '00000000000338', '0000000000338', 338]) {
-      expect(isOffPlanogram(variant, withShortCode, false)).toBe(false)
+      expect(isOffPlanogram({ gtin: variant }, withShortCode, false)).toBe(false)
     }
   })
 
-  it('fails open on a GTIN it cannot read', () => {
-    expect(isOffPlanogram('', planogram, false)).toBe(false)
-    expect(isOffPlanogram(null, planogram, false)).toBe(false)
-    expect(isOffPlanogram('not-a-gtin', planogram, false)).toBe(false)
+  it('fails open on an item with no code it can read', () => {
+    expect(isOffPlanogram({ gtin: '' }, planogram, false)).toBe(false)
+    expect(isOffPlanogram({ gtin: null }, planogram, false)).toBe(false)
+    expect(isOffPlanogram({ gtin: 'not-a-gtin' }, planogram, false)).toBe(false)
+  })
+
+  // The reason this feature was rebuilt. A cigarette item's gtin is the PACK
+  // barcode; the planogram lists the carton code. Comparing the gtin flagged
+  // every carton-sold product in the file.
+  describe('carton-sold items', () => {
+    // "Putters KO LT 20": pack barcode in column A, carton code in column B of
+    // the CRT row. Only the carton code is on the planogram.
+    const cartonPlanogram = new Set(['00001966850289'])
+
+    it('does not flag an item whose crtCode is on the planogram', () => {
+      expect(
+        isOffPlanogram(
+          { gtin: '00001911605605', crtCode: '1966850289' },
+          cartonPlanogram,
+          false,
+        ),
+      ).toBe(false)
+    })
+
+    it('flags an item whose crtCode is absent even though its gtin would miss too', () => {
+      expect(
+        isOffPlanogram(
+          { gtin: '00002303085388', crtCode: '23030853859' },
+          cartonPlanogram,
+          false,
+        ),
+      ).toBe(true)
+    })
+
+    // The half of the file with no CRT row at all — every Chew item — is keyed
+    // by gtin on the planogram and must keep matching that way.
+    it('still matches an item with no crtCode by its gtin', () => {
+      const mixed = new Set(['00001966850289', '00042100008715'])
+      expect(isOffPlanogram({ gtin: '00042100008715', crtCode: '' }, mixed, false)).toBe(
+        false,
+      )
+    })
   })
 
   // Regression for the station-supply exemption. In the create route the
@@ -266,7 +339,11 @@ describe('isOffPlanogram', () => {
     expect(numericCategoryNumber !== '5001').toBe(true)
 
     expect(
-      isOffPlanogram('999999999999', planogram, String(numericCategoryNumber) === '5001'),
+      isOffPlanogram(
+        { gtin: '999999999999' },
+        planogram,
+        String(numericCategoryNumber) === '5001',
+      ),
     ).toBe(false)
   })
 })

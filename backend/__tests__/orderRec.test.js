@@ -139,6 +139,20 @@ describe('OrderRec schema — item validation', () => {
     expect(doc.categories[0].items[0].offPlanogram).toBe(true)
   })
 
+  // Empty rather than undefined so the planogram check can branch on a plain
+  // falsy test for "this item has no carton row".
+  it('defaults item crtCode to an empty string', () => {
+    const doc = new OrderRec(withItem())
+    expect(doc.categories[0].items[0].crtCode).toBe('')
+  })
+
+  it('stores a crtCode alongside the gtin', () => {
+    const doc = new OrderRec(withItem({ gtin: '00001911605605', crtCode: '1966850289' }))
+    const item = doc.categories[0].items[0]
+    expect(item.gtin).toBe('00001911605605')
+    expect(item.crtCode).toBe('1966850289')
+  })
+
   it('stores provided item field values', () => {
     const doc = new OrderRec(withItem({ onHandQty: 10, casesToOrder: 3, unitInCase: 12 }))
     const item = doc.categories[0].items[0]
