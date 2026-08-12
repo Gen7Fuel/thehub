@@ -354,18 +354,21 @@ function RouteComponent() {
   };
 
   const [showTicker, setShowTicker] = useState<boolean>(() => {
-    const stored = localStorage.getItem("showFuelTicker");
-    return stored === null ? true : stored === "true";
+    const savedState = localStorage.getItem('showFuelTicker');
+    // Default to false if not set in localStorage
+    return savedState ? savedState === 'true' : false;
   });
 
   useEffect(() => {
-    const syncTickerState = () => {
-      const stored = localStorage.getItem("showFuelTicker");
-      setShowTicker(stored === null ? true : stored === "true");
+    const handleTickerToggle = () => {
+      const savedState = localStorage.getItem('showFuelTicker');
+      setShowTicker(savedState ? savedState === 'true' : false);
     };
 
-    window.addEventListener("fuelTickerToggle", syncTickerState);
-    return () => window.removeEventListener("fuelTickerToggle", syncTickerState);
+    window.addEventListener('fuelTickerToggle', handleTickerToggle);
+    return () => {
+      window.removeEventListener('fuelTickerToggle', handleTickerToggle);
+    };
   }, []);
 
   return (
