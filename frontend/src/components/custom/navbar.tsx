@@ -26,16 +26,28 @@ export default function Navbar() {
   // Inside your Navbar Component
   const [unreadCount, setUnreadCount] = useState(0);
 
-  // LocalStorage Fuel Ticker Toggle State
   const [showFuelTicker, setShowFuelTicker] = useState<boolean>(() => {
-    const stored = localStorage.getItem('showFuelTicker');
-    return stored === null ? true : stored === 'true';
+    const savedState = localStorage.getItem('showFuelTicker');
+    // Default to false if not set in localStorage
+    return savedState ? savedState === 'true' : false;
   });
 
+  useEffect(() => {
+    const handleTickerToggle = () => {
+      const savedState = localStorage.getItem('showFuelTicker');
+      setShowFuelTicker(savedState ? savedState === 'true' : false);
+    };
+
+    window.addEventListener('fuelTickerToggle', handleTickerToggle);
+    return () => {
+      window.removeEventListener('fuelTickerToggle', handleTickerToggle);
+    };
+  }, []);
+
   const handleToggleFuelTicker = () => {
-    const nextValue = !showFuelTicker;
-    setShowFuelTicker(nextValue);
-    localStorage.setItem('showFuelTicker', String(nextValue));
+    const newState = !showFuelTicker;
+    setShowFuelTicker(newState);
+    localStorage.setItem('showFuelTicker', String(newState));
     window.dispatchEvent(new Event('fuelTickerToggle'));
   };
 

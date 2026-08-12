@@ -663,8 +663,11 @@ function RouteComponent() {
     (isWaversChequeSite ? chequesValue : 0) -
     (adjustedReportedCash ?? 0) + (handheldDebit ?? 0) + (unsettledPrepays ?? 0)
 
-  const effectiveOverShort = lottery ? adjustedOverShort : overShort
-  const notesRequired = Math.abs(effectiveOverShort) > 25
+  // Exclude Wavers West from using adjustedOverShort
+  const isWaversWest = site === 'Wavers West';
+  const effectiveOverShort = lottery && !isWaversWest ? adjustedOverShort : overShort;
+
+  const notesRequired = Math.abs(effectiveOverShort) > 25;
   const notesProvided = noteText.trim().length > 0
   const submitDisabled = submitState !== 'idle' || arCheckMatch === false || payoutsCheckMatch === false || (notesRequired && !notesProvided)
 
