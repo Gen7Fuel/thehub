@@ -6,7 +6,16 @@ const SelectTemplateSchema = new mongoose.Schema({
   options: [
     {
       text: { type: String, required: true },
-      email: { type: String },
+      email: { type: String }, // default TO (comma-separated for multiple)
+      cc: { type: String }, // default CC (comma-separated for multiple)
+      siteOverrides: [
+        {
+          site: { type: String, required: true },
+          to: { type: String }, // comma-separated; blank = inherit default `email`
+          cc: { type: String }, // comma-separated; blank = inherit default `cc`
+          _id: false,
+        }
+      ],
     }
   ],
   createdBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User' }, // Optional: who created it
