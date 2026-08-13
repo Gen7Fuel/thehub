@@ -10,6 +10,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import { EmailChipInput } from "@/components/custom/emailChipInput";
 
 export const Route = createFileRoute(
   '/_navbarLayout/audit/templates/select/$id',
@@ -266,19 +267,17 @@ function RouteComponent() {
               {name === "Assigned To" && (
                 <div className="mt-2 space-y-2">
                   <div className="flex gap-2">
-                    <input
-                      className="border px-2 py-1 flex-1"
+                    <EmailChipInput
+                      className="flex-1"
                       placeholder="Default TO email(s)"
-                      type="text"
                       value={option.email}
-                      onChange={e => handleOptionChange(idx, "email", e.target.value)}
+                      onChange={value => handleOptionChange(idx, "email", value)}
                     />
-                    <input
-                      className="border px-2 py-1 flex-1"
+                    <EmailChipInput
+                      className="flex-1"
                       placeholder="Default CC email(s)"
-                      type="text"
                       value={option.cc}
-                      onChange={e => handleOptionChange(idx, "cc", e.target.value)}
+                      onChange={value => handleOptionChange(idx, "cc", value)}
                     />
                   </div>
 
@@ -321,22 +320,20 @@ function RouteComponent() {
                               <TableRow key={site._id}>
                                 <TableCell className="whitespace-nowrap">{site.stationName}</TableCell>
                                 <TableCell>
-                                  <input
-                                    className="border px-2 py-1 w-full"
+                                  <EmailChipInput
                                     placeholder="Uses default"
                                     value={getOverrideValue(option, site.stationName, "to")}
-                                    onChange={e =>
-                                      handleOverrideChange(idx, site.stationName, "to", e.target.value)
+                                    onChange={value =>
+                                      handleOverrideChange(idx, site.stationName, "to", value)
                                     }
                                   />
                                 </TableCell>
                                 <TableCell>
-                                  <input
-                                    className="border px-2 py-1 w-full"
+                                  <EmailChipInput
                                     placeholder="Uses default"
                                     value={getOverrideValue(option, site.stationName, "cc")}
-                                    onChange={e =>
-                                      handleOverrideChange(idx, site.stationName, "cc", e.target.value)
+                                    onChange={value =>
+                                      handleOverrideChange(idx, site.stationName, "cc", value)
                                     }
                                   />
                                 </TableCell>
