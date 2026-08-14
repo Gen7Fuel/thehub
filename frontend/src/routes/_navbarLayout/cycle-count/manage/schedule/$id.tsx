@@ -23,6 +23,7 @@ import Barcode from 'react-barcode'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import axios from 'axios'
 import { Dialog, DialogContent } from '@/components/ui/dialog' // Adjust import path to your project rules
+import { useAuth } from '@/context/AuthContext'
 
 export const Route = createFileRoute(
   '/_navbarLayout/cycle-count/manage/schedule/$id',
@@ -198,6 +199,8 @@ interface ScheduleInstancePayload {
 
 /* --- PRIMARY ROUTE VIEW COMPONENT --- */
 function RouteComponent() {
+  const { user } = useAuth();
+  const access = user?.access
   const { id } = Route.useParams()
   const queryClient = useQueryClient()
 
@@ -278,6 +281,7 @@ function RouteComponent() {
 
   // --- BUSINESS LOGIC LIMIT CHECKS FOR MUTATION BUTTONS ---
   const isInstanceScheduled = instanceData?.is_scheduled ?? false
+  const canRemoveSystemCount = access?.cycleCount?.manageCount?.deleteSystemSchedule;
   const totalItemCount = itemsData.length
 
   const canAddItem = isInstanceScheduled || (!isInstanceScheduled && totalItemCount < 20)
@@ -432,7 +436,7 @@ function RouteComponent() {
 
   // --- FULL DELETION TRIGGER INTERACTION ---
   const handleDeleteEntireSchedule = () => {
-    const confirmText = "⚠️ CRITICAL WARNING: Are you sure you want to completely DELETE this entire schedule? This action will permanently drop the instance along with all linked item lines. This action cannot be undone.";
+    const confirmText = "⚠️ CRITICAL WARNING: Are you sure you want to completely DELETE this entire schedule? This action will permanently drop the schedule along with all linked item lines. This action cannot be undone.";
 
     if (window.confirm(confirmText)) {
       deleteEntireScheduleMutation.mutate();
@@ -601,7 +605,7 @@ function RouteComponent() {
                   Add Item
                 </button>
 
-                {isInstanceScheduled && (
+                {(isInstanceScheduled || canRemoveSystemCount) && (
                   <button
                     type="button"
                     onClick={handleDeleteEntireSchedule}
