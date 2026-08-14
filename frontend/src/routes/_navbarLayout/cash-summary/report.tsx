@@ -823,14 +823,14 @@ function RouteComponent() {
                                               </DialogTrigger>
                                               <DialogContent className="max-w-2xl">
                                                 <DialogHeader>
-                                                  <DialogTitle>Transaction Details: {tx.transactionId} ({tx.eventStartTime?.toString().split('T')[1]?.substring(0, 5)})</DialogTitle>
+                                                  <DialogTitle>Transaction Details: {tx.transactionId}</DialogTitle>
                                                 </DialogHeader>
                                                 <div className="mt-4 border rounded-md overflow-hidden">
                                                   <table className="w-full text-xs">
                                                     <thead className="bg-slate-50 border-b">
                                                       <tr>
-                                                        <th className="p-2 text-left">Line</th>
                                                         <th className="p-2 text-left">Item Name</th>
+                                                        <th className="p-2 text-left">Department</th>
                                                         <th className="p-2 text-left">UPC/GTIN</th>
                                                         <th className="p-2 text-right">Amount</th>
                                                       </tr>
@@ -838,7 +838,6 @@ function RouteComponent() {
                                                     <tbody className="divide-y">
                                                       {tx.items.map((item: any, i: number) => (
                                                         <tr key={i}>
-                                                          <td className="p-2 text-muted-foreground">{item.transactionLine}</td>
                                                           <td className="p-2 font-medium">
                                                             {item.itemName === 'NoMap' ? (
                                                               <span className="italic text-slate-400">Item Details Not Found</span>
@@ -846,6 +845,7 @@ function RouteComponent() {
                                                               item.itemName
                                                             )}
                                                           </td>
+                                                          <td className="p-2 text-muted-foreground">{item.category || '-'}</td>
                                                           <td className="p-2 text-muted-foreground font-mono">
                                                             {item.upc?.toString().startsWith('99999') || item.gtin?.toString().startsWith('99999') ? (
                                                               <span className="text-slate-300">N/A</span>
