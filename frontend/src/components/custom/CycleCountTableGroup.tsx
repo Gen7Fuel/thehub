@@ -173,22 +173,25 @@ const CycleCountTableGroup: React.FC<Props> = ({
 
       {/* --- BARCODE ZOOM DIALOG --- */}
       <Dialog open={!!activeBarcodeItem} onOpenChange={() => setActiveBarcodeItem(null)}>
-        <DialogContent className="sm:max-w-md rounded-3xl overflow-hidden p-0 border-none">
-          {/* Product Image Header */}
-          <div className="w-full h-48 bg-gray-50 relative border-b border-gray-100">
-            <div className="absolute top-4 left-0 right-0 text-center">
-              <span className="bg-white/80 backdrop-blur-sm px-3 py-1 rounded-full text-[9px] uppercase tracking-tighter font-black text-gray-500 shadow-sm border border-white/50">
-                Verify Product Identity
-              </span>
-            </div>
+        <DialogContent className="sm:max-w-md rounded-3xl overflow-hidden p-0 border-none bg-white">
+          
+          {/* Header Badge (Cleanly separated above the image container) */}
+          <div className="w-full pt-5 pb-2 text-center bg-white">
+            <span className="bg-gray-100 px-3 py-1 rounded-full text-[9px] uppercase tracking-tighter font-black text-gray-500 shadow-sm border border-gray-200/60 inline-block">
+              Verify Product Identity
+            </span>
+          </div>
+
+          {/* Product Image Container (Pure white background, no badge overlay) */}
+          <div className="w-full h-44 bg-white border-b border-gray-100 flex items-center justify-center">
             {activeBarcodeItem?.image ? (
               <img
                 src={activeBarcodeItem.image}
                 alt={activeBarcodeItem.name}
-                className="w-full h-full object-contain p-4" // object-contain ensures we see the whole product
+                className="w-full h-full object-contain px-6 pb-4" // object-contain ensures we see the whole product
               />
             ) : (
-              <div className="w-full h-full flex flex-col items-center justify-center text-gray-300">
+              <div className="w-full h-full flex flex-col items-center justify-center text-gray-300 bg-gray-50">
                 <ImageIcon className="w-12 h-12 mb-2 opacity-20" />
                 <span className="text-xs font-bold uppercase tracking-widest opacity-40">No Image Available</span>
               </div>

@@ -11,6 +11,24 @@ const toNullableNumber = (value) => {
   return Number.isFinite(n) ? n : null;
 };
 
+// ----------------------------------------------------
+// 🛠️ NUMERIC & GENERAL VALUE EQUALITY HELPERS
+// ----------------------------------------------------
+const isSameNum = (val1, val2) => {
+  const n1 = toNullableNumber(val1);
+  const n2 = toNullableNumber(val2);
+  return n1 === n2;
+};
+
+const isSame = (val1, val2) => {
+  const normalize = (v) => {
+    if (v === null || v === undefined || v === "") return null;
+    if (v instanceof Date) return format(v, "yyyy-MM-dd");
+    return String(v).trim();
+  };
+  return normalize(val1) === normalize(val2);
+};
+
 async function runSanitizeItemBk() {
   console.log("--- Starting Saturday Morning Item Sanitization Protocol ---");
   const db = getPg();
@@ -28,7 +46,7 @@ async function runSanitizeItemBk() {
   // ==========================================
   // 🛡️ CRITICAL ETL SAFETY GATE
   // ==========================================
-  const ABSOLUTE_MINIMUM_ROWS = 5000; // Adjust to 10000 or 0 depending on your risk tolerance
+  const ABSOLUTE_MINIMUM_ROWS = 5000;
 
   if (!azureData || azureData.length === 0) {
     console.error(`🚨 [CRITICAL ALERT] Azure SQL returned 0 records! This indicates a upstream ETL pipeline failure. Skipping sanitization loop to protect production data.`);
@@ -49,9 +67,12 @@ async function runSanitizeItemBk() {
 
   // 4. Fetch all current Postgres records into memory
   console.log("Downloading active Postgres backup map...");
-  const pgItems = await db("item_bk").select("id", "site", "upc", "gtin", "upc_barcode", "description", "retail", "vendor_id", "vendor_name", "category_id", "department_id", "department", "price_group_id", "price_group", "promo_group_id", "promo_group", "on_hand_qty", "last_inv_date");
+  const pgItems = await db("item_bk")
+                  .select("id", "site", "upc", "gtin", "upc_barcode", "description", 
+                          "retail", "vendor_id", "vendor_name", "category_id", "department_id", 
+                          "department", "price_group_id", "price_group", "promo_group_id", "promo_group", 
+                          "on_hand_qty", "last_inv_date", "active", "image_url");
 
-  // Create lookup key composite string: "siteMongoId_upc"
   const pgMap = new Map(pgItems.map(item => [`${item.site}_${item.upc}`, item]));
 
   const rowsToInsert = [];
@@ -98,8 +119,10 @@ async function runSanitizeItemBk() {
 
     if (!match) {
       // SCENARIO A: Item exists in SQL but is missing in Postgres -> ADD IT
-      rowsToInsert.push({
-        site: mongoSiteId, upc, gtin,
+      const newRow = {
+        site: mongoSiteId, 
+        upc, 
+        gtin,
         upc_barcode: item?.upc_barcode != null ? String(item.upc_barcode) : null,
         description: item?.Description ?? null,
         retail: item?.Retail != null ? String(item.Retail) : null,
@@ -119,27 +142,30 @@ async function runSanitizeItemBk() {
         allow_cycle_count: true,
         image_url: item?.image_url ?? null,
         sync_date: db.fn.now()
-      });
+      };
+
+      rowsToInsert.push(newRow);
+      pgMap.set(azureKey, newRow);
     } else {
       // SCENARIO B: Item exists in both -> VERIFY AND CORRECT SHIFTS
       const hasChanged =
-        match.active !== true || 
-        match.gtin !== gtin ||
-        match.upc_barcode !== (item?.upc_barcode != null ? String(item.upc_barcode) : null) ||
-        match.description !== (item?.Description ?? null) ||
-        match.retail !== (item?.Retail != null ? String(item.Retail) : null) ||
-        match.vendor_id !== (item?.vendorId != null ? String(item.vendorId) : null) ||
-        match.vendor_name !== (item?.vendorName ?? null) ||
-        match.category_id !== categoryId ||
-        match.department_id !== (item?.departmentId != null ? String(item.departmentId) : null) ||
-        match.department !== (item?.Department ?? null) ||
-        match.price_group_id !== (item?.priceGroupId != null ? String(item.priceGroupId) : null) ||
-        match.price_group !== (item?.priceGroup ?? null) ||
-        match.promo_group_id !== (item?.promoGroupId != null ? String(item.promoGroupId) : null) ||
-        match.promo_group !== (item?.promoGroup ?? null) ||
-        Number(match.on_hand_qty) !== toNullableNumber(item?.onHandQty) ||
-        match.last_inv_date !== lastInvDate ||
-        match.image_url !== (item?.image_url ?? null);
+        match.active !== true ||
+        !isSame(match.gtin, gtin) ||
+        !isSame(match.upc_barcode, item?.upc_barcode) ||
+        !isSame(match.description, item?.Description) ||
+        !isSameNum(match.retail, item?.Retail) || // Use numeric evaluation for retail
+        !isSame(match.vendor_id, item?.vendorId) ||
+        !isSame(match.vendor_name, item?.vendorName) ||
+        !isSameNum(match.category_id, categoryId) ||
+        !isSame(match.department_id, item?.departmentId) ||
+        !isSame(match.department, item?.Department) ||
+        !isSame(match.price_group_id, item?.priceGroupId) ||
+        !isSame(match.price_group, item?.priceGroup) ||
+        !isSame(match.promo_group_id, item?.promoGroupId) ||
+        !isSame(match.promo_group, item?.promoGroup) ||
+        !isSameNum(match.on_hand_qty, item?.onHandQty) || // 👈 FIX: Evaluate as numeric values
+        !isSame(match.last_inv_date, lastInvDate) ||
+        !isSame(match.image_url, item?.image_url);
 
       if (hasChanged) {
         rowsToUpdate.push({
@@ -241,8 +267,8 @@ function chunkArray(arr, size) {
   return out;
 }
 
-// Runs every Saturday at exactly 03:00 AM
-cron.schedule("0 3 * * 6", async () => {
+// Runs every Saturday at exactly 06:00 AM
+cron.schedule("0 6 * * 6", async () => {
   console.log(`[${new Date().toISOString()}] Triggering scheduled Saturday morning Item Book Sanitization Protocol...`);
   try {
     await runSanitizeItemBk();
