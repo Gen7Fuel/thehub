@@ -267,7 +267,7 @@ router.get('/voided-transactions-details', async (req, res) => {
       }
 
       acc[txId].items.push({
-        transactionLine: row['Transaction Line'],
+        // transactionLine: row['Transaction Line'],
         gtin: row['GTIN'],
         upc: row['UPC'],
         category: row['Category'],
