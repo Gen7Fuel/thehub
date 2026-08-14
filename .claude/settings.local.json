@@ -94,7 +94,8 @@
       "Bash(awk '{ if \\($0 ~ /SECRET/\\) { gsub\\(/\"[^\"]*\"/, \"\\\\\"<redacted len=\" length\\($0\\) \">\\\\\"\"\\); } print }' frontend/public/DELETE-sage/credentials.js)",
       "Bash(npx eslint *)",
       "Bash(xargs -I{} sh -c 'echo \"$\\(du -k \"{}\" | cut -f1\\)K {}\"')",
-      "Bash(tee /tmp/tsc.txt)"
+      "Bash(tee /tmp/tsc.txt)",
+      "Bash(echo \"EXIT_CODE=$?\")"
     ]
   }
 }

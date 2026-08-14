@@ -12,6 +12,10 @@ const {
   mockAxiosPut,
   mockUploadBase64Image,
   mockUseAuth,
+  mockSavePendingAction,
+  mockGetPendingActions,
+  mockDeletePendingAction,
+  mockTriggerBackgroundSync,
 } = vi.hoisted(() => {
   const mockStore = {
     payableVendorName: 'Shell Canada' as string,
@@ -47,6 +51,10 @@ const {
     mockAxiosPut: vi.fn(),
     mockUploadBase64Image: vi.fn().mockResolvedValue({ filename: 'uploaded.jpg' }),
     mockUseAuth,
+    mockSavePendingAction: vi.fn().mockResolvedValue(undefined),
+    mockGetPendingActions: vi.fn().mockResolvedValue([]),
+    mockDeletePendingAction: vi.fn().mockResolvedValue(undefined),
+    mockTriggerBackgroundSync: vi.fn().mockResolvedValue(undefined),
   }
 })
 
@@ -92,11 +100,27 @@ vi.mock('@/lib/utils', async (importOriginal) => {
     }),
     uploadBase64Image: mockUploadBase64Image,
     toUTC: (d: Date) => d,
+    triggerBackgroundSync: mockTriggerBackgroundSync,
   }
 })
 
 vi.mock('@/lib/constants', () => ({
   domain: 'http://localhost:5000',
+}))
+
+vi.mock('@/lib/orderRecIndexedDB', () => ({
+  getDB: vi.fn(),
+  saveOrderRec: vi.fn(),
+  getOrderRecById: vi.fn(),
+  savePendingAction: mockSavePendingAction,
+  getPendingActions: mockGetPendingActions,
+  getPendingActionEntries: vi.fn().mockResolvedValue([]),
+  deletePendingAction: mockDeletePendingAction,
+  updatePendingAction: vi.fn().mockResolvedValue(undefined),
+  clearPendingActions: vi.fn(),
+  hasPendingActionsForId: vi.fn().mockResolvedValue(false),
+  deletePendingActionsForId: vi.fn(),
+  clearLocalDB: vi.fn(),
 }))
 
 vi.mock('@/components/custom/locationPicker', () => ({
@@ -375,6 +399,109 @@ describe('Payable List — list.tsx', () => {
       )
     )
   })
+
+  it('shows a queued payable from the offline sync queue as "Pending upload"', async () => {
+    mockAxiosGet
+      .mockReset()
+      .mockResolvedValueOnce({ data: [{ _id: 'loc-1', stationName: 'Rankin' }] })
+      .mockResolvedValueOnce({ data: [] })
+    mockGetPendingActions.mockResolvedValueOnce([
+      {
+        type: 'CREATE_PAYABLE',
+        queuedAt: 12345,
+        images: ['data:image/png;base64,queued'],
+        payload: {
+          vendorName: 'Offline Vendor',
+          location: 'Rankin',
+          notes: '',
+          paymentMethod: 'safe',
+          amount: 42,
+          date: '2026-03-10',
+        },
+      },
+    ])
+
+    renderWithSuspense(<PayableList />)
+
+    await waitFor(() => expect(screen.getByText('Offline Vendor')).toBeInTheDocument())
+    expect(screen.getAllByText(/pending upload/i).length).toBeGreaterThan(0)
+  })
+
+  it('shows a permanently-failed payable with red/error styling and its reason, separate from the pending count', async () => {
+    mockAxiosGet
+      .mockReset()
+      .mockResolvedValueOnce({ data: [{ _id: 'loc-1', stationName: 'Rankin' }] })
+      .mockResolvedValueOnce({ data: [] })
+    mockGetPendingActions.mockResolvedValueOnce([
+      {
+        type: 'CREATE_PAYABLE',
+        queuedAt: 54321,
+        images: [],
+        failed: true,
+        failureReason: 'Location "Rankin" not found',
+        _key: 7,
+        payload: {
+          vendorName: 'Failed Vendor',
+          location: 'Rankin',
+          notes: '',
+          paymentMethod: 'safe',
+          amount: 20,
+          date: '2026-03-10',
+        },
+      },
+    ])
+
+    renderWithSuspense(<PayableList />)
+
+    await waitFor(() => expect(screen.getByText('Failed Vendor')).toBeInTheDocument())
+    expect(screen.getByText(/upload failed/i)).toBeInTheDocument()
+    expect(screen.getByText('Location "Rankin" not found')).toBeInTheDocument()
+    // Not counted as "pending upload" — it's terminal, not in progress.
+    expect(screen.queryByText(/pending upload/i)).not.toBeInTheDocument()
+  })
+
+  it('shows the one queued payable the background sync loop is actively uploading as "Sending…", distinct from "Pending upload"', async () => {
+    mockAxiosGet
+      .mockReset()
+      .mockResolvedValueOnce({ data: [{ _id: 'loc-1', stationName: 'Rankin' }] })
+      .mockResolvedValueOnce({ data: [] })
+    mockGetPendingActions.mockResolvedValueOnce([
+      {
+        type: 'CREATE_PAYABLE',
+        queuedAt: 11111,
+        images: [],
+        syncing: true,
+        payload: {
+          vendorName: 'Uploading Vendor',
+          location: 'Rankin',
+          notes: '',
+          paymentMethod: 'safe',
+          amount: 30,
+          date: '2026-03-10',
+        },
+      },
+      {
+        type: 'CREATE_PAYABLE',
+        queuedAt: 22222,
+        images: [],
+        payload: {
+          vendorName: 'Waiting Vendor',
+          location: 'Rankin',
+          notes: '',
+          paymentMethod: 'safe',
+          amount: 10,
+          date: '2026-03-10',
+        },
+      },
+    ])
+
+    renderWithSuspense(<PayableList />)
+
+    await waitFor(() => expect(screen.getByText('Uploading Vendor')).toBeInTheDocument())
+    expect(screen.getByText('Waiting Vendor')).toBeInTheDocument()
+    expect(screen.getAllByText(/sending/i).length).toBeGreaterThan(0)
+    expect(screen.getAllByText(/pending upload/i).length).toBeGreaterThan(0)
+  })
 })
 
 // ─── Payable Images (images.tsx) ──────────────────────────────────────────────
@@ -483,7 +610,7 @@ describe('Payable Review — review.tsx', () => {
     )
   })
 
-  it('calls POST /api/payables and navigates to /payables/list on success', async () => {
+  it('always queues locally first — the only awaited step is a local IndexedDB write, never a network call', async () => {
     renderWithSuspense(<PayableReview />)
 
     const submitBtn = await waitFor(() =>
@@ -492,25 +619,42 @@ describe('Payable Review — review.tsx', () => {
     fireEvent.click(submitBtn)
 
     await waitFor(() =>
-      expect(mockAxiosPost).toHaveBeenCalledWith(
-        expect.stringContaining('/api/payables'),
+      expect(mockSavePendingAction).toHaveBeenCalledWith(
         expect.objectContaining({
-          vendorName: 'Shell Canada',
-          paymentMethod: 'safe',
-          amount: 150,
-        }),
-        expect.any(Object)
+          type: 'CREATE_PAYABLE',
+          images: [],
+          payload: expect.objectContaining({
+            vendorName: 'Shell Canada',
+            location: 'Rankin',
+            paymentMethod: 'safe',
+            amount: 150,
+            // mockStore.date = new Date('2026-03-10') parses as UTC
+            // midnight, which is 2026-03-09 evening in the America/Toronto
+            // test environment — format() renders the local calendar date.
+            date: '2026-03-09',
+          }),
+          queuedAt: expect.any(Number),
+        })
       )
     )
+    // The image upload + POST /api/payables live in syncOneAction's
+    // CREATE_PAYABLE branch (lib/utils.ts) now, not here.
+    expect(mockAxiosPost).not.toHaveBeenCalled()
+
+    // Fire-and-forget background sync attempt, resets the form, and
+    // navigates away immediately — none of that waits on the network.
+    await waitFor(() => expect(mockTriggerBackgroundSync).toHaveBeenCalled())
+    await waitFor(() => expect(mockStore.resetPayableForm).toHaveBeenCalled())
     await waitFor(() =>
       expect(mockNavigate).toHaveBeenCalledWith({ to: '/payables/list' })
     )
   })
 
-  it('shows "Submitting..." while the request is in flight', async () => {
-    // Never resolve so the component stays in submitting state
-    mockAxiosGet.mockResolvedValue({ data: [{ _id: 'loc-1', stationName: 'Rankin' }] })
-    mockAxiosPost.mockReturnValue(new Promise(() => {}))
+  it('shows "Saving..." only briefly while the local save is in flight', async () => {
+    // Never resolve so the component stays in the saving state — proves the
+    // button's disabled/spinner state is driven by the local write, not by
+    // any network call.
+    mockSavePendingAction.mockReturnValue(new Promise(() => {}))
 
     renderWithSuspense(<PayableReview />)
 
@@ -520,7 +664,20 @@ describe('Payable Review — review.tsx', () => {
     fireEvent.click(submitBtn)
 
     await waitFor(() =>
-      expect(screen.getByRole('button', { name: /submitting/i })).toBeInTheDocument()
+      expect(screen.getByRole('button', { name: /saving/i })).toBeInTheDocument()
     )
+  })
+
+  it('double-clicking Submit only queues one pending action', async () => {
+    renderWithSuspense(<PayableReview />)
+
+    const submitBtn = await waitFor(() =>
+      screen.getByRole('button', { name: /submit/i })
+    )
+    fireEvent.click(submitBtn)
+    fireEvent.click(submitBtn)
+
+    await waitFor(() => expect(mockSavePendingAction).toHaveBeenCalled())
+    expect(mockSavePendingAction).toHaveBeenCalledTimes(1)
   })
 })

@@ -733,6 +733,65 @@ describe('PO List — list.tsx', () => {
     // Not counted as "pending upload" — it's terminal, not in progress.
     expect(screen.queryByText(/pending upload/i)).not.toBeInTheDocument()
   })
+
+  it('shows the one queued purchase order the background sync loop is actively uploading as "Sending…", distinct from "Pending upload"', async () => {
+    mockAxiosGet.mockResolvedValue({ status: 200, data: [] })
+    mockGetPendingActions.mockResolvedValueOnce([
+      {
+        type: 'CREATE_PURCHASE_ORDER',
+        queuedAt: 11111,
+        receipt: 'data:image/png;base64,sending',
+        syncing: true,
+        payload: {
+          source: 'PO',
+          date: '2026-01-01',
+          stationName: 'Rankin',
+          fleetCardNumber: '',
+          poNumber: '22222',
+          quantity: 15,
+          amount: 30,
+          productCode: 'UNL',
+          customerName: 'Uploading Customer',
+          driverName: 'Uploading Driver',
+          vehicleMakeModel: '',
+          licensePlate: '',
+          purchaseType: 'fuel',
+          itemsDescription: '',
+        },
+      },
+      {
+        type: 'CREATE_PURCHASE_ORDER',
+        queuedAt: 22222,
+        receipt: 'data:image/png;base64,queued',
+        payload: {
+          source: 'PO',
+          date: '2026-01-01',
+          stationName: 'Rankin',
+          fleetCardNumber: '',
+          poNumber: '33333',
+          quantity: 5,
+          amount: 10,
+          productCode: 'UNL',
+          customerName: 'Waiting Customer',
+          driverName: 'Waiting Driver',
+          vehicleMakeModel: '',
+          licensePlate: '',
+          purchaseType: 'fuel',
+          itemsDescription: '',
+        },
+      },
+    ])
+
+    renderWithSuspense(<POList />)
+
+    await waitFor(() => expect(screen.getByText('Uploading Customer')).toBeInTheDocument())
+    expect(screen.getByText('Waiting Customer')).toBeInTheDocument()
+
+    // The syncing entry shows "Sending…", not "Pending upload".
+    expect(screen.getAllByText(/sending/i).length).toBeGreaterThan(0)
+    // The still-queued entry shows "Pending upload", not "Sending…".
+    expect(screen.getAllByText(/pending upload/i).length).toBeGreaterThan(0)
+  })
 })
 
 // ─── PO Signature (signature.tsx) ─────────────────────────────────────────────
