@@ -214,9 +214,9 @@ function RouteComponent() {
     setVendorCode(selectedCode);
   };
 
-  // ----------------------------------------------------
+  // -----------------------------------------------------
   // 🚀 Submission Pipeline
-  // ----------------------------------------------------
+  // -----------------------------------------------------
   // Add "site" to the validation criteria
   const isFormValid =
     site && // 🚀 Enforces that a location is actively selected
