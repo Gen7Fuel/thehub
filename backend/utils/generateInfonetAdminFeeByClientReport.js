@@ -329,14 +329,15 @@ async function generateAdminFeePdfReports(site, adminFee, provinceStatusDiscount
     let saleAmount = parseFloat(row['Total Sale Amount']) || 0;
     const originalSaleAmount = saleAmount;
 
-    // Dynamic Effective Price calculation
-    const dynamicEffectivePrice = regularPrice - (numericProvinceDiscount - numericAdminFee);
+    // Dynamic Effective Price & Target Gap calculation
+    const targetGap = numericProvinceDiscount - numericAdminFee;
+    const dynamicEffectivePrice = regularPrice - targetGap;
     const dynamicBasePrice = regularPrice;
 
-    // Price gap checks
-    const priceDiff = Math.abs((regularPrice - treatyPrice) - 0.10);
+    // Dynamic price gap checks using precise (up to 3 decimal) target gap
+    const priceDiff = Math.abs((regularPrice - treatyPrice) - targetGap);
     const isGapMismatch = (fuelType === 'REGULAR' || fuelType === 'PREMIUM') && priceDiff > 0.001;
-    const isTreatyNotLessThanRegular = treatyPrice >= (regularPrice - 0.099);
+    const isTreatyNotLessThanRegular = treatyPrice >= (regularPrice - (targetGap - 0.001));
     const isDieselCorrection = fuelType === 'DIESEL' && treatyPrice > regularPrice && taxExempt < 0;
 
     const needsAdjustment = isDieselCorrection || isGapMismatch || isTreatyNotLessThanRegular;
