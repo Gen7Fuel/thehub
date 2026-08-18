@@ -1,5 +1,5 @@
 import { createFileRoute } from '@tanstack/react-router';
-import { Construction, Clock, Sparkles } from 'lucide-react';
+import { Construction, Clock } from 'lucide-react';
 
 export const Route = createFileRoute(
   '/_navbarLayout/accounting-reports/end-of-day',

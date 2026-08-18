@@ -57,12 +57,10 @@ function formatDateToFileNameString(dateObj) {
 
 /**
  * Generates a single PDF report in memory and returns a Promise resolving to a Buffer.
+ * Supports grouped sections with section subtotals and grand totals.
  */
-function generateSinglePdfBuffer(processedRecords, reportTitle, siteDisplayName, addressLine1, addressLine2, dateFromStr, dateToStr) {
+function generateSinglePdfBuffer(groupedSections, reportTitle, siteDisplayName, addressLine1, addressLine2, dateFromStr, dateToStr) {
   return new Promise((resolve, reject) => {
-    // Sort records by Status Number (Account #)
-    processedRecords.sort((a, b) => (a.statusNo || '').localeCompare(b.statusNo || '', undefined, { numeric: true }));
-
     const doc = new PDFDocument({
       size: 'LETTER',
       margin: 36, // 0.5 inch margins
@@ -159,69 +157,116 @@ function generateSinglePdfBuffer(processedRecords, reportTitle, siteDisplayName,
       return 168;
     }
 
-    // Totals accumulators
-    let totalLitres = 0;
-    let totalFee = 0;
-    let totalDiscount = 0;
-    let totalAmount = 0;
-
     let y = 168;
     const pageHeight = 740;
 
     renderHeader(1, 1);
 
-    // Draw Rows
-    processedRecords.forEach((rec) => {
-      if (y > pageHeight) {
+    // Grand Totals accumulators
+    let grandLitres = 0;
+    let grandFee = 0;
+    let grandDiscount = 0;
+    let grandAmount = 0;
+
+    const isMultiSection = groupedSections.length > 1;
+
+    // Render Each Grade Section
+    groupedSections.forEach((section) => {
+      // Sort records within section by Status Number (Account #)
+      section.records.sort((a, b) => (a.statusNo || '').localeCompare(b.statusNo || '', undefined, { numeric: true }));
+
+      // Section Header (Only if multi-section)
+      if (isMultiSection) {
+        if (y + 20 > pageHeight) {
+          doc.addPage();
+          y = 168;
+        }
+        doc.font('Helvetica-Bold').fontSize(9).text(`GRADE: ${section.gradeName.toUpperCase()}`, colX.transNo + 2, y);
+        y += 14;
+      }
+
+      let sectionLitres = 0;
+      let sectionFee = 0;
+      let sectionDiscount = 0;
+      let sectionAmount = 0;
+
+      // Draw Section Rows
+      section.records.forEach((rec) => {
+        if (y > pageHeight) {
+          doc.addPage();
+          y = 168;
+        }
+
+        doc.font('Helvetica').fontSize(8);
+        doc.text(rec.transactionNo, colX.transNo + 2, y);
+        doc.text(rec.statusNo, colX.statusNo, y);
+        doc.text(rec.name, colX.name, y, { width: colWidths.name, height: 10, ellipsis: true });
+        doc.text(rec.date, colX.date, y);
+        doc.text(rec.fuelType, colX.product, y);
+
+        doc.text(formatNumber(rec.litres), colX.litres, y, { align: 'right', width: colWidths.litres });
+        doc.text(formatCurrency(rec.fee), colX.fee, y, { align: 'right', width: colWidths.fee });
+        doc.text(formatCurrency(rec.taxExempt), colX.discount, y, { align: 'right', width: colWidths.discount });
+        doc.text(formatCurrency(rec.saleAmount), colX.amount, y, { align: 'right', width: colWidths.amount });
+
+        sectionLitres += rec.litres;
+        sectionFee += rec.fee;
+        sectionDiscount += rec.taxExempt;
+        sectionAmount += rec.saleAmount;
+
+        y += 14;
+      });
+
+      // Accumulate to Grand Total
+      grandLitres += sectionLitres;
+      grandFee += sectionFee;
+      grandDiscount += sectionDiscount;
+      grandAmount += sectionAmount;
+
+      // Render Section Totals
+      if (y + 25 > pageHeight) {
         doc.addPage();
         y = 168;
       }
 
-      doc.font('Helvetica').fontSize(8);
-      doc.text(rec.transactionNo, colX.transNo + 2, y);
-      doc.text(rec.statusNo, colX.statusNo, y);
-      doc.text(rec.name, colX.name, y, { width: colWidths.name, height: 10, ellipsis: true });
-      doc.text(rec.date, colX.date, y);
-      doc.text(rec.fuelType, colX.product, y);
+      y += 2;
+      doc.lineWidth(0.5).lineCap('butt').moveTo(36, y).lineTo(576, y).stroke();
+      y += 4;
 
-      doc.text(formatNumber(rec.litres), colX.litres, y, { align: 'right', width: colWidths.litres });
-      doc.text(formatCurrency(rec.fee), colX.fee, y, { align: 'right', width: colWidths.fee });
-      doc.text(formatCurrency(rec.taxExempt), colX.discount, y, { align: 'right', width: colWidths.discount });
-      doc.text(formatCurrency(rec.saleAmount), colX.amount, y, { align: 'right', width: colWidths.amount });
+      doc.font('Helvetica-Bold').fontSize(8.5);
+      const totalLabel = isMultiSection ? `${section.gradeName.toUpperCase()} TOTAL:` : 'TOTALS:';
+      doc.text(totalLabel, colX.name, y, { width: colX.litres - colX.name - 5, align: 'right' });
+      doc.text(formatNumber(sectionLitres), colX.litres, y, { align: 'right', width: colWidths.litres });
+      doc.text(formatCurrency(sectionFee), colX.fee, y, { align: 'right', width: colWidths.fee });
+      doc.text(formatCurrency(sectionDiscount), colX.discount, y, { align: 'right', width: colWidths.discount });
+      doc.text(formatCurrency(sectionAmount), colX.amount, y, { align: 'right', width: colWidths.amount });
 
-      totalLitres += rec.litres;
-      totalFee += rec.fee;
-      totalDiscount += rec.taxExempt;
-      totalAmount += rec.saleAmount;
-
-      y += 14;
+      y += 12;
+      doc.lineWidth(0.5).lineCap('butt').moveTo(36, y).lineTo(576, y).stroke();
+      y += 10;
     });
 
-    // Round Totals
-    totalLitres = Math.round((totalLitres + Number.EPSILON) * 100) / 100;
-    totalFee = Math.round((totalFee + Number.EPSILON) * 100) / 100;
-    totalDiscount = Math.round((totalDiscount + Number.EPSILON) * 100) / 100;
-    totalAmount = Math.round((totalAmount + Number.EPSILON) * 100) / 100;
+    // Render Grand Total if multiple sections exist
+    if (isMultiSection) {
+      if (y + 25 > pageHeight) {
+        doc.addPage();
+        y = 168;
+      }
 
-    // Render Totals
-    if (y + 25 > pageHeight) {
-      doc.addPage();
-      y = 168;
+      y += 2;
+      doc.lineWidth(1.5).lineCap('butt').moveTo(36, y).lineTo(576, y).stroke();
+      y += 5;
+
+      doc.font('Helvetica-Bold').fontSize(8.5);
+      doc.text('GRAND TOTAL:', colX.name, y, { width: colX.litres - colX.name - 5, align: 'right' });
+      doc.text(formatNumber(grandLitres), colX.litres, y, { align: 'right', width: colWidths.litres });
+      doc.text(formatCurrency(grandFee), colX.fee, y, { align: 'right', width: colWidths.fee });
+      doc.text(formatCurrency(grandDiscount), colX.discount, y, { align: 'right', width: colWidths.discount });
+      doc.text(formatCurrency(grandAmount), colX.amount, y, { align: 'right', width: colWidths.amount });
+
+      y += 12;
+      doc.lineWidth(1.5).lineCap('butt').moveTo(36, y).lineTo(576, y).stroke();
     }
-
-    y += 5;
-    doc.lineWidth(1).lineCap('butt').moveTo(36, y).lineTo(576, y).stroke();
-    y += 5;
-
-    doc.font('Helvetica-Bold').fontSize(8.5);
-    doc.text('TOTALS:', colX.product, y);
-    doc.text(formatNumber(totalLitres), colX.litres, y, { align: 'right', width: colWidths.litres });
-    doc.text(formatCurrency(totalFee), colX.fee, y, { align: 'right', width: colWidths.fee });
-    doc.text(formatCurrency(totalDiscount), colX.discount, y, { align: 'right', width: colWidths.discount });
-    doc.text(formatCurrency(totalAmount), colX.amount, y, { align: 'right', width: colWidths.amount });
-
-    y += 12;
-    doc.lineWidth(1).lineCap('butt').moveTo(36, y).lineTo(576, y).stroke();
 
     // Apply Page Numbers
     const range = doc.bufferedPageRange();
@@ -236,14 +281,6 @@ function generateSinglePdfBuffer(processedRecords, reportTitle, siteDisplayName,
 
 /**
  * Generates Admin Fee PDF reports directly in memory and tracks adjusted transactions.
- *
- * @param {string} site - Raw site identifier (e.g., 'wavers west', 'wavers east').
- * @param {number|string} adminFee - Dynamic admin fee per litre (e.g., 0.03).
- * @param {number|string} provinceStatusDiscount - Dynamic province status discount per litre (e.g., 0.125).
- * @param {Array<Object>} flattenData - Array of record objects produced by processInfonetReport.
- * @param {string} [addressLine1=''] - Primary site address line.
- * @param {string} [addressLine2=''] - Secondary site address line (City, Province, Postal Code).
- * @returns {Promise<{ pdfReports: Array<{ fileName: string, title: string, buffer: Buffer }>, adjustedTransactions: Array<Object> }>}
  */
 async function generateAdminFeePdfReports(site, adminFee, provinceStatusDiscount, flattenData, addressLine1 = '', addressLine2 = '') {
   if (!Array.isArray(flattenData) || flattenData.length === 0) {
@@ -336,13 +373,8 @@ async function generateAdminFeePdfReports(site, adminFee, provinceStatusDiscount
     };
   });
 
-  // 3. Define report configurations
-  const reportConfigs = [
-    {
-      targetFuelType: 'ALL',
-      fileName: `Admin Fee by Client - ${siteDisplayName.toUpperCase()}${dateRangeSuffix}.pdf`,
-      title: 'ADMIN FEE BY CLIENT'
-    },
+  // 3. Define individual grade configurations
+  const gradeConfigs = [
     {
       targetFuelType: 'REGULAR',
       fileName: `Admin Fee by Client - Regular - ${siteDisplayName.toUpperCase()}${dateRangeSuffix}.pdf`,
@@ -360,35 +392,76 @@ async function generateAdminFeePdfReports(site, adminFee, provinceStatusDiscount
     }
   ];
 
-  // 4. Generate all PDF buffers concurrently
-  const pdfReports = await Promise.all(
-    reportConfigs.map(async (config) => {
-      let filteredRecords = allProcessedRecords;
-      if (config.targetFuelType !== 'ALL') {
-        filteredRecords = allProcessedRecords.filter(
-          rec => rec.fuelType === config.targetFuelType
-        );
-      }
+  // 4. Build grouped sections array for active fuel types in strict order (Regular, Diesel, Premium)
+  const order = ['REGULAR', 'DIESEL', 'PREMIUM'];
+  const groupedSectionsForCombined = [];
 
-      const recordsCopy = JSON.parse(JSON.stringify(filteredRecords));
+  order.forEach(grade => {
+    const matchingRecords = allProcessedRecords.filter(r => r.fuelType === grade);
+    if (matchingRecords.length > 0) {
+      groupedSectionsForCombined.push({
+        gradeName: grade,
+        records: JSON.parse(JSON.stringify(matchingRecords))
+      });
+    }
+  });
 
-      const pdfBuffer = await generateSinglePdfBuffer(
-        recordsCopy,
-        config.title,
-        siteDisplayName,
-        addressLine1,
-        addressLine2,
-        dateFromStr,
-        dateToStr
-      );
+  // Include any unmatched grades under "OTHER" if present
+  const knownGrades = new Set(order);
+  const otherRecords = allProcessedRecords.filter(r => !knownGrades.has(r.fuelType));
+  if (otherRecords.length > 0) {
+    groupedSectionsForCombined.push({
+      gradeName: 'OTHER',
+      records: JSON.parse(JSON.stringify(otherRecords))
+    });
+  }
 
-      return {
-        fileName: config.fileName,
-        title: config.title,
-        buffer: pdfBuffer
-      };
-    })
-  );
+  const pdfReports = [];
+
+  // 5. Generate Combined PDF report containing all non-empty sections
+  if (groupedSectionsForCombined.length > 0) {
+    const combinedBuffer = await generateSinglePdfBuffer(
+      groupedSectionsForCombined,
+      'ADMIN FEE BY CLIENT',
+      siteDisplayName,
+      addressLine1,
+      addressLine2,
+      dateFromStr,
+      dateToStr
+    );
+
+    pdfReports.push({
+      fileName: `Admin Fee by Client - ${siteDisplayName.toUpperCase()}${dateRangeSuffix}.pdf`,
+      title: 'ADMIN FEE BY CLIENT',
+      buffer: combinedBuffer
+    });
+  }
+
+  // 6. Generate individual grade PDF reports ONLY if transactions exist for that grade
+  for (const config of gradeConfigs) {
+    const filteredRecords = allProcessedRecords.filter(rec => rec.fuelType === config.targetFuelType);
+
+    // Skip generating this grade PDF if no transactions are found
+    if (filteredRecords.length === 0) continue;
+
+    const recordsCopy = JSON.parse(JSON.stringify(filteredRecords));
+
+    const pdfBuffer = await generateSinglePdfBuffer(
+      [{ gradeName: config.targetFuelType, records: recordsCopy }],
+      config.title,
+      siteDisplayName,
+      addressLine1,
+      addressLine2,
+      dateFromStr,
+      dateToStr
+    );
+
+    pdfReports.push({
+      fileName: config.fileName,
+      title: config.title,
+      buffer: pdfBuffer
+    });
+  }
 
   return {
     pdfReports,

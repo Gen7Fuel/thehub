@@ -181,6 +181,7 @@ function generateSinglePdfBuffer(processedRecords, reportTitle, siteDisplayName,
 
 /**
  * Generates Infonet PDF reports by grade directly in memory (as raw data, no adjustments).
+ * Skips report generation for grades with zero transactions.
  *
  * @param {string} site - Raw site identifier (e.g., 'wavers west', 'wavers east').
  * @param {Array<Object>} flattenData - Array of record objects produced by processInfonetReport.
@@ -248,29 +249,35 @@ async function generateInfonetPdfReports(site, flattenData, addressLine1 = '', a
     }
   ];
 
-  // 4. Generate PDF buffers concurrently per grade
-  const pdfReports = await Promise.all(
-    fuelGrades.map(async (grade) => {
-      const filteredRecords = processedRecords.filter(rec => rec.fuelType === grade.type);
-      const recordsCopy = JSON.parse(JSON.stringify(filteredRecords));
+  const pdfReports = [];
 
-      const pdfBuffer = await generateSinglePdfBuffer(
-        recordsCopy,
-        grade.title,
-        siteDisplayName,
-        addressLine1,
-        addressLine2,
-        dateFromStr,
-        dateToStr
-      );
+  // 4. Generate PDF buffers sequentially per grade, skipping grades with 0 transactions
+  for (const grade of fuelGrades) {
+    const filteredRecords = processedRecords.filter(rec => rec.fuelType === grade.type);
 
-      return {
-        fileName: grade.fileName,
-        title: grade.title,
-        buffer: pdfBuffer
-      };
-    })
-  );
+    // Skip report generation if no records exist for this fuel type
+    if (filteredRecords.length === 0) {
+      continue;
+    }
+
+    const recordsCopy = JSON.parse(JSON.stringify(filteredRecords));
+
+    const pdfBuffer = await generateSinglePdfBuffer(
+      recordsCopy,
+      grade.title,
+      siteDisplayName,
+      addressLine1,
+      addressLine2,
+      dateFromStr,
+      dateToStr
+    );
+
+    pdfReports.push({
+      fileName: grade.fileName,
+      title: grade.title,
+      buffer: pdfBuffer
+    });
+  }
 
   return pdfReports;
 }
