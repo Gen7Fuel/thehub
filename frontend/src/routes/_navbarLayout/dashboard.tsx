@@ -1,5 +1,5 @@
 import { createFileRoute, Link, useNavigate } from '@tanstack/react-router';
-import { useEffect, useState, useMemo } from "react";
+import { useEffect, useState, useCallback, useMemo } from "react";
 import { LocationPicker } from "@/components/custom/locationPicker";
 import { getCsoCodeByStationName, getVendorNameById } from '@/lib/utils';
 import { DonutSalesChart } from "@/components/custom/dashboard/salesByCategoryDonut";
@@ -38,6 +38,8 @@ import { getOrderRecStatusColor } from '@/lib/utils';
 import { PasswordProtection } from "@/components/custom/PasswordProtection";
 import { AuditSummaryChart } from "@/components/custom/dashboard/auditCharts"
 import { getPeriodKey } from '../_navbarLayout/audit/checklist/$id'
+import axios from "axios";
+import { getGradeTheme } from "./fuel-pricing"; // Adjust relative path as needed
 
 // Define the dashboard route using TanStack Router
 export const Route = createFileRoute('/_navbarLayout/dashboard')({
@@ -100,6 +102,19 @@ interface TransactionData {
   transactions: number;
   visits: number;
   avgBasket: number;
+}
+
+// 1. Define interface for ticker data
+interface FuelGradePrice {
+  grade: string;
+  price: string;
+  updatedAt: string;
+}
+
+interface SiteTickerData {
+  stationName: string;
+  site: string;
+  grades: FuelGradePrice[];
 }
 
 // interface OperationalTiming {
@@ -349,6 +364,9 @@ function RouteComponent() {
   // Safe balance (end-of-day) data
   const [safeBalanceRaw, setSafeBalanceRaw] = useState<any[]>([]);
   const [auditStats, setAuditStats] = useState<any[]>([]);
+
+  const [allTickerData, setAllTickerData] = useState<SiteTickerData[]>([]);
+  const [loadingTicker, setLoadingTicker] = useState<boolean>(true);
 
 
   const [salesData, setSalesData] = useState<SalesData | null>(null);
@@ -1109,45 +1127,52 @@ function RouteComponent() {
   }, []);
 
 
-  // Compute current and previous 7-day average basket sizes
-  // const avgBasketStats = useMemo(() => {
-  //   if (!transactionChartData || transactionChartData.length === 0) return { current: 0, previous: 0, changePct: 0 };
+  // 1. Direct order map using exact backend grade strings
+  const GRADE_ORDER: Record<string, number> = {
+    "Regular": 1,
+    "Mid Grade": 2,
+    "Premium": 3,
+    "Diesel": 4,
+    "Dyed Diesel": 5,
+  };
 
-  //   const today = new Date();
-  //   const yesterday = new Date(today);
-  //   yesterday.setDate(today.getDate() - 1);
+  // 2. Fetcher
+  const fetchTickerData = useCallback(async () => {
+    try {
+      setLoadingTicker(true);
+      const token = localStorage.getItem("token");
+      const { data } = await axios.get("/api/fuel-pricing/prices-ticker", {
+        headers: { Authorization: `Bearer ${token || ""}` },
+      });
+      setAllTickerData(data || []);
+    } catch (err) {
+      console.error("Failed fetching pricing ticker:", err);
+    } finally {
+      setLoadingTicker(false);
+    }
+  }, []);
 
-  //   const formatKey = (date: Date) => date.toISOString().slice(5, 10); // 'MM-DD'
+  useEffect(() => {
+    fetchTickerData();
+  }, [fetchTickerData]);
 
-  //   const currentStart = new Date(yesterday);
-  //   currentStart.setDate(yesterday.getDate() - 6); // 7-day range
-  //   const previousStart = new Date(currentStart);
-  //   previousStart.setDate(currentStart.getDate() - 7); // previous 7 days
-  //   const previousEnd = new Date(currentStart);
-  //   previousEnd.setDate(currentStart.getDate() - 1);
+  // 3. Current selected site's fuel grades sorted in strict order
+  const currentSiteGrades = useMemo(() => {
+    const siteMatch = allTickerData.find(
+      (item) =>
+        item.site?.toLowerCase() === site?.toLowerCase() ||
+        item.stationName?.toLowerCase() === site?.toLowerCase()
+    );
 
-  //   const currentSlice = transactionChartData.filter(
-  //     (d: TransactionData) => d.day >= formatKey(currentStart) && d.day <= formatKey(yesterday)
-  //   );
-  //   const previousSlice = transactionChartData.filter(
-  //     (d: TransactionData) => d.day >= formatKey(previousStart) && d.day <= formatKey(previousEnd)
-  //   );
+    if (!siteMatch?.grades) return [];
 
-  //   const currentAvg = currentSlice.length
-  //     ? currentSlice.reduce((sum, d) => sum + (d.avgBasket || 0), 0) / currentSlice.length
-  //     : 0;
-  //   const previousAvg = previousSlice.length
-  //     ? previousSlice.reduce((sum, d) => sum + (d.avgBasket || 0), 0) / previousSlice.length
-  //     : 0;
+    return [...siteMatch.grades].sort((a, b) => {
+      const orderA = GRADE_ORDER[a.grade] ?? 99;
+      const orderB = GRADE_ORDER[b.grade] ?? 99;
+      return orderA - orderB;
+    });
+  }, [allTickerData, site]);
 
-  //   const changePct = previousAvg > 0 ? ((currentAvg - previousAvg) / previousAvg) * 100 : 0;
-
-  //   return {
-  //     current: Number(currentAvg.toFixed(2)),
-  //     previous: Number(previousAvg.toFixed(2)),
-  //     changePct: Number(changePct.toFixed(1)),
-  //   };
-  // }, [transactionChartData]);
   const avgBasketStats = useMemo(() => {
     if (!transactionChartData || transactionChartData.length === 0)
       return { current: 0, previous: 0, changePct: 0 };
@@ -1471,6 +1496,62 @@ function RouteComponent() {
                   </div>
                 </section>
                 )}
+
+                {/* ======================= */}
+                {/*   FUEL PRICES SECTION   */}
+                {/* ======================= */}
+                {loadingTicker ? (
+                  <section aria-labelledby="fuel-prices-heading" className="mb-10">
+                    <h2 id="fuel-prices-heading" className="text-2xl font-bold mb-4 pl-4">
+                      Current Fuel Prices
+                    </h2>
+                    <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-4">
+                      {[1, 2, 3, 4, 5].map((i) => (
+                        <div key={i} className="bg-white rounded-xl shadow p-4 flex items-center justify-between">
+                          <Skeleton className="h-8 w-8 rounded-lg" />
+                          <div className="flex flex-col gap-1 items-end">
+                            <Skeleton className="h-4 w-16" />
+                            <Skeleton className="h-6 w-20" />
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </section>
+                ) : currentSiteGrades.length > 0 ? (
+                  <section aria-labelledby="fuel-prices-heading" className="mb-10">
+                    <h2 id="fuel-prices-heading" className="text-2xl font-bold mb-4 pl-4">
+                      Current Fuel Prices
+                    </h2>
+                    <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-flow-col md:auto-cols-fr gap-4">
+                      {currentSiteGrades.map((item) => {
+                        const theme = getGradeTheme(item.grade);
+                        const IconComponent = theme.icon;
+
+                        return (
+                          <div
+                            key={item.grade}
+                            className={`bg-white rounded-xl shadow-sm border border-slate-100 p-4 flex items-center justify-between transition-all hover:shadow-md ${theme.light}`}
+                          >
+                            {/* Green-to-Red Gradient Badge for Mid Grade, Solid Colors for Others */}
+                            <div className={`p-2.5 rounded-lg text-white ${theme.color} shrink-0 flex items-center justify-center shadow-sm`}>
+                              <IconComponent className="w-5 h-5" />
+                            </div>
+
+                            {/* Price Details */}
+                            <div className="text-right ml-3 min-w-0">
+                              <span className={`text-xs font-semibold uppercase tracking-wider block truncate ${theme.label}`}>
+                                {item.grade}
+                              </span>
+                              <div className="text-xl font-bold text-slate-900 mt-0.5">
+                                {item.price} <span className="text-xs font-normal text-muted-foreground">¢/L</span>
+                              </div>
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </section>
+                ) : null}
 
                 {/* ======================= */}
                 {/*     Station Shift Activity SECTION   */}
