@@ -70,6 +70,7 @@ const fuelOrderRoutes = require("./routes/fuel/fuelOrderRoutes");
 const fuelSaleRoutes = require("./routes/fuel/fuelSaleRoutes");
 const fuelPriceRoutes = require("./routes/fuel/fuelPricingRoutes");
 const fuelSettingsRoutes = require("./routes/fuel/fuelSettingsRoutes");
+const accountingReportRoutes = require("./routes/accountingReportRoutes");
 
 const { auth } = require("./middleware/authMiddleware");
 
@@ -177,6 +178,7 @@ app.use('/api/fuel-station-tanks', fuelStationTankRoutes);
 app.use('/api/fuel-orders', fuelOrderRoutes);
 app.use('/api/fuel-sales', fuelSaleRoutes);
 app.use('/api/fuel-settings', fuelSettingsRoutes);
+app.use('/api/accounting-reports', accountingReportRoutes);
 // Misc
 app.use('/api', emailRoutes);
 
