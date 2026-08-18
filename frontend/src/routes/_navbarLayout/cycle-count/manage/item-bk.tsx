@@ -1746,26 +1746,31 @@ function RouteComponent() {
       {/* --- HIGH PERFORMANCE ISOLATED BARCODE ZOOM DIALOG --- */}
       <Dialog open={!!activeBarcodeItem} onOpenChange={(open) => { if (!open) setActiveBarcodeItem(null); }}>
         <DialogContent className="sm:max-w-md rounded-3xl overflow-hidden p-0 border-none bg-white">
-          <div className="w-full h-48 bg-gray-50 relative border-b border-gray-100">
-            <div className="absolute top-4 left-0 right-0 text-center z-10">
-              <span className="bg-white/80 backdrop-blur-sm px-3 py-1 rounded-full text-[9px] uppercase tracking-tighter font-black text-gray-500 shadow-sm border border-white/50">
-                Verify Product Identity
-              </span>
-            </div>
+          
+          {/* 🏷️ Header Bar (Cleanly separated above the image) */}
+          <div className="w-full pt-5 pb-2 text-center bg-white">
+            <span className="bg-gray-100 px-3 py-1 rounded-full text-[9px] uppercase tracking-tighter font-black text-gray-500 shadow-sm border border-gray-200/60 inline-block">
+              Verify Product Identity
+            </span>
+          </div>
+
+          {/* 🖼️ Image Container (Pure white background, no top badge overlap) */}
+          <div className="w-full h-44 bg-white border-b border-gray-100 flex items-center justify-center">
             {activeBarcodeItem?.image ? (
               <img
                 src={activeBarcodeItem.image}
                 alt={activeBarcodeItem.name}
-                className="w-full h-full object-contain p-4"
+                className="w-full h-full object-contain px-6 pb-4"
               />
             ) : (
-              <div className="w-full h-full flex flex-col items-center justify-center text-gray-300">
+              <div className="w-full h-full flex flex-col items-center justify-center text-gray-300 bg-gray-50">
                 <ImageIcon className="w-12 h-12 mb-2 opacity-20" />
                 <span className="text-xs font-bold uppercase tracking-widest opacity-40">No Image Available</span>
               </div>
             )}
           </div>
 
+          {/* 📊 Barcode & Details Section */}
           <div className="flex flex-col justify-center items-center p-8 pt-6">
             <div className="w-full p-6 bg-white rounded-2xl border-2 border-gray-100 mb-6 flex justify-center shadow-sm">
               {activeBarcodeItem?.upc && (

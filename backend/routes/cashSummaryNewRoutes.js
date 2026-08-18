@@ -267,7 +267,7 @@ router.get('/voided-transactions-details', async (req, res) => {
       }
 
       acc[txId].items.push({
-        transactionLine: row['Transaction Line'],
+        // transactionLine: row['Transaction Line'],
         gtin: row['GTIN'],
         upc: row['UPC'],
         category: row['Category'],
@@ -424,7 +424,9 @@ router.get('/over-short', async (req, res) => {
       // B. Calculate Adjusted Reported Cash (Expected)
       let adjustedReported = totals.report_canadian_cash;
 
-      if (sellsLottery && lotteryMap[dateStr]) {
+      const isWavers = ['Wavers West', 'Wavers East'].includes(site);
+
+      if (sellsLottery && lotteryMap[dateStr] && !isWavers) {
         const lotto = lotteryMap[dateStr];
 
         const onlineOverShort = (totals.shiftOnlineTotal || 0) - (

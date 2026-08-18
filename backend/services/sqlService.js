@@ -1127,20 +1127,26 @@ async function getShiftTransactionTimings(pool, csoCode, startDate, endDate) {
 async function getRefundTransactions(csoCode, date) {
   try {
     const pool = await getPool();
+    const transactionDate = formatDateForDB(date);
     const result = await pool.request()
       .input('csoCode', sql.Int, csoCode)
-      .input('targetDate', sql.VarChar, date) // or sql.Date
+      .input('targetDate', sql.VarChar, transactionDate) // or sql.Date depending on your Date_SK type
       .query(`
-        SELECT [Transaction ID], [Transaction Line], [Event Start Time], 
-          [GTIN], [UPC], [Category], [Item Name], 
-          [Actual Sales Amount]
-        FROM [CSO].[SalesTransactionCRJ]
-        WHERE [Status] = 'RefundEvent' AND 
-          [Station_SK] = @csoCode AND 
-          [Date] = @targetDate
-        ORDER BY [Event Start Time]
+        SELECT 
+          FORMAT([DateTime], 'HH:mm:ss') AS [Event Start Time],
+          [Transaction ID],
+          [GTIN],
+          NULL AS [UPC], -- Alias as NULL to satisfy front-end fallback logic cleanly
+          [Department] AS [Category],
+          [Item Description] AS [Item Name],
+          [Sales Amount] AS [Actual Sales Amount]
+        FROM [CSO].[Stg_CashRegisterJournal]
+        WHERE [Station_SK] = @csoCode 
+          AND [Event] = 'RefundEvent' 
+          AND [Date_SK] = @targetDate
+        ORDER BY [DateTime]
       `);
-    // await sql.close();
+
     return result.recordset;
   } catch (err) {
     console.error('SQL error:', err);
@@ -1174,13 +1180,26 @@ async function getShiftEmployees(csoCode, startDate, endDate) {
 }
 
 /**
- * Fetches flattened item data from Azure SQL by joining Current_Inventory,
- * Master_Item, and the most recent record from Inventory Balance.
+ * Fetches flattened item data from Azure SQL by joining the latest snapshot
+ * from Current_Inventory (using Date_SK), Master_Item, and Inventory Balance.
  */
 async function getFullItemBackupData() {
   try {
     const pool = await getPool();
     const query = `
+      WITH LatestInventory AS (
+        -- Get only the most recent Date_SK snapshot for each UPC and Station_SK
+        SELECT 
+          [UPC],
+          [Station_SK],
+          [On Hand Qty],
+          [Date_SK],
+          ROW_NUMBER() OVER (
+            PARTITION BY [UPC], [Station_SK] 
+            ORDER BY [Date_SK] DESC
+          ) AS rn
+        FROM [CSO].[Current_Inventory]
+      )
       SELECT 
         CI.[UPC],
         CI.[Station_SK],
@@ -1192,26 +1211,34 @@ async function getFullItemBackupData() {
         MI.[Vendor ID] AS vendorId,
         MI.[Vendor] AS vendorName,
         MI.[Category ID] AS categoryId,
+        MI.[Category] AS categoryName,
         MI.[Department ID] AS departmentId,
         MI.[Department],
         MI.[Price Group ID] AS priceGroupId,
         MI.[Price Group] AS priceGroup,
         MI.[Promo Group ID] AS promoGroupId,
         MI.[Promo Group] AS promoGroup,
-        (
-          SELECT MAX([Last_Inv_Date]) 
-          FROM [CSO].[Inventory Balance] IB 
-          WHERE IB.[UPC] = CI.[UPC] AND IB.[Station_SK] = CI.[Station_SK]
-        ) AS last_inv_date,
+        IB.[last_inv_date],
         (
           SELECT [URL] 
           FROM [CSO].[UPC Details] UD
           WHERE UD.[UPC] = CI.[UPC]
         ) AS image_url
-      FROM [CSO].[Current_Inventory] CI
+      FROM LatestInventory CI
       LEFT JOIN [CSO].[Master_Item] MI 
         ON CI.[UPC] = MI.[UPC] AND CI.[Station_SK] = MI.[Station_SK]
-      WHERE MI.[GTIN] IS NOT NULL and MI.[Category ID] is not null
+      INNER JOIN (
+        SELECT 
+          [UPC], 
+          [Station_SK], 
+          MAX([Last_Inv_Date]) AS last_inv_date
+        FROM [CSO].[Inventory Balance]
+        WHERE [Last_Inv_Date] >= '2024-01-01'
+        GROUP BY [UPC], [Station_SK]
+      ) IB ON CI.[UPC] = IB.[UPC] AND CI.[Station_SK] = IB.[Station_SK]
+      WHERE CI.rn = 1
+        AND MI.[GTIN] IS NOT NULL 
+        AND MI.[Category ID] IS NOT NULL
     `;
 
     const result = await pool.request().query(query);
@@ -1226,14 +1253,77 @@ async function getFullItemBackupData() {
  * Fetches the entire current inventory matrix from Azure SQL to sanitize Postgres item_bk.
  * Includes Category Name for Mongo cross-verification lookup.
  */
+// async function getSanitizationBackupData() {
+//   try {
+//     const pool = await getPool();
+//     const query = `
+//       SELECT 
+//         CI.[UPC],
+//         CI.[Station_SK],
+//         CI.[On Hand Qty] AS onHandQty,
+//         MI.[GTIN],
+//         MI.[SKU] AS upc_barcode,
+//         MI.[Description],
+//         MI.[Retail],
+//         MI.[Vendor ID] AS vendorId,
+//         MI.[Vendor] AS vendorName,
+//         MI.[Category ID] AS categoryId,
+//         MI.[Category Name] AS categoryName,
+//         MI.[Department ID] AS departmentId,
+//         MI.[Department],
+//         MI.[Price Group ID] AS priceGroupId,
+//         MI.[Price Group] AS priceGroup,
+//         MI.[Promo Group ID] AS promoGroupId,
+//         MI.[Promo Group] AS promoGroup,
+//         (
+//           SELECT MAX([Last_Inv_Date]) 
+//           FROM [CSO].[Inventory Balance] IB 
+//           WHERE IB.[UPC] = CI.[UPC] AND IB.[Station_SK] = CI.[Station_SK]
+//         ) AS last_inv_date,
+//         (
+//           SELECT [URL] 
+//           FROM [CSO].[UPC Details] UD
+//           WHERE UD.[UPC] = CI.[UPC]
+//         ) AS image_url
+//       FROM [CSO].[Current_Inventory] CI
+//       LEFT JOIN [CSO].[Master_Item] MI 
+//         ON CI.[UPC] = MI.[UPC] AND CI.[Station_SK] = MI.[Station_SK]
+//       WHERE MI.[GTIN] IS NOT NULL 
+//         AND MI.[Category ID] IS NOT NULL 
+//         AND MI.[Category ID] 
+//           NOT IN (0, 121, 130, 131, 133, 134, 152, 153, 155, 157, 158, 175, 176, 
+//                   200, 201, 202, 203, 204, 205, 206, 207, 208, 209, 210, 213, 
+//                   214, 216, 218, 219, 220, 800, 999, 1000, 5001, 5002, 5003, 10000)
+//     `;
+
+//     const result = await pool.request().query(query);
+//     return result.recordset;
+//   } catch (err) {
+//     console.error("SQL error fetching sanitization backup data:", err);
+//     throw err;
+//   }
+// }
+
 async function getSanitizationBackupData() {
   try {
     const pool = await getPool();
     const query = `
+      WITH LatestInventory AS (
+        SELECT 
+          CI.[UPC],
+          CI.[Station_SK],
+          CI.[On Hand Qty] AS onHandQty,
+          CI.[Date_SK],
+          ROW_NUMBER() OVER (
+            PARTITION BY CI.[UPC], CI.[Station_SK] 
+            ORDER BY CI.[Date_SK] DESC
+          ) AS rn
+        FROM [CSO].[Current_Inventory] CI
+      )
       SELECT 
         CI.[UPC],
         CI.[Station_SK],
-        CI.[On Hand Qty] AS onHandQty,
+        CI.[onHandQty],
         MI.[GTIN],
         MI.[SKU] AS upc_barcode,
         MI.[Description],
@@ -1254,19 +1344,20 @@ async function getSanitizationBackupData() {
           WHERE IB.[UPC] = CI.[UPC] AND IB.[Station_SK] = CI.[Station_SK]
         ) AS last_inv_date,
         (
-          SELECT [URL] 
+          SELECT TOP 1 [URL] 
           FROM [CSO].[UPC Details] UD
           WHERE UD.[UPC] = CI.[UPC]
         ) AS image_url
-      FROM [CSO].[Current_Inventory] CI
+      FROM LatestInventory CI
       LEFT JOIN [CSO].[Master_Item] MI 
         ON CI.[UPC] = MI.[UPC] AND CI.[Station_SK] = MI.[Station_SK]
-      WHERE MI.[GTIN] IS NOT NULL 
+      WHERE CI.rn = 1
+        AND MI.[GTIN] IS NOT NULL 
         AND MI.[Category ID] IS NOT NULL 
         AND MI.[Category ID] 
-          NOT IN (0, 121, 130, 131, 133, 134, 152, 153, 155, 157, 158, 175, 176, 
-                  200, 201, 202, 203, 204, 205, 206, 207, 208, 209, 210, 213, 
-                  214, 216, 218, 219, 220, 800, 999, 1000, 5001, 5002, 5003, 10000)
+        NOT IN (0, 121, 130, 131, 133, 134, 152, 153, 155, 157, 158, 175, 176, 
+                200, 201, 202, 203, 204, 205, 206, 207, 208, 209, 210, 213, 
+                214, 216, 218, 219, 220, 800, 999, 1000, 5001, 5002, 5003, 10000)
     `;
 
     const result = await pool.request().query(query);

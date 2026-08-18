@@ -11,6 +11,7 @@ const SelectTemplate = require('../../models/audit/selectTemplate');
 const { emailQueue } = require('../../queues/emailQueue');
 const User = require('../../models/User');
 const { pushNotification } = require("../../services/notificationService");
+const { resolveIssueRecipients } = require("../../utils/auditIssueRecipients");
 // GET /api/audit/category-options
 router.get('/category-options', async (req, res) => {
   try {
@@ -871,77 +872,50 @@ router.post('/instance', async (req, res) => {
                   (opt) => opt.text === item.assignedTo
                 );
 
-                // if (match && match.email) {
-                //   const to = match.email;
-                let to = null;
-
                 if (match) {
-                  let recipientList = []; // We will collect all primary 'TO' emails here
+                  // Per-site override (if any) for this option
+                  const override = match.siteOverrides?.find((o) => o.site === site);
 
-                  if (match.text === "Station Manager") {
-                    // 🧩 NEW: Fetch Location to get the managerEmails array
-                    const location = await Location.findOne({ site });
-
-                    if (location?.managerEmails && location.managerEmails.length > 0) {
-                      // Add all manager emails to the list
-                      recipientList = [...location.managerEmails];
-                    } else {
-                      // Fallback: if no managerEmails are set, use the main store email so the issue isn't lost
-                      console.warn(`No managerEmails found for ${site}, falling back to store email.`);
-                      if (location?.email) recipientList.push(location.email);
-                    }
-                  } else if (match.email) {
-                    // 🧩 NEW: Handle comma-separated strings or single emails
-                    if (typeof match.email === 'string' && match.email.includes(',')) {
-                      // Split by comma, trim whitespace, and filter out any empty strings
-                      const multiEmails = match.email
-                        .split(',')
-                        .map(e => e.trim())
-                        .filter(Boolean);
-
-                      recipientList.push(...multiEmails);
-                    } else if (match.email) {
-                      // Standard assignment (single email)
-                      recipientList.push(match.email.trim());
-                    }
+                  // Station Manager's TO is dynamically resolved from the
+                  // Location's managerEmails unless a site override sets `to`
+                  // explicitly — only fetch the Location when it's actually needed.
+                  let location = null;
+                  if (match.text === "Station Manager" && !override?.to) {
+                    location = await Location.findOne({ site });
                   }
 
-                  if (recipientList.length === 0) {
-                    console.warn("No valid recipients found for assignedTo:", match?.text);
-                    return;
-                  }
-
-                  // Existing CC list
-                  const cc = [
-                    "daksh@gen7fuel.com",
-                    "ana@gen7fuel.com",
-                    "kporter@gen7fuel.com",
-                    "michelle@gen7fuel.com"
-                  ];
-                  // const cc = [];
-
-                  const issueData = {
-                    site: site,
-                    item: item.item,
-                    category: item.category,
-                    status: item.status || "No Status Selected",
-                    comment: item.comment || "No Comment Provided"
-                  };
-
-                  const io = req.app.get("io");
-
-                  // 🧩 Pass the combined list. 
-                  // Our updated pushNotification service will handle deduplication.
-                  await pushNotification({
-                    io,
-                    recipientEmails: [...recipientList, ...cc],
-                    slug: "issue-raised-alert",
-                    subject: `⚠️ Issue Raised for Site ${site}`,
-                    fieldValues: issueData,
-                    type: 'system'
+                  const { to: recipientList, cc } = resolveIssueRecipients({
+                    option: match,
+                    site,
+                    location,
                   });
 
-                  console.log(`📨 Issue notification queued for: ${recipientList.join(", ")}`);
+                  if (recipientList.length === 0) {
+                    console.warn("No valid recipients found for assignedTo:", match.text);
+                  } else {
+                    const issueData = {
+                      site: site,
+                      item: item.item,
+                      category: item.category,
+                      status: item.status || "No Status Selected",
+                      comment: item.comment || "No Comment Provided"
+                    };
+
+                    const io = req.app.get("io");
+
+                    // 🧩 Pass the combined list.
+                    // Our updated pushNotification service will handle deduplication.
+                    await pushNotification({
+                      io,
+                      recipientEmails: [...recipientList, ...cc],
+                      slug: "issue-raised-alert",
+                      subject: `⚠️ Issue Raised for Site ${site}`,
+                      fieldValues: issueData,
+                      type: 'system'
+                    });
+
+                    console.log(`📨 Issue notification queued for: ${recipientList.join(", ")}`);
+                  }
                 } else {
                   console.warn(
                     `⚠️ No matching Assigned To email found for "${item.assignedTo}"`

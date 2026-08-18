@@ -2181,11 +2181,11 @@ router.delete('/instance/:id', async (req, res) => {
     }
 
     // 2. CRITICAL SECURITY GUARDRAIL: Block deletion if it is NOT a manual/scheduled record
-    if (!instance.is_scheduled) {
-      return res.status(403).json({
-        message: "Action Denied: Automatically generated system count instances cannot be manually deleted."
-      });
-    }
+    // if (!instance.is_scheduled) {
+    //   return res.status(403).json({
+    //     message: "Action Denied: Automatically generated system count instances cannot be manually deleted."
+    //   });
+    // }
 
     // 3. Execution wrapper block
     await db.transaction(async (trx) => {
