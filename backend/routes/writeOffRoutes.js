@@ -5,6 +5,8 @@ const Location = require('../models/Location');
 const { getBulkOnHandQtyCSO } = require('../services/sqlService');
 const { emailQueue } = require('../queues/emailQueue');
 const { pushNotification } = require('../services/notificationService');
+const { syncWriteOffToCStore } = require("../utils/cStoreWriteOffAutomation");
+const moment = require("moment-timezone");
 
 // Helper function to generate email HTML content
 function generateEmailHTML(site, woMongoId, ateMongoId, btMongoId) {
@@ -495,13 +497,13 @@ router.patch('/:id/items/:itemId', async (req, res) => {
 
 //     const isBT = list.listType === 'BT';
 
-//     // 1. Mark as submitted and ensure status is Complete
+//     // 1. Mark as submitted
 //     list.submitted = true;
 //     list.status = 'Complete';
 //     const finalizedList = await list.save();
 
-//     // 2. Fetch Location for CSO (Only if not BT)
-//     let csoLink = null;
+//     // 2. Fetch Location for CSO Link (Only if not Bistro)
+//     let csoLink = "";
 //     if (!isBT) {
 //       const location = await Location.findOne({ site: list.site });
 //       const csoCode = location?.csoCode || '0';
@@ -514,22 +516,62 @@ router.patch('/:id/items/:itemId', async (req, res) => {
 
 //     const hubLink = `https://app.gen7fuel.com/write-off/${list._id}`;
 
-//     // 3. Email Config
+
+//     // 3. Notification Config
 //     const emailRecipients = {
 //       primaryTo: "grayson@gen7fuel.com",
-//       categoryTeam: ["daksh@gen7fuel.com", "vasu@gen7fuel.com", "Saeid@gen7fuel.com", "zyannic@bosservicesltd.com"]
+//       categoryTeam: ["daksh@gen7fuel.com", "karthikeyan@gen7fuel.com", "vasu@gen7fuel.com", "Saeid@gen7fuel.com", "zyannic@bosservicesltd.com", "tejasvini@gen7fuel.com"]
 //     };
 
-//     // Subject logic
 //     const subject = isBT
 //       ? `Approved by Station Manager: Bistro Items - ${list.site} (${list.listNumber})`
 //       : `Finalized: Write-Off List - ${list.site} (${list.listNumber})`;
 
-//     await emailQueue.add("sendWriteOffEmail", {
-//       to: emailRecipients.primaryTo,
+//     // const isBT = listType === 'BT';
+//     const bannerColor = isBT ? "#e67e22" : "#1b5e20"; // Orange for Bistro, Green for WO
+//     const headerTitle = isBT ? "Bistro Write-Off Approved" : "Write-Off Finalized";
+
+//     // Text content based on type
+//     const mainMessage = isBT
+//       ? `The Station Manager has <strong>approved</strong> the Bistro Write-Off request for <strong>${list.site}</strong>. Please review the items in the Hub.`
+//       : `The Station Manager has finalized the Write-Off request for <strong>${list.site}</strong>. Please review the details in the Hub and accept the corresponding ticket in CStoreOffice.`;
+
+//     // Dynamic Button Layout
+//     let buttonsHTML = '';
+//     if (csoLink) {
+//       // TWO BUTTONS (For WO)
+//       buttonsHTML = `
+//       <td align="center" style="padding: 10px; width: 50%;">
+//         <p style="margin: 0 0 10px 0; font-size: 12px; color: #666; font-weight: bold; text-transform: uppercase;">Review Details</p>
+//         <a href="${hubLink}" style="background-color: #333333; color: #ffffff; padding: 14px 0; text-decoration: none; font-weight: 600; border-radius: 6px; display: block; width: 90%; font-size: 14px; text-align: center;">📂 View in Hub</a>
+//       </td>
+//       <td align="center" style="padding: 10px; width: 50%;">
+//         <p style="margin: 0 0 10px 0; font-size: 12px; color: #666; font-weight: bold; text-transform: uppercase;">Inventory System</p>
+//         <a href="${csoLink}" style="background-color: #2e7d32; color: #ffffff; padding: 14px 0; text-decoration: none; font-weight: 600; border-radius: 6px; display: block; width: 90%; font-size: 14px; text-align: center;">✅ Accept in CSO</a>
+//       </td>`;
+//     } else {
+//       // ONE BUTTON (For BT)
+//       buttonsHTML = `
+//       <td align="center" style="padding: 10px; width: 100%;">
+//         <p style="margin: 0 0 10px 0; font-size: 12px; color: #666; font-weight: bold; text-transform: uppercase;">Review Details</p>
+//         <a href="${hubLink}" style="background-color: #e67e22; color: #ffffff; padding: 14px 0; text-decoration: none; font-weight: 600; border-radius: 6px; display: block; width: 95%; font-size: 14px; text-align: center;">📂 View Approved Bistro List</a>
+//       </td>`;
+//     }
+
+//     // 4. Trigger Hub Notification & Email Queue
+//     await pushNotification({
+//       io: req.app.get("io"),
+//       recipientEmails: [emailRecipients.primaryTo, ...emailRecipients.categoryTeam],
+//       slug: "write-off-finalized",
 //       subject: subject,
-//       html: generateFinalizedEmailHTML(list.site, list.listNumber, hubLink, csoLink, list.listType),
-//       cc: emailRecipients.categoryTeam
+//       fieldValues: {
+//         site: list.site,
+//         listNumber: list.listNumber,
+//         bannerColor: bannerColor,
+//         headerTitle: headerTitle,
+//         mainMessage: mainMessage,
+//         buttonsHTML: buttonsHTML,
+//       }
 //     });
 
 //     res.json(finalizedList);
@@ -538,8 +580,7 @@ router.patch('/:id/items/:itemId', async (req, res) => {
 //     res.status(500).json({ error: err.message });
 //   }
 // });
-
-router.patch('/:id/finalize', async (req, res) => {
+router.patch("/:id/finalize", async (req, res) => {
   try {
     const list = await WriteOff.findById(req.params.id);
     if (!list) return res.status(404).json({ error: "List not found" });
@@ -548,51 +589,81 @@ router.patch('/:id/finalize', async (req, res) => {
       return res.status(400).json({ error: "This list has already been submitted." });
     }
 
-    const isBT = list.listType === 'BT';
+    const isBT = list.listType === "BT";
+    const isWO = list.listType === "WO";
 
     // 1. Mark as submitted
     list.submitted = true;
-    list.status = 'Complete';
-    const finalizedList = await list.save();
+    list.status = "Complete";
+    // const finalizedList = await list.save();
+    const finalizedList = [];
 
-    // 2. Fetch Location for CSO Link (Only if not Bistro)
+    // 2. Fetch Location and Calculate Timezone-specific Timestamps
     let csoLink = "";
-    if (!isBT) {
-      const location = await Location.findOne({ site: list.site });
-      const csoCode = location?.csoCode || '0';
-      const dateObj = new Date(list.createdAt);
-      const formattedDate = dateObj.toLocaleDateString('en-US', {
-        month: '2-digit', day: '2-digit', year: 'numeric'
-      });
-      csoLink = `https://03.cstoreoffice.com/daily-store-spoilage.php?Station=${csoCode}&date_form=${formattedDate}`;
+    let formattedDate = "";
+    let formattedTime = "";
+    let targetStationCsoCode = "0";
+
+    const location = await Location.findOne({ site: list.site });
+
+    if (location) {
+      targetStationCsoCode = location.csoCode || "0";
+      const stationTimezone = location.timezone || "America/Toronto";
+
+      // Convert UTC createdAt date to the station's exact local timezone
+      const localMoment = moment(list.createdAt).tz(stationTimezone);
+      formattedDate = localMoment.format("MM/DD/YYYY");
+      formattedTime = localMoment.format("HH:mm:ss");
+    } else {
+      const defaultMoment = moment(list.createdAt).tz("America/Toronto");
+      formattedDate = defaultMoment.format("MM/DD/YYYY");
+      formattedTime = defaultMoment.format("HH:mm:ss");
     }
 
+    if (!isBT) {
+      csoLink = `https://03.cstoreoffice.com/daily-store-spoilage.php?Station=${targetStationCsoCode}&date_form=${formattedDate}`;
+    }
+
+    // 3. Trigger Automation (Only for 'WO' lists)
+    if (isWO) {
+      syncWriteOffToCStore({
+        targetStationCsoCode,
+        formattedDate,
+        formattedTime,
+        listNumber: list.listNumber,
+        items: list.items || [], // Passing MongoDB list items
+      }).catch((err) => {
+        console.error(`Background Automation Task Failed for WO ${list.listNumber}:`, err.message);
+      });
+    }
+
+    // 4. Notification & Email Configuration
     const hubLink = `https://app.gen7fuel.com/write-off/${list._id}`;
-
-
-    // 3. Notification Config
     const emailRecipients = {
       primaryTo: "grayson@gen7fuel.com",
-      categoryTeam: ["daksh@gen7fuel.com", "karthikeyan@gen7fuel.com", "vasu@gen7fuel.com", "Saeid@gen7fuel.com", "zyannic@bosservicesltd.com", "tejasvini@gen7fuel.com"]
+      categoryTeam: [
+        "daksh@gen7fuel.com",
+        "karthikeyan@gen7fuel.com",
+        "vasu@gen7fuel.com",
+        "Saeid@gen7fuel.com",
+        "zyannic@bosservicesltd.com",
+        "tejasvini@gen7fuel.com",
+      ],
     };
 
     const subject = isBT
       ? `Approved by Station Manager: Bistro Items - ${list.site} (${list.listNumber})`
       : `Finalized: Write-Off List - ${list.site} (${list.listNumber})`;
 
-    // const isBT = listType === 'BT';
-    const bannerColor = isBT ? "#e67e22" : "#1b5e20"; // Orange for Bistro, Green for WO
+    const bannerColor = isBT ? "#e67e22" : "#1b5e20";
     const headerTitle = isBT ? "Bistro Write-Off Approved" : "Write-Off Finalized";
 
-    // Text content based on type
     const mainMessage = isBT
       ? `The Station Manager has <strong>approved</strong> the Bistro Write-Off request for <strong>${list.site}</strong>. Please review the items in the Hub.`
       : `The Station Manager has finalized the Write-Off request for <strong>${list.site}</strong>. Please review the details in the Hub and accept the corresponding ticket in CStoreOffice.`;
 
-    // Dynamic Button Layout
-    let buttonsHTML = '';
+    let buttonsHTML = "";
     if (csoLink) {
-      // TWO BUTTONS (For WO)
       buttonsHTML = `
       <td align="center" style="padding: 10px; width: 50%;">
         <p style="margin: 0 0 10px 0; font-size: 12px; color: #666; font-weight: bold; text-transform: uppercase;">Review Details</p>
@@ -603,7 +674,6 @@ router.patch('/:id/finalize', async (req, res) => {
         <a href="${csoLink}" style="background-color: #2e7d32; color: #ffffff; padding: 14px 0; text-decoration: none; font-weight: 600; border-radius: 6px; display: block; width: 90%; font-size: 14px; text-align: center;">✅ Accept in CSO</a>
       </td>`;
     } else {
-      // ONE BUTTON (For BT)
       buttonsHTML = `
       <td align="center" style="padding: 10px; width: 100%;">
         <p style="margin: 0 0 10px 0; font-size: 12px; color: #666; font-weight: bold; text-transform: uppercase;">Review Details</p>
@@ -611,21 +681,20 @@ router.patch('/:id/finalize', async (req, res) => {
       </td>`;
     }
 
-    // 4. Trigger Hub Notification & Email Queue
-    await pushNotification({
-      io: req.app.get("io"),
-      recipientEmails: [emailRecipients.primaryTo, ...emailRecipients.categoryTeam],
-      slug: "write-off-finalized",
-      subject: subject,
-      fieldValues: {
-        site: list.site,
-        listNumber: list.listNumber,
-        bannerColor: bannerColor,
-        headerTitle: headerTitle,
-        mainMessage: mainMessage,
-        buttonsHTML: buttonsHTML,
-      }
-    });
+    // await pushNotification({
+    //   io: req.app.get("io"),
+    //   recipientEmails: [emailRecipients.primaryTo, ...emailRecipients.categoryTeam],
+    //   slug: "write-off-finalized",
+    //   subject: subject,
+    //   fieldValues: {
+    //     site: list.site,
+    //     listNumber: list.listNumber,
+    //     bannerColor: bannerColor,
+    //     headerTitle: headerTitle,
+    //     mainMessage: mainMessage,
+    //     buttonsHTML: buttonsHTML,
+    //   },
+    // });
 
     res.json(finalizedList);
   } catch (err) {
