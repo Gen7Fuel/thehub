@@ -200,7 +200,7 @@ export async function executeRetailPriceUpdate({
     // Helper: Build Dynamic Store & Permanent CC List
     // -------------------------------------------------------------------------
     const getStoreAndPermanentCCs = (station) => {
-      const ccs = ["kim@gen7fuel.com", "daksh@gen7fuel.com"];
+      const ccs = ["kporter@gen7fuel.com", "daksh@gen7fuel.com"];
 
       // Station Group 1 Mapping
       const group1Stations = ["Silver Grizzly", "Oliver", "Osoyoos", "Charlies"];
