@@ -47,6 +47,43 @@ const CANADIAN_PROVINCES = [
   "Yukon",
 ];
 
+interface DayHours {
+  open: string;
+  close: string;
+  isClosed: boolean;
+}
+
+type WeekDays =
+  | "monday"
+  | "tuesday"
+  | "wednesday"
+  | "thursday"
+  | "friday"
+  | "saturday"
+  | "sunday";
+
+type StoreHours = Record<WeekDays, DayHours>;
+
+const DAYS_OF_WEEK: { key: WeekDays; label: string }[] = [
+  { key: "monday", label: "Monday" },
+  { key: "tuesday", label: "Tuesday" },
+  { key: "wednesday", label: "Wednesday" },
+  { key: "thursday", label: "Thursday" },
+  { key: "friday", label: "Friday" },
+  { key: "saturday", label: "Saturday" },
+  { key: "sunday", label: "Sunday" },
+];
+
+const DEFAULT_STORE_HOURS: StoreHours = {
+  monday: { open: "06:00", close: "22:00", isClosed: false },
+  tuesday: { open: "06:00", close: "22:00", isClosed: false },
+  wednesday: { open: "06:00", close: "22:00", isClosed: false },
+  thursday: { open: "06:00", close: "22:00", isClosed: false },
+  friday: { open: "06:00", close: "22:00", isClosed: false },
+  saturday: { open: "06:00", close: "22:00", isClosed: false },
+  sunday: { open: "06:00", close: "22:00", isClosed: false },
+};
+
 interface PushoverDevice {
   _id?: string;
   deviceName: string;
@@ -68,6 +105,7 @@ interface LocationForm {
   gasBuddyStationId?: string;
   pushOverUserKey: string;
   devices: PushoverDevice[];
+  storeHours: StoreHours;
 }
 
 function RouteComponent() {
@@ -112,6 +150,7 @@ function RouteComponent() {
     gasBuddyStationId: "",
     pushOverUserKey: "",
     devices: [],
+    storeHours: DEFAULT_STORE_HOURS,
   });
 
   useEffect(() => {
@@ -188,6 +227,9 @@ function RouteComponent() {
         gasBuddyStationId: location.gasBuddyStationId || "",
         pushOverUserKey: location.pushOverUserKey || "",
         devices: location.devices || [],
+        storeHours: location.storeHours
+          ? { ...DEFAULT_STORE_HOURS, ...location.storeHours }
+          : DEFAULT_STORE_HOURS,
       });
       setManagerEmails(location.managerEmails || []);
       setOtp(location.managerCode?.toString() || "");
@@ -375,6 +417,38 @@ function RouteComponent() {
     }
   };
 
+  const handleHourChange = (
+    day: WeekDays,
+    field: "open" | "close",
+    value: string,
+  ) => {
+    setFormData((prev) => ({
+      ...prev,
+      storeHours: {
+        ...prev.storeHours,
+        [day]: {
+          ...prev.storeHours[day],
+          [field]: value,
+        },
+      },
+    }));
+  };
+
+  const handleClosedToggle = (day: WeekDays, isClosed: boolean) => {
+    setFormData((prev) => ({
+      ...prev,
+      storeHours: {
+        ...prev.storeHours,
+        [day]: {
+          ...prev.storeHours[day],
+          isClosed,
+          open: isClosed ? "" : prev.storeHours[day].open || "06:00",
+          close: isClosed ? "" : prev.storeHours[day].close || "22:00",
+        },
+      },
+    }));
+  };
+
   if (!location)
     return <div className="p-4 text-red-500">Location not found</div>;
 
@@ -560,6 +634,80 @@ function RouteComponent() {
                   ))}
                 </SelectContent>
               </Select>
+            </div>
+
+            {/* --- STORE HOURS SECTION --- */}
+            <div className="space-y-3 pt-2">
+              <Label className="block font-semibold text-slate-900">
+                Store Operating Hours
+              </Label>
+              <div className="border rounded-xl p-4 bg-slate-50/50 space-y-3">
+                <div className="grid grid-cols-12 gap-2 text-xs font-semibold text-slate-500 uppercase px-1">
+                  <span className="col-span-3">Day</span>
+                  <span className="col-span-3">Open</span>
+                  <span className="col-span-3">Close</span>
+                  <span className="col-span-3 text-center">Closed All Day</span>
+                </div>
+
+                {DAYS_OF_WEEK.map(({ key, label }) => {
+                  const dayData = formData.storeHours[key];
+                  return (
+                    <div
+                      key={key}
+                      className="grid grid-cols-12 gap-2 items-center bg-white border p-2.5 rounded-lg text-sm"
+                    >
+                      <span className="col-span-3 font-medium text-slate-800">
+                        {label}
+                      </span>
+
+                      <div className="col-span-3">
+                        <Input
+                          type="time"
+                          disabled={dayData.isClosed}
+                          value={dayData.open}
+                          onChange={(e) =>
+                            handleHourChange(key, "open", e.target.value)
+                          }
+                          className="h-8 text-xs bg-white"
+                        />
+                      </div>
+
+                      <div className="col-span-3">
+                        <Input
+                          type="time"
+                          disabled={dayData.isClosed}
+                          value={dayData.close}
+                          onChange={(e) =>
+                            handleHourChange(key, "close", e.target.value)
+                          }
+                          className="h-8 text-xs bg-white"
+                        />
+                      </div>
+
+                      <div className="col-span-3 flex justify-center items-center">
+                        <button
+                          type="button"
+                          aria-pressed={dayData.isClosed}
+                          onClick={() =>
+                            handleClosedToggle(key, !dayData.isClosed)
+                          }
+                          className={`relative inline-flex items-center h-5 rounded-full w-9 transition-colors ${
+                            dayData.isClosed ? "bg-red-500" : "bg-gray-300"
+                          }`}
+                        >
+                          <span
+                            className={`inline-block w-3 h-3 bg-white rounded-full transform transition-transform ${
+                              dayData.isClosed
+                                ? "translate-x-5"
+                                : "translate-x-1"
+                            }`}
+                          />
+                        </button>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
             </div>
 
             <div>

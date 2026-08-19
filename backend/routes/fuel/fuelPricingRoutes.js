@@ -4,6 +4,7 @@ const Location = require("../../models/Location");
 const moment = require("moment-timezone");
 const User = require("../../models/User"); // Ensure correct path to your User model
 const { getFuelPricingDate } = require("../../services/sqlService");
+const { downloadFromCdn } = require("../../utils/uploadToCdn"); // Adjust path as needed
 const { getPg } = require("../../config/pg");
 const { priceTimeoutQueue } = require("../../queues/priceTimeoutQueue");
 const { priceScheduleQueue } = require("../../queues/priceScheduleQueue");
@@ -938,7 +939,7 @@ router.put("/verify-price-receipt", async (req, res) => {
   // 1. Determine if this site uses an InfoNet terminal dynamically
   const hasInfonet = !SITES_WITHOUT_INFONET.includes(String(locationId));
 
-  // 2. Adjust standard parameter validations (infonetFilename is only mandatory if hasInfonet is true)
+  // 2. Adjust standard parameter validations
   if (
     !userEmail ||
     !locationId ||
@@ -951,31 +952,29 @@ router.put("/verify-price-receipt", async (req, res) => {
   }
 
   try {
-    // 3. Update the targeted log records using conditional filter constraints
+    // 3. Update targeted log records
     const updatedRows = await db("fuel_price_logs")
       .where({ site: locationId })
       .andWhere((builder) => {
         if (hasInfonet) {
-          // Standard check: Target rows where either image string is missing
           builder.whereNull("image_url").orWhereNull("infonet_image_url");
         } else {
-          // Exception check: Target rows where only the primary Bulloch image string is missing
           builder.whereNull("image_url");
         }
       })
       .where("created_at", ">=", db.raw("NOW() - INTERVAL '6 hours'"))
       .update({
         image_url: filename,
-        // If it does not have InfoNet, save it explicitly as null (or keep a static string like 'N/A' if preferred)
         infonet_image_url: hasInfonet ? infonetFilename : null,
         received_by: userIdStr,
         updated_at: db.raw("CURRENT_TIMESTAMP"),
       });
 
     console.log(
-      `⛽ Safe Audit Update Complete. Site: ${locationId} (Has InfoNet: ${hasInfonet}) | Rows Filled: ${updatedRows} within 6hr window.`,
+      `⛽ Safe Audit Update Complete. Site: ${locationId} (Has InfoNet: ${hasInfonet}) | Rows Filled: ${updatedRows} within 6hr window.`
     );
-    // 🚀 NEW: Real-time broadcast to unlock all manager and main accounts on other devices
+
+    // 🚀 Real-time broadcast to unlock all manager and main accounts on other devices
     const locationDoc = await Location.findById(locationId);
     if (locationDoc) {
       const criticalEmails = [
@@ -984,18 +983,131 @@ router.put("/verify-price-receipt", async (req, res) => {
       ].filter(Boolean);
       const targetedUsers = await User.find(
         { email: { $in: criticalEmails } },
-        "_id",
+        "_id"
       );
       const uniqueUserIds = targetedUsers.map((u) => String(u._id));
 
       const io = req.app.get("io");
       if (io && uniqueUserIds.length > 0) {
         uniqueUserIds.forEach((userId) => {
-          // Emit unlock message targeting each channel room
           io.to(userId).emit("retail-price-verified", { locationId });
         });
       }
+
+      // -----------------------------------------------------------------------
+      // 🖼️ CDN ASSET DOWNLOAD: Fetch uploaded receipts for email attachments
+      // -----------------------------------------------------------------------
+      const attachments = [];
+
+      // Download primary Bulloch receipt
+      const bullochReceipt = await downloadFromCdn(filename);
+      if (bullochReceipt) {
+        attachments.push({
+          filename: `Bulloch_Receipt_${filename}`,
+          content: bullochReceipt.content.toString("base64"), // Encoded for Queue safety
+          contentType: bullochReceipt.contentType,
+          encoding: "base64",
+        });
+      }
+
+      // Download secondary InfoNet receipt if site requires it
+      if (hasInfonet && infonetFilename) {
+        const infonetReceipt = await downloadFromCdn(infonetFilename);
+        if (infonetReceipt) {
+          attachments.push({
+            filename: `InfoNet_Receipt_${infonetFilename}`,
+            content: infonetReceipt.content.toString("base64"), // Encoded for Queue safety
+            contentType: infonetReceipt.contentType,
+            encoding: "base64",
+          });
+        }
+      }
+
+      // -----------------------------------------------------------------------
+      // ✉️ EMAIL NOTIFICATION: Notify admin/managers with attachments
+      // -----------------------------------------------------------------------
+      const targetStationName = locationDoc.stationName || locationId;
+
+      const getStoreAndPermanentCCs = (station) => {
+        const ccs = ["kporter@gen7fuel.com", "daksh@gen7fuel.com"];
+
+        const group1Stations = [
+          "Silver Grizzly",
+          "Oliver",
+          "Osoyoos",
+          "Charlies",
+        ];
+        const group2Stations = ["Couchiching", "Wavers West", "Wavers East"];
+
+        if (group1Stations.includes(station)) {
+          ccs.push("michelle@gen7fuel.com");
+        } else if (group2Stations.includes(station)) {
+          ccs.push("dennis@gen7fuel.com");
+        }
+
+        return Array.from(new Set(ccs.filter(Boolean)));
+      };
+
+      const ccEmails = getStoreAndPermanentCCs(targetStationName);
+
+      const verificationNoticeHtml = `
+        <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; border: 1px solid #e2e8f0; border-radius: 16px; background-color: #ffffff;">
+          <div style="background-color: #f0fdf4; border-left: 4px solid #16a34a; padding: 16px; border-radius: 8px; margin-bottom: 20px;">
+            <h2 style="color: #14532d; margin: 0 0 8px 0; font-size: 18px; font-weight: 800; text-transform: uppercase;">
+              ✅ Receipt Verification Submitted
+            </h2>
+            <p style="color: #166534; margin: 0; font-size: 14px; font-weight: 600; line-height: 1.5;">
+              Terminal receipt snapshots have been successfully uploaded and verified for this price change cycle.
+            </p>
+          </div>
+
+          <div style="margin-bottom: 24px;">
+            <table style="width: 100%; border-collapse: collapse;">
+              <tr>
+                <td style="padding: 6px 0; font-size: 13px; color: #64748b; font-weight: bold; width: 140px;">STATION SITE:</td>
+                <td style="padding: 6px 0; font-size: 14px; color: #0f172a; font-weight: bold;">${targetStationName}</td>
+              </tr>
+              <tr>
+                <td style="padding: 6px 0; font-size: 13px; color: #64748b; font-weight: bold;">SUBMITTED BY:</td>
+                <td style="padding: 6px 0; font-size: 14px; color: #0f172a; font-weight: bold;">${userEmail}</td>
+              </tr>
+              <tr>
+                <td style="padding: 6px 0; font-size: 13px; color: #64748b; font-weight: bold;">TERMINALS VERIFIED:</td>
+                <td style="padding: 6px 0; font-size: 14px; color: #16a34a; font-weight: bold;">
+                  ${hasInfonet ? "Bulloch POS & InfoNet Terminal" : "Bulloch POS Terminal"}
+                </td>
+              </tr>
+              <tr>
+                <td style="padding: 6px 0; font-size: 13px; color: #64748b; font-weight: bold;">AUDIT STATUS:</td>
+                <td style="padding: 6px 0; font-size: 14px; color: #16a34a; font-weight: bold;">Verified (${updatedRows} record${updatedRows === 1 ? "" : "s"} locked)</td>
+              </tr>
+            </table>
+          </div>
+
+          <p style="font-size: 14px; color: #334155; line-height: 1.6; margin-bottom: 20px;">
+            The terminal receipts have been linked to the fuel audit logs and are attached to this email for administrative review.
+          </p>
+
+          <div style="border-top: 1px solid #e2e8f0; padding-top: 16px; text-align: center;">
+            <span style="font-size: 11px; color: #94a3b8; font-style: italic;">
+              Automated operational tracking notification — Gen 7 Fuel Hub System.
+            </span>
+          </div>
+        </div>
+      `;
+
+      await emailQueue.add(
+        `price-verification-notice-${locationId}-${Date.now()}`,
+        {
+          to: "mandy@gen7fuel.com",
+          cc: ccEmails,
+          subject: `Receipt Verified: Fuel Price Change - ${targetStationName}`,
+          html: verificationNoticeHtml,
+          attachments,
+        }
+      );
     }
+
     return res.status(200).json({
       success: true,
       message: `Successfully verified and locked ${updatedRows} fuel grade rows.`,
@@ -1007,487 +1119,90 @@ router.put("/verify-price-receipt", async (req, res) => {
       .json({ message: "Failed to persist terminal verification asset." });
   }
 });
+// router.put("/verify-price-receipt", async (req, res) => {
+//   const db = getPg();
+//   const userEmail = req.user?.email;
+//   const userIdStr = req.user?._id ? String(req.user._id) : null;
+//   const { locationId, filename, infonetFilename } = req.body;
+
+//   // 1. Determine if this site uses an InfoNet terminal dynamically
+//   const hasInfonet = !SITES_WITHOUT_INFONET.includes(String(locationId));
+
+//   // 2. Adjust standard parameter validations (infonetFilename is only mandatory if hasInfonet is true)
+//   if (
+//     !userEmail ||
+//     !locationId ||
+//     !filename ||
+//     (hasInfonet && !infonetFilename)
+//   ) {
+//     return res
+//       .status(400)
+//       .json({ message: "Missing required verification data coordinates." });
+//   }
+
+//   try {
+//     // 3. Update the targeted log records using conditional filter constraints
+//     const updatedRows = await db("fuel_price_logs")
+//       .where({ site: locationId })
+//       .andWhere((builder) => {
+//         if (hasInfonet) {
+//           // Standard check: Target rows where either image string is missing
+//           builder.whereNull("image_url").orWhereNull("infonet_image_url");
+//         } else {
+//           // Exception check: Target rows where only the primary Bulloch image string is missing
+//           builder.whereNull("image_url");
+//         }
+//       })
+//       .where("created_at", ">=", db.raw("NOW() - INTERVAL '6 hours'"))
+//       .update({
+//         image_url: filename,
+//         // If it does not have InfoNet, save it explicitly as null (or keep a static string like 'N/A' if preferred)
+//         infonet_image_url: hasInfonet ? infonetFilename : null,
+//         received_by: userIdStr,
+//         updated_at: db.raw("CURRENT_TIMESTAMP"),
+//       });
+
+//     console.log(
+//       `⛽ Safe Audit Update Complete. Site: ${locationId} (Has InfoNet: ${hasInfonet}) | Rows Filled: ${updatedRows} within 6hr window.`,
+//     );
+//     // 🚀 NEW: Real-time broadcast to unlock all manager and main accounts on other devices
+//     const locationDoc = await Location.findById(locationId);
+//     if (locationDoc) {
+//       const criticalEmails = [
+//         locationDoc.email,
+//         ...(locationDoc.managerEmails || []),
+//       ].filter(Boolean);
+//       const targetedUsers = await User.find(
+//         { email: { $in: criticalEmails } },
+//         "_id",
+//       );
+//       const uniqueUserIds = targetedUsers.map((u) => String(u._id));
+
+//       const io = req.app.get("io");
+//       if (io && uniqueUserIds.length > 0) {
+//         uniqueUserIds.forEach((userId) => {
+//           // Emit unlock message targeting each channel room
+//           io.to(userId).emit("retail-price-verified", { locationId });
+//         });
+//       }
+//     }
+//     return res.status(200).json({
+//       success: true,
+//       message: `Successfully verified and locked ${updatedRows} fuel grade rows.`,
+//     });
+//   } catch (err) {
+//     console.error("Critical failure during batch log image linking:", err);
+//     return res
+//       .status(500)
+//       .json({ message: "Failed to persist terminal verification asset." });
+//   }
+// });
 
 // =========================================================================
 // UPSERT WITH DELTA CHANGE-DETECTION CONSTRAINT
 // =========================================================================
-// router.post("/upsert-retail", async (req, res) => {
-//   const { locationId, stationName, prices } = req.body;
-//   const db = getPg();
-//   const postedByUserIdStr = req.user?._id ? String(req.user._id) : null;
-//   const userEmail = req.user?.email;
-
-//   if (!locationId || !prices) {
-//     return res
-//       .status(400)
-//       .json({ message: "Missing location identification parameters." });
-//   }
-
-//   const now = new Date();
-//   const dateSK = parseInt(
-//     `${now.getFullYear()}${String(now.getMonth() + 1).padStart(2, "0")}${String(now.getDate()).padStart(2, "0")}`,
-//     10,
-//   );
-//   const currentDayName = now.toLocaleDateString("en-US", { weekday: "long" });
-
-//   try {
-//     const locationDoc = await Location.findById(locationId);
-//     if (!locationDoc) {
-//       return res
-//         .status(404)
-//         .json({ message: "Target location context not found." });
-//     }
-
-//     const hasInfonet = !SITES_WITHOUT_INFONET.includes(locationId);
-
-//     const criticalEmails = [
-//       locationDoc.email,
-//       ...(locationDoc.managerEmails || []),
-//     ].filter(Boolean);
-//     const targetedUsers = await User.find(
-//       { email: { $in: criticalEmails } },
-//       "_id email",
-//     );
-//     const uniqueUserIds = targetedUsers.map((u) => String(u._id));
-
-//     // 🚀 FIX STEP 1: Pass the transaction manager here if your model layer supports it,
-//     // to guarantee you aren't pulling from a dirty/stale outside read pool.
-//     const existingRows =
-//       await currentPriceModel.getCurrentPricesBySite(locationId);
-
-//     const changedGradesList = [];
-//     const unchangedGradesList = [];
-//     let databaseWritesExecutedCount = 0;
-
-//     const masterFrontendCodes = Object.keys(GRADE_MAP);
-
-//     await db.transaction(async (trx) => {
-//       for (const frontendCode of masterFrontendCodes) {
-//         const correspondingDbGradeName = GRADE_MAP[frontendCode];
-
-//         // Find if this grade already has a record in the database for this site
-//         const matchingDbRow = existingRows.find(
-//           (row) =>
-//             String(row.grade).trim() ===
-//             String(correspondingDbGradeName).trim(),
-//         );
-
-//         // 🚀 FIX STEP 2: Strict parsing check. If matchingDbRow exists and has a price, use it.
-//         // Check for both null/undefined AND make sure it's not an empty string check.
-//         const hasValidPriceRecord =
-//           matchingDbRow &&
-//           matchingDbRow.price !== null &&
-//           matchingDbRow.price !== undefined;
-
-//         const currentDbPrice = hasValidPriceRecord
-//           ? parseFloat(matchingDbRow.price)
-//           : 0;
-//         const isNewRecordForSite = !hasValidPriceRecord;
-
-//         const targetPriceRaw = prices[frontendCode];
-
-//         if (targetPriceRaw === undefined || targetPriceRaw === null) {
-//           if (isNewRecordForSite) {
-//             continue; // No price provided for a brand new site grade? Skip it.
-//           }
-//         }
-
-//         const parsedTargetPrice =
-//           targetPriceRaw !== undefined && targetPriceRaw !== null
-//             ? parseFloat(targetPriceRaw)
-//             : currentDbPrice;
-
-//         const itemStatePayload = {
-//           gradeId: frontendCode,
-//           label: correspondingDbGradeName,
-//           oldPrice: isNewRecordForSite ? null : currentDbPrice, // 🚀 Will now accurately bind currentDbPrice float
-//           newPrice: parsedTargetPrice,
-//         };
-
-//         // Delta Engine Validation:
-//         if (!isNewRecordForSite && currentDbPrice === parsedTargetPrice) {
-//           unchangedGradesList.push(itemStatePayload);
-//         } else {
-//           databaseWritesExecutedCount++;
-//           changedGradesList.push(itemStatePayload);
-
-//           // Pass structural fallback tracking arguments down to SQL layer
-//           await currentPriceModel.upsertCurrentPrice(
-//             {
-//               site: locationId,
-//               grade: correspondingDbGradeName,
-//               price: parsedTargetPrice,
-//               old_price: isNewRecordForSite ? null : currentDbPrice,
-//               last_updated_by: postedByUserIdStr,
-//             },
-//             trx,
-//           );
-
-//           // Persist historical snapshot directly into audit logger row
-//           await logsModel.createLog(
-//             {
-//               date: dateSK,
-//               day: currentDayName,
-//               site: locationId,
-//               grade: correspondingDbGradeName,
-//               price: parsedTargetPrice,
-//               old_price: isNewRecordForSite ? null : currentDbPrice,
-//               image_url: null,
-//               infonet_image_url: null,
-//               posted_by: postedByUserIdStr,
-//             },
-//             trx,
-//           );
-//         }
-//       }
-//     });
-
-//     // -------------------------------------------------------------------------
-//     // 🚀 UNCONDITIONAL GASBUDDY BACKGROUND BROADCAST (WITH SYSTEM INSULATION)
-//     // -------------------------------------------------------------------------
-//     try {
-//       if (locationDoc.gasBuddyStationId) {
-//         const normalizedPrices = {};
-
-//         for (const [feCode, numericPrice] of Object.entries(prices)) {
-//           // Explicitly drop Dyed Diesel so we don't pass untaxed commercial fuel to GasBuddy
-//           if (feCode === 'DYED') continue;
-
-//           // Lookup the readable name using your existing file-level GRADE_MAP (e.g., 'REG' -> 'Regular')
-//           const gasBuddyLabel = GRADE_MAP[feCode];
-
-//           // Pass the numeric decimal float (e.g., 1.532) directly to match your test harness format
-//           if (gasBuddyLabel && numericPrice !== undefined && numericPrice !== null) {
-//             normalizedPrices[gasBuddyLabel] = parseFloat(numericPrice);
-//           }
-//         }
-
-//         // Verify we built a clean, qualified set of public fuel grades before pushing to Redis
-//         if (Object.keys(normalizedPrices).length > 0) {
-//           await gasBuddyQueue.add(
-//             `gasbuddy-sync-${locationId}-${Date.now()}`,
-//             {
-//               gasBuddyStationId: locationDoc.gasBuddyStationId,
-//               stationName: stationName,
-//               prices: normalizedPrices // Dispatches clean format: { "Regular": 1.532, "Mid Grade": 1.694 }
-//             },
-//             {
-//               removeOnComplete: true,
-//               removeOnFail: false // Kept in BullMQ dashboard for fail-safe visual troubleshooting
-//             }
-//           );
-//           console.log(`🤖 GasBuddy background verification job successfully queued for ${stationName}`);
-//         } else {
-//           console.log(`ℹ️ GasBuddy skipped: No qualifying public fuel grades provided in request payload.`);
-//         }
-//       } else {
-//         console.log(`ℹ️ GasBuddy update skipped: No gasBuddyStationId configuration mapped for ${stationName}`);
-//       }
-//     } catch (gasBuddyQueueError) {
-//       // 🛡️ Complete Isolation Guardrail
-//       // Traps any Redis disconnects or BullMQ internal failures here so the main HTTP transaction remains unaffected.
-//       console.error("💥 CRITICAL NON-BLOCKING EXCEPTION: GasBuddy queue dispatch failed.", gasBuddyQueueError);
-//     }
-
-//     // -------------------------------------------------------------------------
-//     // DISPATCH NOTIFICATIONS & TIMER ON CHANGES DETECTED
-//     // -------------------------------------------------------------------------
-//     if (databaseWritesExecutedCount > 0) {
-//       const storeEmail = locationDoc.email;
-//       const targetStationName = stationName || locationDoc.stationName;
-
-//       // Dynamically compile CC targets (Manager emails + user session context email)
-//       const baseCCEmails = Array.isArray(locationDoc.managerEmails) ? [...locationDoc.managerEmails, "kporter@gen7fuel.com", "daksh@gen7fuel.com"] : ["kporter@gen7fuel.com", "daksh@gen7fuel.com"];
-
-//       // 1. Send IMMEDIATE general update alert to store, copying managers & admin
-//       const initialNoticeHtml = `
-//         <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; border: 1px solid #e2e8f0; border-radius: 16px; background-color: #ffffff;">
-//           <div style="background-color: #f0fdf4; border-left: 4px solid #16a34a; padding: 16px; border-radius: 8px; margin-bottom: 20px;">
-//             <h2 style="color: #14532d; margin: 0 0 8px 0; font-size: 18px; font-weight: 800; text-transform: uppercase;">
-//               🔔 Notice: Fuel Prices Updated
-//             </h2>
-//             <p style="color: #166534; margin: 0; font-size: 14px; font-weight: 600; line-height: 1.5;">
-//               New retail prices have just been published for your station location. Please update your system registers immediately.
-//             </p>
-//           </div>
-
-//           <div style="margin-bottom: 24px;">
-//             <table style="width: 100%; border-collapse: collapse;">
-//               <tr>
-//                 <td style="padding: 6px 0; font-size: 13px; color: #64748b; font-weight: bold; width: 120px;">STATION SITE:</td>
-//                 <td style="padding: 6px 0; font-size: 14px; color: #0f172a; font-weight: bold;">${targetStationName}</td>
-//               </tr>
-//               <tr>
-//                 <td style="padding: 6px 0; font-size: 13px; color: #64748b; font-weight: bold;">STATUS:</td>
-//                 <td style="padding: 6px 0; font-size: 14px; color: #16a34a; font-weight: bold;">Awaiting Bulloch & InfoNet Snapshots</td>
-//               </tr>
-//             </table>
-//           </div>
-
-//           <p style="font-size: 14px; color: #334155; line-height: 1.6; margin-bottom: 20px;">
-//             Please log into the Gen7 Fuel Hub on your station account, finalize the price adjustments on your physical point-of-sale registers, and upload the required Bulloch and InfoNet receipt imagery to complete the audit cycle.
-//           </p>
-
-//           <div style="border-top: 1px solid #e2e8f0; padding-top: 16px; text-align: center;">
-//             <span style="font-size: 11px; color: #94a3b8; font-style: italic;">
-//               Automated operational tracking notification — Gen 7 Fuel Hub System.
-//             </span>
-//           </div>
-//         </div>
-//       `;
-
-//       await emailQueue.add(`immediate-price-notice-${locationId}-${Date.now()}`, {
-//         to: storeEmail,
-//         cc: baseCCEmails,
-//         // to: "daksh@gen7fuel.com",
-//         subject: `⛽ Notification: New Fuel Prices Published - ${targetStationName}`,
-//         html: initialNoticeHtml
-//       });
-//       console.log(`📧 Immediate update notification queued into BullMQ for ${targetStationName}.`);
-
-//       // 2. WATCHDOG DELAYED TIMER PIPELINE (BULLMQ)
-//       // Admin routing for the 30-min escalation
-//       const primaryAdminEmail = "Mandy@gen7fuel.com";
-//       const adminCCEmails = ["kellie@gen7fuel.com", "daksh@gen7fuel.com", "kporter@gen7fuel.com"];
-
-//       // -------------------------------------------------------------------------
-//       // 1. TEMPLATE: 15-Minute Store Reminder Email (Kept your exact style)
-//       // -------------------------------------------------------------------------
-//       const storeReminderHtml = `
-//         <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; border: 1px solid #e2e8f0; border-radius: 16px; background-color: #ffffff;">
-//           <div style="background-color: #fffbeb; border-left: 4px solid #d97706; padding: 16px; border-radius: 8px; margin-bottom: 20px;">
-//             <h2 style="color: #92400e; margin: 0 0 8px 0; font-size: 18px; font-weight: 800; text-transform: uppercase;">
-//               ⚠️ Action Required: Complete Fuel Price Update
-//             </h2>
-//             <p style="color: #78350f; margin: 0; font-size: 14px; font-weight: 600; line-height: 1.5;">
-//               New retail prices were published for your station 15 minutes ago. This is a friendly reminder to ensure your registers are updated and your confirmation snapshots are uploaded.
-//             </p>
-//           </div>
-
-//           <div style="margin-bottom: 24px;">
-//             <table style="width: 100%; border-collapse: collapse;">
-//               <tr>
-//                 <td style="padding: 6px 0; font-size: 13px; color: #64748b; font-weight: bold; width: 120px;">STATION SITE:</td>
-//                 <td style="padding: 6px 0; font-size: 14px; color: #0f172a; font-weight: bold;">${targetStationName}</td>
-//               </tr>
-//               <tr>
-//                 <td style="padding: 6px 0; font-size: 13px; color: #64748b; font-weight: bold;">STATUS:</td>
-//                 <td style="padding: 6px 0; font-size: 14px; color: #b45309; font-weight: bold;">Awaiting Bulloch & InfoNet Snapshots</td>
-//               </tr>
-//             </table>
-//           </div>
-
-//           <p style="font-size: 14px; color: #334155; line-height: 1.6; margin-bottom: 20px;">
-//             Please log into the Gen7 Fuel Hub on your station account, and finalize the price adjustments on your registers, and upload the required receipt imagery to resolve this flag.
-//           </p>
-
-//           <div style="border-top: 1px solid #e2e8f0; padding-top: 16px; text-align: center;">
-//             <span style="font-size: 11px; color: #94a3b8; font-style: italic;">
-//               Automated operational tracking reminder — Gen 7 Fuel Hub System.
-//             </span>
-//           </div>
-//         </div>
-//       `;
-
-//       // -------------------------------------------------------------------------
-//       // 2. TEMPLATE: 30-Minute Admin Escalation Email (Plain & understandable)
-//       // -------------------------------------------------------------------------
-//       const adminEscalationHtml = `
-//         <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; color: #334155; line-height: 1.6;">
-//           <h2 style="color: #dc2626; font-size: 18px; margin-top: 0; font-weight: 800; text-transform: uppercase; tracking-tight">
-//             🚨 Alert: Price Verification Overdue (30 Mins)
-//           </h2>
-
-//           <p style="font-size: 14px; color: #334155;">
-//             The pricing change you pushed to <strong>${targetStationName}</strong> remains unverified.
-//             The store has not uploaded any Bulloch or InfoNet register images to the Hub to complete the fuel price update workflow.
-//           </p>
-
-//           <div style="background-color: #f8fafc; border: 1px solid #e2e8f0; padding: 14px; border-radius: 12px; margin: 18px 0; font-size: 13px;">
-//             <table style="width: 100%; border-collapse: collapse;">
-//               <tr>
-//                 <td style="padding: 4px 0; color: #64748b; font-weight: bold; width: 110px;">LOCATION:</td>
-//                 <td style="padding: 4px 0; color: #0f172a; font-weight: bold;">${targetStationName}</td>
-//               </tr>
-//               <tr>
-//                 <td style="padding: 4px 0; color: #64748b; font-weight: bold;">ELAPSED TIME:</td>
-//                 <td style="padding: 4px 0; color: #dc2626; font-weight: bold;">30 Minutes</td>
-//               </tr>
-//               <tr>
-//                 <td style="padding: 4px 0; color: #64748b; font-weight: bold;">STATUS:</td>
-//                 <td style="padding: 4px 0; color: #475569; font-weight: bold;">Awaiting Register Snapshots</td>
-//               </tr>
-//             </table>
-//           </div>
-
-//           <div style="border-top: 1px solid #e2e8f0; padding-top: 14px; margin-top: 20px;">
-//             <span style="font-size: 11px; color: #94a3b8; font-style: italic;">
-//               Automated pricing supervisor log — Gen 7 Fuel Hub Operational Pipeline.
-//             </span>
-//           </div>
-//         </div>
-//       `;
-
-//       // -------------------------------------------------------------------------
-//       // SCHEDULE TASKS
-//       // -------------------------------------------------------------------------
-
-//       // Task A: 15-Minute Store Watchdog Reminder
-//       await priceTimeoutQueue.add(
-//         `timeout-reminder-${locationId}-${Date.now()}`,
-//         {
-//           locationId: locationId,
-//           stationName: targetStationName,
-//           toEmail: storeEmail,
-//           ccEmails: baseCCEmails,
-//           // ccEmails: ["daksh@gen7fuel.com"],
-//           subject: `⛽ Urgent Reminder: Update & Verify Fuel Prices - ${targetStationName}`,
-//           html: storeReminderHtml,
-//           hasInfonet: hasInfonet // 🚀 Target Flag
-//         },
-//         {
-//           delay: 15 * 60 * 1000, // 15-Minute delay
-//           removeOnComplete: true,
-//           removeOnFail: true
-//         }
-//       );
-
-//       // Task B: 30-Minute Admin Escalation Watchdog
-//       await priceTimeoutQueue.add(
-//         `timeout-admin-escalation-${locationId}-${Date.now()}`,
-//         {
-//           locationId: locationId,
-//           stationName: targetStationName,
-//           toEmail: userEmail || primaryAdminEmail,
-//           ccEmails: adminCCEmails,
-//           // toEmail: storeEmail,
-//           // ccEmails: ["daksh@gen7fuel.com"],
-//           subject: `🚨 Unverified Price Update Alert: ${targetStationName} (30 Mins Overdue)`,
-//           html: adminEscalationHtml,
-//           hasInfonet: hasInfonet // 🚀 Target Flag
-//         },
-//         {
-//           delay: 30 * 60 * 1000, // 30-Minute delay
-//           removeOnComplete: true,
-//           removeOnFail: true
-//         }
-//       );
-
-//       console.log(`⏱️ Multi-Tier Watchdog Initialized: Scheduled 15-min store reminder and 30-min admin alert for ${targetStationName}.`);
-//       // -------------------------------------------------------------------------
-//       // 🚀 3. MARKETING TEAM PRICE COMPARISON HIGHLIGHTS REPORT (NEW)
-//       // -------------------------------------------------------------------------
-//       let marketingRowsHtml = '';
-
-//       // Compile changed rows into view engine
-//       for (const item of changedGradesList) {
-//         const displayOld = item.oldPrice !== null ? `${Number(item.oldPrice).toFixed(4)}¢` : '--';
-//         marketingRowsHtml += `
-//           <tr style="border-bottom: 1px solid #f1f5f9;">
-//             <td style="padding: 12px; font-size: 14px; font-weight: bold; color: #1e293b;">${item.label}</td>
-//             <td style="padding: 12px; font-size: 14px; color: #64748b; text-decoration: line-through;">${displayOld}</td>
-//             <td style="padding: 12px; font-size: 15px; font-weight: 800; color: #16a34a;">${Number(item.newPrice).toFixed(4)}¢</td>
-//             <td style="padding: 12px; text-align: right;">
-//               <span style="display: inline-block; background-color: #dcfce7; color: #15803d; font-size: 11px; font-weight: bold; padding: 4px 8px; border-radius: 6px; text-transform: uppercase;">
-//                 Updated
-//               </span>
-//             </td>
-//           </tr>
-//         `;
-//       }
-
-//       // Compile unchanged rows into view engine
-//       for (const item of unchangedGradesList) {
-//         marketingRowsHtml += `
-//           <tr style="border-bottom: 1px solid #f1f5f9; background-color: #f8fafc;">
-//             <td style="padding: 12px; font-size: 14px; font-weight: bold; color: #64748b;">${item.label}</td>
-//             <td style="padding: 12px; font-size: 14px; color: #94a3b8;">--</td>
-//             <td style="padding: 12px; font-size: 14px; font-weight: bold; color: #475569;">${Number(item.newPrice).toFixed(4)}¢</td>
-//             <td style="padding: 12px; text-align: right;">
-//               <span style="display: inline-block; background-color: #e2e8f0; color: #475569; font-size: 11px; font-weight: bold; padding: 4px 8px; border-radius: 6px; text-transform: uppercase;">
-//                 Unchanged
-//               </span>
-//             </td>
-//           </tr>
-//         `;
-//       }
-
-//       const marketingReportHtml = `
-//         <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; border: 1px solid #cbd5e1; border-radius: 16px; background-color: #ffffff;">
-//           <div style="background-color: #f8fafc; border-bottom: 2px solid #e2e8f0; padding: 16px; border-radius: 12px 12px 0 0; margin-bottom: 20px;">
-//             <h3 style="color: #334155; margin: 0 0 4px 0; font-size: 16px; font-weight: 800; text-transform: uppercase; letter-spacing: 0.5px;">
-//               📊 Fuel Price Ledger
-//             </h3>
-//             <h2 style="color: #0f172a; margin: 0; font-size: 20px; font-weight: 900;">
-//               ${targetStationName}
-//             </h2>
-//           </div>
-
-//           <p style="font-size: 14px; color: #475569; line-height: 1.5; margin-bottom: 20px;">
-//             The retail pricing board for this station location has been altered. Here are the comparisons mapping against current vs old prices:
-//           </p>
-
-//           <table style="width: 100%; border-collapse: collapse; margin-bottom: 24px; text-align: left;">
-//             <thead>
-//               <tr style="background-color: #f1f5f9; border-bottom: 2px solid #cbd5e1;">
-//                 <th style="padding: 10px 12px; font-size: 12px; font-weight: bold; color: #475569; text-transform: uppercase;">Fuel Grade</th>
-//                 <th style="padding: 10px 12px; font-size: 12px; font-weight: bold; color: #475569; text-transform: uppercase;">Old Price</th>
-//                 <th style="padding: 10px 12px; font-size: 12px; font-weight: bold; color: #475569; text-transform: uppercase;">New Price</th>
-//                 <th style="padding: 10px 12px; font-size: 12px; font-weight: bold; color: #475569; text-transform: uppercase; text-align: right;">Status</th>
-//               </tr>
-//             </thead>
-//             <tbody>
-//               ${marketingRowsHtml}
-//             </tbody>
-//           </table>
-
-//           <div style="border-top: 1px solid #e2e8f0; padding-top: 16px; text-align: center;">
-//             <span style="font-size: 11px; color: #94a3b8; font-style: italic;">
-//               Internal price distribution ledger — Gen 7 Fuel Hub Operational Network.
-//             </span>
-//           </div>
-//         </div>
-//       `;
-
-//       await emailQueue.add(`marketing-price-sync-${locationId}-${Date.now()}`, {
-//         to: "marketing@gen7fuel.com", // Keeping marketing layout to your email for initial preview testing
-//         subject: `📊 Fuel Pricing Sync Summary: ${targetStationName}`,
-//         html: marketingReportHtml
-//       });
-//       console.log(`📧 Marketing highlights overview report queued successfully into BullMQ for ${targetStationName}.`);
-//     }
-
-//     // BROADCAST PIPELINE: This payload will now ALWAYS contain the full 5 grades
-//     const io = req.app.get("io");
-//     if (io && uniqueUserIds.length > 0) {
-//       const socketPayload = {
-//         stationName: stationName,
-//         locationId: locationId,
-//         changedGrades: changedGradesList,
-//         unchangedGrades: unchangedGradesList,
-//         hasStructuralChanges: changedGradesList.length > 0,
-//         hasInfonet: hasInfonet, // 🚀 Socket Broadcast Flag payload
-//       };
-
-//       uniqueUserIds.forEach((userId) => {
-//         io.to(userId).emit("retail-price-published", socketPayload);
-//       });
-//     }
-
-//     return res.status(200).json({
-//       success: true,
-//       updatesApplied: databaseWritesExecutedCount,
-//       notifiedUserCount: uniqueUserIds.length,
-//     });
-//   } catch (err) {
-//     console.error("Transaction Pipeline Failed:", err);
-//     return res.status(500).json({ message: "Persistence layer failure." });
-//   }
-// });
-
 router.post("/upsert-retail", async (req, res) => {
-  const { locationId, stationName, prices, isScheduled, scheduledDateTime } =
-    req.body;
+  const { locationId, stationName, prices, isScheduled, scheduledDateTime } = req.body;
   const db = getPg();
   const postedByUserIdStr = req.user?._id ? String(req.user._id) : null;
   const userEmail = req.user?.email;
@@ -1506,36 +1221,89 @@ router.post("/upsert-retail", async (req, res) => {
         .json({ message: "Target location context not found." });
     }
 
-    // Determine target location timezone (fallback to Americas/Toronto index configurations)
+    // Determine target location timezone
     const targetTimezone = locationDoc.timezone || "America/Toronto";
     const io = req.app.get("io");
 
     // -------------------------------------------------------------------------
-    // BRANCH A: DELAYED TASK SCHEDULING PIPELINE (Per-Grade Rows)
+    // STORE HOURS UTILITY: Find target execution moment if closed
     // -------------------------------------------------------------------------
+    const nowInStationTZ = moment().tz(targetTimezone);
+    
+    // Helper function to resolve the target execution moment based on operating hours
+    const getTargetExecutionMoment = (nowMoment, storeHours) => {
+      if (!storeHours) return nowMoment; // Fallback to immediate if hours aren't defined
+
+      for (let dayOffset = 0; dayOffset < 7; dayOffset++) {
+        const candidateDate = nowMoment.clone().add(dayOffset, "days");
+        const dayKey = candidateDate.format("dddd").toLowerCase();
+        const dayConfig = storeHours[dayKey];
+
+        // Skip completely closed days or invalid configs
+        if (!dayConfig || dayConfig.isClosed || !dayConfig.open || !dayConfig.close) {
+          continue;
+        }
+
+        const [openHour, openMinute] = dayConfig.open.split(":").map(Number);
+        const [closeHour, closeMinute] = dayConfig.close.split(":").map(Number);
+
+        const openMoment = candidateDate.clone().hour(openHour).minute(openMinute).second(0).millisecond(0);
+        const closeMoment = candidateDate.clone().hour(closeHour).minute(closeMinute).second(0).millisecond(0);
+
+        if (dayOffset === 0) {
+          // TODAY: If currently within operating hours, execute immediately
+          if (nowMoment.isSameOrAfter(openMoment) && nowMoment.isBefore(closeMoment)) {
+            return nowMoment;
+          }
+          // TODAY: If before store open, schedule for today's opening time
+          if (nowMoment.isBefore(openMoment)) {
+            return openMoment;
+          }
+          // TODAY: If after store close, continue loop to look at next days
+        } else {
+          // FUTURE DAY: Schedule for the candidate day's opening time
+          return openMoment;
+        }
+      }
+
+      return nowMoment; // Emergency fallback if all 7 days are marked closed
+    };
+
+    // Determine target execution time for explicit or implicit scheduling
+    let finalTargetMoment = null;
+    let isAutoDeferred = false;
+
     if (isScheduled && scheduledDateTime) {
-      const nowInStationTZ = moment().tz(targetTimezone);
-      const targetTimeInStationTZ = moment.tz(
-        scheduledDateTime,
-        targetTimezone,
-      );
-
-      let calculatedDelayMs = targetTimeInStationTZ.diff(nowInStationTZ);
-
-      if (calculatedDelayMs <= 0) {
+      // Manual User-Defined Schedule
+      finalTargetMoment = moment.tz(scheduledDateTime, targetTimezone);
+      if (finalTargetMoment.diff(nowInStationTZ) <= 0) {
         return res
           .status(400)
           .json({ message: "Scheduled date and time must be in the future." });
       }
+    } else {
+      // Immediate Publish: Check against Store Operating Hours
+      const targetMoment = getTargetExecutionMoment(nowInStationTZ, locationDoc.storeHours);
+      if (targetMoment.isAfter(nowInStationTZ)) {
+        finalTargetMoment = targetMoment;
+        isAutoDeferred = true;
+      }
+    }
 
-      // Subtract 10-second safety cushion buffer
+    // -------------------------------------------------------------------------
+    // BRANCH A: QUEUE SCHEDULED EXECUTION (Manual OR Deferred Off-Hours)
+    // -------------------------------------------------------------------------
+    if (finalTargetMoment) {
+      let calculatedDelayMs = finalTargetMoment.diff(nowInStationTZ);
+
+      // Subtract 10-second safety buffer to align execution closely with exact time
       const safetyBufferMs = 10 * 1000;
       calculatedDelayMs = Math.max(0, calculatedDelayMs - safetyBufferMs);
 
       const masterFrontendCodes = Object.keys(GRADE_MAP);
-      const dbTimestamp = targetTimeInStationTZ.toDate();
+      const dbTimestamp = finalTargetMoment.toDate();
 
-      // Update the scheduling details for EACH grade row for this site
+      // Persist scheduled states across grade records
       await db.transaction(async (trx) => {
         for (const frontendCode of masterFrontendCodes) {
           const correspondingDbGradeName = GRADE_MAP[frontendCode];
@@ -1549,14 +1317,14 @@ router.post("/upsert-retail", async (req, res) => {
               })
               .update({
                 is_scheduled: true,
-                scheduled_date_time: targetTimeInStationTZ.toDate(),
+                scheduled_date_time: dbTimestamp,
                 scheduled_price: parseFloat(targetPriceRaw),
               });
           }
         }
       });
 
-      // Dispatch a single worker trigger for the station safely
+      // Dispatch job to BullMQ queue
       await priceScheduleQueue.add(
         `execute-scheduled-price-${locationId}-${Date.now()}`,
         {
@@ -1565,24 +1333,31 @@ router.post("/upsert-retail", async (req, res) => {
           postedByUserIdStr,
           userEmail,
           isSocketEnabled: true,
-          lockScheduledDateTime: dbTimestamp.toISOString(), // ✅ The Validation Lock
+          lockScheduledDateTime: dbTimestamp.toISOString(),
         },
         {
           delay: calculatedDelayMs,
           removeOnComplete: true,
           removeOnFail: false,
-        },
+        }
       );
+
+      const formattedTime = finalTargetMoment.format("YYYY-MM-DD hh:mm A z");
+      const scheduleMessage = isAutoDeferred
+        ? `Station is currently closed. Price updates automatically scheduled for store opening at ${formattedTime}.`
+        : `Price adjustments scheduled successfully across grades. Execution set for ${formattedTime}.`;
 
       return res.status(200).json({
         success: true,
-        message: `Price adjustments scheduled successfully across grades. Execution in ~${Math.round(calculatedDelayMs / 1000)}s.`,
+        message: scheduleMessage,
         isScheduled: true,
+        scheduledDateTime: dbTimestamp,
+        autoDeferred: isAutoDeferred,
       });
     }
 
     // -------------------------------------------------------------------------
-    // BRANCH B: IMMEDIATE INTERACTIVE LIVE PUBLISH
+    // BRANCH B: IMMEDIATE LIVE PUBLISH (Store is currently OPEN)
     // -------------------------------------------------------------------------
     const executionResults = await executeRetailPriceUpdate({
       locationId,
@@ -1605,6 +1380,127 @@ router.post("/upsert-retail", async (req, res) => {
       .json({ message: "Persistence engine operation failure." });
   }
 });
+
+// router.post("/upsert-retail", async (req, res) => {
+//   const { locationId, stationName, prices, isScheduled, scheduledDateTime } =
+//     req.body;
+//   const db = getPg();
+//   const postedByUserIdStr = req.user?._id ? String(req.user._id) : null;
+//   const userEmail = req.user?.email;
+
+//   if (!locationId || !prices) {
+//     return res
+//       .status(400)
+//       .json({ message: "Missing location identification parameters." });
+//   }
+
+//   try {
+//     const locationDoc = await Location.findById(locationId);
+//     if (!locationDoc) {
+//       return res
+//         .status(404)
+//         .json({ message: "Target location context not found." });
+//     }
+
+//     // Determine target location timezone (fallback to Americas/Toronto index configurations)
+//     const targetTimezone = locationDoc.timezone || "America/Toronto";
+//     const io = req.app.get("io");
+
+//     // -------------------------------------------------------------------------
+//     // BRANCH A: DELAYED TASK SCHEDULING PIPELINE (Per-Grade Rows)
+//     // -------------------------------------------------------------------------
+//     if (isScheduled && scheduledDateTime) {
+//       const nowInStationTZ = moment().tz(targetTimezone);
+//       const targetTimeInStationTZ = moment.tz(
+//         scheduledDateTime,
+//         targetTimezone,
+//       );
+
+//       let calculatedDelayMs = targetTimeInStationTZ.diff(nowInStationTZ);
+
+//       if (calculatedDelayMs <= 0) {
+//         return res
+//           .status(400)
+//           .json({ message: "Scheduled date and time must be in the future." });
+//       }
+
+//       // Subtract 10-second safety cushion buffer
+//       const safetyBufferMs = 10 * 1000;
+//       calculatedDelayMs = Math.max(0, calculatedDelayMs - safetyBufferMs);
+
+//       const masterFrontendCodes = Object.keys(GRADE_MAP);
+//       const dbTimestamp = targetTimeInStationTZ.toDate();
+
+//       // Update the scheduling details for EACH grade row for this site
+//       await db.transaction(async (trx) => {
+//         for (const frontendCode of masterFrontendCodes) {
+//           const correspondingDbGradeName = GRADE_MAP[frontendCode];
+//           const targetPriceRaw = prices[frontendCode];
+
+//           if (targetPriceRaw !== undefined && targetPriceRaw !== null) {
+//             await trx("fuel_current_price")
+//               .where({
+//                 site: locationId,
+//                 grade: correspondingDbGradeName,
+//               })
+//               .update({
+//                 is_scheduled: true,
+//                 scheduled_date_time: targetTimeInStationTZ.toDate(),
+//                 scheduled_price: parseFloat(targetPriceRaw),
+//               });
+//           }
+//         }
+//       });
+
+//       // Dispatch a single worker trigger for the station safely
+//       await priceScheduleQueue.add(
+//         `execute-scheduled-price-${locationId}-${Date.now()}`,
+//         {
+//           locationId,
+//           stationName,
+//           postedByUserIdStr,
+//           userEmail,
+//           isSocketEnabled: true,
+//           lockScheduledDateTime: dbTimestamp.toISOString(), // ✅ The Validation Lock
+//         },
+//         {
+//           delay: calculatedDelayMs,
+//           removeOnComplete: true,
+//           removeOnFail: false,
+//         },
+//       );
+
+//       return res.status(200).json({
+//         success: true,
+//         message: `Price adjustments scheduled successfully across grades. Execution in ~${Math.round(calculatedDelayMs / 1000)}s.`,
+//         isScheduled: true,
+//       });
+//     }
+
+//     // -------------------------------------------------------------------------
+//     // BRANCH B: IMMEDIATE INTERACTIVE LIVE PUBLISH
+//     // -------------------------------------------------------------------------
+//     const executionResults = await executeRetailPriceUpdate({
+//       locationId,
+//       stationName,
+//       prices,
+//       postedByUserIdStr,
+//       userEmail,
+//       appIo: io,
+//     });
+
+//     return res.status(200).json({
+//       success: true,
+//       updatesApplied: executionResults.databaseWritesExecutedCount,
+//       notifiedUserCount: executionResults.uniqueUserIdsCount,
+//     });
+//   } catch (err) {
+//     console.error("Transaction Pipeline Process Interrupted:", err);
+//     return res
+//       .status(500)
+//       .json({ message: "Persistence engine operation failure." });
+//   }
+// });
 
 // -------------------------------------------------------------------------
 // ROUTE 1: CANCEL / DELETE ENTIRE SITE SCHEDULE
