@@ -30,7 +30,10 @@ const {
     setPayableAmount: vi.fn(),
     payableImages: [] as string[],
     setPayableImages: vi.fn(),
-    date: new Date('2026-03-10') as Date | undefined,
+    // Local-midnight construction, matching how the Calendar picker actually
+    // produces dates — new Date('2026-03-10') would parse as UTC midnight and
+    // shift a day in negative-UTC-offset timezones.
+    date: new Date(2026, 2, 10) as Date | undefined,
     setDate: vi.fn(),
     resetPayableForm: vi.fn(),
   }
@@ -192,7 +195,7 @@ const resetStore = () => {
   mockStore.payablePaymentMethod = 'safe'
   mockStore.payableAmount = 150
   mockStore.payableImages = []
-  mockStore.date = new Date('2026-03-10')
+  mockStore.date = new Date(2026, 2, 10)
 }
 
 const PayableForm = (IndexRoute as any).component as React.ComponentType
@@ -628,10 +631,7 @@ describe('Payable Review — review.tsx', () => {
             location: 'Rankin',
             paymentMethod: 'safe',
             amount: 150,
-            // mockStore.date = new Date('2026-03-10') parses as UTC
-            // midnight, which is 2026-03-09 evening in the America/Toronto
-            // test environment — format() renders the local calendar date.
-            date: '2026-03-09',
+            date: '2026-03-10',
           }),
           queuedAt: expect.any(Number),
         })
