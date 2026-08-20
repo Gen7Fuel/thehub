@@ -212,26 +212,26 @@ describe('parsePlanogramWorkbook', () => {
 // ─── isOffPlanogram ───────────────────────────────────────────────────────────
 
 describe('planogramKey', () => {
-  it('prefers crtCode over gtin when the item has one', () => {
+  it('prefers gtin over crtCode when the item has both', () => {
     expect(planogramKey({ gtin: '00001911605605', crtCode: '1966850289' })).toBe(
-      '00001966850289',
+      '00001911605605',
     )
   })
 
-  it('falls back to gtin when there is no crtCode', () => {
-    for (const crtCode of ['', null, undefined]) {
-      expect(planogramKey({ gtin: '00042100008715', crtCode })).toBe('00042100008715')
+  it('falls back to crtCode when there is no gtin', () => {
+    for (const gtin of ['', null, undefined]) {
+      expect(planogramKey({ gtin, crtCode: '1966850289' })).toBe('00001966850289')
     }
   })
 
-  // A CSV that has been through Excel renders column B as "6.80085E+11" — the
-  // real digits are already gone. Falling back to the gtin is the only honest
-  // move; matching on the mangled text would flag a real product.
-  it('falls back to gtin when the crtCode is unreadable', () => {
-    expect(planogramKey({ gtin: '00042100008715', crtCode: '6.80085E+11' })).toBe(
-      '00042100008715',
+  // A CSV that has been through Excel can render column A as "6.80085E+11" —
+  // the real digits are already gone. Falling back to crtCode is the only
+  // honest move; matching on the mangled text would flag a real product.
+  it('falls back to crtCode when the gtin is unreadable', () => {
+    expect(planogramKey({ gtin: '6.80085E+11', crtCode: '1966850289' })).toBe(
+      '00001966850289',
     )
-    expect(planogramKey({ gtin: '00042100008715', crtCode: '↑' })).toBe('00042100008715')
+    expect(planogramKey({ gtin: '↑', crtCode: '1966850289' })).toBe('00001966850289')
   })
 
   it('is null only when neither code is readable', () => {
@@ -288,14 +288,14 @@ describe('isOffPlanogram', () => {
   })
 
   // The reason this feature was rebuilt. A cigarette item's gtin is the PACK
-  // barcode; the planogram lists the carton code. Comparing the gtin flagged
-  // every carton-sold product in the file.
+  // barcode; the planogram lists the carton code. Comparing the gtin alone
+  // flagged every carton-sold product in the file.
   describe('carton-sold items', () => {
     // "Putters KO LT 20": pack barcode in column A, carton code in column B of
     // the CRT row. Only the carton code is on the planogram.
     const cartonPlanogram = new Set(['00001966850289'])
 
-    it('does not flag an item whose crtCode is on the planogram', () => {
+    it('does not flag an item whose crtCode is on the planogram even though its gtin misses', () => {
       expect(
         isOffPlanogram(
           { gtin: '00001911605605', crtCode: '1966850289' },
@@ -305,7 +305,7 @@ describe('isOffPlanogram', () => {
       ).toBe(false)
     })
 
-    it('flags an item whose crtCode is absent even though its gtin would miss too', () => {
+    it('flags an item whose crtCode is also absent from the planogram', () => {
       expect(
         isOffPlanogram(
           { gtin: '00002303085388', crtCode: '23030853859' },
@@ -322,6 +322,24 @@ describe('isOffPlanogram', () => {
       expect(isOffPlanogram({ gtin: '00042100008715', crtCode: '' }, mixed, false)).toBe(
         false,
       )
+    })
+  })
+
+  // Osoyoos: Backwoods 5-packs are shelved as packs, so the planogram lists
+  // their pack gtin — but the CSV still carries a crtCode for each, from the
+  // wholesale-case sub-row. Preferring crtCode here flagged every one of them
+  // even though the pack gtin was right there on the planogram.
+  describe('pack-sold items with an incidental crtCode', () => {
+    const packPlanogram = new Set(['00071610203358']) // Backwoods Vanilla 5 PK
+
+    it('does not flag an item whose gtin is on the planogram even though its crtCode is a case code that is not', () => {
+      expect(
+        isOffPlanogram(
+          { gtin: '00071610203358', crtCode: '71610340848' },
+          packPlanogram,
+          false,
+        ),
+      ).toBe(false)
     })
   })
 
