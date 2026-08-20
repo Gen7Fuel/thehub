@@ -515,6 +515,13 @@ function VideoItemView({
     }
   }
 
+  function handleTogglePlay() {
+    const v = videoRef.current
+    if (!v) return
+    if (v.paused) v.play()
+    else v.pause()
+  }
+
   return (
     <div className="space-y-3">
       <div className="rounded-2xl overflow-hidden border border-gray-100">
@@ -529,8 +536,9 @@ function VideoItemView({
           <video
             ref={videoRef}
             src={isHls ? undefined : src}
-            className="w-full aspect-video bg-black"
-            controls
+            className="w-full aspect-video bg-black cursor-pointer"
+            playsInline
+            onClick={handleTogglePlay}
             onLoadedMetadata={handleLoadedMetadata}
             onTimeUpdate={handleTimeUpdate}
             onPause={handlePause}

@@ -95,7 +95,8 @@
       "Bash(npx eslint *)",
       "Bash(xargs -I{} sh -c 'echo \"$\\(du -k \"{}\" | cut -f1\\)K {}\"')",
       "Bash(tee /tmp/tsc.txt)",
-      "Bash(echo \"EXIT_CODE=$?\")"
+      "Bash(echo \"EXIT_CODE=$?\")",
+      "Bash(echo \"EXIT CODE: $?\")"
     ]
   }
 }
