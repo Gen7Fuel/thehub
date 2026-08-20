@@ -204,12 +204,24 @@ function isOffPlanogram(item, planogramGtins, isStationSupply) {
  *
  * The null return is the "skip the check entirely" rule: callers branch on
  * truthiness, so a site without a planogram can never flag anything.
+ *
+ * Re-normalizes every stored gtin rather than trusting it's already padded.
+ * parsePlanogramWorkbook() pads to 14 on upload, but planogramKey() also pads
+ * whatever it's given, so a document written before that padding existed (or
+ * edited by hand) would carry short, unpadded gtins that silently never match
+ * a padded order-rec key. Running both sides through the same normalizeGtin()
+ * at compare time is what keeps them from drifting apart again.
  */
 async function loadPlanogramGtinSet(site) {
   const Planogram = require('../models/Planogram')
   const doc = await Planogram.findOne({ site }, { 'items.gtin': 1 }).lean()
   if (!doc || !Array.isArray(doc.items) || doc.items.length === 0) return null
-  return new Set(doc.items.map((i) => i.gtin))
+  const set = new Set()
+  for (const i of doc.items) {
+    const gtin = normalizeGtin(i.gtin)
+    if (gtin !== null) set.add(gtin)
+  }
+  return set
 }
 
 module.exports = {
