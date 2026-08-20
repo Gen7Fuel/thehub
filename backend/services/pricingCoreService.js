@@ -195,16 +195,41 @@ export async function executeRetailPriceUpdate({
   if (databaseWritesExecutedCount > 0) {
     const storeEmail = locationDoc.email;
     const targetStationName = stationName || locationDoc.stationName;
+
+    // -------------------------------------------------------------------------
+    // Helper: Build Dynamic Store & Permanent CC List
+    // -------------------------------------------------------------------------
+    const getStoreAndPermanentCCs = (station) => {
+      const ccs = ["kporter@gen7fuel.com", "daksh@gen7fuel.com"];
+
+      // Station Group 1 Mapping
+      const group1Stations = ["Silver Grizzly", "Oliver", "Osoyoos", "Charlies"];
+      // Station Group 2 Mapping
+      const group2Stations = ["Couchiching", "Wavers West", "Wavers East"];
+
+      if (group1Stations.includes(station)) {
+        ccs.push("michelle@gen7fuel.com");
+      } else if (group2Stations.includes(station)) {
+        ccs.push("dennis@gen7fuel.com");
+      }
+
+      return ccs;
+    };
+
+    const extraCCs = getStoreAndPermanentCCs(targetStationName);
+
     const baseCCEmails = Array.isArray(locationDoc.managerEmails)
       ? [
           ...locationDoc.managerEmails,
-          "kporter@gen7fuel.com",
-          "daksh@gen7fuel.com",
+          ...extraCCs,
         ]
       : [
-            "kporter@gen7fuel.com", 
-            "daksh@gen7fuel.com"
+          ...extraCCs,
         ];
+
+    // Deduplicate CCs in case any address is duplicated
+    const uniqueBaseCCEmails = Array.from(new Set(baseCCEmails));
+
     // 1. Send IMMEDIATE general update alert to store, copying managers & admin
     const initialNoticeHtml = `
         <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; border: 1px solid #e2e8f0; border-radius: 16px; background-color: #ffffff;">
@@ -243,13 +268,13 @@ export async function executeRetailPriceUpdate({
       `;
     await emailQueue.add(`immediate-price-notice-${locationId}-${Date.now()}`, {
       to: storeEmail,
-      cc: baseCCEmails,
+      cc: uniqueBaseCCEmails,
       subject: `Notice: Fuel Prices Updated - ${targetStationName}`,
       html: initialNoticeHtml,
     });
 
     // -------------------------------------------------------------------------
-    // 1. TEMPLATE: 15-Minute Store Reminder Email (Kept your exact style)
+    // 1. TEMPLATE: 15-Minute Store Reminder Email
     // -------------------------------------------------------------------------
     const storeReminderHtml = `
         <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; border: 1px solid #e2e8f0; border-radius: 16px; background-color: #ffffff;">
@@ -288,7 +313,7 @@ export async function executeRetailPriceUpdate({
       `;
 
     // -------------------------------------------------------------------------
-    // 2. TEMPLATE: 30-Minute Admin Escalation Email (Plain & understandable)
+    // 2. TEMPLATE: 30-Minute Admin Escalation Email (UNTOUCHED CC LIST)
     // -------------------------------------------------------------------------
     const adminEscalationHtml = `
         <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; color: #334155; line-height: 1.6;">
@@ -332,7 +357,7 @@ export async function executeRetailPriceUpdate({
         locationId,
         stationName: targetStationName,
         toEmail: storeEmail,
-        ccEmails: baseCCEmails,
+        ccEmails: uniqueBaseCCEmails,
         subject: `Reminder: Update Fuel Prices - ${targetStationName}`,
         html: storeReminderHtml,
         hasInfonet,
@@ -358,7 +383,6 @@ export async function executeRetailPriceUpdate({
     // Marketing compilation blocks
     let marketingRowsHtml = "";
 
-    // Compile changed rows into view engine
     for (const item of changedGradesList) {
       const displayOld =
         item.oldPrice !== null ? `${Number(item.oldPrice).toFixed(4)}¢` : "--";
@@ -376,7 +400,6 @@ export async function executeRetailPriceUpdate({
         `;
     }
 
-    // Compile unchanged rows into view engine
     for (const item of unchangedGradesList) {
       marketingRowsHtml += `
           <tr style="border-bottom: 1px solid #f1f5f9; background-color: #f8fafc;">
@@ -431,7 +454,7 @@ export async function executeRetailPriceUpdate({
 
     await emailQueue.add(`marketing-price-sync-${locationId}-${Date.now()}`, {
       to: "marketing@gen7fuel.com",
-    //   to: "daksh@gen7fuel.com",
+      cc: extraCCs, // Included permanent & store-based CCs
       subject: `Fuel Pricing Sync Summary: ${targetStationName}`,
       html: marketingReportHtml,
     });

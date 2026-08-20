@@ -147,8 +147,8 @@ async function refreshAllSitesCache() {
   console.log("📊 Dashboard cache cron complete.");
 }
 
-// Schedule: 5:00 AM America/Toronto daily
-cron.schedule("0 7 * * *", async () => {
+// Schedule: 8:00 AM America/Toronto daily
+cron.schedule("0 8 * * *", async () => {
   try {
     await refreshAllSitesCache();
   } catch (err) {

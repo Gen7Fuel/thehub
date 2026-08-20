@@ -160,19 +160,19 @@ async function attemptPricePost({ gasBuddyStationId, prices }) {
         }
       }
     }
+    // Pausing the auto-update for testing
+    // const autoUpdateLabel = dialogModal.locator('label:has-text("Auto-update the price(s) for this price submission for today?")');
+    // const autoUpdateCheckbox = dialogModal.locator('div.checkbox__checkbox___2QDLE input[type="checkbox"]');
 
-    const autoUpdateLabel = dialogModal.locator('label:has-text("Auto-update the price(s) for this price submission for today?")');
-    const autoUpdateCheckbox = dialogModal.locator('div.checkbox__checkbox___2QDLE input[type="checkbox"]');
-
-    if (await autoUpdateLabel.isVisible()) {
-      const isAlreadyChecked = await autoUpdateCheckbox.isChecked({ force: true });
-      if (!isAlreadyChecked) {
-        console.log("📌 Syncing auto-update daily price locking toggle state to [ACTIVE]...");
-        await autoUpdateLabel.click();
-      } else {
-        console.log("ℹ️ Auto-update price locking option toggle is already checked.");
-      }
-    }
+    // if (await autoUpdateLabel.isVisible()) {
+    //   const isAlreadyChecked = await autoUpdateCheckbox.isChecked({ force: true });
+    //   if (!isAlreadyChecked) {
+    //     console.log("📌 Syncing auto-update daily price locking toggle state to [ACTIVE]...");
+    //     await autoUpdateLabel.click();
+    //   } else {
+    //     console.log("ℹ️ Auto-update price locking option toggle is already checked.");
+    //   }
+    // }
 
     if (updatesCommitted > 0) {
       const saveButton = dialogModal.locator('button:has-text("Save Changes")');

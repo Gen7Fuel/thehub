@@ -240,7 +240,7 @@ export function useFuelPricing({ user, selectedSite }: UseFuelPricingOptions) {
     }
   }, [activePostgresPrices, activeScheduleTargetDate]);
 
-  // Unified Mutation Architecture
+  // Unified Mutation Architecture with Smart Notification Feedback
   const submitPricesMutation = useMutation({
     mutationFn: async ({
       payload,
@@ -256,21 +256,57 @@ export function useFuelPricing({ user, selectedSite }: UseFuelPricingOptions) {
       }
       return (await axios[method](route, payload, authHeader)).data;
     },
-    onSuccess: (_: any, variables: any) => {
+    onSuccess: (data: any, variables: any) => {
       if (variables.method === "delete") {
-        toast.success("Pending Pricing Schedule Deleted Successfully");
+        toast.success("Pending Pricing Schedule Deleted Successfully", {
+          description: data?.message || "All scheduled fuel price changes have been cleared.",
+          duration: 10000,
+        });
         setIsRemoveScheduleOpen(false);
       } else if (variables.method === "put") {
-        toast.success("Pricing Schedule Updated Successfully");
+        toast.success("Pricing Schedule Updated Successfully", {
+          description: data?.message || "The price schedule has been adjusted.",
+          duration: 10000,
+        });
         setIsEditScheduleOpen(false);
       } else {
-        toast.success(
-          isScheduled
-            ? "Fuel Price Update Scheduled Successfully"
-            : "Retail Fuel Prices Dispatched",
-        );
+        // -------------------------------------------------------------------
+        // POST: Handlers for Immediate, Manual Schedule, & Auto-Deferred Off-Hours
+        // -------------------------------------------------------------------
+        const backendMessage = data?.message;
+        const isAutoDeferred = data?.autoDeferred;
+        const isScheduledResult = data?.isScheduled;
+
+        if (isAutoDeferred) {
+          // 🌙 STORE IS CLOSED: Auto-deferred to next opening time
+          toast.warning("Store Currently Closed — Schedule Queued", {
+            description:
+              backendMessage ||
+              "The station is outside operating hours. Prices will automatically push when the store opens next.",
+            duration: 10000,
+          });
+        } else if (isScheduledResult) {
+          // 📅 MANUAL SCHEDULE: User chose a future date/time
+          toast.info("Fuel Price Update Scheduled", {
+            description:
+              backendMessage ||
+              "Fuel price changes have been queued for the scheduled target date and time.",
+            duration: 10000,
+          });
+        } else {
+          // ⚡ IMMEDIATE LIVE PUBLISH: Store is open and prices pushed live
+          const count = data?.updatesApplied ?? 0;
+          toast.success("Retail Fuel Prices Published Live", {
+            description:
+              backendMessage ||
+              `Successfully updated ${count} grade${count === 1 ? "" : "s"} live on station registers.`,
+            duration: 10000,
+          });
+        }
+
         setIsConfirmOpen(false);
       }
+
       setIsScheduled(false);
 
       queryClient.invalidateQueries({
@@ -280,9 +316,59 @@ export function useFuelPricing({ user, selectedSite }: UseFuelPricingOptions) {
     },
     onError: (err: any) => {
       if (handleAxiosErrorCheck(err)) return;
-      toast.error("Transmission Pipeline Operation Aborted");
+
+      const errorMessage =
+        err?.response?.data?.message ||
+        "Transmission pipeline failed. Please re-verify values and try again.";
+
+      toast.error("Transmission Pipeline Failure", {
+        description: errorMessage,
+        duration: 10000,
+      });
     },
   });
+  // const submitPricesMutation = useMutation({
+  //   mutationFn: async ({
+  //     payload,
+  //     method,
+  //     route,
+  //   }: {
+  //     payload: any;
+  //     method: "post" | "put" | "delete";
+  //     route: string;
+  //   }) => {
+  //     if (method === "delete") {
+  //       return (await axios.delete(route, authHeader)).data;
+  //     }
+  //     return (await axios[method](route, payload, authHeader)).data;
+  //   },
+  //   onSuccess: (_: any, variables: any) => {
+  //     if (variables.method === "delete") {
+  //       toast.success("Pending Pricing Schedule Deleted Successfully");
+  //       setIsRemoveScheduleOpen(false);
+  //     } else if (variables.method === "put") {
+  //       toast.success("Pricing Schedule Updated Successfully");
+  //       setIsEditScheduleOpen(false);
+  //     } else {
+  //       toast.success(
+  //         isScheduled
+  //           ? "Fuel Price Update Scheduled Successfully"
+  //           : "Retail Fuel Prices Dispatched",
+  //       );
+  //       setIsConfirmOpen(false);
+  //     }
+  //     setIsScheduled(false);
+
+  //     queryClient.invalidateQueries({
+  //       queryKey: ["fuel-pricing-history-logs", locationMongoId],
+  //     });
+  //     reloadPostgres();
+  //   },
+  //   onError: (err: any) => {
+  //     if (handleAxiosErrorCheck(err)) return;
+  //     toast.error("Transmission Pipeline Operation Aborted");
+  //   },
+  // });
 
   // Handlers & Helpers
   const handlePriceValueChange = (gradeId: string, inputString: string) => {

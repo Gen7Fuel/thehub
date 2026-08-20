@@ -369,9 +369,12 @@ const { chromium } = require("playwright-extra");
 const stealth = require("puppeteer-extra-plugin-stealth")();
 const { emailQueue } = require("../queues/emailQueue");
 const CsoInvoice = require("../models/CsoInvoice");
-const User = require("../models/User"); 
+const User = require("../models/User");
 const Location = require("../models/Location"); // Make sure to import your Location model
 const { pushNotification } = require("../services/notificationService");
+const fs = require("fs");
+const path = require("path");
+const os = require("os");
 
 // Inject stealth plugin layers into the chromium driver bundle
 chromium.use(stealth);
@@ -403,14 +406,14 @@ async function uploadBufferToCDN(buffer, filename) {
  */
 async function processInvoiceAutomation({ invoiceId, io }) {
   console.log(
-    `🤖 Initializing Docflow Processing Pipeline for Invoice ID: ${invoiceId}...`
+    `🤖 Initializing Docflow Processing Pipeline for Invoice ID: ${invoiceId}...`,
   );
 
   // 1. Resolve Document Context from MongoDB
   const invoice = await CsoInvoice.findById(invoiceId);
   if (!invoice) {
     throw new Error(
-      `Invoice with DB Ref ID ${invoiceId} does not exist inside historical tracking storage.`
+      `Invoice with DB Ref ID ${invoiceId} does not exist inside historical tracking storage.`,
     );
   }
 
@@ -543,7 +546,7 @@ async function processInvoiceAutomation({ invoiceId, io }) {
     });
 
     console.log(
-      `🎯 Targeting station button selector: #station${siteCsoCode}-btnEl`
+      `🎯 Targeting station button selector: #station${siteCsoCode}-btnEl`,
     );
     const stationButton = page.locator(`#station${siteCsoCode}-btnEl`);
     await stationButton.click();
@@ -552,12 +555,24 @@ async function processInvoiceAutomation({ invoiceId, io }) {
     currentExecutionStep = "CALENDAR_SELECTION";
     const targetDateId = `app-calendar-month-day-${year}${monthStr}${dayStr}`;
     const monthsArray = [
-      "January", "February", "March", "April", "May", "June",
-      "July", "August", "September", "October", "November", "December"
+      "January",
+      "February",
+      "March",
+      "April",
+      "May",
+      "June",
+      "July",
+      "August",
+      "September",
+      "October",
+      "November",
+      "December",
     ];
     const targetMonthLabel = `${monthsArray[parseInt(monthStr, 10) - 1]}, ${year}`;
 
-    console.log(`📆 Navigating calendar grid wrapper to find: ${targetMonthLabel}`);
+    console.log(
+      `📆 Navigating calendar grid wrapper to find: ${targetMonthLabel}`,
+    );
 
     let currentMonthLabelText = await page
       .locator("#app-calendar-tb-month")
@@ -571,7 +586,9 @@ async function processInvoiceAutomation({ invoiceId, io }) {
       escapeAttempts++;
       const currentLabelParts = currentMonthLabelText.split(",");
       const currentYear = parseInt(currentLabelParts[1].trim(), 10);
-      const currentMonthIndex = monthsArray.indexOf(currentLabelParts[0].trim());
+      const currentMonthIndex = monthsArray.indexOf(
+        currentLabelParts[0].trim(),
+      );
       const targetMonthIndex = parseInt(monthStr, 10) - 1;
       const targetYearInt = parseInt(year, 10);
 
@@ -602,12 +619,46 @@ async function processInvoiceAutomation({ invoiceId, io }) {
 
     await page.waitForTimeout(3000);
 
+    // // =========================================================================
+    // // PHASE 2: NEW DOCUMENT DIALOG & IN-MEMORY FILE UPLOAD
+    // // =========================================================================
+    // currentExecutionStep = "OPEN_NEW_DOC_DIALOG";
+    // console.log("➕ Triggering '+ New Document' modal...");
+    // const newDocButton = page.locator('.doc-scan-btn button:has-text("New Document")');
+    // await newDocButton.waitFor({ state: "visible" });
+    // await newDocButton.click();
+
+    // const modalWindow = page.locator(".x-window.documentWindow");
+    // await modalWindow.waitFor({ state: "visible", timeout: 15000 });
+
+    // currentExecutionStep = "CDN_IMAGE_STREAMING";
+    // console.log(`📥 Downloading ${images.length} image payloads directly into RAM...`);
+
+    // const inMemoryFiles = [];
+    // for (let i = 0; i < images.length; i++) {
+    //   const filename = images[i];
+    //   const cdnUrl = `http://cdn:5001/cdn/download/${filename}`;
+
+    //   const response = await axios.get(cdnUrl, { responseType: "arraybuffer" });
+    //   inMemoryFiles.push({
+    //     name: filename,
+    //     mimeType: response.headers["content-type"] || "image/png",
+    //     buffer: Buffer.from(response.data),
+    //   });
+    // }
+
+    // await modalWindow.locator(".imgButtonUpload button").click();
+    // const fileInputHandle = modalWindow.locator("input.x-form-file-input");
+    // await fileInputHandle.setInputFiles(inMemoryFiles);
+    // await page.waitForTimeout(3000);
     // =========================================================================
-    // PHASE 2: NEW DOCUMENT DIALOG & IN-MEMORY FILE UPLOAD
+    // PHASE 2: NEW DOCUMENT DIALOG & FILE UPLOAD
     // =========================================================================
     currentExecutionStep = "OPEN_NEW_DOC_DIALOG";
     console.log("➕ Triggering '+ New Document' modal...");
-    const newDocButton = page.locator('.doc-scan-btn button:has-text("New Document")');
+    const newDocButton = page.locator(
+      '.doc-scan-btn button:has-text("New Document")',
+    );
     await newDocButton.waitFor({ state: "visible" });
     await newDocButton.click();
 
@@ -615,25 +666,43 @@ async function processInvoiceAutomation({ invoiceId, io }) {
     await modalWindow.waitFor({ state: "visible", timeout: 15000 });
 
     currentExecutionStep = "CDN_IMAGE_STREAMING";
-    console.log(`📥 Downloading ${images.length} image payloads directly into RAM...`);
+    console.log(
+      `📥 Downloading ${images.length} image payloads for file assignment...`,
+    );
 
-    const inMemoryFiles = [];
-    for (let i = 0; i < images.length; i++) {
-      const filename = images[i];
-      const cdnUrl = `http://cdn:5001/cdn/download/${filename}`;
+    // Temporary directory in system memory (/tmp) - safe, ephemeral, independent of repo codebase
+    const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "cso-upload-"));
+    const localFilePaths = [];
 
-      const response = await axios.get(cdnUrl, { responseType: "arraybuffer" });
-      inMemoryFiles.push({
-        name: filename,
-        mimeType: response.headers["content-type"] || "image/png",
-        buffer: Buffer.from(response.data),
-      });
+    try {
+      for (let i = 0; i < images.length; i++) {
+        const filename = images[i];
+        const cdnUrl = `http://cdn:5001/cdn/download/${filename}`;
+
+        const response = await axios.get(cdnUrl, {
+          responseType: "arraybuffer",
+        });
+        const tempFilePath = path.join(tempDir, filename);
+
+        fs.writeFileSync(tempFilePath, Buffer.from(response.data));
+        localFilePaths.push(tempFilePath);
+      }
+
+      await modalWindow.locator(".imgButtonUpload button").click();
+      const fileInputHandle = modalWindow.locator("input.x-form-file-input");
+
+      // Pass array of file paths — bypasses Playwright's 50MB RAM IPC limit completely
+      await fileInputHandle.setInputFiles(localFilePaths);
+      await page.waitForTimeout(3000);
+    } finally {
+      // Guaranteed cleanup of system temp files
+      try {
+        fs.rmSync(tempDir, { recursive: true, force: true });
+        console.log("🧹 Wiped temporary file buffer.");
+      } catch (cleanupErr) {
+        console.error("⚠️ Failed to clean up temp files:", cleanupErr.message);
+      }
     }
-
-    await modalWindow.locator(".imgButtonUpload button").click();
-    const fileInputHandle = modalWindow.locator("input.x-form-file-input");
-    await fileInputHandle.setInputFiles(inMemoryFiles);
-    await page.waitForTimeout(3000);
 
     // =========================================================================
     // PHASE 2: FORM MAPPING & EVALUATION
@@ -645,12 +714,14 @@ async function processInvoiceAutomation({ invoiceId, io }) {
       .innerText();
 
     if (uiDateText.trim() !== formattedUIDate) {
-      console.warn(`⚠️ Date Mismatch: UI shows ${uiDateText.trim()} vs expected ${formattedUIDate}.`);
+      console.warn(
+        `⚠️ Date Mismatch: UI shows ${uiDateText.trim()} vs expected ${formattedUIDate}.`,
+      );
       await modalWindow.locator(".x-tool img.x-tool-close").click();
       await modalWindow.waitFor({ state: "hidden", timeout: 5000 });
 
       throw new Error(
-        `RETRY_PHASE_1: Invoice date mismatch corrected. Open dialog closed gracefully.`
+        `RETRY_PHASE_1: Invoice date mismatch corrected. Open dialog closed gracefully.`,
       );
     }
 
@@ -681,7 +752,7 @@ async function processInvoiceAutomation({ invoiceId, io }) {
         await backupVendorOption.first().click();
       } else {
         throw new Error(
-          `Vendor Code "${vendorCode}" (${vendorName}) was not found or is not available in CSO.`
+          `Vendor Code "${vendorCode}" (${vendorName}) was not found or is not available in CSO.`,
         );
       }
     }
@@ -698,23 +769,31 @@ async function processInvoiceAutomation({ invoiceId, io }) {
     await page.waitForTimeout(1000);
 
     const mopRegExp = new RegExp(`^${methodOfPayment}$`, "i");
-    const mopBoundListOption = page.locator(".x-boundlist-item").filter({ hasText: mopRegExp });
+    const mopBoundListOption = page
+      .locator(".x-boundlist-item")
+      .filter({ hasText: mopRegExp });
 
     try {
       await mopBoundListOption.waitFor({ state: "visible", timeout: 5000 });
       await mopBoundListOption.first().click();
     } catch (mopDropdownError) {
-      const backupOption = page.locator(".x-boundlist-item").filter({ hasText: methodOfPayment });
+      const backupOption = page
+        .locator(".x-boundlist-item")
+        .filter({ hasText: methodOfPayment });
       if ((await backupOption.count()) > 0) {
         await backupOption.first().click();
       } else {
-        throw new Error(`Invalid Payment Method: "${methodOfPayment}" is not supported or not available.`);
+        throw new Error(
+          `Invalid Payment Method: "${methodOfPayment}" is not supported or not available.`,
+        );
       }
     }
 
     if (methodOfPayment.toLowerCase() === "check") {
       if (!checkNumber) {
-        throw new Error(`Check number is missing for the selected 'check' payment method.`);
+        throw new Error(
+          `Check number is missing for the selected 'check' payment method.`,
+        );
       }
       const checkField = modalWindow.locator('input[name="check_number"]');
       await checkField.waitFor({ state: "visible", timeout: 5000 });
@@ -723,11 +802,15 @@ async function processInvoiceAutomation({ invoiceId, io }) {
 
     currentExecutionStep = "FORM_SUBMIT";
     console.log(`💰 Populating Total Cost: ${totalCost}`);
-    await modalWindow.locator('input[name="total_cost"]').fill(String(totalCost));
+    await modalWindow
+      .locator('input[name="total_cost"]')
+      .fill(String(totalCost));
     await page.waitForTimeout(1000);
 
     const saveButton = modalWindow
-      .locator('button.x-btn-center:has-text("Save"), .greenButton button:has-text("Save")')
+      .locator(
+        'button.x-btn-center:has-text("Save"), .greenButton button:has-text("Save")',
+      )
       .first();
     await saveButton.waitFor({ state: "visible", timeout: 5000 });
     await saveButton.click();
@@ -739,16 +822,26 @@ async function processInvoiceAutomation({ invoiceId, io }) {
     // GRID RECORD ROW VERIFICATION HANDSHAKE
     // =========================================================================
     currentExecutionStep = "GRID_VERIFICATION";
-    console.log(`🔍 Verification Phase: Scanning grid for Vendor: "${vendorName}" & Doc #: "${docNumber}"`);
+    console.log(
+      `🔍 Verification Phase: Scanning grid for Vendor: "${vendorName}" & Doc #: "${docNumber}"`,
+    );
 
-    const dataTableRows = page.locator(".x-grid-view table.x-grid-table tr.x-grid-row");
+    const dataTableRows = page.locator(
+      ".x-grid-view table.x-grid-table tr.x-grid-row",
+    );
     const totalGridRows = await dataTableRows.count();
     let submissionConfirmed = false;
 
     for (let i = 0; i < totalGridRows; i++) {
       const row = dataTableRows.nth(i);
-      const currentVendorCellText = await row.locator("td.x-grid-cell").nth(1).innerText();
-      const currentDocNumCellText = await row.locator("td.x-grid-cell").nth(2).innerText();
+      const currentVendorCellText = await row
+        .locator("td.x-grid-cell")
+        .nth(1)
+        .innerText();
+      const currentDocNumCellText = await row
+        .locator("td.x-grid-cell")
+        .nth(2)
+        .innerText();
 
       const cleanedGridVendor = currentVendorCellText.trim().toLowerCase();
       const cleanedGridDocNum = currentDocNumCellText.trim().toLowerCase();
@@ -757,7 +850,8 @@ async function processInvoiceAutomation({ invoiceId, io }) {
       const expectedDocNum = docNumber.trim().toLowerCase();
 
       if (
-        (cleanedGridVendor.includes(expectedVendor) || expectedVendor.includes(cleanedGridVendor)) &&
+        (cleanedGridVendor.includes(expectedVendor) ||
+          expectedVendor.includes(cleanedGridVendor)) &&
         cleanedGridDocNum === expectedDocNum
       ) {
         submissionConfirmed = true;
@@ -766,7 +860,9 @@ async function processInvoiceAutomation({ invoiceId, io }) {
     }
 
     if (!submissionConfirmed) {
-      throw new Error(`Invoice saved, but could not be verified in the CSO table. Please check if Document #${docNumber} exists in CSO.`);
+      throw new Error(
+        `Invoice saved, but could not be verified in the CSO table. Please check if Document #${docNumber} exists in CSO.`,
+      );
     }
 
     // =========================================================================
@@ -774,16 +870,22 @@ async function processInvoiceAutomation({ invoiceId, io }) {
     // =========================================================================
     let cdnSuccessScreenshotFilename = null;
     try {
-      console.log("📸 Capturing verification snapshot proof directly into RAM...");
+      console.log(
+        "📸 Capturing verification snapshot proof directly into RAM...",
+      );
       const successBuffer = await page.screenshot({ fullPage: true });
       const originalSuccessScreenshotName = `success-inv-${siteCsoCode}-${invoiceId}-att${currentAttempt}.png`;
 
-      console.log("☁️ Uploading verification snapshot proof directly to CDN...");
+      console.log(
+        "☁️ Uploading verification snapshot proof directly to CDN...",
+      );
       cdnSuccessScreenshotFilename = await uploadBufferToCDN(
         successBuffer,
-        originalSuccessScreenshotName
+        originalSuccessScreenshotName,
       );
-      console.log(`✅ Verification proof saved on CDN: ${cdnSuccessScreenshotFilename}`);
+      console.log(
+        `✅ Verification proof saved on CDN: ${cdnSuccessScreenshotFilename}`,
+      );
     } catch (ssErr) {
       console.error("Failed uploading success proof to CDN:", ssErr.message);
     }
@@ -811,7 +913,7 @@ async function processInvoiceAutomation({ invoiceId, io }) {
         csoUploadError: null,
         $push: { logs: successLogEntry },
       },
-      { new: true }
+      { new: true },
     );
 
     // =========================================================================
@@ -827,7 +929,9 @@ async function processInvoiceAutomation({ invoiceId, io }) {
 
       // Resolve CSO Code to Station Name
       let resolvedStationName = updatedInvoice.siteCsoCode; // Fallback
-      const locationDoc = await Location.findOne({ csoCode: updatedInvoice.siteCsoCode });
+      const locationDoc = await Location.findOne({
+        csoCode: updatedInvoice.siteCsoCode,
+      });
       if (locationDoc && locationDoc.stationName) {
         resolvedStationName = locationDoc.stationName;
       }
@@ -850,12 +954,14 @@ async function processInvoiceAutomation({ invoiceId, io }) {
         type: "system",
       });
     } catch (notifErr) {
-      console.error("⚠️ Failed to dispatch success notification:", notifErr.message);
+      console.error(
+        "⚠️ Failed to dispatch success notification:",
+        notifErr.message,
+      );
     }
 
     await browser.close();
     return { success: true };
-
   } catch (error) {
     console.error("❌ AUTOMATION EXECUTION FAULT AT RUNTIME:", error);
 
@@ -866,7 +972,8 @@ async function processInvoiceAutomation({ invoiceId, io }) {
         timestamp: new Date(),
         status: "retry_phase",
         errorCategory: "RETRY_EVENT",
-        message: "Invoice date mismatch detected on form. Auto-re-triggering date picker flow.",
+        message:
+          "Invoice date mismatch detected on form. Auto-re-triggering date picker flow.",
         rawError: error.message,
         errorScreenshotFilename: null,
         executionStep: currentExecutionStep,
@@ -890,8 +997,13 @@ async function processInvoiceAutomation({ invoiceId, io }) {
       const originalScreenshotName = `err-inv-${siteCsoCode}-${invoiceId}-att${currentAttempt}.png`;
 
       console.log("☁️ Uploading error screenshot proof directly to CDN...");
-      cdnErrorScreenshotFilename = await uploadBufferToCDN(errorBuffer, originalScreenshotName);
-      console.log(`✅ Diagnostic proof saved on CDN: ${cdnErrorScreenshotFilename}`);
+      cdnErrorScreenshotFilename = await uploadBufferToCDN(
+        errorBuffer,
+        originalScreenshotName,
+      );
+      console.log(
+        `✅ Diagnostic proof saved on CDN: ${cdnErrorScreenshotFilename}`,
+      );
     } catch (ssErr) {
       console.error("Failed uploading error proof to CDN:", ssErr.message);
     }
@@ -950,7 +1062,7 @@ async function processInvoiceAutomation({ invoiceId, io }) {
         csoUploadError: formattedUserError,
         $push: { logs: failureLogEntry },
       },
-      { new: true }
+      { new: true },
     );
 
     // =========================================================================
@@ -966,7 +1078,9 @@ async function processInvoiceAutomation({ invoiceId, io }) {
 
       // Resolve CSO Code to Station Name
       let resolvedStationName = failedInvoice.siteCsoCode; // Fallback
-      const locationDoc = await Location.findOne({ csoCode: failedInvoice.siteCsoCode });
+      const locationDoc = await Location.findOne({
+        csoCode: failedInvoice.siteCsoCode,
+      });
       if (locationDoc && locationDoc.stationName) {
         resolvedStationName = locationDoc.stationName;
       }
@@ -990,7 +1104,10 @@ async function processInvoiceAutomation({ invoiceId, io }) {
         type: "system",
       });
     } catch (notifErr) {
-      console.error("⚠️ Failed to dispatch failure notification:", notifErr.message);
+      console.error(
+        "⚠️ Failed to dispatch failure notification:",
+        notifErr.message,
+      );
     }
 
     await browser.close();

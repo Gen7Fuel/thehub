@@ -127,7 +127,11 @@ router.put("/:id", async (req, res) => {
   const updateData = req.body;
 
   try {
-    const location = await Location.findByIdAndUpdate(id, updateData, { new: true });
+    const location = await Location.findByIdAndUpdate(
+      id,
+      { $set: updateData },
+      { new: true, runValidators: true }
+    );
     if (!location) {
       return res.status(404).json({ message: "Location not found." });
     }

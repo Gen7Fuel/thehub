@@ -30,6 +30,7 @@ import {
   Settings,
   FileUp,
   LayoutGrid,
+  FileBarChart,
 } from 'lucide-react'
 
 export const Route = createFileRoute('/_navbarLayout/')({
@@ -151,6 +152,9 @@ function App() {
               )}
               {access?.accounting?.atm && (
                 <NavButton to="/atm" label="ATM" icon={Banknote} theme="amber" />
+              )}
+              {access?.accounting?.accountingReports?.value && (
+                <NavButton to="/accounting-reports" label="Reporting" icon={FileBarChart} theme="amber" />
               )}
             </Section>
           )}

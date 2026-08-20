@@ -1127,20 +1127,26 @@ async function getShiftTransactionTimings(pool, csoCode, startDate, endDate) {
 async function getRefundTransactions(csoCode, date) {
   try {
     const pool = await getPool();
+    const transactionDate = formatDateForDB(date);
     const result = await pool.request()
       .input('csoCode', sql.Int, csoCode)
-      .input('targetDate', sql.VarChar, date) // or sql.Date
+      .input('targetDate', sql.VarChar, transactionDate) // or sql.Date depending on your Date_SK type
       .query(`
-        SELECT [Transaction ID], [Transaction Line], [Event Start Time], 
-          [GTIN], [UPC], [Category], [Item Name], 
-          [Actual Sales Amount]
-        FROM [CSO].[SalesTransactionCRJ]
-        WHERE [Status] = 'RefundEvent' AND 
-          [Station_SK] = @csoCode AND 
-          [Date] = @targetDate
-        ORDER BY [Event Start Time]
+        SELECT 
+          FORMAT([DateTime], 'HH:mm:ss') AS [Event Start Time],
+          [Transaction ID],
+          [GTIN],
+          NULL AS [UPC], -- Alias as NULL to satisfy front-end fallback logic cleanly
+          [Department] AS [Category],
+          [Item Description] AS [Item Name],
+          [Sales Amount] AS [Actual Sales Amount]
+        FROM [CSO].[Stg_CashRegisterJournal]
+        WHERE [Station_SK] = @csoCode 
+          AND [Event] = 'RefundEvent' 
+          AND [Date_SK] = @targetDate
+        ORDER BY [DateTime]
       `);
-    // await sql.close();
+
     return result.recordset;
   } catch (err) {
     console.error('SQL error:', err);

@@ -45,6 +45,14 @@ export const getGradeTheme = (grade: string) => {
         icon: Car,
         light: "bg-green-50/50",
       };
+    case "Mid Grade":
+      return {
+        color: "bg-gradient-to-r from-green-500 to-red-500",
+        label: "text-emerald-800",
+        border: "border-emerald-500",
+        icon: Car,
+        light: "bg-emerald-50/30",
+      };
     case "Premium":
       return {
         color: "bg-red-500",
