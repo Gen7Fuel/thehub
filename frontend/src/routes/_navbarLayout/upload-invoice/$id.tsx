@@ -14,10 +14,14 @@ import {
   SelectContent,
   SelectGroup,
   SelectItem,
-  SelectLabel,
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import {
+  InvoiceVendorSelect,
+  EDI_VENDORS_CONFIG,
+  type VendorData,
+} from "@/components/custom/invoiceVendorSelect";
 import {
   Dialog,
   DialogContent,
@@ -33,12 +37,6 @@ import {
   AlertTriangle,
   RotateCcw,
 } from "lucide-react";
-import { EDI_VENDORS_CONFIG } from "./index";
-
-interface VendorData {
-  code: string;
-  name: string;
-}
 
 export const Route = createFileRoute("/_navbarLayout/upload-invoice/$id")({
   component: RouteComponent,
@@ -58,7 +56,6 @@ function RouteComponent() {
   const [invoiceDate, setInvoiceDate] = useState<Date | undefined>(undefined);
   const [vendorCode, setVendorCode] = useState<string>("");
   const [vendorName, setVendorName] = useState<string>("");
-  const [vendorSearch, setVendorSearch] = useState<string>("");
   const [docNumber, setDocNumber] = useState<string>("");
   const [mop, setMop] = useState<string>("");
   const [checkNumber, setCheckNumber] = useState<string>("");
@@ -84,12 +81,6 @@ function RouteComponent() {
     { value: "eft", label: "EFT" },
     { value: "credit_card", label: "Credit Card" },
   ];
-
-  const filteredVendors = vendors.filter(
-    (v) =>
-      v.name.toLowerCase().includes(vendorSearch.toLowerCase()) ||
-      v.code.toLowerCase().includes(vendorSearch.toLowerCase()),
-  );
 
   // 1. Fetch Master Vendors
   useEffect(() => {
@@ -225,7 +216,6 @@ function RouteComponent() {
 
         setVendorCode(originalCode);
         setVendorName(originalVendor?.name || "");
-        setVendorSearch("");
         return;
       }
     }
@@ -361,53 +351,12 @@ function RouteComponent() {
               <label className="text-xs font-semibold text-slate-600">
                 Vendor
               </label>
-              <Select
+              <InvoiceVendorSelect
+                vendors={vendors}
                 value={vendorCode}
                 onValueChange={handleVendorChange} // Updated from setVendorCode
                 disabled={isLoadingVendors}
-                onOpenChange={(open) => !open && setVendorSearch("")}
-              >
-                <SelectTrigger className="w-full bg-white">
-                  <SelectValue
-                    placeholder={
-                      isLoadingVendors ? "Loading..." : "Select Vendor"
-                    }
-                  />
-                </SelectTrigger>
-                <SelectContent>
-                  <div
-                    className="p-2 border-b border-slate-100 sticky top-0 bg-white z-10"
-                    /* Prevents tablet touch events from dismissing the dropdown */
-                    onPointerDown={(e) => e.stopPropagation()}
-                    onTouchStart={(e) => e.stopPropagation()}
-                  >
-                    <Input
-                      type="text"
-                      placeholder="Search name or code..."
-                      value={vendorSearch}
-                      onChange={(e) => setVendorSearch(e.target.value)}
-                      className="h-8 text-xs"
-                      onKeyDown={(e) => e.stopPropagation()}
-                      onClick={(e) => e.stopPropagation()}
-                      onFocus={(e) => e.stopPropagation()}
-                    />
-                  </div>
-                  <SelectGroup className="max-h-[250px] overflow-y-auto">
-                    <SelectLabel>Available Vendors</SelectLabel>
-                    {filteredVendors.length === 0 ? (
-                      <div className="text-xs text-slate-400 text-center py-4">
-                        No vendors found
-                      </div>
-                    ) : (
-                      filteredVendors.map((v) => (
-                        <SelectItem key={v.code} value={v.code}>
-                          {v.name} ({v.code})
-                        </SelectItem>
-                      ))
-                    )}
-                  </SelectGroup>
-                </SelectContent>
-              </Select>
+              />
             </div>
 
             {/* Doc # */}
