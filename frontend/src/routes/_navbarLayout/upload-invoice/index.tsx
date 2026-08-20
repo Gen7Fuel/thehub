@@ -38,7 +38,7 @@ interface VendorData {
 // Define EDI vendor rules:
 // - `excludedSites: []` means EDI is enabled for ALL stores.
 // - `excludedSites: ["Site A", "Site B"]` means EDI is enabled for all stores EXCEPT those listed.
-const EDI_VENDORS_CONFIG: Record<
+export const EDI_VENDORS_CONFIG: Record<
   string,
   { name: string; excludedSites: string[] }
 > = {
@@ -332,7 +332,7 @@ function RouteComponent() {
               </label>
               <Select
                 value={vendorCode}
-                onValueChange={handleVendorChange} // Updated here
+                onValueChange={handleVendorChange}
                 disabled={isLoadingVendors}
                 onOpenChange={(open) => !open && setVendorSearch("")}
               >
@@ -344,7 +344,12 @@ function RouteComponent() {
                   />
                 </SelectTrigger>
                 <SelectContent>
-                  <div className="p-2 border-b border-slate-100 sticky top-0 bg-white z-10">
+                  <div
+                    className="p-2 border-b border-slate-100 sticky top-0 bg-white z-10"
+                    /* Prevent tablet touch events from triggering dropdown close */
+                    onPointerDown={(e) => e.stopPropagation()}
+                    onTouchStart={(e) => e.stopPropagation()}
+                  >
                     <Input
                       type="text"
                       placeholder="Search name or code..."
@@ -352,6 +357,8 @@ function RouteComponent() {
                       onChange={(e) => setVendorSearch(e.target.value)}
                       className="h-8 text-xs"
                       onKeyDown={(e) => e.stopPropagation()}
+                      onClick={(e) => e.stopPropagation()}
+                      onFocus={(e) => e.stopPropagation()}
                     />
                   </div>
                   <SelectGroup className="max-h-[250px] overflow-y-auto">
