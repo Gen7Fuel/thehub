@@ -1,10 +1,20 @@
 const mongoose = require("mongoose");
 const { attachSiteAlias } = require("../utils/attachSiteAlias");
 
+// Sub-schema for individual daily operating hours
+const dayHoursSchema = new mongoose.Schema(
+  {
+    isClosed: { type: Boolean, default: false },
+    open: { type: String, default: "06:00" }, // 24-hour HH:mm string format
+    close: { type: String, default: "22:00" }, // 24-hour HH:mm string format
+  },
+  { _id: false }
+);
+
 // Define a clean sub-schema for granular device control
 const pushoverDeviceSchema = new mongoose.Schema({
   deviceName: { type: String, required: true },
-  notificationEnabled: { type: Boolean, default: true }
+  notificationEnabled: { type: Boolean, default: true },
 });
 
 const locationSchema = new mongoose.Schema({
@@ -25,15 +35,26 @@ const locationSchema = new mongoose.Schema({
   fuelStationNumber: { type: String, unique: true },
   fuelCustomerName: { type: String },
   address: { type: String },
-  province: { type: String, required: true},
+  province: { type: String, required: true },
   defaultFuelRack: { type: mongoose.Schema.Types.ObjectId, ref: "FuelRack" },
   defaultFuelCarrier: { type: mongoose.Schema.Types.ObjectId, ref: "FuelCarrier" },
   availableGrades: [{ type: String, default: [] }],
   gasBuddyStationId: { type: String, required: false },
 
   // --- Pushover Core Extensions ---
-  pushOverUserKey: { type: String, default: null }, 
-  devices: [pushoverDeviceSchema]
+  pushOverUserKey: { type: String, default: null },
+  devices: [pushoverDeviceSchema],
+
+  // --- Flexible Operating Hours Extension ---
+  storeHours: {
+    monday: { type: dayHoursSchema, default: () => ({}) },
+    tuesday: { type: dayHoursSchema, default: () => ({}) },
+    wednesday: { type: dayHoursSchema, default: () => ({}) },
+    thursday: { type: dayHoursSchema, default: () => ({}) },
+    friday: { type: dayHoursSchema, default: () => ({}) },
+    saturday: { type: dayHoursSchema, default: () => ({}) },
+    sunday: { type: dayHoursSchema, default: () => ({}) },
+  },
 });
 
 attachSiteAlias(locationSchema, "stationName");
