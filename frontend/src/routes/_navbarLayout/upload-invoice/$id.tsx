@@ -33,6 +33,7 @@ import {
   AlertTriangle,
   RotateCcw,
 } from "lucide-react";
+import { EDI_VENDORS_CONFIG } from "./index";
 
 interface VendorData {
   code: string;
@@ -48,6 +49,7 @@ function RouteComponent() {
   const { user } = useAuth();
   const navigate = useNavigate();
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const initialVendorCodeRef = useRef<string>("");
 
   // ----------------------------------------------------
   // Form Field States
@@ -126,11 +128,14 @@ function RouteComponent() {
         const json = await res.json();
         if (json.success && json.data) {
           const inv = json.data;
+          const initialCode = inv.vendorCode || "";
+          initialVendorCodeRef.current = initialCode; // Save original vendor code from DB
+
           setSite(inv.siteName || user?.location || "");
           setInvoiceDate(
             inv.invoiceDate ? new Date(inv.invoiceDate) : new Date(),
           );
-          setVendorCode(inv.vendorCode || "");
+          setVendorCode(initialCode);
           setVendorName(inv.vendorName || "");
           setDocNumber(inv.docNumber || "");
           setMop(inv.methodOfPayment || "");
@@ -194,6 +199,39 @@ function RouteComponent() {
     if (updated.length === 0) setGalleryIndex(null);
     else if (galleryIndex !== null && galleryIndex >= updated.length)
       setGalleryIndex(updated.length - 1);
+  };
+
+  const handleVendorChange = (selectedCode: string) => {
+    const ediConfig = EDI_VENDORS_CONFIG[selectedCode];
+
+    if (ediConfig) {
+      // Check if the current site is in the exclusion list
+      const isExcluded = ediConfig.excludedSites.includes(site);
+
+      // If the site is NOT excluded, EDI is active -> Block upload and show notice
+      if (!isExcluded) {
+        const isEdiForAllStores = ediConfig.excludedSites.length === 0;
+
+        alert(
+          `Notice: You do not need to upload invoices for ${ediConfig.name}.\n\n` +
+            `Invoices for this vendor are automatically received and processed directly in the back office system for ${
+              isEdiForAllStores ? "all stores" : site
+            }.`,
+        );
+
+        // Reset vendor code back to the initial code loaded from DB
+        const originalCode = initialVendorCodeRef.current;
+        const originalVendor = vendors.find((v) => v.code === originalCode);
+
+        setVendorCode(originalCode);
+        setVendorName(originalVendor?.name || "");
+        setVendorSearch("");
+        return;
+      }
+    }
+
+    // If the store IS excluded (or vendor isn't in config), allow normal selection
+    setVendorCode(selectedCode);
   };
 
   const isFormValid =
@@ -325,7 +363,7 @@ function RouteComponent() {
               </label>
               <Select
                 value={vendorCode}
-                onValueChange={setVendorCode}
+                onValueChange={handleVendorChange} // Updated from setVendorCode
                 disabled={isLoadingVendors}
                 onOpenChange={(open) => !open && setVendorSearch("")}
               >
@@ -337,7 +375,12 @@ function RouteComponent() {
                   />
                 </SelectTrigger>
                 <SelectContent>
-                  <div className="p-2 border-b border-slate-100 sticky top-0 bg-white z-10">
+                  <div
+                    className="p-2 border-b border-slate-100 sticky top-0 bg-white z-10"
+                    /* Prevents tablet touch events from dismissing the dropdown */
+                    onPointerDown={(e) => e.stopPropagation()}
+                    onTouchStart={(e) => e.stopPropagation()}
+                  >
                     <Input
                       type="text"
                       placeholder="Search name or code..."
@@ -345,6 +388,8 @@ function RouteComponent() {
                       onChange={(e) => setVendorSearch(e.target.value)}
                       className="h-8 text-xs"
                       onKeyDown={(e) => e.stopPropagation()}
+                      onClick={(e) => e.stopPropagation()}
+                      onFocus={(e) => e.stopPropagation()}
                     />
                   </div>
                   <SelectGroup className="max-h-[250px] overflow-y-auto">
