@@ -158,26 +158,30 @@ function parsePlanogramWorkbook(buffer) {
 }
 
 /**
- * The identifier an order-rec item is matched on: crtCode when the item has a
- * readable one, otherwise gtin.
+ * The identifier an order-rec item would be matched on if only one were
+ * available: gtin when the item has a readable one, otherwise crtCode.
  *
  * The planogram's "Product ID" column is a MIXED identifier space, not one kind
  * of number. It lists whichever code identifies the form of the product that
- * actually occupies the shelf: a carton code for cigarettes sold by the carton,
- * and a plain GTIN for tins, pouches and bags. Measured against the Silver
- * Grizzly Back Wall planogram, 21 of its 60 rows are carton codes and 33 are
- * GTINs — so a rule that used either one alone would silently miss half the
- * shelf.
+ * actually occupies the shelf: a plain GTIN for anything sold as a pack, tin,
+ * pouch or bag, and a carton code for the (site-dependent) subset that's
+ * genuinely shelved by the carton — cigarettes at some sites. Which is which
+ * is a per-site, sometimes per-category fact the CSV doesn't tell us, so this
+ * is only ever a tiebreak: isOffPlanogram() below checks BOTH codes against
+ * the planogram and only uses this one key for reporting which code an
+ * unmatched item was closest to.
  *
- * The fallback direction matters. Every order-rec item has a gtin, but only
- * items with a CRT sub-row have a crtCode, and for those the gtin is the PACK
- * barcode, which the planogram never lists (it matched 0 of 46 in that sample).
- * So crtCode wins whenever it is present, and gtin covers everything else.
+ * gtin goes first because every order-rec item has one and it is the code
+ * actually printed on the shelf-facing unit; crtCode exists only for items
+ * with a CRT sub-row, and plenty of planograms (Osoyoos's Cigars category,
+ * for one — Backwoods 5-packs are shelved as packs, not cases) never list the
+ * carton code at all, so leading with crtCode there flagged every match crt
+ * could have made instead of gtin.
  */
 function planogramKey(item) {
   if (!item) return null
-  const crt = normalizeGtin(item.crtCode)
-  return crt !== null ? crt : normalizeGtin(item.gtin)
+  const gtin = normalizeGtin(item.gtin)
+  return gtin !== null ? gtin : normalizeGtin(item.crtCode)
 }
 
 /**
@@ -186,17 +190,27 @@ function planogramKey(item) {
  * Both the order-rec create path and the recheck endpoint call this, so the
  * flag written at creation can never disagree with the flag written later.
  *
+ * Checks gtin AND crtCode (when each is readable) against the planogram set
+ * and clears the flag if either is present — the two codes are matched
+ * independently rather than picking one key up front, because which one the
+ * planogram actually lists varies by site and category (see planogramKey()).
+ * A carton-sold item whose gtin is the pack barcode still needs crtCode to
+ * find its match; a pack-sold item with a stray crtCode still needs gtin to.
+ *
  * Fails open in every uncertain case: no planogram for the site, a station
  * supply, or an item with no readable code at all yield false rather than a
  * guess. An unreadable crtCode is not itself a failure — a CSV export that
- * mangled column B into "6.80085E+11" fails normalizeGtin, and the item falls
- * back to its gtin rather than being flagged on a value we could not read.
+ * mangled column B into "6.80085E+11" fails normalizeGtin, and the item is
+ * judged on gtin alone rather than being flagged on a value we could not read.
  */
 function isOffPlanogram(item, planogramGtins, isStationSupply) {
   if (!planogramGtins || isStationSupply) return false
-  const key = planogramKey(item)
-  if (key === null) return false
-  return !planogramGtins.has(key)
+  const gtin = normalizeGtin(item?.gtin)
+  const crt = normalizeGtin(item?.crtCode)
+  if (gtin === null && crt === null) return false
+  if (gtin !== null && planogramGtins.has(gtin)) return false
+  if (crt !== null && planogramGtins.has(crt)) return false
+  return true
 }
 
 /**
