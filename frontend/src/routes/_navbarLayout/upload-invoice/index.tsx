@@ -11,10 +11,14 @@ import {
   SelectContent,
   SelectGroup,
   SelectItem,
-  SelectLabel,
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import {
+  InvoiceVendorSelect,
+  EDI_VENDORS_CONFIG,
+  type VendorData,
+} from "@/components/custom/invoiceVendorSelect";
 import {
   Dialog,
   DialogContent,
@@ -29,33 +33,6 @@ import {
   Loader2,
   AlertTriangle,
 } from "lucide-react";
-
-interface VendorData {
-  code: string;
-  name: string;
-}
-
-// Define EDI vendor rules:
-// - `excludedSites: []` means EDI is enabled for ALL stores.
-// - `excludedSites: ["Site A", "Site B"]` means EDI is enabled for all stores EXCEPT those listed.
-export const EDI_VENDORS_CONFIG: Record<
-  string,
-  { name: string; excludedSites: string[] }
-> = {
-  // EDI enabled for ALL stores (no exclusions)
-  "96239": { name: "Quota Core-Mark", excludedSites: [] },
-  "721": { name: "Core-Mark", excludedSites: [] },
-
-  // EDI enabled for ALL stores EXCEPT these 4 (they can manually upload)
-  "64990": {
-    name: "COCA-COLA BOTTLING LTD",
-    excludedSites: ["Oliver", "Osoyoos", "Wavers West", "Wavers East"],
-  },
-  "97290": {
-    name: "Coke Canada Bottling",
-    excludedSites: ["Oliver", "Osoyoos", "Wavers West", "Wavers East"],
-  },
-};
 
 export const Route = createFileRoute("/_navbarLayout/upload-invoice/")({
   component: RouteComponent,
@@ -74,7 +51,6 @@ function RouteComponent() {
   const [invoiceDate, setInvoiceDate] = useState<Date | undefined>(new Date());
   const [vendorCode, setVendorCode] = useState<string>("");
   const [vendorName, setVendorName] = useState<string>("");
-  const [vendorSearch, setVendorSearch] = useState<string>("");
   const [docNumber, setDocNumber] = useState<string>("");
   const [mop, setMop] = useState<string>("");
   const [checkNumber, setCheckNumber] = useState<string>("");
@@ -99,13 +75,6 @@ function RouteComponent() {
     { value: "eft", label: "EFT" },
     { value: "credit_card", label: "Credit Card" },
   ];
-
-  // Filter vendors based on search input (Code or Name)
-  const filteredVendors = vendors.filter(
-    (v) =>
-      v.name.toLowerCase().includes(vendorSearch.toLowerCase()) ||
-      v.code.toLowerCase().includes(vendorSearch.toLowerCase()),
-  );
 
   // Fetch Live SQL Vendors on Mount
   useEffect(() => {
@@ -205,7 +174,6 @@ function RouteComponent() {
         // Clear vendor field selection
         setVendorCode("");
         setVendorName("");
-        setVendorSearch("");
         return;
       }
     }
@@ -330,53 +298,12 @@ function RouteComponent() {
               <label className="text-xs font-semibold text-slate-600">
                 Vendor
               </label>
-              <Select
+              <InvoiceVendorSelect
+                vendors={vendors}
                 value={vendorCode}
                 onValueChange={handleVendorChange}
                 disabled={isLoadingVendors}
-                onOpenChange={(open) => !open && setVendorSearch("")}
-              >
-                <SelectTrigger className="w-full bg-white">
-                  <SelectValue
-                    placeholder={
-                      isLoadingVendors ? "Loading..." : "Select Vendor"
-                    }
-                  />
-                </SelectTrigger>
-                <SelectContent>
-                  <div
-                    className="p-2 border-b border-slate-100 sticky top-0 bg-white z-10"
-                    /* Prevent tablet touch events from triggering dropdown close */
-                    onPointerDown={(e) => e.stopPropagation()}
-                    onTouchStart={(e) => e.stopPropagation()}
-                  >
-                    <Input
-                      type="text"
-                      placeholder="Search name or code..."
-                      value={vendorSearch}
-                      onChange={(e) => setVendorSearch(e.target.value)}
-                      className="h-8 text-xs"
-                      onKeyDown={(e) => e.stopPropagation()}
-                      onClick={(e) => e.stopPropagation()}
-                      onFocus={(e) => e.stopPropagation()}
-                    />
-                  </div>
-                  <SelectGroup className="max-h-[250px] overflow-y-auto">
-                    <SelectLabel>Available Vendors</SelectLabel>
-                    {filteredVendors.length === 0 ? (
-                      <div className="text-xs text-slate-400 text-center py-4">
-                        No vendors found
-                      </div>
-                    ) : (
-                      filteredVendors.map((v) => (
-                        <SelectItem key={v.code} value={v.code}>
-                          {v.name} ({v.code})
-                        </SelectItem>
-                      ))
-                    )}
-                  </SelectGroup>
-                </SelectContent>
-              </Select>
+              />
             </div>
 
             {/* Field 3: Doc # */}
