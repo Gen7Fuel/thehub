@@ -1,5 +1,6 @@
 import { savePendingAction } from "@/lib/orderRecIndexedDB";
 import { triggerBackgroundSync } from "@/lib/utils";
+import { compressImage } from "@/lib/compressImage";
 import { Camera, Loader2 } from "lucide-react";
 import { useEffect, useRef, useState } from 'react'
 import { useNavigate } from '@tanstack/react-router'
@@ -43,13 +44,23 @@ function RouteComponent() {
     }
   }, [date, customerName, driverName, fuelType, quantity, amount, purchaseType, itemsDescription]);
 
-  const handleRetryCapture = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleRetryCapture = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]
-    if (file) {
-      const reader = new FileReader()
-      reader.onloadend = () => setReceipt(reader.result as string)
-      reader.readAsDataURL(file)
+    if (!file) return
+
+    // Compress before storing as base64 — receipts come straight off a phone
+    // camera and can be several MB uncompressed, which is slow to queue in
+    // IndexedDB and slow to upload over spotty site wifi/cellular.
+    let toRead: Blob = file
+    try {
+      toRead = await compressImage(file, 1600, 0.75)
+    } catch (err) {
+      console.error("Failed to compress receipt image, using original:", err)
     }
+
+    const reader = new FileReader()
+    reader.onloadend = () => setReceipt(reader.result as string)
+    reader.readAsDataURL(toRead)
   }
 
   // A ref guard (not just React state) closes the double-tap window: state

@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 
 const {
+  mockAxiosGet,
   mockAxiosPost,
   mockGetPendingActionEntries,
   mockDeletePendingAction,
@@ -8,6 +9,7 @@ const {
   mockSaveOrderRec,
   mockIsActuallyOnline,
 } = vi.hoisted(() => ({
+  mockAxiosGet: vi.fn(),
   mockAxiosPost: vi.fn(),
   mockGetPendingActionEntries: vi.fn(),
   mockDeletePendingAction: vi.fn().mockResolvedValue(undefined),
@@ -18,7 +20,7 @@ const {
 
 vi.mock('axios', () => ({
   default: {
-    get: vi.fn(),
+    get: mockAxiosGet,
     post: mockAxiosPost,
     put: vi.fn(),
     patch: vi.fn(),
@@ -48,10 +50,20 @@ const poAction = (overrides: Record<string, any> = {}) => ({
   ...overrides,
 })
 
+const payableAction = (overrides: Record<string, any> = {}) => ({
+  type: 'CREATE_PAYABLE',
+  images: ['data:image/png;base64,abc'],
+  payload: { vendorName: 'Shell Canada', location: 'Rankin', notes: '', paymentMethod: 'safe', amount: 100, date: '2026-01-01' },
+  queuedAt: 1,
+  ...overrides,
+})
+
 beforeEach(() => {
   vi.clearAllMocks()
   mockIsActuallyOnline.mockResolvedValue(true)
-  // Default: both the receipt upload and the PO create succeed.
+  // Default: locations lookup resolves, and both the receipt/image upload
+  // and the create-record POST succeed.
+  mockAxiosGet.mockResolvedValue({ data: [{ _id: 'loc-1', stationName: 'Rankin' }] })
   mockAxiosPost.mockImplementation((url: string) => {
     if (url.includes('upload-base64')) return Promise.resolve({ data: { filename: 'uploaded.jpg' } })
     return Promise.resolve({ status: 201, data: { _id: 'txn-1' } })
@@ -90,6 +102,62 @@ describe('syncPendingActions — per-key delete, no blanket clear', () => {
     expect(mockDeletePendingAction).toHaveBeenCalledWith(1)
     expect(mockDeletePendingAction).toHaveBeenCalledWith(2)
     expect(mockAxiosPost.mock.calls.filter(([url]) => url === '/api/purchase-orders')).toHaveLength(2)
+  })
+})
+
+describe('syncPendingActions — CREATE_PAYABLE (Payout module)', () => {
+  it('uploads each attached image, resolves the station name to a location ObjectId, then posts the payable', async () => {
+    mockGetPendingActionEntries
+      .mockResolvedValueOnce([{ key: 1, action: payableAction({ images: ['data:image/png;base64,a', 'data:image/png;base64,b'] }) }])
+      .mockResolvedValueOnce([])
+
+    await syncPendingActions()
+
+    expect(mockAxiosPost.mock.calls.filter(([url]) => url === '/cdn/upload-base64')).toHaveLength(2)
+    expect(mockAxiosGet).toHaveBeenCalledWith('/api/locations', expect.any(Object))
+    expect(mockAxiosPost).toHaveBeenCalledWith(
+      '/api/payables',
+      expect.objectContaining({
+        vendorName: 'Shell Canada',
+        location: 'loc-1', // resolved from the "Rankin" station name to its ObjectId
+        images: ['uploaded.jpg', 'uploaded.jpg'],
+      }),
+      expect.any(Object)
+    )
+    expect(mockDeletePendingAction).toHaveBeenCalledWith(1)
+  })
+
+  it('succeeds with no image uploads when the payable has no attachments', async () => {
+    mockGetPendingActionEntries
+      .mockResolvedValueOnce([{ key: 2, action: payableAction({ images: [] }) }])
+      .mockResolvedValueOnce([])
+
+    await syncPendingActions()
+
+    expect(mockAxiosPost.mock.calls.filter(([url]) => url === '/cdn/upload-base64')).toHaveLength(0)
+    expect(mockAxiosPost).toHaveBeenCalledWith(
+      '/api/payables',
+      expect.objectContaining({ images: [] }),
+      expect.any(Object)
+    )
+    expect(mockDeletePendingAction).toHaveBeenCalledWith(2)
+  })
+
+  it('permanently fails (does not retry) when the queued station name matches no location', async () => {
+    mockAxiosGet.mockResolvedValue({ data: [{ _id: 'loc-1', stationName: 'Some Other Site' }] })
+    mockGetPendingActionEntries
+      .mockResolvedValueOnce([{ key: 3, action: payableAction() }])
+      .mockResolvedValueOnce([])
+
+    await syncPendingActions()
+
+    expect(mockUpdatePendingAction).toHaveBeenCalledWith(3, expect.objectContaining({
+      failed: true,
+      failureReason: 'Location "Rankin" not found',
+    }))
+    expect(mockDeletePendingAction).not.toHaveBeenCalled()
+    // Never reached the create-payable POST.
+    expect(mockAxiosPost.mock.calls.some(([url]) => url === '/api/payables')).toBe(false)
   })
 })
 
@@ -157,7 +225,11 @@ describe('syncPendingActions — retryable vs. permanent failure classification'
 
     await syncPendingActions()
 
-    expect(mockUpdatePendingAction).not.toHaveBeenCalled()
+    // Marked syncing while the attempt was in flight, then cleared back to
+    // plain "pending" on failure — never marked failed/deleted.
+    expect(mockUpdatePendingAction).toHaveBeenCalledWith(9, { syncing: true })
+    expect(mockUpdatePendingAction).toHaveBeenCalledWith(9, { syncing: false })
+    expect(mockUpdatePendingAction).not.toHaveBeenCalledWith(9, expect.objectContaining({ failed: true }))
     expect(mockDeletePendingAction).not.toHaveBeenCalled()
   })
 
@@ -171,8 +243,62 @@ describe('syncPendingActions — retryable vs. permanent failure classification'
 
     await syncPendingActions()
 
-    expect(mockUpdatePendingAction).not.toHaveBeenCalled()
+    expect(mockUpdatePendingAction).toHaveBeenCalledWith(3, { syncing: true })
+    expect(mockUpdatePendingAction).toHaveBeenCalledWith(3, { syncing: false })
+    expect(mockUpdatePendingAction).not.toHaveBeenCalledWith(3, expect.objectContaining({ failed: true }))
     expect(mockDeletePendingAction).not.toHaveBeenCalled()
+  })
+})
+
+describe('syncPendingActions — "syncing" flag (drives the list page\'s "Sending…" status)', () => {
+  it('marks the entry syncing before its network call starts, one at a time', async () => {
+    mockGetPendingActionEntries
+      .mockResolvedValueOnce([
+        { key: 1, action: poAction({ payload: { ...poAction().payload, customerName: 'First' } }) },
+        { key: 2, action: poAction({ payload: { ...poAction().payload, customerName: 'Second' } }) },
+      ])
+      .mockResolvedValueOnce([])
+
+    await syncPendingActions()
+
+    // Compare invocation order across the two mocks (a shared global call
+    // counter, jest/vitest-compatible) without overriding either mock's
+    // implementation — avoids leaking state into later tests.
+    const syncStart = (key: number) => {
+      const i = mockUpdatePendingAction.mock.calls.findIndex(([k, patch]) => k === key && patch?.syncing === true)
+      return mockUpdatePendingAction.mock.invocationCallOrder[i]
+    }
+    const deleted = (key: number) => {
+      const i = mockDeletePendingAction.mock.calls.findIndex(([k]) => k === key)
+      return mockDeletePendingAction.mock.invocationCallOrder[i]
+    }
+
+    // Item 1 is fully synced (marked syncing, then deleted) strictly before
+    // item 2 is even marked syncing — confirms one-at-a-time processing.
+    expect(syncStart(1)).toBeLessThan(deleted(1))
+    expect(deleted(1)).toBeLessThan(syncStart(2))
+  })
+
+  it('never sets syncing on a permanent failure without also clearing it', async () => {
+    const err403 = Object.assign(new Error('Forbidden'), {
+      isAxiosErr: true,
+      response: { status: 403, data: { message: 'Permission denied' } },
+    })
+    mockAxiosPost.mockImplementation((url: string) => {
+      if (url.includes('upload-base64')) return Promise.resolve({ data: { filename: 'uploaded.jpg' } })
+      return Promise.reject(err403)
+    })
+    mockGetPendingActionEntries
+      .mockResolvedValueOnce([{ key: 6, action: poAction() }])
+      .mockResolvedValueOnce([])
+
+    await syncPendingActions()
+
+    expect(mockUpdatePendingAction).toHaveBeenCalledWith(6, { syncing: true })
+    expect(mockUpdatePendingAction).toHaveBeenCalledWith(6, expect.objectContaining({
+      failed: true,
+      syncing: false,
+    }))
   })
 })
 

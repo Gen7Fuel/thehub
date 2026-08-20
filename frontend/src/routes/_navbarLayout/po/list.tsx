@@ -161,7 +161,12 @@ function RouteComponent() {
     signature: a.payload.signature,
     receipt: '',
     requestReceipt: false,
-    pending: !a.failed,
+    // Three mutually-exclusive states: failed (terminal), syncing (the one
+    // entry the background sync loop is uploading right now — sync is
+    // strictly one-at-a-time, see syncPendingActions() in lib/utils.ts),
+    // and pending (queued, waiting its turn).
+    pending: !a.failed && !a.syncing,
+    syncing: !a.failed && !!a.syncing,
     failed: !!a.failed,
     failureReason: a.failureReason,
     _key: a._key,
@@ -171,10 +176,11 @@ function RouteComponent() {
   // duplicate PO number) will never succeed no matter how many times the
   // background sync retries — surfaced separately so they don't sit as an
   // unexplained "pending" spinner forever.
-  const pendingRows = filteredPendingActions.filter((a: any) => !a.failed).map(mapPendingAction);
   const failedRows = filteredPendingActions.filter((a: any) => a.failed).map(mapPendingAction);
+  const syncingRows = filteredPendingActions.filter((a: any) => !a.failed && a.syncing).map(mapPendingAction);
+  const pendingRows = filteredPendingActions.filter((a: any) => !a.failed && !a.syncing).map(mapPendingAction);
 
-  const allOrders = [...failedRows, ...pendingRows, ...purchaseOrders];
+  const allOrders = [...failedRows, ...syncingRows, ...pendingRows, ...purchaseOrders];
 
   const dismissFailedPO = async (key: any) => {
     if (key == null) return;
@@ -349,7 +355,7 @@ function RouteComponent() {
     }
   }
 
-  const showActionsColumn = !!(access?.po?.pdf || access?.po?.changeDate || access?.po?.delete || purchaseOrders.some(o => o.requestReceipt) || pendingRows.length > 0 || failedRows.length > 0)
+  const showActionsColumn = !!(access?.po?.pdf || access?.po?.changeDate || access?.po?.delete || purchaseOrders.some(o => o.requestReceipt) || pendingRows.length > 0 || syncingRows.length > 0 || failedRows.length > 0)
 
   return (
     <div className="p-4 border border-dashed border-gray-300 rounded-md">
@@ -377,6 +383,9 @@ function RouteComponent() {
       <div className="flex justify-between border-b border-dashed border-gray-300 py-2 mb-2 text-sm text-gray-600">
         <span>
           {allOrders.length} {allOrders.length === 1 ? 'entry' : 'entries'}
+          {syncingRows.length > 0 && (
+            <span className="text-blue-600"> ({syncingRows.length} sending)</span>
+          )}
           {pendingRows.length > 0 && (
             <span className="text-amber-600"> ({pendingRows.length} pending upload)</span>
           )}
@@ -407,7 +416,7 @@ function RouteComponent() {
         <tbody>
           {allOrders.length > 0 ? (
             allOrders.map((order: any, index) => (
-              <tr key={order._id ?? index} className={order.failed ? 'bg-red-50 hover:bg-red-100' : order.pending ? 'bg-amber-50 hover:bg-amber-100' : 'hover:bg-gray-50'}>
+              <tr key={order._id ?? index} className={order.failed ? 'bg-red-50 hover:bg-red-100' : order.syncing ? 'bg-blue-50 hover:bg-blue-100' : order.pending ? 'bg-amber-50 hover:bg-amber-100' : 'hover:bg-gray-50'}>
                 <td className="border-dashed border-t border-gray-300 px-4 py-2">{
                   order.dateStr || new Date(order.date).toLocaleDateString('en-CA', { timeZone: 'UTC' })
                 }</td>
@@ -439,6 +448,11 @@ function RouteComponent() {
                         >
                           Dismiss
                         </Button>
+                      </span>
+                    ) : order.syncing ? (
+                      <span className="text-xs font-medium text-blue-700 inline-flex items-center gap-1">
+                        <Loader2 className="h-3 w-3 animate-spin" />
+                        Sending…
                       </span>
                     ) : order.pending ? (
                       <span className="text-xs font-medium text-amber-700 inline-flex items-center gap-1">
