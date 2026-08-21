@@ -3,6 +3,7 @@ import { createFileRoute, useLoaderData, useNavigate, useSearch } from '@tanstac
 import { format } from 'date-fns'
 import { SitePicker } from '@/components/custom/sitePicker'
 import { DatePickerWithRange } from '@/components/custom/datePickerWithRange'
+import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 import '@/styles/tableGrid.css'
 import type { DateRange } from 'react-day-picker'
 import '@/styles/typewriter.css'
@@ -205,6 +206,49 @@ function RouteComponent() {
     return '';
   }
 
+  // Mirrors the Balance Check formula computed in backend/routes/cashRecRoutes.js:
+  // totalPos + reportCanadianCash + couponsAccepted + giftCertificates + payouts
+  //   - totalSales + totalReceivablesAmount + missedCpl + otherCoupons + gasolineCoupons + cashOffCoupons
+  const balanceCheckTerms = (data: EntriesResponse | null) => {
+    const t = data?.cashSummary?.totals
+    return [
+      { label: 'Total POS', value: t?.totalPos ?? 0, sign: 1 as const },
+      { label: 'CDN Cash', value: t?.report_canadian_cash ?? 0, sign: 1 as const },
+      { label: 'Coupons Accepted', value: t?.couponsAccepted ?? 0, sign: 1 as const },
+      { label: 'Gift Certificates', value: t?.giftCertificates ?? 0, sign: 1 as const },
+      { label: 'Payouts', value: t?.payouts ?? 0, sign: 1 as const },
+      { label: 'Total Sales', value: t?.totalSales ?? 0, sign: -1 as const },
+      { label: 'Total Receivables', value: data?.totalReceivablesAmount ?? 0, sign: 1 as const },
+      { label: 'Missed CPL', value: t?.missedCpl ?? 0, sign: 1 as const },
+      { label: 'Other Coupons', value: t?.otherCoupons ?? 0, sign: 1 as const },
+      { label: 'Gasoline Coupons', value: t?.gasolineCoupons ?? 0, sign: 1 as const },
+      { label: 'Cash Off Coupons', value: t?.cashOffCoupons ?? 0, sign: 1 as const },
+    ]
+  }
+
+  const BalanceCheckFormula = ({ data }: { data: EntriesResponse | null }) => {
+    const terms = balanceCheckTerms(data)
+    const op = (sign: number, first: boolean) => (first ? (sign < 0 ? '− ' : '') : (sign < 0 ? ' − ' : ' + '))
+    return (
+      <div className="typewriter-font text-left whitespace-normal max-w-[22rem]">
+        <div className="font-semibold">Balance Check</div>
+        <div>
+          {'= '}
+          {terms.map((t, i) => (
+            <span key={t.label}>{op(t.sign, i === 0)}{t.label}</span>
+          ))}
+        </div>
+        <div className="mt-1">
+          {'= '}
+          {terms.map((t, i) => (
+            <span key={t.label}>{op(t.sign, i === 0)}{fmt2(t.value)}</span>
+          ))}
+        </div>
+        <div className="mt-1 font-semibold">{'= '}{fmt2(data?.balanceCheck)}</div>
+      </div>
+    )
+  }
+
   const copyCell = (e: React.MouseEvent<HTMLTableCellElement>) => {
     const raw = e.currentTarget.textContent?.trim() ?? ''
     if (!raw || raw === '-') return
@@ -366,7 +410,14 @@ function RouteComponent() {
                             (data?.cashSummary?.unsettledPrepays ?? 0)
                       )}
                     </td>
-                    <td className="px-2 py-2 text-right cursor-copy" onClick={copyCell}>{fmt2(data?.balanceCheck)}</td>
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <td className="px-2 py-2 text-right cursor-copy" onClick={copyCell}>{fmt2(data?.balanceCheck)}</td>
+                      </TooltipTrigger>
+                      <TooltipContent side="top" className="w-auto max-w-none">
+                        <BalanceCheckFormula data={data} />
+                      </TooltipContent>
+                    </Tooltip>
                     <td className="px-2 py-2 text-right cursor-copy" onClick={copyCell}>{fmt2(data?.bankStmtTrans)}</td>
                     <td className="px-2 py-2 text-right cursor-copy" onClick={copyCell}>{fmt2(data?.bankRecDay ?? data?.bankRec)}</td>
                   </tr>
