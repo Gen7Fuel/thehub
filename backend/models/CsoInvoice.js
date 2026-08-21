@@ -44,7 +44,27 @@ const ExecutionLogSchema = new mongoose.Schema(
       default: null,
     },
   },
-  { _id: true },
+  { _id: true }
+);
+
+// 🚀 New Image Metadata Subdocument: Stores individual image CDN/path along with Laplacian quality metrics
+const ImageMetadataSchema = new mongoose.Schema(
+  {
+    name: {
+      type: String,
+      required: true,
+      trim: true,
+    },
+    laplacianScore: {
+      type: Number,
+      default: null,
+    },
+    isFlaggedBlur: {
+      type: Boolean,
+      default: false, // true if laplacianScore < 850
+    },
+  },
+  { _id: true, timestamps: true }
 );
 
 const CsoInvoiceSchema = new mongoose.Schema(
@@ -100,10 +120,11 @@ const CsoInvoiceSchema = new mongoose.Schema(
       required: true,
       min: 0,
     },
+    // 🚀 Updated Images Field: Array of ImageMetadata subdocuments
     images: {
-      type: [String],
+      type: [ImageMetadataSchema],
       validate: [
-        (v) => v.length > 0,
+        (v) => v && v.length > 0,
         "At least one invoice image is required.",
       ],
     },
@@ -125,7 +146,7 @@ const CsoInvoiceSchema = new mongoose.Schema(
   },
   {
     timestamps: true,
-  },
+  }
 );
 
 module.exports = mongoose.model("CsoInvoice", CsoInvoiceSchema);
