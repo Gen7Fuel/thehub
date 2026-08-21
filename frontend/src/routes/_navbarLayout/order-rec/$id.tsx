@@ -1264,7 +1264,20 @@ function RouteComponent() {
               </span>
             </AccordionTrigger>
             <AccordionContent>
-              <div className="overflow-x-auto">
+              {/*
+                max-h + overflow-y-auto turns this category's table into its own
+                bounded scroll panel (same pattern used for sticky headers
+                elsewhere in this codebase, e.g. cash-rec entries, dashboard,
+                cycle-count). Without a bounded height, overflow-x-auto alone
+                also promotes overflow-y to "auto" (a CSS quirk), which makes
+                this div a vertical scroll container that never actually
+                scrolls internally — trapping the "sticky top-0" header inside
+                it instead of letting it stick to the page scroll, so it
+                silently never sticks. Only one category can be open at a
+                time (Accordion type="single"), so a single bounded panel is
+                enough — no need to coordinate multiple sticky headers.
+              */}
+              <div className="overflow-x-auto overflow-y-auto max-h-[70vh]">
                 <table className="w-full border mb-2">
                   <thead>
                     <tr>
