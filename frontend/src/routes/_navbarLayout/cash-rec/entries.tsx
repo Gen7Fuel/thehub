@@ -115,6 +115,62 @@ type EntriesResponse = {
 
 type EntriesRow = { date: string; data: EntriesResponse | null }
 
+const fmt2 = (v: number | undefined | null) => {
+  if (typeof v === 'number' && Number.isFinite(v)) {
+    if (v < 0) {
+      return `(${Math.abs(v).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })})`;
+    }
+    return v.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  }
+  return '';
+}
+
+// Mirrors the Balance Check formula computed in backend/routes/cashRecRoutes.js:
+// totalPos + reportCanadianCash + couponsAccepted + giftCertificates + payouts
+//   - totalSales + totalReceivablesAmount + missedCpl + otherCoupons + gasolineCoupons + cashOffCoupons
+// Defined at module scope (not inside RouteComponent) so it keeps a stable
+// identity across renders instead of being recreated as a new component type
+// every time the route re-renders.
+const balanceCheckTerms = (data: EntriesResponse | null) => {
+  const t = data?.cashSummary?.totals
+  return [
+    { label: 'Total POS', value: t?.totalPos ?? 0, sign: 1 as const },
+    { label: 'CDN Cash', value: t?.report_canadian_cash ?? 0, sign: 1 as const },
+    { label: 'Coupons Accepted', value: t?.couponsAccepted ?? 0, sign: 1 as const },
+    { label: 'Gift Certificates', value: t?.giftCertificates ?? 0, sign: 1 as const },
+    { label: 'Payouts', value: t?.payouts ?? 0, sign: 1 as const },
+    { label: 'Total Sales', value: t?.totalSales ?? 0, sign: -1 as const },
+    { label: 'Total Receivables', value: data?.totalReceivablesAmount ?? 0, sign: 1 as const },
+    { label: 'Missed CPL', value: t?.missedCpl ?? 0, sign: 1 as const },
+    { label: 'Other Coupons', value: t?.otherCoupons ?? 0, sign: 1 as const },
+    { label: 'Gasoline Coupons', value: t?.gasolineCoupons ?? 0, sign: 1 as const },
+    { label: 'Cash Off Coupons', value: t?.cashOffCoupons ?? 0, sign: 1 as const },
+  ]
+}
+
+const BalanceCheckFormula = ({ data }: { data: EntriesResponse | null }) => {
+  const terms = balanceCheckTerms(data)
+  const op = (sign: number, first: boolean) => (first ? (sign < 0 ? '− ' : '') : (sign < 0 ? ' − ' : ' + '))
+  return (
+    <div className="typewriter-font text-left whitespace-normal max-w-[22rem]">
+      <div className="font-semibold">Balance Check</div>
+      <div>
+        {'= '}
+        {terms.map((t, i) => (
+          <span key={t.label}>{op(t.sign, i === 0)}{t.label}</span>
+        ))}
+      </div>
+      <div className="mt-1">
+        {'= '}
+        {terms.map((t, i) => (
+          <span key={t.label}>{op(t.sign, i === 0)}{fmt2(t.value)}</span>
+        ))}
+      </div>
+      <div className="mt-1 font-semibold">{'= '}{fmt2(data?.balanceCheck)}</div>
+    </div>
+  )
+}
+
 export const Route = createFileRoute('/_navbarLayout/cash-rec/entries')({
   // Default date to today (yyyy-MM-dd), mirror payouts.tsx behavior
   validateSearch: (search: Record<string, any>) => {
@@ -195,59 +251,6 @@ function RouteComponent() {
   }
   const fromObj = ymdToLocalDate(from)
   const toObj = ymdToLocalDate(to || from)
-
-  const fmt2 = (v: number | undefined | null) => {
-    if (typeof v === 'number' && Number.isFinite(v)) {
-      if (v < 0) {
-        return `(${Math.abs(v).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })})`;
-      }
-      return v.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-    }
-    return '';
-  }
-
-  // Mirrors the Balance Check formula computed in backend/routes/cashRecRoutes.js:
-  // totalPos + reportCanadianCash + couponsAccepted + giftCertificates + payouts
-  //   - totalSales + totalReceivablesAmount + missedCpl + otherCoupons + gasolineCoupons + cashOffCoupons
-  const balanceCheckTerms = (data: EntriesResponse | null) => {
-    const t = data?.cashSummary?.totals
-    return [
-      { label: 'Total POS', value: t?.totalPos ?? 0, sign: 1 as const },
-      { label: 'CDN Cash', value: t?.report_canadian_cash ?? 0, sign: 1 as const },
-      { label: 'Coupons Accepted', value: t?.couponsAccepted ?? 0, sign: 1 as const },
-      { label: 'Gift Certificates', value: t?.giftCertificates ?? 0, sign: 1 as const },
-      { label: 'Payouts', value: t?.payouts ?? 0, sign: 1 as const },
-      { label: 'Total Sales', value: t?.totalSales ?? 0, sign: -1 as const },
-      { label: 'Total Receivables', value: data?.totalReceivablesAmount ?? 0, sign: 1 as const },
-      { label: 'Missed CPL', value: t?.missedCpl ?? 0, sign: 1 as const },
-      { label: 'Other Coupons', value: t?.otherCoupons ?? 0, sign: 1 as const },
-      { label: 'Gasoline Coupons', value: t?.gasolineCoupons ?? 0, sign: 1 as const },
-      { label: 'Cash Off Coupons', value: t?.cashOffCoupons ?? 0, sign: 1 as const },
-    ]
-  }
-
-  const BalanceCheckFormula = ({ data }: { data: EntriesResponse | null }) => {
-    const terms = balanceCheckTerms(data)
-    const op = (sign: number, first: boolean) => (first ? (sign < 0 ? '− ' : '') : (sign < 0 ? ' − ' : ' + '))
-    return (
-      <div className="typewriter-font text-left whitespace-normal max-w-[22rem]">
-        <div className="font-semibold">Balance Check</div>
-        <div>
-          {'= '}
-          {terms.map((t, i) => (
-            <span key={t.label}>{op(t.sign, i === 0)}{t.label}</span>
-          ))}
-        </div>
-        <div className="mt-1">
-          {'= '}
-          {terms.map((t, i) => (
-            <span key={t.label}>{op(t.sign, i === 0)}{fmt2(t.value)}</span>
-          ))}
-        </div>
-        <div className="mt-1 font-semibold">{'= '}{fmt2(data?.balanceCheck)}</div>
-      </div>
-    )
-  }
 
   const copyCell = (e: React.MouseEvent<HTMLTableCellElement>) => {
     const raw = e.currentTarget.textContent?.trim() ?? ''
