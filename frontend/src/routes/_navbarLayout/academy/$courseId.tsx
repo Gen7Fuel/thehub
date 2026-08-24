@@ -19,7 +19,7 @@ import {
   verticalListSortingStrategy,
 } from '@dnd-kit/sortable'
 import { CSS } from '@dnd-kit/utilities'
-import { GripVertical } from 'lucide-react'
+import { GripVertical, Maximize2 } from 'lucide-react'
 
 // ─── Types ────────────────────────────────────────────────
 
@@ -522,6 +522,20 @@ function VideoItemView({
     else v.pause()
   }
 
+  function handleFullscreen(e: React.MouseEvent) {
+    e.stopPropagation()
+    const v = videoRef.current as (HTMLVideoElement & {
+      webkitRequestFullscreen?: () => void
+      webkitEnterFullscreen?: () => void
+    }) | null
+    if (!v) return
+    if (v.requestFullscreen) v.requestFullscreen()
+    else if (v.webkitRequestFullscreen) v.webkitRequestFullscreen()
+    // iOS Safari doesn't support requestFullscreen on arbitrary elements, but
+    // <video> exposes its own native fullscreen entry point.
+    else if (v.webkitEnterFullscreen) v.webkitEnterFullscreen()
+  }
+
   return (
     <div className="space-y-3">
       <div className="rounded-2xl overflow-hidden border border-gray-100">
@@ -533,17 +547,27 @@ function VideoItemView({
             allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
           />
         ) : (
-          <video
-            ref={videoRef}
-            src={isHls ? undefined : src}
-            className="w-full aspect-video bg-black cursor-pointer"
-            playsInline
-            onClick={handleTogglePlay}
-            onLoadedMetadata={handleLoadedMetadata}
-            onTimeUpdate={handleTimeUpdate}
-            onPause={handlePause}
-            onEnded={handleEnded}
-          />
+          <div className="relative">
+            <video
+              ref={videoRef}
+              src={isHls ? undefined : src}
+              className="w-full aspect-video bg-black cursor-pointer"
+              playsInline
+              onClick={handleTogglePlay}
+              onLoadedMetadata={handleLoadedMetadata}
+              onTimeUpdate={handleTimeUpdate}
+              onPause={handlePause}
+              onEnded={handleEnded}
+            />
+            <button
+              type="button"
+              onClick={handleFullscreen}
+              aria-label="Fullscreen"
+              className="absolute top-2 right-2 z-10 rounded-full bg-black/50 hover:bg-black/70 text-white p-1.5 transition-colors"
+            >
+              <Maximize2 className="w-4 h-4" />
+            </button>
+          </div>
         )}
       </div>
       {isEmbed && !markedWatched && (
