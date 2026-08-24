@@ -156,7 +156,7 @@ router.get("/list", async (req, res) => {
 
       if (!targetLocation) {
         console.warn(
-          `⚠️ [INVOICE LIST API] Location matching '${siteName}' not found in DB.`
+          `⚠️ [INVOICE LIST API] Location matching '${siteName}' not found in DB.`,
         );
         return res.status(404).json({
           success: false,
@@ -180,10 +180,20 @@ router.get("/list", async (req, res) => {
       .sort({ invoiceDate: -1, createdAt: -1 })
       .lean();
 
-    // Map `images` array of objects down to flat filename arrays for frontend consumption
+    // Preserve object structure so frontend receives laplacianScore & blur flag
     const formattedInvoices = invoices.map((invoice) => ({
       ...invoice,
-      images: formatInvoiceImages(invoice.images),
+      images: (invoice.images || []).map((img) => {
+        if (typeof img === "string") {
+          return { name: img, laplacianScore: null, isBlur: false };
+        }
+        return {
+          name: img.name || img.filename || "",
+          laplacianScore: img.laplacianScore ?? null,
+          // Fixed: included img.isFlaggedBlur from Mongoose schema
+          isBlur: img.isFlaggedBlur ?? img.isBlur ?? img.isBlurry ?? false,
+        };
+      }),
     }));
 
     return res.status(200).json({
@@ -191,7 +201,10 @@ router.get("/list", async (req, res) => {
       data: formattedInvoices,
     });
   } catch (err) {
-    console.error("❌ [INVOICE LIST API] Error fetching filtered invoice list:", err);
+    console.error(
+      "❌ [INVOICE LIST API] Error fetching filtered invoice list:",
+      err,
+    );
     return res.status(500).json({
       success: false,
       error: "Failed to retrieve invoice records.",
@@ -463,7 +476,7 @@ router.post("/submit", async (req, res) => {
         attempts: 2,
         removeOnComplete: true,
         removeOnFail: false,
-      }
+      },
     );
 
     // Immediate user feedback
@@ -687,13 +700,15 @@ router.put("/:id", async (req, res) => {
     // Update metadata immediately (logs array is explicitly preserved)
     existingInvoice.site = siteMongoId;
     existingInvoice.siteCsoCode = targetCsoCode;
-    existingInvoice.submittedByMongoId = userMongoId || existingInvoice.submittedByMongoId;
+    existingInvoice.submittedByMongoId =
+      userMongoId || existingInvoice.submittedByMongoId;
     existingInvoice.invoiceDate = dateStringOnly;
     existingInvoice.vendorCode = vendorCode;
     existingInvoice.vendorName = vendorName;
     existingInvoice.docNumber = docNumber;
     existingInvoice.methodOfPayment = methodOfPayment;
-    existingInvoice.checkNumber = methodOfPayment === "check" ? checkNumber : null;
+    existingInvoice.checkNumber =
+      methodOfPayment === "check" ? checkNumber : null;
     existingInvoice.totalCost = Number(totalCost);
     existingInvoice.status = "pending_api_upload";
 
@@ -714,7 +729,7 @@ router.put("/:id", async (req, res) => {
         attempts: 2,
         removeOnComplete: true,
         removeOnFail: false,
-      }
+      },
     );
 
     return res.json({
