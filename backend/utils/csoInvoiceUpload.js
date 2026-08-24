@@ -676,7 +676,18 @@ async function processInvoiceAutomation({ invoiceId, io }) {
 
     try {
       for (let i = 0; i < images.length; i++) {
-        const filename = images[i];
+        const imgItem = images[i];
+
+        // Safely extract string filename whether item is object or string
+        const filename = typeof imgItem === "string" ? imgItem : imgItem?.name;
+
+        if (!filename) {
+          console.warn(
+            `⚠️ Warning: Image at index ${i} has no valid filename. Skipping.`,
+          );
+          continue;
+        }
+
         const cdnUrl = `http://cdn:5001/cdn/download/${filename}`;
 
         const response = await axios.get(cdnUrl, {
