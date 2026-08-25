@@ -259,13 +259,13 @@ function App() {
               icon={<GraduationCap className="w-5 h-5 text-violet-600" />}
             >
               {access?.training?.voiceAgent && (
-                <>
-                  <NavButton to="/ai-customer" label="AI Customer Chat" icon={MessageSquare} theme="violet" />
-                  <NavButton to="/ai-customer/mcq" label="MCQ" icon={FileText} theme="violet" />
-                </>
+                <NavButton to="/ai-customer" label="AI Customer Chat" icon={MessageSquare} theme="violet" />
               )}
               {access?.academy && (
-                <NavButton to="/academy" label="Academy" icon={GraduationCap} theme="violet" />
+                <>
+                  <NavButton to="/academy" label="Academy" icon={GraduationCap} theme="violet" />
+                  <NavButton to="/ai-customer/mcq" label="MCQ" icon={FileText} theme="violet" />
+                </>
               )}
             </Section>
           )}
