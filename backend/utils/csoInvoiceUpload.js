@@ -676,7 +676,18 @@ async function processInvoiceAutomation({ invoiceId, io }) {
 
     try {
       for (let i = 0; i < images.length; i++) {
-        const filename = images[i];
+        const imgItem = images[i];
+
+        // Safely extract string filename whether item is object or string
+        const filename = typeof imgItem === "string" ? imgItem : imgItem?.name;
+
+        if (!filename) {
+          console.warn(
+            `⚠️ Warning: Image at index ${i} has no valid filename. Skipping.`,
+          );
+          continue;
+        }
+
         const cdnUrl = `http://cdn:5001/cdn/download/${filename}`;
 
         const response = await axios.get(cdnUrl, {
@@ -761,14 +772,32 @@ async function processInvoiceAutomation({ invoiceId, io }) {
     await modalWindow.locator('input[name="document_id"]').fill(docNumber);
 
     currentExecutionStep = "MOP_SELECTION";
-    console.log(`💳 Selecting Payment Method: ${methodOfPayment}`);
+
+    // 1. Format incoming methodOfPayment (e.g., "money_order" -> "money order")
+    const formattedMop = (methodOfPayment || "").replace(/_/g, " ").trim();
+    console.log(
+      `💳 Selecting Payment Method: ${formattedMop} (Original: ${methodOfPayment})`,
+    );
+
     const mopInput = modalWindow.locator('input[name="payment_type"]');
+
+    // 2. Ensure field is visible and completely cleared
+    await mopInput.waitFor({ state: "visible", timeout: 5000 });
     await mopInput.click();
+
+    // Select all and clear to prevent appending to existing default text like "check"
+    await mopInput.press("ControlOrMeta+a");
+    await mopInput.press("Backspace");
     await mopInput.fill("");
-    await mopInput.type(methodOfPayment, { delay: 100 });
+
+    // 3. Type formatted payment method
+    await mopInput.type(formattedMop, { delay: 100 });
     await page.waitForTimeout(1000);
 
-    const mopRegExp = new RegExp(`^${methodOfPayment}$`, "i");
+    // 4. Safely escape regex characters for dynamic matching
+    const escapedMop = formattedMop.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+    const mopRegExp = new RegExp(`^${escapedMop}$`, "i");
+
     const mopBoundListOption = page
       .locator(".x-boundlist-item")
       .filter({ hasText: mopRegExp });
@@ -779,17 +808,19 @@ async function processInvoiceAutomation({ invoiceId, io }) {
     } catch (mopDropdownError) {
       const backupOption = page
         .locator(".x-boundlist-item")
-        .filter({ hasText: methodOfPayment });
+        .filter({ hasText: formattedMop });
+
       if ((await backupOption.count()) > 0) {
         await backupOption.first().click();
       } else {
         throw new Error(
-          `Invalid Payment Method: "${methodOfPayment}" is not supported or not available.`,
+          `Invalid Payment Method: "${formattedMop}" is not supported or not available.`,
         );
       }
     }
 
-    if (methodOfPayment.toLowerCase() === "check") {
+    // 5. Check condition handling formatted MOP
+    if (formattedMop.toLowerCase() === "check") {
       if (!checkNumber) {
         throw new Error(
           `Check number is missing for the selected 'check' payment method.`,

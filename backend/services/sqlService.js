@@ -1538,6 +1538,181 @@ async function getFuelSalesRollupReport(csoCode, targetDate) {
 
 //   return result.recordset;
 // }
+// Function specifically for June 25-26 matching legacy cumulative calculation logic
+async function getFuelSalesTransactions25June(csoCode, targetDate) {
+  const pool = await getPool();
+  const formattedDateString = formatDateForDB(targetDate.toString());
+
+  const result = await pool.request()
+    .input("csoCode", sql.VarChar, csoCode)
+    .input("targetDate", sql.Char(8), formattedDateString)
+    .query(`
+      WITH date_range AS (
+          SELECT 
+            @targetDate AS start_date,
+            CONVERT(VARCHAR(8), DATEADD(day, 1, CONVERT(DATE, @targetDate, 112)), 112) AS end_date
+      ),
+
+      status_discount_transactions AS (
+          SELECT DISTINCT [Transaction ID]
+          FROM [CSO].[Stg_CashRegisterJournal]
+          CROSS JOIN date_range
+          WHERE [Date_SK] BETWEEN start_date AND end_date
+            AND [Station_SK] = @csoCode
+            AND [Item Description] = 'STATUS DISCOUNT'
+            AND [Transaction ID] IS NOT NULL
+      ),
+
+      extracted_fuel_sales AS (
+          SELECT 
+              s.[Date_SK],
+              s.[DateTime],
+              s.[Register ID],
+              s.[Transaction ID],
+              
+              CASE 
+                  WHEN s.[Event] LIKE '%Refund%' THEN -1 * ABS(s.[Sales Amount])
+                  ELSE s.[Sales Amount]
+              END AS sales_amount,
+              
+              CASE 
+                  WHEN s.[Event] LIKE '%Refund%' THEN -1 * ABS(s.[Sales Quantity])
+                  ELSE s.[Sales Quantity]
+              END AS sales_quantity,
+              
+              CASE 
+                  WHEN s.[Item Description] LIKE '%DYED%' THEN 'Dyed Diesel'
+                  WHEN s.[Item Description] LIKE '%DIESEL%' OR s.[Item Description] LIKE '%ULSD%' THEN 'Diesel'
+                  WHEN s.[Fuel Type] = 'REG' THEN 'Regular | E15'
+                  WHEN s.[Fuel Type] = 'PNL' THEN 'Premium'
+                  WHEN s.[Fuel Type] = 'MID' THEN 'Midgrade'
+                  ELSE COALESCE(s.[Fuel Type], 'Unknown Grade')
+              END AS final_grade,
+              CASE 
+                  WHEN d.[Transaction ID] IS NOT NULL THEN 'Treaty Sale'
+                  ELSE 'Non Treaty Sale'
+              END AS sale_category
+          FROM [CSO].[Stg_CashRegisterJournal] s
+          CROSS JOIN date_range
+          LEFT JOIN status_discount_transactions d ON s.[Transaction ID] = d.[Transaction ID]
+          WHERE s.[Date_SK] BETWEEN start_date AND end_date
+            AND s.[Station_SK] = @csoCode
+            AND (s.[Event] LIKE 'SaleEvent%' OR s.[Event] LIKE '%Refund%')
+            AND s.[Transaction Type] LIKE 'Fuel%'
+            AND s.[Sales Quantity] <> 0
+      )
+
+      SELECT 
+          [Date_SK],
+          [DateTime],
+          [Register ID],
+          [Transaction ID],
+          sale_category,
+          final_grade AS fuel_grade,
+          CAST(sales_amount AS DECIMAL(18,2)) AS sales_amount,
+          CAST(sales_quantity AS DECIMAL(18,4)) AS sales_quantity
+      FROM extracted_fuel_sales
+      WHERE sale_category = 'Treaty Sale'
+      ORDER BY 
+          [Date_SK] ASC,
+          [DateTime] ASC,
+          [Transaction ID] ASC;
+    `);
+
+  return result.recordset;
+}
+
+async function getFuelSalesRollupReportRange(csoCode, startDate, endDate) {
+  const pool = await getPool();
+  const formattedStartDate = formatDateForDB(startDate.toString());
+  const formattedEndDate = formatDateForDB(endDate.toString());
+
+  const result = await pool
+    .request()
+    .input("csoCode", sql.VarChar, csoCode)
+    .input("startDate", sql.Char(8), formattedStartDate)
+    .input("endDate", sql.Char(8), formattedEndDate)
+    .query(`
+      WITH date_range AS (
+          SELECT 
+            @startDate AS start_date,
+            @endDate AS end_date
+      ),
+
+      status_discount_transactions AS (
+          -- Track Date_SK and Transaction ID together (no Register ID)
+          SELECT DISTINCT 
+              [Date_SK],
+              [Transaction ID]
+          FROM [CSO].[Stg_CashRegisterJournal]
+          CROSS JOIN date_range
+          WHERE [Date_SK] BETWEEN start_date AND end_date
+            AND [Station_SK] = @csoCode
+            AND [Item Description] = 'STATUS DISCOUNT'
+            AND [Transaction ID] IS NOT NULL
+      ),
+
+      extracted_fuel_sales AS (
+          SELECT 
+              s.[Date_SK],
+              s.[DateTime],
+              s.[Register ID],
+              s.[Transaction ID],
+              
+              CASE 
+                  WHEN s.[Event] LIKE '%Refund%' THEN -1 * ABS(s.[Sales Amount])
+                  ELSE s.[Sales Amount]
+              END AS sales_amount,
+              
+              CASE 
+                  WHEN s.[Event] LIKE '%Refund%' THEN -1 * ABS(s.[Sales Quantity])
+                  ELSE s.[Sales Quantity]
+              END AS sales_quantity,
+              
+              CASE 
+                  WHEN s.[Item Description] LIKE '%DYED%' THEN 'Dyed Diesel'
+                  WHEN s.[Item Description] LIKE '%DIESEL%' OR s.[Item Description] LIKE '%ULSD%' THEN 'Diesel'
+                  WHEN s.[Fuel Type] = 'REG' THEN 'Regular'
+                  WHEN s.[Fuel Type] = 'PNL' THEN 'Premium'
+                  WHEN s.[Fuel Type] = 'MID' THEN 'Midgrade'
+                  ELSE COALESCE(s.[Fuel Type], 'Unknown Grade')
+              END AS final_grade,
+              CASE 
+                  WHEN d.[Transaction ID] IS NOT NULL THEN 'Treaty Sale'
+                  ELSE 'Non Treaty Sale'
+              END AS sale_category
+          FROM [CSO].[Stg_CashRegisterJournal] s
+          CROSS JOIN date_range
+          -- JOIN on Date_SK AND Transaction ID ONLY
+          LEFT JOIN status_discount_transactions d 
+                 ON s.[Transaction ID] = d.[Transaction ID] 
+                AND s.[Date_SK] = d.[Date_SK]
+          WHERE s.[Date_SK] BETWEEN start_date AND end_date
+            AND s.[Station_SK] = @csoCode
+            AND (s.[Event] LIKE 'SaleEvent%' OR s.[Event] LIKE '%Refund%')
+            AND s.[Transaction Type] LIKE 'Fuel%'
+            AND s.[Sales Quantity] <> 0
+      )
+
+      SELECT 
+          [Date_SK],
+          [DateTime],
+          [Register ID],
+          [Transaction ID],
+          sale_category,
+          final_grade AS fuel_grade,
+          CAST(sales_amount AS DECIMAL(18,2)) AS sales_amount,
+          CAST(sales_quantity AS DECIMAL(18,4)) AS sales_quantity
+      FROM extracted_fuel_sales
+      WHERE sale_category = 'Treaty Sale'
+      ORDER BY 
+          [Date_SK] ASC,
+          [DateTime] ASC,
+          [Transaction ID] ASC;
+    `);
+
+  return result.recordset;
+}
 
 function formatDateForDB(dateString) {
   // input: "2025-11-14"
@@ -1694,4 +1869,6 @@ module.exports = {
   getFuelSalesRollupReport,
   getLatestCsoVendorsList,
   getCoreMarkPriceBookByUPCs,
+  getFuelSalesRollupReportRange,
+  getFuelSalesTransactions25June
 };
