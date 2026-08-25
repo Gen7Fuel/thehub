@@ -15,6 +15,30 @@ const { emailQueue } = require('../queues/emailQueue'); // Update to match your 
 // Configure multer to store uploaded files in memory
 const upload = multer({ storage: multer.memoryStorage() });
 
+// Import your refactored PDF generator helpers
+const {
+  fetchEodDataForDate,
+  combineEodData,
+  generateEodReportBuffer
+} = require('../utils/eodReportWavers');
+
+/**
+ * Helper to generate a date array (YYYY-MM-DD) between startStr and endStr inclusive.
+ */
+function getDateRange(startStr, endStr) {
+  const dates = [];
+  let current = new Date(`${startStr}T00:00:00`);
+  const end = new Date(`${endStr}T00:00:00`);
+
+  while (current <= end) {
+    const yyyy = current.getFullYear();
+    const mm = String(current.getMonth() + 1).padStart(2, '0');
+    const dd = String(current.getDate()).padStart(2, '0');
+    dates.push(`${yyyy}-${mm}-${dd}`);
+    current.setDate(current.getDate() + 1);
+  }
+  return dates;
+}
 /**
  * Helper to convert a Buffer, Stream, or Base64 string to a pure Base64 string.
  */
@@ -215,6 +239,98 @@ router.post('/infonet-reports', upload.single('file'), async (req, res) => {
     });
   }
 });
+
+/**
+ * POST /eod-reports/cumulative
+ * Body parameters:
+ *  - stationName (string, required)
+ *  - startDate (string YYYY-MM-DD, required)
+ *  - endDate (string YYYY-MM-DD, required)
+ *  - includeIndividualReports (boolean, optional, default: false)
+ */
+router.post('/eod-reports/cumulative', async (req, res) => {
+  try {
+    const { stationName, startDate, endDate, includeIndividualReports = false } = req.body;
+
+    // 1. Validation
+    if (!stationName || !startDate || !endDate) {
+      return res.status(400).json({
+        error: 'Parameters "stationName", "startDate", and "endDate" are required.'
+      });
+    }
+
+    // 2. Fetch Location to determine isManitoba flag
+    const locationDoc = await Location.findOne({
+      $or: [
+        { stationName: new RegExp(`^${stationName}$`, 'i') },
+        { site: stationName }
+      ]
+    });
+
+    if (!locationDoc) {
+      return res.status(404).json({ error: `Location not found for station: ${stationName}` });
+    }
+
+    const isManitoba = (locationDoc.province || '').trim().toLowerCase() === 'manitoba';
+    const site = locationDoc.site || locationDoc.stationName;
+
+    // 3. Process Date Range
+    const dates = getDateRange(startDate, endDate);
+    if (dates.length === 0) {
+      return res.status(400).json({ error: 'Invalid date range provided.' });
+    }
+
+    const dailyDataList = [];
+    const individualPdfs = [];
+
+    // 4. Fetch daily data & conditionally generate individual PDF buffers
+    for (const date of dates) {
+      const dailyData = await fetchEodDataForDate({ site, date, isManitoba });
+      dailyDataList.push(dailyData);
+
+      if (includeIndividualReports) {
+        const pdfBuffer = await generateEodReportBuffer({ site, date, data: dailyData });
+        individualPdfs.push({
+          date,
+          fileName: `End-of-Day-Report-${site}-${date}.pdf`,
+          bufferBase64: pdfBuffer.toString('base64')
+        });
+      }
+    }
+
+    // 5. Generate Cumulative PDF
+    const cumulativeData = combineEodData(dailyDataList);
+    const cumulativeDateLabel = `${startDate} to ${endDate}`;
+
+    const cumulativePdfBuffer = await generateEodReportBuffer({
+      site,
+      date: cumulativeDateLabel,
+      data: cumulativeData
+    });
+
+    // 6. Return response payload containing base64 encoded buffers
+    return res.status(200).json({
+      success: true,
+      site,
+      isManitoba,
+      dateRange: { startDate, endDate },
+      cumulativeReport: {
+        fileName: `${site}_CUMULATIVE_${startDate}_to_${endDate}.pdf`,
+        bufferBase64: cumulativePdfBuffer.toString('base64')
+      },
+      individualReports: individualPdfs
+    });
+
+  } catch (error) {
+    console.error('Error generating EOD cumulative report:', error);
+    return res.status(500).json({
+      error: 'Failed to generate EOD cumulative report.',
+      details: error.message
+    });
+  }
+});
+
+module.exports = router;
 // router.post('/infonet-reports', upload.single('file'), async (req, res) => {
 //   try {
 //     const { site, adminFee, provinceStatusDiscount } = req.body;
@@ -352,4 +468,4 @@ router.post('/infonet-reports', upload.single('file'), async (req, res) => {
 //   }
 // });
 
-module.exports = router;
+// module.exports = router;
