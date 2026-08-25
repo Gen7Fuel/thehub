@@ -261,6 +261,7 @@ function RouteComponent() {
               value={codeInput}
               onChange={(e) => setCodeInput(e.target.value.replace(/\D/g, '').slice(0, 4))}
               onKeyDown={(e) => { if (e.key === 'Enter') handleLookup() }}
+              autoFocus
               className="w-full rounded-2xl border-2 border-gray-200 px-4 py-3 text-center text-lg font-mono tracking-widest focus:outline-none focus:border-red-500 transition-colors"
             />
             {codeError && <p className="text-sm text-red-500 text-center">{codeError}</p>}
@@ -436,11 +437,23 @@ function VideoItemView({
   const isHls = !isEmbed && raw.includes('.m3u8')
 
   const videoRef = useRef<HTMLVideoElement>(null)
+  const containerRef = useRef<HTMLDivElement>(null)
   const hlsRef = useRef<Hls | null>(null)
   const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const hasCompletedRef = useRef(isCompleted)
   const savedSecondsRef = useRef<number>(0)
   const [markedWatched, setMarkedWatched] = useState(isCompleted)
+  const [isFullscreen, setIsFullscreen] = useState(false)
+
+  // Track fullscreen state so the video can be resized to fill the screen
+  // and so we know which element is currently fullscreen.
+  useEffect(() => {
+    function handleFullscreenChange() {
+      setIsFullscreen(document.fullscreenElement === containerRef.current)
+    }
+    document.addEventListener('fullscreenchange', handleFullscreenChange)
+    return () => document.removeEventListener('fullscreenchange', handleFullscreenChange)
+  }, [])
 
   const saveProgress = useCallback(
     (seconds: number) => {
@@ -524,16 +537,22 @@ function VideoItemView({
 
   function handleFullscreen(e: React.MouseEvent) {
     e.stopPropagation()
-    const v = videoRef.current as (HTMLVideoElement & {
+    // Fullscreen the *wrapper div*, not the <video> itself. Browsers add
+    // their own native seek/control overlay only when a <video> element is
+    // directly the fullscreen target — fullscreening an ancestor avoids that
+    // overlay entirely, so clicks reach our onClick handler and toggle play/pause.
+    const container = containerRef.current as (HTMLDivElement & {
       webkitRequestFullscreen?: () => void
+    }) | null
+    const v = videoRef.current as (HTMLVideoElement & {
       webkitEnterFullscreen?: () => void
     }) | null
-    if (!v) return
-    if (v.requestFullscreen) v.requestFullscreen()
-    else if (v.webkitRequestFullscreen) v.webkitRequestFullscreen()
-    // iOS Safari doesn't support requestFullscreen on arbitrary elements, but
-    // <video> exposes its own native fullscreen entry point.
-    else if (v.webkitEnterFullscreen) v.webkitEnterFullscreen()
+    if (container?.requestFullscreen) container.requestFullscreen()
+    else if (container?.webkitRequestFullscreen) container.webkitRequestFullscreen()
+    // iOS Safari doesn't support requestFullscreen on arbitrary elements, so
+    // fall back to <video>'s own native fullscreen entry point. That's an
+    // OS-level player with its own controls we can't remove or override.
+    else if (v?.webkitEnterFullscreen) v.webkitEnterFullscreen()
   }
 
   return (
@@ -547,11 +566,14 @@ function VideoItemView({
             allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
           />
         ) : (
-          <div className="relative">
+          <div
+            ref={containerRef}
+            className={isFullscreen ? 'relative flex items-center justify-center bg-black w-screen h-screen' : 'relative'}
+          >
             <video
               ref={videoRef}
               src={isHls ? undefined : src}
-              className="w-full aspect-video bg-black cursor-pointer"
+              className={isFullscreen ? 'max-w-full max-h-full bg-black cursor-pointer' : 'w-full aspect-video bg-black cursor-pointer'}
               playsInline
               onClick={handleTogglePlay}
               onLoadedMetadata={handleLoadedMetadata}
@@ -773,7 +795,7 @@ function MCQItemView({
               <h3 className={`text-3xl font-black mb-4 uppercase tracking-tighter ${
                 theme === 'correct' ? 'text-green-600' : theme === 'close' ? 'text-orange-600' : 'text-red-600'
               }`}>
-                {theme === 'correct' ? 'Awesome!' : theme === 'close' ? 'Nice Try!' : 'Not Quite!'}
+                {theme === 'correct' ? 'Awesome!' : theme === 'close' ? 'Nice Try!' : 'Quick Warning'}
               </h3>
               <p className="text-gray-600 font-medium leading-relaxed">
                 {selectedOpt.feedback || (
