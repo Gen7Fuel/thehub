@@ -6,7 +6,7 @@ const mongoose = require('mongoose');
 const JSZip = require('jszip');
 
 // Retrieve already registered model from Mongoose registry, or require file if not yet registered
-const Location = mongoose.models.Location || require('../models/location');
+const Location = require('../models/Location');
 const { processInfonetReport } = require('../utils/flattenInfonetReport');
 const { generateAdminFeePdfReports } = require('../utils/generateInfonetAdminFeeByClientReport');
 const { generateInfonetPdfReports } = require('../utils/generateInfonetByClientReport');
