@@ -3,6 +3,7 @@ const router = express.Router();
 const multer = require('multer');
 const ExcelJS = require('exceljs');
 const mongoose = require('mongoose');
+const JSZip = require('jszip');
 
 // Retrieve already registered model from Mongoose registry, or require file if not yet registered
 const Location = mongoose.models.Location || require('../models/location');
@@ -15,6 +16,36 @@ const { emailQueue } = require('../queues/emailQueue'); // Update to match your 
 // Configure multer to store uploaded files in memory
 const upload = multer({ storage: multer.memoryStorage() });
 
+// Import your refactored PDF generator helpers
+const {
+  fetchEodDataForDate,
+  combineEodData,
+  generateEodReportBuffer
+} = require('../utils/eodReportWavers');
+
+const {
+  fetchChickenDelightEodDataForDate,
+  combineChickenDelightEodData,
+  generateChickenDelightEodReportBuffer
+} = require('../utils/eodCDReportWavers'); // Path to your Chicken Delight helper module
+
+/**
+ * Helper to generate a date array (YYYY-MM-DD) between startStr and endStr inclusive.
+ */
+function getDateRange(startStr, endStr) {
+  const dates = [];
+  let current = new Date(`${startStr}T00:00:00`);
+  const end = new Date(`${endStr}T00:00:00`);
+
+  while (current <= end) {
+    const yyyy = current.getFullYear();
+    const mm = String(current.getMonth() + 1).padStart(2, '0');
+    const dd = String(current.getDate()).padStart(2, '0');
+    dates.push(`${yyyy}-${mm}-${dd}`);
+    current.setDate(current.getDate() + 1);
+  }
+  return dates;
+}
 /**
  * Helper to convert a Buffer, Stream, or Base64 string to a pure Base64 string.
  */
@@ -215,6 +246,204 @@ router.post('/infonet-reports', upload.single('file'), async (req, res) => {
     });
   }
 });
+
+/**
+ * POST /eod-reports/cumulative
+ * Body parameters:
+ *  - stationName (string, required)
+ *  - startDate (string YYYY-MM-DD, required)
+ *  - endDate (string YYYY-MM-DD, required)
+ *  - includeIndividualReports (boolean, optional, default: false)
+ */
+router.post('/eod-reports/cumulative', async (req, res) => {
+  try {
+    const {
+      stationName,
+      startDate,
+      endDate,
+      includeIndividualReports = false,
+      includeChickenDelight = false
+    } = req.body;
+
+    // 1. Validation
+    if (!stationName || !startDate || !endDate) {
+      return res.status(400).json({
+        error: 'Parameters "stationName", "startDate", and "endDate" are required.'
+      });
+    }
+
+    // 2. Fetch Location to determine isManitoba flag
+    const locationDoc = await Location.findOne({
+      $or: [
+        { stationName: new RegExp(`^${stationName}$`, 'i') },
+        { site: stationName }
+      ]
+    });
+
+    if (!locationDoc) {
+      return res.status(404).json({ error: `Location not found for station: ${stationName}` });
+    }
+
+    const isManitoba = (locationDoc.province || '').trim().toLowerCase() === 'manitoba';
+    const site = locationDoc.stationName || locationDoc.site;
+    const siteDisplayName = formatReportSiteName(site);
+
+    // 3. Process Date Range
+    const dates = getDateRange(startDate, endDate);
+    if (dates.length === 0) {
+      return res.status(400).json({ error: 'Invalid date range provided.' });
+    }
+
+    const dailyDataList = [];
+    const individualPdfs = [];
+
+    const cdDailyDataList = [];
+    const cdIndividualPdfs = [];
+
+    // 4. Fetch daily data & conditionally generate individual PDF buffers
+    for (const date of dates) {
+      // Regular EOD Data
+      const dailyData = await fetchEodDataForDate({ site, date, isManitoba });
+      dailyDataList.push(dailyData);
+
+      if (includeIndividualReports) {
+        const pdfBuffer = await generateEodReportBuffer({ site, date, data: dailyData });
+        individualPdfs.push({
+          date,
+          fileName: `End-of-Day-Report-${siteDisplayName}-${date}.pdf`,
+          buffer: pdfBuffer
+        });
+      }
+
+      // Chicken Delight EOD Data (if flag is active)
+      if (includeChickenDelight) {
+        const cdDailyData = await fetchChickenDelightEodDataForDate({ site, date });
+        cdDailyDataList.push(cdDailyData);
+
+        if (includeIndividualReports) {
+          const cdPdfBuffer = await generateChickenDelightEodReportBuffer({
+            site,
+            date,
+            data: cdDailyData
+          });
+          cdIndividualPdfs.push({
+            date,
+            fileName: `Chicken-Delight-EOD-${siteDisplayName}-${date}.pdf`,
+            buffer: cdPdfBuffer
+          });
+        }
+      }
+    }
+
+    // 5. Generate Cumulative PDFs
+    const cumulativeDateLabel = `${startDate} to ${endDate}`;
+
+    // 5a. Standard Cumulative EOD PDF
+    const cumulativeData = combineEodData(dailyDataList);
+    const cumulativePdfBuffer = await generateEodReportBuffer({
+      site,
+      date: cumulativeDateLabel,
+      data: cumulativeData
+    });
+
+    // 6. Build Attachments Array
+    const attachments = [];
+
+    // Attach Standard Cumulative PDF
+    const cumulativeFileName = `${siteDisplayName}_CUMULATIVE_${startDate}_to_${endDate}.pdf`;
+    attachments.push({
+      filename: cumulativeFileName,
+      content: cumulativePdfBuffer,
+      contentType: 'application/pdf'
+    });
+
+    // 5b. Chicken Delight Cumulative EOD PDF (if requested)
+    if (includeChickenDelight) {
+      const cdCumulativeData = combineChickenDelightEodData(cdDailyDataList);
+      const cdCumulativePdfBuffer = await generateChickenDelightEodReportBuffer({
+        site,
+        date: cumulativeDateLabel,
+        data: cdCumulativeData
+      });
+
+      const cdCumulativeFileName = `Chicken-Delight-EOD-${siteDisplayName}_CUMULATIVE_${startDate}_to_${endDate}.pdf`;
+      attachments.push({
+        filename: cdCumulativeFileName,
+        content: cdCumulativePdfBuffer,
+        contentType: 'application/pdf'
+      });
+    }
+
+    // Attach Standard Individual Reports Zip (if requested)
+    if (includeIndividualReports && individualPdfs.length > 0) {
+      const zip = new JSZip();
+      individualPdfs.forEach((report) => {
+        zip.file(report.fileName, report.buffer);
+      });
+
+      const zipBuffer = await zip.generateAsync({ type: 'nodebuffer' });
+      attachments.push({
+        filename: `Individual_EOD_Reports_${siteDisplayName}_${startDate}_to_${endDate}.zip`,
+        content: zipBuffer,
+        contentType: 'application/zip'
+      });
+    }
+
+    // Attach Chicken Delight Individual Reports Zip (if both flags are requested)
+    if (includeChickenDelight && includeIndividualReports && cdIndividualPdfs.length > 0) {
+      const cdZip = new JSZip();
+      cdIndividualPdfs.forEach((report) => {
+        cdZip.file(report.fileName, report.buffer);
+      });
+
+      const cdZipBuffer = await cdZip.generateAsync({ type: 'nodebuffer' });
+      attachments.push({
+        filename: `Individual_Chicken_Delight_EOD_Reports_${siteDisplayName}_${startDate}_to_${endDate}.zip`,
+        content: cdZipBuffer,
+        contentType: 'application/zip'
+      });
+    }
+
+    // 7. Serialize attachments to base64
+    const serializedAttachments = await Promise.all(
+      attachments.map(async (att) => ({
+        filename: att.filename,
+        content: await attachmentContentToBase64(att.content),
+        encoding: 'base64',
+        contentType: att.contentType
+      }))
+    );
+
+    // 8. Queue Email Task
+    const recipientEmail = req.user && req.user.email ? req.user.email : 'daksh@gen7fuel.com';
+    const emailSubject = `End of Day Reports – ${siteDisplayName} (${startDate} to ${endDate})`;
+
+    await emailQueue.add('sendEodReportEmail', {
+      to: recipientEmail,
+      subject: emailSubject,
+      text: `Hello,\n\nAttached are the requested End of Day reports for ${siteDisplayName} covering the period ${startDate} to ${endDate}.\n\nBest regards,\nGen7 Fuel Automated System`,
+      attachments: serializedAttachments
+    });
+
+    // 9. Return Response
+    return res.status(200).json({
+      success: true,
+      message: `The generated reports have been queued and will be emailed directly to ${recipientEmail} shortly.`,
+      site,
+      isManitoba,
+      dateRange: { startDate, endDate }
+    });
+
+  } catch (error) {
+    console.error('Error generating EOD cumulative report:', error);
+    return res.status(500).json({
+      error: 'Failed to generate EOD cumulative report.',
+      details: error.message
+    });
+  }
+});
+
+module.exports = router;
 // router.post('/infonet-reports', upload.single('file'), async (req, res) => {
 //   try {
 //     const { site, adminFee, provinceStatusDiscount } = req.body;
@@ -352,4 +581,4 @@ router.post('/infonet-reports', upload.single('file'), async (req, res) => {
 //   }
 // });
 
-module.exports = router;
+// module.exports = router;

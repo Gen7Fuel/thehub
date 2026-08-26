@@ -10,7 +10,7 @@ function RouteComponent() {
   const access = user?.access || {};
 
   const hasInfonet = access?.accounting?.accountingReports?.infonet;
-  const hasEOD = access?.accounting?.accountingReports?.endOfDayReport;
+  const hasEOD = access?.accounting?.accountingReports?.endOfDayReport?.value;
 
   if (hasInfonet) {
     return <Navigate to="/accounting-reports/infonet" replace />;
