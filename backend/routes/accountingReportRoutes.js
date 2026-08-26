@@ -27,7 +27,7 @@ const {
   fetchChickenDelightEodDataForDate,
   combineChickenDelightEodData,
   generateChickenDelightEodReportBuffer
-} = require('../utils/eodCDReportWavers'); // Path to your Chicken Delight helper module
+} = require('../utils/eodCDReportWavers'); //Path to your Chicken Delight helper module
 
 /**
  * Helper to generate a date array (YYYY-MM-DD) between startStr and endStr inclusive.
