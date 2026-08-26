@@ -1,38 +1,17 @@
 import { useState, useEffect } from 'react';
-import { createFileRoute } from '@tanstack/react-router';
-import { Building, Calendar, FileDown, Loader2, FileText, CheckCircle2 } from 'lucide-react';
+import { createFileRoute, useNavigate } from '@tanstack/react-router';
+import { Building, Calendar, Mail, Loader2, FileText, CheckCircle2, Send, UtensilsCrossed } from 'lucide-react';
 import { DatePicker } from '@/components/custom/datePicker';
 import { LocationPicker } from '@/components/custom/locationPicker';
 import { useSite } from '@/context/SiteContext';
 import { useAuth } from '@/context/AuthContext';
-import axios from 'axios'; // Or your app's custom api client instance
+import axios from 'axios';
 
 export const Route = createFileRoute(
   '/_navbarLayout/accounting-reports/end-of-day',
 )({
   component: RouteComponent,
 });
-
-/**
- * Helper to download base64 string directly as a PDF file
- */
-function downloadBase64Pdf(base64Data: string, fileName: string) {
-  const binaryString = window.atob(base64Data);
-  const len = binaryString.length;
-  const bytes = new Uint8Array(len);
-  for (let i = 0; i < len; i++) {
-    bytes[i] = binaryString.charCodeAt(i);
-  }
-  const blob = new Blob([bytes], { type: 'application/pdf' });
-  const url = window.URL.createObjectURL(blob);
-  const link = document.createElement('a');
-  link.href = url;
-  link.setAttribute('download', fileName);
-  document.body.appendChild(link);
-  link.click();
-  link.remove();
-  window.URL.revokeObjectURL(url);
-}
 
 /**
  * Helper to format Javascript Date into YYYY-MM-DD
@@ -46,7 +25,13 @@ function formatDateToYYYYMMDD(date: Date): string {
 
 function RouteComponent() {
   const { user } = useAuth();
-  const { selectedSite, setSelectedSite } = useSite();
+  const { selectedSite } = useSite();
+  const navigate = useNavigate();
+
+  // Permission check for individual report downloads
+  const canDownloadIndividualReports = Boolean(
+    user?.access?.accounting?.accountingReports?.endOfDayReport?.downloadIndividualReports
+  );
 
   // Location state synced with Auth/Site Context
   const [site, setSite] = useState<string>(
@@ -61,28 +46,31 @@ function RouteComponent() {
   const [fromDate, setFromDate] = useState<Date | undefined>(yesterday);
   const [toDate, setToDate] = useState<Date | undefined>(today);
 
-  // Toggle state for individual reports
+  // Toggle states
   const [includeIndividualReports, setIncludeIndividualReports] = useState<boolean>(false);
+  const [includeChickenDelight, setIncludeChickenDelight] = useState<boolean>(false);
 
   // UI state for loading & error feedback
   const [loading, setLoading] = useState<boolean>(false);
   const [statusMessage, setStatusMessage] = useState<string>('');
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
-  // Sync site state with global site context changes
+  // Check if current selected location is "Wavers West"
+  const isWaversWest = site.trim().toLowerCase() === 'wavers west';
+
+  // Sync site local state if global selectedSite changes
   useEffect(() => {
     if (selectedSite) {
       setSite(selectedSite);
     }
   }, [selectedSite]);
 
-  // Handle location picker changes and propagate to global SiteContext
-  const handleSiteChange = (newSite: string) => {
-    setSite(newSite);
-    if (setSelectedSite) {
-      setSelectedSite(newSite);
+  // Reset Chicken Delight toggle if station is changed away from Wavers West
+  useEffect(() => {
+    if (!isWaversWest) {
+      setIncludeChickenDelight(false);
     }
-  };
+  }, [isWaversWest]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -103,39 +91,46 @@ function RouteComponent() {
 
     const startDateStr = formatDateToYYYYMMDD(fromDate);
     const endDateStr = formatDateToYYYYMMDD(toDate);
+    const shouldIncludeIndividual = canDownloadIndividualReports && includeIndividualReports;
+    const shouldIncludeChickenDelight = isWaversWest && includeChickenDelight;
 
     try {
       setLoading(true);
-      setStatusMessage('Generating End of Day reports on server...');
+      setStatusMessage('Requesting End of Day reports...');
 
-      const response = await axios.post('/api/eod-reports/cumulative', {
-        stationName: site,
-        startDate: startDateStr,
-        endDate: endDateStr,
-        includeIndividualReports,
-      });
+      const token = localStorage.getItem('token');
 
-      const { cumulativeReport, individualReports } = response.data;
+      const response = await axios.post(
+        '/api/accounting-reports/eod-reports/cumulative',
+        {
+          stationName: site,
+          startDate: startDateStr,
+          endDate: endDateStr,
+          includeIndividualReports: shouldIncludeIndividual,
+          includeChickenDelight: shouldIncludeChickenDelight,
+        },
+        {
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${token}`,
+            'X-Required-Permission': 'accounting.accountingReports.endOfDayReport',
+          },
+        }
+      );
 
-      setStatusMessage('Reports generated! Downloading files...');
-
-      // 1. Download Cumulative Report
-      if (cumulativeReport?.bufferBase64) {
-        downloadBase64Pdf(cumulativeReport.bufferBase64, cumulativeReport.fileName);
-      }
-
-      // 2. Download Individual Reports if requested and available
-      if (includeIndividualReports && Array.isArray(individualReports)) {
-        individualReports.forEach((report: { bufferBase64: string; fileName: string }) => {
-          if (report.bufferBase64) {
-            downloadBase64Pdf(report.bufferBase64, report.fileName);
-          }
-        });
-      }
-
-      setStatusMessage('All reports downloaded successfully!');
+      // Display response feedback message
+      const targetEmail = user?.email || 'your email address';
+      setStatusMessage(
+        response.data?.message || `Reports generated! The reports will be emailed directly to ${targetEmail} shortly.`
+      );
     } catch (err: any) {
       console.error('Error generating reports:', err);
+
+      if (err.response?.status === 403) {
+        navigate({ to: '/no-access' });
+        return;
+      }
+
       setErrorMessage(
         err.response?.data?.error || err.message || 'Failed to generate reports.'
       );
@@ -153,7 +148,7 @@ function RouteComponent() {
             End of Day Reports
           </h1>
           <p className="text-sm text-slate-500 dark:text-zinc-400">
-            Generate and download cumulative and daily operational EOD reports.
+            Generate and dispatch cumulative and daily operational EOD reports directly to your email.
           </p>
         </div>
       </div>
@@ -169,7 +164,7 @@ function RouteComponent() {
                 <Building className="w-3.5 h-3.5" /> Station Location
               </label>
               <LocationPicker
-                setStationName={handleSiteChange}
+                setStationName={setSite}
                 value="stationName"
                 defaultValue={site}
               />
@@ -206,34 +201,67 @@ function RouteComponent() {
             </div>
           </div>
 
-          {/* Toggle Option for Individual Reports */}
-          <div className="flex items-center justify-between pt-2 border-t border-slate-100 dark:border-zinc-800/80">
-            <div className="flex items-center gap-3">
-              <div className="p-2 rounded-lg bg-slate-100 dark:bg-zinc-800 text-slate-600 dark:text-zinc-300">
-                <FileText className="w-5 h-5" />
+          {/* Toggle Option for Chicken Delight Report (Only for Wavers West) */}
+          {isWaversWest && (
+            <div className="flex items-center justify-between pt-4 border-t border-slate-100 dark:border-zinc-800/80">
+              <div className="flex items-center gap-3">
+                <div className="p-2 rounded-lg bg-amber-100 dark:bg-amber-950/50 text-amber-600 dark:text-amber-400">
+                  <UtensilsCrossed className="w-5 h-5" />
+                </div>
+                <div>
+                  <label htmlFor="chicken-delight-toggle" className="text-sm font-semibold text-slate-800 dark:text-zinc-200 cursor-pointer">
+                    Include Chicken Delight Report
+                  </label>
+                  <p className="text-xs text-slate-500 dark:text-zinc-400">
+                    Generate and attach the specialized Chicken Delight EOD report alongside standard EOD reports.
+                  </p>
+                </div>
               </div>
-              <div>
-                <label htmlFor="individual-toggle" className="text-sm font-semibold text-slate-800 dark:text-zinc-200 cursor-pointer">
-                  Include Individual Daily Reports
-                </label>
-                <p className="text-xs text-slate-500 dark:text-zinc-400">
-                  When enabled, individual daily PDF reports will be downloaded alongside the cumulative PDF report.
-                </p>
-              </div>
-            </div>
 
-            <label className="relative inline-flex items-center cursor-pointer">
-              <input
-                id="individual-toggle"
-                type="checkbox"
-                checked={includeIndividualReports}
-                onChange={(e) => setIncludeIndividualReports(e.target.checked)}
-                disabled={loading}
-                className="sr-only peer"
-              />
-              <div className="w-11 h-6 bg-slate-200 peer-focus:outline-none dark:peer-focus:ring-blue-800 rounded-full peer dark:bg-zinc-700 peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all dark:after:border-zinc-600 peer-checked:bg-amber-600"></div>
-            </label>
-          </div>
+              <label className="relative inline-flex items-center cursor-pointer">
+                <input
+                  id="chicken-delight-toggle"
+                  type="checkbox"
+                  checked={includeChickenDelight}
+                  onChange={(e) => setIncludeChickenDelight(e.target.checked)}
+                  disabled={loading}
+                  className="sr-only peer"
+                />
+                <div className="w-11 h-6 bg-slate-200 peer-focus:outline-none dark:peer-focus:ring-blue-800 rounded-full peer dark:bg-zinc-700 peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all dark:after:border-zinc-600 peer-checked:bg-amber-600"></div>
+              </label>
+            </div>
+          )}
+
+          {/* Toggle Option for Individual Reports (Permission Restricted) */}
+          {canDownloadIndividualReports && (
+            <div className="flex items-center justify-between pt-4 border-t border-slate-100 dark:border-zinc-800/80">
+              <div className="flex items-center gap-3">
+                <div className="p-2 rounded-lg bg-slate-100 dark:bg-zinc-800 text-slate-600 dark:text-zinc-300">
+                  <FileText className="w-5 h-5" />
+                </div>
+                <div>
+                  <label htmlFor="individual-toggle" className="text-sm font-semibold text-slate-800 dark:text-zinc-200 cursor-pointer">
+                    Include Individual Daily Reports
+                  </label>
+                  <p className="text-xs text-slate-500 dark:text-zinc-400">
+                    When enabled, individual daily PDF reports will be zipped and attached alongside the cumulative report.
+                  </p>
+                </div>
+              </div>
+
+              <label className="relative inline-flex items-center cursor-pointer">
+                <input
+                  id="individual-toggle"
+                  type="checkbox"
+                  checked={includeIndividualReports}
+                  onChange={(e) => setIncludeIndividualReports(e.target.checked)}
+                  disabled={loading}
+                  className="sr-only peer"
+                />
+                <div className="w-11 h-6 bg-slate-200 peer-focus:outline-none dark:peer-focus:ring-blue-800 rounded-full peer dark:bg-zinc-700 peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all dark:after:border-zinc-600 peer-checked:bg-amber-600"></div>
+              </label>
+            </div>
+          )}
 
           {/* Error Message */}
           {errorMessage && (
@@ -254,6 +282,18 @@ function RouteComponent() {
             </div>
           )}
 
+          {/* Email Notification Banner */}
+          <div className="flex items-center gap-2.5 p-3.5 bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800/50 rounded-lg text-amber-900 dark:text-amber-200 text-sm">
+            <Mail className="h-4 w-4 shrink-0 text-amber-600 dark:text-amber-400" />
+            <span>
+              Generated reports will be emailed directly to{" "}
+              <strong className="font-semibold underline decoration-amber-300">
+                {user?.email || "your email address"}
+              </strong>
+              .
+            </span>
+          </div>
+
           {/* Actions */}
           <div className="flex justify-end pt-2">
             <button
@@ -264,12 +304,12 @@ function RouteComponent() {
               {loading ? (
                 <>
                   <Loader2 className="w-4 h-4 animate-spin" />
-                  Generating Reports...
+                  Generating & Dispatching...
                 </>
               ) : (
                 <>
-                  <FileDown className="w-4 h-4" />
-                  Generate & Download Reports
+                  <Send className="w-4 h-4" />
+                  Submit & Email Reports
                 </>
               )}
             </button>

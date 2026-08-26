@@ -3,6 +3,7 @@ const router = express.Router();
 const multer = require('multer');
 const ExcelJS = require('exceljs');
 const mongoose = require('mongoose');
+const JSZip = require('jszip');
 
 // Retrieve already registered model from Mongoose registry, or require file if not yet registered
 const Location = mongoose.models.Location || require('../models/location');
@@ -21,6 +22,12 @@ const {
   combineEodData,
   generateEodReportBuffer
 } = require('../utils/eodReportWavers');
+
+const {
+  fetchChickenDelightEodDataForDate,
+  combineChickenDelightEodData,
+  generateChickenDelightEodReportBuffer
+} = require('../utils/eodCDReportWavers'); // Path to your Chicken Delight helper module
 
 /**
  * Helper to generate a date array (YYYY-MM-DD) between startStr and endStr inclusive.
@@ -250,7 +257,13 @@ router.post('/infonet-reports', upload.single('file'), async (req, res) => {
  */
 router.post('/eod-reports/cumulative', async (req, res) => {
   try {
-    const { stationName, startDate, endDate, includeIndividualReports = false } = req.body;
+    const {
+      stationName,
+      startDate,
+      endDate,
+      includeIndividualReports = false,
+      includeChickenDelight = false
+    } = req.body;
 
     // 1. Validation
     if (!stationName || !startDate || !endDate) {
@@ -272,7 +285,8 @@ router.post('/eod-reports/cumulative', async (req, res) => {
     }
 
     const isManitoba = (locationDoc.province || '').trim().toLowerCase() === 'manitoba';
-    const site = locationDoc.site || locationDoc.stationName;
+    const site = locationDoc.stationName || locationDoc.site;
+    const siteDisplayName = formatReportSiteName(site);
 
     // 3. Process Date Range
     const dates = getDateRange(startDate, endDate);
@@ -283,8 +297,12 @@ router.post('/eod-reports/cumulative', async (req, res) => {
     const dailyDataList = [];
     const individualPdfs = [];
 
+    const cdDailyDataList = [];
+    const cdIndividualPdfs = [];
+
     // 4. Fetch daily data & conditionally generate individual PDF buffers
     for (const date of dates) {
+      // Regular EOD Data
       const dailyData = await fetchEodDataForDate({ site, date, isManitoba });
       dailyDataList.push(dailyData);
 
@@ -292,33 +310,128 @@ router.post('/eod-reports/cumulative', async (req, res) => {
         const pdfBuffer = await generateEodReportBuffer({ site, date, data: dailyData });
         individualPdfs.push({
           date,
-          fileName: `End-of-Day-Report-${site}-${date}.pdf`,
-          bufferBase64: pdfBuffer.toString('base64')
+          fileName: `End-of-Day-Report-${siteDisplayName}-${date}.pdf`,
+          buffer: pdfBuffer
         });
+      }
+
+      // Chicken Delight EOD Data (if flag is active)
+      if (includeChickenDelight) {
+        const cdDailyData = await fetchChickenDelightEodDataForDate({ site, date });
+        cdDailyDataList.push(cdDailyData);
+
+        if (includeIndividualReports) {
+          const cdPdfBuffer = await generateChickenDelightEodReportBuffer({
+            site,
+            date,
+            data: cdDailyData
+          });
+          cdIndividualPdfs.push({
+            date,
+            fileName: `Chicken-Delight-EOD-${siteDisplayName}-${date}.pdf`,
+            buffer: cdPdfBuffer
+          });
+        }
       }
     }
 
-    // 5. Generate Cumulative PDF
-    const cumulativeData = combineEodData(dailyDataList);
+    // 5. Generate Cumulative PDFs
     const cumulativeDateLabel = `${startDate} to ${endDate}`;
 
+    // 5a. Standard Cumulative EOD PDF
+    const cumulativeData = combineEodData(dailyDataList);
     const cumulativePdfBuffer = await generateEodReportBuffer({
       site,
       date: cumulativeDateLabel,
       data: cumulativeData
     });
 
-    // 6. Return response payload containing base64 encoded buffers
+    // 6. Build Attachments Array
+    const attachments = [];
+
+    // Attach Standard Cumulative PDF
+    const cumulativeFileName = `${siteDisplayName}_CUMULATIVE_${startDate}_to_${endDate}.pdf`;
+    attachments.push({
+      filename: cumulativeFileName,
+      content: cumulativePdfBuffer,
+      contentType: 'application/pdf'
+    });
+
+    // 5b. Chicken Delight Cumulative EOD PDF (if requested)
+    if (includeChickenDelight) {
+      const cdCumulativeData = combineChickenDelightEodData(cdDailyDataList);
+      const cdCumulativePdfBuffer = await generateChickenDelightEodReportBuffer({
+        site,
+        date: cumulativeDateLabel,
+        data: cdCumulativeData
+      });
+
+      const cdCumulativeFileName = `Chicken-Delight-EOD-${siteDisplayName}_CUMULATIVE_${startDate}_to_${endDate}.pdf`;
+      attachments.push({
+        filename: cdCumulativeFileName,
+        content: cdCumulativePdfBuffer,
+        contentType: 'application/pdf'
+      });
+    }
+
+    // Attach Standard Individual Reports Zip (if requested)
+    if (includeIndividualReports && individualPdfs.length > 0) {
+      const zip = new JSZip();
+      individualPdfs.forEach((report) => {
+        zip.file(report.fileName, report.buffer);
+      });
+
+      const zipBuffer = await zip.generateAsync({ type: 'nodebuffer' });
+      attachments.push({
+        filename: `Individual_EOD_Reports_${siteDisplayName}_${startDate}_to_${endDate}.zip`,
+        content: zipBuffer,
+        contentType: 'application/zip'
+      });
+    }
+
+    // Attach Chicken Delight Individual Reports Zip (if both flags are requested)
+    if (includeChickenDelight && includeIndividualReports && cdIndividualPdfs.length > 0) {
+      const cdZip = new JSZip();
+      cdIndividualPdfs.forEach((report) => {
+        cdZip.file(report.fileName, report.buffer);
+      });
+
+      const cdZipBuffer = await cdZip.generateAsync({ type: 'nodebuffer' });
+      attachments.push({
+        filename: `Individual_Chicken_Delight_EOD_Reports_${siteDisplayName}_${startDate}_to_${endDate}.zip`,
+        content: cdZipBuffer,
+        contentType: 'application/zip'
+      });
+    }
+
+    // 7. Serialize attachments to base64
+    const serializedAttachments = await Promise.all(
+      attachments.map(async (att) => ({
+        filename: att.filename,
+        content: await attachmentContentToBase64(att.content),
+        encoding: 'base64',
+        contentType: att.contentType
+      }))
+    );
+
+    // 8. Queue Email Task
+    const recipientEmail = req.user && req.user.email ? req.user.email : 'daksh@gen7fuel.com';
+    const emailSubject = `End of Day Reports – ${siteDisplayName} (${startDate} to ${endDate})`;
+
+    await emailQueue.add('sendEodReportEmail', {
+      to: recipientEmail,
+      subject: emailSubject,
+      text: `Hello,\n\nAttached are the requested End of Day reports for ${siteDisplayName} covering the period ${startDate} to ${endDate}.\n\nBest regards,\nGen7 Fuel Automated System`,
+      attachments: serializedAttachments
+    });
+
+    // 9. Return Response
     return res.status(200).json({
       success: true,
+      message: `The generated reports have been queued and will be emailed directly to ${recipientEmail} shortly.`,
       site,
       isManitoba,
-      dateRange: { startDate, endDate },
-      cumulativeReport: {
-        fileName: `${site}_CUMULATIVE_${startDate}_to_${endDate}.pdf`,
-        bufferBase64: cumulativePdfBuffer.toString('base64')
-      },
-      individualReports: individualPdfs
+      dateRange: { startDate, endDate }
     });
 
   } catch (error) {
