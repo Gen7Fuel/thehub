@@ -113,8 +113,8 @@ const updateCycleCountCSO = async () => {
   }
 };
 
-// Execute Cron job at exactly 6:00 AM local Server Time
-cron.schedule("0 6 * * *", () => {
+// Execute Cron job at exactly 7:00 AM local Server Time
+cron.schedule("0 7 * * *", () => {
   console.log("Triggering scheduled morning updateCycleCountCSO invocation...");
   updateCycleCountCSO();
 }, {
