@@ -58,7 +58,7 @@ function RouteComponent() {
   // Check if current selected location is "Wavers West"
   const isWaversWest = site.trim().toLowerCase() === 'wavers west';
 
-  // Sync site local state if global selectedSite changes
+  // Sync site local state if global selected Site changes
   useEffect(() => {
     if (selectedSite) {
       setSite(selectedSite);
