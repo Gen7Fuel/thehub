@@ -71,6 +71,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
+import { useAuth } from "@/context/AuthContext";
 
 export const Route = createFileRoute(
   "/_navbarLayout/fuel-management/workspace",
@@ -483,6 +484,16 @@ function StationStrip({
   date: Date;
   racks: any[];
 }) {
+  const { user } = useAuth();
+  const access = user?.access || {};
+  const canEditOrderQty = access?.fuelManagement?.workspace?.editOrderQty;
+  const canEditOrderMetadata = access?.fuelManagement?.workspace?.editOrderMetadata;
+  const canUpdateOrderStatus = access?.fuelManagement?.workspace?.updateOrderStatus;
+  const canAddOrderComments = access?.fuelManagement?.workspace?.viewOrderComments?.addOrderComments;
+  const canViewOrderComments = access?.fuelManagement?.workspace?.viewOrderComments?.value;
+  const canViewPo = access?.fuelManagement?.workspace?.viewPo;
+  const canRescheduleOrder = access?.fuelManagement?.workspace?.rescheduleOrder;
+
   const [rescheduleOrder, setRescheduleOrder] = useState<any>(null);
   const [viewingCommentsOrder, setViewingCommentsOrder] = useState<any | null>(
     null,
@@ -1039,14 +1050,16 @@ function StationStrip({
                           >
                             {order.currentStatus}
                           </Badge>
-                          <Button
-                            variant="ghost"
-                            disabled={isDelivered} // LOCKED IF DELIVERED
-                            onClick={() => setUpdateStatusOrder(order)}
-                            className="h-6 px-2 text-[11px] font-black uppercase text-blue-600"
-                          >
-                            Update Status
-                          </Button>
+                          {canUpdateOrderStatus && (
+                            <Button
+                              variant="ghost"
+                              disabled={isDelivered} // LOCKED IF DELIVERED
+                              onClick={() => setUpdateStatusOrder(order)}
+                              className="h-6 px-2 text-[11px] font-black uppercase text-blue-600"
+                            >
+                              Update Status
+                            </Button>
+                          )}
                         </div>
 
                         {/* Metadata Breadcrumbs */}
@@ -1071,26 +1084,30 @@ function StationStrip({
                           </div>
 
                           {/* NEW EDIT META BUTTON */}
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            disabled={isDelivered}
-                            onClick={() => setEditMetaOrder(order)} // Opens the dialog by setting the order
-                            className="h-6 w-6 p-0 text-slate-400 hover:text-blue-600"
-                          >
-                            <Edit3 className="h-3.5 w-3.5" />
-                          </Button>
+                          {canEditOrderMetadata && (
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              disabled={isDelivered}
+                              onClick={() => setEditMetaOrder(order)} // Opens the dialog by setting the order
+                              className="h-6 w-6 p-0 text-slate-400 hover:text-blue-600"
+                            >
+                              <Edit3 className="h-3.5 w-3.5" />
+                            </Button>
+                          )}
 
                           {/* NEW VIEW PO BUTTON */}
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            onClick={() => setViewingPO(order)}
-                            className="h-6 px-2 text-[10px] font-black uppercase text-slate-500 hover:text-blue-600 hover:bg-blue-50"
-                          >
-                            <FileText className="h-3 w-3 mr-1" />
-                            View PO
-                          </Button>
+                          {canViewPo && (
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => setViewingPO(order)}
+                              className="h-6 px-2 text-[10px] font-black uppercase text-slate-500 hover:text-blue-600 hover:bg-blue-50"
+                            >
+                              <FileText className="h-3 w-3 mr-1" />
+                              View PO
+                            </Button>
+                          )}
                         </div>
                       </div>
 
@@ -1107,26 +1124,30 @@ function StationStrip({
                                 {order.estimatedDeliveryWindow?.start} —{" "}
                                 {order.estimatedDeliveryWindow?.end}
                               </span>
-                              <Button
-                                variant="ghost"
-                                disabled={isDelivered} // LOCKED IF DELIVERED
-                                onClick={() => setRescheduleOrder(order)}
-                                className="h-5 px-1.5 text-[11px] font-black uppercase"
-                              >
-                                Reschedule
-                              </Button>
+                              {canRescheduleOrder && (
+                                <Button
+                                  variant="ghost"
+                                  disabled={isDelivered} // LOCKED IF DELIVERED
+                                  onClick={() => setRescheduleOrder(order)}
+                                  className="h-5 px-1.5 text-[11px] font-black uppercase"
+                                >
+                                  Reschedule
+                                </Button>
+                              )}
 
                               {/* NEW DEDICATED AUDIT THREAD ACTION - UNLOCKED FOR ANY STATUS POSITION */}
-                              <Button
-                                variant="ghost"
-                                onClick={() => setViewingCommentsOrder(order)}
-                                className="h-5 px-1.5 text-[11px] font-black uppercase text-slate-500 hover:text-blue-600 flex items-center gap-1 bg-slate-50 hover:bg-slate-100 rounded-md"
-                              >
-                                <MessageSquare className="h-3 w-3" />
-                                <span>
-                                  Comments ({order.comments?.length || 0})
-                                </span>
-                              </Button>
+                              {canViewOrderComments && (
+                                <Button
+                                  variant="ghost"
+                                  onClick={() => setViewingCommentsOrder(order)}
+                                  className="h-5 px-1.5 text-[11px] font-black uppercase text-slate-500 hover:text-blue-600 flex items-center gap-1 bg-slate-50 hover:bg-slate-100 rounded-md"
+                                >
+                                  <MessageSquare className="h-3 w-3" />
+                                  <span>
+                                    Comments ({order.comments?.length || 0})
+                                  </span>
+                                </Button>
+                              )}
                             </div>
                           </div>
                         </div>
@@ -1176,14 +1197,16 @@ function StationStrip({
                                 );
                               })}
                           </div>
-                          <Button
-                            variant="outline"
-                            disabled={isDelivered} // LOCKED IF DELIVERED
-                            onClick={() => setEditQtyOrder(order)}
-                            className="h-8 w-8 p-0"
-                          >
-                            <Edit3 className="h-3.5 w-3.5" />
-                          </Button>
+                          {canEditOrderQty && (
+                            <Button
+                              variant="outline"
+                              disabled={isDelivered} // LOCKED IF DELIVERED
+                              onClick={() => setEditQtyOrder(order)}
+                              className="h-8 w-8 p-0"
+                            >
+                              <Edit3 className="h-3.5 w-3.5" />
+                            </Button>
+                          )}
                         </div>
                       </div>
                     </div>
@@ -1256,9 +1279,10 @@ function StationStrip({
             !open && setViewingCommentsOrder(null)
           }
           locationId={location._id}
+          canAddComments={canAddOrderComments} // <--- Added permission prop
         />
       )}
-
+       
       {editQtyOrder && (
         <EditQtyDialog
           order={editQtyOrder}
@@ -1457,7 +1481,10 @@ export function RescheduleDialog({
 
   const queryClient = useQueryClient();
   const authHeader = {
-    headers: { Authorization: `Bearer ${localStorage.getItem("token")}` },
+    headers: { 
+      Authorization: `Bearer ${localStorage.getItem("token")}`,
+      "X-Required-Permission": "fuelManagement.workspace.rescheduleOrder"
+    },
   };
 
   const allowedMinDate = useMemo(() => {
@@ -1636,6 +1663,13 @@ export function UpdateStatusDialog({
   }, [open, initialStep]);
 
   const currentIndex = statuses.findIndex((s) => s.id === order.currentStatus);
+
+  const authHeader = {
+    headers: { 
+      Authorization: `Bearer ${localStorage.getItem("token")}`,
+      "X-Required-Permission": "fuelManagement.workspace.updateOrderStatus"
+    },
+  };
 
   const mutation = useMutation({
     mutationFn: async ({
@@ -1929,6 +1963,7 @@ export function OrderCommentsDialog({
   open,
   onOpenChange,
   locationId,
+  canAddComments = false, // <--- Destructured with fallback default
 }: any) {
   const [newComment, setNewComment] = useState("");
   const queryClient = useQueryClient();
@@ -1938,6 +1973,12 @@ export function OrderCommentsDialog({
       setNewComment("");
     }
   }, [open]);
+  const authHeader = {
+    headers: { 
+      Authorization: `Bearer ${localStorage.getItem("token")}`,
+      "X-Required-Permission": "fuelManagement.workspace.viewOrderComments.addOrderComments"
+    },
+  };
 
   const mutation = useMutation({
     mutationFn: async (text: string) => {
@@ -1993,7 +2034,7 @@ export function OrderCommentsDialog({
                       {format(new Date(c.timestamp), "MMM d, h:mm a")}
                     </span>
                   </div>
-                  <p className="text-slate-600 font-medium leading-normal解决 whitespace-pre-wrap">
+                  <p className="text-slate-600 font-medium leading-normal whitespace-pre-wrap">
                     {c.text}
                   </p>
                 </div>
@@ -2006,162 +2047,31 @@ export function OrderCommentsDialog({
           </div>
         </div>
 
-        {/* Form Entry Dock footer */}
-        <div className="p-3 border-t bg-slate-50/30 flex gap-2 items-center">
-          <input
-            type="text"
-            placeholder="Type a workflow update comment..."
-            value={newComment}
-            onChange={(e) => setNewComment(e.target.value)}
-            onKeyDown={(e) => e.key === "Enter" && handlePostComment()}
-            className="flex-1 h-9 px-3 border border-slate-200 bg-white rounded-xl text-xs font-medium focus:outline-none focus:border-blue-400 disabled:opacity-60"
-            disabled={mutation.isPending}
-          />
-          <Button
-            onClick={handlePostComment}
-            disabled={!newComment.trim() || mutation.isPending}
-            className="h-9 bg-slate-900 text-white hover:bg-slate-800 text-xs font-bold rounded-xl px-4 tracking-wide disabled:opacity-40"
-          >
-            Post
-          </Button>
-        </div>
+        {/* Form Entry Dock footer - Hidden if user lacks permission */}
+        {canAddComments && (
+          <div className="p-3 border-t bg-slate-50/30 flex gap-2 items-center">
+            <input
+              type="text"
+              placeholder="Type a workflow update comment..."
+              value={newComment}
+              onChange={(e) => setNewComment(e.target.value)}
+              onKeyDown={(e) => e.key === "Enter" && handlePostComment()}
+              className="flex-1 h-9 px-3 border border-slate-200 bg-white rounded-xl text-xs font-medium focus:outline-none focus:border-blue-400 disabled:opacity-60"
+              disabled={mutation.isPending}
+            />
+            <Button
+              onClick={handlePostComment}
+              disabled={!newComment.trim() || mutation.isPending}
+              className="h-9 bg-slate-900 text-white hover:bg-slate-800 text-xs font-bold rounded-xl px-4 tracking-wide disabled:opacity-40"
+            >
+              Post
+            </Button>
+          </div>
+        )}
       </DialogContent>
     </Dialog>
   );
 }
-
-// export function UpdateStatusDialog({ order, open, onOpenChange, locationId }: any) {
-//   const queryClient = useQueryClient();
-//   // Track which status the user clicked but hasn't confirmed yet
-//   const [pendingStatus, setPendingStatus] = useState<string | null>(null);
-
-//   const mutation = useMutation({
-//     mutationFn: async (newStatus: string) => {
-//       return axios.put(`/api/fuel-orders/${order._id}`, { currentStatus: newStatus }, authHeader);
-//     },
-//     onSuccess: () => {
-//       queryClient.invalidateQueries({ queryKey: ['workspace-orders', locationId] });
-//       queryClient.invalidateQueries({ queryKey: ['station-tanks', locationId] });
-//       setPendingStatus(null);
-//       onOpenChange(false);
-//     }
-//   });
-
-//   if (!order) return null;
-
-//   const statuses = [
-//     { id: 'Created', label: 'Created', icon: PackagePlus, color: 'text-slate-500' },
-//     { id: 'In Transit', label: 'In Transit', icon: Truck, color: 'text-blue-500' },
-//     { id: 'Delivered', label: 'Delivered', icon: CheckCircle2, color: 'text-green-500' },
-//   ];
-
-//   const currentIndex = statuses.findIndex(s => s.id === order.currentStatus);
-
-//   return (
-//     <Dialog open={open} onOpenChange={(val) => {
-//       if (!val) setPendingStatus(null); // Reset warning if they close dialog
-//       onOpenChange(val);
-//     }}>
-//       <DialogContent className="sm:max-w-[400px]">
-//         <DialogHeader>
-//           <DialogTitle className="text-xl font-black uppercase italic">
-//             {pendingStatus ? "Confirm Change" : "Update Status"}
-//           </DialogTitle>
-//           <p className="text-sm text-slate-500 font-bold tracking-tight">
-//             PO: {order.poNumber}
-//           </p>
-//         </DialogHeader>
-
-//         <div className="flex flex-col gap-3 py-4">
-//           {!pendingStatus ? (
-//             // STANDARD LIST VIEW
-//             statuses.map((status, index) => {
-//               const isCurrent = order.currentStatus === status.id;
-//               const isDisabled = index < currentIndex || index > currentIndex + 1;
-
-//               return (
-//                 <Button
-//                   key={status.id}
-//                   variant={isCurrent ? "default" : "outline"}
-//                   disabled={isDisabled || isCurrent || mutation.isPending}
-//                   onClick={() => setPendingStatus(status.id)} // Set the pending state instead of mutating
-//                   className={`h-14 justify-start gap-4 border-2 ${isCurrent ? 'border-blue-600 bg-blue-50 text-blue-700' : ''
-//                     }`}
-//                 >
-//                   <status.icon className={`h-5 w-5 ${status.color}`} />
-//                   <div className="flex flex-col items-start">
-//                     <span className="font-black uppercase text-xs tracking-widest">{status.label}</span>
-//                     {isCurrent && <span className="text-[10px] font-bold opacity-70">CURRENT STATUS</span>}
-//                   </div>
-//                 </Button>
-//               );
-//             })
-//           ) : (
-//             // CONFIRMATION VIEW
-//             // Inside the Confirmation View section of your UpdateStatusDialog:
-
-//             <div className="flex flex-col gap-3 py-4">
-//               {pendingStatus && (
-//                 <div className="space-y-4 animate-in fade-in zoom-in-95 duration-200">
-
-//                   {/* 1. CONDITIONAL WARNING BOX */}
-//                   {pendingStatus === 'Delivered' ? (
-//                     <div className="p-4 bg-amber-50 border-2 border-amber-100 rounded-2xl flex flex-col gap-2">
-//                       <div className="flex items-center gap-2 text-amber-700 font-black text-xs uppercase">
-//                         <AlertTriangle className="h-4 w-4" />
-//                         Warning: Finalize Order
-//                       </div>
-//                       <p className="text-sm text-amber-900 font-medium leading-tight">
-//                         Marking this as <span className="font-black uppercase">Delivered</span> will lock the fuel quantities and update the station inventory. <strong>This action cannot be undone.</strong>
-//                       </p>
-//                     </div>
-//                   ) : (
-//                     <div className="p-4 bg-blue-50 border-2 border-blue-100 rounded-2xl flex flex-col gap-2">
-//                       <div className="flex items-center gap-2 text-blue-700 font-black text-xs uppercase">
-//                         <Truck className="h-4 w-4" />
-//                         Status Update
-//                       </div>
-//                       <p className="text-sm text-blue-900 font-medium leading-tight">
-//                         Are you sure you want to move this order to <span className="font-black uppercase">In Transit</span>?
-//                       </p>
-//                     </div>
-//                   )}
-
-//                   {/* 2. ACTION BUTTONS */}
-//                   <div className="flex flex-col gap-2">
-//                     <Button
-//                       className={cn(
-//                         "w-full h-12 font-black uppercase transition-all",
-//                         pendingStatus === 'Delivered' ? "bg-green-600 hover:bg-green-700" : "bg-blue-600 hover:bg-blue-700"
-//                       )}
-//                       disabled={mutation.isPending}
-//                       onClick={() => mutation.mutate(pendingStatus)}
-//                     >
-//                       {mutation.isPending ? (
-//                         <Loader2 className="h-5 w-5 animate-spin" />
-//                       ) : (
-//                         `Confirm ${pendingStatus}`
-//                       )}
-//                     </Button>
-
-//                     <Button
-//                       variant="ghost"
-//                       className="w-full font-black uppercase text-slate-400 hover:text-slate-600"
-//                       disabled={mutation.isPending}
-//                       onClick={() => setPendingStatus(null)}
-//                     >
-//                       Go Back
-//                     </Button>
-//                   </div>
-//                 </div>
-//               )}
-//             </div>
-//           )}
-//         </div>
-//       </DialogContent>
-//     </Dialog>
-//   );
-// }
 
 export function EditMetaDialog({
   order,
@@ -2182,7 +2092,10 @@ export function EditMetaDialog({
   const [loading, setLoading] = useState(false);
 
   const authHeader = {
-    headers: { Authorization: `Bearer ${localStorage.getItem("token")}` },
+    headers: { 
+      Authorization: `Bearer ${localStorage.getItem("token")}`,
+      "X-Required-Permission": "fuelManagement.workspace.editOrderMetadata"
+    },
   };
 
   // Initialize and handle Rack changes
@@ -2390,6 +2303,12 @@ export const gradeConfig: Record<string, { priority: number; short: string }> =
 export function EditQtyDialog({ order, open, onOpenChange, locationId }: any) {
   const queryClient = useQueryClient();
   const [items, setItems] = useState<any[]>([]);
+  const authHeader = {
+    headers: { 
+      Authorization: `Bearer ${localStorage.getItem("token")}`,
+      "X-Required-Permission": "fuelManagement.workspace.editOrderQty"
+    },
+  };
 
   useEffect(() => {
     if (order?.items) {
