@@ -137,16 +137,37 @@ async function attemptPricePost({ gasBuddyStationId, prices }) {
       if (await inputField.isVisible()) {
         const targetPriceString = String(rawPrice);
 
-        // 1. Fully focus and clear the input field reliably
-        await inputField.focus();
-        await inputField.fill(''); // Playwright native clear
-        
-        // Fallback clear in case GasBuddy uses custom masked inputs
-        await page.keyboard.press('Control+A');
-        await page.keyboard.press('Backspace');
+        const clearAndTypePrice = async () => {
+          // 1. Fully focus and clear the input field reliably
+          await inputField.focus();
+          await inputField.fill(''); // Playwright native clear
 
-        // 2. Type the clean target price string (e.g. "154.9")
-        await inputField.type(targetPriceString, { delay: 100 });
+          // Fallback clear in case GasBuddy uses custom masked inputs
+          await page.keyboard.press('Control+A');
+          await page.keyboard.press('Backspace');
+
+          // 2. Type the clean target price string (e.g. "154.9")
+          await inputField.type(targetPriceString, { delay: 100 });
+        };
+
+        await clearAndTypePrice();
+
+        // 3. Read back what actually landed in the field before committing.
+        // GasBuddy's price input reformats what's typed (hence the masked-input
+        // fallback clear above) — a transient timing hiccup during automated
+        // typing can silently produce a value that's close to, but not exactly,
+        // the intended price. Verify instead of trusting the type blindly; a
+        // real price should never be posted without confirming it matches.
+        let actualValue = await inputField.inputValue();
+        if (actualValue !== targetPriceString) {
+          console.log(`⚠️ Value mismatch for ${normalizedFuelType}: expected "${targetPriceString}", field shows "${actualValue}". Retrying clear+type once...`);
+          await clearAndTypePrice();
+          actualValue = await inputField.inputValue();
+        }
+
+        if (actualValue !== targetPriceString) {
+          throw new Error(`PRICE_TYPE_MISMATCH: ${normalizedFuelType} field shows "${actualValue}" after retry, expected "${targetPriceString}". Refusing to submit a price GasBuddy may have mis-parsed.`);
+        }
 
         const confirmButton = fuelColumn.locator('button:has-text("Confirm")');
         if (await confirmButton.isVisible()) {
