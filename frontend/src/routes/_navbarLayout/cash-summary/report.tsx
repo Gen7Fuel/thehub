@@ -174,6 +174,11 @@ function RouteComponent() {
     accessDenied: boolean
     isManitoba: boolean
   }
+  const [arData, setArData] = useState<{
+    arIncurredTotal: number;
+    transactionsTotal: number;
+    match: boolean;
+  } | null>(null);
   // const [submitState, setSubmitState] = useState<'idle' | 'submitting' | 'submitted'>('idle')
   const [submitState, setSubmitState] = useState<'idle' | 'submitting' | 'submitted'>(
     report?.report?.submitted === true ? 'submitted' : 'idle'
@@ -493,10 +498,13 @@ function RouteComponent() {
     check()
   }, [site, date])
 
+  // 2. Update your useEffect hook
   useEffect(() => {
-    setArCheckMatch(null)
-    toast.dismiss('ar-check-mismatch')
-    if (!site || !date || ['Oliver', 'Osoyoos'].includes(site)) return
+    setArCheckMatch(null);
+    setArData(null);
+    toast.dismiss('ar-check-mismatch');
+    
+    if (!site || !date || ['Oliver', 'Osoyoos'].includes(site)) return;
 
     const check = async () => {
       try {
@@ -504,24 +512,28 @@ function RouteComponent() {
         const res = await fetch(
           `/api/cash-summary/ar-check?site=${encodeURIComponent(site)}&date=${encodeURIComponent(date)}`,
           { headers: { Authorization: `Bearer ${token || ''}`, 'X-Required-Permission': 'accounting.cashSummary.report' } }
-        )
-        if (res.status === 403) { navigate({ to: '/no-access' }); return }
-        if (!res.ok) return
-        const data = await res.json()
-        console.log('[ar-check]', data)
-        setArCheckMatch(data.match)
+        );
+        if (res.status === 403) { navigate({ to: '/no-access' }); return; }
+        if (!res.ok) return;
+        
+        const data = await res.json();
+        console.log('[ar-check]', data);
+        
+        setArCheckMatch(data.match);
+        setArData(data); // Save full payload
+        
         if (!data.match) {
           toast.warning(
             "This report cannot be submitted — receivables in Bulloch don't match the receivables entered in the Hub.",
             { id: 'ar-check-mismatch', duration: Infinity }
-          )
+          );
         }
       } catch {
-        // silently ignore — don't block the page on a check failure
+        // silently ignore
       }
-    }
-    check()
-  }, [site, date])
+    };
+    check();
+  }, [site, date]);
 
   console.log('Site/date report:', site, date, voidedDetails)
 
@@ -984,6 +996,61 @@ function RouteComponent() {
                     showImages={false} // Set to false for the report view
                     isManitoba={isManitoba}
                   />
+                </div>
+              )}
+              {/* Integrated A/R Reconciliation Section */}
+              {arData && !['Oliver', 'Osoyoos'].includes(site) && (
+                <div className={`p-4 border rounded-lg space-y-3 ${arData.match ? 'bg-green-50/50 border-green-200' : 'bg-red-50/50 border-red-200'}`}>
+                  <div className="flex items-center justify-between">
+                    <h3 className="text-sm font-semibold text-gray-900">A/R Reconciliation (Bulloch vs Hub)</h3>
+                    <span className={`text-xs px-2.5 py-0.5 rounded-full font-medium ${arData.match ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'}`}>
+                      {arData.match ? 'Matched' : 'Mismatch Detected'}
+                    </span>
+                  </div>
+
+                  {/* Two-Block Summary Cards */}
+                  <div className="grid gap-4 sm:grid-cols-2">
+                    <div className="border rounded-md p-3 bg-white shadow-sm">
+                      <span className="text-xs text-muted-foreground block font-medium">Bulloch Terminal A/R Total</span>
+                      <span className="text-lg font-bold text-gray-800">{fmtNum(arData.arIncurredTotal)}</span>
+                    </div>
+                    
+                    <div className="border rounded-md p-3 bg-white shadow-sm">
+                      <span className="text-xs text-muted-foreground block font-medium">Hub Recorded A/R Total</span>
+                      <span className={`text-lg font-bold ${
+                        arData.transactionsTotal > arData.arIncurredTotal 
+                          ? 'text-amber-600' 
+                          : arData.transactionsTotal < arData.arIncurredTotal 
+                          ? 'text-red-600' 
+                          : 'text-green-600'
+                      }`}>
+                        {fmtNum(arData.transactionsTotal)}
+                      </span>
+                    </div>
+                  </div>
+
+                  {/* Guidance Alert Banner for Mismatches */}
+                  {!arData.match && (() => {
+                    const diff = Math.abs(arData.transactionsTotal - arData.arIncurredTotal);
+                    const isHubOver = arData.transactionsTotal > arData.arIncurredTotal;
+
+                    return (
+                      <div className={`p-3 rounded-md text-xs font-medium border ${
+                        isHubOver ? 'bg-amber-100/70 border-amber-300 text-amber-900' : 'bg-red-100/70 border-red-300 text-red-900'
+                      }`}>
+                        <p className="font-semibold mb-1">
+                          Difference: Out by {fmtNum(diff)} ({isHubOver ? 'Hub is Higher' : 'Hub is Lower'})
+                        </p>
+                        <p>
+                          {isHubOver ? (
+                            <>You have <strong>more</strong> transactions reported on the Hub than on Bulloch. Please check the PO module to verify if a transaction was mistyped or entered under the wrong date.</>
+                          ) : (
+                            <>You have <strong>fewer</strong> transactions reported on the Hub than on Bulloch. Please visit the PO module to add the missing transaction(s) worth <strong>{fmtNum(diff)}</strong>.</>
+                          )}
+                        </p>
+                      </div>
+                    );
+                  })()}
                 </div>
               )}
 

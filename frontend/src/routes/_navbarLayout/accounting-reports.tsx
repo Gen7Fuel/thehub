@@ -21,7 +21,7 @@ function RouteComponent() {
   const access = user?.access || {};
 
   const hasInfonet = Boolean(access?.accounting?.accountingReports?.infonet);
-  const hasEOD = Boolean(access?.accounting?.accountingReports?.endOfDayReport);
+  const hasEOD = Boolean(access?.accounting?.accountingReports?.endOfDayReport?.value);
 
   return (
     <div className="pt-5 flex flex-col items-center">
