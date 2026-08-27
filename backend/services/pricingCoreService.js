@@ -170,8 +170,12 @@ export async function executeRetailPriceUpdate({
           numericPrice !== null &&
           !isNaN(numericPrice)
         ) {
-          // Convert dollar input (1.549) to cents (154.9) without float rounding errors
-          const priceInCents = Number((parseFloat(numericPrice) * 100).toFixed(1));
+          // Convert dollar input (1.549) to cents (154.9) without float rounding errors.
+          // Keep this as a STRING — wrapping it in Number() drops the trailing ".0" for
+          // round prices (Number("154.0") === 154), so GasBuddy would sometimes receive
+          // "154" instead of "154.0" depending on the price, and its price input reacts
+          // to a value with no decimal point differently than one that has it.
+          const priceInCents = (parseFloat(numericPrice) * 100).toFixed(1);
           normalizedPrices[gasBuddyLabel] = priceInCents;
         }
       }
