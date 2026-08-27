@@ -18,6 +18,13 @@ const fmt = (d) => d.toISOString().slice(0, 10);
 /**
  * Build the combined SQL + Mongo dashboard payload for a single site.
  * Mirrors the logic in GET /api/sql/all-data (salesRoutes.js).
+ *
+ * Returns { data, failedQueries } — failedQueries lists any SQL queries that
+ * failed after retries. The payload still contains data (with [] in place of
+ * whatever failed) so a caller can use it as a best-effort live response, but
+ * callers MUST check failedQueries before caching the result: caching a
+ * partial/degraded payload would bake a transient SQL failure into Redis for
+ * the full TTL.
  */
 async function buildDashboardData(csoCode, siteName) {
   const today = new Date();
@@ -52,6 +59,8 @@ async function buildDashboardData(csoCode, siteName) {
     CashSummary.find({ site: siteName, date: { $gte: startDate, $lte: endDate } }).lean(),
   ]);
 
+  const { _failedQueries: failedQueries, ...sqlData } = sqlResponse;
+
   // Aggregate Mongo Shifts
   const mongoDailyTimings = {};
   shifts.forEach((s) => {
@@ -75,7 +84,7 @@ async function buildDashboardData(csoCode, siteName) {
   while (current <= endDate) {
     const dateStr = current.toISOString().split("T")[0];
     const sqlDateSK = dateStr.replace(/-/g, "");
-    const sqlRow = sqlResponse.shiftTransactionTimings.find((row) => row.Date_SK === sqlDateSK) || {};
+    const sqlRow = sqlData.shiftTransactionTimings.find((row) => row.Date_SK === sqlDateSK) || {};
     const mongoRow = mongoDailyTimings[dateStr] || {};
     const reportEntry = reports.find((r) => new Date(r.date).toISOString().split("T")[0] === dateStr);
 
@@ -112,19 +121,36 @@ async function buildDashboardData(csoCode, siteName) {
   }
 
   return {
-    ...sqlResponse,
-    operationalTimings,
-    lastUpdated: new Date().toISOString(),
+    data: {
+      ...sqlData,
+      operationalTimings,
+      lastUpdated: new Date().toISOString(),
+    },
+    failedQueries,
   };
 }
 
 /**
  * Refresh dashboard cache for a single site.
+ *
+ * Skips the Redis write (leaving whatever cache entry already exists in
+ * place) if any of the underlying SQL queries failed after retries — a
+ * transient MSSQL blip must not get baked into a 25-hour cache entry and
+ * make the dashboard look blank all day. The freshly-built data is still
+ * returned so callers (e.g. the admin refresh endpoint) get a best-effort
+ * result even when caching was skipped.
  */
 async function refreshSiteCache(siteName, csoCode) {
   const cacheKey = `dashboard:${siteName}:allSqlData`;
-  const data = await buildDashboardData(csoCode, siteName);
+  const { data, failedQueries } = await buildDashboardData(csoCode, siteName);
+
+  if (failedQueries.length > 0) {
+    console.error(`  ⚠️ ${siteName}: SQL queries failed after retries (${failedQueries.join(", ")}) — not caching degraded data, leaving existing cache in place`);
+    return data;
+  }
+
   await redis.set(cacheKey, JSON.stringify(data), "EX", 90000); // 25 hours
+  console.log(`  ✅ ${siteName} cached`);
   return data;
 }
 
@@ -138,7 +164,6 @@ async function refreshAllSitesCache() {
   for (const loc of locations) {
     try {
       await refreshSiteCache(loc.stationName, loc.csoCode);
-      console.log(`  ✅ ${loc.stationName} cached`);
     } catch (err) {
       console.error(`  ❌ ${loc.stationName} failed:`, err.message);
     }
@@ -156,6 +181,6 @@ cron.schedule("0 8 * * *", async () => {
   }
 }, { timezone: "America/Toronto" });
 
-console.log("📊 Dashboard cache cron registered (daily at 7:00 AM America/Toronto)");
+console.log("📊 Dashboard cache cron registered (daily at 8:00 AM America/Toronto)");
 
 module.exports = { refreshSiteCache, refreshAllSitesCache, buildDashboardData };

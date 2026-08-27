@@ -1812,6 +1812,9 @@ async function getAllSQLData(csoCode, dates) {
   const bistroResult = await runQuery("bistroWoWSales", () => getWeeklyBistroSales(pool, csoCode));
   const top10Result = await runQuery("top10Bistro", () => getTop10Bistro(pool, csoCode));
 
+  const allResults = [salesResult, fuelResult, transResult, periodResult, tenderResult, shiftResult, bistroResult, top10Result];
+  const failedQueries = queryNames.filter((_, i) => allResults[i].status === "rejected");
+
   return {
     sales: salesResult.status === "fulfilled" ? salesResult.value : [],
     fuel: fuelResult.status === "fulfilled" ? fuelResult.value : [],
@@ -1821,6 +1824,12 @@ async function getAllSQLData(csoCode, dates) {
     shiftTransactionTimings: shiftResult.status === "fulfilled" ? shiftResult.value : [],
     bistroWoWSales: bistroResult.status === "fulfilled" ? bistroResult.value : [],
     top10Bistro: top10Result.status === "fulfilled" ? top10Result.value : [],
+    // Internal metadata, NOT part of the client-facing payload — names of queries that
+    // failed after all retries. Callers must strip this before returning/caching the
+    // result and use it to decide whether the data is safe to cache (see dashboardCacheCron.js
+    // and salesRoutes.js's /all-data handler). Without this, a transient SQL failure looks
+    // identical to a legitimately empty result and gets cached as if it were valid.
+    _failedQueries: failedQueries,
   };
 }
 
