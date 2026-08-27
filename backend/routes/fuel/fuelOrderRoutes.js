@@ -263,7 +263,7 @@ async function processUpcomingOrderNotifications() {
   // 1. Send Master List (All Provinces)
   await emailQueue.add("sendFuelOrderNotification", {
     to: ['Glenn@gpmcholdings.ca', 'kellie@gen7fuel.com', 'Mandy@gen7fuel.com', 'Brian@gpmcholdings.ca', 'kporter@gen7fuel.com'], // Standard recipients list
-    cc: ['Ryan@gen7fuel.com', 'nmiller@gen7fuel.com', 'nsporders@nspetroleum.ca'],
+    cc: ['Ryan@gen7fuel.com', 'valerie@gen7fuel.com', 'nsporders@nspetroleum.ca'],
     subject: `Upcoming Fuel Deliveries - ${tomorrowStr} & ${dayAfterStr}`,
     html: masterHtml
   });
