@@ -668,6 +668,74 @@ router.get('/payables-comparison', async (req, res) => {
   }
 });
 
+// 1. GET shifts by site & date (Local midnight bounds)
+router.get('/by-date', async (req, res) => {
+  try {
+    const { site, date } = req.query;
+    if (!site || !date) {
+      return res.status(400).json({ error: 'site and date parameters are required' });
+    }
+
+    const targetDate = new Date(date);
+    const startOfDay = new Date(targetDate.getFullYear(), targetDate.getMonth(), targetDate.getDate(), 0, 0, 0, 0);
+    const endOfDay = new Date(targetDate.getFullYear(), targetDate.getMonth(), targetDate.getDate(), 23, 59, 59, 999);
+
+    const shifts = await CashSummary.find({
+      site,
+      date: { $gte: startOfDay, $lte: endOfDay }
+    }).sort({ shift_number: 1 }).lean();
+
+    res.json(shifts);
+  } catch (err) {
+    console.error('Fetch shifts by date error:', err);
+    res.status(500).json({ error: 'Failed to fetch shifts for selected date' });
+  }
+});
+
+// 2. BATCH POST/UPDATE route to handle whole day submission
+router.post('/batch', async (req, res) => {
+  try {
+    const { items } = req.body;
+    if (!Array.isArray(items) || items.length === 0) {
+      return res.status(400).json({ error: 'No shift data provided for submission' });
+    }
+
+    const bulkOperations = items.map((item) => {
+      const updatePayload = {
+        canadian_cash_collected: item.canadian_cash_collected ?? 0,
+        exempted_tax: item.exempted_tax ?? 0, // Always sets or defaults exempted_tax
+        reviewed: true
+      };
+
+      if (item.chequesCashedOut !== undefined) {
+        updatePayload.chequesCashedOut = item.chequesCashedOut;
+      }
+
+      if (item.isChickenDelight) {
+        updatePayload.tenders = item.tenders || [];
+        updatePayload.chickenDelightTips = item.chickenDelightTips ?? 0;
+        updatePayload.pinpadPhoto = item.pinpadPhoto || null;
+        updatePayload.isChickenDelight = true;
+      } else {
+        updatePayload.isChickenDelight = false;
+      }
+
+      return {
+        updateOne: {
+          filter: { _id: item._id },
+          update: { $set: updatePayload }
+        }
+      };
+    });
+
+    await CashSummary.bulkWrite(bulkOperations);
+    res.json({ success: true, count: items.length });
+  } catch (err) {
+    console.error('Batch update shifts error:', err);
+    res.status(500).json({ error: 'Failed to update daily cash summary shifts' });
+  }
+});
+
 router.post('/', async (req, res) => {
   try {
     const userId = req.user._id;
