@@ -320,6 +320,8 @@ describe('PO Form — index.tsx', () => {
   })
 
   it('shows a PO uniqueness error when the uniqueness API returns not-unique', async () => {
+    // Only CLASSIC_PO_NUMBER_SITES show the PO Number path.
+    mockStore.stationName = 'Wavers West'
     mockStore.poNumber = '12345'
     mockAxiosGet.mockImplementation((url: string) => {
       if (url.includes('ar-customers')) return Promise.resolve({ data: [] })
@@ -337,6 +339,8 @@ describe('PO Form — index.tsx', () => {
   })
 
   it('clears the PO error when the uniqueness API confirms the number is unique', async () => {
+    // Only CLASSIC_PO_NUMBER_SITES show the PO Number path.
+    mockStore.stationName = 'Wavers West'
     mockStore.poNumber = '12345'
     mockAxiosGet.mockImplementation((url: string) => {
       if (url.includes('ar-customers')) return Promise.resolve({ data: [] })
@@ -365,19 +369,19 @@ describe('PO Form — index.tsx', () => {
     }, { timeout: 5000 })
   })
 
-  it.each(['Rankin', 'Sarnia', 'Walpole', 'Jocko Point', 'Charlies'])('does not render the Number section or OTP input for site "%s"', async (site) => {
+  it.each(['Rankin', 'Sarnia', 'Walpole', 'Jocko Point', 'Charlies'])('shows the Fleet Card switch and OTP input for site "%s" (fleet-card-only by default)', async (site) => {
     mockStore.stationName = site
     renderWithSuspense(<POForm />)
 
     await waitFor(() => {
-      expect(screen.getByTestId('date-picker')).toBeInTheDocument()
+      expect(screen.getByText('Customer has fleet card')).toBeInTheDocument()
+      expect(screen.getByTestId('otp-input')).toBeInTheDocument()
     }, { timeout: 5000 })
 
     expect(screen.queryByText('Number')).not.toBeInTheDocument()
-    expect(screen.queryByTestId('otp-input')).not.toBeInTheDocument()
   })
 
-  it.each(['Rankin', 'Sarnia', 'Walpole', 'Jocko Point', 'Charlies'])('does not auto-fill a fleet card from quick-select on site "%s"', async (site) => {
+  it.each(['Rankin', 'Sarnia', 'Walpole', 'Jocko Point', 'Charlies'])('auto-fills a fleet card from quick-select on site "%s"', async (site) => {
     mockStore.stationName = site
     mockAxiosGet.mockImplementation((url: string) => {
       if (url.includes('quick-select')) {
@@ -393,8 +397,20 @@ describe('PO Form — index.tsx', () => {
     fireEvent.click(quickBtn)
 
     await waitFor(() => expect(mockStore.setCustomerName).toHaveBeenCalledWith('Acme Co'))
-    expect(mockStore.setFleetCardNumber).not.toHaveBeenCalledWith('1234567890123456')
-    expect(screen.queryByTestId('otp-input')).not.toBeInTheDocument()
+    expect(mockStore.setFleetCardNumber).toHaveBeenCalledWith('1234567890123456')
+  })
+
+  it.each(['Wavers West', 'Wavers East', 'Oliver', 'Osoyoos'])('shows the classic PO Number / Fleet Card toggle (no Switch) for site "%s"', async (site) => {
+    mockStore.stationName = site
+    renderWithSuspense(<POForm />)
+
+    await waitFor(() => {
+      expect(screen.getByText('Number')).toBeInTheDocument()
+    }, { timeout: 5000 })
+
+    expect(screen.queryByText('Customer has fleet card')).not.toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'PO Number' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Fleet Card' })).toBeInTheDocument()
   })
 
   it('shows only the first word of a customer name on the quick-select button', async () => {
