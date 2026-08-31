@@ -120,7 +120,11 @@ type FormStore = {
 export const useFormStore = create<FormStore>((set) => ({
     fleetCardNumber: '',
     setFleetCardNumber: (fleetCardNumber) => set({ fleetCardNumber }),
-    noFleetCard: false,
+    // Defaults to "no fleet card" — most PO customers don't carry one, and the
+    // Upload Receipt button on fleet-card-only sites is gated on this being
+    // true or on a verified card, so defaulting false would block a normal
+    // transaction until the cashier proactively flipped the switch.
+    noFleetCard: true,
     setNoFleetCard: (noFleetCard) => set({ noFleetCard }),
     poNumber: '',
     setPoNumber: (poNumber) => set({ poNumber }),
@@ -150,7 +154,7 @@ export const useFormStore = create<FormStore>((set) => ({
     setSignature: (signature) => set({ signature }),
     resetForm: () => set({
         fleetCardNumber: '',
-        noFleetCard: false,
+        noFleetCard: true,
         poNumber: '',
         stationName: '',
         customerName: '',

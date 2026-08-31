@@ -298,19 +298,22 @@ function RouteComponent() {
     setSelectedQuickCustomerId(null)
     setNumberType('po')
     setFleetCardNumber('')
-    setNoFleetCard(false)
+    setNoFleetCard(true) // back to the "no fleet card" rest state, not the blocking one
     setCardStatus(null)
   }
 
   // Sites other than CLASSIC_PO_NUMBER_SITES use the fleet-card-only flow (no PO
   // Number). The store persists across client-side nav, so force-clear stale PO
   // Number state the instant the active site becomes one of them (e.g. user typed
-  // a PO Number for a classic site, then switched sites).
+  // a PO Number for a classic site, then switched sites). Also default the switch
+  // to "no fleet card" so a normal transaction isn't blocked out of the gate —
+  // most customers don't carry one; the cashier flips it on only when they do.
   useEffect(() => {
     if (isFleetCardOnlySite) {
       setNumberType('po')
       setPoNumber('')
       setPoError('')
+      setNoFleetCard(true)
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isFleetCardOnlySite])
@@ -332,7 +335,7 @@ function RouteComponent() {
     } else {
       setNumberType('po')
       setFleetCardNumber('')
-      setNoFleetCard(false)
+      setNoFleetCard(true) // this quick-select customer has no card on file
       setCardStatus(null)
     }
   }
