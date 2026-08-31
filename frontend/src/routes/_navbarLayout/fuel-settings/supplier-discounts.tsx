@@ -113,16 +113,16 @@ export function RouteComponent() {
   }, [])
 
   // Check if a saved update belongs to the current month
-  const isStagedInCurrentMonth = (dateStr: string | null) => {
-    if (!dateStr) return false
-    try {
-      const date = new Date(dateStr)
-      const now = new Date()
-      return date.getMonth() === now.getMonth() && date.getFullYear() === now.getFullYear()
-    } catch {
-      return false
-    }
-  }
+  // const isStagedInCurrentMonth = (dateStr: string | null) => {
+  //   if (!dateStr) return false
+  //   try {
+  //     const date = new Date(dateStr)
+  //     const now = new Date()
+  //     return date.getMonth() === now.getMonth() && date.getFullYear() === now.getFullYear()
+  //   } catch {
+  //     return false
+  //   }
+  // }
 
   // --- FILTER AND SORT ENGINE ---
   const sortedAndFilteredData = useMemo(() => {
