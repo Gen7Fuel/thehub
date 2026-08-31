@@ -11,6 +11,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from 
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { format, addDays, isAfter, startOfDay } from 'date-fns';
+import { useAuth } from "@/context/AuthContext";
 
 type VolumeSearch = {
   site?: string
@@ -24,9 +25,15 @@ export const Route = createFileRoute('/_navbarLayout/fuel-management/volume')({
   component: VolumeDashboard,
 })
 
+
 function VolumeDashboard() {
   const { site } = Route.useSearch()
   const navigate = useNavigate({ from: Route.fullPath })
+  
+  const { user } = useAuth();
+  const access = user?.access || {};
+  const canViewHistoricalSalesVolumeChart = access?.fuelManagement?.volume?.viewHistoricalSalesVolumeChart;
+  const canFetchLatestReading = access?.fuelManagement?.volume?.fetchLatestReading;
 
   // States
   const [viewMode, setViewMode] = useState<'live' | 'historical'>('live');
@@ -40,7 +47,10 @@ function VolumeDashboard() {
     if (isManual) setSyncing(true); else setLoading(true);
     try {
       const res = await axios.get('/api/fuel-station-tanks/sync-all-volumes', {
-        headers: { Authorization: `Bearer ${localStorage.getItem('token')}` }
+        headers: { 
+          Authorization: `Bearer ${localStorage.getItem('token')}`,
+          "X-Permission-Required": "fuelManagement.volume.fetchLatestReading"
+        }
       })
       setAllTanks(res.data)
     } catch (err) {
@@ -56,7 +66,10 @@ function VolumeDashboard() {
     setLoading(true);
     try {
       const res = await axios.get(`/api/fuel-station-tanks/reconciliation/${stationId}`, {
-        headers: { Authorization: `Bearer ${localStorage.getItem('token')}` }
+        headers: { 
+          Authorization: `Bearer ${localStorage.getItem('token')}`,
+          "X-Permission-Required": "fuelManagement.volume.viewHistoricalSalesVolumeChart"
+        }      
       });
 
       setHistoricalData(res.data);
@@ -150,17 +163,19 @@ function VolumeDashboard() {
           <div className="h-10 w-px bg-slate-100 hidden md:block" />
 
           {/* Toggle View Button */}
-          <Button
-            variant="ghost"
-            onClick={() => {
-              if (viewMode === 'live') fetchHistorical(currentStationId);
-              setViewMode(viewMode === 'live' ? 'historical' : 'live');
-            }}
-            className="rounded-2xl font-black uppercase text-[10px] tracking-wide gap-2"
-          >
-            {viewMode === 'live' ? <History className="h-4 w-4" /> : <LayoutDashboard className="h-4 w-4" />}
-            {viewMode === 'live' ? 'View History' : 'Back to Live'}
-          </Button>
+          {canViewHistoricalSalesVolumeChart && (
+            <Button
+              variant="ghost"
+              onClick={() => {
+                if (viewMode === 'live') fetchHistorical(currentStationId);
+                setViewMode(viewMode === 'live' ? 'historical' : 'live');
+              }}
+              className="rounded-2xl font-black uppercase text-[10px] tracking-wide gap-2"
+            >
+              {viewMode === 'live' ? <History className="h-4 w-4" /> : <LayoutDashboard className="h-4 w-4" />}
+              {viewMode === 'live' ? 'View History' : 'Back to Live'}
+            </Button>
+          )}
         </div>
         <div className="flex gap-4">
           <Select value={site} onValueChange={handleSiteChange}>
@@ -173,10 +188,11 @@ function VolumeDashboard() {
               ))}
             </SelectContent>
           </Select>
-
-          <Button onClick={() => fetchAndSync(true)} disabled={syncing} className="bg-slate-900 rounded-2xl h-10 font-black">
-            {syncing ? <Loader2 className="animate-spin" /> : <RefreshCw />} Fetch Latest
-          </Button>
+          {canFetchLatestReading && (
+            <Button onClick={() => fetchAndSync(true)} disabled={syncing} className="bg-slate-900 rounded-2xl h-10 font-black">
+              {syncing ? <Loader2 className="animate-spin" /> : <RefreshCw />} Fetch Latest
+            </Button>
+          )}
         </div>
       </div >
 
@@ -272,6 +288,11 @@ function VolumeTankCard({ tank, onUpdate }: { tank: any; onUpdate: () => void })
   const [chartData, setChartData] = useState([]);
   const [isLoadingChart, setIsLoadingChart] = useState(false);
   const [selectedDate, setSelectedDate] = useState(startOfDay(new Date()));
+  
+  const { user } = useAuth();
+  const access = user?.access || {};
+  const canViewHistoricalVolume = access?.fuelManagement?.volume?.viewHistoricalVolume;
+  const canAddPhysicalReading = access?.fuelManagement?.volume?.addPhysicalReading;
 
   const readingTime = tank.lastUpdatedVolumeReadingDateTime || "";
   const isStale = readingTime === "No latest reading available" || readingTime === "";
@@ -295,7 +316,12 @@ function VolumeTankCard({ tank, onUpdate }: { tank: any; onUpdate: () => void })
     try {
       await axios.patch(`/api/fuel-station-tanks/manual-update/${tank._id}`,
         { volume: manualVolume, manualTime, manualDate },
-        { headers: { Authorization: `Bearer ${localStorage.getItem('token')}` } }
+        { 
+          headers: { 
+            Authorization: `Bearer ${localStorage.getItem('token')}`,
+            "X-Permission-Required": "fuelManagement.volume.addPhysicalReading"
+          }   
+        }
       );
       toast.success("Manual reading recorded");
       setIsOpen(false);
@@ -311,8 +337,11 @@ function VolumeTankCard({ tank, onUpdate }: { tank: any; onUpdate: () => void })
     setIsLoadingChart(true);
     try {
       const dateStr = format(date, 'yyyy-MM-dd');
-      const res = await axios.get(`/api/fuel-station-tanks/history/${tank._id}?date=${dateStr}`, {
-        headers: { Authorization: `Bearer ${localStorage.getItem('token')}` }
+      const res = await axios.get(`/api/fuel-station-tanks/history/${tank._id}?date=${dateStr}`, { 
+          headers: { 
+            Authorization: `Bearer ${localStorage.getItem('token')}`,
+            "X-Permission-Required": "fuelManagement.volume.viewHistoricalVolume"
+          }   
       });
       setChartData(res.data);
     } catch (err) {
@@ -380,7 +409,7 @@ function VolumeTankCard({ tank, onUpdate }: { tank: any; onUpdate: () => void })
 
           <div className="flex items-center gap-2">
             {/* MANUAL DIALOG BUTTON */}
-            {(isStale || isYesterday || isManual) && (
+            {(isStale || isYesterday || isManual) && (canAddPhysicalReading) && (
               <Dialog open={isOpen} onOpenChange={setIsOpen}>
                 <DialogTrigger asChild>
                   <Button
@@ -480,15 +509,16 @@ function VolumeTankCard({ tank, onUpdate }: { tank: any; onUpdate: () => void })
                 </DialogContent>
               </Dialog>
             )}
-
-            <Button
-              variant="outline"
-              size="icon"
-              onClick={() => { setIsChartOpen(true); fetchChartData(selectedDate); }}
-              className="h-8 w-8 rounded-xl border-slate-200 text-slate-600 hover:bg-indigo-50 hover:text-indigo-600"
-            >
-              <LayoutDashboard className="h-4 w-4" />
-            </Button>
+            {canViewHistoricalVolume && (
+              <Button
+                variant="outline"
+                size="icon"
+                onClick={() => { setIsChartOpen(true); fetchChartData(selectedDate); }}
+                className="h-8 w-8 rounded-xl border-slate-200 text-slate-600 hover:bg-indigo-50 hover:text-indigo-600"
+              >
+                <LayoutDashboard className="h-4 w-4" />
+              </Button>
+            )}
 
             <div className={`${theme.color} p-1.5 rounded-xl text-white ${isStale && !isManual ? 'grayscale' : ''}`}>
               <theme.icon className="h-4 w-4" />
