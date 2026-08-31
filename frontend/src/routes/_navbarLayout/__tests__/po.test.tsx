@@ -275,6 +275,7 @@ const renderWithQuery = (ui: React.ReactElement) =>
 /** Reset mockStore back to safe defaults before each test. */
 const resetStore = () => {
   mockStore.fleetCardNumber = ''
+  mockStore.noFleetCard = true
   mockStore.poNumber = ''
   mockStore.customerName = 'Jane Doe'
   mockStore.driverName = 'Bob Smith'
@@ -310,11 +311,28 @@ describe('PO Form — index.tsx', () => {
     mockAxiosGet.mockResolvedValue({ data: [] })
   })
 
-  it('renders the location picker and OTP input by default', async () => {
+  it('renders the location picker and defaults to "no fleet card", leaving Upload Receipt enabled', async () => {
+    // receipt must be null so the camera/upload button is rendered (not "View Captured Receipt")
+    mockStore.receipt = null
     renderWithSuspense(<POForm />)
     // Allow up to 5 s on the first render — the lazy route module needs to load
     await waitFor(() => {
       expect(screen.getByTestId('date-picker')).toBeInTheDocument()
+      expect(screen.getByText('Customer has fleet card')).toBeInTheDocument()
+    }, { timeout: 5000 })
+
+    // The switch defaults off (no card) — most PO customers don't carry one — so the
+    // OTP stays hidden and the button isn't blocked waiting on a card verification.
+    expect(screen.queryByTestId('otp-input')).not.toBeInTheDocument()
+    expect(screen.getByText(/no fleet card/i)).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /upload receipt/i })).not.toBeDisabled()
+  })
+
+  it('shows the Fleet Card OTP input once the switch is toggled to "has a fleet card"', async () => {
+    mockStore.noFleetCard = false
+    renderWithSuspense(<POForm />)
+
+    await waitFor(() => {
       expect(screen.getByTestId('otp-input')).toBeInTheDocument()
     }, { timeout: 5000 })
   })
@@ -369,16 +387,19 @@ describe('PO Form — index.tsx', () => {
     }, { timeout: 5000 })
   })
 
-  it.each(['Rankin', 'Sarnia', 'Walpole', 'Jocko Point', 'Charlies'])('shows the Fleet Card switch and OTP input for site "%s" (fleet-card-only by default)', async (site) => {
+  it.each(['Rankin', 'Sarnia', 'Walpole', 'Jocko Point', 'Charlies'])('shows the Fleet Card switch (defaulting to no card) for site "%s"', async (site) => {
     mockStore.stationName = site
+    mockStore.receipt = null
     renderWithSuspense(<POForm />)
 
     await waitFor(() => {
       expect(screen.getByText('Customer has fleet card')).toBeInTheDocument()
-      expect(screen.getByTestId('otp-input')).toBeInTheDocument()
     }, { timeout: 5000 })
 
     expect(screen.queryByText('Number')).not.toBeInTheDocument()
+    // Defaults off — OTP hidden, button not blocked on a card.
+    expect(screen.queryByTestId('otp-input')).not.toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /upload receipt/i })).not.toBeDisabled()
   })
 
   it.each(['Rankin', 'Sarnia', 'Walpole', 'Jocko Point', 'Charlies'])('auto-fills a fleet card from quick-select on site "%s"', async (site) => {
