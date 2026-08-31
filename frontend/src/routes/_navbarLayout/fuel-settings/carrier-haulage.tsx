@@ -112,18 +112,6 @@ export function RouteComponent() {
     fetchHaulageData()
   }, [])
 
-  // Check if a saved update belongs to the current month
-  const isStagedInCurrentMonth = (dateStr: string | null) => {
-    if (!dateStr) return false
-    try {
-      const date = new Date(dateStr)
-      const now = new Date()
-      return date.getMonth() === now.getMonth() && date.getFullYear() === now.getFullYear()
-    } catch {
-      return false
-    }
-  }
-
   // --- FILTER AND SORT ENGINE ---
   const sortedAndFilteredData = useMemo(() => {
     const normalizedQuery = searchQuery.replace(/[-\s]/g, '').toUpperCase()
@@ -158,7 +146,6 @@ export function RouteComponent() {
 
   // Dropdown options extractors
   const uniqueCarriers = useMemo(() => Array.from(new Set(data.map(r => r['Carrier'].trim()))).sort(), [data])
-  // const uniqueTypes = useMemo(() => Array.from(new Set(data.map(r => r['Type'].trim()))).sort(), [data])
   const uniqueLocations = useMemo(() => Array.from(new Set(data.map(r => r['Location'].trim()))).sort(), [data])
   const uniquePickups = useMemo(() => Array.from(new Set(data.map(r => r['Pickup'].trim()))).sort(), [data])
 
@@ -171,8 +158,8 @@ export function RouteComponent() {
     setActiveDialogRow(row)
     const key = getRowKey(row)
 
-    // Default to scheduled price if one exists from this month, otherwise show live price
-    const baselineValue = (row['Stg_Haulage'] !== null && isStagedInCurrentMonth(row['Stg_Updated_At']))
+    // Default to scheduled price if Stg_Updated_At exists, otherwise show live price
+    const baselineValue = (row['Stg_Haulage'] !== null && row['Stg_Updated_At'] !== null)
       ? row['Stg_Haulage']
       : (row['Live_Haulage'] ?? 0)
 
@@ -229,12 +216,10 @@ export function RouteComponent() {
 
     const entriesToPush = HAULAGE_MAPPING[selectedCategory as keyof typeof HAULAGE_MAPPING];
 
-    // Keep original values for the actual data object
     const carrierOriginal = formCarrier.trim();
     const locationOriginal = formLocation.trim();
     const pickupOriginal = formPickup.trim();
 
-    // Create uppercase versions specifically for duplication checks
     const carrierUpper = carrierOriginal.toUpperCase();
     const locationUpper = locationOriginal.toUpperCase();
     const pickupUpper = pickupOriginal.toUpperCase();
@@ -242,7 +227,6 @@ export function RouteComponent() {
     let addedCount = 0;
 
     entriesToPush.forEach(item => {
-      // Check for duplicates using the UPPERCASE versions
       const isDuplicate = newEntriesList.some(
         e => e.carrier.toUpperCase() === carrierUpper &&
           e.type === item.type &&
@@ -257,10 +241,10 @@ export function RouteComponent() {
 
       if (!isDuplicate) {
         setNewEntriesList(prev => [...prev, {
-          carrier: carrierOriginal, // Send original casing
+          carrier: carrierOriginal,
           type: item.type,
-          location: locationOriginal, // Send original casing
-          pickup: pickupOriginal,     // Send original casing
+          location: locationOriginal,
+          pickup: pickupOriginal,
           haulage: haulageNum
         }]);
         addedCount++;
@@ -269,7 +253,6 @@ export function RouteComponent() {
 
     if (addedCount === 0) alert("These routes already exist in the system.");
 
-    // Reset fields
     setFormType('');
     setFormHaulageValue('');
   };
@@ -371,9 +354,10 @@ export function RouteComponent() {
   const hasPendingChanges = Object.keys(editedRows).length > 0 || Object.keys(deletedRows).filter(k => deletedRows[k]).length > 0
   const totalStagedCount = Object.keys(editedRows).length + Object.keys(deletedRows).filter(k => deletedRows[k]).length
 
-  // Calculate next month name dynamically
+  // Calculate next month name dynamically without Date rollover bugs
   const scheduledMonthName = useMemo(() => {
     const nextMonth = new Date()
+    nextMonth.setDate(1)
     nextMonth.setMonth(nextMonth.getMonth() + 1)
     return nextMonth.toLocaleString('default', { month: 'long' })
   }, [])
@@ -397,7 +381,6 @@ export function RouteComponent() {
         </div>
 
         {/* CONTROLS CLUSTER */}
-
         {canEdit && (
           <div className="flex flex-col items-end gap-1.5 shrink-0">
             {/* DELETION ADVISORY BANNER */}
@@ -416,10 +399,11 @@ export function RouteComponent() {
               </button>
 
               <button
-                onClick={() => setIsLiveConfirmOpen(true)} // Changed from direct call
+                onClick={() => setIsLiveConfirmOpen(true)}
                 disabled={!hasPendingChanges}
-                className={`flex items-center gap-1.5 h-9 px-3 text-sm font-medium rounded-lg shadow-xs transition-all ${hasPendingChanges ? 'bg-red-600 text-white hover:bg-red-700 cursor-pointer' : 'bg-gray-100 text-gray-400 cursor-not-allowed'
-                  }`}
+                className={`flex items-center gap-1.5 h-9 px-3 text-sm font-medium rounded-lg shadow-xs transition-all ${
+                  hasPendingChanges ? 'bg-red-600 text-white hover:bg-red-700 cursor-pointer' : 'bg-gray-100 text-gray-400 cursor-not-allowed'
+                }`}
               >
                 <Zap className="w-4 h-4" />
                 Go Live Now ({totalStagedCount})
@@ -428,8 +412,9 @@ export function RouteComponent() {
               <button
                 onClick={() => setIsScheduleConfirmOpen(true)}
                 disabled={!hasPendingChanges}
-                className={`flex items-center gap-1.5 h-9 px-3 text-sm font-medium rounded-lg shadow-xs transition-all ${hasPendingChanges ? 'bg-amber-600 text-white hover:bg-amber-700 cursor-pointer' : 'bg-gray-100 text-gray-400 cursor-not-allowed'
-                  }`}
+                className={`flex items-center gap-1.5 h-9 px-3 text-sm font-medium rounded-lg shadow-xs transition-all ${
+                  hasPendingChanges ? 'bg-amber-600 text-white hover:bg-amber-700 cursor-pointer' : 'bg-gray-100 text-gray-400 cursor-not-allowed'
+                }`}
                 title={`Save updates to turn on automatically on the 1st of ${scheduledMonthName}.`}
               >
                 <Calendar className="w-4 h-4" />
@@ -489,8 +474,8 @@ export function RouteComponent() {
                 const isStagedDeleted = !!deletedRows[key]
                 const hasUnsavedLocalEdit = editedRows[key] !== undefined
 
-                // Check if there is an active future price already stored on the database server
-                const hasValidStagingMonth = row['Stg_Updated_At'] !== null && isStagedInCurrentMonth(row['Stg_Updated_At'])
+                // Active staging relies directly on whether Stg_Updated_At is non-null
+                const hasValidStagingMonth = row['Stg_Updated_At'] !== null
                 const hasSurchargesDiff = row['Stg_Haulage'] !== row['Live_Haulage']
                 const isCommittedScheduleActive = hasValidStagingMonth && hasSurchargesDiff
 
@@ -554,7 +539,6 @@ export function RouteComponent() {
                     </td>
 
                     {/* ITEM ROW CONTROLS */}
-
                     {canEdit && (
                       <td className="p-4 text-center">
                         <div className="flex items-center justify-center gap-1">

@@ -41,6 +41,19 @@ const customSelectStyles = {
   menu: (base: any) => ({ ...base, zIndex: 9999 })
 }
 
+// Category mapping configuration for bulk expansion
+const MAPPING_CONFIG = {
+  "GAS": [
+    { supplierItem: "GAS", inventoryItem: "RUL87" },
+    { supplierItem: "GAS", inventoryItem: "PUL91" }
+  ],
+  "DIESEL & DYED": [
+    { supplierItem: "DIESEL", inventoryItem: "ULSD" },
+    { supplierItem: "DIESEL", inventoryItem: "WULSD" },
+    { supplierItem: "DYED", inventoryItem: "ULSDD" }
+  ]
+} as const;
+
 export function RouteComponent() {
   const { user } = useAuth()
   const access = user?.access || {}
@@ -171,7 +184,7 @@ export function RouteComponent() {
     const currentKey = getRowKey(row)
 
     // Default to scheduled price if one exists from this month, otherwise show live price
-    const baselineValue = (row['Stg_Discounts'] !== null && isStagedInCurrentMonth(row['Stg_Updated_At']))
+    const baselineValue = (row['Stg_Discounts'] !== null && row['Stg_Updated_At']!== null)
       ? row['Stg_Discounts']
       : (row['Live_Discounts'] ?? 0)
 
@@ -222,31 +235,18 @@ export function RouteComponent() {
       return;
     }
 
-    // Define the relationship for expansion
-    const MAPPING_CONFIG = {
-      "GAS": [
-        { supplierItem: "GAS", inventoryItem: "RUL87" },
-        { supplierItem: "GAS", inventoryItem: "PUL91" }
-      ],
-      "DIESEL & DYED": [
-        { supplierItem: "DIESEL", inventoryItem: "ULSD" },
-        { supplierItem: "DIESEL", inventoryItem: "WULSD" },
-        { supplierItem: "DYED", inventoryItem: "ULSDD" }
-      ]
-    };
-
-    // 2. Ensure the category exists in your config
+    // Ensure the category exists in your config
     if (!(selectedCategory in MAPPING_CONFIG)) {
       alert("Invalid fuel category selected.");
       return;
     }
 
-    // Now TypeScript knows selectedCategory is valid
-    const itemsToPush = MAPPING_CONFIG[selectedCategory as keyof typeof MAPPING_CONFIG]; const supplierCode = formSupplierCode.trim().toUpperCase();
+    const itemsToPush = MAPPING_CONFIG[selectedCategory as keyof typeof MAPPING_CONFIG];
+    const supplierCode = formSupplierCode.trim().toUpperCase();
 
     let addedCount = 0;
 
-    itemsToPush.forEach((item: any) => {
+    itemsToPush.forEach((item) => {
       // 1. Check for duplicates in staging or existing database
       const isStagedDuplicate = newEntriesList.some(
         e => e.supplierCode === supplierCode &&
@@ -381,10 +381,11 @@ export function RouteComponent() {
 
   // Calculate next month name dynamically
   const scheduledMonthName = useMemo(() => {
-    const nextMonth = new Date()
-    nextMonth.setMonth(nextMonth.getMonth() + 1)
-    return nextMonth.toLocaleString('default', { month: 'long' })
-  }, [])
+    const nextMonth = new Date();
+    nextMonth.setDate(1); // Prevents August 31st from overflowing to October when adding a month
+    nextMonth.setMonth(nextMonth.getMonth() + 1);
+    return nextMonth.toLocaleString("default", { month: "long" });
+  }, []);
 
   if (loading) {
     return <div className="p-6 text-sm font-medium text-gray-500 animate-pulse">Loading discount information...</div>
@@ -494,7 +495,8 @@ export function RouteComponent() {
                 const hasUnsavedLocalEdit = editedRows[rowKey] !== undefined
 
                 // Check if there is an active future price already stored on the database server
-                const hasValidStagingMonth = row['Stg_Updated_At'] !== null && isStagedInCurrentMonth(row['Stg_Updated_At'])
+                const hasValidStagingMonth = row['Stg_Updated_At'] !== null 
+                // && isStagedInCurrentMonth(row['Stg_Updated_At'])
                 const hasSurchargesDiff = row['Stg_Discounts'] !== row['Live_Discounts']
                 const isCommittedScheduleActive = hasValidStagingMonth && hasSurchargesDiff
 
