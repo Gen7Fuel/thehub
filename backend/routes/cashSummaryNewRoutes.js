@@ -692,7 +692,115 @@ router.get('/by-date', async (req, res) => {
   }
 });
 
+// GET grouped daily cash summaries between 'from' and 'to' dates
+router.get('/by-range', async (req, res) => {
+  try {
+    const { site, from, to } = req.query;
+    if (!site || !from || !to) {
+      return res.status(400).json({ error: 'site, from, and to parameters are required' });
+    }
+
+    const fromDate = new Date(from);
+    const toDate = new Date(to);
+
+    const startOfRange = new Date(fromDate.getFullYear(), fromDate.getMonth(), fromDate.getDate(), 0, 0, 0, 0);
+    const endOfRange = new Date(toDate.getFullYear(), toDate.getMonth(), toDate.getDate(), 23, 59, 59, 999);
+
+    const shifts = await CashSummary.find({
+      site,
+      date: { $gte: startOfRange, $lte: endOfRange }
+    }).sort({ date: -1, shift_number: 1 }).lean();
+
+    // Group shifts by local ISO Date string (YYYY-MM-DD)
+    const groupedMap = new Map();
+
+    for (const shift of shifts) {
+      const d = new Date(shift.date);
+      const dateKey = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+
+      if (!groupedMap.has(dateKey)) {
+        groupedMap.set(dateKey, {
+          date: dateKey,
+          shift_numbers: [],
+          canadian_cash_collected: 0,
+          item_sales: 0,
+          cash_back: 0,
+          loyalty: 0,
+          cpl_bulloch: 0,
+          exempted_tax: 0,
+          allReviewed: true
+        });
+      }
+
+      const group = groupedMap.get(dateKey);
+      group.shift_numbers.push(shift.shift_number);
+      group.canadian_cash_collected += shift.canadian_cash_collected || 0;
+      group.item_sales += shift.item_sales || 0;
+      group.cash_back += shift.cash_back || 0;
+      group.loyalty += shift.loyalty || 0;
+      group.cpl_bulloch += shift.cpl_bulloch || 0;
+      group.exempted_tax += shift.exempted_tax || 0;
+
+      // Determine shift reviewed status:
+      // Valid if explicitly marked reviewed OR if it contains legacy reported cash field
+      const isShiftReviewed = Boolean(shift.reviewed) || shift.canadian_cash_collected !== undefined;
+
+      if (!isShiftReviewed) {
+        group.allReviewed = false;
+      }
+    }
+
+    res.json(Array.from(groupedMap.values()));
+  } catch (err) {
+    console.error('Fetch shifts by range error:', err);
+    res.status(500).json({ error: 'Failed to fetch shifts for date range' });
+  }
+});
+
 // 2. BATCH POST/UPDATE route to handle whole day submission
+// router.post('/batch', async (req, res) => {
+//   try {
+//     const { items } = req.body;
+//     if (!Array.isArray(items) || items.length === 0) {
+//       return res.status(400).json({ error: 'No shift data provided for submission' });
+//     }
+
+//     const bulkOperations = items.map((item) => {
+//       const updatePayload = {
+//         canadian_cash_collected: item.canadian_cash_collected ?? 0,
+//         exempted_tax: item.exempted_tax ?? 0, // Always sets or defaults exempted_tax
+//         reviewed: true
+//       };
+
+//       if (item.chequesCashedOut !== undefined) {
+//         updatePayload.chequesCashedOut = item.chequesCashedOut;
+//       }
+
+//       if (item.isChickenDelight) {
+//         updatePayload.tenders = item.tenders || [];
+//         updatePayload.chickenDelightTips = item.chickenDelightTips ?? 0;
+//         updatePayload.pinpadPhoto = item.pinpadPhoto || null;
+//         updatePayload.isChickenDelight = true;
+//       } else {
+//         updatePayload.isChickenDelight = false;
+//       }
+
+//       return {
+//         updateOne: {
+//           filter: { _id: item._id },
+//           update: { $set: updatePayload }
+//         }
+//       };
+//     });
+
+//     await CashSummary.bulkWrite(bulkOperations);
+//     res.json({ success: true, count: items.length });
+//   } catch (err) {
+//     console.error('Batch update shifts error:', err);
+//     res.status(500).json({ error: 'Failed to update daily cash summary shifts' });
+//   }
+// });
+// 2. BATCH POST/UPDATE route to handle whole day submission & Safesheet integration
 router.post('/batch', async (req, res) => {
   try {
     const { items } = req.body;
@@ -700,11 +808,12 @@ router.post('/batch', async (req, res) => {
       return res.status(400).json({ error: 'No shift data provided for submission' });
     }
 
+    // 1. Perform bulk update on CashSummary documents
     const bulkOperations = items.map((item) => {
       const updatePayload = {
         canadian_cash_collected: item.canadian_cash_collected ?? 0,
-        exempted_tax: item.exempted_tax ?? 0, // Always sets or defaults exempted_tax
-        reviewed: true
+        exempted_tax: item.exempted_tax ?? 0,
+        reviewed: true,
       };
 
       if (item.chequesCashedOut !== undefined) {
@@ -723,12 +832,100 @@ router.post('/batch', async (req, res) => {
       return {
         updateOne: {
           filter: { _id: item._id },
-          update: { $set: updatePayload }
-        }
+          update: { $set: updatePayload },
+        },
       };
     });
 
     await CashSummary.bulkWrite(bulkOperations);
+
+    // 2. Resolve Site and Date context for Safesheet entry
+    let targetSite = items[0]?.site;
+    let targetDateRaw = items[0]?.date;
+
+    // Fall back to DB lookup if site or date is missing in payload items
+    if (!targetSite || !targetDateRaw) {
+      const dbDoc = await CashSummary.findById(items[0]._id).lean();
+      if (dbDoc) {
+        targetSite = targetSite || dbDoc.site;
+        targetDateRaw = targetDateRaw || dbDoc.date;
+      }
+    }
+
+    if (targetSite && targetDateRaw) {
+      // Parse local date (supports "YYYY-MM-DD" strings or ISO Date objects)
+      let dateStr = '';
+      if (typeof targetDateRaw === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(targetDateRaw)) {
+        dateStr = targetDateRaw;
+      } else {
+        const d = new Date(targetDateRaw);
+        const y = d.getFullYear();
+        const m = String(d.getMonth() + 1).padStart(2, '0');
+        const day = String(d.getDate()).padStart(2, '0');
+        dateStr = `${y}-${m}-${day}`;
+      }
+
+      const [yy, mm, dd] = dateStr.split('-').map(Number);
+      const start = new Date(yy, mm - 1, dd, 0, 0, 0, 0);
+      const end = new Date(yy, mm - 1, dd + 1, 0, 0, 0, 0);
+
+      // Aggregate total canadian_cash_collected for the entire site & day from DB
+      const agg = await CashSummary.aggregate([
+        { $match: { site: targetSite, date: { $gte: start, $lt: end } } },
+        {
+          $group: {
+            _id: null,
+            total: { $sum: { $ifNull: ['$canadian_cash_collected', 0] } },
+          },
+        },
+      ]);
+
+      const totalCanadianCashCollected =
+        Math.round(Number(agg[0]?.total || 0) * 100) / 100;
+
+      // Find or create the Safesheet for this site
+      let sheet = await Safesheet.findOne({ site: targetSite });
+      if (!sheet) {
+        sheet = await Safesheet.create({
+          site: targetSite,
+          initialBalance: 0,
+          entries: [],
+        });
+      }
+
+      const sameDay = (d) => d >= start && d < end;
+
+      // Search for an existing "Daily Deposit" entry on that date
+      const idx = (() => {
+        for (let j = sheet.entries.length - 1; j >= 0; j--) {
+          const e = sheet.entries[j];
+          if (sameDay(new Date(e.date)) && e.description === 'Daily Deposit') {
+            return j;
+          }
+        }
+        return -1;
+      })();
+
+      const entryDate = dateFromYMDLocal(dateStr);
+
+      if (idx >= 0) {
+        // Update existing entry
+        sheet.entries[idx].date = entryDate;
+        sheet.entries[idx].description = 'Daily Deposit';
+        sheet.entries[idx].cashIn = totalCanadianCashCollected;
+        sheet.entries[idx].updatedAt = new Date();
+      } else {
+        // Add new entry
+        sheet.entries.push({
+          date: entryDate,
+          description: 'Daily Deposit',
+          cashIn: totalCanadianCashCollected,
+        });
+      }
+
+      await sheet.save();
+    }
+
     res.json({ success: true, count: items.length });
   } catch (err) {
     console.error('Batch update shifts error:', err);

@@ -735,13 +735,16 @@
 //   )
 // }
 import { createFileRoute, useNavigate } from '@tanstack/react-router'
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { SitePicker } from '@/components/custom/sitePicker'
 import { DatePicker } from '@/components/custom/datePicker'
 import { ImagePlus, Image as ImageIcon, HelpCircle, X, CheckCircle2 } from 'lucide-react'
 import { useSite } from '@/context/SiteContext'
 
-type CashSummarySearch = { site: string }
+type CashSummarySearch = {
+  site: string
+  date?: string
+}
 
 interface ShiftDoc {
   _id: string
@@ -775,10 +778,21 @@ interface ShiftFormState {
   isChickenDelight: boolean
 }
 
+// Get Yesterday local midnight ISO String (YYYY-MM-DD)
+const getYesterdayDateString = (): string => {
+  const d = new Date()
+  d.setDate(d.getDate() - 1)
+  const yy = d.getFullYear()
+  const mm = String(d.getMonth() + 1).padStart(2, '0')
+  const dd = String(d.getDate()).padStart(2, '0')
+  return `${yy}-${mm}-${dd}`
+}
+
 export const Route = createFileRoute('/_navbarLayout/cash-summary/form')({
   component: RouteComponent,
   validateSearch: (search: Record<string, unknown>): CashSummarySearch => ({
     site: (search.site as string) || '',
+    date: (search.date as string) || '',
   }),
 })
 
@@ -830,28 +844,60 @@ function FieldHelpDialog({
 }
 
 function RouteComponent() {
-  const { site } = Route.useSearch()
+  const { site, date: searchDate } = Route.useSearch()
   const navigate = useNavigate({ from: Route.fullPath })
   const { selectedSite } = useSite()
 
-  useEffect(() => {
-    if (!site && selectedSite) {
-      navigate({ search: { site: selectedSite }, replace: true })
-    }
-  }, [selectedSite])
+  // Ensure default date falls back to yesterday if omitted
+  const activeDateString = searchDate || getYesterdayDateString()
 
-  const todayLocalMidnight = () => {
-    const d = new Date()
-    return new Date(d.getFullYear(), d.getMonth(), d.getDate(), 0, 0, 0, 0)
+  // Derive Date object for DatePicker from active search param string
+  const pickerDate = useMemo(() => {
+    if (!activeDateString) return undefined
+    const [yy, mm, dd] = activeDateString.split('-').map(Number)
+    return new Date(yy, mm - 1, dd, 0, 0, 0, 0)
+  }, [activeDateString])
+
+  const updateSite = (newSite: string) =>
+    navigate({ search: (prev:any) => ({ ...prev, site: newSite }), replace: true })
+
+  const updateDate = (newDate: string) =>
+    navigate({ search: (prev:any) => ({ ...prev, date: newDate }), replace: true })
+
+  // Match standard Dispatch<SetStateAction<Date | undefined>> signature
+  const handleDateChange: React.Dispatch<React.SetStateAction<Date | undefined>> = (value) => {
+    const d = typeof value === 'function' ? value(pickerDate) : value
+    if (!d) return
+    const yy = d.getFullYear()
+    const mm = String(d.getMonth() + 1).padStart(2, '0')
+    const dd2 = String(d.getDate()).padStart(2, '0')
+    updateDate(`${yy}-${mm}-${dd2}`)
   }
 
-  const [date, setDate] = useState<Date | undefined>(todayLocalMidnight())
+  // Auto-set site/date defaults in URL search params if missing
+  useEffect(() => {
+    if (!site || !searchDate) {
+      navigate({
+        search: (prev: any) => ({
+          site: prev.site || selectedSite || '',
+          date: prev.date || activeDateString,
+        }),
+        replace: true,
+      })
+    }
+  }, [site, searchDate, selectedSite, activeDateString, navigate])
+
   const [shifts, setShifts] = useState<ShiftDoc[]>([])
   const [activeShiftId, setActiveShiftId] = useState<string | null>(null)
   const [formsState, setFormsState] = useState<Record<string, ShiftFormState>>({})
   
   const [fetchingShifts, setFetchingShifts] = useState(false)
   const [showCDCheckbox, setShowCDCheckbox] = useState(false)
+  
+  // Lottery Routing States
+  const [sellsLottery, setSellsLottery] = useState(false)
+  const [hasSavedLottery, setHasSavedLottery] = useState(false)
+  
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [success, setSuccess] = useState<string | null>(null)
@@ -861,28 +907,50 @@ function RouteComponent() {
 
   const showChequesField = (site === 'Wavers East' || site === 'Wavers West')
 
-  // Check Chicken Delight site capability
+  // Check Location Capabilities & Lottery Completion Status
   useEffect(() => {
-    if (!site) return
+    if (!site || !pickerDate) return
     ;(async () => {
       try {
-        const r = await fetch(`/api/locations?stationName=${encodeURIComponent(site)}`)
-        const loc = await r.json()
+        const locRes = await fetch(`/api/locations?stationName=${encodeURIComponent(site)}`)
+        const loc = await locRes.json()
+        const lottoSite = !!loc?.sellsLottery
         setShowCDCheckbox(!!loc?.chickenDelightSection)
-      } catch {
-        // ignore
+        setSellsLottery(lottoSite)
+
+        if (lottoSite) {
+          const formattedDate = activeDateString
+          const lottoRes = await fetch(
+            `/api/cash-summary/lottery?site=${encodeURIComponent(site)}&date=${encodeURIComponent(formattedDate)}`,
+            {
+              headers: {
+                Authorization: `Bearer ${localStorage.getItem('token') || ''}`,
+              }
+            }
+          )
+          if (lottoRes.ok) {
+            const lottoData = await lottoRes.json()
+            setHasSavedLottery(!!lottoData?.lottery)
+          } else {
+            setHasSavedLottery(false)
+          }
+        } else {
+          setHasSavedLottery(false)
+        }
+      } catch (err) {
+        console.warn('Failed checking site capabilities / lottery status', err)
       }
     })()
-  }, [site])
+  }, [site, pickerDate, activeDateString])
 
   // Fetch pre-registered shifts for selected Date and Site
   useEffect(() => {
-    if (!site || !date) return
+    if (!site || !pickerDate) return
     ;(async () => {
       setFetchingShifts(true)
       setError(null)
       try {
-        const dateISO = date.toISOString()
+        const dateISO = pickerDate.toISOString()
         const res = await fetch(`/api/cash-summary/by-date?site=${encodeURIComponent(site)}&date=${encodeURIComponent(dateISO)}`, {
           headers: {
             Authorization: `Bearer ${localStorage.getItem('token') || ''}`,
@@ -893,7 +961,6 @@ function RouteComponent() {
         const data: ShiftDoc[] = await res.json()
         setShifts(data)
 
-        // Initialize form state dictionary for all returned shifts
         const initialFormDict: Record<string, ShiftFormState> = {}
         data.forEach(s => {
           const tenders = s.tenders || []
@@ -925,7 +992,7 @@ function RouteComponent() {
         setFetchingShifts(false)
       }
     })()
-  }, [site, date])
+  }, [site, pickerDate])
 
   const activeShift = shifts.find(s => s._id === activeShiftId)
   const activeForm = activeShiftId ? formsState[activeShiftId] : null
@@ -965,7 +1032,6 @@ function RouteComponent() {
     setError(null)
     setSuccess(null)
 
-    // Validation pass
     for (const s of shifts) {
       const f = formsState[s._id]
       if (!f) continue
@@ -1019,12 +1085,33 @@ function RouteComponent() {
 
       if (!res.ok) throw new Error(await res.text())
       setSuccess('All shifts updated and marked as reviewed successfully!')
+
+      const searchParams = { site, date: activeDateString }
+
+      if (sellsLottery && !hasSavedLottery) {
+        navigate({
+          to: '/cash-summary/lottery',
+          search: searchParams
+        })
+      } else {
+        navigate({
+          to: '/cash-summary/report',
+          search: searchParams
+        })
+      }
     } catch (err: any) {
       setError(err.message || 'Submission failed')
     } finally {
       setSubmitting(false)
     }
   }
+
+  const isLotteryPending = sellsLottery && !hasSavedLottery
+  const buttonLabel = submitting
+    ? 'Submitting...'
+    : isLotteryPending
+    ? 'Save Shifts & Continue to Lottery'
+    : 'Save All Shifts Data'
 
   return (
     <div className="pt-16 flex flex-col items-center w-full">
@@ -1034,7 +1121,7 @@ function RouteComponent() {
             <label className="block text-sm font-medium">Site *</label>
             <SitePicker
               value={site}
-              onValueChange={(s) => navigate({ search: { site: s } })}
+              onValueChange={updateSite}
               placeholder="Pick a site"
               label="Site"
               className="w-full"
@@ -1044,8 +1131,8 @@ function RouteComponent() {
           <div className="space-y-1 w-full">
             <label className="block text-sm font-medium">Select Date *</label>
             <DatePicker
-              date={date}
-              setDate={setDate}
+              date={pickerDate}
+              setDate={handleDateChange}
               restrictToPast
             />
           </div>
@@ -1248,9 +1335,9 @@ function RouteComponent() {
               <button
                 type="submit"
                 disabled={submitting}
-                className="w-full py-2.5 rounded bg-primary text-primary-foreground font-semibold disabled:opacity-50"
+                className="w-full py-2.5 rounded bg-primary text-primary-foreground font-semibold disabled:opacity-50 hover:opacity-95 transition-opacity"
               >
-                {submitting ? 'Submitting Day Summary...' : 'Submit All Shifts For Day'}
+                {buttonLabel}
               </button>
               {error && <div className="text-red-600 text-sm font-medium">{error}</div>}
               {success && <div className="text-green-600 text-sm font-medium">{success}</div>}

@@ -279,6 +279,7 @@ async function runSftIngestionCron() {
   //   }
   // }
   await syncSftShiftsForSite("Wavers West", "America/Chicago");
+  await syncSftShiftsForSite("Rankin", "America/Toronto");
   console.log("[SFT Ingestion Cron] Completed execution.");
 }
 
