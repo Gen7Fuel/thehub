@@ -1,27 +1,28 @@
 import { createFileRoute, useNavigate } from '@tanstack/react-router'
-import { useMemo, useState, useEffect, useRef } from 'react'
+import { useEffect, useMemo, useState } from 'react'
+import type { Dispatch, ReactNode, SetStateAction } from 'react'
+import { AlertTriangle, CheckCircle2, Info } from 'lucide-react'
+import { Toaster } from 'sonner'
 import { DatePicker } from '@/components/custom/datePicker'
-import { toast, Toaster } from 'sonner'
+import { LotteryComparisonTable } from '@/components/custom/LotteryComparisionTable'
 import { SitePicker } from '@/components/custom/sitePicker'
-import { Button } from '@/components/ui/button';
-import { Info, RefreshCw } from 'lucide-react'
-import { useAuth } from '@/context/AuthContext'
-import { useSite } from '@/context/SiteContext'
+import { Button } from '@/components/ui/button'
 import {
   Dialog,
   DialogContent,
   DialogHeader,
   DialogTitle,
   DialogTrigger,
-} from "@/components/ui/dialog"
-import { LotteryComparisonTable } from '@/components/custom/LotteryComparisionTable'
+} from '@/components/ui/dialog'
+import { useAuth } from '@/context/AuthContext'
+import { useSite } from '@/context/SiteContext'
 
-interface CardProps {
-  title: React.ReactNode
-  value: React.ReactNode
-  dialogContent?: React.ReactNode
+const SITE_CONFIG = {
+  waversCheques: ['Wavers West', 'Wavers East'],
+  excludeLottery: ['Wavers West', 'Wavers East'],
+  excludeAR: ['Oliver', 'Osoyoos'],
+  excludeAP: ['Oliver', 'Osoyoos', 'Wavers East', 'Wavers West'],
 }
-// import { domain } from '@/lib/constants'
 
 type Search = { site: string; date: string }
 
@@ -36,10 +37,21 @@ type Row = {
   exempted_tax?: number
   report_canadian_cash?: number
   payouts?: number
-  pinpadTotal?: number
   isChickenDelight?: boolean
-  chickenDelightTips?: number      
-  pinpadPhoto?: string
+  chickenDelightTips?: number
+}
+
+type Readiness = {
+  canViewReport: boolean
+  shiftIssues: {
+    hasShifts: boolean
+    missingCashShiftNumbers: string[]
+    unreviewedShiftNumbers: string[]
+  }
+  lotteryIssue: {
+    sellsLottery: boolean
+    hasLottery: boolean
+  }
 }
 
 type ReportData = {
@@ -60,33 +72,56 @@ type ReportData = {
     chequesCashedOut?: number
   }
   chickenDelightTip?: number
-  report?: { notes?: string; submitted?: boolean; unsettledPrepays?: number; handheldDebit?: number }
+  report?: {
+    notes?: string
+    submitted?: boolean
+    unsettledPrepays?: number
+    handheldDebit?: number
+  }
+  readiness?: Readiness
+}
+
+type ArRegisterRow = {
+  register: string
+  arIncurredTotal: number
+  transactionsTotal: number
+  match: boolean
+}
+
+type ArCheckData = {
+  arIncurredTotal: number
+  transactionsTotal: number
+  match: boolean
+  byRegister?: ArRegisterRow[]
 }
 
 export const Route = createFileRoute('/_navbarLayout/cash-summary/report')({
   component: RouteComponent,
   validateSearch: (search: Record<string, unknown>): Search => {
-    const today = (() => {
-      const d = new Date()
-      const y = d.getFullYear()
-      const m = String(d.getMonth() + 1).padStart(2, '0')
-      const day = String(d.getDate()).padStart(2, '0')
-      return `${y}-${m}-${day}`
-    })()
+    const d = new Date()
+    const today = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(
+      d.getDate()
+    ).padStart(2, '0')}`
+
     return {
       site: (search.site as string) || '',
       date: (search.date as string) || today,
     }
   },
-  loaderDeps: ({ search: { site, date } }) => ({ site, date }),
-  loader: async ({ deps: { site, date } }) => {
+  loaderDeps: ({ search: { site, date } }: { search: Search }) => ({ site, date }),
+  loader: async ({ deps: { site, date } }: { deps: Search }) => {
     if (!site || !date) {
-      return { report: null as ReportData | null, error: null as string | null, accessDenied: false }
+      return {
+        report: null as ReportData | null,
+        error: null as string | null,
+        accessDenied: false,
+        isManitoba: false,
+      }
     }
+
     const token = localStorage.getItem('token') || ''
     let isManitoba = false
 
-    // 1) Fetch locations endpoint to safely determine the province
     try {
       const locResp = await fetch(`/api/locations?stationName=${encodeURIComponent(site)}`, {
         headers: token ? { Authorization: `Bearer ${token}` } : {},
@@ -97,7 +132,6 @@ export const Route = createFileRoute('/_navbarLayout/cash-summary/report')({
       }
     } catch (locErr) {
       console.error('Failed to resolve site location profile info', locErr)
-      isManitoba = false
     }
 
     try {
@@ -105,440 +139,271 @@ export const Route = createFileRoute('/_navbarLayout/cash-summary/report')({
         `/api/cash-summary/report?site=${encodeURIComponent(site)}&date=${encodeURIComponent(date)}`,
         {
           headers: {
-            Authorization: `Bearer ${localStorage.getItem('token') || ''}`,
-            "X-Required-Permission": "accounting.cashSummary.report",
+            Authorization: `Bearer ${token}`,
+            'X-Required-Permission': 'accounting.cashSummary.report',
           },
         }
       )
 
-      // ✅ Permission denied
       if (res.status === 403) {
-        return { report: null, error: null, accessDenied: true }
+        return { report: null, error: null, accessDenied: true, isManitoba }
       }
 
       if (!res.ok) {
         const msg = await res.text().catch(() => 'Failed to load')
-        return { report: null, error: msg || 'Failed to load', accessDenied: false, isManitoba: false }
+        return { report: null, error: msg || 'Failed to load', accessDenied: false, isManitoba }
       }
 
-      const report = (await res.json()) as ReportData
-      return { report, error: null, accessDenied: false, isManitoba }
-
-    } catch (err) {
-      return { report: null, error: 'Network error', accessDenied: false, isManitoba: false }
+      return {
+        report: (await res.json()) as ReportData,
+        error: null,
+        accessDenied: false,
+        isManitoba,
+      }
+    } catch {
+      return { report: null, error: 'Network error', accessDenied: false, isManitoba }
     }
-  }
+  },
 })
 
-export function Card({ title, value, dialogContent }: CardProps) {
-  const [open, setOpen] = useState(false)
-
-  return (
-    <div className="border rounded-md p-4 bg-card">
-      <div className="flex items-center gap-1 text-xs text-muted-foreground mb-1">
-        {title}
-        {dialogContent && (
-          <Dialog open={open} onOpenChange={setOpen}>
-            <DialogTrigger asChild>
-              <button>
-                <Info className="h-3 w-3 cursor-pointer text-muted-foreground hover:text-foreground" />
-              </button>
-            </DialogTrigger>
-            <DialogContent className="max-w-xs text-xs leading-relaxed">
-              <DialogHeader>
-                <DialogTitle>{title} Details</DialogTitle>
-              </DialogHeader>
-              {dialogContent}
-            </DialogContent>
-          </Dialog>
-        )}
-      </div>
-
-      <div className="text-base">{value}</div>
-    </div>
-  )
+export function Card({
+  title,
+  value,
+  dialogContent,
+}: {
+  title: ReactNode
+  value: ReactNode
+  dialogContent?: ReactNode
+}) {
+  return <StatCard title={title} value={value} dialogContent={dialogContent} />
 }
-
 
 function RouteComponent() {
   const { user } = useAuth()
   const { selectedSite } = useSite()
   const access = user?.access || {}
   const { site, date } = Route.useSearch()
-
   const navigate = useNavigate({ from: Route.fullPath })
-  // const { report, error } = Route.useLoaderData() as { report: ReportData | null; error: string | null }
   const { report, error, accessDenied, isManitoba } = Route.useLoaderData() as {
     report: ReportData | null
     error: string | null
     accessDenied: boolean
     isManitoba: boolean
   }
-  const [arData, setArData] = useState<{
-    arIncurredTotal: number;
-    transactionsTotal: number;
-    match: boolean;
-  } | null>(null);
-  // const [submitState, setSubmitState] = useState<'idle' | 'submitting' | 'submitted'>('idle')
-  const [submitState, setSubmitState] = useState<'idle' | 'submitting' | 'submitted'>(
-    report?.report?.submitted === true ? 'submitted' : 'idle'
-  )
-  const notes = report?.report?.notes ?? ''
-  const submitted = report?.report?.submitted === true
-  const unsettledPrepays = report?.report?.unsettledPrepays ?? undefined
-  const handheldDebit = report?.report?.handheldDebit ?? undefined
 
-  const [noteText, setNoteText] = useState('')
-  const [fetching, setFetching] = useState(false)
-
+  const [arData, setArData] = useState<ArCheckData | null>(null)
   const [arCheckMatch, setArCheckMatch] = useState<boolean | null>(null)
   const [payoutsCheckMatch, setPayoutsCheckMatch] = useState<boolean | null>(null)
-
-  const [voidedDetails, setVoidedDetails] = useState<any[]>([]);
-  const [loadingVoided, setLoadingVoided] = useState(false);
-
-  // Lottery saved entry for this site/date (for report print)
+  const [voidedDetails, setVoidedDetails] = useState<any[]>([])
+  const [loadingVoided, setLoadingVoided] = useState(false)
   const [lottery, setLottery] = useState<any | null>(null)
   const [bullock, setBullock] = useState<any | null>(null)
-  const [_, setLotteryLoading] = useState(false)
+  const [noteText, setNoteText] = useState('')
+  const [unsettledPrepaysValue, setUnsettledPrepaysValue] = useState('')
+  const [handheldDebitValue, setHandheldDebitValue] = useState('')
+  const [savingReportField, setSavingReportField] = useState<
+    'notes' | 'unsettledPrepays' | 'handheldDebit' | null
+  >(null)
+
+  const rows = report?.rows ?? []
+  const totals = report?.totals
+  const regularRows = rows.filter((r) => !r.isChickenDelight)
+  const cdRows = rows.filter((r) => r.isChickenDelight)
+  const chickenDelightTip = report?.chickenDelightTip ?? 0
+  const notes = report?.report?.notes ?? ''
+  const submitted = report?.report?.submitted === true
+  const unsettledPrepays = report?.report?.unsettledPrepays
+  const handheldDebit = report?.report?.handheldDebit
 
   const skeletonCards = useMemo(
-    () => Array.from({ length: 9 }).map((_, i) => (
-      <div key={i} className="border rounded-md p-4 bg-muted/30 animate-pulse h-24" />
-    )),
+    () =>
+      Array.from({ length: 9 }).map((_, i) => (
+        <div key={i} className="h-24 animate-pulse rounded-md border bg-muted/30 p-4" />
+      )),
     []
   )
 
-  const submitStateRef = useRef<'idle' | 'submitting' | 'submitted'>(submitState)
   useEffect(() => {
-    submitStateRef.current = submitState
-  }, [submitState])
-
-  // ✅ Redirect on permission failure
-  useEffect(() => {
-    if (accessDenied) {
-      navigate({ to: "/no-access" })
-    }
+    if (accessDenied) navigate({ to: '/no-access' })
   }, [accessDenied, navigate])
 
   useEffect(() => {
-    if (!site && selectedSite) navigate({ search: (prev: Search) => ({ ...prev, site: selectedSite }) })
-  }, [selectedSite])
+    if (!site && selectedSite) {
+      navigate({ search: (prev: Search) => ({ ...prev, site: selectedSite }) })
+    }
+  }, [navigate, selectedSite, site])
 
+  useEffect(() => setNoteText(notes), [notes])
+  useEffect(() => {
+    setUnsettledPrepaysValue(typeof unsettledPrepays === 'number' ? String(unsettledPrepays) : '')
+  }, [unsettledPrepays])
+  useEffect(() => {
+    setHandheldDebitValue(typeof handheldDebit === 'number' ? String(handheldDebit) : '')
+  }, [handheldDebit])
+  useEffect(() => setVoidedDetails([]), [site, date])
 
   useEffect(() => {
-    setNoteText(notes)
-  }, [notes])
-
-  // const saveNotes = async (text: string) => {
-  //   if (!site || !date || submitted || !text.trim()) return
-  //   await fetch('/api/cash-summary/report', {
-  //     method: 'PUT',
-  //     headers: {
-  //       'Content-Type': 'application/json',
-  //       Authorization: `Bearer ${localStorage.getItem('token') || ''}`,
-  //     },
-  //     body: JSON.stringify({ site, date, notes: text }),
-  //   }).catch(() => { })
-  //   // Optionally refetch route loader:
-  //   // navigate({ search: (prev: Search) => ({ ...prev }) })
-  // }
-  const saveNotes = async (text: string) => {
-    if (!site || !date || submitted || !text.trim()) return
-
-    try {
-      const res = await fetch('/api/cash-summary/report', {
-        method: 'PUT',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${localStorage.getItem('token') || ''}`,
-          'X-Required-Permission': 'accounting.cashSummary.report',
-        },
-        body: JSON.stringify({ site, date, notes: text }),
-      })
-
-      // ✅ Permission denied → redirect
-      if (res.status === 403) {
-        navigate({ to: "/no-access" })
-        return
-      }
-
-      if (!res.ok) {
-        console.warn('Failed to save notes')
-        return
-      }
-
-      // Optional: refetch loader
-      // navigate({ search: (prev: Search) => ({ ...prev }) })
-
-    } catch {
-      console.warn('Failed to save notes (network)')
-    }
-  }
-
-  // const saveField = async (key: 'unsettledPrepays' | 'handheldDebit', value: string) => {
-  //   if (!site || !date || submitted) return
-  //   const num = Number(value)
-  //   if (!Number.isFinite(num)) return
-  //   await fetch('/api/cash-summary/report', {
-  //     method: 'PUT',
-  //     headers: {
-  //       'Content-Type': 'application/json',
-  //       Authorization: `Bearer ${localStorage.getItem('token') || ''}`,
-  //     },
-  //     body: JSON.stringify({ site, date, [key]: num }),
-  //   }).catch(() => { })
-  // }
-  const saveField = async (key: 'unsettledPrepays' | 'handheldDebit', value: string) => {
-    if (!site || !date || submitted) return
-
-    const num = Number(value)
-    if (!Number.isFinite(num)) return
-
-    try {
-      const res = await fetch('/api/cash-summary/report', {
-        method: 'PUT',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${localStorage.getItem('token') || ''}`,
-          'X-Required-Permission': 'accounting.cashSummary.report',
-        },
-        body: JSON.stringify({ site, date, [key]: num }),
-      })
-
-      // ✅ Permission denied → redirect
-      if (res.status === 403) {
-        navigate({ to: "/no-access" })
-        return
-      }
-
-      if (!res.ok) {
-        console.warn(`Failed to save field: ${key}`)
-        return
-      }
-
-    } catch {
-      console.warn(`Failed to save field (network): ${key}`)
-    }
-  }
-
-
-  useEffect(() => {
-    if (report?.report?.submitted === true) {
-      setSubmitState('submitted')
-    } else {
-      setSubmitState('idle')
-    }
-  }, [report])
-
-
-  const onSubmitClick = async () => {
-    if (submitStateRef.current !== 'idle' || !site || !date) {
-      return
-    }
-
-    // If this site sells lottery, ensure a saved Lottery entry exists for this date
-    try {
-      const token = localStorage.getItem('token')
-      const locResp = await fetch('/api/locations', { headers: token ? { Authorization: `Bearer ${token}` } : {} })
-      if (locResp.ok) {
-        const locs = await locResp.json()
-        const found = Array.isArray(locs) ? locs.find((l: any) => l.stationName === site) : null
-        if (found && found.sellsLottery) {
-          console.log('[CashSummary] onSubmitClick site sellsLottery; lottery present?', !!lottery)
-          // lottery state was loaded earlier; if missing, block submit
-          if (!lottery) {
-            alert('You need to add lottery values to submit this report. Redirecting to Lottery entry page.')
-            navigate({ to: '/cash-summary/lottery' })
-            return
-          }
-        }
-      }
-    } catch (e) {
-      // if we cannot verify, allow submit to proceed
-    }
-
-    const proceed = window.confirm(
-      'An email will be sent to Accounting with a copy of the Cash Summary Report.\n\nDo you want to continue?'
-    )
-    if (!proceed) return
-
-    // console.log('submitted')
-    try {
-      setSubmitState('submitting')
-      const r = await fetch('/api/cash-summary/submit/to/safesheet', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${localStorage.getItem('token') || ''}`,
-          'X-Required-Permission': 'accounting.cashSummary.report',
-        },
-        body: JSON.stringify({ site, date }),
-      })
-      if (r.status === 403) {
-        navigate({ to: "/no-access" })
-        return
-      }
-      if (!r.ok) {
-        const msg = await r.text().catch(() => 'Submit failed')
-        throw new Error(msg || 'Submit failed')
-      }
-      setSubmitState('submitted')
-    } catch (e) {
-      alert('Failed to submit.')
-      setSubmitState('idle')
-    }
-  }
-
-  const onFetch = async () => {
-    submitStateRef.current = 'idle'
-    setSubmitState('idle')
-
-    if (fetching) { return }
-    if (!site || !date) { return }
-    const ids = (report?.rows || []).map((r) => r._id).filter(Boolean)
-    if (ids.length === 0) { return }
-    setFetching(true)
-    try {
-      const token = localStorage.getItem('token') || ''
-      let permissionDenied = false
-      for (const id of ids) {
-        try {
-          const res = await fetch(`/api/cash-summary/${encodeURIComponent(id)}`, {
-            method: 'PUT',
-            headers: {
-              'Content-Type': 'application/json',
-              Authorization: `Bearer ${token}`,
-              'X-Required-Permission': 'accounting.cashSummary.report.fetchAgain',
-            },
-            body: JSON.stringify({ refetch: true }),
-          })
-          if (res.status === 403) {
-            permissionDenied = true
-            break
-          }
-          // Continue even if one fails; surface minimal feedback
-          if (!res.ok) {
-            // ignore refetch failures silently
-          }
-        } catch (e) {
-          // ignore refetch errors silently
-        }
-      }
-      // ✅ Redirect if permission failed
-      if (permissionDenied) {
-        navigate({ to: "/no-access" })
-        return
-      }
-      await navigate({ search: (prev: Search) => ({ ...prev }) })
-      await onSubmitClick()
-    } finally {
-      setFetching(false)
-    }
-  }
-
-  const fetchVoidedDetails = async () => {
-    // Only fetch if we don't already have data for this specific report
-    if (voidedDetails.length > 0 || loadingVoided) return;
-
-    setLoadingVoided(true);
-    try {
-      const token = localStorage.getItem('token');
-      const resp = await fetch(
-        `/api/cash-summary/voided-transactions-details?site=${encodeURIComponent(site)}&date=${encodeURIComponent(date)}`,
-        { headers: token ? { Authorization: `Bearer ${token}`, 'X-Required-Permission': 'accounting.cashSummary.report' } : {}, }
-      );
-      if (resp.status === 403) {
-        navigate({ to: "/no-access" })
-        return
-      }
-      if (resp.ok) {
-        const data = await resp.json();
-        setVoidedDetails(data);
-      }
-    } catch (e) {
-      console.error('Failed to fetch voided details', e);
-    } finally {
-      setLoadingVoided(false);
-    }
-  };
-
-  // We still need this to "reset" when the user changes the main report site/date
-  useEffect(() => {
-    setVoidedDetails([]);
-  }, [site, date]);
-
-  useEffect(() => {
-    setPayoutsCheckMatch(null)
-    toast.dismiss('payouts-check-mismatch')
-    if (!site || !date || ['Oliver', 'Osoyoos', 'Wavers East', 'Wavers West'].includes(site)) return
-
     const check = async () => {
+      setPayoutsCheckMatch(null)
+      if (!site || !date || SITE_CONFIG.excludeAP.includes(site)) return
+
       try {
         const token = localStorage.getItem('token')
         const res = await fetch(
           `/api/cash-summary/payouts-check?site=${encodeURIComponent(site)}&date=${encodeURIComponent(date)}`,
-          { headers: { Authorization: `Bearer ${token || ''}`, 'X-Required-Permission': 'accounting.cashSummary.report' } }
+          {
+            headers: {
+              Authorization: `Bearer ${token || ''}`,
+              'X-Required-Permission': 'accounting.cashSummary.report',
+            },
+          }
         )
-        if (res.status === 403) { navigate({ to: '/no-access' }); return }
-        if (!res.ok) return
-        const data = await res.json()
-        console.log('[payouts-check]', data)
-        setPayoutsCheckMatch(data.match)
-        if (!data.match) {
-          toast.warning(
-            "This report cannot be submitted — payouts in Bulloch don't match the payables entered in the Hub.",
-            { id: 'payouts-check-mismatch', duration: Infinity }
-          )
-        }
+        if (res.status === 403) return navigate({ to: '/no-access' })
+        if (res.ok) setPayoutsCheckMatch((await res.json()).match)
       } catch {
-        // silently ignore — don't block the page on a check failure
+        setPayoutsCheckMatch(null)
       }
     }
+
     check()
-  }, [site, date])
+  }, [date, navigate, site])
 
-  // 2. Update your useEffect hook
   useEffect(() => {
-    setArCheckMatch(null);
-    setArData(null);
-    toast.dismiss('ar-check-mismatch');
-    
-    if (!site || !date || ['Oliver', 'Osoyoos'].includes(site)) return;
-
     const check = async () => {
+      setArCheckMatch(null)
+      setArData(null)
+      if (!site || !date || SITE_CONFIG.excludeAR.includes(site)) return
+
       try {
         const token = localStorage.getItem('token')
         const res = await fetch(
           `/api/cash-summary/ar-check?site=${encodeURIComponent(site)}&date=${encodeURIComponent(date)}`,
-          { headers: { Authorization: `Bearer ${token || ''}`, 'X-Required-Permission': 'accounting.cashSummary.report' } }
-        );
-        if (res.status === 403) { navigate({ to: '/no-access' }); return; }
-        if (!res.ok) return;
-        
-        const data = await res.json();
-        console.log('[ar-check]', data);
-        
-        setArCheckMatch(data.match);
-        setArData(data); // Save full payload
-        
-        if (!data.match) {
-          toast.warning(
-            "This report cannot be submitted — receivables in Bulloch don't match the receivables entered in the Hub.",
-            { id: 'ar-check-mismatch', duration: Infinity }
-          );
+          {
+            headers: {
+              Authorization: `Bearer ${token || ''}`,
+              'X-Required-Permission': 'accounting.cashSummary.report',
+            },
+          }
+        )
+        if (res.status === 403) return navigate({ to: '/no-access' })
+        if (res.ok) {
+          const data = (await res.json()) as ArCheckData
+          setArCheckMatch(data.match)
+          setArData(data)
         }
       } catch {
-        // silently ignore
+        setArCheckMatch(null)
+        setArData(null)
       }
-    };
-    check();
-  }, [site, date]);
+    }
 
-  console.log('Site/date report:', site, date, voidedDetails)
+    check()
+  }, [date, navigate, site])
 
-  const submitLabel =
-    submitState === 'idle' ? 'Submit' : submitState === 'submitting' ? 'Submitting...' : 'Submitted'
+  useEffect(() => {
+    const fetchLottery = async () => {
+      if (!site || !date) {
+        setLottery(null)
+        setBullock(null)
+        return
+      }
+
+      try {
+        const token = localStorage.getItem('token')
+        const resp = await fetch(
+          `/api/cash-summary/lottery?site=${encodeURIComponent(site)}&date=${encodeURIComponent(date)}`,
+          {
+            headers: token
+              ? {
+                  Authorization: `Bearer ${token}`,
+                  'X-Required-Permission': 'accounting.cashSummary.report',
+                }
+              : {},
+          }
+        )
+        if (resp.status === 403) return navigate({ to: '/no-access' })
+        if (!resp.ok) {
+          setLottery(null)
+          setBullock(null)
+          return
+        }
+        const data = await resp.json()
+        setLottery(data?.lottery ?? null)
+        setBullock(data?.totals ?? null)
+      } catch {
+        setLottery(null)
+        setBullock(null)
+      }
+    }
+
+    fetchLottery()
+  }, [date, navigate, site])
+
+  const saveReportField = async (
+    endpoint: string,
+    body: Record<string, unknown>,
+    field: 'notes' | 'unsettledPrepays' | 'handheldDebit'
+  ) => {
+    try {
+      setSavingReportField(field)
+      const res = await fetch(endpoint, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${localStorage.getItem('token') || ''}`,
+          'X-Required-Permission': 'accounting.cashSummary.report',
+        },
+        body: JSON.stringify(body),
+      })
+
+      if (res.status === 403) navigate({ to: '/no-access' })
+    } finally {
+      setSavingReportField(null)
+    }
+  }
+
+  const saveNotes = () => {
+    if (!site || !date || submitted || !noteText.trim()) return
+    saveReportField('/api/cash-summary/report/notes', { site, date, notes: noteText }, 'notes')
+  }
+
+  const saveField = (key: 'unsettledPrepays' | 'handheldDebit', value: string) => {
+    if (!site || !date || submitted) return
+    const num = Number(value)
+    if (!Number.isFinite(num)) return
+
+    saveReportField(
+      key === 'unsettledPrepays'
+        ? '/api/cash-summary/report/unsettled-prepays'
+        : '/api/cash-summary/report/handheld-debit',
+      { site, date, [key]: num },
+      key
+    )
+  }
+
+  const fetchVoidedDetails = async () => {
+    if (voidedDetails.length > 0 || loadingVoided || !site || !date) return
+
+    setLoadingVoided(true)
+    try {
+      const token = localStorage.getItem('token')
+      const resp = await fetch(
+        `/api/cash-summary/voided-transactions-details?site=${encodeURIComponent(site)}&date=${encodeURIComponent(date)}`,
+        {
+          headers: token
+            ? {
+                Authorization: `Bearer ${token}`,
+                'X-Required-Permission': 'accounting.cashSummary.report',
+              }
+            : {},
+        }
+      )
+      if (resp.status === 403) return navigate({ to: '/no-access' })
+      if (resp.ok) setVoidedDetails(await resp.json())
+    } finally {
+      setLoadingVoided(false)
+    }
+  }
 
   const updateSite = (newSite: string) =>
     navigate({ search: (prev: Search) => ({ ...prev, site: newSite }) })
@@ -548,152 +413,99 @@ function RouteComponent() {
   const pickerDate = useMemo(() => {
     if (!date) return undefined
     const [yy, mm, dd] = date.split('-').map(Number)
-    return new Date(yy, mm - 1, dd, 0, 0, 0, 0)
+    return new Date(yy, mm - 1, dd)
   }, [date])
 
-  const handleDateChange: React.Dispatch<React.SetStateAction<Date | undefined>> = (value) => {
+  const handleDateChange: Dispatch<SetStateAction<Date | undefined>> = (value) => {
     const d = typeof value === 'function' ? value(pickerDate) : value
     if (!d) return
-    const yy = d.getFullYear()
-    const mm = String(d.getMonth() + 1).padStart(2, '0')
-    const dd2 = String(d.getDate()).padStart(2, '0')
-    updateDate(`${yy}-${mm}-${dd2}`)
+    updateDate(
+      `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(
+        d.getDate()
+      ).padStart(2, '0')}`
+    )
   }
 
-  const rows = report?.rows ?? []
-  const totals = report?.totals
-  const hasRows = rows.length > 0
-  const regularRows = rows.filter(r => !r.isChickenDelight)
-  const cdRows = rows.filter(r => r.isChickenDelight)
-  const chickenDelightTip = report?.chickenDelightTip ?? 0
-
-  useEffect(() => {
-    const fetchLottery = async () => {
-      if (!site || !date) {
-        setLottery(null)
-        setBullock(null)
-        return
-      }
-      setLotteryLoading(true)
-      try {
-        const token = localStorage.getItem('token')
-        const resp = await fetch(`/api/cash-summary/lottery?site=${encodeURIComponent(site)}&date=${encodeURIComponent(date)}`, {
-          headers: token ? { Authorization: `Bearer ${token}`, 'X-Required-Permission': 'accounting.cashSummary.report' } : {},
-        })
-        if (resp.status === 403) {
-          setLottery(null)
-          setBullock(null)
-          navigate({ to: "/no-access" })
-          return
-        }
-        if (!resp.ok) {
-          setLottery(null)
-          setBullock(null)
-          return
-        }
-        const data = await resp.json()
-        setLottery(data?.lottery ?? null)
-        setBullock(data?.totals ?? null)
-      } catch (e) {
-        console.warn('Failed to fetch lottery for report', e)
-        setLottery(null)
-        setBullock(null)
-      } finally {
-        setLotteryLoading(false)
-      }
-    }
-    fetchLottery()
-  }, [site, date])
-
-  const safeBullock = bullock ?? {
-    onlineSales: 0,
-    scratchSales: 0,
-    payouts: 0,
-  }
-
+  const safeBullock = bullock ?? { onlineSales: 0, scratchSales: 0, payouts: 0 }
   const safeLottery = lottery ?? {
     onlineLottoTotal: 0,
     onlineCancellations: 0,
     onlineDiscounts: 0,
     instantLottTotal: 0,
     scratchFreeTickets: 0,
+    oldScratchTickets: 0,
     lottoPayout: 0,
-    vouchersRedeemed: 0,
   }
-
-  const fmtNum = (n?: number) =>
-    typeof n === 'number'
-      ? n.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })
-      : '—'
-
-  const shiftReportUrl = (shiftNumber: string) =>
-    `https://app.gen7fuel.com/sftp?site=${encodeURIComponent(site)}&type=sft&shift=${encodeURIComponent(`"${shiftNumber}"`)}`
-
-  const canViewShiftReport = !!access?.accounting?.cashSummary?.report?.viewShiftReport
-
-  // --- NEW: Dynamic Cheque-Adjusted Math Core ---
-  const isWaversChequeSite = site === 'Wavers East' || site === 'Wavers West';
-  const chequesValue = totals?.chequesCashedOut ?? 0;
-
-  // Standard variance calculation (Incorporate cheques as counted revenue if at a Wavers station)
+  const isWaversChequeSite = SITE_CONFIG.waversCheques.includes(site)
+  const chequesValue = totals?.chequesCashedOut ?? 0
   const overShort =
     (totals?.canadian_cash_collected ?? 0) +
     (isWaversChequeSite ? chequesValue : 0) -
     (totals?.report_canadian_cash ?? 0) +
     (handheldDebit ?? 0) +
-    (unsettledPrepays ?? 0);
-
-  const baseReportedCash = totals?.report_canadian_cash || 0
-
+    (unsettledPrepays ?? 0)
   const onlineOverShort =
     (safeBullock.onlineSales || 0) -
     ((safeLottery.onlineLottoTotal ?? 0) -
       (safeLottery.onlineCancellations || 0) -
       (safeLottery.onlineDiscounts || 0))
-
   const scratchOverShort = isManitoba
     ? 0
     : (safeBullock.scratchSales || 0) -
-    ((safeLottery.instantLottTotal ?? 0) +
-      (safeLottery.scratchFreeTickets ?? 0) +
-      (safeLottery.oldScratchTickets ?? 0))
-
-  const payoutOverShort =
-    (safeBullock.payouts || 0) - (safeLottery.lottoPayout ?? 0)
-
+      ((safeLottery.instantLottTotal ?? 0) +
+        (safeLottery.scratchFreeTickets ?? 0) +
+        (safeLottery.oldScratchTickets ?? 0))
+  const payoutOverShort = (safeBullock.payouts || 0) - (safeLottery.lottoPayout ?? 0)
   const adjustedReportedCash =
-    baseReportedCash + onlineOverShort + scratchOverShort
-
-  const adjustedItemSales =
-    (totals?.item_sales || 0) + onlineOverShort + scratchOverShort
-
-  const adjustedPayouts =
-    (totals?.payouts || 0) + payoutOverShort
-
+    (totals?.report_canadian_cash ?? 0) + onlineOverShort + scratchOverShort
+  const adjustedItemSales = (totals?.item_sales ?? 0) + onlineOverShort + scratchOverShort
+  const adjustedPayouts = (totals?.payouts ?? 0) + payoutOverShort
   const adjustedOverShort =
     (totals?.canadian_cash_collected ?? 0) +
     (isWaversChequeSite ? chequesValue : 0) -
-    (adjustedReportedCash ?? 0) + (handheldDebit ?? 0) + (unsettledPrepays ?? 0)
+    adjustedReportedCash +
+    (handheldDebit ?? 0) +
+    (unsettledPrepays ?? 0)
 
-  // Exclude Wavers West from using adjustedOverShort
-  const isWaversWest = site === 'Wavers West';
-  const effectiveOverShort = lottery && !isWaversWest ? adjustedOverShort : overShort;
-
-  const notesRequired = Math.abs(effectiveOverShort) > 25;
+  const effectiveOverShort = lottery && site !== 'Wavers West' ? adjustedOverShort : overShort
+  const notesRequired = Math.abs(effectiveOverShort) > 25
   const notesProvided = noteText.trim().length > 0
-  const submitDisabled = submitState !== 'idle' || arCheckMatch === false || payoutsCheckMatch === false || (notesRequired && !notesProvided)
-
+  const readiness = report?.readiness
+  const shiftBlocked = Boolean(
+    readiness &&
+      !readiness.canViewReport &&
+      (!readiness.shiftIssues.hasShifts ||
+        readiness.shiftIssues.missingCashShiftNumbers.length > 0 ||
+        readiness.shiftIssues.unreviewedShiftNumbers.length > 0)
+  )
+  const lotteryBlocked = Boolean(
+    readiness &&
+      !readiness.canViewReport &&
+      !shiftBlocked &&
+      readiness.lotteryIssue.sellsLottery &&
+      !readiness.lotteryIssue.hasLottery
+  )
+  const mismatchMessages = [
+    arCheckMatch === false ? 'A/R is not matching between Bulloch and the Hub.' : null,
+    payoutsCheckMatch === false ? 'A/P is not matching between Bulloch payouts and Hub payables.' : null,
+  ].filter(Boolean)
+  const canViewShiftReport = Boolean(access?.accounting?.cashSummary?.report?.viewShiftReport)
+  const showLotterySection = Boolean(lottery && !SITE_CONFIG.excludeLottery.includes(site))
+  const showARSection = Boolean(arData && !SITE_CONFIG.excludeAR.includes(site))
   const osColor =
     overShort > 0 ? 'text-green-600' : overShort < 0 ? 'text-red-600' : 'text-muted-foreground'
   const adjustedOsColor =
-    adjustedOverShort > 0 ? 'text-green-600' : adjustedOverShort < 0 ? 'text-red-600' : 'text-muted-foreground'
+    adjustedOverShort > 0
+      ? 'text-green-600'
+      : adjustedOverShort < 0
+        ? 'text-red-600'
+        : 'text-muted-foreground'
 
   if (accessDenied) return null
 
   return (
-    <div className="pt-2 w-full flex flex-col items-center">
+    <div className="flex min-h-screen w-full flex-col items-center bg-slate-50/50 py-4">
       <Toaster />
-      {/* Print-only CSS: hide everything except #print-area */}
       <style>{`
         @media print {
           body * { visibility: hidden !important; }
@@ -702,516 +514,705 @@ function RouteComponent() {
         }
       `}</style>
 
-      <div className="w-full max-w-7xl px-4 space-y-6">
-        <div className="flex items-end gap-4">
-          <SitePicker
-            value={site}
-            onValueChange={updateSite}
-            placeholder="Pick a site"
-            label="Site"
-            className="w-[220px]"
-          />
-          <div>
-            <label className="block text-sm mb-1">Date</label>
-            <DatePicker
-              date={pickerDate}
-              setDate={handleDateChange}
-            />
-          </div>
-          <div className="ml-auto flex flex-row gap-2">
-            {hasRows && (
-              <Button type="button" onClick={onSubmitClick} disabled={submitDisabled}>
-                {submitLabel}
-              </Button>
-            )}
-            {/* <Button type="button" variant="outline" onClick={() => window.print()}>
-              Export PDF
-            </Button> */}
-            {access?.accounting?.cashSummary?.report?.fetchAgain && (
-              <Button
-                type="button"
-                variant="outline"
-                onClick={onFetch}
-                disabled={fetching}
-                title="Refetch shifts and submit"
-                aria-label="Refetch shifts and submit"
-              >
-                <RefreshCw className={`h-4 w-4 ${fetching ? 'animate-spin' : ''}`} />
-              </Button>
-            )}
-          </div>
-        </div>
-
-        <div className="border rounded-md overflow-hidden" id="print-area">
-          <div className="px-4 py-3 border-b flex items-center justify-between bg-muted/40">
-            <h2 className="text-sm font-semibold">
-              Cash Summary – {site || '—'} – {date || '—'}
-            </h2>
-            {error && <span className="text-xs text-red-600">Error: {error}</span>}
-          </div>
-
-          {!site || !date ? (
-            <div className="p-4 text-sm text-muted-foreground">Pick a site and date.</div>
-          ) : !report && !error ? (
-            <div className="p-4 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">{skeletonCards}</div>
-          ) : rows.length === 0 ? (
-            <div className="p-4 text-sm text-muted-foreground">No summaries</div>
-          ) : (
-            <div className="p-4 space-y-8">
-              <div>
-                <h3 className="text-sm font-semibold mb-2">Totals</h3>
-                <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-                  <Card title="Total Canadian Cash Counted" value={fmtNum(totals?.canadian_cash_collected)} />
-                  <Card title="Total Canadian Cash Reported" value={fmtNum(totals?.report_canadian_cash)} />
-                  <Card
-                    title="Over/Short"
-                    value={<span className={`font-semibold ${osColor}`}>{fmtNum(overShort)}</span>}
-                  />
-                  <Card title="Item Sales" value={fmtNum(totals?.item_sales)} />
-                  <Card title="Cash Back" value={fmtNum(totals?.cash_back)} />
-                  <Card title="Loyalty" value={fmtNum(totals?.loyalty)} />
-                  <Card title="Exempted Tax" value={fmtNum(totals?.exempted_tax)} />
-                  <Card title="Payouts" value={fmtNum(totals?.payouts)} />
-                  {/* ⚠️ CONDITIONAL CHEQUES DISPLAY BLOCK */}
-                  {isWaversChequeSite && (
-                    <Card
-                      title="Cheques Cashed Out"
-                      value={<span className="font-semibold text-amber-700">{fmtNum(totals?.chequesCashedOut)}</span>}
-                    />
-                  )}
-                  <Card
-                    title={<span className="font-bold text-black">Voided Transactions</span>}
-                    value={
-                      <div className="flex items-center gap-1">
-                        <span
-                          className={`font-semibold ${typeof totals?.voidedTransactionsAmount === 'number' && totals.voidedTransactionsAmount !== 0
-                            ? 'text-red-600'
-                            : ''
-                            }`}
-                        >
-                          {fmtNum(totals?.voidedTransactionsAmount)}
-                        </span>
-
-                        {/* Only show the icon if the amount is greater than 0 */}
-                        {(totals?.voidedTransactionsAmount ?? 0) > 0 && (
-                          <Dialog onOpenChange={(open) => open && fetchVoidedDetails()}>
-                            <DialogTrigger asChild>
-                              <button className="p-1 rounded-full hover:bg-gray-100 transition-colors inline-flex items-center outline-none">
-                                <Info className="h-4 w-4 cursor-pointer text-muted-foreground hover:text-blue-600" />
-                              </button>
-                            </DialogTrigger>
-                            <DialogContent className="max-w-4xl max-h-[80vh] flex flex-col">
-                              <DialogHeader>
-                                <DialogTitle>Voided Transactions Summary</DialogTitle>
-                              </DialogHeader>
-
-                              <div className="flex-1 overflow-y-auto mt-4">
-                                {loadingVoided ? (
-                                  <div className="py-20 text-center animate-pulse">Loading summary...</div>
-                                ) : voidedDetails.length > 0 ? (
-                                  <table className="w-full text-sm">
-                                    <thead className="bg-muted sticky top-0">
-                                      <tr>
-                                        <th className="p-3 text-left">Transaction ID</th>
-                                        <th className="p-3 text-left">Time</th>
-                                        <th className="p-3 text-left">Items</th>
-                                        <th className="p-3 text-right">Total Refunded</th>
-                                      </tr>
-                                    </thead>
-                                    <tbody className="divide-y">
-                                      {voidedDetails.map((tx) => (
-                                        <tr key={tx.transactionId} className="hover:bg-muted/30">
-                                          <td className="p-3 font-mono text-sm">{tx.transactionId}</td>
-                                          <td className="p-3 text-muted-foreground">
-                                            {/* Extracts the time portion (HH:mm:ss) from the ISO string without timezone conversion */}
-                                            {tx.eventStartTime?.toString().split('T')[1]?.substring(0, 5) || tx.eventStartTime}
-                                          </td>
-                                          <td className="p-3">
-                                            <Dialog>
-                                              <DialogTrigger asChild>
-                                                <button className="text-blue-600 underline hover:text-blue-800 font-medium cursor-pointer">
-                                                  {tx.items.length} {tx.items.length === 1 ? 'Item' : 'Items'}
-                                                </button>
-                                              </DialogTrigger>
-                                              <DialogContent className="max-w-2xl">
-                                                <DialogHeader>
-                                                  <DialogTitle>Transaction Details: {tx.transactionId}</DialogTitle>
-                                                </DialogHeader>
-                                                <div className="mt-4 border rounded-md overflow-hidden">
-                                                  <table className="w-full text-xs">
-                                                    <thead className="bg-slate-50 border-b">
-                                                      <tr>
-                                                        <th className="p-2 text-left">Item Name</th>
-                                                        <th className="p-2 text-left">Department</th>
-                                                        <th className="p-2 text-left">UPC/GTIN</th>
-                                                        <th className="p-2 text-right">Amount</th>
-                                                      </tr>
-                                                    </thead>
-                                                    <tbody className="divide-y">
-                                                      {tx.items.map((item: any, i: number) => (
-                                                        <tr key={i}>
-                                                          <td className="p-2 font-medium">
-                                                            {item.itemName === 'NoMap' ? (
-                                                              <span className="italic text-slate-400">Item Details Not Found</span>
-                                                            ) : (
-                                                              item.itemName
-                                                            )}
-                                                          </td>
-                                                          <td className="p-2 text-muted-foreground">{item.category || '-'}</td>
-                                                          <td className="p-2 text-muted-foreground font-mono">
-                                                            {item.upc?.toString().startsWith('99999') || item.gtin?.toString().startsWith('99999') ? (
-                                                              <span className="text-slate-300">N/A</span>
-                                                            ) : (
-                                                              item.upc || item.gtin || '—'
-                                                            )}
-                                                          </td>
-                                                          <td className="p-2 text-right">{fmtNum(item.amount)}</td>
-                                                        </tr>
-                                                      ))}
-                                                    </tbody>
-                                                  </table>
-                                                </div>
-                                              </DialogContent>
-                                            </Dialog>
-                                          </td>
-                                          <td className="p-3 text-right font-bold text-red-600">
-                                            {fmtNum(tx.totalAmount)}
-                                          </td>
-                                        </tr>
-                                      ))}
-                                    </tbody>
-                                  </table>
-                                ) : (
-                                  <div className="py-20 text-center text-muted-foreground">No records found.</div>
-                                )}
-                              </div>
-                            </DialogContent>
-                          </Dialog>
-                        )}
-                      </div>
-                    }
-                  />
-                </div>
-              </div>
-
-              {lottery && !['Wavers West', 'Wavers East'].includes(site) && (
-                <div className="rounded-lg bg-gray-100 p-4 shadow-sm">
-                  <h3 className="text-sm font-semibold mb-4">Adjusted Totals (After Lottery)</h3>
-                  <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-
-                    <Card
-                      title={<span className="font-bold text-black">Total Canadian Cash Counted</span>}
-                      value={<span className="font-semibold">{fmtNum(totals?.canadian_cash_collected)}</span>}
-                    />
-
-                    <Card
-                      title={<span className="font-bold text-black">Final Canadian Cash Reported</span>}
-                      value={<span className="font-semibold">{fmtNum(adjustedReportedCash)}</span>}
-                      dialogContent={
-                        <div className="whitespace-pre-line text-sm leading-relaxed">
-                          {isManitoba ? (
-                            "Adjusted Reported Cash = Bulloch Reported Cash + Online Lottery Sales Over/Short"
-                          ) : (
-                            "Adjusted Reported Cash = Bulloch Reported Cash + (Online Lottery Sales Over/Short + Scratch Lottery Sales Over/Short)"
-                          )}
-                        </div>
-                      }
-                    />
-
-                    <Card
-                      title={<span className="font-bold text-black">Final Over/Short</span>}
-                      value={<span className={`font-bold ${adjustedOsColor}`}>{fmtNum(adjustedOverShort)}</span>}
-                    />
-
-                    <Card
-                      title={<span className="font-bold text-black">Final Item Sales</span>}
-                      value={<span className="font-semibold">{fmtNum(adjustedItemSales)}</span>}
-                      dialogContent={
-                        <div className="whitespace-pre-line text-sm leading-relaxed">
-                          {isManitoba ? (
-                            "Adjusted Item Sales = Bulloch Item Sales + Online Lottery Sales Over/Short"
-                          ) : (
-                            "Adjusted Item Sales = Bulloch Item Sales + (Online Lottery Sales Over/Short + Scratch Lottery Sales Over/Short)"
-                          )}
-                        </div>
-                      }
-                    />
-
-                    <Card
-                      title={<span className="font-bold text-black">Final Payouts</span>}
-                      value={<span className="font-semibold">{fmtNum(adjustedPayouts)}</span>}
-                      dialogContent={
-                        <div className="whitespace-pre-line text-sm leading-relaxed">
-                          Adjusted Payouts = Bulloch Payouts + Lottery Payout Over/Short
-                        </div>
-                      }
-                    />
-
-                  </div>
-                </div>
-              )}
-              <div>
-                <h3 className="text-sm font-semibold mb-2">Adjustments</h3>
-                <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-                  <div className="border rounded-md p-4 bg-card">
-                    <label className="text-xs text-muted-foreground mb-1 block">Unsettled Prepays</label>
-                    <input
-                      type="number"
-                      step="0.01"
-                      defaultValue={typeof unsettledPrepays === 'number' ? unsettledPrepays : ''}
-                      onBlur={(e) => saveField('unsettledPrepays', e.target.value)}
-                      disabled={submitted}
-                      className="border rounded px-3 py-2 w-full"
-                    />
-                  </div>
-                  <div className="border rounded-md p-4 bg-card">
-                    <label className="text-xs text-muted-foreground mb-1 block">Handheld Debit</label>
-                    <input
-                      type="number"
-                      step="0.01"
-                      defaultValue={typeof handheldDebit === 'number' ? handheldDebit : ''}
-                      onBlur={(e) => saveField('handheldDebit', e.target.value)}
-                      disabled={submitted}
-                      className="border rounded px-3 py-2 w-full"
-                    />
-                  </div>
-                </div>
-                {submitted && (
-                  <div className="mt-1 text-xs text-muted-foreground">
-                    Adjustments are locked because this report is submitted.
-                  </div>
-                )}
-              </div>
-
-              {/* Lottery summary (only show when a saved Lottery exists for this site/date)
-                  Rendered between Totals and Shifts. Images are excluded from this report view. */}
-              {/* Integrated Lottery Comparison Table */}
-              {lottery && (
-                <div className="space-y-2">
-                  <h3 className="text-sm font-semibold px-1">Lottery Reconciliation</h3>
-                  <LotteryComparisonTable
-                    lotteryData={lottery}
-                    bullockData={bullock}
-                    isReadOnly={true}
-                    showImages={false} // Set to false for the report view
-                    isManitoba={isManitoba}
-                  />
-                </div>
-              )}
-              {/* Integrated A/R Reconciliation Section */}
-              {arData && !['Oliver', 'Osoyoos'].includes(site) && (
-                <div className={`p-4 border rounded-lg space-y-3 ${arData.match ? 'bg-green-50/50 border-green-200' : 'bg-red-50/50 border-red-200'}`}>
-                  <div className="flex items-center justify-between">
-                    <h3 className="text-sm font-semibold text-gray-900">A/R Reconciliation (Bulloch vs Hub)</h3>
-                    <span className={`text-xs px-2.5 py-0.5 rounded-full font-medium ${arData.match ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'}`}>
-                      {arData.match ? 'Matched' : 'Mismatch Detected'}
-                    </span>
-                  </div>
-
-                  {/* Two-Block Summary Cards */}
-                  <div className="grid gap-4 sm:grid-cols-2">
-                    <div className="border rounded-md p-3 bg-white shadow-sm">
-                      <span className="text-xs text-muted-foreground block font-medium">Bulloch Terminal A/R Total</span>
-                      <span className="text-lg font-bold text-gray-800">{fmtNum(arData.arIncurredTotal)}</span>
-                    </div>
-                    
-                    <div className="border rounded-md p-3 bg-white shadow-sm">
-                      <span className="text-xs text-muted-foreground block font-medium">Hub Recorded A/R Total</span>
-                      <span className={`text-lg font-bold ${
-                        arData.transactionsTotal > arData.arIncurredTotal 
-                          ? 'text-amber-600' 
-                          : arData.transactionsTotal < arData.arIncurredTotal 
-                          ? 'text-red-600' 
-                          : 'text-green-600'
-                      }`}>
-                        {fmtNum(arData.transactionsTotal)}
-                      </span>
-                    </div>
-                  </div>
-
-                  {/* Guidance Alert Banner for Mismatches */}
-                  {!arData.match && (() => {
-                    const diff = Math.abs(arData.transactionsTotal - arData.arIncurredTotal);
-                    const isHubOver = arData.transactionsTotal > arData.arIncurredTotal;
-
-                    return (
-                      <div className={`p-3 rounded-md text-xs font-medium border ${
-                        isHubOver ? 'bg-amber-100/70 border-amber-300 text-amber-900' : 'bg-red-100/70 border-red-300 text-red-900'
-                      }`}>
-                        <p className="font-semibold mb-1">
-                          Difference: Out by {fmtNum(diff)} ({isHubOver ? 'Hub is Higher' : 'Hub is Lower'})
-                        </p>
-                        <p>
-                          {isHubOver ? (
-                            <>You have <strong>more</strong> transactions reported on the Hub than on Bulloch. Please check the PO module to verify if a transaction was mistyped or entered under the wrong date.</>
-                          ) : (
-                            <>You have <strong>fewer</strong> transactions reported on the Hub than on Bulloch. Please visit the PO module to add the missing transaction(s) worth <strong>{fmtNum(diff)}</strong>.</>
-                          )}
-                        </p>
-                      </div>
-                    );
-                  })()}
-                </div>
-              )}
-
-              <div>
-                <h3 className="text-sm font-semibold mb-2">Shifts</h3>
-                <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-                  {regularRows.map((r) => (
-                    <div key={r._id} className="border rounded-md p-4 bg-card">
-                      <div className="text-xs text-muted-foreground mb-1">Shift Number</div>
-                      <div className="text-base font-semibold mb-3">
-                        <ShiftNumber shiftNumber={r.shift_number} url={shiftReportUrl(r.shift_number)} clickable={canViewShiftReport} />
-                      </div>
-                      <div className="grid gap-2 text-sm">
-                        <KV k="Canadian Cash Counted" v={fmtNum(r.canadian_cash_collected)} />
-                        <KV k="Canadian Cash Reported" v={fmtNum(r.report_canadian_cash)} />
-                        <KV k="Payouts" v={fmtNum(r.payouts)} />
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </div>
-
-              {cdRows.length > 0 && (
-                <div>
-                  <h3 className="text-sm font-semibold mb-2">Chicken Delight</h3>
-                  <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-                    {cdRows.map((r) => {
-                      // Calculate Shift Over/Short: (Cash Collected + Tips) - Bulloch Reported
-                      const cashCollected = r.canadian_cash_collected ?? 0
-                      const tips = r.chickenDelightTips ?? 0
-                      const bullochReported = r.report_canadian_cash ?? 0
-                      const variance = (cashCollected + tips) - bullochReported
-                      
-                      const isShort = variance < 0
-
-                      return (
-                        <div key={r._id} className="border rounded-md p-4 bg-card">
-                          <div className="text-xs text-muted-foreground mb-1">Shift Number</div>
-                          <div className="text-base font-semibold mb-3">
-                            <ShiftNumber 
-                              shiftNumber={r.shift_number} 
-                              url={shiftReportUrl(r.shift_number)} 
-                              clickable={canViewShiftReport} 
-                            />
-                          </div>
-                          <div className="grid gap-2 text-sm">
-                            <KV k="Cash Collected" v={fmtNum(cashCollected)} />
-                            <KV k="Tips" v={<span className="text-green-600 font-semibold">{fmtNum(tips)}</span>} />
-                            <KV k="Bulloch Reported" v={fmtNum(bullochReported)} />
-                            <KV
-                              k="Shift Over/Short"
-                              v={
-                                <span className={`font-semibold ${isShort ? 'text-red-600' : 'text-green-600'}`}>
-                                  {variance > 0 ? `+${fmtNum(variance)}` : fmtNum(variance)}
-                                </span>
-                              }
-                            />
-                          </div>
-                        </div>
-                      )
-                    })}
-                    
-                    {cdRows.length > 1 && (
-                      <div className="border rounded-md p-4 bg-muted/40">
-                        <div className="text-xs text-muted-foreground mb-1">Total Tips</div>
-                        <div className="text-base font-semibold text-green-600">{fmtNum(chickenDelightTip)}</div>
-                      </div>
-                    )}
-                  </div>
-                </div>
-              )}
-
-              <div>
-                <h3 className="text-sm font-semibold mb-2">
-                  Notes
-                  {notesRequired && !submitted && (
-                    <span className="ml-2 text-amber-600 font-normal">*required</span>
-                  )}
-                </h3>
-                <textarea
-                  className={`w-full min-h-[120px] border rounded px-3 py-2 text-sm ${notesRequired && !notesProvided && !submitted ? 'border-amber-500 focus:outline-amber-500' : ''}`}
-                  value={noteText}
-                  onChange={(e) => setNoteText(e.target.value)}
-                  onBlur={() => saveNotes(noteText)}
-                  placeholder={notesRequired ? 'Required — explain the over/short variance…' : 'Add notes for this cash summary…'}
-                  disabled={submitted}
-                />
-                {notesRequired && !notesProvided && !submitted && (
-                  <div className="mt-1 text-xs text-amber-600">
-                    Manager's notes are required when the over/short exceeds $25. The report cannot be submitted until an explanation is provided.
-                  </div>
-                )}
-                {submitted && (
-                  <div className="mt-1 text-xs text-muted-foreground">
-                    Notes are locked because this report is submitted.
-                  </div>
-                )}
-              </div>
+      <div className="w-full max-w-7xl space-y-6 px-4">
+        <div className="flex flex-wrap items-end justify-between gap-4 rounded-xl border bg-white p-4 shadow-sm">
+          <div className="flex w-full flex-wrap items-center gap-4 md:w-auto">
+            <div className="w-full sm:w-[220px]">
+              <label className="mb-1 block text-xs font-semibold text-slate-600">Site</label>
+              <SitePicker value={site} onValueChange={updateSite} placeholder="Pick a site" label="Site" className="w-full" />
             </div>
-          )}
+            <div className="w-full sm:w-auto">
+              <label className="mb-1 block text-xs font-semibold text-slate-600">Date</label>
+              <DatePicker date={pickerDate} setDate={handleDateChange} />
+            </div>
+            {mismatchMessages.length > 0 && (
+              <div className="w-full rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs font-medium text-amber-900 sm:w-auto">
+                {mismatchMessages.join(' ')}
+              </div>
+            )}
+          </div>
         </div>
+
+        {(shiftBlocked || lotteryBlocked) && (
+          <PrerequisiteOverlay
+            date={date}
+            site={site}
+            readiness={readiness}
+            type={shiftBlocked ? 'shift' : 'lottery'}
+            onContinue={() =>
+              navigate({
+                to: shiftBlocked ? '/cash-summary/form' : '/cash-summary/lottery',
+                search: { site, date },
+              })
+            }
+          />
+        )}
+
+        {!shiftBlocked && !lotteryBlocked && (
+          <div id="print-area" className="overflow-hidden rounded-xl border bg-white shadow-sm">
+            <div className="flex items-center justify-between border-b bg-slate-900 px-6 py-4 text-white">
+              <div>
+                <h2 className="text-base font-bold tracking-wide">Cash Summary Report</h2>
+                <p className="mt-0.5 text-xs text-slate-300">
+                  Site: <span className="font-semibold text-white">{site || '-'}</span> | Date:{' '}
+                  <span className="font-semibold text-white">{date || '-'}</span>
+                </p>
+              </div>
+              {error && (
+                <span className="rounded-full border border-red-500/30 bg-red-500/20 px-3 py-1 text-xs font-medium text-red-200">
+                  Error: {error}
+                </span>
+              )}
+            </div>
+
+            {!site || !date ? (
+              <EmptyState>Please select a site and date to view the summary report.</EmptyState>
+            ) : !report && !error ? (
+              <div className="grid gap-4 p-6 sm:grid-cols-2 lg:grid-cols-3">{skeletonCards}</div>
+            ) : rows.length === 0 ? (
+              <EmptyState>No cash summaries found for the selected date.</EmptyState>
+            ) : (
+              <div className="space-y-8 p-6">
+                <TotalsSection
+                  fetchVoidedDetails={fetchVoidedDetails}
+                  fmtNum={fmtNum}
+                  loadingVoided={loadingVoided}
+                  osColor={osColor}
+                  overShort={overShort}
+                  showCheques={isWaversChequeSite}
+                  totals={totals}
+                  voidedDetails={voidedDetails}
+                />
+
+                {showLotterySection && (
+                  <AdjustedTotalsSection
+                    adjustedItemSales={adjustedItemSales}
+                    adjustedOsColor={adjustedOsColor}
+                    adjustedOverShort={adjustedOverShort}
+                    adjustedPayouts={adjustedPayouts}
+                    adjustedReportedCash={adjustedReportedCash}
+                    fmtNum={fmtNum}
+                    isManitoba={isManitoba}
+                    totals={totals}
+                  />
+                )}
+
+                <AdjustmentsSection
+                  handheldDebitValue={handheldDebitValue}
+                  onHandheldDebitChange={setHandheldDebitValue}
+                  onSaveHandheldDebit={() => saveField('handheldDebit', handheldDebitValue)}
+                  onSaveUnsettledPrepays={() => saveField('unsettledPrepays', unsettledPrepaysValue)}
+                  onUnsettledPrepaysChange={setUnsettledPrepaysValue}
+                  savingReportField={savingReportField}
+                  submitted={submitted}
+                  unsettledPrepaysValue={unsettledPrepaysValue}
+                />
+
+                {lottery && (
+                  <section className="space-y-3">
+                    <SectionTitle>Lottery Reconciliation</SectionTitle>
+                    <LotteryComparisonTable
+                      lotteryData={lottery}
+                      bullockData={bullock}
+                      isReadOnly
+                      showImages={false}
+                      isManitoba={isManitoba}
+                    />
+                  </section>
+                )}
+
+                {showARSection && <ArReconciliation arData={arData} fmtNum={fmtNum} />}
+
+                <ShiftCards canViewShiftReport={canViewShiftReport} fmtNum={fmtNum} rows={regularRows} site={site} />
+
+                {cdRows.length > 0 && (
+                  <ChickenDelightCards
+                    canViewShiftReport={canViewShiftReport}
+                    fmtNum={fmtNum}
+                    rows={cdRows}
+                    site={site}
+                    totalTips={chickenDelightTip}
+                  />
+                )}
+
+                <NotesSection
+                  noteText={noteText}
+                  notesProvided={notesProvided}
+                  notesRequired={notesRequired}
+                  onChange={setNoteText}
+                  onSave={saveNotes}
+                  savingReportField={savingReportField}
+                  submitted={submitted}
+                />
+              </div>
+            )}
+          </div>
+        )}
       </div>
     </div>
   )
 }
 
+function PrerequisiteOverlay({
+  date,
+  site,
+  readiness,
+  type,
+  onContinue,
+}: {
+  date: string
+  site: string
+  readiness?: Readiness
+  type: 'shift' | 'lottery'
+  onContinue: () => void
+}) {
+  return (
+    <div className="rounded-xl border border-amber-200 bg-white p-6 shadow-sm">
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+        <div className="space-y-2">
+          <div className="flex items-center gap-2 text-amber-700">
+            <AlertTriangle className="h-5 w-5" />
+            <h2 className="text-base font-bold text-slate-900">
+              {type === 'shift' ? 'Shift data needs review' : 'Lottery data is missing'}
+            </h2>
+          </div>
+          {type === 'shift' ? (
+            <div className="space-y-1 text-sm text-slate-600">
+              {!readiness?.shiftIssues.hasShifts && (
+                <p>
+                  No shifts were found for {site} on {date}.
+                </p>
+              )}
+              {(readiness?.shiftIssues.unreviewedShiftNumbers.length ?? 0) > 0 && (
+                <p>Shifts left to review: {readiness?.shiftIssues.unreviewedShiftNumbers.join(', ')}</p>
+              )}
+              {(readiness?.shiftIssues.missingCashShiftNumbers.length ?? 0) > 0 && (
+                <p>Missing Canadian cash collected: {readiness?.shiftIssues.missingCashShiftNumbers.join(', ')}</p>
+              )}
+            </div>
+          ) : (
+            <p className="text-sm text-slate-600">
+              This store sells lottery, but no saved lottery entry exists for {site} on {date}.
+            </p>
+          )}
+        </div>
+        <Button type="button" onClick={onContinue} className="w-full sm:w-auto">
+          Go to {type === 'shift' ? 'Form' : 'Lottery'}
+        </Button>
+      </div>
+    </div>
+  )
+}
 
-// function Card({ title, value }: { title: string; value: React.ReactNode }) {
-//   return (
-//     <div className="border rounded-md p-4 bg-card">
-//       <div className="text-xs text-muted-foreground mb-1">{title}</div>
-//       <div className="text-base">{value}</div>
-//     </div>
-//   )
-// }
-// function Card({ title, value, tooltip }: CardProps) {
-//   return (
-//     <div className="border rounded-md p-4 bg-card">
-//       <div className="flex items-center gap-1 text-xs text-muted-foreground mb-1">
-//         <span>{title}</span>
+function TotalsSection({
+  totals,
+  overShort,
+  osColor,
+  showCheques,
+  fetchVoidedDetails,
+  fmtNum,
+  loadingVoided,
+  voidedDetails,
+}: {
+  totals: ReportData['totals'] | undefined
+  overShort: number
+  osColor: string
+  showCheques: boolean
+  fetchVoidedDetails: () => void
+  fmtNum: (n?: number) => string
+  loadingVoided: boolean
+  voidedDetails: any[]
+}) {
+  return (
+    <section>
+      <SectionTitle>Standard Totals</SectionTitle>
+      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+        <StatCard title="Total Canadian Cash Counted" value={fmtNum(totals?.canadian_cash_collected)} />
+        <StatCard title="Total Canadian Cash Reported" value={fmtNum(totals?.report_canadian_cash)} />
+        <StatCard title="Over / Short" value={<span className={`font-bold ${osColor}`}>{fmtNum(overShort)}</span>} />
+        <StatCard title="Item Sales" value={fmtNum(totals?.item_sales)} />
+        <StatCard title="Cash Back" value={fmtNum(totals?.cash_back)} />
+        <StatCard title="Loyalty" value={fmtNum(totals?.loyalty)} />
+        <StatCard title="Exempted Tax" value={fmtNum(totals?.exempted_tax)} />
+        <StatCard title="Payouts" value={fmtNum(totals?.payouts)} />
+        {showCheques && (
+          <StatCard title="Cheques Cashed Out" value={<span className="font-bold text-amber-700">{fmtNum(totals?.chequesCashedOut)}</span>} />
+        )}
+        <StatCard
+          title="Voided Transactions"
+          value={
+            <div className="flex items-center justify-between">
+              <span className={`font-bold ${(totals?.voidedTransactionsAmount ?? 0) !== 0 ? 'text-red-600' : 'text-slate-800'}`}>
+                {fmtNum(totals?.voidedTransactionsAmount)}
+              </span>
+              {(totals?.voidedTransactionsAmount ?? 0) > 0 && (
+                <Dialog onOpenChange={(open) => open && fetchVoidedDetails()}>
+                  <DialogTrigger asChild>
+                    <button className="inline-flex items-center rounded-lg p-1.5 text-slate-500 transition-colors hover:bg-slate-100 hover:text-blue-600">
+                      <Info className="h-4 w-4" />
+                    </button>
+                  </DialogTrigger>
+                  <DialogContent className="flex max-h-[85vh] max-w-4xl flex-col">
+                    <DialogHeader>
+                      <DialogTitle>Voided Transactions Summary</DialogTitle>
+                    </DialogHeader>
+                    <VoidedTransactionsTable loading={loadingVoided} rows={voidedDetails} fmtNum={fmtNum} />
+                  </DialogContent>
+                </Dialog>
+              )}
+            </div>
+          }
+        />
+      </div>
+    </section>
+  )
+}
 
-//         {tooltip && (
-//           <TooltipProvider>
-//             <Tooltip>
-//               <TooltipTrigger asChild>
-//                 <Info className="h-3 w-3 cursor-pointer text-muted-foreground hover:text-foreground" />
-//               </TooltipTrigger>
-//               <TooltipContent className="max-w-xs text-xs leading-relaxed">
-//                 {tooltip}
-//               </TooltipContent>
-//             </Tooltip>
-//           </TooltipProvider>
-//         )}
-//       </div>
+function AdjustedTotalsSection({
+  adjustedItemSales,
+  adjustedOsColor,
+  adjustedOverShort,
+  adjustedPayouts,
+  adjustedReportedCash,
+  isManitoba,
+  totals,
+  fmtNum,
+}: {
+  adjustedItemSales: number
+  adjustedOsColor: string
+  adjustedOverShort: number
+  adjustedPayouts: number
+  adjustedReportedCash: number
+  isManitoba: boolean
+  totals: ReportData['totals'] | undefined
+  fmtNum: (n?: number) => string
+}) {
+  const lotteryFormula = isManitoba
+    ? 'Bulloch reported cash + online lottery sales over/short'
+    : 'Bulloch reported cash + online and scratch lottery sales over/short'
 
-//       <div className="text-base">{value}</div>
-//     </div>
-//   )
-// }
+  return (
+    <section className="space-y-3 rounded-xl border border-slate-200 bg-slate-50/60 p-5">
+      <SectionTitle>Adjusted Totals After Lottery</SectionTitle>
+      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+        <StatCard title="Total Canadian Cash Counted" value={fmtNum(totals?.canadian_cash_collected)} />
+        <StatCard title="Final Canadian Cash Reported" value={fmtNum(adjustedReportedCash)} dialogContent={<Formula>{lotteryFormula}</Formula>} />
+        <StatCard title="Final Over / Short" value={<span className={`font-bold ${adjustedOsColor}`}>{fmtNum(adjustedOverShort)}</span>} />
+        <StatCard title="Final Item Sales" value={fmtNum(adjustedItemSales)} dialogContent={<Formula>{lotteryFormula.replace('reported cash', 'item sales')}</Formula>} />
+        <StatCard title="Final Payouts" value={fmtNum(adjustedPayouts)} dialogContent={<Formula>Bulloch payouts + lottery payout over/short</Formula>} />
+      </div>
+    </section>
+  )
+}
+
+function AdjustmentsSection({
+  handheldDebitValue,
+  savingReportField,
+  submitted,
+  unsettledPrepaysValue,
+  onHandheldDebitChange,
+  onSaveHandheldDebit,
+  onSaveUnsettledPrepays,
+  onUnsettledPrepaysChange,
+}: {
+  handheldDebitValue: string
+  savingReportField: 'notes' | 'unsettledPrepays' | 'handheldDebit' | null
+  submitted: boolean
+  unsettledPrepaysValue: string
+  onHandheldDebitChange: (value: string) => void
+  onSaveHandheldDebit: () => void
+  onSaveUnsettledPrepays: () => void
+  onUnsettledPrepaysChange: (value: string) => void
+}) {
+  return (
+    <section>
+      <SectionTitle>Adjustments</SectionTitle>
+      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+        <EditableMoneyCard
+          disabled={submitted}
+          label="Unsettled Prepays"
+          saving={savingReportField === 'unsettledPrepays'}
+          value={unsettledPrepaysValue}
+          onChange={onUnsettledPrepaysChange}
+          onSave={onSaveUnsettledPrepays}
+        />
+        <EditableMoneyCard
+          disabled={submitted}
+          label="Handheld Debit"
+          saving={savingReportField === 'handheldDebit'}
+          value={handheldDebitValue}
+          onChange={onHandheldDebitChange}
+          onSave={onSaveHandheldDebit}
+        />
+      </div>
+      {submitted && <p className="mt-2 text-xs italic text-slate-400">Adjustments are locked because this report is submitted.</p>}
+    </section>
+  )
+}
+
+function ArReconciliation({ arData, fmtNum }: { arData: ArCheckData | null; fmtNum: (n?: number) => string }) {
+  if (!arData) return null
+
+  return (
+    <section className={`space-y-4 rounded-xl border p-5 ${arData.match ? 'border-emerald-200 bg-emerald-50/40' : 'border-rose-200 bg-rose-50/40'}`}>
+      <div className="flex items-center justify-between">
+        <h3 className="flex items-center gap-2 text-sm font-bold text-slate-900">
+          A/R Reconciliation <span className="text-xs font-normal text-slate-500">(Bulloch vs Hub)</span>
+        </h3>
+        <span className={`flex items-center gap-1.5 rounded-full px-3 py-1 text-xs font-semibold ${arData.match ? 'bg-emerald-100 text-emerald-800' : 'bg-rose-100 text-rose-800'}`}>
+          {arData.match ? <CheckCircle2 className="h-3.5 w-3.5" /> : <AlertTriangle className="h-3.5 w-3.5" />}
+          {arData.match ? 'Matched' : 'Mismatch Detected'}
+        </span>
+      </div>
+
+      <div className="grid gap-4 sm:grid-cols-2">
+        <SummaryBox label="Bulloch Terminal A/R Total" value={fmtNum(arData.arIncurredTotal)} />
+        <SummaryBox
+          label="Hub Recorded A/R Total"
+          value={fmtNum(arData.transactionsTotal)}
+          tone={arData.transactionsTotal === arData.arIncurredTotal ? 'good' : arData.transactionsTotal > arData.arIncurredTotal ? 'warn' : 'bad'}
+        />
+      </div>
+
+      {(arData.byRegister?.length ?? 0) > 0 && (
+        <div className="overflow-hidden rounded-lg border bg-white">
+          <table className="w-full text-sm">
+            <thead className="bg-slate-50 text-xs font-semibold text-slate-600">
+              <tr>
+                <th className="p-3 text-left">Register</th>
+                <th className="p-3 text-right">Bulloch A/R</th>
+                <th className="p-3 text-right">Hub A/R</th>
+                <th className="p-3 text-right">Difference</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y">
+              {arData.byRegister?.map((row) => {
+                const diff = row.transactionsTotal - row.arIncurredTotal
+                return (
+                  <tr key={row.register} className={row.match ? 'bg-white' : 'bg-amber-50/50'}>
+                    <td className="p-3 font-semibold text-slate-800">Register {row.register}</td>
+                    <td className="p-3 text-right font-medium text-slate-700">{fmtNum(row.arIncurredTotal)}</td>
+                    <td className="p-3 text-right font-medium text-slate-700">{fmtNum(row.transactionsTotal)}</td>
+                    <td className={`p-3 text-right font-bold ${diff === 0 ? 'text-emerald-600' : 'text-rose-600'}`}>
+                      {diff > 0 ? `+${fmtNum(diff)}` : fmtNum(diff)}
+                    </td>
+                  </tr>
+                )
+              })}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </section>
+  )
+}
+
+function ShiftCards({
+  canViewShiftReport,
+  rows,
+  site,
+  fmtNum,
+}: {
+  canViewShiftReport: boolean
+  rows: Row[]
+  site: string
+  fmtNum: (n?: number) => string
+}) {
+  return (
+    <section>
+      <SectionTitle>Shifts</SectionTitle>
+      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+        {rows.map((r) => (
+          <ShiftCard key={r._id} canViewShiftReport={canViewShiftReport} fmtNum={fmtNum} row={r} site={site} />
+        ))}
+      </div>
+    </section>
+  )
+}
+
+function ChickenDelightCards({
+  rows,
+  totalTips,
+  site,
+  fmtNum,
+  canViewShiftReport,
+}: {
+  rows: Row[]
+  totalTips: number
+  site: string
+  fmtNum: (n?: number) => string
+  canViewShiftReport: boolean
+}) {
+  return (
+    <section>
+      <SectionTitle>Chicken Delight</SectionTitle>
+      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+        {rows.map((r) => {
+          const cashCollected = r.canadian_cash_collected ?? 0
+          const tips = r.chickenDelightTips ?? 0
+          const variance = cashCollected + tips - (r.report_canadian_cash ?? 0)
+
+          return (
+            <ShiftCard
+              key={r._id}
+              canViewShiftReport={canViewShiftReport}
+              extraRows={[
+                ['Cash Collected', fmtNum(cashCollected)],
+                ['Tips', <span className="font-bold text-emerald-600">{fmtNum(tips)}</span>],
+                ['Bulloch Reported', fmtNum(r.report_canadian_cash)],
+                [
+                  'Shift Over/Short',
+                  <span className={`font-bold ${variance < 0 ? 'text-rose-600' : 'text-emerald-600'}`}>
+                    {variance > 0 ? `+${fmtNum(variance)}` : fmtNum(variance)}
+                  </span>,
+                ],
+              ]}
+              fmtNum={fmtNum}
+              row={r}
+              site={site}
+            />
+          )
+        })}
+        {rows.length > 1 && (
+          <div className="flex flex-col justify-center rounded-lg border bg-slate-50 p-4">
+            <span className="mb-1 text-xs font-semibold text-slate-500">Total Tips</span>
+            <span className="text-lg font-bold text-emerald-600">{fmtNum(totalTips)}</span>
+          </div>
+        )}
+      </div>
+    </section>
+  )
+}
+
+function NotesSection({
+  noteText,
+  notesProvided,
+  notesRequired,
+  savingReportField,
+  submitted,
+  onChange,
+  onSave,
+}: {
+  noteText: string
+  notesProvided: boolean
+  notesRequired: boolean
+  savingReportField: 'notes' | 'unsettledPrepays' | 'handheldDebit' | null
+  submitted: boolean
+  onChange: (value: string) => void
+  onSave: () => void
+}) {
+  return (
+    <section>
+      <h3 className="mb-2 flex items-center px-0.5 text-xs font-bold uppercase tracking-wider text-slate-500">
+        Notes
+        {notesRequired && !submitted && <span className="ml-2 text-xs font-normal lowercase text-amber-600">*required</span>}
+      </h3>
+      <textarea
+        className={`min-h-[120px] w-full rounded-lg border px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 ${
+          notesRequired && !notesProvided && !submitted ? 'border-amber-500 focus:ring-amber-500' : 'border-slate-200'
+        }`}
+        value={noteText}
+        onChange={(e) => onChange(e.target.value)}
+        placeholder={notesRequired ? 'Required - explain the over/short variance...' : 'Add notes for this cash summary...'}
+        disabled={submitted}
+      />
+      <Button type="button" size="sm" variant="outline" disabled={submitted || savingReportField === 'notes' || !noteText.trim()} onClick={onSave} className="mt-2">
+        {savingReportField === 'notes' ? 'Saving...' : 'Save Notes'}
+      </Button>
+      {notesRequired && !notesProvided && !submitted && (
+        <p className="mt-1.5 text-xs font-medium text-amber-600">Manager's notes are required when the over/short exceeds $25.</p>
+      )}
+      {submitted && <p className="mt-1.5 text-xs italic text-slate-400">Notes are locked because this report is submitted.</p>}
+    </section>
+  )
+}
+
+function ShiftCard({
+  canViewShiftReport,
+  extraRows,
+  fmtNum,
+  row,
+  site,
+}: {
+  canViewShiftReport: boolean
+  extraRows?: [string, ReactNode][]
+  fmtNum: (n?: number) => string
+  row: Row
+  site: string
+}) {
+  const rows =
+    extraRows ??
+    ([
+      ['Canadian Cash Counted', fmtNum(row.canadian_cash_collected)],
+      ['Canadian Cash Reported', fmtNum(row.report_canadian_cash)],
+      ['Payouts', fmtNum(row.payouts)],
+    ] as [string, ReactNode][])
+
+  return (
+    <div className="space-y-3 rounded-lg border bg-white p-4 shadow-sm">
+      <div className="flex items-center justify-between border-b pb-2">
+        <span className="text-xs font-semibold text-slate-400">Shift Number</span>
+        <div className="text-sm font-bold">
+          <ShiftNumber shiftNumber={row.shift_number} url={shiftReportUrl(site, row.shift_number)} clickable={canViewShiftReport} />
+        </div>
+      </div>
+      <div className="space-y-2 text-xs">
+        {rows.map(([k, v]) => (
+          <KV key={k} k={k} v={v} />
+        ))}
+      </div>
+    </div>
+  )
+}
+
+function VoidedTransactionsTable({
+  loading,
+  rows,
+  fmtNum,
+}: {
+  loading: boolean
+  rows: any[]
+  fmtNum: (n?: number) => string
+}) {
+  if (loading) return <div className="mt-4 py-20 text-center text-slate-500 animate-pulse">Loading summary...</div>
+  if (rows.length === 0) return <div className="mt-4 py-20 text-center text-slate-500">No records found.</div>
+
+  return (
+    <div className="mt-4 flex-1 overflow-y-auto rounded-lg border">
+      <table className="w-full text-sm">
+        <thead className="sticky top-0 border-b bg-slate-50">
+          <tr>
+            <th className="p-3 text-left font-semibold text-slate-700">Transaction ID</th>
+            <th className="p-3 text-left font-semibold text-slate-700">Time</th>
+            <th className="p-3 text-left font-semibold text-slate-700">Items</th>
+            <th className="p-3 text-right font-semibold text-slate-700">Total Refunded</th>
+          </tr>
+        </thead>
+        <tbody className="divide-y">
+          {rows.map((tx) => (
+            <tr key={tx.transactionId} className="transition-colors hover:bg-slate-50/80">
+              <td className="p-3 font-mono text-xs">{tx.transactionId}</td>
+              <td className="p-3 text-xs text-slate-500">{tx.eventStartTime?.toString().split('T')[1]?.substring(0, 5) || tx.eventStartTime}</td>
+              <td className="p-3">{Array.isArray(tx.items) ? tx.items.length : 0} Items</td>
+              <td className="p-3 text-right font-bold text-red-600">{fmtNum(tx.totalAmount)}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  )
+}
+
+function EditableMoneyCard({
+  disabled,
+  label,
+  saving,
+  value,
+  onChange,
+  onSave,
+}: {
+  disabled: boolean
+  label: string
+  saving: boolean
+  value: string
+  onChange: (value: string) => void
+  onSave: () => void
+}) {
+  return (
+    <div className="space-y-1.5 rounded-lg border bg-white p-4 shadow-sm">
+      <label className="block text-xs font-semibold text-slate-500">{label}</label>
+      <input
+        type="number"
+        step="0.01"
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        disabled={disabled}
+        className="w-full rounded-md border px-3 py-2 text-sm font-medium focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:bg-slate-50 disabled:text-slate-500"
+      />
+      <Button type="button" size="sm" variant="outline" disabled={disabled || saving} onClick={onSave} className="w-full">
+        {saving ? 'Saving...' : 'Save'}
+      </Button>
+    </div>
+  )
+}
+
+function SummaryBox({ label, value, tone }: { label: string; value: string; tone?: 'good' | 'warn' | 'bad' }) {
+  const toneClass =
+    tone === 'good' ? 'text-emerald-600' : tone === 'warn' ? 'text-amber-600' : tone === 'bad' ? 'text-rose-600' : 'text-slate-800'
+
+  return (
+    <div className="space-y-1 rounded-lg border bg-white p-4 shadow-sm">
+      <span className="block text-xs font-medium text-slate-500">{label}</span>
+      <span className={`text-xl font-bold ${toneClass}`}>{value}</span>
+    </div>
+  )
+}
+
+function StatCard({ title, value, dialogContent }: { title: ReactNode; value: ReactNode; dialogContent?: ReactNode }) {
+  return (
+    <div className="flex flex-col justify-between rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
+      <div className="mb-1.5 flex items-center justify-between">
+        <span className="text-xs font-semibold text-slate-500">{title}</span>
+        {dialogContent && (
+          <Dialog>
+            <DialogTrigger asChild>
+              <button className="rounded p-1 text-slate-400 transition-colors hover:bg-slate-100 hover:text-slate-600">
+                <Info className="h-3.5 w-3.5" />
+              </button>
+            </DialogTrigger>
+            <DialogContent className="max-w-md">
+              <DialogHeader>
+                <DialogTitle className="text-base font-semibold">Calculation Breakdown</DialogTitle>
+              </DialogHeader>
+              <div className="mt-2">{dialogContent}</div>
+            </DialogContent>
+          </Dialog>
+        )}
+      </div>
+      <div className="text-base font-semibold text-slate-900">{value}</div>
+    </div>
+  )
+}
+
+function SectionTitle({ children }: { children: ReactNode }) {
+  return <h3 className="mb-3 px-0.5 text-xs font-bold uppercase tracking-wider text-slate-500">{children}</h3>
+}
+
+function Formula({ children }: { children: ReactNode }) {
+  return <div className="whitespace-pre-line text-xs leading-relaxed text-slate-600">{children}</div>
+}
+
+function EmptyState({ children }: { children: ReactNode }) {
+  return <div className="p-12 text-center text-sm text-slate-500">{children}</div>
+}
 
 function ShiftNumber({ shiftNumber, url, clickable }: { shiftNumber: string; url: string; clickable: boolean }) {
-  if (!clickable) {
-    return <span>{shiftNumber}</span>
-  }
+  if (!clickable) return <span>{shiftNumber}</span>
+
   return (
-    <a
-      href={url}
-      target="_blank"
-      rel="noopener noreferrer"
-      className="text-blue-600 underline hover:text-blue-800"
-    >
+    <a href={url} target="_blank" rel="noopener noreferrer" className="text-blue-600 underline transition-colors hover:text-blue-800">
       {shiftNumber}
     </a>
   )
 }
 
-function KV({ k, v }: { k: string; v: React.ReactNode }) {
+function KV({ k, v }: { k: string; v: ReactNode }) {
   return (
-    <div className="flex items-center justify-between">
-      <div className="text-muted-foreground">{k}</div>
-      <div className="font-medium">{v}</div>
+    <div className="flex items-center justify-between text-slate-600">
+      <span>{k}</span>
+      <span className="font-medium text-slate-900">{v}</span>
     </div>
   )
+}
+
+function fmtNum(n?: number) {
+  return typeof n === 'number'
+    ? n.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+    : '-'
+}
+
+function shiftReportUrl(site: string, shiftNumber: string) {
+  return `https://app.gen7fuel.com/sftp?site=${encodeURIComponent(site)}&type=sft&shift=${encodeURIComponent(
+    `"${shiftNumber}"`
+  )}`
 }

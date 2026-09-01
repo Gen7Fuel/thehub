@@ -1567,6 +1567,29 @@ router.get('/report', async (req, res) => {
       0
     )
 
+    const [location, lotteryDoc] = await Promise.all([
+      Location.findOne({ $or: [{ stationName: site }, { site }] }, { sellsLottery: 1 }).lean(),
+      Lottery.findOne({ site, date: String(date) }, { _id: 1 }).lean(),
+    ])
+    const missingCashRows = rows.filter((r) => typeof r.canadian_cash_collected !== 'number')
+    const unreviewedRows = rows.filter((r) => !r.reviewed)
+    const readiness = {
+      canViewReport:
+        rows.length > 0 &&
+        missingCashRows.length === 0 &&
+        unreviewedRows.length === 0 &&
+        (!(location?.sellsLottery) || Boolean(lotteryDoc)),
+      shiftIssues: {
+        hasShifts: rows.length > 0,
+        missingCashShiftNumbers: missingCashRows.map((r) => r.shift_number).filter(Boolean),
+        unreviewedShiftNumbers: unreviewedRows.map((r) => r.shift_number).filter(Boolean),
+      },
+      lotteryIssue: {
+        sellsLottery: Boolean(location?.sellsLottery),
+        hasLottery: Boolean(lotteryDoc),
+      },
+    }
+
     // Fetch or create the single report for site+day (normalized date)
     const reportDate = start // store normalized day start
     const reportDoc = await CashSummaryReport.findOne({ site, date: reportDate }).lean()
@@ -1578,10 +1601,69 @@ router.get('/report', async (req, res) => {
       totals,
       chickenDelightTip,
       report: reportDoc || null, // contains notes + submitted
+      readiness,
     })
   } catch (err) {
     console.error('CashSummary report error:', err)
     res.status(500).json({ error: 'Failed to fetch report' })
+  }
+})
+
+async function saveCashSummaryReportFields({ site, date, fields }) {
+  if (!site) {
+    const err = new Error('site is required')
+    err.status = 400
+    throw err
+  }
+  if (!date || !/^\d{4}-\d{2}-\d{2}$/.test(String(date))) {
+    const err = new Error('date (YYYY-MM-DD) is required')
+    err.status = 400
+    throw err
+  }
+
+  const { start } = startEndOfYmd(date)
+  return CashSummaryReport.findOneAndUpdate(
+    { site, date: start },
+    { $set: { site, date: start, ...fields } },
+    { upsert: true, new: true, setDefaultsOnInsert: true }
+  ).lean()
+}
+
+router.put('/report/notes', async (req, res) => {
+  try {
+    const { site, date, notes = '' } = req.body || {}
+    if (typeof notes !== 'string') return res.status(400).json({ error: 'notes must be a string' })
+    const doc = await saveCashSummaryReportFields({ site, date, fields: { notes } })
+    res.json(doc)
+  } catch (err) {
+    console.error('CashSummary report notes save error:', err)
+    res.status(err.status || 500).json({ error: err.message || 'Failed to save report notes' })
+  }
+})
+
+router.put('/report/unsettled-prepays', async (req, res) => {
+  try {
+    const { site, date, unsettledPrepays } = req.body || {}
+    const value = norm(unsettledPrepays)
+    if (value === undefined) return res.status(400).json({ error: 'unsettledPrepays must be a number' })
+    const doc = await saveCashSummaryReportFields({ site, date, fields: { unsettledPrepays: value } })
+    res.json(doc)
+  } catch (err) {
+    console.error('CashSummary report unsettled prepays save error:', err)
+    res.status(err.status || 500).json({ error: err.message || 'Failed to save unsettled prepays' })
+  }
+})
+
+router.put('/report/handheld-debit', async (req, res) => {
+  try {
+    const { site, date, handheldDebit } = req.body || {}
+    const value = norm(handheldDebit)
+    if (value === undefined) return res.status(400).json({ error: 'handheldDebit must be a number' })
+    const doc = await saveCashSummaryReportFields({ site, date, fields: { handheldDebit: value } })
+    res.json(doc)
+  } catch (err) {
+    console.error('CashSummary report handheld debit save error:', err)
+    res.status(err.status || 500).json({ error: err.message || 'Failed to save handheld debit' })
   }
 })
 
@@ -1754,9 +1836,14 @@ router.get('/ar-check', async (req, res) => {
     const start = new Date(date); start.setUTCHours(0, 0, 0, 0)
     const end = new Date(date); end.setUTCHours(23, 59, 59, 999)
 
-    const [shiftAgg] = await CashSummary.aggregate([
+    const shiftRows = await CashSummary.aggregate([
       { $match: { site, date: { $gte: start, $lte: end } } },
-      { $group: { _id: null, total: { $sum: { $ifNull: ['$arIncurred', 0] } } } },
+      {
+        $group: {
+          _id: { $substr: [{ $ifNull: ['$shift_number', ''] }, 0, 1] },
+          total: { $sum: { $ifNull: ['$arIncurred', 0] } },
+        },
+      },
     ])
 
     // Transactions are stored as exact submission timestamps in UTC, so we must
@@ -1768,7 +1855,7 @@ router.get('/ar-check', async (req, res) => {
     const txStart = DateTime.fromISO(date, { zone: tz }).startOf('day').toJSDate()
     const txEnd = DateTime.fromISO(date, { zone: tz }).endOf('day').toJSDate()
 
-    const [txAgg] = await Transactions.aggregate([
+    const transactionRows = await Transactions.aggregate([
       {
         $match: {
           stationName: site,
@@ -1779,17 +1866,44 @@ router.get('/ar-check', async (req, res) => {
           ],
         },
       },
-      { $group: { _id: null, total: { $sum: { $ifNull: ['$amount', 0] } } } },
+      {
+        $group: {
+          _id: { $toString: { $ifNull: ['$register', 'Unassigned'] } },
+          total: { $sum: { $ifNull: ['$amount', 0] } },
+        },
+      },
     ])
 
-    const arIncurredTotal = shiftAgg?.total ?? 0
-    const transactionsTotal = txAgg?.total ?? 0
+    const byRegisterMap = new Map()
+    for (const row of shiftRows) {
+      const register = /^[1-4]$/.test(String(row._id || '')) ? String(row._id) : 'Unassigned'
+      byRegisterMap.set(register, { register, arIncurredTotal: row.total ?? 0, transactionsTotal: 0 })
+    }
+    for (const row of transactionRows) {
+      const register = row._id && row._id !== '' ? String(row._id) : 'Unassigned'
+      const existing = byRegisterMap.get(register) || { register, arIncurredTotal: 0, transactionsTotal: 0 }
+      existing.transactionsTotal = row.total ?? 0
+      byRegisterMap.set(register, existing)
+    }
+
+    const byRegister = Array.from(byRegisterMap.values())
+      .map((r) => ({
+        register: r.register,
+        arIncurredTotal: Math.round((r.arIncurredTotal ?? 0) * 100) / 100,
+        transactionsTotal: Math.round((r.transactionsTotal ?? 0) * 100) / 100,
+        match: Math.round((r.arIncurredTotal ?? 0) * 100) === Math.round((r.transactionsTotal ?? 0) * 100),
+      }))
+      .sort((a, b) => a.register.localeCompare(b.register, undefined, { numeric: true }))
+
+    const arIncurredTotal = byRegister.reduce((sum, r) => sum + r.arIncurredTotal, 0)
+    const transactionsTotal = byRegister.reduce((sum, r) => sum + r.transactionsTotal, 0)
     const match = Math.round(arIncurredTotal * 100) === Math.round(transactionsTotal * 100)
 
     res.json({
       arIncurredTotal: Math.round(arIncurredTotal * 100) / 100,
       transactionsTotal: Math.round(transactionsTotal * 100) / 100,
       match,
+      byRegister,
     })
   } catch (err) {
     console.error('AR check error:', err)
