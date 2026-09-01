@@ -109,6 +109,18 @@ describe('Transaction schema — field validation', () => {
     const err = new Transaction({ ...base(), purchaseType: 'other' }).validateSync()
     expect(err?.errors.purchaseType).toBeDefined()
   })
+
+  it('defaults register to empty string when absent', () => {
+    const trx = new Transaction(base())
+    expect(trx.validateSync()).toBeUndefined()
+    expect(trx.register).toBe('')
+  })
+
+  it('stores a register value when supplied', () => {
+    const trx = new Transaction({ ...base(), register: '2' })
+    expect(trx.validateSync()).toBeUndefined()
+    expect(trx.register).toBe('2')
+  })
 })
 
 // ─── site alias sync ──────────────────────────────────────────────────────
