@@ -499,18 +499,20 @@ function RouteComponent() {
       {showRegisterSelector && (
         <div className="space-y-2">
           <h2 className="text-lg font-bold">Register</h2>
-          <div className="flex rounded-md border border-input overflow-hidden w-fit">
-            {currentSiteRegisters.map((r, idx) => (
-              <button
-                key={r._id ?? r.number}
-                type="button"
-                onClick={() => setRegister(r.number)}
-                className={toggleClass(register === r.number, idx > 0 ? 'border-l border-input' : '')}
-              >
-                {r.number}
-              </button>
-            ))}
-          </div>
+          <Select name="register" value={register} onValueChange={(value) => setRegister(value)}>
+            <SelectTrigger className="w-[180px]">
+              <SelectValue placeholder="Select Register" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectGroup>
+                {currentSiteRegisters.map((r) => (
+                  <SelectItem key={r._id ?? r.number} value={r.number}>
+                    {r.number}
+                  </SelectItem>
+                ))}
+              </SelectGroup>
+            </SelectContent>
+          </Select>
         </div>
       )}
 
