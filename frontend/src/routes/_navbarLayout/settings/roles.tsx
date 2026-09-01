@@ -1,6 +1,7 @@
 import { createFileRoute, Link, Outlet, useNavigate } from '@tanstack/react-router';
 import { useEffect } from 'react';
 import axios from "axios";
+import { MasterDetailShell } from "@/components/custom/masterDetailShell";
 
 export const Route = createFileRoute('/_navbarLayout/settings/roles')({
   component: RouteComponent,
@@ -59,34 +60,32 @@ function RouteComponent() {
   };
 
   return (
-    <div className="flex">
-      {/* Sidebar list of roles */}
-      <aside className="flex flex-col w-1/4 p-4 border-r border-gray-300 border-dashed justify-start items-end">
-        {roles.map((role) => (
+    <MasterDetailShell
+      sidebar={
+        <>
+          {roles.map((role) => (
+            <Link
+              key={role._id}
+              className="p-2 w-full"
+              to="/settings/roles/$id"
+              params={{ id: role._id }}
+              activeProps={activeProps}
+            >
+              {role.role_name}
+            </Link>
+          ))}
+
+          {/* Add New Role Button */}
           <Link
-            key={role._id}
-            className="p-2 w-full text-right"
-            to="/settings/roles/$id"
-            params={{ id: role._id }}
-            activeProps={activeProps}
+            to="/settings/roles/new"
+            className="mt-4 px-3 py-2 bg-blue-500 text-white rounded hover:bg-blue-400 w-full text-center"
           >
-            {role.role_name}
+            + Add New Role
           </Link>
-        ))}
-
-        {/* Add New Role Button */}
-        <Link
-          to="/settings/roles/new"
-          className="mt-4 px-3 py-2 bg-blue-500 text-white rounded hover:bg-blue-400 w-full text-center"
-        >
-          + Add New Role
-        </Link>
-      </aside>
-
-      {/* Content area (shows selected role or new form) */}
-      <main className="w-3/4">
-        <Outlet />
-      </main>
-    </div>
+        </>
+      }
+    >
+      <Outlet />
+    </MasterDetailShell>
   );
 }
