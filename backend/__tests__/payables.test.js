@@ -97,6 +97,18 @@ describe('Payable schema — field validation', () => {
     const doc = new Payable(base({ paymentMethod: 'SAFE' }))
     expect(doc.paymentMethod).toBe('safe')
   })
+
+  it('defaults register to empty string when absent', () => {
+    const doc = new Payable(base())
+    expect(doc.validateSync()).toBeUndefined()
+    expect(doc.register).toBe('')
+  })
+
+  it('stores a register value when supplied', () => {
+    const doc = new Payable(base({ register: '2' }))
+    expect(doc.validateSync()).toBeUndefined()
+    expect(doc.register).toBe('2')
+  })
 })
 
 describe('Payable schema — date field', () => {

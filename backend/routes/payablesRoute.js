@@ -63,7 +63,7 @@ router.get('/:id', async (req, res) => {
 // POST create new payable
 router.post('/', async (req, res) => {
   try {
-    const { vendorName, location, notes, paymentMethod, amount, images, date } = req.body;
+    const { vendorName, location, notes, paymentMethod, amount, images, date, register } = req.body;
     
     // Validation
     if (!vendorName || !location || !paymentMethod || amount === undefined) {
@@ -88,6 +88,7 @@ router.post('/', async (req, res) => {
       amount,
       images: images || [],
       date: dateStr,
+      register: register || '',
     });
 
     const savedPayable = await payable.save();

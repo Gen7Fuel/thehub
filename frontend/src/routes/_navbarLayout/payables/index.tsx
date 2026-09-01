@@ -153,16 +153,50 @@
 // }
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
-import { useEffect, useRef } from "react"; // Added useRef
+import { useEffect, useMemo, useRef } from "react"; // Added useRef
 import { DatePicker } from '@/components/custom/datePicker';
 import { Select, SelectContent, SelectGroup, SelectItem, SelectLabel, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { createFileRoute, Link, useNavigate } from '@tanstack/react-router' // Added useNavigate
+import { useQuery } from '@tanstack/react-query'
 import { useFormStore } from '@/store'
 import { LocationPicker } from '@/components/custom/locationPicker'
 import { Textarea } from '@/components/ui/textarea'
 import { useAuth } from "@/context/AuthContext";
 import { Camera, Eye } from 'lucide-react'; // Added icons
 import { useSite } from "@/context/SiteContext";
+import axios from 'axios'
+import { domain } from '@/lib/constants'
+import { getCachedLocations, saveCachedLocations } from '@/lib/locationsCache'
+
+interface RegisterOption {
+  _id?: string
+  number: string
+}
+
+interface LocationWithRegisters {
+  _id: string
+  stationName: string
+  registers?: RegisterOption[]
+}
+
+// Shares the ['locations'] react-query cache key with LocationPicker
+// (frontend/src/components/custom/locationPicker.tsx) — this is a cache-shared
+// read, not a duplicate network fetch, whichever component's query settles first.
+const fetchLocationsForRegisters = async (): Promise<LocationWithRegisters[]> => {
+  try {
+    const token = localStorage.getItem('token')
+    const response = await axios.get(`${domain}/api/locations`, {
+      headers: { Authorization: `Bearer ${token}` },
+      timeout: 5000,
+    })
+    saveCachedLocations(response.data)
+    return response.data
+  } catch (err) {
+    const cached = getCachedLocations<LocationWithRegisters>()
+    if (cached.length > 0) return cached
+    throw err
+  }
+}
 
 export const Route = createFileRoute('/_navbarLayout/payables/')({
   component: RouteComponent,
@@ -187,7 +221,10 @@ function RouteComponent() {
   const setPayablePaymentMethod = useFormStore((state) => state.setPayablePaymentMethod)
   const payableAmount = useFormStore((state) => state.payableAmount)
   const setPayableAmount = useFormStore((state) => state.setPayableAmount)
-  
+
+  const payableRegister = useFormStore((state) => state.payableRegister)
+  const setPayableRegister = useFormStore((state) => state.setPayableRegister)
+
   // Image Logic
   const payableImages = useFormStore((state) => state.payableImages)
   const setPayableImages = useFormStore((state) => state.setPayableImages)
@@ -196,6 +233,31 @@ function RouteComponent() {
     const site = selectedSite || user?.location
     if (site) setPayableLocation(site)
   }, [selectedSite, user?.location, setPayableLocation]);
+
+  // DB-driven per-site config — only sites with 2+ registers configured show
+  // the selector below (matches the PO form's Register selector).
+  const { data: locationsForRegisters } = useQuery({
+    queryKey: ['locations'],
+    queryFn: fetchLocationsForRegisters,
+    initialData: () => {
+      const cached = getCachedLocations<LocationWithRegisters>()
+      return cached.length > 0 ? cached : undefined
+    },
+    initialDataUpdatedAt: 0,
+  })
+
+  const currentSiteRegisters = useMemo(
+    () => locationsForRegisters?.find((l) => l.stationName === payableLocation)?.registers ?? [],
+    [locationsForRegisters, payableLocation]
+  )
+  const showRegisterSelector = currentSiteRegisters.length >= 2
+
+  // Never let a register selection survive a site switch — required with no
+  // default, so a stale value from a previous site must not silently carry over.
+  useEffect(() => {
+    setPayableRegister('')
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [payableLocation])
 
   const handleCapture = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]
@@ -218,7 +280,7 @@ function RouteComponent() {
     { value: 'other', label: 'Other' }
   ]
 
-  const isFormValid = payableVendorName && payableLocation && payablePaymentMethod && payableAmount > 0
+  const isFormValid = payableVendorName && payableLocation && payablePaymentMethod && payableAmount > 0 && (!showRegisterSelector || !!payableRegister)
 
   return (
     <div className="min-w-[30%] mx-auto">
@@ -254,6 +316,26 @@ function RouteComponent() {
             value="stationName"
           />
         </div>
+
+        {showRegisterSelector && (
+          <div className="space-y-2">
+            <h2 className="text-lg font-bold">Register</h2>
+            <Select name="register" value={payableRegister} onValueChange={(value) => setPayableRegister(value)}>
+              <SelectTrigger className="w-[180px]">
+                <SelectValue placeholder="Select Register" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectGroup>
+                  {currentSiteRegisters.map((r) => (
+                    <SelectItem key={r._id ?? r.number} value={r.number}>
+                      {r.number}
+                    </SelectItem>
+                  ))}
+                </SelectGroup>
+              </SelectContent>
+            </Select>
+          </div>
+        )}
 
         <div className="space-y-2">
           <h2 className="text-lg font-bold">Date</h2>
