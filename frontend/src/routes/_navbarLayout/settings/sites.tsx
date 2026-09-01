@@ -47,7 +47,7 @@ function RouteComponent() {
             params={{ id: location._id }}
             activeProps={activeProps}
           >
-            {location.stationName} - {location.csoCode}
+            {location.stationName} - {location.csoCode} - {location.INDNumber}
           </Link>
         ))}
 

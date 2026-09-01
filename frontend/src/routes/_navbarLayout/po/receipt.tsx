@@ -35,6 +35,7 @@ function RouteComponent() {
   const stationName = useFormStore((state) => state.stationName);
   const purchaseType = useFormStore((state) => state.purchaseType);
   const itemsDescription = useFormStore((state) => state.itemsDescription);
+  const register = useFormStore((state) => state.register);
 
   useEffect(() => {
     const fuelInvalid = purchaseType === 'fuel' && (!fuelType || quantity === 0);
@@ -94,6 +95,7 @@ function RouteComponent() {
       licensePlate,
       purchaseType,
       itemsDescription: purchaseType === 'non-fuel' ? itemsDescription : '',
+      register: register || '',
     };
 
     try {

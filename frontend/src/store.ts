@@ -37,6 +37,12 @@ type FormStore = {
     itemsDescription: string;
     setItemsDescription: (s: string) => void;
 
+    // Which register/till the PO was rung through — only used at sites with
+    // 2+ registers configured. Deliberately no default value (unlike
+    // purchaseType/noFleetCard): the cashier must actively pick one.
+    register: string;
+    setRegister: (register: string) => void;
+
     resetForm: () => void;
 
     receipt: string | null;
@@ -148,6 +154,8 @@ export const useFormStore = create<FormStore>((set) => ({
     setPurchaseType: (purchaseType) => set({ purchaseType }),
     itemsDescription: '',
     setItemsDescription: (itemsDescription) => set({ itemsDescription }),
+    register: '',
+    setRegister: (register) => set({ register }),
     receipt: null,
     setReceipt: (receipt) => set({ receipt }),
     signature: null,
@@ -166,6 +174,7 @@ export const useFormStore = create<FormStore>((set) => ({
         fuelType: '',
         purchaseType: 'fuel',
         itemsDescription: '',
+        register: '',
         receipt: null,
         signature: null,
     }),

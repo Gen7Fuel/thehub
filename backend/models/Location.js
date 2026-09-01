@@ -17,6 +17,13 @@ const pushoverDeviceSchema = new mongoose.Schema({
   notificationEnabled: { type: Boolean, default: true },
 });
 
+// Sub-schema for a physical register/till at a site. Drives the PO create
+// form's per-site Register selector (frontend/src/routes/_navbarLayout/po/index.tsx) —
+// only shown once a site has 2+ of these configured.
+const registerSchema = new mongoose.Schema({
+  number: { type: String, required: true },
+});
+
 const locationSchema = new mongoose.Schema({
   type: { type: String, required: true },
   stationName: { type: String, required: true },
@@ -44,6 +51,9 @@ const locationSchema = new mongoose.Schema({
   // --- Pushover Core Extensions ---
   pushOverUserKey: { type: String, default: null },
   devices: [pushoverDeviceSchema],
+
+  // --- Registers/Tills ---
+  registers: [registerSchema],
 
   // --- Flexible Operating Hours Extension ---
   storeHours: {

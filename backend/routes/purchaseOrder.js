@@ -80,6 +80,7 @@ router.post("/", async (req, res) => {
     licensePlate,
     purchaseType,
     itemsDescription,
+    register,
   } = req.body;
 
   try {
@@ -177,6 +178,7 @@ router.post("/", async (req, res) => {
       licensePlate: licensePlate || '',
       purchaseType: purchaseType || 'fuel',
       itemsDescription: itemsDescription || '',
+      register: register || '',
     });
 
     const savedOrder = await newOrder.save();
