@@ -38,16 +38,11 @@ interface QuickSelectCustomer {
 const PRODUCTS_CACHE_KEY = 'po_cachedProducts'
 const QUICK_SELECT_CACHE_PREFIX = 'po_cachedQuickSelect_'
 
-// Sites with no PO Number / Fleet Card concept — the Number section is hidden
-// entirely and neither field is submitted with the purchase order.
-const NO_PO_NUMBER_SITES = ['Rankin', 'Sarnia', 'Walpole', 'Jocko Point', 'Charlies']
-
-// Fleet-card-only flow (no PO Number) with a "customer doesn't have their
-// card" opt-out that feeds fleet-card-coverage analytics. Dormant until we
-// flip FLEET_CARD_ONLY_ENABLED on for the real sites — fill in the site
-// names below when that day comes.
-const FLEET_CARD_ONLY_ENABLED = true
-const FLEET_CARD_ONLY_SITES: string[] = ['Test Lab']
+// Sites that keep the classic PO Number / Fleet Card toggle instead of the
+// fleet-card-only flow below. Wavers West/East use an externally issued
+// PO-number book with recycled numbers (see DUPLICATE_PO_ALLOWED_SITES in
+// backend/constants/poSites.js); Oliver/Osoyoos are excluded per ops request.
+const CLASSIC_PO_NUMBER_SITES = ['Wavers West', 'Wavers East', 'Oliver', 'Osoyoos']
 
 async function loader() {
   try {
@@ -130,8 +125,8 @@ function RouteComponent() {
   const data = Route.useLoaderData()
   const stationName = useFormStore((state) => state.stationName)
   const setStationName = useFormStore((state) => state.setStationName)
-  const isNoPoNumberSite = NO_PO_NUMBER_SITES.includes(stationName)
-  const isFleetCardOnlySite = FLEET_CARD_ONLY_ENABLED && FLEET_CARD_ONLY_SITES.includes(stationName)
+  const isClassicPoNumberSite = CLASSIC_PO_NUMBER_SITES.includes(stationName)
+  const isFleetCardOnlySite = !isClassicPoNumberSite
 
   const [poError, setPoError] = useState<string>('')
   const [cardStatus, setCardStatus] = useState<string | null>(null)
@@ -157,7 +152,7 @@ function RouteComponent() {
 
   // Whether the Fleet Card OTP input is actually on screen right now —
   // either the classic toggle is set to 'fleet', or this is a
-  // FLEET_CARD_ONLY_SITES site and the customer hasn't opted out of having one.
+  // fleet-card-only site and the customer hasn't opted out of having one.
   const showingFleetCardInput = isFleetCardOnlySite ? !noFleetCard : numberType === 'fleet'
 
   const handleBlur = async () => {
@@ -258,10 +253,10 @@ function RouteComponent() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [showingFleetCardInput])
 
-  // FLEET_CARD_ONLY_SITES use their own Fleet-Card-only flow (no PO Number
-  // toggle). Force-clear the "no fleet card" analytics flag whenever the
-  // active site isn't one of them, so it never leaks into an unrelated
-  // site's submission (e.g. user opted out, then switched to a regular site).
+  // Fleet-card-only sites use their own flow (no PO Number toggle). Force-clear
+  // the "no fleet card" analytics flag whenever the active site is a classic
+  // PO Number site, so it never leaks into an unrelated site's submission
+  // (e.g. user opted out, then switched to a CLASSIC_PO_NUMBER_SITES site).
   useEffect(() => {
     if (!isFleetCardOnlySite) setNoFleetCard(false)
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -303,21 +298,25 @@ function RouteComponent() {
     setSelectedQuickCustomerId(null)
     setNumberType('po')
     setFleetCardNumber('')
-    setNoFleetCard(false)
+    setNoFleetCard(true) // back to the "no fleet card" rest state, not the blocking one
     setCardStatus(null)
   }
 
-  // NO_PO_NUMBER_SITES have no PO Number / Fleet Card concept. The store persists
-  // across client-side nav, so force-clear stale values the instant the active
-  // site becomes one of them (e.g. user typed something on another site, then switched).
+  // Sites other than CLASSIC_PO_NUMBER_SITES use the fleet-card-only flow (no PO
+  // Number). The store persists across client-side nav, so force-clear stale PO
+  // Number state the instant the active site becomes one of them (e.g. user typed
+  // a PO Number for a classic site, then switched sites). Also default the switch
+  // to "no fleet card" so a normal transaction isn't blocked out of the gate —
+  // most customers don't carry one; the cashier flips it on only when they do.
   useEffect(() => {
-    if (isNoPoNumberSite) {
-      resetNumberSection()
+    if (isFleetCardOnlySite) {
+      setNumberType('po')
       setPoNumber('')
       setPoError('')
+      setNoFleetCard(true)
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isNoPoNumberSite])
+  }, [isFleetCardOnlySite])
 
   const handleQuickCustomerTap = (qc: QuickSelectCustomer) => {
     if (selectedQuickCustomerId === qc._id) {
@@ -328,7 +327,7 @@ function RouteComponent() {
     setCustomerName(qc.name)
     setSelectedQuickCustomerId(qc._id)
     setShowSuggestions(false)
-    if (qc.fleetCardNumber && !isNoPoNumberSite) {
+    if (qc.fleetCardNumber) {
       setNumberType('fleet')
       setFleetCardNumber(qc.fleetCardNumber)
       setNoFleetCard(false)
@@ -336,7 +335,7 @@ function RouteComponent() {
     } else {
       setNumberType('po')
       setFleetCardNumber('')
-      setNoFleetCard(false)
+      setNoFleetCard(true) // this quick-select customer has no card on file
       setCardStatus(null)
     }
   }
@@ -359,7 +358,7 @@ function RouteComponent() {
   const firstWord = (name: string) => name.trim().split(' ')[0] || name
   const quickSelectLabel = (qc: QuickSelectCustomer) => qc.label || firstWord(qc.name)
 
-  // Shared by the classic PO/Fleet toggle and the FLEET_CARD_ONLY_SITES flow —
+  // Shared by the classic PO/Fleet toggle and the fleet-card-only flow —
   // same 16-digit OTP entry + live verify-on-change + status line either way.
   const renderFleetCardInput = () => (
     <div className="space-y-1">
@@ -439,8 +438,8 @@ function RouteComponent() {
       {/* Number + Date on the same row */}
       <div className="flex items-start justify-between gap-4">
         <div className={`space-y-3 transition-opacity duration-500 ${selectedQuickCustomerId ? 'opacity-0 pointer-events-none' : 'opacity-100'}`}>
-          {/* NO_PO_NUMBER_SITES have no PO Number / Fleet Card entry */}
-          {!isNoPoNumberSite && isFleetCardOnlySite && (
+          {/* CLASSIC_PO_NUMBER_SITES keep the PO Number / Fleet Card toggle below */}
+          {isFleetCardOnlySite && (
             <>
               <h2 className="text-lg font-bold">Fleet Card</h2>
               <div className="flex items-center gap-2">
@@ -459,7 +458,7 @@ function RouteComponent() {
             </>
           )}
 
-          {!isNoPoNumberSite && !isFleetCardOnlySite && (
+          {isClassicPoNumberSite && (
             <>
               <h2 className="text-lg font-bold">Number</h2>
               <div className="flex rounded-md border border-input overflow-hidden w-fit">
@@ -540,7 +539,7 @@ function RouteComponent() {
       {/* Fleet Card number entry, on its own full-width row below Number + Date —
           the 16-slot OTP is too wide to share a row with the Date picker on
           narrower (tablet) viewports without overflowing. */}
-      {!isNoPoNumberSite && isFleetCardOnlySite && !noFleetCard && (
+      {isFleetCardOnlySite && !noFleetCard && (
         <div className={`transition-opacity duration-500 ${selectedQuickCustomerId ? 'opacity-0 pointer-events-none' : 'opacity-100'}`}>
           {renderFleetCardInput()}
         </div>
@@ -713,11 +712,11 @@ function RouteComponent() {
             className="bg-blue-600 hover:bg-blue-700 text-white"
             onClick={() => {
               // Only pad when the user is actually on the PO Number path for a site that shows it.
-              // NO_PO_NUMBER_SITES and FLEET_CARD_ONLY_SITES never show the PO Number path, and
-              // the Fleet Card path never touches poNumber — padding an untouched empty value to
-              // "00000" would submit a non-empty poNumber that collides with the backend's
-              // per-station unique index on every subsequent submission.
-              if (!isNoPoNumberSite && !isFleetCardOnlySite && numberType === 'po') setPoNumber(padFive(poNumber));
+              // Fleet-card-only sites never show the PO Number path, and the Fleet Card path
+              // never touches poNumber — padding an untouched empty value to "00000" would
+              // submit a non-empty poNumber that collides with the backend's per-station
+              // unique index on every subsequent submission.
+              if (isClassicPoNumberSite && numberType === 'po') setPoNumber(padFive(poNumber));
               fileInputRef.current?.click();
             }}
             disabled={!!poError || !customerName || !driverName || (purchaseType === 'fuel' ? quantity === 0 : !itemsDescription) || (isFleetCardOnlySite ? (!noFleetCard && cardStatus !== 'active' && cardStatus !== 'offline') : (numberType === 'fleet' && cardStatus !== 'active' && cardStatus !== 'offline'))}

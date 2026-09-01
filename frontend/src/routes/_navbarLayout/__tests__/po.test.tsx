@@ -275,6 +275,7 @@ const renderWithQuery = (ui: React.ReactElement) =>
 /** Reset mockStore back to safe defaults before each test. */
 const resetStore = () => {
   mockStore.fleetCardNumber = ''
+  mockStore.noFleetCard = true
   mockStore.poNumber = ''
   mockStore.customerName = 'Jane Doe'
   mockStore.driverName = 'Bob Smith'
@@ -310,16 +311,35 @@ describe('PO Form — index.tsx', () => {
     mockAxiosGet.mockResolvedValue({ data: [] })
   })
 
-  it('renders the location picker and OTP input by default', async () => {
+  it('renders the location picker and defaults to "no fleet card", leaving Upload Receipt enabled', async () => {
+    // receipt must be null so the camera/upload button is rendered (not "View Captured Receipt")
+    mockStore.receipt = null
     renderWithSuspense(<POForm />)
     // Allow up to 5 s on the first render — the lazy route module needs to load
     await waitFor(() => {
       expect(screen.getByTestId('date-picker')).toBeInTheDocument()
+      expect(screen.getByText('Customer has fleet card')).toBeInTheDocument()
+    }, { timeout: 5000 })
+
+    // The switch defaults off (no card) — most PO customers don't carry one — so the
+    // OTP stays hidden and the button isn't blocked waiting on a card verification.
+    expect(screen.queryByTestId('otp-input')).not.toBeInTheDocument()
+    expect(screen.getByText(/no fleet card/i)).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /upload receipt/i })).not.toBeDisabled()
+  })
+
+  it('shows the Fleet Card OTP input once the switch is toggled to "has a fleet card"', async () => {
+    mockStore.noFleetCard = false
+    renderWithSuspense(<POForm />)
+
+    await waitFor(() => {
       expect(screen.getByTestId('otp-input')).toBeInTheDocument()
     }, { timeout: 5000 })
   })
 
   it('shows a PO uniqueness error when the uniqueness API returns not-unique', async () => {
+    // Only CLASSIC_PO_NUMBER_SITES show the PO Number path.
+    mockStore.stationName = 'Wavers West'
     mockStore.poNumber = '12345'
     mockAxiosGet.mockImplementation((url: string) => {
       if (url.includes('ar-customers')) return Promise.resolve({ data: [] })
@@ -337,6 +357,8 @@ describe('PO Form — index.tsx', () => {
   })
 
   it('clears the PO error when the uniqueness API confirms the number is unique', async () => {
+    // Only CLASSIC_PO_NUMBER_SITES show the PO Number path.
+    mockStore.stationName = 'Wavers West'
     mockStore.poNumber = '12345'
     mockAxiosGet.mockImplementation((url: string) => {
       if (url.includes('ar-customers')) return Promise.resolve({ data: [] })
@@ -365,19 +387,22 @@ describe('PO Form — index.tsx', () => {
     }, { timeout: 5000 })
   })
 
-  it.each(['Rankin', 'Sarnia', 'Walpole', 'Jocko Point', 'Charlies'])('does not render the Number section or OTP input for site "%s"', async (site) => {
+  it.each(['Rankin', 'Sarnia', 'Walpole', 'Jocko Point', 'Charlies'])('shows the Fleet Card switch (defaulting to no card) for site "%s"', async (site) => {
     mockStore.stationName = site
+    mockStore.receipt = null
     renderWithSuspense(<POForm />)
 
     await waitFor(() => {
-      expect(screen.getByTestId('date-picker')).toBeInTheDocument()
+      expect(screen.getByText('Customer has fleet card')).toBeInTheDocument()
     }, { timeout: 5000 })
 
     expect(screen.queryByText('Number')).not.toBeInTheDocument()
+    // Defaults off — OTP hidden, button not blocked on a card.
     expect(screen.queryByTestId('otp-input')).not.toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /upload receipt/i })).not.toBeDisabled()
   })
 
-  it.each(['Rankin', 'Sarnia', 'Walpole', 'Jocko Point', 'Charlies'])('does not auto-fill a fleet card from quick-select on site "%s"', async (site) => {
+  it.each(['Rankin', 'Sarnia', 'Walpole', 'Jocko Point', 'Charlies'])('auto-fills a fleet card from quick-select on site "%s"', async (site) => {
     mockStore.stationName = site
     mockAxiosGet.mockImplementation((url: string) => {
       if (url.includes('quick-select')) {
@@ -393,8 +418,20 @@ describe('PO Form — index.tsx', () => {
     fireEvent.click(quickBtn)
 
     await waitFor(() => expect(mockStore.setCustomerName).toHaveBeenCalledWith('Acme Co'))
-    expect(mockStore.setFleetCardNumber).not.toHaveBeenCalledWith('1234567890123456')
-    expect(screen.queryByTestId('otp-input')).not.toBeInTheDocument()
+    expect(mockStore.setFleetCardNumber).toHaveBeenCalledWith('1234567890123456')
+  })
+
+  it.each(['Wavers West', 'Wavers East', 'Oliver', 'Osoyoos'])('shows the classic PO Number / Fleet Card toggle (no Switch) for site "%s"', async (site) => {
+    mockStore.stationName = site
+    renderWithSuspense(<POForm />)
+
+    await waitFor(() => {
+      expect(screen.getByText('Number')).toBeInTheDocument()
+    }, { timeout: 5000 })
+
+    expect(screen.queryByText('Customer has fleet card')).not.toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'PO Number' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Fleet Card' })).toBeInTheDocument()
   })
 
   it('shows only the first word of a customer name on the quick-select button', async () => {
