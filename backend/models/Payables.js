@@ -49,6 +49,14 @@ const payableSchema = new mongoose.Schema({
   date: {
     type: String, // "yyyy-mm-dd"
   },
+  // Which physical register/till at the site the payable was recorded
+  // against. Only collected at creation time — not cross-validated against
+  // the site's configured Location.registers list (mirrors backend/models/Transactions.js's PO register field).
+  register: {
+    type: String,
+    required: false,
+    default: '',
+  },
 }, {
   timestamps: true // Adds createdAt and updatedAt fields automatically
 });

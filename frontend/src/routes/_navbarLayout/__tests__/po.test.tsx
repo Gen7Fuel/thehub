@@ -569,8 +569,9 @@ describe('PO Form — index.tsx', () => {
     expect(screen.getByRole('button', { name: /upload receipt/i })).not.toBeDisabled()
   })
 
-  it('shows Register buttons and disables Upload Receipt until one is picked, for a site with 2+ registers', async () => {
+  it('shows the Register dropdown and disables Upload Receipt until one is picked, for a site with 2+ registers', async () => {
     mockStore.receipt = null
+    mockStore.register = ''
     mockAxiosGet.mockImplementation((url: string) => {
       if (url.includes('/api/locations')) {
         return Promise.resolve({
@@ -584,12 +585,29 @@ describe('PO Form — index.tsx', () => {
 
     await waitFor(() => {
       expect(screen.getByText('Register')).toBeInTheDocument()
+      expect(screen.getByText('Select Register')).toBeInTheDocument()
     }, { timeout: 5000 })
 
     expect(screen.getByRole('button', { name: /upload receipt/i })).toBeDisabled()
+  })
 
-    fireEvent.click(screen.getByRole('button', { name: '2' }))
-    expect(mockStore.setRegister).toHaveBeenCalledWith('2')
+  it('enables Upload Receipt once a register is selected, for a site with 2+ registers', async () => {
+    mockStore.receipt = null
+    mockStore.register = '2'
+    mockAxiosGet.mockImplementation((url: string) => {
+      if (url.includes('/api/locations')) {
+        return Promise.resolve({
+          data: [{ _id: 'loc1', stationName: 'TestSite', registers: [{ number: '1' }, { number: '2' }] }],
+        })
+      }
+      return Promise.resolve({ data: [] })
+    })
+
+    renderWithQuery(<POForm />)
+
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: /upload receipt/i })).not.toBeDisabled()
+    }, { timeout: 5000 })
   })
 })
 

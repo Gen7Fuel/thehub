@@ -67,6 +67,12 @@ type FormStore = {
     payableAmount: number;
     setPayableAmount: (amount: number) => void;
 
+    // Which register/till the payable was recorded against — only used at
+    // sites with 2+ registers configured. Deliberately no default value
+    // (mirrors the PO form's `register` field): must be actively picked.
+    payableRegister: string;
+    setPayableRegister: (register: string) => void;
+
     payableImages: string[];
     setPayableImages: (images: string[]) => void;
 
@@ -198,6 +204,9 @@ export const useFormStore = create<FormStore>((set) => ({
     payableAmount: 0,
     setPayableAmount: (payableAmount) => set({ payableAmount }),
 
+    payableRegister: '',
+    setPayableRegister: (payableRegister) => set({ payableRegister }),
+
     payableImages: [],
     setPayableImages: (payableImages) => set({ payableImages }),
 
@@ -208,6 +217,7 @@ export const useFormStore = create<FormStore>((set) => ({
         payablePaymentMethod: '',
         payableAmount: 0,
         payableImages: [],
+        payableRegister: '',
     }),
 
     lotteryValues: {

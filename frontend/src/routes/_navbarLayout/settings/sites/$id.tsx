@@ -26,6 +26,7 @@ import {
   DialogFooter,
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
+import { Building2 } from "lucide-react";
 
 export const Route = createFileRoute("/_navbarLayout/settings/sites/$id")({
   component: RouteComponent,
@@ -532,20 +533,27 @@ function RouteComponent() {
     return <div className="p-4 text-red-500">Location not found</div>;
 
   return (
-    <div className="max-w-2xl mx-auto p-6">
+    <div className="max-w-7xl mx-auto p-8">
       <Card>
-        <CardHeader className="flex flex-row items-start justify-between space-y-0 pb-6 border-b">
-          {/* Title on the left in a larger, prominent font */}
-          <div>
-            <CardTitle className="text-2xl font-extrabold tracking-tight text-slate-900">
-              Edit Location
-            </CardTitle>
-          </div>
+        <CardHeader className="pb-6 border-b">
+          <div className="flex flex-wrap items-center justify-between gap-4">
+            {/* Icon + title/subtitle on the left */}
+            <div className="flex items-center gap-4">
+              <div className="h-12 w-12 rounded-xl bg-blue-100 flex items-center justify-center text-blue-600 shrink-0">
+                <Building2 className="h-6 w-6" />
+              </div>
+              <div>
+                <CardTitle className="text-2xl font-extrabold tracking-tight text-slate-900">
+                  Edit Location
+                </CardTitle>
+                <p className="text-sm text-muted-foreground">
+                  {formData.stationName || "Untitled Site"}
+                </p>
+              </div>
+            </div>
 
-          {/* Two rows of buttons stacked on the right */}
-          <div className="flex flex-col items-end gap-3">
-            {/* ROW 1: Sells Lottery & Assigned Users */}
-            <div className="flex items-center gap-3">
+            {/* Toolbar on the right */}
+            <div className="flex flex-wrap items-center gap-3">
               {/* Sells Lottery Toggle Group */}
               <div className="flex items-center gap-2 bg-slate-50 border px-3 py-1.5 rounded-lg text-sm">
                 <span className="text-muted-foreground font-medium">
@@ -575,10 +583,7 @@ function RouteComponent() {
               >
                 Assigned Users ({selectedUsers.length})
               </Button>
-            </div>
 
-            {/* ROW 2: Generate Safesheet & Manage Pushover */}
-            <div className="flex items-center gap-3">
               {!hasSafesheet && (
                 <Button
                   variant="default"
@@ -613,122 +618,196 @@ function RouteComponent() {
         </CardHeader>
 
         <CardContent>
-          <form onSubmit={handleSubmit} className="space-y-6">
-            <div>
-              <Label className="block font-medium mb-1">Type</Label>
-              <Select
-                value={formData.type}
-                onValueChange={(value) =>
-                  setFormData({ ...formData, type: value })
-                }
-              >
-                <SelectTrigger className="w-full rounded-md border border-gray-300">
-                  <SelectValue placeholder="Select Type" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="store">Store</SelectItem>
-                  <SelectItem value="backoffice">Backoffice</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
+          <form onSubmit={handleSubmit} className="space-y-8">
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+              {/* Column 1: Identity */}
+              <div className="p-6 border rounded-xl bg-white shadow-sm space-y-4">
+                <h3 className="text-xs font-bold uppercase text-slate-400 tracking-widest">
+                  Identity
+                </h3>
 
-            {[
-              { label: "Station Name", name: "stationName" },
-              { label: "Legal Name", name: "legalName" },
-              { label: "IND Number", name: "INDNumber" },
-              { label: "Kardpoll Code", name: "kardpollCode" },
-              { label: "CSO Code", name: "csoCode" },
-              { label: "Station Email", name: "email" },
-            ].map((field) => (
-              <div key={field.name}>
-                <Label className="block font-medium mb-1">{field.label}</Label>
-                <div className="flex gap-2">
-                  <input
-                    type="text"
-                    name={field.name}
-                    value={String(
-                      formData[field.name as keyof LocationForm] ?? "",
-                    )}
-                    onChange={(e) =>
-                      setFormData({ ...formData, [field.name]: e.target.value })
+                <div>
+                  <Label className="block font-medium mb-1">Type</Label>
+                  <Select
+                    value={formData.type}
+                    onValueChange={(value) =>
+                      setFormData({ ...formData, type: value })
                     }
-                    className="border border-gray-300 rounded-md px-3 py-2 w-full focus:ring-2 focus:ring-blue-500 focus:outline-none"
-                    required={[
-                      "stationName",
-                      "legalName",
-                      "INDNumber",
-                      "csoCode",
-                      "email",
-                    ].includes(field.name)}
-                  />
+                  >
+                    <SelectTrigger className="w-full rounded-md border border-gray-300">
+                      <SelectValue placeholder="Select Type" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="store">Store</SelectItem>
+                      <SelectItem value="backoffice">Backoffice</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
 
-                  {field.name === "email" && (
+                {[
+                  { label: "Station Name", name: "stationName" },
+                  { label: "Legal Name", name: "legalName" },
+                  { label: "IND Number", name: "INDNumber" },
+                  { label: "CSO Code", name: "csoCode" },
+                  { label: "Kardpoll Code", name: "kardpollCode" },
+                ].map((field) => (
+                  <div key={field.name}>
+                    <Label className="block font-medium mb-1">{field.label}</Label>
+                    <Input
+                      type="text"
+                      name={field.name}
+                      value={String(
+                        formData[field.name as keyof LocationForm] ?? "",
+                      )}
+                      onChange={(e) =>
+                        setFormData({ ...formData, [field.name]: e.target.value })
+                      }
+                      className="border border-gray-300 rounded-md px-3 py-2 w-full focus:ring-2 focus:ring-blue-500 focus:outline-none"
+                      required={[
+                        "stationName",
+                        "legalName",
+                        "INDNumber",
+                        "csoCode",
+                      ].includes(field.name)}
+                    />
+                  </div>
+                ))}
+              </div>
+
+              {/* Column 2: Contact & Region */}
+              <div className="p-6 border rounded-xl bg-slate-50/50 space-y-4">
+                <h3 className="text-xs font-bold uppercase text-slate-400 tracking-widest">
+                  Contact &amp; Region
+                </h3>
+
+                <div>
+                  <Label className="block font-medium mb-1">Station Email</Label>
+                  <div className="flex gap-2">
+                    <Input
+                      type="text"
+                      name="email"
+                      value={String(formData.email ?? "")}
+                      onChange={(e) =>
+                        setFormData({ ...formData, email: e.target.value })
+                      }
+                      className="border border-gray-300 rounded-md px-3 py-2 w-full focus:ring-2 focus:ring-blue-500 focus:outline-none bg-white"
+                      required
+                    />
                     <Button
                       type="button"
                       variant="outline"
-                      className="whitespace-nowrap border-blue-500 text-blue-600 hover:bg-blue-50"
+                      className="whitespace-nowrap border-blue-500 text-blue-600 hover:bg-blue-50 bg-white"
                       onClick={() => setManagerDialogOpen(true)}
                     >
                       Manage Managers ({managerEmails.length})
                     </Button>
+                  </div>
+
+                  {managerEmails.length > 0 && (
+                    <p className="text-[11px] text-gray-500 mt-1 italic">
+                      Notifications also CC'd to: {managerEmails.join(", ")}
+                    </p>
                   )}
                 </div>
 
-                {field.name === "email" && managerEmails.length > 0 && (
-                  <p className="text-[11px] text-gray-500 mt-1 italic">
-                    Notifications also CC'd to: {managerEmails.join(", ")}
-                  </p>
-                )}
+                <div>
+                  <Label className="block font-medium mb-1">Province</Label>
+                  <Select
+                    value={formData.province}
+                    onValueChange={(value) =>
+                      setFormData({ ...formData, province: value })
+                    }
+                  >
+                    <SelectTrigger className="w-full rounded-md border border-gray-300 bg-white">
+                      <SelectValue placeholder="Select Province" />
+                    </SelectTrigger>
+                    <SelectContent className="max-h-64 overflow-y-auto">
+                      {CANADIAN_PROVINCES.map((prov) => (
+                        <SelectItem key={prov} value={prov}>
+                          {prov}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                <div>
+                  <Label className="block font-medium mb-1">Timezone</Label>
+                  <Select
+                    value={formData.timezone}
+                    onValueChange={(value) =>
+                      setFormData({ ...formData, timezone: value })
+                    }
+                  >
+                    <SelectTrigger className="w-full rounded-md border border-gray-300 bg-white">
+                      <SelectValue placeholder="Select Timezone" />
+                    </SelectTrigger>
+                    <SelectContent className="max-h-64 overflow-y-auto">
+                      {timezones.map((tz) => (
+                        <SelectItem key={tz} value={tz}>
+                          {tz}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                <div>
+                  <Label
+                    htmlFor="gasBuddyStationId"
+                    className="block font-medium mb-1"
+                  >
+                    GasBuddy Station ID
+                  </Label>
+                  <Input
+                    id="gasBuddyStationId"
+                    type="text"
+                    placeholder="e.g., 205339"
+                    value={formData.gasBuddyStationId || ""}
+                    onChange={(e) =>
+                      setFormData({
+                        ...formData,
+                        gasBuddyStationId: e.target.value,
+                      })
+                    }
+                    className="border border-gray-300 rounded-md px-3 py-2 w-full focus:ring-2 focus:ring-blue-500 focus:outline-none bg-white"
+                  />
+                </div>
               </div>
-            ))}
 
-            <div>
-              <Label className="block font-medium mb-1">Province</Label>
-              <Select
-                value={formData.province}
-                onValueChange={(value) =>
-                  setFormData({ ...formData, province: value })
-                }
-              >
-                <SelectTrigger className="w-full rounded-md border border-gray-300">
-                  <SelectValue placeholder="Select Province" />
-                </SelectTrigger>
-                <SelectContent className="max-h-64 overflow-y-auto">
-                  {CANADIAN_PROVINCES.map((prov) => (
-                    <SelectItem key={prov} value={prov}>
-                      {prov}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+              {/* Column 3: Security & Access */}
+              <div className="p-6 border rounded-xl bg-white shadow-sm space-y-4 flex flex-col">
+                <h3 className="text-xs font-bold uppercase text-slate-400 tracking-widest">
+                  Security &amp; Access
+                </h3>
+
+                <div>
+                  <Label className="block font-medium mb-1">Manager Code</Label>
+                  <div className="flex justify-center">
+                    <InputOTP maxLength={4} value={otp} onChange={setOtp}>
+                      <InputOTPGroup>
+                        <InputOTPSlot index={0} />
+                        <InputOTPSlot index={1} />
+                        <InputOTPSlot index={2} />
+                        <InputOTPSlot index={3} />
+                      </InputOTPGroup>
+                    </InputOTP>
+                  </div>
+                </div>
+
+                <div className="flex-1" />
+
+                <Button type="submit" disabled={loading} className="w-full">
+                  {loading ? "Saving..." : "Save Changes"}
+                </Button>
+              </div>
             </div>
 
-            <div>
-              <Label className="block font-medium mb-1">Timezone</Label>
-              <Select
-                value={formData.timezone}
-                onValueChange={(value) =>
-                  setFormData({ ...formData, timezone: value })
-                }
-              >
-                <SelectTrigger className="w-full rounded-md border border-gray-300">
-                  <SelectValue placeholder="Select Timezone" />
-                </SelectTrigger>
-                <SelectContent className="max-h-64 overflow-y-auto">
-                  {timezones.map((tz) => (
-                    <SelectItem key={tz} value={tz}>
-                      {tz}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-
-            {/* --- STORE HOURS SECTION --- */}
-            <div className="space-y-3 pt-2">
-              <Label className="block font-semibold text-slate-900">
+            {/* --- STORE HOURS SECTION (full width) --- */}
+            <div className="p-6 border rounded-xl bg-white shadow-sm space-y-3">
+              <h3 className="text-xs font-bold uppercase text-slate-400 tracking-widest">
                 Store Operating Hours
-              </Label>
+              </h3>
               <div className="border rounded-xl p-4 bg-slate-50/50 space-y-3">
                 <div className="grid grid-cols-12 gap-2 text-xs font-semibold text-slate-500 uppercase px-1">
                   <span className="col-span-3">Day</span>
@@ -797,46 +876,6 @@ function RouteComponent() {
                 })}
               </div>
             </div>
-
-            <div>
-              <Label
-                htmlFor="gasBuddyStationId"
-                className="block font-medium mb-1"
-              >
-                GasBuddy Station ID
-              </Label>
-              <Input
-                id="gasBuddyStationId"
-                type="text"
-                placeholder="e.g., 205339"
-                value={formData.gasBuddyStationId || ""}
-                onChange={(e) =>
-                  setFormData({
-                    ...formData,
-                    gasBuddyStationId: e.target.value,
-                  })
-                }
-                className="border border-gray-300 rounded-md px-3 py-2 w-full focus:ring-2 focus:ring-blue-500 focus:outline-none"
-              />
-            </div>
-
-            <div>
-              <Label className="block font-medium mb-1">Manager Code</Label>
-              <div className="flex justify-center">
-                <InputOTP maxLength={4} value={otp} onChange={setOtp}>
-                  <InputOTPGroup>
-                    <InputOTPSlot index={0} />
-                    <InputOTPSlot index={1} />
-                    <InputOTPSlot index={2} />
-                    <InputOTPSlot index={3} />
-                  </InputOTPGroup>
-                </InputOTP>
-              </div>
-            </div>
-
-            <Button type="submit" disabled={loading} className="w-full">
-              {loading ? "Saving..." : "Save Changes"}
-            </Button>
           </form>
         </CardContent>
       </Card>
