@@ -34,6 +34,7 @@ interface Payable {
   createdAt: string
   date?: string
   requestInvoice?: boolean
+  register?: string
 }
 
 export const Route = createFileRoute('/_navbarLayout/payables/list')({
@@ -316,6 +317,7 @@ function RouteComponent() {
     createdAt: new Date(a.queuedAt).toISOString(),
     date: a.payload.date,
     requestInvoice: false,
+    register: a.payload.register,
     // Three mutually-exclusive states: failed (terminal), syncing (the one
     // entry the background sync loop is uploading right now — sync is
     // strictly one-at-a-time, see syncPendingActions() in lib/utils.ts),
@@ -474,6 +476,7 @@ function RouteComponent() {
               <th className="border-dashed border-b border-gray-300 px-4 py-2">Vendor</th>
               <th className="border-dashed border-b border-gray-300 px-4 py-2">Payment Method</th>
               <th className="border-dashed border-b border-gray-300 px-4 py-2">Amount</th>
+              <th className="border-dashed border-b border-gray-300 px-4 py-2">Register</th>
               <th className="border-dashed border-b border-gray-300 px-4 py-2">Images</th>
               <th className="border-dashed border-b border-gray-300 px-4 py-2">Actions</th>
             </tr>
@@ -496,6 +499,9 @@ function RouteComponent() {
                   </td>
                   <td className="border-dashed border-t border-gray-300 px-4 py-2">
                     ${payable.amount.toFixed(2)}
+                  </td>
+                  <td className="border-dashed border-t border-gray-300 px-4 py-2">
+                    {payable.register || '—'}
                   </td>
                   <td className="border-dashed border-t border-gray-300 px-4 py-2">
                     {payable.images.length} image(s)
@@ -593,7 +599,7 @@ function RouteComponent() {
               ))
             ) : (
               <tr>
-                <td colSpan={6} className="border-dashed border-t border-gray-300 px-4 py-2 text-center">
+                <td colSpan={7} className="border-dashed border-t border-gray-300 px-4 py-2 text-center">
                   No payables found.
                 </td>
               </tr>

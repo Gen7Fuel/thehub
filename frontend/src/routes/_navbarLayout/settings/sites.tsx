@@ -1,5 +1,6 @@
 import { createFileRoute, Link, Outlet } from '@tanstack/react-router';
 import axios from "axios"
+import { MasterDetailShell } from "@/components/custom/masterDetailShell";
 
 export const Route = createFileRoute('/_navbarLayout/settings/sites')({
   component: RouteComponent,
@@ -37,32 +38,32 @@ function RouteComponent() {
   };
 
   return (
-    <div className="flex">
-      <aside className="flex flex-col w-1/4 p-4 border-r border-gray-300 border-dashed justify-start items-end">
-        {locations.map((location) => (
+    <MasterDetailShell
+      sidebar={
+        <>
+          {locations.map((location) => (
+            <Link
+              key={location._id}
+              className="p-2 w-full"
+              to="/settings/sites/$id"
+              params={{ id: location._id }}
+              activeProps={activeProps}
+            >
+              {location.stationName} - {location.csoCode} - {location.INDNumber}
+            </Link>
+          ))}
+
+          {/* Add New Site Button */}
           <Link
-            key={location._id}
-            className="p-2"
-            to="/settings/sites/$id"
-            params={{ id: location._id }}
-            activeProps={activeProps}
+            to="/settings/sites/new"
+            className="mt-4 px-3 py-2 bg-blue-500 text-white rounded hover:bg-blue-300 w-full text-center"
           >
-            {location.stationName} - {location.csoCode} - {location.INDNumber}
+            + Add New Site
           </Link>
-        ))}
-
-        {/* Add New Site Button */}
-        <Link
-          to="/settings/sites/new"
-          className="mt-4 px-3 py-2 bg-blue-500 text-white rounded hover:bg-blue-300 w-full text-center"
-        >
-          + Add New Site
-        </Link>
-      </aside>
-
-      <main className="w-3/4">
-        <Outlet />
-      </main>
-    </div>
+        </>
+      }
+    >
+      <Outlet />
+    </MasterDetailShell>
   );
 }
