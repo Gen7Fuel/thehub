@@ -294,71 +294,36 @@ async function getBulkUnitPriceCSO(site, gtins = []) {
 }
 
 
-// let pool;
-
-// async function getPool() {
-//   try {
-//     if (!pool) {
-//       console.log("🔌 Creating new SQL connection pool...");
-//       pool = await sql.connect({
-//         server: process.env.SQL_SERVER,
-//         database: process.env.SQL_DB,
-//         user: process.env.SQL_USER,
-//         password: process.env.SQL_PASSWORD,
-//         pool: {
-//           max: 20,           // increase max connections
-//           min: 0,
-//           idleTimeoutMillis: 30000,
-//           acquireTimeoutMillis: 60000, // wait longer before abort
-//         },
-//         options: {
-//           encrypt: true,
-//           trustServerCertificate: false,
-//         },
-//       });
-
-//       // Optional: log when pool is closed
-//       pool.on('error', err => {
-//         console.error("SQL Pool Error:", err);
-//         pool = null; // force reconnect next time
-//       });
-//     }
-
-//     // 🔍 Check if pool is still healthy
-//     if (!pool.connected) {
-//       console.warn("SQL pool was disconnected — reconnecting...");
-//       pool = await sql.connect(pool.config);
-//     }
-
-//     return pool;
-//   } catch (err) {
-//     console.error("Failed to get SQL pool:", err);
-//     pool = null;
-//     throw err;
-//   }
-// }
-
 let pool = null;
 
-async function getPool() {
-  try {
-    if (!pool || !pool.connected) {
-      if (pool) {
-        try { await pool.close(); } catch { }
+async function getPool(retries = 3, delay = 5000) {
+  for (let attempt = 1; attempt <= retries; attempt++) {
+    try {
+      // Re-use active connection if healthy
+      if (pool && pool.connected) {
+        return pool;
       }
 
-      console.log("🔌 Creating new SQL connection pool...");
+      // Clean up dead pool if present
+      if (pool) {
+        try { await pool.close(); } catch { }
+        pool = null;
+      }
+
+      console.log(`🔌 [Attempt ${attempt}/${retries}] Creating new SQL connection pool...`);
+
       pool = await sql.connect({
         server: process.env.SQL_SERVER,
         database: process.env.SQL_DB,
         user: process.env.SQL_USER,
         password: process.env.SQL_PASSWORD,
-        requestTimeout: 60000, // 60s per query (default was 15s)
+        connectionTimeout: 60000, // 60s initial connection timeout (prevents 15s ETIMEOUT)
+        requestTimeout: 60000,    // 60s per query execution
         pool: {
-          max: 50, // increase if VPS can handle it
+          max: 50,
           min: 0,
-          idleTimeoutMillis: 60000, // more time for idle connections
-          acquireTimeoutMillis: 300000, // more time to acquire heavy queries
+          idleTimeoutMillis: 60000,
+          acquireTimeoutMillis: 30000,
         },
         options: {
           encrypt: true,
@@ -369,17 +334,68 @@ async function getPool() {
 
       pool.on("error", (err) => {
         console.error("SQL Pool Error:", err);
-        pool = null; // force reconnect next time
+        pool = null; // Force reset pool on error
       });
-    }
 
-    return pool;
-  } catch (err) {
-    console.error("Failed to get SQL pool:", err);
-    pool = null;
-    throw err;
+      return pool; // Connection succeeded
+
+    } catch (err) {
+      console.error(`❌ Connection attempt ${attempt} failed: ${err.message}`);
+      pool = null;
+
+      if (attempt < retries) {
+        console.log(`⏳ Retrying in ${delay / 1000} seconds...`);
+        await new Promise((resolve) => setTimeout(resolve, delay));
+        delay *= 2; // Exponential backoff (5s -> 10s -> 20s)
+      } else {
+        throw new Error(`Failed to establish SQL connection after ${retries} attempts: ${err.message}`);
+      }
+    }
   }
 }
+
+// let pool = null;
+
+// async function getPool() {
+//   try {
+//     if (!pool || !pool.connected) {
+//       if (pool) {
+//         try { await pool.close(); } catch { }
+//       }
+
+//       console.log("🔌 Creating new SQL connection pool...");
+//       pool = await sql.connect({
+//         server: process.env.SQL_SERVER,
+//         database: process.env.SQL_DB,
+//         user: process.env.SQL_USER,
+//         password: process.env.SQL_PASSWORD,
+//         requestTimeout: 60000, // 60s per query (default was 15s)
+//         pool: {
+//           max: 50, // increase if VPS can handle it
+//           min: 0,
+//           idleTimeoutMillis: 60000, // more time for idle connections
+//           acquireTimeoutMillis: 300000, // more time to acquire heavy queries
+//         },
+//         options: {
+//           encrypt: true,
+//           trustServerCertificate: false,
+//           enableArithAbort: true,
+//         },
+//       });
+
+//       pool.on("error", (err) => {
+//         console.error("SQL Pool Error:", err);
+//         pool = null; // force reconnect next time
+//       });
+//     }
+
+//     return pool;
+//   } catch (err) {
+//     console.error("Failed to get SQL pool:", err);
+//     pool = null;
+//     throw err;
+//   }
+// }
 
 async function getUPC_barcode(gtin) {
   try {
