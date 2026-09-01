@@ -6,6 +6,7 @@ import { InputOTP, InputOTPGroup, InputOTPSeparator, InputOTPSlot } from '@/comp
 import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Switch } from '@/components/ui/switch'
 import { createFileRoute, Link, useNavigate } from '@tanstack/react-router'
+import { useQuery } from '@tanstack/react-query'
 import { useAuth } from '@/context/AuthContext'
 import { useSite } from '@/context/SiteContext'
 import { useFormStore } from '@/store'
@@ -15,6 +16,7 @@ import { LocationPicker } from '@/components/custom/locationPicker';
 import { domain } from '@/lib/constants'
 import { Camera, ExternalLink } from 'lucide-react'
 import { getCachedArCustomers, saveCachedArCustomers } from '@/lib/arCustomersCache'
+import { getCachedLocations, saveCachedLocations } from '@/lib/locationsCache'
 
 interface Product {
   _id: string
@@ -33,6 +35,17 @@ interface QuickSelectCustomer {
   fleetCardNumber: string
   label?: string
   order: number
+}
+
+interface RegisterOption {
+  _id?: string
+  number: string
+}
+
+interface LocationWithRegisters {
+  _id: string
+  stationName: string
+  registers?: RegisterOption[]
 }
 
 const PRODUCTS_CACHE_KEY = 'po_cachedProducts'
@@ -66,6 +79,25 @@ async function loader() {
     } catch {
       return { products: [] }
     }
+  }
+}
+
+// Shares the ['locations'] react-query cache key with LocationPicker
+// (frontend/src/components/custom/locationPicker.tsx) — this is a cache-shared
+// read, not a duplicate network fetch, whichever component's query settles first.
+const fetchLocationsForRegisters = async (): Promise<LocationWithRegisters[]> => {
+  try {
+    const token = localStorage.getItem('token')
+    const response = await axios.get(`${domain}/api/locations`, {
+      headers: { Authorization: `Bearer ${token}` },
+      timeout: 5000,
+    })
+    saveCachedLocations(response.data)
+    return response.data
+  } catch (err) {
+    const cached = getCachedLocations<LocationWithRegisters>()
+    if (cached.length > 0) return cached
+    throw err
   }
 }
 
@@ -119,6 +151,9 @@ function RouteComponent() {
   const itemsDescription = useFormStore((state) => state.itemsDescription)
   const setItemsDescription = useFormStore((state) => state.setItemsDescription)
 
+  const register = useFormStore((state) => state.register)
+  const setRegister = useFormStore((state) => state.setRegister)
+
   const receipt = useFormStore((state) => state.receipt)
   const setReceipt = useFormStore((state) => state.setReceipt)
 
@@ -127,6 +162,25 @@ function RouteComponent() {
   const setStationName = useFormStore((state) => state.setStationName)
   const isClassicPoNumberSite = CLASSIC_PO_NUMBER_SITES.includes(stationName)
   const isFleetCardOnlySite = !isClassicPoNumberSite
+
+  // DB-driven per-site config (unlike isFleetCardOnlySite above, which is a
+  // hardcoded site-name array) — only sites with 2+ registers configured show
+  // the selector below.
+  const { data: locationsForRegisters } = useQuery({
+    queryKey: ['locations'],
+    queryFn: fetchLocationsForRegisters,
+    initialData: () => {
+      const cached = getCachedLocations<LocationWithRegisters>()
+      return cached.length > 0 ? cached : undefined
+    },
+    initialDataUpdatedAt: 0,
+  })
+
+  const currentSiteRegisters = useMemo(
+    () => locationsForRegisters?.find((l) => l.stationName === stationName)?.registers ?? [],
+    [locationsForRegisters, stationName]
+  )
+  const showRegisterSelector = currentSiteRegisters.length >= 2
 
   const [poError, setPoError] = useState<string>('')
   const [cardStatus, setCardStatus] = useState<string | null>(null)
@@ -261,6 +315,13 @@ function RouteComponent() {
     if (!isFleetCardOnlySite) setNoFleetCard(false)
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isFleetCardOnlySite])
+
+  // Never let a register selection survive a site switch — required with no
+  // default, so a stale value from a previous site must not silently carry over.
+  useEffect(() => {
+    setRegister('')
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [stationName])
 
   // Helpers for 5-digit numeric PO input
   const toFiveDigits = (s: string) => {
@@ -434,6 +495,24 @@ function RouteComponent() {
           </div>
         </div>
       </div>
+
+      {showRegisterSelector && (
+        <div className="space-y-2">
+          <h2 className="text-lg font-bold">Register</h2>
+          <div className="flex rounded-md border border-input overflow-hidden w-fit">
+            {currentSiteRegisters.map((r, idx) => (
+              <button
+                key={r._id ?? r.number}
+                type="button"
+                onClick={() => setRegister(r.number)}
+                className={toggleClass(register === r.number, idx > 0 ? 'border-l border-input' : '')}
+              >
+                {r.number}
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
 
       {/* Number + Date on the same row */}
       <div className="flex items-start justify-between gap-4">
@@ -719,7 +798,7 @@ function RouteComponent() {
               if (isClassicPoNumberSite && numberType === 'po') setPoNumber(padFive(poNumber));
               fileInputRef.current?.click();
             }}
-            disabled={!!poError || !customerName || !driverName || (purchaseType === 'fuel' ? quantity === 0 : !itemsDescription) || (isFleetCardOnlySite ? (!noFleetCard && cardStatus !== 'active' && cardStatus !== 'offline') : (numberType === 'fleet' && cardStatus !== 'active' && cardStatus !== 'offline'))}
+            disabled={!!poError || !customerName || !driverName || (purchaseType === 'fuel' ? quantity === 0 : !itemsDescription) || (isFleetCardOnlySite ? (!noFleetCard && cardStatus !== 'active' && cardStatus !== 'offline') : (numberType === 'fleet' && cardStatus !== 'active' && cardStatus !== 'offline')) || (showRegisterSelector && !register)}
           >
             <Camera className="mr-2 h-4 w-4" />
             Upload Receipt

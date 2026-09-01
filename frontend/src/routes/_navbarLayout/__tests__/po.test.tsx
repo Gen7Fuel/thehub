@@ -47,6 +47,8 @@ const {
     setPurchaseType: vi.fn(),
     itemsDescription: '' as string,
     setItemsDescription: vi.fn(),
+    register: '' as string,
+    setRegister: vi.fn(),
     receipt: 'data:image/png;base64,abc' as string | null,
     setReceipt: vi.fn(),
     signature: 'data:image/png;base64,sig' as string | null,
@@ -286,6 +288,7 @@ const resetStore = () => {
   mockStore.fuelType = 'UNL'
   mockStore.purchaseType = 'fuel'
   mockStore.itemsDescription = ''
+  mockStore.register = ''
   mockStore.receipt = 'data:image/png;base64,abc'
   mockStore.signature = 'data:image/png;base64,sig'
   mockStore.date = new Date(2026, 0, 15)
@@ -314,7 +317,7 @@ describe('PO Form — index.tsx', () => {
   it('renders the location picker and defaults to "no fleet card", leaving Upload Receipt enabled', async () => {
     // receipt must be null so the camera/upload button is rendered (not "View Captured Receipt")
     mockStore.receipt = null
-    renderWithSuspense(<POForm />)
+    renderWithQuery(<POForm />)
     // Allow up to 5 s on the first render — the lazy route module needs to load
     await waitFor(() => {
       expect(screen.getByTestId('date-picker')).toBeInTheDocument()
@@ -330,7 +333,7 @@ describe('PO Form — index.tsx', () => {
 
   it('shows the Fleet Card OTP input once the switch is toggled to "has a fleet card"', async () => {
     mockStore.noFleetCard = false
-    renderWithSuspense(<POForm />)
+    renderWithQuery(<POForm />)
 
     await waitFor(() => {
       expect(screen.getByTestId('otp-input')).toBeInTheDocument()
@@ -343,10 +346,11 @@ describe('PO Form — index.tsx', () => {
     mockStore.poNumber = '12345'
     mockAxiosGet.mockImplementation((url: string) => {
       if (url.includes('ar-customers')) return Promise.resolve({ data: [] })
+      if (url.includes('/api/locations')) return Promise.resolve({ data: [] })
       return Promise.resolve({ data: { unique: false } })
     })
 
-    renderWithSuspense(<POForm />)
+    renderWithQuery(<POForm />)
     const otpInput = await waitFor(() => screen.getByTestId('otp-input'), { timeout: 5000 })
     fireEvent.blur(otpInput)
 
@@ -362,10 +366,11 @@ describe('PO Form — index.tsx', () => {
     mockStore.poNumber = '12345'
     mockAxiosGet.mockImplementation((url: string) => {
       if (url.includes('ar-customers')) return Promise.resolve({ data: [] })
+      if (url.includes('/api/locations')) return Promise.resolve({ data: [] })
       return Promise.resolve({ data: { unique: true } })
     })
 
-    renderWithSuspense(<POForm />)
+    renderWithQuery(<POForm />)
     const otpInput = await waitFor(() => screen.getByTestId('otp-input'), { timeout: 5000 })
     fireEvent.blur(otpInput)
 
@@ -379,7 +384,7 @@ describe('PO Form — index.tsx', () => {
     // receipt must be null so the camera/upload button is rendered (not "View Captured Receipt")
     mockStore.receipt = null
     mockStore.customerName = ''
-    renderWithSuspense(<POForm />)
+    renderWithQuery(<POForm />)
 
     await waitFor(() => {
       const uploadBtn = screen.getByRole('button', { name: /upload receipt/i })
@@ -390,7 +395,7 @@ describe('PO Form — index.tsx', () => {
   it.each(['Rankin', 'Sarnia', 'Walpole', 'Jocko Point', 'Charlies'])('shows the Fleet Card switch (defaulting to no card) for site "%s"', async (site) => {
     mockStore.stationName = site
     mockStore.receipt = null
-    renderWithSuspense(<POForm />)
+    renderWithQuery(<POForm />)
 
     await waitFor(() => {
       expect(screen.getByText('Customer has fleet card')).toBeInTheDocument()
@@ -413,7 +418,7 @@ describe('PO Form — index.tsx', () => {
       return Promise.resolve({ data: [] })
     })
 
-    renderWithSuspense(<POForm />)
+    renderWithQuery(<POForm />)
     const quickBtn = await waitFor(() => screen.getByRole('button', { name: 'Acme' }), { timeout: 5000 })
     fireEvent.click(quickBtn)
 
@@ -423,7 +428,7 @@ describe('PO Form — index.tsx', () => {
 
   it.each(['Wavers West', 'Wavers East', 'Oliver', 'Osoyoos'])('shows the classic PO Number / Fleet Card toggle (no Switch) for site "%s"', async (site) => {
     mockStore.stationName = site
-    renderWithSuspense(<POForm />)
+    renderWithQuery(<POForm />)
 
     await waitFor(() => {
       expect(screen.getByText('Number')).toBeInTheDocument()
@@ -444,7 +449,7 @@ describe('PO Form — index.tsx', () => {
       return Promise.resolve({ data: [] })
     })
 
-    renderWithSuspense(<POForm />)
+    renderWithQuery(<POForm />)
 
     await waitFor(() =>
       expect(screen.getByRole('button', { name: 'Batchewana' })).toBeInTheDocument()
@@ -465,7 +470,7 @@ describe('PO Form — index.tsx', () => {
       return Promise.resolve({ data: [] })
     })
 
-    renderWithSuspense(<POForm />)
+    renderWithQuery(<POForm />)
 
     const nameInput = await waitFor(() => screen.getByDisplayValue('Jane Doe'), { timeout: 5000 })
     fireEvent.focus(nameInput)
@@ -484,7 +489,7 @@ describe('PO Form — index.tsx', () => {
       return Promise.resolve({ data: [] })
     })
 
-    renderWithSuspense(<POForm />)
+    renderWithQuery(<POForm />)
 
     await waitFor(() => {
       const cached = localStorage.getItem('po_cachedArCustomers')
@@ -504,7 +509,7 @@ describe('PO Form — index.tsx', () => {
       return Promise.resolve({ data: [] })
     })
 
-    renderWithSuspense(<POForm />)
+    renderWithQuery(<POForm />)
 
     await waitFor(() =>
       expect(screen.getByRole('button', { name: 'Cached' })).toBeInTheDocument()
@@ -523,7 +528,7 @@ describe('PO Form — index.tsx', () => {
       return Promise.resolve({ data: [] })
     })
 
-    renderWithSuspense(<POForm />)
+    renderWithQuery(<POForm />)
 
     const quickBtn = await waitFor(() => screen.getByRole('button', { name: 'Three Fires' }), { timeout: 5000 })
     expect(screen.queryByText('Three', { selector: 'button' })).not.toBeInTheDocument()
@@ -535,12 +540,56 @@ describe('PO Form — index.tsx', () => {
   it.each(['Rankin', 'Sarnia', 'Walpole', 'Jocko Point', 'Charlies'])('does not pad poNumber to "00000" when clicking Upload Receipt on site "%s"', async (site) => {
     mockStore.stationName = site
     mockStore.receipt = null
-    renderWithSuspense(<POForm />)
+    renderWithQuery(<POForm />)
 
     const uploadBtn = await waitFor(() => screen.getByRole('button', { name: /upload receipt/i }), { timeout: 5000 })
     fireEvent.click(uploadBtn)
 
     expect(mockStore.setPoNumber).not.toHaveBeenCalledWith('00000')
+  })
+
+  it('hides the Register selector when the site has 0 or 1 registers configured', async () => {
+    mockStore.receipt = null
+    mockAxiosGet.mockImplementation((url: string) => {
+      if (url.includes('/api/locations')) {
+        return Promise.resolve({
+          data: [{ _id: 'loc1', stationName: 'TestSite', registers: [{ number: '1' }] }],
+        })
+      }
+      return Promise.resolve({ data: [] })
+    })
+
+    renderWithQuery(<POForm />)
+
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: /upload receipt/i })).toBeInTheDocument()
+    }, { timeout: 5000 })
+
+    expect(screen.queryByText('Register')).not.toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /upload receipt/i })).not.toBeDisabled()
+  })
+
+  it('shows Register buttons and disables Upload Receipt until one is picked, for a site with 2+ registers', async () => {
+    mockStore.receipt = null
+    mockAxiosGet.mockImplementation((url: string) => {
+      if (url.includes('/api/locations')) {
+        return Promise.resolve({
+          data: [{ _id: 'loc1', stationName: 'TestSite', registers: [{ number: '1' }, { number: '2' }] }],
+        })
+      }
+      return Promise.resolve({ data: [] })
+    })
+
+    renderWithQuery(<POForm />)
+
+    await waitFor(() => {
+      expect(screen.getByText('Register')).toBeInTheDocument()
+    }, { timeout: 5000 })
+
+    expect(screen.getByRole('button', { name: /upload receipt/i })).toBeDisabled()
+
+    fireEvent.click(screen.getByRole('button', { name: '2' }))
+    expect(mockStore.setRegister).toHaveBeenCalledWith('2')
   })
 })
 

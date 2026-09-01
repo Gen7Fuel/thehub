@@ -90,6 +90,11 @@ interface PushoverDevice {
   notificationEnabled: boolean;
 }
 
+interface Register {
+  _id?: string;
+  number: string;
+}
+
 interface LocationForm {
   type: string;
   stationName: string;
@@ -105,6 +110,7 @@ interface LocationForm {
   gasBuddyStationId?: string;
   pushOverUserKey: string;
   devices: PushoverDevice[];
+  registers: Register[];
   storeHours: StoreHours;
 }
 
@@ -119,6 +125,11 @@ function RouteComponent() {
   const [pushoverDialogOpen, setPushoverDialogOpen] = useState(false);
   const [newDeviceName, setNewDeviceName] = useState("");
   const [isSavingPushover, setIsSavingPushover] = useState(false);
+
+  // --- Registers State Machinery ---
+  const [registersDialogOpen, setRegistersDialogOpen] = useState(false);
+  const [newRegisterNumber, setNewRegisterNumber] = useState("");
+  const [isSavingRegisters, setIsSavingRegisters] = useState(false);
 
   const { id } = Route.useParams();
   const navigate = useNavigate();
@@ -150,6 +161,7 @@ function RouteComponent() {
     gasBuddyStationId: "",
     pushOverUserKey: "",
     devices: [],
+    registers: [],
     storeHours: DEFAULT_STORE_HOURS,
   });
 
@@ -227,6 +239,7 @@ function RouteComponent() {
         gasBuddyStationId: location.gasBuddyStationId || "",
         pushOverUserKey: location.pushOverUserKey || "",
         devices: location.devices || [],
+        registers: location.registers || [],
         storeHours: location.storeHours
           ? { ...DEFAULT_STORE_HOURS, ...location.storeHours }
           : DEFAULT_STORE_HOURS,
@@ -417,6 +430,72 @@ function RouteComponent() {
     }
   };
 
+  // --- Granular Registers Form Actions ---
+  const handleAddRegisterRecord = () => {
+    const cleanNumber = newRegisterNumber.trim();
+    if (!cleanNumber) return;
+
+    if (
+      formData.registers.some(
+        (r) => r.number.toLowerCase() === cleanNumber.toLowerCase(),
+      )
+    ) {
+      return alert("A register with this number already exists.");
+    }
+
+    setFormData({
+      ...formData,
+      registers: [...formData.registers, { number: cleanNumber }],
+    });
+    setNewRegisterNumber("");
+  };
+
+  const handleUpdateRegisterNumber = (index: number, value: string) => {
+    const deepCopiedArray = [...formData.registers];
+    deepCopiedArray[index] = { ...deepCopiedArray[index], number: value };
+    setFormData({ ...formData, registers: deepCopiedArray });
+  };
+
+  const handleRemoveRegisterRecord = (index: number) => {
+    setFormData({
+      ...formData,
+      registers: formData.registers.filter((_, i) => i !== index),
+    });
+  };
+
+  const handleSaveRegistersConfiguration = async () => {
+    const trimmed = formData.registers.map((r) => ({
+      ...r,
+      number: r.number.trim(),
+    }));
+    const seen = new Set<string>();
+    for (const r of trimmed) {
+      if (!r.number) return alert("Register numbers cannot be blank.");
+      const key = r.number.toLowerCase();
+      if (seen.has(key)) return alert(`Duplicate register number: "${r.number}"`);
+      seen.add(key);
+    }
+
+    setIsSavingRegisters(true);
+    try {
+      const token = localStorage.getItem("token");
+      await axios.put(
+        `/api/locations/${id}`,
+        { ...formData, registers: trimmed, managerCode: otp },
+        { headers: { Authorization: `Bearer ${token}` } },
+      );
+
+      alert("Registers updated successfully!");
+      setRegistersDialogOpen(false);
+      await fetchLocation();
+    } catch (error) {
+      console.error(error);
+      alert("Failed to update registers.");
+    } finally {
+      setIsSavingRegisters(false);
+    }
+  };
+
   const handleHourChange = (
     day: WeekDays,
     field: "open" | "close",
@@ -519,6 +598,15 @@ function RouteComponent() {
                 🔔 Manage Pushover (
                 {formData.devices.filter((d) => d.notificationEnabled).length}{" "}
                 Active)
+              </Button>
+
+              <Button
+                variant="outline"
+                type="button"
+                className="border-slate-500 text-slate-600 hover:bg-slate-50"
+                onClick={() => setRegistersDialogOpen(true)}
+              >
+                Manage Registers ({formData.registers.length})
               </Button>
             </div>
           </div>
@@ -877,6 +965,90 @@ function RouteComponent() {
               disabled={isSavingPushover}
             >
               {isSavingPushover ? "Saving..." : "Save Route Configuration"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* --- REGISTERS MANAGER MODAL --- */}
+      <Dialog open={registersDialogOpen} onOpenChange={setRegistersDialogOpen}>
+        <DialogContent className="max-w-xl max-h-[85vh] flex flex-col">
+          <DialogHeader>
+            <DialogTitle className="text-xl">Manage Registers</DialogTitle>
+            <p className="text-xs text-muted-foreground">
+              Registers/tills available at this site. The PO form only shows
+              a Register selector once 2 or more are configured here.
+            </p>
+          </DialogHeader>
+
+          <div className="flex-1 overflow-y-auto my-2 space-y-4 pr-1">
+            <div className="border rounded-xl p-4 bg-slate-50/50 space-y-3">
+              <Label className="font-semibold text-sm block">Registers</Label>
+
+              <div className="flex gap-2">
+                <Input
+                  type="text"
+                  placeholder="e.g., 1"
+                  value={newRegisterNumber}
+                  onChange={(e) => setNewRegisterNumber(e.target.value)}
+                  onKeyDown={(e) =>
+                    e.key === "Enter" &&
+                    (e.preventDefault(), handleAddRegisterRecord())
+                  }
+                  className="bg-white"
+                />
+                <Button type="button" onClick={handleAddRegisterRecord}>
+                  Add Register
+                </Button>
+              </div>
+
+              <div className="space-y-1.5 mt-2 max-h-48 overflow-y-auto">
+                {formData.registers.length === 0 ? (
+                  <p className="text-xs text-gray-400 italic py-2 text-center">
+                    No registers configured for this site.
+                  </p>
+                ) : (
+                  formData.registers.map((reg, idx) => (
+                    <div
+                      key={reg._id ?? idx}
+                      className="flex items-center justify-between bg-white border p-2.5 rounded-lg text-sm gap-3"
+                    >
+                      <Input
+                        type="text"
+                        value={reg.number}
+                        onChange={(e) =>
+                          handleUpdateRegisterNumber(idx, e.target.value)
+                        }
+                        className="font-mono font-medium text-slate-800 h-8"
+                      />
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="sm"
+                        className="text-red-500 hover:text-red-700 hover:bg-red-50 h-7 px-2"
+                        onClick={() => handleRemoveRegisterRecord(idx)}
+                      >
+                        Remove
+                      </Button>
+                    </div>
+                  ))
+                )}
+              </div>
+            </div>
+          </div>
+
+          <DialogFooter className="pt-3 border-t">
+            <Button
+              variant="outline"
+              onClick={() => setRegistersDialogOpen(false)}
+            >
+              Cancel
+            </Button>
+            <Button
+              onClick={handleSaveRegistersConfiguration}
+              disabled={isSavingRegisters}
+            >
+              {isSavingRegisters ? "Saving..." : "Save Registers"}
             </Button>
           </DialogFooter>
         </DialogContent>
