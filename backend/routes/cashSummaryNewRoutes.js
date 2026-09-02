@@ -1828,6 +1828,95 @@ router.get('/ar-check-range', async (req, res) => {
   }
 })
 
+// router.get('/ar-check', async (req, res) => {
+//   const { site, date } = req.query
+//   if (!site || !date) return res.status(400).json({ error: 'site and date required' })
+
+//   try {
+//     const start = new Date(date); start.setUTCHours(0, 0, 0, 0)
+//     const end = new Date(date); end.setUTCHours(23, 59, 59, 999)
+
+//     const shiftRows = await CashSummary.aggregate([
+//       { $match: { site, date: { $gte: start, $lte: end } } },
+//       {
+//         $group: {
+//           _id: { $substr: [{ $ifNull: ['$shift_number', ''] }, 0, 1] },
+//           total: { $sum: { $ifNull: ['$arIncurred', 0] } },
+//         },
+//       },
+//     ])
+
+//     // Transactions are stored as exact submission timestamps in UTC, so we must
+//     // query using the site's local timezone day boundaries, not UTC midnight.
+//     // Fallback branch covers PO docs (and all Kardpoll docs) that predate the
+//     // dateStr migration and don't have a dateStr field yet.
+//     const location = await Location.findOne({ site }, { timezone: 1 }).lean()
+//     const tz = location?.timezone || 'America/Toronto'
+//     const txStart = DateTime.fromISO(date, { zone: tz }).startOf('day').toJSDate()
+//     const txEnd = DateTime.fromISO(date, { zone: tz }).endOf('day').toJSDate()
+
+//     const transactionRows = await Transactions.aggregate([
+//       {
+//         $match: {
+//           stationName: site,
+//           deletedAt: null,
+//           $or: [
+//             { dateStr: date },
+//             { dateStr: { $exists: false }, date: { $gte: txStart, $lte: txEnd } },
+//           ],
+//         },
+//       },
+//       {
+//         $group: {
+//           _id: { $toString: { $ifNull: ['$register', 'Unassigned'] } },
+//           total: { $sum: { $ifNull: ['$amount', 0] } },
+//         },
+//       },
+//     ])
+
+//     const byRegisterMap = new Map()
+//     for (const row of shiftRows) {
+//       const register = /^[1-4]$/.test(String(row._id || '')) ? String(row._id) : 'Unassigned'
+//       byRegisterMap.set(register, { register, arIncurredTotal: row.total ?? 0, transactionsTotal: 0 })
+//     }
+//     for (const row of transactionRows) {
+//       const register = row._id && row._id !== '' ? String(row._id) : 'Unassigned'
+//       const existing = byRegisterMap.get(register) || { register, arIncurredTotal: 0, transactionsTotal: 0 }
+//       existing.transactionsTotal = row.total ?? 0
+//       byRegisterMap.set(register, existing)
+//     }
+
+//     const byRegister = Array.from(byRegisterMap.values())
+//       .map((r) => ({
+//         register: r.register,
+//         arIncurredTotal: Math.round((r.arIncurredTotal ?? 0) * 100) / 100,
+//         transactionsTotal: Math.round((r.transactionsTotal ?? 0) * 100) / 100,
+//         match: Math.round((r.arIncurredTotal ?? 0) * 100) === Math.round((r.transactionsTotal ?? 0) * 100),
+//       }))
+//       .sort((a, b) => a.register.localeCompare(b.register, undefined, { numeric: true }))
+
+//     const arIncurredTotal = byRegister.reduce((sum, r) => sum + r.arIncurredTotal, 0)
+//     const transactionsTotal = byRegister.reduce((sum, r) => sum + r.transactionsTotal, 0)
+//     const match = Math.round(arIncurredTotal * 100) === Math.round(transactionsTotal * 100)
+
+//     res.json({
+//       arIncurredTotal: Math.round(arIncurredTotal * 100) / 100,
+//       transactionsTotal: Math.round(transactionsTotal * 100) / 100,
+//       match,
+//       byRegister,
+//     })
+//   } catch (err) {
+//     console.error('AR check error:', err)
+//     res.status(500).json({ error: 'Failed to check AR totals' })
+//   }
+// })
+
+// Monthly A/R paid report for the two Wavers sites — every A/R customer entry
+// with a non-zero `paid` amount, grouped by site. Consumed by Desk's
+// "A/R Paid Report" page, which renders the .docx client-side.
+//
+// MUST stay above router.get('/:id') below, or Express hands 'ar-paid-report'
+// to findById and the request 500s on a CastError.
 router.get('/ar-check', async (req, res) => {
   const { site, date } = req.query
   if (!site || !date) return res.status(400).json({ error: 'site and date required' })
@@ -1836,26 +1925,41 @@ router.get('/ar-check', async (req, res) => {
     const start = new Date(date); start.setUTCHours(0, 0, 0, 0)
     const end = new Date(date); end.setUTCHours(23, 59, 59, 999)
 
-    const shiftRows = await CashSummary.aggregate([
-      { $match: { site, date: { $gte: start, $lte: end } } },
-      {
-        $group: {
-          _id: { $substr: [{ $ifNull: ['$shift_number', ''] }, 0, 1] },
-          total: { $sum: { $ifNull: ['$arIncurred', 0] } },
-        },
-      },
-    ])
+    // 1. Fetch POS Cash Summary documents
+    const cashSummaries = await CashSummary.find(
+      { site, date: { $gte: start, $lte: end } },
+      { shift_number: 1, arCustomers: 1, arIncurred: 1 }
+    ).lean()
 
-    // Transactions are stored as exact submission timestamps in UTC, so we must
-    // query using the site's local timezone day boundaries, not UTC midnight.
-    // Fallback branch covers PO docs (and all Kardpoll docs) that predate the
-    // dateStr migration and don't have a dateStr field yet.
+    const extractRegister = (shiftStr) => {
+      const s = String(shiftStr || '').trim()
+      if (/^[1-4]/.test(s)) return s.charAt(0)
+      return 'Unassigned'
+    }
+
+    const posEntries = []
+    for (const doc of cashSummaries) {
+      const register = extractRegister(doc.shift_number)
+      if (Array.isArray(doc.arCustomers)) {
+        for (const item of doc.arCustomers) {
+          if (item && item.name && (item.incurred || 0) > 0) {
+            posEntries.push({
+              register,
+              customerName: String(item.name).trim(),
+              incurred: Number(item.incurred) || 0,
+            })
+          }
+        }
+      }
+    }
+
+    // 2. Fetch Hub Transactions
     const location = await Location.findOne({ site }, { timezone: 1 }).lean()
     const tz = location?.timezone || 'America/Toronto'
     const txStart = DateTime.fromISO(date, { zone: tz }).startOf('day').toJSDate()
     const txEnd = DateTime.fromISO(date, { zone: tz }).endOf('day').toJSDate()
 
-    const transactionRows = await Transactions.aggregate([
+    const hubEntries = await Transactions.aggregate([
       {
         $match: {
           stationName: site,
@@ -1868,32 +1972,109 @@ router.get('/ar-check', async (req, res) => {
       },
       {
         $group: {
-          _id: { $toString: { $ifNull: ['$register', 'Unassigned'] } },
+          _id: {
+            register: { $toString: { $ifNull: ['$register', 'Unassigned'] } },
+            customerName: { $trim: { input: { $ifNull: ['$customerName', 'Unknown'] } } },
+          },
           total: { $sum: { $ifNull: ['$amount', 0] } },
         },
       },
     ])
 
-    const byRegisterMap = new Map()
-    for (const row of shiftRows) {
-      const register = /^[1-4]$/.test(String(row._id || '')) ? String(row._id) : 'Unassigned'
-      byRegisterMap.set(register, { register, arIncurredTotal: row.total ?? 0, transactionsTotal: 0 })
-    }
-    for (const row of transactionRows) {
-      const register = row._id && row._id !== '' ? String(row._id) : 'Unassigned'
-      const existing = byRegisterMap.get(register) || { register, arIncurredTotal: 0, transactionsTotal: 0 }
-      existing.transactionsTotal = row.total ?? 0
-      byRegisterMap.set(register, existing)
+    const normalize = (str) => str.toLowerCase().replace(/[^a-z0-9]/g, '')
+
+    // 3. Build strict structure: Map<Register, Map<CustomerKey, Record>>
+    const registerMap = new Map()
+
+    const getOrCreateRegister = (reg) => {
+      const regKey = reg && reg !== '' ? reg : 'Unassigned'
+      if (!registerMap.has(regKey)) {
+        registerMap.set(regKey, new Map())
+      }
+      return registerMap.get(regKey)
     }
 
-    const byRegister = Array.from(byRegisterMap.values())
-      .map((r) => ({
-        register: r.register,
-        arIncurredTotal: Math.round((r.arIncurredTotal ?? 0) * 100) / 100,
-        transactionsTotal: Math.round((r.transactionsTotal ?? 0) * 100) / 100,
-        match: Math.round((r.arIncurredTotal ?? 0) * 100) === Math.round((r.transactionsTotal ?? 0) * 100),
-      }))
-      .sort((a, b) => a.register.localeCompare(b.register, undefined, { numeric: true }))
+    // Populate POS (Left Side) strictly in its own register map
+    for (const item of posEntries) {
+      const custMap = getOrCreateRegister(item.register)
+      const normName = normalize(item.customerName)
+
+      let existingKey = Array.from(custMap.keys()).find(
+        (k) => k === normName || k.startsWith(normName) || normName.startsWith(k)
+      )
+
+      if (!existingKey) {
+        existingKey = normName
+        custMap.set(existingKey, {
+          posCustomerName: item.customerName,
+          hubCustomerName: null,
+          arIncurredTotal: 0,
+          transactionsTotal: 0,
+        })
+      }
+
+      const record = custMap.get(existingKey)
+      record.arIncurredTotal += item.incurred
+    }
+
+    // Populate Hub (Right Side) strictly in ITS specified register map
+    for (const row of hubEntries) {
+      const regKey = row._id.register && row._id.register !== '' ? String(row._id.register) : 'Unassigned'
+      const custMap = getOrCreateRegister(regKey)
+      const rawName = row._id.customerName || 'Unknown'
+      const normName = normalize(rawName)
+
+      // Search ONLY within this specific register
+      let existingKey = Array.from(custMap.keys()).find(
+        (k) => k === normName || k.startsWith(normName) || normName.startsWith(k)
+      )
+
+      if (!existingKey) {
+        existingKey = normName
+        custMap.set(existingKey, {
+          posCustomerName: null,
+          hubCustomerName: rawName,
+          arIncurredTotal: 0,
+          transactionsTotal: 0,
+        })
+      }
+
+      const record = custMap.get(existingKey)
+      if (!record.hubCustomerName) {
+        record.hubCustomerName = rawName
+      }
+      record.transactionsTotal += row.total ?? 0
+    }
+
+    // 4. Transform output data
+    const byRegister = Array.from(registerMap.entries()).map(([register, custMap]) => {
+      const customers = Array.from(custMap.values()).map((c) => {
+        const arIncurredTotal = Math.round((c.arIncurredTotal || 0) * 100) / 100
+        const transactionsTotal = Math.round((c.transactionsTotal || 0) * 100) / 100
+        const diff = Math.round((transactionsTotal - arIncurredTotal) * 100) / 100
+
+        return {
+          customerName: c.posCustomerName || c.hubCustomerName || 'Unknown',
+          posCustomerName: c.posCustomerName || '—',
+          hubCustomerName: c.hubCustomerName || '—',
+          arIncurredTotal,
+          transactionsTotal,
+          diff,
+          match: arIncurredTotal === transactionsTotal,
+        }
+      }).sort((a, b) => a.customerName.localeCompare(b.customerName))
+
+      const regArIncurred = customers.reduce((sum, c) => sum + c.arIncurredTotal, 0)
+      const regTxTotal = customers.reduce((sum, c) => sum + c.transactionsTotal, 0)
+
+      return {
+        register,
+        arIncurredTotal: Math.round(regArIncurred * 100) / 100,
+        transactionsTotal: Math.round(regTxTotal * 100) / 100,
+        match: Math.round(regArIncurred * 100) === Math.round(regTxTotal * 100),
+        customers,
+      }
+    }).sort((a, b) => a.register.localeCompare(b.register, undefined, { numeric: true }))
 
     const arIncurredTotal = byRegister.reduce((sum, r) => sum + r.arIncurredTotal, 0)
     const transactionsTotal = byRegister.reduce((sum, r) => sum + r.transactionsTotal, 0)
@@ -1911,12 +2092,6 @@ router.get('/ar-check', async (req, res) => {
   }
 })
 
-// Monthly A/R paid report for the two Wavers sites — every A/R customer entry
-// with a non-zero `paid` amount, grouped by site. Consumed by Desk's
-// "A/R Paid Report" page, which renders the .docx client-side.
-//
-// MUST stay above router.get('/:id') below, or Express hands 'ar-paid-report'
-// to findById and the request 500s on a CastError.
 router.get('/ar-paid-report', async (req, res) => {
   try {
     const month = String(req.query.month || '')
