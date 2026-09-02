@@ -1,7 +1,6 @@
 import React from 'react'
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { render, screen, fireEvent, waitFor } from '@testing-library/react'
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 
 // ─── Hoisted mutable state ─────────────────────────────────────────────────────
 
@@ -29,8 +28,6 @@ const {
     setPayablePaymentMethod: vi.fn(),
     payableAmount: 150 as number,
     setPayableAmount: vi.fn(),
-    payableRegister: '' as string,
-    setPayableRegister: vi.fn(),
     payableImages: [] as string[],
     setPayableImages: vi.fn(),
     // Local-midnight construction, matching how the Calendar picker actually
@@ -191,29 +188,12 @@ const renderWithSuspense = (ui: React.ReactElement) =>
     ),
   })
 
-/** Wraps a component in QueryClientProvider + Suspense — needed by any
- * component that calls useQuery directly (payables/index.tsx's Register
- * selector queries ['locations']). Mirrors po.test.tsx's renderWithQuery. */
-const renderWithQuery = (ui: React.ReactElement) => {
-  const qc = new QueryClient({
-    defaultOptions: { queries: { retry: false } },
-  })
-  return render(ui, {
-    wrapper: ({ children }: { children: React.ReactNode }) => (
-      <QueryClientProvider client={qc}>
-        <React.Suspense fallback={null}>{children}</React.Suspense>
-      </QueryClientProvider>
-    ),
-  })
-}
-
 const resetStore = () => {
   mockStore.payableVendorName = 'Shell Canada'
   mockStore.payableLocation = 'Rankin'
   mockStore.payableNotes = ''
   mockStore.payablePaymentMethod = 'safe'
   mockStore.payableAmount = 150
-  mockStore.payableRegister = ''
   mockStore.payableImages = []
   mockStore.date = new Date(2026, 2, 10)
 }
@@ -232,7 +212,7 @@ describe('Payable Form — index.tsx', () => {
   })
 
   it('renders the Vendor Name input', async () => {
-    renderWithQuery(<PayableForm />)
+    renderWithSuspense(<PayableForm />)
     await waitFor(() =>
       expect(screen.getByPlaceholderText(/vendor name/i)).toBeInTheDocument(),
       { timeout: 5000 }
@@ -240,7 +220,7 @@ describe('Payable Form — index.tsx', () => {
   })
 
   it('renders the Amount input', async () => {
-    renderWithQuery(<PayableForm />)
+    renderWithSuspense(<PayableForm />)
     await waitFor(() =>
       expect(screen.getByPlaceholderText(/amount/i)).toBeInTheDocument(),
       { timeout: 5000 }
@@ -248,21 +228,21 @@ describe('Payable Form — index.tsx', () => {
   })
 
   it('renders the location picker', async () => {
-    renderWithQuery(<PayableForm />)
+    renderWithSuspense(<PayableForm />)
     await waitFor(() =>
       expect(screen.getByTestId('location-picker')).toBeInTheDocument()
     )
   })
 
   it('renders the date picker', async () => {
-    renderWithQuery(<PayableForm />)
+    renderWithSuspense(<PayableForm />)
     await waitFor(() =>
       expect(screen.getByTestId('date-picker')).toBeInTheDocument()
     )
   })
 
   it('shows "Capture Invoice" button when form is valid and no images exist', async () => {
-    renderWithQuery(<PayableForm />)
+    renderWithSuspense(<PayableForm />)
     await waitFor(() =>
       expect(screen.getByRole('button', { name: /capture invoice/i })).toBeInTheDocument()
     )
@@ -270,7 +250,7 @@ describe('Payable Form — index.tsx', () => {
 
   it('disables "Capture Invoice" button when vendorName is missing', async () => {
     mockStore.payableVendorName = ''
-    renderWithQuery(<PayableForm />)
+    renderWithSuspense(<PayableForm />)
     await waitFor(() =>
       expect(screen.getByRole('button', { name: /capture invoice/i })).toBeDisabled()
     )
@@ -278,7 +258,7 @@ describe('Payable Form — index.tsx', () => {
 
   it('disables "Capture Invoice" button when amount is 0', async () => {
     mockStore.payableAmount = 0
-    renderWithQuery(<PayableForm />)
+    renderWithSuspense(<PayableForm />)
     await waitFor(() =>
       expect(screen.getByRole('button', { name: /capture invoice/i })).toBeDisabled()
     )
@@ -286,69 +266,10 @@ describe('Payable Form — index.tsx', () => {
 
   it('shows "View X Images" button when images exist', async () => {
     mockStore.payableImages = ['data:image/png;base64,abc']
-    renderWithQuery(<PayableForm />)
+    renderWithSuspense(<PayableForm />)
     await waitFor(() =>
       expect(screen.getByRole('button', { name: /view 1 images/i })).toBeInTheDocument()
     )
-  })
-
-  it('hides the Register selector when the site has 0 or 1 registers configured', async () => {
-    mockAxiosGet.mockImplementation((url: string) => {
-      if (url.includes('/api/locations')) {
-        return Promise.resolve({
-          data: [{ _id: 'loc1', stationName: 'Rankin', registers: [{ number: '1' }] }],
-        })
-      }
-      return Promise.resolve({ data: [] })
-    })
-
-    renderWithQuery(<PayableForm />)
-
-    await waitFor(() => {
-      expect(screen.getByRole('button', { name: /capture invoice/i })).toBeInTheDocument()
-    }, { timeout: 5000 })
-
-    expect(screen.queryByText('Register')).not.toBeInTheDocument()
-    expect(screen.getByRole('button', { name: /capture invoice/i })).not.toBeDisabled()
-  })
-
-  it('shows the Register dropdown and disables Capture Invoice until one is picked, for a site with 2+ registers', async () => {
-    mockStore.payableRegister = ''
-    mockAxiosGet.mockImplementation((url: string) => {
-      if (url.includes('/api/locations')) {
-        return Promise.resolve({
-          data: [{ _id: 'loc1', stationName: 'Rankin', registers: [{ number: '1' }, { number: '2' }] }],
-        })
-      }
-      return Promise.resolve({ data: [] })
-    })
-
-    renderWithQuery(<PayableForm />)
-
-    await waitFor(() => {
-      expect(screen.getByText('Register')).toBeInTheDocument()
-      expect(screen.getByText('Select Register')).toBeInTheDocument()
-    }, { timeout: 5000 })
-
-    expect(screen.getByRole('button', { name: /capture invoice/i })).toBeDisabled()
-  })
-
-  it('enables Capture Invoice once a register is selected, for a site with 2+ registers', async () => {
-    mockStore.payableRegister = '2'
-    mockAxiosGet.mockImplementation((url: string) => {
-      if (url.includes('/api/locations')) {
-        return Promise.resolve({
-          data: [{ _id: 'loc1', stationName: 'Rankin', registers: [{ number: '1' }, { number: '2' }] }],
-        })
-      }
-      return Promise.resolve({ data: [] })
-    })
-
-    renderWithQuery(<PayableForm />)
-
-    await waitFor(() => {
-      expect(screen.getByRole('button', { name: /capture invoice/i })).not.toBeDisabled()
-    }, { timeout: 5000 })
   })
 })
 
@@ -719,25 +640,6 @@ describe('Payable Review — review.tsx', () => {
     // The image upload + POST /api/payables live in syncOneAction's
     // CREATE_PAYABLE branch (lib/utils.ts) now, not here.
     expect(mockAxiosPost).not.toHaveBeenCalled()
-  })
-
-  it('includes the selected register in the queued payload', async () => {
-    mockStore.payableRegister = '2'
-    renderWithSuspense(<PayableReview />)
-
-    const submitBtn = await waitFor(() =>
-      screen.getByRole('button', { name: /submit/i })
-    )
-    fireEvent.click(submitBtn)
-
-    await waitFor(() =>
-      expect(mockSavePendingAction).toHaveBeenCalledWith(
-        expect.objectContaining({
-          type: 'CREATE_PAYABLE',
-          payload: expect.objectContaining({ register: '2' }),
-        })
-      )
-    )
 
     // Fire-and-forget background sync attempt, resets the form, and
     // navigates away immediately — none of that waits on the network.

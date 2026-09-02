@@ -22,7 +22,6 @@ function RouteComponent() {
   const payableNotes = useFormStore((state) => state.payableNotes)
   const payablePaymentMethod = useFormStore((state) => state.payablePaymentMethod)
   const payableAmount = useFormStore((state) => state.payableAmount)
-  const payableRegister = useFormStore((state) => state.payableRegister)
   const payableImages = useFormStore((state) => state.payableImages)
   const date = useFormStore((state) => state.date)
   const resetPayableForm = useFormStore((state) => state.resetPayableForm)
@@ -57,7 +56,6 @@ function RouteComponent() {
       paymentMethod: payablePaymentMethod,
       amount: payableAmount,
       date: date ? format(date, 'yyyy-MM-dd') : format(new Date(), 'yyyy-MM-dd'),
-      register: payableRegister || '',
     }
 
     try {
@@ -124,14 +122,8 @@ function RouteComponent() {
               <strong>Amount:</strong>
               <p>${payableAmount.toFixed(2)}</p>
             </div>
-            {payableRegister && (
-              <div>
-                <strong>Register:</strong>
-                <p>{payableRegister}</p>
-              </div>
-            )}
           </div>
-
+          
           {payableNotes && (
             <div>
               <strong>Notes:</strong>
