@@ -839,7 +839,7 @@ router.post('/batch', async (req, res) => {
 
     await CashSummary.bulkWrite(bulkOperations);
 
-    // 2. Resolve Site and Date context for Safesheet entry
+    // 2. Resolve Site and Date context for Safesheet entry & CashSummaryReport
     let targetSite = items[0]?.site;
     let targetDateRaw = items[0]?.date;
 
@@ -866,10 +866,27 @@ router.post('/batch', async (req, res) => {
       }
 
       const [yy, mm, dd] = dateStr.split('-').map(Number);
+      
+      // Normalized UTC start-of-day for index/query consistency across microservices
+      const normalizedStart = new Date(Date.UTC(yy, mm - 1, dd));
       const start = new Date(yy, mm - 1, dd, 0, 0, 0, 0);
       const end = new Date(yy, mm - 1, dd + 1, 0, 0, 0, 0);
 
-      // Aggregate total canadian_cash_collected for the entire site & day from DB
+      // 3. Upsert CashSummaryReport document with default values (submitted: false)
+      await CashSummaryReport.findOneAndUpdate(
+        { site: targetSite, date: normalizedStart },
+        { 
+          $setOnInsert: { 
+            site: targetSite, 
+            date: normalizedStart, 
+            submitted: false,
+            notes: ''
+          } 
+        },
+        { upsert: true, new: true, setDefaultsOnInsert: true }
+      );
+
+      // 4. Aggregate total canadian_cash_collected for the entire site & day from DB
       const agg = await CashSummary.aggregate([
         { $match: { site: targetSite, date: { $gte: start, $lt: end } } },
         {
@@ -883,7 +900,7 @@ router.post('/batch', async (req, res) => {
       const totalCanadianCashCollected =
         Math.round(Number(agg[0]?.total || 0) * 100) / 100;
 
-      // Find or create the Safesheet for this site
+      // 5. Find or create the Safesheet for this site
       let sheet = await Safesheet.findOne({ site: targetSite });
       if (!sheet) {
         sheet = await Safesheet.create({
@@ -2423,4 +2440,7 @@ router.delete('/:id', async (req, res) => {
   }
 })
 
-module.exports = router
+router.getDepositSlipAttachment = getDepositSlipAttachment;
+router.attachmentContentToBase64 = attachmentContentToBase64;
+
+module.exports = router;
