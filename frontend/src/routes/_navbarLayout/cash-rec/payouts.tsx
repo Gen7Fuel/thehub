@@ -3,6 +3,7 @@ import { format } from 'date-fns'
 import { DatePicker } from '@/components/custom/datePicker'
 import { Button } from '@/components/ui/button'
 import { SitePicker } from '@/components/custom/sitePicker'
+import type { Key, ReactElement, JSXElementConstructor, ReactNode, ReactPortal } from 'react'
 
 type Payable = {
   _id: string
@@ -12,7 +13,6 @@ type Payable = {
   notes?: string
   createdAt: string
   location?: { stationName?: string; csoCode?: string }
-  register?: string
 }
 
 export const Route = createFileRoute('/_navbarLayout/cash-rec/payouts')({
@@ -112,25 +112,23 @@ function RouteComponent() {
               <th className="text-left px-3 py-2">Vendor</th>
               <th className="text-left px-3 py-2">Payment</th>
               <th className="text-right px-3 py-2">Amount</th>
-              <th className="text-left px-3 py-2">Register</th>
               <th className="text-left px-3 py-2">Notes</th>
               <th className="text-left px-3 py-2">Created</th>
             </tr>
           </thead>
           <tbody>
-            {payables.map((p: Payable) => (
+            {payables.map((p: { _id: Key | null | undefined; vendorName: string | number | bigint | boolean | ReactElement<unknown, string | JSXElementConstructor<any>> | Iterable<ReactNode> | ReactPortal | Promise<string | number | bigint | boolean | ReactPortal | ReactElement<unknown, string | JSXElementConstructor<any>> | Iterable<ReactNode> | null | undefined> | null | undefined; paymentMethod: string | number | bigint | boolean | ReactElement<unknown, string | JSXElementConstructor<any>> | Iterable<ReactNode> | ReactPortal | Promise<string | number | bigint | boolean | ReactPortal | ReactElement<unknown, string | JSXElementConstructor<any>> | Iterable<ReactNode> | null | undefined> | null | undefined; amount: number; notes: string | undefined; createdAt: string | number | Date }) => (
               <tr key={p._id} className="border-t">
                 <td className="px-3 py-2">{p.vendorName}</td>
                 <td className="px-3 py-2">{p.paymentMethod}</td>
                 <td className="px-3 py-2 text-right">${p.amount.toFixed(2)}</td>
-                <td className="px-3 py-2">{p.register || '—'}</td>
                 <td className="px-3 py-2 max-w-[220px] truncate" title={p.notes}>{p.notes || '—'}</td>
                 <td className="px-3 py-2">{new Date(p.createdAt).toLocaleString()}</td>
               </tr>
             ))}
             {!payables.length && (
               <tr>
-                <td colSpan={6} className="px-3 py-6 text-center text-muted-foreground">
+                <td colSpan={5} className="px-3 py-6 text-center text-muted-foreground">
                   No payables for this selection.
                 </td>
               </tr>
