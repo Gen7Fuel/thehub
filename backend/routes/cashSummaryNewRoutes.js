@@ -680,12 +680,23 @@ router.get('/by-date', async (req, res) => {
     const startOfDay = new Date(targetDate.getFullYear(), targetDate.getMonth(), targetDate.getDate(), 0, 0, 0, 0);
     const endOfDay = new Date(targetDate.getFullYear(), targetDate.getMonth(), targetDate.getDate(), 23, 59, 59, 999);
 
+    // Check if Cash Summary Report is submitted for this day
+    const report = await CashSummaryReport.findOne({
+      site,
+      date: { $gte: startOfDay,$lte: endOfDay }
+    }).lean();
+
+    const isSubmitted = !!(report && report.submitted);
+
     const shifts = await CashSummary.find({
       site,
-      date: { $gte: startOfDay, $lte: endOfDay }
+      date: { $gte: startOfDay,$lte: endOfDay }
     }).sort({ shift_number: 1 }).lean();
 
-    res.json(shifts);
+    res.json({
+      isSubmitted,
+      shifts
+    });
   } catch (err) {
     console.error('Fetch shifts by date error:', err);
     res.status(500).json({ error: 'Failed to fetch shifts for selected date' });
@@ -706,12 +717,27 @@ router.get('/by-range', async (req, res) => {
     const startOfRange = new Date(fromDate.getFullYear(), fromDate.getMonth(), fromDate.getDate(), 0, 0, 0, 0);
     const endOfRange = new Date(toDate.getFullYear(), toDate.getMonth(), toDate.getDate(), 23, 59, 59, 999);
 
+    // 1. Fetch submitted CashSummaryReports in date range for site
+    const reports = await CashSummaryReport.find({
+      site,
+      date: { $gte: startOfRange, $lte: endOfRange },
+      submitted: true
+    }).lean();
+
+    const submittedDatesSet = new Set(
+      reports.map(r => {
+        const d = new Date(r.date);
+        return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+      })
+    );
+
+    // 2. Fetch shifts in date range
     const shifts = await CashSummary.find({
       site,
       date: { $gte: startOfRange, $lte: endOfRange }
     }).sort({ date: -1, shift_number: 1 }).lean();
 
-    // Group shifts by local ISO Date string (YYYY-MM-DD)
+    // 3. Group shifts by local ISO Date string (YYYY-MM-DD)
     const groupedMap = new Map();
 
     for (const shift of shifts) {
@@ -728,7 +754,8 @@ router.get('/by-range', async (req, res) => {
           loyalty: 0,
           cpl_bulloch: 0,
           exempted_tax: 0,
-          allReviewed: true
+          allReviewed: true,
+          isSubmitted: submittedDatesSet.has(dateKey)
         });
       }
 
@@ -1681,6 +1708,27 @@ router.put('/report/handheld-debit', async (req, res) => {
   } catch (err) {
     console.error('CashSummary report handheld debit save error:', err)
     res.status(err.status || 500).json({ error: err.message || 'Failed to save handheld debit' })
+  }
+})
+
+router.put('/report/submitted', async (req, res) => {
+  try {
+    const { site, date, submitted } = req.body || {}
+
+    if (typeof submitted !== 'boolean') {
+      return res.status(400).json({ error: 'submitted must be a boolean' })
+    }
+
+    const doc = await saveCashSummaryReportFields({
+      site,
+      date,
+      fields: { submitted }
+    })
+
+    res.json(doc)
+  } catch (err) {
+    console.error('CashSummary report submitted update error:', err)
+    res.status(err.status || 500).json({ error: err.message || 'Failed to update report submitted status' })
   }
 })
 

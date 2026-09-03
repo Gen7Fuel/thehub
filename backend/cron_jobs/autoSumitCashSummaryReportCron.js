@@ -207,9 +207,9 @@ const autoSubmitCashSummaryReports = async () => {
           )
 
           await emailQueue.add('sendCashSummaryEmail', {
-            // to: CASH_SUMMARY_EMAILS.join(','),
-            // cc,
-            to: 'daksh@gen7fuel.com',
+            to: CASH_SUMMARY_EMAILS.join(','),
+            cc,
+            // to: 'daksh@gen7fuel.com',
             subject: `Daily Report – ${site} – ${dateStr}`,
             text: `Attached are the Cash Summary${shiftReportsPdf ? ', Shift Reports' : ''}${depositSlip ? ' and Bank Deposit Slip' : ''} for ${site} on ${dateStr}.`,
             attachments: serializedAttachments

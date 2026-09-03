@@ -308,7 +308,7 @@ import { useEffect, useMemo } from 'react'
 import { SitePicker } from '@/components/custom/sitePicker'
 import { DatePicker } from '@/components/custom/datePicker'
 import { useSite } from '@/context/SiteContext'
-import { CheckCircle2, AlertCircle, Calendar, ArrowRight } from 'lucide-react'
+import { CheckCircle2, AlertCircle, Calendar, ArrowRight, Lock } from 'lucide-react'
 
 type CashSummarySearch = {
   site?: string
@@ -326,6 +326,7 @@ interface GroupedDailySummary {
   cpl_bulloch: number
   exempted_tax: number
   allReviewed: boolean
+  isSubmitted?: boolean
 }
 
 // Compute default ISO date strings (YYYY-MM-DD)
@@ -426,7 +427,7 @@ function RouteComponent() {
   useEffect(() => {
     if (!site || !queryFrom || !queryTo) {
       navigate({
-        search: (prev:any) => ({
+        search: (prev: any) => ({
           site: prev.site || selectedSite || '',
           from: prev.from || activeFromStr,
           to: prev.to || activeToStr,
@@ -438,7 +439,7 @@ function RouteComponent() {
 
   const handleUpdateSite = (newSite: string) => {
     navigate({
-      search: (prev:any) => ({ ...prev, site: newSite }),
+      search: (prev: any) => ({ ...prev, site: newSite }),
       replace: true,
     })
   }
@@ -453,7 +454,7 @@ function RouteComponent() {
     const formattedFrom = `${yy}-${mm}-${dd}`
 
     navigate({
-      search: (prev:any) => ({ ...prev, from: formattedFrom }),
+      search: (prev: any) => ({ ...prev, from: formattedFrom }),
       replace: true,
     })
   }
@@ -467,12 +468,13 @@ function RouteComponent() {
     const formattedTo = `${yy}-${mm}-${dd}`
 
     navigate({
-      search: (prev:any) => ({ ...prev, to: formattedTo }),
+      search: (prev: any) => ({ ...prev, to: formattedTo }),
       replace: true,
     })
   }
 
-  const onRowClick = (dateStr: string) => {
+  const onRowClick = (dateStr: string, isSubmitted?: boolean) => {
+    if (isSubmitted) return
     navigate({
       to: '/cash-summary/form',
       search: { site: currentSite, date: dateStr },
@@ -527,7 +529,7 @@ function RouteComponent() {
                 Daily Cash Summaries {currentSite && `— ${currentSite}`}
               </h2>
               <p className="text-xs text-muted-foreground mt-0.5">
-                Click any daily row to inspect or edit individual shift forms.
+                Click any unlocked daily row to inspect or edit individual shift forms.
               </p>
             </div>
             {summaries.length > 0 && (
@@ -565,14 +567,18 @@ function RouteComponent() {
                 <tbody className="divide-y">
                   {summaries.map((row) => {
                     const isReviewed = row.allReviewed
+                    const isSubmitted = !!row.isSubmitted
+
                     return (
                       <tr
                         key={row.date}
-                        onClick={() => onRowClick(row.date)}
-                        className={`group cursor-pointer transition-colors ${
-                          isReviewed
-                            ? 'bg-emerald-50/40 hover:bg-emerald-100/60 dark:bg-emerald-950/20 dark:hover:bg-emerald-900/30'
-                            : 'bg-rose-50/50 hover:bg-rose-100/70 dark:bg-rose-950/20 dark:hover:bg-rose-900/30'
+                        onClick={() => onRowClick(row.date, isSubmitted)}
+                        className={`group transition-colors ${
+                          isSubmitted
+                            ? 'bg-muted/30 cursor-not-allowed opacity-80'
+                            : isReviewed
+                            ? 'cursor-pointer bg-emerald-50/40 hover:bg-emerald-100/60 dark:bg-emerald-950/20 dark:hover:bg-emerald-900/30'
+                            : 'cursor-pointer bg-rose-50/50 hover:bg-rose-100/70 dark:bg-rose-950/20 dark:hover:bg-rose-900/30'
                         }`}
                       >
                         <td className="px-4 py-3.5 font-semibold text-foreground whitespace-nowrap flex items-center gap-1.5">
@@ -598,7 +604,11 @@ function RouteComponent() {
                         <td className="px-4 py-3.5 text-right font-mono text-muted-foreground">{fmtNum(row.cpl_bulloch)}</td>
                         <td className="px-4 py-3.5 text-right font-mono text-muted-foreground">{fmtNum(row.exempted_tax)}</td>
                         <td className="px-4 py-3.5 text-center whitespace-nowrap">
-                          {isReviewed ? (
+                          {isSubmitted ? (
+                            <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-semibold bg-amber-100 text-amber-800 dark:bg-amber-900/40 dark:text-amber-300">
+                              <Lock className="w-3.5 h-3.5" /> Locked & Submitted
+                            </span>
+                          ) : isReviewed ? (
                             <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-semibold bg-emerald-100 text-emerald-800 dark:bg-emerald-900/40 dark:text-emerald-300">
                               <CheckCircle2 className="w-3.5 h-3.5" /> Reviewed
                             </span>
@@ -608,8 +618,12 @@ function RouteComponent() {
                             </span>
                           )}
                         </td>
-                        <td className="px-3 py-3.5 text-muted-foreground group-hover:text-foreground">
-                          <ArrowRight className="w-4 h-4 opacity-0 group-hover:opacity-100 transition-opacity" />
+                        <td className="px-3 py-3.5 text-muted-foreground">
+                          {isSubmitted ? (
+                            <Lock className="w-4 h-4 text-amber-600/80" />
+                          ) : (
+                            <ArrowRight className="w-4 h-4 opacity-0 group-hover:opacity-100 transition-opacity" />
+                          )}
                         </td>
                       </tr>
                     )

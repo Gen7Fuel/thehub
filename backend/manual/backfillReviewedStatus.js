@@ -26,37 +26,59 @@ async function backfillReviewedStatus() {
       return
     }
 
-    // 2. Fetch all submitted reports to perform in-memory lookup for optimal performance
-    const submittedReports = await CashSummaryReport.find({ submitted: true }, { site: 1, date: 1 }).lean()
+    // 2. Fetch all existing reports (submitted or not) for in-memory lookup
+    const allReports = await CashSummaryReport.find({}, { site: 1, date: 1, submitted: 1 }).lean()
 
-    // Build a Set of "site|YYYY-MM-DD" keys for quick O(1) matching
-    const submittedReportKeys = new Set(
-      submittedReports.map((r) => {
-        const dateStr = normalizeToStartOfDay(r.date).toISOString().split('T')[0]
-        return `${r.site}|${dateStr}`
-      })
-    )
+    // Build Sets for quick O(1) lookups
+    const submittedReportKeys = new Set()
+    const allExistingReportKeys = new Set()
 
-    const bulkOps = []
+    for (const r of allReports) {
+      const dateStr = normalizeToStartOfDay(r.date).toISOString().split('T')[0]
+      const key = `${r.site}|${dateStr}`
+      
+      allExistingReportKeys.add(key)
+      if (r.submitted) {
+        submittedReportKeys.add(key)
+      }
+    }
+
+    const shiftBulkOps = []
     let autoReviewedCount = 0
     let reportReviewedCount = 0
     let unreviewedCount = 0
 
+    // Map to track unique site|date pairs where shifts were marked as reviewed
+    // Key: "site|YYYY-MM-DD" -> Value: { site, startOfDay }
+    const reviewedSiteDatesToEnsure = new Map()
+
     for (const shift of pendingShifts) {
       let targetReviewedValue = false
+      const shiftStartOfDay = normalizeToStartOfDay(shift.date)
+      const shiftDateStr = shiftStartOfDay.toISOString().split('T')[0]
+      const lookupKey = `${shift.site}|${shiftDateStr}`
 
       // Rule 1: If canadian_cash_collected is present and not null/undefined
       if (shift.canadian_cash_collected !== undefined && shift.canadian_cash_collected !== null) {
         targetReviewedValue = true
         autoReviewedCount++
+        
+        // Track this site+date to ensure a CashSummaryReport entry exists
+        reviewedSiteDatesToEnsure.set(lookupKey, {
+          site: shift.site,
+          date: shiftStartOfDay
+        })
       } else {
         // Rule 2: Check if corresponding CashSummaryReport exists for site + date and is submitted
-        const shiftDateStr = normalizeToStartOfDay(shift.date).toISOString().split('T')[0]
-        const lookupKey = `${shift.site}|${shiftDateStr}`
-
         if (submittedReportKeys.has(lookupKey)) {
           targetReviewedValue = true
           reportReviewedCount++
+
+          // Track this site+date as well
+          reviewedSiteDatesToEnsure.set(lookupKey, {
+            site: shift.site,
+            date: shiftStartOfDay
+          })
         } else {
           // Rule 3: Missing cash collected AND no submitted report
           targetReviewedValue = false
@@ -64,7 +86,7 @@ async function backfillReviewedStatus() {
         }
       }
 
-      bulkOps.push({
+      shiftBulkOps.push({
         updateOne: {
           filter: { _id: shift._id },
           update: { $set: { reviewed: targetReviewedValue } },
@@ -72,20 +94,54 @@ async function backfillReviewedStatus() {
       })
     }
 
-    // 3. Execute bulk update in batches of 500
-    if (bulkOps.length > 0) {
+    // 3. Execute bulk update on CashSummary in batches of 500
+    if (shiftBulkOps.length > 0) {
       const batchSize = 500
-      for (let i = 0; i < bulkOps.length; i += batchSize) {
-        const batch = bulkOps.slice(i, i + batchSize)
+      for (let i = 0; i < shiftBulkOps.length; i += batchSize) {
+        const batch = shiftBulkOps.slice(i, i + batchSize)
         await CashSummary.bulkWrite(batch)
       }
     }
 
+    // 4. Check for missing CashSummaryReport documents and create unsubmitted entries
+    const reportBulkOps = []
+    let createdUnsubmittedReportsCount = 0
+
+    for (const [key, { site, date }] of reviewedSiteDatesToEnsure.entries()) {
+      if (!allExistingReportKeys.has(key)) {
+        reportBulkOps.push({
+          updateOne: {
+            filter: { site, date },
+            update: {
+              $setOnInsert: {
+                site,
+                date,
+                submitted: false,
+                createdAt: new Date(),
+              },
+            },
+            upsert: true,
+          },
+        })
+        createdUnsubmittedReportsCount++
+      }
+    }
+
+    // 5. Execute bulk write for missing CashSummaryReports
+    if (reportBulkOps.length > 0) {
+      const batchSize = 500
+      for (let i = 0; i < reportBulkOps.length; i += batchSize) {
+        const batch = reportBulkOps.slice(i, i + batchSize)
+        await CashSummaryReport.bulkWrite(batch)
+      }
+    }
+
     console.log('--- Migration Summary ---')
-    console.log(`Total shifts updated: ${bulkOps.length}`)
+    console.log(`Total shifts updated: ${shiftBulkOps.length}`)
     console.log(`- Set reviewed=true (via canadian_cash_collected): ${autoReviewedCount}`)
     console.log(`- Set reviewed=true (via submitted report match): ${reportReviewedCount}`)
     console.log(`- Set reviewed=false (no cash & no submitted report): ${unreviewedCount}`)
+    console.log(`- Created new unsubmitted CashSummaryReports: ${createdUnsubmittedReportsCount}`)
   } catch (err) {
     console.error('Error during backfill script execution:', err)
     throw err

@@ -738,7 +738,7 @@ import { createFileRoute, useNavigate } from '@tanstack/react-router'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { SitePicker } from '@/components/custom/sitePicker'
 import { DatePicker } from '@/components/custom/datePicker'
-import { ImagePlus, Image as ImageIcon, HelpCircle, X, CheckCircle2 } from 'lucide-react'
+import { ImagePlus, Image as ImageIcon, HelpCircle, X, CheckCircle2, Lock } from 'lucide-react'
 import { useSite } from '@/context/SiteContext'
 
 type CashSummarySearch = {
@@ -848,10 +848,8 @@ function RouteComponent() {
   const navigate = useNavigate({ from: Route.fullPath })
   const { selectedSite } = useSite()
 
-  // Ensure default date falls back to yesterday if omitted
   const activeDateString = searchDate || getYesterdayDateString()
 
-  // Derive Date object for DatePicker from active search param string
   const pickerDate = useMemo(() => {
     if (!activeDateString) return undefined
     const [yy, mm, dd] = activeDateString.split('-').map(Number)
@@ -859,12 +857,11 @@ function RouteComponent() {
   }, [activeDateString])
 
   const updateSite = (newSite: string) =>
-    navigate({ search: (prev:any) => ({ ...prev, site: newSite }), replace: true })
+    navigate({ search: (prev: any) => ({ ...prev, site: newSite }), replace: true })
 
   const updateDate = (newDate: string) =>
-    navigate({ search: (prev:any) => ({ ...prev, date: newDate }), replace: true })
+    navigate({ search: (prev: any) => ({ ...prev, date: newDate }), replace: true })
 
-  // Match standard Dispatch<SetStateAction<Date | undefined>> signature
   const handleDateChange: React.Dispatch<React.SetStateAction<Date | undefined>> = (value) => {
     const d = typeof value === 'function' ? value(pickerDate) : value
     if (!d) return
@@ -874,7 +871,6 @@ function RouteComponent() {
     updateDate(`${yy}-${mm}-${dd2}`)
   }
 
-  // Auto-set site/date defaults in URL search params if missing
   useEffect(() => {
     if (!site || !searchDate) {
       navigate({
@@ -888,13 +884,13 @@ function RouteComponent() {
   }, [site, searchDate, selectedSite, activeDateString, navigate])
 
   const [shifts, setShifts] = useState<ShiftDoc[]>([])
+  const [isReportSubmitted, setIsReportSubmitted] = useState(false)
   const [activeShiftId, setActiveShiftId] = useState<string | null>(null)
   const [formsState, setFormsState] = useState<Record<string, ShiftFormState>>({})
   
   const [fetchingShifts, setFetchingShifts] = useState(false)
   const [showCDCheckbox, setShowCDCheckbox] = useState(false)
   
-  // Lottery Routing States
   const [sellsLottery, setSellsLottery] = useState(false)
   const [hasSavedLottery, setHasSavedLottery] = useState(false)
   
@@ -907,7 +903,6 @@ function RouteComponent() {
 
   const showChequesField = (site === 'Wavers East' || site === 'Wavers West')
 
-  // Check Location Capabilities & Lottery Completion Status
   useEffect(() => {
     if (!site || !pickerDate) return
     ;(async () => {
@@ -943,7 +938,6 @@ function RouteComponent() {
     })()
   }, [site, pickerDate, activeDateString])
 
-  // Fetch pre-registered shifts for selected Date and Site
   useEffect(() => {
     if (!site || !pickerDate) return
     ;(async () => {
@@ -958,7 +952,12 @@ function RouteComponent() {
           }
         })
         if (!res.ok) throw new Error('Failed to fetch shifts')
-        const data: ShiftDoc[] = await res.json()
+        
+        const resData = await res.json()
+        const data: ShiftDoc[] = resData.shifts || (Array.isArray(resData) ? resData : [])
+        const submittedStatus = !!resData.isSubmitted
+
+        setIsReportSubmitted(submittedStatus)
         setShifts(data)
 
         const initialFormDict: Record<string, ShiftFormState> = {}
@@ -998,7 +997,7 @@ function RouteComponent() {
   const activeForm = activeShiftId ? formsState[activeShiftId] : null
 
   const updateActiveFormField = (field: keyof ShiftFormState, value: any) => {
-    if (!activeShiftId) return
+    if (!activeShiftId || isReportSubmitted) return
     setFormsState(prev => ({
       ...prev,
       [activeShiftId]: {
@@ -1009,6 +1008,7 @@ function RouteComponent() {
   }
 
   const handleCameraUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (isReportSubmitted) return
     const file = e.target.files?.[0]
     if (!file || !activeShiftId) return
     const formData = new FormData()
@@ -1028,6 +1028,8 @@ function RouteComponent() {
 
   const handleSubmitAll = async (e: React.FormEvent) => {
     e.preventDefault()
+    if (isReportSubmitted) return
+
     setSubmitting(true)
     setError(null)
     setSuccess(null)
@@ -1107,11 +1109,15 @@ function RouteComponent() {
   }
 
   const isLotteryPending = sellsLottery && !hasSavedLottery
-  const buttonLabel = submitting
-    ? 'Submitting...'
-    : isLotteryPending
-    ? 'Save Shifts & Continue to Lottery'
-    : 'Save All Shifts Data'
+  
+  let buttonLabel = 'Save All Shifts Data'
+  if (isReportSubmitted) {
+    buttonLabel = 'Report Submitted – Records Locked'
+  } else if (submitting) {
+    buttonLabel = 'Submitting...'
+  } else if (isLotteryPending) {
+    buttonLabel = 'Save Shifts & Continue to Lottery'
+  }
 
   return (
     <div className="pt-16 flex flex-col items-center w-full">
@@ -1129,7 +1135,15 @@ function RouteComponent() {
           </div>
 
           <div className="space-y-1 w-full">
-            <label className="block text-sm font-medium">Select Date *</label>
+            <div className="flex items-center justify-between">
+              <label className="block text-sm font-medium">Select Date *</label>
+              {isReportSubmitted && (
+                <div className="flex items-center gap-1 text-xs font-semibold text-amber-600 bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-800 px-2 py-0.5 rounded">
+                  <Lock className="w-3 h-3 text-amber-600" />
+                  <span>Report Submitted</span>
+                </div>
+              )}
+            </div>
             <DatePicker
               date={pickerDate}
               setDate={handleDateChange}
@@ -1202,9 +1216,10 @@ function RouteComponent() {
                 <div className="grid gap-4 sm:grid-cols-2">
                   <Field label="Canadian Cash Collected *">
                     <input
+                      disabled={isReportSubmitted}
                       value={activeForm.canadian_cash_collected}
                       onChange={(e) => updateActiveFormField('canadian_cash_collected', e.target.value)}
-                      className="w-full border rounded px-3 py-2"
+                      className="w-full border rounded px-3 py-2 disabled:bg-muted disabled:cursor-not-allowed"
                       inputMode="decimal"
                       placeholder="0.00"
                     />
@@ -1219,8 +1234,9 @@ function RouteComponent() {
                         {!activeForm.pinpadPhoto ? (
                           <button
                             type="button"
+                            disabled={isReportSubmitted}
                             onClick={() => cameraInputRef.current?.click()}
-                            className="flex items-center gap-1.5 text-xs px-2.5 py-1.5 border rounded border-amber-500 text-amber-600 bg-amber-50/50 hover:bg-amber-50"
+                            className="flex items-center gap-1.5 text-xs px-2.5 py-1.5 border rounded border-amber-500 text-amber-600 bg-amber-50/50 hover:bg-amber-50 disabled:opacity-50 disabled:cursor-not-allowed"
                           >
                             <ImagePlus className="w-3.5 h-3.5" /> Upload Receipt *
                           </button>
@@ -1241,9 +1257,10 @@ function RouteComponent() {
                           onHelpClick={() => setHelpConfig({ title: 'Debit Ref', desc: '', img: '/cd_images/debit.jpg' })}
                         >
                           <input
+                            disabled={isReportSubmitted}
                             value={activeForm.debit}
                             onChange={(e) => updateActiveFormField('debit', e.target.value)}
-                            className="w-full border rounded px-3 py-1.5 text-sm"
+                            className="w-full border rounded px-3 py-1.5 text-sm disabled:bg-muted disabled:cursor-not-allowed"
                             inputMode="decimal"
                             placeholder="0.00"
                           />
@@ -1254,9 +1271,10 @@ function RouteComponent() {
                           onHelpClick={() => setHelpConfig({ title: 'Visa Ref', desc: '', img: '/cd_images/visa.jpg' })}
                         >
                           <input
+                            disabled={isReportSubmitted}
                             value={activeForm.visa}
                             onChange={(e) => updateActiveFormField('visa', e.target.value)}
-                            className="w-full border rounded px-3 py-1.5 text-sm"
+                            className="w-full border rounded px-3 py-1.5 text-sm disabled:bg-muted disabled:cursor-not-allowed"
                             inputMode="decimal"
                             placeholder="0.00"
                           />
@@ -1267,9 +1285,10 @@ function RouteComponent() {
                           onHelpClick={() => setHelpConfig({ title: 'Mastercard Ref', desc: '', img: '/cd_images/mastercard.jpg' })}
                         >
                           <input
+                            disabled={isReportSubmitted}
                             value={activeForm.mastercard}
                             onChange={(e) => updateActiveFormField('mastercard', e.target.value)}
-                            className="w-full border rounded px-3 py-1.5 text-sm"
+                            className="w-full border rounded px-3 py-1.5 text-sm disabled:bg-muted disabled:cursor-not-allowed"
                             inputMode="decimal"
                             placeholder="0.00"
                           />
@@ -1280,9 +1299,10 @@ function RouteComponent() {
                           onHelpClick={() => setHelpConfig({ title: 'Amex Ref', desc: '', img: '/cd_images/amex.jpg' })}
                         >
                           <input
+                            disabled={isReportSubmitted}
                             value={activeForm.amex}
                             onChange={(e) => updateActiveFormField('amex', e.target.value)}
-                            className="w-full border rounded px-3 py-1.5 text-sm"
+                            className="w-full border rounded px-3 py-1.5 text-sm disabled:bg-muted disabled:cursor-not-allowed"
                             inputMode="decimal"
                             placeholder="0.00"
                           />
@@ -1294,9 +1314,10 @@ function RouteComponent() {
                             onHelpClick={() => setHelpConfig({ title: 'Tips Ref', desc: '', img: '/cd_images/tips.jpg' })}
                           >
                             <input
+                              disabled={isReportSubmitted}
                               value={activeForm.chickenDelightTips}
                               onChange={(e) => updateActiveFormField('chickenDelightTips', e.target.value)}
-                              className="w-full border rounded px-3 py-1.5 text-sm bg-primary/5 border-primary/20"
+                              className="w-full border rounded px-3 py-1.5 text-sm bg-primary/5 border-primary/20 disabled:bg-muted disabled:cursor-not-allowed"
                               inputMode="decimal"
                               placeholder="0.00"
                             />
@@ -1307,9 +1328,10 @@ function RouteComponent() {
                   ) : (
                     <Field label="Infonet Exempted Tax">
                       <input
+                        disabled={isReportSubmitted}
                         value={activeForm.exempted_tax}
                         onChange={(e) => updateActiveFormField('exempted_tax', e.target.value)}
-                        className="w-full border rounded px-3 py-2"
+                        className="w-full border rounded px-3 py-2 disabled:bg-muted disabled:cursor-not-allowed"
                         inputMode="decimal"
                         placeholder="0.00"
                       />
@@ -1319,9 +1341,10 @@ function RouteComponent() {
                   {showChequesField && !activeForm.isChickenDelight && (
                     <Field label="Cheques Cashed Out">
                       <input
+                        disabled={isReportSubmitted}
                         value={activeForm.chequesCashedOut}
                         onChange={(e) => updateActiveFormField('chequesCashedOut', e.target.value)}
-                        className="w-full border rounded px-3 py-2 bg-amber-50/30 border-amber-200"
+                        className="w-full border rounded px-3 py-2 bg-amber-50/30 border-amber-200 disabled:bg-muted disabled:cursor-not-allowed"
                         inputMode="decimal"
                         placeholder="0.00"
                       />
@@ -1334,10 +1357,11 @@ function RouteComponent() {
             <div className="flex flex-col gap-2 pt-2 border-t">
               <button
                 type="submit"
-                disabled={submitting}
-                className="w-full py-2.5 rounded bg-primary text-primary-foreground font-semibold disabled:opacity-50 hover:opacity-95 transition-opacity"
+                disabled={submitting || isReportSubmitted}
+                className="w-full py-2.5 rounded bg-primary text-primary-foreground font-semibold disabled:opacity-50 disabled:cursor-not-allowed hover:opacity-95 transition-opacity flex items-center justify-center gap-2"
               >
-                {buttonLabel}
+                {isReportSubmitted && <Lock className="w-4 h-4" />}
+                <span>{buttonLabel}</span>
               </button>
               {error && <div className="text-red-600 text-sm font-medium">{error}</div>}
               {success && <div className="text-green-600 text-sm font-medium">{success}</div>}

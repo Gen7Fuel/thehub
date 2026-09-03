@@ -8,7 +8,8 @@ import {
   ChevronDown,
   ChevronRight,
 } from "lucide-react";
-import { Toaster } from "sonner";
+import { toast } from "sonner";
+import { Switch } from "@/components/ui/switch"; // or your UI library's Switch component
 import { DatePicker } from "@/components/custom/datePicker";
 import { LotteryComparisonTable } from "@/components/custom/LotteryComparisionTable";
 import { SitePicker } from "@/components/custom/sitePicker";
@@ -257,6 +258,11 @@ function RouteComponent() {
       )),
     [],
   );
+  const hasUnlockShiftPermission = Boolean(
+    access?.accounting?.cashSummary?.report?.unlockShift,
+  );
+
+  const [togglingSubmitted, setTogglingSubmitted] = useState(false);
 
   useEffect(() => {
     if (accessDenied) navigate({ to: "/no-access" });
@@ -294,6 +300,52 @@ function RouteComponent() {
     "notes" | "unsettledPrepays" | "handheldDebit" | null
   >(null);
   useEffect(() => setVoidedDetails([]), [site, date]);
+
+  const handleSubmittedToggle = async (newSubmittedState: boolean) => {
+    if (!site || !date) return;
+    setTogglingSubmitted(true);
+
+    const statusLabel = newSubmittedState ? "Submitted" : "Unlocked";
+
+    try {
+      const res = await fetch("/api/cash-summary/report/submitted", {
+        method: "PUT",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${localStorage.getItem("token") || ""}`,
+          "X-Required-Permission": "accounting.cashSummary.report.unlockShift",
+        },
+        body: JSON.stringify({ site, date, submitted: newSubmittedState }),
+      });
+
+      if (res.status === 403) {
+        toast.error("Permission denied: You cannot unlock/submit shifts");
+        navigate({ to: "/no-access" });
+        return;
+      }
+
+      if (!res.ok) {
+        const errData = await res.json().catch(() => ({}));
+        throw new Error(
+          errData.error || `Failed to set report status to ${statusLabel}`,
+        );
+      }
+
+      // Success toast notification
+      toast.success(`Shift report marked as ${statusLabel.toLowerCase()}`);
+
+      // Re-fetch route data using TanStack Router
+      await navigate({
+        search: (prev: Search) => ({ ...prev }),
+        replace: true,
+      });
+    } catch (err: any) {
+      console.error("Failed to toggle submitted status:", err);
+      toast.error(err.message || "Failed to update shift status");
+    } finally {
+      setTogglingSubmitted(false);
+    }
+  };
 
   useEffect(() => {
     const check = async () => {
@@ -571,10 +623,10 @@ function RouteComponent() {
   );
   const mismatchMessages = [
     arCheckMatch === false
-      ? "A/R is not matching between Bulloch and the Hub."
+      ? "PO's are not matching between Bulloch and the Hub."
       : null,
     payoutsCheckMatch === false
-      ? "A/P is not matching between Bulloch payouts and Hub payables."
+      ? "Payouts/Payables is not matching between Bulloch and Hub."
       : null,
   ].filter(Boolean);
   const canViewShiftReport = Boolean(
@@ -603,18 +655,19 @@ function RouteComponent() {
 
   return (
     <div className="flex min-h-screen w-full flex-col items-center bg-slate-50/50 py-4">
-      <Toaster />
       <style>{`
-        @media print {
-          body * { visibility: hidden !important; }
-          #print-area, #print-area * { visibility: visible !important; }
-          #print-area { position: relative; inset: 0; width: 100%; }
-        }
-      `}</style>
+      @media print {
+        body * { visibility: hidden !important; }
+        #print-area, #print-area * { visibility: visible !important; }
+        #print-area { position: relative; inset: 0; width: 100%; }
+      }
+    `}</style>
 
       <div className="w-full max-w-7xl space-y-6 px-4">
+        {/* Top Controls Header */}
         <div className="flex flex-wrap items-end justify-between gap-4 rounded-xl border bg-white p-4 shadow-sm">
-          <div className="flex w-full flex-wrap items-center gap-4 md:w-auto">
+          <div className="flex w-full flex-wrap items-end gap-4 md:w-auto">
+            {/* Site Picker */}
             <div className="w-full sm:w-[220px]">
               <label className="mb-1 block text-xs font-semibold text-slate-600">
                 Site
@@ -627,15 +680,45 @@ function RouteComponent() {
                 className="w-full"
               />
             </div>
+
+            {/* Date Picker */}
             <div className="w-full sm:w-auto">
               <label className="mb-1 block text-xs font-semibold text-slate-600">
                 Date
               </label>
               <DatePicker date={pickerDate} setDate={handleDateChange} />
             </div>
+
+            {/* Warnings */}
             {mismatchMessages.length > 0 && (
-              <div className="w-full rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs font-medium text-amber-900 sm:w-auto">
-                {mismatchMessages.join(" ")}
+              <div className="w-full sm:w-auto">
+                <label className="mb-1 block text-xs font-semibold text-amber-700">
+                  Discrepancies
+                </label>
+                <div className="flex h-10 items-center rounded-lg border border-amber-200 bg-amber-50 px-3 text-xs font-medium text-amber-900">
+                  {mismatchMessages.join(" ")}
+                </div>
+              </div>
+            )}
+
+            {/* Unlock / Submitted Toggle */}
+            {hasUnlockShiftPermission && (
+              <div className="w-full sm:w-auto">
+                <label className="mb-1 block text-xs font-semibold text-slate-600">
+                  Shift Status
+                </label>
+                <div className="flex h-10 items-center gap-2 rounded-lg border border-slate-200 bg-slate-50/50 px-3">
+                  <Switch
+                    checked={submitted}
+                    disabled={togglingSubmitted || !site || !date}
+                    onCheckedChange={(checked) =>
+                      handleSubmittedToggle(checked)
+                    }
+                  />
+                  <span className="text-xs font-medium text-slate-700">
+                    {submitted ? "Submitted" : "Unlocked"}
+                  </span>
+                </div>
               </div>
             )}
           </div>

@@ -1,9 +1,12 @@
+const cron = require("node-cron");
 const moment = require("moment-timezone");
 const Location = require("../models/Location");
 const { CashSummary } = require("../models/CashSummaryNew");
 const { parseSftReport } = require("../utils/parseSftReport");
 
 const OFFICE_SFTP_API_BASE = "http://24.50.55.130:5000";
+
+let isCronRunning = false;
 
 async function fetchWithTimeout(url, opts = {}, ms = 15000) {
   const controller = new AbortController();
@@ -58,7 +61,7 @@ function normalizeDateToStoreTimezone(rawDate, timezone = "America/Toronto") {
 
 async function syncSftShiftsForSite(site, timezone = "America/Toronto") {
   console.log(
-    `[SFT Sync] Starting sync for site: "${site}" (TZ: ${timezone})...`,
+    `[SFT Sync] Starting sync for site: "${site}" (TZ: ${timezone})...`
   );
   try {
     // 1. Fetch file list from SFTP API
@@ -69,7 +72,7 @@ async function syncSftShiftsForSite(site, timezone = "America/Toronto") {
     const listResp = await fetchWithTimeout(listUrl.toString());
     if (!listResp.ok) {
       console.warn(
-        `[SFT Sync] Failed to fetch file list for site "${site}". Status: ${listResp.status}`,
+        `[SFT Sync] Failed to fetch file list for site "${site}". Status: ${listResp.status}`
       );
       return;
     }
@@ -92,7 +95,7 @@ async function syncSftShiftsForSite(site, timezone = "America/Toronto") {
       .filter(Boolean);
 
     console.log(
-      `[SFT Sync] Found ${shiftItems.length} valid shift files for site "${site}".`,
+      `[SFT Sync] Found ${shiftItems.length} valid shift files for site "${site}".`
     );
 
     for (const { shiftNumber, fileName, fileDate } of shiftItems) {
@@ -101,7 +104,7 @@ async function syncSftShiftsForSite(site, timezone = "America/Toronto") {
       // Fetch full file content & metrics
       const detailUrl = new URL(
         `/api/sftp/receive/${encodeURIComponent(shiftNumStr)}`,
-        OFFICE_SFTP_API_BASE,
+        OFFICE_SFTP_API_BASE
       );
       detailUrl.searchParams.set("site", site);
       detailUrl.searchParams.set("type", "sft");
@@ -109,7 +112,7 @@ async function syncSftShiftsForSite(site, timezone = "America/Toronto") {
       const detailResp = await fetchWithTimeout(detailUrl.toString());
       if (!detailResp.ok) {
         console.warn(
-          `[SFT Sync] Failed to fetch detail for Site: "${site}", Shift #${shiftNumStr}. Status: ${detailResp.status}`,
+          `[SFT Sync] Failed to fetch detail for Site: "${site}", Shift #${shiftNumStr}. Status: ${detailResp.status}`
         );
         continue;
       }
@@ -118,7 +121,7 @@ async function syncSftShiftsForSite(site, timezone = "America/Toronto") {
       const content = String(data?.content || "").replace(/^\uFEFF/, "");
       if (!content) {
         console.warn(
-          `[SFT Sync] Empty file content for Site: "${site}", Shift #${shiftNumStr}. Skipping.`,
+          `[SFT Sync] Empty file content for Site: "${site}", Shift #${shiftNumStr}. Skipping.`
         );
         continue;
       }
@@ -136,7 +139,7 @@ async function syncSftShiftsForSite(site, timezone = "America/Toronto") {
 
       if (arTotal === 0 && salesTotal === 0 && payoutsTotal === 0) {
         console.log(
-          `[SFT Sync] [SKIP EMPTY SHIFT] Site: "${site}", Shift #${shiftNumStr} | totalSales: ${salesTotal}, arTotal: ${arTotal}, payoutsTotal: ${payoutsTotal}`,
+          `[SFT Sync] [SKIP EMPTY SHIFT] Site: "${site}", Shift #${shiftNumStr} | totalSales: ${salesTotal}, arTotal: ${arTotal}, payoutsTotal: ${payoutsTotal}`
         );
         continue;
       }
@@ -156,7 +159,7 @@ async function syncSftShiftsForSite(site, timezone = "America/Toronto") {
       const isWaversWest4x =
         site === "Wavers West" && /^4\d{4}$/.test(shiftNumStr);
       const isChickenDelight = Boolean(
-        parsed.isChickenDelight || isWaversWest4x,
+        parsed.isChickenDelight || isWaversWest4x
       );
 
       // -------------------------------------------------------------
@@ -259,7 +262,7 @@ async function syncSftShiftsForSite(site, timezone = "America/Toronto") {
       );
 
       console.log(
-        `[SFT Sync] [UPSERT SUCCESS] Site: "${site}", Shift #${shiftNumStr} | totalSales: $${salesTotal} | Date: ${shiftDate.toISOString()}`,
+        `[SFT Sync] [UPSERT SUCCESS] Site: "${site}", Shift #${shiftNumStr} | totalSales: $${salesTotal} | Date: ${shiftDate.toISOString()}`
       );
     }
   } catch (err) {
@@ -267,20 +270,47 @@ async function syncSftShiftsForSite(site, timezone = "America/Toronto") {
   }
 }
 
-async function runSftIngestionCron() {
+const runSftIngestionCron = async () => {
+  if (isCronRunning) {
+    console.warn(
+      "[SFT Ingestion Cron] Previous job execution is still in progress. Skipping..."
+    );
+    return;
+  }
+
+  isCronRunning = true;
   console.log("[SFT Ingestion Cron] Starting execution...");
-  const locations = await Location.find(
-    { type: "store" },
-    "stationName timezone",
-  ).lean();
-  // for (const loc of locations) {
-  //   if (loc.stationName) {
-  //     await syncSftShiftsForSite(loc.stationName, loc.timezone);
-  //   }
-  // }
-  await syncSftShiftsForSite("Wavers West", "America/Chicago");
-  await syncSftShiftsForSite("Rankin", "America/Toronto");
-  console.log("[SFT Ingestion Cron] Completed execution.");
-}
+
+  try {
+    const locations = await Location.find(
+      { type: "store" },
+      "stationName timezone"
+    ).lean();
+
+    for (const loc of locations) {
+      if (loc.stationName) {
+        await syncSftShiftsForSite(loc.stationName, loc.timezone);
+      }
+    }
+  } catch (err) {
+    console.error("[SFT Ingestion Cron Execution Error]:", err);
+  } finally {
+    isCronRunning = false;
+    console.log("[SFT Ingestion Cron] Completed execution.");
+  }
+};
+
+// Scheduled every 3 hours at 2:00 AM, 5:00 AM, 8:00 AM, 11:00 AM, 2:00 PM, 5:00 PM, 8:00 PM, and 11:00 PM EST
+cron.schedule(
+  "0 2,5,8,11,14,17,20,23 * * *",
+  () => {
+    console.log("Triggering SFT ingestion cron job...");
+    runSftIngestionCron();
+  },
+  {
+    scheduled: true,
+    timezone: "America/Toronto",
+  }
+);
 
 module.exports = { runSftIngestionCron };
