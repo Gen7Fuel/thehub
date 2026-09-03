@@ -158,43 +158,44 @@ export async function executeRetailPriceUpdate({
   }
 
   // --- In executeRetailPriceUpdate inside server file ---
-  try {
-    if (locationDoc.gasBuddyStationId) {
-      const normalizedPrices = {};
-      for (const [feCode, numericPrice] of Object.entries(prices)) {
-        if (feCode === "DYED") continue;
-        const gasBuddyLabel = GRADE_MAP[feCode];
-        if (
-          gasBuddyLabel &&
-          numericPrice !== undefined &&
-          numericPrice !== null &&
-          !isNaN(numericPrice)
-        ) {
-          // Convert dollar input (1.549) to cents (154.9) without float rounding errors.
-          // Keep this as a STRING — wrapping it in Number() drops the trailing ".0" for
-          // round prices (Number("154.0") === 154), so GasBuddy would sometimes receive
-          // "154" instead of "154.0" depending on the price, and its price input reacts
-          // to a value with no decimal point differently than one that has it.
-          const priceInCents = (parseFloat(numericPrice) * 100).toFixed(1);
-          normalizedPrices[gasBuddyLabel] = priceInCents;
-        }
-      }
+  // Temporary stopping of gas buddy queing.
+  // try {
+  //   if (locationDoc.gasBuddyStationId) {
+  //     const normalizedPrices = {};
+  //     for (const [feCode, numericPrice] of Object.entries(prices)) {
+  //       if (feCode === "DYED") continue;
+  //       const gasBuddyLabel = GRADE_MAP[feCode];
+  //       if (
+  //         gasBuddyLabel &&
+  //         numericPrice !== undefined &&
+  //         numericPrice !== null &&
+  //         !isNaN(numericPrice)
+  //       ) {
+  //         // Convert dollar input (1.549) to cents (154.9) without float rounding errors.
+  //         // Keep this as a STRING — wrapping it in Number() drops the trailing ".0" for
+  //         // round prices (Number("154.0") === 154), so GasBuddy would sometimes receive
+  //         // "154" instead of "154.0" depending on the price, and its price input reacts
+  //         // to a value with no decimal point differently than one that has it.
+  //         const priceInCents = (parseFloat(numericPrice) * 100).toFixed(1);
+  //         normalizedPrices[gasBuddyLabel] = priceInCents;
+  //       }
+  //     }
 
-      if (Object.keys(normalizedPrices).length > 0) {
-        await gasBuddyQueue.add(
-          `gasbuddy-sync-${locationId}-${Date.now()}`,
-          {
-            gasBuddyStationId: locationDoc.gasBuddyStationId,
-            stationName,
-            prices: normalizedPrices,
-          },
-          { removeOnComplete: true, removeOnFail: false },
-        );
-      }
-    }
-  } catch (err) {
-    console.error("Non-blocking operational failure (GasBuddy):", err);
-  }
+  //     if (Object.keys(normalizedPrices).length > 0) {
+  //       await gasBuddyQueue.add(
+  //         `gasbuddy-sync-${locationId}-${Date.now()}`,
+  //         {
+  //           gasBuddyStationId: locationDoc.gasBuddyStationId,
+  //           stationName,
+  //           prices: normalizedPrices,
+  //         },
+  //         { removeOnComplete: true, removeOnFail: false },
+  //       );
+  //     }
+  //   }
+  // } catch (err) {
+  //   console.error("Non-blocking operational failure (GasBuddy):", err);
+  // }
 
   if (databaseWritesExecutedCount > 0) {
     const storeEmail = locationDoc.email;
