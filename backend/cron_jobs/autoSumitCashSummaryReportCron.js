@@ -18,7 +18,7 @@ const {
 } = require('../routes/cashSummaryNewRoutes')
 const { emailQueue } = require('../queues/emailQueue')
 
-const CUTOFF_DATE_STR = '2026-08-31'
+const CUTOFF_DATE_STR = '2026-09-02'
 const CDN_BASE_URL = process.env.CDN_BASE_URL || process.env.PUBLIC_CDN_BASE_URL || 'http://cdn:5001'
 const CASH_SUMMARY_EMAILS = (process.env.CASH_SUMMARY_EMAILS || 'reports@bosservicesltd.com')
   .split(',')
