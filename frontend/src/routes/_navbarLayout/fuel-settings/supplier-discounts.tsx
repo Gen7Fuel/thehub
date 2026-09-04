@@ -660,7 +660,7 @@ export function RouteComponent() {
                   onChange={(e) => setFormSupplierItem(e.target.value)}
                 >
                   <option value="">-- Choose Fuel Category --</option>
-                  <option value="GAS">GAS (RUL & PNL)</option>
+                  <option value="GAS">GAS (RUL & PUL)</option>
                   <option value="GAS-E15">GAS (E15)</option>
                   <option value="DIESEL & DYED">DIESEL & DYED</option>
                 </select>
