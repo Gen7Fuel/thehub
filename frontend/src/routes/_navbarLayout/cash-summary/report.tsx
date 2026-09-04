@@ -1653,24 +1653,84 @@ function VoidedTransactionsTable({
           </tr>
         </thead>
         <tbody className="divide-y">
-          {rows.map((tx) => (
-            <tr
-              key={tx.transactionId}
-              className="transition-colors hover:bg-slate-50/80"
-            >
-              <td className="p-3 font-mono text-xs">{tx.transactionId}</td>
-              <td className="p-3 text-xs text-slate-500">
-                {tx.eventStartTime?.toString().split("T")[1]?.substring(0, 5) ||
-                  tx.eventStartTime}
-              </td>
-              <td className="p-3">
-                {Array.isArray(tx.items) ? tx.items.length : 0} Items
-              </td>
-              <td className="p-3 text-right font-bold text-red-600">
-                {fmtNum(tx.totalAmount)}
-              </td>
-            </tr>
-          ))}
+          {rows.map((tx) => {
+            const itemsList = Array.isArray(tx.items) ? tx.items : [];
+            const timeFormatted =
+              tx.eventStartTime?.toString().split("T")[1]?.substring(0, 5) ||
+              tx.eventStartTime;
+
+            return (
+              <tr
+                key={tx.transactionId}
+                className="transition-colors hover:bg-slate-50/80"
+              >
+                <td className="p-3 font-mono text-xs">{tx.transactionId}</td>
+                <td className="p-3 text-xs text-slate-500">{timeFormatted}</td>
+                <td className="p-3">
+                  <Dialog>
+                    <DialogTrigger asChild>
+                      <button className="cursor-pointer font-medium text-blue-600 underline hover:text-blue-800">
+                        {itemsList.length}{" "}
+                        {itemsList.length === 1 ? "Item" : "Items"}
+                      </button>
+                    </DialogTrigger>
+                    <DialogContent className="max-w-2xl">
+                      <DialogHeader>
+                        <DialogTitle>
+                          Transaction Details: {tx.transactionId} (
+                          {timeFormatted})
+                        </DialogTitle>
+                      </DialogHeader>
+                      <div className="mt-4 overflow-hidden rounded-md border">
+                        <table className="w-full text-xs">
+                          <thead className="border-b bg-slate-50">
+                            <tr>
+                              <th className="p-2 text-left">Line</th>
+                              <th className="p-2 text-left">Item Name</th>
+                              <th className="p-2 text-left">UPC/GTIN</th>
+                              <th className="p-2 text-right">Amount</th>
+                            </tr>
+                          </thead>
+                          <tbody className="divide-y">
+                            {itemsList.map((item: any, i: number) => (
+                              <tr key={i}>
+                                <td className="p-2 text-muted-foreground">
+                                  {item.transactionLine ?? i + 1}
+                                </td>
+                                <td className="p-2 font-medium">
+                                  {item.itemName === "NoMap" ? (
+                                    <span className="italic text-slate-400">
+                                      Item Details Not Found
+                                    </span>
+                                  ) : (
+                                    item.itemName
+                                  )}
+                                </td>
+                                <td className="p-2 font-mono text-muted-foreground">
+                                  {item.upc?.toString().startsWith("99999") ||
+                                  item.gtin?.toString().startsWith("99999") ? (
+                                    <span className="text-slate-300">N/A</span>
+                                  ) : (
+                                    item.upc || item.gtin || "—"
+                                  )}
+                                </td>
+                                <td className="p-2 text-right">
+                                  {fmtNum(item.amount)}
+                                </td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    </DialogContent>
+                  </Dialog>
+                </td>
+                <td className="p-3 text-right font-bold text-red-600">
+                  {fmtNum(tx.totalAmount)}
+                </td>
+              </tr>
+            );
+          })}
         </tbody>
       </table>
     </div>
