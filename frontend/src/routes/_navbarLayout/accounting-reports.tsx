@@ -16,12 +16,20 @@ function RouteComponent() {
 
   const isInfonetActive = matchRoute({ to: "/accounting-reports/infonet" });
   const idEODActive = matchRoute({ to: "/accounting-reports/end-of-day" });
+  const isArCustomerActive = matchRoute({
+    to: "/accounting-reports/ar-customer-report",
+  });
 
   const { user } = useAuth();
   const access = user?.access || {};
 
   const hasInfonet = Boolean(access?.accounting?.accountingReports?.infonet);
-  const hasEOD = Boolean(access?.accounting?.accountingReports?.endOfDayReport?.value);
+  const hasEOD = Boolean(
+    access?.accounting?.accountingReports?.endOfDayReport?.value
+  );
+  const hasArCustomer = Boolean(
+    access?.accounting?.accountingReports?.arCustomerReport
+  );
 
   return (
     <div className="pt-5 flex flex-col items-center">
@@ -35,7 +43,7 @@ function RouteComponent() {
           >
             <Button
               {...(!isInfonetActive && ({ variant: "outline" } as object))}
-              className={hasEOD ? "rounded-r-none" : ""}
+              className={hasEOD || hasArCustomer ? "rounded-r-none" : ""}
             >
               Infonet Reports
             </Button>
@@ -50,9 +58,27 @@ function RouteComponent() {
           >
             <Button
               {...(!idEODActive && ({ variant: "outline" } as object))}
-              className={hasEOD && hasInfonet ? "rounded-l-none" : ""}
+              className={`
+                ${hasInfonet ? "rounded-l-none" : ""} 
+                ${hasArCustomer ? "rounded-r-none" : ""}
+              `.trim()}
             >
               EOD Reports
+            </Button>
+          </Link>
+        )}
+
+        {/* A/R Customer Report tab button */}
+        {hasArCustomer && (
+          <Link
+            to="/accounting-reports/ar-customer-report"
+            activeOptions={{ exact: true }}
+          >
+            <Button
+              {...(!isArCustomerActive && ({ variant: "outline" } as object))}
+              className={hasInfonet || hasEOD ? "rounded-l-none" : ""}
+            >
+              A/R Customer Reports
             </Button>
           </Link>
         )}
