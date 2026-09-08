@@ -13,6 +13,13 @@ type FormStore = {
     customerName: string;
     setCustomerName: (name: string) => void;
 
+    // Whether the current customerName came from an actual selection (dropdown
+    // pick, quick-select tap, or a verified fleet-card lookup) rather than being
+    // hand-typed — any edit to the text box flips this back to false. Gates
+    // submission so a free-typed name can never be submitted as a real AR customer.
+    customerNameSelected: boolean;
+    setCustomerNameSelected: (value: boolean) => void;
+
     driverName: string;
     setDriverName: (name: string) => void;
 
@@ -138,6 +145,8 @@ export const useFormStore = create<FormStore>((set) => ({
     setStationName: (stationName) => set({ stationName }),
     customerName: '',
     setCustomerName: (customerName) => set({ customerName }),
+    customerNameSelected: false,
+    setCustomerNameSelected: (customerNameSelected) => set({ customerNameSelected }),
     driverName: '',
     setDriverName: (driverName) => set({ driverName }),
     vehicleInfo: '',
@@ -166,6 +175,7 @@ export const useFormStore = create<FormStore>((set) => ({
         poNumber: '',
         stationName: '',
         customerName: '',
+        customerNameSelected: false,
         driverName: '',
         vehicleInfo: '',
         licensePlate: '',

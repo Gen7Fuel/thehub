@@ -127,6 +127,9 @@ function RouteComponent() {
   const customerName = useFormStore((state) => state.customerName)
   const setCustomerName = useFormStore((state) => state.setCustomerName)
 
+  const customerNameSelected = useFormStore((state) => state.customerNameSelected)
+  const setCustomerNameSelected = useFormStore((state) => state.setCustomerNameSelected)
+
   const driverName = useFormStore((state) => state.driverName)
   const setDriverName = useFormStore((state) => state.setDriverName)
 
@@ -221,11 +224,15 @@ function RouteComponent() {
 
     if (data.message) {
       setCustomerName('')
+      setCustomerNameSelected(false)
       setDriverName('')
       setVehicleInfo('')
       setLicensePlate('')
     } else {
+      // A verified fleet-card lookup is as trustworthy as picking from the
+      // AR customer dropdown — it comes straight from the backend record.
       setCustomerName(data.customerName)
+      setCustomerNameSelected(true)
       setDriverName(data.driverName)
       setVehicleInfo(data.vehicleMakeModel)
       setLicensePlate(data.numberPlate ?? '')
@@ -287,11 +294,16 @@ function RouteComponent() {
     const handleClickOutside = (e: MouseEvent) => {
       if (customerNameRef.current && !customerNameRef.current.contains(e.target as Node)) {
         setShowSuggestions(false)
+        // Clicking a suggestion is itself inside customerNameRef, so this never
+        // fires for a real pick — only for genuinely walking away from an
+        // unselected, hand-typed name. Clear it rather than leaving a stale
+        // free-typed value sitting in the box.
+        if (!customerNameSelected && customerName) setCustomerName('')
       }
     }
     document.addEventListener('mousedown', handleClickOutside)
     return () => document.removeEventListener('mousedown', handleClickOutside)
-  }, [])
+  }, [customerName, customerNameSelected])
 
   useEffect(() => {
     if (showingFleetCardInput) {
@@ -383,9 +395,11 @@ function RouteComponent() {
     if (selectedQuickCustomerId === qc._id) {
       resetNumberSection()
       setCustomerName('')
+      setCustomerNameSelected(false)
       return
     }
     setCustomerName(qc.name)
+    setCustomerNameSelected(true)
     setSelectedQuickCustomerId(qc._id)
     setShowSuggestions(false)
     if (qc.fleetCardNumber) {
@@ -653,7 +667,7 @@ function RouteComponent() {
             name="customerName"
             value={customerName}
             autoComplete="off"
-            onChange={(e) => { setCustomerName(e.target.value); setShowSuggestions(true); if (selectedQuickCustomerId) resetNumberSection() }}
+            onChange={(e) => { setCustomerName(e.target.value); setCustomerNameSelected(false); setShowSuggestions(true); if (selectedQuickCustomerId) resetNumberSection() }}
             onFocus={() => setShowSuggestions(true)}
           />
           {showSuggestions && customerSuggestions.length > 0 && (
@@ -662,7 +676,7 @@ function RouteComponent() {
                 <li
                   key={c._id}
                   className="px-3 py-2 text-sm cursor-pointer hover:bg-gray-100"
-                  onMouseDown={() => { setCustomerName(c.name); setShowSuggestions(false); if (selectedQuickCustomerId) resetNumberSection() }}
+                  onMouseDown={() => { setCustomerName(c.name); setCustomerNameSelected(true); setShowSuggestions(false); if (selectedQuickCustomerId) resetNumberSection() }}
                 >
                   {c.name}
                 </li>
@@ -800,7 +814,7 @@ function RouteComponent() {
               if (isClassicPoNumberSite && numberType === 'po') setPoNumber(padFive(poNumber));
               fileInputRef.current?.click();
             }}
-            disabled={!!poError || !customerName || !driverName || (purchaseType === 'fuel' ? quantity === 0 : !itemsDescription) || (isFleetCardOnlySite ? (!noFleetCard && cardStatus !== 'active' && cardStatus !== 'offline') : (numberType === 'fleet' && cardStatus !== 'active' && cardStatus !== 'offline')) || (showRegisterSelector && !register)}
+            disabled={!!poError || !customerName || !customerNameSelected || !driverName || (purchaseType === 'fuel' ? quantity === 0 : !itemsDescription) || (isFleetCardOnlySite ? (!noFleetCard && cardStatus !== 'active' && cardStatus !== 'offline') : (numberType === 'fleet' && cardStatus !== 'active' && cardStatus !== 'offline')) || (showRegisterSelector && !register)}
           >
             <Camera className="mr-2 h-4 w-4" />
             Upload Receipt
