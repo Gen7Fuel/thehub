@@ -102,7 +102,7 @@ async function getGradeVolumeFuelData(pool, csoCode, startDate, endDate) {
   const dbStartDate = formatDateForDB(startDate);
   const dbEndDate = formatDateForDB(endDate);
   const result = await pool.request().query(`
-    SELECT s.[Station_SK], s.[Date_SK] as 'businessDate', s.[FuelGradeID] as 'fuelGradeID', s.[Sales_Volume_LTR] as 'fuelGradeSalesVolume', s.[Description] as 'fuelGradeDescription'
+    SELECT s.[Station_SK], s.[Date_SK] as 'businessDate', s.[FuelGradeID] as 'fuelGradeID', s.[Sales_Volume_LTR] as 'fuelGradeSalesVolume', s.[Sales_Amount] as 'fuelSalesAmount', s.[Description] as 'fuelGradeDescription'
     FROM [CSO].[FuelSummary] s
     WHERE
       s.[Station_SK] = ${csoCode}
@@ -1795,6 +1795,92 @@ async function getLatestCsoVendorsList() {
   }
 }
 
+/**
+ * Query timesheet labor costs and hours broken down by date and status.
+ */
+async function getEmployeeTimesheetVsSalesChart(pool, csoCode, startDate, endDate) {
+  const transactionsResult = await pool.request()
+    .input("StationSK", sql.Int, csoCode)
+    .input("StartDate", sql.Date, startDate)
+    .input("EndDate", sql.Date, endDate)
+    .query(`
+      WITH CategorizedTimesheets AS (
+        SELECT 
+            CAST(t.[startDate] AS DATE) AS LaborDate,
+            t.[Station_SK],
+            t.[status],
+            t.[hours],
+            t.[earningDescription],
+            
+            -- Calculated Cost for this specific shift row
+            CASE t.[earningDescription]
+                WHEN 'Holiday Pay 1.0'       THEN ISNULL(TRY_CAST(e.[employeeRate_Holiday_Pay_1_0] AS DECIMAL(18,4)), 0) * t.[hours]
+                WHEN 'ST Holiday Pay 1.0'    THEN ISNULL(TRY_CAST(e.[employeeRate_ST_Holiday_Pay_1_0] AS DECIMAL(18,4)), 0) * t.[hours]
+                WHEN 'Holiday Pay @1.5'      THEN ISNULL(TRY_CAST(e.[employeeRate_Holiday_Pay_1_5] AS DECIMAL(18,4)), 0) * t.[hours]
+                WHEN 'ST Holiday Pay @ 1.5'  THEN ISNULL(TRY_CAST(e.[employeeRate_ST_Holiday_Pay_1_5] AS DECIMAL(18,4)), 0) * t.[hours]
+                WHEN 'Overtime'             THEN ISNULL(TRY_CAST(e.[employeeRate_Overtime] AS DECIMAL(18,4)), 0) * t.[hours]
+                WHEN 'ST Overtime'          THEN ISNULL(TRY_CAST(e.[employeeRate_Overtime] AS DECIMAL(18,4)), 0) * t.[hours]
+                WHEN 'Regular Pay'          THEN ISNULL(TRY_CAST(e.[employeeRate_Regular_Pay] AS DECIMAL(18,4)), 0) * t.[hours]
+                WHEN 'ST Regular Pay'       THEN ISNULL(TRY_CAST(e.[employeeRate_ST_Regular_Pay] AS DECIMAL(18,4)), 0) * t.[hours]
+                WHEN 'Regular Salary'       THEN (ISNULL(TRY_CAST(e.[employeeRate_Regular_Salary] AS DECIMAL(18,4)), 0) / NULLIF(TRY_CAST(e.[hoursPerPay] AS DECIMAL(18,4)), 0)) * t.[hours]
+                WHEN 'ST Reg Salary'        THEN (ISNULL(TRY_CAST(e.[employeeRate_ST_Reg_Salary] AS DECIMAL(18,4)), 0) / NULLIF(TRY_CAST(e.[hoursPerPay] AS DECIMAL(18,4)), 0)) * t.[hours]
+                WHEN 'Sick - Unpaid Hrs'    THEN ISNULL(TRY_CAST(e.[employeeRate_Sick_Unpaid_Hrs] AS DECIMAL(18,4)), 0) * t.[hours]
+                WHEN 'Sick Hrs - Paid'      THEN ISNULL(TRY_CAST(e.[employeeRate_Sick_Hrs_Paid] AS DECIMAL(18,4)), 0) * t.[hours]
+                WHEN 'Gen7Callin Hrs'       THEN (ISNULL(TRY_CAST(e.[employeeRate_Regular_Pay] AS DECIMAL(18,4)), 0) + ISNULL(TRY_CAST(e.[employeeRate_Gen7Callin_Hrs] AS DECIMAL(18,4)), 0)) * t.[hours]
+                WHEN 'ST Gen7Callin Hrs'    THEN (ISNULL(TRY_CAST(e.[employeeRate_ST_Regular_Pay] AS DECIMAL(18,4)), 0) + ISNULL(TRY_CAST(e.[employeeRate_ST_Gen7Callin_Hrs] AS DECIMAL(18,4)), 0)) * t.[hours]
+                WHEN 'Training'             THEN COALESCE(TRY_CAST(e.[employeeRate_ST_Regular_Pay] AS DECIMAL(18,4)), TRY_CAST(e.[employeeRate_Regular_Pay] AS DECIMAL(18,4)), 0) * t.[hours]
+                WHEN 'Bereavement Hrs - Paid' THEN ISNULL(TRY_CAST(e.[employeeRate_Bereavement_Hrs_Paid] AS DECIMAL(18,4)), 0) * t.[hours]
+                ELSE 0
+            END AS ShiftCost,
+
+            -- Valid Earning Flag: 1 if earningDescription is tracked, else 0
+            CASE WHEN t.[earningDescription] IN (
+                'Holiday Pay 1.0', 'ST Holiday Pay 1.0', 'Holiday Pay @1.5', 'ST Holiday Pay @ 1.5',
+                'Overtime', 'ST Overtime', 'Regular Pay', 'ST Regular Pay',
+                'Regular Salary', 'ST Reg Salary', 'Sick - Unpaid Hrs', 'Sick Hrs - Paid',
+                'Gen7Callin Hrs', 'ST Gen7Callin Hrs', 'Training', 'Bereavement Hrs - Paid'
+            ) THEN 1 ELSE 0 END AS IsValidEarningType
+
+        FROM [Payworks].[Timesheets] t
+        INNER JOIN [Payworks].[Employees] e
+            ON CAST(t.[employeeId] AS NVARCHAR(100)) = e.[employeeId]
+        WHERE t.[startDate] >= CAST(@StartDate AS DATETIME)
+          AND t.[startDate] <= DATEADD(SECOND, -1, DATEADD(DAY, 1, CAST(@EndDate AS DATETIME)))
+          AND t.[Station_SK] = @StationSK
+          AND t.[Station_SK] IS NOT NULL
+          AND (t.[position] NOT LIKE '%Manager%' OR t.[position] IS NULL)
+          AND t.[DeletedAt] IS NULL
+          AND t.[status] <> 'Deleted'
+      )
+      SELECT 
+          LaborDate,
+          Station_SK,
+
+          -- Total Hours and Cost
+          SUM(CASE WHEN IsValidEarningType = 1 AND hours IS NOT NULL THEN hours ELSE 0 END) AS TotalHoursWorked,
+          SUM(ShiftCost) AS ActualLaborCost,
+
+          -- Approved Breakdown
+          SUM(CASE WHEN status IN ('Approved', 'Stat Pay') AND IsValidEarningType = 1 AND hours IS NOT NULL THEN hours ELSE 0 END) AS ApprovedHoursWorked,
+          SUM(CASE WHEN status IN ('Approved', 'Stat Pay') THEN ShiftCost ELSE 0 END) AS ApprovedLaborCost,
+
+          -- Pending Breakdown
+          SUM(CASE WHEN status = 'Pending' AND IsValidEarningType = 1 AND hours IS NOT NULL THEN hours ELSE 0 END) AS PendingHoursWorked,
+          SUM(CASE WHEN status = 'Pending' THEN ShiftCost ELSE 0 END) AS PendingLaborCost
+
+      FROM CategorizedTimesheets
+      GROUP BY 
+          LaborDate,
+          Station_SK
+      ORDER BY 
+          LaborDate ASC;
+    `);
+
+  return {
+    timesheets: transactionsResult.recordset ?? [],
+  };
+}
+
 async function getAllSQLData(csoCode, dates) {
   const pool = await getPool();
 
@@ -1802,12 +1888,14 @@ async function getAllSQLData(csoCode, dates) {
     salesStart, salesEnd,
     fuelStart, fuelEnd,
     transStart, transEnd,
-    shiftStart, shiftEnd
+    shiftStart, shiftEnd,
+    timesheetStart, timesheetEnd // <--- New Parameters
   } = dates;
 
   const queryNames = [
     "sales", "fuel", "transactions", "timePeriod",
     "tender", "shiftTimings", "bistroWoWSales", "top10Bistro",
+    "timesheets" // <--- Added
   ];
 
   async function runQuery(name, fn) {
@@ -1827,8 +1915,13 @@ async function getAllSQLData(csoCode, dates) {
   const shiftResult = await runQuery("shiftTimings", () => getShiftTransactionTimings(pool, csoCode, shiftStart, shiftEnd));
   const bistroResult = await runQuery("bistroWoWSales", () => getWeeklyBistroSales(pool, csoCode));
   const top10Result = await runQuery("top10Bistro", () => getTop10Bistro(pool, csoCode));
+  const timesheetsResult = await runQuery("timesheets", () => getEmployeeTimesheetVsSalesChart(pool, csoCode, timesheetStart, timesheetEnd));
 
-  const allResults = [salesResult, fuelResult, transResult, periodResult, tenderResult, shiftResult, bistroResult, top10Result];
+  const allResults = [
+    salesResult, fuelResult, transResult, periodResult, 
+    tenderResult, shiftResult, bistroResult, top10Result, timesheetsResult
+  ];
+  
   const failedQueries = queryNames.filter((_, i) => allResults[i].status === "rejected");
 
   return {
@@ -1840,11 +1933,7 @@ async function getAllSQLData(csoCode, dates) {
     shiftTransactionTimings: shiftResult.status === "fulfilled" ? shiftResult.value : [],
     bistroWoWSales: bistroResult.status === "fulfilled" ? bistroResult.value : [],
     top10Bistro: top10Result.status === "fulfilled" ? top10Result.value : [],
-    // Internal metadata, NOT part of the client-facing payload — names of queries that
-    // failed after all retries. Callers must strip this before returning/caching the
-    // result and use it to decide whether the data is safe to cache (see dashboardCacheCron.js
-    // and salesRoutes.js's /all-data handler). Without this, a transient SQL failure looks
-    // identical to a legitimately empty result and gets cached as if it were valid.
+    employeeTimesheets: timesheetsResult.status === "fulfilled" ? timesheetsResult.value.timesheets : [], // <--- Included
     _failedQueries: failedQueries,
   };
 }

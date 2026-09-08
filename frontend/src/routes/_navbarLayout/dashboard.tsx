@@ -101,6 +101,7 @@ import {
   SafeBalanceTrendChart,
   PayablesDiscrepancyTable,
 } from "@/components/custom/dashboard/accountingCharts";
+import {ShiftsAndSalesChart} from "@/components/custom/dashboard/ShiftsAndSalesChart";
 import { Skeleton } from "@/components/ui/skeleton";
 // import { Button } from '@/components/ui/button';
 // import OperationalTimelineCard from '@/components/custom/dashboard/operationalTimelineChart';
@@ -419,6 +420,7 @@ function RouteComponent() {
   const [tenderTransactions, setTenderTransactions] = useState<
     TenderTransaction[]
   >([]);
+  const [timesheetData, setTimesheetData] = useState<any[]>([]);
   const [bistroWoWSales, setBistroWoWSales] = useState<BistroWowSales[]>([]);
   const [top10Bistro, setTop10Bistro] = useState<Top10Bistro[]>([]);
   // const [operationalTimings, setOperationalTimings] = useState<OperationalTiming[]>([]);
@@ -530,6 +532,8 @@ function RouteComponent() {
         transStart.setDate(transStart.getDate() - 14);
         const shiftStart = new Date(end);
         shiftStart.setDate(shiftStart.getDate() - 7);
+        const timesheetStart = new Date(end);
+        timesheetStart.setDate(timesheetStart.getDate() - 59);
         const salesStart = new Date(end);
         salesStart.setDate(salesStart.getDate() - 59);
         salesStart.setHours(0, 0, 0, 0);
@@ -542,6 +546,8 @@ function RouteComponent() {
         const transEndDate = fmt(end);
         const shiftStartDate = fmt(shiftStart);
         const shiftEndDate = fmt(end);
+        const timesheetStartDate = fmt(timesheetStart);
+        const timesheetEndDate = fmt(end);
         const salesStartDate = fmt(salesStart);
         const salesEndDate = fmt(salesEnd);
 
@@ -562,6 +568,7 @@ function RouteComponent() {
           getDashboardData(STORES.TENDER_TRANS, site), // idx 5
           getDashboardData(STORES.BISTRO_WOW_SALES, site), // idx 6
           getDashboardData(STORES.TOP_10_BISTRO, site), // idx 7
+          getDashboardData(STORES.TIMESHEET, site), // idx 8
         ]);
 
         // ────────────────────────────────────────────────────────
@@ -635,6 +642,7 @@ function RouteComponent() {
           tenderCached,
           bistroCached,
           top10Cached,
+          timesheetCached,
         ] = idbResults.map((r) => (r.status === "fulfilled" ? r.value : null));
 
         // ── Always call API (Redis-cached on backend, <5ms) — fall back to IDB on failure ──
@@ -651,7 +659,10 @@ function RouteComponent() {
               transEndDate,
               shiftStartDate,
               shiftEndDate,
+              timesheetStartDate,
+              timesheetEndDate,
             );
+            const timesheetArray = data.employeeTimesheets || data.timesheet || [];
             // Update IndexedDB as L2 offline fallback
             saveDashboardData(STORES.SALES, site, data.sales);
             saveDashboardData(STORES.FUEL, site, data.fuel);
@@ -672,7 +683,11 @@ function RouteComponent() {
               data.bistroWoWSales,
             );
             saveDashboardData(STORES.TOP_10_BISTRO, site, data.top10Bistro);
-            return data;
+            saveDashboardData(STORES.TIMESHEET, site, timesheetArray);
+            return {
+              ...data,
+              timesheet: timesheetArray,
+            };
           } catch {
             // Fallback to IndexedDB if API fails
             console.log("⚠️ API failed, using IndexedDB cache");
@@ -684,6 +699,7 @@ function RouteComponent() {
               tenderTransactions: tenderCached ?? [],
               bistroWoWSales: bistroCached ?? [],
               top10Bistro: top10Cached ?? [],
+              timesheet: timesheetCached ?? [],
             };
           }
         })();
@@ -835,6 +851,7 @@ function RouteComponent() {
         setTimePeriodData(sqlData.timePeriodTransactions);
         setBistroWoWSales(sqlData.bistroWoWSales);
         setTop10Bistro(sqlData.top10Bistro);
+        setTimesheetData(sqlData.timesheet || sqlData.employeeTimesheets || []);
 
         setLoadingOverview(false);
         setLoadingSql(false);
@@ -2366,6 +2383,41 @@ function RouteComponent() {
             {/* )} */}
 
             {/* ======================= */}
+            {/* Shifts & Scheduling     */}
+            {/* ======================= */}
+            {!loadingSql && (
+              <section aria-labelledby="shifts-heading" className="mb-10">
+                <h2
+                  id="shifts-heading"
+                  className="text-2xl font-bold mb-4 pl-4"
+                >
+                  Shifts & Scheduling
+                </h2>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                  {/* 1 & 2. Main Chart: Takes up 2 spaces on md/lg screens, squeezes on mobile */}
+                  <ShiftsAndSalesChart
+                    timesheetData={timesheetData}
+                    className="col-span-1 md:col-span-2 lg:col-span-2"
+                  />
+
+                  {/* 3. Placeholder / Complementary Chart for Space #3 */}
+                  <Card className="col-span-1">
+                    <CardHeader>
+                      <CardTitle>Labor Summary</CardTitle>
+                      <CardDescription>Overall shift cost metrics</CardDescription>
+                    </CardHeader>
+                    <CardContent>
+                      <div className="py-10 text-center text-muted-foreground text-sm">
+                        Space reserved for Shift Breakdown / Labor KPIs
+                      </div>
+                    </CardContent>
+                  </Card>
+                </div>
+              </section>
+            )}
+
+            {/* ======================= */}
             {/* Store Activity Section   */}
             {/* ======================= */}
             {!loadingSql && site !== "Jocko Point" && site !== "Sarnia" && (
@@ -2787,6 +2839,8 @@ const fetchAllSqlData = async (
   transEnd: string,
   shiftStart: string,
   shiftEnd: string,
+  timesheetStart: string,
+  timesheetEnd: string,
 ) => {
   const params = new URLSearchParams({
     csoCode,
@@ -2799,6 +2853,8 @@ const fetchAllSqlData = async (
     transEnd,
     shiftStart,
     shiftEnd,
+    timesheetStart,
+    timesheetEnd
   });
 
   const res = await fetch(`/api/sql/all-data?${params}`, {

@@ -2,6 +2,7 @@ const express = require('express');
 const router = express.Router();
 const { CashSummary, CashSummaryReport } = require('../models/CashSummaryNew')
 const Location = require('../models/Location')
+const { mergeSalesWithTimesheets } = require('../utils/mergeSalesWithTimesheets');
 const { getCategorizedSalesData, getGradeVolumeFuelData, getTransTimePeriodData, getAllSQLData } = require('../services/sqlService');
 const redis = require('../utils/redisClient');
 
@@ -84,11 +85,12 @@ const getMinutesFromMidnight = (input, referenceDateStr) => {
 router.get('/all-data', async (req, res) => {
   const {
     csoCode,
-    site: siteParam,  // sent by client to skip the Location lookup
+    site: siteParam,
     salesStart, salesEnd,
     fuelStart, fuelEnd,
     transStart, transEnd,
-    shiftStart, shiftEnd
+    shiftStart, shiftEnd,
+    timesheetStart, timesheetEnd // <--- Extracted
   } = req.query;
 
   try {
@@ -108,7 +110,13 @@ router.get('/all-data', async (req, res) => {
 
     // Run SQL queries AND MongoDB shift queries in parallel — no sequential dependency
     const [sqlResponse, reports, shifts] = await Promise.all([
-      getAllSQLData(csoCode, { salesStart, salesEnd, fuelStart, fuelEnd, transStart, transEnd, shiftStart, shiftEnd }),
+      getAllSQLData(csoCode, { 
+        salesStart, salesEnd, 
+        fuelStart, fuelEnd, 
+        transStart, transEnd, 
+        shiftStart, shiftEnd,
+        timesheetStart, timesheetEnd // <--- Passed to SQL service
+      }),
       CashSummaryReport.find({ site: siteParam, date: { $gte: startDate, $lte: endDate } }).lean(),
       CashSummary.find({ site: siteParam, date: { $gte: startDate, $lte: endDate } }).lean(),
     ]);
@@ -179,12 +187,7 @@ router.get('/all-data', async (req, res) => {
 
         // Metrics added back for "Store Activity Trend" section
         chartMetrics: {
-          openMin,
-          closeMin,
-          regStartMin,
-          regEndMin,
-          clStartMin,
-          clEndMin,
+          openMin, closeMin, regStartMin, regEndMin, clStartMin, clEndMin,
           isZombieShift: openMin !== null && openMin < 0,
           isMissingClose: normOpen && !normClose,
           hasActivityBeforeOpen: sqlRow.firstRegTrans && normOpen && (new Date(sqlRow.firstRegTrans) < normOpen)
@@ -194,9 +197,17 @@ router.get('/all-data', async (req, res) => {
       current.setDate(current.getDate() + 1);
     }
 
+    // Process and enrich employeeTimesheets with daily total sales (Store Sales + Cumulative Fuel Sales)
+    const enrichedEmployeeTimesheets = mergeSalesWithTimesheets(
+      sqlData.employeeTimesheets || [],
+      sqlData.sales || [],
+      sqlData.fuel || []
+    );
+
     // 3. Build response
     const responseData = {
       ...sqlData,
+      employeeTimesheets: enrichedEmployeeTimesheets,
       operationalTimings,
       lastUpdated: new Date().toISOString(),
     };

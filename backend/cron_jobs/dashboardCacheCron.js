@@ -2,6 +2,7 @@ const cron = require("node-cron");
 const Location = require("../models/Location");
 const { CashSummary, CashSummaryReport } = require("../models/CashSummaryNew");
 const { getAllSQLData } = require("../services/sqlService");
+const { mergeSalesWithTimesheets } = require('../utils/mergeSalesWithTimesheets');
 const redis = require("../utils/redisClient");
 
 // Helper: minutes from midnight for a given datetime and reference date
@@ -36,6 +37,7 @@ async function buildDashboardData(csoCode, siteName) {
   const fuelStart = new Date(end); fuelStart.setDate(fuelStart.getDate() - 60);
   const transStart = new Date(end); transStart.setDate(transStart.getDate() - 14);
   const shiftStart = new Date(end); shiftStart.setDate(shiftStart.getDate() - 7);
+  const timesheetStart = new Date(end); timesheetStart.setDate(timesheetStart.getDate() - 59); // <--- Added
 
   const dates = {
     salesStart: fmt(salesStart),
@@ -46,6 +48,8 @@ async function buildDashboardData(csoCode, siteName) {
     transEnd: fmt(end),
     shiftStart: fmt(shiftStart),
     shiftEnd: fmt(end),
+    timesheetStart: fmt(timesheetStart), // <--- Included
+    timesheetEnd: fmt(end),              // <--- Included
   };
 
   const startDate = new Date(dates.shiftStart);
@@ -120,9 +124,17 @@ async function buildDashboardData(csoCode, siteName) {
     current.setDate(current.getDate() + 1);
   }
 
+  // Process and enrich employeeTimesheets with daily total sales (Store Sales + Cumulative Fuel Sales)
+  const enrichedEmployeeTimesheets = mergeSalesWithTimesheets(
+    sqlData.employeeTimesheets || [],
+    sqlData.sales || [],
+    sqlData.fuel || []
+  );
+
   return {
     data: {
       ...sqlData,
+      employeeTimesheets: enrichedEmployeeTimesheets,
       operationalTimings,
       lastUpdated: new Date().toISOString(),
     },
