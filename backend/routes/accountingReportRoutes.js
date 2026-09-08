@@ -15,7 +15,13 @@ const { emailQueue } = require('../queues/emailQueue'); // Update to match your 
 
 // Configure multer to store uploaded files in memory
 const upload = multer({ storage: multer.memoryStorage() });
-
+const Transaction = require("../models/Transactions");
+const { CashSummary } = require('../models/CashSummaryNew');
+const {
+  normalizeCustomerName,
+  generateArCustomerReportPdf,
+  generateArPaidReportPdf
+} = require('../utils/generateArCustomerReportPdf');
 // Import your refactored PDF generator helpers
 const {
   fetchEodDataForDate,
@@ -438,6 +444,195 @@ router.post('/eod-reports/cumulative', async (req, res) => {
     console.error('Error generating EOD cumulative report:', error);
     return res.status(500).json({
       error: 'Failed to generate EOD cumulative report.',
+      details: error.message
+    });
+  }
+});
+
+/**
+ * POST /api/accounting-reports/ar-customer-report
+ * Body parameters:
+ *  - stationName (string, required)
+ *  - startDate (string YYYY-MM-DD, required)
+ *  - endDate (string YYYY-MM-DD, required)
+ *  - includeArPaidReport (boolean, optional)
+ */
+router.post('/ar-customer-report', async (req, res) => {
+  try {
+    const {
+      stationName,
+      startDate,
+      endDate,
+      includeArPaidReport = false
+    } = req.body;
+
+    // 1. Parameter Validation
+    if (!stationName || !startDate || !endDate) {
+      return res.status(400).json({
+        error: 'Parameters "stationName", "startDate", and "endDate" are required.'
+      });
+    }
+
+    // 2. Fetch Location
+    const locationDoc = await Location.findOne({
+      $or: [
+        { stationName: new RegExp(`^${stationName}$`, 'i') },
+        { site: stationName }
+      ]
+    });
+
+    if (!locationDoc) {
+      return res.status(404).json({ error: `Location not found for station: ${stationName}` });
+    }
+
+    const site = locationDoc.stationName || locationDoc.site;
+    const siteDisplayName = formatReportSiteName(site);
+
+    const startBoundary = new Date(`${startDate}T00:00:00.000Z`);
+    const endBoundary = new Date(`${endDate}T23:59:59.999Z`);
+
+    // 3. Query A/R Transactions
+    const transactions = await Transaction.find({
+      $or: [{ stationName: site }, { site: site }],
+      date: { $gte: startBoundary, $lte: endBoundary },
+      deletedAt: null
+    })
+      .sort({ customerName: 1, date: 1 })
+      .lean();
+
+    // 4. Group A/R Transactions by Customer
+    const customerMap = {};
+    transactions.forEach((trx) => {
+      const rawName = (trx.customerName || 'Unknown Customer').trim();
+      const normalizedKey = normalizeCustomerName(rawName);
+
+      if (!customerMap[normalizedKey]) {
+        customerMap[normalizedKey] = {
+          customerName: rawName,
+          items: [],
+          totalAmount: 0,
+          count: 0
+        };
+      }
+
+      customerMap[normalizedKey].items.push(trx);
+      customerMap[normalizedKey].totalAmount += trx.amount || 0;
+      customerMap[normalizedKey].count += 1;
+    });
+
+    const groupedData = Object.values(customerMap).sort((a, b) =>
+      a.customerName.localeCompare(b.customerName, undefined, { sensitivity: 'base' })
+    );
+
+    // 5. Generate Main A/R Transactions PDF Buffer
+    const pdfBuffer = await generateArCustomerReportPdf({
+      siteDisplayName,
+      startDate,
+      endDate,
+      groupedData
+    });
+
+    // 6. Build Attachments Array
+    const attachments = [];
+    const mainReportFileName = `AR_Customer_Transactions_${siteDisplayName}_${startDate}_to_${endDate}.pdf`;
+
+    attachments.push({
+      filename: mainReportFileName,
+      content: await attachmentContentToBase64(pdfBuffer),
+      encoding: 'base64',
+      contentType: 'application/pdf'
+    });
+
+    // 7. Process A/R Paid Report (CashSummary Data) if flag is active
+    if (includeArPaidReport) {
+      const paidRecords = await CashSummary.find({
+        $or: [{ site: site }, { stationName: site }],
+        date: { $gte: startBoundary, $lte: endBoundary },
+        'arCustomers.paid': { $exists: true, $ne: null, $gt: 0 }
+      })
+        .sort({ date: 1, shift_number: 1 })
+        .lean();
+
+      const paidCustomerMap = {};
+
+      paidRecords.forEach((doc) => {
+        const formattedDate = doc.date ? new Date(doc.date).toISOString().split('T')[0] : 'N/A';
+
+        if (Array.isArray(doc.arCustomers)) {
+          doc.arCustomers.forEach((cust) => {
+            if (cust.paid !== null && cust.paid !== undefined && cust.paid > 0) {
+              const rawName = (cust.name || 'Unknown Customer').trim();
+              const normalizedKey = normalizeCustomerName(rawName);
+
+              if (!paidCustomerMap[normalizedKey]) {
+                paidCustomerMap[normalizedKey] = {
+                  customerName: rawName,
+                  items: [],
+                  totalAmount: 0,
+                  count: 0
+                };
+              }
+
+              paidCustomerMap[normalizedKey].items.push({
+                date: formattedDate,
+                shift_number: doc.shift_number || '',
+                name: rawName,
+                paid: cust.paid
+              });
+
+              paidCustomerMap[normalizedKey].totalAmount += cust.paid || 0;
+              paidCustomerMap[normalizedKey].count += 1;
+            }
+          });
+        }
+      });
+
+      const groupedPaidData = Object.values(paidCustomerMap).sort((a, b) =>
+        a.customerName.localeCompare(b.customerName, undefined, { sensitivity: 'base' })
+      );
+
+      // Generate A/R Paid Report PDF
+      const paidPdfBuffer = await generateArPaidReportPdf({
+        siteDisplayName,
+        startDate,
+        endDate,
+        groupedData: groupedPaidData
+      });
+
+      const paidReportFileName = `AR_Customer_Paid_Report_${siteDisplayName}_${startDate}_to_${endDate}.pdf`;
+
+      attachments.push({
+        filename: paidReportFileName,
+        content: await attachmentContentToBase64(paidPdfBuffer),
+        encoding: 'base64',
+        contentType: 'application/pdf'
+      });
+    }
+
+    // 8. Queue Email Task
+    const recipientEmail = req.user && req.user.email ? req.user.email : 'daksh@gen7fuel.com';
+    const emailSubject = `A/R Customer Reports – ${siteDisplayName} (${startDate} to ${endDate})`;
+
+    await emailQueue.add('sendArCustomerReportEmail', {
+      to: recipientEmail,
+      subject: emailSubject,
+      text: `Hello,\n\nAttached is the requested Accounts Receivable Customer Report package for ${siteDisplayName} covering the period ${startDate} to ${endDate}.\n\nBest regards,\nGen7 Fuel Automated System`,
+      attachments
+    });
+
+    // 9. Return Response
+    return res.status(200).json({
+      success: true,
+      message: `The generated A/R report package has been queued and will be emailed directly to ${recipientEmail} shortly.`,
+      site,
+      dateRange: { startDate, endDate },
+      includedArPaidReport: includeArPaidReport
+    });
+
+  } catch (error) {
+    console.error('Error generating A/R customer report package:', error);
+    return res.status(500).json({
+      error: 'Failed to generate A/R customer report package.',
       details: error.message
     });
   }

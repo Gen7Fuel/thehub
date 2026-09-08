@@ -2,10 +2,11 @@ import React from 'react'
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { render, screen, fireEvent, waitFor } from '@testing-library/react'
 
-// ─── Hoisted mutable state ─────────────────────────────────────────────────────
-
-const { mockNavigate, mockUseLoaderData, mockUseSearch, mockUseAuth } = vi.hoisted(() => {
-  const mockUseAuth = vi.fn().mockReturnValue({
+const { mockNavigate, mockUseLoaderData, mockUseSearch, mockUseAuth, mockUseSite } = vi.hoisted(() => ({
+  mockNavigate: vi.fn(),
+  mockUseLoaderData: vi.fn().mockReturnValue({}),
+  mockUseSearch: vi.fn().mockReturnValue({ site: 'Rankin', date: '2026-03-10' }),
+  mockUseAuth: vi.fn().mockReturnValue({
     user: {
       id: 'user-1',
       location: 'Rankin',
@@ -13,22 +14,15 @@ const { mockNavigate, mockUseLoaderData, mockUseSearch, mockUseAuth } = vi.hoist
         accounting: {
           cashSummary: {
             form: true,
-            report: { value: true },
+            list: true,
+            report: { value: true, viewShiftReport: true, unlockShift: true },
           },
         },
       },
     },
-  })
-
-  return {
-    mockNavigate: vi.fn(),
-    mockUseLoaderData: vi.fn().mockReturnValue({ existing: null, accessDenied: false }),
-    mockUseSearch: vi.fn().mockReturnValue({ site: 'Rankin', id: undefined }),
-    mockUseAuth,
-  }
-})
-
-// ─── Module mocks ──────────────────────────────────────────────────────────────
+  }),
+  mockUseSite: vi.fn().mockReturnValue({ selectedSite: '', setSelectedSite: vi.fn() }),
+}))
 
 vi.mock('@tanstack/react-router', async (importOriginal) => {
   const actual = await importOriginal<typeof import('@tanstack/react-router')>()
@@ -50,42 +44,15 @@ vi.mock('@/context/AuthContext', () => ({
 }))
 
 vi.mock('@/context/SiteContext', () => ({
-  useSite: () => ({ selectedSite: '', setSelectedSite: vi.fn() }),
-}))
-
-vi.mock('@/lib/constants', () => ({
-  domain: 'http://localhost:5000',
+  useSite: () => mockUseSite(),
 }))
 
 vi.mock('@/components/custom/sitePicker', () => ({
   SitePicker: ({ onValueChange, value }: any) => (
-    <button data-testid="site-picker" onClick={() => onValueChange('TestSite')}>
+    <button data-testid="site-picker" type="button" onClick={() => onValueChange('TestSite')}>
       {value || 'Pick a site'}
     </button>
   ),
-}))
-
-vi.mock('@/components/custom/LotteryComparisionTable', () => ({
-  LotteryComparisonTable: () => <div data-testid="lottery-table" />,
-}))
-
-vi.mock('input-otp', () => ({
-  REGEXP_ONLY_DIGITS: '^[0-9]*$',
-}))
-
-vi.mock('@/components/ui/input-otp', () => ({
-  InputOTP: ({ value, onChange, onBlur }: any) => (
-    <input
-      data-testid="shift-otp-input"
-      type="text"
-      value={value ?? ''}
-      onChange={(e) => onChange?.(e.target.value)}
-      onBlur={onBlur}
-      maxLength={5}
-    />
-  ),
-  InputOTPGroup: ({ children }: any) => <>{children}</>,
-  InputOTPSlot: () => null,
 }))
 
 vi.mock('@/components/custom/datePicker', () => ({
@@ -101,7 +68,7 @@ vi.mock('@/components/custom/datePicker', () => ({
         onChange={(e) => {
           if (!e.target.value) return
           const [y, m, d] = e.target.value.split('-').map(Number)
-          setDate(new Date(y, m - 1, d, 0, 0, 0, 0))
+          setDate?.(new Date(y, m - 1, d, 0, 0, 0, 0))
         }}
         readOnly={!setDate}
       />
@@ -109,14 +76,67 @@ vi.mock('@/components/custom/datePicker', () => ({
   },
 }))
 
-// ─── Component imports (after mocks) ─────────────────────────────────────────
+vi.mock('@/components/custom/LotteryComparisionTable', () => ({
+  LotteryComparisonTable: () => <div data-testid="lottery-table" />,
+}))
+
+vi.mock('@/components/ui/button', () => ({
+  Button: ({ children, asChild, ...props }: any) =>
+    asChild && React.isValidElement(children)
+      ? React.cloneElement(children, props)
+      : <button {...props}>{children}</button>,
+}))
+
+vi.mock('@/components/ui/dialog', () => ({
+  Dialog: ({ children }: any) => <div>{children}</div>,
+  DialogContent: ({ children }: any) => <div>{children}</div>,
+  DialogDescription: ({ children }: any) => <div>{children}</div>,
+  DialogFooter: ({ children }: any) => <div>{children}</div>,
+  DialogHeader: ({ children }: any) => <div>{children}</div>,
+  DialogTitle: ({ children }: any) => <div>{children}</div>,
+  DialogTrigger: ({ children }: any) => <>{children}</>,
+}))
+
+vi.mock('@/components/ui/switch', () => ({
+  Switch: ({ checked, disabled, onCheckedChange }: any) => (
+    <button
+      aria-pressed={checked}
+      disabled={disabled}
+      type="button"
+      onClick={() => onCheckedChange?.(!checked)}
+    >
+      switch
+    </button>
+  ),
+}))
+
+vi.mock('sonner', () => ({
+  toast: { error: vi.fn(), success: vi.fn() },
+}))
+
+vi.mock('lucide-react', () => {
+  const Icon = (props: any) => <svg data-testid="icon" {...props} />
+  return {
+    AlertCircle: Icon,
+    AlertTriangle: Icon,
+    ArrowRight: Icon,
+    Calendar: Icon,
+    CheckCircle2: Icon,
+    ChevronDown: Icon,
+    ChevronRight: Icon,
+    HelpCircle: Icon,
+    Image: Icon,
+    ImagePlus: Icon,
+    Info: Icon,
+    Lock: Icon,
+    Trash2: Icon,
+  }
+})
 
 import { Route as IndexRoute } from '../cash-summary/index'
 import { Route as FormRoute } from '../cash-summary/form'
 import { Route as ListRoute } from '../cash-summary/list'
 import { Route as ReportRoute } from '../cash-summary/report'
-
-// ─── Helpers ──────────────────────────────────────────────────────────────────
 
 const renderWithSuspense = (ui: React.ReactElement) =>
   render(ui, {
@@ -130,299 +150,387 @@ const CashSummaryForm = (FormRoute as any).component as React.ComponentType
 const CashSummaryList = (ListRoute as any).component as React.ComponentType
 const CashSummaryReport = (ReportRoute as any).component as React.ComponentType
 
-const makeOkFetch = (data: any) =>
-  vi.fn().mockResolvedValue({ status: 200, ok: true, json: () => Promise.resolve(data) })
+const okResponse = (data: any) => ({
+  status: 200,
+  ok: true,
+  json: () => Promise.resolve(data),
+  text: () => Promise.resolve(typeof data === 'string' ? data : JSON.stringify(data)),
+})
 
-const sampleSummary = {
-  _id: 'sum-1',
-  site: 'Rankin',
-  shift_number: 'SFT-001',
-  date: '2026-03-10T00:00:00.000Z',
-  canadian_cash_collected: 500,
-  item_sales: 250,
-  createdAt: '2026-03-10T08:00:00.000Z',
-  updatedAt: '2026-03-10T08:00:00.000Z',
+type TestShift = {
+  _id: string
+  site: string
+  shift_number: string
+  date: string
+  canadian_cash_collected?: number
+  exempted_tax?: number
+  reviewed?: boolean
 }
 
-// ─── Cash Summary Index — index.tsx ───────────────────────────────────────────
+const sampleShift: TestShift = {
+  _id: 'shift-1',
+  site: 'Rankin',
+  shift_number: '10001',
+  date: '2026-03-10T00:00:00.000Z',
+  canadian_cash_collected: 500,
+  exempted_tax: 12.5,
+  reviewed: false,
+}
 
-describe('Cash Summary Index — index.tsx', () => {
+const sampleDailySummary = {
+  date: '2026-03-10',
+  shift_numbers: ['10001', '10002'],
+  canadian_cash_collected: 500,
+  item_sales: 250,
+  cash_back: 20,
+  loyalty: 10,
+  cpl_bulloch: 5,
+  exempted_tax: 12.5,
+  allReviewed: false,
+  isSubmitted: false,
+}
+
+const sampleReport = {
+  site: 'Rankin',
+  date: '2026-03-10',
+  rows: [
+    {
+      _id: 'r1',
+      shift_number: '10001',
+      canadian_cash_collected: 500,
+      report_canadian_cash: 475,
+      payouts: 25,
+    },
+  ],
+  totals: {
+    count: 1,
+    canadian_cash_collected: 500,
+    item_sales: 250,
+    cash_back: 20,
+    loyalty: 10,
+    cpl_bulloch: 5,
+    exempted_tax: 12.5,
+    report_canadian_cash: 475,
+    payouts: 25,
+    voidedTransactionsAmount: 0,
+  },
+  report: { notes: '', submitted: false },
+  readiness: {
+    canViewReport: true,
+    shiftIssues: {
+      hasShifts: true,
+      missingCashShiftNumbers: [],
+      unreviewedShiftNumbers: [],
+    },
+    lotteryIssue: { sellsLottery: false, hasLottery: false },
+  },
+}
+
+const mockFormFetch = (shifts: TestShift[] = [sampleShift], extraLocation = {}) => {
+  global.fetch = vi.fn((input: RequestInfo | URL) => {
+    const url = String(input)
+    if (url.startsWith('/api/locations')) {
+      return Promise.resolve(okResponse({ sellsLottery: false, chickenDelightSection: false, ...extraLocation }))
+    }
+    if (url.startsWith('/api/cash-summary/by-date')) {
+      return Promise.resolve(okResponse({ shifts, isSubmitted: false }))
+    }
+    if (url.startsWith('/api/cash-summary/batch')) {
+      return Promise.resolve(okResponse({ ok: true }))
+    }
+    return Promise.resolve(okResponse({}))
+  }) as any
+}
+
+const mockReportFetch = () => {
+  global.fetch = vi.fn((input: RequestInfo | URL) => {
+    const url = String(input)
+    if (url.startsWith('/api/cash-summary/ar-check')) {
+      return Promise.resolve(okResponse({ match: true, arIncurredTotal: 0, transactionsTotal: 0 }))
+    }
+    if (url.startsWith('/api/cash-summary/payouts-check')) {
+      return Promise.resolve(okResponse({ match: true }))
+    }
+    if (url.startsWith('/api/cash-summary/lottery')) {
+      return Promise.resolve(okResponse({ lottery: null, totals: null }))
+    }
+    return Promise.resolve(okResponse({ province: 'Ontario' }))
+  }) as any
+}
+
+describe('Cash Summary Index - index.tsx', () => {
   beforeEach(() => {
     vi.clearAllMocks()
   })
 
-  it('redirects to /cash-summary/form when user has form access', async () => {
-    mockUseAuth.mockReturnValue({
-      user: {
-        access: { accounting: { cashSummary: { form: true } } },
-      },
-    })
+  it('redirects to the form when user has form access', async () => {
+    mockUseAuth.mockReturnValue({ user: { access: { accounting: { cashSummary: { form: true } } } } })
     renderWithSuspense(<CashSummaryIndex />)
-    await waitFor(
-      () => expect(mockNavigate).toHaveBeenCalledWith(
-        expect.objectContaining({ to: '/cash-summary/form' })
-      ),
-      { timeout: 5000 }
+    await waitFor(() =>
+      expect(mockNavigate).toHaveBeenCalledWith(expect.objectContaining({ to: '/cash-summary/form' })),
     )
   })
 
-  it('redirects to /cash-summary/report when user has report access but not form', async () => {
+  it('redirects to the report when user has report access but no form access', async () => {
     mockUseAuth.mockReturnValue({
-      user: {
-        access: { accounting: { cashSummary: { form: false, report: { value: true } } } },
-      },
+      user: { access: { accounting: { cashSummary: { form: false, report: { value: true } } } } },
     })
     renderWithSuspense(<CashSummaryIndex />)
     await waitFor(() =>
-      expect(mockNavigate).toHaveBeenCalledWith(
-        expect.objectContaining({ to: '/cash-summary/report' })
-      )
+      expect(mockNavigate).toHaveBeenCalledWith(expect.objectContaining({ to: '/cash-summary/report' })),
     )
   })
 
   it('redirects to /no-access when user has no cash summary access', async () => {
     mockUseAuth.mockReturnValue({
-      user: {
-        access: { accounting: { cashSummary: { form: false, report: { value: false } } } },
-      },
+      user: { access: { accounting: { cashSummary: { form: false, report: { value: false } } } } },
     })
     renderWithSuspense(<CashSummaryIndex />)
-    await waitFor(() =>
-      expect(mockNavigate).toHaveBeenCalledWith({ to: '/no-access' })
-    )
+    await waitFor(() => expect(mockNavigate).toHaveBeenCalledWith({ to: '/no-access' }))
   })
 })
 
-// ─── Cash Summary Form — form.tsx ─────────────────────────────────────────────
-
-describe('Cash Summary Form — form.tsx', () => {
+describe('Cash Summary Form - form.tsx', () => {
   beforeEach(() => {
     vi.clearAllMocks()
     localStorage.setItem('token', 'test-token')
-    global.fetch = makeOkFetch({})
-    mockUseLoaderData.mockReturnValue({ existing: null, accessDenied: false })
-    mockUseSearch.mockReturnValue({ site: 'Rankin', id: undefined })
-    mockUseAuth.mockReturnValue({ user: { id: 'user-1', location: 'Rankin', access: {} } })
+    mockUseSearch.mockReturnValue({ site: 'Rankin', date: '2026-03-10' })
+    mockUseSite.mockReturnValue({ selectedSite: '', setSelectedSite: vi.fn() })
+    mockFormFetch()
   })
 
-  it('renders the SitePicker', async () => {
+  it('renders site and date controls', async () => {
     renderWithSuspense(<CashSummaryForm />)
-    await waitFor(
-      () => expect(screen.getByTestId('site-picker')).toBeInTheDocument(),
-      { timeout: 5000 }
-    )
+    await waitFor(() => expect(screen.getByTestId('site-picker')).toHaveTextContent('Rankin'))
+    expect(screen.getByTestId('date-picker')).toHaveValue('2026-03-10')
   })
 
-  it('renders the "New Cash Summary" heading when no id is set', async () => {
+  it('renders loaded shifts in the batch form', async () => {
     renderWithSuspense(<CashSummaryForm />)
-    await waitFor(() =>
-      expect(screen.getByText(/new cash summary/i)).toBeInTheDocument()
-    )
+    await waitFor(() => expect(screen.getByText('Select Shift to Fill')).toBeInTheDocument())
+    expect(screen.getByRole('button', { name: /shift #10001/i })).toBeInTheDocument()
+    expect(screen.getByText(/editing details: shift #10001/i)).toBeInTheDocument()
+    expect(screen.getByText(/canadian cash collected \*/i)).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /save all shifts data/i })).toBeInTheDocument()
   })
 
-  it('renders the "Shift Number *" field', async () => {
-    renderWithSuspense(<CashSummaryForm />)
-    await waitFor(() =>
-      expect(screen.getByText(/shift number \*/i)).toBeInTheDocument()
-    )
-  })
-
-  it('renders the "Date *" field', async () => {
-    renderWithSuspense(<CashSummaryForm />)
-    await waitFor(() => expect(screen.getByText(/^Date \*$/i)).toBeInTheDocument())
-  })
-
-  it('renders the "Save" submit button when creating a new entry', async () => {
+  it('shows the empty state when no pre-registered shifts are returned', async () => {
+    mockFormFetch([])
     renderWithSuspense(<CashSummaryForm />)
     await waitFor(() =>
-      expect(screen.getByRole('button', { name: /^save$/i })).toBeInTheDocument()
+      expect(screen.getByText(/no pre-registered shifts found for this site on selected date/i)).toBeInTheDocument(),
     )
   })
 
-  it('shows a validation error when the form is submitted without a shift number', async () => {
-    global.fetch = vi.fn() // should not be called
+  it('requires cash collected before batch submit', async () => {
+    mockFormFetch([{ ...sampleShift, canadian_cash_collected: undefined }])
     renderWithSuspense(<CashSummaryForm />)
-
-    const saveBtn = await waitFor(() => screen.getByRole('button', { name: /^save$/i }))
-    // Use fireEvent.submit on the form to bypass HTML5 required-field validation
-    fireEvent.submit(saveBtn.closest('form')!)
-
+    const submit = await screen.findByRole('button', { name: /save all shifts data/i })
+    fireEvent.click(submit)
     await waitFor(() =>
-      expect(screen.getByText(/shift number required/i)).toBeInTheDocument()
+      expect(screen.getByText(/shift #10001: cash collected is required/i)).toBeInTheDocument(),
     )
   })
 
-  it('navigates to /no-access when the POST returns 403', async () => {
-    global.fetch = vi.fn().mockResolvedValue({ status: 403, ok: false, json: () => Promise.resolve({}) })
+  it('submits all loaded shift forms and navigates to the report', async () => {
     renderWithSuspense(<CashSummaryForm />)
+    const submit = await screen.findByRole('button', { name: /save all shifts data/i })
+    fireEvent.click(submit)
 
-    const saveBtn = await waitFor(() => screen.getByRole('button', { name: /^save$/i }))
-
-    // Set a shift number so validation passes and the POST is actually sent
-    const shiftInput = screen.getAllByRole('textbox')[0]
-    fireEvent.change(shiftInput, { target: { value: 'SFT-001' } })
-    fireEvent.click(saveBtn)
-
-    await waitFor(() =>
-      expect(mockNavigate).toHaveBeenCalledWith({ to: '/no-access' })
-    )
-  })
-
-  it('shows "Edit Cash Summary" heading when an existing record is loaded', async () => {
-    mockUseSearch.mockReturnValue({ site: 'Rankin', id: 'sum-1' })
-    mockUseLoaderData.mockReturnValue({
-      existing: {
-        _id: 'sum-1',
-        shift_number: 'SFT-001',
-        date: '2026-03-10T00:00:00.000Z',
-        canadian_cash_collected: 500,
-      },
-      accessDenied: false,
+    await waitFor(() => {
+      expect(global.fetch).toHaveBeenCalledWith(
+        '/api/cash-summary/batch',
+        expect.objectContaining({ method: 'POST' }),
+      )
+      expect(mockNavigate).toHaveBeenCalledWith({
+        to: '/cash-summary/report',
+        search: { site: 'Rankin', date: '2026-03-10' },
+      })
     })
-    renderWithSuspense(<CashSummaryForm />)
-    await waitFor(() =>
-      expect(screen.getByText(/edit cash summary/i)).toBeInTheDocument()
-    )
   })
 
-  it('navigates to /no-access when accessDenied is true', async () => {
-    mockUseLoaderData.mockReturnValue({ existing: null, accessDenied: true })
+  it('locks submit when the day report is submitted', async () => {
+    global.fetch = vi.fn((input: RequestInfo | URL) => {
+      const url = String(input)
+      if (url.startsWith('/api/locations')) return Promise.resolve(okResponse({}))
+      if (url.startsWith('/api/cash-summary/by-date')) {
+        return Promise.resolve(okResponse({ shifts: [sampleShift], isSubmitted: true }))
+      }
+      return Promise.resolve(okResponse({}))
+    }) as any
+
     renderWithSuspense(<CashSummaryForm />)
-    await waitFor(() =>
-      expect(mockNavigate).toHaveBeenCalledWith({ to: '/no-access' })
-    )
+    await waitFor(() => expect(screen.getByText('Report Submitted')).toBeInTheDocument())
+    expect(screen.getByRole('button', { name: /report submitted/i })).toBeDisabled()
   })
 })
 
-// ─── Cash Summary List — list.tsx ─────────────────────────────────────────────
-
-describe('Cash Summary List — list.tsx', () => {
+describe('Cash Summary List - list.tsx', () => {
   beforeEach(() => {
     vi.clearAllMocks()
-    mockUseLoaderData.mockReturnValue({ summaries: [sampleSummary], accessDenied: false })
-    mockUseSearch.mockReturnValue({ site: 'Rankin' })
+    mockUseSearch.mockReturnValue({ site: 'Rankin', from: '2026-02-10', to: '2026-03-10' })
+    mockUseSite.mockReturnValue({ selectedSite: '', setSelectedSite: vi.fn() })
+    mockUseLoaderData.mockReturnValue({ summaries: [sampleDailySummary], accessDenied: false })
   })
 
-  it('renders the SitePicker', async () => {
+  it('renders filters and grouped daily cash summaries', async () => {
     renderWithSuspense(<CashSummaryList />)
-    await waitFor(
-      () => expect(screen.getByTestId('site-picker')).toBeInTheDocument(),
-      { timeout: 5000 }
-    )
+    await waitFor(() => expect(screen.getByText(/daily cash summaries/i)).toBeInTheDocument())
+    expect(screen.getByTestId('site-picker')).toHaveTextContent('Rankin')
+    expect(screen.getAllByTestId('date-picker')[0]).toHaveValue('2026-02-10')
+    expect(screen.getAllByTestId('date-picker')[1]).toHaveValue('2026-03-10')
+    expect(screen.getByText('2026-03-10')).toBeInTheDocument()
+    expect(screen.getByText('#10001')).toBeInTheDocument()
+    expect(screen.getByText('#10002')).toBeInTheDocument()
+    expect(screen.getByText(/pending attention/i)).toBeInTheDocument()
   })
 
-  it('renders the "Cash Summaries" heading', async () => {
-    renderWithSuspense(<CashSummaryList />)
-    await waitFor(() =>
-      expect(screen.getByText(/cash summaries/i)).toBeInTheDocument()
-    )
-  })
-
-  it('shows "Select a site to view entries" when no site is selected', async () => {
-    mockUseSearch.mockReturnValue({ site: '' })
+  it('shows the no-site empty state', async () => {
+    mockUseSearch.mockReturnValue({ site: '', from: '2026-02-10', to: '2026-03-10' })
     mockUseLoaderData.mockReturnValue({ summaries: [], accessDenied: false })
     renderWithSuspense(<CashSummaryList />)
     await waitFor(() =>
-      expect(screen.getByText(/select a site to view entries/i)).toBeInTheDocument()
+      expect(screen.getByText(/please select a site above to display cash summaries/i)).toBeInTheDocument(),
     )
   })
 
-  it('shows "No summaries found" when the site is set but data is empty', async () => {
+  it('shows the no-entries state for an empty date range', async () => {
     mockUseLoaderData.mockReturnValue({ summaries: [], accessDenied: false })
     renderWithSuspense(<CashSummaryList />)
-    await waitFor(() =>
-      expect(screen.getByText(/no summaries found for this site/i)).toBeInTheDocument()
-    )
+    await waitFor(() => expect(screen.getByText(/no entries found for the selected date range/i)).toBeInTheDocument())
   })
 
-  it('displays the shift number when summaries data is present', async () => {
+  it('navigates to the form when an unlocked day row is clicked', async () => {
     renderWithSuspense(<CashSummaryList />)
-    await waitFor(() =>
-      expect(screen.getByText('SFT-001')).toBeInTheDocument()
-    )
-  })
-
-  it('displays the table column headers', async () => {
-    renderWithSuspense(<CashSummaryList />)
-    await waitFor(() => {
-      expect(screen.getByText('Shift')).toBeInTheDocument()
-      expect(screen.getByText('Canadian Cash')).toBeInTheDocument()
+    fireEvent.click(await screen.findByText('2026-03-10'))
+    expect(mockNavigate).toHaveBeenCalledWith({
+      to: '/cash-summary/form',
+      search: { site: 'Rankin', date: '2026-03-10' },
     })
+  })
+
+  it('does not navigate from submitted rows', async () => {
+    mockUseLoaderData.mockReturnValue({
+      summaries: [{ ...sampleDailySummary, isSubmitted: true, allReviewed: true }],
+      accessDenied: false,
+    })
+    renderWithSuspense(<CashSummaryList />)
+    fireEvent.click(await screen.findByText('2026-03-10'))
+    expect(mockNavigate).not.toHaveBeenCalledWith(
+      expect.objectContaining({ to: '/cash-summary/form' }),
+    )
+    expect(screen.getByText(/locked & submitted/i)).toBeInTheDocument()
   })
 
   it('navigates to /no-access when accessDenied is true', async () => {
     mockUseLoaderData.mockReturnValue({ summaries: [], accessDenied: true })
     renderWithSuspense(<CashSummaryList />)
-    await waitFor(() =>
-      expect(mockNavigate).toHaveBeenCalledWith({ to: '/no-access' })
-    )
+    await waitFor(() => expect(mockNavigate).toHaveBeenCalledWith({ to: '/no-access' }))
   })
 })
 
-// ─── Cash Summary Report — report.tsx ─────────────────────────────────────────
-
-describe('Cash Summary Report — report.tsx', () => {
+describe('Cash Summary Report - report.tsx', () => {
   beforeEach(() => {
     vi.clearAllMocks()
     localStorage.setItem('token', 'test-token')
-    global.fetch = makeOkFetch({})
     mockUseSearch.mockReturnValue({ site: 'Rankin', date: '2026-03-10' })
-    mockUseLoaderData.mockReturnValue({ report: null, error: null, accessDenied: false })
-    mockUseAuth.mockReturnValue({
-      user: { id: 'user-1', location: 'Rankin', access: { accounting: { cashSummary: { report: { value: true } } } } },
+    mockUseLoaderData.mockReturnValue({
+      report: sampleReport,
+      error: null,
+      accessDenied: false,
+      isManitoba: false,
     })
+    mockUseAuth.mockReturnValue({
+      user: {
+        id: 'user-1',
+        access: {
+          accounting: {
+            cashSummary: {
+              report: { value: true, viewShiftReport: true, unlockShift: true },
+            },
+          },
+        },
+      },
+    })
+    mockReportFetch()
   })
 
-  it('renders the SitePicker', async () => {
+  it('renders filters and the cash summary report shell', async () => {
     renderWithSuspense(<CashSummaryReport />)
-    await waitFor(
-      () => expect(screen.getByTestId('site-picker')).toBeInTheDocument(),
-      { timeout: 5000 }
-    )
+    await waitFor(() => expect(screen.getByText('Cash Summary Report')).toBeInTheDocument())
+    expect(screen.getByTestId('site-picker')).toHaveTextContent('Rankin')
+    expect(screen.getByTestId('date-picker')).toHaveValue('2026-03-10')
+    expect(screen.getByText(/site:/i)).toBeInTheDocument()
   })
 
-  it('renders the Date input with the current date value', async () => {
+  it('shows standard totals and shift cards when report data is ready', async () => {
     renderWithSuspense(<CashSummaryReport />)
-    await waitFor(() =>
-      expect(screen.getByTestId('date-picker')).toHaveValue('2026-03-10')
-    )
+    await waitFor(() => expect(screen.getByText('Standard Totals')).toBeInTheDocument())
+    expect(screen.getByText('Total Canadian Cash Counted')).toBeInTheDocument()
+    expect(screen.getAllByText('500.00').length).toBeGreaterThan(0)
+    expect(screen.getByText('Shifts')).toBeInTheDocument()
+    expect(screen.getByText('10001')).toBeInTheDocument()
+    expect(screen.getByText('Notes')).toBeInTheDocument()
   })
 
-  it('navigates to /no-access when accessDenied is true', async () => {
-    mockUseLoaderData.mockReturnValue({ report: null, error: null, accessDenied: true })
-    renderWithSuspense(<CashSummaryReport />)
-    await waitFor(() =>
-      expect(mockNavigate).toHaveBeenCalledWith({ to: '/no-access' })
-    )
-  })
-
-  it('shows report data when a report is returned', async () => {
+  it('shows the shift prerequisite overlay when shift review blocks the report', async () => {
     mockUseLoaderData.mockReturnValue({
       report: {
-        site: 'Rankin',
-        date: '2026-03-10',
-        rows: [
-          { _id: 'r1', shift_number: 'SFT-001', canadian_cash_collected: 500 },
-        ],
-        totals: {
-          count: 1,
-          canadian_cash_collected: 500,
-          item_sales: 0,
-          cash_back: 0,
-          loyalty: 0,
-          cpl_bulloch: 0,
-          exempted_tax: 0,
-          report_canadian_cash: 0,
-          payouts: 0,
+        ...sampleReport,
+        readiness: {
+          canViewReport: false,
+          shiftIssues: {
+            hasShifts: true,
+            missingCashShiftNumbers: [],
+            unreviewedShiftNumbers: ['10001'],
+          },
+          lotteryIssue: { sellsLottery: false, hasLottery: false },
         },
-        report: { notes: '', submitted: false },
       },
       error: null,
       accessDenied: false,
+      isManitoba: false,
     })
     renderWithSuspense(<CashSummaryReport />)
-    await waitFor(() =>
-      expect(screen.getByText('SFT-001')).toBeInTheDocument()
-    )
+    await waitFor(() => expect(screen.getByText(/shift data needs review/i)).toBeInTheDocument())
+    expect(screen.getByText(/shifts left to review/i)).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: /go to form/i }))
+    expect(mockNavigate).toHaveBeenCalledWith({
+      to: '/cash-summary/form',
+      search: { site: 'Rankin', date: '2026-03-10' },
+    })
+  })
+
+  it('shows the lottery prerequisite overlay when lottery data blocks the report', async () => {
+    mockUseLoaderData.mockReturnValue({
+      report: {
+        ...sampleReport,
+        readiness: {
+          canViewReport: false,
+          shiftIssues: {
+            hasShifts: true,
+            missingCashShiftNumbers: [],
+            unreviewedShiftNumbers: [],
+          },
+          lotteryIssue: { sellsLottery: true, hasLottery: false },
+        },
+      },
+      error: null,
+      accessDenied: false,
+      isManitoba: false,
+    })
+    renderWithSuspense(<CashSummaryReport />)
+    await waitFor(() => expect(screen.getByText(/lottery data is missing/i)).toBeInTheDocument())
+    fireEvent.click(screen.getByRole('button', { name: /go to lottery/i }))
+    expect(mockNavigate).toHaveBeenCalledWith({
+      to: '/cash-summary/lottery',
+      search: { site: 'Rankin', date: '2026-03-10' },
+    })
+  })
+
+  it('navigates to /no-access when accessDenied is true', async () => {
+    mockUseLoaderData.mockReturnValue({ report: null, error: null, accessDenied: true, isManitoba: false })
+    renderWithSuspense(<CashSummaryReport />)
+    await waitFor(() => expect(mockNavigate).toHaveBeenCalledWith({ to: '/no-access' }))
   })
 })

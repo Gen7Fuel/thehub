@@ -47,6 +47,9 @@ const MAPPING_CONFIG = {
     { supplierItem: "GAS", inventoryItem: "RUL87" },
     { supplierItem: "GAS", inventoryItem: "PUL91" }
   ],
+  "GAS-E15": [
+    { supplierItem: "GAS", inventoryItem: "E15" }
+  ],
   "DIESEL & DYED": [
     { supplierItem: "DIESEL", inventoryItem: "ULSD" },
     { supplierItem: "DIESEL", inventoryItem: "WULSD" },
@@ -657,7 +660,8 @@ export function RouteComponent() {
                   onChange={(e) => setFormSupplierItem(e.target.value)}
                 >
                   <option value="">-- Choose Fuel Category --</option>
-                  <option value="GAS">GAS</option>
+                  <option value="GAS">GAS (RUL & PUL)</option>
+                  <option value="GAS-E15">GAS (E15)</option>
                   <option value="DIESEL & DYED">DIESEL & DYED</option>
                 </select>
               </div>

@@ -30,6 +30,8 @@ require('./cron_jobs/cycleCountReportCron'); //cron job for updating onHandCSO a
 require('./cron_jobs/cycleCountWeeklyInstanceCron'); //cron job for generating weekly cycle count instances, runs every Sunday at 3 AM
 require('./cron_jobs/syncStgLiveFuelPriceCron'); //cron job for syncing staging to live fuel price tables on the 1st of every month at 12 AM EST in SSMS
 require('./cron_jobs/syncDailyStgLiveFuelCron'); //cron job for syncing staging to live fuel price tables daily at 5 AM EST in SSMS
+require('./cron_jobs/fetchBullochShiftsCron'); //cron job for fetching bulloch shift reports every 3 hours form the server
+require('./cron_jobs/autoSumitCashSummaryReportCron'); //cron job for auto submitting completed shifts to the accounting every morning 6.30 am EST
 
 // Route imports
 const authRoutes = require("./routes/auth");
