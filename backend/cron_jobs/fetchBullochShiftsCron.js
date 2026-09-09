@@ -324,17 +324,16 @@ const runSftIngestionCron = async () => {
   console.log("[SFT Ingestion Cron] Starting execution...");
 
   try {
-    // const locations = await Location.find(
-    //   { type: "store" },
-    //   "stationName timezone"
-    // ).lean();
+    const locations = await Location.find(
+      { type: "store" },
+      "stationName timezone"
+    ).lean();
 
-    // for (const loc of locations) {
-    //   if (loc.stationName) {
-    //     await syncSftShiftsForSite(loc.stationName, loc.timezone);
-    //   }
-    // }
-    await syncSftShiftsForSite('Couchiching', 'America/Winnipeg');
+    for (const loc of locations) {
+      if (loc.stationName) {
+        await syncSftShiftsForSite(loc.stationName, loc.timezone);
+      }
+    }
   } catch (err) {
     console.error("[SFT Ingestion Cron Execution Error]:", err);
   } finally {
