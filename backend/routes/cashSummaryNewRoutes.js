@@ -1,5 +1,11 @@
 const express = require('express')
+const mongoose = require('mongoose')
 const { CashSummary, CashSummaryReport } = require('../models/CashSummaryNew')
+const {
+  isValidAttributeName,
+  buildReservedAttributeNames,
+  castAttributeValue,
+} = require('../utils/shiftAttributes')
 const Safesheet = require('../models/Safesheet')
 const LotteryModule = require('../models/Lottery')
 const Location = require('../models/Location')
@@ -2485,6 +2491,71 @@ router.delete('/:id', async (req, res) => {
   } catch (err) {
     console.error('CashSummary delete error:', err)
     res.status(500).json({ error: 'Failed to delete CashSummary' })
+  }
+})
+
+// ─── Custom attributes ──────────────────────────────────────────────────────
+// Lets a caller attach an ad-hoc, typed top-level field to a CashSummary doc
+// (e.g. "posTotal" = 123.45 as a Double) without it being part of the fixed
+// schema. Written via the raw driver collection (CashSummary.collection),
+// bypassing Mongoose casting/strict-mode entirely, so the schema itself stays
+// untouched and every other route's validation is unaffected. Name collisions
+// with any real (current or historical) schema field are rejected outright —
+// see utils/shiftAttributes.js for the validation/casting logic and why.
+
+const RESERVED_ATTRIBUTE_NAMES = buildReservedAttributeNames(CashSummary)
+
+router.put('/:id/attributes/:name', async (req, res) => {
+  try {
+    const { id, name } = req.params
+    const { value, type } = req.body
+
+    if (!isValidAttributeName(name)) {
+      return res.status(400).json({
+        error: 'Attribute name must start with a letter and contain only letters, numbers, and underscores.',
+      })
+    }
+    if (RESERVED_ATTRIBUTE_NAMES.has(name)) {
+      return res.status(400).json({
+        error: `"${name}" is a reserved field name and can't be used as a custom attribute.`,
+      })
+    }
+    if (value === undefined || value === null || value === '') {
+      return res.status(400).json({ error: 'A value is required.' })
+    }
+
+    const cast = castAttributeValue(type, value)
+    if (cast.error) return res.status(400).json({ error: cast.error })
+
+    const result = await CashSummary.collection.updateOne(
+      { _id: new mongoose.Types.ObjectId(id) },
+      { $set: { [name]: cast.value } }
+    )
+    if (result.matchedCount === 0) return res.status(404).json({ error: 'Not found' })
+
+    const updated = await CashSummary.findById(id).lean()
+    res.json(updated)
+  } catch (err) {
+    console.error('CashSummary set attribute error:', err)
+    res.status(500).json({ error: 'Failed to set attribute' })
+  }
+})
+
+router.delete('/:id/attributes/:name', async (req, res) => {
+  try {
+    const { id, name } = req.params
+
+    const result = await CashSummary.collection.updateOne(
+      { _id: new mongoose.Types.ObjectId(id) },
+      { $unset: { [name]: '' } }
+    )
+    if (result.matchedCount === 0) return res.status(404).json({ error: 'Not found' })
+
+    const updated = await CashSummary.findById(id).lean()
+    res.json(updated)
+  } catch (err) {
+    console.error('CashSummary remove attribute error:', err)
+    res.status(500).json({ error: 'Failed to remove attribute' })
   }
 })
 
