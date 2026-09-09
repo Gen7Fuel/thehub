@@ -124,6 +124,19 @@ async function syncSftShiftsForSite(site, timezone = "America/Toronto") {
       const shiftNumStr = String(shiftNumber).trim();
 
       try {
+        // --- ⚡ SKIP IF SHIFT ALREADY EXISTS IN DB ---
+        const existingShift = await CashSummary.findOne({
+          site,
+          shift_number: shiftNumStr,
+        }).lean();
+
+        if (existingShift) {
+          console.log(
+            `[SFT Sync] [SKIP EXISTING] Site: "${site}", Shift #${shiftNumStr} already ingested.`
+          );
+          continue;
+        }
+
         // Fetch raw file content via central endpoint
         const detailUrl = new URL(
           `/api/sftp/receive/${encodeURIComponent(shiftNumStr)}`,
