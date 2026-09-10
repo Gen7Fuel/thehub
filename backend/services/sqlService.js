@@ -227,12 +227,21 @@ async function getOnHandBulkCSOData(csoCode, gtins = [], targetDate) {
 
   try {
     const pool = await getPool();
+    const request = pool.request();
 
-    // Convert "2026-07-31" -> "20260731" locally
-    const targetDateSK = Number(formatDateForDB(targetDate));
+    // 1. Station_SK is INT in SQL schema
+    request.input("stationSK", sql.Int, parseInt(csoCode, 10));
 
-    // Sanitize GTINs for SQL IN clause
-    const formattedGtins = gtins.map(u => `'${String(u).replace(/'/g, "''")}'`).join(",");
+    // 2. Date_SK is DATE in SQL schema (format: "YYYY-MM-DD")
+    const formattedDate = new Date(targetDate).toISOString().split("T")[0];
+    request.input("targetDate", sql.Date, formattedDate);
+
+    // 3. GTIN is NVARCHAR(100) in SQL schema
+    const gtinParams = gtins.map((gtin, index) => {
+      const paramName = `gtin_${index}`;
+      request.input(paramName, sql.NVarChar(100), String(gtin).trim());
+      return `@${paramName}`;
+    });
 
     const query = `
       SELECT 
@@ -240,12 +249,12 @@ async function getOnHandBulkCSOData(csoCode, gtins = [], targetDate) {
           [On Hand Qty] AS qty,
           [Unit Retail] AS unitPrice
       FROM [CSO].[Current_Inventory]
-      WHERE [Station_SK] = '${String(csoCode).replace(/'/g, "''")}' 
-        AND [GTIN] IN (${formattedGtins})
-        AND [Date_SK] = ${targetDateSK}
+      WHERE [Station_SK] = @stationSK 
+        AND [GTIN] IN (${gtinParams.join(",")})
+        AND [Date_SK] = @targetDate
     `;
 
-    const result = await pool.request().query(query);
+    const result = await request.query(query);
 
     const data = {};
     for (const row of result.recordset) {

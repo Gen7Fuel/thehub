@@ -124,6 +124,19 @@ async function syncSftShiftsForSite(site, timezone = "America/Toronto") {
       const shiftNumStr = String(shiftNumber).trim();
 
       try {
+        // --- ⚡ SKIP IF SHIFT ALREADY EXISTS IN DB ---
+        const existingShift = await CashSummary.findOne({
+          site,
+          shift_number: shiftNumStr,
+        }).lean();
+
+        if (existingShift) {
+          console.log(
+            `[SFT Sync] [SKIP EXISTING] Site: "${site}", Shift #${shiftNumStr} already ingested.`
+          );
+          continue;
+        }
+
         // Fetch raw file content via central endpoint
         const detailUrl = new URL(
           `/api/sftp/receive/${encodeURIComponent(shiftNumStr)}`,
@@ -324,17 +337,16 @@ const runSftIngestionCron = async () => {
   console.log("[SFT Ingestion Cron] Starting execution...");
 
   try {
-    // const locations = await Location.find(
-    //   { type: "store" },
-    //   "stationName timezone"
-    // ).lean();
+    const locations = await Location.find(
+      { type: "store" },
+      "stationName timezone"
+    ).lean();
 
-    // for (const loc of locations) {
-    //   if (loc.stationName) {
-    //     await syncSftShiftsForSite(loc.stationName, loc.timezone);
-    //   }
-    // }
-    await syncSftShiftsForSite('Couchiching', 'America/Winnipeg');
+    for (const loc of locations) {
+      if (loc.stationName) {
+        await syncSftShiftsForSite(loc.stationName, loc.timezone);
+      }
+    }
   } catch (err) {
     console.error("[SFT Ingestion Cron Execution Error]:", err);
   } finally {
