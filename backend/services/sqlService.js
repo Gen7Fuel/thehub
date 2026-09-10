@@ -1808,10 +1808,21 @@ async function getLatestCsoVendorsList() {
  * Query timesheet labor costs and hours broken down by date and status.
  */
 async function getEmployeeTimesheetVsSalesChart(pool, csoCode, startDate, endDate) {
+  // Determine End Date (default to today if not provided)
+  const targetEndDate = endDate ? new Date(endDate) : new Date();
+
+  // Calculate Start Date as the 1st day of the month, 5 months prior
+  const targetStartDate = new Date(targetEndDate);
+  targetStartDate.setMonth(targetStartDate.getMonth() - 10);
+  targetStartDate.setDate(1); // Force to the 1st of the month
+
+  const formattedStartDate = targetStartDate.toISOString().split("T")[0];
+  const formattedEndDate = targetEndDate.toISOString().split("T")[0];
+
   const transactionsResult = await pool.request()
     .input("StationSK", sql.Int, csoCode)
-    .input("StartDate", sql.Date, startDate)
-    .input("EndDate", sql.Date, endDate)
+    .input("StartDate", sql.Date, formattedStartDate)
+    .input("EndDate", sql.Date, formattedEndDate)
     .query(`
       WITH CategorizedTimesheets AS (
         SELECT 
@@ -1821,7 +1832,7 @@ async function getEmployeeTimesheetVsSalesChart(pool, csoCode, startDate, endDat
             t.[hours],
             t.[earningDescription],
             
-            -- Calculated Cost for this specific shift row
+            -- Cost is calculated for all valid earning types (including Holiday Pay 1.0 / ST Holiday Pay 1.0)
             CASE t.[earningDescription]
                 WHEN 'Holiday Pay 1.0'       THEN ISNULL(TRY_CAST(e.[employeeRate_Holiday_Pay_1_0] AS DECIMAL(18,4)), 0) * t.[hours]
                 WHEN 'ST Holiday Pay 1.0'    THEN ISNULL(TRY_CAST(e.[employeeRate_ST_Holiday_Pay_1_0] AS DECIMAL(18,4)), 0) * t.[hours]
@@ -1848,7 +1859,13 @@ async function getEmployeeTimesheetVsSalesChart(pool, csoCode, startDate, endDat
                 'Overtime', 'ST Overtime', 'Regular Pay', 'ST Regular Pay',
                 'Regular Salary', 'ST Reg Salary', 'Sick - Unpaid Hrs', 'Sick Hrs - Paid',
                 'Gen7Callin Hrs', 'ST Gen7Callin Hrs', 'Training', 'Bereavement Hrs - Paid'
-            ) THEN 1 ELSE 0 END AS IsValidEarningType
+            ) THEN 1 ELSE 0 END AS IsValidEarningType,
+
+            -- Hours are set to 0 ONLY for Holiday Pay 1.0 and ST Holiday Pay 1.0
+            CASE 
+                WHEN t.[earningDescription] IN ('Holiday Pay 1.0', 'ST Holiday Pay 1.0') THEN 0
+                ELSE ISNULL(t.[hours], 0)
+            END AS EffectiveHours
 
         FROM [Payworks].[Timesheets] t
         INNER JOIN [Payworks].[Employees] e
@@ -1860,45 +1877,115 @@ async function getEmployeeTimesheetVsSalesChart(pool, csoCode, startDate, endDat
           AND (t.[position] NOT LIKE '%Manager%' OR t.[position] IS NULL)
           AND t.[DeletedAt] IS NULL
           AND t.[status] <> 'Deleted'
-      ),
-      AggregatedTimesheets AS (
+    ),
+    AggregatedTimesheets AS (
         SELECT 
             LaborDate,
             Station_SK,
-
-            -- Total Hours and Cost
-            SUM(CASE WHEN IsValidEarningType = 1 AND hours IS NOT NULL THEN hours ELSE 0 END) AS TotalHoursWorked,
+            SUM(CASE WHEN IsValidEarningType = 1 THEN EffectiveHours ELSE 0 END) AS TotalHoursWorked,
             SUM(ShiftCost) AS ActualLaborCost,
-
-            -- Approved Breakdown
-            SUM(CASE WHEN status IN ('Approved', 'Stat Pay') AND IsValidEarningType = 1 AND hours IS NOT NULL THEN hours ELSE 0 END) AS ApprovedHoursWorked,
+            SUM(CASE WHEN status IN ('Approved', 'Stat Pay') AND IsValidEarningType = 1 THEN EffectiveHours ELSE 0 END) AS ApprovedHoursWorked,
             SUM(CASE WHEN status IN ('Approved', 'Stat Pay') THEN ShiftCost ELSE 0 END) AS ApprovedLaborCost,
-
-            -- Pending Breakdown
-            SUM(CASE WHEN status = 'Pending' AND IsValidEarningType = 1 AND hours IS NOT NULL THEN hours ELSE 0 END) AS PendingHoursWorked,
+            SUM(CASE WHEN status = 'Pending' AND IsValidEarningType = 1 THEN EffectiveHours ELSE 0 END) AS PendingHoursWorked,
             SUM(CASE WHEN status = 'Pending' THEN ShiftCost ELSE 0 END) AS PendingLaborCost
-
         FROM CategorizedTimesheets
+        GROUP BY LaborDate, Station_SK
+    ),
+    CategorizedSchedules AS (
+        SELECT 
+            CAST(s.[startDateTime] AS DATE) AS ScheduleDate,
+            s.[Station_SK],
+            DATEDIFF(MINUTE, s.[startDateTime], s.[endDateTime]) / 60.0 AS ScheduledHours,
+            (DATEDIFF(MINUTE, s.[startDateTime], s.[endDateTime]) / 60.0) * 
+                COALESCE(
+                    TRY_CAST(e.[employeeRate_ST_Regular_Pay] AS DECIMAL(18,4)), 
+                    TRY_CAST(e.[employeeRate_Regular_Pay] AS DECIMAL(18,4)), 
+                    0
+                ) AS ScheduledCost
+        FROM [Payworks].[ScheduleShifts] s
+        INNER JOIN [Payworks].[Employees] e
+            ON CAST(s.[employeeId] AS NVARCHAR(100)) = e.[employeeId]
+        WHERE s.[startDateTime] >= CAST(@StartDate AS DATETIME)
+          AND s.[startDateTime] <= DATEADD(SECOND, -1, DATEADD(DAY, 1, CAST(@EndDate AS DATETIME)))
+          AND s.[Station_SK] = @StationSK
+          AND s.[Station_SK] IS NOT NULL
+          AND (s.[positionName] NOT LIKE '%Manager%' OR s.[positionName] IS NULL)
+          AND (s.[isDeleted] IS NULL OR s.[isDeleted] = 0)
+    ),
+    AggregatedSchedules AS (
+        SELECT 
+            ScheduleDate,
+            Station_SK,
+            SUM(ScheduledHours) AS ScheduledHours,
+            SUM(ScheduledCost) AS ScheduledCost
+        FROM CategorizedSchedules
+        GROUP BY ScheduleDate, Station_SK
+    ),
+    AggregatedStoreSales AS (
+        SELECT 
+            CAST([Date_SK] AS DATE) AS SalesDate,
+            [Station_SK],
+            SUM(ISNULL([Total_Sales], 0)) AS StoreSalesAmount
+        FROM [CSO].[TotalSales]
+        WHERE [Station_SK] = @StationSK
+          AND [Date_SK] >= @StartDate
+          AND [Date_SK] <= @EndDate
+        GROUP BY CAST([Date_SK] AS DATE), [Station_SK]
+    ),
+    AggregatedFuelSales AS (
+        SELECT 
+            CAST(
+              CASE 
+                WHEN LEN(CAST([Date_SK] AS VARCHAR(8))) = 8 AND CHARINDEX('-', CAST([Date_SK] AS VARCHAR(8))) = 0
+                THEN STUFF(STUFF(CAST([Date_SK] AS VARCHAR(8)), 5, 0, '-'), 8, 0, '-')
+                ELSE CAST([Date_SK] AS VARCHAR(10))
+              END AS DATE
+            ) AS FuelDate,
+            [Station_SK],
+            SUM(ISNULL([Sales_Amount], 0)) AS FuelSalesAmount
+        FROM [CSO].[FuelSummary]
+        WHERE [Station_SK] = @StationSK
+          AND [Date_SK] >= REPLACE(CAST(@StartDate AS VARCHAR(10)), '-', '')
+          AND [Date_SK] <= REPLACE(CAST(@EndDate AS VARCHAR(10)), '-', '')
         GROUP BY 
-            LaborDate,
-            Station_SK
-      )
-      SELECT 
-          ts.LaborDate,
-          ts.Station_SK,
-          ts.TotalHoursWorked,
-          ts.ActualLaborCost,
-          ts.ApprovedHoursWorked,
-          ts.ApprovedLaborCost,
-          ts.PendingHoursWorked,
-          ts.PendingLaborCost,
-          ISNULL(tr.[Number of Transaction ID], 0) AS transactions
-      FROM AggregatedTimesheets ts
-      LEFT JOIN [CSO].[Daily Transaction Traffic View] tr
-          ON ts.Station_SK = tr.Station_SK 
-         AND ts.LaborDate = CAST(tr.[Date] AS DATE)
-      ORDER BY 
-          ts.LaborDate ASC;
+          CAST(
+            CASE 
+              WHEN LEN(CAST([Date_SK] AS VARCHAR(8))) = 8 AND CHARINDEX('-', CAST([Date_SK] AS VARCHAR(8))) = 0
+              THEN STUFF(STUFF(CAST([Date_SK] AS VARCHAR(8)), 5, 0, '-'), 8, 0, '-')
+              ELSE CAST([Date_SK] AS VARCHAR(10))
+            END AS DATE
+          ), [Station_SK]
+    )
+    SELECT 
+        COALESCE(ts.LaborDate, sch.ScheduleDate) AS LaborDate,
+        COALESCE(ts.Station_SK, sch.Station_SK) AS Station_SK,
+        ISNULL(sch.ScheduledHours, 0) AS ScheduledHours,
+        ISNULL(sch.ScheduledCost, 0) AS ScheduledCost,
+        ISNULL(ts.TotalHoursWorked, 0) AS TotalHoursWorked,
+        ISNULL(ts.ActualLaborCost, 0) AS ActualLaborCost,
+        ISNULL(ts.ApprovedHoursWorked, 0) AS ApprovedHoursWorked,
+        ISNULL(ts.ApprovedLaborCost, 0) AS ApprovedLaborCost,
+        ISNULL(ts.PendingHoursWorked, 0) AS PendingHoursWorked,
+        ISNULL(ts.PendingLaborCost, 0) AS PendingLaborCost,
+        ISNULL(tr.[Number of Transaction ID], 0) AS transactions,
+        ISNULL(ss.StoreSalesAmount, 0) AS storeSales,
+        ISNULL(fs.FuelSalesAmount, 0) AS fuelSales,
+        (ISNULL(ss.StoreSalesAmount, 0) + ISNULL(fs.FuelSalesAmount, 0)) AS totalSales
+    FROM AggregatedTimesheets ts
+    FULL OUTER JOIN AggregatedSchedules sch
+        ON ts.Station_SK = sch.Station_SK
+      AND ts.LaborDate = sch.ScheduleDate
+    LEFT JOIN [CSO].[Daily Transaction Traffic View] tr
+        ON COALESCE(ts.Station_SK, sch.Station_SK) = tr.Station_SK 
+      AND COALESCE(ts.LaborDate, sch.ScheduleDate) = CAST(tr.[Date] AS DATE)
+    LEFT JOIN AggregatedStoreSales ss
+        ON COALESCE(ts.Station_SK, sch.Station_SK) = ss.Station_SK
+      AND COALESCE(ts.LaborDate, sch.ScheduleDate) = ss.SalesDate
+    LEFT JOIN AggregatedFuelSales fs
+        ON COALESCE(ts.Station_SK, sch.Station_SK) = fs.Station_SK
+      AND COALESCE(ts.LaborDate, sch.ScheduleDate) = fs.FuelDate
+    ORDER BY 
+        LaborDate ASC;
     `);
 
   return {

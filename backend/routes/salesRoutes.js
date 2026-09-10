@@ -2,7 +2,6 @@ const express = require('express');
 const router = express.Router();
 const { CashSummary, CashSummaryReport } = require('../models/CashSummaryNew')
 const Location = require('../models/Location')
-const { mergeSalesWithTimesheets } = require('../utils/mergeSalesWithTimesheets');
 const { getCategorizedSalesData, getGradeVolumeFuelData, getTransTimePeriodData, getAllSQLData } = require('../services/sqlService');
 const redis = require('../utils/redisClient');
 
@@ -90,7 +89,7 @@ router.get('/all-data', async (req, res) => {
     fuelStart, fuelEnd,
     transStart, transEnd,
     shiftStart, shiftEnd,
-    timesheetStart, timesheetEnd // <--- Extracted
+    timesheetStart, timesheetEnd
   } = req.query;
 
   try {
@@ -115,7 +114,7 @@ router.get('/all-data', async (req, res) => {
         fuelStart, fuelEnd, 
         transStart, transEnd, 
         shiftStart, shiftEnd,
-        timesheetStart, timesheetEnd // <--- Passed to SQL service
+        timesheetStart, timesheetEnd
       }),
       CashSummaryReport.find({ site: siteParam, date: { $gte: startDate, $lte: endDate } }).lean(),
       CashSummary.find({ site: siteParam, date: { $gte: startDate, $lte: endDate } }).lean(),
@@ -125,8 +124,6 @@ router.get('/all-data', async (req, res) => {
     // retries) — strip it from the client-facing/cached payload, but use it below
     // to decide whether this result is safe to cache.
     const { _failedQueries: failedQueries, ...sqlData } = sqlResponse;
-
-    const site = siteParam;
 
     // Aggregate Mongo Shifts: Find Absolute Min Start / Max End per day
     const mongoDailyTimings = {};
@@ -197,28 +194,15 @@ router.get('/all-data', async (req, res) => {
       current.setDate(current.getDate() + 1);
     }
 
-    // Process and enrich employeeTimesheets with daily total sales (Store Sales + Cumulative Fuel Sales)
-    const enrichedEmployeeTimesheets = mergeSalesWithTimesheets(
-      sqlData.employeeTimesheets || [],
-      sqlData.sales || [],
-      sqlData.fuel || []
-    );
-
-    // 3. Build response
+    // 3. Build response - sqlData already contains employeeTimesheets with sales fields
     const responseData = {
       ...sqlData,
-      employeeTimesheets: enrichedEmployeeTimesheets,
       operationalTimings,
       lastUpdated: new Date().toISOString(),
     };
 
-    // Only cache a complete result. If any SQL query failed after retries, this
-    // response is degraded (empty sections standing in for real data) — caching
-    // it would bake a transient MSSQL blip into Redis for 25 hours and make the
-    // dashboard look blank for the rest of the day. Serve it live instead and
-    // let the next request try again.
     if (failedQueries.length > 0) {
-      console.error(`  ⚠️ ${siteParam}: SQL queries failed after retries (${failedQueries.join(", ")}) — not caching degraded data`);
+      console.error(` ⚠️ ${siteParam}: SQL queries failed after retries (${failedQueries.join(", ")}) — not caching degraded data`);
     } else {
       // Cache for 25 hours (90000 seconds) — cron refreshes daily, buffer for missed runs
       await redis.set(cacheKey, JSON.stringify(responseData), 'EX', 90000);

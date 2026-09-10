@@ -2,7 +2,6 @@ const cron = require("node-cron");
 const Location = require("../models/Location");
 const { CashSummary, CashSummaryReport } = require("../models/CashSummaryNew");
 const { getAllSQLData } = require("../services/sqlService");
-const { mergeSalesWithTimesheets } = require('../utils/mergeSalesWithTimesheets');
 const redis = require("../utils/redisClient");
 
 // Helper: minutes from midnight for a given datetime and reference date
@@ -124,17 +123,9 @@ async function buildDashboardData(csoCode, siteName) {
     current.setDate(current.getDate() + 1);
   }
 
-  // Process and enrich employeeTimesheets with daily total sales (Store Sales + Cumulative Fuel Sales)
-  const enrichedEmployeeTimesheets = mergeSalesWithTimesheets(
-    sqlData.employeeTimesheets || [],
-    sqlData.sales || [],
-    sqlData.fuel || []
-  );
-
   return {
     data: {
       ...sqlData,
-      employeeTimesheets: enrichedEmployeeTimesheets,
       operationalTimings,
       lastUpdated: new Date().toISOString(),
     },
