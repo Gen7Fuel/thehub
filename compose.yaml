@@ -75,6 +75,12 @@ services:
       - ACADEMY_ADMIN_TOKEN=${ACADEMY_ADMIN_TOKEN}
       - GASBUDDY_EMAIL=${GASBUDDY_EMAIL}
       - GASBUDDY_PASSWORD=${GASBUDDY_PASSWORD}
+      - GVM_EMAIL=${GVM_EMAIL}
+      - GVM_PASSWORD=${GVM_PASSWORD}
+      # Runtime switch for the GVM Unifi price sync (see fuelPricingRoutes.js,
+      # PUT /verify-price-receipt). Defaults to off if unset/anything other
+      # than the literal string "true".
+      - GVM_SYNC_ENABLED=${GVM_SYNC_ENABLED:-false}
       - PETROSOFT_USERNAME=${PETROSOFT_USERNAME}
       - PETROSOFT_PASSWORD=${PETROSOFT_PASSWORD}
       - PUSHOVER_API_TOKEN=${PUSHOVER_API_TOKEN}
