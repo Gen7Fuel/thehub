@@ -59,6 +59,7 @@ function NewSiteRouteComponent() {
     sellsLottery: false,
     managerEmails: [] as string[],
     gasBuddyStationId: "", // 🚀 NEW: State tracker variable initialized as optional empty string
+    gvmLocationName: "",
   });
   const [managerCode, setManagerCode] = useState("");
   const [loading, setLoading] = useState(false);
@@ -271,6 +272,21 @@ function NewSiteRouteComponent() {
                   />
                   <p className="text-[11px] text-gray-400 mt-1">
                     Leave blank if this location won't sync live pricing metrics with public maps.
+                  </p>
+                </div>
+
+                <div>
+                  <Label htmlFor="gvmLocationName">GVM Location Name</Label>
+                  <Input
+                    id="gvmLocationName"
+                    name="gvmLocationName"
+                    placeholder="Must match GVM Unifi's pricing-page location dropdown (Optional)"
+                    value={formData.gvmLocationName}
+                    onChange={handleChange}
+                    className="bg-white"
+                  />
+                  <p className="text-[11px] text-gray-400 mt-1">
+                    Leave blank if this location won't sync live pricing to GVM Unifi.
                   </p>
                 </div>
 

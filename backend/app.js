@@ -13,6 +13,7 @@ const requestId = require("./middleware/requestId");
 require("./queues/emailQueue"); // Just runs the worker
 require("./queues/priceTimeoutQueue"); // Just runs the worker
 require("./queues/gasBuddyQueue"); // Just runs the worker
+require("./queues/gvmQueue"); // Just runs the worker
 const { initPriceScheduleWorker } = require("./queues/priceScheduleQueue");
 const { initCsoInvoiceWorker } = require("./queues/csoInvoiceQueue"); // 1. Import worker initializer
 require('./cron_jobs/cycleCountCron'); //cron job for getting cso on hands for cyclecount

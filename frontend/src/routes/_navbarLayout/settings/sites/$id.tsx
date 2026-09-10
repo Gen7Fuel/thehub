@@ -109,6 +109,7 @@ interface LocationForm {
   managerEmails: string[];
   province: string;
   gasBuddyStationId?: string;
+  gvmLocationName?: string;
   pushOverUserKey: string;
   devices: PushoverDevice[];
   registers: Register[];
@@ -160,6 +161,7 @@ function RouteComponent() {
     managerEmails: [],
     province: "",
     gasBuddyStationId: "",
+    gvmLocationName: "",
     pushOverUserKey: "",
     devices: [],
     registers: [],
@@ -238,6 +240,7 @@ function RouteComponent() {
         managerEmails: location.managerEmails || [],
         province: location.province || "Ontario",
         gasBuddyStationId: location.gasBuddyStationId || "",
+        gvmLocationName: location.gvmLocationName || "",
         pushOverUserKey: location.pushOverUserKey || "",
         devices: location.devices || [],
         registers: location.registers || [],
@@ -768,6 +771,28 @@ function RouteComponent() {
                       setFormData({
                         ...formData,
                         gasBuddyStationId: e.target.value,
+                      })
+                    }
+                    className="border border-gray-300 rounded-md px-3 py-2 w-full focus:ring-2 focus:ring-blue-500 focus:outline-none bg-white"
+                  />
+                </div>
+
+                <div>
+                  <Label
+                    htmlFor="gvmLocationName"
+                    className="block font-medium mb-1"
+                  >
+                    GVM Location Name
+                  </Label>
+                  <Input
+                    id="gvmLocationName"
+                    type="text"
+                    placeholder="Must match the location dropdown in GVM Unifi's pricing page"
+                    value={formData.gvmLocationName || ""}
+                    onChange={(e) =>
+                      setFormData({
+                        ...formData,
+                        gvmLocationName: e.target.value,
                       })
                     }
                     className="border border-gray-300 rounded-md px-3 py-2 w-full focus:ring-2 focus:ring-blue-500 focus:outline-none bg-white"
