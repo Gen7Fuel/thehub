@@ -1851,29 +1851,45 @@ async function getEmployeeTimesheetVsSalesChart(pool, csoCode, startDate, endDat
           AND (t.[position] NOT LIKE '%Manager%' OR t.[position] IS NULL)
           AND t.[DeletedAt] IS NULL
           AND t.[status] <> 'Deleted'
+      ),
+      AggregatedTimesheets AS (
+        SELECT 
+            LaborDate,
+            Station_SK,
+
+            -- Total Hours and Cost
+            SUM(CASE WHEN IsValidEarningType = 1 AND hours IS NOT NULL THEN hours ELSE 0 END) AS TotalHoursWorked,
+            SUM(ShiftCost) AS ActualLaborCost,
+
+            -- Approved Breakdown
+            SUM(CASE WHEN status IN ('Approved', 'Stat Pay') AND IsValidEarningType = 1 AND hours IS NOT NULL THEN hours ELSE 0 END) AS ApprovedHoursWorked,
+            SUM(CASE WHEN status IN ('Approved', 'Stat Pay') THEN ShiftCost ELSE 0 END) AS ApprovedLaborCost,
+
+            -- Pending Breakdown
+            SUM(CASE WHEN status = 'Pending' AND IsValidEarningType = 1 AND hours IS NOT NULL THEN hours ELSE 0 END) AS PendingHoursWorked,
+            SUM(CASE WHEN status = 'Pending' THEN ShiftCost ELSE 0 END) AS PendingLaborCost
+
+        FROM CategorizedTimesheets
+        GROUP BY 
+            LaborDate,
+            Station_SK
       )
       SELECT 
-          LaborDate,
-          Station_SK,
-
-          -- Total Hours and Cost
-          SUM(CASE WHEN IsValidEarningType = 1 AND hours IS NOT NULL THEN hours ELSE 0 END) AS TotalHoursWorked,
-          SUM(ShiftCost) AS ActualLaborCost,
-
-          -- Approved Breakdown
-          SUM(CASE WHEN status IN ('Approved', 'Stat Pay') AND IsValidEarningType = 1 AND hours IS NOT NULL THEN hours ELSE 0 END) AS ApprovedHoursWorked,
-          SUM(CASE WHEN status IN ('Approved', 'Stat Pay') THEN ShiftCost ELSE 0 END) AS ApprovedLaborCost,
-
-          -- Pending Breakdown
-          SUM(CASE WHEN status = 'Pending' AND IsValidEarningType = 1 AND hours IS NOT NULL THEN hours ELSE 0 END) AS PendingHoursWorked,
-          SUM(CASE WHEN status = 'Pending' THEN ShiftCost ELSE 0 END) AS PendingLaborCost
-
-      FROM CategorizedTimesheets
-      GROUP BY 
-          LaborDate,
-          Station_SK
+          ts.LaborDate,
+          ts.Station_SK,
+          ts.TotalHoursWorked,
+          ts.ActualLaborCost,
+          ts.ApprovedHoursWorked,
+          ts.ApprovedLaborCost,
+          ts.PendingHoursWorked,
+          ts.PendingLaborCost,
+          ISNULL(tr.[Number of Transaction ID], 0) AS transactions
+      FROM AggregatedTimesheets ts
+      LEFT JOIN [CSO].[Daily Transaction Traffic View] tr
+          ON ts.Station_SK = tr.Station_SK 
+         AND ts.LaborDate = CAST(tr.[Date] AS DATE)
       ORDER BY 
-          LaborDate ASC;
+          ts.LaborDate ASC;
     `);
 
   return {

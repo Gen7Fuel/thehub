@@ -10,6 +10,7 @@ import {
   Tooltip,
   CartesianGrid,
   ResponsiveContainer,
+  ReferenceArea,
 } from "recharts";
 import {
   Card,
@@ -25,22 +26,30 @@ import { ChevronLeft, ChevronRight } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 interface ShiftsAndSalesChartProps {
-  timesheetData: any[]; // Accepts enriched employeeTimesheets directly
+  timesheetData: any[];
   className?: string;
 }
 
 const CHART_CONFIG = {
   approvedCost: {
     label: "Approved Shift Cost",
-    color: "#22c55e", // Green
+    color: "#22c55e",
   },
   pendingCost: {
     label: "Pending Shift Cost",
-    color: "#eab308", // Yellow
+    color: "#eab308",
+  },
+  expectedCost: {
+    label: "Avg Cost (By Day)",
+    color: "#ef4444", // Red dotted baseline target
   },
   sales: {
     label: "Total Sales",
-    color: "#2563eb", // Blue
+    color: "#2563eb",
+  },
+  transactions: {
+    label: "Transactions",
+    color: "#a855f7",
   },
 };
 
@@ -48,127 +57,143 @@ export function ShiftsAndSalesChart({
   timesheetData,
   className,
 }: ShiftsAndSalesChartProps) {
-  // Page index for 7-day pagination over historical data
   const [pageIndex, setPageIndex] = useState(0);
 
-  // 1. Process Enriched Timesheet Data Directly
-    const combinedData = useMemo(() => {
-    if (!timesheetData || timesheetData.length === 0) return [];
+  // 1. Process Enriched Data & Calculate Day-of-Week Average Ratios
+  const { combinedData, dayOfWeekAvgRatios } = useMemo(() => {
+    if (!timesheetData || timesheetData.length === 0) {
+      return { combinedData: [], dayOfWeekAvgRatios: new Map<number, number>() };
+    }
 
     const aggregatedMap = new Map<
-        string,
-        {
+      string,
+      {
         approvedCost: number;
         pendingCost: number;
         sales: number;
+        transactions: number;
         date: string;
         dayLabel: string;
-        }
+        dayOfWeek: number;
+      }
     >();
 
     timesheetData.forEach((item) => {
-        const dateStr = item.LaborDate || item.date || item.Date;
-        if (!dateStr) return;
+      const dateStr = item.LaborDate || item.date || item.Date;
+      if (!dateStr) return;
 
-        const formattedDate = String(dateStr).slice(0, 10);
-        const dayLabel = formattedDate.slice(5, 10); // MM-DD format
+      const formattedDate = String(dateStr).slice(0, 10);
+      const dayLabel = formattedDate.slice(5, 10);
+      const dateObj = new Date(formattedDate);
+      const dayOfWeek = dateObj.getDay(); // 0 = Sun, 1 = Mon, ..., 6 = Sat
 
-        if (!aggregatedMap.has(formattedDate)) {
+      if (!aggregatedMap.has(formattedDate)) {
         aggregatedMap.set(formattedDate, {
-            approvedCost: 0,
-            pendingCost: 0,
-            sales: Number(item.totalSales || 0),
-            date: formattedDate,
-            dayLabel,
+          approvedCost: 0,
+          pendingCost: 0,
+          sales: Number(item.totalSales || item.sales || 0),
+          transactions: Number(item.transactions || item.Transactions || 0),
+          date: formattedDate,
+          dayLabel,
+          dayOfWeek,
         });
-        }
+      }
 
-        const rec = aggregatedMap.get(formattedDate)!;
+      const rec = aggregatedMap.get(formattedDate)!;
+      const approved = Number(item.ApprovedLaborCost ?? item.approvedLaborCost ?? 0);
+      const pending = Number(item.PendingLaborCost ?? item.pendingLaborCost ?? 0);
 
-        // ✅ Read pre-aggregated Approved / Pending labor cost fields from API
-        const approved = Number(
-        item.ApprovedLaborCost ?? item.approvedLaborCost ?? 0
-        );
-        const pending = Number(
-        item.PendingLaborCost ?? item.pendingLaborCost ?? 0
-        );
-
-        // ✅ If costs are already split into ApprovedLaborCost and PendingLaborCost
-        if (approved > 0 || pending > 0) {
+      if (approved > 0 || pending > 0) {
         rec.approvedCost += approved;
         rec.pendingCost += pending;
-        } else {
-        // Fallback for individual shift records with Status and ShiftCost
-        const cost = Number(
-            item.ActualLaborCost ?? item.ShiftCost ?? item.cost ?? item.amount ?? 0
-        );
+      } else {
+        const cost = Number(item.ActualLaborCost ?? item.ShiftCost ?? item.cost ?? item.amount ?? 0);
         const status = String(item.Status || item.status || "").toLowerCase();
 
         if (status === "approved" || status === "completed" || !status) {
-            rec.approvedCost += cost;
+          rec.approvedCost += cost;
         } else {
-            rec.pendingCost += cost;
+          rec.pendingCost += cost;
         }
-        }
+      }
     });
 
-    // Sort chronologically
-    return Array.from(aggregatedMap.values())
-        .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime())
-        .map((d) => ({
-        ...d,
-        day: d.dayLabel,
-        approvedCost: Math.round(d.approvedCost),
-        pendingCost: Math.round(d.pendingCost),
-        sales: Math.round(d.sales),
-        }));
-    }, [timesheetData]);
+    const rawList = Array.from(aggregatedMap.values());
 
-  // 2. Paginate Data (7 days per page)
-  const pageSize = 7;
+    // Step 1a: Calculate average Labor-to-Sales ratio per Day of Week (0-6)
+    const dayRatiosMap = new Map<number, number[]>();
+    rawList.forEach((d) => {
+      const totalCost = d.approvedCost + d.pendingCost;
+      if (d.sales > 0 && totalCost > 0) {
+        const ratio = totalCost / d.sales; // Ratio = Cost / Sales
+        if (!dayRatiosMap.has(d.dayOfWeek)) {
+          dayRatiosMap.set(d.dayOfWeek, []);
+        }
+        dayRatiosMap.get(d.dayOfWeek)!.push(ratio);
+      }
+    });
+
+    const dayOfWeekAvgRatios = new Map<number, number>();
+    dayRatiosMap.forEach((ratios, day) => {
+      const avg = ratios.reduce((acc, curr) => acc + curr, 0) / ratios.length;
+      dayOfWeekAvgRatios.set(day, avg);
+    });
+
+    // Step 1b: Map over chronologically sorted records and attach expected labor cost
+    const processed = rawList
+      .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime())
+      .map((d) => {
+        const totalCost = Math.round(d.approvedCost + d.pendingCost);
+        const avgRatio = dayOfWeekAvgRatios.get(d.dayOfWeek) || 0;
+        const expectedCost = Math.round(d.sales * avgRatio);
+
+        return {
+          ...d,
+          day: d.dayLabel,
+          approvedCost: Math.round(d.approvedCost),
+          pendingCost: Math.round(d.pendingCost),
+          totalCost,
+          expectedCost,
+          isOverTarget: totalCost > expectedCost && expectedCost > 0,
+          sales: Math.round(d.sales),
+          transactions: Math.round(d.transactions),
+        };
+      });
+
+    return { combinedData: processed, dayOfWeekAvgRatios };
+  }, [timesheetData]);
+
+  // 2. 5-Day Pagination Window
+  const pageSize = 5;
   const maxPages = Math.ceil(combinedData.length / pageSize) || 1;
   const safePageIndex = Math.min(pageIndex, Math.max(0, maxPages - 1));
 
   const visibleData = useMemo(() => {
     if (combinedData.length === 0) return [];
-
     const total = combinedData.length;
     const endIndex = total - safePageIndex * pageSize;
     const startIndex = Math.max(0, endIndex - pageSize);
-
     return combinedData.slice(startIndex, Math.max(0, endIndex));
   }, [combinedData, safePageIndex, pageSize]);
-
-  // Date range label
-  const currentRangeLabel = useMemo(() => {
-    if (visibleData.length === 0) return "";
-    const start = visibleData[0]?.day;
-    const end = visibleData[visibleData.length - 1]?.day;
-    return `${start} to ${end}`;
-  }, [visibleData]);
 
   return (
     <Card className={cn("w-full", className)}>
       <CardHeader className="flex flex-row items-center justify-between pb-2 space-y-0">
         <div>
-          <CardTitle>Shifts Cost vs. Daily Sales</CardTitle>
+          <CardTitle>Shifts Cost vs. Sales & Traffic</CardTitle>
           <CardDescription>
-            Labor expenses (Approved vs. Pending) overlaid with merged daily sales
+            Daily labor costs, sales, and transaction trends
           </CardDescription>
         </div>
 
-        {/* Week Pagination */}
-        <div className="flex items-center gap-2">
-          <span className="text-xs font-medium text-muted-foreground mr-1 hidden sm:inline-block">
-            {currentRangeLabel}
-          </span>
+        <div className="flex items-center gap-1">
           <Button
             variant="outline"
             size="icon"
             className="h-8 w-8"
             onClick={() => safePageIndex < maxPages - 1 && setPageIndex((p) => p + 1)}
             disabled={safePageIndex >= maxPages - 1 || combinedData.length === 0}
-            title="Previous Week"
+            title="Previous Period"
           >
             <ChevronLeft className="h-4 w-4" />
           </Button>
@@ -178,7 +203,7 @@ export function ShiftsAndSalesChart({
             className="h-8 w-8"
             onClick={() => safePageIndex > 0 && setPageIndex((p) => p - 1)}
             disabled={safePageIndex === 0 || combinedData.length === 0}
-            title="Next Week"
+            title="Next Period"
           >
             <ChevronRight className="h-4 w-4" />
           </Button>
@@ -197,7 +222,7 @@ export function ShiftsAndSalesChart({
                 tick={{ fontSize: 12 }}
               />
 
-              {/* Left Axis for Shift Costs */}
+              {/* Left Y-Axis for Labor Costs ($) */}
               <YAxis
                 yAxisId="left"
                 tickLine={false}
@@ -206,7 +231,7 @@ export function ShiftsAndSalesChart({
                 tick={{ fontSize: 11 }}
               />
 
-              {/* Right Axis for Total Daily Sales */}
+              {/* Right Y-Axis for Sales ($) */}
               <YAxis
                 yAxisId="right"
                 orientation="right"
@@ -216,18 +241,33 @@ export function ShiftsAndSalesChart({
                 tick={{ fontSize: 11 }}
               />
 
-              <Tooltip
-                content={<MultiLineChartToolTip config={CHART_CONFIG} />}
-              />
+              <YAxis yAxisId="transactions" hide={true} domain={["auto", "auto"]} />
 
-              {/* Stacked Shift Labor Costs */}
+              {/* Background Highlight for Days Exceeding Target Cost */}
+              {visibleData.map(
+                (item) =>
+                  item.isOverTarget && (
+                    <ReferenceArea
+                      key={`over-target-${item.date}`}
+                      yAxisId="left"
+                      x1={item.day}
+                      x2={item.day}
+                      fill="#ef4444"
+                      fillOpacity={0.08}
+                    />
+                  )
+              )}
+
+              <Tooltip content={<MultiLineChartToolTip config={CHART_CONFIG} />} />
+
+              {/* Stacked Shift Labor Cost Bars */}
               <Bar
                 yAxisId="left"
                 dataKey="approvedCost"
                 name={CHART_CONFIG.approvedCost.label}
                 stackId="cost"
                 fill={CHART_CONFIG.approvedCost.color}
-                barSize={28}
+                barSize={24}
               />
               <Bar
                 yAxisId="left"
@@ -235,18 +275,43 @@ export function ShiftsAndSalesChart({
                 name={CHART_CONFIG.pendingCost.label}
                 stackId="cost"
                 fill={CHART_CONFIG.pendingCost.color}
-                barSize={28}
+                barSize={24}
                 radius={[4, 4, 0, 0]}
               />
 
-              {/* Merged Total Sales Line */}
+              {/* Dotted Step/Baseline Line for Target Labor Cost */}
+              <Line
+                yAxisId="left"
+                type="stepAfter"
+                dataKey="expectedCost"
+                name={CHART_CONFIG.expectedCost.label}
+                stroke={CHART_CONFIG.expectedCost.color}
+                strokeWidth={2}
+                strokeDasharray="4 4"
+                dot={false}
+                activeDot={false}
+              />
+
+              {/* Sales Line */}
               <Line
                 yAxisId="right"
                 type="monotone"
                 dataKey="sales"
                 name={CHART_CONFIG.sales.label}
                 stroke={CHART_CONFIG.sales.color}
-                strokeWidth={3}
+                strokeWidth={2.5}
+                dot={{ r: 3 }}
+                activeDot={{ r: 5 }}
+              />
+
+              {/* Transactions Line */}
+              <Line
+                yAxisId="transactions"
+                type="monotone"
+                dataKey="transactions"
+                name={CHART_CONFIG.transactions.label}
+                stroke={CHART_CONFIG.transactions.color}
+                strokeWidth={2}
                 dot={{ r: 3 }}
                 activeDot={{ r: 5 }}
               />
@@ -258,8 +323,8 @@ export function ShiftsAndSalesChart({
           </div>
         )}
 
-        {/* Legend */}
-        <div className="flex flex-wrap items-center justify-center gap-6 pt-4">
+        {/* Updated Legend */}
+        <div className="flex flex-wrap items-center justify-center gap-4 pt-4">
           {Object.entries(CHART_CONFIG).map(([key, config]) => (
             <div key={key} className="flex items-center gap-2">
               <div
@@ -275,7 +340,7 @@ export function ShiftsAndSalesChart({
       </CardContent>
 
       <CardFooter className="text-xs text-muted-foreground">
-        Showing 7-day window ({safePageIndex * 7} days back)
+        Showing 5-day window ({safePageIndex * 5} days back)
       </CardFooter>
     </Card>
   );

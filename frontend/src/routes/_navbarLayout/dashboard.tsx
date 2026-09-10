@@ -2385,37 +2385,50 @@ function RouteComponent() {
             {/* ======================= */}
             {/* Shifts & Scheduling     */}
             {/* ======================= */}
-            {!loadingSql && (
-              <section aria-labelledby="shifts-heading" className="mb-10">
-                <h2
-                  id="shifts-heading"
-                  className="text-2xl font-bold mb-4 pl-4"
-                >
-                  Shifts & Scheduling
-                </h2>
+           {!loadingSql && (
+            <section aria-labelledby="shifts-heading" className="mb-10">
+              <h2
+                id="shifts-heading"
+                className="text-2xl font-bold mb-4 pl-4"
+              >
+                Shifts & Scheduling
+              </h2>
 
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                  {/* 1 & 2. Main Chart: Takes up 2 spaces on md/lg screens, squeezes on mobile */}
-                  <ShiftsAndSalesChart
-                    timesheetData={timesheetData}
-                    className="col-span-1 md:col-span-2 lg:col-span-2"
-                  />
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                {/* 1. Main Chart: Takes up 1 column space */}
+                <ShiftsAndSalesChart
+                  timesheetData={timesheetData}
+                  className="col-span-1"
+                />
 
-                  {/* 3. Placeholder / Complementary Chart for Space #3 */}
-                  <Card className="col-span-1">
-                    <CardHeader>
-                      <CardTitle>Labor Summary</CardTitle>
-                      <CardDescription>Overall shift cost metrics</CardDescription>
-                    </CardHeader>
-                    <CardContent>
-                      <div className="py-10 text-center text-muted-foreground text-sm">
-                        Space reserved for Shift Breakdown / Labor KPIs
-                      </div>
-                    </CardContent>
-                  </Card>
-                </div>
-              </section>
-            )}
+                {/* 2. Space #2 */}
+                <Card className="col-span-1">
+                  <CardHeader>
+                    <CardTitle>Labor Summary</CardTitle>
+                    <CardDescription>Overall shift cost metrics</CardDescription>
+                  </CardHeader>
+                  <CardContent>
+                    <div className="py-10 text-center text-muted-foreground text-sm">
+                      Space reserved for Shift Breakdown / Labor KPIs
+                    </div>
+                  </CardContent>
+                </Card>
+
+                {/* 3. Space #3 */}
+                <Card className="col-span-1">
+                  <CardHeader>
+                    <CardTitle>Efficiency Metrics</CardTitle>
+                    <CardDescription>Sales per labor hour</CardDescription>
+                  </CardHeader>
+                  <CardContent>
+                    <div className="py-10 text-center text-muted-foreground text-sm">
+                      Space reserved for additional metrics
+                    </div>
+                  </CardContent>
+                </Card>
+              </div>
+            </section>
+          )}
 
             {/* ======================= */}
             {/* Store Activity Section   */}
