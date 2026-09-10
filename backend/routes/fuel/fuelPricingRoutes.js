@@ -9,6 +9,7 @@ const { getPg } = require("../../config/pg");
 const { priceTimeoutQueue } = require("../../queues/priceTimeoutQueue");
 const { priceScheduleQueue } = require("../../queues/priceScheduleQueue");
 const { gasBuddyQueue } = require("../../queues/gasBuddyQueue");
+const { gvmQueue } = require("../../queues/gvmQueue");
 const { emailQueue } = require("../../queues/emailQueue"); // Import emailQueue for the immediate notification
 const { calculateCustomRecPrice } = require("../../utils/fuelPriceRecLogic");
 const {
@@ -24,6 +25,16 @@ const logsModel = require("../../pg/models/fuelPriceLog");
 const REVERSE_GRADE_MAP = Object.fromEntries(
   Object.entries(GRADE_MAP).map(([key, value]) => [value, key]),
 );
+
+// GVM Unifi's five price-field labels, keyed the same way as GRADE_MAP.
+// Unlike GasBuddy, GVM wants all five grades — no DYED skip.
+const GVM_GRADE_MAP = {
+  REG: "Regular Gas",
+  MID: "Midgrade Gas",
+  PNL: "Premium Gas",
+  DSL: "Diesel",
+  DYED: "Dyed Diesel",
+};
 
 // =========================================================================
 // 1. PRIMARY FUEL PRICING GRID DASHBOARD ROUTE
@@ -992,6 +1003,49 @@ router.put("/verify-price-receipt", async (req, res) => {
         uniqueUserIds.forEach((userId) => {
           io.to(userId).emit("retail-price-verified", { locationId });
         });
+      }
+
+      // -----------------------------------------------------------------------
+      // 🔗 GVM UNIFI SYNC: fired from here, not from the price-publish step.
+      // The site only just confirmed (via this photo upload) that Bulloch's
+      // physical price has actually been changed — syncing GVM here instead
+      // of at publish time means the cardlock pumps and the street pumps go
+      // live at roughly the same time, rather than GVM jumping ahead by
+      // however long it takes the cashier to notice the alert and act on it.
+      //
+      // Gated behind GVM_SYNC_ENABLED — a real runtime switch, not a
+      // commented-out placeholder: set GVM_SYNC_ENABLED=true (compose.yaml /
+      // the deploy secret) and restart the backend to turn this on; unset or
+      // "false" keeps it off. Defaults to off. This intentionally does NOT
+      // gate gvmQueue/gvmScrapper.js themselves, so a manual dry-run job can
+      // still be enqueued directly for testing while this stays off.
+      // -----------------------------------------------------------------------
+      try {
+        const gvmSyncEnabled = process.env.GVM_SYNC_ENABLED === "true";
+        if (gvmSyncEnabled && updatedRows > 0 && locationDoc.gvmLocationName) {
+          const currentPrices = await currentPriceModel.getCurrentPricesBySite(locationId);
+          const normalizedPrices = {};
+          for (const row of currentPrices) {
+            const feCode = REVERSE_GRADE_MAP[String(row.grade).trim()];
+            const gvmLabel = feCode && GVM_GRADE_MAP[feCode];
+            if (gvmLabel && row.price !== undefined && row.price !== null) {
+              normalizedPrices[gvmLabel] = row.price;
+            }
+          }
+
+          if (Object.keys(normalizedPrices).length > 0) {
+            await gvmQueue.add(
+              `gvm-sync-${locationId}-${Date.now()}`,
+              {
+                gvmLocationName: locationDoc.gvmLocationName,
+                prices: normalizedPrices,
+              },
+              { removeOnComplete: true, removeOnFail: false },
+            );
+          }
+        }
+      } catch (err) {
+        console.error("Non-blocking operational failure (GVM):", err);
       }
 
       // -----------------------------------------------------------------------

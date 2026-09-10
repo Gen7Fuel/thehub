@@ -47,6 +47,10 @@ const locationSchema = new mongoose.Schema({
   defaultFuelCarrier: { type: mongoose.Schema.Types.ObjectId, ref: "FuelCarrier" },
   availableGrades: [{ type: String, default: [] }],
   gasBuddyStationId: { type: String, required: false },
+  // Must exactly match this site's option text in GVM Unifi's pricing-modal
+  // location dropdown (https://live.gvmunifi.com/pricing) — GVM's dropdown
+  // doesn't expose a separate stable ID the way GasBuddy's stationId does.
+  gvmLocationName: { type: String, required: false },
 
   // --- Pushover Core Extensions ---
   pushOverUserKey: { type: String, default: null },

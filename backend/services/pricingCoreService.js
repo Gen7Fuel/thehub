@@ -5,7 +5,7 @@ const require = createRequire(import.meta.url);
 // 3. Now all of your existing require paths will work perfectly without crashing!
 const Location = require("../models/Location");
 const User = require("../models/User");
-const { gasBuddyQueue } = require("../queues/gasBuddyQueue"); 
+const { gasBuddyQueue } = require("../queues/gasBuddyQueue");
 const { emailQueue } = require("../queues/emailQueue");
 const { priceTimeoutQueue } = require("../queues/priceTimeoutQueue");
 const { fuelNotificationQueue } = require("../queues/fuelNotificationQueue");
@@ -196,6 +196,14 @@ export async function executeRetailPriceUpdate({
   // } catch (err) {
   //   console.error("Non-blocking operational failure (GasBuddy):", err);
   // }
+
+  // GVM Unifi price sync deliberately does NOT fire from here. It's
+  // triggered from the site's photo-verification step instead (see
+  // routes/fuel/fuelPricingRoutes.js, PUT /verify-price-receipt) — firing
+  // here (at publish time) would put the cardlock pumps' new price live
+  // before the cashier has even been notified to change the street-pump
+  // price in Bulloch, let alone done it. Syncing GVM to the verification
+  // step instead means both price sets change at roughly the same time.
 
   if (databaseWritesExecutedCount > 0) {
     const storeEmail = locationDoc.email;
