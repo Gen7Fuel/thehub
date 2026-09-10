@@ -25,6 +25,7 @@ function RouteComponent() {
   const noFleetCard = useFormStore((state) => state.noFleetCard);
   const poNumber = useFormStore((state) => state.poNumber);
   const customerName = useFormStore((state) => state.customerName);
+  const customerNameSelected = useFormStore((state) => state.customerNameSelected);
   const driverName = useFormStore((state) => state.driverName);
   const vehicleInfo = useFormStore((state) => state.vehicleInfo);
   const licensePlate = useFormStore((state) => state.licensePlate);
@@ -40,10 +41,10 @@ function RouteComponent() {
   useEffect(() => {
     const fuelInvalid = purchaseType === 'fuel' && (!fuelType || quantity === 0);
     const nonFuelInvalid = purchaseType === 'non-fuel' && !itemsDescription;
-    if (!date || !customerName || !driverName || amount === 0 || fuelInvalid || nonFuelInvalid) {
+    if (!date || !customerName || !customerNameSelected || !driverName || amount === 0 || fuelInvalid || nonFuelInvalid) {
       navigate({ to: "/po" });
     }
-  }, [date, customerName, driverName, fuelType, quantity, amount, purchaseType, itemsDescription]);
+  }, [date, customerName, customerNameSelected, driverName, fuelType, quantity, amount, purchaseType, itemsDescription]);
 
   const handleRetryCapture = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]

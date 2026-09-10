@@ -1,5 +1,11 @@
 const express = require('express')
+const mongoose = require('mongoose')
 const { CashSummary, CashSummaryReport } = require('../models/CashSummaryNew')
+const {
+  isValidAttributeName,
+  buildReservedAttributeNames,
+  castAttributeValue,
+} = require('../utils/shiftAttributes')
 const Safesheet = require('../models/Safesheet')
 const LotteryModule = require('../models/Lottery')
 const Location = require('../models/Location')
@@ -835,8 +841,15 @@ router.post('/batch', async (req, res) => {
       return res.status(400).json({ error: 'No shift data provided for submission' });
     }
 
-    // 1. Perform bulk update on CashSummary documents
+    // Fetch existing documents from DB to access baseline values (like existing report_canadian_cash or raw canadianCash)
+    const itemIds = items.map((i) => i._id).filter(Boolean);
+    const existingDocs = await CashSummary.find({ _id: { $in: itemIds } }).lean();
+    const existingDocsMap = new Map(existingDocs.map((doc) => [doc._id.toString(), doc]));
+
+    // 1. Build bulk operations array with updated Chicken Delight logic
     const bulkOperations = items.map((item) => {
+      const dbDoc = existingDocsMap.get(String(item._id)) || {};
+
       const updatePayload = {
         canadian_cash_collected: item.canadian_cash_collected ?? 0,
         exempted_tax: item.exempted_tax ?? 0,
@@ -848,10 +861,27 @@ router.post('/batch', async (req, res) => {
       }
 
       if (item.isChickenDelight) {
-        updatePayload.tenders = item.tenders || [];
-        updatePayload.chickenDelightTips = item.chickenDelightTips ?? 0;
+        const submittedTenders = Array.isArray(item.tenders) ? item.tenders : [];
+        const tips = Number(item.chickenDelightTips) || 0;
+
+        // Calculate sum of frontend tender values
+        const frontendTendersSum = submittedTenders.reduce(
+          (sum, t) => sum + (Number(t.value) || 0),
+          0
+        );
+
+        // Determine baseline reported cash (prioritize raw canadianCash from SFT sync, fallback to DB report_canadian_cash)
+        const baseCashReport =
+          dbDoc.canadianCash ?? dbDoc.report_canadian_cash ?? item.report_canadian_cash ?? 0;
+
+        // Formula: baseCashReport - (tendersSum - tips)
+        const adjustedReportedCash = baseCashReport - (frontendTendersSum - tips);
+
+        updatePayload.tenders = submittedTenders;
+        updatePayload.chickenDelightTips = tips;
         updatePayload.pinpadPhoto = item.pinpadPhoto || null;
         updatePayload.isChickenDelight = true;
+        updatePayload.report_canadian_cash = Math.round(adjustedReportedCash * 100) / 100;
       } else {
         updatePayload.isChickenDelight = false;
       }
@@ -870,9 +900,8 @@ router.post('/batch', async (req, res) => {
     let targetSite = items[0]?.site;
     let targetDateRaw = items[0]?.date;
 
-    // Fall back to DB lookup if site or date is missing in payload items
     if (!targetSite || !targetDateRaw) {
-      const dbDoc = await CashSummary.findById(items[0]._id).lean();
+      const dbDoc = existingDocsMap.get(String(items[0]._id));
       if (dbDoc) {
         targetSite = targetSite || dbDoc.site;
         targetDateRaw = targetDateRaw || dbDoc.date;
@@ -899,16 +928,16 @@ router.post('/batch', async (req, res) => {
       const start = new Date(yy, mm - 1, dd, 0, 0, 0, 0);
       const end = new Date(yy, mm - 1, dd + 1, 0, 0, 0, 0);
 
-      // 3. Upsert CashSummaryReport document with default values (submitted: false)
+      // 3. Upsert CashSummaryReport document with default values
       await CashSummaryReport.findOneAndUpdate(
         { site: targetSite, date: normalizedStart },
-        { 
-          $setOnInsert: { 
-            site: targetSite, 
-            date: normalizedStart, 
+        {
+          $setOnInsert: {
+            site: targetSite,
+            date: normalizedStart,
             submitted: false,
-            notes: ''
-          } 
+            notes: '',
+          },
         },
         { upsert: true, new: true, setDefaultsOnInsert: true }
       );
@@ -2485,6 +2514,71 @@ router.delete('/:id', async (req, res) => {
   } catch (err) {
     console.error('CashSummary delete error:', err)
     res.status(500).json({ error: 'Failed to delete CashSummary' })
+  }
+})
+
+// ─── Custom attributes ──────────────────────────────────────────────────────
+// Lets a caller attach an ad-hoc, typed top-level field to a CashSummary doc
+// (e.g. "posTotal" = 123.45 as a Double) without it being part of the fixed
+// schema. Written via the raw driver collection (CashSummary.collection),
+// bypassing Mongoose casting/strict-mode entirely, so the schema itself stays
+// untouched and every other route's validation is unaffected. Name collisions
+// with any real (current or historical) schema field are rejected outright —
+// see utils/shiftAttributes.js for the validation/casting logic and why.
+
+const RESERVED_ATTRIBUTE_NAMES = buildReservedAttributeNames(CashSummary)
+
+router.put('/:id/attributes/:name', async (req, res) => {
+  try {
+    const { id, name } = req.params
+    const { value, type } = req.body
+
+    if (!isValidAttributeName(name)) {
+      return res.status(400).json({
+        error: 'Attribute name must start with a letter and contain only letters, numbers, and underscores.',
+      })
+    }
+    if (RESERVED_ATTRIBUTE_NAMES.has(name)) {
+      return res.status(400).json({
+        error: `"${name}" is a reserved field name and can't be used as a custom attribute.`,
+      })
+    }
+    if (value === undefined || value === null || value === '') {
+      return res.status(400).json({ error: 'A value is required.' })
+    }
+
+    const cast = castAttributeValue(type, value)
+    if (cast.error) return res.status(400).json({ error: cast.error })
+
+    const result = await CashSummary.collection.updateOne(
+      { _id: new mongoose.Types.ObjectId(id) },
+      { $set: { [name]: cast.value } }
+    )
+    if (result.matchedCount === 0) return res.status(404).json({ error: 'Not found' })
+
+    const updated = await CashSummary.findById(id).lean()
+    res.json(updated)
+  } catch (err) {
+    console.error('CashSummary set attribute error:', err)
+    res.status(500).json({ error: 'Failed to set attribute' })
+  }
+})
+
+router.delete('/:id/attributes/:name', async (req, res) => {
+  try {
+    const { id, name } = req.params
+
+    const result = await CashSummary.collection.updateOne(
+      { _id: new mongoose.Types.ObjectId(id) },
+      { $unset: { [name]: '' } }
+    )
+    if (result.matchedCount === 0) return res.status(404).json({ error: 'Not found' })
+
+    const updated = await CashSummary.findById(id).lean()
+    res.json(updated)
+  } catch (err) {
+    console.error('CashSummary remove attribute error:', err)
+    res.status(500).json({ error: 'Failed to remove attribute' })
   }
 })
 

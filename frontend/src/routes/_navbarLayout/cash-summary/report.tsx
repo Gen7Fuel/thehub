@@ -1252,8 +1252,8 @@ export function ArReconciliation({
 
   if (!arData) return null;
 
-  // Date Cutoff Check: September 3, 2026
-  const isAfterCutoff = date >= "2026-09-03";
+  // Date Cutoff Check: August 1, 2026
+  const isAfterCutoff = date >= "2026-08-01";
 
   const toggleRegister = (reg: string) => {
     setExpandedRegisters((prev) => ({ ...prev, [reg]: !prev[reg] }));

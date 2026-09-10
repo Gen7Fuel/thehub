@@ -93,14 +93,14 @@ async function syncSftShiftsForSite(site, timezone = "America/Toronto") {
       return;
     }
 
-    // --- 7-DAY CUTOFF FILTER ---
-    const sevenDaysAgo = moment()
+    // --- 3-DAY CUTOFF FILTER ---
+    const cutOffDate = moment()
       .tz(timezone)
-      .subtract(7, "days")
+      .subtract(3, "days")
       .startOf("day")
       .toDate();
 
-    // 2. Extract shift numbers and dates, then filter out files older than 7 days
+    // 2. Extract shift numbers and dates, then filter out files older than 3 days
     const shiftItems = files
       .map((f) => {
         const match = f.name.match(/(\d+)\.sft$/i);
@@ -111,12 +111,12 @@ async function syncSftShiftsForSite(site, timezone = "America/Toronto") {
       })
       .filter((item) => {
         if (!item) return false;
-        // Keep file ONLY if date is available and within the last 7 days
-        return item.fileDate && item.fileDate >= sevenDaysAgo;
+        // Keep file ONLY if date is available and within the last 3 days
+        return item.fileDate && item.fileDate >= cutOffDate;
       });
 
     console.log(
-      `[SFT Sync] Found ${shiftItems.length} valid shift files within the last 7 days for site "${site}".`
+      `[SFT Sync] Found ${shiftItems.length} valid shift files within the last 3 days for site "${site}".`
     );
 
     // 3. Process each filtered shift item sequentially
@@ -124,6 +124,19 @@ async function syncSftShiftsForSite(site, timezone = "America/Toronto") {
       const shiftNumStr = String(shiftNumber).trim();
 
       try {
+        // --- ⚡ SKIP IF SHIFT ALREADY EXISTS IN DB ---
+        const existingShift = await CashSummary.findOne({
+          site,
+          shift_number: shiftNumStr,
+        }).lean();
+
+        if (existingShift) {
+          console.log(
+            `[SFT Sync] [SKIP EXISTING] Site: "${site}", Shift #${shiftNumStr} already ingested.`
+          );
+          continue;
+        }
+
         // Fetch raw file content via central endpoint
         const detailUrl = new URL(
           `/api/sftp/receive/${encodeURIComponent(shiftNumStr)}`,
@@ -184,8 +197,8 @@ async function syncSftShiftsForSite(site, timezone = "America/Toronto") {
           parsed.isChickenDelight || isWaversWest4x
         );
 
-        // Construct CashSummary document update mapping
-        const parsedUpdate = {
+        // Raw payload mapping
+        const rawUpdate = {
           site,
           shift_number: shiftNumStr,
           date: shiftDate,
@@ -257,26 +270,32 @@ async function syncSftShiftsForSite(site, timezone = "America/Toronto") {
                 volume: norm(d.volume),
                 amount: norm(d.amount),
               }))
-            : [],
+            : undefined,
 
-          arCustomers: Array.isArray(parsed.arCustomers)
+          arCustomers: Array.isArray(parsed.arCustomers) && parsed.arCustomers.length > 0
             ? parsed.arCustomers.map((c) => ({
                 name: c.name,
                 incurred: norm(c.incurred),
                 paid: norm(c.paid),
               }))
-            : [],
+            : undefined,
         };
 
         // Attach tenders array if not Chicken Delight
         if (!isChickenDelight) {
-          parsedUpdate.tenders = [
+          rawUpdate.tenders = [
             { key: "debit", value: norm(parsed.debit) },
             { key: "visa", value: norm(parsed.visa) },
             { key: "mastercard", value: norm(parsed.mastercard) },
             { key: "amex", value: norm(parsed.amex) },
           ];
         }
+
+        // PRESERVE MANUALLY ADDED DATA:
+        // Filter out undefined and null values so existing Mongo values aren't overwritten by missing parsed fields
+        const parsedUpdate = Object.fromEntries(
+          Object.entries(rawUpdate).filter(([_, v]) => v !== undefined && v !== null)
+        );
 
         // Upsert into CashSummary collection
         await CashSummary.findOneAndUpdate(

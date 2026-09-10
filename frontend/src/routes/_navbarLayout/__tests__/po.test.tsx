@@ -31,6 +31,8 @@ const {
     setPoNumber: vi.fn(),
     customerName: 'Jane Doe' as string,
     setCustomerName: vi.fn(),
+    customerNameSelected: true as boolean,
+    setCustomerNameSelected: vi.fn(),
     driverName: 'Bob Smith' as string,
     setDriverName: vi.fn(),
     vehicleInfo: 'Ford F-150' as string,
@@ -280,6 +282,7 @@ const resetStore = () => {
   mockStore.noFleetCard = true
   mockStore.poNumber = ''
   mockStore.customerName = 'Jane Doe'
+  mockStore.customerNameSelected = true
   mockStore.driverName = 'Bob Smith'
   mockStore.vehicleInfo = 'Ford F-150'
   mockStore.licensePlate = ''
@@ -392,6 +395,75 @@ describe('PO Form — index.tsx', () => {
     }, { timeout: 5000 })
   })
 
+  it('disables the Upload Receipt button when a customer name was typed but never picked from the dropdown', async () => {
+    mockStore.receipt = null
+    mockStore.customerName = 'Some Random Walk-in'
+    mockStore.customerNameSelected = false
+    renderWithQuery(<POForm />)
+
+    await waitFor(() => {
+      const uploadBtn = screen.getByRole('button', { name: /upload receipt/i })
+      expect(uploadBtn).toBeDisabled()
+    }, { timeout: 5000 })
+  })
+
+  it('flags the customer name as unselected as soon as the text box is edited', async () => {
+    mockStore.receipt = null
+    renderWithQuery(<POForm />)
+
+    const nameInput = await waitFor(() => screen.getByDisplayValue('Jane Doe'), { timeout: 5000 })
+    fireEvent.change(nameInput, { target: { value: 'Jane Doe Jr' } })
+
+    expect(mockStore.setCustomerNameSelected).toHaveBeenCalledWith(false)
+  })
+
+  it('picking a suggestion from the dropdown marks the customer name as selected', async () => {
+    mockStore.receipt = null
+    mockAxiosGet.mockImplementation((url: string) => {
+      if (url.includes('ar-customers/quick-select')) return Promise.resolve({ data: [] })
+      if (url.includes('ar-customers')) {
+        return Promise.resolve({ data: [{ _id: 'c1', name: 'Jane Doe Trucking' }] })
+      }
+      return Promise.resolve({ data: [] })
+    })
+
+    renderWithQuery(<POForm />)
+
+    const nameInput = await waitFor(() => screen.getByDisplayValue('Jane Doe'), { timeout: 5000 })
+    fireEvent.focus(nameInput)
+    const suggestion = await waitFor(() => screen.getByText('Jane Doe Trucking'), { timeout: 5000 })
+    fireEvent.mouseDown(suggestion)
+
+    expect(mockStore.setCustomerName).toHaveBeenCalledWith('Jane Doe Trucking')
+    expect(mockStore.setCustomerNameSelected).toHaveBeenCalledWith(true)
+  })
+
+  it('clears an unselected, hand-typed customer name when clicking away from the field', async () => {
+    mockStore.receipt = null
+    mockStore.customerName = 'Some Random Walk-in'
+    mockStore.customerNameSelected = false
+    renderWithQuery(<POForm />)
+
+    const nameInput = await waitFor(() => screen.getByDisplayValue('Some Random Walk-in'), { timeout: 5000 })
+    fireEvent.focus(nameInput)
+    fireEvent.mouseDown(document.body)
+
+    await waitFor(() => expect(mockStore.setCustomerName).toHaveBeenCalledWith(''))
+  })
+
+  it('does not clear the field when clicking away after a valid selection', async () => {
+    mockStore.receipt = null
+    mockStore.customerName = 'Jane Doe'
+    mockStore.customerNameSelected = true
+    renderWithQuery(<POForm />)
+
+    const nameInput = await waitFor(() => screen.getByDisplayValue('Jane Doe'), { timeout: 5000 })
+    fireEvent.focus(nameInput)
+    fireEvent.mouseDown(document.body)
+
+    expect(mockStore.setCustomerName).not.toHaveBeenCalledWith('')
+  })
+
   it.each(['Rankin', 'Sarnia', 'Walpole', 'Jocko Point', 'Charlies'])('shows the Fleet Card switch (defaulting to no card) for site "%s"', async (site) => {
     mockStore.stationName = site
     mockStore.receipt = null
@@ -423,7 +495,32 @@ describe('PO Form — index.tsx', () => {
     fireEvent.click(quickBtn)
 
     await waitFor(() => expect(mockStore.setCustomerName).toHaveBeenCalledWith('Acme Co'))
+    expect(mockStore.setCustomerNameSelected).toHaveBeenCalledWith(true)
     expect(mockStore.setFleetCardNumber).toHaveBeenCalledWith('1234567890123456')
+  })
+
+  it('un-marks the customer name as selected when tapping an already-selected quick-select button again', async () => {
+    mockAxiosGet.mockImplementation((url: string) => {
+      if (url.includes('quick-select')) {
+        return Promise.resolve({
+          data: [{ _id: 'qc1', name: 'Acme Co', fleetCardNumber: '1234567890123456', order: 0 }],
+        })
+      }
+      return Promise.resolve({ data: [] })
+    })
+
+    renderWithQuery(<POForm />)
+    const quickBtn = await waitFor(() => screen.getByRole('button', { name: 'Acme' }), { timeout: 5000 })
+
+    fireEvent.click(quickBtn)
+    await waitFor(() => expect(mockStore.setCustomerNameSelected).toHaveBeenCalledWith(true))
+
+    // The mocked store doesn't reflect the setState call, so selectedQuickCustomerId
+    // (local component state) already toggled on from the first tap; tapping again hits
+    // the deselect branch.
+    fireEvent.click(quickBtn)
+    expect(mockStore.setCustomerName).toHaveBeenCalledWith('')
+    expect(mockStore.setCustomerNameSelected).toHaveBeenCalledWith(false)
   })
 
   it.each(['Wavers West', 'Wavers East', 'Oliver', 'Osoyoos'])('shows the classic PO Number / Fleet Card toggle (no Switch) for site "%s"', async (site) => {
@@ -975,6 +1072,17 @@ describe('PO Receipt — receipt.tsx', () => {
 
   it('redirects to /po when required form fields are missing', async () => {
     mockStore.quantity = 0 // triggers the guard
+
+    renderWithQuery(<POReceipt />)
+
+    await waitFor(() =>
+      expect(mockNavigate).toHaveBeenCalledWith({ to: '/po' })
+    )
+  })
+
+  it('redirects to /po when the customer name was typed but never selected from the AR customer list', async () => {
+    mockStore.customerName = 'Some Random Walk-in' // non-empty, but never picked from the dropdown
+    mockStore.customerNameSelected = false
 
     renderWithQuery(<POReceipt />)
 
