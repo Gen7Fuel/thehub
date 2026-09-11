@@ -183,7 +183,9 @@ function WorkspaceComponent() {
   // Filter locations for the Dialog Search
   const filteredLocations = useMemo(() => {
     return locations.filter((loc: any) =>
-      (loc.site ?? loc.stationName).toLowerCase().includes(stationSearch.toLowerCase()),
+      (loc.site ?? loc.stationName)
+        .toLowerCase()
+        .includes(stationSearch.toLowerCase()),
     );
   }, [locations, stationSearch]);
 
@@ -487,10 +489,14 @@ function StationStrip({
   const { user } = useAuth();
   const access = user?.access || {};
   const canEditOrderQty = access?.fuelManagement?.workspace?.editOrderQty;
-  const canEditOrderMetadata = access?.fuelManagement?.workspace?.editOrderMetadata;
-  const canUpdateOrderStatus = access?.fuelManagement?.workspace?.updateOrderStatus;
-  const canAddOrderComments = access?.fuelManagement?.workspace?.viewOrderComments?.addOrderComments;
-  const canViewOrderComments = access?.fuelManagement?.workspace?.viewOrderComments?.value;
+  const canEditOrderMetadata =
+    access?.fuelManagement?.workspace?.editOrderMetadata;
+  const canUpdateOrderStatus =
+    access?.fuelManagement?.workspace?.updateOrderStatus;
+  const canAddOrderComments =
+    access?.fuelManagement?.workspace?.viewOrderComments?.addOrderComments;
+  const canViewOrderComments =
+    access?.fuelManagement?.workspace?.viewOrderComments?.value;
   const canViewPo = access?.fuelManagement?.workspace?.viewPo;
   const canRescheduleOrder = access?.fuelManagement?.workspace?.rescheduleOrder;
 
@@ -742,7 +748,7 @@ function StationStrip({
                   <thead>
                     <tr className="bg-slate-100/50 border-b border-slate-200">
                       <th className="py-1.5 px-3 text-[9px] font-black text-slate-500 uppercase">
-                        Grade
+                        Grade (Min Limit)
                       </th>
                       <th className="py-1.5 px-3 text-[9px] font-black text-slate-500 uppercase text-right">
                         {isFuture ? "Est Opening" : "Opening"} (L)
@@ -839,6 +845,13 @@ function StationStrip({
                                   : gradeMap[item.grade] || item.grade}
                               </span>
 
+                              {/* Added Min Limit in brackets */}
+                              {item.minLimit !== undefined && (
+                                <span className="text-[9px] font-bold text-slate-400 font-mono">
+                                  ({item.minLimit.toLocaleString()} L)
+                                </span>
+                              )}
+
                               {/* ALERT DOTS */}
                               {isLow && (
                                 <div
@@ -859,7 +872,6 @@ function StationStrip({
                                 />
                               )}
                             </td>
-
                             <td className="py-1.5 px-3 text-right font-mono text-[11px] font-bold text-slate-600">
                               {item.opening.toLocaleString()}
                             </td>
@@ -1282,7 +1294,7 @@ function StationStrip({
           canAddComments={canAddOrderComments} // <--- Added permission prop
         />
       )}
-       
+
       {editQtyOrder && (
         <EditQtyDialog
           order={editQtyOrder}
@@ -1469,21 +1481,43 @@ export function RescheduleDialog({
   onOpenChange,
   locationId,
 }: RescheduleDialogProps) {
-  const [date, setDate] = useState<Date | undefined>(() => {
-    // Use the existing order date but ensure it's treated as local for the picker
-    return order.estimatedDeliveryDate
-      ? new Date(order.estimatedDeliveryDate)
-      : new Date();
-  });
+  const stationTz = order.station?.timezone || order.location?.timezone || "America/Toronto";
+
+  // Helper to parse date string correctly relative to station timezone
+  const getInitialDate = () => {
+    if (!order?.estimatedDeliveryDate) return new Date();
+
+    const rawDate = order.estimatedDeliveryDate;
+    
+    // If it's a simple YYYY-MM-DD string, parse as midnight local to station timezone
+    if (typeof rawDate === "string" && rawDate.length === 10) {
+      const [year, month, day] = rawDate.split("-").map(Number);
+      return new Date(year, month - 1, day);
+    }
+
+    // If it's an ISO string or Date object, convert to station timezone date
+    return toZonedTime(new Date(rawDate), stationTz);
+  };
+
+  const [date, setDate] = useState<Date | undefined>(getInitialDate);
+
+  // Keep state in sync whenever a new order is opened
+  useEffect(() => {
+    if (isOpen) {
+      setDate(getInitialDate());
+      setWindow(order.estimatedDeliveryWindow || { start: "08:00", end: "12:00" });
+    }
+  }, [order, isOpen]);
+
   const [window, setWindow] = useState(
     order.estimatedDeliveryWindow || { start: "08:00", end: "12:00" },
   );
 
   const queryClient = useQueryClient();
   const authHeader = {
-    headers: { 
+    headers: {
       Authorization: `Bearer ${localStorage.getItem("token")}`,
-      "X-Required-Permission": "fuelManagement.workspace.rescheduleOrder"
+      "X-Required-Permission": "fuelManagement.workspace.rescheduleOrder",
     },
   };
 
@@ -1665,9 +1699,9 @@ export function UpdateStatusDialog({
   const currentIndex = statuses.findIndex((s) => s.id === order.currentStatus);
 
   const authHeader = {
-    headers: { 
+    headers: {
       Authorization: `Bearer ${localStorage.getItem("token")}`,
-      "X-Required-Permission": "fuelManagement.workspace.updateOrderStatus"
+      "X-Required-Permission": "fuelManagement.workspace.updateOrderStatus",
     },
   };
 
@@ -1685,7 +1719,7 @@ export function UpdateStatusDialog({
       }
       return axios.put(`/api/fuel-orders/${order._id}`, payload, authHeader);
     },
-    onSuccess: (_:any, variables: any) => {
+    onSuccess: (_: any, variables: any) => {
       // 1. Always invalidate the orders list so the UI badges update immediately
       queryClient.invalidateQueries({
         queryKey: ["workspace-orders", locationId],
@@ -1974,9 +2008,10 @@ export function OrderCommentsDialog({
     }
   }, [open]);
   const authHeader = {
-    headers: { 
+    headers: {
       Authorization: `Bearer ${localStorage.getItem("token")}`,
-      "X-Required-Permission": "fuelManagement.workspace.viewOrderComments.addOrderComments"
+      "X-Required-Permission":
+        "fuelManagement.workspace.viewOrderComments.addOrderComments",
     },
   };
 
@@ -2092,9 +2127,9 @@ export function EditMetaDialog({
   const [loading, setLoading] = useState(false);
 
   const authHeader = {
-    headers: { 
+    headers: {
       Authorization: `Bearer ${localStorage.getItem("token")}`,
-      "X-Required-Permission": "fuelManagement.workspace.editOrderMetadata"
+      "X-Required-Permission": "fuelManagement.workspace.editOrderMetadata",
     },
   };
 
@@ -2304,9 +2339,9 @@ export function EditQtyDialog({ order, open, onOpenChange, locationId }: any) {
   const queryClient = useQueryClient();
   const [items, setItems] = useState<any[]>([]);
   const authHeader = {
-    headers: { 
+    headers: {
       Authorization: `Bearer ${localStorage.getItem("token")}`,
-      "X-Required-Permission": "fuelManagement.workspace.editOrderQty"
+      "X-Required-Permission": "fuelManagement.workspace.editOrderQty",
     },
   };
 
