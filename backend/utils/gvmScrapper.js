@@ -1,6 +1,7 @@
 const { chromium } = require("playwright-extra");
 const stealth = require("puppeteer-extra-plugin-stealth")();
 const fs = require("fs");
+const moment = require("moment-timezone");
 const { emailQueue } = require("../queues/emailQueue");
 const GvmSession = require("../models/GvmSession");
 const { uploadToCdn } = require("./uploadToCdn");
@@ -10,6 +11,8 @@ const { runAutoLogin, GVM_BASE_URL } = require("./gvmLoginScrapper");
 chromium.use(stealth);
 
 const GVM_PRICING_URL = `${GVM_BASE_URL}/pricing`;
+const DEFAULT_TIMEZONE = "America/Toronto";
+const EFFECTIVE_AT_BUFFER_MINUTES = 11;
 
 /**
  * Locates the price <input> for a given grade row. GVM's "New" pricing
@@ -56,7 +59,7 @@ async function selectLocation(page, modal, gvmLocationName) {
  * Pulls session data from MongoDB and executes the browser run. Modeled
  * directly on gasBuddyScrapper.js's attemptPricePost.
  */
-async function attemptPricePost({ gvmLocationName, prices }) {
+async function attemptPricePost({ gvmLocationName, prices, timezone }) {
   console.log("🤖 Initializing Headless Execution via Live Database States (GVM Unifi)...");
 
   const sessionDoc = await GvmSession.findOne({ key: "production_session" });
@@ -118,12 +121,57 @@ async function attemptPricePost({ gvmLocationName, prices }) {
     await modal.waitFor({ state: "visible", timeout: 8000 });
     console.log("🔓 New-pricing modal opened.");
 
-    // The "Effective At" date/time field above the price table is
-    // deliberately left untouched — confirmed it's fine to leave at
-    // whatever it defaults to.
-
     console.log(`📍 Selecting location: ${gvmLocationName}`);
     await selectLocation(page, modal, gvmLocationName);
+
+    // "Effective At" is set here, after selecting the location rather than
+    // before, since selecting a location is the one action in this flow
+    // that could plausibly reset/re-render other fields in the modal.
+    // GVM auto-populates this field to "now + 10 minutes" using the
+    // browser's own system clock, which is UTC (Playwright runs on the
+    // server) — wrong for any site not in UTC. Overwritten here with the
+    // site's actual local time instead, converted via its `timezone`
+    // (IANA name, e.g. "America/Toronto") from the Location document.
+    console.log("🕒 Setting Effective At...");
+    const effectiveAtInput = modal.getByLabel("Effective At", { exact: true });
+
+    if (!(await effectiveAtInput.isVisible().catch(() => false))) {
+      throw new Error('DOM_ELEMENT_MISSING: The "Effective At" field could not be found in the pricing modal.');
+    }
+
+    const targetTimezone = timezone || DEFAULT_TIMEZONE;
+    const effectiveAtValue = moment()
+      .tz(targetTimezone)
+      .add(EFFECTIVE_AT_BUFFER_MINUTES, "minutes")
+      .format("YYYY-MM-DD HH:mm:ss");
+
+    const clearAndTypeEffectiveAt = async () => {
+      await effectiveAtInput.focus();
+      await effectiveAtInput.fill("");
+      await page.keyboard.press("Control+A");
+      await page.keyboard.press("Backspace");
+      await effectiveAtInput.type(effectiveAtValue, { delay: 100 });
+      await effectiveAtInput.blur();
+    };
+
+    await clearAndTypeEffectiveAt();
+
+    // Read back after blur, not just after typing — this field is a
+    // MudBlazor date/time picker (unlike the plain price inputs below),
+    // and pickers commonly re-validate/reformat typed text on blur, so a
+    // pre-blur read could miss a silent rejection or reformat.
+    let actualEffectiveAt = await effectiveAtInput.inputValue();
+    if (actualEffectiveAt !== effectiveAtValue) {
+      console.log(`⚠️ Effective At mismatch: expected "${effectiveAtValue}", field shows "${actualEffectiveAt}". Retrying once...`);
+      await clearAndTypeEffectiveAt();
+      actualEffectiveAt = await effectiveAtInput.inputValue();
+    }
+
+    if (actualEffectiveAt !== effectiveAtValue) {
+      throw new Error(`EFFECTIVE_AT_TYPE_MISMATCH: field shows "${actualEffectiveAt}" after retry, expected "${effectiveAtValue}". Refusing to submit with a possibly-wrong effective time.`);
+    }
+
+    console.log(`✅ Effective At set to ${effectiveAtValue} (${targetTimezone}, +${EFFECTIVE_AT_BUFFER_MINUTES}m)`);
 
     let updatesCommitted = 0;
 
@@ -260,7 +308,7 @@ async function attemptPricePost({ gvmLocationName, prices }) {
  * via DB, and retries up to 3 times. Modeled directly on
  * gasBuddyScrapper.js's postPricesToGasBuddy.
  */
-async function postPricesToGvm({ gvmLocationName, prices }) {
+async function postPricesToGvm({ gvmLocationName, prices, timezone }) {
   const MAX_RETRIES = 3;
   let attempt = 0;
   let lastError = null;
@@ -270,7 +318,7 @@ async function postPricesToGvm({ gvmLocationName, prices }) {
     console.log(`🔄 [Attempt ${attempt}/${MAX_RETRIES}] Posting GVM prices for location: ${gvmLocationName}...`);
 
     try {
-      await attemptPricePost({ gvmLocationName, prices });
+      await attemptPricePost({ gvmLocationName, prices, timezone });
       return;
 
     } catch (error) {
