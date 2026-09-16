@@ -634,7 +634,13 @@ router.get('/payables-comparison', async (req, res) => {
       const d = new Date(shift.date);
       d.setHours(0, 0, 0, 0);
       const key = d.toISOString();
-      posByDate[key] = (posByDate[key] || 0) + (shift.payouts || 0);
+
+      // Use lottoPayout for sites that sell lottery, otherwise use payouts
+      const payoutValue = sellsLottery 
+        ? (shift.lottoPayout || 0) 
+        : (shift.payouts || 0);
+
+      posByDate[key] = (posByDate[key] || 0) + payoutValue;
     }
 
     // 2️⃣ Aggregate Payables Module entries
@@ -663,7 +669,7 @@ router.get('/payables-comparison', async (req, res) => {
         date: dateStr,
         posPayout: rawPosPayout,
         internalPayout: internalTotal,
-        difference: internalTotal - rawPosPayout, // Reverted to your original formula
+        difference: internalTotal - rawPosPayout,
       };
     });
 
