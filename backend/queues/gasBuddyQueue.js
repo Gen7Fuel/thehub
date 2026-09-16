@@ -3,7 +3,19 @@ const { Queue, Worker } = require("bullmq");
 const connection = require("../utils/redisClient");
 const { postPricesToGasBuddy } = require("../utils/gasBuddyScrapper");
 
-const gasBuddyQueue = new Queue("gasBuddyQueue", { connection });
+const gasBuddyQueue = new Queue("gasBuddyQueue", {
+  connection,
+  defaultJobOptions: {
+    removeOnComplete: {
+      count: 20,
+      age: 1800, // Keep completed jobs for 30 minutes
+    },
+    removeOnFail: {
+      count: 100, // Keep up to 100 failed jobs
+      age: 259200, // Keep failed jobs for 3 days (72 hours)
+    },
+  },
+});
 
 const gasBuddyWorker = new Worker(
   "gasBuddyQueue",
