@@ -74,6 +74,27 @@ async function runAutoLogin(attempt = 1) {
     await emailInput.waitFor({ state: "visible", timeout: 15000 });
     await passwordInput.waitFor({ state: "visible", timeout: 15000 });
 
+    console.log("🍪 Step 2.5: Dismissing cookie consent banner (if present)...");
+    // Confirmed against live markup: GVM renders a site-wide `#cookieConsent`
+    // banner behind a full-viewport `section.backdrop` (position: fixed,
+    // z-index: 10, pointer-events: auto) that intercepts all pointer events
+    // — including hover/click — on everything beneath it, Sign In button
+    // included, until dismissed. This is what was timing out: `.focus()` on
+    // the inputs above skips Playwright's occlusion check so typing still
+    // worked, but `.hover()`/`.click()` on the button don't and kept
+    // retrying against the backdrop for the full 30s. The banner's button
+    // has aria-label="Close" (not "Accept"), so getByRole(..., { name:
+    // "Accept" }) silently fails to match — scope by container + visible
+    // text instead.
+    const cookieAcceptButton = page.locator("#cookieConsent button", { hasText: "Accept" });
+    try {
+      await cookieAcceptButton.waitFor({ state: "visible", timeout: 8000 });
+      await cookieAcceptButton.click();
+      console.log("🍪 Cookie consent banner dismissed.");
+    } catch {
+      console.log("🍪 No cookie consent banner detected — continuing.");
+    }
+
     // Introduce a brief human delay
     await page.waitForTimeout(1000 + Math.random() * 1000);
 
