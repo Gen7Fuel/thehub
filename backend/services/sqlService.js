@@ -600,7 +600,6 @@ async function getFuelInventoryReportPreviousDay() {
       FROM [CSO].[FuelInventory]
       WHERE [Date] = CAST(GETDATE() - 1 AS date)
     `);
-    await sql.close();
     return result.recordset;
   } catch (err) {
     console.error('SQL error:', err);
@@ -633,7 +632,6 @@ async function getFuelInventoryReportCurrentDay() {
       GROUP BY [Station_SK], [Fuel_Grade]
       ORDER BY [Station_SK]
     `);
-    await sql.close();
     return result.recordset;
   } catch (err) {
     console.error('SQL error:', err);
