@@ -26,11 +26,13 @@ import {
   DialogFooter,
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
-import { Building2 } from "lucide-react";
+import { Building2, CheckCircle2 } from "lucide-react";
 
 export const Route = createFileRoute("/_navbarLayout/settings/sites/$id")({
   component: RouteComponent,
 });
+
+const ALL_GRADES = ["Regular", "Premium", "Mid Grade", "Diesel", "Dyed Diesel"];
 
 const CANADIAN_PROVINCES = [
   "Alberta",
@@ -114,6 +116,7 @@ interface LocationForm {
   devices: PushoverDevice[];
   registers: Register[];
   storeHours: StoreHours;
+  availableGrades: string[];
 }
 
 function RouteComponent() {
@@ -166,6 +169,7 @@ function RouteComponent() {
     devices: [],
     registers: [],
     storeHours: DEFAULT_STORE_HOURS,
+    availableGrades: [],
   });
 
   useEffect(() => {
@@ -247,6 +251,7 @@ function RouteComponent() {
         storeHours: location.storeHours
           ? { ...DEFAULT_STORE_HOURS, ...location.storeHours }
           : DEFAULT_STORE_HOURS,
+        availableGrades: location.availableGrades || [],
       });
       setManagerEmails(location.managerEmails || []);
       setOtp(location.managerCode?.toString() || "");
@@ -476,7 +481,8 @@ function RouteComponent() {
     for (const r of trimmed) {
       if (!r.number) return alert("Register numbers cannot be blank.");
       const key = r.number.toLowerCase();
-      if (seen.has(key)) return alert(`Duplicate register number: "${r.number}"`);
+      if (seen.has(key))
+        return alert(`Duplicate register number: "${r.number}"`);
       seen.add(key);
     }
 
@@ -530,6 +536,22 @@ function RouteComponent() {
         },
       },
     }));
+  };
+
+  // Inside your component:
+  const handleToggleGrade = (grade: string) => {
+    const currentGrades = [...(formData.availableGrades || [])];
+    if (currentGrades.includes(grade)) {
+      setFormData({
+        ...formData,
+        availableGrades: currentGrades.filter((g: string) => g !== grade),
+      });
+    } else {
+      setFormData({
+        ...formData,
+        availableGrades: [...currentGrades, grade],
+      });
+    }
   };
 
   if (!location)
@@ -655,7 +677,9 @@ function RouteComponent() {
                   { label: "Kardpoll Code", name: "kardpollCode" },
                 ].map((field) => (
                   <div key={field.name}>
-                    <Label className="block font-medium mb-1">{field.label}</Label>
+                    <Label className="block font-medium mb-1">
+                      {field.label}
+                    </Label>
                     <Input
                       type="text"
                       name={field.name}
@@ -663,7 +687,10 @@ function RouteComponent() {
                         formData[field.name as keyof LocationForm] ?? "",
                       )}
                       onChange={(e) =>
-                        setFormData({ ...formData, [field.name]: e.target.value })
+                        setFormData({
+                          ...formData,
+                          [field.name]: e.target.value,
+                        })
                       }
                       className="border border-gray-300 rounded-md px-3 py-2 w-full focus:ring-2 focus:ring-blue-500 focus:outline-none"
                       required={[
@@ -684,7 +711,9 @@ function RouteComponent() {
                 </h3>
 
                 <div>
-                  <Label className="block font-medium mb-1">Station Email</Label>
+                  <Label className="block font-medium mb-1">
+                    Station Email
+                  </Label>
                   <div className="flex gap-2">
                     <Input
                       type="text"
@@ -825,6 +854,42 @@ function RouteComponent() {
                 <Button type="submit" disabled={loading} className="w-full">
                   {loading ? "Saving..." : "Save Changes"}
                 </Button>
+              </div>
+            </div>
+
+            {/* --- AVAILABLE GRADES FOR SELLING (ADMIN ONLY) --- */}
+            <div className="p-6 border rounded-xl bg-white shadow-sm space-y-3">
+              <h3 className="text-xs font-bold uppercase text-slate-400 tracking-widest">
+                Available Grades For Selling
+              </h3>
+              <div className="flex flex-wrap gap-x-6 gap-y-2 bg-slate-50/50 p-4 rounded-xl border border-slate-100">
+                {ALL_GRADES.map((grade: string) => {
+                  const isChecked = formData.availableGrades?.includes(grade);
+                  return (
+                    <label
+                      key={grade}
+                      className="flex items-center gap-2 cursor-pointer group select-none"
+                    >
+                      <div
+                        onClick={() => handleToggleGrade(grade)}
+                        className={`w-5 h-5 rounded border flex items-center justify-center transition-colors ${
+                          isChecked
+                            ? "bg-blue-600 border-blue-600"
+                            : "border-slate-300 bg-white group-hover:border-blue-400"
+                        }`}
+                      >
+                        {isChecked && (
+                          <CheckCircle2 className="h-3.5 w-3.5 text-white" />
+                        )}
+                      </div>
+                      <span
+                        className={`text-sm font-semibold transition-colors ${isChecked ? "text-slate-900" : "text-slate-500"}`}
+                      >
+                        {grade}
+                      </span>
+                    </label>
+                  );
+                })}
               </div>
             </div>
 
@@ -1040,8 +1105,8 @@ function RouteComponent() {
           <DialogHeader>
             <DialogTitle className="text-xl">Manage Registers</DialogTitle>
             <p className="text-xs text-muted-foreground">
-              Registers/tills available at this site. The PO form only shows
-              a Register selector once 2 or more are configured here.
+              Registers/tills available at this site. The PO form only shows a
+              Register selector once 2 or more are configured here.
             </p>
           </DialogHeader>
 

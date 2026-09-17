@@ -229,6 +229,7 @@ const startServer = async () => {
     // 3. Start the server
     server.listen(PORT, "0.0.0.0", () => {
       console.log(`🚀 Server running on port ${PORT}`);
+      console.log(`🔧 GVM Unifi sync: ${process.env.GVM_SYNC_ENABLED === "true" ? "ENABLED" : "disabled"}`);
     });
   } catch (err) {
     console.error("❌ Critical Failure: Could not initialize Permission Map", err);

@@ -3,17 +3,30 @@ const { Queue, Worker } = require("bullmq");
 const connection = require("../utils/redisClient");
 const { postPricesToGvm } = require("../utils/gvmScrapper");
 
-const gvmQueue = new Queue("gvmQueue", { connection });
+const gvmQueue = new Queue("gvmQueue", {
+  connection,
+  defaultJobOptions: {
+    removeOnComplete: {
+      count: 20,
+      age: 1800, // Keep completed jobs for 30 minutes
+    },
+    removeOnFail: {
+      count: 100, // Keep up to 100 failed jobs
+      age: 259200, // Keep failed jobs for 3 days (72 hours)
+    },
+  },
+});
 
 const gvmWorker = new Worker(
   "gvmQueue",
   async (job) => {
-    const { gvmLocationName, prices } = job.data;
+    const { gvmLocationName, prices, timezone } = job.data;
     console.log(`🤖 [GVM Worker] Starting price broadcast sync for location: ${gvmLocationName}`);
 
     await postPricesToGvm({
       gvmLocationName,
-      prices
+      prices,
+      timezone
     });
 
     console.log(`🎉 [GVM Worker] Successfully processed pricing updates for ${gvmLocationName}.`);
