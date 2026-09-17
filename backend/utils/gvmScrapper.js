@@ -90,6 +90,11 @@ async function attemptPricePost({ gvmLocationName, prices, timezone }) {
     userAgent: "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
   });
 
+  // Needed to paste (rather than type) the space in "Effective At" below —
+  // clipboard-write requires this permission to be pre-granted since headless
+  // Chromium has no real permission-prompt UI to accept it interactively.
+  await context.grantPermissions(["clipboard-read", "clipboard-write"], { origin: GVM_BASE_URL });
+
   const page = await context.newPage();
 
   try {
@@ -140,17 +145,25 @@ async function attemptPricePost({ gvmLocationName, prices, timezone }) {
     }
 
     const targetTimezone = timezone || DEFAULT_TIMEZONE;
-    const effectiveAtValue = moment()
-      .tz(targetTimezone)
-      .add(EFFECTIVE_AT_BUFFER_MINUTES, "minutes")
-      .format("YYYY-MM-DD HH:mm:ss");
+    const effectiveAtMoment = moment().tz(targetTimezone).add(EFFECTIVE_AT_BUFFER_MINUTES, "minutes");
+    const effectiveAtDatePart = effectiveAtMoment.format("YYYY-MM-DD");
+    const effectiveAtTimePart = effectiveAtMoment.format("HH:mm:ss");
+    const effectiveAtValue = `${effectiveAtDatePart} ${effectiveAtTimePart}`;
 
+    // Confirmed live: this field's mask accepts a typed keystroke for every
+    // character except the date/time separator space — a real " " keypress
+    // gets silently dropped (cursor never advances), while pasting " "
+    // lands correctly. So the date and time halves are typed normally and
+    // the separator between them is pasted via the clipboard instead.
     const clearAndTypeEffectiveAt = async () => {
       await effectiveAtInput.focus();
       await effectiveAtInput.fill("");
       await page.keyboard.press("Control+A");
       await page.keyboard.press("Backspace");
-      await effectiveAtInput.type(effectiveAtValue, { delay: 100 });
+      await effectiveAtInput.type(effectiveAtDatePart, { delay: 100 });
+      await page.evaluate((value) => navigator.clipboard.writeText(value), " ");
+      await page.keyboard.press("Control+V");
+      await effectiveAtInput.type(effectiveAtTimePart, { delay: 100 });
       await effectiveAtInput.blur();
     };
 
