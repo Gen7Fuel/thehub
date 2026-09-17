@@ -34,64 +34,44 @@ interface ShiftsAndSalesChartProps {
   className?: string;
 }
 
-const CHART_CONFIG = {
-  approvedCost: {
-    label: "Approved Shift Cost",
-    color: "#22c55e",
-  },
-  pendingCost: {
-    label: "Pending Shift Cost",
-    color: "#eab308",
-  },
-  expectedCost: {
-    label: "Avg Cost (By Day)",
-    color: "#ef4444", // Red dotted baseline target
-  },
-  sales: {
-    label: "Total Sales",
-    color: "#00eeff",
-  },
-  transactions: {
-    label: "Transactions",
-    color: "#fd00c6",
-  },
-};
-
-const AGGREGATED_CHART_CONFIG = {
-  approvedCost: {
-    label: "Approved Cost",
-    color: "#10b981",
-  },
-  pendingCost: {
-    label: "Pending Cost",
-    color: "#f59e0b",
-  },
-  sales: {
-    label: "Total Sales",
-    color: "#00eeff",
-  },
-  transactions: {
-    label: "Transactions",
-    color: "#fd00c6",
-  },
-};
-
-/* ============================================================================
-   1. DAILY CHART (Existing)
-   ============================================================================ */
 export function ShiftsAndSalesChart({
   timesheetData,
   className,
 }: ShiftsAndSalesChartProps) {
   const [pageIndex, setPageIndex] = useState(0);
+  const [showAllSales, setShowAllSales] = useState(false); // Default: inside sales only
 
-  // Process Enriched Data & Calculate Day-of-Week Average Ratios (Latest 60 Days Only)
+  // Dynamic config driving Tooltip & Legend labels
+  const chartConfig = useMemo(
+    () => ({
+      approvedCost: {
+        label: "Approved Shift Cost",
+        color: "#22c55e",
+      },
+      pendingCost: {
+        label: "Pending Shift Cost",
+        color: "#eab308",
+      },
+      expectedCost: {
+        label: "Avg Cost (By Day)",
+        color: "#ef4444",
+      },
+      sales: {
+        label: showAllSales ? "All Sales" : "In Store Sales",
+        color: "#00eeff",
+      },
+      transactions: {
+        label: "Transactions",
+        color: "#fd00c6",
+      },
+    }),
+    [showAllSales]
+  );
+
+  // Process Enriched Data & Calculate Day-of-Week Average Ratios dynamically based on mode
   const { combinedData } = useMemo(() => {
     if (!timesheetData || timesheetData.length === 0) {
-      return {
-        combinedData: [],
-        dayOfWeekAvgRatios: new Map<number, number>(),
-      };
+      return { combinedData: [] };
     }
 
     const aggregatedMap = new Map<
@@ -99,7 +79,8 @@ export function ShiftsAndSalesChart({
       {
         approvedCost: number;
         pendingCost: number;
-        sales: number;
+        totalSales: number;
+        dispenserSales: number;
         transactions: number;
         date: string;
         dayLabel: string;
@@ -120,7 +101,8 @@ export function ShiftsAndSalesChart({
         aggregatedMap.set(formattedDate, {
           approvedCost: 0,
           pendingCost: 0,
-          sales: Number(item.totalSales || item.sales || 0),
+          totalSales: Number(item.totalSales || item.sales || 0),
+          dispenserSales: Number(item.dispenserSales || 0),
           transactions: Number(item.transactions || item.Transactions || 0),
           date: formattedDate,
           dayLabel,
@@ -162,12 +144,16 @@ export function ShiftsAndSalesChart({
       .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime())
       .slice(-60);
 
-    // Compute ratios strictly from the recent 60-day dataset
+    // Compute ratios based on whether All Sales or Inside Sales is selected
     const dayRatiosMap = new Map<number, number[]>();
     rawList.forEach((d) => {
+      const activeSales = showAllSales
+        ? d.totalSales
+        : Math.max(0, d.totalSales - d.dispenserSales);
+
       const totalCost = d.approvedCost + d.pendingCost;
-      if (d.sales > 0 && totalCost > 0) {
-        const ratio = totalCost / d.sales;
+      if (activeSales > 0 && totalCost > 0) {
+        const ratio = totalCost / activeSales;
         if (!dayRatiosMap.has(d.dayOfWeek)) {
           dayRatiosMap.set(d.dayOfWeek, []);
         }
@@ -182,9 +168,13 @@ export function ShiftsAndSalesChart({
     });
 
     const processed = rawList.map((d) => {
+      const activeSales = showAllSales
+        ? d.totalSales
+        : Math.max(0, d.totalSales - d.dispenserSales);
+
       const totalCost = Math.round(d.approvedCost + d.pendingCost);
       const avgRatio = dayOfWeekAvgRatios.get(d.dayOfWeek) || 0;
-      const expectedCost = Math.round(d.sales * avgRatio);
+      const expectedCost = Math.round(activeSales * avgRatio);
 
       return {
         ...d,
@@ -194,13 +184,13 @@ export function ShiftsAndSalesChart({
         totalCost,
         expectedCost,
         isOverTarget: totalCost > expectedCost && expectedCost > 0,
-        sales: Math.round(d.sales),
+        sales: Math.round(activeSales),
         transactions: Math.round(d.transactions),
       };
     });
 
-    return { combinedData: processed, dayOfWeekAvgRatios };
-  }, [timesheetData]);
+    return { combinedData: processed };
+  }, [timesheetData, showAllSales]);
 
   // 5-Day Pagination Window
   const pageSize = 5;
@@ -221,35 +211,56 @@ export function ShiftsAndSalesChart({
         <div>
           <CardTitle>Shifts Cost vs. Sales & Traffic</CardTitle>
           <CardDescription>
-            Daily labor costs, sales, and transaction trends
+            Daily labor, sales, and traffic
           </CardDescription>
         </div>
 
-        <div className="flex items-center gap-1">
-          <Button
-            variant="outline"
-            size="icon"
-            className="h-8 w-8"
-            onClick={() =>
-              safePageIndex < maxPages - 1 && setPageIndex((p) => p + 1)
-            }
-            disabled={
-              safePageIndex >= maxPages - 1 || combinedData.length === 0
-            }
-            title="Previous Period"
-          >
-            <ChevronLeft className="h-4 w-4" />
-          </Button>
-          <Button
-            variant="outline"
-            size="icon"
-            className="h-8 w-8"
-            onClick={() => safePageIndex > 0 && setPageIndex((p) => p - 1)}
-            disabled={safePageIndex === 0 || combinedData.length === 0}
-            title="Next Period"
-          >
-            <ChevronRight className="h-4 w-4" />
-          </Button>
+        <div className="flex items-center gap-3">
+          {/* Toggle for All Sales vs Store-Only Sales */}
+          <div className="flex items-center space-x-2">
+            <Switch
+              id="all-sales-toggle"
+              checked={showAllSales}
+              onCheckedChange={(checked) => {
+                setShowAllSales(checked);
+                setPageIndex(0);
+              }}
+            />
+            <Label
+              htmlFor="all-sales-toggle"
+              className="text-xs cursor-pointer font-medium whitespace-nowrap"
+            >
+              All Sales
+            </Label>
+          </div>
+
+          {/* Navigation Controls */}
+          <div className="flex items-center gap-1">
+            <Button
+              variant="outline"
+              size="icon"
+              className="h-8 w-8"
+              onClick={() =>
+                safePageIndex < maxPages - 1 && setPageIndex((p) => p + 1)
+              }
+              disabled={
+                safePageIndex >= maxPages - 1 || combinedData.length === 0
+              }
+              title="Previous Period"
+            >
+              <ChevronLeft className="h-4 w-4" />
+            </Button>
+            <Button
+              variant="outline"
+              size="icon"
+              className="h-8 w-8"
+              onClick={() => safePageIndex > 0 && setPageIndex((p) => p - 1)}
+              disabled={safePageIndex === 0 || combinedData.length === 0}
+              title="Next Period"
+            >
+              <ChevronRight className="h-4 w-4" />
+            </Button>
+          </div>
         </div>
       </CardHeader>
 
@@ -282,11 +293,13 @@ export function ShiftsAndSalesChart({
                 tick={{ fontSize: 11 }}
               />
 
-              <YAxis
-                yAxisId="transactions"
-                hide={true}
-                domain={["auto", "auto"]}
-              />
+              {showAllSales && (
+                <YAxis
+                  yAxisId="transactions"
+                  hide={true}
+                  domain={["auto", "auto"]}
+                />
+              )}
 
               {visibleData.map(
                 (item) =>
@@ -303,23 +316,23 @@ export function ShiftsAndSalesChart({
               )}
 
               <Tooltip
-                content={<MultiLineChartToolTip config={CHART_CONFIG} />}
+                content={<MultiLineChartToolTip config={chartConfig} />}
               />
 
               <Bar
                 yAxisId="left"
                 dataKey="approvedCost"
-                name={CHART_CONFIG.approvedCost.label}
+                name={chartConfig.approvedCost.label}
                 stackId="cost"
-                fill={CHART_CONFIG.approvedCost.color}
+                fill={chartConfig.approvedCost.color}
                 barSize={24}
               />
               <Bar
                 yAxisId="left"
                 dataKey="pendingCost"
-                name={CHART_CONFIG.pendingCost.label}
+                name={chartConfig.pendingCost.label}
                 stackId="cost"
-                fill={CHART_CONFIG.pendingCost.color}
+                fill={chartConfig.pendingCost.color}
                 barSize={24}
                 radius={[4, 4, 0, 0]}
               />
@@ -328,8 +341,8 @@ export function ShiftsAndSalesChart({
                 yAxisId="left"
                 type="step"
                 dataKey="expectedCost"
-                name={CHART_CONFIG.expectedCost.label}
-                stroke={CHART_CONFIG.expectedCost.color}
+                name={chartConfig.expectedCost.label}
+                stroke={chartConfig.expectedCost.color}
                 strokeWidth={2}
                 strokeDasharray="4 4"
                 dot={false}
@@ -340,23 +353,25 @@ export function ShiftsAndSalesChart({
                 yAxisId="right"
                 type="monotone"
                 dataKey="sales"
-                name={CHART_CONFIG.sales.label}
-                stroke={CHART_CONFIG.sales.color}
+                name={chartConfig.sales.label}
+                stroke={chartConfig.sales.color}
                 strokeWidth={2.5}
                 dot={{ r: 3 }}
                 activeDot={{ r: 5 }}
               />
 
-              <Line
-                yAxisId="transactions"
-                type="monotone"
-                dataKey="transactions"
-                name={CHART_CONFIG.transactions.label}
-                stroke={CHART_CONFIG.transactions.color}
-                strokeWidth={2}
-                dot={{ r: 3 }}
-                activeDot={{ r: 5 }}
-              />
+              {showAllSales && (
+                <Line
+                  yAxisId="transactions"
+                  type="monotone"
+                  dataKey="transactions"
+                  name={chartConfig.transactions.label}
+                  stroke={chartConfig.transactions.color}
+                  strokeWidth={2}
+                  dot={{ r: 3 }}
+                  activeDot={{ r: 5 }}
+                />
+              )}
             </ComposedChart>
           </ResponsiveContainer>
         ) : (
@@ -366,23 +381,25 @@ export function ShiftsAndSalesChart({
         )}
 
         <div className="flex flex-wrap items-center justify-center gap-4 pt-4">
-          {Object.entries(CHART_CONFIG).map(([key, config]) => (
-            <div key={key} className="flex items-center gap-2">
-              <div
-                className="h-3 w-3 rounded-sm shrink-0"
-                style={{ backgroundColor: config.color }}
-              />
-              <span className="text-xs font-medium text-slate-700">
-                {config.label}
-              </span>
-            </div>
-          ))}
+          {Object.entries(chartConfig)
+            .filter(([key]) => key !== "transactions" || showAllSales)
+            .map(([key, config]) => (
+              <div key={key} className="flex items-center gap-2">
+                <div
+                  className="h-3 w-3 rounded-sm shrink-0"
+                  style={{ backgroundColor: config.color }}
+                />
+                <span className="text-xs font-medium text-slate-700">
+                  {config.label}
+                </span>
+              </div>
+            ))}
         </div>
       </CardContent>
 
       <CardFooter className="text-xs text-muted-foreground">
-        Showing 5-day window ({safePageIndex * 5} - {(safePageIndex + 1) * 5} of
-        60 days)
+        Showing 5-day window ({safePageIndex * 5} - {(safePageIndex + 1) * 5} of{" "}
+        {combinedData.length} days)
       </CardFooter>
     </Card>
   );
@@ -396,7 +413,31 @@ export function ShiftsAndSalesAggregatedChart({
   className,
 }: ShiftsAndSalesChartProps) {
   const [isMonthly, setIsMonthly] = useState(false);
+  const [showAllSales, setShowAllSales] = useState(false); // Default: inside sales only
   const [pageIndex, setPageIndex] = useState(0);
+
+  // Dynamic config driving Tooltip & Legend labels
+  const chartConfig = useMemo(
+    () => ({
+      approvedCost: {
+        label: "Approved Cost",
+        color: "#10b981",
+      },
+      pendingCost: {
+        label: "Pending Cost",
+        color: "#f59e0b",
+      },
+      sales: {
+        label: showAllSales ? "All Sales" : "In Store Sales",
+        color: "#00eeff",
+      },
+      transactions: {
+        label: "Transactions",
+        color: "#fd00c6",
+      },
+    }),
+    [showAllSales]
+  );
 
   const aggregatedList = useMemo(() => {
     if (!timesheetData || timesheetData.length === 0) return [];
@@ -419,11 +460,17 @@ export function ShiftsAndSalesAggregatedChart({
 
       const formattedDate = String(dateStr).slice(0, 10);
 
+      const totalSales = Number(item.totalSales || item.sales || 0);
+      const dispenserSales = Number(item.dispenserSales || 0);
+      const activeSales = showAllSales
+        ? totalSales
+        : Math.max(0, totalSales - dispenserSales);
+
       if (!dailyMap.has(formattedDate)) {
         dailyMap.set(formattedDate, {
           approvedCost: 0,
           pendingCost: 0,
-          sales: Number(item.totalSales || item.sales || 0),
+          sales: activeSales,
           transactions: Number(item.transactions || item.Transactions || 0),
           date: formattedDate,
         });
@@ -577,7 +624,7 @@ export function ShiftsAndSalesAggregatedChart({
           };
         });
     }
-  }, [timesheetData, isMonthly]);
+  }, [timesheetData, isMonthly, showAllSales]);
 
   // 5-Bar Pagination Window
   const pageSize = 5;
@@ -597,16 +644,34 @@ export function ShiftsAndSalesAggregatedChart({
       <CardHeader className="flex flex-row items-center justify-between pb-2 space-y-0">
         <div>
           <CardTitle>
-            Shifts Cost vs. Sales ({isMonthly ? "Monthly" : "Weekly"})
+            Shifts Cost vs. Sales
           </CardTitle>
           <CardDescription>
             {isMonthly
-              ? "Aggregated monthly performance metrics"
-              : "Weekly trends (Mon–Sun)"}
+              ? "Monthly metrics"
+              : "Weekly trends"}
           </CardDescription>
         </div>
 
         <div className="flex items-center gap-3">
+          {/* Toggle for All Sales vs Store Sales */}
+          <div className="flex items-center space-x-2">
+            <Switch
+              id="aggregated-all-sales-toggle"
+              checked={showAllSales}
+              onCheckedChange={(checked) => {
+                setShowAllSales(checked);
+                setPageIndex(0);
+              }}
+            />
+            <Label
+              htmlFor="aggregated-all-sales-toggle"
+              className="text-xs cursor-pointer font-medium whitespace-nowrap"
+            >
+              All Sales
+            </Label>
+          </div>
+
           {/* Toggle for Monthly vs Weekly */}
           <div className="flex items-center space-x-2">
             <Switch
@@ -683,15 +748,17 @@ export function ShiftsAndSalesAggregatedChart({
                 tick={{ fontSize: 11 }}
               />
 
-              <YAxis
-                yAxisId="transactions"
-                hide={true}
-                domain={["auto", "auto"]}
-              />
+              {showAllSales && (
+                <YAxis
+                  yAxisId="transactions"
+                  hide={true}
+                  domain={["auto", "auto"]}
+                />
+              )}
 
               <Tooltip
                 content={
-                  <MultiLineChartToolTip config={AGGREGATED_CHART_CONFIG} />
+                  <MultiLineChartToolTip config={chartConfig} />
                 }
               />
 
@@ -699,17 +766,17 @@ export function ShiftsAndSalesAggregatedChart({
               <Bar
                 yAxisId="left"
                 dataKey="approvedCost"
-                name={AGGREGATED_CHART_CONFIG.approvedCost.label}
+                name={chartConfig.approvedCost.label}
                 stackId="cost"
-                fill={AGGREGATED_CHART_CONFIG.approvedCost.color}
+                fill={chartConfig.approvedCost.color}
                 barSize={28}
               />
               <Bar
                 yAxisId="left"
                 dataKey="pendingCost"
-                name={AGGREGATED_CHART_CONFIG.pendingCost.label}
+                name={chartConfig.pendingCost.label}
                 stackId="cost"
-                fill={AGGREGATED_CHART_CONFIG.pendingCost.color}
+                fill={chartConfig.pendingCost.color}
                 barSize={28}
                 radius={[4, 4, 0, 0]}
               />
@@ -719,24 +786,26 @@ export function ShiftsAndSalesAggregatedChart({
                 yAxisId="right"
                 type="monotone"
                 dataKey="sales"
-                name={AGGREGATED_CHART_CONFIG.sales.label}
-                stroke={AGGREGATED_CHART_CONFIG.sales.color}
+                name={chartConfig.sales.label}
+                stroke={chartConfig.sales.color}
                 strokeWidth={2.5}
                 dot={{ r: 4 }}
                 activeDot={{ r: 6 }}
               />
 
-              {/* Transactions Line */}
-              <Line
-                yAxisId="transactions"
-                type="monotone"
-                dataKey="transactions"
-                name={AGGREGATED_CHART_CONFIG.transactions.label}
-                stroke={AGGREGATED_CHART_CONFIG.transactions.color}
-                strokeWidth={2}
-                dot={{ r: 4 }}
-                activeDot={{ r: 6 }}
-              />
+              {/* Transactions Line (only when All Sales is active) */}
+              {showAllSales && (
+                <Line
+                  yAxisId="transactions"
+                  type="monotone"
+                  dataKey="transactions"
+                  name={chartConfig.transactions.label}
+                  stroke={chartConfig.transactions.color}
+                  strokeWidth={2}
+                  dot={{ r: 4 }}
+                  activeDot={{ r: 6 }}
+                />
+              )}
             </ComposedChart>
           </ResponsiveContainer>
         ) : (
@@ -746,17 +815,19 @@ export function ShiftsAndSalesAggregatedChart({
         )}
 
         <div className="flex flex-wrap items-center justify-center gap-4 pt-4">
-          {Object.entries(AGGREGATED_CHART_CONFIG).map(([key, config]) => (
-            <div key={key} className="flex items-center gap-2">
-              <div
-                className="h-3 w-3 rounded-sm shrink-0"
-                style={{ backgroundColor: config.color }}
-              />
-              <span className="text-xs font-medium text-slate-700">
-                {config.label}
-              </span>
-            </div>
-          ))}
+          {Object.entries(chartConfig)
+            .filter(([key]) => key !== "transactions" || showAllSales)
+            .map(([key, config]) => (
+              <div key={key} className="flex items-center gap-2">
+                <div
+                  className="h-3 w-3 rounded-sm shrink-0"
+                  style={{ backgroundColor: config.color }}
+                />
+                <span className="text-xs font-medium text-slate-700">
+                  {config.label}
+                </span>
+              </div>
+            ))}
         </div>
       </CardContent>
 
