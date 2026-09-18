@@ -28,7 +28,7 @@ const SITE_CONFIG = {
   waversCheques: ["Wavers West", "Wavers East"],
   excludeAdjustedOvSh: ["Wavers West", "Wavers East", "Sioux Valley"],
   excludeAR: ["Oliver", "Osoyoos"],
-  excludeAP: ["Oliver", "Osoyoos", "Wavers East", "Wavers West"],
+  excludeAP: ["Oliver", "Osoyoos", "Wavers East", "Wavers West", "Sioux Valley"],
 };
 
 type Search = { site: string; date: string };
