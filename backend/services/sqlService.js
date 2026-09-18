@@ -592,55 +592,6 @@ async function getFuelPricingDate(date) {
 // }
 
 
-async function getFuelInventoryReportPreviousDay() {
-  try {
-    const pool = await getPool();
-    const result = await pool.request().query(`
-      SELECT [Date],[Station_Name],[Fuel_Grade],[Stick_L]
-      FROM [CSO].[FuelInventory]
-      WHERE [Date] = CAST(GETDATE() - 1 AS date)
-    `);
-    await sql.close();
-    return result.recordset;
-  } catch (err) {
-    console.error('SQL error:', err);
-    return [];
-  }
-}
-
-async function getFuelInventoryReportCurrentDay() {
-  try {
-    const pool = await getPool();
-    const result = await pool.request().query(`
-      WITH RankedInventory AS (
-        SELECT 
-            [Station_SK], 
-            [Fuel_Grade], 
-            TRY_CAST([Volume] AS DECIMAL(18, 2)) AS [Stick_L_Tank],
-            ROW_NUMBER() OVER (
-                PARTITION BY [Station_SK], [Fuel_Grade], [Tank_ID]
-                ORDER BY [Time] DESC
-            ) AS rnk
-        FROM [CSO].[CurrentFuelInv]
-        WHERE [Date_SK] = TRY_CONVERT(CHAR(8), GETDATE(), 112)
-      )
-      SELECT 
-            [Station_SK], 
-            [Fuel_Grade], 
-            SUM([Stick_L_tank]) AS [Stick_L] 
-      FROM RankedInventory
-      WHERE rnk = 1
-      GROUP BY [Station_SK], [Fuel_Grade]
-      ORDER BY [Station_SK]
-    `);
-    await sql.close();
-    return result.recordset;
-  } catch (err) {
-    console.error('SQL error:', err);
-    return [];
-  }
-}
-
 async function getFuelSupplierDiscounts() {
   try {
     const { getPool } = require('./sqlService'); // Adjust path if needed
@@ -1876,8 +1827,6 @@ module.exports = {
   getInventoryCategories,
   getAllSQLData,
   getBulkOnHandQtyCSO,
-  getFuelInventoryReportPreviousDay,
-  getFuelInventoryReportCurrentDay,
   getCategoriesFromSQL,
   getCategoryNumbersFromSQL,
   getInactiveMasterItems,
