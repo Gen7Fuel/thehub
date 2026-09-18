@@ -26,7 +26,7 @@ import { useSite } from "@/context/SiteContext";
 
 const SITE_CONFIG = {
   waversCheques: ["Wavers West", "Wavers East"],
-  excludeLottery: ["Wavers West", "Wavers East"],
+  excludeAdjustedOvSh: ["Wavers West", "Wavers East", "Sioux Valley"],
   excludeAR: ["Oliver", "Osoyoos"],
   excludeAP: ["Oliver", "Osoyoos", "Wavers East", "Wavers West"],
 };
@@ -633,7 +633,7 @@ function RouteComponent() {
     access?.accounting?.cashSummary?.report?.viewShiftReport,
   );
   const showLotterySection = Boolean(
-    lottery && !SITE_CONFIG.excludeLottery.includes(site),
+    lottery && !SITE_CONFIG.excludeAdjustedOvSh.includes(site),
   );
   const showARSection = Boolean(
     arData && !SITE_CONFIG.excludeAR.includes(site),

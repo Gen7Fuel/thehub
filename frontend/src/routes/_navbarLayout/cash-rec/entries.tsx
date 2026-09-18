@@ -63,6 +63,9 @@ type CashSummaryTotals = {
   fuelPriceOverrides: number
   parsedItemSales: number
   depositTotal: number
+  gst?: number
+  pst?: number
+  salesTax?: number
   pennyRounding: number
   totalSales: number
   afdCredit: number
@@ -322,6 +325,7 @@ function RouteComponent() {
                 <th className="px-1 py-1 text-center align-bottom h-24 bg-violet-50">DealGroup CPL Discounts</th>
                 <th className="px-1 py-1 text-center align-bottom h-24 bg-violet-50">Unsettled Prepays</th>
                 <th className="px-1 py-1 text-center align-bottom h-24 bg-violet-50">Item Sales</th>
+                <th className="px-1 py-1 text-center align-bottom h-24 bg-violet-50">Sales Tax</th>
                 <th className="px-1 py-1 text-center align-bottom h-24 bg-violet-50">Total Sales</th>
                 <th className="px-1 py-1 text-center align-bottom h-24 bg-violet-50">Fuel Sales</th>
                 <th className="px-1 py-1 text-center align-bottom h-24 bg-violet-50">AFD GC</th>
@@ -372,6 +376,7 @@ function RouteComponent() {
                     <td className="px-2 py-2 text-right cursor-copy" onClick={copyCell}>{fmt2(data?.cashSummary?.totals.fuelPriceOverrides)}</td>
                     <td className="px-2 py-2 text-right cursor-copy" onClick={copyCell}>{data?.cashSummary?.unsettledPrepays == null ? '-' : fmt2(data?.cashSummary?.unsettledPrepays)}</td>
                     <td className="px-2 py-2 text-right cursor-copy" onClick={copyCell}>{fmt2(data?.cashSummary?.totals.item_sales)}</td>
+                    <td className="px-2 py-2 text-right cursor-copy" onClick={copyCell}>{fmt2(data?.cashSummary?.totals.salesTax ?? ((data?.cashSummary?.totals.gst ?? 0) + (data?.cashSummary?.totals.pst ?? 0)))}</td>
                     <td className="px-2 py-2 text-right cursor-copy" onClick={copyCell}>{fmt2(data?.cashSummary?.totals.totalSales)}</td>
                     <td className="px-2 py-2 text-right cursor-copy" onClick={copyCell}>{fmt2((data?.cashSummary?.totals.fuelSales ?? 0) + (data?.cashSummary?.totals.fuelPriceOverrides ?? 0))}</td>
                     <td className="px-2 py-2 text-right cursor-copy" onClick={copyCell}>{fmt2(data?.cashSummary?.totals.afdGiftCard)}</td>
