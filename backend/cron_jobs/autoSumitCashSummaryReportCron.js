@@ -164,7 +164,7 @@ const autoSubmitCashSummaryReports = async () => {
             })
           }
 
-          if (site === 'Wavers West' || site === 'Wavers East') {
+          if (site === 'Wavers West' || site === 'Wavers East' || site === 'Sioux Valley') {
             try {
               const eodWaversPdf = await generateEodReportPdf({ site, date: dateStr, isManitoba })
               attachments.push({
