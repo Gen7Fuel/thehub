@@ -1546,7 +1546,7 @@ router.put('/item-bk/mass-edit', async (req, res) => {
     }
 
     // 2. Extracted Values Field Guard
-    if (!updates || Object.keys(updates).length === 0) {
+    if (!updates || typeof updates !== 'object' || Object.keys(updates).length === 0) {
       return res.status(400).json({
         success: false,
         message: "No parameters isolated for configuration updates."
@@ -1563,16 +1563,30 @@ router.put('/item-bk/mass-edit', async (req, res) => {
 
         // Formatting processing matrix per type
         if (field === 'allow_cycle_count') {
-          sanitizedPayload[field] = Boolean(value);
+          if (typeof value !== 'boolean') {
+            return res.status(400).json({ success: false, message: "Field allow_cycle_count must be a true/false." });
+          }
+          sanitizedPayload[field] = value;
+
         } else if (field === 'grade') {
           if (!['A', 'B', 'C'].includes(value)) {
             return res.status(400).json({ success: false, message: "Invalid value passed for grade matrix alignment." });
           }
           sanitizedPayload[field] = value;
+
         } else if (field === 'pk_in_crt' || field === 'crt_in_case') {
-          sanitizedPayload[field] = value !== null ? parseInt(value, 10) : null;
-          if (sanitizedPayload[field] !== null && isNaN(sanitizedPayload[field])) {
-            return res.status(400).json({ success: false, message: `Logistics value for ${field} must evaluate cleanly to an integer.` });
+          // Explicit null check to clear mappings
+          if (value === null) {
+            sanitizedPayload[field] = null;
+          } else {
+            const parsedVal = parseInt(value, 10);
+            if (isNaN(parsedVal) || parsedVal <= 0) {
+              return res.status(400).json({
+                success: false,
+                message: `Logistics value for ${field} must be a positive integer or null.`
+              });
+            }
+            sanitizedPayload[field] = parsedVal;
           }
         }
       }
@@ -1583,9 +1597,8 @@ router.put('/item-bk/mass-edit', async (req, res) => {
       return res.status(400).json({ success: false, message: "No valid tracking parameters parsed for database changes." });
     }
 
-    // 4. Database Transaction Write Execution
-    // Standard Knex execution syntax query matrix:
-    await db('item_bk')
+    // 4. Database Write Execution
+    const rowsAffected = await db('item_bk')
       .whereIn('id', ids)
       .update(sanitizedPayload);
 
@@ -1598,8 +1611,8 @@ router.put('/item-bk/mass-edit', async (req, res) => {
 
     return res.status(200).json({
       success: true,
-      message: `Successfully updated config variables across ${ids.length} selected row contexts.`,
-      rowsAffected: ids.length
+      message: `Successfully updated config variables across ${rowsAffected} selected row contexts.`,
+      rowsAffected
     });
 
   } catch (error) {
