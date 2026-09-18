@@ -110,7 +110,7 @@ const CycleCountTableGroup: React.FC<Props> = ({
 
                 {/* BOH Column */}
                 <td className="px-2 py-4 w-40">
-                  {item.pk_in_crt ? (
+                  {Boolean(item.pk_in_crt && item.pk_in_crt > 0) ? (
                     <MultiUnitInput
                       label="boh"
                       placeholder="BOH"
@@ -126,8 +126,9 @@ const CycleCountTableGroup: React.FC<Props> = ({
                       type="number"
                       min="0"
                       placeholder="BOH"
-                      className={`w-full h-12 text-center text-lg font-bold border-2 rounded-xl transition-all outline-none ${bohStr !== "" ? 'border-green-500 bg-green-50 text-green-700 shadow-inner' : 'border-red-200 bg-red-50/50 text-red-900'
-                        }`}
+                      className={`w-full h-12 text-center text-lg font-bold border-2 rounded-xl transition-all outline-none ${
+                        bohStr !== "" ? 'border-green-500 bg-green-50 text-green-700 shadow-inner' : 'border-red-200 bg-red-50/50 text-red-900'
+                      }`}
                       value={bohStr}
                       onChange={(e) => onInputChange(item.entryId, "boh", e.target.value)}
                       onBlur={(e) => onInputBlur(item.entryId, "boh", e.target.value)}
