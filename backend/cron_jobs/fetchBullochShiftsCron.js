@@ -347,6 +347,7 @@ const runSftIngestionCron = async () => {
         await syncSftShiftsForSite(loc.stationName, loc.timezone);
       }
     }
+    // await syncSftShiftsForSite('Sioux Valley', 'America/Winnipeg');
   } catch (err) {
     console.error("[SFT Ingestion Cron Execution Error]:", err);
   } finally {
