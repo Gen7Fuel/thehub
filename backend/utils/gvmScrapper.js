@@ -145,39 +145,62 @@ async function attemptPricePost({ gvmLocationName, prices, timezone }) {
     }
 
     const targetTimezone = timezone || DEFAULT_TIMEZONE;
-    const effectiveAtMoment = moment().tz(targetTimezone).add(EFFECTIVE_AT_BUFFER_MINUTES, "minutes");
-    const effectiveAtDatePart = effectiveAtMoment.format("YYYY-MM-DD");
-    const effectiveAtTimePart = effectiveAtMoment.format("HH:mm:ss");
-    const effectiveAtValue = `${effectiveAtDatePart} ${effectiveAtTimePart}`;
+    const effectiveAtValue = moment()
+      .tz(targetTimezone)
+      .add(EFFECTIVE_AT_BUFFER_MINUTES, "minutes")
+      .format("YYYY-MM-DD HH:mm:ss");
 
-    // Confirmed live: this field's mask accepts a typed keystroke for every
-    // character except the date/time separator space — a real " " keypress
-    // gets silently dropped (cursor never advances), while pasting " "
-    // lands correctly. So the date and time halves are typed normally and
-    // the separator between them is pasted via the clipboard instead.
-    const clearAndTypeEffectiveAt = async () => {
+    // Entering this value one character at a time loses the date/time
+    // separator: the mask swallows a " " keypress, leaving "2026-09-1708:56:22".
+    // Typing the halves and pasting just the separator between them didn't fix
+    // it either, so the whole value now goes in as a single paste.
+    const setEffectiveAtByPaste = async () => {
+      // Clipboard is written before the field is touched so that nothing
+      // between clearing and pasting can disturb focus.
+      await page.evaluate((value) => navigator.clipboard.writeText(value), effectiveAtValue);
       await effectiveAtInput.focus();
       await effectiveAtInput.fill("");
       await page.keyboard.press("Control+A");
       await page.keyboard.press("Backspace");
-      await effectiveAtInput.type(effectiveAtDatePart, { delay: 100 });
-      await page.evaluate((value) => navigator.clipboard.writeText(value), " ");
       await page.keyboard.press("Control+V");
-      await effectiveAtInput.type(effectiveAtTimePart, { delay: 100 });
-      await effectiveAtInput.blur();
     };
 
-    await clearAndTypeEffectiveAt();
+    // A synthetic Ctrl+V does not always trigger a real paste in headless
+    // Chromium, which would look identical to the mask rejecting the value.
+    // insertText goes through the browser's own editing pipeline instead:
+    // one genuine input event, no per-character keydown for the mask to
+    // filter, and no dependency on clipboard permissions.
+    const setEffectiveAtByInsertText = async () => {
+      await effectiveAtInput.focus();
+      await effectiveAtInput.fill("");
+      await page.keyboard.press("Control+A");
+      await page.keyboard.press("Backspace");
+      await effectiveAtInput.evaluate((el, value) => {
+        el.focus();
+        document.execCommand("insertText", false, value);
+      }, effectiveAtValue);
+    };
 
-    // Read back after blur, not just after typing — this field is a
-    // MudBlazor date/time picker (unlike the plain price inputs below),
-    // and pickers commonly re-validate/reformat typed text on blur, so a
-    // pre-blur read could miss a silent rejection or reformat.
-    let actualEffectiveAt = await effectiveAtInput.inputValue();
+    // Reading before and after blur separates the failure modes: an empty
+    // field before blur means the input never landed at all, whereas a value
+    // that changes across blur means the picker reformatted or rejected it.
+    const applyAndRead = async (setValue, label) => {
+      await setValue();
+      const beforeBlur = await effectiveAtInput.inputValue();
+      await effectiveAtInput.blur();
+      const afterBlur = await effectiveAtInput.inputValue();
+      console.log(`🕒 Effective At via ${label}: "${beforeBlur}" before blur, "${afterBlur}" after blur.`);
+      return afterBlur;
+    };
+
+    let actualEffectiveAt = await applyAndRead(setEffectiveAtByPaste, "clipboard paste");
+
+    // The retry deliberately switches technique rather than repeating the
+    // same one — this mismatch has proven deterministic, so an identical
+    // second attempt only ever reproduces it.
     if (actualEffectiveAt !== effectiveAtValue) {
-      console.log(`⚠️ Effective At mismatch: expected "${effectiveAtValue}", field shows "${actualEffectiveAt}". Retrying once...`);
-      await clearAndTypeEffectiveAt();
-      actualEffectiveAt = await effectiveAtInput.inputValue();
+      console.log(`⚠️ Clipboard paste gave "${actualEffectiveAt}", expected "${effectiveAtValue}". Retrying with insertText...`);
+      actualEffectiveAt = await applyAndRead(setEffectiveAtByInsertText, "insertText");
     }
 
     if (actualEffectiveAt !== effectiveAtValue) {
