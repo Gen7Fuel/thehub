@@ -1,6 +1,7 @@
 const { chromium } = require("playwright-extra");
 const stealth = require("puppeteer-extra-plugin-stealth")();
 const fs = require("fs");
+const moment = require("moment-timezone");
 const { emailQueue } = require("../queues/emailQueue");
 const GvmSession = require("../models/GvmSession");
 const { uploadToCdn } = require("./uploadToCdn");
@@ -10,6 +11,8 @@ const { runAutoLogin, GVM_BASE_URL } = require("./gvmLoginScrapper");
 chromium.use(stealth);
 
 const GVM_PRICING_URL = `${GVM_BASE_URL}/pricing`;
+const DEFAULT_TIMEZONE = "America/Toronto";
+const EFFECTIVE_AT_BUFFER_MINUTES = 11;
 
 /**
  * Locates the price <input> for a given grade row. GVM's "New" pricing
@@ -56,7 +59,7 @@ async function selectLocation(page, modal, gvmLocationName) {
  * Pulls session data from MongoDB and executes the browser run. Modeled
  * directly on gasBuddyScrapper.js's attemptPricePost.
  */
-async function attemptPricePost({ gvmLocationName, prices }) {
+async function attemptPricePost({ gvmLocationName, prices, timezone }) {
   console.log("🤖 Initializing Headless Execution via Live Database States (GVM Unifi)...");
 
   const sessionDoc = await GvmSession.findOne({ key: "production_session" });
@@ -86,6 +89,11 @@ async function attemptPricePost({ gvmLocationName, prices }) {
     viewport: { width: 1400, height: 1000 },
     userAgent: "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
   });
+
+  // Needed to paste (rather than type) the space in "Effective At" below —
+  // clipboard-write requires this permission to be pre-granted since headless
+  // Chromium has no real permission-prompt UI to accept it interactively.
+  await context.grantPermissions(["clipboard-read", "clipboard-write"], { origin: GVM_BASE_URL });
 
   const page = await context.newPage();
 
@@ -118,12 +126,88 @@ async function attemptPricePost({ gvmLocationName, prices }) {
     await modal.waitFor({ state: "visible", timeout: 8000 });
     console.log("🔓 New-pricing modal opened.");
 
-    // The "Effective At" date/time field above the price table is
-    // deliberately left untouched — confirmed it's fine to leave at
-    // whatever it defaults to.
-
     console.log(`📍 Selecting location: ${gvmLocationName}`);
     await selectLocation(page, modal, gvmLocationName);
+
+    // "Effective At" is set here, after selecting the location rather than
+    // before, since selecting a location is the one action in this flow
+    // that could plausibly reset/re-render other fields in the modal.
+    // GVM auto-populates this field to "now + 10 minutes" using the
+    // browser's own system clock, which is UTC (Playwright runs on the
+    // server) — wrong for any site not in UTC. Overwritten here with the
+    // site's actual local time instead, converted via its `timezone`
+    // (IANA name, e.g. "America/Toronto") from the Location document.
+    console.log("🕒 Setting Effective At...");
+    const effectiveAtInput = modal.getByLabel("Effective At", { exact: true });
+
+    if (!(await effectiveAtInput.isVisible().catch(() => false))) {
+      throw new Error('DOM_ELEMENT_MISSING: The "Effective At" field could not be found in the pricing modal.');
+    }
+
+    const targetTimezone = timezone || DEFAULT_TIMEZONE;
+    const effectiveAtValue = moment()
+      .tz(targetTimezone)
+      .add(EFFECTIVE_AT_BUFFER_MINUTES, "minutes")
+      .format("YYYY-MM-DD HH:mm:ss");
+
+    // Entering this value one character at a time loses the date/time
+    // separator: the mask swallows a " " keypress, leaving "2026-09-1708:56:22".
+    // Typing the halves and pasting just the separator between them didn't fix
+    // it either, so the whole value now goes in as a single paste.
+    const setEffectiveAtByPaste = async () => {
+      // Clipboard is written before the field is touched so that nothing
+      // between clearing and pasting can disturb focus.
+      await page.evaluate((value) => navigator.clipboard.writeText(value), effectiveAtValue);
+      await effectiveAtInput.focus();
+      await effectiveAtInput.fill("");
+      await page.keyboard.press("Control+A");
+      await page.keyboard.press("Backspace");
+      await page.keyboard.press("Control+V");
+    };
+
+    // A synthetic Ctrl+V does not always trigger a real paste in headless
+    // Chromium, which would look identical to the mask rejecting the value.
+    // insertText goes through the browser's own editing pipeline instead:
+    // one genuine input event, no per-character keydown for the mask to
+    // filter, and no dependency on clipboard permissions.
+    const setEffectiveAtByInsertText = async () => {
+      await effectiveAtInput.focus();
+      await effectiveAtInput.fill("");
+      await page.keyboard.press("Control+A");
+      await page.keyboard.press("Backspace");
+      await effectiveAtInput.evaluate((el, value) => {
+        el.focus();
+        document.execCommand("insertText", false, value);
+      }, effectiveAtValue);
+    };
+
+    // Reading before and after blur separates the failure modes: an empty
+    // field before blur means the input never landed at all, whereas a value
+    // that changes across blur means the picker reformatted or rejected it.
+    const applyAndRead = async (setValue, label) => {
+      await setValue();
+      const beforeBlur = await effectiveAtInput.inputValue();
+      await effectiveAtInput.blur();
+      const afterBlur = await effectiveAtInput.inputValue();
+      console.log(`🕒 Effective At via ${label}: "${beforeBlur}" before blur, "${afterBlur}" after blur.`);
+      return afterBlur;
+    };
+
+    let actualEffectiveAt = await applyAndRead(setEffectiveAtByPaste, "clipboard paste");
+
+    // The retry deliberately switches technique rather than repeating the
+    // same one — this mismatch has proven deterministic, so an identical
+    // second attempt only ever reproduces it.
+    if (actualEffectiveAt !== effectiveAtValue) {
+      console.log(`⚠️ Clipboard paste gave "${actualEffectiveAt}", expected "${effectiveAtValue}". Retrying with insertText...`);
+      actualEffectiveAt = await applyAndRead(setEffectiveAtByInsertText, "insertText");
+    }
+
+    if (actualEffectiveAt !== effectiveAtValue) {
+      throw new Error(`EFFECTIVE_AT_TYPE_MISMATCH: field shows "${actualEffectiveAt}" after retry, expected "${effectiveAtValue}". Refusing to submit with a possibly-wrong effective time.`);
+    }
+
+    console.log(`✅ Effective At set to ${effectiveAtValue} (${targetTimezone}, +${EFFECTIVE_AT_BUFFER_MINUTES}m)`);
 
     let updatesCommitted = 0;
 
@@ -260,7 +344,7 @@ async function attemptPricePost({ gvmLocationName, prices }) {
  * via DB, and retries up to 3 times. Modeled directly on
  * gasBuddyScrapper.js's postPricesToGasBuddy.
  */
-async function postPricesToGvm({ gvmLocationName, prices }) {
+async function postPricesToGvm({ gvmLocationName, prices, timezone }) {
   const MAX_RETRIES = 3;
   let attempt = 0;
   let lastError = null;
@@ -270,7 +354,7 @@ async function postPricesToGvm({ gvmLocationName, prices }) {
     console.log(`🔄 [Attempt ${attempt}/${MAX_RETRIES}] Posting GVM prices for location: ${gvmLocationName}...`);
 
     try {
-      await attemptPricePost({ gvmLocationName, prices });
+      await attemptPricePost({ gvmLocationName, prices, timezone });
       return;
 
     } catch (error) {

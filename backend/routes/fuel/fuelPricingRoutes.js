@@ -1039,6 +1039,7 @@ router.put("/verify-price-receipt", async (req, res) => {
               {
                 gvmLocationName: locationDoc.gvmLocationName,
                 prices: normalizedPrices,
+                timezone: locationDoc.timezone,
               },
               { removeOnComplete: true, removeOnFail: false },
             );

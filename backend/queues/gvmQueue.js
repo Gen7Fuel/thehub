@@ -20,12 +20,13 @@ const gvmQueue = new Queue("gvmQueue", {
 const gvmWorker = new Worker(
   "gvmQueue",
   async (job) => {
-    const { gvmLocationName, prices } = job.data;
+    const { gvmLocationName, prices, timezone } = job.data;
     console.log(`🤖 [GVM Worker] Starting price broadcast sync for location: ${gvmLocationName}`);
 
     await postPricesToGvm({
       gvmLocationName,
-      prices
+      prices,
+      timezone
     });
 
     console.log(`🎉 [GVM Worker] Successfully processed pricing updates for ${gvmLocationName}.`);

@@ -48,6 +48,11 @@ const notificationSchema = new mongoose.Schema({
   }
 }, { timestamps: true });
 
+// Backs the unread-count and notification-list queries, which run on every
+// page load. Descending createdAt matches the list's sort, so it's served from
+// the index rather than sorted in memory.
+notificationSchema.index({ recipientIds: 1, createdAt: -1 });
+
 // module.exports = mongoose.model('Notification', notificationSchema);
 
 // 2. Check if the model is already compiled in the connection
