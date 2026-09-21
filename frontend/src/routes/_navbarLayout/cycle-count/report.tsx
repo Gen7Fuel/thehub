@@ -50,6 +50,16 @@ interface ReportItem {
   boh_crt: number | null;
   count_completed: boolean;
   priority: boolean;
+  foh_case: number | null;
+  boh_case: number | null;
+
+  // Manager Count Extensions
+  manager_foh: number | null;
+  manager_boh: number | null;
+  manager_foh_crt: number | null;
+  manager_boh_crt: number | null;
+  manager_foh_case: number | null;
+  manager_boh_case: number | null;
 }
 
 interface ActiveBarcode {
@@ -64,6 +74,174 @@ interface ThreadNote {
   createdAt: string;
   userName: string;
 }
+
+// Helper function to check if station date is scheduled date + 1 day
+const isNextDayOfCount = (scheduledDateStr: string | Date): boolean => {
+  if (!scheduledDateStr) return false;
+
+  const countDate = new Date(scheduledDateStr);
+  const nextDay = new Date(countDate);
+  nextDay.setDate(nextDay.getDate() + 1);
+
+  const today = new Date();
+
+  return (
+    today.getFullYear() === nextDay.getFullYear() &&
+    today.getMonth() === nextDay.getMonth() &&
+    today.getDate() === nextDay.getDate()
+  );
+};
+
+interface ManagerCountModalProps {
+  item: ReportItem | null;
+  isOpen: boolean;
+  onClose: () => void;
+  onSave: (itemId: string, data: Record<string, number | null>) => Promise<void>;
+}
+
+export const ManagerCountModal: React.FC<ManagerCountModalProps> = ({
+  item,
+  isOpen,
+  onClose,
+  onSave,
+}) => {
+  if (!isOpen || !item) return null;
+
+  const [foh, setFoh] = useState<string>(item.manager_foh?.toString() ?? '');
+  const [boh, setBoh] = useState<string>(item.manager_boh?.toString() ?? '');
+  const [fohCrt, setFohCrt] = useState<string>(item.manager_foh_crt?.toString() ?? '');
+  const [bohCrt, setBohCrt] = useState<string>(item.manager_boh_crt?.toString() ?? '');
+  const [fohCase, setFohCase] = useState<string>(item.manager_foh_case?.toString() ?? '');
+  const [bohCase, setBohCase] = useState<string>(item.manager_boh_case?.toString() ?? '');
+  const [isSubmitting, setIsSubmitting] = useState(false);
+
+  const handleSave = async () => {
+    setIsSubmitting(true);
+    await onSave(item._id, {
+      manager_foh: foh !== '' ? Number(foh) : null,
+      manager_boh: boh !== '' ? Number(boh) : null,
+      manager_foh_crt: item.foh_crt !== null && item.foh_crt !== undefined ? (fohCrt !== '' ? Number(fohCrt) : null) : null,
+      manager_boh_crt: item.boh_crt !== null && item.boh_crt !== undefined ? (bohCrt !== '' ? Number(bohCrt) : null) : null,
+      manager_foh_case: item.foh_case !== null && item.foh_case !== undefined ? (fohCase !== '' ? Number(fohCase) : null) : null,
+      manager_boh_case: item.boh_case !== null && item.boh_case !== undefined ? (bohCase !== '' ? Number(bohCase) : null) : null,
+    });
+    setIsSubmitting(false);
+    onClose();
+  };
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 backdrop-blur-xs p-4">
+      <div className="bg-white rounded-2xl shadow-xl w-full max-w-md overflow-hidden border border-slate-200">
+        <div className="p-4 bg-slate-50 border-b border-slate-200">
+          <h3 className="text-sm font-black text-slate-800 uppercase tracking-wider">Store Count</h3>
+          <p className="text-xs text-slate-500 font-medium truncate mt-0.5">{item.name}</p>
+        </div>
+
+        <div className="p-5 space-y-4 text-xs font-semibold text-slate-700">
+          {/* FOH & BOH Base Counts */}
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="block mb-1 text-slate-600">Manager FOH Count</label>
+              <input
+                type="number"
+                value={foh}
+                onChange={(e) => setFoh(e.target.value)}
+                placeholder="Enter count"
+                className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+              />
+            </div>
+            <div>
+              <label className="block mb-1 text-slate-600">Manager BOH Count</label>
+              <input
+                type="number"
+                value={boh}
+                onChange={(e) => setBoh(e.target.value)}
+                placeholder="Enter count"
+                className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+              />
+            </div>
+          </div>
+
+          {/* Crates (Conditionally Rendered) */}
+          {(item.foh_crt !== null && item.foh_crt !== undefined || item.boh_crt !== null && item.boh_crt !== undefined) && (
+            <div className="grid grid-cols-2 gap-3 pt-2 border-t border-slate-100">
+              {item.foh_crt !== null && item.foh_crt !== undefined && (
+                <div>
+                  <label className="block mb-1 text-slate-600">Manager FOH Crates</label>
+                  <input
+                    type="number"
+                    value={fohCrt}
+                    onChange={(e) => setFohCrt(e.target.value)}
+                    placeholder="Enter crates"
+                    className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  />
+                </div>
+              )}
+              {item.boh_crt !== null && item.boh_crt !== undefined && (
+                <div>
+                  <label className="block mb-1 text-slate-600">Manager BOH Crates</label>
+                  <input
+                    type="number"
+                    value={bohCrt}
+                    onChange={(e) => setBohCrt(e.target.value)}
+                    placeholder="Enter crates"
+                    className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  />
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* Cases (Conditionally Rendered) */}
+          {(item.foh_case !== null && item.foh_case !== undefined || item.boh_case !== null && item.boh_case !== undefined) && (
+            <div className="grid grid-cols-2 gap-3 pt-2 border-t border-slate-100">
+              {item.foh_case !== null && item.foh_case !== undefined && (
+                <div>
+                  <label className="block mb-1 text-slate-600">Manager FOH Cases</label>
+                  <input
+                    type="number"
+                    value={fohCase}
+                    onChange={(e) => setFohCase(e.target.value)}
+                    placeholder="Enter cases"
+                    className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  />
+                </div>
+              )}
+              {item.boh_case !== null && item.boh_case !== undefined && (
+                <div>
+                  <label className="block mb-1 text-slate-600">Manager BOH Cases</label>
+                  <input
+                    type="number"
+                    value={bohCase}
+                    onChange={(e) => setBohCase(e.target.value)}
+                    placeholder="Enter cases"
+                    className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  />
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+
+        <div className="p-4 bg-slate-50 border-t border-slate-200 flex justify-end gap-2">
+          <button
+            onClick={onClose}
+            className="px-4 py-2 text-xs font-bold text-slate-600 bg-white border border-slate-300 rounded-lg hover:bg-slate-100"
+          >
+            Cancel
+          </button>
+          <button
+            onClick={handleSave}
+            disabled={isSubmitting}
+            className="px-4 py-2 text-xs font-bold text-white bg-blue-600 rounded-lg hover:bg-blue-700 disabled:opacity-50"
+          >
+            {isSubmitting ? 'Saving...' : 'Save'}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+};
 
 // Optimized sub-row component to cleanly display stacked values without conversion
 const CrateBreakdown = ({
@@ -85,15 +263,224 @@ const CrateBreakdown = ({
   );
 };
 
+// const ItemRow = memo(
+//   ({
+//     item,
+//     onOpenBarcode,
+//   }: {
+//     item: ReportItem;
+//     onOpenBarcode: (name: string, upc: string, image: string | null) => void;
+//   }) => {
+//     // Calculations apply to completed counts
+//     const fohCratePacks = (item.foh_crt || 0) * (item.pk_in_crt || 0);
+//     const bohCratePacks = (item.boh_crt || 0) * (item.pk_in_crt || 0);
+//     const computedTotalQty =
+//       item.foh + item.boh + fohCratePacks + bohCratePacks;
+
+//     const hasCSO = item.onHandCSO !== undefined && item.onHandCSO !== null;
+//     const variance = hasCSO ? computedTotalQty - item.onHandCSO : 0;
+//     const dollarVariance = variance * item.unitPrice;
+
+//     const formatCurrency = (val: number) =>
+//       new Intl.NumberFormat("en-CA", {
+//         style: "currency",
+//         currency: "CAD",
+//       }).format(val);
+
+//     const hasFohCrates =
+//       item.foh_crt !== null && item.foh_crt !== undefined && item.foh_crt >= 0;
+//     const hasBohCrates =
+//       item.boh_crt !== null && item.boh_crt !== undefined && item.boh_crt >= 0;
+
+//     // Render logic variations if the sequence was bypassed or incomplete
+//     if (!item.count_completed) {
+//       return (
+//         <tr className="border-b border-rose-100/70 bg-rose-50/20 hover:bg-rose-50/40 transition-colors group text-xs text-slate-400">
+//           <td className="p-2.5 sticky left-0 z-10 align-middle text-center w-14 bg-[#fffafb] group-hover:bg-rose-50/40 transition-colors border-r border-rose-100/40">
+//             <div className="w-9 h-9 rounded-lg bg-slate-100 flex-shrink-0 overflow-hidden border border-slate-200/40 mx-auto grayscale opacity-60">
+//               {item.image_url ? (
+//                 <img
+//                   src={item.image_url}
+//                   alt={item.name}
+//                   loading="lazy"
+//                   className="w-full h-full object-cover"
+//                 />
+//               ) : (
+//                 <div className="w-full h-full flex items-center justify-center text-slate-300">
+//                   <ImageIcon className="w-4 h-4 opacity-30" />
+//                 </div>
+//               )}
+//             </div>
+//           </td>
+//           <td className="p-3 sticky left-[56px] z-10 font-mono align-middle w-36 bg-[#fffafb] group-hover:bg-rose-50/40 transition-colors border-r border-rose-100/40">
+//             <button
+//               type="button"
+//               onClick={() =>
+//                 onOpenBarcode(item.name, item.upc_barcode, item.image_url)
+//               }
+//               className="flex items-center gap-1 font-mono text-slate-500 hover:bg-slate-100 px-1.5 py-1 rounded transition-colors text-left truncate w-full"
+//             >
+//               <ScanBarcode className="w-3.5 h-3.5 shrink-0 text-slate-400" />
+//               <span className="font-semibold truncate">
+//                 {item.upc_barcode || "NO UPC"}
+//               </span>
+//             </button>
+//           </td>
+//           <td
+//             className="p-3 sticky left-[200px] z-10 font-medium align-middle w-54 bg-[#fffafb] group-hover:bg-rose-50/40 transition-colors border-r border-rose-100/40 shadow-[4px_0_8px_-3px_rgba(0,0,0,0.04)] italic text-slate-500"
+//             title={item.name}
+//           >
+//             <div className="line-clamp-2 leading-tight break-words pr-2">
+//               {item.name}
+//             </div>
+//           </td>
+//           <td className="p-3 text-center align-middle w-28 font-medium text-slate-300">
+//             -
+//           </td>
+//           <td className="p-3 text-center align-middle w-28 font-medium text-slate-300">
+//             -
+//           </td>
+//           <td className="p-3 text-center align-middle w-24 border-x border-rose-100/40 font-medium text-slate-300">
+//             -
+//           </td>
+//           <td className="p-3 font-mono text-center align-middle w-28 text-rose-900/80 font-bold bg-rose-50/30">
+//             {item.onHandCSO}
+//           </td>
+//           <td className="p-3 text-center align-middle w-28 font-medium text-slate-300">
+//             -
+//           </td>
+//           <td className="p-3 text-right pr-6 align-middle w-32 font-medium text-slate-300">
+//             $-
+//           </td>
+//         </tr>
+//       );
+//     }
+
+//     return (
+//       <tr className="border-b border-slate-100 bg-white hover:bg-slate-50/60 transition-colors group text-xs">
+//         {/* STICKY LOGISTICS IMAGE */}
+//         <td className="p-2.5 sticky left-0 z-10 align-middle text-center w-14 bg-white group-hover:bg-slate-50/60 transition-colors border-r border-slate-100">
+//           <div className="w-9 h-9 rounded-lg bg-slate-50 flex-shrink-0 overflow-hidden border border-slate-200/60 mx-auto">
+//             {item.image_url ? (
+//               <img
+//                 src={item.image_url}
+//                 alt={item.name}
+//                 loading="lazy"
+//                 className="w-full h-full object-cover"
+//               />
+//             ) : (
+//               <div className="w-full h-full flex items-center justify-center text-slate-400">
+//                 <ImageIcon className="w-4 h-4 opacity-30" />
+//               </div>
+//             )}
+//           </div>
+//         </td>
+
+//         {/* STICKY INTERACTIVE UPC BUTTON */}
+//         <td className="p-3 sticky left-[56px] z-10 font-mono align-middle w-36 bg-white group-hover:bg-slate-50/60 transition-colors border-r border-slate-100">
+//           <button
+//             type="button"
+//             onClick={() =>
+//               onOpenBarcode(item.name, item.upc_barcode, item.image_url)
+//             }
+//             className="flex items-center gap-1 font-mono text-blue-600 hover:bg-blue-50/80 px-1.5 py-1 rounded transition-colors text-left truncate w-full"
+//           >
+//             <ScanBarcode className="w-3.5 h-3.5 shrink-0 text-blue-500" />
+//             <span className="font-bold truncate">
+//               {item.upc_barcode || "NO UPC"}
+//             </span>
+//           </button>
+//         </td>
+
+//         {/* STICKY DESCRIPTION COLUMN WITH LINE CLAMP WRAPPING */}
+//         <td
+//           className="p-3 sticky left-[200px] z-10 font-medium text-slate-900 align-middle w-54 shadow-[4px_0_8px_-3px_rgba(0,0,0,0.08)] bg-white group-hover:bg-slate-50/60 transition-colors border-r border-slate-100"
+//           title={item.name}
+//         >
+//           <div className="line-clamp-2 leading-tight break-words font-semibold text-slate-800 pr-1">
+//             {item.name}
+//           </div>
+//         </td>
+
+//         {/* FOH COLUMN */}
+//         <td className="p-3 font-mono text-center align-top w-28 bg-white group-hover:bg-slate-50/60">
+//           {hasFohCrates ? (
+//             <CrateBreakdown loosePacks={item.foh} rawCrates={item.foh_crt!} />
+//           ) : (
+//             <span className="font-bold text-slate-900 block mt-1">
+//               {item.foh}
+//             </span>
+//           )}
+//         </td>
+
+//         {/* BOH COLUMN */}
+//         <td className="p-3 font-mono text-center align-top w-28 bg-white group-hover:bg-slate-50/60">
+//           {hasBohCrates ? (
+//             <CrateBreakdown loosePacks={item.boh} rawCrates={item.boh_crt!} />
+//           ) : (
+//             <span className="font-bold text-slate-900 block mt-1">
+//               {item.boh}
+//             </span>
+//           )}
+//         </td>
+
+//         {/* COMPILED PACK QUANTITIES */}
+//         <td className="p-3 font-mono text-center align-middle w-24 bg-slate-50/40 group-hover:bg-slate-50/80 font-black text-slate-900 border-r border-slate-100">
+//           {computedTotalQty}
+//         </td>
+
+//         <td className="p-3 font-mono text-center align-middle w-28 bg-white group-hover:bg-slate-50/60 text-slate-600 font-semibold">
+//           {item.onHandCSO}
+//         </td>
+
+//         {/* PIECE VARIANCE */}
+//         <td className="p-3 font-mono text-center align-middle w-28 bg-white group-hover:bg-slate-50/60">
+//           <span
+//             className={`inline-flex items-center gap-0.5 font-bold px-1.5 py-0.5 rounded ${variance === 0 ? "text-slate-500" : variance > 0 ? "text-emerald-700 bg-emerald-50" : "text-rose-700 bg-rose-50"}`}
+//           >
+//             {variance > 0 ? `+${variance}` : variance}
+//             {variance > 0 && <ArrowUp className="w-3 h-3 shrink-0" />}
+//             {variance < 0 && <ArrowDown className="w-3 h-3 shrink-0" />}
+//           </span>
+//         </td>
+
+//         {/* VALUATION VARIANCE */}
+//         <td className="p-3 font-mono text-right pr-6 align-middle w-32 bg-white group-hover:bg-slate-50/60">
+//           {dollarVariance === 0 ? (
+//             <span className="text-slate-400 font-medium">$0.00</span>
+//           ) : (
+//             <span
+//               className={`font-bold ${dollarVariance > 0 ? "text-emerald-600" : "text-rose-600"}`}
+//             >
+//               {dollarVariance > 0
+//                 ? `+${formatCurrency(dollarVariance)}`
+//                 : formatCurrency(dollarVariance)}
+//             </span>
+//           )}
+//         </td>
+//       </tr>
+//     );
+//   },
+// );
 const ItemRow = memo(
   ({
     item,
     onOpenBarcode,
+    onOpenManagerModal,
+    canEditManagerCount,
   }: {
     item: ReportItem;
     onOpenBarcode: (name: string, upc: string, image: string | null) => void;
+    onOpenManagerModal?: (item: ReportItem) => void;
+    canEditManagerCount?: boolean;
   }) => {
-    // Calculations apply to completed counts
+    // Check if manager counts exist to highlight row
+    const isManagerUpdated =
+      item.manager_foh !== null ||
+      item.manager_boh !== null ||
+      item.manager_foh_crt !== null ||
+      item.manager_boh_crt !== null;
+
     const fohCratePacks = (item.foh_crt || 0) * (item.pk_in_crt || 0);
     const bohCratePacks = (item.boh_crt || 0) * (item.pk_in_crt || 0);
     const computedTotalQty =
@@ -114,8 +501,8 @@ const ItemRow = memo(
     const hasBohCrates =
       item.boh_crt !== null && item.boh_crt !== undefined && item.boh_crt >= 0;
 
-    // Render logic variations if the sequence was bypassed or incomplete
     if (!item.count_completed) {
+      // Incomplete table row remains non-editable
       return (
         <tr className="border-b border-rose-100/70 bg-rose-50/20 hover:bg-rose-50/40 transition-colors group text-xs text-slate-400">
           <td className="p-2.5 sticky left-0 z-10 align-middle text-center w-14 bg-[#fffafb] group-hover:bg-rose-50/40 transition-colors border-r border-rose-100/40">
@@ -156,32 +543,35 @@ const ItemRow = memo(
               {item.name}
             </div>
           </td>
-          <td className="p-3 text-center align-middle w-28 font-medium text-slate-300">
-            -
-          </td>
-          <td className="p-3 text-center align-middle w-28 font-medium text-slate-300">
-            -
-          </td>
-          <td className="p-3 text-center align-middle w-24 border-x border-rose-100/40 font-medium text-slate-300">
-            -
-          </td>
+          <td className="p-3 text-center align-middle w-28 font-medium text-slate-300">-</td>
+          <td className="p-3 text-center align-middle w-28 font-medium text-slate-300">-</td>
+          <td className="p-3 text-center align-middle w-24 border-x border-rose-100/40 font-medium text-slate-300">-</td>
           <td className="p-3 font-mono text-center align-middle w-28 text-rose-900/80 font-bold bg-rose-50/30">
             {item.onHandCSO}
           </td>
-          <td className="p-3 text-center align-middle w-28 font-medium text-slate-300">
-            -
-          </td>
-          <td className="p-3 text-right pr-6 align-middle w-32 font-medium text-slate-300">
-            $-
-          </td>
+          <td className="p-3 text-center align-middle w-28 font-medium text-slate-300">-</td>
+          <td className="p-3 text-right pr-6 align-middle w-32 font-medium text-slate-300">$-</td>
         </tr>
       );
     }
 
     return (
-      <tr className="border-b border-slate-100 bg-white hover:bg-slate-50/60 transition-colors group text-xs">
+      <tr
+        onClick={() => {
+          if (canEditManagerCount && onOpenManagerModal) {
+            onOpenManagerModal(item);
+          }
+        }}
+        className={`border-b border-slate-100 transition-colors group text-xs ${
+          canEditManagerCount ? 'cursor-pointer' : ''
+        } ${
+          isManagerUpdated
+            ? 'bg-amber-50/80 hover:bg-amber-100/60'
+            : 'bg-white hover:bg-slate-50/60'
+        }`}
+      >
         {/* STICKY LOGISTICS IMAGE */}
-        <td className="p-2.5 sticky left-0 z-10 align-middle text-center w-14 bg-white group-hover:bg-slate-50/60 transition-colors border-r border-slate-100">
+        <td className="p-2.5 sticky left-0 z-10 align-middle text-center w-14 group-hover:bg-opacity-80 transition-colors border-r border-slate-100">
           <div className="w-9 h-9 rounded-lg bg-slate-50 flex-shrink-0 overflow-hidden border border-slate-200/60 mx-auto">
             {item.image_url ? (
               <img
@@ -199,12 +589,13 @@ const ItemRow = memo(
         </td>
 
         {/* STICKY INTERACTIVE UPC BUTTON */}
-        <td className="p-3 sticky left-[56px] z-10 font-mono align-middle w-36 bg-white group-hover:bg-slate-50/60 transition-colors border-r border-slate-100">
+        <td className="p-3 sticky left-[56px] z-10 font-mono align-middle w-36 group-hover:bg-opacity-80 transition-colors border-r border-slate-100">
           <button
             type="button"
-            onClick={() =>
-              onOpenBarcode(item.name, item.upc_barcode, item.image_url)
-            }
+            onClick={(e) => {
+              e.stopPropagation();
+              onOpenBarcode(item.name, item.upc_barcode, item.image_url);
+            }}
             className="flex items-center gap-1 font-mono text-blue-600 hover:bg-blue-50/80 px-1.5 py-1 rounded transition-colors text-left truncate w-full"
           >
             <ScanBarcode className="w-3.5 h-3.5 shrink-0 text-blue-500" />
@@ -214,9 +605,9 @@ const ItemRow = memo(
           </button>
         </td>
 
-        {/* STICKY DESCRIPTION COLUMN WITH LINE CLAMP WRAPPING */}
+        {/* STICKY DESCRIPTION COLUMN */}
         <td
-          className="p-3 sticky left-[200px] z-10 font-medium text-slate-900 align-middle w-54 shadow-[4px_0_8px_-3px_rgba(0,0,0,0.08)] bg-white group-hover:bg-slate-50/60 transition-colors border-r border-slate-100"
+          className="p-3 sticky left-[200px] z-10 font-medium text-slate-900 align-middle w-54 shadow-[4px_0_8px_-3px_rgba(0,0,0,0.08)] group-hover:bg-opacity-80 transition-colors border-r border-slate-100"
           title={item.name}
         >
           <div className="line-clamp-2 leading-tight break-words font-semibold text-slate-800 pr-1">
@@ -225,7 +616,7 @@ const ItemRow = memo(
         </td>
 
         {/* FOH COLUMN */}
-        <td className="p-3 font-mono text-center align-top w-28 bg-white group-hover:bg-slate-50/60">
+        <td className="p-3 font-mono text-center align-top w-28">
           {hasFohCrates ? (
             <CrateBreakdown loosePacks={item.foh} rawCrates={item.foh_crt!} />
           ) : (
@@ -236,7 +627,7 @@ const ItemRow = memo(
         </td>
 
         {/* BOH COLUMN */}
-        <td className="p-3 font-mono text-center align-top w-28 bg-white group-hover:bg-slate-50/60">
+        <td className="p-3 font-mono text-center align-top w-28">
           {hasBohCrates ? (
             <CrateBreakdown loosePacks={item.boh} rawCrates={item.boh_crt!} />
           ) : (
@@ -251,14 +642,20 @@ const ItemRow = memo(
           {computedTotalQty}
         </td>
 
-        <td className="p-3 font-mono text-center align-middle w-28 bg-white group-hover:bg-slate-50/60 text-slate-600 font-semibold">
+        <td className="p-3 font-mono text-center align-middle w-28 text-slate-600 font-semibold">
           {item.onHandCSO}
         </td>
 
         {/* PIECE VARIANCE */}
-        <td className="p-3 font-mono text-center align-middle w-28 bg-white group-hover:bg-slate-50/60">
+        <td className="p-3 font-mono text-center align-middle w-28">
           <span
-            className={`inline-flex items-center gap-0.5 font-bold px-1.5 py-0.5 rounded ${variance === 0 ? "text-slate-500" : variance > 0 ? "text-emerald-700 bg-emerald-50" : "text-rose-700 bg-rose-50"}`}
+            className={`inline-flex items-center gap-0.5 font-bold px-1.5 py-0.5 rounded ${
+              variance === 0
+                ? "text-slate-500"
+                : variance > 0
+                ? "text-emerald-700 bg-emerald-50"
+                : "text-rose-700 bg-rose-50"
+            }`}
           >
             {variance > 0 ? `+${variance}` : variance}
             {variance > 0 && <ArrowUp className="w-3 h-3 shrink-0" />}
@@ -267,12 +664,14 @@ const ItemRow = memo(
         </td>
 
         {/* VALUATION VARIANCE */}
-        <td className="p-3 font-mono text-right pr-6 align-middle w-32 bg-white group-hover:bg-slate-50/60">
+        <td className="p-3 font-mono text-right pr-6 align-middle w-32">
           {dollarVariance === 0 ? (
             <span className="text-slate-400 font-medium">$0.00</span>
           ) : (
             <span
-              className={`font-bold ${dollarVariance > 0 ? "text-emerald-600" : "text-rose-600"}`}
+              className={`font-bold ${
+                dollarVariance > 0 ? "text-emerald-600" : "text-rose-600"
+              }`}
             >
               {dollarVariance > 0
                 ? `+${formatCurrency(dollarVariance)}`
@@ -282,7 +681,7 @@ const ItemRow = memo(
         </td>
       </tr>
     );
-  },
+  }
 );
 ItemRow.displayName = "ItemRow";
 
@@ -316,6 +715,7 @@ function RouteComponent() {
   const [newNoteText, setNewNoteText] = useState("");
   const [isThreadOpen, setIsThreadOpen] = useState(false);
   const [postingNote, setPostingNote] = useState(false);
+  const [lastCountedAt, setLastCountedAt] = useState<string | null>(null);
 
   useEffect(() => {
     setShowPasswordDialog(true);
@@ -347,6 +747,7 @@ function RouteComponent() {
       // Supporting unified response payload containing the root instance container mapping
       setItems(res.data.data || []);
       setInstanceId(res.data.instanceId || null);
+      setLastCountedAt(res.data.lastCountedAt || null); // Save local converted timestamp
 
       if (res.data.instanceId) {
         fetchThreadNotes(res.data.instanceId);
@@ -456,9 +857,7 @@ function RouteComponent() {
       );
 
       if (response.data.success) {
-        alert(
-          `Ticket Generated Succefully for ${site}!`,
-        );
+        alert(`Ticket Generated Succefully for ${site}!`);
       } else {
         alert(
           `⚠️ Sync dispatch rejected: ${response.data.reason || "Unknown processing pipeline state."}`,
@@ -489,78 +888,94 @@ function RouteComponent() {
       {hasAccess && (
         <div className="min-h-screen bg-slate-50/60 p-3 sm:p-4 lg:p-6 flex flex-col justify-start items-center select-none font-sans antialiased w-full max-w-full overflow-x-hidden">
           <div className="w-full max-w-full lg:max-w-[1400px]">
-            {/* Header / Filter Module */}
-            <div className="flex flex-col xl:flex-row xl:items-center justify-between gap-4 mb-6 bg-white p-4 sm:p-5 rounded-2xl border border-slate-200/70 shadow-2xs">
-              <div>
-                <h1 className="text-xl md:text-2xl font-black text-slate-900 tracking-tight flex items-center gap-2">
-                  Cycle Count Analytics
-                </h1>
+            {/* Header / Filter Module - 2-Row Optimized Layout */}
+            <div className="bg-white p-4 sm:p-5 rounded-2xl border border-slate-200/70 shadow-2xs mb-6 space-y-4">
+              {/* ROW 1: Title & Controls */}
+              <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+                <div>
+                  <h1 className="text-xl md:text-2xl font-black text-slate-900 tracking-tight flex items-center gap-2">
+                    Cycle Count Analytics
+                  </h1>
+                  {lastCountedAt && (
+                    <div className="mt-1 flex items-center gap-1.5 text-xs text-slate-500 font-medium">
+                      <span className="inline-block w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
+                      <span>Count completed at:</span>
+                      <span className="font-bold text-slate-700 bg-slate-100 px-2 py-0.5 rounded-md border border-slate-200/80">
+                        {lastCountedAt}
+                      </span>
+                    </div>
+                  )}
+                </div>
+
+                {/* Date, Location, and Action Buttons */}
+                <div className="flex flex-wrap items-center gap-2.5">
+                  <DatePicker
+                    date={date}
+                    setDate={(val) =>
+                      typeof val === "function"
+                        ? setDate(val(date))
+                        : setDate(val)
+                    }
+                    restrictToPast
+                  />
+                  <LocationPicker
+                    setStationName={setSite}
+                    value="stationName"
+                    defaultValue={site}
+                  />
+                  {/* ADMIN FORCED WORKER DISTRIBUTOR BUTTON */}
+                  {user?.access?.cycleCount?.report?.generateCsoTicket && (
+                    <button
+                      type="button"
+                      onClick={handleFinalizeAndSync}
+                      disabled={syncing || !site || items.length === 0}
+                      className="flex items-center gap-1.5 px-4 py-2 bg-blue-600 hover:bg-blue-700 disabled:bg-slate-100 disabled:text-slate-400 font-bold border border-transparent text-white rounded-xl transition-all text-xs shadow-xs cursor-pointer disabled:cursor-not-allowed shrink-0 h-10"
+                    >
+                      <RefreshCw
+                        className={`w-3.5 h-3.5 ${syncing ? "animate-spin" : ""}`}
+                      />
+                      <span>
+                        {syncing ? "Pushing Counts..." : "Generate CSO Ticket"}
+                      </span>
+                    </button>
+                  )}
+                </div>
               </div>
 
-              {/* CENTER CONSOLE: EXPANDED COMMENT INSTANCE FIELD */}
-              {instanceId ? (
-                <div className="w-full md:flex-1 md:max-w-4xl bg-slate-50 border border-slate-200/80 rounded-xl p-2 flex items-center gap-2 mx-0 xl:mx-4">
-                  <textarea
-                    value={newNoteText}
-                    onChange={(e) => setNewNoteText(e.target.value)}
-                    placeholder="Add comments related to this count report....."
-                    rows={1}
-                    className="flex-1 bg-transparent text-xs p-1.5 px-2 focus:outline-hidden resize-none font-medium placeholder-slate-400 max-h-10 text-slate-800"
-                  />
-                  <button
-                    onClick={handlePostNote}
-                    disabled={!newNoteText.trim() || postingNote}
-                    className="p-2 bg-slate-900 text-white rounded-lg hover:bg-black transition-all disabled:opacity-30 disabled:hover:bg-slate-900 shrink-0"
-                  >
-                    <Send className="w-3.5 h-3.5" />
-                  </button>
-                  <div className="h-6 w-[1px] bg-slate-200 mx-0.5 shrink-0" />
-                  <button
-                    onClick={() => setIsThreadOpen(true)}
-                    title={`View Thread (${notes.length})`}
-                    className="flex items-center gap-1 px-2.5 py-1.5 bg-white hover:bg-slate-100 border border-slate-200 text-slate-700 rounded-lg transition-colors text-[11px] font-bold shrink-0 shadow-3xs"
-                  >
-                    <Eye className="w-3.5 h-3.5 text-slate-500" />
-                    <span>({notes.length})</span>
-                  </button>
-                </div>
-              ) : (
-                <div className="flex-1 max-w-2xl text-center py-2 text-xs italic text-slate-400 font-medium">
-                  Select a location setup matching an active scheduled sequence
-                  to drop thread comments.
-                </div>
-              )}
-
-              <div className="flex flex-wrap items-center gap-2.5 shrink-0">
-                <DatePicker
-                  date={date}
-                  setDate={(val) =>
-                    typeof val === "function"
-                      ? setDate(val(date))
-                      : setDate(val)
-                  }
-                  restrictToPast
-                />
-                <LocationPicker
-                  setStationName={setSite}
-                  value="stationName"
-                  defaultValue={site}
-                />
-                {/* 💡 ADMIN FORCED WORKER DISTRIBUTOR BUTTON */}
-                {user?.access?.cycleCount?.report?.generateCsoTicket && (
-                  <button
-                    type="button"
-                    onClick={handleFinalizeAndSync}
-                    disabled={syncing || !site || items.length === 0}
-                    className="flex items-center gap-1.5 px-4 py-2 bg-blue-600 hover:bg-blue-700 disabled:bg-slate-100 disabled:text-slate-400 font-bold border border-transparent text-white rounded-xl transition-all text-xs shadow-xs cursor-pointer disabled:cursor-not-allowed shrink-0 h-9"
-                  >
-                    <RefreshCw
-                      className={`w-3.5 h-3.5 ${syncing ? "animate-spin" : ""}`}
+              {/* ROW 2: Expanded Comment Thread Bar */}
+              <div className="pt-2 border-t border-slate-100">
+                {instanceId ? (
+                  <div className="w-full bg-slate-50 border border-slate-200/80 rounded-xl p-2 flex items-center gap-2.5 focus-within:ring-2 focus-within:ring-slate-900/10 transition-all">
+                    <textarea
+                      value={newNoteText}
+                      onChange={(e) => setNewNoteText(e.target.value)}
+                      placeholder="Add comments related to this count report..."
+                      rows={1}
+                      className="flex-1 bg-transparent text-xs sm:text-sm p-1.5 px-2 focus:outline-hidden resize-none font-medium placeholder-slate-400 min-h-[38px] max-h-20 text-slate-800"
                     />
-                    <span>
-                      {syncing ? "Pushing Counts..." : "Generate CSO Ticket"}
-                    </span>
-                  </button>
+                    <button
+                      onClick={handlePostNote}
+                      disabled={!newNoteText.trim() || postingNote}
+                      className="p-2.5 bg-slate-900 text-white rounded-lg hover:bg-black transition-all disabled:opacity-30 disabled:hover:bg-slate-900 shrink-0 cursor-pointer disabled:cursor-not-allowed"
+                      title="Post comment"
+                    >
+                      <Send className="w-4 h-4" />
+                    </button>
+                    <div className="h-6 w-[1px] bg-slate-200 mx-0.5 shrink-0" />
+                    <button
+                      onClick={() => setIsThreadOpen(true)}
+                      title={`View Thread (${notes.length})`}
+                      className="flex items-center gap-1.5 px-3 py-2 bg-white hover:bg-slate-100 border border-slate-200 text-slate-700 rounded-lg transition-colors text-xs font-bold shrink-0 shadow-2xs cursor-pointer"
+                    >
+                      <Eye className="w-4 h-4 text-slate-500" />
+                      <span>View Thread ({notes.length})</span>
+                    </button>
+                  </div>
+                ) : (
+                  <div className="w-full bg-slate-50/60 border border-dashed border-slate-200 rounded-xl text-center py-3 px-4 text-xs italic text-slate-400 font-medium">
+                    Select a location setup matching an active scheduled
+                    sequence to drop thread comments.
+                  </div>
                 )}
               </div>
             </div>

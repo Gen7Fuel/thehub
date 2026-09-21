@@ -1953,6 +1953,121 @@ router.get('/v2/daily-counts', async (req, res) => {
   }
 });
 
+// router.get("/daily-report", async (req, res) => {
+//   const { site, date } = req.query; // Expects site: "Rankin", date: "YYYY-MM-DD"
+//   const db = getPg();
+
+//   if (!site || !date) {
+//     return res.status(400).json({ success: false, message: "Missing required parameters: site and date." });
+//   }
+
+//   try {
+//     // 1. Resolve the text site name to its MongoDB ID string reference
+//     const locationDoc = await Location.findOne({ site }).lean();
+//     if (!locationDoc) {
+//       return res.status(404).json({ success: false, message: `Location profile not found for site: ${site}` });
+//     }
+//     const siteMongoIdStr = locationDoc._id.toString();
+
+//     // 2. Fetch the instance row from PostgreSQL
+//     const instance = await db("cycle_count_instance")
+//       .where({ site_mongo_id: siteMongoIdStr, date: date })
+//       .first();
+
+//     // console.log("Resolved instance for report query:", instance.id);
+
+//     // If no instance exists for that day, return an empty array gracefully
+//     if (!instance) {
+//       return res.status(200).json({ success: true, data: [] });
+//     }
+
+//     // 3. Fetch all Mongo Product Categories upfront to avoid N+1 query performance hits
+//     const mongoCategories = await ProductCategory.find({}).lean();
+//     const categoryMap = new Map(mongoCategories.map(cat => [Number(cat.Number), cat.Name]));
+
+//     // 4. Query all items tied to this instance, including case/crate breakdowns & master product details
+//     const reportItems = await db("cycle_count_items as cci")
+//       .join("item_bk as ib", "cci.product_id", "ib.id")
+//       .where({
+//         "cci.instance_id": instance.id
+//         // "cci.count_completed": true // Added condition here
+//       })
+//       .select(
+//         "cci.id as itemId",
+//         "cci.product_id as productId",
+//         "ib.description as name",
+//         "ib.upc_barcode as upc_barcode",
+//         "ib.image_url",
+//         "ib.retail as unitPrice",
+//         "ib.pk_in_crt",
+//         "ib.category_id as categoryId",
+//         "ib.on_hand_at_count as onHandCSO",
+//         "cci.foh",
+//         "cci.foh_crt",
+//         "cci.foh_case",
+//         "cci.boh",
+//         "cci.boh_crt",
+//         "cci.boh_case",
+//         "cci.count_completed",
+//         "cci.priority"
+//       );
+
+//     // console.log(`Fetched ${reportItems.length} items for report generation.`);
+
+//     // 5. Calculate total pieces and stitch the categoryName into the payload
+//     const parsedItems = reportItems.map(item => {
+//       const totalFoh = Number(item.foh || 0);
+//       const totalBoh = Number(item.boh || 0);
+//       const compositeTotalQty = totalFoh + totalBoh;
+//       const cleanCategoryId = item.categoryId ? Number(item.categoryId) : 0;
+
+//       return {
+//         _id: String(item.itemId),
+//         productId: item.productId,
+//         name: item.name,
+//         upc_barcode: item.upc_barcode,
+//         image_url: item.image_url,
+//         unitPrice: item.unitPrice ? Number(item.unitPrice) : 0,
+//         onHandCSO: item.onHandCSO ? Number(item.onHandCSO) : 0,
+//         categoryId: cleanCategoryId,
+//         pk_in_crt: item.pk_in_crt ? Number(item.pk_in_crt) : 0,
+
+//         // Match Postgres categoryId with Mongo's "Number" field to get the string Name
+//         categoryName: categoryMap.get(cleanCategoryId) || "Unknown Category",
+
+//         // Loose counts
+//         foh: totalFoh,
+//         boh: totalBoh,
+
+//         // Case / Crate tracking metrics
+//         foh_crt: item.foh_crt,
+//         foh_case: item.foh_case,
+//         boh_crt: item.boh_crt,
+//         boh_case: item.boh_case,
+
+//         totalQty: compositeTotalQty,
+//         count_completed: item.count_completed,
+//         priority: item.priority,
+//         comments: []
+//       };
+//     });
+
+//     return res.status(200).json({
+//       success: true,
+//       instanceId: instance.id,
+//       date: instance.date,
+//       day: instance.day,
+//       data: parsedItems
+//     });
+
+//   } catch (error) {
+//     console.error("Error generating relational variance report query:", error);
+//     return res.status(500).json({ success: false, message: "Internal server registry error processing report data." });
+//   }
+// });
+
+// GET: Fetch all notes for an instance with user profiles
+
 router.get("/daily-report", async (req, res) => {
   const { site, date } = req.query; // Expects site: "Rankin", date: "YYYY-MM-DD"
   const db = getPg();
@@ -1978,19 +2093,18 @@ router.get("/daily-report", async (req, res) => {
 
     // If no instance exists for that day, return an empty array gracefully
     if (!instance) {
-      return res.status(200).json({ success: true, data: [] });
+      return res.status(200).json({ success: true, data: [], lastCountedAt: null });
     }
 
     // 3. Fetch all Mongo Product Categories upfront to avoid N+1 query performance hits
     const mongoCategories = await ProductCategory.find({}).lean();
     const categoryMap = new Map(mongoCategories.map(cat => [Number(cat.Number), cat.Name]));
 
-    // 4. Query all items tied to this instance, including case/crate breakdowns & master product details
+    // 4. Query all items tied to this instance, including cci.updated_at
     const reportItems = await db("cycle_count_items as cci")
       .join("item_bk as ib", "cci.product_id", "ib.id")
       .where({
         "cci.instance_id": instance.id
-        // "cci.count_completed": true // Added condition here
       })
       .select(
         "cci.id as itemId",
@@ -2009,12 +2123,30 @@ router.get("/daily-report", async (req, res) => {
         "cci.boh_crt",
         "cci.boh_case",
         "cci.count_completed",
-        "cci.priority"
+        "cci.priority",
+        "cci.updated_at" // Added updated_at column
       );
 
-    // console.log(`Fetched ${reportItems.length} items for report generation.`);
+    // 5. Find the most recent updated_at timestamp among items
+    let lastCountedAt = null;
+    if (reportItems.length > 0) {
+      const validTimestamps = reportItems
+        .map(i => i.updated_at)
+        .filter(Boolean)
+        .map(t => new Date(t).getTime());
 
-    // 5. Calculate total pieces and stitch the categoryName into the payload
+      if (validTimestamps.length > 0) {
+        const maxTimestamp = new Date(Math.max(...validTimestamps));
+        const timeZone = locationDoc.timezone || "America/New_York"; // Fallback if timezone not explicitly defined
+        
+        // Convert UTC database time to Station Local Time
+        lastCountedAt = moment(maxTimestamp)
+          .tz(timeZone)
+          .format("YYYY-MM-DD hh:mm A z");
+      }
+    }
+
+    // 6. Calculate total pieces and stitch category name
     const parsedItems = reportItems.map(item => {
       const totalFoh = Number(item.foh || 0);
       const totalBoh = Number(item.boh || 0);
@@ -2048,6 +2180,7 @@ router.get("/daily-report", async (req, res) => {
         totalQty: compositeTotalQty,
         count_completed: item.count_completed,
         priority: item.priority,
+        updated_at: item.updated_at,
         comments: []
       };
     });
@@ -2057,12 +2190,54 @@ router.get("/daily-report", async (req, res) => {
       instanceId: instance.id,
       date: instance.date,
       day: instance.day,
+      lastCountedAt, // Returns converted station local timestamp
       data: parsedItems
     });
 
   } catch (error) {
     console.error("Error generating relational variance report query:", error);
     return res.status(500).json({ success: false, message: "Internal server registry error processing report data." });
+  }
+});
+
+// PUT /api/cycle-counts/items/:id/manager-count
+router.put('/items/:id/manager-count', async (req, res) => {
+  try {
+    const { id } = req.params;
+    const {
+      manager_foh,
+      manager_boh,
+      manager_foh_crt,
+      manager_boh_crt,
+      manager_foh_case,
+      manager_boh_case,
+    } = req.body;
+
+    const payload = {
+      manager_foh: manager_foh !== undefined && manager_foh !== '' ? Number(manager_foh) : null,
+      manager_boh: manager_boh !== undefined && manager_boh !== '' ? Number(manager_boh) : null,
+      manager_foh_crt: manager_foh_crt !== undefined && manager_foh_crt !== '' ? Number(manager_foh_crt) : null,
+      manager_boh_crt: manager_boh_crt !== undefined && manager_boh_crt !== '' ? Number(manager_boh_crt) : null,
+      manager_foh_case: manager_foh_case !== undefined && manager_foh_case !== '' ? Number(manager_foh_case) : null,
+      manager_boh_case: manager_boh_case !== undefined && manager_boh_case !== '' ? Number(manager_boh_case) : null,
+    };
+
+    // Check live table first
+    let updatedCount = await knex('cycle_count_items')
+      .where({ _id: id })
+      .update(payload);
+
+    // If item was archived, update archive table instead
+    if (updatedCount === 0) {
+      await knex('cycle_count_items_archive')
+        .where({ _id: id })
+        .update(payload);
+    }
+
+    res.json({ success: true, data: payload });
+  } catch (error) {
+    console.error('Error updating manager count:', error);
+    res.status(500).json({ error: 'Failed to update manager count' });
   }
 });
 
