@@ -1,8 +1,48 @@
 const Location = require("../models/Location");
 const ItemBk = require("../pg/models/itemBk"); // Assumed structure
 const { getPg } = require("../config/pg");
-const { format, addDays, nextMonday } = require("date-fns");
+const { format, addDays, nextMonday, getMonth } = require("date-fns");
 const cron = require("node-cron");
+
+// ----------------------------------------------------------------------
+// 🗓️ STORE SCHEDULE CONFIGURATION MAPPING
+// ----------------------------------------------------------------------
+// Maps store stationName / legalName identifiers to their scheduled count day.
+const STORE_SCHEDULE_MAP = {
+  "rankin": "Sunday",
+  "walpole": "Sunday",
+  "couchiching": "Sunday",
+  "wavers west": "Sunday",
+  "wavers east": "Sunday",
+  "silver grizzly": "Wednesday",
+  "oliver": "Thursday",
+  "osoyoos": "Thursday",
+  "charlies": "Thursday"
+};
+
+/**
+ * Resolves the scheduled count day for a given store model instance.
+ * Defaults to Sunday if unmapped.
+ */
+function getStoreScheduledDay(store) {
+  const name = (store.stationName || store.legalName || "").toLowerCase().trim();
+  for (const [key, day] of Object.entries(STORE_SCHEDULE_MAP)) {
+    if (name.includes(key)) return day;
+  }
+  return "Sunday"; // Fallback default
+}
+
+/**
+ * Checks whether a given target date is the last occurrence of its day-of-week in that month.
+ * 
+ * @param {Date} targetDate 
+ * @returns {boolean}
+ */
+function isLastDayOfWeekInMonth(targetDate) {
+  const currentMonth = getMonth(targetDate);
+  const nextWeekSameDay = addDays(targetDate, 7);
+  return getMonth(nextWeekSameDay) !== currentMonth;
+}
 
 async function runWeeklyInstanceCalculations() {
   const db = getPg();
@@ -14,10 +54,100 @@ async function runWeeklyInstanceCalculations() {
 
     for (const store of stores) {
       const siteId = store._id.toString();
-      console.log(`\nProcessing Store: ${store.stationName} (${siteId})`);
+      const scheduledDayName = getStoreScheduledDay(store);
+      console.log(`\nProcessing Store: ${store.stationName} (${siteId}) | Target Day: ${scheduledDayName}`);
 
       let pool = null;
+      let scheduledNegativeProductIds = new Set();
 
+      // ==================================================================
+      // PASS 1: CHECK FOR END-OF-MONTH SCHEDULED NEGATIVE INVENTORY COUNT
+      // ==================================================================
+      for (let i = 0; i < 7; i++) {
+        const targetDate = addDays(startDate, i);
+        const dayName = format(targetDate, "EEEE");
+
+        if (dayName.toLowerCase() === scheduledDayName.toLowerCase()) {
+          if (isLastDayOfWeekInMonth(targetDate)) {
+            const dateStr = format(targetDate, "yyyy-MM-dd");
+            console.log(`   [END-OF-MONTH DETECTED] ${dateStr} (${dayName}) is the last ${dayName} of the month.`);
+
+            // Query all active items for site with negative on_hand_qty sorted negative-first
+            const negativeItems = await db("item_bk")
+              .where({ site: siteId, active: true, allow_cycle_count: true })
+              .where("on_hand_qty", "<", 0)
+              .orderBy("on_hand_qty", "asc")
+              .select("id", "on_hand_qty");
+
+            if (negativeItems.length > 0) {
+              console.log(`   [END-OF-MONTH] Found ${negativeItems.length} items with negative on-hand quantity.`);
+
+              try {
+                await db.transaction(async (trx) => {
+                  // Check existing instance
+                  let instance = await trx("cycle_count_instance")
+                    .where({ site_mongo_id: siteId, date: dateStr })
+                    .first();
+
+                  let instanceId;
+
+                  if (!instance) {
+                    const [inserted] = await trx("cycle_count_instance")
+                      .insert({
+                        date: dateStr,
+                        day: dayName,
+                        is_scheduled: true,
+                        site_mongo_id: siteId,
+                        group_id: null
+                      })
+                      .returning("id");
+
+                    instanceId = typeof inserted === 'object' ? inserted.id : inserted;
+                  } else {
+                    instanceId = instance.id;
+                    await trx("cycle_count_instance")
+                      .where({ id: instanceId })
+                      .update({ is_scheduled: true, group_id: null });
+                  }
+
+                  // Prepare items for insertion
+                  const childRows = negativeItems.map(item => ({
+                    instance_id: instanceId,
+                    product_id: item.id,
+                    foh: null,
+                    boh: null,
+                    count_completed: false,
+                    priority: false
+                  }));
+
+                  // Insert with conflict resolution to prevent duplicate entries
+                  const chunkSize = 1000;
+                  for (let c = 0; c < childRows.length; c += chunkSize) {
+                    await trx("cycle_count_items")
+                      .insert(childRows.slice(c, c + chunkSize))
+                      .onConflict(["instance_id", "product_id"])
+                      .ignore();
+                  }
+
+                  // Track negative item IDs to exclude them from standard auto-generated counts
+                  negativeItems.forEach(item => scheduledNegativeProductIds.add(item.id));
+                });
+
+                console.log(`   [SUCCESS] Scheduled EOM negative instance created/updated for ${dateStr} with ${negativeItems.length} products.`);
+              } catch (eomErr) {
+                console.error(`   [ERROR] Failed creating EOM scheduled instance for ${dateStr}:`, eomErr.message);
+              }
+            } else {
+              console.log(`   [END-OF-MONTH] No negative on-hand quantity items found for ${dateStr}.`);
+            }
+          }
+          break; // Day matched for this week, exit Pass 1 loop
+        }
+      }
+
+      // ==================================================================
+      // PASS 2: REGULAR AUTO-SORT DAILY CYCLE COUNT GENERATION
+      // ==================================================================
       for (let i = 0; i < 7; i++) {
         const targetDate = addDays(startDate, i);
         const dateStr = format(targetDate, "yyyy-MM-dd");
@@ -36,10 +166,16 @@ async function runWeeklyInstanceCalculations() {
         // --- AUTO-SORT GENERATION ENGINE ---
         if (!pool) {
           const allRanked = await ItemBk.getRankedItemsForSite(siteId);
+          
+          // Filter out negative items already booked in the scheduled EOM count
+          const filteredRanked = allRanked.filter(
+            item => !scheduledNegativeProductIds.has(item.id)
+          );
+
           pool = {
-            A: allRanked.filter(i => i.grade === 'A'),
-            B: allRanked.filter(i => i.grade === 'B'),
-            C: allRanked.filter(i => i.grade === 'C')
+            A: filteredRanked.filter(i => i.grade === 'A'),
+            B: filteredRanked.filter(i => i.grade === 'B'),
+            C: filteredRanked.filter(i => i.grade === 'C')
           };
         }
 
