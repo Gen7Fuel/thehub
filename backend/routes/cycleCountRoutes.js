@@ -2114,6 +2114,7 @@ router.get("/daily-report", async (req, res) => {
         "ib.image_url",
         "ib.retail as unitPrice",
         "ib.pk_in_crt",
+        // "ib.crt_in_case",
         "ib.category_id as categoryId",
         "ib.on_hand_at_count as onHandCSO",
         "cci.foh",
@@ -2122,6 +2123,12 @@ router.get("/daily-report", async (req, res) => {
         "cci.boh",
         "cci.boh_crt",
         "cci.boh_case",
+        "cci.manager_foh",
+        "cci.manager_boh",
+        "cci.manager_foh_crt",
+        "cci.manager_boh_crt",
+        // "cci.manager_foh_case",
+        // "cci.manager_boh_case",
         "cci.count_completed",
         "cci.priority",
         "cci.updated_at" // Added updated_at column
@@ -2163,6 +2170,7 @@ router.get("/daily-report", async (req, res) => {
         onHandCSO: item.onHandCSO ? Number(item.onHandCSO) : 0,
         categoryId: cleanCategoryId,
         pk_in_crt: item.pk_in_crt ? Number(item.pk_in_crt) : 0,
+        crt_in_case: item.crt_in_case ? Number(item.crt_in_case) : 0,
 
         // Match Postgres categoryId with Mongo's "Number" field to get the string Name
         categoryName: categoryMap.get(cleanCategoryId) || "Unknown Category",
@@ -2176,6 +2184,12 @@ router.get("/daily-report", async (req, res) => {
         foh_case: item.foh_case,
         boh_crt: item.boh_crt,
         boh_case: item.boh_case,
+        manager_foh: item.manager_foh,
+        manager_boh: item.manager_boh,
+        manager_foh_crt: item.manager_foh_crt,
+        manager_boh_crt: item.manager_boh_crt,
+        manager_foh_case: item.manager_foh_case,
+        manager_boh_case: item.manager_boh_case,
 
         totalQty: compositeTotalQty,
         count_completed: item.count_completed,
@@ -2188,6 +2202,7 @@ router.get("/daily-report", async (req, res) => {
     return res.status(200).json({
       success: true,
       instanceId: instance.id,
+      isScheduled: instance.is_scheduled,
       date: instance.date,
       day: instance.day,
       lastCountedAt, // Returns converted station local timestamp
@@ -2212,6 +2227,7 @@ router.put('/items/:id/manager-count', async (req, res) => {
       manager_foh_case,
       manager_boh_case,
     } = req.body;
+    const db = getPg();
 
     const payload = {
       manager_foh: manager_foh !== undefined && manager_foh !== '' ? Number(manager_foh) : null,
@@ -2223,15 +2239,19 @@ router.put('/items/:id/manager-count', async (req, res) => {
     };
 
     // Check live table first
-    let updatedCount = await knex('cycle_count_items')
-      .where({ _id: id })
+    let updatedCount = await db('cycle_count_items')
+      .where({ id: id })
       .update(payload);
 
     // If item was archived, update archive table instead
     if (updatedCount === 0) {
-      await knex('cycle_count_items_archive')
-        .where({ _id: id })
+      updatedCount = await db('cycle_count_items_archive')
+        .where({ id: id })
         .update(payload);
+    }
+
+    if (updatedCount === 0) {
+      return res.status(404).json({ success: false, error: 'Cycle count item not found' });
     }
 
     res.json({ success: true, data: payload });

@@ -1,14 +1,12 @@
 // routes/_navbarLayout/cycle-count/report-new.tsx
-import { useState, useEffect, memo } from "react";
+import { useState, useEffect, memo, useMemo } from "react";
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import axios from "axios";
 import {
   ArrowUp,
   ArrowDown,
   Image as ImageIcon,
-  ChevronDown,
   Eye,
-  ChevronRight,
   ScanBarcode,
   AlertCircle,
   CheckCircle2,
@@ -44,23 +42,55 @@ interface ReportItem {
   categoryId: number;
   categoryName: string;
   pk_in_crt: number;
+  crt_in_case: number;
   foh: number;
   foh_crt: number | null;
   boh: number;
   boh_crt: number | null;
   count_completed: boolean;
   priority: boolean;
-  foh_case: number | null;
-  boh_case: number | null;
+  // foh_case: number | null;
+  // boh_case: number | null;
 
   // Manager Count Extensions
   manager_foh: number | null;
   manager_boh: number | null;
   manager_foh_crt: number | null;
   manager_boh_crt: number | null;
-  manager_foh_case: number | null;
-  manager_boh_case: number | null;
+  // manager_foh_case: number | null;
+  // manager_boh_case: number | null;
 }
+
+const hasManagerCount = (item: ReportItem): boolean =>
+  item.manager_foh != null ||
+  item.manager_boh != null ||
+  item.manager_foh_crt != null ||
+  item.manager_boh_crt != null;
+// item.manager_foh_case != null ||
+// item.manager_boh_case != null
+
+const getEffectiveCount = (
+  managerValue: number | null,
+  originalValue: number | null,
+) => managerValue ?? originalValue ?? 0;
+
+const getItemMetrics = (item: ReportItem) => {
+  const foh = getEffectiveCount(item.manager_foh, item.foh);
+  const boh = getEffectiveCount(item.manager_boh, item.boh);
+  const fohCrt = getEffectiveCount(item.manager_foh_crt, item.foh_crt);
+  const bohCrt = getEffectiveCount(item.manager_boh_crt, item.boh_crt);
+  // const fohCase = getEffectiveCount(item.manager_foh_case, item.foh_case);
+  // const bohCase = getEffectiveCount(item.manager_boh_case, item.boh_case);
+  const packsPerCrate = item.pk_in_crt || 0;
+  // const packsPerCase = packsPerCrate * (item.crt_in_case || 0);
+  const totalCounted = foh + boh + (fohCrt + bohCrt) * packsPerCrate;
+  // +
+  // (fohCase + bohCase) * packsPerCase;
+  const variancePcs = totalCounted - (item.onHandCSO ?? 0);
+  const varianceDollar = variancePcs * (item.unitPrice ?? 0);
+
+  return { totalCounted, variancePcs, varianceDollar };
+};
 
 interface ActiveBarcode {
   name: string;
@@ -96,7 +126,11 @@ interface ManagerCountModalProps {
   item: ReportItem | null;
   isOpen: boolean;
   onClose: () => void;
-  onSave: (itemId: string, data: Record<string, number | null>) => Promise<void>;
+  onSave: (
+    itemId: string,
+    data: Record<string, number | null>,
+  ) => Promise<void>;
+  isEditable?: boolean; // New prop
 }
 
 export const ManagerCountModal: React.FC<ManagerCountModalProps> = ({
@@ -104,26 +138,38 @@ export const ManagerCountModal: React.FC<ManagerCountModalProps> = ({
   isOpen,
   onClose,
   onSave,
+  isEditable = true, // Default to true if omitted
 }) => {
   if (!isOpen || !item) return null;
 
-  const [foh, setFoh] = useState<string>(item.manager_foh?.toString() ?? '');
-  const [boh, setBoh] = useState<string>(item.manager_boh?.toString() ?? '');
-  const [fohCrt, setFohCrt] = useState<string>(item.manager_foh_crt?.toString() ?? '');
-  const [bohCrt, setBohCrt] = useState<string>(item.manager_boh_crt?.toString() ?? '');
-  const [fohCase, setFohCase] = useState<string>(item.manager_foh_case?.toString() ?? '');
-  const [bohCase, setBohCase] = useState<string>(item.manager_boh_case?.toString() ?? '');
+  const [foh, setFoh] = useState<string>(item.manager_foh?.toString() ?? "");
+  const [boh, setBoh] = useState<string>(item.manager_boh?.toString() ?? "");
+  const [fohCrt, setFohCrt] = useState<string>(
+    item.manager_foh_crt?.toString() ?? "",
+  );
+  const [bohCrt, setBohCrt] = useState<string>(
+    item.manager_boh_crt?.toString() ?? "",
+  );
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   const handleSave = async () => {
+    if (!isEditable) return;
     setIsSubmitting(true);
     await onSave(item._id, {
-      manager_foh: foh !== '' ? Number(foh) : null,
-      manager_boh: boh !== '' ? Number(boh) : null,
-      manager_foh_crt: item.foh_crt !== null && item.foh_crt !== undefined ? (fohCrt !== '' ? Number(fohCrt) : null) : null,
-      manager_boh_crt: item.boh_crt !== null && item.boh_crt !== undefined ? (bohCrt !== '' ? Number(bohCrt) : null) : null,
-      manager_foh_case: item.foh_case !== null && item.foh_case !== undefined ? (fohCase !== '' ? Number(fohCase) : null) : null,
-      manager_boh_case: item.boh_case !== null && item.boh_case !== undefined ? (bohCase !== '' ? Number(bohCase) : null) : null,
+      manager_foh: foh !== "" ? Number(foh) : null,
+      manager_boh: boh !== "" ? Number(boh) : null,
+      manager_foh_crt:
+        item.foh_crt !== null && item.foh_crt !== undefined
+          ? fohCrt !== ""
+            ? Number(fohCrt)
+            : null
+          : null,
+      manager_boh_crt:
+        item.boh_crt !== null && item.boh_crt !== undefined
+          ? bohCrt !== ""
+            ? Number(bohCrt)
+            : null
+          : null,
     });
     setIsSubmitting(false);
     onClose();
@@ -131,112 +177,167 @@ export const ManagerCountModal: React.FC<ManagerCountModalProps> = ({
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 backdrop-blur-xs p-4">
-      <div className="bg-white rounded-2xl shadow-xl w-full max-w-md overflow-hidden border border-slate-200">
-        <div className="p-4 bg-slate-50 border-b border-slate-200">
-          <h3 className="text-sm font-black text-slate-800 uppercase tracking-wider">Store Count</h3>
-          <p className="text-xs text-slate-500 font-medium truncate mt-0.5">{item.name}</p>
+      <div className="bg-white rounded-2xl shadow-xl w-full max-w-lg overflow-hidden border border-slate-200">
+        {/* Header */}
+        <div className="p-4 bg-slate-50 border-b border-slate-200 flex justify-between items-center">
+          <div>
+            <h3 className="text-sm font-black text-slate-800 uppercase tracking-wider">
+              {isEditable
+                ? "Store Count Adjustment"
+                : "Manager Count History (Read Only)"}
+            </h3>
+            <p className="text-xs text-slate-500 font-medium truncate mt-0.5">
+              {item.name}
+            </p>
+          </div>
+          {!isEditable && (
+            <span className="text-[10px] uppercase font-bold bg-amber-100 text-amber-800 px-2 py-0.5 rounded">
+              View Only
+            </span>
+          )}
         </div>
 
-        <div className="p-5 space-y-4 text-xs font-semibold text-slate-700">
+        {/* Modal Body */}
+        <div className="p-5 space-y-4 text-xs font-semibold text-slate-700 max-h-[70vh] overflow-y-auto">
           {/* FOH & BOH Base Counts */}
-          <div className="grid grid-cols-2 gap-3">
-            <div>
-              <label className="block mb-1 text-slate-600">Manager FOH Count</label>
-              <input
-                type="number"
-                value={foh}
-                onChange={(e) => setFoh(e.target.value)}
-                placeholder="Enter count"
-                className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-              />
+          <div className="grid grid-cols-2 gap-4">
+            {/* FOH */}
+            <div className="space-y-1">
+              <label className="block text-slate-600">FOH Count</label>
+              <div className="text-[11px] text-slate-500 font-mono">
+                Original:{" "}
+                <span className="font-bold text-slate-800">
+                  {item.foh ?? 0}
+                </span>
+              </div>
+              {isEditable ? (
+                <input
+                  type="number"
+                  value={foh}
+                  onChange={(e) => setFoh(e.target.value)}
+                  placeholder="Manager FOH"
+                  className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                />
+              ) : (
+                <div className="text-[11px] text-slate-500 font-mono pt-0.5">
+                  Manager:{" "}
+                  <span className="font-bold text-amber-700">
+                    {item.manager_foh ?? "N/A"}
+                  </span>
+                </div>
+              )}
             </div>
-            <div>
-              <label className="block mb-1 text-slate-600">Manager BOH Count</label>
-              <input
-                type="number"
-                value={boh}
-                onChange={(e) => setBoh(e.target.value)}
-                placeholder="Enter count"
-                className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-              />
+
+            {/* BOH */}
+            <div className="space-y-1">
+              <label className="block text-slate-600">BOH Count</label>
+              <div className="text-[11px] text-slate-500 font-mono">
+                Original:{" "}
+                <span className="font-bold text-slate-800">
+                  {item.boh ?? 0}
+                </span>
+              </div>
+              {isEditable ? (
+                <input
+                  type="number"
+                  value={boh}
+                  onChange={(e) => setBoh(e.target.value)}
+                  placeholder="Manager BOH"
+                  className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                />
+              ) : (
+                <div className="text-[11px] text-slate-500 font-mono pt-0.5">
+                  Manager:{" "}
+                  <span className="font-bold text-amber-700">
+                    {item.manager_boh ?? "N/A"}
+                  </span>
+                </div>
+              )}
             </div>
           </div>
 
           {/* Crates (Conditionally Rendered) */}
-          {(item.foh_crt !== null && item.foh_crt !== undefined || item.boh_crt !== null && item.boh_crt !== undefined) && (
-            <div className="grid grid-cols-2 gap-3 pt-2 border-t border-slate-100">
+          {((item.foh_crt !== null && item.foh_crt !== undefined) ||
+            (item.boh_crt !== null && item.boh_crt !== undefined)) && (
+            <div className="grid grid-cols-2 gap-4 pt-3 border-t border-slate-100">
+              {/* FOH Crates */}
               {item.foh_crt !== null && item.foh_crt !== undefined && (
-                <div>
-                  <label className="block mb-1 text-slate-600">Manager FOH Crates</label>
-                  <input
-                    type="number"
-                    value={fohCrt}
-                    onChange={(e) => setFohCrt(e.target.value)}
-                    placeholder="Enter crates"
-                    className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  />
+                <div className="space-y-1">
+                  <label className="block text-slate-600">FOH Crates</label>
+                  <div className="text-[11px] text-slate-500 font-mono">
+                    Original:{" "}
+                    <span className="font-bold text-slate-800">
+                      {item.foh_crt}
+                    </span>
+                  </div>
+                  {isEditable ? (
+                    <input
+                      type="number"
+                      value={fohCrt}
+                      onChange={(e) => setFohCrt(e.target.value)}
+                      placeholder="Manager Crates"
+                      className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    />
+                  ) : (
+                    <div className="text-[11px] text-slate-500 font-mono pt-0.5">
+                      Manager:{" "}
+                      <span className="font-bold text-amber-700">
+                        {item.manager_foh_crt ?? "N/A"}
+                      </span>
+                    </div>
+                  )}
                 </div>
               )}
-              {item.boh_crt !== null && item.boh_crt !== undefined && (
-                <div>
-                  <label className="block mb-1 text-slate-600">Manager BOH Crates</label>
-                  <input
-                    type="number"
-                    value={bohCrt}
-                    onChange={(e) => setBohCrt(e.target.value)}
-                    placeholder="Enter crates"
-                    className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  />
-                </div>
-              )}
-            </div>
-          )}
 
-          {/* Cases (Conditionally Rendered) */}
-          {(item.foh_case !== null && item.foh_case !== undefined || item.boh_case !== null && item.boh_case !== undefined) && (
-            <div className="grid grid-cols-2 gap-3 pt-2 border-t border-slate-100">
-              {item.foh_case !== null && item.foh_case !== undefined && (
-                <div>
-                  <label className="block mb-1 text-slate-600">Manager FOH Cases</label>
-                  <input
-                    type="number"
-                    value={fohCase}
-                    onChange={(e) => setFohCase(e.target.value)}
-                    placeholder="Enter cases"
-                    className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  />
-                </div>
-              )}
-              {item.boh_case !== null && item.boh_case !== undefined && (
-                <div>
-                  <label className="block mb-1 text-slate-600">Manager BOH Cases</label>
-                  <input
-                    type="number"
-                    value={bohCase}
-                    onChange={(e) => setBohCase(e.target.value)}
-                    placeholder="Enter cases"
-                    className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  />
+              {/* BOH Crates */}
+              {item.boh_crt !== null && item.boh_crt !== undefined && (
+                <div className="space-y-1">
+                  <label className="block text-slate-600">BOH Crates</label>
+                  <div className="text-[11px] text-slate-500 font-mono">
+                    Original:{" "}
+                    <span className="font-bold text-slate-800">
+                      {item.boh_crt}
+                    </span>
+                  </div>
+                  {isEditable ? (
+                    <input
+                      type="number"
+                      value={bohCrt}
+                      onChange={(e) => setBohCrt(e.target.value)}
+                      placeholder="Manager Crates"
+                      className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    />
+                  ) : (
+                    <div className="text-[11px] text-slate-500 font-mono pt-0.5">
+                      Manager:{" "}
+                      <span className="font-bold text-amber-700">
+                        {item.manager_boh_crt ?? "N/A"}
+                      </span>
+                    </div>
+                  )}
                 </div>
               )}
             </div>
           )}
         </div>
 
+        {/* Footer */}
         <div className="p-4 bg-slate-50 border-t border-slate-200 flex justify-end gap-2">
           <button
             onClick={onClose}
             className="px-4 py-2 text-xs font-bold text-slate-600 bg-white border border-slate-300 rounded-lg hover:bg-slate-100"
           >
-            Cancel
+            {isEditable ? "Cancel" : "Close"}
           </button>
-          <button
-            onClick={handleSave}
-            disabled={isSubmitting}
-            className="px-4 py-2 text-xs font-bold text-white bg-blue-600 rounded-lg hover:bg-blue-700 disabled:opacity-50"
-          >
-            {isSubmitting ? 'Saving...' : 'Save'}
-          </button>
+          {isEditable && (
+            <button
+              onClick={handleSave}
+              disabled={isSubmitting}
+              className="px-4 py-2 text-xs font-bold text-white bg-blue-600 rounded-lg hover:bg-blue-700 disabled:opacity-50"
+            >
+              {isSubmitting ? "Saving..." : "Save"}
+            </button>
+          )}
         </div>
       </div>
     </div>
@@ -247,19 +348,90 @@ export const ManagerCountModal: React.FC<ManagerCountModalProps> = ({
 const CrateBreakdown = ({
   loosePacks,
   rawCrates,
+  // rawCases,
+  managerLoosePacks,
+  managerRawCrates,
+  // managerRawCases,
 }: {
   loosePacks: number;
   rawCrates: number;
+  rawCases?: number | null;
+  managerLoosePacks?: number | null;
+  managerRawCrates?: number | null;
+  managerRawCases?: number | null;
 }) => {
+  const hasManagerLoose = managerLoosePacks != null;
+  const hasManagerCrates = managerRawCrates != null;
+  // const hasCases = rawCases != null || managerRawCases != null;
+  // const hasManagerCases = managerRawCases != null;
+
   return (
     <div className="mt-0.5 pt-0.5 border-t border-slate-100 text-[10px] text-left mx-auto w-max font-sans text-slate-500 space-y-0.5 leading-tight">
       <div>
-        <span className="font-semibold text-slate-400">Pks:</span> {loosePacks}
+        <span className="font-semibold text-slate-400">Pks:</span>{" "}
+        <span
+          title={hasManagerLoose ? `Original: ${loosePacks}` : undefined}
+          className={
+            hasManagerLoose
+              ? "rounded bg-amber-100 px-1 font-black text-amber-800"
+              : undefined
+          }
+        >
+          {hasManagerLoose ? managerLoosePacks : loosePacks}
+        </span>
       </div>
       <div>
-        <span className="font-semibold text-slate-400">Crt:</span> {rawCrates}
+        <span className="font-semibold text-slate-400">Crt:</span>{" "}
+        <span
+          title={hasManagerCrates ? `Original: ${rawCrates}` : undefined}
+          className={
+            hasManagerCrates
+              ? "rounded bg-amber-100 px-1 font-black text-amber-800"
+              : undefined
+          }
+        >
+          {hasManagerCrates ? managerRawCrates : rawCrates}
+        </span>
       </div>
+      {/* {hasCases && (
+        <div>
+          <span className="font-semibold text-slate-400">Case:</span>{" "}
+          <span
+            title={hasManagerCases ? `Original: ${rawCases ?? 0}` : undefined}
+            className={
+              hasManagerCases
+                ? "rounded bg-amber-100 px-1 font-black text-amber-800"
+                : undefined
+            }
+          >
+            {hasManagerCases ? managerRawCases : (rawCases ?? 0)}
+          </span>
+        </div>
+      )} */}
     </div>
+  );
+};
+
+const CountValue = ({
+  original,
+  manager,
+}: {
+  original: number | null;
+  manager: number | null;
+}) => {
+  const isManagerValue = manager != null;
+
+  return (
+    <span
+      title={isManagerValue ? `Original: ${original ?? 0}` : undefined}
+      className={`font-bold block mt-1 ${
+        isManagerValue
+          ? "mx-auto w-max rounded-md bg-amber-100 px-2 py-0.5 text-amber-800 ring-1 ring-amber-200"
+          : "text-slate-900"
+      }`}
+    >
+      {isManagerValue ? manager : (original ?? 0)}
+    </span>
   );
 };
 
@@ -462,33 +634,26 @@ const CrateBreakdown = ({
 //     );
 //   },
 // );
+interface ItemRowProps {
+  item: ReportItem;
+  onOpenBarcode: (name: string, upc: string, image: string | null) => void;
+  onOpenManagerModal?: (item: ReportItem) => void;
+  isScheduled?: boolean; // Added prop
+}
+
 const ItemRow = memo(
   ({
     item,
     onOpenBarcode,
     onOpenManagerModal,
-    canEditManagerCount,
-  }: {
-    item: ReportItem;
-    onOpenBarcode: (name: string, upc: string, image: string | null) => void;
-    onOpenManagerModal?: (item: ReportItem) => void;
-    canEditManagerCount?: boolean;
-  }) => {
-    // Check if manager counts exist to highlight row
-    const isManagerUpdated =
-      item.manager_foh !== null ||
-      item.manager_boh !== null ||
-      item.manager_foh_crt !== null ||
-      item.manager_boh_crt !== null;
-
-    const fohCratePacks = (item.foh_crt || 0) * (item.pk_in_crt || 0);
-    const bohCratePacks = (item.boh_crt || 0) * (item.pk_in_crt || 0);
-    const computedTotalQty =
-      item.foh + item.boh + fohCratePacks + bohCratePacks;
-
-    const hasCSO = item.onHandCSO !== undefined && item.onHandCSO !== null;
-    const variance = hasCSO ? computedTotalQty - item.onHandCSO : 0;
-    const dollarVariance = variance * item.unitPrice;
+    isScheduled = false,
+  }: ItemRowProps) => {
+    const isManagerUpdated = hasManagerCount(item);
+    const {
+      totalCounted: computedTotalQty,
+      variancePcs: variance,
+      varianceDollar: dollarVariance,
+    } = getItemMetrics(item);
 
     const formatCurrency = (val: number) =>
       new Intl.NumberFormat("en-CA", {
@@ -502,7 +667,7 @@ const ItemRow = memo(
       item.boh_crt !== null && item.boh_crt !== undefined && item.boh_crt >= 0;
 
     if (!item.count_completed) {
-      // Incomplete table row remains non-editable
+      // Incomplete table row remains non-editable and non-clickable
       return (
         <tr className="border-b border-rose-100/70 bg-rose-50/20 hover:bg-rose-50/40 transition-colors group text-xs text-slate-400">
           <td className="p-2.5 sticky left-0 z-10 align-middle text-center w-14 bg-[#fffafb] group-hover:bg-rose-50/40 transition-colors border-r border-rose-100/40">
@@ -543,14 +708,24 @@ const ItemRow = memo(
               {item.name}
             </div>
           </td>
-          <td className="p-3 text-center align-middle w-28 font-medium text-slate-300">-</td>
-          <td className="p-3 text-center align-middle w-28 font-medium text-slate-300">-</td>
-          <td className="p-3 text-center align-middle w-24 border-x border-rose-100/40 font-medium text-slate-300">-</td>
+          <td className="p-3 text-center align-middle w-28 font-medium text-slate-300">
+            -
+          </td>
+          <td className="p-3 text-center align-middle w-28 font-medium text-slate-300">
+            -
+          </td>
+          <td className="p-3 text-center align-middle w-24 border-x border-rose-100/40 font-medium text-slate-300">
+            -
+          </td>
           <td className="p-3 font-mono text-center align-middle w-28 text-rose-900/80 font-bold bg-rose-50/30">
             {item.onHandCSO}
           </td>
-          <td className="p-3 text-center align-middle w-28 font-medium text-slate-300">-</td>
-          <td className="p-3 text-right pr-6 align-middle w-32 font-medium text-slate-300">$-</td>
+          <td className="p-3 text-center align-middle w-28 font-medium text-slate-300">
+            -
+          </td>
+          <td className="p-3 text-right pr-6 align-middle w-32 font-medium text-slate-300">
+            $-
+          </td>
         </tr>
       );
     }
@@ -558,16 +733,16 @@ const ItemRow = memo(
     return (
       <tr
         onClick={() => {
-          if (canEditManagerCount && onOpenManagerModal) {
+          if (isScheduled && onOpenManagerModal) {
             onOpenManagerModal(item);
           }
         }}
         className={`border-b border-slate-100 transition-colors group text-xs ${
-          canEditManagerCount ? 'cursor-pointer' : ''
+          isScheduled ? "cursor-pointer" : ""
         } ${
           isManagerUpdated
-            ? 'bg-amber-50/80 hover:bg-amber-100/60'
-            : 'bg-white hover:bg-slate-50/60'
+            ? "bg-amber-50/80 hover:bg-amber-100/60"
+            : "bg-white hover:bg-slate-50/60"
         }`}
       >
         {/* STICKY LOGISTICS IMAGE */}
@@ -615,25 +790,36 @@ const ItemRow = memo(
           </div>
         </td>
 
+        {/* CATEGORY */}
+        <td className="p-3 text-xs text-slate-600 truncate border-r border-slate-100">
+          {item.categoryName || item.categoryId || "Uncategorized"}
+        </td>
+
         {/* FOH COLUMN */}
         <td className="p-3 font-mono text-center align-top w-28">
           {hasFohCrates ? (
-            <CrateBreakdown loosePacks={item.foh} rawCrates={item.foh_crt!} />
+            <CrateBreakdown
+              loosePacks={item.foh}
+              rawCrates={item.foh_crt!}
+              managerLoosePacks={item.manager_foh}
+              managerRawCrates={item.manager_foh_crt}
+            />
           ) : (
-            <span className="font-bold text-slate-900 block mt-1">
-              {item.foh}
-            </span>
+            <CountValue original={item.foh} manager={item.manager_foh} />
           )}
         </td>
 
         {/* BOH COLUMN */}
         <td className="p-3 font-mono text-center align-top w-28">
           {hasBohCrates ? (
-            <CrateBreakdown loosePacks={item.boh} rawCrates={item.boh_crt!} />
+            <CrateBreakdown
+              loosePacks={item.boh}
+              rawCrates={item.boh_crt!}
+              managerLoosePacks={item.manager_boh}
+              managerRawCrates={item.manager_boh_crt}
+            />
           ) : (
-            <span className="font-bold text-slate-900 block mt-1">
-              {item.boh}
-            </span>
+            <CountValue original={item.boh} manager={item.manager_boh} />
           )}
         </td>
 
@@ -653,8 +839,8 @@ const ItemRow = memo(
               variance === 0
                 ? "text-slate-500"
                 : variance > 0
-                ? "text-emerald-700 bg-emerald-50"
-                : "text-rose-700 bg-rose-50"
+                  ? "text-emerald-700 bg-emerald-50"
+                  : "text-rose-700 bg-rose-50"
             }`}
           >
             {variance > 0 ? `+${variance}` : variance}
@@ -681,7 +867,7 @@ const ItemRow = memo(
         </td>
       </tr>
     );
-  }
+  },
 );
 ItemRow.displayName = "ItemRow";
 
@@ -702,9 +888,6 @@ function RouteComponent() {
   const [instanceId, setInstanceId] = useState<number | null>(null);
   const [syncing, setSyncing] = useState(false); // 💡 Tracking state for active browser pipeline processing
   const [loading, setLoading] = useState(false);
-  const [collapsedCategories, setCollapsedCategories] = useState<
-    Record<string, boolean>
-  >({});
   const [activeBarcodeItem, setActiveBarcodeItem] =
     useState<ActiveBarcode | null>(null);
   const [showPasswordDialog, setShowPasswordDialog] = useState(false);
@@ -716,6 +899,11 @@ function RouteComponent() {
   const [isThreadOpen, setIsThreadOpen] = useState(false);
   const [postingNote, setPostingNote] = useState(false);
   const [lastCountedAt, setLastCountedAt] = useState<string | null>(null);
+  const [isScheduled, setIsScheduled] = useState(false);
+
+  const [selectedManagerItem, setSelectedManagerItem] =
+    useState<ReportItem | null>(null);
+  const [isManagerModalOpen, setIsManagerModalOpen] = useState(false);
 
   useEffect(() => {
     setShowPasswordDialog(true);
@@ -748,6 +936,7 @@ function RouteComponent() {
       setItems(res.data.data || []);
       setInstanceId(res.data.instanceId || null);
       setLastCountedAt(res.data.lastCountedAt || null); // Save local converted timestamp
+      setIsScheduled(res.data.isScheduled || false);
 
       if (res.data.instanceId) {
         fetchThreadNotes(res.data.instanceId);
@@ -806,22 +995,6 @@ function RouteComponent() {
   const completedRecords = items.filter((i) => i.count_completed);
   const uncompletedRecords = items.filter((i) => !i.count_completed);
 
-  const groupedCompleted = completedRecords.reduce<
-    Record<string, ReportItem[]>
-  >((acc, item) => {
-    const catName = item.categoryName || "Unassigned Categories";
-    if (!acc[catName]) acc[catName] = [];
-    acc[catName].push(item);
-    return acc;
-  }, {});
-
-  const toggleCategoryCollapse = (categoryName: string) => {
-    setCollapsedCategories((prev) => ({
-      ...prev,
-      [categoryName]: !prev[categoryName],
-    }));
-  };
-
   const handleOpenBarcodeDialog = (
     name: string,
     upc: string,
@@ -873,6 +1046,41 @@ function RouteComponent() {
       setSyncing(false);
     }
   };
+
+  const handleOpenManagerModal = (item: ReportItem) => {
+    setSelectedManagerItem(item);
+    setIsManagerModalOpen(true);
+  };
+
+  const handleSaveManagerCount = async (
+    itemId: string,
+    data: Record<string, number | null>,
+  ) => {
+    try {
+      const token = localStorage.getItem("token");
+      await axios.put(`/api/cycle-count/items/${itemId}/manager-count`, data, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      await fetchReport(); // Refresh data table
+    } catch (err) {
+      console.error("Failed to update manager count:", err);
+    }
+  };
+
+  // Sort manager-adjusted rows first, then by highest absolute variance dollar value.
+  const sortedCompletedRecords = useMemo(() => {
+    return [...completedRecords].sort((a, b) => {
+      const managerRankA = hasManagerCount(a) ? 1 : 0;
+      const managerRankB = hasManagerCount(b) ? 1 : 0;
+      if (managerRankA !== managerRankB) {
+        return managerRankB - managerRankA;
+      }
+
+      const varA = Math.abs(getItemMetrics(a).varianceDollar);
+      const varB = Math.abs(getItemMetrics(b).varianceDollar);
+      return varB - varA;
+    });
+  }, [completedRecords]);
 
   return (
     <>
@@ -981,7 +1189,7 @@ function RouteComponent() {
             </div>
 
             {/* MAIN COMPLETED TRACKS TABLE */}
-            <div className="w-full max-w-full bg-white rounded-2xl border border-slate-200 shadow-xs overflow-hidden mb-8">
+            {/* <div className="w-full max-w-full bg-white rounded-2xl border border-slate-200 shadow-xs overflow-hidden mb-8">
               <div className="p-4 bg-slate-50 border-b border-slate-200/80 flex items-center gap-2">
                 <CheckCircle2 className="w-4 h-4 text-emerald-600" />
                 <h2 className="text-xs font-black text-slate-800 uppercase tracking-wider">
@@ -1079,12 +1287,90 @@ function RouteComponent() {
                                   key={item._id}
                                   item={item}
                                   onOpenBarcode={handleOpenBarcodeDialog}
+                                  onOpenManagerModal={handleOpenManagerModal}
+                                  canEditManagerCount={isNextDayOfCount(date)} // Pass permission check here
                                 />
                               ))}
                           </tbody>
                         );
                       },
                     )}
+                </table>
+              </div>
+            </div> */}
+
+            {/* MAIN COMPLETED TRACKS TABLE */}
+            <div className="w-full max-w-full bg-white rounded-2xl border border-slate-200 shadow-xs overflow-hidden mb-8">
+              <div className="p-4 bg-slate-50 border-b border-slate-200/80 flex items-center gap-2">
+                <CheckCircle2 className="w-4 h-4 text-emerald-600" />
+                <h2 className="text-xs font-black text-slate-800 uppercase tracking-wider">
+                  Reconciled Core Matrix ({sortedCompletedRecords.length})
+                </h2>
+              </div>
+
+              <div className="overflow-x-auto w-full max-h-[60vh] block clear-both style-scrollbar">
+                <table className="w-full text-left border-collapse text-sm table-fixed min-w-[1200px] md:min-w-full">
+                  <thead className="bg-slate-100 text-slate-600 font-bold sticky top-0 z-30 shadow-[0_1px_0_0_rgba(0,0,0,0.06)] uppercase tracking-wider text-[10px]">
+                    <tr>
+                      <th className="p-3 sticky left-0 bg-slate-100 z-40 text-center w-14 border-r border-slate-200">
+                        Image
+                      </th>
+                      <th className="p-3 sticky left-[56px] bg-slate-100 z-40 w-36 font-mono border-r border-slate-200">
+                        UPC
+                      </th>
+                      <th className="p-3 sticky left-[200px] bg-slate-100 z-40 w-54 shadow-[4px_0_8px_-3px_rgba(0,0,0,0.08)] border-r border-slate-200">
+                        Description
+                      </th>
+                      <th className="p-3 w-36 border-r border-slate-200">
+                        Category
+                      </th>
+                      <th className="p-3 text-center w-28">FOH Count</th>
+                      <th className="p-3 text-center w-28">BOH Count</th>
+                      <th className="p-3 text-center w-24 bg-slate-200/50 text-slate-800 font-black">
+                        Total Pack
+                      </th>
+                      <th className="p-3 text-center w-28">Expected (CSO)</th>
+                      <th className="p-3 text-center w-28">Variance (Pcs)</th>
+                      <th className="p-3 text-right pr-6 w-32">
+                        Variance (C$)
+                      </th>
+                    </tr>
+                  </thead>
+
+                  <tbody>
+                    {loading && (
+                      <tr>
+                        <td
+                          colSpan={10}
+                          className="text-center py-12 text-slate-400 font-medium"
+                        >
+                          Processing database records...
+                        </td>
+                      </tr>
+                    )}
+
+                    {!loading && sortedCompletedRecords.length === 0 && (
+                      <tr>
+                        <td
+                          colSpan={10}
+                          className="text-center py-12 text-slate-400 font-medium"
+                        >
+                          No verified completed sequences match parameters.
+                        </td>
+                      </tr>
+                    )}
+
+                    {!loading &&
+                      sortedCompletedRecords.map((item) => (
+                        <ItemRow
+                          key={item._id}
+                          item={item}
+                          onOpenBarcode={handleOpenBarcodeDialog}
+                          onOpenManagerModal={handleOpenManagerModal}
+                          isScheduled={isScheduled}
+                        />
+                      ))}
+                  </tbody>
                 </table>
               </div>
             </div>
@@ -1254,6 +1540,13 @@ function RouteComponent() {
           </div>
         </DialogContent>
       </Dialog>
+      <ManagerCountModal
+        item={selectedManagerItem}
+        isOpen={isManagerModalOpen}
+        onClose={() => setIsManagerModalOpen(false)}
+        onSave={handleSaveManagerCount}
+        isEditable={date ? isNextDayOfCount(date) : false}
+      />
     </>
   );
 }
