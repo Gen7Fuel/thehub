@@ -388,7 +388,8 @@ router.get('/daily-items-v2', async (req, res) => {
         "ib.crt_in_case",
         "ib.on_hand_qty as onHandCSO"
       )
-      .orderBy("ci.priority", "desc");
+      .orderBy("ci.priority", "desc")
+      .orderBy("ib.description", "asc");
 
     // 4. Attach Category Names
     const enrichedItems = items.map(item => ({
