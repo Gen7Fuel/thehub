@@ -368,7 +368,7 @@ router.get('/daily-items-v2', async (req, res) => {
       .where({
         "i.site_mongo_id": location._id.toString(),
         "i.date": localDateStr,
-        "i.allow_cycle_count": true
+        "ib.allow_cycle_count": true
       })
       .select(
         "ci.id as entryId",
