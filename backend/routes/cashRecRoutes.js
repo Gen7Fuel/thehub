@@ -476,6 +476,255 @@ async function computeBankRecForDate(site, date) {
   return endingBalance - bankStmtTrans - totalPos - kardpollSales + kioskGC + afdGC + kardpollAr - handheldDebit
 }
 
+// router.get('/entries', async (req, res) => {
+//   try {
+//     const site = String(req.query.site || '').trim()
+//     const date = String(req.query.date || '').trim() // YYYY-MM-DD
+
+//     if (!site || !/^\d{4}-\d{2}-\d{2}$/.test(date)) {
+//       return res.status(400).json({ error: 'site and date (YYYY-MM-DD) are required' })
+//     }
+
+//     // 1) Kardpoll for same date (string date in DB)
+//     const kardpoll = await KardpollReport.findOne({ site, date }).lean()
+
+//     // 2) BankStatement for next day
+//     const nextDate = addDaysYmd(date, 1)
+//     const bank = nextDate
+//       ? await BankStatement.findOne({ site, date: nextDate }).lean()
+//       : null
+
+//     // 3) CashSummary aggregate (Date type, sum all numeric fields for the day)
+//     const start = startOfUtcDay(date)
+//     const end = endOfUtcDay(date)
+
+//     const numericFields = [
+//       'canadian_cash_collected',
+//       'item_sales',
+//       'cash_back',
+//       'loyalty',
+//       'cpl_bulloch',
+//       'exempted_tax',
+//       'report_canadian_cash',
+//       'payouts',
+//       'fuelSales',
+//       'dealGroupCplDiscounts',
+//       'fuelPriceOverrides',
+//       'parsedItemSales',
+//       'depositTotal',
+//       'pennyRounding',
+//       'totalSales',
+//       'afdCredit',
+//       'afdDebit',
+//       'afdGiftCard',
+//       'kioskCredit',
+//       'kioskDebit',
+//       'kioskGiftCard',
+//       'totalPos',
+//       'arIncurred',
+//       'grandTotal',
+//       'missedCpl',
+//       'couponsAccepted',
+//       'giftCertificates',
+//       'cashOffCoupons',
+//       'gasolineCoupons',
+//       'otherCoupons',
+//       'canadianCash',
+//       'cashOnHand',
+//       'parsedCashBack',
+//       'parsedPayouts',
+//       'safedropsCount',
+//       'safedropsAmount',
+//       // Lotto fields
+//       'onlineLottoTotal',
+//       'instantLottTotal',
+//       'lottoPayout',
+//       'unsettledPrepays',
+//     ]
+
+//     const groupStage = numericFields.reduce(
+//       (acc, f) => {
+//         acc[f] = { $sum: { $ifNull: [`$${f}`, 0] } }
+//         return acc
+//       },
+//       { shiftCount: { $sum: 1 } }
+//     )
+
+//     const [agg] = await CashSummary.aggregate([
+//       { $match: { site, date: { $gte: start, $lte: end } } },
+//       { $group: { _id: null, ...groupStage } },
+//       { $project: { _id: 0 } },
+//     ])
+
+//     const emptyTotals = numericFields.reduce((o, k) => ((o[k] = 0), o), {})
+//     const cashSummary = {
+//       site,
+//       date,
+//       shiftCount: agg?.shiftCount || 0,
+//       totals: agg ? agg : { ...emptyTotals, shiftCount: 0 },
+//     }
+
+//     // Use per-shift aggregated unsettledPrepays if available, otherwise fall back to CashSummaryReport
+//     const aggUnsettledPrepays = agg?.unsettledPrepays
+//     try {
+//       const { CashSummaryReport } = require('../models/CashSummaryNew')
+//       const reportDate = new Date(`${date}T00:00:00.000Z`) // CashSummaryReport stores date as UTC midnight
+//       const report = await CashSummaryReport.findOne({ site, date: reportDate }).lean()
+//       if (report) {
+//         cashSummary.unsettledPrepays = aggUnsettledPrepays || (typeof report.unsettledPrepays === 'number' ? report.unsettledPrepays : undefined)
+//         cashSummary.handheldDebit = typeof report.handheldDebit === 'number' ? report.handheldDebit : undefined
+//       } else {
+//         cashSummary.unsettledPrepays = aggUnsettledPrepays || undefined
+//       }
+//     } catch (e) {
+//       cashSummary.unsettledPrepays = aggUnsettledPrepays || undefined
+//     }
+
+//     // 4) Receivables total from Transactions (source: 'PO') for stationName/site and day range
+//     let totalReceivablesAmount = 0
+//     try {
+//       // Backward compatibility: pre-migration docs have no dateStr, so match
+//       // those against the old Date-range logic instead of excluding them.
+//       const [txAgg] = await Transactions.aggregate([
+//         {
+//           $match: {
+//             source: 'PO',
+//             stationName: site,
+//             deletedAt: null,
+//             $or: [
+//               { dateStr: date },
+//               { dateStr: { $exists: false }, date: { $gte: start, $lte: end } },
+//             ],
+//           },
+//         },
+//         { $group: { _id: null, total: { $sum: { $ifNull: ['$amount', 0] } } } },
+//       ])
+//       totalReceivablesAmount = txAgg?.total || 0
+//     } catch (e) {
+//       // Defensive: log but do not fail the endpoint
+//       console.error('Failed to aggregate receivables:', e)
+//     }
+
+//     // Compute Bank Stmt Trans:
+//     // balanceForward - sum(miscDebits.amount) - sum(gblDebits.amount) - merchantFees + sum(miscCredits.amount)
+//     const miscDebitsTotal = (bank?.miscDebits || []).reduce((sum, x) => {
+//       const amt = Number(x?.amount) || 0
+//       return sum + (amt > 0 ? amt : 0)
+//     }, 0)
+//     const gblDebitsTotal = (bank?.gblDebits || []).reduce((sum, x) => {
+//       const amt = Number(x?.amount) || 0
+//       return sum + (amt > 0 ? amt : 0)
+//     }, 0)
+//     const miscCreditsTotal = (bank?.miscCredits || []).reduce((sum, x) => {
+//       const amt = Number(x?.amount) || 0
+//       return sum + (amt > 0 ? amt : 0)
+//     }, 0)
+//     const bankStmtTrans =
+//       (Number(bank?.balanceForward) || 0)
+//       - miscDebitsTotal
+//       - gblDebitsTotal
+//       - (Number(bank?.merchantFees) || 0)
+//       + miscCreditsTotal
+
+//     // Compute Bank Rec:
+//     // Ending Balance - Bank Stmt Trans - Total POS - Kardpoll Sales + Kiosk GC + AFD GC + Kardpoll AR - Handheld Debit
+//     const endingBalance = Number(bank?.endingBalance) || 0
+//     const totalPos = Number(cashSummary?.totals?.totalPos) || 0
+//     const kioskGC = Number(cashSummary?.totals?.kioskGiftCard) || 0
+//     const afdGC = Number(cashSummary?.totals?.afdGiftCard) || 0
+//     const kardpollSales = Number(kardpoll?.sales) || 0
+//     const kardpollAr = Number(kardpoll?.ar) || 0
+//     const handheldDebit = Number(cashSummary?.handheldDebit) || 0
+
+//     const bankRecDay = endingBalance - bankStmtTrans - totalPos - kardpollSales + kioskGC + afdGC + kardpollAr - handheldDebit
+//     let bankRec = bankRecDay
+
+//     // On Sundays, aggregate bankRec across Friday, Saturday, and Sunday
+//     const [yr, mo, dy] = date.split('-').map(Number)
+//     if (new Date(Date.UTC(yr, mo - 1, dy)).getUTCDay() === 0) {
+//       const fridayDate = addDaysYmd(date, -2)
+//       const saturdayDate = addDaysYmd(date, -1)
+//       const [fridayRec, saturdayRec] = await Promise.all([
+//         computeBankRecForDate(site, fridayDate),
+//         computeBankRecForDate(site, saturdayDate),
+//       ])
+//       bankRec = fridayRec + saturdayRec + bankRecDay
+//     }
+
+
+//     // Compute miscCreditDescTotal: sum of miscCredits where description contains 'credit' or 'tns' (case-insensitive)
+//     const miscCreditDescTotal = Array.isArray(bank?.miscCredits)
+//       ? bank.miscCredits.reduce((sum, tx) => {
+//           const desc = typeof tx.description === 'string' ? tx.description.toLowerCase() : ''
+//           return (desc.includes('credit') || desc.includes('tns'))
+//             ? sum + (Number(tx.amount) || 0)
+//             : sum
+//         }, 0)
+//       : 0
+
+//     // Compute Balance Check (moved from frontend):
+//     // totalPos + report_canadian_cash + couponsAccepted + giftCertificates + payouts - totalSales + totalReceivablesAmount
+//     const reportCanadianCash = Number(cashSummary?.totals?.report_canadian_cash) || 0
+//     const couponsAccepted = Number(cashSummary?.totals?.couponsAccepted) || 0
+//     const giftCertificates = Number(cashSummary?.totals?.giftCertificates) || 0
+//     const payouts = Number(cashSummary?.totals?.payouts) || 0
+//     const totalSalesNum = Number(cashSummary?.totals?.totalSales) || 0
+//     const missedCpl = Number(cashSummary?.totals?.missedCpl) || 0
+//     const otherCoupons = Number(cashSummary?.totals?.otherCoupons) || 0
+//     const gasolineCoupons = Number(cashSummary?.totals?.gasolineCoupons) || 0
+//     const cashOffCoupons = Number(cashSummary?.totals?.cashOffCoupons) || 0
+//     // balanceCheck includes every coupon/gift-certificate component that makes up
+//     // the Coupons column on the cash-rec pages, so the two always agree.
+//     const balanceCheck = totalPos + reportCanadianCash + couponsAccepted + giftCertificates + payouts - totalSalesNum + (Number(totalReceivablesAmount) || 0) + missedCpl + otherCoupons + gasolineCoupons + cashOffCoupons
+
+//     // Compute adjusted over/short for lottery sites
+//     let adjustedOverShort = null
+//     try {
+//       const location = await Location.findOne({ site }).lean()
+//       if (location?.sellsLottery) {
+//         const lotteryDoc = await Lottery.findOne({ site, date }).lean()
+//         if (lotteryDoc) {
+//           const shiftOnline = Number(cashSummary?.totals?.onlineLottoTotal) || 0
+//           const shiftInstant = Number(cashSummary?.totals?.instantLottTotal) || 0
+//           const onlineOverShort =
+//             shiftOnline -
+//             ((Number(lotteryDoc.onlineLottoTotal) || 0) -
+//               (Number(lotteryDoc.onlineCancellations) || 0) -
+//               (Number(lotteryDoc.onlineDiscounts) || 0))
+//           const scratchOverShort =
+//             shiftInstant -
+//             ((Number(lotteryDoc.instantLottTotal) || 0) +
+//               (Number(lotteryDoc.scratchFreeTickets) || 0) +
+//               (Number(lotteryDoc.oldScratchTickets) || 0))
+//           const adjustedReportedCash = reportCanadianCash + onlineOverShort + scratchOverShort
+//           const canadianCashCollected = Number(cashSummary?.totals?.canadian_cash_collected) || 0
+//           adjustedOverShort =
+//             canadianCashCollected -
+//             adjustedReportedCash +
+//             (Number(cashSummary?.handheldDebit) || 0) +
+//             (Number(cashSummary?.unsettledPrepays) || 0)
+//         }
+//       }
+//     } catch (e) {
+//       // silent — fall back to null so frontend uses regular formula
+//     }
+
+//     return res.json({
+//       kardpoll: kardpoll || null,
+//       bank: bank || null,
+//       cashSummary,
+//       totalReceivablesAmount,
+//       bankStmtTrans,
+//       bankRec,
+//       bankRecDay,
+//       balanceCheck,
+//       adjustedOverShort,
+//     })
+//   } catch (err) {
+//     console.error('cashRecRoutes.entries error:', err)
+//     return res.status(500).json({ error: 'Failed to load entries' })
+//   }
+// })
 router.get('/entries', async (req, res) => {
   try {
     const site = String(req.query.site || '').trim()
@@ -512,6 +761,8 @@ router.get('/entries', async (req, res) => {
       'fuelPriceOverrides',
       'parsedItemSales',
       'depositTotal',
+      'gst', // <-- Added GST
+      'pst', // <-- Added PST
       'pennyRounding',
       'totalSales',
       'afdCredit',
@@ -544,24 +795,34 @@ router.get('/entries', async (req, res) => {
 
     const groupStage = numericFields.reduce(
       (acc, f) => {
-        acc[f] = { $sum: { $ifNull: [`$${f}`, 0] } }
+        acc[f] = { $sum: {$ifNull: [`$${f}`, 0] } }
         return acc
       },
       { shiftCount: { $sum: 1 } }
     )
 
     const [agg] = await CashSummary.aggregate([
-      { $match: { site, date: { $gte: start, $lte: end } } },
+      { $match: { site, date: { $gte: start,$lte: end } } },
       { $group: { _id: null, ...groupStage } },
       { $project: { _id: 0 } },
     ])
 
     const emptyTotals = numericFields.reduce((o, k) => ((o[k] = 0), o), {})
+    const aggregatedTotals = agg ? agg : { ...emptyTotals, shiftCount: 0 }
+
+    // Compute combined Sales Tax (GST + PST)
+    const gstVal = Number(aggregatedTotals.gst) || 0
+    const pstVal = Number(aggregatedTotals.pst) || 0
+    const salesTax = gstVal + pstVal
+
     const cashSummary = {
       site,
       date,
       shiftCount: agg?.shiftCount || 0,
-      totals: agg ? agg : { ...emptyTotals, shiftCount: 0 },
+      totals: {
+        ...aggregatedTotals,
+        salesTax, // <-- Exposed to the frontend
+      },
     }
 
     // Use per-shift aggregated unsettledPrepays if available, otherwise fall back to CashSummaryReport
@@ -593,11 +854,11 @@ router.get('/entries', async (req, res) => {
             deletedAt: null,
             $or: [
               { dateStr: date },
-              { dateStr: { $exists: false }, date: { $gte: start, $lte: end } },
+              { dateStr: { $exists: false }, date: { $gte: start,$lte: end } },
             ],
           },
         },
-        { $group: { _id: null, total: { $sum: { $ifNull: ['$amount', 0] } } } },
+        { $group: { _id: null, total: {$sum: { $ifNull: ['$amount', 0] } } } },
       ])
       totalReceivablesAmount = txAgg?.total || 0
     } catch (e) {
