@@ -1,7 +1,7 @@
 const { getPg } = require("../config/pg");
 const Location = require('../models/Location');
 const { generateInventoryCsvBuffer } = require('./generateCsoCountCsv');
-const { petrosoftQueue } = require('../queues/petrosoftQueue'); // 💡 Import your new queue here
+const { petrosoftQueue } = require('../queues/petrosoftQueue');
 
 /**
  * Main orchestration engine to pull counts from Postgres, compile the memory CSV buffer,
@@ -24,7 +24,7 @@ async function syncPostgresCountsToPetrosoft(locationId, targetDate) {
       throw new Error(`Missing crucial 'csoCode' properties on MongoDB profile for location: ${locationDoc.stationName}`);
     }
 
-    // 2. Query target cycle count elements out of Postgres
+    // 2. Query target cycle count elements out of Postgres (including manager fields & is_scheduled flag)
     const db = getPg();
     const rows = await db('cycle_count_instance as cci')
       .join('cycle_count_items as cci_items', 'cci.id', 'cci_items.instance_id')
@@ -32,15 +32,17 @@ async function syncPostgresCountsToPetrosoft(locationId, targetDate) {
       .where('cci.site_mongo_id', siteMongoIdStr)
       .where('cci.date', targetDate.toString())
       .select([
+        'cci.is_scheduled', // 💡 Selected is_scheduled from cci
         'ibk.gtin',
         'cci_items.foh',
         'cci_items.boh',
         'cci_items.foh_crt',
         'cci_items.boh_crt',
-        'cci_items.foh_case',
-        'cci_items.boh_case',
-        'ibk.pk_in_crt',
-        'ibk.crt_in_case'
+        'cci_items.manager_foh',     // 💡 Selected manager count fields
+        'cci_items.manager_boh',
+        'cci_items.manager_foh_crt',
+        'cci_items.manager_boh_crt',
+        'ibk.pk_in_crt'
       ]);
 
     if (!rows || rows.length === 0) {
@@ -52,22 +54,44 @@ async function syncPostgresCountsToPetrosoft(locationId, targetDate) {
     const compiledItems = [];
 
     for (const row of rows) {
-      if (row.foh === null || row.boh === null) continue;
+      const isScheduled = Boolean(row.is_scheduled);
+
+      // Determine final FOH and BOH (Manager override if isScheduled is true and manager counts exist)
+      let finalFoh = row.foh;
+      let finalBoh = row.boh;
+      let finalFohCrt = row.foh_crt;
+      let finalBohCrt = row.boh_crt;
+
+      if (isScheduled) {
+        if (row.manager_foh !== null && row.manager_foh !== undefined) {
+          finalFoh = row.manager_foh;
+        }
+        if (row.manager_boh !== null && row.manager_boh !== undefined) {
+          finalBoh = row.manager_boh;
+        }
+        if (row.manager_foh_crt !== null && row.manager_foh_crt !== undefined) {
+          finalFohCrt = row.manager_foh_crt;
+        }
+        if (row.manager_boh_crt !== null && row.manager_boh_crt !== undefined) {
+          finalBohCrt = row.manager_boh_crt;
+        }
+      }
+
+      // Ensure counts are completed
+      if (finalFoh === null || finalBoh === null) continue;
 
       const pksInCrt = Number(row.pk_in_crt || 0);
 
+      // If item is configured to support crates, verify crate counts exist
       if (pksInCrt > 0) {
-        if (row.foh_crt === null || row.boh_crt === null) continue;
+        if (finalFohCrt === null || finalBohCrt === null) continue;
       }
 
-      const crtsInCase = Number(row.crt_in_case || 0);
-      const pksInCase = pksInCrt * crtsInCase; 
+      // Calculate total pack quantities (base loose packs + crate packs)
+      const basePacks = (finalFoh ?? 0) + (finalBoh ?? 0);
+      const cratePacks = (pksInCrt * (finalFohCrt ?? 0)) + (pksInCrt * (finalBohCrt ?? 0));
 
-      const basePacks = (row.foh ?? 0) + (row.boh ?? 0);
-      const cratePacks = (pksInCrt * (row.foh_crt ?? 0)) + (pksInCrt * (row.boh_crt ?? 0));
-      const casePacks = (pksInCase * (row.foh_case ?? 0)) + (pksInCase * (row.boh_case ?? 0));
-
-      const totalCalculatedPacks = basePacks + cratePacks + casePacks;
+      const totalCalculatedPacks = basePacks + cratePacks;
 
       compiledItems.push({
         gtin: row.gtin,

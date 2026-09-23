@@ -263,7 +263,7 @@ export const ManagerCountModal: React.FC<ManagerCountModalProps> = ({
               {/* FOH Crates */}
               {item.foh_crt !== null && item.foh_crt !== undefined && (
                 <div className="space-y-1">
-                  <label className="block text-slate-600">FOH Crates</label>
+                  <label className="block text-slate-600">FOH Crt</label>
                   <div className="text-[11px] text-slate-500 font-mono">
                     Original:{" "}
                     <span className="font-bold text-slate-800">
@@ -275,7 +275,7 @@ export const ManagerCountModal: React.FC<ManagerCountModalProps> = ({
                       type="number"
                       value={fohCrt}
                       onChange={(e) => setFohCrt(e.target.value)}
-                      placeholder="Manager Crates"
+                      placeholder="Manager Crt"
                       className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
                     />
                   ) : (
@@ -292,7 +292,7 @@ export const ManagerCountModal: React.FC<ManagerCountModalProps> = ({
               {/* BOH Crates */}
               {item.boh_crt !== null && item.boh_crt !== undefined && (
                 <div className="space-y-1">
-                  <label className="block text-slate-600">BOH Crates</label>
+                  <label className="block text-slate-600">BOH Crt</label>
                   <div className="text-[11px] text-slate-500 font-mono">
                     Original:{" "}
                     <span className="font-bold text-slate-800">
@@ -304,7 +304,7 @@ export const ManagerCountModal: React.FC<ManagerCountModalProps> = ({
                       type="number"
                       value={bohCrt}
                       onChange={(e) => setBohCrt(e.target.value)}
-                      placeholder="Manager Crates"
+                      placeholder="Manager Crt"
                       className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
                     />
                   ) : (

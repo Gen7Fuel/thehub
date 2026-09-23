@@ -13,6 +13,8 @@ const ProductCategory = require('../models/ProductCategory');
 const { getPg } = require("../config/pg");
 const moment = require("moment-timezone");
 const { syncPostgresCountsToPetrosoft } = require('../utils/uploadCountToCStore'); // Adjust path to our function
+const Role = require('../models/Role');
+const { pushNotification } = require('../services/notificationService');
 
 
 const upload = multer({ storage: multer.memoryStorage() });
@@ -2333,21 +2335,139 @@ router.post('/instance-notes', async (req, res) => {
       return res.status(401).json({ message: "Unauthorized: Missing user reference context." });
     }
 
+    // 1. Insert note into Postgres
     const [newNote] = await db("cycle_count_instance_notes")
       .insert({
         instance_id: instanceId,
         note: note.trim(),
-        user_mongo_id: cleanMongoId, // Pure 24-character hex string
+        user_mongo_id: cleanMongoId,
         created_at: new Date()
       })
       .returning("*");
 
+    // 2. Return HTTP response immediately to keep UX snappy
     res.status(201).json({ success: true, data: newNote });
+
+    // 3. Dispatch Notification asynchronously after sending response
+    try {
+      const senderRoleName = req.user?.role?.role_name;
+      const io = req.app.get('io');
+
+      if (!senderRoleName || !io) return;
+
+      // Query cycle_count_instance to retrieve the store_mongo_id and date
+      const instance = await db("cycle_count_instance")
+        .where({ id: instanceId })
+        .select("site_mongo_id", "date")
+        .first();
+
+      if (!instance || !instance.site_mongo_id) return;
+
+      // Query MongoDB Location model using site_mongo_id
+      const locationDoc = await Location.findById(instance.site_mongo_id).lean();
+      if (!locationDoc) return;
+
+      const stationName = locationDoc.stationName || locationDoc.site || "Store";
+      let recipientEmails = [];
+
+      // DIRECTIVE: Check role of sender
+      if (['Station Cashier', 'Station Manager'].includes(senderRoleName)) {
+        // --- CASE 1: Commented by Store Staff -> Notify "Inventory Team" ---
+        const inventoryRole = await Role.findOne({ role_name: 'Inventory Team' }).lean();
+        if (inventoryRole) {
+          const inventoryUsers = await User.find({
+            role: inventoryRole._id,
+            is_active: true
+          }).select('email').lean();
+
+          recipientEmails = inventoryUsers
+            .map(u => u.email)
+            .filter(Boolean);
+        }
+      } else {
+        // --- CASE 2: Commented by non-store staff (Category / Inventory / Admin) -> Notify Manager / Store Email ---
+        // Collect valid manager emails from location profile
+        if (Array.isArray(locationDoc.managerEmails) && locationDoc.managerEmails.length > 0) {
+          recipientEmails = locationDoc.managerEmails.filter(e => e && e.trim() !== "");
+        }
+
+        // Fallback: If no manager emails exist, use the store's primary email address
+        if (recipientEmails.length === 0 && locationDoc.email) {
+          recipientEmails = [locationDoc.email];
+        }
+      }
+
+      // Deduplicate emails and exclude sender's own email if present
+      const senderEmail = req.user?.email;
+      recipientEmails = [...new Set(recipientEmails)].filter(
+        email => email && email.toLowerCase() !== senderEmail?.toLowerCase()
+      );
+
+      if (!recipientEmails.length) return;
+
+      const senderName = req.user?.firstName || req.user?.lastName || "A user";
+
+      // Queue notification payload
+      await pushNotification({
+        io,
+        senderId: req.user._id,
+        recipientEmails,
+        slug: 'cycle-count-report-comment',
+        fieldValues: {
+          senderName,
+          site: stationName,
+          message: note.trim().substring(0, 200),
+          countDate: instance.date
+        },
+        subject: `New comment on cycle count report for ${stationName}`,
+        type: 'system'
+      });
+
+    } catch (notifErr) {
+      console.error('Cycle count report comment notification background dispatch error:', notifErr);
+    }
+
   } catch (err) {
     console.error("Error creating instance note:", err);
     res.status(500).json({ message: "Failed to post comment to thread." });
   }
 });
+
+// POST: Add a note to a specific count instance thread
+// router.post('/instance-notes', async (req, res) => {
+//   try {
+//     const { instanceId, note } = req.body;
+//     const userMongoId = req.user?._id;
+//     const db = getPg();
+
+//     if (!instanceId || !note?.trim()) {
+//       return res.status(400).json({ message: "Instance ID and note content are required." });
+//     }
+
+//     // Convert cleanly to hex string, stripping out any accidental double quotes
+//     const cleanMongoId = userMongoId
+//       ? userMongoId.toString().replace(/^"|"$/g, '')
+//       : null;
+
+//     if (!cleanMongoId) {
+//       return res.status(401).json({ message: "Unauthorized: Missing user reference context." });
+//     }
+
+//     const [newNote] = await db("cycle_count_instance_notes")
+//       .insert({
+//         instance_id: instanceId,
+//         note: note.trim(),
+//         user_mongo_id: cleanMongoId, // Pure 24-character hex string
+//         created_at: new Date()
+//       })
+//       .returning("*");
+
+//     res.status(201).json({ success: true, data: newNote });
+//   } catch (err) {
+//     console.error("Error creating instance note:", err);
+//     res.status(500).json({ message: "Failed to post comment to thread." });
+//   }
+// });
 
 // POST /api/cycle-count/:id/comments 
 // add new comments from the reports side
