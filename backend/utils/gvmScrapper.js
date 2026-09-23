@@ -227,13 +227,17 @@ async function attemptPricePost({ gvmLocationName, prices, timezone }) {
       }
 
       // Deliberate business rule (not a rounding artifact): GVM Unifi is
-      // always posted 1¢ below Hub's actual price. Applied here, at the
-      // single point where prices actually reach GVM, so it can't be
-      // bypassed or duplicated depending on which caller builds `prices`.
+      // posted 1¢ below Hub's actual price — except Dyed Diesel, which goes
+      // up at Hub's price with no adjustment. Applied here, at the single
+      // point where prices actually reach GVM, so it can't be bypassed or
+      // duplicated depending on which caller builds `prices`. "Dyed Diesel"
+      // is the exact label GVM_GRADE_MAP (fuel/fuelPricingRoutes.js) sends
+      // for this grade, and that map is the only source of these keys.
       const GVM_PRICE_ADJUSTMENT = 0.01;
-      const adjustedPrice = numericPrice - GVM_PRICE_ADJUSTMENT;
+      const adjustment = gradeLabel === "Dyed Diesel" ? 0 : GVM_PRICE_ADJUSTMENT;
+      const adjustedPrice = numericPrice - adjustment;
       if (adjustedPrice < 0) {
-        throw new Error(`INVALID_PRICE: ${gradeLabel} adjusted price would be negative (${numericPrice} - ${GVM_PRICE_ADJUSTMENT} = ${adjustedPrice}).`);
+        throw new Error(`INVALID_PRICE: ${gradeLabel} adjusted price would be negative (${numericPrice} - ${adjustment} = ${adjustedPrice}).`);
       }
 
       // Confirmed: the field's placeholder ("0.0000") implies 4 decimal
@@ -242,7 +246,8 @@ async function attemptPricePost({ gvmLocationName, prices, timezone }) {
       // unconfirmed, so this is the safe default rather than passing
       // whatever precision Hub's internal price happens to carry.
       const targetPriceString = adjustedPrice.toFixed(4);
-      console.log(`💲 ${gradeLabel}: Hub price ${numericPrice.toFixed(4)} -> GVM price ${targetPriceString} (-${GVM_PRICE_ADJUSTMENT})`);
+      const adjustmentNote = adjustment === 0 ? "no adjustment" : `-${GVM_PRICE_ADJUSTMENT}`;
+      console.log(`💲 ${gradeLabel}: Hub price ${numericPrice.toFixed(4)} -> GVM price ${targetPriceString} (${adjustmentNote})`);
 
       const clearAndTypePrice = async () => {
         await inputField.focus();
