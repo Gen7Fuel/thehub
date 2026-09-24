@@ -451,6 +451,7 @@ interface EventDoc {
   title: string;
   description?: string;
   date: string; // YYYY-MM-DD
+  type?: "system" | "manual";
   createdBy: {
     id: string;
     firstName?: string;
@@ -750,12 +751,12 @@ function RouteComponent() {
     }
   };
 
-  // Frontend visibility rules: Only block if it's today/past or a Cycle Count event.
+  // Frontend visibility rules: Block if it's today/past or a system-generated event.
   // Authorization (Admin/Owner) is handled directly by backend response.
   const isPastOrToday = !!viewing && viewing.date <= todayIso;
-  const isCycleCount = !!viewing && viewing.title?.startsWith("Cycle Count");
+  const isSystemEvent = !!viewing && viewing.type === "system";
 
-  const canDeleteViewing = !!viewing && !isPastOrToday && !isCycleCount;
+  const canDeleteViewing = !!viewing && !isPastOrToday && !isSystemEvent;
 
   const formatLongDate = (iso: string) => {
     const d = parseIsoDate(iso);

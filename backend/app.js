@@ -28,7 +28,8 @@ require('./cron_jobs/weeklyArReportCron') // cron job for weekly AR report email
 // require('./cron_jobs/productCategoryMappingCron'); //cron job for normalising the product categories
 require('./cron_jobs/itemBkSanitizationCron'); //cron job for sanitizing item backup data from SQL
 require('./cron_jobs/cycleCountReportCron'); //cron job for updating onHandCSO and unit prices for cycle count report, runs every morning at 3 AM
-require('./cron_jobs/cycleCountWeeklyInstanceCron'); //cron job for generating weekly cycle count instances, runs every Sunday at 3 AM
+// require('./cron_jobs/cycleCountWeeklyInstanceCron'); //cron job for generating weekly cycle count instances, runs every Sunday at 3 AM
+const { initWeeklyInstanceCron } = require('./cron_jobs/cycleCountWeeklyInstanceCron'); // Import initializer - cron job for generating weekly cycle count instances, runs every Sunday at 3 AM
 require('./cron_jobs/syncStgLiveFuelPriceCron'); //cron job for syncing staging to live fuel price tables on the 1st of every month at 12 AM EST in SSMS
 require('./cron_jobs/syncDailyStgLiveFuelCron'); //cron job for syncing staging to live fuel price tables daily at 5 AM EST in SSMS
 require('./cron_jobs/fetchBullochShiftsCron'); //cron job for fetching bulloch shift reports every 3 hours form the server
@@ -190,6 +191,7 @@ app.set("io", io);
 
 initPriceScheduleWorker(io);
 initCsoInvoiceWorker(io);
+initWeeklyInstanceCron(io); 
 
 const PORT = process.env.PORT || 5000;
 

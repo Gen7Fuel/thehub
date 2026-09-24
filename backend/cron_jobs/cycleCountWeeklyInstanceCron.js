@@ -1,5 +1,8 @@
+const mongoose = require("mongoose");
 const Location = require("../models/Location");
 const ItemBk = require("../pg/models/itemBk"); // Assumed structure
+const Event = require("../models/Event");
+const { pushNotification } = require('../services/notificationService');
 const { getPg } = require("../config/pg");
 const { format, addDays, nextMonday, getMonth } = require("date-fns");
 const cron = require("node-cron");
@@ -19,6 +22,8 @@ const STORE_SCHEDULE_MAP = {
   "osoyoos": "Thursday",
   "charlies": "Thursday"
 };
+
+const SYSTEM_USER_ID = new mongoose.Types.ObjectId("000000000000000000000000");
 
 /**
  * Resolves the scheduled count day for a given store model instance.
@@ -44,7 +49,7 @@ function isLastDayOfWeekInMonth(targetDate) {
   return getMonth(nextWeekSameDay) !== currentMonth;
 }
 
-async function runWeeklyInstanceCalculations() {
+async function runWeeklyInstanceCalculations(io = null) {
   const db = getPg();
   console.log("--- Starting Weekly Cycle Count Generation ---");
 
@@ -54,6 +59,7 @@ async function runWeeklyInstanceCalculations() {
 
     for (const store of stores) {
       const siteId = store._id.toString();
+      const siteName = store.site || store.stationName || store.legalName;
       const scheduledDayName = getStoreScheduledDay(store);
       console.log(`\nProcessing Store: ${store.stationName} (${siteId}) | Target Day: ${scheduledDayName}`);
 
@@ -134,6 +140,70 @@ async function runWeeklyInstanceCalculations() {
                 });
 
                 console.log(`   [SUCCESS] Scheduled EOM negative instance created/updated for ${dateStr} with ${negativeItems.length} products.`);
+
+                // =========================================================================
+                // Asynchronous Background System Event Creation & Notification Dispatch
+                // =========================================================================
+                try {
+                  const eventTitle = `Count Scheduled - Negative Inventory`;
+                  const eventDescription = `Cycle Count Scheduled for ${dateStr} and Negative Inventory (~${negativeItems.length} items)`;
+
+                  // 1. Create System Event with non-null Mongoose ObjectId
+                  const event = await Event.create({
+                    site: siteName,
+                    title: eventTitle,
+                    description: eventDescription,
+                    date: String(dateStr),
+                    type: 'system',
+                    createdBy: {
+                      id: SYSTEM_USER_ID,
+                      firstName: 'System',
+                      lastName: 'Generated',
+                      email: 'system@gen7fuel.com',
+                    },
+                  });
+
+                  // 2. Resolve Recipients from Location record (managerEmails or store email)
+                  const managerEmails = (store.managerEmails || [])
+                    .filter(e => Boolean(e) && typeof e === 'string')
+                    .map(e => e.trim().toLowerCase());
+
+                  const storeEmail = store.email ? store.email.trim().toLowerCase() : null;
+
+                  let recipientEmails = managerEmails.length > 0
+                    ? managerEmails
+                    : (storeEmail ? [storeEmail] : []);
+
+                  recipientEmails = [...new Set(recipientEmails)];
+
+                  // 3. Queue / Push Notification
+                  if (recipientEmails.length > 0) {
+                    const senderName = 'System Generated';
+                    const monthStr = String(dateStr).substring(0, 7);
+                    const baseUrl = process.env.CLIENT_URL || 'http://app.gen7fuel.com';
+                    const calendarUrl = `${baseUrl}/events?site=${encodeURIComponent(siteName)}&month=${monthStr}`;
+
+                    await pushNotification({
+                      io,
+                      senderId: SYSTEM_USER_ID,
+                      recipientEmails,
+                      slug: 'new-event-created',
+                      fieldValues: {
+                        senderName,
+                        site: siteName,
+                        eventTitle: event.title,
+                        eventDate: event.date,
+                        calendarUrl,
+                      },
+                      subject: `New Event Created for ${siteName}: ${event.title}`,
+                      type: 'system',
+                    });
+                    console.log(`   [NOTIFICATION] Dispatched notification for ${siteName} to: ${recipientEmails.join(", ")}`);
+                  }
+                } catch (bgError) {
+                  console.error('Error creating background schedule event or sending notification:', bgError);
+                }
+
               } catch (eomErr) {
                 console.error(`   [ERROR] Failed creating EOM scheduled instance for ${dateStr}:`, eomErr.message);
               }
@@ -291,22 +361,33 @@ async function archiveHistoricalCycleCounts() {
   }
 }
 
-// Runs every Sunday at exactly 03:00 AM
-cron.schedule("0 3 * * 0", async () => {
-  console.log(`[${new Date().toISOString()}] Triggering scheduled Sunday morning Weekly Instance Calculation engine...`);
-  try {
-    await runWeeklyInstanceCalculations();
-    console.log(`[${new Date().toISOString()}] Sunday morning Weekly Instance Calculations completed successfully.`);
-    
-    // RUN DEEP ARCHIVAL IMMEDIATELY AFTER GENERATION FINISHES
-    await archiveHistoricalCycleCounts();
-    console.log(`[${new Date().toISOString()}] Database table maintenance and historical archival run completed.`);
-  } catch (error) {
-    console.error("Critical Failure running Sunday Weekly Instance Calculations:", error);
-  }
-}, {
-  scheduled: true,
-  timezone: "America/Toronto"
-});
+/**
+ * Initializer Function called from app.js
+ */
+function initWeeklyInstanceCron(io) {
+  // Runs every Sunday at exactly 03:00 AM
+  cron.schedule("0 3 * * 0", async () => {
+    console.log(`[${new Date().toISOString()}] Triggering scheduled Sunday morning Weekly Instance Calculation engine...`);
+    try {
+      await runWeeklyInstanceCalculations(io);
+      console.log(`[${new Date().toISOString()}] Sunday morning Weekly Instance Calculations completed successfully.`);
+      
+      // RUN DEEP ARCHIVAL IMMEDIATELY AFTER GENERATION FINISHES
+      await archiveHistoricalCycleCounts();
+      console.log(`[${new Date().toISOString()}] Database table maintenance and historical archival run completed.`);
+    } catch (error) {
+      console.error("Critical Failure running Sunday Weekly Instance Calculations:", error);
+    }
+  }, {
+    scheduled: true,
+    timezone: "America/Toronto"
+  });
 
-module.exports = { runWeeklyInstanceCalculations, archiveHistoricalCycleCounts };
+  console.log("📅 Cycle Count Weekly Instance Cron Job Initialized.");
+}
+
+module.exports = { 
+  initWeeklyInstanceCron,
+  runWeeklyInstanceCalculations, 
+  archiveHistoricalCycleCounts 
+};

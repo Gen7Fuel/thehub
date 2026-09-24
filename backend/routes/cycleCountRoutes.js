@@ -15,6 +15,7 @@ const moment = require("moment-timezone");
 const { syncPostgresCountsToPetrosoft } = require('../utils/uploadCountToCStore'); // Adjust path to our function
 const Role = require('../models/Role');
 const { pushNotification } = require('../services/notificationService');
+const Event = require('../models/Event');
 
 
 const upload = multer({ storage: multer.memoryStorage() });
@@ -1106,20 +1107,110 @@ router.post('/finalize-and-sync', async (req, res) => {
 });
 
 // 3. ATOMIC TRANSACTION: CREATE INSTANCE & INJECT CHILD RECORDS
+// router.post('/schedules/create', async (req, res) => {
+//   const db = getPg();
+//   try {
+//     const { site, date, day, groupId, filterColumn, filterValues } = req.body;
+//     const scheduledBy = req.user?._id || req.user?.firstName || "system_operator";
+
+//     if (!site || !date || !day || !groupId || !filterColumn || !filterValues) {
+//       return res.status(400).json({ message: "Missing required setup parameters" });
+//     }
+
+//     // Resolve site context to grab Mongo ID mapping target
+//     const location = await Location.findOne({ site });
+//     if (!location) {
+//       return res.status(404).json({ message: "Selected location context not recognized" });
+//     }
+//     const siteMongoIdString = location._id.toString();
+
+//     // Begin single transaction isolation sandbox
+//     const result = await db.transaction(async (trx) => {
+
+//       // Secondary absolute safety gate for date duplicates inside transaction block
+//       const duplicateGate = await trx("public.cycle_count_instance")
+//         .where({ site_mongo_id: siteMongoIdString, date })
+//         .first();
+
+//       if (duplicateGate) {
+//         throw new Error(`CONFLICT_DATE`);
+//       }
+
+//       // Step A: Insert master instance header row structure
+//       const [insertedInstance] = await trx("public.cycle_count_instance")
+//         .insert({
+//           date: date,
+//           day: day,
+//           is_scheduled: true,
+//           site_mongo_id: siteMongoIdString,
+//           scheduled_by: String(scheduledBy),
+//           group_id: parseInt(groupId, 10)
+//         })
+//         .returning(["id"]);
+
+//       const newInstanceId = insertedInstance.id;
+
+//       // Step B: Query ALL qualifying matching records inside public.item_bk
+//       const targetItemsToSchedule = await trx("public.item_bk")
+//         .where({ site: siteMongoIdString })
+//         .whereIn(filterColumn, filterValues)
+//         .select("id");
+
+//       if (targetItemsToSchedule.length === 0) {
+//         throw new Error("NO_ITEMS_FOUND");
+//       }
+
+//       // Step C: Chunk-insert array relations into public.cycle_count_items
+//       const childPayload = targetItemsToSchedule.map(item => ({
+//         instance_id: newInstanceId,
+//         product_id: item.id,
+//         foh: null,
+//         boh: null,
+//         count_completed: false,
+//         priority: false
+//       }));
+
+//       // Batch insert inside chunks to prevent parameter limits saturation
+//       const chunkSize = 1000;
+//       for (let i = 0; i < childPayload.length; i += chunkSize) {
+//         await trx("public.cycle_count_items")
+//           .insert(childPayload.slice(i, i + chunkSize));
+//       }
+
+//       return { instanceId: newInstanceId, totalAdded: childPayload.length };
+//     });
+
+//     res.json({
+//       success: true,
+//       message: `Schedule locked down. Tracked ${result.totalAdded} child entries successfully.`,
+//       instanceId: result.instanceId
+//     });
+
+//   } catch (err) {
+//     console.error("Critical error building schedule pipeline execution block:", err);
+//     if (err.message === 'CONFLICT_DATE') {
+//       return res.status(422).json({ message: "A schedule layout variant already locks down that precise date context." });
+//     }
+//     if (err.message === 'NO_ITEMS_FOUND') {
+//       return res.status(422).json({ message: "The configuration matched zero inventory records inside item_bk." });
+//     }
+//     res.status(500).json({ message: "Database failure creating schedule engine logs." });
+//   }
+// });
 router.post('/schedules/create', async (req, res) => {
   const db = getPg();
   try {
     const { site, date, day, groupId, filterColumn, filterValues } = req.body;
-    const scheduledBy = req.user?._id || req.user?.firstName || "system_operator";
+    const scheduledBy = req.user?._id || req.user?.firstName || 'system_operator';
 
     if (!site || !date || !day || !groupId || !filterColumn || !filterValues) {
-      return res.status(400).json({ message: "Missing required setup parameters" });
+      return res.status(400).json({ message: 'Missing required setup parameters' });
     }
 
     // Resolve site context to grab Mongo ID mapping target
     const location = await Location.findOne({ site });
     if (!location) {
-      return res.status(404).json({ message: "Selected location context not recognized" });
+      return res.status(404).json({ message: 'Selected location context not recognized' });
     }
     const siteMongoIdString = location._id.toString();
 
@@ -1127,36 +1218,44 @@ router.post('/schedules/create', async (req, res) => {
     const result = await db.transaction(async (trx) => {
 
       // Secondary absolute safety gate for date duplicates inside transaction block
-      const duplicateGate = await trx("public.cycle_count_instance")
+      const duplicateGate = await trx('public.cycle_count_instance')
         .where({ site_mongo_id: siteMongoIdString, date })
         .first();
 
       if (duplicateGate) {
-        throw new Error(`CONFLICT_DATE`);
+        throw new Error('CONFLICT_DATE');
       }
 
+      // Query group name from public.cycle_count_groups
+      const groupDoc = await trx('public.cycle_count_groups')
+        .where({ id: parseInt(groupId, 10) })
+        .select('name')
+        .first();
+
+      const groupName = groupDoc?.name || `Group #${groupId}`;
+
       // Step A: Insert master instance header row structure
-      const [insertedInstance] = await trx("public.cycle_count_instance")
+      const [insertedInstance] = await trx('public.cycle_count_instance')
         .insert({
           date: date,
           day: day,
           is_scheduled: true,
           site_mongo_id: siteMongoIdString,
           scheduled_by: String(scheduledBy),
-          group_id: parseInt(groupId, 10)
+          group_id: parseInt(groupId, 10),
         })
-        .returning(["id"]);
+        .returning(['id']);
 
       const newInstanceId = insertedInstance.id;
 
       // Step B: Query ALL qualifying matching records inside public.item_bk
-      const targetItemsToSchedule = await trx("public.item_bk")
+      const targetItemsToSchedule = await trx('public.item_bk')
         .where({ site: siteMongoIdString })
         .whereIn(filterColumn, filterValues)
-        .select("id");
+        .select('id');
 
       if (targetItemsToSchedule.length === 0) {
-        throw new Error("NO_ITEMS_FOUND");
+        throw new Error('NO_ITEMS_FOUND');
       }
 
       // Step C: Chunk-insert array relations into public.cycle_count_items
@@ -1166,34 +1265,103 @@ router.post('/schedules/create', async (req, res) => {
         foh: null,
         boh: null,
         count_completed: false,
-        priority: false
+        priority: false,
       }));
 
       // Batch insert inside chunks to prevent parameter limits saturation
       const chunkSize = 1000;
       for (let i = 0; i < childPayload.length; i += chunkSize) {
-        await trx("public.cycle_count_items")
+        await trx('public.cycle_count_items')
           .insert(childPayload.slice(i, i + chunkSize));
       }
 
-      return { instanceId: newInstanceId, totalAdded: childPayload.length };
+      return {
+        instanceId: newInstanceId,
+        totalAdded: childPayload.length,
+        groupName,
+      };
     });
 
+    // Send HTTP response immediately
     res.json({
       success: true,
       message: `Schedule locked down. Tracked ${result.totalAdded} child entries successfully.`,
-      instanceId: result.instanceId
+      instanceId: result.instanceId,
     });
 
+    // =========================================================================
+    // Asynchronous Background System Event Creation & Notification Dispatch
+    // =========================================================================
+    try {
+      // 1. Create System Event
+      const eventTitle = `Count Scheduled - ${result.groupName}`;
+      const eventDescription = `Cycle Count Scheduled for ${date} and ${result.groupName} (~${result.totalAdded} items)`;
+
+      const event = await Event.create({
+        site,
+        title: eventTitle,
+        description: eventDescription,
+        date: String(date),
+        type: 'system',
+        createdBy: {
+          id: req.user?._id,
+          firstName: req.user?.firstName || '',
+          lastName: req.user?.lastName || '',
+          email: req.user?.email || '',
+        },
+      });
+
+      // 2. Dispatch Notification to Store Manager / Store Email
+      const io = req.app.get('io');
+      const managerEmails = (location.managerEmails || [])
+        .filter(e => Boolean(e) && typeof e === 'string')
+        .map(e => e.trim().toLowerCase());
+
+      const storeEmail = location.email ? location.email.trim().toLowerCase() : null;
+
+      // Direct target: Manager emails first, fallback to store email
+      let recipientEmails = managerEmails.length > 0
+        ? managerEmails
+        : (storeEmail ? [storeEmail] : []);
+
+      // Deduplicate recipient list
+      recipientEmails = [...new Set(recipientEmails)];
+
+      if (recipientEmails.length > 0 && io) {
+        const senderName = `${req.user?.firstName || ''} ${req.user?.lastName || ''}`.trim() || 'Category Team';
+        const monthStr = String(date).substring(0, 7);
+        const baseUrl = process.env.CLIENT_URL || 'http://app.gen7fuel.com';
+        const calendarUrl = `${baseUrl}/events?site=${encodeURIComponent(site)}&month=${monthStr}`;
+
+        await pushNotification({
+          io,
+          senderId: req.user?._id,
+          recipientEmails,
+          slug: 'new-event-created',
+          fieldValues: {
+            senderName,
+            site,
+            eventTitle: event.title,
+            eventDate: event.date,
+            calendarUrl,
+          },
+          subject: `New Event Created for ${site}: ${event.title}`,
+          type: 'system',
+        });
+      }
+    } catch (bgError) {
+      console.error('Error creating background schedule event or sending notification:', bgError);
+    }
+
   } catch (err) {
-    console.error("Critical error building schedule pipeline execution block:", err);
+    console.error('Critical error building schedule pipeline execution block:', err);
     if (err.message === 'CONFLICT_DATE') {
-      return res.status(422).json({ message: "A schedule layout variant already locks down that precise date context." });
+      return res.status(422).json({ message: 'A schedule layout variant already locks down that precise date context.' });
     }
     if (err.message === 'NO_ITEMS_FOUND') {
-      return res.status(422).json({ message: "The configuration matched zero inventory records inside item_bk." });
+      return res.status(422).json({ message: 'The configuration matched zero inventory records inside item_bk.' });
     }
-    res.status(500).json({ message: "Database failure creating schedule engine logs." });
+    res.status(500).json({ message: 'Database failure creating schedule engine logs.' });
   }
 });
 
@@ -2496,6 +2664,44 @@ router.post('/:id/comments', async (req, res) => {
 });
 
 // Express Handler Endpoint: DELETE /api/cycle-count/instance/:id
+// router.delete('/instance/:id', async (req, res) => {
+//   const instanceId = req.params.id;
+//   const db = req.app.get("db") || getPg();
+
+//   try {
+//     // 1. Fetch the targeted instance profile record
+//     const instance = await db("cycle_count_instance")
+//       .where({ id: instanceId })
+//       .first();
+
+//     if (!instance) {
+//       return res.status(404).json({ message: "The requested count instance could not be found." });
+//     }
+
+//     // 2. CRITICAL SECURITY GUARDRAIL: Block deletion if it is NOT a manual/scheduled record
+//     // if (!instance.is_scheduled) {
+//     //   return res.status(403).json({
+//     //     message: "Action Denied: Automatically generated system count instances cannot be manually deleted."
+//     //   });
+//     // }
+
+//     // 3. Execution wrapper block
+//     await db.transaction(async (trx) => {
+//       // Due to 'ON DELETE CASCADE' on your Foreign Key constraint,
+//       // dropping the parent row here drops everything inside cycle_count_items automatically.
+//       await trx("cycle_count_instance")
+//         .where({ id: instanceId })
+//         .del();
+//     });
+
+//     console.log(`[SUCCESS] Purged scheduled instance ID: ${instanceId} along with its cascading items.`);
+//     res.json({ success: true, message: "Instance and linked line mappings completely dropped cleanly." });
+
+//   } catch (err) {
+//     console.error("Critical Failure executing Instance Deletion Chain:", err);
+//     res.status(500).json({ error: "Internal server error occurred while deleting the instance layout." });
+//   }
+// });
 router.delete('/instance/:id', async (req, res) => {
   const instanceId = req.params.id;
   const db = req.app.get("db") || getPg();
@@ -2508,6 +2714,13 @@ router.delete('/instance/:id', async (req, res) => {
 
     if (!instance) {
       return res.status(404).json({ message: "The requested count instance could not be found." });
+    }
+
+    // Resolve site name using site_mongo_id to target MongoDB Event cleanly
+    let siteName = null;
+    if (instance.site_mongo_id) {
+      const locationDoc = await Location.findById(instance.site_mongo_id).lean();
+      siteName = locationDoc?.site || locationDoc?.stationName || null;
     }
 
     // 2. CRITICAL SECURITY GUARDRAIL: Block deletion if it is NOT a manual/scheduled record
@@ -2527,7 +2740,28 @@ router.delete('/instance/:id', async (req, res) => {
     });
 
     console.log(`[SUCCESS] Purged scheduled instance ID: ${instanceId} along with its cascading items.`);
-    res.json({ success: true, message: "Instance and linked line mappings completely dropped cleanly." });
+
+    // 4. Clean up corresponding System Event in MongoDB if is_scheduled is true
+    if (instance.is_scheduled && siteName && instance.date) {
+      try {
+        const deletedEvent = await Event.findOneAndDelete({
+          site: siteName,
+          date: String(instance.date),
+          type: 'system',
+          title: { $regex: /^Count Scheduled/i },
+        });
+
+        if (deletedEvent) {
+          console.log(`[SUCCESS] Removed linked system event for site ${siteName} on ${instance.date}`);
+        } else {
+          console.warn(`[WARN] No matching system event found to delete for site ${siteName} on ${instance.date}`);
+        }
+      } catch (eventErr) {
+        console.error("Failed to delete corresponding system event from MongoDB:", eventErr);
+      }
+    }
+
+    res.json({ success: true, message: "Instance, linked line mappings, and associated calendar event completely dropped cleanly." });
 
   } catch (err) {
     console.error("Critical Failure executing Instance Deletion Chain:", err);
