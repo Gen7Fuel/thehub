@@ -328,6 +328,7 @@ router.post('/carrier-haulage/batch', async (req, res) => {
     try {
       for (const entry of entries) {
         const haulageVal = parseFloat(entry.haulage);
+        const isSplitVal = entry.isSplit ? 1 : 0; 
 
         // A. Inject into Live Table Room
         const liveInsert = new mssql.Request(transaction);
@@ -337,11 +338,12 @@ router.post('/carrier-haulage/batch', async (req, res) => {
           .input('location', mssql.VarChar, entry.location)
           .input('pickup', mssql.VarChar, entry.pickup)
           .input('haulageVal', mssql.Float, haulageVal)
+          .input('isSplitVal', mssql.Int, isSplitVal)
           .query(`
             INSERT INTO [FUEL].[CarrierHaulage] (
-              [Carrier], [Type], [Location], [Pickup], [Haulage], [Created At], [Updated At], [Deleted At]
+              [Carrier], [Type], [Location], [Pickup], [Haulage], [IsSplit], [Created At], [Updated At], [Deleted At]
             ) VALUES (
-              @carrier, @type, @location, @pickup, @haulageVal, GETDATE(), GETDATE(), '1900-01-01 00:00:00.000'
+              @carrier, @type, @location, @pickup, @haulageVal, @isSplitVal, GETDATE(), GETDATE(), '1900-01-01 00:00:00.000'
             )
           `);
 
@@ -353,11 +355,12 @@ router.post('/carrier-haulage/batch', async (req, res) => {
           .input('location', mssql.VarChar, entry.location)
           .input('pickup', mssql.VarChar, entry.pickup)
           .input('haulageVal', mssql.Float, haulageVal)
+          .input('isSplitVal', mssql.Int, isSplitVal)
           .query(`
             INSERT INTO [FUEL].[Stg_CarrierHaulage] (
-              [Carrier], [Type], [Location], [Pickup], [Haulage], [Updated At]
+              [Carrier], [Type], [Location], [Pickup], [Haulage], [IsSplit], [Created At], [Updated At]
             ) VALUES (
-              @carrier, @type, @location, @pickup, @haulageVal, NULL
+              @carrier, @type, @location, @pickup, @haulageVal, @isSplitVal, GETDATE(), NULL
             )
           `);
       }
@@ -374,6 +377,87 @@ router.post('/carrier-haulage/batch', async (req, res) => {
   }
 });
 
+// router.put('/carrier-haulage/batch', async (req, res) => {
+//   const { updates, deletions, isImmediate } = req.body;
+//   let pool;
+//   try {
+//     const mssql = require('mssql');
+//     pool = await getPool();
+//     const transaction = new mssql.Transaction(pool);
+//     await transaction.begin();
+
+//     try {
+//       if (deletions && deletions.length > 0) {
+//         for (const item of deletions) {
+//           const liveDelete = new mssql.Request(transaction);
+//           await liveDelete
+//             .input('carrier', mssql.VarChar, item.carrier)
+//             .input('type', mssql.VarChar, item.type)
+//             .input('location', mssql.VarChar, item.location)
+//             .input('pickup', mssql.VarChar, item.pickup)
+//             .query(`DELETE FROM [FUEL].[CarrierHaulage] WHERE [Carrier] = @carrier AND [Type] = @type AND [Location] = @location AND [Pickup] = @pickup`);
+
+//           const stgDelete = new mssql.Request(transaction);
+//           await stgDelete
+//             .input('carrier', mssql.VarChar, item.carrier)
+//             .input('type', mssql.VarChar, item.type)
+//             .input('location', mssql.VarChar, item.location)
+//             .input('pickup', mssql.VarChar, item.pickup)
+//             .query(`DELETE FROM [FUEL].[Stg_CarrierHaulage] WHERE [Carrier] = @carrier AND [Type] = @type AND [Location] = @location AND [Pickup] = @pickup`);
+//         }
+//       }
+
+//       if (updates && updates.length > 0) {
+//         for (const item of updates) {
+//           const haulageVal = parseFloat(item.haulage);
+
+//           if (isImmediate === true) {
+//             const liveUpdate = new mssql.Request(transaction);
+//             await liveUpdate
+//               .input('haulageVal', mssql.Float, haulageVal)
+//               .input('carrier', mssql.VarChar, item.carrier)
+//               .input('type', mssql.VarChar, item.type)
+//               .input('location', mssql.VarChar, item.location)
+//               .input('pickup', mssql.VarChar, item.pickup)
+//               .query(`UPDATE [FUEL].[CarrierHaulage] SET [Haulage] = @haulageVal, [Updated At] = GETDATE() WHERE [Carrier] = @carrier AND [Type] = @type AND [Location] = @location AND [Pickup] = @pickup`);
+
+//             const stgUpdate = new mssql.Request(transaction);
+//             await stgUpdate
+//               .input('haulageVal', mssql.Float, haulageVal)
+//               .input('carrier', mssql.VarChar, item.carrier)
+//               .input('type', mssql.VarChar, item.type)
+//               .input('location', mssql.VarChar, item.location)
+//               .input('pickup', mssql.VarChar, item.pickup)
+//               .query(`
+//                 UPDATE [FUEL].[Stg_CarrierHaulage] 
+//                 SET [Haulage] = @haulageVal, [Updated At] = NULL 
+//                 WHERE [Carrier] = @carrier AND [Type] = @type AND [Location] = @location AND [Pickup] = @pickup
+//                   AND ([Updated At] IS NULL OR MONTH([Updated At]) != MONTH(GETDATE()) OR YEAR([Updated At]) != YEAR(GETDATE()))
+//               `);
+//           } else {
+//             const stgScheduledUpdate = new mssql.Request(transaction);
+//             await stgScheduledUpdate
+//               .input('haulageVal', mssql.Float, haulageVal)
+//               .input('carrier', mssql.VarChar, item.carrier)
+//               .input('type', mssql.VarChar, item.type)
+//               .input('location', mssql.VarChar, item.location)
+//               .input('pickup', mssql.VarChar, item.pickup)
+//               .query(`UPDATE [FUEL].[Stg_CarrierHaulage] SET [Haulage] = @haulageVal, [Updated At] = GETDATE() WHERE [Carrier] = @carrier AND [Type] = @type AND [Location] = @location AND [Pickup] = @pickup`);
+//           }
+//         }
+//       }
+
+//       await transaction.commit();
+//       return res.status(200).json({ message: "Haulage parameters modifications processed successfully." });
+//     } catch (txError) {
+//       await transaction.rollback();
+//       throw txError;
+//     }
+//   } catch (error) {
+//     console.error("Batch update failed for carrier haulage:", error);
+//     return res.status(500).json({ error: "Failed to execute database batch updates." });
+//   }
+// });
 router.put('/carrier-haulage/batch', async (req, res) => {
   const { updates, deletions, isImmediate } = req.body;
   let pool;
@@ -384,15 +468,26 @@ router.put('/carrier-haulage/batch', async (req, res) => {
     await transaction.begin();
 
     try {
+      // 1. PROCESS DELETIONS
       if (deletions && deletions.length > 0) {
         for (const item of deletions) {
+          const isSplitVal = item.isSplit ? 1 : 0;
+
           const liveDelete = new mssql.Request(transaction);
           await liveDelete
             .input('carrier', mssql.VarChar, item.carrier)
             .input('type', mssql.VarChar, item.type)
             .input('location', mssql.VarChar, item.location)
             .input('pickup', mssql.VarChar, item.pickup)
-            .query(`DELETE FROM [FUEL].[CarrierHaulage] WHERE [Carrier] = @carrier AND [Type] = @type AND [Location] = @location AND [Pickup] = @pickup`);
+            .input('isSplitVal', mssql.Int, isSplitVal)
+            .query(`
+              DELETE FROM [FUEL].[CarrierHaulage] 
+              WHERE [Carrier] = @carrier 
+                AND [Type] = @type 
+                AND [Location] = @location 
+                AND [Pickup] = @pickup 
+                AND [IsSplit] = @isSplitVal
+            `);
 
           const stgDelete = new mssql.Request(transaction);
           await stgDelete
@@ -400,13 +495,23 @@ router.put('/carrier-haulage/batch', async (req, res) => {
             .input('type', mssql.VarChar, item.type)
             .input('location', mssql.VarChar, item.location)
             .input('pickup', mssql.VarChar, item.pickup)
-            .query(`DELETE FROM [FUEL].[Stg_CarrierHaulage] WHERE [Carrier] = @carrier AND [Type] = @type AND [Location] = @location AND [Pickup] = @pickup`);
+            .input('isSplitVal', mssql.Int, isSplitVal)
+            .query(`
+              DELETE FROM [FUEL].[Stg_CarrierHaulage] 
+              WHERE [Carrier] = @carrier 
+                AND [Type] = @type 
+                AND [Location] = @location 
+                AND [Pickup] = @pickup 
+                AND [IsSplit] = @isSplitVal
+            `);
         }
       }
 
+      // 2. PROCESS UPDATES
       if (updates && updates.length > 0) {
         for (const item of updates) {
           const haulageVal = parseFloat(item.haulage);
+          const isSplitVal = item.isSplit ? 1 : 0;
 
           if (isImmediate === true) {
             const liveUpdate = new mssql.Request(transaction);
@@ -416,7 +521,16 @@ router.put('/carrier-haulage/batch', async (req, res) => {
               .input('type', mssql.VarChar, item.type)
               .input('location', mssql.VarChar, item.location)
               .input('pickup', mssql.VarChar, item.pickup)
-              .query(`UPDATE [FUEL].[CarrierHaulage] SET [Haulage] = @haulageVal, [Updated At] = GETDATE() WHERE [Carrier] = @carrier AND [Type] = @type AND [Location] = @location AND [Pickup] = @pickup`);
+              .input('isSplitVal', mssql.Int, isSplitVal)
+              .query(`
+                UPDATE [FUEL].[CarrierHaulage] 
+                SET [Haulage] = @haulageVal, [Updated At] = GETDATE() 
+                WHERE [Carrier] = @carrier 
+                  AND [Type] = @type 
+                  AND [Location] = @location 
+                  AND [Pickup] = @pickup 
+                  AND [IsSplit] = @isSplitVal
+              `);
 
             const stgUpdate = new mssql.Request(transaction);
             await stgUpdate
@@ -425,10 +539,15 @@ router.put('/carrier-haulage/batch', async (req, res) => {
               .input('type', mssql.VarChar, item.type)
               .input('location', mssql.VarChar, item.location)
               .input('pickup', mssql.VarChar, item.pickup)
+              .input('isSplitVal', mssql.Int, isSplitVal)
               .query(`
                 UPDATE [FUEL].[Stg_CarrierHaulage] 
                 SET [Haulage] = @haulageVal, [Updated At] = NULL 
-                WHERE [Carrier] = @carrier AND [Type] = @type AND [Location] = @location AND [Pickup] = @pickup
+                WHERE [Carrier] = @carrier 
+                  AND [Type] = @type 
+                  AND [Location] = @location 
+                  AND [Pickup] = @pickup 
+                  AND [IsSplit] = @isSplitVal
                   AND ([Updated At] IS NULL OR MONTH([Updated At]) != MONTH(GETDATE()) OR YEAR([Updated At]) != YEAR(GETDATE()))
               `);
           } else {
@@ -439,7 +558,16 @@ router.put('/carrier-haulage/batch', async (req, res) => {
               .input('type', mssql.VarChar, item.type)
               .input('location', mssql.VarChar, item.location)
               .input('pickup', mssql.VarChar, item.pickup)
-              .query(`UPDATE [FUEL].[Stg_CarrierHaulage] SET [Haulage] = @haulageVal, [Updated At] = GETDATE() WHERE [Carrier] = @carrier AND [Type] = @type AND [Location] = @location AND [Pickup] = @pickup`);
+              .input('isSplitVal', mssql.Int, isSplitVal)
+              .query(`
+                UPDATE [FUEL].[Stg_CarrierHaulage] 
+                SET [Haulage] = @haulageVal, [Updated At] = GETDATE() 
+                WHERE [Carrier] = @carrier 
+                  AND [Type] = @type 
+                  AND [Location] = @location 
+                  AND [Pickup] = @pickup 
+                  AND [IsSplit] = @isSplitVal
+              `);
           }
         }
       }

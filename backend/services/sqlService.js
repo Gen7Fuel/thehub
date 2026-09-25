@@ -665,13 +665,14 @@ async function getFuelCarrierHaulage() {
     const { getPool } = require('./sqlService'); // Adjust path if needed
     const pool = await getPool();
 
-    // FULL OUTER JOIN on all 4 composite keys: Carrier, Type, Location, and Pickup
+    // FULL OUTER JOIN on all 5 composite keys: Carrier, Type, Location, Pickup, and IsSplit
     const result = await pool.request().query(`
       SELECT 
         COALESCE(live.[Carrier], stg.[Carrier]) AS [Carrier],
         COALESCE(live.[Type], stg.[Type]) AS [Type],
         COALESCE(live.[Location], stg.[Location]) AS [Location],
         COALESCE(live.[Pickup], stg.[Pickup]) AS [Pickup],
+        COALESCE(live.[IsSplit], stg.[IsSplit]) AS [IsSplit],
         live.[Haulage] AS [Live_Haulage],
         live.[Updated At] AS [Live_Updated_At],
         stg.[Haulage] AS [Stg_Haulage],
@@ -682,6 +683,7 @@ async function getFuelCarrierHaulage() {
         AND live.[Type] = stg.[Type]
         AND live.[Location] = stg.[Location]
         AND live.[Pickup] = stg.[Pickup]
+        AND live.[IsSplit] = stg.[IsSplit]
     `);
 
     return result.recordset;
