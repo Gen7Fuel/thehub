@@ -374,15 +374,51 @@ router.patch('/bank-statement/merchant-fees', express.json(), async (req, res) =
   }
 })
 
+const KARDPOLL_DATE_RE = /^\d{4}-\d{2}-\d{2}$/
+
 router.get('/kardpoll-entries', async (req, res) => {
   try {
-    const site = String(req.query.site || '').trim()
-    const date = String(req.query.date || '').trim()
-    if (!site || !/^\d{4}-\d{2}-\d{2}$/.test(date)) {
+    const { site, date, startDate, endDate } = req.query
+
+    // Range query — startDate/endDate, optionally scoped to one site.
+    // Used for multi-day/multi-site AR reporting (e.g. Desk's Intacct page).
+    if (startDate || endDate) {
+      const start = String(startDate || '').trim()
+      const end = String(endDate || '').trim()
+      if (!KARDPOLL_DATE_RE.test(start) || !KARDPOLL_DATE_RE.test(end)) {
+        return res
+          .status(400)
+          .json({ error: 'startDate and endDate (YYYY-MM-DD) are required together' })
+      }
+
+      const filter = { date: { $gte: start, $lte: end } }
+      const siteFilter = String(site || '').trim()
+      if (siteFilter) filter.site = siteFilter
+
+      const docs = await KardpollReport.find(filter).sort({ site: 1, date: 1 }).lean()
+      return res.json(
+        docs.map((doc) => ({
+          _id: doc._id,
+          site: doc.site,
+          date: doc.date,
+          litresSold: doc.litresSold,
+          sales: doc.sales,
+          ar: doc.ar,
+          ar_rows: doc.ar_rows || [],
+          createdAt: doc.createdAt,
+          updatedAt: doc.updatedAt,
+        })),
+      )
+    }
+
+    // Legacy: exact site + date lookup, single document.
+    const siteExact = String(site || '').trim()
+    const dateExact = String(date || '').trim()
+    if (!siteExact || !KARDPOLL_DATE_RE.test(dateExact)) {
       return res.status(400).json({ error: 'site and date (YYYY-MM-DD) are required' })
     }
 
-    const doc = await KardpollReport.findOne({ site, date }).lean()
+    const doc = await KardpollReport.findOne({ site: siteExact, date: dateExact }).lean()
     if (!doc) return res.status(404).json({ error: 'No Kardpoll report found for site/date' })
 
     // Return full document; ar_rows included
