@@ -367,7 +367,8 @@ router.get('/daily-items-v2', async (req, res) => {
       .join("item_bk as ib", "ci.product_id", "ib.id")
       .where({
         "i.site_mongo_id": location._id.toString(),
-        "i.date": localDateStr
+        "i.date": localDateStr,
+        "ib.allow_cycle_count": true
       })
       .select(
         "ci.id as entryId",
@@ -387,7 +388,8 @@ router.get('/daily-items-v2', async (req, res) => {
         "ib.crt_in_case",
         "ib.on_hand_qty as onHandCSO"
       )
-      .orderBy("ci.priority", "desc");
+      .orderBy("ci.priority", "desc")
+      .orderBy("ib.description", "asc");
 
     // 4. Attach Category Names
     const enrichedItems = items.map(item => ({
