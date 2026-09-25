@@ -1,12 +1,12 @@
 const cron = require("node-cron");
 const { DateTime } = require("luxon");
 const { getPg } = require("../config/pg");
-const Location = require("../models/Location"); // Keeping Mongo Location collection as source of truth for timezones
+const Location = require("../models/Location"); // Source of truth for timezones
 const { getOnHandBulkCSOData } = require("../services/sqlService");
 
-// Helper: Get yesterday's date string configured for the specific site's local time zone
-const getYesterdayDateString = (timezone) => {
-  return DateTime.now().setZone(timezone).minus({ days: 1 }).toFormat("yyyy-MM-dd");
+// Helper: Get date string formatted for site local timezone
+const getLocalDateString = (timezone, daysOffset = 0) => {
+  return DateTime.now().setZone(timezone).plus({ days: daysOffset }).toFormat("yyyy-MM-dd");
 };
 
 const updateCycleCountCSO = async () => {
@@ -16,7 +16,7 @@ const updateCycleCountCSO = async () => {
   try {
     const excludedSites = ["Sarnia", "Jocko Point"];
 
-    // 1. Fetch active monitoring store list from Mongo to handle specific timezones
+    // 1. Fetch active monitoring store list from Mongo
     const locations = await Location.find({
       site: { $nin: excludedSites },
       type: "store"
@@ -27,12 +27,13 @@ const updateCycleCountCSO = async () => {
       if (!timezone || !siteMongoId) continue;
 
       const mongoSiteIdStr = siteMongoId.toString();
-      const yesterdayStr = getYesterdayDateString(timezone);
+      const yesterdayStr = getLocalDateString(timezone, -1);
+      const todayStr = getLocalDateString(timezone, 0);
 
-      console.log(`Processing [${siteName}] for Target Audit Date: ${yesterdayStr}`);
+      console.log(`Processing [${siteName}] | Yesterday (${yesterdayStr}) & Today (${todayStr})`);
 
-      // 2. Query Postgres for completed cycle counts submitted yesterday for this site
-      const completedItems = await db("cycle_count_items as cci")
+      // 2a. Query Postgres for completed cycle count items from YESTERDAY
+      const yesterdayCompletedItems = await db("cycle_count_items as cci")
         .join("cycle_count_instance as cci_inst", "cci.instance_id", "cci_inst.id")
         .join("item_bk as ib", "cci.product_id", "ib.id")
         .where({
@@ -48,29 +49,50 @@ const updateCycleCountCSO = async () => {
           "ib.retail as currentRetail"
         );
 
-      if (!completedItems.length) {
-        console.log(`-> No completed counts found for ${siteName} on ${yesterdayStr}. Skipping.`);
+      // 2b. Query Postgres for scheduled cycle count items for TODAY
+      const todayScheduledItems = await db("cycle_count_items as cci")
+        .join("cycle_count_instance as cci_inst", "cci.instance_id", "cci_inst.id")
+        .join("item_bk as ib", "cci.product_id", "ib.id")
+        .where({
+          "cci_inst.site_mongo_id": mongoSiteIdStr,
+          "cci_inst.date": todayStr
+        })
+        .select(
+          "cci.id as itemId",
+          "cci.product_id as productId",
+          "ib.gtin",
+          "ib.upc",
+          "ib.retail as currentRetail"
+        );
+
+      if (!yesterdayCompletedItems.length && !todayScheduledItems.length) {
+        console.log(`-> No items found for ${siteName} on ${yesterdayStr} or ${todayStr}. Skipping.`);
         continue;
       }
 
-      // Filter and isolate unique valid GTINs to build batch request
-      const gtinMap = new Map();
-      completedItems.forEach(item => {
-        if (item.gtin) gtinMap.set(item.gtin, item.productId);
-      });
+      // Collect distinct GTINs across both datasets to query SQL in a single batch
+      const allTargetGtins = [
+        ...new Set([
+          ...yesterdayCompletedItems.map(i => i.gtin),
+          ...todayScheduledItems.map(i => i.gtin)
+        ].filter(Boolean))
+      ];
 
-      const uniqueGtins = Array.from(gtinMap.keys());
-      if (!uniqueGtins.length) continue;
+      if (!allTargetGtins.length) continue;
 
-      // 3. Hit Azure SQL to gather yesterday's closing snapshots
-      console.log(`-> Querying Azure SQL for ${uniqueGtins.length} metrics at ${siteName}...`);
-      const csoDataMap = await getOnHandBulkCSOData(csoCode, uniqueGtins, yesterdayStr);
-      let updateCount = 0;
+      console.log(`-> Querying Azure SQL for ${allTargetGtins.length} GTINs at ${siteName} as of ${yesterdayStr}...`);
 
-      // 4. Update item_bk logs systematically
-      // Using an isolated transaction loop block per site to prevent network lockouts
+      // Query Azure SQL using yesterdayStr to fetch the latest available inventory snapshot
+      const csoDataMap = await getOnHandBulkCSOData(csoCode, allTargetGtins, yesterdayStr);
+
+      let yesterdayUpdateCount = 0;
+      let todayUpdateCount = 0;
+
+      // 3. Execute DB mutations inside a single site transaction
       await db.transaction(async (trx) => {
-        for (const item of completedItems) {
+
+        // A. PROCESS YESTERDAY'S COMPLETED ITEMS -> update on_hand_at_count for variance report
+        for (const item of yesterdayCompletedItems) {
           const sqlSnapshot = csoDataMap[item.gtin];
           if (!sqlSnapshot) continue;
 
@@ -81,7 +103,6 @@ const updateCycleCountCSO = async () => {
             updateFields.on_hand_at_count = sqlSnapshot.qty;
           }
 
-          // Update product base retail price if it has updated on the POS system
           if (
             sqlSnapshot.unitPrice != null &&
             sqlSnapshot.unitPrice > 0 &&
@@ -90,21 +111,50 @@ const updateCycleCountCSO = async () => {
             updateFields.retail = sqlSnapshot.unitPrice;
           }
 
-          // If changes need to be made, execute the write statement
           if (Object.keys(updateFields).length > 0) {
             updateFields.sync_date = trx.fn.now();
-            updateFields.last_inv_date = yesterdayStr; // Snapshot date stamp reference marker
+            updateFields.last_inv_date = yesterdayStr;
 
             await trx("item_bk")
               .where({ id: item.productId })
               .update(updateFields);
 
-            updateCount++;
+            yesterdayUpdateCount++;
+          }
+        }
+
+        // B. PROCESS TODAY'S SCHEDULED ITEMS -> update on_hand_qty for counter display
+        for (const item of todayScheduledItems) {
+          const sqlSnapshot = csoDataMap[item.gtin];
+          if (!sqlSnapshot) continue;
+
+          const updateFields = {};
+
+          if (sqlSnapshot.qty !== undefined) {
+            updateFields.on_hand_qty = sqlSnapshot.qty; // Latest available CSO updated here
+          }
+
+          if (
+            sqlSnapshot.unitPrice != null &&
+            sqlSnapshot.unitPrice > 0 &&
+            Number(sqlSnapshot.unitPrice) !== Number(item.currentRetail)
+          ) {
+            updateFields.retail = sqlSnapshot.unitPrice;
+          }
+
+          if (Object.keys(updateFields).length > 0) {
+            updateFields.sync_date = trx.fn.now();
+
+            await trx("item_bk")
+              .where({ id: item.productId })
+              .update(updateFields);
+
+            todayUpdateCount++;
           }
         }
       });
 
-      console.log(`Successfully completed snapshot synchronization. Updated ${updateCount} records for ${siteName}.`);
+      console.log(`[${siteName}] Synchronization Summary -> Yesterday Snapshots Updated: ${yesterdayUpdateCount} | Today Live On-Hand Updated: ${todayUpdateCount}`);
     }
 
     console.log("--- Relational Cycle Count CSO Snapshot Sync Completed Successfully ---");
@@ -113,7 +163,7 @@ const updateCycleCountCSO = async () => {
   }
 };
 
-// Execute Cron job at exactly 7:00 AM local Server Time
+// Execute Cron job at 07:00 AM Toronto time
 cron.schedule("0 7 * * *", () => {
   console.log("Triggering scheduled morning updateCycleCountCSO invocation...");
   updateCycleCountCSO();

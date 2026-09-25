@@ -16,6 +16,7 @@ interface Props {
   onInputChange: (id: string, field: "foh" | "boh", value: string) => void;
   onInputBlur: (id: string, field: "foh" | "boh", value: string) => void;
   getVarianceForItem: (catNum?: number) => number;
+  isScheduled?: boolean;
 }
 
 const CycleCountTableGroup: React.FC<Props> = ({
@@ -24,7 +25,8 @@ const CycleCountTableGroup: React.FC<Props> = ({
   isPriority,
   onInputChange,
   onInputBlur,
-  getVarianceForItem
+  getVarianceForItem,
+  isScheduled = false
 }) => {
   const [activeBarcodeItem, setActiveBarcodeItem] = useState<{ name: string, upc: string, image: string } | null>(null);
   const [openVarianceId, setOpenVarianceId] = useState<string | null>(null);
@@ -39,6 +41,10 @@ const CycleCountTableGroup: React.FC<Props> = ({
             <th className="px-4 py-4 w-28 text-center">BOH</th>
             <th className="px-4 py-4 w-28 text-center">FOH</th>
             <th className="px-4 py-4 w-20 text-center">Total Pks</th>
+            {/* Render only when isScheduled is true */}
+            {isScheduled && (
+              <th className="px-4 py-4 w-24 text-center">Expected Pks</th>
+            )}
           </tr>
         </thead>
         <tbody className="divide-y divide-gray-100">
@@ -166,6 +172,13 @@ const CycleCountTableGroup: React.FC<Props> = ({
                 <td className={`px-4 py-4 text-center font-black text-xl rounded-xl ${isDone ? 'bg-green-50 text-green-700' : 'text-gray-300'}`}>
                   {isDone ? total : "--"}
                 </td>
+
+                {/* Render only when isScheduled is true */}
+                {isScheduled && (
+                  <td className="px-4 py-4 text-center font-bold text-gray-600 text-lg">
+                    {item.onHandCSO != null ? Math.round(Number(item.onHandCSO)) : "--"}
+                  </td>
+                )}
               </tr>
             );
           })}

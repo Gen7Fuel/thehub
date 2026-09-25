@@ -364,7 +364,7 @@ router.get('/daily-items-v2', async (req, res) => {
     const stationTimezone = location.timezone || "UTC";
     const localDateStr = moment().tz(stationTimezone).format("YYYY-MM-DD");
 
-    // 3. Fetch Items from Postgres
+    // 3. Fetch Items from Postgres (including i.is_scheduled)
     const items = await db("cycle_count_instance as i")
       .join("cycle_count_items as ci", "i.id", "ci.instance_id")
       .join("item_bk as ib", "ci.product_id", "ib.id")
@@ -374,6 +374,7 @@ router.get('/daily-items-v2', async (req, res) => {
         "ib.allow_cycle_count": true
       })
       .select(
+        "i.is_scheduled as isScheduled", // 👈 Selected from instance table
         "ci.id as entryId",
         "ci.foh",
         "ci.boh",
@@ -394,13 +395,22 @@ router.get('/daily-items-v2', async (req, res) => {
       .orderBy("ci.priority", "desc")
       .orderBy("ib.description", "asc");
 
-    // 4. Attach Category Names
+    // 4. Determine overall scheduled status for this count instance
+    // If items exist, check the first row's isScheduled status (default to false if no items)
+    const isScheduled = items.length > 0 ? Boolean(items[0].isScheduled) : false;
+
+    // 5. Attach Category Names
     const enrichedItems = items.map(item => ({
       ...item,
+      isScheduled: Boolean(item.isScheduled),
       categoryName: categoryMap[item.category_id] || `Uncategorized (${item.category_id})`
     }));
 
-    res.json({ items: enrichedItems });
+    // Return both the root flag and enriched item payload
+    res.json({
+      isScheduled,
+      items: enrichedItems
+    });
   } catch (err) {
     console.error(err);
     res.status(500).send("Server Error");

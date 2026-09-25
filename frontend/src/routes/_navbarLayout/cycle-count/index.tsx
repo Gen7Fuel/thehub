@@ -32,6 +32,7 @@ function RouteComponent() {
   const [completedCategories, setCompletedCategories] = useState<string[]>([]);
   const [varianceMap, setVarianceMap] = useState<{ [key: number]: number }>({});
   const [syncing, setSyncing] = useState(false);
+  const [isScheduled, setIsScheduled] = useState<boolean>(false);
   // const [showWelcomeModal, setShowWelcomeModal] = useState(true);
 
   interface CycleCountFieldUpdateV2 {
@@ -62,6 +63,7 @@ function RouteComponent() {
       const data = await res.json();
       const fetchedItems = data.items || [];
       setItems(fetchedItems);
+      setIsScheduled(Boolean(data.isScheduled));
 
       // 1. Prepare initial counts
       const initial: any = {};
@@ -554,7 +556,15 @@ function RouteComponent() {
                     </div>
                   )}
                   <div className={isMarkedDone ? "opacity-50 pointer-events-none" : ""}>
-                    <CycleCountTableGroup items={priorityItems} counts={counts} isPriority={true} onInputChange={handleInputChange} onInputBlur={handleInputBlur} getVarianceForItem={getVarianceForItem} />
+                    <CycleCountTableGroup 
+                      items={priorityItems} 
+                      isScheduled={isScheduled} // <-- Pass prop here
+                      counts={counts}
+                      isPriority={true}
+                      onInputChange={handleInputChange}
+                      onInputBlur={handleInputBlur}
+                      getVarianceForItem={getVarianceForItem}
+                    />
                   </div>
                 </div>
               </AccordionContent>
@@ -629,7 +639,15 @@ function RouteComponent() {
                     </div>
                   )}
                   <div className={group.isMarkedDone ? "opacity-40 pointer-events-none" : ""}>
-                    <CycleCountTableGroup items={group.items} counts={counts} isPriority={false} onInputChange={handleInputChange} onInputBlur={handleInputBlur} getVarianceForItem={getVarianceForItem} />
+                    <CycleCountTableGroup 
+                      items={group.items} 
+                      counts={counts} 
+                      isPriority={false} 
+                      isScheduled={isScheduled} 
+                      onInputChange={handleInputChange} 
+                      onInputBlur={handleInputBlur} 
+                      getVarianceForItem={getVarianceForItem} 
+                    />
                   </div>
                 </div>
               </AccordionContent>

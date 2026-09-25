@@ -501,11 +501,24 @@ const MONTH_LONG = [
   "December",
 ];
 
+function isSystemUser(ev?: EventDoc | null) {
+  return ev?.createdBy?.firstName?.trim().toLowerCase() === "system";
+}
+
 function authorName(ev: EventDoc) {
   const f = ev.createdBy?.firstName || "";
   const l = ev.createdBy?.lastName || "";
   const full = `${f} ${l}`.trim();
   return full || ev.createdBy?.email || "Unknown";
+}
+
+// Helper to return either "By John Doe" or just "System Generated"
+function formatAuthorLabel(ev: EventDoc, prefix: "By" | "Posted by" = "By") {
+  const name = authorName(ev);
+  if (isSystemUser(ev)) {
+    return name; // Returns "System Generated" directly without prefix
+  }
+  return `${prefix} ${name}`; // Returns "By John Doe" or "Posted by John Doe"
 }
 
 export const Route = createFileRoute("/_navbarLayout/events/")({
@@ -830,7 +843,7 @@ function RouteComponent() {
                         </Badge>
                       </div>
                       <p className="text-[11px] text-muted-foreground font-medium truncate">
-                        By {authorName(ev)}
+                        {formatAuthorLabel(ev, "By")}
                       </p>
                     </CardContent>
                   </Card>
@@ -885,7 +898,7 @@ function RouteComponent() {
                         </Badge>
                       </div>
                       <p className="text-[11px] text-muted-foreground font-medium truncate">
-                        By {authorName(ev)}
+                        {formatAuthorLabel(ev, "By")}
                       </p>
                     </CardContent>
                   </Card>
@@ -1112,7 +1125,7 @@ function RouteComponent() {
             </DialogTitle>
             {viewing && (
               <DialogDescription>
-                {formatLongDate(viewing.date)} • Posted by {authorName(viewing)}
+                {formatLongDate(viewing.date)} • {formatAuthorLabel(viewing, "Posted by")}
               </DialogDescription>
             )}
           </DialogHeader>
