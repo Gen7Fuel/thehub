@@ -27,6 +27,12 @@ const eventSchema = new mongoose.Schema(
       match: /^\d{4}-\d{2}-\d{2}$/,
       index: true,
     },
+    type: {
+      type: String,
+      enum: ['system', 'manual'],
+      default: 'manual',
+      required: true,
+    },
     createdBy: {
       id: {
         type: mongoose.Schema.Types.ObjectId,
