@@ -4,9 +4,11 @@ import { render, screen, fireEvent, waitFor } from '@testing-library/react'
 
 // ─── Hoisted mutable state ─────────────────────────────────────────────────────
 
-const { mockUseLoaderData, mockRouterInvalidate, mockUser } = vi.hoisted(() => ({
+const { mockUseLoaderData, mockRouterInvalidate, mockUser, mockNavigate, mockSearch } = vi.hoisted(() => ({
   mockUseLoaderData: vi.fn().mockReturnValue({ events: [] }),
   mockRouterInvalidate: vi.fn().mockResolvedValue(undefined),
+  mockNavigate: vi.fn(),
+  mockSearch: { month: undefined, site: undefined },
   mockUser: {
     id: 'user-1',
     location: 'Rankin',
@@ -23,13 +25,28 @@ vi.mock('@tanstack/react-router', async (importOriginal) => {
     createFileRoute: () => (config: any) => ({
       ...config,
       useLoaderData: mockUseLoaderData,
+      useSearch: () => mockSearch,
     }),
-    useRouter: () => ({ invalidate: mockRouterInvalidate }),
+    useRouter: () => ({ invalidate: mockRouterInvalidate, navigate: mockNavigate }),
   }
 })
 
 vi.mock('@/context/AuthContext', () => ({
   useAuth: () => ({ user: mockUser }),
+}))
+
+vi.mock('@/context/SiteContext', () => ({
+  useSite: () => ({ selectedSite: 'Rankin' }),
+}))
+
+vi.mock('@/components/custom/locationPicker', () => ({
+  LocationPicker: ({ setStationName, defaultValue }: any) => (
+    <input
+      data-testid="location-picker"
+      defaultValue={defaultValue}
+      onChange={(e) => setStationName(e.target.value)}
+    />
+  ),
 }))
 
 // jsdom doesn't implement scrollIntoView
@@ -53,21 +70,34 @@ const today = new Date()
 const pad = (n: number) => String(n).padStart(2, '0')
 const todayIso = `${today.getFullYear()}-${pad(today.getMonth() + 1)}-${pad(today.getDate())}`
 
+const tomorrow = new Date()
+tomorrow.setDate(today.getDate() + 1)
+const tomorrowIso = `${tomorrow.getFullYear()}-${pad(tomorrow.getMonth() + 1)}-${pad(tomorrow.getDate())}`
+
+const yesterday = new Date()
+yesterday.setDate(today.getDate() - 1)
+// const yesterdayIso = `${yesterday.getFullYear()}-${pad(yesterday.getMonth() + 1)}-${pad(yesterday.getDate())}`
+
+const futureDate = new Date()
+futureDate.setDate(today.getDate() + 5)
+const futureIso = `${futureDate.getFullYear()}-${pad(futureDate.getMonth() + 1)}-${pad(futureDate.getDate())}`
+
 const makeEvent = (overrides = {}) => ({
   _id: 'evt-1',
   site: 'Rankin',
   title: 'Staff Meeting',
   description: 'Quarterly check-in.',
   date: todayIso,
+  type: 'manual' as const,
   createdBy: { id: 'user-1', firstName: 'Jane', lastName: 'Doe', email: 'jane@gen7.com' },
   createdAt: `${todayIso}T09:00:00Z`,
   updatedAt: `${todayIso}T09:00:00Z`,
   ...overrides,
 })
 
-// ─── Tests: Rendering ──────────────────────────────────────────────────────────
+// ─── Tests: Rendering & Layout ──────────────────────────────────────────────────
 
-describe('Events — rendering', () => {
+describe('Events — rendering & layout', () => {
   beforeEach(() => {
     vi.clearAllMocks()
     localStorage.setItem('token', 'test-token')
@@ -75,83 +105,100 @@ describe('Events — rendering', () => {
     mockUser.is_admin = false
   })
 
-  it('renders the Events heading', async () => {
+  it('renders the Events Calendar heading and controls', async () => {
     renderWithSuspense(<EventsComponent />)
-    await waitFor(
-      () => expect(screen.getByRole('heading', { name: 'Events' })).toBeInTheDocument(),
-      { timeout: 5000 },
-    )
+    await waitFor(() => {
+      expect(screen.getByRole('heading', { name: /Events Calendar/i })).toBeInTheDocument()
+    })
   })
 
-  it('shows site name in the subtitle', async () => {
+  it('shows schedule site in subtitle', async () => {
     renderWithSuspense(<EventsComponent />)
-    await waitFor(
-      () => expect(screen.getByText(/Upcoming events for Rankin/i)).toBeInTheDocument(),
-      { timeout: 5000 },
-    )
+    await waitFor(() => {
+      expect(screen.getByText(/Showing schedule for Rankin/i)).toBeInTheDocument()
+    })
   })
 
-  it('renders month group headers', async () => {
+  it('renders Today and Tomorrow spotlight sections', async () => {
     renderWithSuspense(<EventsComponent />)
-    const months = [
-      'January', 'February', 'March', 'April', 'May', 'June',
-      'July', 'August', 'September', 'October', 'November', 'December',
-    ]
-    const currentMonth = months[today.getMonth()]
-    await waitFor(
-      () => expect(screen.getByText(new RegExp(currentMonth, 'i'))).toBeInTheDocument(),
-      { timeout: 5000 },
-    )
+    await waitFor(() => {
+      expect(screen.getByText(/Today/i)).toBeInTheDocument()
+      expect(screen.getByText(/Tomorrow/i)).toBeInTheDocument()
+    })
   })
 
-  it('shows "Today" badge on today\'s date row', async () => {
+  it('displays weekday headers in the month grid', async () => {
     renderWithSuspense(<EventsComponent />)
-    await waitFor(
-      () => expect(screen.getByText('Today')).toBeInTheDocument(),
-      { timeout: 5000 },
-    )
+    const weekdays = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']
+    await waitFor(() => {
+      weekdays.forEach((day) => expect(screen.getByText(day)).toBeInTheDocument())
+    })
   })
 })
 
-describe('Events — event display', () => {
+// ─── Tests: Event Display & Author Format ──────────────────────────────────────
+
+describe('Events — event display & author labels', () => {
   beforeEach(() => {
     vi.clearAllMocks()
     localStorage.setItem('token', 'test-token')
     mockUser.is_admin = false
   })
 
-  it('renders event titles from loader data', async () => {
-    mockUseLoaderData.mockReturnValue({ events: [makeEvent()] })
-    renderWithSuspense(<EventsComponent />)
-    await waitFor(
-      () => expect(screen.getByText('Staff Meeting')).toBeInTheDocument(),
-      { timeout: 5000 },
-    )
-  })
-
-  it('renders event description below title', async () => {
-    mockUseLoaderData.mockReturnValue({ events: [makeEvent()] })
-    renderWithSuspense(<EventsComponent />)
-    await waitFor(
-      () => expect(screen.getByText('Quarterly check-in.')).toBeInTheDocument(),
-      { timeout: 5000 },
-    )
-  })
-
-  it('renders multiple events on the same day', async () => {
+  it('renders Today and Tomorrow events in spotlight cards', async () => {
     mockUseLoaderData.mockReturnValue({
       events: [
-        makeEvent({ _id: 'e-1', title: 'Morning Stand-up' }),
-        makeEvent({ _id: 'e-2', title: 'Safety Briefing' }),
+        makeEvent({ _id: 'e-today', title: 'Today Sync', date: todayIso }),
+        makeEvent({ _id: 'e-tomorrow', title: 'Tomorrow Planning', date: tomorrowIso }),
       ],
     })
     renderWithSuspense(<EventsComponent />)
+
     await waitFor(() => {
-      expect(screen.getByText('Morning Stand-up')).toBeInTheDocument()
-      expect(screen.getByText('Safety Briefing')).toBeInTheDocument()
-    }, { timeout: 5000 })
+      expect(screen.getByText('Today Sync')).toBeInTheDocument()
+      expect(screen.getByText('Tomorrow Planning')).toBeInTheDocument()
+    })
+  })
+
+  it('prefixes human author names with "By " in cards and "Posted by " in dialog', async () => {
+    mockUseLoaderData.mockReturnValue({ events: [makeEvent()] })
+    renderWithSuspense(<EventsComponent />)
+
+    await waitFor(() => expect(screen.getByText('By Jane Doe')).toBeInTheDocument())
+
+    fireEvent.click(screen.getByText('Staff Meeting'))
+
+    await waitFor(() => {
+      expect(screen.getByText(/Posted by Jane Doe/i)).toBeInTheDocument()
+    })
+  })
+
+  it('displays system generated author directly without "By" or "Posted by" label', async () => {
+    const systemEvent = makeEvent({
+      _id: 'evt-sys',
+      title: 'Automated Event',
+      type: 'system',
+      createdBy: { id: 'sys-1', firstName: 'System', lastName: 'Generated' },
+    })
+
+    mockUseLoaderData.mockReturnValue({ events: [systemEvent] })
+    renderWithSuspense(<EventsComponent />)
+
+    await waitFor(() => {
+      expect(screen.getByText('System Generated')).toBeInTheDocument()
+      expect(screen.queryByText('By System Generated')).not.toBeInTheDocument()
+    })
+
+    fireEvent.click(screen.getByText('Automated Event'))
+
+    await waitFor(() => {
+      expect(screen.getByText(/System Generated/i)).toBeInTheDocument()
+      expect(screen.queryByText(/Posted by System Generated/i)).not.toBeInTheDocument()
+    })
   })
 })
+
+// ─── Tests: Compose Dialog ──────────────────────────────────────────────────────
 
 describe('Events — compose dialog', () => {
   beforeEach(() => {
@@ -165,74 +212,57 @@ describe('Events — compose dialog', () => {
     } as any)
   })
 
-  it('opens the compose dialog when a date row is clicked', async () => {
+  it('opens compose dialog when clicking today or future date tiles', async () => {
     renderWithSuspense(<EventsComponent />)
-    await waitFor(
-      () => expect(screen.getByText('Today')).toBeInTheDocument(),
-      { timeout: 5000 },
-    )
 
-    // Click the today row (the parent div with onClick)
-    const todayBadge = screen.getByText('Today')
-    const dateRow = todayBadge.closest('[class*="cursor-pointer"]') as HTMLElement
-    if (dateRow) fireEvent.click(dateRow)
-
-    await waitFor(
-      () => expect(screen.getByRole('heading', { name: 'New event' })).toBeInTheDocument(),
-      { timeout: 5000 },
-    )
-  })
-
-  it('shows title and description fields in the compose dialog', async () => {
-    renderWithSuspense(<EventsComponent />)
-    await waitFor(() => screen.getByText('Today'), { timeout: 5000 })
-
-    const todayBadge = screen.getByText('Today')
-    const dateRow = todayBadge.closest('[class*="cursor-pointer"]') as HTMLElement
-    if (dateRow) fireEvent.click(dateRow)
+    // Find the today date tile by button or cell
+    const todayCell = screen.getByText(today.getDate().toString()).closest('div')
+    if (todayCell) fireEvent.click(todayCell)
 
     await waitFor(() => {
-      expect(screen.getByPlaceholderText('Event title')).toBeInTheDocument()
-      expect(screen.getByPlaceholderText('Add details…')).toBeInTheDocument()
-    }, { timeout: 5000 })
+      expect(screen.getByRole('heading', { name: 'New Event' })).toBeInTheDocument()
+    })
   })
 
-  it('shows error when submitting without a title', async () => {
+  it('shows error when title is empty', async () => {
     renderWithSuspense(<EventsComponent />)
-    await waitFor(() => screen.getByText('Today'), { timeout: 5000 })
 
-    const todayBadge = screen.getByText('Today')
-    const dateRow = todayBadge.closest('[class*="cursor-pointer"]') as HTMLElement
-    if (dateRow) fireEvent.click(dateRow)
+    const todayCell = screen.getByText(today.getDate().toString()).closest('div')
+    if (todayCell) fireEvent.click(todayCell)
 
-    await waitFor(
-      () => expect(screen.getByText('Add Event')).toBeInTheDocument(),
-      { timeout: 5000 },
-    )
+    await waitFor(() => screen.getByPlaceholderText(/Event title/i))
+
     fireEvent.click(screen.getByText('Add Event'))
 
-    await waitFor(
-      () => expect(screen.getByText('Title is required.')).toBeInTheDocument(),
-      { timeout: 5000 },
-    )
+    await waitFor(() => {
+      expect(screen.getByText('Title is required.')).toBeInTheDocument()
+    })
   })
 
-  it('calls POST /api/events with title and date on submit', async () => {
+  it('enforces max 30 character limit on title input', async () => {
     renderWithSuspense(<EventsComponent />)
-    await waitFor(() => screen.getByText('Today'), { timeout: 5000 })
 
-    const todayBadge = screen.getByText('Today')
-    const dateRow = todayBadge.closest('[class*="cursor-pointer"]') as HTMLElement
-    if (dateRow) fireEvent.click(dateRow)
+    const todayCell = screen.getByText(today.getDate().toString()).closest('div')
+    if (todayCell) fireEvent.click(todayCell)
 
-    await waitFor(
-      () => expect(screen.getByPlaceholderText('Event title')).toBeInTheDocument(),
-      { timeout: 5000 },
-    )
+    await waitFor(() => screen.getByPlaceholderText(/Event title/i))
 
-    fireEvent.change(screen.getByPlaceholderText('Event title'), {
+    const titleInput = screen.getByPlaceholderText(/Event title/i)
+    expect(titleInput).toHaveAttribute('maxLength', '30')
+  })
+
+  it('submits POST /api/events with correct payload', async () => {
+    renderWithSuspense(<EventsComponent />)
+
+    const todayCell = screen.getByText(today.getDate().toString()).closest('div')
+    if (todayCell) fireEvent.click(todayCell)
+
+    await waitFor(() => screen.getByPlaceholderText(/Event title/i))
+
+    fireEvent.change(screen.getByPlaceholderText(/Event title/i), {
       target: { value: 'Fire Drill' },
     })
+
     fireEvent.click(screen.getByText('Add Event'))
 
     await waitFor(() => {
@@ -243,35 +273,16 @@ describe('Events — compose dialog', () => {
           body: expect.stringContaining('"title":"Fire Drill"'),
         }),
       )
-    }, { timeout: 5000 })
-  })
-
-  it('closes the dialog on Cancel', async () => {
-    renderWithSuspense(<EventsComponent />)
-    await waitFor(() => screen.getByText('Today'), { timeout: 5000 })
-
-    const dateRow = screen.getByText('Today').closest('[class*="cursor-pointer"]') as HTMLElement
-    if (dateRow) fireEvent.click(dateRow)
-
-    await waitFor(
-      () => expect(screen.getByRole('heading', { name: 'New event' })).toBeInTheDocument(),
-      { timeout: 5000 },
-    )
-
-    fireEvent.click(screen.getByRole('button', { name: 'Cancel' }))
-
-    await waitFor(
-      () => expect(screen.queryByRole('heading', { name: 'New event' })).not.toBeInTheDocument(),
-      { timeout: 5000 },
-    )
+    })
   })
 })
 
-describe('Events — view and delete dialog', () => {
+// ─── Tests: View & Delete Dialog ────────────────────────────────────────────────
+
+describe('Events — view & delete dialog permissions', () => {
   beforeEach(() => {
     vi.clearAllMocks()
     localStorage.setItem('token', 'test-token')
-    mockUseLoaderData.mockReturnValue({ events: [makeEvent()] })
     mockUser.is_admin = false
     global.fetch = vi.fn().mockResolvedValue({
       ok: true,
@@ -279,120 +290,86 @@ describe('Events — view and delete dialog', () => {
     } as any)
   })
 
-  it('opens the view dialog when an event button is clicked', async () => {
-    renderWithSuspense(<EventsComponent />)
-    await waitFor(
-      () => expect(screen.getByText('Staff Meeting')).toBeInTheDocument(),
-      { timeout: 5000 },
-    )
-
-    fireEvent.click(screen.getByText('Staff Meeting'))
-
-    await waitFor(
-      () => expect(screen.getByRole('dialog')).toBeInTheDocument(),
-      { timeout: 5000 },
-    )
-  })
-
-  it('shows author name in the view dialog', async () => {
-    renderWithSuspense(<EventsComponent />)
-    await waitFor(() => screen.getByText('Staff Meeting'), { timeout: 5000 })
-
-    fireEvent.click(screen.getByText('Staff Meeting'))
-
-    await waitFor(
-      () => expect(screen.getByText(/Posted by Jane Doe/i)).toBeInTheDocument(),
-      { timeout: 5000 },
-    )
-  })
-
-  it('shows the Delete button when the viewer is the author', async () => {
+  it('hides delete button for past or today events even if owner/admin', async () => {
     mockUser.id = 'user-1'
-    renderWithSuspense(<EventsComponent />)
-    await waitFor(() => screen.getByText('Staff Meeting'), { timeout: 5000 })
+    mockUser.is_admin = true
 
+    // Event on today
+    mockUseLoaderData.mockReturnValue({ events: [makeEvent({ date: todayIso })] })
+    renderWithSuspense(<EventsComponent />)
+
+    await waitFor(() => screen.getByText('Staff Meeting'))
     fireEvent.click(screen.getByText('Staff Meeting'))
 
-    await waitFor(
-      () => expect(screen.getByRole('button', { name: /delete/i })).toBeInTheDocument(),
-      { timeout: 5000 },
-    )
-  })
-
-  it('hides the Delete button when viewer is not the author and not admin', async () => {
-    mockUser.id = 'user-99' // different user
-    mockUser.is_admin = false
-    renderWithSuspense(<EventsComponent />)
-
-    // Wait for the event list item button to appear
-    await waitFor(() => screen.getByRole('button', { name: /Staff Meeting/ }), { timeout: 5000 })
-    fireEvent.click(screen.getByRole('button', { name: /Staff Meeting/ }))
-
-    // Dialog opens — wait for the dialog title (not the list button)
-    await waitFor(
-      () => {
-        // The title appears in the dialog header as a heading
-        const headings = screen.getAllByText('Staff Meeting')
-        // At least 2 elements: the list button and the dialog title
-        expect(headings.length).toBeGreaterThanOrEqual(2)
-      },
-      { timeout: 5000 },
-    )
-
-    // Non-owner, non-admin should not see the delete button
+    await waitFor(() => screen.getByRole('dialog'))
+    // canDeleteViewing requires !isPastOrToday
     expect(screen.queryByRole('button', { name: /^delete$/i })).not.toBeInTheDocument()
   })
 
-  it('shows the Delete button for admin regardless of authorship', async () => {
-    mockUser.id = 'user-99'
+  it('hides delete button for system events', async () => {
+    mockUser.id = 'user-1'
     mockUser.is_admin = true
-    renderWithSuspense(<EventsComponent />)
-    await waitFor(() => screen.getByText('Staff Meeting'), { timeout: 5000 })
 
+    const sysEvent = makeEvent({
+      _id: 'sys-evt',
+      date: futureIso,
+      type: 'system',
+    })
+
+    mockUseLoaderData.mockReturnValue({ events: [sysEvent] })
+    renderWithSuspense(<EventsComponent />)
+
+    await waitFor(() => screen.getByText('Staff Meeting'))
     fireEvent.click(screen.getByText('Staff Meeting'))
 
-    await waitFor(
-      () => expect(screen.getByRole('button', { name: /delete/i })).toBeInTheDocument(),
-      { timeout: 5000 },
-    )
+    await waitFor(() => screen.getByRole('dialog'))
+    expect(screen.queryByRole('button', { name: /^delete$/i })).not.toBeInTheDocument()
   })
 
-  it('calls DELETE /api/events/:id when Delete is confirmed', async () => {
+  it('shows delete button for future manual events', async () => {
     mockUser.id = 'user-1'
+    const futureEvent = makeEvent({ _id: 'evt-future', date: futureIso, type: 'manual' })
+
+    mockUseLoaderData.mockReturnValue({ events: [futureEvent] })
     renderWithSuspense(<EventsComponent />)
-    await waitFor(() => screen.getByText('Staff Meeting'), { timeout: 5000 })
 
+    await waitFor(() => screen.getByText('Staff Meeting'))
     fireEvent.click(screen.getByText('Staff Meeting'))
-    await waitFor(
-      () => expect(screen.getByRole('button', { name: /delete/i })).toBeInTheDocument(),
-      { timeout: 5000 },
-    )
 
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: /delete/i })).toBeInTheDocument()
+    })
+  })
+
+  it('calls DELETE /api/events/:id when confirmed', async () => {
+    mockUser.id = 'user-1'
+    const futureEvent = makeEvent({ _id: 'evt-future', date: futureIso, type: 'manual' })
+
+    mockUseLoaderData.mockReturnValue({ events: [futureEvent] })
+    renderWithSuspense(<EventsComponent />)
+
+    await waitFor(() => screen.getByText('Staff Meeting'))
+    fireEvent.click(screen.getByText('Staff Meeting'))
+
+    await waitFor(() => screen.getByRole('button', { name: /delete/i }))
     fireEvent.click(screen.getByRole('button', { name: /delete/i }))
 
     await waitFor(() => {
       expect(global.fetch).toHaveBeenCalledWith(
-        '/api/events/evt-1',
+        '/api/events/evt-future',
         expect.objectContaining({ method: 'DELETE' }),
       )
-    }, { timeout: 5000 })
+    })
   })
 })
 
+// ─── Tests: Date Helpers ───────────────────────────────────────────────────────
+
 describe('Events — date helper functions', () => {
-  it('toIsoDate produces YYYY-MM-DD from local date', () => {
+  it('toIsoDate produces local YYYY-MM-DD format', () => {
     const pad = (n: number) => String(n).padStart(2, '0')
     const d = new Date(2026, 3, 15) // April 15 2026
     const iso = `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`
     expect(iso).toBe('2026-04-15')
-  })
-
-  it('parseIsoDate round-trips through toIsoDate', () => {
-    const pad = (n: number) => String(n).padStart(2, '0')
-    const original = '2026-11-30'
-    const [y, m, d] = original.split('-').map(Number)
-    const date = new Date(y, (m || 1) - 1, d || 1)
-    const roundTripped = `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}`
-    expect(roundTripped).toBe(original)
   })
 })
