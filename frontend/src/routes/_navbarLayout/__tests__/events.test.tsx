@@ -74,10 +74,6 @@ const tomorrow = new Date()
 tomorrow.setDate(today.getDate() + 1)
 const tomorrowIso = `${tomorrow.getFullYear()}-${pad(tomorrow.getMonth() + 1)}-${pad(tomorrow.getDate())}`
 
-const yesterday = new Date()
-yesterday.setDate(today.getDate() - 1)
-// const yesterdayIso = `${yesterday.getFullYear()}-${pad(yesterday.getMonth() + 1)}-${pad(yesterday.getDate())}`
-
 const futureDate = new Date()
 futureDate.setDate(today.getDate() + 5)
 const futureIso = `${futureDate.getFullYear()}-${pad(futureDate.getMonth() + 1)}-${pad(futureDate.getDate())}`
@@ -155,8 +151,8 @@ describe('Events — event display & author labels', () => {
     renderWithSuspense(<EventsComponent />)
 
     await waitFor(() => {
-      expect(screen.getByText('Today Sync')).toBeInTheDocument()
-      expect(screen.getByText('Tomorrow Planning')).toBeInTheDocument()
+      expect(screen.getAllByText('Today Sync').length).toBeGreaterThan(0)
+      expect(screen.getAllByText('Tomorrow Planning').length).toBeGreaterThan(0)
     })
   })
 
@@ -166,7 +162,7 @@ describe('Events — event display & author labels', () => {
 
     await waitFor(() => expect(screen.getByText('By Jane Doe')).toBeInTheDocument())
 
-    fireEvent.click(screen.getByText('Staff Meeting'))
+    fireEvent.click(screen.getAllByText('Staff Meeting')[0])
 
     await waitFor(() => {
       expect(screen.getByText(/Posted by Jane Doe/i)).toBeInTheDocument()
@@ -189,7 +185,7 @@ describe('Events — event display & author labels', () => {
       expect(screen.queryByText('By System Generated')).not.toBeInTheDocument()
     })
 
-    fireEvent.click(screen.getByText('Automated Event'))
+    fireEvent.click(screen.getAllByText('Automated Event')[0])
 
     await waitFor(() => {
       expect(screen.getByText(/System Generated/i)).toBeInTheDocument()
@@ -215,7 +211,6 @@ describe('Events — compose dialog', () => {
   it('opens compose dialog when clicking today or future date tiles', async () => {
     renderWithSuspense(<EventsComponent />)
 
-    // Find the today date tile by button or cell
     const todayCell = screen.getByText(today.getDate().toString()).closest('div')
     if (todayCell) fireEvent.click(todayCell)
 
@@ -294,15 +289,13 @@ describe('Events — view & delete dialog permissions', () => {
     mockUser.id = 'user-1'
     mockUser.is_admin = true
 
-    // Event on today
     mockUseLoaderData.mockReturnValue({ events: [makeEvent({ date: todayIso })] })
     renderWithSuspense(<EventsComponent />)
 
-    await waitFor(() => screen.getByText('Staff Meeting'))
-    fireEvent.click(screen.getByText('Staff Meeting'))
+    await waitFor(() => expect(screen.getAllByText('Staff Meeting').length).toBeGreaterThan(0))
+    fireEvent.click(screen.getAllByText('Staff Meeting')[0])
 
     await waitFor(() => screen.getByRole('dialog'))
-    // canDeleteViewing requires !isPastOrToday
     expect(screen.queryByRole('button', { name: /^delete$/i })).not.toBeInTheDocument()
   })
 
@@ -312,6 +305,7 @@ describe('Events — view & delete dialog permissions', () => {
 
     const sysEvent = makeEvent({
       _id: 'sys-evt',
+      title: 'Automated Event',
       date: futureIso,
       type: 'system',
     })
@@ -319,8 +313,8 @@ describe('Events — view & delete dialog permissions', () => {
     mockUseLoaderData.mockReturnValue({ events: [sysEvent] })
     renderWithSuspense(<EventsComponent />)
 
-    await waitFor(() => screen.getByText('Staff Meeting'))
-    fireEvent.click(screen.getByText('Staff Meeting'))
+    await waitFor(() => expect(screen.getAllByText('Automated Event').length).toBeGreaterThan(0))
+    fireEvent.click(screen.getAllByText('Automated Event')[0])
 
     await waitFor(() => screen.getByRole('dialog'))
     expect(screen.queryByRole('button', { name: /^delete$/i })).not.toBeInTheDocument()
@@ -333,8 +327,8 @@ describe('Events — view & delete dialog permissions', () => {
     mockUseLoaderData.mockReturnValue({ events: [futureEvent] })
     renderWithSuspense(<EventsComponent />)
 
-    await waitFor(() => screen.getByText('Staff Meeting'))
-    fireEvent.click(screen.getByText('Staff Meeting'))
+    await waitFor(() => expect(screen.getAllByText('Staff Meeting').length).toBeGreaterThan(0))
+    fireEvent.click(screen.getAllByText('Staff Meeting')[0])
 
     await waitFor(() => {
       expect(screen.getByRole('button', { name: /delete/i })).toBeInTheDocument()
@@ -348,8 +342,8 @@ describe('Events — view & delete dialog permissions', () => {
     mockUseLoaderData.mockReturnValue({ events: [futureEvent] })
     renderWithSuspense(<EventsComponent />)
 
-    await waitFor(() => screen.getByText('Staff Meeting'))
-    fireEvent.click(screen.getByText('Staff Meeting'))
+    await waitFor(() => expect(screen.getAllByText('Staff Meeting').length).toBeGreaterThan(0))
+    fireEvent.click(screen.getAllByText('Staff Meeting')[0])
 
     await waitFor(() => screen.getByRole('button', { name: /delete/i }))
     fireEvent.click(screen.getByRole('button', { name: /delete/i }))
