@@ -113,7 +113,7 @@ const exportConfig = [
   { modelName: 'AuditItem', collectionName: 'audit_item' },
   { modelName: 'CashSummary', collectionName: 'cash_summary' },
   { modelName: 'CashSummaryReport', collectionName: 'cash_summary_report' },
-  { modelName: 'CycleCount', collectionName: 'cycle_count' },
+  // { modelName: 'CycleCount', collectionName: 'cycle_count' },
   { modelName: 'Lottery', collectionName: 'lottery' },
   { modelName: 'OrderReconciliation', collectionName: 'order_reconciliation' },
   { modelName: 'Payable', collectionName: 'payable' },

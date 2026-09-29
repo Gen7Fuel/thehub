@@ -38,6 +38,7 @@
     "node-fetch": "^3.3.2",
     "npx": "^10.2.2",
     "openai": "^6.33.0",
+    "parquetjs-lite": "^0.8.7",
     "pdf-parse": "^2.4.5",
     "pdfkit": "^0.17.2",
     "pg": "^8.20.0",
