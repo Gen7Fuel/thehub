@@ -187,7 +187,7 @@ async function runSanitizeItemBk() {
                   .select("id", "site", "upc", "gtin", "upc_barcode", "description", 
                           "retail", "vendor_id", "vendor_name", "category_id", "department_id", 
                           "department", "price_group_id", "price_group", "promo_group_id", "promo_group", 
-                          "on_hand_qty", "last_inv_date", "active", "image_url");
+                          "on_hand_qty", "last_inv_date", "active", "image_url", "pk_in_crt");
 
   const pgMap = new Map(pgItems.map(item => [`${item.site}_${item.upc}`, item]));
 
@@ -257,6 +257,7 @@ async function runSanitizeItemBk() {
         active: true,
         allow_cycle_count: true,
         image_url: item?.image_url ?? null,
+        pk_in_crt: toNullableNumber(item?.pk_in_crt),
         sync_date: db.fn.now()
       };
 
@@ -264,12 +265,17 @@ async function runSanitizeItemBk() {
       pgMap.set(azureKey, newRow);
     } else {
       // SCENARIO B: Item exists in both -> VERIFY AND CORRECT SHIFTS
+      
+      // Determine resolved pk_in_crt: preserve Postgres value if SQL returns null/undefined
+      const incomingPkInCrt = toNullableNumber(item?.pk_in_crt);
+      const targetPkInCrt = incomingPkInCrt !== null ? incomingPkInCrt : toNullableNumber(match.pk_in_crt);
+
       const hasChanged =
         match.active !== true ||
         !isSame(match.gtin, gtin) ||
         !isSame(match.upc_barcode, item?.upc_barcode) ||
         !isSame(match.description, item?.Description) ||
-        !isSameNum(match.retail, item?.Retail) || // Use numeric evaluation for retail
+        !isSameNum(match.retail, item?.Retail) || 
         !isSame(match.vendor_id, item?.vendorId) ||
         !isSame(match.vendor_name, item?.vendorName) ||
         !isSameNum(match.category_id, categoryId) ||
@@ -279,9 +285,10 @@ async function runSanitizeItemBk() {
         !isSame(match.price_group, item?.priceGroup) ||
         !isSame(match.promo_group_id, item?.promoGroupId) ||
         !isSame(match.promo_group, item?.promoGroup) ||
-        !isSameNum(match.on_hand_qty, item?.onHandQty) || // 👈 FIX: Evaluate as numeric values
+        !isSameNum(match.on_hand_qty, item?.onHandQty) || 
         !isSame(match.last_inv_date, lastInvDate) ||
-        !isSame(match.image_url, item?.image_url);
+        !isSame(match.image_url, item?.image_url) ||
+        !isSameNum(match.pk_in_crt, targetPkInCrt);
 
       if (hasChanged) {
         rowsToUpdate.push({
@@ -302,6 +309,7 @@ async function runSanitizeItemBk() {
           on_hand_qty: toNullableNumber(item?.onHandQty),
           last_inv_date: lastInvDate,
           image_url: item?.image_url ?? null,
+          pk_in_crt: targetPkInCrt,
           active: true, // Auto-reactivate if it reappeared in system feed
           sync_date: db.fn.now()
         });
@@ -338,7 +346,11 @@ async function runSanitizeItemBk() {
     if (idsToRemove.length > 0) {
       await trx("item_bk")
         .whereIn("id", idsToRemove)
-        .update({ active: false, sync_date: db.fn.now() });
+        .update({ 
+          active: false, 
+          allow_cycle_count: false, // 👈 Ensures soft-deleted items don't appear in upcoming counts
+          sync_date: db.fn.now() 
+        });
 
       const logChunks = chunkArray(logEntriesToInsert, 200);
       for (const batch of logChunks) {

@@ -1,6 +1,6 @@
 import { createFileRoute, useNavigate } from '@tanstack/react-router'
 import { useState, useEffect, useMemo } from 'react'
-import { Edit2, Trash2, Zap, Calendar, X, PlusCircle, RotateCcw, AlertTriangle, FileText, Search } from 'lucide-react'
+import { Edit2, Trash2, Zap, Calendar, X, PlusCircle, RotateCcw, AlertTriangle, FileText, Search, Info } from 'lucide-react'
 import CreatableSelect from 'react-select/creatable'
 import axios from 'axios'
 import { useAuth } from '@/context/AuthContext'
@@ -567,7 +567,11 @@ export function RouteComponent() {
             <tr>
               <th className="p-4 bg-gray-50/90">Carrier</th>
               <th className="p-4 bg-gray-50/90">Type</th>
-              <th className="p-4 bg-gray-50/90">Location</th>
+              
+              {/* SPLIT LOCATION HEADERS */}
+              <th className="p-4 bg-gray-50/90">Primary Location</th>
+              <th className="p-4 bg-gray-50/90">Secondary Location</th>
+
               <th className="p-4 bg-gray-50/90">Pickup Terminal</th>
               <th className="p-4 bg-gray-50/90">Is Split</th>
 
@@ -585,7 +589,7 @@ export function RouteComponent() {
           <tbody className="divide-y divide-gray-100 text-sm">
             {sortedAndFilteredData.length === 0 ? (
               <tr>
-                <td colSpan={10} className="p-8 text-center text-sm text-gray-400 italic">No records found matching your search.</td>
+                <td colSpan={11} className="p-8 text-center text-sm text-gray-400 italic">No records found matching your search.</td>
               </tr>
             ) : (
               sortedAndFilteredData.map((row) => {
@@ -610,6 +614,19 @@ export function RouteComponent() {
                   rowClassName = "bg-blue-50/20 hover:bg-blue-50/40 text-gray-900 transition-colors"
                 }
 
+                // LOCATION SPLIT LOGIC
+                const isSplit = Number(row['IsSplit'] ?? row['IsSplit']) === 1 || !!row['IsSplit']
+                const rawLocation = row['Location'] || ''
+                const hasAmpersand = rawLocation.includes('&')
+
+                const primaryLocation = isSplit && hasAmpersand
+                  ? rawLocation.split('&')[0].trim()
+                  : rawLocation
+
+                const secondaryLocation = isSplit && hasAmpersand
+                  ? rawLocation.split('&')[1]?.trim() || ''
+                  : ''
+
                 return (
                   <tr key={key} className={rowClassName}>
                     <td className="p-4 font-bold text-gray-900">{row['Carrier']}</td>
@@ -618,9 +635,30 @@ export function RouteComponent() {
                         {row['Type']}
                       </span>
                     </td>
-                    <td className="p-4 font-medium">{row['Location']}</td>
+
+                    {/* PRIMARY & SECONDARY LOCATION CELLS */}
+                    <td className="p-4 font-medium text-gray-900">{primaryLocation}</td>
+                    <td className="p-4 font-medium text-gray-500">
+                      {secondaryLocation ? (
+                        <span>{secondaryLocation}</span>
+                      ) : (
+                        <span className="text-gray-300 font-normal italic">-</span>
+                      )}
+                    </td>
+
                     <td className="p-4 text-gray-600">{row['Pickup']}</td>
-                    <td className="p-4 text-gray-600">{row['IsSplit'] ? 'Yes' : 'No'}</td>
+                    <td className="p-4 text-gray-600">
+                      {isSplit ? (
+                        <span className="px-2 py-0.5 rounded-full text-[10px] bg-purple-100 text-purple-700 font-bold border border-purple-200">
+                          Yes
+                        </span>
+                      ) : (
+                        <span className="px-2 py-0.5 rounded-full text-[10px] bg-gray-100 text-gray-500 font-medium border border-gray-200">
+                          No
+                        </span>
+                      )}
+                    </td>
+
                     {/* LIVE DISPLAY BLOCK */}
                     <td className="p-3 text-right font-mono font-bold bg-emerald-50/10 text-emerald-700 border-x">
                       {row['Live_Haulage'] !== null ? row['Live_Haulage'].toFixed(4) : '-'}
@@ -686,34 +724,76 @@ export function RouteComponent() {
       </div>
 
       {/* DIALOG 1: PRICE CHANGE MODAL */}
-      {isEditDialogOpen && activeDialogRow && (
-        <div className="fixed inset-0 bg-black/40 backdrop-blur-xs flex items-center justify-center z-50">
-          <div className="bg-white border rounded-xl shadow-2xl w-full max-w-md p-6">
-            <div className="flex justify-between items-center mb-4 pb-2 border-b">
-              <h3 className="font-bold text-gray-900 text-base">Change Route Haulage Rate</h3>
-              <button onClick={() => setIsEditDialogOpen(false)} className="text-gray-400 hover:text-gray-600"><X className="w-5 h-5" /></button>
-            </div>
-            <div className="space-y-2 mb-6 bg-gray-50 p-4 rounded-lg text-xs text-gray-600 border">
-              <div><span className="font-semibold text-gray-500">Carrier:</span> {activeDialogRow['Carrier']}</div>
-              <div><span className="font-semibold text-gray-500">Route Type:</span> {activeDialogRow['Type']}</div>
-              <div><span className="font-semibold text-gray-500">Destination:</span> {activeDialogRow['Location']}</div>
-              <div><span className="font-semibold text-gray-500">Terminal:</span> {activeDialogRow['Pickup']}</div>
-            </div>
-            <div className="mb-6">
-              <label className="block text-sm font-medium text-gray-700 mb-2">Enter New Number Amount</label>
-              <input
-                type="number" step="0.0001"
-                className="w-full p-2.5 border rounded-lg font-mono focus:ring-2 focus:ring-blue-500"
-                value={dialogInputValue} onChange={(e) => setDialogInputValue(e.target.value)}
-              />
-            </div>
-            <div className="flex justify-end gap-3">
-              <button onClick={() => setIsEditDialogOpen(false)} className="px-4 py-2 border text-gray-700 rounded-lg text-sm">Cancel</button>
-              <button onClick={saveDialogEdit} className="px-4 py-2 bg-blue-600 text-white rounded-lg text-sm font-medium">Keep Change</button>
+      {isEditDialogOpen && activeDialogRow && (() => {
+        // Check IsSplit flag (handles both 1/0 numbers, strings "1"/"0", or boolean values)
+        const isSplitFlag = Number(activeDialogRow['IsSplit'] ?? activeDialogRow['IsSplit']) === 1;
+        const hasAmpersand = activeDialogRow['Location']?.includes('&');
+        const isSplitLocation = isSplitFlag || hasAmpersand;
+
+        const [primaryLoc, secondaryLoc] = hasAmpersand
+          ? activeDialogRow['Location'].split('&').map(s => s.trim())
+          : [activeDialogRow['Location'], null];
+
+        return (
+          <div className="fixed inset-0 bg-black/40 backdrop-blur-xs flex items-center justify-center z-50">
+            <div className="bg-white border rounded-xl shadow-2xl w-full max-w-md p-6">
+              <div className="flex justify-between items-center mb-4 pb-2 border-b">
+                <h3 className="font-bold text-gray-900 text-base">Change Route Haulage Rate</h3>
+                <button onClick={() => setIsEditDialogOpen(false)} className="text-gray-400 hover:text-gray-600">
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+
+              <div className="space-y-2 mb-6 bg-gray-50 p-4 rounded-lg text-xs text-gray-600 border">
+                <div><span className="font-semibold text-gray-500">Carrier:</span> {activeDialogRow['Carrier']}</div>
+                <div><span className="font-semibold text-gray-500">Route Type:</span> {activeDialogRow['Type']}</div>
+
+                {/* DYNAMIC DESTINATION DISPLAY BASED ON IsSplit COLUMN */}
+                {isSplitLocation && secondaryLoc ? (
+                  <>
+                    <div><span className="font-semibold text-gray-500">Primary Location:</span> {primaryLoc}</div>
+                    <div><span className="font-semibold text-gray-500">Secondary Location:</span> {secondaryLoc}</div>
+                  </>
+                ) : (
+                  <div><span className="font-semibold text-gray-500">Destination:</span> {activeDialogRow['Location']}</div>
+                )}
+
+                <div><span className="font-semibold text-gray-500">Terminal:</span> {activeDialogRow['Pickup']}</div>
+              </div>
+
+              <div className="mb-6 space-y-2">
+                <label className="block text-sm font-medium text-gray-700">Enter New Rate Amount ($)</label>
+                <input
+                  type="number"
+                  step="0.0001"
+                  className="w-full p-2.5 border rounded-lg font-mono focus:ring-2 focus:ring-blue-500 text-sm"
+                  value={dialogInputValue}
+                  onChange={(e) => setDialogInputValue(e.target.value)}
+                />
+
+                {/* DISCLAIMER FOR SPLIT LOCATIONS */}
+                {isSplitLocation && (
+                  <div className="flex items-start gap-2 p-2.5 bg-blue-50/80 border border-blue-200 rounded-lg text-blue-800 text-xs mt-2">
+                    <Info className="w-4 h-4 text-blue-600 shrink-0 mt-0.5" />
+                    <span>
+                      <strong>Note:</strong> The rate you are updating applies specifically to the <strong>Primary Location ({primaryLoc})</strong>.
+                    </span>
+                  </div>
+                )}
+              </div>
+
+              <div className="flex justify-end gap-3">
+                <button onClick={() => setIsEditDialogOpen(false)} className="px-4 py-2 border text-gray-700 rounded-lg text-sm">
+                  Cancel
+                </button>
+                <button onClick={saveDialogEdit} className="px-4 py-2 bg-blue-600 text-white rounded-lg text-sm font-medium">
+                  Keep Change
+                </button>
+              </div>
             </div>
           </div>
-        </div>
-      )}
+        );
+      })()}
 
       {/* DIALOG 2: WIZARD STEP 1 - BOOKWORKS SYSTEM AUDIT ALERT */}
       {wizardStep === 'warning' && (
@@ -805,11 +885,11 @@ export function RouteComponent() {
               ) : (
                 <>
                   <div>
-                    <label className="block font-bold text-gray-600 uppercase mb-1">Destination Location A</label>
+                    <label className="block font-bold text-gray-600 uppercase mb-1">Destination Location (Primary)</label>
                     <CreatableSelect
                       isClearable
                       styles={customSelectStyles}
-                      placeholder="Select or type location A..."
+                      placeholder="Select or type primary location..."
                       options={uniqueLocations.map(l => ({ value: l, label: l }))}
                       onChange={opt => setFormLocationA(opt?.value || '')}
                       onCreateOption={val => setFormLocationA(val.trim().toUpperCase())}
@@ -817,11 +897,11 @@ export function RouteComponent() {
                     />
                   </div>
                   <div>
-                    <label className="block font-bold text-gray-600 uppercase mb-1">Destination Location B</label>
+                    <label className="block font-bold text-gray-600 uppercase mb-1">Destination Location (Secondary)</label>
                     <CreatableSelect
                       isClearable
                       styles={customSelectStyles}
-                      placeholder="Select or type location B..."
+                      placeholder="Select or type secondary location..."
                       options={uniqueLocations.map(l => ({ value: l, label: l }))}
                       onChange={opt => setFormLocationB(opt?.value || '')}
                       onCreateOption={val => setFormLocationB(val.trim().toUpperCase())}
@@ -845,27 +925,40 @@ export function RouteComponent() {
                 />
               </div>
 
-              {/* HAULAGE RATE & ADD BUTTON */}
-              <div className="col-span-2">
-                <label className="block font-bold text-gray-600 uppercase mb-1">Haulage Rate Amount ($)</label>
-                <div className="flex gap-2">
-                  <input
-                    type="number"
-                    step="0.0001"
-                    placeholder="0.0000"
-                    className="w-full p-2 border rounded-lg bg-white font-mono h-[38px] text-sm"
-                    value={formHaulageValue}
-                    onChange={(e) => setFormHaulageValue(e.target.value)}
-                  />
-                  <button
-                    onClick={handleAddEntryToStagingList}
-                    className="px-4 py-2 bg-gray-900 text-white rounded-lg font-semibold hover:bg-gray-800 shrink-0 h-[38px]"
-                  >
-                    Add To Queue List
-                  </button>
-                </div>
+             {/* HAULAGE RATE & ADD BUTTON */}
+            <div className="col-span-2 space-y-2">
+              <label className="block font-bold text-gray-600 uppercase">
+                Haulage Rate ($)
+              </label>
+
+              <div className="flex gap-2">
+                <input
+                  type="number"
+                  step="0.0001"
+                  placeholder="0.0000"
+                  className="w-full p-2 border rounded-lg bg-white font-mono h-[38px] text-sm"
+                  value={formHaulageValue}
+                  onChange={(e) => setFormHaulageValue(e.target.value)}
+                />
+                <button
+                  onClick={handleAddEntryToStagingList}
+                  className="px-4 py-2 bg-gray-900 text-white rounded-lg font-semibold hover:bg-gray-800 shrink-0 h-[38px]"
+                >
+                  Add To Queue List
+                </button>
               </div>
+
+              {/* SPLIT ROUTE DISCLAIMER / HIGHLIGHT BLOCK */}
+              {formIsSplit && (
+                <div className="flex items-start gap-2 p-2.5 bg-blue-50/80 border border-blue-200 rounded-lg text-blue-800 text-xs">
+                  <Info className="w-4 h-4 text-blue-600 shrink-0 mt-0.5" />
+                  <span>
+                    <strong>Note:</strong> This rate applies specifically to the <strong>Primary Destination Location</strong>. To set the rate for the secondary location, create a second entry with the locations reversed.
+                  </span>
+                </div>
+              )}
             </div>
+          </div>
 
             {/* PREVIEW CONTAINER STAGING WINDOW */}
             <div className="flex-1 overflow-auto border rounded-xl p-2 bg-gray-50/30 flex flex-col min-h-[150px] mb-6">

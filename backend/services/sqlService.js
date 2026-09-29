@@ -1325,7 +1325,16 @@ async function getSanitizationBackupData() {
           SELECT TOP 1 [URL] 
           FROM [CSO].[UPC Details] UD
           WHERE UD.[UPC] = CI.[UPC]
-        ) AS image_url
+        ) AS image_url,
+        (
+          SELECT TOP 1 PH.[Units_Per_Parent]
+          FROM [CSO].[UPC_Packaging_Hierarchy_Lookup] PH
+          WHERE PH.[UPC] = CI.[UPC]
+            AND PH.[Unit_Type] = 'PK'
+            AND PH.[Parent_Unit_Type] = 'CRT'
+            AND PH.[Units_Per_Parent] IS NOT NULL
+            AND MI.[Category ID] in (101,102,104,105)
+        ) AS pk_in_crt
       FROM LatestInventory CI
       LEFT JOIN [CSO].[Master_Item] MI 
         ON CI.[UPC] = MI.[UPC] AND CI.[Station_SK] = MI.[Station_SK]
