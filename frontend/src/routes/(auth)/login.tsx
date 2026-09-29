@@ -122,6 +122,14 @@ function RouteComponent() {
       //   })
       // }
       localStorage.setItem('token', response.data.token)
+
+      // Initialize showFuelTicker to 'false' by default
+      const existingFuelTickerState = localStorage.getItem('showFuelTicker');
+      if (!existingFuelTickerState) {
+        localStorage.setItem('showFuelTicker', 'false');
+      }
+      window.dispatchEvent(new Event('fuelTickerToggle'));
+
       clearLocalDB();
       clearDashboardDB();
       refreshAuth()

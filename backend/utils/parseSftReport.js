@@ -563,6 +563,7 @@ function parseSftReport(text) {
     couponsAccepted: pickNum(/^\s*Coupons Accepted\s+([-\d.,]+)\s*$/mi, text),
     giftCertificates: pickNum(/^\s*Gift Certificates\s+([-\d.,]+)\s*$/mi, text),
     cashOffCoupons: pickNum(/^\s*Cash Off Coupons\s+([-\d.,]+)\s*$/mi, text),
+    gasolineCoupons: pickNum(/^\s*Gasoline Coupons\s+([-\d.,]+)\s*$/mi, text),
     otherCoupons: pickNum(/^\s*Other Coupons\s+([-\d.,]+)\s*$/mi, text),
     canadianCash: pickNum(/^\s*Canadian Cash\s+([-\d.,]+)\s*$/mi, text),
     usCash: pickNum(/^\s*U\.?S\.?\s*Cash\s+([-\d.,]+)\s*$/mi, text),
@@ -571,7 +572,13 @@ function parseSftReport(text) {
     payouts: pickNum(/^\s*Payouts\s+([-\d.,]+)\s*$/mi, text),
     unsettledPrepays: pickNum(/^\s*Unsettled Prepays\s+([-\d.,]+)\s*$/mi, text),
 
-    lottoPayout: pickNum(/^\s*lotto\s*payouts?\s*[:\-]?\s*\$?\s*([-\d.,]+)\s*$/mi, text),
+    lottoPayout: (() => {
+      const payout = pickNum(/^\s*lotto\s*payouts?\s*[:\-]?\s*\$?\s*([-\d.,]+)\s*$/mi, text);
+      const win = pickNum(/^\s*LOTTO WIN\s+([-\d.,]+)\s*$/mi, text);
+
+      if (payout == null && win == null) return null;
+      return Number(((payout || 0) + (win || 0)).toFixed(2));
+    })(),
 
     onlineLottoTotal: (() => {
       const m = text.match(

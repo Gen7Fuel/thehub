@@ -3,10 +3,12 @@ const mssql = require('mssql');
 const { getPool } = require('../services/sqlService');
 
 async function processMonthlySync() {
-  const pool = await getPool();
-  const transaction = new mssql.Transaction(pool);
+  let transaction;
 
   try {
+    const pool = await getPool();
+    transaction = new mssql.Transaction(pool);
+
     await transaction.begin();
     console.log("Starting monthly sync...");
 
@@ -36,7 +38,7 @@ async function processMonthlySync() {
 
         const updateSet = columns.map(c => `[${c}] = @${c}`).join(', ');
 
-        const result = await upsertReq.query(`
+        await upsertReq.query(`
           UPDATE [FUEL].[${table.name}] 
           SET ${updateSet}, [Updated At] = GETDATE() 
           WHERE ${whereClause};
@@ -58,15 +60,38 @@ async function processMonthlySync() {
     await transaction.commit();
     console.log("Monthly sync completed successfully.");
   } catch (err) {
-    await transaction.rollback();
+    // Only attempt rollback if the transaction was actually initiated
+    if (transaction && transaction._begun) {
+      try {
+        await transaction.rollback();
+      } catch (rollbackErr) {
+        console.error("Rollback failed:", rollbackErr);
+      }
+    }
     console.error("Monthly sync failed:", err);
+    throw err; // 👈 CRITICAL: Re-throw so cron.schedule catches it and retries!
   }
 }
 
 // Runs at 12:00 AM (Midnight) America/Toronto time on the 1st day of every month
-cron.schedule("0 0 1 * *", () => {
+cron.schedule("0 0 1 * *", async () => {
   console.log("Running monthly automatic sync at midnight...");
-  processMonthlySync();
+  
+  const maxCronRetries = 3;
+  for (let attempt = 1; attempt <= maxCronRetries; attempt++) {
+    try {
+      await processMonthlySync();
+      break; // Success exit loop
+    } catch (err) {
+      console.error(`Monthly sync failed on attempt ${attempt}/${maxCronRetries}.`);
+      if (attempt < maxCronRetries) {
+        console.log("Waiting 30 seconds before retrying entire sync job...");
+        await new Promise(res => setTimeout(res, 30000));
+      } else {
+        console.error("CRITICAL: Monthly sync completely failed after max retries.");
+      }
+    }
+  }
 }, {
   scheduled: true,
   timezone: "America/Toronto"

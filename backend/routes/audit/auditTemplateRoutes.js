@@ -11,6 +11,7 @@ const SelectTemplate = require('../../models/audit/selectTemplate');
 const { emailQueue } = require('../../queues/emailQueue');
 const User = require('../../models/User');
 const { pushNotification } = require("../../services/notificationService");
+const { resolveIssueRecipients } = require("../../utils/auditIssueRecipients");
 // GET /api/audit/category-options
 router.get('/category-options', async (req, res) => {
   try {
@@ -859,6 +860,75 @@ router.post('/instance', async (req, res) => {
 
 
           // 🔹 Send email only when issueRaised goes from false → true
+          // if (item.issueRaised === true && existingItem?.issueRaised !== true) {
+          //   try {
+          //     const assignedTemplate = await SelectTemplate.findOne({
+          //       name: "Assigned To",
+          //     });
+
+          //     if (assignedTemplate && assignedTemplate.options?.length > 0) {
+          //       // Match by assignedTo text
+          //       const match = assignedTemplate.options.find(
+          //         (opt) => opt.text === item.assignedTo
+          //       );
+
+          //       if (match) {
+          //         // Per-site override (if any) for this option
+          //         const override = match.siteOverrides?.find((o) => o.site === site);
+
+          //         // Station Manager's TO is dynamically resolved from the
+          //         // Location's managerEmails unless a site override sets `to`
+          //         // explicitly — only fetch the Location when it's actually needed.
+          //         let location = null;
+          //         if (match.text === "Station Manager" && !override?.to) {
+          //           location = await Location.findOne({ site });
+          //         }
+
+          //         const { to: recipientList, cc } = resolveIssueRecipients({
+          //           option: match,
+          //           site,
+          //           location,
+          //         });
+
+          //         if (recipientList.length === 0) {
+          //           console.warn("No valid recipients found for assignedTo:", match.text);
+          //         } else {
+          //           const issueData = {
+          //             site: site,
+          //             item: item.item,
+          //             category: item.category,
+          //             status: item.status || "No Status Selected",
+          //             comment: item.comment || "No Comment Provided"
+          //           };
+
+          //           const io = req.app.get("io");
+
+          //           // 🧩 Pass the combined list.
+          //           // Our updated pushNotification service will handle deduplication.
+          //           await pushNotification({
+          //             io,
+          //             recipientEmails: [...recipientList, ...cc],
+          //             slug: "issue-raised-alert",
+          //             subject: `⚠️ Issue Raised for Site ${site}`,
+          //             fieldValues: issueData,
+          //             type: 'system'
+          //           });
+
+          //           console.log(`📨 Issue notification queued for: ${recipientList.join(", ")}`);
+          //         }
+          //       } else {
+          //         console.warn(
+          //           `⚠️ No matching Assigned To email found for "${item.assignedTo}"`
+          //         );
+          //       }
+          //     } else {
+          //       console.warn("⚠️ Assigned To template not found");
+          //     }
+          //   } catch (emailErr) {
+          //     console.error("❌ Error sending issueRaised email:", emailErr);
+          //   }
+          // }
+          // 🔹 Send email directly via emailQueue when issueRaised goes from false → true
           if (item.issueRaised === true && existingItem?.issueRaised !== true) {
             try {
               const assignedTemplate = await SelectTemplate.findOne({
@@ -871,87 +941,137 @@ router.post('/instance', async (req, res) => {
                   (opt) => opt.text === item.assignedTo
                 );
 
-                // if (match && match.email) {
-                //   const to = match.email;
-                let to = null;
-
                 if (match) {
-                  let recipientList = []; // We will collect all primary 'TO' emails here
+                  // Per-site override (if any) for this option
+                  const override = match.siteOverrides?.find((o) => o.site === site);
 
-                  if (match.text === "Station Manager") {
-                    // 🧩 NEW: Fetch Location to get the managerEmails array
-                    const location = await Location.findOne({ site });
-
-                    if (location?.managerEmails && location.managerEmails.length > 0) {
-                      // Add all manager emails to the list
-                      recipientList = [...location.managerEmails];
-                    } else {
-                      // Fallback: if no managerEmails are set, use the main store email so the issue isn't lost
-                      console.warn(`No managerEmails found for ${site}, falling back to store email.`);
-                      if (location?.email) recipientList.push(location.email);
-                    }
-                  } else if (match.email) {
-                    // 🧩 NEW: Handle comma-separated strings or single emails
-                    if (typeof match.email === 'string' && match.email.includes(',')) {
-                      // Split by comma, trim whitespace, and filter out any empty strings
-                      const multiEmails = match.email
-                        .split(',')
-                        .map(e => e.trim())
-                        .filter(Boolean);
-
-                      recipientList.push(...multiEmails);
-                    } else if (match.email) {
-                      // Standard assignment (single email)
-                      recipientList.push(match.email.trim());
-                    }
+                  let location = null;
+                  if (match.text === "Station Manager" && !override?.to) {
+                    location = await Location.findOne({ site });
                   }
 
-                  if (recipientList.length === 0) {
-                    console.warn("No valid recipients found for assignedTo:", match?.text);
-                    return;
-                  }
-
-                  // Existing CC list
-                  const cc = [
-                    "daksh@gen7fuel.com",
-                    "ana@gen7fuel.com",
-                    "kporter@gen7fuel.com",
-                    "michelle@gen7fuel.com"
-                  ];
-                  // const cc = [];
-
-                  const issueData = {
-                    site: site,
-                    item: item.item,
-                    category: item.category,
-                    status: item.status || "No Status Selected",
-                    comment: item.comment || "No Comment Provided"
-                  };
-
-                  const io = req.app.get("io");
-
-                  // 🧩 Pass the combined list. 
-                  // Our updated pushNotification service will handle deduplication.
-                  await pushNotification({
-                    io,
-                    recipientEmails: [...recipientList, ...cc],
-                    slug: "issue-raised-alert",
-                    subject: `⚠️ Issue Raised for Site ${site}`,
-                    fieldValues: issueData,
-                    type: 'system'
+                  const { to: recipientList, cc: baseCc } = resolveIssueRecipients({
+                    option: match,
+                    site,
+                    location,
                   });
 
-                  console.log(`📨 Issue notification queued for: ${recipientList.join(", ")}`);
+                  if (!recipientList || recipientList.length === 0) {
+                    console.warn("⚠️ No valid recipients found for assignedTo:", match.text);
+                  } else {
+                    // emailQueue only supports a single 'to' address:
+                    // Take the first recipient as 'to', and push any additional recipients into 'cc'
+                    const primaryTo = recipientList[0];
+                    const extraToAsCc = recipientList.slice(1);
+                    const combinedCc = Array.from(new Set([...extraToAsCc, ...(baseCc || [])]));
+
+                    const statusText = item.status && item.status.trim() !== "" ? item.status : "No Status Selected";
+                    const commentText = item.comment && item.comment.trim() !== "" ? item.comment : "No Comment Provided";
+
+                    const subject = `⚠️ Issue Raised for Site ${site}`;
+                    const text = `An issue has been raised for site ${site}.
+                      Checklist: ${item.item}
+                      Category: ${item.category}
+                      Status Selected: ${statusText}
+                      Comment: ${commentText}
+
+                      Please review the issue in the Hub under Station Audit Interface.`;
+
+                    const html = `
+                      <div style="
+                        font-family: 'Segoe UI', Arial, sans-serif;
+                        background-color: #f7f9fc;
+                        padding: 30px;
+                      ">
+                        <div style="
+                          max-width: 600px;
+                          margin: 0 auto;
+                          background-color: #ffffff;
+                          border-radius: 12px;
+                          box-shadow: 0 4px 8px rgba(0,0,0,0.08);
+                          overflow: hidden;
+                        ">
+                          <!-- Header -->
+                          <div style="
+                            background-color: #d32f2f;
+                            color: #ffffff;
+                            text-align: center;
+                            padding: 16px 0;
+                          ">
+                            <h1 style="margin: 0; font-size: 22px;">🚨 Issue Raised Alert</h1>
+                          </div>
+
+                          <!-- Body -->
+                          <div style="padding: 24px 30px;">
+                            <p style="font-size: 16px; color: #333;">
+                              An issue has been raised for the following site:
+                            </p>
+
+                            <table style="width: 100%; border-collapse: collapse; margin-top: 10px;">
+                              <tr>
+                                <td style="padding: 8px; font-weight: bold; color: #555;">🏪 Site:</td>
+                                <td style="padding: 8px; color: #222;">${site}</td>
+                              </tr>
+                              <tr>
+                                <td style="padding: 8px; font-weight: bold; color: #555;">🧾 Checklist:</td>
+                                <td style="padding: 8px; color: #222;">${item.item}</td>
+                              </tr>
+                              <tr>
+                                <td style="padding: 8px; font-weight: bold; color: #555;">📂 Category:</td>
+                                <td style="padding: 8px; color: #222;">${item.category}</td>
+                              </tr>
+                              <tr>
+                                <td style="padding: 8px; font-weight: bold; color: #555;">⚡ Status Selected:</td>
+                                <td style="padding: 8px; color: #222;">${statusText}</td>
+                              </tr>
+                              <tr>
+                                <td style="padding: 8px; font-weight: bold; color: #555;">📝 Comment:</td>
+                                <td style="padding: 8px; color: #222;">${commentText}</td>
+                              </tr>
+                            </table>
+
+                            <div style="
+                              margin-top: 24px;
+                              background-color: #fff3cd;
+                              border-left: 6px solid #ffc107;
+                              padding: 16px;
+                              border-radius: 8px;
+                            ">
+                              <p style="margin: 0; color: #856404; font-size: 15px;">
+                                ⚠️ Please review this issue in the <strong>Hub → Station Audit Interface</strong> as soon as possible.
+                              </p>
+                            </div>
+
+                            <p style="color: #777; font-size: 13px; margin-top: 32px; text-align: center;">
+                              This is an automated message from the Gen7Fuel Hub Audit System.<br>
+                              Please do not reply to this email.
+                            </p>
+                          </div>
+                        </div>
+                      </div>
+                    `;
+
+                    await emailQueue.add("sendIssueEmail", {
+                      to: primaryTo,
+                      // to: 'daksh@gen7fuel.com',
+                      subject,
+                      text,
+                      html,
+                      cc: combinedCc,
+                    });
+
+                    console.log(`📨 Issue email queued for TO: ${primaryTo} | CC: ${combinedCc.join(", ")}`);
+                  }
                 } else {
                   console.warn(
-                    `⚠️ No matching Assigned To email found for "${item.assignedTo}"`
+                    `⚠️ No matching Assigned To template option found for "${item.assignedTo}"`
                   );
                 }
               } else {
                 console.warn("⚠️ Assigned To template not found");
               }
             } catch (emailErr) {
-              console.error("❌ Error sending issueRaised email:", emailErr);
+              console.error("❌ Error queuing issueRaised email:", emailErr);
             }
           }
         }

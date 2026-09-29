@@ -23,6 +23,7 @@ import Barcode from 'react-barcode'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import axios from 'axios'
 import { Dialog, DialogContent } from '@/components/ui/dialog' // Adjust import path to your project rules
+import { useAuth } from '@/context/AuthContext'
 
 export const Route = createFileRoute(
   '/_navbarLayout/cycle-count/manage/schedule/$id',
@@ -198,6 +199,8 @@ interface ScheduleInstancePayload {
 
 /* --- PRIMARY ROUTE VIEW COMPONENT --- */
 function RouteComponent() {
+  const { user } = useAuth();
+  const access = user?.access
   const { id } = Route.useParams()
   const queryClient = useQueryClient()
 
@@ -246,7 +249,7 @@ function RouteComponent() {
     const todayStr = formatter.format(new Date()) // Format results in 'YYYY-MM-DD'
 
     const totalItems = itemsData.length
-    const completedItems = itemsData.filter(i => i.count_completed).length
+    const completedItems = itemsData.filter((i:any) => i.count_completed).length
     const remainingItems = totalItems - completedItems
 
     if (instanceData.date === todayStr) {
@@ -278,6 +281,7 @@ function RouteComponent() {
 
   // --- BUSINESS LOGIC LIMIT CHECKS FOR MUTATION BUTTONS ---
   const isInstanceScheduled = instanceData?.is_scheduled ?? false
+  const canRemoveSystemCount = access?.cycleCount?.manageCount?.deleteSystemSchedule;
   const totalItemCount = itemsData.length
 
   const canAddItem = isInstanceScheduled || (!isInstanceScheduled && totalItemCount < 20)
@@ -291,7 +295,7 @@ function RouteComponent() {
     // 1. Initialize the Priority List container safely at the absolute top
     groups["Priority List"] = [];
 
-    itemsData.forEach((item) => {
+    itemsData.forEach((item:any) => {
       if (item.priority) {
         // Send priority items directly to the top group
         groups["Priority List"].push(item);
@@ -351,7 +355,7 @@ function RouteComponent() {
     if (selectedIds.length === itemsData.length) {
       setSelectedIds([])
     } else {
-      setSelectedIds(itemsData.map(item => item.product_id))
+      setSelectedIds(itemsData.map((item:any) => item.product_id))
     }
   }
 
@@ -432,7 +436,7 @@ function RouteComponent() {
 
   // --- FULL DELETION TRIGGER INTERACTION ---
   const handleDeleteEntireSchedule = () => {
-    const confirmText = "⚠️ CRITICAL WARNING: Are you sure you want to completely DELETE this entire schedule? This action will permanently drop the instance along with all linked item lines. This action cannot be undone.";
+    const confirmText = "⚠️ CRITICAL WARNING: Are you sure you want to completely DELETE this entire schedule? This action will permanently drop the schedule along with all linked item lines. This action cannot be undone.";
 
     if (window.confirm(confirmText)) {
       deleteEntireScheduleMutation.mutate();
@@ -601,7 +605,7 @@ function RouteComponent() {
                   Add Item
                 </button>
 
-                {isInstanceScheduled && (
+                {(isInstanceScheduled || canRemoveSystemCount) && (
                   <button
                     type="button"
                     onClick={handleDeleteEntireSchedule}
@@ -731,7 +735,7 @@ function RouteComponent() {
                     </tr>
 
                     {/* ================= RENDER UNCOLLAPSED ITEMS MATRICES ================= */}
-                    {!isCollapsed && categoryRows.map((item) => (
+                    {!isCollapsed && categoryRows.map((item:any) => (
                       <ItemRow
                         key={item.product_id}
                         item={item}
@@ -752,28 +756,32 @@ function RouteComponent() {
 
       {/* --- HIGH PERFORMANCE ISOLATED BARCODE ZOOM DIALOG --- */}
       <Dialog open={!!activeBarcodeItem} onOpenChange={(open) => { if (!open) setActiveBarcodeItem(null); }}>
-        {/* Dialog markup keeps running identically */}
         <DialogContent className="sm:max-w-md rounded-3xl overflow-hidden p-0 border-none bg-white">
-          <div className="w-full h-48 bg-gray-50 relative border-b border-gray-100">
-            <div className="absolute top-4 left-0 right-0 text-center z-10">
-              <span className="bg-white/80 backdrop-blur-sm px-3 py-1 rounded-full text-[9px] uppercase tracking-tighter font-black text-gray-500 shadow-sm border border-white/50">
-                Verify Product Identity
-              </span>
-            </div>
+          
+          {/* 🏷️ Header Bar (Cleanly separated above the image) */}
+          <div className="w-full pt-5 pb-2 text-center bg-white">
+            <span className="bg-gray-100 px-3 py-1 rounded-full text-[9px] uppercase tracking-tighter font-black text-gray-500 shadow-sm border border-gray-200/60 inline-block">
+              Verify Product Identity
+            </span>
+          </div>
+
+          {/* 🖼️ Image Container (Pure white background, no top badge overlap) */}
+          <div className="w-full h-44 bg-white border-b border-gray-100 flex items-center justify-center">
             {activeBarcodeItem?.image ? (
               <img
                 src={activeBarcodeItem.image}
                 alt={activeBarcodeItem.name}
-                className="w-full h-full object-contain p-4"
+                className="w-full h-full object-contain px-6 pb-4"
               />
             ) : (
-              <div className="w-full h-full flex flex-col items-center justify-center text-gray-300">
+              <div className="w-full h-full flex flex-col items-center justify-center text-gray-300 bg-gray-50">
                 <ImageIcon className="w-12 h-12 mb-2 opacity-20" />
                 <span className="text-xs font-bold uppercase tracking-widest opacity-40">No Image Available</span>
               </div>
             )}
           </div>
 
+          {/* 📊 Barcode & Details Section */}
           <div className="flex flex-col justify-center items-center p-8 pt-6">
             <div className="w-full p-6 bg-white rounded-2xl border-2 border-gray-100 mb-6 flex justify-center shadow-sm">
               {activeBarcodeItem?.upc && (
@@ -882,7 +890,7 @@ export const AddItemsModal: React.FC<AddItemsModalProps> = ({
     },
     // Only fetch if modal is completely visible AND we have a valid site location scope string loaded
     enabled: isOpen && !!siteMongoId,
-    placeholderData: (previousData) => previousData,
+    placeholderData: (previousData:any) => previousData,
   });
 
   // 3. Save Mutation Put Execution Hooks
@@ -1034,7 +1042,7 @@ export const AddItemsModal: React.FC<AddItemsModalProps> = ({
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-100 text-xs font-medium text-gray-700">
-                {items.map((item) => {
+                {items.map((item:any) => {
                   const isChecked = !!selectedItemMap[item.id];
                   const shouldHideSelector = isLimitHit && !isChecked;
 

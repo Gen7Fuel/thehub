@@ -1,14 +1,30 @@
-import { createFileRoute, Link, useNavigate } from '@tanstack/react-router';
-import { useEffect, useState, useMemo } from "react";
+import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
+import { useEffect, useState, useCallback, useMemo } from "react";
 import { LocationPicker } from "@/components/custom/locationPicker";
-import { getCsoCodeByStationName, getVendorNameById } from '@/lib/utils';
+import { getCsoCodeByStationName, getVendorNameById } from "@/lib/utils";
 import { DonutSalesChart } from "@/components/custom/dashboard/salesByCategoryDonut";
-import { getDashboardData, saveDashboardData, STORES } from "@/lib/dashboardIndexedDB"
-import { PieTenderChart, type TenderTransaction } from "@/components/custom/dashboard/pieCharts"
-import { BistroBarLineChart, Top10BistroChart } from "@/components/custom/dashboard/bistroCharts";
 import {
-  Bar, BarChart, CartesianGrid, XAxis, LabelList,
-  Line, YAxis, Cell
+  getDashboardData,
+  saveDashboardData,
+  STORES,
+} from "@/lib/dashboardIndexedDB";
+import {
+  PieTenderChart,
+  type TenderTransaction,
+} from "@/components/custom/dashboard/pieCharts";
+import {
+  BistroBarLineChart,
+  Top10BistroChart,
+} from "@/components/custom/dashboard/bistroCharts";
+import {
+  Bar,
+  BarChart,
+  CartesianGrid,
+  XAxis,
+  LabelList,
+  Line,
+  YAxis,
+  Cell,
 } from "recharts";
 import {
   Card,
@@ -28,23 +44,35 @@ import {
   MultiLineChartToolTip,
   // CycleCountTooltip,
 } from "@/components/ui/chart";
-import { MultiLineChart, TransactionsLineChart } from "@/components/custom/dashboard/multiLineChart";
+import {
+  MultiLineChart,
+  TransactionsLineChart,
+} from "@/components/custom/dashboard/multiLineChart";
 import { FuelSparkline } from "@/components/custom/dashboard/fuelSparkLine";
 // import { DatePickerWithRange } from '@/components/custom/datePickerWithRange';
 // import type { DateRange } from "react-day-picker";
 import { useAuth } from "@/context/AuthContext";
 import { useSite } from "@/context/SiteContext";
-import { getOrderRecStatusColor } from '@/lib/utils';
+import { getOrderRecStatusColor } from "@/lib/utils";
 import { PasswordProtection } from "@/components/custom/PasswordProtection";
-import { AuditSummaryChart } from "@/components/custom/dashboard/auditCharts"
-import { getPeriodKey } from '../_navbarLayout/audit/checklist/$id'
+import { AuditSummaryChart } from "@/components/custom/dashboard/auditCharts";
+import { getPeriodKey } from "../_navbarLayout/audit/checklist/$id";
+import axios from "axios";
+import { getGradeTheme } from "./fuel-pricing"; // Adjust relative path as needed
 
 // Define the dashboard route using TanStack Router
-export const Route = createFileRoute('/_navbarLayout/dashboard')({
+export const Route = createFileRoute("/_navbarLayout/dashboard")({
   component: RouteComponent,
 });
 
-const STATUS_KEYS = ["created", "completed", "not placed", "placed", "delivered", "invoice_received"];
+const STATUS_KEYS = [
+  "created",
+  "completed",
+  "not placed",
+  "placed",
+  "delivered",
+  "invoice_received",
+];
 
 const chartConfig = {
   count: { label: "Cycle Counts", color: "var(--chart-1)" },
@@ -68,8 +96,12 @@ import {
   DialogTitle,
   DialogDescription,
 } from "@/components/ui/dialog";
-import { OverShortSparkline, SafeBalanceTrendChart, PayablesDiscrepancyTable } from '@/components/custom/dashboard/accountingCharts';
-import { Skeleton } from '@/components/ui/skeleton';
+import {
+  OverShortSparkline,
+  SafeBalanceTrendChart,
+  PayablesDiscrepancyTable,
+} from "@/components/custom/dashboard/accountingCharts";
+import { Skeleton } from "@/components/ui/skeleton";
 // import { Button } from '@/components/ui/button';
 // import OperationalTimelineCard from '@/components/custom/dashboard/operationalTimelineChart';
 // import { PayablesDiscrepancyChart, OverShortChart } from '@/components/custom/dashboard/accountingCharts';
@@ -78,28 +110,41 @@ interface CycleCountItem {
   name: string;
   upc_barcode: string;
   totalQty: number;
-  completed: boolean; 
+  completed: boolean;
 }
 
 interface CycleCountDayData {
-  day: string;                  // Formatted as MM-DD
-  count: number;                // Total unique item rows matching instance 
+  day: string; // Formatted as MM-DD
+  count: number; // Total unique item rows matching instance
   completionPercentage: number; // calculated integer (0 - 100)
-  items: CycleCountItem[];      // Array of items evaluated for the calculation
+  items: CycleCountItem[]; // Array of items evaluated for the calculation
 }
 
 interface ChartBarModalProps {
   data: CycleCountDayData | null;
   isOpen: boolean;
   onClose: () => void;
-} 
+}
 
 interface TransactionData {
-  dayFull: string;    // full date string e.g., "2023-11-14"
-  day: string;           // e.g., "11-14"
+  dayFull: string; // full date string e.g., "2023-11-14"
+  day: string; // e.g., "11-14"
   transactions: number;
   visits: number;
   avgBasket: number;
+}
+
+// 1. Define interface for ticker data
+interface FuelGradePrice {
+  grade: string;
+  price: string;
+  updatedAt: string;
+}
+
+interface SiteTickerData {
+  stationName: string;
+  site: string;
+  grades: FuelGradePrice[];
 }
 
 // interface OperationalTiming {
@@ -153,7 +198,11 @@ interface OverShortChartItem {
 
 // type HourlyMap = Record<string, HourlyRecord>;
 
-export const ChartBarModal: React.FC<ChartBarModalProps> = ({ data, isOpen, onClose }) => {
+export const ChartBarModal: React.FC<ChartBarModalProps> = ({
+  data,
+  isOpen,
+  onClose,
+}) => {
   if (!data) return null;
 
   return (
@@ -167,22 +216,37 @@ export const ChartBarModal: React.FC<ChartBarModalProps> = ({ data, isOpen, onCl
         </DialogHeader>
 
         {data.items.length === 0 ? (
-          <div className="text-muted-foreground mt-4 text-center py-6">No cycle items cataloged for this shift window.</div>
+          <div className="text-muted-foreground mt-4 text-center py-6">
+            No cycle items cataloged for this shift window.
+          </div>
         ) : (
           <div className="mt-4 max-h-80 overflow-y-auto w-full">
             <table className="min-w-full table-fixed border border-slate-200 divide-y divide-slate-200 text-sm">
               <thead className="bg-slate-50 sticky top-0 z-10">
                 <tr>
-                  <th className="px-3 py-2 text-left font-medium w-1/2 max-w-[220px] truncate">Name</th>
-                  <th className="px-3 py-2 text-left font-medium w-1/4 max-w-[120px]">UPC</th>
-                  <th className="px-3 py-2 text-right font-medium w-1/4 max-w-[100px]">Qty</th>
+                  <th className="px-3 py-2 text-left font-medium w-1/2 max-w-[220px] truncate">
+                    Name
+                  </th>
+                  <th className="px-3 py-2 text-left font-medium w-1/4 max-w-[120px]">
+                    UPC
+                  </th>
+                  <th className="px-3 py-2 text-right font-medium w-1/4 max-w-[100px]">
+                    Qty
+                  </th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-200 bg-white">
                 {data.items.map((item, idx) => (
-                  <tr key={idx} className={item.completed ? "bg-green-50/30" : ""}>
-                    <td className="px-3 py-2 truncate max-w-[220px] font-medium text-gray-900">{item.name}</td>
-                    <td className="px-3 py-2 max-w-[120px] font-mono text-gray-500">{item.upc_barcode}</td>
+                  <tr
+                    key={idx}
+                    className={item.completed ? "bg-green-50/30" : ""}
+                  >
+                    <td className="px-3 py-2 truncate max-w-[220px] font-medium text-gray-900">
+                      {item.name}
+                    </td>
+                    <td className="px-3 py-2 max-w-[120px] font-mono text-gray-500">
+                      {item.upc_barcode}
+                    </td>
                     <td className="px-3 py-2 text-right max-w-[100px] align-middle">
                       {item.completed ? (
                         <span className="font-mono font-bold text-gray-900">
@@ -253,7 +317,11 @@ export const fetchFuelMonthToMonth = async (data: any) => {
 
   const currentMonthStart = new Date(today.getFullYear(), today.getMonth(), 1);
   const prevMonthStart = new Date(today.getFullYear(), today.getMonth() - 1, 1);
-  const prevMonthEnd = new Date(prevMonthStart.getFullYear(), prevMonthStart.getMonth(), today.getDate());
+  const prevMonthEnd = new Date(
+    prevMonthStart.getFullYear(),
+    prevMonthStart.getMonth(),
+    today.getDate(),
+  );
 
   // --- Helper: sum volumes in a date range ---
   const sumVolumeByDateRange = (startD: Date, endD: Date) => {
@@ -276,7 +344,7 @@ export const fetchFuelMonthToMonth = async (data: any) => {
     previousMonthVolume: prevMonthVolume,
     percent: Number(changePct.toFixed(2)),
   };
-}
+};
 
 export function formatNumberCompact(value: number | undefined | null): string {
   if (value === null || value === undefined) return "0";
@@ -295,12 +363,12 @@ export function formatNumberCompact(value: number | undefined | null): string {
 }
 
 interface BistroStackedChartRow {
-  week: string;              // "11-17"
-  sales_130: number;         // category 130 sales
-  sales_134: number;         // category 134 sales
-  units_130: number;         // category 130 units
-  units_134: number;         // category 134 units
-  growth: number | null;     // WoW growth (same for both categories)
+  week: string; // "11-17"
+  sales_130: number; // category 130 sales
+  sales_134: number; // category 134 sales
+  units_130: number; // category 130 units
+  units_134: number; // category 134 units
+  growth: number | null; // WoW growth (same for both categories)
 }
 
 interface Top10Bistro {
@@ -312,9 +380,9 @@ interface Top10Bistro {
 }
 
 function processOverShortData(data: OverShortChartItem[]) {
-  const maxAbs = Math.max(...data.map(d => Math.abs(d.overShort)));
+  const maxAbs = Math.max(...data.map((d) => Math.abs(d.overShort)));
 
-  return data.map(d => {
+  return data.map((d) => {
     const relativeHeight = maxAbs ? d.overShort / maxAbs : 0;
 
     let fill = "";
@@ -325,7 +393,7 @@ function processOverShortData(data: OverShortChartItem[]) {
     return {
       ...d,
       fill,
-      displayValue: relativeHeight // for chart height
+      displayValue: relativeHeight, // for chart height
     };
   });
 }
@@ -337,12 +405,20 @@ function RouteComponent() {
   const [_orderRecs, setOrderRecs] = useState<Record<string, any[]>>({});
   const [_vendorNames, setVendorNames] = useState<Record<string, string>>({});
   const [_vendors, setVendors] = useState<any[]>([]);
-  const [dailyCounts, setDailyCounts] = useState<{ date: string, count: number, completionPercentage: number, items: any }[]>([]);
-  const [selectedDay, setSelectedDay] = useState<CycleCountDayData | null>(null);
+  const [dailyCounts, setDailyCounts] = useState<
+    { date: string; count: number; completionPercentage: number; items: any }[]
+  >([]);
+  const [selectedDay, setSelectedDay] = useState<CycleCountDayData | null>(
+    null,
+  );
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [selectedGrade, setSelectedGrade] = useState<string | null>(null);
-  const [transactionChartData, setTransactionChartData] = useState<TransactionData[]>([]);
-  const [tenderTransactions, setTenderTransactions] = useState<TenderTransaction[]>([]);
+  const [transactionChartData, setTransactionChartData] = useState<
+    TransactionData[]
+  >([]);
+  const [tenderTransactions, setTenderTransactions] = useState<
+    TenderTransaction[]
+  >([]);
   const [bistroWoWSales, setBistroWoWSales] = useState<BistroWowSales[]>([]);
   const [top10Bistro, setTop10Bistro] = useState<Top10Bistro[]>([]);
   // const [operationalTimings, setOperationalTimings] = useState<OperationalTiming[]>([]);
@@ -350,10 +426,14 @@ function RouteComponent() {
   const [safeBalanceRaw, setSafeBalanceRaw] = useState<any[]>([]);
   const [auditStats, setAuditStats] = useState<any[]>([]);
 
+  const [allTickerData, setAllTickerData] = useState<SiteTickerData[]>([]);
+  const [loadingTicker, setLoadingTicker] = useState<boolean>(true);
 
   const [salesData, setSalesData] = useState<SalesData | null>(null);
   const [vendorStatus, setVendorStatus] = useState<any[]>([]);
-  const [timePeriodData, setTimePeriodData] = useState<TimePeriodTransaction[]>([]);
+  const [timePeriodData, setTimePeriodData] = useState<TimePeriodTransaction[]>(
+    [],
+  );
 
   // Per-section loading flags for progressive rendering
   const [loadingOverview, setLoadingOverview] = useState(true);
@@ -361,27 +441,26 @@ function RouteComponent() {
   const [loadingAccounting, setLoadingAccounting] = useState(true);
   const [loadingSql, setLoadingSql] = useState(true);
 
-
   const today = new Date();
   const sevenDaysAgo = new Date(today);
   sevenDaysAgo.setDate(today.getDate() - 7);
 
-  const [startDate,] = useState(sevenDaysAgo.toISOString().slice(0, 10));
-  const [endDate,] = useState(today.toISOString().slice(0, 10));
+  const [startDate] = useState(sevenDaysAgo.toISOString().slice(0, 10));
+  const [endDate] = useState(today.toISOString().slice(0, 10));
   const [safeMaxBalance, setSafeMaxBalance] = useState<number>(25_000);
   const [payablesComparisonData, setPayablesComparisonData] = useState([]);
   const [currentDate] = useState(new Date());
 
   const [showPasswordDialog, setShowPasswordDialog] = useState(false);
   const [hasAccess, setHasAccess] = useState(false);
-  const [overShortData, setOverShortData] = useState<any[]>([])
+  const [overShortData, setOverShortData] = useState<any[]>([]);
   const [fuelData, setFuelData] = useState<any[]>([]);
   const [fuelMonthStats, setFuelMonthStats] = useState<{
     currentMonthVolume: number;
     previousMonthVolume: number;
     percent: number;
   } | null>(null);
-  const navigate = useNavigate({ from: Route.fullPath })
+  const navigate = useNavigate({ from: Route.fullPath });
   // Constructing period keys for the query
   const pKeys = {
     daily: getPeriodKey("daily", currentDate),
@@ -390,7 +469,7 @@ function RouteComponent() {
   };
   const [siteTimezone, setSiteTimezone] = useState("UTC");
 
-  // Rendering passcode dialog for manager access 
+  // Rendering passcode dialog for manager access
   useEffect(() => {
     setShowPasswordDialog(true);
   }, []);
@@ -401,10 +480,10 @@ function RouteComponent() {
   };
 
   const handlePasswordCancel = () => {
-    setShowPasswordDialog(false)
+    setShowPasswordDialog(false);
     // Navigate back to cycle-count main page
-    navigate({ to: '/' })
-  }
+    navigate({ to: "/" });
+  };
 
   // ----------------------------
   // Fetch dashboard data whenever site/date changes
@@ -431,21 +510,31 @@ function RouteComponent() {
         end.setDate(end.getDate() - 1); // yesterday
 
         // Date range helpers
-        const pad = (n: number) => String(n).padStart(2, '0');
-        const ymd = (d: Date) => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+        const pad = (n: number) => String(n).padStart(2, "0");
+        const ymd = (d: Date) =>
+          `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
         const fmt = (d: Date) => d.toISOString().slice(0, 10);
 
         // Safe balance date range (20 days before yesterday)
         const safeStart = new Date(end);
         safeStart.setDate(safeStart.getDate() - 20);
-        const safeQuery = new URLSearchParams({ from: ymd(safeStart), to: ymd(end) }).toString();
+        const safeQuery = new URLSearchParams({
+          from: ymd(safeStart),
+          to: ymd(end),
+        }).toString();
 
         // SQL date ranges
-        const fuelStart = new Date(end); fuelStart.setDate(fuelStart.getDate() - 60);
-        const transStart = new Date(end); transStart.setDate(transStart.getDate() - 14);
-        const shiftStart = new Date(end); shiftStart.setDate(shiftStart.getDate() - 7);
-        const salesStart = new Date(end); salesStart.setDate(salesStart.getDate() - 59); salesStart.setHours(0, 0, 0, 0);
-        const salesEnd = new Date(end); salesEnd.setHours(23, 59, 59, 999);
+        const fuelStart = new Date(end);
+        fuelStart.setDate(fuelStart.getDate() - 60);
+        const transStart = new Date(end);
+        transStart.setDate(transStart.getDate() - 14);
+        const shiftStart = new Date(end);
+        shiftStart.setDate(shiftStart.getDate() - 7);
+        const salesStart = new Date(end);
+        salesStart.setDate(salesStart.getDate() - 59);
+        salesStart.setHours(0, 0, 0, 0);
+        const salesEnd = new Date(end);
+        salesEnd.setHours(23, 59, 59, 999);
 
         const fuelStartDate = fmt(fuelStart);
         const fuelEndDate = fmt(end);
@@ -457,21 +546,22 @@ function RouteComponent() {
         const salesEndDate = fmt(salesEnd);
 
         // Vendor week range
-        const { startDate: weekStart, endDate: weekEnd } = getCurrentWeekRange();
+        const { startDate: weekStart, endDate: weekEnd } =
+          getCurrentWeekRange();
 
         // ────────────────────────────────────────────────────────
         // FAST TRACK — IDB reads + csoCode (~100ms, no heavy DB)
         // Await this first so SQL can start before slow Mongo calls.
         // ────────────────────────────────────────────────────────
         const fastTrackPromise = Promise.allSettled([
-          getCsoCodeByStationName(site),                    // idx 0
-          getDashboardData(STORES.SALES, site),             // idx 1
-          getDashboardData(STORES.FUEL, site),              // idx 2
-          getDashboardData(STORES.TRANS, site),             // idx 3
+          getCsoCodeByStationName(site), // idx 0
+          getDashboardData(STORES.SALES, site), // idx 1
+          getDashboardData(STORES.FUEL, site), // idx 2
+          getDashboardData(STORES.TRANS, site), // idx 3
           getDashboardData(STORES.TIME_PERIOD_TRANS, site), // idx 4
-          getDashboardData(STORES.TENDER_TRANS, site),      // idx 5
-          getDashboardData(STORES.BISTRO_WOW_SALES, site),  // idx 6
-          getDashboardData(STORES.TOP_10_BISTRO, site),     // idx 7
+          getDashboardData(STORES.TENDER_TRANS, site), // idx 5
+          getDashboardData(STORES.BISTRO_WOW_SALES, site), // idx 6
+          getDashboardData(STORES.TOP_10_BISTRO, site), // idx 7
         ]);
 
         // ────────────────────────────────────────────────────────
@@ -480,30 +570,51 @@ function RouteComponent() {
         // not wait for these.
         // ────────────────────────────────────────────────────────
         const slowTrackPromise = Promise.allSettled([
-          fetch(`/api/order-rec/range?${params}`, { headers: authHeaders }).then(async (res) => {
+          fetch(`/api/order-rec/range?${params}`, {
+            headers: authHeaders,
+          }).then(async (res) => {
             if (res.status === 403) throw { is403: true };
-            if (!res.ok) throw new Error(`Failed to fetch order records: ${res.statusText}`);
+            if (!res.ok)
+              throw new Error(
+                `Failed to fetch order records: ${res.statusText}`,
+              );
             return res.json();
           }),
-          fetch(`/api/safesheets/site/${encodeURIComponent(site)}/daily-balances?${safeQuery}`, { headers: authHeaders }).then(async (res) => {
+          fetch(
+            `/api/safesheets/site/${encodeURIComponent(site)}/daily-balances?${safeQuery}`,
+            { headers: authHeaders },
+          ).then(async (res) => {
             if (res.status === 403) throw { is403: true };
-            if (!res.ok) throw new Error(`Failed to fetch safe balance data: ${res.statusText}`);
+            if (!res.ok)
+              throw new Error(
+                `Failed to fetch safe balance data: ${res.statusText}`,
+              );
             return res.json();
           }),
           fetchLocation(site),
-          fetch(`/api/cash-summary/over-short?site=${encodeURIComponent(site)}`, { headers: authHeaders }).then(async (res) => {
+          fetch(
+            `/api/cash-summary/over-short?site=${encodeURIComponent(site)}`,
+            { headers: authHeaders },
+          ).then(async (res) => {
             if (res.status === 403) throw { is403: true };
-            if (!res.ok) throw new Error('Failed to fetch over/short data');
+            if (!res.ok) throw new Error("Failed to fetch over/short data");
             return res.json();
           }),
-          fetch(`/api/cash-summary/payables-comparison?site=${encodeURIComponent(site)}`, { headers: authHeaders }).then(async (res) => {
+          fetch(
+            `/api/cash-summary/payables-comparison?site=${encodeURIComponent(site)}`,
+            { headers: authHeaders },
+          ).then(async (res) => {
             if (res.status === 403) throw { is403: true };
-            if (!res.ok) throw new Error('Failed to fetch payables comparison data');
+            if (!res.ok)
+              throw new Error("Failed to fetch payables comparison data");
             return res.json();
           }),
-          fetch(`/api/audit/station-stats?site=${encodeURIComponent(site)}&periodKeys=${encodeURIComponent(JSON.stringify(pKeys))}`, { headers: authHeaders }).then(async (res) => {
+          fetch(
+            `/api/audit/station-stats?site=${encodeURIComponent(site)}&periodKeys=${encodeURIComponent(JSON.stringify(pKeys))}`,
+            { headers: authHeaders },
+          ).then(async (res) => {
             if (res.status === 403) throw { is403: true };
-            if (!res.ok) throw new Error('Failed to fetch audit stats');
+            if (!res.ok) throw new Error("Failed to fetch audit stats");
             return res.json();
           }),
           fetchVendors(site),
@@ -514,62 +625,116 @@ function RouteComponent() {
         const [csoCodeResult, ...idbResults] = await fastTrackPromise;
         if (cancelled) return;
 
-        const csoCode = csoCodeResult.status === 'fulfilled' ? csoCodeResult.value : '';
-        const [salesCached, fuelCached, transCached, timePeriodCached, tenderCached, bistroCached, top10Cached] =
-          idbResults.map(r => (r.status === 'fulfilled' ? r.value : null));
+        const csoCode =
+          csoCodeResult.status === "fulfilled" ? csoCodeResult.value : "";
+        const [
+          salesCached,
+          fuelCached,
+          transCached,
+          timePeriodCached,
+          tenderCached,
+          bistroCached,
+          top10Cached,
+        ] = idbResults.map((r) => (r.status === "fulfilled" ? r.value : null));
 
         // ── Always call API (Redis-cached on backend, <5ms) — fall back to IDB on failure ──
         const sqlPromise = (async () => {
           try {
             const data = await fetchAllSqlData(
-              csoCode ?? '', site, salesStartDate, salesEndDate,
-              fuelStartDate, fuelEndDate, transStartDate, transEndDate,
-              shiftStartDate, shiftEndDate,
+              csoCode ?? "",
+              site,
+              salesStartDate,
+              salesEndDate,
+              fuelStartDate,
+              fuelEndDate,
+              transStartDate,
+              transEndDate,
+              shiftStartDate,
+              shiftEndDate,
             );
             // Update IndexedDB as L2 offline fallback
             saveDashboardData(STORES.SALES, site, data.sales);
             saveDashboardData(STORES.FUEL, site, data.fuel);
             saveDashboardData(STORES.TRANS, site, data.transactions);
-            saveDashboardData(STORES.TIME_PERIOD_TRANS, site, data.timePeriodTransactions);
-            saveDashboardData(STORES.TENDER_TRANS, site, data.tenderTransactions);
-            saveDashboardData(STORES.BISTRO_WOW_SALES, site, data.bistroWoWSales);
+            saveDashboardData(
+              STORES.TIME_PERIOD_TRANS,
+              site,
+              data.timePeriodTransactions,
+            );
+            saveDashboardData(
+              STORES.TENDER_TRANS,
+              site,
+              data.tenderTransactions,
+            );
+            saveDashboardData(
+              STORES.BISTRO_WOW_SALES,
+              site,
+              data.bistroWoWSales,
+            );
             saveDashboardData(STORES.TOP_10_BISTRO, site, data.top10Bistro);
             return data;
           } catch {
             // Fallback to IndexedDB if API fails
-            console.log('⚠️ API failed, using IndexedDB cache');
+            console.log("⚠️ API failed, using IndexedDB cache");
             return {
-              sales: salesCached ?? [], fuel: fuelCached ?? [], transactions: transCached ?? [],
-              timePeriodTransactions: timePeriodCached ?? [], tenderTransactions: tenderCached ?? [],
-              bistroWoWSales: bistroCached ?? [], top10Bistro: top10Cached ?? [],
+              sales: salesCached ?? [],
+              fuel: fuelCached ?? [],
+              transactions: transCached ?? [],
+              timePeriodTransactions: timePeriodCached ?? [],
+              tenderTransactions: tenderCached ?? [],
+              bistroWoWSales: bistroCached ?? [],
+              top10Bistro: top10Cached ?? [],
             };
           }
         })();
 
         // ── Now await slow-track MongoDB results (~2s, already running) ──
         const [
-          orderRecResult, safeBalanceResult, locationResult,
-          overShortResult, payablesResult, auditResult,
-          vendorsResult, weekOrderRecsResult,
+          orderRecResult,
+          safeBalanceResult,
+          locationResult,
+          overShortResult,
+          payablesResult,
+          auditResult,
+          vendorsResult,
+          weekOrderRecsResult,
         ] = await slowTrackPromise;
         if (cancelled) return;
 
         // Check for 403
-        for (const r of [orderRecResult, safeBalanceResult, overShortResult, payablesResult, auditResult]) {
-          if (r.status === 'rejected' && (r.reason as any)?.is403) {
-            navigate({ to: '/no-access' });
+        for (const r of [
+          orderRecResult,
+          safeBalanceResult,
+          overShortResult,
+          payablesResult,
+          auditResult,
+        ]) {
+          if (r.status === "rejected" && (r.reason as any)?.is403) {
+            navigate({ to: "/no-access" });
             return;
           }
         }
 
-        const orderRecsRes    = orderRecResult.status === 'fulfilled'      ? orderRecResult.value      : [];
-        const safeBalanceJson = safeBalanceResult.status === 'fulfilled'   ? safeBalanceResult.value   : {};
-        const locationData    = locationResult.status === 'fulfilled'      ? locationResult.value      : {};
-        const overShortRes    = overShortResult.status === 'fulfilled'     ? overShortResult.value     : [];
-        const payablesRes     = payablesResult.status === 'fulfilled'      ? payablesResult.value      : [];
-        const auditRes        = auditResult.status === 'fulfilled'         ? auditResult.value         : [];
-        const vendorsArr      = vendorsResult.status === 'fulfilled'       ? vendorsResult.value       : [];
-        const orderRecsArr    = weekOrderRecsResult.status === 'fulfilled' ? weekOrderRecsResult.value : [];
+        const orderRecsRes =
+          orderRecResult.status === "fulfilled" ? orderRecResult.value : [];
+        const safeBalanceJson =
+          safeBalanceResult.status === "fulfilled"
+            ? safeBalanceResult.value
+            : {};
+        const locationData =
+          locationResult.status === "fulfilled" ? locationResult.value : {};
+        const overShortRes =
+          overShortResult.status === "fulfilled" ? overShortResult.value : [];
+        const payablesRes =
+          payablesResult.status === "fulfilled" ? payablesResult.value : [];
+        const auditRes =
+          auditResult.status === "fulfilled" ? auditResult.value : [];
+        const vendorsArr =
+          vendorsResult.status === "fulfilled" ? vendorsResult.value : [];
+        const orderRecsArr =
+          weekOrderRecsResult.status === "fulfilled"
+            ? weekOrderRecsResult.value
+            : [];
 
         // ── Accounting section data is ready ──
         setSafeBalanceRaw(safeBalanceJson.data || []);
@@ -580,11 +745,21 @@ function RouteComponent() {
         if (!cancelled) setLoadingAccounting(false);
 
         // ── Vendor / order rec state ──
-        const vendorOrderMap: Record<string, { orderRecId: string; currentStatus: string; date: string }> = {};
+        const vendorOrderMap: Record<
+          string,
+          { orderRecId: string; currentStatus: string; date: string }
+        > = {};
         for (const rec of orderRecsArr) {
           if (!rec.vendor) continue;
-          if (!vendorOrderMap[rec.vendor] || new Date(rec.date) > new Date(vendorOrderMap[rec.vendor].date)) {
-            vendorOrderMap[rec.vendor] = { orderRecId: rec._id, currentStatus: rec.currentStatus, date: rec.createdAt };
+          if (
+            !vendorOrderMap[rec.vendor] ||
+            new Date(rec.date) > new Date(vendorOrderMap[rec.vendor].date)
+          ) {
+            vendorOrderMap[rec.vendor] = {
+              orderRecId: rec._id,
+              currentStatus: rec.currentStatus,
+              date: rec.createdAt,
+            };
           }
         }
         const updatedVendors = vendorsArr.map((vendor: any) => ({
@@ -596,19 +771,29 @@ function RouteComponent() {
         setVendorStatus(updatedVendors);
 
         // ── Start cycle counts immediately — only needs timezone, no SQL dependency ──
-        const timezone = locationData.timezone || 'UTC';
+        const timezone = locationData.timezone || "UTC";
         setSiteTimezone(timezone);
         const dailyCountsPromise = fetchDailyCounts(
-          site, sevenDaysAgo.toISOString().slice(0, 10), today.toISOString().slice(0, 10),
+          site,
+          sevenDaysAgo.toISOString().slice(0, 10),
+          today.toISOString().slice(0, 10),
         );
 
         // Vendor names (runs in parallel with cycle counts + SQL)
-        const vendorIds = [...new Set(STATUS_KEYS.flatMap(key => (orderRecsRes[key] ?? []).map((r: any) => String(r.vendor))))];
+        const vendorIds = [
+          ...new Set(
+            STATUS_KEYS.flatMap((key) =>
+              (orderRecsRes[key] ?? []).map((r: any) => String(r.vendor)),
+            ),
+          ),
+        ];
         const vendorNamesObj: Record<string, string> = {};
-        await Promise.all(vendorIds.map(async (id: string) => {
-          const name = await getVendorNameById(id);
-          if (name) vendorNamesObj[id] = name;
-        }));
+        await Promise.all(
+          vendorIds.map(async (id: string) => {
+            const name = await getVendorNameById(id);
+            if (name) vendorNamesObj[id] = name;
+          }),
+        );
         if (cancelled) return;
         setVendorNames(vendorNamesObj);
 
@@ -623,13 +808,21 @@ function RouteComponent() {
         if (cancelled) return;
 
         // ── CPU-only transforms ──
-        const { cleaned: cleanedFuelData, fullFuelData } = await fetchFuelData(sqlData.fuel);
+        const { cleaned: cleanedFuelData, fullFuelData } = await fetchFuelData(
+          sqlData.fuel,
+        );
         const stats = await fetchFuelMonthToMonth(fullFuelData);
         const salesDataRes = await fetchSalesData(sqlData.sales);
 
         const transactionModChartData = sqlData.transactions.map((t: any) => {
           const dayFull = t.Date;
-          return { dayFull, day: dayFull.slice(5, 10), transactions: t.transactions, visits: t.visits, avgBasket: t.bucket_size };
+          return {
+            dayFull,
+            day: dayFull.slice(5, 10),
+            transactions: t.transactions,
+            visits: t.visits,
+            avgBasket: t.bucket_size,
+          };
         });
 
         if (cancelled) return;
@@ -645,9 +838,8 @@ function RouteComponent() {
 
         setLoadingOverview(false);
         setLoadingSql(false);
-
       } catch (err) {
-        console.error('Error fetching dashboard data:', err);
+        console.error("Error fetching dashboard data:", err);
         // On unexpected error, stop all spinners to avoid infinite loading
         if (!cancelled) {
           setLoadingOverview(false);
@@ -659,7 +851,9 @@ function RouteComponent() {
     };
 
     fetchAllData();
-    return () => { cancelled = true; };
+    return () => {
+      cancelled = true;
+    };
   }, [site, startDate, endDate]);
 
   // build past 7 days fuel chart data
@@ -667,14 +861,18 @@ function RouteComponent() {
     if (!fuelData?.length) return [];
 
     // Get unique last 7 days from the data
-    const allDates = Array.from(new Set(fuelData.map(d => d.businessDate.slice(0, 10)))).sort();
+    const allDates = Array.from(
+      new Set(fuelData.map((d) => d.businessDate.slice(0, 10))),
+    ).sort();
     const last7Dates = allDates.slice(-7); // last 7 days
 
-    const grades = Array.from(new Set(fuelData.map(d => d.fuelGradeDescription)));
+    const grades = Array.from(
+      new Set(fuelData.map((d) => d.fuelGradeDescription)),
+    );
 
     // Build map: day -> grade -> volume
     const byDate: Record<string, Record<string, number>> = {};
-    fuelData.forEach(d => {
+    fuelData.forEach((d) => {
       const day = d.businessDate.slice(0, 10);
       if (!last7Dates.includes(day)) return; // only keep last 7 days
       if (!byDate[day]) byDate[day] = {};
@@ -682,9 +880,9 @@ function RouteComponent() {
     });
 
     // Build chart rows
-    return last7Dates.map(day => {
+    return last7Dates.map((day) => {
       const row: Record<string, any> = { day: day.slice(5, 10) }; // MM-DD for x-axis
-      grades.forEach(g => (row[g] = byDate[day]?.[g] ?? 0));
+      grades.forEach((g) => (row[g] = byDate[day]?.[g] ?? 0));
       return row;
     });
   }, [fuelData]);
@@ -692,7 +890,7 @@ function RouteComponent() {
   // Step 1: Get all unique grades from the fuel data
   const allGrades = useMemo(() => {
     if (!fuelData?.length) return [];
-    return Array.from(new Set(fuelData.map(d => d.fuelGradeDescription)));
+    return Array.from(new Set(fuelData.map((d) => d.fuelGradeDescription)));
   }, [fuelData]);
 
   // Step 2: Assign colors to grades (same color for same grade)
@@ -707,19 +905,21 @@ function RouteComponent() {
     ];
 
     return Object.fromEntries(
-      allGrades.map((grade, idx) => [grade, colors[idx % colors.length]])
+      allGrades.map((grade, idx) => [grade, colors[idx % colors.length]]),
     );
   }, [allGrades]);
 
   // Step 3: Build chart configs using the same color mapping
   const fuelChartConfig: ChartConfig = useMemo(() => {
     return Object.fromEntries(
-      allGrades.map(grade => [grade, { label: grade, color: gradeColors[grade] }])
+      allGrades.map((grade) => [
+        grade,
+        { label: grade, color: gradeColors[grade] },
+      ]),
     );
   }, [allGrades, gradeColors]);
 
   // Use the same config for 90-day chart
-
 
   const fuelChartConfig90: ChartConfig = fuelChartConfig; // reuse the same
 
@@ -727,9 +927,9 @@ function RouteComponent() {
   const fuelChartDataWithSMA = useMemo(() => {
     if (!fuelChartData.length) return [];
 
-    const totalPerDay = fuelChartData.map(row => {
+    const totalPerDay = fuelChartData.map((row) => {
       const total = Object.keys(row)
-        .filter(k => k !== "day")
+        .filter((k) => k !== "day")
         .reduce((acc, grade) => acc + (row[grade] ?? 0), 0);
       return { ...row, total };
     });
@@ -742,7 +942,6 @@ function RouteComponent() {
     });
   }, [fuelChartData]);
 
-
   const normalizedFuelChartConfig90 = Object.fromEntries(
     Object.entries(fuelChartConfig90).map(([key, val]) => [
       key,
@@ -750,7 +949,7 @@ function RouteComponent() {
         label: val.label ? String(val.label) : key,
         color: val.color ?? "#f10f0fff", // fallback if no color
       },
-    ])
+    ]),
   );
 
   const last35FuelData = useMemo(() => {
@@ -758,17 +957,13 @@ function RouteComponent() {
 
     // Get unique sorted MM-DD dates
     const allDates = Array.from(
-      new Set(fuelData.map(d => d.businessDate.slice(5, 10)))
+      new Set(fuelData.map((d) => d.businessDate.slice(5, 10))),
     ).sort();
 
     const last35Dates = new Set(allDates.slice(-35));
 
-    return fuelData.filter(d =>
-      last35Dates.has(d.businessDate.slice(5, 10))
-    );
+    return fuelData.filter((d) => last35Dates.has(d.businessDate.slice(5, 10)));
   }, [fuelData]);
-
-
 
   // Build 35-day  fuel chart data
   // const fuelMix90 = useMemo(() => {
@@ -823,32 +1018,30 @@ function RouteComponent() {
     if (!last35FuelData.length) return [];
 
     const grades = Array.from(
-      new Set(last35FuelData.map(d => d.fuelGradeDescription))
+      new Set(last35FuelData.map((d) => d.fuelGradeDescription)),
     );
 
     const byDate: Record<string, Record<string, number>> = {};
 
-    last35FuelData.forEach(d => {
+    last35FuelData.forEach((d) => {
       const dateObj = new Date(d.businessDate); // ensure Date
       const dayKey = dateObj.toISOString().slice(0, 10); // YYYY-MM-DD
       if (!byDate[dayKey]) byDate[dayKey] = {};
-      byDate[dayKey][d.fuelGradeDescription] =
-        Number(d.fuelGradeSalesVolume ?? 0);
+      byDate[dayKey][d.fuelGradeDescription] = Number(
+        d.fuelGradeSalesVolume ?? 0,
+      );
     });
 
     const dates = Object.keys(byDate).sort(
-      (a, b) => new Date(a).getTime() - new Date(b).getTime()
+      (a, b) => new Date(a).getTime() - new Date(b).getTime(),
     );
 
-    return dates.map(dateStr => {
+    return dates.map((dateStr) => {
       const row: Record<string, any> = { day: dateStr.slice(5, 10) }; // display MM-DD
-      grades.forEach(g => (row[g] = byDate[dateStr]?.[g] ?? 0));
+      grades.forEach((g) => (row[g] = byDate[dateStr]?.[g] ?? 0));
       return row;
     });
   }, [last35FuelData]);
-
-
-
 
   // Mini fuel sparkline datasets per grade
   // const fuelSparklines = useMemo(() => {
@@ -895,20 +1088,20 @@ function RouteComponent() {
     if (!last35FuelData.length) return {};
 
     const grades = Array.from(
-      new Set(last35FuelData.map(d => d.fuelGradeDescription))
+      new Set(last35FuelData.map((d) => d.fuelGradeDescription)),
     );
 
     const byGrade: Record<string, any[]> = {};
 
-    grades.forEach(g => {
+    grades.forEach((g) => {
       byGrade[g] = last35FuelData
-        .filter(d => d.fuelGradeDescription === g)
-        .map(d => {
+        .filter((d) => d.fuelGradeDescription === g)
+        .map((d) => {
           const dateObj = new Date(d.businessDate);
           return {
             day: dateObj.toISOString().slice(5, 10), // display MM-DD
             fullDate: dateObj, // for sorting
-            value: Number(d.fuelGradeSalesVolume ?? 0)
+            value: Number(d.fuelGradeSalesVolume ?? 0),
           };
         })
         .sort((a, b) => a.fullDate.getTime() - b.fullDate.getTime());
@@ -916,8 +1109,6 @@ function RouteComponent() {
 
     return byGrade;
   }, [last35FuelData]);
-
-
 
   //transactions and visits char config
   const transactionChartConfig = [
@@ -938,11 +1129,11 @@ function RouteComponent() {
     },
   ];
 
-
   // Process tender transactions for Pie chart
   const tenderChartData = useMemo(() => {
     // If tenderTransactions is null, undefined, or NOT an array → return empty
-    if (!Array.isArray(tenderTransactions) || tenderTransactions.length === 0) return [];
+    if (!Array.isArray(tenderTransactions) || tenderTransactions.length === 0)
+      return [];
 
     const totals: Record<string, number> = {};
 
@@ -955,7 +1146,6 @@ function RouteComponent() {
       if (typeof t.tender === "string" && t.tender.trim() !== "") {
         tender = t.tender.trim();
       }
-
 
       // safe transaction value
       const tx =
@@ -972,21 +1162,34 @@ function RouteComponent() {
     }));
   }, [tenderTransactions]);
 
-
-
-
-
   // 2️⃣ Create config with colors
   const DEFAULT_COLORS = [
-    "#2563eb", "#16a34a", "#d97706", "#db2777", "#4b5563",
-    "#8b5cf6", "#f59e0b", "#e11d48", "#14b8a6", "#0ea5e9",
-    "#7c3aed", "#22c55e", "#f97316", "#6366f1", "#a855f7",
-    "#ec4899", "#84cc16", "#06b6d4", "#facc15", "#e879f9",
+    "#2563eb",
+    "#16a34a",
+    "#d97706",
+    "#db2777",
+    "#4b5563",
+    "#8b5cf6",
+    "#f59e0b",
+    "#e11d48",
+    "#14b8a6",
+    "#0ea5e9",
+    "#7c3aed",
+    "#22c55e",
+    "#f97316",
+    "#6366f1",
+    "#a855f7",
+    "#ec4899",
+    "#84cc16",
+    "#06b6d4",
+    "#facc15",
+    "#e879f9",
   ];
 
   //config for the tendor pie chart
   const tenderConfig = useMemo(() => {
-    if (!Array.isArray(tenderTransactions) || tenderTransactions.length === 0) return {};
+    if (!Array.isArray(tenderTransactions) || tenderTransactions.length === 0)
+      return {};
 
     // Get unique tenders
     const uniqueTenders = Array.from(
@@ -997,8 +1200,8 @@ function RouteComponent() {
           if (typeof raw === "string") return raw.trim();
           console.warn("⚠️ Non-string tender found:", raw);
           return "Other";
-        })
-      )
+        }),
+      ),
     );
 
     // Sort alphabetically so the same tender always gets the same color
@@ -1017,7 +1220,6 @@ function RouteComponent() {
 
     return config;
   }, [tenderTransactions]);
-
 
   // const timePeriodChartData = useMemo(() => {
   //   if (!timePeriodData || timePeriodData.length === 0) return [];
@@ -1070,7 +1272,7 @@ function RouteComponent() {
         hourlyMap[hour] = {
           Fuel: { total: 0, dates: new Set() },
           "C-Store": { total: 0, dates: new Set() },
-          Both: { total: 0, dates: new Set() }
+          Both: { total: 0, dates: new Set() },
         };
       }
 
@@ -1083,22 +1285,18 @@ function RouteComponent() {
       .map((hour) => {
         const rec = hourlyMap[hour];
 
-        const avgFuel =
-          rec.Fuel.total / rec.Fuel.dates.size || 0;
-        const avgCStore =
-          rec["C-Store"].total / rec["C-Store"].dates.size || 0;
-        const avgBoth =
-          rec.Both.total / rec.Both.dates.size || 0;
+        const avgFuel = rec.Fuel.total / rec.Fuel.dates.size || 0;
+        const avgCStore = rec["C-Store"].total / rec["C-Store"].dates.size || 0;
+        const avgBoth = rec.Both.total / rec.Both.dates.size || 0;
 
         return {
           hour,
           Fuel: Number(avgFuel.toFixed(0)),
           CStore: Number(avgCStore.toFixed(0)),
-          Both: Number(avgBoth.toFixed(0))
+          Both: Number(avgBoth.toFixed(0)),
         };
       });
   }, [timePeriodData]);
-
 
   const timePeriodChartConfig = useMemo(() => {
     return {
@@ -1108,46 +1306,52 @@ function RouteComponent() {
     };
   }, []);
 
+  // 1. Direct order map using exact backend grade strings
+  const GRADE_ORDER: Record<string, number> = {
+    Regular: 1,
+    "Mid Grade": 2,
+    Premium: 3,
+    Diesel: 4,
+    "Dyed Diesel": 5,
+  };
 
-  // Compute current and previous 7-day average basket sizes
-  // const avgBasketStats = useMemo(() => {
-  //   if (!transactionChartData || transactionChartData.length === 0) return { current: 0, previous: 0, changePct: 0 };
+  // 2. Fetcher
+  const fetchTickerData = useCallback(async () => {
+    try {
+      setLoadingTicker(true);
+      const token = localStorage.getItem("token");
+      const { data } = await axios.get("/api/fuel-pricing/prices-ticker", {
+        headers: { Authorization: `Bearer ${token || ""}` },
+      });
+      setAllTickerData(data || []);
+    } catch (err) {
+      console.error("Failed fetching pricing ticker:", err);
+    } finally {
+      setLoadingTicker(false);
+    }
+  }, []);
 
-  //   const today = new Date();
-  //   const yesterday = new Date(today);
-  //   yesterday.setDate(today.getDate() - 1);
+  useEffect(() => {
+    fetchTickerData();
+  }, [fetchTickerData]);
 
-  //   const formatKey = (date: Date) => date.toISOString().slice(5, 10); // 'MM-DD'
+  // 3. Current selected site's fuel grades sorted in strict order
+  const currentSiteGrades = useMemo(() => {
+    const siteMatch = allTickerData.find(
+      (item) =>
+        item.site?.toLowerCase() === site?.toLowerCase() ||
+        item.stationName?.toLowerCase() === site?.toLowerCase(),
+    );
 
-  //   const currentStart = new Date(yesterday);
-  //   currentStart.setDate(yesterday.getDate() - 6); // 7-day range
-  //   const previousStart = new Date(currentStart);
-  //   previousStart.setDate(currentStart.getDate() - 7); // previous 7 days
-  //   const previousEnd = new Date(currentStart);
-  //   previousEnd.setDate(currentStart.getDate() - 1);
+    if (!siteMatch?.grades) return [];
 
-  //   const currentSlice = transactionChartData.filter(
-  //     (d: TransactionData) => d.day >= formatKey(currentStart) && d.day <= formatKey(yesterday)
-  //   );
-  //   const previousSlice = transactionChartData.filter(
-  //     (d: TransactionData) => d.day >= formatKey(previousStart) && d.day <= formatKey(previousEnd)
-  //   );
+    return [...siteMatch.grades].sort((a, b) => {
+      const orderA = GRADE_ORDER[a.grade] ?? 99;
+      const orderB = GRADE_ORDER[b.grade] ?? 99;
+      return orderA - orderB;
+    });
+  }, [allTickerData, site]);
 
-  //   const currentAvg = currentSlice.length
-  //     ? currentSlice.reduce((sum, d) => sum + (d.avgBasket || 0), 0) / currentSlice.length
-  //     : 0;
-  //   const previousAvg = previousSlice.length
-  //     ? previousSlice.reduce((sum, d) => sum + (d.avgBasket || 0), 0) / previousSlice.length
-  //     : 0;
-
-  //   const changePct = previousAvg > 0 ? ((currentAvg - previousAvg) / previousAvg) * 100 : 0;
-
-  //   return {
-  //     current: Number(currentAvg.toFixed(2)),
-  //     previous: Number(previousAvg.toFixed(2)),
-  //     changePct: Number(changePct.toFixed(1)),
-  //   };
-  // }, [transactionChartData]);
   const avgBasketStats = useMemo(() => {
     if (!transactionChartData || transactionChartData.length === 0)
       return { current: 0, previous: 0, changePct: 0 };
@@ -1167,27 +1371,28 @@ function RouteComponent() {
 
     const parseDay = (d: TransactionData) => new Date(d.dayFull);
 
-    const currentSlice = transactionChartData.filter(d => {
+    const currentSlice = transactionChartData.filter((d) => {
       const dayDate = parseDay(d);
       return dayDate >= currentStart && dayDate <= yesterday;
     });
 
-    const previousSlice = transactionChartData.filter(d => {
+    const previousSlice = transactionChartData.filter((d) => {
       const dayDate = parseDay(d);
       return dayDate >= previousStart && dayDate <= previousEnd;
     });
 
     const currentAvg = currentSlice.length
-      ? currentSlice.reduce((sum, d) => sum + (d.avgBasket || 0), 0) / currentSlice.length
+      ? currentSlice.reduce((sum, d) => sum + (d.avgBasket || 0), 0) /
+        currentSlice.length
       : 0;
 
     const previousAvg = previousSlice.length
-      ? previousSlice.reduce((sum, d) => sum + (d.avgBasket || 0), 0) / previousSlice.length
+      ? previousSlice.reduce((sum, d) => sum + (d.avgBasket || 0), 0) /
+        previousSlice.length
       : 0;
 
-    const changePct = previousAvg > 0
-      ? ((currentAvg - previousAvg) / previousAvg) * 100
-      : 0;
+    const changePct =
+      previousAvg > 0 ? ((currentAvg - previousAvg) / previousAvg) * 100 : 0;
 
     return {
       current: Number(currentAvg.toFixed(2)),
@@ -1197,45 +1402,41 @@ function RouteComponent() {
   }, [transactionChartData]);
 
   const bistroChartData: BistroStackedChartRow[] = Object.values(
-    bistroWoWSales.reduce<Record<string, BistroStackedChartRow>>(
-      (acc, d) => {
-        const weekDate = new Date(d.WeekStart);
-        const key = `${weekDate.getMonth() + 1}-${weekDate.getDate()}`;
+    bistroWoWSales.reduce<Record<string, BistroStackedChartRow>>((acc, d) => {
+      const weekDate = new Date(d.WeekStart);
+      const key = `${weekDate.getMonth() + 1}-${weekDate.getDate()}`;
 
-        if (!acc[key]) {
-          acc[key] = {
-            week: key,
-            sales_130: 0,
-            sales_134: 0,
-            units_130: 0,
-            units_134: 0,
-            growth: d.WoW_Growth_Pct, // same across categories
-          };
-        }
+      if (!acc[key]) {
+        acc[key] = {
+          week: key,
+          sales_130: 0,
+          sales_134: 0,
+          units_130: 0,
+          units_134: 0,
+          growth: d.WoW_Growth_Pct, // same across categories
+        };
+      }
 
-        if (d.Category === '130') {
-          acc[key].sales_130 += d.BistroSales;
-          acc[key].units_130 += d.UnitsSold;
-        }
+      if (d.Category === "130") {
+        acc[key].sales_130 += d.BistroSales;
+        acc[key].units_130 += d.UnitsSold;
+      }
 
-        if (d.Category === '134') {
-          acc[key].sales_134 += d.BistroSales;
-          acc[key].units_134 += d.UnitsSold;
-        }
+      if (d.Category === "134") {
+        acc[key].sales_134 += d.BistroSales;
+        acc[key].units_134 += d.UnitsSold;
+      }
 
-        return acc;
-      },
-      {}
-    )
-  ).filter(d => d.growth !== null);
+      return acc;
+    }, {}),
+  ).filter((d) => d.growth !== null);
 
-  const top10BistroChartData = top10Bistro.map(d => ({
+  const top10BistroChartData = top10Bistro.map((d) => ({
     item: d.Item,
     sales: d.TotalSales,
     units: d.UnitsSold,
     unitsPerDay: d.UnitsPerDay,
   }));
-
 
   const safeBalanceChartData = useMemo(() => {
     return safeBalanceRaw.map((d) => {
@@ -1253,7 +1454,6 @@ function RouteComponent() {
     });
   }, [safeBalanceRaw]);
 
-
   // ----------------------------
   // Prepare chart data
   // ----------------------------
@@ -1264,13 +1464,14 @@ function RouteComponent() {
   //   items: items ?? [], // default to empty array if missing
   // }));
 
-  const chartData = dailyCounts.map(({ date, count, completionPercentage, items }) => ({
-    day: date.slice(5), // YYYY-MM-DD -> MM-DD
-    count, // keeping baseline number tracks intact
-    completionPercentage, // newly injected data dimension 
-    items: items ?? [],
-  }));
-
+  const chartData = dailyCounts.map(
+    ({ date, count, completionPercentage, items }) => ({
+      day: date.slice(5), // YYYY-MM-DD -> MM-DD
+      count, // keeping baseline number tracks intact
+      completionPercentage, // newly injected data dimension
+      items: items ?? [],
+    }),
+  );
 
   // Use daily (last 7 days) for the existing stacked chart
   const salesChartData = salesData?.daily.map((entry) => ({
@@ -1283,20 +1484,20 @@ function RouteComponent() {
     Vapes: entry.Vapes ?? 0,
     "Native Gifts": entry["Native Gifts"] ?? 0,
     Bistro: entry.Bistro ?? 0,
-  }))
+  }));
 
   // Weekly aggregated (last 5 weeks)
-  const weeklySalesChartData = salesData?.weekly.map(entry => ({
-    week: entry.week,            // e.g., 'Wk of MM-DD'
+  const weeklySalesChartData = salesData?.weekly.map((entry) => ({
+    week: entry.week, // e.g., 'Wk of MM-DD'
     FN: entry.FN ?? 0,
     Quota: entry.Quota ?? 0,
     Cannabis: entry.Cannabis ?? 0,
     GRE: entry.GRE ?? 0,
     Convenience: entry.Convenience ?? 0,
     Vapes: entry.Vapes ?? 0,
-    "Native Gifts": entry['Native Gifts'] ?? 0,
+    "Native Gifts": entry["Native Gifts"] ?? 0,
     Bistro: entry.Bistro ?? 0,
-  }))
+  }));
 
   // Build 7-day totals for the donut chart
   const donutCategories = [
@@ -1318,7 +1519,6 @@ function RouteComponent() {
       : 0, // default to 0 if salesChartData is undefined
   }));
 
-
   const donutConfig = Object.fromEntries(
     donutCategories.map((cat, idx) => [
       cat,
@@ -1326,7 +1526,7 @@ function RouteComponent() {
         label: cat,
         color: `var(--chart-${idx + 1})`,
       },
-    ])
+    ]),
   );
 
   // ----------------------------
@@ -1347,135 +1547,252 @@ function RouteComponent() {
         <div className="pt-5 flex flex-col items-center">
           {/* Filters */}
           <div className="flex gap-4">
-            <LocationPicker setStationName={setSite} value="stationName" defaultValue={site} />
+            <LocationPicker
+              setStationName={setSite}
+              value="stationName"
+              defaultValue={site}
+            />
             {/* <DatePickerWithRange date={date} setDate={setDate} /> */}
           </div>
 
           {/* Main container */}
           <div className="mt-8 w-full max-w-7xl">
-                {/* ======================= */}
-                {/*     CARD SECTION   */}
-                {/* ======================= */}
-                {loadingOverview ? (
-                  <section className="mb-10">
-                    <h2 className="text-2xl font-bold mb-4 pl-4">Overview</h2>
-                    <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-6">
-                      {[1, 2, 3, 4].map((i) => (
-                        <div key={i} className="bg-white rounded-xl shadow p-4 flex flex-col gap-2">
-                          <Skeleton className="h-4 w-32" />
-                          <Skeleton className="h-7 w-24" />
-                          <Skeleton className="h-4 w-40" />
-                        </div>
-                      ))}
+            {/* ======================= */}
+            {/*     CARD SECTION   */}
+            {/* ======================= */}
+            {loadingOverview ? (
+              <section className="mb-10">
+                <h2 className="text-2xl font-bold mb-4 pl-4">Overview</h2>
+                <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-6">
+                  {[1, 2, 3, 4].map((i) => (
+                    <div
+                      key={i}
+                      className="bg-white rounded-xl shadow p-4 flex flex-col gap-2"
+                    >
+                      <Skeleton className="h-4 w-32" />
+                      <Skeleton className="h-7 w-24" />
+                      <Skeleton className="h-4 w-40" />
                     </div>
-                  </section>
-                ) : (
-                <section aria-labelledby="overview-heading" className="mb-10">
-                  <h2 id="overview-heading" className="text-2xl font-bold mb-4 pl-4">Overview</h2>
+                  ))}
+                </div>
+              </section>
+            ) : (
+              <section aria-labelledby="overview-heading" className="mb-10">
+                <h2
+                  id="overview-heading"
+                  className="text-2xl font-bold mb-4 pl-4"
+                >
+                  Overview
+                </h2>
 
-                  <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-6">
-
-                    {/* Month-to-Month Sales Card */}
-                    <div className="col-span-1">
-                      <div className="bg-white rounded-xl shadow p-4 flex flex-col">
-                        <div className="text-sm text-muted-foreground">M-to-M C-Store Sales</div>
-                        <div className="text-2xl font-bold mt-1">
-                          C$ {formatNumberCompact(salesData?.cards?.month?.current).toLocaleString() ?? 0}
-                        </div>
-                        <div className="text-sm mt-1">
-                          <span className="text-muted-foreground">
-                            C$ {formatNumberCompact(salesData?.cards?.month?.previous).toLocaleString() ?? 0}
-                          </span>
-                          <span
-                            className={`ml-2 font-semibold ${Number(salesData?.cards?.month?.changePct) >= 0
+                <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-6">
+                  {/* Month-to-Month Sales Card */}
+                  <div className="col-span-1">
+                    <div className="bg-white rounded-xl shadow p-4 flex flex-col">
+                      <div className="text-sm text-muted-foreground">
+                        M-to-M C-Store Sales
+                      </div>
+                      <div className="text-2xl font-bold mt-1">
+                        C${" "}
+                        {formatNumberCompact(
+                          salesData?.cards?.month?.current,
+                        ).toLocaleString() ?? 0}
+                      </div>
+                      <div className="text-sm mt-1">
+                        <span className="text-muted-foreground">
+                          C${" "}
+                          {formatNumberCompact(
+                            salesData?.cards?.month?.previous,
+                          ).toLocaleString() ?? 0}
+                        </span>
+                        <span
+                          className={`ml-2 font-semibold ${
+                            Number(salesData?.cards?.month?.changePct) >= 0
                               ? "text-green-600"
                               : "text-red-600"
-                              }`}
-                          >
-                            ({salesData?.cards?.month?.changePct}%)
-                          </span>
-                        </div>
+                          }`}
+                        >
+                          ({salesData?.cards?.month?.changePct}%)
+                        </span>
                       </div>
                     </div>
+                  </div>
 
-                    {/* Week-to-Week Sales Card */}
-                    <div className="col-span-1">
-                      <div className="bg-white rounded-xl shadow p-4 flex flex-col">
-                        <div className="text-sm text-muted-foreground">W-to-W C-Store Sales</div>
-                        <div className="text-2xl font-bold mt-1">
-                          C$ {formatNumberCompact(salesData?.cards?.week?.current).toLocaleString() ?? 0}
-                        </div>
-                        <div className="text-sm mt-1">
-                          <span className="text-muted-foreground">
-                            C$ {formatNumberCompact(salesData?.cards?.week?.previous).toLocaleString() ?? 0}
-                          </span>
-                          <span
-                            className={`ml-2 font-semibold ${Number(salesData?.cards?.week?.changePct) >= 0
+                  {/* Week-to-Week Sales Card */}
+                  <div className="col-span-1">
+                    <div className="bg-white rounded-xl shadow p-4 flex flex-col">
+                      <div className="text-sm text-muted-foreground">
+                        W-to-W C-Store Sales
+                      </div>
+                      <div className="text-2xl font-bold mt-1">
+                        C${" "}
+                        {formatNumberCompact(
+                          salesData?.cards?.week?.current,
+                        ).toLocaleString() ?? 0}
+                      </div>
+                      <div className="text-sm mt-1">
+                        <span className="text-muted-foreground">
+                          C${" "}
+                          {formatNumberCompact(
+                            salesData?.cards?.week?.previous,
+                          ).toLocaleString() ?? 0}
+                        </span>
+                        <span
+                          className={`ml-2 font-semibold ${
+                            Number(salesData?.cards?.week?.changePct) >= 0
                               ? "text-green-600"
                               : "text-red-600"
-                              }`}
-                          >
-                            ({salesData?.cards?.week?.changePct}%)
-                          </span>
-                        </div>
+                          }`}
+                        >
+                          ({salesData?.cards?.week?.changePct}%)
+                        </span>
                       </div>
                     </div>
+                  </div>
 
-                    {/* Mont to Month Fuel Volume */}
-                    <div className="col-span-1">
-                      <div className="bg-white rounded-xl shadow p-4 flex flex-col">
-                        <div className="text-sm text-muted-foreground">M-to-M Fuel Volume</div>
-                        <div className="text-2xl font-bold mt-1">
-                          {formatNumberCompact(fuelMonthStats?.currentMonthVolume).toLocaleString() ?? 0} Ltrs
-                        </div>
-                        <div className="text-sm mt-1">
-                          <span className="text-muted-foreground">
-                            {formatNumberCompact(fuelMonthStats?.previousMonthVolume).toLocaleString() ?? 0} Ltrs
-                          </span>
-                          <span
-                            className={`ml-2 font-semibold ${Number(fuelMonthStats?.percent) >= 0
+                  {/* Mont to Month Fuel Volume */}
+                  <div className="col-span-1">
+                    <div className="bg-white rounded-xl shadow p-4 flex flex-col">
+                      <div className="text-sm text-muted-foreground">
+                        M-to-M Fuel Volume
+                      </div>
+                      <div className="text-2xl font-bold mt-1">
+                        {formatNumberCompact(
+                          fuelMonthStats?.currentMonthVolume,
+                        ).toLocaleString() ?? 0}{" "}
+                        Ltrs
+                      </div>
+                      <div className="text-sm mt-1">
+                        <span className="text-muted-foreground">
+                          {formatNumberCompact(
+                            fuelMonthStats?.previousMonthVolume,
+                          ).toLocaleString() ?? 0}{" "}
+                          Ltrs
+                        </span>
+                        <span
+                          className={`ml-2 font-semibold ${
+                            Number(fuelMonthStats?.percent) >= 0
                               ? "text-green-600"
                               : "text-red-600"
-                              }`}
-                          >
-                            ({fuelMonthStats?.percent}%)
-                          </span>
-                        </div>
+                          }`}
+                        >
+                          ({fuelMonthStats?.percent}%)
+                        </span>
                       </div>
                     </div>
+                  </div>
 
-                    {/* Cash on Hand (Accounting) */}
-                    {/* <div className="col-span-1">
+                  {/* Cash on Hand (Accounting) */}
+                  {/* <div className="col-span-1">
                       <CashOnHandDisplay site={site} />
                     </div> */}
-                    {/* Avg Basket Size Card */}
-                    {site !== "Jocko Point" && site !== "Sarnia" && (
-                      <div className="col-span-1">
-                        <div className="bg-white rounded-xl shadow p-4 flex flex-col">
-                          <div className="text-sm text-muted-foreground">Avg Basket Size (Last 7 days)</div>
-                          <div className="text-2xl font-bold mt-1">
-                            C$ {avgBasketStats.current}
-                          </div>
-                          <div className="text-sm mt-1">
-                            <span className="text-muted-foreground">C$ {avgBasketStats.previous}</span>
-                            <span
-                              className={`ml-2 font-semibold ${avgBasketStats.changePct >= 0 ? "text-green-600" : "text-red-600"
-                                }`}
-                            >
-                              ({avgBasketStats.changePct}%)
+                  {/* Avg Basket Size Card */}
+                  {site !== "Jocko Point" && site !== "Sarnia" && (
+                    <div className="col-span-1">
+                      <div className="bg-white rounded-xl shadow p-4 flex flex-col">
+                        <div className="text-sm text-muted-foreground">
+                          Avg Basket Size (Last 7 days)
+                        </div>
+                        <div className="text-2xl font-bold mt-1">
+                          C$ {avgBasketStats.current}
+                        </div>
+                        <div className="text-sm mt-1">
+                          <span className="text-muted-foreground">
+                            C$ {avgBasketStats.previous}
+                          </span>
+                          <span
+                            className={`ml-2 font-semibold ${
+                              avgBasketStats.changePct >= 0
+                                ? "text-green-600"
+                                : "text-red-600"
+                            }`}
+                          >
+                            ({avgBasketStats.changePct}%)
+                          </span>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              </section>
+            )}
+
+            {/* ======================= */}
+            {/*   FUEL PRICES SECTION   */}
+            {/* ======================= */}
+            {loadingTicker ? (
+              <section aria-labelledby="fuel-prices-heading" className="mb-10">
+                <h2
+                  id="fuel-prices-heading"
+                  className="text-2xl font-bold mb-4 pl-4"
+                >
+                  Current Fuel Prices
+                </h2>
+                <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-4">
+                  {[1, 2, 3, 4, 5].map((i) => (
+                    <div
+                      key={i}
+                      className="bg-white rounded-xl shadow p-4 flex items-center justify-between"
+                    >
+                      <Skeleton className="h-8 w-8 rounded-lg" />
+                      <div className="flex flex-col gap-1 items-end">
+                        <Skeleton className="h-4 w-16" />
+                        <Skeleton className="h-6 w-20" />
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </section>
+            ) : currentSiteGrades.length > 0 ? (
+              <section aria-labelledby="fuel-prices-heading" className="mb-10">
+                <h2
+                  id="fuel-prices-heading"
+                  className="text-2xl font-bold mb-4 pl-4"
+                >
+                  Current Fuel Prices
+                </h2>
+                <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-flow-col md:auto-cols-fr gap-4">
+                  {currentSiteGrades.map((item) => {
+                    const theme = getGradeTheme(item.grade);
+                    const IconComponent = theme.icon;
+
+                    return (
+                      <div
+                        key={item.grade}
+                        className={`bg-white rounded-xl shadow-sm border border-slate-100 p-4 flex items-center justify-between transition-all hover:shadow-md ${theme.light}`}
+                      >
+                        {/* Green-to-Red Gradient Badge for Mid Grade, Solid Colors for Others */}
+                        <div
+                          className={`p-2.5 rounded-lg text-white ${theme.color} shrink-0 flex items-center justify-center shadow-sm`}
+                        >
+                          <IconComponent className="w-5 h-5" />
+                        </div>
+
+                        {/* Price Details */}
+                        <div className="text-right ml-3 min-w-0">
+                          <span
+                            className={`text-xs font-semibold uppercase tracking-wider block truncate ${theme.label}`}
+                          >
+                            {item.grade}
+                          </span>
+                          <div className="text-xl font-bold text-slate-900 mt-0.5">
+                            {item.price}{" "}
+                            <span className="text-xs font-normal text-muted-foreground">
+                              $/L
                             </span>
                           </div>
                         </div>
                       </div>
-                    )}
-                  </div>
-                </section>
-                )}
+                    );
+                  })}
+                </div>
+              </section>
+            ) : null}
 
-                {/* ======================= */}
-                {/*     Station Shift Activity SECTION   */}
-                {/* ======================= */}
-                {/* <section aria-labelledby="activity-heading" className="mb-10">
+            {/* ======================= */}
+            {/*     Station Shift Activity SECTION   */}
+            {/* ======================= */}
+            {/* <section aria-labelledby="activity-heading" className="mb-10">
                   <h2 id="activity-heading" className="text-2xl font-bold mb-4 pl-4">Station Shift Activity</h2>
 
                   <div className="grid grid-cols-1 md:grid-cols-1 lg:grid-cols-1 gap-6">
@@ -1483,475 +1800,673 @@ function RouteComponent() {
                   </div>
                 </section> */}
 
-                {/* ======================= */}
-                {/*     INVENTORY SECTION   */}
-                {/* ======================= */}
-                {/* {site !== "Jocko Point" && site !== "Sarnia" && ( */}
-                {loadingInventory ? (
-                  <section className="mb-10">
-                    <h2 className="text-2xl font-bold mb-4 pl-4">Inventory &amp; Audits</h2>
-                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                      {[1, 2, 3].map((i) => (
-                        <div key={i} className="bg-white rounded-xl shadow p-6 flex flex-col gap-3">
-                          <Skeleton className="h-5 w-36" />
-                          <Skeleton className="h-[200px] w-full" />
-                        </div>
-                      ))}
+            {/* ======================= */}
+            {/*     INVENTORY SECTION   */}
+            {/* ======================= */}
+            {/* {site !== "Jocko Point" && site !== "Sarnia" && ( */}
+            {loadingInventory ? (
+              <section className="mb-10">
+                <h2 className="text-2xl font-bold mb-4 pl-4">
+                  Inventory &amp; Audits
+                </h2>
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                  {[1, 2, 3].map((i) => (
+                    <div
+                      key={i}
+                      className="bg-white rounded-xl shadow p-6 flex flex-col gap-3"
+                    >
+                      <Skeleton className="h-5 w-36" />
+                      <Skeleton className="h-[200px] w-full" />
                     </div>
-                  </section>
-                ) : (
-                <section aria-labelledby="inventory-heading" className="mb-10">
-                  <h2 id="inventory-heading" className="text-2xl font-bold mb-4 pl-4">
-                    {site !== "Jocko Point" && site !== "Sarnia"
-                      ? "Inventory & Audits"
-                      : "Station Audits"}
-                  </h2>
+                  ))}
+                </div>
+              </section>
+            ) : (
+              <section aria-labelledby="inventory-heading" className="mb-10">
+                <h2
+                  id="inventory-heading"
+                  className="text-2xl font-bold mb-4 pl-4"
+                >
+                  {site !== "Jocko Point" && site !== "Sarnia"
+                    ? "Inventory & Audits"
+                    : "Station Audits"}
+                </h2>
 
+                {/* Responsive grid: 1 col mobile, 2 col tablet, 3 col desktop */}
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                  {site !== "Jocko Point" && site !== "Sarnia" && (
+                    <>
+                      {" "}
+                      {/* Vendor Status (Inventory) */}
+                      <Card className="min-h-[365px] flex flex-col col-span-1">
+                        <CardHeader className="space-y-2">
+                          {/* Title + Description */}
+                          <div>
+                            <CardTitle>Vendor Status</CardTitle>
+                            <CardDescription>
+                              Order Status (This Week)
+                            </CardDescription>
+                          </div>
 
-                  {/* Responsive grid: 1 col mobile, 2 col tablet, 3 col desktop */}
-                  < div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                    {site !== "Jocko Point" && site !== "Sarnia" && (
-                      <>                   {/* Vendor Status (Inventory) */}
-                        <Card className="min-h-[365px] flex flex-col col-span-1">
-                          <CardHeader className="space-y-2">
-                            {/* Title + Description */}
-                            <div>
-                              <CardTitle>Vendor Status</CardTitle>
-                              <CardDescription>Order Status (This Week)</CardDescription>
-                            </div>
-
-                            {/* Legend */}
-                            <div className="w-full flex flex-wrap items-center gap-3 text-xs">
-                              {["Created", "Completed", "Not Placed", "Placed", "Delivered", "Invoice Received"].map((status) => (
+                          {/* Legend */}
+                          <div className="w-full flex flex-wrap items-center gap-3 text-xs">
+                            {[
+                              "Created",
+                              "Completed",
+                              "Not Placed",
+                              "Placed",
+                              "Delivered",
+                              "Invoice Received",
+                            ].map((status) => (
+                              <div
+                                key={status}
+                                className="flex items-center gap-1.5 whitespace-nowrap"
+                              >
                                 <div
-                                  key={status}
-                                  className="flex items-center gap-1.5 whitespace-nowrap"
-                                >
-                                  <div
-                                    className="h-2 w-2 rounded-[2px] shrink-0"
-                                    style={{ backgroundColor: getOrderRecStatusColor(status) }}
-                                  />
-                                  <span className="text-xs font-medium text-black">{status}</span>
-                                </div>
-                              ))}
-                            </div>
-                          </CardHeader>
-
-
-                          <CardContent className="flex-1 overflow-y-auto max-h-60">
-                            <ul className="divide-y divide-gray-200">
-                              {vendorStatus.map((vendor) => (
-                                <li
-                                  key={vendor._id}
-                                  className="px-2 py-1 font-medium rounded mb-1"
+                                  className="h-2 w-2 rounded-[2px] shrink-0"
                                   style={{
-                                    backgroundColor: vendor.orderRec
-                                      ? getOrderRecStatusColor(vendor.orderRec.currentStatus)
-                                      : "#F3F3F3",
+                                    backgroundColor:
+                                      getOrderRecStatusColor(status),
                                   }}
-                                >
-                                  {vendor.orderRec ? (
-                                    <Link
-                                      to="/order-rec/$id"
-                                      params={{ id: vendor.orderRec.orderRecId }}
-                                      className="underline"
-                                      style={{ color: "inherit" }}
-                                    >
-                                      {vendor.name}
-                                    </Link>
-                                  ) : (
-                                    vendor.name
-                                  )}
-                                </li>
-                              ))}
-                            </ul>
-                          </CardContent>
-                        </Card>
-
-                        {/* Cycle Counts (Inventory) */}
-                        <Card className="col-span-1">
-                          <CardHeader>
-                            <CardTitle>Cycle Counts</CardTitle>
-                            <CardDescription>Daily cycle count entries for {site}</CardDescription>
-                          </CardHeader>
-                          <CardContent>
-                            <ChartContainer config={chartConfig}>
-                              {/* We pass completionPercentage as the core visualization data layer */}
-                              <BarChart accessibilityLayer data={chartData}>
-                                <CartesianGrid vertical={false} />
-                                <XAxis dataKey="day" tickLine={false} axisLine={false} tickMargin={10} />
-                                <YAxis axisLine={false} tickLine={false} domain={[0, 100]} unit="%" />
-                                <Bar
-                                  dataKey="completionPercentage"
-                                  radius={8}
-                                  onClick={(data) => {
-                                    setSelectedDay(data.payload);
-                                    setIsModalOpen(true);
-                                  }}
-                                >
-                                  {chartData.map((entry, index) => (
-                                    <Cell
-                                      key={`cell-${index}`}
-                                      fill={entry.completionPercentage === 100 ? "#22c55e" : "#f97316"}
-                                    />
-                                  ))}
-
-                                  <LabelList
-                                    position="top"
-                                    offset={12}
-                                    className="fill-foreground font-bold"
-                                    fontSize={11}
-                                    formatter={(value: number) => `${value}%`}
-                                  />
-                                </Bar>
-                              </BarChart>
-                            </ChartContainer>
-                          </CardContent>
-                          <CardFooter className="flex-col items-start gap-2 text-sm">
-                            <div className="text-muted-foreground leading-none">
-                              Showing verification compliance status percentages per day range.
-                            </div>
-                          </CardFooter>
-                        </Card>
-                        <ChartBarModal
-                          data={selectedDay}
-                          isOpen={isModalOpen}
-                          onClose={() => setIsModalOpen(false)}
-                        />
-                      </>
-                    )}
-                    {/* Empty slot / placeholder: keeps grid balanced on larger screens.
-                      Remove or replace with another inventory widget later. */}
-                    <div className="col-span-1" >
-                      <AuditSummaryChart auditStats={auditStats} periodKeys={pKeys} timezone={siteTimezone} />
-                    </div>
-                  </div>
-                </section>
-                )}
-
-                {/* ======================= */}
-                {/*        Catgory SECTION    */}
-                {/* ======================= */}
-                {loadingSql ? (
-                  <section className="mb-10">
-                    <h2 className="text-2xl font-bold mb-4 pl-4">Category</h2>
-                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                      {[1, 2, 3].map((i) => (
-                        <div key={i} className="bg-white rounded-xl shadow p-6 flex flex-col gap-3">
-                          <Skeleton className="h-5 w-36" />
-                          <Skeleton className="h-[200px] w-full" />
-                        </div>
-                      ))}
-                    </div>
-                  </section>
-                ) : (
-                <section aria-labelledby="sales-heading" className="mb-10">
-                  <h2 id="sales-heading" className="text-2xl font-bold mb-4 pl-4">Category</h2>
-
-                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                    {/* Sales by Category (Daily) */}
-                    <Card className="col-span-1">
-                      <CardHeader>
-                        <CardTitle>Sales by Category (Daily)</CardTitle>
-                        <CardDescription>Last 7 days (stacked)</CardDescription>
-                      </CardHeader>
-                      <CardContent>
-                        <ChartContainer config={salesChartConfig}>
-                          <BarChart accessibilityLayer data={salesChartData}>
-                            <CartesianGrid vertical={false} />
-                            <XAxis
-                              dataKey="day"
-                              tickLine={false}
-                              tickMargin={10}
-                              axisLine={false}
-                              tickFormatter={(value) => value}
-                            />
-                            <YAxis
-                              axisLine={false}
-                              tickLine={false}
-                            />
-                            <ChartTooltip content={<ChartTooltipContent hideLabel />} />
-                            <ChartLegend content={<ChartLegendContent data={salesChartData} />} />
-                            <Bar dataKey="FN" stackId="a" fill="var(--chart-1)" />
-                            <Bar dataKey="Quota" stackId="a" fill="var(--chart-2)" />
-                            <Bar dataKey="Cannabis" stackId="a" fill="var(--chart-3)" />
-                            <Bar dataKey="GRE" stackId="a" fill="var(--chart-4)" />
-                            <Bar dataKey="Convenience" stackId="a" fill="var(--chart-5)" />
-                            <Bar dataKey="Vapes" stackId="a" fill="var(--chart-6)" />
-                            <Bar dataKey="Native Gifts" stackId="a" fill="var(--chart-7)" />
-                            <Bar dataKey="Bistro" stackId="a" fill="var(--chart-8)" />
-                          </BarChart>
-                        </ChartContainer>
-                      </CardContent>
-                      <CardFooter className="flex-col items-start gap-2 text-sm">
-                        <div className="text-muted-foreground leading-none">Last 7 days ending yesterday</div>
-                      </CardFooter>
-                    </Card>
-
-                    {/* Sales by Category (Weekly) */}
-                    <Card className="col-span-1">
-                      <CardHeader>
-                        <CardTitle>Sales by Category (Weekly)</CardTitle>
-                        <CardDescription>Last 5 weeks aggregated (stacked)</CardDescription>
-                      </CardHeader>
-                      <CardContent>
-                        <ChartContainer config={salesChartConfig}>
-                          <BarChart accessibilityLayer data={weeklySalesChartData}>
-                            <CartesianGrid vertical={false} />
-                            <XAxis
-                              dataKey="week"
-                              tickLine={false}
-                              tickMargin={10}
-                              axisLine={false}
-                              tickFormatter={(value) => value.replace(/wk of\s*/i, "")}
-                            />
-                            <YAxis
-                              axisLine={false}
-                              tickLine={false}
-                            />
-                            <ChartTooltip content={<ChartTooltipContent hideLabel />} />
-                            <ChartLegend content={<ChartLegendContent data={weeklySalesChartData} />} />
-                            <Bar dataKey="FN" stackId="a" fill="var(--chart-1)" />
-                            <Bar dataKey="Quota" stackId="a" fill="var(--chart-2)" />
-                            <Bar dataKey="Cannabis" stackId="a" fill="var(--chart-3)" />
-                            <Bar dataKey="GRE" stackId="a" fill="var(--chart-4)" />
-                            <Bar dataKey="Convenience" stackId="a" fill="var(--chart-5)" />
-                            <Bar dataKey="Vapes" stackId="a" fill="var(--chart-6)" />
-                            <Bar dataKey="Native Gifts" stackId="a" fill="var(--chart-7)" />
-                            <Bar dataKey="Bistro" stackId="a" fill="var(--chart-8)" />
-                          </BarChart>
-                        </ChartContainer>
-                      </CardContent>
-                      <CardFooter className="flex-col items-start gap-2 text-sm">
-                        <div className="text-muted-foreground leading-none">Weeks end on Sunday; bars labeled by week start (Mon)</div>
-                      </CardFooter>
-                    </Card>
-
-                    {/* Sales Breakdown (7-Day Donut) */}
-                    <Card className="col-span-1">
-                      <CardHeader>
-                        <CardTitle>Sales Breakdown (7-Day)</CardTitle>
-                        <CardDescription>Category share of last 7 days</CardDescription>
-                      </CardHeader>
-
-                      <CardContent>
-
-                        <DonutSalesChart data={donutData} config={donutConfig} />
-                      </CardContent>
-
-                      <CardFooter className="text-sm text-muted-foreground">
-                        Last 7 days ending yesterday
-                      </CardFooter>
-                    </Card>
-
-
-                  </div>
-                </section>
-                )}
-                {/* ======================= */}
-                {/*     BISTRO SECTION   */}
-                {/* ======================= */}
-
-                {!loadingSql && ["Rankin", "Couchiching", "Silver Grizzly", "Oliver", "Osoyoos", "Charlies"].includes(site) && (
-                  <section aria-labelledby="bistro-heading" className="mb-10">
-                    <h2 id="bistro-heading" className="text-2xl font-bold mb-4 pl-4">
-                      Bistro
-                    </h2>
-
-                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                      <BistroBarLineChart data={bistroChartData} />
-                      <Top10BistroChart data={top10BistroChartData} />
-                    </div>
-                  </section>
-                )}
-
-                {/* ======================= */}
-                {/*     FUEL SECTION   */}
-                {/* ======================= */}
-                {loadingSql ? (
-                  <section className="mb-10">
-                    <h2 className="text-2xl font-bold mb-4 pl-4">Fuel</h2>
-                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                      {[1, 2, 3].map((i) => (
-                        <div key={i} className="bg-white rounded-xl shadow p-6 flex flex-col gap-3">
-                          <Skeleton className="h-5 w-24" />
-                          <Skeleton className="h-[200px] w-full" />
-                        </div>
-                      ))}
-                    </div>
-                  </section>
-                ) : (
-                <section aria-labelledby="fuel-heading" className="mb-10">
-                  <h2 id="fuel-heading" className="text-2xl font-bold mb-4 pl-4">Fuel</h2>
-
-                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-
-                    {/* 90-Day Fuel Mix Area Chart */}
-                    {/* <FuelMixAreaChart data={fuelMix90} config={normalizedFuelChartConfig90} /> */}
-                    <MultiLineChart
-                      data={fuelMix90}
-                      config={normalizedFuelChartConfig90}
-                      selectedGrade={selectedGrade}
-                    />
-
-                    {/* Sparklines for each grade */}
-                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 col-span-1">
-                      {Object.keys(fuelSparklines).map((grade) => (
-                        <FuelSparkline
-                          key={grade}
-                          title={grade}
-                          color={fuelChartConfig90[grade]?.color}
-                          data={fuelSparklines[grade]}
-                          onClick={() =>
-                            setSelectedGrade(prev => (prev === grade ? null : grade))
-                          }
-                        />
-                      ))}
-                    </div>
-
-                    {/* 7-Day Stacked Bar with SMA */}
-                    <Card className="col-span-1">
-                      <CardHeader>
-                        <CardTitle>Fuel Volume by Grade (Daily)</CardTitle>
-                        <CardDescription>Last 7 days (Stacked)</CardDescription>
-                      </CardHeader>
-
-                      <CardContent>
-                        <ChartContainer config={fuelChartConfig}>
-                          <BarChart data={fuelChartDataWithSMA}>
-                            <CartesianGrid vertical={false} />
-                            <XAxis dataKey="day" tickLine={false} axisLine={false} />
-                            <YAxis
-                              axisLine={false}
-                              tickLine={false}
-                            />
-                            <ChartTooltip content={<ChartTooltipContent hideLabel />} />
-                            <ChartLegend content={<ChartLegendContent data={fuelChartDataWithSMA} />} />
-
-                            {/* Stacked bars */}
-                            {Object.keys(fuelChartConfig).map(grade => (
-                              <Bar key={grade} dataKey={grade} stackId="a" fill={fuelChartConfig[grade].color} />
+                                />
+                                <span className="text-xs font-medium text-black">
+                                  {status}
+                                </span>
+                              </div>
                             ))}
+                          </div>
+                        </CardHeader>
 
-                            {/* 7-day moving average line (total volume) */}
-                            <Line type="monotone" dataKey="sma" stroke="#1F2937" strokeWidth={2} dot={false} />
-                          </BarChart>
-                        </ChartContainer>
-                      </CardContent>
-
-                      <CardFooter className="text-sm text-muted-foreground">
-                        Last 7 days ending yesterday
-                      </CardFooter>
-                    </Card>
-
-                  </div>
-                </section>
-                )}
-
-                {/* ======================= */}
-                {/*     Accounting SECTION   */}
-                {/* ======================= */}
-
-                {/* {!["Sarnia"].includes(site) && ( */}
-                {loadingAccounting ? (
-                  <section className="mb-10">
-                    <h2 className="text-2xl font-bold mb-4 pl-4">Accounting</h2>
-                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                      {[1, 2, 3].map((i) => (
-                        <div key={i} className="bg-white rounded-xl shadow p-6 flex flex-col gap-3">
-                          <Skeleton className="h-5 w-28" />
-                          <Skeleton className="h-[200px] w-full" />
-                        </div>
-                      ))}
-                    </div>
-                  </section>
-                ) : (
-                <section aria-labelledby="accounting-heading" className="mb-10">
-                  <h2 id="accounting-heading" className="text-2xl font-bold mb-4 pl-4">
-                    Accounting
-                  </h2>
-
-                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                    {/* <OverShortChart data={processOverShortData(overShortData)} /> */}
-                    <OverShortSparkline data={processOverShortData(overShortData)} />
-                    <SafeBalanceTrendChart data={safeBalanceChartData} maxBalance={safeMaxBalance} />
-                    {/* <PayablesDiscrepancyChart data={payablesComparisonData} /> */}
-                    <PayablesDiscrepancyTable data={payablesComparisonData} />
-                  </div>
-                </section>
-                )}
-                {/* )} */}
-
-
-                {/* ======================= */}
-                {/* Store Activity Section   */}
-                {/* ======================= */}
-                {!loadingSql && site !== "Jocko Point" && site !== "Sarnia" && (
-                  <section aria-labelledby="activity-heading" className="mb-10">
-                    <h2 id="activity-heading" className="text-2xl font-bold mb-4 pl-4">Store Activity Trend</h2>
-
-                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-
-                      {/* 2. Transactions Line Chart (Second Position) */}
-                      <TransactionsLineChart
-                        data={transactionChartData}
-                        config={transactionChartConfig}
-                      />
-
-                      {/* 3. Avg Transactions by Hour (Third Position - End of Row 1) */}
+                        <CardContent className="flex-1 overflow-y-auto max-h-60">
+                          <ul className="divide-y divide-gray-200">
+                            {vendorStatus.map((vendor) => (
+                              <li
+                                key={vendor._id}
+                                className="px-2 py-1 font-medium rounded mb-1"
+                                style={{
+                                  backgroundColor: vendor.orderRec
+                                    ? getOrderRecStatusColor(
+                                        vendor.orderRec.currentStatus,
+                                      )
+                                    : "#F3F3F3",
+                                }}
+                              >
+                                {vendor.orderRec ? (
+                                  <Link
+                                    to="/order-rec/$id"
+                                    params={{ id: vendor.orderRec.orderRecId }}
+                                    className="underline"
+                                    style={{ color: "inherit" }}
+                                  >
+                                    {vendor.name}
+                                  </Link>
+                                ) : (
+                                  vendor.name
+                                )}
+                              </li>
+                            ))}
+                          </ul>
+                        </CardContent>
+                      </Card>
+                      {/* Cycle Counts (Inventory) */}
                       <Card className="col-span-1">
                         <CardHeader>
-                          <CardTitle>Avg Transactions by Hour</CardTitle>
-                          <CardDescription>Aggregated across hours by Days</CardDescription>
+                          <CardTitle>Cycle Counts</CardTitle>
+                          <CardDescription>
+                            Daily cycle count entries for {site}
+                          </CardDescription>
                         </CardHeader>
                         <CardContent>
-                          <ChartContainer config={timePeriodChartConfig}>
-                            <BarChart data={timePeriodChartData}>
+                          <ChartContainer config={chartConfig}>
+                            {/* We pass completionPercentage as the core visualization data layer */}
+                            <BarChart accessibilityLayer data={chartData}>
                               <CartesianGrid vertical={false} />
-                              <XAxis dataKey="hour" />
-                              <YAxis axisLine={false} tickLine={false} />
-                              <ChartTooltip content={<MultiLineChartToolTip config={timePeriodChartConfig} labelTypeIsHour={true} />} />
-                              <ChartLegend content={<ChartLegendContent data={timePeriodChartData} />} />
+                              <XAxis
+                                dataKey="day"
+                                tickLine={false}
+                                axisLine={false}
+                                tickMargin={10}
+                              />
+                              <YAxis
+                                axisLine={false}
+                                tickLine={false}
+                                domain={[0, 100]}
+                                unit="%"
+                              />
+                              <Bar
+                                dataKey="completionPercentage"
+                                radius={8}
+                                onClick={(data) => {
+                                  setSelectedDay(data.payload);
+                                  setIsModalOpen(true);
+                                }}
+                              >
+                                {chartData.map((entry, index) => (
+                                  <Cell
+                                    key={`cell-${index}`}
+                                    fill={
+                                      entry.completionPercentage === 100
+                                        ? "#22c55e"
+                                        : "#f97316"
+                                    }
+                                  />
+                                ))}
 
-                              <Bar dataKey="Fuel" stackId="a" fill={timePeriodChartConfig.Fuel.color} />
-                              <Bar dataKey="CStore" stackId="a" fill={timePeriodChartConfig.CStore.color} />
-                              <Bar dataKey="Both" stackId="a" fill={timePeriodChartConfig.Both.color} />
+                                <LabelList
+                                  position="top"
+                                  offset={12}
+                                  className="fill-foreground font-bold"
+                                  fontSize={11}
+                                  formatter={(value: number) => `${value}%`}
+                                />
+                              </Bar>
                             </BarChart>
                           </ChartContainer>
                         </CardContent>
-                        <CardFooter className="text-sm text-muted-foreground">
-                          Aggregated hourly data - last 14 days ending Yesterday
+                        <CardFooter className="flex-col items-start gap-2 text-sm">
+                          <div className="text-muted-foreground leading-none">
+                            Showing verification compliance status percentages
+                            per day range.
+                          </div>
                         </CardFooter>
                       </Card>
+                      <ChartBarModal
+                        data={selectedDay}
+                        isOpen={isModalOpen}
+                        onClose={() => setIsModalOpen(false)}
+                      />
+                    </>
+                  )}
+                  {/* Empty slot / placeholder: keeps grid balanced on larger screens.
+                      Remove or replace with another inventory widget later. */}
+                  <div className="col-span-1">
+                    <AuditSummaryChart
+                      auditStats={auditStats}
+                      periodKeys={pKeys}
+                      timezone={siteTimezone}
+                    />
+                  </div>
+                </div>
+              </section>
+            )}
 
-                      {/* 4. Tender Breakdown (Fourth Position - Starts Row 2) */}
-                      <Card className="col-span-1">
-                        <CardHeader>
-                          <CardTitle>Tender Breakdown (%)</CardTitle>
-                          <CardDescription>Tender share by Transactions</CardDescription>
-                        </CardHeader>
-                        <CardContent>
-                          {tenderChartData.length > 0 ? (
-                            <PieTenderChart data={tenderChartData} config={tenderConfig} />
-                          ) : (
-                            <div className="text-center text-muted-foreground py-10">Loading...</div>
-                          )}
-                        </CardContent>
-                        <CardFooter className="text-sm text-muted-foreground">
-                          Cumulative from last 14 days ending Yesterday
-                        </CardFooter>
-                      </Card>
-
+            {/* ======================= */}
+            {/*        Catgory SECTION    */}
+            {/* ======================= */}
+            {loadingSql ? (
+              <section className="mb-10">
+                <h2 className="text-2xl font-bold mb-4 pl-4">Category</h2>
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                  {[1, 2, 3].map((i) => (
+                    <div
+                      key={i}
+                      className="bg-white rounded-xl shadow p-6 flex flex-col gap-3"
+                    >
+                      <Skeleton className="h-5 w-36" />
+                      <Skeleton className="h-[200px] w-full" />
                     </div>
-                  </section>
-                )}
+                  ))}
+                </div>
+              </section>
+            ) : (
+              <section aria-labelledby="sales-heading" className="mb-10">
+                <h2 id="sales-heading" className="text-2xl font-bold mb-4 pl-4">
+                  Category
+                </h2>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                  {/* Sales by Category (Daily) */}
+                  <Card className="col-span-1">
+                    <CardHeader>
+                      <CardTitle>Sales by Category (Daily)</CardTitle>
+                      <CardDescription>Last 7 days (stacked)</CardDescription>
+                    </CardHeader>
+                    <CardContent>
+                      <ChartContainer config={salesChartConfig}>
+                        <BarChart accessibilityLayer data={salesChartData}>
+                          <CartesianGrid vertical={false} />
+                          <XAxis
+                            dataKey="day"
+                            tickLine={false}
+                            tickMargin={10}
+                            axisLine={false}
+                            tickFormatter={(value) => value}
+                          />
+                          <YAxis axisLine={false} tickLine={false} />
+                          <ChartTooltip
+                            content={<ChartTooltipContent hideLabel />}
+                          />
+                          <ChartLegend
+                            content={
+                              <ChartLegendContent data={salesChartData} />
+                            }
+                          />
+                          <Bar dataKey="FN" stackId="a" fill="var(--chart-1)" />
+                          <Bar
+                            dataKey="Quota"
+                            stackId="a"
+                            fill="var(--chart-2)"
+                          />
+                          <Bar
+                            dataKey="Cannabis"
+                            stackId="a"
+                            fill="var(--chart-3)"
+                          />
+                          <Bar
+                            dataKey="GRE"
+                            stackId="a"
+                            fill="var(--chart-4)"
+                          />
+                          <Bar
+                            dataKey="Convenience"
+                            stackId="a"
+                            fill="var(--chart-5)"
+                          />
+                          <Bar
+                            dataKey="Vapes"
+                            stackId="a"
+                            fill="var(--chart-6)"
+                          />
+                          <Bar
+                            dataKey="Native Gifts"
+                            stackId="a"
+                            fill="var(--chart-7)"
+                          />
+                          <Bar
+                            dataKey="Bistro"
+                            stackId="a"
+                            fill="var(--chart-8)"
+                          />
+                        </BarChart>
+                      </ChartContainer>
+                    </CardContent>
+                    <CardFooter className="flex-col items-start gap-2 text-sm">
+                      <div className="text-muted-foreground leading-none">
+                        Last 7 days ending yesterday
+                      </div>
+                    </CardFooter>
+                  </Card>
+
+                  {/* Sales by Category (Weekly) */}
+                  <Card className="col-span-1">
+                    <CardHeader>
+                      <CardTitle>Sales by Category (Weekly)</CardTitle>
+                      <CardDescription>
+                        Last 5 weeks aggregated (stacked)
+                      </CardDescription>
+                    </CardHeader>
+                    <CardContent>
+                      <ChartContainer config={salesChartConfig}>
+                        <BarChart
+                          accessibilityLayer
+                          data={weeklySalesChartData}
+                        >
+                          <CartesianGrid vertical={false} />
+                          <XAxis
+                            dataKey="week"
+                            tickLine={false}
+                            tickMargin={10}
+                            axisLine={false}
+                            tickFormatter={(value) =>
+                              value.replace(/wk of\s*/i, "")
+                            }
+                          />
+                          <YAxis axisLine={false} tickLine={false} />
+                          <ChartTooltip
+                            content={<ChartTooltipContent hideLabel />}
+                          />
+                          <ChartLegend
+                            content={
+                              <ChartLegendContent data={weeklySalesChartData} />
+                            }
+                          />
+                          <Bar dataKey="FN" stackId="a" fill="var(--chart-1)" />
+                          <Bar
+                            dataKey="Quota"
+                            stackId="a"
+                            fill="var(--chart-2)"
+                          />
+                          <Bar
+                            dataKey="Cannabis"
+                            stackId="a"
+                            fill="var(--chart-3)"
+                          />
+                          <Bar
+                            dataKey="GRE"
+                            stackId="a"
+                            fill="var(--chart-4)"
+                          />
+                          <Bar
+                            dataKey="Convenience"
+                            stackId="a"
+                            fill="var(--chart-5)"
+                          />
+                          <Bar
+                            dataKey="Vapes"
+                            stackId="a"
+                            fill="var(--chart-6)"
+                          />
+                          <Bar
+                            dataKey="Native Gifts"
+                            stackId="a"
+                            fill="var(--chart-7)"
+                          />
+                          <Bar
+                            dataKey="Bistro"
+                            stackId="a"
+                            fill="var(--chart-8)"
+                          />
+                        </BarChart>
+                      </ChartContainer>
+                    </CardContent>
+                    <CardFooter className="flex-col items-start gap-2 text-sm">
+                      <div className="text-muted-foreground leading-none">
+                        Weeks end on Sunday; bars labeled by week start (Mon)
+                      </div>
+                    </CardFooter>
+                  </Card>
+
+                  {/* Sales Breakdown (7-Day Donut) */}
+                  <Card className="col-span-1">
+                    <CardHeader>
+                      <CardTitle>Sales Breakdown (7-Day)</CardTitle>
+                      <CardDescription>
+                        Category share of last 7 days
+                      </CardDescription>
+                    </CardHeader>
+
+                    <CardContent>
+                      <DonutSalesChart data={donutData} config={donutConfig} />
+                    </CardContent>
+
+                    <CardFooter className="text-sm text-muted-foreground">
+                      Last 7 days ending yesterday
+                    </CardFooter>
+                  </Card>
+                </div>
+              </section>
+            )}
+            {/* ======================= */}
+            {/*     BISTRO SECTION   */}
+            {/* ======================= */}
+
+            {!loadingSql &&
+              [
+                "Rankin",
+                "Couchiching",
+                "Silver Grizzly",
+                "Oliver",
+                "Osoyoos",
+                "Charlies",
+              ].includes(site) && (
+                <section aria-labelledby="bistro-heading" className="mb-10">
+                  <h2
+                    id="bistro-heading"
+                    className="text-2xl font-bold mb-4 pl-4"
+                  >
+                    Bistro
+                  </h2>
+
+                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                    <BistroBarLineChart data={bistroChartData} />
+                    <Top10BistroChart data={top10BistroChartData} />
+                  </div>
+                </section>
+              )}
+
+            {/* ======================= */}
+            {/*     FUEL SECTION   */}
+            {/* ======================= */}
+            {loadingSql ? (
+              <section className="mb-10">
+                <h2 className="text-2xl font-bold mb-4 pl-4">Fuel</h2>
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                  {[1, 2, 3].map((i) => (
+                    <div
+                      key={i}
+                      className="bg-white rounded-xl shadow p-6 flex flex-col gap-3"
+                    >
+                      <Skeleton className="h-5 w-24" />
+                      <Skeleton className="h-[200px] w-full" />
+                    </div>
+                  ))}
+                </div>
+              </section>
+            ) : (
+              <section aria-labelledby="fuel-heading" className="mb-10">
+                <h2 id="fuel-heading" className="text-2xl font-bold mb-4 pl-4">
+                  Fuel
+                </h2>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                  {/* 90-Day Fuel Mix Area Chart */}
+                  {/* <FuelMixAreaChart data={fuelMix90} config={normalizedFuelChartConfig90} /> */}
+                  <MultiLineChart
+                    data={fuelMix90}
+                    config={normalizedFuelChartConfig90}
+                    selectedGrade={selectedGrade}
+                  />
+
+                  {/* Sparklines for each grade */}
+                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 col-span-1">
+                    {Object.keys(fuelSparklines).map((grade) => (
+                      <FuelSparkline
+                        key={grade}
+                        title={grade}
+                        color={fuelChartConfig90[grade]?.color}
+                        data={fuelSparklines[grade]}
+                        onClick={() =>
+                          setSelectedGrade((prev) =>
+                            prev === grade ? null : grade,
+                          )
+                        }
+                      />
+                    ))}
+                  </div>
+
+                  {/* 7-Day Stacked Bar with SMA */}
+                  <Card className="col-span-1">
+                    <CardHeader>
+                      <CardTitle>Fuel Volume by Grade (Daily)</CardTitle>
+                      <CardDescription>Last 7 days (Stacked)</CardDescription>
+                    </CardHeader>
+
+                    <CardContent>
+                      <ChartContainer config={fuelChartConfig}>
+                        <BarChart data={fuelChartDataWithSMA}>
+                          <CartesianGrid vertical={false} />
+                          <XAxis
+                            dataKey="day"
+                            tickLine={false}
+                            axisLine={false}
+                          />
+                          <YAxis axisLine={false} tickLine={false} />
+                          <ChartTooltip
+                            content={<ChartTooltipContent hideLabel />}
+                          />
+                          <ChartLegend
+                            content={
+                              <ChartLegendContent data={fuelChartDataWithSMA} />
+                            }
+                          />
+
+                          {/* Stacked bars */}
+                          {Object.keys(fuelChartConfig).map((grade) => (
+                            <Bar
+                              key={grade}
+                              dataKey={grade}
+                              stackId="a"
+                              fill={fuelChartConfig[grade].color}
+                            />
+                          ))}
+
+                          {/* 7-day moving average line (total volume) */}
+                          <Line
+                            type="monotone"
+                            dataKey="sma"
+                            stroke="#1F2937"
+                            strokeWidth={2}
+                            dot={false}
+                          />
+                        </BarChart>
+                      </ChartContainer>
+                    </CardContent>
+
+                    <CardFooter className="text-sm text-muted-foreground">
+                      Last 7 days ending yesterday
+                    </CardFooter>
+                  </Card>
+                </div>
+              </section>
+            )}
+
+            {/* ======================= */}
+            {/*     Accounting SECTION   */}
+            {/* ======================= */}
+
+            {/* {!["Sarnia"].includes(site) && ( */}
+            {loadingAccounting ? (
+              <section className="mb-10">
+                <h2 className="text-2xl font-bold mb-4 pl-4">Accounting</h2>
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                  {[1, 2, 3].map((i) => (
+                    <div
+                      key={i}
+                      className="bg-white rounded-xl shadow p-6 flex flex-col gap-3"
+                    >
+                      <Skeleton className="h-5 w-28" />
+                      <Skeleton className="h-[200px] w-full" />
+                    </div>
+                  ))}
+                </div>
+              </section>
+            ) : (
+              <section aria-labelledby="accounting-heading" className="mb-10">
+                <h2
+                  id="accounting-heading"
+                  className="text-2xl font-bold mb-4 pl-4"
+                >
+                  Accounting
+                </h2>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                  {/* <OverShortChart data={processOverShortData(overShortData)} /> */}
+                  <OverShortSparkline
+                    data={processOverShortData(overShortData)}
+                  />
+                  <SafeBalanceTrendChart
+                    data={safeBalanceChartData}
+                    maxBalance={safeMaxBalance}
+                  />
+                  {/* <PayablesDiscrepancyChart data={payablesComparisonData} /> */}
+                  <PayablesDiscrepancyTable data={payablesComparisonData} />
+                </div>
+              </section>
+            )}
+            {/* )} */}
+
+            {/* ======================= */}
+            {/* Store Activity Section   */}
+            {/* ======================= */}
+            {!loadingSql && site !== "Jocko Point" && site !== "Sarnia" && (
+              <section aria-labelledby="activity-heading" className="mb-10">
+                <h2
+                  id="activity-heading"
+                  className="text-2xl font-bold mb-4 pl-4"
+                >
+                  Store Activity Trend
+                </h2>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                  {/* 2. Transactions Line Chart (Second Position) */}
+                  <TransactionsLineChart
+                    data={transactionChartData}
+                    config={transactionChartConfig}
+                  />
+
+                  {/* 3. Avg Transactions by Hour (Third Position - End of Row 1) */}
+                  <Card className="col-span-1">
+                    <CardHeader>
+                      <CardTitle>Avg Transactions by Hour</CardTitle>
+                      <CardDescription>
+                        Aggregated across hours by Days
+                      </CardDescription>
+                    </CardHeader>
+                    <CardContent>
+                      <ChartContainer config={timePeriodChartConfig}>
+                        <BarChart data={timePeriodChartData}>
+                          <CartesianGrid vertical={false} />
+                          <XAxis dataKey="hour" />
+                          <YAxis axisLine={false} tickLine={false} />
+                          <ChartTooltip
+                            content={
+                              <MultiLineChartToolTip
+                                config={timePeriodChartConfig}
+                                labelTypeIsHour={true}
+                              />
+                            }
+                          />
+                          <ChartLegend
+                            content={
+                              <ChartLegendContent data={timePeriodChartData} />
+                            }
+                          />
+
+                          <Bar
+                            dataKey="Fuel"
+                            stackId="a"
+                            fill={timePeriodChartConfig.Fuel.color}
+                          />
+                          <Bar
+                            dataKey="CStore"
+                            stackId="a"
+                            fill={timePeriodChartConfig.CStore.color}
+                          />
+                          <Bar
+                            dataKey="Both"
+                            stackId="a"
+                            fill={timePeriodChartConfig.Both.color}
+                          />
+                        </BarChart>
+                      </ChartContainer>
+                    </CardContent>
+                    <CardFooter className="text-sm text-muted-foreground">
+                      Aggregated hourly data - last 14 days ending Yesterday
+                    </CardFooter>
+                  </Card>
+
+                  {/* 4. Tender Breakdown (Fourth Position - Starts Row 2) */}
+                  <Card className="col-span-1">
+                    <CardHeader>
+                      <CardTitle>Tender Breakdown (%)</CardTitle>
+                      <CardDescription>
+                        Tender share by Transactions
+                      </CardDescription>
+                    </CardHeader>
+                    <CardContent>
+                      {tenderChartData.length > 0 ? (
+                        <PieTenderChart
+                          data={tenderChartData}
+                          config={tenderConfig}
+                        />
+                      ) : (
+                        <div className="text-center text-muted-foreground py-10">
+                          Loading...
+                        </div>
+                      )}
+                    </CardContent>
+                    <CardFooter className="text-sm text-muted-foreground">
+                      Cumulative from last 14 days ending Yesterday
+                    </CardFooter>
+                  </Card>
+                </div>
+              </section>
+            )}
           </div>
-        </div >
-      )
-      }
+        </div>
+      )}
     </>
   );
-
 }
 
 // function CashOnHandDisplay({ site }: { site: string }) {
@@ -2042,40 +2557,54 @@ function RouteComponent() {
 //   }).then(res => res.json());
 // };
 
-const fetchDailyCounts = async (site: string, startDate: string, endDate: string) => {
+const fetchDailyCounts = async (
+  site: string,
+  startDate: string,
+  endDate: string,
+) => {
   // Simplified parameters block omitting legacy timezone parameters logic completely
   const params = new URLSearchParams({ site, startDate, endDate });
   return fetch(`/api/cycle-count/v2/daily-counts?${params}`, {
     headers: { Authorization: `Bearer ${localStorage.getItem("token")}` },
-  }).then(res => res.json());
+  }).then((res) => res.json());
 };
 
 const fetchSalesData = async (rows: any) => {
   // Categories used across charts
-  const CATS = ['FN', 'Quota', 'Cannabis', 'GRE', 'Convenience', 'Vapes', 'Native Gifts', 'Bistro'] as const
+  const CATS = [
+    "FN",
+    "Quota",
+    "Cannabis",
+    "GRE",
+    "Convenience",
+    "Vapes",
+    "Native Gifts",
+    "Bistro",
+  ] as const;
 
   // Compute date window: last 5 weeks ending yesterday
-  const end = new Date()
-  end.setDate(end.getDate() - 1) // yesterday
-  end.setHours(23, 59, 59, 999)
+  const end = new Date();
+  end.setDate(end.getDate() - 1); // yesterday
+  end.setHours(23, 59, 59, 999);
 
-  const start = new Date(end)
+  const start = new Date(end);
   // <-- changed to 60 days window (instead of 35)
-  start.setDate(start.getDate() - (60 - 1)) // 60 days window
-  start.setHours(0, 0, 0, 0)
+  start.setDate(start.getDate() - (60 - 1)); // 60 days window
+  start.setHours(0, 0, 0, 0);
 
-  const fmt = (d: Date) => d.toISOString().slice(0, 10)
+  const fmt = (d: Date) => d.toISOString().slice(0, 10);
 
   // Build date-indexed map with sums
-  const byDate: Record<string, Record<string, number>> = {}
+  const byDate: Record<string, Record<string, number>> = {};
 
   for (const r of Array.isArray(rows) ? rows : []) {
-    const dateKey = String(r.Date_SK || r.date || '').slice(0, 10) // 'YYYY-MM-DD'
-    if (!/^\d{4}-\d{2}-\d{2}$/.test(dateKey)) continue
-    byDate[dateKey] = byDate[dateKey] || Object.fromEntries(CATS.map(c => [c, 0]))
+    const dateKey = String(r.Date_SK || r.date || "").slice(0, 10); // 'YYYY-MM-DD'
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(dateKey)) continue;
+    byDate[dateKey] =
+      byDate[dateKey] || Object.fromEntries(CATS.map((c) => [c, 0]));
     for (const c of CATS) {
-      const v = Number(r[c] ?? 0)
-      if (!Number.isNaN(v)) byDate[dateKey][c] += v
+      const v = Number(r[c] ?? 0);
+      if (!Number.isNaN(v)) byDate[dateKey][c] += v;
     }
   }
 
@@ -2096,38 +2625,41 @@ const fetchSalesData = async (rows: any) => {
   };
 
   // Build daily (last 7 days ending yesterday), ascending by date
-  const daily: any[] = []
+  const daily: any[] = [];
   for (let i = 6; i >= 0; i--) {
-    const d = new Date(end)
-    d.setDate(end.getDate() - i)
-    d.setHours(0, 0, 0, 0)
-    const k = fmt(d)
-    const sums = byDate[k] || Object.fromEntries(CATS.map(c => [c, 0]))
-    daily.push({ day: k.slice(5), ...sums }) // day: 'MM-DD'
+    const d = new Date(end);
+    d.setDate(end.getDate() - i);
+    d.setHours(0, 0, 0, 0);
+    const k = fmt(d);
+    const sums = byDate[k] || Object.fromEntries(CATS.map((c) => [c, 0]));
+    daily.push({ day: k.slice(5), ...sums }); // day: 'MM-DD'
   }
 
   // Build weekly (past 5 full weeks, excluding the current in-progress week)
   // We don't want to include the current week (the week that contains 'end'), so start from one week earlier.
-  const weeks: { start: Date; end: Date }[] = []
+  const weeks: { start: Date; end: Date }[] = [];
   // wkStart is the Monday of the week *before* the current week
-  let wkStart = startOfWeek(addDays(end, -7))
+  let wkStart = startOfWeek(addDays(end, -7));
   for (let i = 4; i >= 0; i--) {
-    const ws = new Date(wkStart); ws.setDate(wkStart.getDate() - i * 7)
-    const we = addDays(ws, 6)
-    weeks.push({ start: ws, end: we })
+    const ws = new Date(wkStart);
+    ws.setDate(wkStart.getDate() - i * 7);
+    const we = addDays(ws, 6);
+    weeks.push({ start: ws, end: we });
   }
 
   const weekly: any[] = weeks.map(({ start: ws, end: we }) => {
-    const sums: Record<string, number> = Object.fromEntries(CATS.map(c => [c, 0]))
+    const sums: Record<string, number> = Object.fromEntries(
+      CATS.map((c) => [c, 0]),
+    );
     for (let d = new Date(ws); d <= we; d = addDays(d, 1)) {
-      const k = fmt(d)
-      const daySums = byDate[k]
-      if (!daySums) continue
-      for (const c of CATS) sums[c] += Number(daySums[c] || 0)
+      const k = fmt(d);
+      const daySums = byDate[k];
+      if (!daySums) continue;
+      for (const c of CATS) sums[c] += Number(daySums[c] || 0);
     }
-    const label = `Wk of ${fmt(ws).slice(5)}` // 'Wk of MM-DD'
-    return { week: label, ...sums }
-  })
+    const label = `Wk of ${fmt(ws).slice(5)}`; // 'Wk of MM-DD'
+    return { week: label, ...sums };
+  });
 
   // ----- Cards Calculation -----
   const today = end; // yesterday
@@ -2136,21 +2668,28 @@ const fetchSalesData = async (rows: any) => {
   const currentMonthStart = new Date(today.getFullYear(), today.getMonth(), 1);
   const prevMonthStart = new Date(today.getFullYear(), today.getMonth() - 1, 1);
   // previous month should end on the same day-of-month as 'today' (yesterday) e.g. 1 Oct -> 18 Oct
-  const prevMonthEnd = new Date(prevMonthStart.getFullYear(), prevMonthStart.getMonth(), today.getDate());
+  const prevMonthEnd = new Date(
+    prevMonthStart.getFullYear(),
+    prevMonthStart.getMonth(),
+    today.getDate(),
+  );
 
   // Helper to sum sales in a date range from byDate map using string-key comparisons (avoid timezone pitfalls)
   const sumSalesByDateRange = (startD: Date, endD: Date) => {
-    const startKey = fmt(startD)
-    const endKey = fmt(endD)
+    const startKey = fmt(startD);
+    const endKey = fmt(endD);
     return Object.entries(byDate)
       .filter(([dateStr]) => dateStr >= startKey && dateStr <= endKey)
       .reduce(
         (acc, [, row]) =>
           acc +
-          Object.values(row).reduce((a, v) => a + (typeof v === "number" ? v : 0), 0),
-        0
+          Object.values(row).reduce(
+            (a, v) => a + (typeof v === "number" ? v : 0),
+            0,
+          ),
+        0,
       );
-  }
+  };
 
   const currentMonthSales = sumSalesByDateRange(currentMonthStart, today);
   const prevMonthSales = sumSalesByDateRange(prevMonthStart, prevMonthEnd);
@@ -2164,7 +2703,7 @@ const fetchSalesData = async (rows: any) => {
   const msPerDay = 24 * 60 * 60 * 1000;
   // const daysCount = Math.round((today.getTime() - currentWeekStart.getTime()) / msPerDay);
   const daysCount = Math.floor(
-    (today.getTime() - currentWeekStart.getTime()) / msPerDay
+    (today.getTime() - currentWeekStart.getTime()) / msPerDay,
   );
   // previous week's same weekday period:
   const prevWeekStart = addDays(currentWeekStart, -7);
@@ -2193,7 +2732,7 @@ const fetchSalesData = async (rows: any) => {
       },
     },
   };
-}
+};
 
 // const parseBusinessDate = (d: string | number) => {
 //   const str = d.toString();
@@ -2228,22 +2767,26 @@ const fetchFuelData = async (rows: any) => {
   const cleaned = Object.values(grouped)
     .filter((gradeRows) => {
       const rowsArray = gradeRows as any[]; // assert type here
-      return !rowsArray.every(r => Number(r.value) === 0);
+      return !rowsArray.every((r) => Number(r.value) === 0);
     })
     .flat();
   return {
     cleaned,
-    fullFuelData
+    fullFuelData,
   };
 };
 
 const fetchAllSqlData = async (
   csoCode: string,
   site: string,
-  salesStart: string, salesEnd: string,
-  fuelStart: string, fuelEnd: string,
-  transStart: string, transEnd: string,
-  shiftStart: string, shiftEnd: string
+  salesStart: string,
+  salesEnd: string,
+  fuelStart: string,
+  fuelEnd: string,
+  transStart: string,
+  transEnd: string,
+  shiftStart: string,
+  shiftEnd: string,
 ) => {
   const params = new URLSearchParams({
     csoCode,
@@ -2255,38 +2798,54 @@ const fetchAllSqlData = async (
     transStart,
     transEnd,
     shiftStart,
-    shiftEnd
+    shiftEnd,
   });
 
   const res = await fetch(`/api/sql/all-data?${params}`, {
-    headers: { Authorization: `Bearer ${localStorage.getItem("token")}` }
+    headers: { Authorization: `Bearer ${localStorage.getItem("token")}` },
   });
 
   return await res.json();
 };
 
-
 const fetchVendors = async (site: string) => {
   const params = new URLSearchParams({ location: site });
-  return fetch(`/api/vendors?${params}`, { headers: { Authorization: `Bearer ${localStorage.getItem("token")}` } }).then(res => res.json());
+  return fetch(`/api/vendors?${params}`, {
+    headers: { Authorization: `Bearer ${localStorage.getItem("token")}` },
+  }).then((res) => res.json());
 };
 
-const fetchOrderRecs = async (site: string, startDate: string, endDate: string) => {
+const fetchOrderRecs = async (
+  site: string,
+  startDate: string,
+  endDate: string,
+) => {
   const params = new URLSearchParams({ site, startDate, endDate });
-  return fetch(`/api/order-rec?${params}`, { headers: { Authorization: `Bearer ${localStorage.getItem("token")}` } }).then(res => res.json());
+  return fetch(`/api/order-rec?${params}`, {
+    headers: { Authorization: `Bearer ${localStorage.getItem("token")}` },
+  }).then((res) => res.json());
 };
 
 export const fetchLocation = async (stationName: string) => {
-  return fetch(`/api/locations/name/${encodeURIComponent(stationName)}`).then(res => res.json());
+  return fetch(`/api/locations/name/${encodeURIComponent(stationName)}`).then(
+    (res) => res.json(),
+  );
 };
 
 const getCurrentWeekRange = () => {
   const today = new Date();
   const day = today.getDay();
   const diffToMonday = day === 0 ? -6 : 1 - day;
-  const monday = new Date(today); monday.setDate(today.getDate() + diffToMonday); monday.setHours(0, 0, 0, 0);
-  const sunday = new Date(monday); sunday.setDate(monday.getDate() + 6); sunday.setHours(23, 59, 59, 999);
-  return { startDate: monday.toISOString().slice(0, 10), endDate: sunday.toISOString().slice(0, 10) };
+  const monday = new Date(today);
+  monday.setDate(today.getDate() + diffToMonday);
+  monday.setHours(0, 0, 0, 0);
+  const sunday = new Date(monday);
+  sunday.setDate(monday.getDate() + 6);
+  sunday.setHours(23, 59, 59, 999);
+  return {
+    startDate: monday.toISOString().slice(0, 10),
+    endDate: sunday.toISOString().slice(0, 10),
+  };
 };
 
 // const OperationalTimelineCard = ({ data }: { data: OperationalTiming[] }) => {
@@ -2395,7 +2954,7 @@ const getCurrentWeekRange = () => {
 //           <Button onClick={goToPrev} disabled={currentIndex === 0} className="h-16 px-8 text-xl font-bold bg-white border-2 text-blue-700 shadow-sm">
 //             ← PREVIOUS DAY
 //           </Button>
-          
+
 //           <div className="text-center">
 //             <h2 className="text-4xl font-black text-blue-900 leading-none">
 //               {new Date(day.date + 'T00:00:00').toLocaleDateString('en-US', { weekday: 'long' })}
@@ -2413,7 +2972,7 @@ const getCurrentWeekRange = () => {
 
 //       <CardContent className="pt-12 pb-16 px-10">
 //         <div className="relative h-48 flex items-center">
-          
+
 //           {/* THE RULER (Background) */}
 //           <div className="absolute inset-0 flex justify-between px-0 pointer-events-none">
 //             {[0, 3, 6, 9, 12, 15, 18, 21, 24].map((hour) => (
@@ -2428,22 +2987,22 @@ const getCurrentWeekRange = () => {
 
 //           {/* 1. STORE OPEN TAPE (Light Blue Background) */}
 //           {day.chartMetrics.openMin !== null && (
-//             <div 
+//             <div
 //               className="absolute h-24 bg-blue-100 rounded-lg border-2 border-blue-200 opacity-60"
-//               style={{ 
-//                 left: `${getPos(day.chartMetrics.openMin)}%`, 
-//                 width: `${getPos(day.chartMetrics.closeMin) - getPos(day.chartMetrics.openMin)}%` 
+//               style={{
+//                 left: `${getPos(day.chartMetrics.openMin)}%`,
+//                 width: `${getPos(day.chartMetrics.closeMin) - getPos(day.chartMetrics.openMin)}%`
 //               }}
 //             />
 //           )}
 
 //           {/* 2. SALES ACTIVITY TAPE (Dark Blue Bold) */}
 //           {day.chartMetrics.regStartMin !== null && (
-//             <div 
+//             <div
 //               className="absolute h-10 bg-blue-800 rounded shadow-md flex items-center justify-center text-white text-[10px] font-bold"
-//               style={{ 
-//                 left: `${getPos(day.chartMetrics.regStartMin)}%`, 
-//                 width: `${getPos(day.chartMetrics.regEndMin) - getPos(day.chartMetrics.regStartMin)}%` 
+//               style={{
+//                 left: `${getPos(day.chartMetrics.regStartMin)}%`,
+//                 width: `${getPos(day.chartMetrics.regEndMin) - getPos(day.chartMetrics.regStartMin)}%`
 //               }}
 //             >
 //               SALES ACTIVE
@@ -2467,7 +3026,7 @@ const getCurrentWeekRange = () => {
 //             <div className="space-y-1">
 //                 <p className="text-sm font-black text-gray-400 uppercase">Store Hours Today</p>
 //                 <p className="text-3xl font-black text-gray-800">
-//                     {day.stationOpen ? new Date(day.stationOpen).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : "Not Logged"} 
+//                     {day.stationOpen ? new Date(day.stationOpen).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : "Not Logged"}
 //                     <span className="mx-2 text-gray-300">to</span>
 //                     {day.stationClose ? new Date(day.stationClose).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : "Open"}
 //                 </p>

@@ -2,7 +2,19 @@ const { Queue, Worker } = require("bullmq");
 const connection = require("../utils/redisClient");
 const { uploadInventoryToPetrosoft } = require("../utils/cStoreCountScrapper");
 
-const petrosoftQueue = new Queue("petrosoftQueue", { connection });
+const petrosoftQueue = new Queue("petrosoftQueue", {
+  connection,
+  defaultJobOptions: {
+    removeOnComplete: {
+      count: 20,
+      age: 1800, // Keep completed jobs for 30 minutes
+    },
+    removeOnFail: {
+      count: 100, // Keep up to 100 failed jobs
+      age: 259200, // Keep failed jobs for 3 days (72 hours)
+    },
+  },
+});
 
 const petrosoftWorker = new Worker(
   "petrosoftQueue",
@@ -10,7 +22,7 @@ const petrosoftWorker = new Worker(
     const { targetStationCsoCode, csvBase64 } = job.data;
     console.log(`🤖 [Petrosoft Worker] Starting automated scraper thread for Station CSO: ${targetStationCsoCode}`);
 
-    // 💡 Decode the base64 string back into a NodeJS Binary Buffer for Playwright
+    // Decode the base64 string back into a NodeJS Binary Buffer for Playwright
     const csvFileBuffer = Buffer.from(csvBase64, "base64");
 
     const uploadResult = await uploadInventoryToPetrosoft({

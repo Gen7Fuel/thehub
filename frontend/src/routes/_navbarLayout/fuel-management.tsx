@@ -52,7 +52,7 @@ function RouteComponent() {
           </Link>
         )}
 
-        {access?.fuelManagement?.value && (
+        {access?.fuelManagement?.workspace?.value && (
           <Link
             to="/fuel-management/workspace"
             activeOptions={{ exact: true }}
@@ -61,6 +61,7 @@ function RouteComponent() {
             <Button
               {...(!isWorkspaceActive && ({ variant: "outline" } as object))}
               // className={access.component_cycle_count_console ? 'rounded-none' : 'rounded-l-none'} //markpoint
+              className={access?.fuelManagement?.volume?.value ? 'rounded-none' : 'rounded-l-none'}
               className={
                 access?.fuelManagement?.volume
                   ? "rounded-none"
@@ -81,18 +82,14 @@ function RouteComponent() {
               {...(!isOrderPipelineActive &&
                 ({ variant: "outline" } as object))}
               // className={access.component_cycle_count_console ? 'rounded-none' : 'rounded-l-none'} //markpoint
-              className={
-                access?.fuelManagement?.volume
-                  ? "rounded-none"
-                  : "rounded-l-none"
-              }
+              className={access?.fuelManagement?.volume?.value ? 'rounded-none' : 'rounded-l-none'}
             >
               Order Pipeline
             </Button>
           </Link>
         )}
 
-        {access?.fuelManagement?.volume && (
+        {access?.fuelManagement?.volume?.value && (
           <Link
             to="/fuel-management/volume"
             activeOptions={{ exact: true }}

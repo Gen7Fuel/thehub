@@ -217,25 +217,44 @@ async function getBulkCSOData(site, gtins = []) {
   }
 }
 
-async function getOnHandBulkCSOData(siteName, gtins = []) {
-  if (!gtins.length) return {};
+/**
+ * @param {string} csoCode - Station_SK code
+ * @param {string[]} gtins - Array of GTIN strings
+ * @param {string} targetDate - Date string "YYYY-MM-DD"
+ */
+async function getOnHandBulkCSOData(csoCode, gtins = [], targetDate) {
+  if (!gtins.length || !csoCode || !targetDate) return {};
+
   try {
     const pool = await getPool();
+    const request = pool.request();
 
-    // Sanitize and wrap strings safely for cross-db query mapping
-    const list = gtins.map(u => `'${u.replace(/'/g, "''")}'`).join(",");
+    // 1. Station_SK is INT in SQL schema
+    request.input("stationSK", sql.Int, parseInt(csoCode, 10));
+
+    // 2. Date_SK is DATE in SQL schema (format: "YYYY-MM-DD")
+    const formattedDate = new Date(targetDate).toISOString().split("T")[0];
+    request.input("targetDate", sql.Date, formattedDate);
+
+    // 3. GTIN is NVARCHAR(100) in SQL schema
+    const gtinParams = gtins.map((gtin, index) => {
+      const paramName = `gtin_${index}`;
+      request.input(paramName, sql.NVarChar(100), String(gtin).trim());
+      return `@${paramName}`;
+    });
 
     const query = `
       SELECT 
           [GTIN] AS gtin, 
           [On Hand Qty] AS qty,
-          [Retail] AS unitPrice
+          [Unit Retail] AS unitPrice
       FROM [CSO].[Current_Inventory]
-      WHERE [Station] = '${siteName.replace(/'/g, "''")}' 
-        AND [GTIN] IN (${list})
+      WHERE [Station_SK] = @stationSK 
+        AND [GTIN] IN (${gtinParams.join(",")})
+        AND [Date_SK] = @targetDate
     `;
 
-    const result = await pool.request().query(query);
+    const result = await request.query(query);
 
     const data = {};
     for (const row of result.recordset) {
@@ -247,7 +266,7 @@ async function getOnHandBulkCSOData(siteName, gtins = []) {
     }
     return data;
   } catch (err) {
-    console.error(`SQL error in getOnHandBulkCSOData for site ${siteName}:`, err);
+    console.error(`SQL error in getOnHandBulkCSOData for station ${csoCode}:`, err);
     return {};
   }
 }
@@ -284,71 +303,36 @@ async function getBulkUnitPriceCSO(site, gtins = []) {
 }
 
 
-// let pool;
-
-// async function getPool() {
-//   try {
-//     if (!pool) {
-//       console.log("🔌 Creating new SQL connection pool...");
-//       pool = await sql.connect({
-//         server: process.env.SQL_SERVER,
-//         database: process.env.SQL_DB,
-//         user: process.env.SQL_USER,
-//         password: process.env.SQL_PASSWORD,
-//         pool: {
-//           max: 20,           // increase max connections
-//           min: 0,
-//           idleTimeoutMillis: 30000,
-//           acquireTimeoutMillis: 60000, // wait longer before abort
-//         },
-//         options: {
-//           encrypt: true,
-//           trustServerCertificate: false,
-//         },
-//       });
-
-//       // Optional: log when pool is closed
-//       pool.on('error', err => {
-//         console.error("SQL Pool Error:", err);
-//         pool = null; // force reconnect next time
-//       });
-//     }
-
-//     // 🔍 Check if pool is still healthy
-//     if (!pool.connected) {
-//       console.warn("SQL pool was disconnected — reconnecting...");
-//       pool = await sql.connect(pool.config);
-//     }
-
-//     return pool;
-//   } catch (err) {
-//     console.error("Failed to get SQL pool:", err);
-//     pool = null;
-//     throw err;
-//   }
-// }
-
 let pool = null;
 
-async function getPool() {
-  try {
-    if (!pool || !pool.connected) {
-      if (pool) {
-        try { await pool.close(); } catch { }
+async function getPool(retries = 3, delay = 5000) {
+  for (let attempt = 1; attempt <= retries; attempt++) {
+    try {
+      // Re-use active connection if healthy
+      if (pool && pool.connected) {
+        return pool;
       }
 
-      console.log("🔌 Creating new SQL connection pool...");
+      // Clean up dead pool if present
+      if (pool) {
+        try { await pool.close(); } catch { }
+        pool = null;
+      }
+
+      console.log(`🔌 [Attempt ${attempt}/${retries}] Creating new SQL connection pool...`);
+
       pool = await sql.connect({
         server: process.env.SQL_SERVER,
         database: process.env.SQL_DB,
         user: process.env.SQL_USER,
         password: process.env.SQL_PASSWORD,
-        requestTimeout: 60000, // 60s per query (default was 15s)
+        connectionTimeout: 60000, // 60s initial connection timeout (prevents 15s ETIMEOUT)
+        requestTimeout: 60000,    // 60s per query execution
         pool: {
-          max: 50, // increase if VPS can handle it
+          max: 50,
           min: 0,
-          idleTimeoutMillis: 60000, // more time for idle connections
-          acquireTimeoutMillis: 300000, // more time to acquire heavy queries
+          idleTimeoutMillis: 60000,
+          acquireTimeoutMillis: 30000,
         },
         options: {
           encrypt: true,
@@ -359,17 +343,68 @@ async function getPool() {
 
       pool.on("error", (err) => {
         console.error("SQL Pool Error:", err);
-        pool = null; // force reconnect next time
+        pool = null; // Force reset pool on error
       });
-    }
 
-    return pool;
-  } catch (err) {
-    console.error("Failed to get SQL pool:", err);
-    pool = null;
-    throw err;
+      return pool; // Connection succeeded
+
+    } catch (err) {
+      console.error(`❌ Connection attempt ${attempt} failed: ${err.message}`);
+      pool = null;
+
+      if (attempt < retries) {
+        console.log(`⏳ Retrying in ${delay / 1000} seconds...`);
+        await new Promise((resolve) => setTimeout(resolve, delay));
+        delay *= 2; // Exponential backoff (5s -> 10s -> 20s)
+      } else {
+        throw new Error(`Failed to establish SQL connection after ${retries} attempts: ${err.message}`);
+      }
+    }
   }
 }
+
+// let pool = null;
+
+// async function getPool() {
+//   try {
+//     if (!pool || !pool.connected) {
+//       if (pool) {
+//         try { await pool.close(); } catch { }
+//       }
+
+//       console.log("🔌 Creating new SQL connection pool...");
+//       pool = await sql.connect({
+//         server: process.env.SQL_SERVER,
+//         database: process.env.SQL_DB,
+//         user: process.env.SQL_USER,
+//         password: process.env.SQL_PASSWORD,
+//         requestTimeout: 60000, // 60s per query (default was 15s)
+//         pool: {
+//           max: 50, // increase if VPS can handle it
+//           min: 0,
+//           idleTimeoutMillis: 60000, // more time for idle connections
+//           acquireTimeoutMillis: 300000, // more time to acquire heavy queries
+//         },
+//         options: {
+//           encrypt: true,
+//           trustServerCertificate: false,
+//           enableArithAbort: true,
+//         },
+//       });
+
+//       pool.on("error", (err) => {
+//         console.error("SQL Pool Error:", err);
+//         pool = null; // force reconnect next time
+//       });
+//     }
+
+//     return pool;
+//   } catch (err) {
+//     console.error("Failed to get SQL pool:", err);
+//     pool = null;
+//     throw err;
+//   }
+// }
 
 async function getUPC_barcode(gtin) {
   try {
@@ -557,55 +592,6 @@ async function getFuelPricingDate(date) {
 // }
 
 
-async function getFuelInventoryReportPreviousDay() {
-  try {
-    const pool = await getPool();
-    const result = await pool.request().query(`
-      SELECT [Date],[Station_Name],[Fuel_Grade],[Stick_L]
-      FROM [CSO].[FuelInventory]
-      WHERE [Date] = CAST(GETDATE() - 1 AS date)
-    `);
-    await sql.close();
-    return result.recordset;
-  } catch (err) {
-    console.error('SQL error:', err);
-    return [];
-  }
-}
-
-async function getFuelInventoryReportCurrentDay() {
-  try {
-    const pool = await getPool();
-    const result = await pool.request().query(`
-      WITH RankedInventory AS (
-        SELECT 
-            [Station_SK], 
-            [Fuel_Grade], 
-            TRY_CAST([Volume] AS DECIMAL(18, 2)) AS [Stick_L_Tank],
-            ROW_NUMBER() OVER (
-                PARTITION BY [Station_SK], [Fuel_Grade], [Tank_ID]
-                ORDER BY [Time] DESC
-            ) AS rnk
-        FROM [CSO].[CurrentFuelInv]
-        WHERE [Date_SK] = TRY_CONVERT(CHAR(8), GETDATE(), 112)
-      )
-      SELECT 
-            [Station_SK], 
-            [Fuel_Grade], 
-            SUM([Stick_L_tank]) AS [Stick_L] 
-      FROM RankedInventory
-      WHERE rnk = 1
-      GROUP BY [Station_SK], [Fuel_Grade]
-      ORDER BY [Station_SK]
-    `);
-    await sql.close();
-    return result.recordset;
-  } catch (err) {
-    console.error('SQL error:', err);
-    return [];
-  }
-}
-
 async function getFuelSupplierDiscounts() {
   try {
     const { getPool } = require('./sqlService'); // Adjust path if needed
@@ -679,13 +665,14 @@ async function getFuelCarrierHaulage() {
     const { getPool } = require('./sqlService'); // Adjust path if needed
     const pool = await getPool();
 
-    // FULL OUTER JOIN on all 4 composite keys: Carrier, Type, Location, and Pickup
+    // FULL OUTER JOIN on all 5 composite keys: Carrier, Type, Location, Pickup, and IsSplit
     const result = await pool.request().query(`
       SELECT 
         COALESCE(live.[Carrier], stg.[Carrier]) AS [Carrier],
         COALESCE(live.[Type], stg.[Type]) AS [Type],
         COALESCE(live.[Location], stg.[Location]) AS [Location],
         COALESCE(live.[Pickup], stg.[Pickup]) AS [Pickup],
+        COALESCE(live.[IsSplit], stg.[IsSplit]) AS [IsSplit],
         live.[Haulage] AS [Live_Haulage],
         live.[Updated At] AS [Live_Updated_At],
         stg.[Haulage] AS [Stg_Haulage],
@@ -696,6 +683,7 @@ async function getFuelCarrierHaulage() {
         AND live.[Type] = stg.[Type]
         AND live.[Location] = stg.[Location]
         AND live.[Pickup] = stg.[Pickup]
+        AND live.[IsSplit] = stg.[IsSplit]
     `);
 
     return result.recordset;
@@ -1117,20 +1105,26 @@ async function getShiftTransactionTimings(pool, csoCode, startDate, endDate) {
 async function getRefundTransactions(csoCode, date) {
   try {
     const pool = await getPool();
+    const transactionDate = formatDateForDB(date);
     const result = await pool.request()
       .input('csoCode', sql.Int, csoCode)
-      .input('targetDate', sql.VarChar, date) // or sql.Date
+      .input('targetDate', sql.VarChar, transactionDate) // or sql.Date depending on your Date_SK type
       .query(`
-        SELECT [Transaction ID], [Transaction Line], [Event Start Time], 
-          [GTIN], [UPC], [Category], [Item Name], 
-          [Actual Sales Amount]
-        FROM [CSO].[SalesTransactionCRJ]
-        WHERE [Status] = 'RefundEvent' AND 
-          [Station_SK] = @csoCode AND 
-          [Date] = @targetDate
-        ORDER BY [Event Start Time]
+        SELECT 
+          FORMAT([DateTime], 'HH:mm:ss') AS [Event Start Time],
+          [Transaction ID],
+          [GTIN],
+          NULL AS [UPC], -- Alias as NULL to satisfy front-end fallback logic cleanly
+          [Department] AS [Category],
+          [Item Description] AS [Item Name],
+          [Sales Amount] AS [Actual Sales Amount]
+        FROM [CSO].[Stg_CashRegisterJournal]
+        WHERE [Station_SK] = @csoCode 
+          AND [Event] = 'RefundEvent' 
+          AND [Date_SK] = @targetDate
+        ORDER BY [DateTime]
       `);
-    // await sql.close();
+
     return result.recordset;
   } catch (err) {
     console.error('SQL error:', err);
@@ -1164,13 +1158,26 @@ async function getShiftEmployees(csoCode, startDate, endDate) {
 }
 
 /**
- * Fetches flattened item data from Azure SQL by joining Current_Inventory,
- * Master_Item, and the most recent record from Inventory Balance.
+ * Fetches flattened item data from Azure SQL by joining the latest snapshot
+ * from Current_Inventory (using Date_SK), Master_Item, and Inventory Balance.
  */
 async function getFullItemBackupData() {
   try {
     const pool = await getPool();
     const query = `
+      WITH LatestInventory AS (
+        -- Get only the most recent Date_SK snapshot for each UPC and Station_SK
+        SELECT 
+          [UPC],
+          [Station_SK],
+          [On Hand Qty],
+          [Date_SK],
+          ROW_NUMBER() OVER (
+            PARTITION BY [UPC], [Station_SK] 
+            ORDER BY [Date_SK] DESC
+          ) AS rn
+        FROM [CSO].[Current_Inventory]
+      )
       SELECT 
         CI.[UPC],
         CI.[Station_SK],
@@ -1182,26 +1189,34 @@ async function getFullItemBackupData() {
         MI.[Vendor ID] AS vendorId,
         MI.[Vendor] AS vendorName,
         MI.[Category ID] AS categoryId,
+        MI.[Category] AS categoryName,
         MI.[Department ID] AS departmentId,
         MI.[Department],
         MI.[Price Group ID] AS priceGroupId,
         MI.[Price Group] AS priceGroup,
         MI.[Promo Group ID] AS promoGroupId,
         MI.[Promo Group] AS promoGroup,
-        (
-          SELECT MAX([Last_Inv_Date]) 
-          FROM [CSO].[Inventory Balance] IB 
-          WHERE IB.[UPC] = CI.[UPC] AND IB.[Station_SK] = CI.[Station_SK]
-        ) AS last_inv_date,
+        IB.[last_inv_date],
         (
           SELECT [URL] 
           FROM [CSO].[UPC Details] UD
           WHERE UD.[UPC] = CI.[UPC]
         ) AS image_url
-      FROM [CSO].[Current_Inventory] CI
+      FROM LatestInventory CI
       LEFT JOIN [CSO].[Master_Item] MI 
         ON CI.[UPC] = MI.[UPC] AND CI.[Station_SK] = MI.[Station_SK]
-      WHERE MI.[GTIN] IS NOT NULL and MI.[Category ID] is not null
+      INNER JOIN (
+        SELECT 
+          [UPC], 
+          [Station_SK], 
+          MAX([Last_Inv_Date]) AS last_inv_date
+        FROM [CSO].[Inventory Balance]
+        WHERE [Last_Inv_Date] >= '2024-01-01'
+        GROUP BY [UPC], [Station_SK]
+      ) IB ON CI.[UPC] = IB.[UPC] AND CI.[Station_SK] = IB.[Station_SK]
+      WHERE CI.rn = 1
+        AND MI.[GTIN] IS NOT NULL 
+        AND MI.[Category ID] IS NOT NULL
     `;
 
     const result = await pool.request().query(query);
@@ -1216,14 +1231,77 @@ async function getFullItemBackupData() {
  * Fetches the entire current inventory matrix from Azure SQL to sanitize Postgres item_bk.
  * Includes Category Name for Mongo cross-verification lookup.
  */
+// async function getSanitizationBackupData() {
+//   try {
+//     const pool = await getPool();
+//     const query = `
+//       SELECT 
+//         CI.[UPC],
+//         CI.[Station_SK],
+//         CI.[On Hand Qty] AS onHandQty,
+//         MI.[GTIN],
+//         MI.[SKU] AS upc_barcode,
+//         MI.[Description],
+//         MI.[Retail],
+//         MI.[Vendor ID] AS vendorId,
+//         MI.[Vendor] AS vendorName,
+//         MI.[Category ID] AS categoryId,
+//         MI.[Category Name] AS categoryName,
+//         MI.[Department ID] AS departmentId,
+//         MI.[Department],
+//         MI.[Price Group ID] AS priceGroupId,
+//         MI.[Price Group] AS priceGroup,
+//         MI.[Promo Group ID] AS promoGroupId,
+//         MI.[Promo Group] AS promoGroup,
+//         (
+//           SELECT MAX([Last_Inv_Date]) 
+//           FROM [CSO].[Inventory Balance] IB 
+//           WHERE IB.[UPC] = CI.[UPC] AND IB.[Station_SK] = CI.[Station_SK]
+//         ) AS last_inv_date,
+//         (
+//           SELECT [URL] 
+//           FROM [CSO].[UPC Details] UD
+//           WHERE UD.[UPC] = CI.[UPC]
+//         ) AS image_url
+//       FROM [CSO].[Current_Inventory] CI
+//       LEFT JOIN [CSO].[Master_Item] MI 
+//         ON CI.[UPC] = MI.[UPC] AND CI.[Station_SK] = MI.[Station_SK]
+//       WHERE MI.[GTIN] IS NOT NULL 
+//         AND MI.[Category ID] IS NOT NULL 
+//         AND MI.[Category ID] 
+//           NOT IN (0, 121, 130, 131, 133, 134, 152, 153, 155, 157, 158, 175, 176, 
+//                   200, 201, 202, 203, 204, 205, 206, 207, 208, 209, 210, 213, 
+//                   214, 216, 218, 219, 220, 800, 999, 1000, 5001, 5002, 5003, 10000)
+//     `;
+
+//     const result = await pool.request().query(query);
+//     return result.recordset;
+//   } catch (err) {
+//     console.error("SQL error fetching sanitization backup data:", err);
+//     throw err;
+//   }
+// }
+
 async function getSanitizationBackupData() {
   try {
     const pool = await getPool();
     const query = `
+      WITH LatestInventory AS (
+        SELECT 
+          CI.[UPC],
+          CI.[Station_SK],
+          CI.[On Hand Qty] AS onHandQty,
+          CI.[Date_SK],
+          ROW_NUMBER() OVER (
+            PARTITION BY CI.[UPC], CI.[Station_SK] 
+            ORDER BY CI.[Date_SK] DESC
+          ) AS rn
+        FROM [CSO].[Current_Inventory] CI
+      )
       SELECT 
         CI.[UPC],
         CI.[Station_SK],
-        CI.[On Hand Qty] AS onHandQty,
+        CI.[onHandQty],
         MI.[GTIN],
         MI.[SKU] AS upc_barcode,
         MI.[Description],
@@ -1244,19 +1322,29 @@ async function getSanitizationBackupData() {
           WHERE IB.[UPC] = CI.[UPC] AND IB.[Station_SK] = CI.[Station_SK]
         ) AS last_inv_date,
         (
-          SELECT [URL] 
+          SELECT TOP 1 [URL] 
           FROM [CSO].[UPC Details] UD
           WHERE UD.[UPC] = CI.[UPC]
-        ) AS image_url
-      FROM [CSO].[Current_Inventory] CI
+        ) AS image_url,
+        (
+          SELECT TOP 1 PH.[Units_Per_Parent]
+          FROM [CSO].[UPC_Packaging_Hierarchy_Lookup] PH
+          WHERE PH.[UPC] = CI.[UPC]
+            AND PH.[Unit_Type] = 'PK'
+            AND PH.[Parent_Unit_Type] = 'CRT'
+            AND PH.[Units_Per_Parent] IS NOT NULL
+            AND MI.[Category ID] in (101,102,104,105)
+        ) AS pk_in_crt
+      FROM LatestInventory CI
       LEFT JOIN [CSO].[Master_Item] MI 
         ON CI.[UPC] = MI.[UPC] AND CI.[Station_SK] = MI.[Station_SK]
-      WHERE MI.[GTIN] IS NOT NULL 
+      WHERE CI.rn = 1
+        AND MI.[GTIN] IS NOT NULL 
         AND MI.[Category ID] IS NOT NULL 
         AND MI.[Category ID] 
-          NOT IN (0, 121, 130, 131, 133, 134, 152, 153, 155, 157, 158, 175, 176, 
-                  200, 201, 202, 203, 204, 205, 206, 207, 208, 209, 210, 213, 
-                  214, 216, 218, 219, 220, 800, 999, 1000, 5001, 5002, 5003, 10000)
+        NOT IN (0, 121, 130, 131, 133, 134, 152, 153, 155, 157, 158, 175, 176, 
+                200, 201, 202, 203, 204, 205, 206, 207, 208, 209, 210, 213, 
+                214, 216, 218, 219, 220, 800, 999, 1000, 5001, 5002, 5003, 10000)
     `;
 
     const result = await pool.request().query(query);
@@ -1437,6 +1525,181 @@ async function getFuelSalesRollupReport(csoCode, targetDate) {
 
 //   return result.recordset;
 // }
+// Function specifically for June 25-26 matching legacy cumulative calculation logic
+async function getFuelSalesTransactions25June(csoCode, targetDate) {
+  const pool = await getPool();
+  const formattedDateString = formatDateForDB(targetDate.toString());
+
+  const result = await pool.request()
+    .input("csoCode", sql.VarChar, csoCode)
+    .input("targetDate", sql.Char(8), formattedDateString)
+    .query(`
+      WITH date_range AS (
+          SELECT 
+            @targetDate AS start_date,
+            CONVERT(VARCHAR(8), DATEADD(day, 1, CONVERT(DATE, @targetDate, 112)), 112) AS end_date
+      ),
+
+      status_discount_transactions AS (
+          SELECT DISTINCT [Transaction ID]
+          FROM [CSO].[Stg_CashRegisterJournal]
+          CROSS JOIN date_range
+          WHERE [Date_SK] BETWEEN start_date AND end_date
+            AND [Station_SK] = @csoCode
+            AND [Item Description] = 'STATUS DISCOUNT'
+            AND [Transaction ID] IS NOT NULL
+      ),
+
+      extracted_fuel_sales AS (
+          SELECT 
+              s.[Date_SK],
+              s.[DateTime],
+              s.[Register ID],
+              s.[Transaction ID],
+              
+              CASE 
+                  WHEN s.[Event] LIKE '%Refund%' THEN -1 * ABS(s.[Sales Amount])
+                  ELSE s.[Sales Amount]
+              END AS sales_amount,
+              
+              CASE 
+                  WHEN s.[Event] LIKE '%Refund%' THEN -1 * ABS(s.[Sales Quantity])
+                  ELSE s.[Sales Quantity]
+              END AS sales_quantity,
+              
+              CASE 
+                  WHEN s.[Item Description] LIKE '%DYED%' THEN 'Dyed Diesel'
+                  WHEN s.[Item Description] LIKE '%DIESEL%' OR s.[Item Description] LIKE '%ULSD%' THEN 'Diesel'
+                  WHEN s.[Fuel Type] = 'REG' THEN 'Regular | E15'
+                  WHEN s.[Fuel Type] = 'PNL' THEN 'Premium'
+                  WHEN s.[Fuel Type] = 'MID' THEN 'Midgrade'
+                  ELSE COALESCE(s.[Fuel Type], 'Unknown Grade')
+              END AS final_grade,
+              CASE 
+                  WHEN d.[Transaction ID] IS NOT NULL THEN 'Treaty Sale'
+                  ELSE 'Non Treaty Sale'
+              END AS sale_category
+          FROM [CSO].[Stg_CashRegisterJournal] s
+          CROSS JOIN date_range
+          LEFT JOIN status_discount_transactions d ON s.[Transaction ID] = d.[Transaction ID]
+          WHERE s.[Date_SK] BETWEEN start_date AND end_date
+            AND s.[Station_SK] = @csoCode
+            AND (s.[Event] LIKE 'SaleEvent%' OR s.[Event] LIKE '%Refund%')
+            AND s.[Transaction Type] LIKE 'Fuel%'
+            AND s.[Sales Quantity] <> 0
+      )
+
+      SELECT 
+          [Date_SK],
+          [DateTime],
+          [Register ID],
+          [Transaction ID],
+          sale_category,
+          final_grade AS fuel_grade,
+          CAST(sales_amount AS DECIMAL(18,2)) AS sales_amount,
+          CAST(sales_quantity AS DECIMAL(18,4)) AS sales_quantity
+      FROM extracted_fuel_sales
+      WHERE sale_category = 'Treaty Sale'
+      ORDER BY 
+          [Date_SK] ASC,
+          [DateTime] ASC,
+          [Transaction ID] ASC;
+    `);
+
+  return result.recordset;
+}
+
+async function getFuelSalesRollupReportRange(csoCode, startDate, endDate) {
+  const pool = await getPool();
+  const formattedStartDate = formatDateForDB(startDate.toString());
+  const formattedEndDate = formatDateForDB(endDate.toString());
+
+  const result = await pool
+    .request()
+    .input("csoCode", sql.VarChar, csoCode)
+    .input("startDate", sql.Char(8), formattedStartDate)
+    .input("endDate", sql.Char(8), formattedEndDate)
+    .query(`
+      WITH date_range AS (
+          SELECT 
+            @startDate AS start_date,
+            @endDate AS end_date
+      ),
+
+      status_discount_transactions AS (
+          -- Track Date_SK and Transaction ID together (no Register ID)
+          SELECT DISTINCT 
+              [Date_SK],
+              [Transaction ID]
+          FROM [CSO].[Stg_CashRegisterJournal]
+          CROSS JOIN date_range
+          WHERE [Date_SK] BETWEEN start_date AND end_date
+            AND [Station_SK] = @csoCode
+            AND [Item Description] = 'STATUS DISCOUNT'
+            AND [Transaction ID] IS NOT NULL
+      ),
+
+      extracted_fuel_sales AS (
+          SELECT 
+              s.[Date_SK],
+              s.[DateTime],
+              s.[Register ID],
+              s.[Transaction ID],
+              
+              CASE 
+                  WHEN s.[Event] LIKE '%Refund%' THEN -1 * ABS(s.[Sales Amount])
+                  ELSE s.[Sales Amount]
+              END AS sales_amount,
+              
+              CASE 
+                  WHEN s.[Event] LIKE '%Refund%' THEN -1 * ABS(s.[Sales Quantity])
+                  ELSE s.[Sales Quantity]
+              END AS sales_quantity,
+              
+              CASE 
+                  WHEN s.[Item Description] LIKE '%DYED%' THEN 'Dyed Diesel'
+                  WHEN s.[Item Description] LIKE '%DIESEL%' OR s.[Item Description] LIKE '%ULSD%' THEN 'Diesel'
+                  WHEN s.[Fuel Type] = 'REG' THEN 'Regular'
+                  WHEN s.[Fuel Type] = 'PNL' THEN 'Premium'
+                  WHEN s.[Fuel Type] = 'MID' THEN 'Midgrade'
+                  ELSE COALESCE(s.[Fuel Type], 'Unknown Grade')
+              END AS final_grade,
+              CASE 
+                  WHEN d.[Transaction ID] IS NOT NULL THEN 'Treaty Sale'
+                  ELSE 'Non Treaty Sale'
+              END AS sale_category
+          FROM [CSO].[Stg_CashRegisterJournal] s
+          CROSS JOIN date_range
+          -- JOIN on Date_SK AND Transaction ID ONLY
+          LEFT JOIN status_discount_transactions d 
+                 ON s.[Transaction ID] = d.[Transaction ID] 
+                AND s.[Date_SK] = d.[Date_SK]
+          WHERE s.[Date_SK] BETWEEN start_date AND end_date
+            AND s.[Station_SK] = @csoCode
+            AND (s.[Event] LIKE 'SaleEvent%' OR s.[Event] LIKE '%Refund%')
+            AND s.[Transaction Type] LIKE 'Fuel%'
+            AND s.[Sales Quantity] <> 0
+      )
+
+      SELECT 
+          [Date_SK],
+          [DateTime],
+          [Register ID],
+          [Transaction ID],
+          sale_category,
+          final_grade AS fuel_grade,
+          CAST(sales_amount AS DECIMAL(18,2)) AS sales_amount,
+          CAST(sales_quantity AS DECIMAL(18,4)) AS sales_quantity
+      FROM extracted_fuel_sales
+      WHERE sale_category = 'Treaty Sale'
+      ORDER BY 
+          [Date_SK] ASC,
+          [DateTime] ASC,
+          [Transaction ID] ASC;
+    `);
+
+  return result.recordset;
+}
 
 function formatDateForDB(dateString) {
   // input: "2025-11-14"
@@ -1536,6 +1799,9 @@ async function getAllSQLData(csoCode, dates) {
   const bistroResult = await runQuery("bistroWoWSales", () => getWeeklyBistroSales(pool, csoCode));
   const top10Result = await runQuery("top10Bistro", () => getTop10Bistro(pool, csoCode));
 
+  const allResults = [salesResult, fuelResult, transResult, periodResult, tenderResult, shiftResult, bistroResult, top10Result];
+  const failedQueries = queryNames.filter((_, i) => allResults[i].status === "rejected");
+
   return {
     sales: salesResult.status === "fulfilled" ? salesResult.value : [],
     fuel: fuelResult.status === "fulfilled" ? fuelResult.value : [],
@@ -1545,6 +1811,12 @@ async function getAllSQLData(csoCode, dates) {
     shiftTransactionTimings: shiftResult.status === "fulfilled" ? shiftResult.value : [],
     bistroWoWSales: bistroResult.status === "fulfilled" ? bistroResult.value : [],
     top10Bistro: top10Result.status === "fulfilled" ? top10Result.value : [],
+    // Internal metadata, NOT part of the client-facing payload — names of queries that
+    // failed after all retries. Callers must strip this before returning/caching the
+    // result and use it to decide whether the data is safe to cache (see dashboardCacheCron.js
+    // and salesRoutes.js's /all-data handler). Without this, a transient SQL failure looks
+    // identical to a legitimately empty result and gets cached as if it were valid.
+    _failedQueries: failedQueries,
   };
 }
 
@@ -1566,8 +1838,6 @@ module.exports = {
   getInventoryCategories,
   getAllSQLData,
   getBulkOnHandQtyCSO,
-  getFuelInventoryReportPreviousDay,
-  getFuelInventoryReportCurrentDay,
   getCategoriesFromSQL,
   getCategoryNumbersFromSQL,
   getInactiveMasterItems,
@@ -1593,4 +1863,6 @@ module.exports = {
   getFuelSalesRollupReport,
   getLatestCsoVendorsList,
   getCoreMarkPriceBookByUPCs,
+  getFuelSalesRollupReportRange,
+  getFuelSalesTransactions25June
 };

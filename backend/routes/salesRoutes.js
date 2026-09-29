@@ -113,6 +113,11 @@ router.get('/all-data', async (req, res) => {
       CashSummary.find({ site: siteParam, date: { $gte: startDate, $lte: endDate } }).lean(),
     ]);
 
+    // _failedQueries is internal metadata (names of SQL queries that failed after
+    // retries) — strip it from the client-facing/cached payload, but use it below
+    // to decide whether this result is safe to cache.
+    const { _failedQueries: failedQueries, ...sqlData } = sqlResponse;
+
     const site = siteParam;
 
     // Aggregate Mongo Shifts: Find Absolute Min Start / Max End per day
@@ -144,7 +149,7 @@ router.get('/all-data', async (req, res) => {
       const sqlDateSK = dateStr.replace(/-/g, '');
 
       // Locate data for this specific date
-      const sqlRow = sqlResponse.shiftTransactionTimings.find(row => row.Date_SK === sqlDateSK) || {};
+      const sqlRow = sqlData.shiftTransactionTimings.find(row => row.Date_SK === sqlDateSK) || {};
       const mongoRow = mongoDailyTimings[dateStr] || {};
       const reportEntry = reports.find(r => new Date(r.date).toISOString().split('T')[0] === dateStr);
 
@@ -189,15 +194,24 @@ router.get('/all-data', async (req, res) => {
       current.setDate(current.getDate() + 1);
     }
 
-    // 3. Build response and cache it
+    // 3. Build response
     const responseData = {
-      ...sqlResponse,
+      ...sqlData,
       operationalTimings,
       lastUpdated: new Date().toISOString(),
     };
 
-    // Cache for 25 hours (90000 seconds) — cron refreshes daily, buffer for missed runs
-    await redis.set(cacheKey, JSON.stringify(responseData), 'EX', 90000);
+    // Only cache a complete result. If any SQL query failed after retries, this
+    // response is degraded (empty sections standing in for real data) — caching
+    // it would bake a transient MSSQL blip into Redis for 25 hours and make the
+    // dashboard look blank for the rest of the day. Serve it live instead and
+    // let the next request try again.
+    if (failedQueries.length > 0) {
+      console.error(`  ⚠️ ${siteParam}: SQL queries failed after retries (${failedQueries.join(", ")}) — not caching degraded data`);
+    } else {
+      // Cache for 25 hours (90000 seconds) — cron refreshes daily, buffer for missed runs
+      await redis.set(cacheKey, JSON.stringify(responseData), 'EX', 90000);
+    }
 
     res.json(responseData);
 

@@ -1092,17 +1092,17 @@ function ReportDoc({ site, date, rows, totals, notes, lottery, bullock, unsettle
       h(TotalsCards, { totals, unsettledPrepays, handheldDebit, isManitoba }), // 👈 Added isManitoba prop
 
       // 2. Adjusted Totals Section
-      lottery && h(React.Fragment, null,
+      lottery && !isManitoba && h(React.Fragment, null,
         h(Text, { style: styles.sectionTitle }, 'Adjusted Totals (After Lottery)'),
         h(AdjustedTotalsCards, { totals, lottery, bullock, unsettledPrepays, handheldDebit, isManitoba })
       ),
 
       // --- CONDITIONAL PAGE BREAK ---
       // If we have extras and a lottery table, start the table on a new page to avoid breaking
-      lottery && hasExtras && h(View, { break: true }),
+      lottery && hasExtras && !isManitoba && h(View, { break: true }),
 
       // 3. Lottery Details Section
-      lottery && h(React.Fragment, null,
+      lottery &&  h(React.Fragment, null,
         h(Text, { style: styles.sectionTitle }, 'Lottery Details'),
         h(LotteryTable, { lottery, bullock, isManitoba })
       ),

@@ -1,5 +1,11 @@
 const express = require('express')
+const mongoose = require('mongoose')
 const { CashSummary, CashSummaryReport } = require('../models/CashSummaryNew')
+const {
+  isValidAttributeName,
+  buildReservedAttributeNames,
+  castAttributeValue,
+} = require('../utils/shiftAttributes')
 const Safesheet = require('../models/Safesheet')
 const LotteryModule = require('../models/Lottery')
 const Location = require('../models/Location')
@@ -16,6 +22,13 @@ const { generateChickenDelightEodReportPdf } = require('../utils/eodCDReportWave
 const { generateShiftReportsPdf } = require('../utils/shiftReportsPdf')
 const { generateLotteryImagesPdf } = require('../utils/lotteryImagesPdf')
 const { getRefundTransactions, getShiftEmployees } = require('../services/sqlService');
+const {
+  buildArPaidReport,
+  AR_PAID_REPORT_SITES,
+  MIN_MONTH,
+  MONTH_RE,
+  monthWindowUtc,
+} = require('../utils/arPaidReport');
 
 const path = require('path')
 
@@ -260,7 +273,7 @@ router.get('/voided-transactions-details', async (req, res) => {
       }
 
       acc[txId].items.push({
-        transactionLine: row['Transaction Line'],
+        // transactionLine: row['Transaction Line'],
         gtin: row['GTIN'],
         upc: row['UPC'],
         category: row['Category'],
@@ -417,7 +430,9 @@ router.get('/over-short', async (req, res) => {
       // B. Calculate Adjusted Reported Cash (Expected)
       let adjustedReported = totals.report_canadian_cash;
 
-      if (sellsLottery && lotteryMap[dateStr]) {
+      const isWavers = ['Wavers West', 'Wavers East'].includes(site);
+
+      if (sellsLottery && lotteryMap[dateStr] && !isWavers) {
         const lotto = lotteryMap[dateStr];
 
         const onlineOverShort = (totals.shiftOnlineTotal || 0) - (
@@ -619,7 +634,13 @@ router.get('/payables-comparison', async (req, res) => {
       const d = new Date(shift.date);
       d.setHours(0, 0, 0, 0);
       const key = d.toISOString();
-      posByDate[key] = (posByDate[key] || 0) + (shift.payouts || 0);
+
+      // Use lottoPayout for sites that sell lottery, otherwise use payouts
+      const payoutValue = sellsLottery 
+        ? (shift.lottoPayout || 0) 
+        : (shift.payouts || 0);
+
+      posByDate[key] = (posByDate[key] || 0) + payoutValue;
     }
 
     // 2️⃣ Aggregate Payables Module entries
@@ -648,7 +669,7 @@ router.get('/payables-comparison', async (req, res) => {
         date: dateStr,
         posPayout: rawPosPayout,
         internalPayout: internalTotal,
-        difference: internalTotal - rawPosPayout, // Reverted to your original formula
+        difference: internalTotal - rawPosPayout,
       };
     });
 
@@ -656,6 +677,338 @@ router.get('/payables-comparison', async (req, res) => {
   } catch (err) {
     console.error('Payables comparison error:', err);
     res.status(500).json({ error: 'Failed to fetch payables comparison data' });
+  }
+});
+
+// 1. GET shifts by site & date (Local midnight bounds)
+router.get('/by-date', async (req, res) => {
+  try {
+    const { site, date } = req.query;
+    if (!site || !date) {
+      return res.status(400).json({ error: 'site and date parameters are required' });
+    }
+
+    const targetDate = new Date(date);
+    const startOfDay = new Date(targetDate.getFullYear(), targetDate.getMonth(), targetDate.getDate(), 0, 0, 0, 0);
+    const endOfDay = new Date(targetDate.getFullYear(), targetDate.getMonth(), targetDate.getDate(), 23, 59, 59, 999);
+
+    // Check if Cash Summary Report is submitted for this day
+    const report = await CashSummaryReport.findOne({
+      site,
+      date: { $gte: startOfDay,$lte: endOfDay }
+    }).lean();
+
+    const isSubmitted = !!(report && report.submitted);
+
+    const shifts = await CashSummary.find({
+      site,
+      date: { $gte: startOfDay,$lte: endOfDay }
+    }).sort({ shift_number: 1 }).lean();
+
+    res.json({
+      isSubmitted,
+      shifts
+    });
+  } catch (err) {
+    console.error('Fetch shifts by date error:', err);
+    res.status(500).json({ error: 'Failed to fetch shifts for selected date' });
+  }
+});
+
+// GET grouped daily cash summaries between 'from' and 'to' dates
+router.get('/by-range', async (req, res) => {
+  try {
+    const { site, from, to } = req.query;
+    if (!site || !from || !to) {
+      return res.status(400).json({ error: 'site, from, and to parameters are required' });
+    }
+
+    const fromDate = new Date(from);
+    const toDate = new Date(to);
+
+    const startOfRange = new Date(fromDate.getFullYear(), fromDate.getMonth(), fromDate.getDate(), 0, 0, 0, 0);
+    const endOfRange = new Date(toDate.getFullYear(), toDate.getMonth(), toDate.getDate(), 23, 59, 59, 999);
+
+    // 1. Fetch submitted CashSummaryReports in date range for site
+    const reports = await CashSummaryReport.find({
+      site,
+      date: { $gte: startOfRange, $lte: endOfRange },
+      submitted: true
+    }).lean();
+
+    const submittedDatesSet = new Set(
+      reports.map(r => {
+        const d = new Date(r.date);
+        return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+      })
+    );
+
+    // 2. Fetch shifts in date range
+    const shifts = await CashSummary.find({
+      site,
+      date: { $gte: startOfRange, $lte: endOfRange }
+    }).sort({ date: -1, shift_number: 1 }).lean();
+
+    // 3. Group shifts by local ISO Date string (YYYY-MM-DD)
+    const groupedMap = new Map();
+
+    for (const shift of shifts) {
+      const d = new Date(shift.date);
+      const dateKey = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+
+      if (!groupedMap.has(dateKey)) {
+        groupedMap.set(dateKey, {
+          date: dateKey,
+          shift_numbers: [],
+          canadian_cash_collected: 0,
+          item_sales: 0,
+          cash_back: 0,
+          loyalty: 0,
+          cpl_bulloch: 0,
+          exempted_tax: 0,
+          allReviewed: true,
+          isSubmitted: submittedDatesSet.has(dateKey)
+        });
+      }
+
+      const group = groupedMap.get(dateKey);
+      group.shift_numbers.push(shift.shift_number);
+      group.canadian_cash_collected += shift.canadian_cash_collected || 0;
+      group.item_sales += shift.item_sales || 0;
+      group.cash_back += shift.cash_back || 0;
+      group.loyalty += shift.loyalty || 0;
+      group.cpl_bulloch += shift.cpl_bulloch || 0;
+      group.exempted_tax += shift.exempted_tax || 0;
+
+      // Determine shift reviewed status:
+      // Valid if explicitly marked reviewed OR if it contains legacy reported cash field
+      const isShiftReviewed = Boolean(shift.reviewed) || shift.canadian_cash_collected !== undefined;
+
+      if (!isShiftReviewed) {
+        group.allReviewed = false;
+      }
+    }
+
+    res.json(Array.from(groupedMap.values()));
+  } catch (err) {
+    console.error('Fetch shifts by range error:', err);
+    res.status(500).json({ error: 'Failed to fetch shifts for date range' });
+  }
+});
+
+// 2. BATCH POST/UPDATE route to handle whole day submission
+// router.post('/batch', async (req, res) => {
+//   try {
+//     const { items } = req.body;
+//     if (!Array.isArray(items) || items.length === 0) {
+//       return res.status(400).json({ error: 'No shift data provided for submission' });
+//     }
+
+//     const bulkOperations = items.map((item) => {
+//       const updatePayload = {
+//         canadian_cash_collected: item.canadian_cash_collected ?? 0,
+//         exempted_tax: item.exempted_tax ?? 0, // Always sets or defaults exempted_tax
+//         reviewed: true
+//       };
+
+//       if (item.chequesCashedOut !== undefined) {
+//         updatePayload.chequesCashedOut = item.chequesCashedOut;
+//       }
+
+//       if (item.isChickenDelight) {
+//         updatePayload.tenders = item.tenders || [];
+//         updatePayload.chickenDelightTips = item.chickenDelightTips ?? 0;
+//         updatePayload.pinpadPhoto = item.pinpadPhoto || null;
+//         updatePayload.isChickenDelight = true;
+//       } else {
+//         updatePayload.isChickenDelight = false;
+//       }
+
+//       return {
+//         updateOne: {
+//           filter: { _id: item._id },
+//           update: { $set: updatePayload }
+//         }
+//       };
+//     });
+
+//     await CashSummary.bulkWrite(bulkOperations);
+//     res.json({ success: true, count: items.length });
+//   } catch (err) {
+//     console.error('Batch update shifts error:', err);
+//     res.status(500).json({ error: 'Failed to update daily cash summary shifts' });
+//   }
+// });
+// 2. BATCH POST/UPDATE route to handle whole day submission & Safesheet integration
+router.post('/batch', async (req, res) => {
+  try {
+    const { items } = req.body;
+    if (!Array.isArray(items) || items.length === 0) {
+      return res.status(400).json({ error: 'No shift data provided for submission' });
+    }
+
+    // Fetch existing documents from DB to access baseline values (like existing report_canadian_cash or raw canadianCash)
+    const itemIds = items.map((i) => i._id).filter(Boolean);
+    const existingDocs = await CashSummary.find({ _id: { $in: itemIds } }).lean();
+    const existingDocsMap = new Map(existingDocs.map((doc) => [doc._id.toString(), doc]));
+
+    // 1. Build bulk operations array with updated Chicken Delight logic
+    const bulkOperations = items.map((item) => {
+      const dbDoc = existingDocsMap.get(String(item._id)) || {};
+
+      const updatePayload = {
+        canadian_cash_collected: item.canadian_cash_collected ?? 0,
+        exempted_tax: item.exempted_tax ?? 0,
+        reviewed: true,
+      };
+
+      if (item.chequesCashedOut !== undefined) {
+        updatePayload.chequesCashedOut = item.chequesCashedOut;
+      }
+
+      if (item.isChickenDelight) {
+        const submittedTenders = Array.isArray(item.tenders) ? item.tenders : [];
+        const tips = Number(item.chickenDelightTips) || 0;
+
+        // Calculate sum of frontend tender values
+        const frontendTendersSum = submittedTenders.reduce(
+          (sum, t) => sum + (Number(t.value) || 0),
+          0
+        );
+
+        // Determine baseline reported cash (prioritize raw canadianCash from SFT sync, fallback to DB report_canadian_cash)
+        const baseCashReport =
+          dbDoc.canadianCash ?? dbDoc.report_canadian_cash ?? item.report_canadian_cash ?? 0;
+
+        // Formula: baseCashReport - (tendersSum - tips)
+        const adjustedReportedCash = baseCashReport - (frontendTendersSum - tips);
+
+        updatePayload.tenders = submittedTenders;
+        updatePayload.chickenDelightTips = tips;
+        updatePayload.pinpadPhoto = item.pinpadPhoto || null;
+        updatePayload.isChickenDelight = true;
+        updatePayload.report_canadian_cash = Math.round(adjustedReportedCash * 100) / 100;
+      } else {
+        updatePayload.isChickenDelight = false;
+      }
+
+      return {
+        updateOne: {
+          filter: { _id: item._id },
+          update: { $set: updatePayload },
+        },
+      };
+    });
+
+    await CashSummary.bulkWrite(bulkOperations);
+
+    // 2. Resolve Site and Date context for Safesheet entry & CashSummaryReport
+    let targetSite = items[0]?.site;
+    let targetDateRaw = items[0]?.date;
+
+    if (!targetSite || !targetDateRaw) {
+      const dbDoc = existingDocsMap.get(String(items[0]._id));
+      if (dbDoc) {
+        targetSite = targetSite || dbDoc.site;
+        targetDateRaw = targetDateRaw || dbDoc.date;
+      }
+    }
+
+    if (targetSite && targetDateRaw) {
+      // Parse local date (supports "YYYY-MM-DD" strings or ISO Date objects)
+      let dateStr = '';
+      if (typeof targetDateRaw === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(targetDateRaw)) {
+        dateStr = targetDateRaw;
+      } else {
+        const d = new Date(targetDateRaw);
+        const y = d.getFullYear();
+        const m = String(d.getMonth() + 1).padStart(2, '0');
+        const day = String(d.getDate()).padStart(2, '0');
+        dateStr = `${y}-${m}-${day}`;
+      }
+
+      const [yy, mm, dd] = dateStr.split('-').map(Number);
+      
+      // Normalized UTC start-of-day for index/query consistency across microservices
+      const normalizedStart = new Date(Date.UTC(yy, mm - 1, dd));
+      const start = new Date(yy, mm - 1, dd, 0, 0, 0, 0);
+      const end = new Date(yy, mm - 1, dd + 1, 0, 0, 0, 0);
+
+      // 3. Upsert CashSummaryReport document with default values
+      await CashSummaryReport.findOneAndUpdate(
+        { site: targetSite, date: normalizedStart },
+        {
+          $setOnInsert: {
+            site: targetSite,
+            date: normalizedStart,
+            submitted: false,
+            notes: '',
+          },
+        },
+        { upsert: true, new: true, setDefaultsOnInsert: true }
+      );
+
+      // 4. Aggregate total canadian_cash_collected for the entire site & day from DB
+      const agg = await CashSummary.aggregate([
+        { $match: { site: targetSite, date: { $gte: start, $lt: end } } },
+        {
+          $group: {
+            _id: null,
+            total: { $sum: { $ifNull: ['$canadian_cash_collected', 0] } },
+          },
+        },
+      ]);
+
+      const totalCanadianCashCollected =
+        Math.round(Number(agg[0]?.total || 0) * 100) / 100;
+
+      // 5. Find or create the Safesheet for this site
+      let sheet = await Safesheet.findOne({ site: targetSite });
+      if (!sheet) {
+        sheet = await Safesheet.create({
+          site: targetSite,
+          initialBalance: 0,
+          entries: [],
+        });
+      }
+
+      const sameDay = (d) => d >= start && d < end;
+
+      // Search for an existing "Daily Deposit" entry on that date
+      const idx = (() => {
+        for (let j = sheet.entries.length - 1; j >= 0; j--) {
+          const e = sheet.entries[j];
+          if (sameDay(new Date(e.date)) && e.description === 'Daily Deposit') {
+            return j;
+          }
+        }
+        return -1;
+      })();
+
+      const entryDate = dateFromYMDLocal(dateStr);
+
+      if (idx >= 0) {
+        // Update existing entry
+        sheet.entries[idx].date = entryDate;
+        sheet.entries[idx].description = 'Daily Deposit';
+        sheet.entries[idx].cashIn = totalCanadianCashCollected;
+        sheet.entries[idx].updatedAt = new Date();
+      } else {
+        // Add new entry
+        sheet.entries.push({
+          date: entryDate,
+          description: 'Daily Deposit',
+          cashIn: totalCanadianCashCollected,
+        });
+      }
+
+      await sheet.save();
+    }
+
+    res.json({ success: true, count: items.length });
+  } catch (err) {
+    console.error('Batch update shifts error:', err);
+    res.status(500).json({ error: 'Failed to update daily cash summary shifts' });
   }
 });
 
@@ -835,6 +1188,7 @@ router.post('/', async (req, res) => {
       couponsAccepted: norm(parsed.couponsAccepted),
       giftCertificates: norm(parsed.giftCertificates),
       cashOffCoupons: norm(parsed.cashOffCoupons),
+      gasolineCoupons: norm(parsed.gasolineCoupons),
       otherCoupons: norm(parsed.otherCoupons),
       canadianCash: norm((parsed.canadianCash || 0) + (parsed.usCash || 0)),
       cashOnHand: norm(parsed.cashOnHand),
@@ -1184,8 +1538,15 @@ router.post('/submit/to/safesheet', async (req, res) => {
 
           let cc = ['mohammad@gen7fuel.com', 'daksh@gen7fuel.com'];
 
-          if (site === 'Oliver' || site === 'Osoyoos') {
-            cc.push('ZBaptiste@oib.ca');
+          const SITE_CC_MAP = {
+            Oliver: ['ZBaptiste@oib.ca'],
+            Osoyoos: ['ZBaptiste@oib.ca'],
+            'Wavers West': ['office@wavers.ca'],
+            'Wavers East': ['manager@boncommunitystore.ca'],
+          };
+
+          if (SITE_CC_MAP[site]) {
+            cc.push(...SITE_CC_MAP[site]);
           }
           const serializedAttachments = await Promise.all(
             attachments.map(async (att) => ({
@@ -1285,6 +1646,29 @@ router.get('/report', async (req, res) => {
       0
     )
 
+    const [location, lotteryDoc] = await Promise.all([
+      Location.findOne({ $or: [{ stationName: site }, { site }] }, { sellsLottery: 1 }).lean(),
+      Lottery.findOne({ site, date: String(date) }, { _id: 1 }).lean(),
+    ])
+    const missingCashRows = rows.filter((r) => typeof r.canadian_cash_collected !== 'number')
+    const unreviewedRows = rows.filter((r) => !r.reviewed)
+    const readiness = {
+      canViewReport:
+        rows.length > 0 &&
+        missingCashRows.length === 0 &&
+        unreviewedRows.length === 0 &&
+        (!(location?.sellsLottery) || Boolean(lotteryDoc)),
+      shiftIssues: {
+        hasShifts: rows.length > 0,
+        missingCashShiftNumbers: missingCashRows.map((r) => r.shift_number).filter(Boolean),
+        unreviewedShiftNumbers: unreviewedRows.map((r) => r.shift_number).filter(Boolean),
+      },
+      lotteryIssue: {
+        sellsLottery: Boolean(location?.sellsLottery),
+        hasLottery: Boolean(lotteryDoc),
+      },
+    }
+
     // Fetch or create the single report for site+day (normalized date)
     const reportDate = start // store normalized day start
     const reportDoc = await CashSummaryReport.findOne({ site, date: reportDate }).lean()
@@ -1296,10 +1680,90 @@ router.get('/report', async (req, res) => {
       totals,
       chickenDelightTip,
       report: reportDoc || null, // contains notes + submitted
+      readiness,
     })
   } catch (err) {
     console.error('CashSummary report error:', err)
     res.status(500).json({ error: 'Failed to fetch report' })
+  }
+})
+
+async function saveCashSummaryReportFields({ site, date, fields }) {
+  if (!site) {
+    const err = new Error('site is required')
+    err.status = 400
+    throw err
+  }
+  if (!date || !/^\d{4}-\d{2}-\d{2}$/.test(String(date))) {
+    const err = new Error('date (YYYY-MM-DD) is required')
+    err.status = 400
+    throw err
+  }
+
+  const { start } = startEndOfYmd(date)
+  return CashSummaryReport.findOneAndUpdate(
+    { site, date: start },
+    { $set: { site, date: start, ...fields } },
+    { upsert: true, new: true, setDefaultsOnInsert: true }
+  ).lean()
+}
+
+router.put('/report/notes', async (req, res) => {
+  try {
+    const { site, date, notes = '' } = req.body || {}
+    if (typeof notes !== 'string') return res.status(400).json({ error: 'notes must be a string' })
+    const doc = await saveCashSummaryReportFields({ site, date, fields: { notes } })
+    res.json(doc)
+  } catch (err) {
+    console.error('CashSummary report notes save error:', err)
+    res.status(err.status || 500).json({ error: err.message || 'Failed to save report notes' })
+  }
+})
+
+router.put('/report/unsettled-prepays', async (req, res) => {
+  try {
+    const { site, date, unsettledPrepays } = req.body || {}
+    const value = norm(unsettledPrepays)
+    if (value === undefined) return res.status(400).json({ error: 'unsettledPrepays must be a number' })
+    const doc = await saveCashSummaryReportFields({ site, date, fields: { unsettledPrepays: value } })
+    res.json(doc)
+  } catch (err) {
+    console.error('CashSummary report unsettled prepays save error:', err)
+    res.status(err.status || 500).json({ error: err.message || 'Failed to save unsettled prepays' })
+  }
+})
+
+router.put('/report/handheld-debit', async (req, res) => {
+  try {
+    const { site, date, handheldDebit } = req.body || {}
+    const value = norm(handheldDebit)
+    if (value === undefined) return res.status(400).json({ error: 'handheldDebit must be a number' })
+    const doc = await saveCashSummaryReportFields({ site, date, fields: { handheldDebit: value } })
+    res.json(doc)
+  } catch (err) {
+    console.error('CashSummary report handheld debit save error:', err)
+    res.status(err.status || 500).json({ error: err.message || 'Failed to save handheld debit' })
+  }
+})
+
+router.put('/report/submitted', async (req, res) => {
+  try {
+    const { site, date, submitted } = req.body || {}
+
+    if (typeof submitted !== 'boolean') {
+      return res.status(400).json({ error: 'submitted must be a boolean' })
+    }
+
+    const doc = await saveCashSummaryReportFields({
+      site,
+      date,
+      fields: { submitted }
+    })
+
+    res.json(doc)
+  } catch (err) {
+    console.error('CashSummary report submitted update error:', err)
+    res.status(err.status || 500).json({ error: err.message || 'Failed to update report submitted status' })
   }
 })
 
@@ -1464,6 +1928,95 @@ router.get('/ar-check-range', async (req, res) => {
   }
 })
 
+// router.get('/ar-check', async (req, res) => {
+//   const { site, date } = req.query
+//   if (!site || !date) return res.status(400).json({ error: 'site and date required' })
+
+//   try {
+//     const start = new Date(date); start.setUTCHours(0, 0, 0, 0)
+//     const end = new Date(date); end.setUTCHours(23, 59, 59, 999)
+
+//     const shiftRows = await CashSummary.aggregate([
+//       { $match: { site, date: { $gte: start, $lte: end } } },
+//       {
+//         $group: {
+//           _id: { $substr: [{ $ifNull: ['$shift_number', ''] }, 0, 1] },
+//           total: { $sum: { $ifNull: ['$arIncurred', 0] } },
+//         },
+//       },
+//     ])
+
+//     // Transactions are stored as exact submission timestamps in UTC, so we must
+//     // query using the site's local timezone day boundaries, not UTC midnight.
+//     // Fallback branch covers PO docs (and all Kardpoll docs) that predate the
+//     // dateStr migration and don't have a dateStr field yet.
+//     const location = await Location.findOne({ site }, { timezone: 1 }).lean()
+//     const tz = location?.timezone || 'America/Toronto'
+//     const txStart = DateTime.fromISO(date, { zone: tz }).startOf('day').toJSDate()
+//     const txEnd = DateTime.fromISO(date, { zone: tz }).endOf('day').toJSDate()
+
+//     const transactionRows = await Transactions.aggregate([
+//       {
+//         $match: {
+//           stationName: site,
+//           deletedAt: null,
+//           $or: [
+//             { dateStr: date },
+//             { dateStr: { $exists: false }, date: { $gte: txStart, $lte: txEnd } },
+//           ],
+//         },
+//       },
+//       {
+//         $group: {
+//           _id: { $toString: { $ifNull: ['$register', 'Unassigned'] } },
+//           total: { $sum: { $ifNull: ['$amount', 0] } },
+//         },
+//       },
+//     ])
+
+//     const byRegisterMap = new Map()
+//     for (const row of shiftRows) {
+//       const register = /^[1-4]$/.test(String(row._id || '')) ? String(row._id) : 'Unassigned'
+//       byRegisterMap.set(register, { register, arIncurredTotal: row.total ?? 0, transactionsTotal: 0 })
+//     }
+//     for (const row of transactionRows) {
+//       const register = row._id && row._id !== '' ? String(row._id) : 'Unassigned'
+//       const existing = byRegisterMap.get(register) || { register, arIncurredTotal: 0, transactionsTotal: 0 }
+//       existing.transactionsTotal = row.total ?? 0
+//       byRegisterMap.set(register, existing)
+//     }
+
+//     const byRegister = Array.from(byRegisterMap.values())
+//       .map((r) => ({
+//         register: r.register,
+//         arIncurredTotal: Math.round((r.arIncurredTotal ?? 0) * 100) / 100,
+//         transactionsTotal: Math.round((r.transactionsTotal ?? 0) * 100) / 100,
+//         match: Math.round((r.arIncurredTotal ?? 0) * 100) === Math.round((r.transactionsTotal ?? 0) * 100),
+//       }))
+//       .sort((a, b) => a.register.localeCompare(b.register, undefined, { numeric: true }))
+
+//     const arIncurredTotal = byRegister.reduce((sum, r) => sum + r.arIncurredTotal, 0)
+//     const transactionsTotal = byRegister.reduce((sum, r) => sum + r.transactionsTotal, 0)
+//     const match = Math.round(arIncurredTotal * 100) === Math.round(transactionsTotal * 100)
+
+//     res.json({
+//       arIncurredTotal: Math.round(arIncurredTotal * 100) / 100,
+//       transactionsTotal: Math.round(transactionsTotal * 100) / 100,
+//       match,
+//       byRegister,
+//     })
+//   } catch (err) {
+//     console.error('AR check error:', err)
+//     res.status(500).json({ error: 'Failed to check AR totals' })
+//   }
+// })
+
+// Monthly A/R paid report for the two Wavers sites — every A/R customer entry
+// with a non-zero `paid` amount, grouped by site. Consumed by Desk's
+// "A/R Paid Report" page, which renders the .docx client-side.
+//
+// MUST stay above router.get('/:id') below, or Express hands 'ar-paid-report'
+// to findById and the request 500s on a CastError.
 router.get('/ar-check', async (req, res) => {
   const { site, date } = req.query
   if (!site || !date) return res.status(400).json({ error: 'site and date required' })
@@ -1472,21 +2025,41 @@ router.get('/ar-check', async (req, res) => {
     const start = new Date(date); start.setUTCHours(0, 0, 0, 0)
     const end = new Date(date); end.setUTCHours(23, 59, 59, 999)
 
-    const [shiftAgg] = await CashSummary.aggregate([
-      { $match: { site, date: { $gte: start, $lte: end } } },
-      { $group: { _id: null, total: { $sum: { $ifNull: ['$arIncurred', 0] } } } },
-    ])
+    // 1. Fetch POS Cash Summary documents
+    const cashSummaries = await CashSummary.find(
+      { site, date: { $gte: start, $lte: end } },
+      { shift_number: 1, arCustomers: 1, arIncurred: 1 }
+    ).lean()
 
-    // Transactions are stored as exact submission timestamps in UTC, so we must
-    // query using the site's local timezone day boundaries, not UTC midnight.
-    // Fallback branch covers PO docs (and all Kardpoll docs) that predate the
-    // dateStr migration and don't have a dateStr field yet.
+    const extractRegister = (shiftStr) => {
+      const s = String(shiftStr || '').trim()
+      if (/^[1-4]/.test(s)) return s.charAt(0)
+      return 'Unassigned'
+    }
+
+    const posEntries = []
+    for (const doc of cashSummaries) {
+      const register = extractRegister(doc.shift_number)
+      if (Array.isArray(doc.arCustomers)) {
+        for (const item of doc.arCustomers) {
+          if (item && item.name && (item.incurred || 0) > 0) {
+            posEntries.push({
+              register,
+              customerName: String(item.name).trim(),
+              incurred: Number(item.incurred) || 0,
+            })
+          }
+        }
+      }
+    }
+
+    // 2. Fetch Hub Transactions
     const location = await Location.findOne({ site }, { timezone: 1 }).lean()
     const tz = location?.timezone || 'America/Toronto'
     const txStart = DateTime.fromISO(date, { zone: tz }).startOf('day').toJSDate()
     const txEnd = DateTime.fromISO(date, { zone: tz }).endOf('day').toJSDate()
 
-    const [txAgg] = await Transactions.aggregate([
+    const hubEntries = await Transactions.aggregate([
       {
         $match: {
           stationName: site,
@@ -1497,21 +2070,163 @@ router.get('/ar-check', async (req, res) => {
           ],
         },
       },
-      { $group: { _id: null, total: { $sum: { $ifNull: ['$amount', 0] } } } },
+      {
+        $group: {
+          _id: {
+            register: { $toString: { $ifNull: ['$register', 'Unassigned'] } },
+            customerName: { $trim: { input: { $ifNull: ['$customerName', 'Unknown'] } } },
+          },
+          total: { $sum: { $ifNull: ['$amount', 0] } },
+        },
+      },
     ])
 
-    const arIncurredTotal = shiftAgg?.total ?? 0
-    const transactionsTotal = txAgg?.total ?? 0
+    const normalize = (str) => str.toLowerCase().replace(/[^a-z0-9]/g, '')
+
+    // 3. Build strict structure: Map<Register, Map<CustomerKey, Record>>
+    const registerMap = new Map()
+
+    const getOrCreateRegister = (reg) => {
+      const regKey = reg && reg !== '' ? reg : 'Unassigned'
+      if (!registerMap.has(regKey)) {
+        registerMap.set(regKey, new Map())
+      }
+      return registerMap.get(regKey)
+    }
+
+    // Populate POS (Left Side) strictly in its own register map
+    for (const item of posEntries) {
+      const custMap = getOrCreateRegister(item.register)
+      const normName = normalize(item.customerName)
+
+      let existingKey = Array.from(custMap.keys()).find(
+        (k) => k === normName || k.startsWith(normName) || normName.startsWith(k)
+      )
+
+      if (!existingKey) {
+        existingKey = normName
+        custMap.set(existingKey, {
+          posCustomerName: item.customerName,
+          hubCustomerName: null,
+          arIncurredTotal: 0,
+          transactionsTotal: 0,
+        })
+      }
+
+      const record = custMap.get(existingKey)
+      record.arIncurredTotal += item.incurred
+    }
+
+    // Populate Hub (Right Side) strictly in ITS specified register map
+    for (const row of hubEntries) {
+      const regKey = row._id.register && row._id.register !== '' ? String(row._id.register) : 'Unassigned'
+      const custMap = getOrCreateRegister(regKey)
+      const rawName = row._id.customerName || 'Unknown'
+      const normName = normalize(rawName)
+
+      // Search ONLY within this specific register
+      let existingKey = Array.from(custMap.keys()).find(
+        (k) => k === normName || k.startsWith(normName) || normName.startsWith(k)
+      )
+
+      if (!existingKey) {
+        existingKey = normName
+        custMap.set(existingKey, {
+          posCustomerName: null,
+          hubCustomerName: rawName,
+          arIncurredTotal: 0,
+          transactionsTotal: 0,
+        })
+      }
+
+      const record = custMap.get(existingKey)
+      if (!record.hubCustomerName) {
+        record.hubCustomerName = rawName
+      }
+      record.transactionsTotal += row.total ?? 0
+    }
+
+    // 4. Transform output data
+    const byRegister = Array.from(registerMap.entries()).map(([register, custMap]) => {
+      const customers = Array.from(custMap.values()).map((c) => {
+        const arIncurredTotal = Math.round((c.arIncurredTotal || 0) * 100) / 100
+        const transactionsTotal = Math.round((c.transactionsTotal || 0) * 100) / 100
+        const diff = Math.round((transactionsTotal - arIncurredTotal) * 100) / 100
+
+        return {
+          customerName: c.posCustomerName || c.hubCustomerName || 'Unknown',
+          posCustomerName: c.posCustomerName || '—',
+          hubCustomerName: c.hubCustomerName || '—',
+          arIncurredTotal,
+          transactionsTotal,
+          diff,
+          match: arIncurredTotal === transactionsTotal,
+        }
+      }).sort((a, b) => a.customerName.localeCompare(b.customerName))
+
+      const regArIncurred = customers.reduce((sum, c) => sum + c.arIncurredTotal, 0)
+      const regTxTotal = customers.reduce((sum, c) => sum + c.transactionsTotal, 0)
+
+      return {
+        register,
+        arIncurredTotal: Math.round(regArIncurred * 100) / 100,
+        transactionsTotal: Math.round(regTxTotal * 100) / 100,
+        match: Math.round(regArIncurred * 100) === Math.round(regTxTotal * 100),
+        customers,
+      }
+    }).sort((a, b) => a.register.localeCompare(b.register, undefined, { numeric: true }))
+
+    const arIncurredTotal = byRegister.reduce((sum, r) => sum + r.arIncurredTotal, 0)
+    const transactionsTotal = byRegister.reduce((sum, r) => sum + r.transactionsTotal, 0)
     const match = Math.round(arIncurredTotal * 100) === Math.round(transactionsTotal * 100)
 
     res.json({
       arIncurredTotal: Math.round(arIncurredTotal * 100) / 100,
       transactionsTotal: Math.round(transactionsTotal * 100) / 100,
       match,
+      byRegister,
     })
   } catch (err) {
     console.error('AR check error:', err)
     res.status(500).json({ error: 'Failed to check AR totals' })
+  }
+})
+
+router.get('/ar-paid-report', async (req, res) => {
+  try {
+    const month = String(req.query.month || '')
+
+    if (!MONTH_RE.test(month)) {
+      return res.status(400).json({ error: 'month must be YYYY-MM' })
+    }
+    // `paid` was first persisted 2026-07-03; earlier shifts have paid: null, so an
+    // older month would report zero payments rather than the truth.
+    if (month < MIN_MONTH) {
+      return res
+        .status(400)
+        .json({ error: `Reports are only available from ${MIN_MONTH} onward` })
+    }
+
+    const { start, end } = monthWindowUtc(month)
+    const sites = AR_PAID_REPORT_SITES.map((s) => s.site)
+
+    // No isChickenDelight filter — a payment taken on a Chicken Delight shift is
+    // still a payment, and the report's job is to find every one of them.
+    const docs = await CashSummary.find(
+      { site: { $in: sites }, date: { $gte: start, $lt: end } },
+      { site: 1, shift_number: 1, date: 1, arCustomers: 1 },
+    ).lean()
+
+    const report = buildArPaidReport({
+      month,
+      siteConfigs: AR_PAID_REPORT_SITES,
+      docs,
+    })
+
+    res.json({ ...report, generatedAt: new Date().toISOString() })
+  } catch (err) {
+    console.error('AR paid report error:', err)
+    res.status(500).json({ error: 'Failed to build A/R paid report' })
   }
 })
 
@@ -1633,6 +2348,7 @@ router.put('/:id', async (req, res) => {
               couponsAccepted: parsed.couponsAccepted,
               giftCertificates: parsed.giftCertificates,
               cashOffCoupons: parsed.cashOffCoupons,
+              gasolineCoupons: parsed.gasolineCoupons,
               otherCoupons: parsed.otherCoupons,
               canadianCash: (parsed.canadianCash || 0) + (parsed.usCash || 0),
               cashOnHand: parsed.cashOnHand,
@@ -1745,6 +2461,7 @@ router.put('/:id', async (req, res) => {
       couponsAccepted: norm(ev.couponsAccepted ?? existing.couponsAccepted),
       giftCertificates: norm(ev.giftCertificates ?? existing.giftCertificates),
       cashOffCoupons: norm(ev.cashOffCoupons ?? existing.cashOffCoupons),
+      gasolineCoupons: norm(ev.gasolineCoupons ?? existing.gasolineCoupons),
       otherCoupons: norm(ev.otherCoupons ?? existing.otherCoupons),
       canadianCash: norm(ev.canadianCash ?? existing.canadianCash),
       cashOnHand: norm(ev.cashOnHand ?? existing.cashOnHand),
@@ -1806,4 +2523,72 @@ router.delete('/:id', async (req, res) => {
   }
 })
 
-module.exports = router
+// ─── Custom attributes ──────────────────────────────────────────────────────
+// Lets a caller attach an ad-hoc, typed top-level field to a CashSummary doc
+// (e.g. "posTotal" = 123.45 as a Double) without it being part of the fixed
+// schema. Written via the raw driver collection (CashSummary.collection),
+// bypassing Mongoose casting/strict-mode entirely, so the schema itself stays
+// untouched and every other route's validation is unaffected. Name collisions
+// with any real (current or historical) schema field are rejected outright —
+// see utils/shiftAttributes.js for the validation/casting logic and why.
+
+const RESERVED_ATTRIBUTE_NAMES = buildReservedAttributeNames(CashSummary)
+
+router.put('/:id/attributes/:name', async (req, res) => {
+  try {
+    const { id, name } = req.params
+    const { value, type } = req.body
+
+    if (!isValidAttributeName(name)) {
+      return res.status(400).json({
+        error: 'Attribute name must start with a letter and contain only letters, numbers, and underscores.',
+      })
+    }
+    if (RESERVED_ATTRIBUTE_NAMES.has(name)) {
+      return res.status(400).json({
+        error: `"${name}" is a reserved field name and can't be used as a custom attribute.`,
+      })
+    }
+    if (value === undefined || value === null || value === '') {
+      return res.status(400).json({ error: 'A value is required.' })
+    }
+
+    const cast = castAttributeValue(type, value)
+    if (cast.error) return res.status(400).json({ error: cast.error })
+
+    const result = await CashSummary.collection.updateOne(
+      { _id: new mongoose.Types.ObjectId(id) },
+      { $set: { [name]: cast.value } }
+    )
+    if (result.matchedCount === 0) return res.status(404).json({ error: 'Not found' })
+
+    const updated = await CashSummary.findById(id).lean()
+    res.json(updated)
+  } catch (err) {
+    console.error('CashSummary set attribute error:', err)
+    res.status(500).json({ error: 'Failed to set attribute' })
+  }
+})
+
+router.delete('/:id/attributes/:name', async (req, res) => {
+  try {
+    const { id, name } = req.params
+
+    const result = await CashSummary.collection.updateOne(
+      { _id: new mongoose.Types.ObjectId(id) },
+      { $unset: { [name]: '' } }
+    )
+    if (result.matchedCount === 0) return res.status(404).json({ error: 'Not found' })
+
+    const updated = await CashSummary.findById(id).lean()
+    res.json(updated)
+  } catch (err) {
+    console.error('CashSummary remove attribute error:', err)
+    res.status(500).json({ error: 'Failed to remove attribute' })
+  }
+})
+
+router.getDepositSlipAttachment = getDepositSlipAttachment;
+router.attachmentContentToBase64 = attachmentContentToBase64;
+
+module.exports = router;

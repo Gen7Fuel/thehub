@@ -31,6 +31,8 @@ const {
     setPoNumber: vi.fn(),
     customerName: 'Jane Doe' as string,
     setCustomerName: vi.fn(),
+    customerNameSelected: true as boolean,
+    setCustomerNameSelected: vi.fn(),
     driverName: 'Bob Smith' as string,
     setDriverName: vi.fn(),
     vehicleInfo: 'Ford F-150' as string,
@@ -47,6 +49,8 @@ const {
     setPurchaseType: vi.fn(),
     itemsDescription: '' as string,
     setItemsDescription: vi.fn(),
+    register: '' as string,
+    setRegister: vi.fn(),
     receipt: 'data:image/png;base64,abc' as string | null,
     setReceipt: vi.fn(),
     signature: 'data:image/png;base64,sig' as string | null,
@@ -275,8 +279,10 @@ const renderWithQuery = (ui: React.ReactElement) =>
 /** Reset mockStore back to safe defaults before each test. */
 const resetStore = () => {
   mockStore.fleetCardNumber = ''
+  mockStore.noFleetCard = true
   mockStore.poNumber = ''
   mockStore.customerName = 'Jane Doe'
+  mockStore.customerNameSelected = true
   mockStore.driverName = 'Bob Smith'
   mockStore.vehicleInfo = 'Ford F-150'
   mockStore.licensePlate = ''
@@ -285,6 +291,7 @@ const resetStore = () => {
   mockStore.fuelType = 'UNL'
   mockStore.purchaseType = 'fuel'
   mockStore.itemsDescription = ''
+  mockStore.register = ''
   mockStore.receipt = 'data:image/png;base64,abc'
   mockStore.signature = 'data:image/png;base64,sig'
   mockStore.date = new Date(2026, 0, 15)
@@ -310,23 +317,43 @@ describe('PO Form — index.tsx', () => {
     mockAxiosGet.mockResolvedValue({ data: [] })
   })
 
-  it('renders the location picker and OTP input by default', async () => {
-    renderWithSuspense(<POForm />)
+  it('renders the location picker and defaults to "no fleet card", leaving Upload Receipt enabled', async () => {
+    // receipt must be null so the camera/upload button is rendered (not "View Captured Receipt")
+    mockStore.receipt = null
+    renderWithQuery(<POForm />)
     // Allow up to 5 s on the first render — the lazy route module needs to load
     await waitFor(() => {
       expect(screen.getByTestId('date-picker')).toBeInTheDocument()
+      expect(screen.getByText('Customer has fleet card')).toBeInTheDocument()
+    }, { timeout: 5000 })
+
+    // The switch defaults off (no card) — most PO customers don't carry one — so the
+    // OTP stays hidden and the button isn't blocked waiting on a card verification.
+    expect(screen.queryByTestId('otp-input')).not.toBeInTheDocument()
+    expect(screen.getByText(/no fleet card/i)).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /upload receipt/i })).not.toBeDisabled()
+  })
+
+  it('shows the Fleet Card OTP input once the switch is toggled to "has a fleet card"', async () => {
+    mockStore.noFleetCard = false
+    renderWithQuery(<POForm />)
+
+    await waitFor(() => {
       expect(screen.getByTestId('otp-input')).toBeInTheDocument()
     }, { timeout: 5000 })
   })
 
   it('shows a PO uniqueness error when the uniqueness API returns not-unique', async () => {
+    // Only CLASSIC_PO_NUMBER_SITES show the PO Number path.
+    mockStore.stationName = 'Wavers West'
     mockStore.poNumber = '12345'
     mockAxiosGet.mockImplementation((url: string) => {
       if (url.includes('ar-customers')) return Promise.resolve({ data: [] })
+      if (url.includes('/api/locations')) return Promise.resolve({ data: [] })
       return Promise.resolve({ data: { unique: false } })
     })
 
-    renderWithSuspense(<POForm />)
+    renderWithQuery(<POForm />)
     const otpInput = await waitFor(() => screen.getByTestId('otp-input'), { timeout: 5000 })
     fireEvent.blur(otpInput)
 
@@ -337,13 +364,16 @@ describe('PO Form — index.tsx', () => {
   })
 
   it('clears the PO error when the uniqueness API confirms the number is unique', async () => {
+    // Only CLASSIC_PO_NUMBER_SITES show the PO Number path.
+    mockStore.stationName = 'Wavers West'
     mockStore.poNumber = '12345'
     mockAxiosGet.mockImplementation((url: string) => {
       if (url.includes('ar-customers')) return Promise.resolve({ data: [] })
+      if (url.includes('/api/locations')) return Promise.resolve({ data: [] })
       return Promise.resolve({ data: { unique: true } })
     })
 
-    renderWithSuspense(<POForm />)
+    renderWithQuery(<POForm />)
     const otpInput = await waitFor(() => screen.getByTestId('otp-input'), { timeout: 5000 })
     fireEvent.blur(otpInput)
 
@@ -357,7 +387,7 @@ describe('PO Form — index.tsx', () => {
     // receipt must be null so the camera/upload button is rendered (not "View Captured Receipt")
     mockStore.receipt = null
     mockStore.customerName = ''
-    renderWithSuspense(<POForm />)
+    renderWithQuery(<POForm />)
 
     await waitFor(() => {
       const uploadBtn = screen.getByRole('button', { name: /upload receipt/i })
@@ -365,19 +395,91 @@ describe('PO Form — index.tsx', () => {
     }, { timeout: 5000 })
   })
 
-  it.each(['Rankin', 'Sarnia', 'Walpole', 'Jocko Point', 'Charlies'])('does not render the Number section or OTP input for site "%s"', async (site) => {
-    mockStore.stationName = site
-    renderWithSuspense(<POForm />)
+  it('disables the Upload Receipt button when a customer name was typed but never picked from the dropdown', async () => {
+    mockStore.receipt = null
+    mockStore.customerName = 'Some Random Walk-in'
+    mockStore.customerNameSelected = false
+    renderWithQuery(<POForm />)
 
     await waitFor(() => {
-      expect(screen.getByTestId('date-picker')).toBeInTheDocument()
+      const uploadBtn = screen.getByRole('button', { name: /upload receipt/i })
+      expect(uploadBtn).toBeDisabled()
+    }, { timeout: 5000 })
+  })
+
+  it('flags the customer name as unselected as soon as the text box is edited', async () => {
+    mockStore.receipt = null
+    renderWithQuery(<POForm />)
+
+    const nameInput = await waitFor(() => screen.getByDisplayValue('Jane Doe'), { timeout: 5000 })
+    fireEvent.change(nameInput, { target: { value: 'Jane Doe Jr' } })
+
+    expect(mockStore.setCustomerNameSelected).toHaveBeenCalledWith(false)
+  })
+
+  it('picking a suggestion from the dropdown marks the customer name as selected', async () => {
+    mockStore.receipt = null
+    mockAxiosGet.mockImplementation((url: string) => {
+      if (url.includes('ar-customers/quick-select')) return Promise.resolve({ data: [] })
+      if (url.includes('ar-customers')) {
+        return Promise.resolve({ data: [{ _id: 'c1', name: 'Jane Doe Trucking' }] })
+      }
+      return Promise.resolve({ data: [] })
+    })
+
+    renderWithQuery(<POForm />)
+
+    const nameInput = await waitFor(() => screen.getByDisplayValue('Jane Doe'), { timeout: 5000 })
+    fireEvent.focus(nameInput)
+    const suggestion = await waitFor(() => screen.getByText('Jane Doe Trucking'), { timeout: 5000 })
+    fireEvent.mouseDown(suggestion)
+
+    expect(mockStore.setCustomerName).toHaveBeenCalledWith('Jane Doe Trucking')
+    expect(mockStore.setCustomerNameSelected).toHaveBeenCalledWith(true)
+  })
+
+  it('clears an unselected, hand-typed customer name when clicking away from the field', async () => {
+    mockStore.receipt = null
+    mockStore.customerName = 'Some Random Walk-in'
+    mockStore.customerNameSelected = false
+    renderWithQuery(<POForm />)
+
+    const nameInput = await waitFor(() => screen.getByDisplayValue('Some Random Walk-in'), { timeout: 5000 })
+    fireEvent.focus(nameInput)
+    fireEvent.mouseDown(document.body)
+
+    await waitFor(() => expect(mockStore.setCustomerName).toHaveBeenCalledWith(''))
+  })
+
+  it('does not clear the field when clicking away after a valid selection', async () => {
+    mockStore.receipt = null
+    mockStore.customerName = 'Jane Doe'
+    mockStore.customerNameSelected = true
+    renderWithQuery(<POForm />)
+
+    const nameInput = await waitFor(() => screen.getByDisplayValue('Jane Doe'), { timeout: 5000 })
+    fireEvent.focus(nameInput)
+    fireEvent.mouseDown(document.body)
+
+    expect(mockStore.setCustomerName).not.toHaveBeenCalledWith('')
+  })
+
+  it.each(['Rankin', 'Sarnia', 'Walpole', 'Jocko Point', 'Charlies'])('shows the Fleet Card switch (defaulting to no card) for site "%s"', async (site) => {
+    mockStore.stationName = site
+    mockStore.receipt = null
+    renderWithQuery(<POForm />)
+
+    await waitFor(() => {
+      expect(screen.getByText('Customer has fleet card')).toBeInTheDocument()
     }, { timeout: 5000 })
 
     expect(screen.queryByText('Number')).not.toBeInTheDocument()
+    // Defaults off — OTP hidden, button not blocked on a card.
     expect(screen.queryByTestId('otp-input')).not.toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /upload receipt/i })).not.toBeDisabled()
   })
 
-  it.each(['Rankin', 'Sarnia', 'Walpole', 'Jocko Point', 'Charlies'])('does not auto-fill a fleet card from quick-select on site "%s"', async (site) => {
+  it.each(['Rankin', 'Sarnia', 'Walpole', 'Jocko Point', 'Charlies'])('auto-fills a fleet card from quick-select on site "%s"', async (site) => {
     mockStore.stationName = site
     mockAxiosGet.mockImplementation((url: string) => {
       if (url.includes('quick-select')) {
@@ -388,13 +490,50 @@ describe('PO Form — index.tsx', () => {
       return Promise.resolve({ data: [] })
     })
 
-    renderWithSuspense(<POForm />)
+    renderWithQuery(<POForm />)
     const quickBtn = await waitFor(() => screen.getByRole('button', { name: 'Acme' }), { timeout: 5000 })
     fireEvent.click(quickBtn)
 
     await waitFor(() => expect(mockStore.setCustomerName).toHaveBeenCalledWith('Acme Co'))
-    expect(mockStore.setFleetCardNumber).not.toHaveBeenCalledWith('1234567890123456')
-    expect(screen.queryByTestId('otp-input')).not.toBeInTheDocument()
+    expect(mockStore.setCustomerNameSelected).toHaveBeenCalledWith(true)
+    expect(mockStore.setFleetCardNumber).toHaveBeenCalledWith('1234567890123456')
+  })
+
+  it('un-marks the customer name as selected when tapping an already-selected quick-select button again', async () => {
+    mockAxiosGet.mockImplementation((url: string) => {
+      if (url.includes('quick-select')) {
+        return Promise.resolve({
+          data: [{ _id: 'qc1', name: 'Acme Co', fleetCardNumber: '1234567890123456', order: 0 }],
+        })
+      }
+      return Promise.resolve({ data: [] })
+    })
+
+    renderWithQuery(<POForm />)
+    const quickBtn = await waitFor(() => screen.getByRole('button', { name: 'Acme' }), { timeout: 5000 })
+
+    fireEvent.click(quickBtn)
+    await waitFor(() => expect(mockStore.setCustomerNameSelected).toHaveBeenCalledWith(true))
+
+    // The mocked store doesn't reflect the setState call, so selectedQuickCustomerId
+    // (local component state) already toggled on from the first tap; tapping again hits
+    // the deselect branch.
+    fireEvent.click(quickBtn)
+    expect(mockStore.setCustomerName).toHaveBeenCalledWith('')
+    expect(mockStore.setCustomerNameSelected).toHaveBeenCalledWith(false)
+  })
+
+  it.each(['Wavers West', 'Wavers East', 'Oliver', 'Osoyoos'])('shows the classic PO Number / Fleet Card toggle (no Switch) for site "%s"', async (site) => {
+    mockStore.stationName = site
+    renderWithQuery(<POForm />)
+
+    await waitFor(() => {
+      expect(screen.getByText('Number')).toBeInTheDocument()
+    }, { timeout: 5000 })
+
+    expect(screen.queryByText('Customer has fleet card')).not.toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'PO Number' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Fleet Card' })).toBeInTheDocument()
   })
 
   it('shows only the first word of a customer name on the quick-select button', async () => {
@@ -407,7 +546,7 @@ describe('PO Form — index.tsx', () => {
       return Promise.resolve({ data: [] })
     })
 
-    renderWithSuspense(<POForm />)
+    renderWithQuery(<POForm />)
 
     await waitFor(() =>
       expect(screen.getByRole('button', { name: 'Batchewana' })).toBeInTheDocument()
@@ -428,7 +567,7 @@ describe('PO Form — index.tsx', () => {
       return Promise.resolve({ data: [] })
     })
 
-    renderWithSuspense(<POForm />)
+    renderWithQuery(<POForm />)
 
     const nameInput = await waitFor(() => screen.getByDisplayValue('Jane Doe'), { timeout: 5000 })
     fireEvent.focus(nameInput)
@@ -447,7 +586,7 @@ describe('PO Form — index.tsx', () => {
       return Promise.resolve({ data: [] })
     })
 
-    renderWithSuspense(<POForm />)
+    renderWithQuery(<POForm />)
 
     await waitFor(() => {
       const cached = localStorage.getItem('po_cachedArCustomers')
@@ -467,7 +606,7 @@ describe('PO Form — index.tsx', () => {
       return Promise.resolve({ data: [] })
     })
 
-    renderWithSuspense(<POForm />)
+    renderWithQuery(<POForm />)
 
     await waitFor(() =>
       expect(screen.getByRole('button', { name: 'Cached' })).toBeInTheDocument()
@@ -486,7 +625,7 @@ describe('PO Form — index.tsx', () => {
       return Promise.resolve({ data: [] })
     })
 
-    renderWithSuspense(<POForm />)
+    renderWithQuery(<POForm />)
 
     const quickBtn = await waitFor(() => screen.getByRole('button', { name: 'Three Fires' }), { timeout: 5000 })
     expect(screen.queryByText('Three', { selector: 'button' })).not.toBeInTheDocument()
@@ -498,12 +637,74 @@ describe('PO Form — index.tsx', () => {
   it.each(['Rankin', 'Sarnia', 'Walpole', 'Jocko Point', 'Charlies'])('does not pad poNumber to "00000" when clicking Upload Receipt on site "%s"', async (site) => {
     mockStore.stationName = site
     mockStore.receipt = null
-    renderWithSuspense(<POForm />)
+    renderWithQuery(<POForm />)
 
     const uploadBtn = await waitFor(() => screen.getByRole('button', { name: /upload receipt/i }), { timeout: 5000 })
     fireEvent.click(uploadBtn)
 
     expect(mockStore.setPoNumber).not.toHaveBeenCalledWith('00000')
+  })
+
+  it('hides the Register selector when the site has 0 or 1 registers configured', async () => {
+    mockStore.receipt = null
+    mockAxiosGet.mockImplementation((url: string) => {
+      if (url.includes('/api/locations')) {
+        return Promise.resolve({
+          data: [{ _id: 'loc1', stationName: 'TestSite', registers: [{ number: '1' }] }],
+        })
+      }
+      return Promise.resolve({ data: [] })
+    })
+
+    renderWithQuery(<POForm />)
+
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: /upload receipt/i })).toBeInTheDocument()
+    }, { timeout: 5000 })
+
+    expect(screen.queryByText('Register')).not.toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /upload receipt/i })).not.toBeDisabled()
+  })
+
+  it('shows the Register dropdown and disables Upload Receipt until one is picked, for a site with 2+ registers', async () => {
+    mockStore.receipt = null
+    mockStore.register = ''
+    mockAxiosGet.mockImplementation((url: string) => {
+      if (url.includes('/api/locations')) {
+        return Promise.resolve({
+          data: [{ _id: 'loc1', stationName: 'TestSite', registers: [{ number: '1' }, { number: '2' }] }],
+        })
+      }
+      return Promise.resolve({ data: [] })
+    })
+
+    renderWithQuery(<POForm />)
+
+    await waitFor(() => {
+      expect(screen.getByText('Register')).toBeInTheDocument()
+      expect(screen.getByText('Select Register')).toBeInTheDocument()
+    }, { timeout: 5000 })
+
+    expect(screen.getByRole('button', { name: /upload receipt/i })).toBeDisabled()
+  })
+
+  it('enables Upload Receipt once a register is selected, for a site with 2+ registers', async () => {
+    mockStore.receipt = null
+    mockStore.register = '2'
+    mockAxiosGet.mockImplementation((url: string) => {
+      if (url.includes('/api/locations')) {
+        return Promise.resolve({
+          data: [{ _id: 'loc1', stationName: 'TestSite', registers: [{ number: '1' }, { number: '2' }] }],
+        })
+      }
+      return Promise.resolve({ data: [] })
+    })
+
+    renderWithQuery(<POForm />)
+
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: /upload receipt/i })).not.toBeDisabled()
+    }, { timeout: 5000 })
   })
 })
 
@@ -733,6 +934,65 @@ describe('PO List — list.tsx', () => {
     // Not counted as "pending upload" — it's terminal, not in progress.
     expect(screen.queryByText(/pending upload/i)).not.toBeInTheDocument()
   })
+
+  it('shows the one queued purchase order the background sync loop is actively uploading as "Sending…", distinct from "Pending upload"', async () => {
+    mockAxiosGet.mockResolvedValue({ status: 200, data: [] })
+    mockGetPendingActions.mockResolvedValueOnce([
+      {
+        type: 'CREATE_PURCHASE_ORDER',
+        queuedAt: 11111,
+        receipt: 'data:image/png;base64,sending',
+        syncing: true,
+        payload: {
+          source: 'PO',
+          date: '2026-01-01',
+          stationName: 'Rankin',
+          fleetCardNumber: '',
+          poNumber: '22222',
+          quantity: 15,
+          amount: 30,
+          productCode: 'UNL',
+          customerName: 'Uploading Customer',
+          driverName: 'Uploading Driver',
+          vehicleMakeModel: '',
+          licensePlate: '',
+          purchaseType: 'fuel',
+          itemsDescription: '',
+        },
+      },
+      {
+        type: 'CREATE_PURCHASE_ORDER',
+        queuedAt: 22222,
+        receipt: 'data:image/png;base64,queued',
+        payload: {
+          source: 'PO',
+          date: '2026-01-01',
+          stationName: 'Rankin',
+          fleetCardNumber: '',
+          poNumber: '33333',
+          quantity: 5,
+          amount: 10,
+          productCode: 'UNL',
+          customerName: 'Waiting Customer',
+          driverName: 'Waiting Driver',
+          vehicleMakeModel: '',
+          licensePlate: '',
+          purchaseType: 'fuel',
+          itemsDescription: '',
+        },
+      },
+    ])
+
+    renderWithSuspense(<POList />)
+
+    await waitFor(() => expect(screen.getByText('Uploading Customer')).toBeInTheDocument())
+    expect(screen.getByText('Waiting Customer')).toBeInTheDocument()
+
+    // The syncing entry shows "Sending…", not "Pending upload".
+    expect(screen.getAllByText(/sending/i).length).toBeGreaterThan(0)
+    // The still-queued entry shows "Pending upload", not "Sending…".
+    expect(screen.getAllByText(/pending upload/i).length).toBeGreaterThan(0)
+  })
 })
 
 // ─── PO Signature (signature.tsx) ─────────────────────────────────────────────
@@ -812,6 +1072,17 @@ describe('PO Receipt — receipt.tsx', () => {
 
   it('redirects to /po when required form fields are missing', async () => {
     mockStore.quantity = 0 // triggers the guard
+
+    renderWithQuery(<POReceipt />)
+
+    await waitFor(() =>
+      expect(mockNavigate).toHaveBeenCalledWith({ to: '/po' })
+    )
+  })
+
+  it('redirects to /po when the customer name was typed but never selected from the AR customer list', async () => {
+    mockStore.customerName = 'Some Random Walk-in' // non-empty, but never picked from the dropdown
+    mockStore.customerNameSelected = false
 
     renderWithQuery(<POReceipt />)
 

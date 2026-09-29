@@ -76,7 +76,7 @@ function RouteComponent() {
             <Button
               {...(!isReportActive && { variant: 'outline' } as object)}
               // className={access.component_cycle_count_console ? 'rounded-none' : 'rounded-l-none'} //markpoint
-              className={access?.cycleCount?.manageCount ? 'rounded-none' : 'rounded-l-none'}
+              className={access?.cycleCount?.manageCount?.value ? 'rounded-none' : 'rounded-l-none'}
             >
               Report
             </Button>
@@ -95,7 +95,7 @@ function RouteComponent() {
           </Link>
         )} */}
 
-        {access?.cycleCount?.manageCount && (
+        {access?.cycleCount?.manageCount?.value && (
           <Link to="/cycle-count/manage" activeOptions={{ exact: true }}>
             <Button
               {...(!isManageCountActive && { variant: 'outline' } as object)}

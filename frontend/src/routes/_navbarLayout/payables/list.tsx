@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useRef } from 'react'
+import React, { useCallback, useEffect, useState, useRef } from 'react'
 import { createFileRoute, useNavigate } from '@tanstack/react-router'
 import { DatePickerWithRange } from '@/components/custom/datePickerWithRange'
 import type { DateRange } from "react-day-picker"
@@ -8,7 +8,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '
 import { getStartAndEndOfToday, uploadBase64Image } from '@/lib/utils'
 import { format } from 'date-fns'
 import { domain } from '@/lib/constants'
-import { Eye, ChevronLeft, ChevronRight, ExternalLink, CalendarIcon, Camera, Loader2 } from 'lucide-react'
+import { Eye, ChevronLeft, ChevronRight, ExternalLink, CalendarIcon, Camera, Loader2, AlertTriangle } from 'lucide-react'
 import axios from "axios"
 import { useAuth } from "@/context/AuthContext"
 import { useSite } from "@/context/SiteContext";
@@ -17,6 +17,7 @@ import PayablePDF from '@/components/custom/PayablePDF'
 import { pdf } from '@react-pdf/renderer'
 import { Calendar } from '@/components/ui/calendar'
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
+import { getPendingActions, deletePendingAction } from '@/lib/orderRecIndexedDB'
 
 interface Payable {
   _id: string
@@ -53,6 +54,12 @@ function RouteComponent() {
   const [_, setTimezone] = useState<string>(user?.timezone || "America/Toronto")
   const [payables, setPayables] = useState<Payable[]>([])
   const [loading, setLoading] = useState(false)
+
+  // Payables created offline and not yet synced to the server (read
+  // straight from the shared IndexedDB pending-action queue in
+  // lib/orderRecIndexedDB — same queue and sync loop the PO module uses).
+  const [pendingPayables, setPendingPayables] = useState<any[]>([])
+  const prevPendingCountRef = useRef(0)
 
   // Image modal state
   const [imageModal, setImageModal] = useState<{
@@ -249,10 +256,93 @@ function RouteComponent() {
         return;
       }
       console.error("Error fetching payables:", error);
-      setPayables([]);
+      // Keep showing whatever was last successfully fetched (e.g. while
+      // offline) instead of blanking the table — a failed refresh isn't "no
+      // payables". Mirrors po/list.tsx's fetchPurchaseOrders.
     } finally {
       setLoading(false)
     }
+  }
+
+  const refreshPendingPayables = useCallback(async () => {
+    try {
+      const actions = await getPendingActions()
+      setPendingPayables(actions.filter((a: any) => a?.type === 'CREATE_PAYABLE'))
+    } catch (err) {
+      console.error('Error reading pending payables:', err)
+    }
+  }, [])
+
+  // Poll the local offline queue so a payable saved while offline shows up
+  // here immediately, and disappears once the background sync loop clears
+  // it. Mirrors po/list.tsx's pending-queue polling.
+  useEffect(() => {
+    refreshPendingPayables()
+    const interval = setInterval(refreshPendingPayables, 5000)
+    const onOnline = () => setTimeout(refreshPendingPayables, 2000)
+    window.addEventListener('online', onOnline)
+    return () => {
+      clearInterval(interval)
+      window.removeEventListener('online', onOnline)
+    }
+  }, [refreshPendingPayables])
+
+  // A drop in the pending count means the sync loop just posted one or more
+  // queued payables to the server — refresh the server list to pick them up.
+  useEffect(() => {
+    if (pendingPayables.length < prevPendingCountRef.current) {
+      fetchPayables()
+    }
+    prevPendingCountRef.current = pendingPayables.length
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pendingPayables.length])
+
+  const filteredPendingActions = pendingPayables
+    .filter((a: any) => a?.payload?.location === location)
+    .filter((a: any) => {
+      if (!date?.from || !date?.to) return true
+      const d = a?.payload?.date
+      return d && d >= format(date.from, 'yyyy-MM-dd') && d <= format(date.to, 'yyyy-MM-dd')
+    })
+
+  const mapPendingAction = (a: any) => ({
+    _id: `pending-${a.queuedAt}`,
+    vendorName: a.payload.vendorName,
+    location: { _id: '', stationName: a.payload.location, csoCode: '' },
+    notes: a.payload.notes,
+    paymentMethod: a.payload.paymentMethod,
+    amount: a.payload.amount,
+    images: a.images || [],
+    createdAt: new Date(a.queuedAt).toISOString(),
+    date: a.payload.date,
+    requestInvoice: false,
+    // Three mutually-exclusive states: failed (terminal), syncing (the one
+    // entry the background sync loop is uploading right now — sync is
+    // strictly one-at-a-time, see syncPendingActions() in lib/utils.ts),
+    // and pending (queued, waiting its turn).
+    pending: !a.failed && !a.syncing,
+    syncing: !a.failed && !!a.syncing,
+    failed: !!a.failed,
+    failureReason: a.failureReason,
+    _key: a._key,
+  })
+
+  // Permanently-failed submissions (e.g. 403 permission denied) will never
+  // succeed no matter how many times the background sync retries —
+  // surfaced separately so they don't sit as an unexplained "pending"
+  // spinner forever.
+  const failedRows = filteredPendingActions.filter((a: any) => a.failed).map(mapPendingAction)
+  const syncingRows = filteredPendingActions.filter((a: any) => !a.failed && a.syncing).map(mapPendingAction)
+  const pendingRows = filteredPendingActions.filter((a: any) => !a.failed && !a.syncing).map(mapPendingAction)
+
+  const allPayables = [...failedRows, ...syncingRows, ...pendingRows, ...payables]
+
+  const dismissFailedPayable = async (key: any) => {
+    if (key == null) return
+    const ok = window.confirm('Remove this failed payable from the queue? It was never submitted — re-enter it manually if it still needs to be recorded.')
+    if (!ok) return
+    await deletePendingAction(key)
+    refreshPendingPayables()
   }
 
   // const deletePayable = async (id: string) => {
@@ -331,7 +421,7 @@ function RouteComponent() {
     fetchPayables()
   }, [date, location])
 
-  const totalAmount = Array.isArray(payables) ? payables.reduce((sum, payable) => sum + payable.amount, 0) : 0
+  const totalAmount = allPayables.reduce((sum, payable: any) => sum + (payable.amount || 0), 0)
 
   return (
     <div className="p-4 border border-dashed border-gray-300 rounded-md">
@@ -358,7 +448,18 @@ function RouteComponent() {
       {/* Summary */}
       <div className="mt-4 p-4 bg-gray-100 rounded-md">
         <div className="flex justify-between items-center">
-          <span className="font-semibold">Total Entries: {payables.length}</span>
+          <span className="font-semibold">
+            Total Entries: {allPayables.length}
+            {syncingRows.length > 0 && (
+              <span className="text-blue-600 font-normal"> ({syncingRows.length} sending)</span>
+            )}
+            {pendingRows.length > 0 && (
+              <span className="text-amber-600 font-normal"> ({pendingRows.length} pending upload)</span>
+            )}
+            {failedRows.length > 0 && (
+              <span className="text-red-600 font-normal"> ({failedRows.length} failed)</span>
+            )}
+          </span>
           <span className="font-semibold">Total Amount: ${totalAmount.toFixed(2)}</span>
         </div>
       </div>
@@ -378,9 +479,12 @@ function RouteComponent() {
             </tr>
           </thead>
           <tbody>
-            {payables.length > 0 ? (
-              payables.map((payable) => (
-                <tr key={payable._id} className="hover:bg-gray-50">
+            {allPayables.length > 0 ? (
+              allPayables.map((payable: any) => (
+                <tr
+                  key={payable._id}
+                  className={payable.failed ? 'bg-red-50 hover:bg-red-100' : payable.syncing ? 'bg-blue-50 hover:bg-blue-100' : payable.pending ? 'bg-amber-50 hover:bg-amber-100' : 'hover:bg-gray-50'}
+                >
                   <td className="border-dashed border-t border-gray-300 px-4 py-2">
                     {payable.date || new Date(payable.createdAt).toLocaleDateString('en-CA', { timeZone: 'UTC' })}
                   </td>
@@ -397,61 +501,93 @@ function RouteComponent() {
                     {payable.images.length} image(s)
                   </td>
                   <td className="border-dashed border-t border-gray-300 px-4 py-2">
-                    <div className="flex gap-2">
-                      {payable.requestInvoice && (
+                    {payable.failed ? (
+                      <span className="text-xs font-medium text-red-700 inline-flex flex-col items-start gap-0.5">
+                        <span className="inline-flex items-center gap-1">
+                          <AlertTriangle className="h-3 w-3" />
+                          Upload failed
+                        </span>
+                        {payable.failureReason && (
+                          <span className="text-[10px] text-red-600 max-w-[180px] truncate" title={payable.failureReason}>
+                            {payable.failureReason}
+                          </span>
+                        )}
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          className="h-6 px-1 text-[10px] text-red-700"
+                          onClick={() => dismissFailedPayable(payable._key)}
+                        >
+                          Dismiss
+                        </Button>
+                      </span>
+                    ) : payable.syncing ? (
+                      <span className="text-xs font-medium text-blue-700 inline-flex items-center gap-1">
+                        <Loader2 className="h-3 w-3 animate-spin" />
+                        Sending…
+                      </span>
+                    ) : payable.pending ? (
+                      <span className="text-xs font-medium text-amber-700 inline-flex items-center gap-1">
+                        <Loader2 className="h-3 w-3 animate-spin" />
+                        Pending upload
+                      </span>
+                    ) : (
+                      <div className="flex gap-2">
+                        {payable.requestInvoice && (
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            onClick={() => onInvoiceCameraClick(payable)}
+                            title="Upload Invoice"
+                            aria-label="Upload Invoice"
+                          >
+                            <Camera className="h-4 w-4" />
+                          </Button>
+                        )}
                         <Button
                           size="sm"
                           variant="outline"
-                          onClick={() => onInvoiceCameraClick(payable)}
-                          title="Upload Invoice"
-                          aria-label="Upload Invoice"
+                          onClick={() => viewImages(payable.images)}
                         >
-                          <Camera className="h-4 w-4" />
+                          <Eye className="h-4 w-4" />
                         </Button>
-                      )}
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        onClick={() => viewImages(payable.images)}
-                      >
-                        <Eye className="h-4 w-4" />
-                      </Button>
-                      {/* <Button
-                        size="sm"
-                        variant="destructive"
-                        onClick={() => deletePayable(payable._id)}
-                      >
-                        <Trash2 className="h-4 w-4" />
-                      </Button> */}
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        onClick={() => generatePDF(payable)}
-                        title="PDF"
-                      >
-                        <FileDown className="h-4 w-4" />
-                      </Button>
-                      {access?.payables?.changeDate && <Popover
-                        open={dateEditOpenId === payable._id}
-                        onOpenChange={(open) => setDateEditOpenId(open ? payable._id : null)}
-                      >
-                        <PopoverTrigger asChild>
-                          <button className="inline-flex items-center justify-center rounded-md border border-input bg-background h-8 w-8 hover:bg-accent hover:text-accent-foreground" title="Change date">
-                            <CalendarIcon className="h-4 w-4" />
-                          </button>
-                        </PopoverTrigger>
-                        <PopoverContent className="w-auto p-0" align="end">
-                          <Calendar
-                            mode="single"
-                            selected={payable.date ? ymdToLocalDate(payable.date) : new Date(payable.createdAt)}
-                            onSelect={(day) => {
-                              if (day) updatePayableDate(payable._id, day)
-                            }}
-                            initialFocus
-                          />
-                        </PopoverContent>
-                      </Popover>}
-                    </div>
+                        {/* <Button
+                          size="sm"
+                          variant="destructive"
+                          onClick={() => deletePayable(payable._id)}
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </Button> */}
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          onClick={() => generatePDF(payable)}
+                          title="PDF"
+                        >
+                          <FileDown className="h-4 w-4" />
+                        </Button>
+                        {access?.payables?.changeDate && <Popover
+                          open={dateEditOpenId === payable._id}
+                          onOpenChange={(open) => setDateEditOpenId(open ? payable._id : null)}
+                        >
+                          <PopoverTrigger asChild>
+                            <button className="inline-flex items-center justify-center rounded-md border border-input bg-background h-8 w-8 hover:bg-accent hover:text-accent-foreground" title="Change date">
+                              <CalendarIcon className="h-4 w-4" />
+                            </button>
+                          </PopoverTrigger>
+                          <PopoverContent className="w-auto p-0" align="end">
+                            <Calendar
+                              mode="single"
+                              selected={payable.date ? ymdToLocalDate(payable.date) : new Date(payable.createdAt)}
+                              onSelect={(day) => {
+                                if (day) updatePayableDate(payable._id, day)
+                              }}
+                              initialFocus
+                            />
+                          </PopoverContent>
+                        </Popover>}
+                      </div>
+                    )}
                   </td>
                 </tr>
               ))

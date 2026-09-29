@@ -26,10 +26,13 @@ import {
   DialogFooter,
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
+import { Building2, CheckCircle2 } from "lucide-react";
 
 export const Route = createFileRoute("/_navbarLayout/settings/sites/$id")({
   component: RouteComponent,
 });
+
+const ALL_GRADES = ["Regular", "Premium", "Mid Grade", "Diesel", "Dyed Diesel"];
 
 const CANADIAN_PROVINCES = [
   "Alberta",
@@ -47,10 +50,52 @@ const CANADIAN_PROVINCES = [
   "Yukon",
 ];
 
+interface DayHours {
+  open: string;
+  close: string;
+  isClosed: boolean;
+}
+
+type WeekDays =
+  | "monday"
+  | "tuesday"
+  | "wednesday"
+  | "thursday"
+  | "friday"
+  | "saturday"
+  | "sunday";
+
+type StoreHours = Record<WeekDays, DayHours>;
+
+const DAYS_OF_WEEK: { key: WeekDays; label: string }[] = [
+  { key: "monday", label: "Monday" },
+  { key: "tuesday", label: "Tuesday" },
+  { key: "wednesday", label: "Wednesday" },
+  { key: "thursday", label: "Thursday" },
+  { key: "friday", label: "Friday" },
+  { key: "saturday", label: "Saturday" },
+  { key: "sunday", label: "Sunday" },
+];
+
+const DEFAULT_STORE_HOURS: StoreHours = {
+  monday: { open: "06:00", close: "22:00", isClosed: false },
+  tuesday: { open: "06:00", close: "22:00", isClosed: false },
+  wednesday: { open: "06:00", close: "22:00", isClosed: false },
+  thursday: { open: "06:00", close: "22:00", isClosed: false },
+  friday: { open: "06:00", close: "22:00", isClosed: false },
+  saturday: { open: "06:00", close: "22:00", isClosed: false },
+  sunday: { open: "06:00", close: "22:00", isClosed: false },
+};
+
 interface PushoverDevice {
   _id?: string;
   deviceName: string;
   notificationEnabled: boolean;
+}
+
+interface Register {
+  _id?: string;
+  number: string;
 }
 
 interface LocationForm {
@@ -66,8 +111,12 @@ interface LocationForm {
   managerEmails: string[];
   province: string;
   gasBuddyStationId?: string;
+  gvmLocationName?: string;
   pushOverUserKey: string;
   devices: PushoverDevice[];
+  registers: Register[];
+  storeHours: StoreHours;
+  availableGrades: string[];
 }
 
 function RouteComponent() {
@@ -81,6 +130,11 @@ function RouteComponent() {
   const [pushoverDialogOpen, setPushoverDialogOpen] = useState(false);
   const [newDeviceName, setNewDeviceName] = useState("");
   const [isSavingPushover, setIsSavingPushover] = useState(false);
+
+  // --- Registers State Machinery ---
+  const [registersDialogOpen, setRegistersDialogOpen] = useState(false);
+  const [newRegisterNumber, setNewRegisterNumber] = useState("");
+  const [isSavingRegisters, setIsSavingRegisters] = useState(false);
 
   const { id } = Route.useParams();
   const navigate = useNavigate();
@@ -110,8 +164,12 @@ function RouteComponent() {
     managerEmails: [],
     province: "",
     gasBuddyStationId: "",
+    gvmLocationName: "",
     pushOverUserKey: "",
     devices: [],
+    registers: [],
+    storeHours: DEFAULT_STORE_HOURS,
+    availableGrades: [],
   });
 
   useEffect(() => {
@@ -186,8 +244,14 @@ function RouteComponent() {
         managerEmails: location.managerEmails || [],
         province: location.province || "Ontario",
         gasBuddyStationId: location.gasBuddyStationId || "",
+        gvmLocationName: location.gvmLocationName || "",
         pushOverUserKey: location.pushOverUserKey || "",
         devices: location.devices || [],
+        registers: location.registers || [],
+        storeHours: location.storeHours
+          ? { ...DEFAULT_STORE_HOURS, ...location.storeHours }
+          : DEFAULT_STORE_HOURS,
+        availableGrades: location.availableGrades || [],
       });
       setManagerEmails(location.managerEmails || []);
       setOtp(location.managerCode?.toString() || "");
@@ -375,24 +439,146 @@ function RouteComponent() {
     }
   };
 
+  // --- Granular Registers Form Actions ---
+  const handleAddRegisterRecord = () => {
+    const cleanNumber = newRegisterNumber.trim();
+    if (!cleanNumber) return;
+
+    if (
+      formData.registers.some(
+        (r) => r.number.toLowerCase() === cleanNumber.toLowerCase(),
+      )
+    ) {
+      return alert("A register with this number already exists.");
+    }
+
+    setFormData({
+      ...formData,
+      registers: [...formData.registers, { number: cleanNumber }],
+    });
+    setNewRegisterNumber("");
+  };
+
+  const handleUpdateRegisterNumber = (index: number, value: string) => {
+    const deepCopiedArray = [...formData.registers];
+    deepCopiedArray[index] = { ...deepCopiedArray[index], number: value };
+    setFormData({ ...formData, registers: deepCopiedArray });
+  };
+
+  const handleRemoveRegisterRecord = (index: number) => {
+    setFormData({
+      ...formData,
+      registers: formData.registers.filter((_, i) => i !== index),
+    });
+  };
+
+  const handleSaveRegistersConfiguration = async () => {
+    const trimmed = formData.registers.map((r) => ({
+      ...r,
+      number: r.number.trim(),
+    }));
+    const seen = new Set<string>();
+    for (const r of trimmed) {
+      if (!r.number) return alert("Register numbers cannot be blank.");
+      const key = r.number.toLowerCase();
+      if (seen.has(key))
+        return alert(`Duplicate register number: "${r.number}"`);
+      seen.add(key);
+    }
+
+    setIsSavingRegisters(true);
+    try {
+      const token = localStorage.getItem("token");
+      await axios.put(
+        `/api/locations/${id}`,
+        { ...formData, registers: trimmed, managerCode: otp },
+        { headers: { Authorization: `Bearer ${token}` } },
+      );
+
+      alert("Registers updated successfully!");
+      setRegistersDialogOpen(false);
+      await fetchLocation();
+    } catch (error) {
+      console.error(error);
+      alert("Failed to update registers.");
+    } finally {
+      setIsSavingRegisters(false);
+    }
+  };
+
+  const handleHourChange = (
+    day: WeekDays,
+    field: "open" | "close",
+    value: string,
+  ) => {
+    setFormData((prev) => ({
+      ...prev,
+      storeHours: {
+        ...prev.storeHours,
+        [day]: {
+          ...prev.storeHours[day],
+          [field]: value,
+        },
+      },
+    }));
+  };
+
+  const handleClosedToggle = (day: WeekDays, isClosed: boolean) => {
+    setFormData((prev) => ({
+      ...prev,
+      storeHours: {
+        ...prev.storeHours,
+        [day]: {
+          ...prev.storeHours[day],
+          isClosed,
+          open: isClosed ? "" : prev.storeHours[day].open || "06:00",
+          close: isClosed ? "" : prev.storeHours[day].close || "22:00",
+        },
+      },
+    }));
+  };
+
+  // Inside your component:
+  const handleToggleGrade = (grade: string) => {
+    const currentGrades = [...(formData.availableGrades || [])];
+    if (currentGrades.includes(grade)) {
+      setFormData({
+        ...formData,
+        availableGrades: currentGrades.filter((g: string) => g !== grade),
+      });
+    } else {
+      setFormData({
+        ...formData,
+        availableGrades: [...currentGrades, grade],
+      });
+    }
+  };
+
   if (!location)
     return <div className="p-4 text-red-500">Location not found</div>;
 
   return (
-    <div className="max-w-2xl mx-auto p-6">
+    <div className="max-w-7xl mx-auto p-8">
       <Card>
-        <CardHeader className="flex flex-row items-start justify-between space-y-0 pb-6 border-b">
-          {/* Title on the left in a larger, prominent font */}
-          <div>
-            <CardTitle className="text-2xl font-extrabold tracking-tight text-slate-900">
-              Edit Location
-            </CardTitle>
-          </div>
+        <CardHeader className="pb-6 border-b">
+          <div className="flex flex-wrap items-center justify-between gap-4">
+            {/* Icon + title/subtitle on the left */}
+            <div className="flex items-center gap-4">
+              <div className="h-12 w-12 rounded-xl bg-blue-100 flex items-center justify-center text-blue-600 shrink-0">
+                <Building2 className="h-6 w-6" />
+              </div>
+              <div>
+                <CardTitle className="text-2xl font-extrabold tracking-tight text-slate-900">
+                  Edit Location
+                </CardTitle>
+                <p className="text-sm text-muted-foreground">
+                  {formData.stationName || "Untitled Site"}
+                </p>
+              </div>
+            </div>
 
-          {/* Two rows of buttons stacked on the right */}
-          <div className="flex flex-col items-end gap-3">
-            {/* ROW 1: Sells Lottery & Assigned Users */}
-            <div className="flex items-center gap-3">
+            {/* Toolbar on the right */}
+            <div className="flex flex-wrap items-center gap-3">
               {/* Sells Lottery Toggle Group */}
               <div className="flex items-center gap-2 bg-slate-50 border px-3 py-1.5 rounded-lg text-sm">
                 <span className="text-muted-foreground font-medium">
@@ -422,10 +608,7 @@ function RouteComponent() {
               >
                 Assigned Users ({selectedUsers.length})
               </Button>
-            </div>
 
-            {/* ROW 2: Generate Safesheet & Manage Pushover */}
-            <div className="flex items-center gap-3">
               {!hasSafesheet && (
                 <Button
                   variant="default"
@@ -446,161 +629,343 @@ function RouteComponent() {
                 {formData.devices.filter((d) => d.notificationEnabled).length}{" "}
                 Active)
               </Button>
+
+              <Button
+                variant="outline"
+                type="button"
+                className="border-slate-500 text-slate-600 hover:bg-slate-50"
+                onClick={() => setRegistersDialogOpen(true)}
+              >
+                Manage Registers ({formData.registers.length})
+              </Button>
             </div>
           </div>
         </CardHeader>
 
         <CardContent>
-          <form onSubmit={handleSubmit} className="space-y-6">
-            <div>
-              <Label className="block font-medium mb-1">Type</Label>
-              <Select
-                value={formData.type}
-                onValueChange={(value) =>
-                  setFormData({ ...formData, type: value })
-                }
-              >
-                <SelectTrigger className="w-full rounded-md border border-gray-300">
-                  <SelectValue placeholder="Select Type" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="store">Store</SelectItem>
-                  <SelectItem value="backoffice">Backoffice</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
+          <form onSubmit={handleSubmit} className="space-y-8">
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+              {/* Column 1: Identity */}
+              <div className="p-6 border rounded-xl bg-white shadow-sm space-y-4">
+                <h3 className="text-xs font-bold uppercase text-slate-400 tracking-widest">
+                  Identity
+                </h3>
 
-            {[
-              { label: "Station Name", name: "stationName" },
-              { label: "Legal Name", name: "legalName" },
-              { label: "IND Number", name: "INDNumber" },
-              { label: "Kardpoll Code", name: "kardpollCode" },
-              { label: "CSO Code", name: "csoCode" },
-              { label: "Station Email", name: "email" },
-            ].map((field) => (
-              <div key={field.name}>
-                <Label className="block font-medium mb-1">{field.label}</Label>
-                <div className="flex gap-2">
-                  <input
-                    type="text"
-                    name={field.name}
-                    value={String(
-                      formData[field.name as keyof LocationForm] ?? "",
-                    )}
-                    onChange={(e) =>
-                      setFormData({ ...formData, [field.name]: e.target.value })
+                <div>
+                  <Label className="block font-medium mb-1">Type</Label>
+                  <Select
+                    value={formData.type}
+                    onValueChange={(value) =>
+                      setFormData({ ...formData, type: value })
                     }
-                    className="border border-gray-300 rounded-md px-3 py-2 w-full focus:ring-2 focus:ring-blue-500 focus:outline-none"
-                    required={[
-                      "stationName",
-                      "legalName",
-                      "INDNumber",
-                      "csoCode",
-                      "email",
-                    ].includes(field.name)}
-                  />
+                  >
+                    <SelectTrigger className="w-full rounded-md border border-gray-300">
+                      <SelectValue placeholder="Select Type" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="store">Store</SelectItem>
+                      <SelectItem value="backoffice">Backoffice</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
 
-                  {field.name === "email" && (
+                {[
+                  { label: "Station Name", name: "stationName" },
+                  { label: "Legal Name", name: "legalName" },
+                  { label: "IND Number", name: "INDNumber" },
+                  { label: "CSO Code", name: "csoCode" },
+                  { label: "Kardpoll Code", name: "kardpollCode" },
+                ].map((field) => (
+                  <div key={field.name}>
+                    <Label className="block font-medium mb-1">
+                      {field.label}
+                    </Label>
+                    <Input
+                      type="text"
+                      name={field.name}
+                      value={String(
+                        formData[field.name as keyof LocationForm] ?? "",
+                      )}
+                      onChange={(e) =>
+                        setFormData({
+                          ...formData,
+                          [field.name]: e.target.value,
+                        })
+                      }
+                      className="border border-gray-300 rounded-md px-3 py-2 w-full focus:ring-2 focus:ring-blue-500 focus:outline-none"
+                      required={[
+                        "stationName",
+                        "legalName",
+                        "INDNumber",
+                        "csoCode",
+                      ].includes(field.name)}
+                    />
+                  </div>
+                ))}
+              </div>
+
+              {/* Column 2: Contact & Region */}
+              <div className="p-6 border rounded-xl bg-slate-50/50 space-y-4">
+                <h3 className="text-xs font-bold uppercase text-slate-400 tracking-widest">
+                  Contact &amp; Region
+                </h3>
+
+                <div>
+                  <Label className="block font-medium mb-1">
+                    Station Email
+                  </Label>
+                  <div className="flex gap-2">
+                    <Input
+                      type="text"
+                      name="email"
+                      value={String(formData.email ?? "")}
+                      onChange={(e) =>
+                        setFormData({ ...formData, email: e.target.value })
+                      }
+                      className="border border-gray-300 rounded-md px-3 py-2 w-full focus:ring-2 focus:ring-blue-500 focus:outline-none bg-white"
+                      required
+                    />
                     <Button
                       type="button"
                       variant="outline"
-                      className="whitespace-nowrap border-blue-500 text-blue-600 hover:bg-blue-50"
+                      className="whitespace-nowrap border-blue-500 text-blue-600 hover:bg-blue-50 bg-white"
                       onClick={() => setManagerDialogOpen(true)}
                     >
                       Manage Managers ({managerEmails.length})
                     </Button>
+                  </div>
+
+                  {managerEmails.length > 0 && (
+                    <p className="text-[11px] text-gray-500 mt-1 italic">
+                      Notifications also CC'd to: {managerEmails.join(", ")}
+                    </p>
                   )}
                 </div>
 
-                {field.name === "email" && managerEmails.length > 0 && (
-                  <p className="text-[11px] text-gray-500 mt-1 italic">
-                    Notifications also CC'd to: {managerEmails.join(", ")}
-                  </p>
-                )}
+                <div>
+                  <Label className="block font-medium mb-1">Province</Label>
+                  <Select
+                    value={formData.province}
+                    onValueChange={(value) =>
+                      setFormData({ ...formData, province: value })
+                    }
+                  >
+                    <SelectTrigger className="w-full rounded-md border border-gray-300 bg-white">
+                      <SelectValue placeholder="Select Province" />
+                    </SelectTrigger>
+                    <SelectContent className="max-h-64 overflow-y-auto">
+                      {CANADIAN_PROVINCES.map((prov) => (
+                        <SelectItem key={prov} value={prov}>
+                          {prov}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                <div>
+                  <Label className="block font-medium mb-1">Timezone</Label>
+                  <Select
+                    value={formData.timezone}
+                    onValueChange={(value) =>
+                      setFormData({ ...formData, timezone: value })
+                    }
+                  >
+                    <SelectTrigger className="w-full rounded-md border border-gray-300 bg-white">
+                      <SelectValue placeholder="Select Timezone" />
+                    </SelectTrigger>
+                    <SelectContent className="max-h-64 overflow-y-auto">
+                      {timezones.map((tz) => (
+                        <SelectItem key={tz} value={tz}>
+                          {tz}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                <div>
+                  <Label
+                    htmlFor="gasBuddyStationId"
+                    className="block font-medium mb-1"
+                  >
+                    GasBuddy Station ID
+                  </Label>
+                  <Input
+                    id="gasBuddyStationId"
+                    type="text"
+                    placeholder="e.g., 205339"
+                    value={formData.gasBuddyStationId || ""}
+                    onChange={(e) =>
+                      setFormData({
+                        ...formData,
+                        gasBuddyStationId: e.target.value,
+                      })
+                    }
+                    className="border border-gray-300 rounded-md px-3 py-2 w-full focus:ring-2 focus:ring-blue-500 focus:outline-none bg-white"
+                  />
+                </div>
+
+                <div>
+                  <Label
+                    htmlFor="gvmLocationName"
+                    className="block font-medium mb-1"
+                  >
+                    GVM Location Name
+                  </Label>
+                  <Input
+                    id="gvmLocationName"
+                    type="text"
+                    placeholder="Must match the location dropdown in GVM Unifi's pricing page"
+                    value={formData.gvmLocationName || ""}
+                    onChange={(e) =>
+                      setFormData({
+                        ...formData,
+                        gvmLocationName: e.target.value,
+                      })
+                    }
+                    className="border border-gray-300 rounded-md px-3 py-2 w-full focus:ring-2 focus:ring-blue-500 focus:outline-none bg-white"
+                  />
+                </div>
               </div>
-            ))}
 
-            <div>
-              <Label className="block font-medium mb-1">Province</Label>
-              <Select
-                value={formData.province}
-                onValueChange={(value) =>
-                  setFormData({ ...formData, province: value })
-                }
-              >
-                <SelectTrigger className="w-full rounded-md border border-gray-300">
-                  <SelectValue placeholder="Select Province" />
-                </SelectTrigger>
-                <SelectContent className="max-h-64 overflow-y-auto">
-                  {CANADIAN_PROVINCES.map((prov) => (
-                    <SelectItem key={prov} value={prov}>
-                      {prov}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
+              {/* Column 3: Security & Access */}
+              <div className="p-6 border rounded-xl bg-white shadow-sm space-y-4 flex flex-col">
+                <h3 className="text-xs font-bold uppercase text-slate-400 tracking-widest">
+                  Security &amp; Access
+                </h3>
 
-            <div>
-              <Label className="block font-medium mb-1">Timezone</Label>
-              <Select
-                value={formData.timezone}
-                onValueChange={(value) =>
-                  setFormData({ ...formData, timezone: value })
-                }
-              >
-                <SelectTrigger className="w-full rounded-md border border-gray-300">
-                  <SelectValue placeholder="Select Timezone" />
-                </SelectTrigger>
-                <SelectContent className="max-h-64 overflow-y-auto">
-                  {timezones.map((tz) => (
-                    <SelectItem key={tz} value={tz}>
-                      {tz}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
+                <div>
+                  <Label className="block font-medium mb-1">Manager Code</Label>
+                  <div className="flex justify-center">
+                    <InputOTP maxLength={4} value={otp} onChange={setOtp}>
+                      <InputOTPGroup>
+                        <InputOTPSlot index={0} />
+                        <InputOTPSlot index={1} />
+                        <InputOTPSlot index={2} />
+                        <InputOTPSlot index={3} />
+                      </InputOTPGroup>
+                    </InputOTP>
+                  </div>
+                </div>
 
-            <div>
-              <Label
-                htmlFor="gasBuddyStationId"
-                className="block font-medium mb-1"
-              >
-                GasBuddy Station ID
-              </Label>
-              <Input
-                id="gasBuddyStationId"
-                type="text"
-                placeholder="e.g., 205339"
-                value={formData.gasBuddyStationId || ""}
-                onChange={(e) =>
-                  setFormData({
-                    ...formData,
-                    gasBuddyStationId: e.target.value,
-                  })
-                }
-                className="border border-gray-300 rounded-md px-3 py-2 w-full focus:ring-2 focus:ring-blue-500 focus:outline-none"
-              />
-            </div>
+                <div className="flex-1" />
 
-            <div>
-              <Label className="block font-medium mb-1">Manager Code</Label>
-              <div className="flex justify-center">
-                <InputOTP maxLength={4} value={otp} onChange={setOtp}>
-                  <InputOTPGroup>
-                    <InputOTPSlot index={0} />
-                    <InputOTPSlot index={1} />
-                    <InputOTPSlot index={2} />
-                    <InputOTPSlot index={3} />
-                  </InputOTPGroup>
-                </InputOTP>
+                <Button type="submit" disabled={loading} className="w-full">
+                  {loading ? "Saving..." : "Save Changes"}
+                </Button>
               </div>
             </div>
 
-            <Button type="submit" disabled={loading} className="w-full">
-              {loading ? "Saving..." : "Save Changes"}
-            </Button>
+            {/* --- AVAILABLE GRADES FOR SELLING (ADMIN ONLY) --- */}
+            <div className="p-6 border rounded-xl bg-white shadow-sm space-y-3">
+              <h3 className="text-xs font-bold uppercase text-slate-400 tracking-widest">
+                Available Grades For Selling
+              </h3>
+              <div className="flex flex-wrap gap-x-6 gap-y-2 bg-slate-50/50 p-4 rounded-xl border border-slate-100">
+                {ALL_GRADES.map((grade: string) => {
+                  const isChecked = formData.availableGrades?.includes(grade);
+                  return (
+                    <label
+                      key={grade}
+                      className="flex items-center gap-2 cursor-pointer group select-none"
+                    >
+                      <div
+                        onClick={() => handleToggleGrade(grade)}
+                        className={`w-5 h-5 rounded border flex items-center justify-center transition-colors ${
+                          isChecked
+                            ? "bg-blue-600 border-blue-600"
+                            : "border-slate-300 bg-white group-hover:border-blue-400"
+                        }`}
+                      >
+                        {isChecked && (
+                          <CheckCircle2 className="h-3.5 w-3.5 text-white" />
+                        )}
+                      </div>
+                      <span
+                        className={`text-sm font-semibold transition-colors ${isChecked ? "text-slate-900" : "text-slate-500"}`}
+                      >
+                        {grade}
+                      </span>
+                    </label>
+                  );
+                })}
+              </div>
+            </div>
+
+            {/* --- STORE HOURS SECTION (full width) --- */}
+            <div className="p-6 border rounded-xl bg-white shadow-sm space-y-3">
+              <h3 className="text-xs font-bold uppercase text-slate-400 tracking-widest">
+                Store Operating Hours
+              </h3>
+              <div className="border rounded-xl p-4 bg-slate-50/50 space-y-3">
+                <div className="grid grid-cols-12 gap-2 text-xs font-semibold text-slate-500 uppercase px-1">
+                  <span className="col-span-3">Day</span>
+                  <span className="col-span-3">Open</span>
+                  <span className="col-span-3">Close</span>
+                  <span className="col-span-3 text-center">Closed All Day</span>
+                </div>
+
+                {DAYS_OF_WEEK.map(({ key, label }) => {
+                  const dayData = formData.storeHours[key];
+                  return (
+                    <div
+                      key={key}
+                      className="grid grid-cols-12 gap-2 items-center bg-white border p-2.5 rounded-lg text-sm"
+                    >
+                      <span className="col-span-3 font-medium text-slate-800">
+                        {label}
+                      </span>
+
+                      <div className="col-span-3">
+                        <Input
+                          type="time"
+                          disabled={dayData.isClosed}
+                          value={dayData.open}
+                          onChange={(e) =>
+                            handleHourChange(key, "open", e.target.value)
+                          }
+                          className="h-8 text-xs bg-white"
+                        />
+                      </div>
+
+                      <div className="col-span-3">
+                        <Input
+                          type="time"
+                          disabled={dayData.isClosed}
+                          value={dayData.close}
+                          onChange={(e) =>
+                            handleHourChange(key, "close", e.target.value)
+                          }
+                          className="h-8 text-xs bg-white"
+                        />
+                      </div>
+
+                      <div className="col-span-3 flex justify-center items-center">
+                        <button
+                          type="button"
+                          aria-pressed={dayData.isClosed}
+                          onClick={() =>
+                            handleClosedToggle(key, !dayData.isClosed)
+                          }
+                          className={`relative inline-flex items-center h-5 rounded-full w-9 transition-colors ${
+                            dayData.isClosed ? "bg-red-500" : "bg-gray-300"
+                          }`}
+                        >
+                          <span
+                            className={`inline-block w-3 h-3 bg-white rounded-full transform transition-transform ${
+                              dayData.isClosed
+                                ? "translate-x-5"
+                                : "translate-x-1"
+                            }`}
+                          />
+                        </button>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
           </form>
         </CardContent>
       </Card>
@@ -729,6 +1094,90 @@ function RouteComponent() {
               disabled={isSavingPushover}
             >
               {isSavingPushover ? "Saving..." : "Save Route Configuration"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* --- REGISTERS MANAGER MODAL --- */}
+      <Dialog open={registersDialogOpen} onOpenChange={setRegistersDialogOpen}>
+        <DialogContent className="max-w-xl max-h-[85vh] flex flex-col">
+          <DialogHeader>
+            <DialogTitle className="text-xl">Manage Registers</DialogTitle>
+            <p className="text-xs text-muted-foreground">
+              Registers/tills available at this site. The PO form only shows a
+              Register selector once 2 or more are configured here.
+            </p>
+          </DialogHeader>
+
+          <div className="flex-1 overflow-y-auto my-2 space-y-4 pr-1">
+            <div className="border rounded-xl p-4 bg-slate-50/50 space-y-3">
+              <Label className="font-semibold text-sm block">Registers</Label>
+
+              <div className="flex gap-2">
+                <Input
+                  type="text"
+                  placeholder="e.g., 1"
+                  value={newRegisterNumber}
+                  onChange={(e) => setNewRegisterNumber(e.target.value)}
+                  onKeyDown={(e) =>
+                    e.key === "Enter" &&
+                    (e.preventDefault(), handleAddRegisterRecord())
+                  }
+                  className="bg-white"
+                />
+                <Button type="button" onClick={handleAddRegisterRecord}>
+                  Add Register
+                </Button>
+              </div>
+
+              <div className="space-y-1.5 mt-2 max-h-48 overflow-y-auto">
+                {formData.registers.length === 0 ? (
+                  <p className="text-xs text-gray-400 italic py-2 text-center">
+                    No registers configured for this site.
+                  </p>
+                ) : (
+                  formData.registers.map((reg, idx) => (
+                    <div
+                      key={reg._id ?? idx}
+                      className="flex items-center justify-between bg-white border p-2.5 rounded-lg text-sm gap-3"
+                    >
+                      <Input
+                        type="text"
+                        value={reg.number}
+                        onChange={(e) =>
+                          handleUpdateRegisterNumber(idx, e.target.value)
+                        }
+                        className="font-mono font-medium text-slate-800 h-8"
+                      />
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="sm"
+                        className="text-red-500 hover:text-red-700 hover:bg-red-50 h-7 px-2"
+                        onClick={() => handleRemoveRegisterRecord(idx)}
+                      >
+                        Remove
+                      </Button>
+                    </div>
+                  ))
+                )}
+              </div>
+            </div>
+          </div>
+
+          <DialogFooter className="pt-3 border-t">
+            <Button
+              variant="outline"
+              onClick={() => setRegistersDialogOpen(false)}
+            >
+              Cancel
+            </Button>
+            <Button
+              onClick={handleSaveRegistersConfiguration}
+              disabled={isSavingRegisters}
+            >
+              {isSavingRegisters ? "Saving..." : "Save Registers"}
             </Button>
           </DialogFooter>
         </DialogContent>

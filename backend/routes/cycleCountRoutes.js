@@ -13,6 +13,9 @@ const ProductCategory = require('../models/ProductCategory');
 const { getPg } = require("../config/pg");
 const moment = require("moment-timezone");
 const { syncPostgresCountsToPetrosoft } = require('../utils/uploadCountToCStore'); // Adjust path to our function
+const Role = require('../models/Role');
+const { pushNotification } = require('../services/notificationService');
+const Event = require('../models/Event');
 
 
 const upload = multer({ storage: multer.memoryStorage() });
@@ -361,15 +364,17 @@ router.get('/daily-items-v2', async (req, res) => {
     const stationTimezone = location.timezone || "UTC";
     const localDateStr = moment().tz(stationTimezone).format("YYYY-MM-DD");
 
-    // 3. Fetch Items from Postgres
+    // 3. Fetch Items from Postgres (including i.is_scheduled)
     const items = await db("cycle_count_instance as i")
       .join("cycle_count_items as ci", "i.id", "ci.instance_id")
       .join("item_bk as ib", "ci.product_id", "ib.id")
       .where({
         "i.site_mongo_id": location._id.toString(),
-        "i.date": localDateStr
+        "i.date": localDateStr,
+        "ib.allow_cycle_count": true
       })
       .select(
+        "i.is_scheduled as isScheduled", // 👈 Selected from instance table
         "ci.id as entryId",
         "ci.foh",
         "ci.boh",
@@ -387,15 +392,25 @@ router.get('/daily-items-v2', async (req, res) => {
         "ib.crt_in_case",
         "ib.on_hand_qty as onHandCSO"
       )
-      .orderBy("ci.priority", "desc");
+      .orderBy("ci.priority", "desc")
+      .orderBy("ib.description", "asc");
 
-    // 4. Attach Category Names
+    // 4. Determine overall scheduled status for this count instance
+    // If items exist, check the first row's isScheduled status (default to false if no items)
+    const isScheduled = items.length > 0 ? Boolean(items[0].isScheduled) : false;
+
+    // 5. Attach Category Names
     const enrichedItems = items.map(item => ({
       ...item,
+      isScheduled: Boolean(item.isScheduled),
       categoryName: categoryMap[item.category_id] || `Uncategorized (${item.category_id})`
     }));
 
-    res.json({ items: enrichedItems });
+    // Return both the root flag and enriched item payload
+    res.json({
+      isScheduled,
+      items: enrichedItems
+    });
   } catch (err) {
     console.error(err);
     res.status(500).send("Server Error");
@@ -1102,20 +1117,110 @@ router.post('/finalize-and-sync', async (req, res) => {
 });
 
 // 3. ATOMIC TRANSACTION: CREATE INSTANCE & INJECT CHILD RECORDS
+// router.post('/schedules/create', async (req, res) => {
+//   const db = getPg();
+//   try {
+//     const { site, date, day, groupId, filterColumn, filterValues } = req.body;
+//     const scheduledBy = req.user?._id || req.user?.firstName || "system_operator";
+
+//     if (!site || !date || !day || !groupId || !filterColumn || !filterValues) {
+//       return res.status(400).json({ message: "Missing required setup parameters" });
+//     }
+
+//     // Resolve site context to grab Mongo ID mapping target
+//     const location = await Location.findOne({ site });
+//     if (!location) {
+//       return res.status(404).json({ message: "Selected location context not recognized" });
+//     }
+//     const siteMongoIdString = location._id.toString();
+
+//     // Begin single transaction isolation sandbox
+//     const result = await db.transaction(async (trx) => {
+
+//       // Secondary absolute safety gate for date duplicates inside transaction block
+//       const duplicateGate = await trx("public.cycle_count_instance")
+//         .where({ site_mongo_id: siteMongoIdString, date })
+//         .first();
+
+//       if (duplicateGate) {
+//         throw new Error(`CONFLICT_DATE`);
+//       }
+
+//       // Step A: Insert master instance header row structure
+//       const [insertedInstance] = await trx("public.cycle_count_instance")
+//         .insert({
+//           date: date,
+//           day: day,
+//           is_scheduled: true,
+//           site_mongo_id: siteMongoIdString,
+//           scheduled_by: String(scheduledBy),
+//           group_id: parseInt(groupId, 10)
+//         })
+//         .returning(["id"]);
+
+//       const newInstanceId = insertedInstance.id;
+
+//       // Step B: Query ALL qualifying matching records inside public.item_bk
+//       const targetItemsToSchedule = await trx("public.item_bk")
+//         .where({ site: siteMongoIdString })
+//         .whereIn(filterColumn, filterValues)
+//         .select("id");
+
+//       if (targetItemsToSchedule.length === 0) {
+//         throw new Error("NO_ITEMS_FOUND");
+//       }
+
+//       // Step C: Chunk-insert array relations into public.cycle_count_items
+//       const childPayload = targetItemsToSchedule.map(item => ({
+//         instance_id: newInstanceId,
+//         product_id: item.id,
+//         foh: null,
+//         boh: null,
+//         count_completed: false,
+//         priority: false
+//       }));
+
+//       // Batch insert inside chunks to prevent parameter limits saturation
+//       const chunkSize = 1000;
+//       for (let i = 0; i < childPayload.length; i += chunkSize) {
+//         await trx("public.cycle_count_items")
+//           .insert(childPayload.slice(i, i + chunkSize));
+//       }
+
+//       return { instanceId: newInstanceId, totalAdded: childPayload.length };
+//     });
+
+//     res.json({
+//       success: true,
+//       message: `Schedule locked down. Tracked ${result.totalAdded} child entries successfully.`,
+//       instanceId: result.instanceId
+//     });
+
+//   } catch (err) {
+//     console.error("Critical error building schedule pipeline execution block:", err);
+//     if (err.message === 'CONFLICT_DATE') {
+//       return res.status(422).json({ message: "A schedule layout variant already locks down that precise date context." });
+//     }
+//     if (err.message === 'NO_ITEMS_FOUND') {
+//       return res.status(422).json({ message: "The configuration matched zero inventory records inside item_bk." });
+//     }
+//     res.status(500).json({ message: "Database failure creating schedule engine logs." });
+//   }
+// });
 router.post('/schedules/create', async (req, res) => {
   const db = getPg();
   try {
     const { site, date, day, groupId, filterColumn, filterValues } = req.body;
-    const scheduledBy = req.user?._id || req.user?.firstName || "system_operator";
+    const scheduledBy = req.user?._id || req.user?.firstName || 'system_operator';
 
     if (!site || !date || !day || !groupId || !filterColumn || !filterValues) {
-      return res.status(400).json({ message: "Missing required setup parameters" });
+      return res.status(400).json({ message: 'Missing required setup parameters' });
     }
 
     // Resolve site context to grab Mongo ID mapping target
     const location = await Location.findOne({ site });
     if (!location) {
-      return res.status(404).json({ message: "Selected location context not recognized" });
+      return res.status(404).json({ message: 'Selected location context not recognized' });
     }
     const siteMongoIdString = location._id.toString();
 
@@ -1123,36 +1228,44 @@ router.post('/schedules/create', async (req, res) => {
     const result = await db.transaction(async (trx) => {
 
       // Secondary absolute safety gate for date duplicates inside transaction block
-      const duplicateGate = await trx("public.cycle_count_instance")
+      const duplicateGate = await trx('public.cycle_count_instance')
         .where({ site_mongo_id: siteMongoIdString, date })
         .first();
 
       if (duplicateGate) {
-        throw new Error(`CONFLICT_DATE`);
+        throw new Error('CONFLICT_DATE');
       }
 
+      // Query group name from public.cycle_count_groups
+      const groupDoc = await trx('public.cycle_count_groups')
+        .where({ id: parseInt(groupId, 10) })
+        .select('name')
+        .first();
+
+      const groupName = groupDoc?.name || `Group #${groupId}`;
+
       // Step A: Insert master instance header row structure
-      const [insertedInstance] = await trx("public.cycle_count_instance")
+      const [insertedInstance] = await trx('public.cycle_count_instance')
         .insert({
           date: date,
           day: day,
           is_scheduled: true,
           site_mongo_id: siteMongoIdString,
           scheduled_by: String(scheduledBy),
-          group_id: parseInt(groupId, 10)
+          group_id: parseInt(groupId, 10),
         })
-        .returning(["id"]);
+        .returning(['id']);
 
       const newInstanceId = insertedInstance.id;
 
       // Step B: Query ALL qualifying matching records inside public.item_bk
-      const targetItemsToSchedule = await trx("public.item_bk")
+      const targetItemsToSchedule = await trx('public.item_bk')
         .where({ site: siteMongoIdString })
         .whereIn(filterColumn, filterValues)
-        .select("id");
+        .select('id');
 
       if (targetItemsToSchedule.length === 0) {
-        throw new Error("NO_ITEMS_FOUND");
+        throw new Error('NO_ITEMS_FOUND');
       }
 
       // Step C: Chunk-insert array relations into public.cycle_count_items
@@ -1162,34 +1275,103 @@ router.post('/schedules/create', async (req, res) => {
         foh: null,
         boh: null,
         count_completed: false,
-        priority: false
+        priority: false,
       }));
 
       // Batch insert inside chunks to prevent parameter limits saturation
       const chunkSize = 1000;
       for (let i = 0; i < childPayload.length; i += chunkSize) {
-        await trx("public.cycle_count_items")
+        await trx('public.cycle_count_items')
           .insert(childPayload.slice(i, i + chunkSize));
       }
 
-      return { instanceId: newInstanceId, totalAdded: childPayload.length };
+      return {
+        instanceId: newInstanceId,
+        totalAdded: childPayload.length,
+        groupName,
+      };
     });
 
+    // Send HTTP response immediately
     res.json({
       success: true,
       message: `Schedule locked down. Tracked ${result.totalAdded} child entries successfully.`,
-      instanceId: result.instanceId
+      instanceId: result.instanceId,
     });
 
+    // =========================================================================
+    // Asynchronous Background System Event Creation & Notification Dispatch
+    // =========================================================================
+    try {
+      // 1. Create System Event
+      const eventTitle = `Count Scheduled - ${result.groupName}`;
+      const eventDescription = `Cycle Count Scheduled for ${date} and ${result.groupName} (~${result.totalAdded} items)`;
+
+      const event = await Event.create({
+        site,
+        title: eventTitle,
+        description: eventDescription,
+        date: String(date),
+        type: 'system',
+        createdBy: {
+          id: req.user?._id,
+          firstName: req.user?.firstName || '',
+          lastName: req.user?.lastName || '',
+          email: req.user?.email || '',
+        },
+      });
+
+      // 2. Dispatch Notification to Store Manager / Store Email
+      const io = req.app.get('io');
+      const managerEmails = (location.managerEmails || [])
+        .filter(e => Boolean(e) && typeof e === 'string')
+        .map(e => e.trim().toLowerCase());
+
+      const storeEmail = location.email ? location.email.trim().toLowerCase() : null;
+
+      // Direct target: Manager emails first, fallback to store email
+      let recipientEmails = managerEmails.length > 0
+        ? managerEmails
+        : (storeEmail ? [storeEmail] : []);
+
+      // Deduplicate recipient list
+      recipientEmails = [...new Set(recipientEmails)];
+
+      if (recipientEmails.length > 0 && io) {
+        const senderName = `${req.user?.firstName || ''} ${req.user?.lastName || ''}`.trim() || 'Category Team';
+        const monthStr = String(date).substring(0, 7);
+        const baseUrl = process.env.CLIENT_URL || 'http://app.gen7fuel.com';
+        const calendarUrl = `${baseUrl}/events?site=${encodeURIComponent(site)}&month=${monthStr}`;
+
+        await pushNotification({
+          io,
+          senderId: req.user?._id,
+          recipientEmails,
+          slug: 'new-event-created',
+          fieldValues: {
+            senderName,
+            site,
+            eventTitle: event.title,
+            eventDate: event.date,
+            calendarUrl,
+          },
+          subject: `New Event Created for ${site}: ${event.title}`,
+          type: 'system',
+        });
+      }
+    } catch (bgError) {
+      console.error('Error creating background schedule event or sending notification:', bgError);
+    }
+
   } catch (err) {
-    console.error("Critical error building schedule pipeline execution block:", err);
+    console.error('Critical error building schedule pipeline execution block:', err);
     if (err.message === 'CONFLICT_DATE') {
-      return res.status(422).json({ message: "A schedule layout variant already locks down that precise date context." });
+      return res.status(422).json({ message: 'A schedule layout variant already locks down that precise date context.' });
     }
     if (err.message === 'NO_ITEMS_FOUND') {
-      return res.status(422).json({ message: "The configuration matched zero inventory records inside item_bk." });
+      return res.status(422).json({ message: 'The configuration matched zero inventory records inside item_bk.' });
     }
-    res.status(500).json({ message: "Database failure creating schedule engine logs." });
+    res.status(500).json({ message: 'Database failure creating schedule engine logs.' });
   }
 });
 
@@ -1546,7 +1728,7 @@ router.put('/item-bk/mass-edit', async (req, res) => {
     }
 
     // 2. Extracted Values Field Guard
-    if (!updates || Object.keys(updates).length === 0) {
+    if (!updates || typeof updates !== 'object' || Object.keys(updates).length === 0) {
       return res.status(400).json({
         success: false,
         message: "No parameters isolated for configuration updates."
@@ -1563,16 +1745,30 @@ router.put('/item-bk/mass-edit', async (req, res) => {
 
         // Formatting processing matrix per type
         if (field === 'allow_cycle_count') {
-          sanitizedPayload[field] = Boolean(value);
+          if (typeof value !== 'boolean') {
+            return res.status(400).json({ success: false, message: "Field allow_cycle_count must be a true/false." });
+          }
+          sanitizedPayload[field] = value;
+
         } else if (field === 'grade') {
           if (!['A', 'B', 'C'].includes(value)) {
             return res.status(400).json({ success: false, message: "Invalid value passed for grade matrix alignment." });
           }
           sanitizedPayload[field] = value;
+
         } else if (field === 'pk_in_crt' || field === 'crt_in_case') {
-          sanitizedPayload[field] = value !== null ? parseInt(value, 10) : null;
-          if (sanitizedPayload[field] !== null && isNaN(sanitizedPayload[field])) {
-            return res.status(400).json({ success: false, message: `Logistics value for ${field} must evaluate cleanly to an integer.` });
+          // Explicit null check to clear mappings
+          if (value === null) {
+            sanitizedPayload[field] = null;
+          } else {
+            const parsedVal = parseInt(value, 10);
+            if (isNaN(parsedVal) || parsedVal <= 0) {
+              return res.status(400).json({
+                success: false,
+                message: `Logistics value for ${field} must be a positive integer or null.`
+              });
+            }
+            sanitizedPayload[field] = parsedVal;
           }
         }
       }
@@ -1583,9 +1779,8 @@ router.put('/item-bk/mass-edit', async (req, res) => {
       return res.status(400).json({ success: false, message: "No valid tracking parameters parsed for database changes." });
     }
 
-    // 4. Database Transaction Write Execution
-    // Standard Knex execution syntax query matrix:
-    await db('item_bk')
+    // 4. Database Write Execution
+    const rowsAffected = await db('item_bk')
       .whereIn('id', ids)
       .update(sanitizedPayload);
 
@@ -1598,8 +1793,8 @@ router.put('/item-bk/mass-edit', async (req, res) => {
 
     return res.status(200).json({
       success: true,
-      message: `Successfully updated config variables across ${ids.length} selected row contexts.`,
-      rowsAffected: ids.length
+      message: `Successfully updated config variables across ${rowsAffected} selected row contexts.`,
+      rowsAffected
     });
 
   } catch (error) {
@@ -1940,6 +2135,121 @@ router.get('/v2/daily-counts', async (req, res) => {
   }
 });
 
+// router.get("/daily-report", async (req, res) => {
+//   const { site, date } = req.query; // Expects site: "Rankin", date: "YYYY-MM-DD"
+//   const db = getPg();
+
+//   if (!site || !date) {
+//     return res.status(400).json({ success: false, message: "Missing required parameters: site and date." });
+//   }
+
+//   try {
+//     // 1. Resolve the text site name to its MongoDB ID string reference
+//     const locationDoc = await Location.findOne({ site }).lean();
+//     if (!locationDoc) {
+//       return res.status(404).json({ success: false, message: `Location profile not found for site: ${site}` });
+//     }
+//     const siteMongoIdStr = locationDoc._id.toString();
+
+//     // 2. Fetch the instance row from PostgreSQL
+//     const instance = await db("cycle_count_instance")
+//       .where({ site_mongo_id: siteMongoIdStr, date: date })
+//       .first();
+
+//     // console.log("Resolved instance for report query:", instance.id);
+
+//     // If no instance exists for that day, return an empty array gracefully
+//     if (!instance) {
+//       return res.status(200).json({ success: true, data: [] });
+//     }
+
+//     // 3. Fetch all Mongo Product Categories upfront to avoid N+1 query performance hits
+//     const mongoCategories = await ProductCategory.find({}).lean();
+//     const categoryMap = new Map(mongoCategories.map(cat => [Number(cat.Number), cat.Name]));
+
+//     // 4. Query all items tied to this instance, including case/crate breakdowns & master product details
+//     const reportItems = await db("cycle_count_items as cci")
+//       .join("item_bk as ib", "cci.product_id", "ib.id")
+//       .where({
+//         "cci.instance_id": instance.id
+//         // "cci.count_completed": true // Added condition here
+//       })
+//       .select(
+//         "cci.id as itemId",
+//         "cci.product_id as productId",
+//         "ib.description as name",
+//         "ib.upc_barcode as upc_barcode",
+//         "ib.image_url",
+//         "ib.retail as unitPrice",
+//         "ib.pk_in_crt",
+//         "ib.category_id as categoryId",
+//         "ib.on_hand_at_count as onHandCSO",
+//         "cci.foh",
+//         "cci.foh_crt",
+//         "cci.foh_case",
+//         "cci.boh",
+//         "cci.boh_crt",
+//         "cci.boh_case",
+//         "cci.count_completed",
+//         "cci.priority"
+//       );
+
+//     // console.log(`Fetched ${reportItems.length} items for report generation.`);
+
+//     // 5. Calculate total pieces and stitch the categoryName into the payload
+//     const parsedItems = reportItems.map(item => {
+//       const totalFoh = Number(item.foh || 0);
+//       const totalBoh = Number(item.boh || 0);
+//       const compositeTotalQty = totalFoh + totalBoh;
+//       const cleanCategoryId = item.categoryId ? Number(item.categoryId) : 0;
+
+//       return {
+//         _id: String(item.itemId),
+//         productId: item.productId,
+//         name: item.name,
+//         upc_barcode: item.upc_barcode,
+//         image_url: item.image_url,
+//         unitPrice: item.unitPrice ? Number(item.unitPrice) : 0,
+//         onHandCSO: item.onHandCSO ? Number(item.onHandCSO) : 0,
+//         categoryId: cleanCategoryId,
+//         pk_in_crt: item.pk_in_crt ? Number(item.pk_in_crt) : 0,
+
+//         // Match Postgres categoryId with Mongo's "Number" field to get the string Name
+//         categoryName: categoryMap.get(cleanCategoryId) || "Unknown Category",
+
+//         // Loose counts
+//         foh: totalFoh,
+//         boh: totalBoh,
+
+//         // Case / Crate tracking metrics
+//         foh_crt: item.foh_crt,
+//         foh_case: item.foh_case,
+//         boh_crt: item.boh_crt,
+//         boh_case: item.boh_case,
+
+//         totalQty: compositeTotalQty,
+//         count_completed: item.count_completed,
+//         priority: item.priority,
+//         comments: []
+//       };
+//     });
+
+//     return res.status(200).json({
+//       success: true,
+//       instanceId: instance.id,
+//       date: instance.date,
+//       day: instance.day,
+//       data: parsedItems
+//     });
+
+//   } catch (error) {
+//     console.error("Error generating relational variance report query:", error);
+//     return res.status(500).json({ success: false, message: "Internal server registry error processing report data." });
+//   }
+// });
+
+// GET: Fetch all notes for an instance with user profiles
+
 router.get("/daily-report", async (req, res) => {
   const { site, date } = req.query; // Expects site: "Rankin", date: "YYYY-MM-DD"
   const db = getPg();
@@ -1965,19 +2275,18 @@ router.get("/daily-report", async (req, res) => {
 
     // If no instance exists for that day, return an empty array gracefully
     if (!instance) {
-      return res.status(200).json({ success: true, data: [] });
+      return res.status(200).json({ success: true, data: [], lastCountedAt: null });
     }
 
     // 3. Fetch all Mongo Product Categories upfront to avoid N+1 query performance hits
     const mongoCategories = await ProductCategory.find({}).lean();
     const categoryMap = new Map(mongoCategories.map(cat => [Number(cat.Number), cat.Name]));
 
-    // 4. Query all items tied to this instance, including case/crate breakdowns & master product details
+    // 4. Query all items tied to this instance, including cci.updated_at
     const reportItems = await db("cycle_count_items as cci")
       .join("item_bk as ib", "cci.product_id", "ib.id")
       .where({
         "cci.instance_id": instance.id
-        // "cci.count_completed": true // Added condition here
       })
       .select(
         "cci.id as itemId",
@@ -1987,6 +2296,7 @@ router.get("/daily-report", async (req, res) => {
         "ib.image_url",
         "ib.retail as unitPrice",
         "ib.pk_in_crt",
+        // "ib.crt_in_case",
         "ib.category_id as categoryId",
         "ib.on_hand_at_count as onHandCSO",
         "cci.foh",
@@ -1995,13 +2305,36 @@ router.get("/daily-report", async (req, res) => {
         "cci.boh",
         "cci.boh_crt",
         "cci.boh_case",
+        "cci.manager_foh",
+        "cci.manager_boh",
+        "cci.manager_foh_crt",
+        "cci.manager_boh_crt",
+        // "cci.manager_foh_case",
+        // "cci.manager_boh_case",
         "cci.count_completed",
-        "cci.priority"
+        "cci.priority",
+        "cci.updated_at" // Added updated_at column
       );
 
-    // console.log(`Fetched ${reportItems.length} items for report generation.`);
+    // 5. Find the most recent updated_at timestamp among completed counts only
+    let lastCountedAt = null;
+    if (reportItems.length > 0) {
+      const validTimestamps = reportItems
+        .filter(i => Boolean(i.count_completed) && i.updated_at) // Filter only completed counts with timestamps
+        .map(i => new Date(i.updated_at).getTime());
 
-    // 5. Calculate total pieces and stitch the categoryName into the payload
+      if (validTimestamps.length > 0) {
+        const maxTimestamp = new Date(Math.max(...validTimestamps));
+        const timeZone = locationDoc.timezone || "America/New_York"; // Fallback if timezone not explicitly defined
+        
+        // Convert UTC database time to Station Local Time
+        lastCountedAt = moment(maxTimestamp)
+          .tz(timeZone)
+          .format("YYYY-MM-DD hh:mm A z");
+      }
+    }
+
+    // 6. Calculate total pieces and stitch category name
     const parsedItems = reportItems.map(item => {
       const totalFoh = Number(item.foh || 0);
       const totalBoh = Number(item.boh || 0);
@@ -2018,6 +2351,7 @@ router.get("/daily-report", async (req, res) => {
         onHandCSO: item.onHandCSO ? Number(item.onHandCSO) : 0,
         categoryId: cleanCategoryId,
         pk_in_crt: item.pk_in_crt ? Number(item.pk_in_crt) : 0,
+        crt_in_case: item.crt_in_case ? Number(item.crt_in_case) : 0,
 
         // Match Postgres categoryId with Mongo's "Number" field to get the string Name
         categoryName: categoryMap.get(cleanCategoryId) || "Unknown Category",
@@ -2031,10 +2365,17 @@ router.get("/daily-report", async (req, res) => {
         foh_case: item.foh_case,
         boh_crt: item.boh_crt,
         boh_case: item.boh_case,
+        manager_foh: item.manager_foh,
+        manager_boh: item.manager_boh,
+        manager_foh_crt: item.manager_foh_crt,
+        manager_boh_crt: item.manager_boh_crt,
+        manager_foh_case: item.manager_foh_case,
+        manager_boh_case: item.manager_boh_case,
 
         totalQty: compositeTotalQty,
         count_completed: item.count_completed,
         priority: item.priority,
+        updated_at: item.updated_at,
         comments: []
       };
     });
@@ -2042,14 +2383,62 @@ router.get("/daily-report", async (req, res) => {
     return res.status(200).json({
       success: true,
       instanceId: instance.id,
+      isScheduled: instance.is_scheduled,
       date: instance.date,
       day: instance.day,
+      lastCountedAt, // Returns converted station local timestamp
       data: parsedItems
     });
 
   } catch (error) {
     console.error("Error generating relational variance report query:", error);
     return res.status(500).json({ success: false, message: "Internal server registry error processing report data." });
+  }
+});
+
+// PUT /api/cycle-counts/items/:id/manager-count
+router.put('/items/:id/manager-count', async (req, res) => {
+  try {
+    const { id } = req.params;
+    const {
+      manager_foh,
+      manager_boh,
+      manager_foh_crt,
+      manager_boh_crt,
+      manager_foh_case,
+      manager_boh_case,
+    } = req.body;
+    const db = getPg();
+
+    const payload = {
+      manager_foh: manager_foh !== undefined && manager_foh !== '' ? Number(manager_foh) : null,
+      manager_boh: manager_boh !== undefined && manager_boh !== '' ? Number(manager_boh) : null,
+      manager_foh_crt: manager_foh_crt !== undefined && manager_foh_crt !== '' ? Number(manager_foh_crt) : null,
+      manager_boh_crt: manager_boh_crt !== undefined && manager_boh_crt !== '' ? Number(manager_boh_crt) : null,
+      manager_foh_case: manager_foh_case !== undefined && manager_foh_case !== '' ? Number(manager_foh_case) : null,
+      manager_boh_case: manager_boh_case !== undefined && manager_boh_case !== '' ? Number(manager_boh_case) : null,
+    };
+
+    // Check live table first
+    let updatedCount = await db('cycle_count_items')
+      .where({ id: id })
+      .update(payload);
+
+    // If item was archived, update archive table instead
+    if (updatedCount === 0) {
+      updatedCount = await db('cycle_count_items_archive')
+        .where({ id: id })
+        .update(payload);
+    }
+
+    if (updatedCount === 0) {
+      return res.status(404).json({ success: false, error: 'Cycle count item not found' });
+    }
+
+    res.json({ success: true, data: payload });
+  } catch (error) {
+    console.error('Error updating manager count:', error);
+    res.status(500).json({ error: 'Failed to update manager count' });
   }
 });
 
@@ -2125,21 +2514,139 @@ router.post('/instance-notes', async (req, res) => {
       return res.status(401).json({ message: "Unauthorized: Missing user reference context." });
     }
 
+    // 1. Insert note into Postgres
     const [newNote] = await db("cycle_count_instance_notes")
       .insert({
         instance_id: instanceId,
         note: note.trim(),
-        user_mongo_id: cleanMongoId, // Pure 24-character hex string
+        user_mongo_id: cleanMongoId,
         created_at: new Date()
       })
       .returning("*");
 
+    // 2. Return HTTP response immediately to keep UX snappy
     res.status(201).json({ success: true, data: newNote });
+
+    // 3. Dispatch Notification asynchronously after sending response
+    try {
+      const senderRoleName = req.user?.role?.role_name;
+      const io = req.app.get('io');
+
+      if (!senderRoleName || !io) return;
+
+      // Query cycle_count_instance to retrieve the store_mongo_id and date
+      const instance = await db("cycle_count_instance")
+        .where({ id: instanceId })
+        .select("site_mongo_id", "date")
+        .first();
+
+      if (!instance || !instance.site_mongo_id) return;
+
+      // Query MongoDB Location model using site_mongo_id
+      const locationDoc = await Location.findById(instance.site_mongo_id).lean();
+      if (!locationDoc) return;
+
+      const stationName = locationDoc.stationName || locationDoc.site || "Store";
+      let recipientEmails = [];
+
+      // DIRECTIVE: Check role of sender
+      if (['Station Cashier', 'Station Manager'].includes(senderRoleName)) {
+        // --- CASE 1: Commented by Store Staff -> Notify "Inventory Team" ---
+        const inventoryRole = await Role.findOne({ role_name: 'Inventory Team' }).lean();
+        if (inventoryRole) {
+          const inventoryUsers = await User.find({
+            role: inventoryRole._id,
+            is_active: true
+          }).select('email').lean();
+
+          recipientEmails = inventoryUsers
+            .map(u => u.email)
+            .filter(Boolean);
+        }
+      } else {
+        // --- CASE 2: Commented by non-store staff (Category / Inventory / Admin) -> Notify Manager / Store Email ---
+        // Collect valid manager emails from location profile
+        if (Array.isArray(locationDoc.managerEmails) && locationDoc.managerEmails.length > 0) {
+          recipientEmails = locationDoc.managerEmails.filter(e => e && e.trim() !== "");
+        }
+
+        // Fallback: If no manager emails exist, use the store's primary email address
+        if (recipientEmails.length === 0 && locationDoc.email) {
+          recipientEmails = [locationDoc.email];
+        }
+      }
+
+      // Deduplicate emails and exclude sender's own email if present
+      const senderEmail = req.user?.email;
+      recipientEmails = [...new Set(recipientEmails)].filter(
+        email => email && email.toLowerCase() !== senderEmail?.toLowerCase()
+      );
+
+      if (!recipientEmails.length) return;
+
+      const senderName = req.user?.firstName || req.user?.lastName || "A user";
+
+      // Queue notification payload
+      await pushNotification({
+        io,
+        senderId: req.user._id,
+        recipientEmails,
+        slug: 'cycle-count-report-comment',
+        fieldValues: {
+          senderName,
+          site: stationName,
+          message: note.trim().substring(0, 200),
+          countDate: instance.date
+        },
+        subject: `New comment on cycle count report for ${stationName}`,
+        type: 'system'
+      });
+
+    } catch (notifErr) {
+      console.error('Cycle count report comment notification background dispatch error:', notifErr);
+    }
+
   } catch (err) {
     console.error("Error creating instance note:", err);
     res.status(500).json({ message: "Failed to post comment to thread." });
   }
 });
+
+// POST: Add a note to a specific count instance thread
+// router.post('/instance-notes', async (req, res) => {
+//   try {
+//     const { instanceId, note } = req.body;
+//     const userMongoId = req.user?._id;
+//     const db = getPg();
+
+//     if (!instanceId || !note?.trim()) {
+//       return res.status(400).json({ message: "Instance ID and note content are required." });
+//     }
+
+//     // Convert cleanly to hex string, stripping out any accidental double quotes
+//     const cleanMongoId = userMongoId
+//       ? userMongoId.toString().replace(/^"|"$/g, '')
+//       : null;
+
+//     if (!cleanMongoId) {
+//       return res.status(401).json({ message: "Unauthorized: Missing user reference context." });
+//     }
+
+//     const [newNote] = await db("cycle_count_instance_notes")
+//       .insert({
+//         instance_id: instanceId,
+//         note: note.trim(),
+//         user_mongo_id: cleanMongoId, // Pure 24-character hex string
+//         created_at: new Date()
+//       })
+//       .returning("*");
+
+//     res.status(201).json({ success: true, data: newNote });
+//   } catch (err) {
+//     console.error("Error creating instance note:", err);
+//     res.status(500).json({ message: "Failed to post comment to thread." });
+//   }
+// });
 
 // POST /api/cycle-count/:id/comments 
 // add new comments from the reports side
@@ -2166,6 +2673,44 @@ router.post('/:id/comments', async (req, res) => {
 });
 
 // Express Handler Endpoint: DELETE /api/cycle-count/instance/:id
+// router.delete('/instance/:id', async (req, res) => {
+//   const instanceId = req.params.id;
+//   const db = req.app.get("db") || getPg();
+
+//   try {
+//     // 1. Fetch the targeted instance profile record
+//     const instance = await db("cycle_count_instance")
+//       .where({ id: instanceId })
+//       .first();
+
+//     if (!instance) {
+//       return res.status(404).json({ message: "The requested count instance could not be found." });
+//     }
+
+//     // 2. CRITICAL SECURITY GUARDRAIL: Block deletion if it is NOT a manual/scheduled record
+//     // if (!instance.is_scheduled) {
+//     //   return res.status(403).json({
+//     //     message: "Action Denied: Automatically generated system count instances cannot be manually deleted."
+//     //   });
+//     // }
+
+//     // 3. Execution wrapper block
+//     await db.transaction(async (trx) => {
+//       // Due to 'ON DELETE CASCADE' on your Foreign Key constraint,
+//       // dropping the parent row here drops everything inside cycle_count_items automatically.
+//       await trx("cycle_count_instance")
+//         .where({ id: instanceId })
+//         .del();
+//     });
+
+//     console.log(`[SUCCESS] Purged scheduled instance ID: ${instanceId} along with its cascading items.`);
+//     res.json({ success: true, message: "Instance and linked line mappings completely dropped cleanly." });
+
+//   } catch (err) {
+//     console.error("Critical Failure executing Instance Deletion Chain:", err);
+//     res.status(500).json({ error: "Internal server error occurred while deleting the instance layout." });
+//   }
+// });
 router.delete('/instance/:id', async (req, res) => {
   const instanceId = req.params.id;
   const db = req.app.get("db") || getPg();
@@ -2180,12 +2725,19 @@ router.delete('/instance/:id', async (req, res) => {
       return res.status(404).json({ message: "The requested count instance could not be found." });
     }
 
-    // 2. CRITICAL SECURITY GUARDRAIL: Block deletion if it is NOT a manual/scheduled record
-    if (!instance.is_scheduled) {
-      return res.status(403).json({
-        message: "Action Denied: Automatically generated system count instances cannot be manually deleted."
-      });
+    // Resolve site name using site_mongo_id to target MongoDB Event cleanly
+    let siteName = null;
+    if (instance.site_mongo_id) {
+      const locationDoc = await Location.findById(instance.site_mongo_id).lean();
+      siteName = locationDoc?.site || locationDoc?.stationName || null;
     }
+
+    // 2. CRITICAL SECURITY GUARDRAIL: Block deletion if it is NOT a manual/scheduled record
+    // if (!instance.is_scheduled) {
+    //   return res.status(403).json({
+    //     message: "Action Denied: Automatically generated system count instances cannot be manually deleted."
+    //   });
+    // }
 
     // 3. Execution wrapper block
     await db.transaction(async (trx) => {
@@ -2197,7 +2749,28 @@ router.delete('/instance/:id', async (req, res) => {
     });
 
     console.log(`[SUCCESS] Purged scheduled instance ID: ${instanceId} along with its cascading items.`);
-    res.json({ success: true, message: "Instance and linked line mappings completely dropped cleanly." });
+
+    // 4. Clean up corresponding System Event in MongoDB if is_scheduled is true
+    if (instance.is_scheduled && siteName && instance.date) {
+      try {
+        const deletedEvent = await Event.findOneAndDelete({
+          site: siteName,
+          date: String(instance.date),
+          type: 'system',
+          title: { $regex: /^Count Scheduled/i },
+        });
+
+        if (deletedEvent) {
+          console.log(`[SUCCESS] Removed linked system event for site ${siteName} on ${instance.date}`);
+        } else {
+          console.warn(`[WARN] No matching system event found to delete for site ${siteName} on ${instance.date}`);
+        }
+      } catch (eventErr) {
+        console.error("Failed to delete corresponding system event from MongoDB:", eventErr);
+      }
+    }
+
+    res.json({ success: true, message: "Instance, linked line mappings, and associated calendar event completely dropped cleanly." });
 
   } catch (err) {
     console.error("Critical Failure executing Instance Deletion Chain:", err);

@@ -6,6 +6,11 @@ const mongoose = require('mongoose');
  */
 const ItemSchema = new mongoose.Schema({
   gtin: { type: String, required: true },           // Global Trade Item Number
+  // Column B of the item's CRT ("carton") sub-row in the order rec file, when it
+  // has one. This — not gtin — is what the planogram lists for anything sold by
+  // the carton; gtin on those rows is the PACK barcode, which never appears on a
+  // planogram. Empty for items with no CRT row (all Chew, most Cannabis).
+  crtCode: { type: String, default: '' },
   vin: { type: String, default: '' },               // Vendor Item Number
   itemName: { type: String, default: '' },          // Name of the item
   strainName: { type: String, default: '' },        // Strain name (only for pcg items)
@@ -18,7 +23,11 @@ const ItemSchema = new mongoose.Schema({
   unitInCase: { type: Number, default: 0 },         // Units per case
   casesToOrder: { type: Number, default: 0 },       // Number of cases to order
   casesToOrderOld: { type: Number, default: 0 },    // Previous number of cases to order
-  completed: { type: Boolean, default: false }      // Whether this item is completed
+  completed: { type: Boolean, default: false },     // Whether this item is completed
+  // True when this GTIN is absent from the site's planogram. Defaults to false
+  // so that documents predating this field — including ones replayed from the
+  // offline IndexedDB cache — read as "not flagged" rather than lighting up.
+  offPlanogram: { type: Boolean, default: false }
 });
 
 /**
@@ -78,7 +87,10 @@ const OrderReconciliationSchema = new mongoose.Schema({
   comments: {
     type: [CommentSchema],
     default: []
-  }                                                 // Array of comments
+  },                                                // Array of comments
+  // When the planogram check last ran. null means it never did — either the
+  // site had no planogram on file, or the doc predates the feature.
+  planogramCheckedAt: { type: Date, default: null }
 });
 
 /**

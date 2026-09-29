@@ -84,6 +84,19 @@ export default function FuelPriceTicker() {
     return allTickerData.filter((station) => siteAccess[station.site ?? station.stationName] === true);
   }, [allTickerData, user]);
 
+  // 🚀 DYNAMIC SPEED LOGIC
+  // Calculates marquee duration based on site volume to maintain readable scrolling velocity
+  const dynamicAnimationDuration = useMemo(() => {
+    const storeCount = permittedTickerData.length;
+    if (storeCount === 0) return '0s';
+
+    const BASE_DURATION = 15;      // Base minimum duration (seconds)
+    const SECONDS_PER_STORE = 15;  // Duration added per store entry
+
+    const totalSeconds = BASE_DURATION + (storeCount * SECONDS_PER_STORE);
+    return `${totalSeconds}s`;
+  }, [permittedTickerData.length]);
+
   if (!permittedTickerData || permittedTickerData.length === 0) return null;
 
   return (
@@ -94,7 +107,7 @@ export default function FuelPriceTicker() {
     <div className="w-full overflow-hidden bg-slate-50 border-b border-slate-200 py-2 relative z-25 flex">
       <div 
         className="flex w-max animate-marquee pause-on-hover select-none items-center"
-        style={{ animationDuration: '75s' }} // Consistent, highly readable crawling velocity
+        style={{ animationDuration: dynamicAnimationDuration }}
       >
         <TickerLayoutContent data={permittedTickerData} />
         <TickerLayoutContent data={permittedTickerData} />
@@ -102,6 +115,61 @@ export default function FuelPriceTicker() {
     </div>
   );
 }
+// export default function FuelPriceTicker() {
+//   const [allTickerData, setAllTickerData] = useState<TickerStationRecord[]>([]);
+//   const { user } = useAuth();
+
+//   const fetchTickerData = useCallback(async () => {
+//     try {
+//       const token = localStorage.getItem('token');
+//       const { data } = await axios.get('/api/fuel-pricing/prices-ticker', {
+//         headers: { Authorization: `Bearer ${token || ''}` }
+//       });
+//       setAllTickerData(data || []);
+//     } catch (err) {
+//       console.error("Failed fetching pricing ticker:", err);
+//     }
+//   }, []);
+
+//   useEffect(() => {
+//     fetchTickerData();
+//     const interval = setInterval(fetchTickerData, 2 * 60 * 1000);
+//     return () => clearInterval(interval);
+//   }, [fetchTickerData]);
+
+//   useEffect(() => {
+//     const socket = getSocket();
+//     socket.on("retail-price-published", () => {
+//       fetchTickerData();
+//     });
+//     return () => {
+//       socket.off("retail-price-published");
+//     };
+//   }, [fetchTickerData]);
+
+//   const permittedTickerData = useMemo(() => {
+//     const siteAccess = user?.access?.site_access || {};
+//     return allTickerData.filter((station) => siteAccess[station.site ?? station.stationName] === true);
+//   }, [allTickerData, user]);
+
+//   if (!permittedTickerData || permittedTickerData.length === 0) return null;
+
+//   return (
+//     /* 
+//       The layout uses a twin-track layout pattern inside an overflow-hidden wrapper.
+//       This allows track 1 and track 2 to seamlessly append each other with no gaps or dead loops.
+//     */
+//     <div className="w-full overflow-hidden bg-slate-50 border-b border-slate-200 py-2 relative z-25 flex">
+//       <div 
+//         className="flex w-max animate-marquee pause-on-hover select-none items-center"
+//         style={{ animationDuration: '75s' }} // Consistent, highly readable crawling velocity
+//       >
+//         <TickerLayoutContent data={permittedTickerData} />
+//         <TickerLayoutContent data={permittedTickerData} />
+//       </div>
+//     </div>
+//   );
+// }
 
 function TickerLayoutContent({ data }: { data: TickerStationRecord[] }) {
   return (

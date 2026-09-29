@@ -3,7 +3,19 @@ const connection = require("../utils/redisClient");
 const { getPg } = require("../config/pg");
 const { emailQueue } = require("./emailQueue");
 
-const priceTimeoutQueue = new Queue("priceTimeoutQueue", { connection });
+const priceTimeoutQueue = new Queue("priceTimeoutQueue", {
+  connection,
+  defaultJobOptions: {
+    removeOnComplete: {
+      count: 20,
+      age: 1800, // Keep completed jobs for 30 minutes
+    },
+    removeOnFail: {
+      count: 100, // Increased count limit slightly to hold weekend volume
+      age: 259200, // Keep failed jobs for 3 days (72 hours)
+    },
+  },
+});
 
 const priceTimeoutWorker = new Worker(
   "priceTimeoutQueue",

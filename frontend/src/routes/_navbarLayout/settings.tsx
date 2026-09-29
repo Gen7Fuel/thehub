@@ -2,6 +2,7 @@ import { createFileRoute, Link, Outlet } from '@tanstack/react-router'
 import { useState } from 'react'
 import axios from 'axios'
 import { useAuth } from "@/context/AuthContext";
+import { MasterDetailShell } from "@/components/custom/masterDetailShell";
 
 // Define the route for the Settings section using TanStack Router
 export const Route = createFileRoute('/_navbarLayout/settings')({
@@ -97,65 +98,65 @@ function RouteComponent() {
   ]
 
   return (
-    <div className='flex pt-5 mx-auto'>
-      {/* Sidebar navigation for settings */}
-      <aside className='flex flex-col w-1/4 p-4 border-r border-gray-300 border-dashed justify-start items-end'>
-        {links.map((link) => (
-          <Link key={link.to} className='p-2' to={link.to} activeProps={activeProps}>
-            {link.label}
-          </Link>
-        ))}
-        {access?.settings?.maintenance && (
-          <Link key='/settings/maintenance' className='p-2' to='/settings/maintenance' activeProps={activeProps}>
-            Maintenance
-          </Link>
-        )}
-        {access?.settings?.notification && (
-          <Link key='/settings/notification' className='p-2' to='/settings/notification' activeProps={activeProps}>
-            Notifications
-          </Link>
-        )}
-        <div className='mt-4 pt-4 border-t border-gray-300 border-dashed w-full flex flex-col items-end'>
-          <button
-            onClick={handleRefreshCache}
-            disabled={cacheRefreshing}
-            className='p-2 text-sm text-blue-600 hover:text-blue-800 disabled:text-gray-400 cursor-pointer disabled:cursor-not-allowed'
-          >
-            {cacheRefreshing ? 'Refreshing...' : 'Refresh Dashboard Cache'}
-          </button>
-          {cacheMessage && (
-            <span className='text-xs text-gray-500 mt-1 pr-2'>{cacheMessage}</span>
+    <MasterDetailShell
+      className="pt-5"
+      sidebar={
+        <>
+          {links.map((link) => (
+            <Link key={link.to} className='p-2 w-full' to={link.to} activeProps={activeProps}>
+              {link.label}
+            </Link>
+          ))}
+          {access?.settings?.maintenance && (
+            <Link key='/settings/maintenance' className='p-2 w-full' to='/settings/maintenance' activeProps={activeProps}>
+              Maintenance
+            </Link>
           )}
-          {/* NEW MANUAL SYNC BUTTON */}
-          <button
-            onClick={handleManualSync}
-            disabled={syncing}
-            className='p-2 text-sm text-orange-600 hover:text-orange-800 disabled:text-gray-400 cursor-pointer disabled:cursor-not-allowed text-right'
-          >
-            {syncing ? 'Syncing Data...' : 'Run Manual Fuel Sync'}
-          </button>
+          {access?.settings?.notification && (
+            <Link key='/settings/notification' className='p-2 w-full' to='/settings/notification' activeProps={activeProps}>
+              Notifications
+            </Link>
+          )}
+          <div className='mt-4 pt-4 border-t border-gray-300 border-dashed w-full flex flex-col items-start'>
+            <button
+              onClick={handleRefreshCache}
+              disabled={cacheRefreshing}
+              className='p-2 text-sm text-blue-600 hover:text-blue-800 disabled:text-gray-400 cursor-pointer disabled:cursor-not-allowed'
+            >
+              {cacheRefreshing ? 'Refreshing...' : 'Refresh Dashboard Cache'}
+            </button>
+            {cacheMessage && (
+              <span className='text-xs text-gray-500 mt-1 pr-2'>{cacheMessage}</span>
+            )}
+            {/* NEW MANUAL SYNC BUTTON */}
+            <button
+              onClick={handleManualSync}
+              disabled={syncing}
+              className='p-2 text-sm text-orange-600 hover:text-orange-800 disabled:text-gray-400 cursor-pointer disabled:cursor-not-allowed'
+            >
+              {syncing ? 'Syncing Data...' : 'Run Manual Fuel Sync'}
+            </button>
 
-          {(cacheMessage || syncMessage) && (
-            <span className='text-xs text-gray-500 mt-1 pr-2 text-right'>
-              {syncMessage || cacheMessage}
-            </span>
-          )}
-          <button
-            onClick={handleSendWeeklyArReport}
-            disabled={arReportSending}
-            className='p-2 text-sm text-green-900 hover:text-green-950 disabled:text-gray-400 cursor-pointer disabled:cursor-not-allowed text-right'
-          >
-            {arReportSending ? 'Sending...' : 'Send Weekly AR Report'}
-          </button>
-          {arReportMessage && (
-            <span className='text-xs text-gray-500 mt-1 pr-2 text-right'>{arReportMessage}</span>
-          )}
-        </div>
-      </aside>
-      {/* Main content area for the selected settings page */}
-      <main className='w-3/4'>
-        <Outlet />
-      </main>
-    </div>
+            {(cacheMessage || syncMessage) && (
+              <span className='text-xs text-gray-500 mt-1 pr-2'>
+                {syncMessage || cacheMessage}
+              </span>
+            )}
+            <button
+              onClick={handleSendWeeklyArReport}
+              disabled={arReportSending}
+              className='p-2 text-sm text-green-900 hover:text-green-950 disabled:text-gray-400 cursor-pointer disabled:cursor-not-allowed'
+            >
+              {arReportSending ? 'Sending...' : 'Send Weekly AR Report'}
+            </button>
+            {arReportMessage && (
+              <span className='text-xs text-gray-500 mt-1 pr-2'>{arReportMessage}</span>
+            )}
+          </div>
+        </>
+      }
+    >
+      <Outlet />
+    </MasterDetailShell>
   )
 }

@@ -8,7 +8,7 @@ import { LocationPicker } from '@/components/custom/locationPicker'
 import PurchaseOrderPDF from '@/components/custom/poForm'
 import { pdf } from '@react-pdf/renderer'
 import { Button } from '@/components/ui/button'
-import { Trash2, Camera, Loader2, Calendar, AlertTriangle } from 'lucide-react'
+import { Trash2, Camera, Loader2, Calendar, AlertTriangle, Search, X } from 'lucide-react'
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog'
 import { Label } from '@/components/ui/label'
 import { getStartAndEndOfToday, uploadBase64Image } from '@/lib/utils'
@@ -45,6 +45,12 @@ function RouteComponent() {
 
   const [stationName, setStationName] = React.useState<string>(selectedSite || user?.location || "");
   const [, setTimezone] = React.useState<string>(user?.timezone || "America/Toronto");
+
+  // Client-side-only filter on customer name for the table below. Deliberately
+  // NOT added to the fetchPurchaseOrders() effect deps (the `[date, stationName]`
+  // effect further down) — it never triggers a server refetch, it only narrows
+  // what's rendered from the already-fetched `allOrders`.
+  const [customerSearch, setCustomerSearch] = React.useState<string>('');
   const [purchaseOrders, setPurchaseOrders] = React.useState<
     {
     _id?: string;
@@ -161,7 +167,12 @@ function RouteComponent() {
     signature: a.payload.signature,
     receipt: '',
     requestReceipt: false,
-    pending: !a.failed,
+    // Three mutually-exclusive states: failed (terminal), syncing (the one
+    // entry the background sync loop is uploading right now — sync is
+    // strictly one-at-a-time, see syncPendingActions() in lib/utils.ts),
+    // and pending (queued, waiting its turn).
+    pending: !a.failed && !a.syncing,
+    syncing: !a.failed && !!a.syncing,
     failed: !!a.failed,
     failureReason: a.failureReason,
     _key: a._key,
@@ -171,10 +182,22 @@ function RouteComponent() {
   // duplicate PO number) will never succeed no matter how many times the
   // background sync retries — surfaced separately so they don't sit as an
   // unexplained "pending" spinner forever.
-  const pendingRows = filteredPendingActions.filter((a: any) => !a.failed).map(mapPendingAction);
   const failedRows = filteredPendingActions.filter((a: any) => a.failed).map(mapPendingAction);
+  const syncingRows = filteredPendingActions.filter((a: any) => !a.failed && a.syncing).map(mapPendingAction);
+  const pendingRows = filteredPendingActions.filter((a: any) => !a.failed && !a.syncing).map(mapPendingAction);
 
-  const allOrders = [...failedRows, ...pendingRows, ...purchaseOrders];
+  const allOrders = [...failedRows, ...syncingRows, ...pendingRows, ...purchaseOrders];
+
+  // Live, case-insensitive substring match on customer name only. `allOrders`
+  // is a small in-memory array already scoped to the selected date range +
+  // station, so no debounce/memoization is needed here.
+  const normalizedCustomerSearch = customerSearch.trim().toLowerCase();
+  const matchesCustomerSearch = (o: any) =>
+    !normalizedCustomerSearch || (o.customerName || '').toLowerCase().includes(normalizedCustomerSearch);
+  const filteredOrders = allOrders.filter(matchesCustomerSearch);
+  const filteredSyncingCount = filteredOrders.filter((o: any) => o.syncing).length;
+  const filteredPendingCount = filteredOrders.filter((o: any) => o.pending).length;
+  const filteredFailedCount = filteredOrders.filter((o: any) => o.failed).length;
 
   const dismissFailedPO = async (key: any) => {
     if (key == null) return;
@@ -349,7 +372,7 @@ function RouteComponent() {
     }
   }
 
-  const showActionsColumn = !!(access?.po?.pdf || access?.po?.changeDate || access?.po?.delete || purchaseOrders.some(o => o.requestReceipt) || pendingRows.length > 0 || failedRows.length > 0)
+  const showActionsColumn = !!(access?.po?.pdf || access?.po?.changeDate || access?.po?.delete || purchaseOrders.some(o => o.requestReceipt) || pendingRows.length > 0 || syncingRows.length > 0 || failedRows.length > 0)
 
   return (
     <div className="p-4 border border-dashed border-gray-300 rounded-md">
@@ -363,8 +386,31 @@ function RouteComponent() {
       />
       <h2 className="text-lg font-bold mb-2">Purchase Order List</h2>
 
-      <div className="flex justify-between gap-4 border-t border-dashed border-gray-300 mt-4 pt-4">
+      <div className="flex flex-wrap items-center gap-4 border-t border-dashed border-gray-300 mt-4 pt-4">
         <DatePickerWithRange date={date} setDate={setDate} />
+
+        <div className="flex-1 min-w-[220px] max-w-xl relative">
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
+          <input
+            type="text"
+            placeholder="Search customer name..."
+            value={customerSearch}
+            onChange={(e) => setCustomerSearch(e.target.value)}
+            className="w-full pl-9 pr-9 py-2 border rounded-lg text-sm bg-gray-50 focus:bg-white focus:outline-none focus:ring-2 focus:ring-primary/20"
+            aria-label="Search by customer name"
+          />
+          {customerSearch && (
+            <button
+              type="button"
+              onClick={() => setCustomerSearch('')}
+              className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
+              aria-label="Clear customer name search"
+              title="Clear search"
+            >
+              <X className="h-4 w-4" />
+            </button>
+          )}
+        </div>
 
         <LocationPicker
           setStationName={setStationName}
@@ -376,16 +422,19 @@ function RouteComponent() {
 
       <div className="flex justify-between border-b border-dashed border-gray-300 py-2 mb-2 text-sm text-gray-600">
         <span>
-          {allOrders.length} {allOrders.length === 1 ? 'entry' : 'entries'}
-          {pendingRows.length > 0 && (
-            <span className="text-amber-600"> ({pendingRows.length} pending upload)</span>
+          {filteredOrders.length} {filteredOrders.length === 1 ? 'entry' : 'entries'}
+          {filteredSyncingCount > 0 && (
+            <span className="text-blue-600"> ({filteredSyncingCount} sending)</span>
           )}
-          {failedRows.length > 0 && (
-            <span className="text-red-600"> ({failedRows.length} failed)</span>
+          {filteredPendingCount > 0 && (
+            <span className="text-amber-600"> ({filteredPendingCount} pending upload)</span>
+          )}
+          {filteredFailedCount > 0 && (
+            <span className="text-red-600"> ({filteredFailedCount} failed)</span>
           )}
         </span>
-        <span>Qty: {allOrders.reduce((sum, o) => sum + o.quantity, 0).toFixed(3)}</span>
-        <span>Total: ${allOrders.reduce((sum, o) => sum + o.amount, 0).toFixed(2)}</span>
+        <span>Qty: {filteredOrders.reduce((sum, o) => sum + o.quantity, 0).toFixed(3)}</span>
+        <span>Total: ${filteredOrders.reduce((sum, o) => sum + o.amount, 0).toFixed(2)}</span>
       </div>
 
       <table className="table-auto w-full border-collapse border-0 mt-4">
@@ -405,14 +454,28 @@ function RouteComponent() {
           </tr>
         </thead>
         <tbody>
-          {allOrders.length > 0 ? (
-            allOrders.map((order: any, index) => (
-              <tr key={order._id ?? index} className={order.failed ? 'bg-red-50 hover:bg-red-100' : order.pending ? 'bg-amber-50 hover:bg-amber-100' : 'hover:bg-gray-50'}>
+          {filteredOrders.length > 0 ? (
+            filteredOrders.map((order: any, index) => (
+              <tr key={order._id ?? index} className={order.failed ? 'bg-red-50 hover:bg-red-100' : order.syncing ? 'bg-blue-50 hover:bg-blue-100' : order.pending ? 'bg-amber-50 hover:bg-amber-100' : 'hover:bg-gray-50'}>
                 <td className="border-dashed border-t border-gray-300 px-4 py-2">{
                   order.dateStr || new Date(order.date).toLocaleDateString('en-CA', { timeZone: 'UTC' })
                 }</td>
                 <td className="border-dashed border-t border-gray-300 px-4 py-2">{order.noFleetCard ? 'No Fleet Card' : (formatFleetCardNumber(order.fleetCardNumber) || order.poNumber)}</td>
-                <td className="border-dashed border-t border-gray-300 px-4 py-2">{order.customerName}</td>
+                <td className="border-dashed border-t border-gray-300 px-4 py-2">
+                  {order.customerName ? (
+                    <button
+                      type="button"
+                      onClick={() => setCustomerSearch(order.customerName)}
+                      className="text-blue-600 underline decoration-dotted hover:text-blue-800 hover:decoration-solid text-left"
+                      title={`Filter list by customer: ${order.customerName}`}
+                      aria-label={`Filter purchase order list by customer ${order.customerName}`}
+                    >
+                      {order.customerName}
+                    </button>
+                  ) : (
+                    order.customerName
+                  )}
+                </td>
                 <td className="border-dashed border-t border-gray-300 px-4 py-2">{order.driverName}</td>
                 <td className="border-dashed border-t border-gray-300 px-4 py-2">{order.quantity}</td>
                 <td className="border-dashed border-t border-gray-300 px-4 py-2">{order.amount.toFixed(2)}</td>
@@ -439,6 +502,11 @@ function RouteComponent() {
                         >
                           Dismiss
                         </Button>
+                      </span>
+                    ) : order.syncing ? (
+                      <span className="text-xs font-medium text-blue-700 inline-flex items-center gap-1">
+                        <Loader2 className="h-3 w-3 animate-spin" />
+                        Sending…
                       </span>
                     ) : order.pending ? (
                       <span className="text-xs font-medium text-amber-700 inline-flex items-center gap-1">
@@ -496,7 +564,9 @@ function RouteComponent() {
           ) : (
             <tr>
               <td colSpan={9} className="border-dashed border-t border-gray-300 px-4 py-2 text-center">
-                No purchase orders available.
+                {normalizedCustomerSearch
+                  ? `No purchase orders found for "${customerSearch.trim()}".`
+                  : 'No purchase orders available.'}
               </td>
             </tr>
           )}

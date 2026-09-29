@@ -5,7 +5,7 @@ const require = createRequire(import.meta.url);
 // 3. Now all of your existing require paths will work perfectly without crashing!
 const Location = require("../models/Location");
 const User = require("../models/User");
-const { gasBuddyQueue } = require("../queues/gasBuddyQueue"); 
+const { gasBuddyQueue } = require("../queues/gasBuddyQueue");
 const { emailQueue } = require("../queues/emailQueue");
 const { priceTimeoutQueue } = require("../queues/priceTimeoutQueue");
 const { fuelNotificationQueue } = require("../queues/fuelNotificationQueue");
@@ -157,50 +157,92 @@ export async function executeRetailPriceUpdate({
     console.error("Non-blocking operational failure (Pushover Queue Dispatch):", err);
   }
 
-  try {
-    if (locationDoc.gasBuddyStationId) {
-      const normalizedPrices = {};
-      for (const [feCode, numericPrice] of Object.entries(prices)) {
-        if (feCode === "DYED") continue;
-        const gasBuddyLabel = GRADE_MAP[feCode];
-        if (
-          gasBuddyLabel &&
-          numericPrice !== undefined &&
-          numericPrice !== null
-        ) {
-          normalizedPrices[gasBuddyLabel] = parseFloat(numericPrice);
-        }
-      }
+  // --- In executeRetailPriceUpdate inside server file ---
+  // Temporary stopping of gas buddy queing.
+  // try {
+  //   if (locationDoc.gasBuddyStationId) {
+  //     const normalizedPrices = {};
+  //     for (const [feCode, numericPrice] of Object.entries(prices)) {
+  //       if (feCode === "DYED") continue;
+  //       const gasBuddyLabel = GRADE_MAP[feCode];
+  //       if (
+  //         gasBuddyLabel &&
+  //         numericPrice !== undefined &&
+  //         numericPrice !== null &&
+  //         !isNaN(numericPrice)
+  //       ) {
+  //         // Convert dollar input (1.549) to cents (154.9) without float rounding errors.
+  //         // Keep this as a STRING — wrapping it in Number() drops the trailing ".0" for
+  //         // round prices (Number("154.0") === 154), so GasBuddy would sometimes receive
+  //         // "154" instead of "154.0" depending on the price, and its price input reacts
+  //         // to a value with no decimal point differently than one that has it.
+  //         const priceInCents = (parseFloat(numericPrice) * 100).toFixed(1);
+  //         normalizedPrices[gasBuddyLabel] = priceInCents;
+  //       }
+  //     }
 
-      if (Object.keys(normalizedPrices).length > 0) {
-        await gasBuddyQueue.add(
-          `gasbuddy-sync-${locationId}-${Date.now()}`,
-          {
-            gasBuddyStationId: locationDoc.gasBuddyStationId,
-            stationName,
-            prices: normalizedPrices,
-          },
-          { removeOnComplete: true, removeOnFail: false },
-        );
-      }
-    }
-  } catch (err) {
-    console.error("Non-blocking operational failure (GasBuddy):", err);
-  }
+  //     if (Object.keys(normalizedPrices).length > 0) {
+  //       await gasBuddyQueue.add(
+  //         `gasbuddy-sync-${locationId}-${Date.now()}`,
+  //         {
+  //           gasBuddyStationId: locationDoc.gasBuddyStationId,
+  //           stationName,
+  //           prices: normalizedPrices,
+  //         },
+  //         { removeOnComplete: true, removeOnFail: false },
+  //       );
+  //     }
+  //   }
+  // } catch (err) {
+  //   console.error("Non-blocking operational failure (GasBuddy):", err);
+  // }
+
+  // GVM Unifi price sync deliberately does NOT fire from here. It's
+  // triggered from the site's photo-verification step instead (see
+  // routes/fuel/fuelPricingRoutes.js, PUT /verify-price-receipt) — firing
+  // here (at publish time) would put the cardlock pumps' new price live
+  // before the cashier has even been notified to change the street-pump
+  // price in Bulloch, let alone done it. Syncing GVM to the verification
+  // step instead means both price sets change at roughly the same time.
 
   if (databaseWritesExecutedCount > 0) {
     const storeEmail = locationDoc.email;
     const targetStationName = stationName || locationDoc.stationName;
+
+    // -------------------------------------------------------------------------
+    // Helper: Build Dynamic Store & Permanent CC List
+    // -------------------------------------------------------------------------
+    const getStoreAndPermanentCCs = (station) => {
+      const ccs = ["kporter@gen7fuel.com", "daksh@gen7fuel.com"];
+
+      // Station Group 1 Mapping
+      const group1Stations = ["Silver Grizzly", "Oliver", "Osoyoos", "Charlies"];
+      // Station Group 2 Mapping
+      const group2Stations = ["Couchiching", "Wavers West", "Wavers East"];
+
+      if (group1Stations.includes(station)) {
+        ccs.push("michelle@gen7fuel.com");
+      } else if (group2Stations.includes(station)) {
+        ccs.push("dennis@gen7fuel.com");
+      }
+
+      return ccs;
+    };
+
+    const extraCCs = getStoreAndPermanentCCs(targetStationName);
+
     const baseCCEmails = Array.isArray(locationDoc.managerEmails)
       ? [
           ...locationDoc.managerEmails,
-          "kporter@gen7fuel.com",
-          "daksh@gen7fuel.com",
+          ...extraCCs,
         ]
       : [
-            "kporter@gen7fuel.com", 
-            "daksh@gen7fuel.com"
+          ...extraCCs,
         ];
+
+    // Deduplicate CCs in case any address is duplicated
+    const uniqueBaseCCEmails = Array.from(new Set(baseCCEmails));
+
     // 1. Send IMMEDIATE general update alert to store, copying managers & admin
     const initialNoticeHtml = `
         <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; border: 1px solid #e2e8f0; border-radius: 16px; background-color: #ffffff;">
@@ -239,13 +281,13 @@ export async function executeRetailPriceUpdate({
       `;
     await emailQueue.add(`immediate-price-notice-${locationId}-${Date.now()}`, {
       to: storeEmail,
-      cc: baseCCEmails,
+      cc: uniqueBaseCCEmails,
       subject: `Notice: Fuel Prices Updated - ${targetStationName}`,
       html: initialNoticeHtml,
     });
 
     // -------------------------------------------------------------------------
-    // 1. TEMPLATE: 15-Minute Store Reminder Email (Kept your exact style)
+    // 1. TEMPLATE: 15-Minute Store Reminder Email
     // -------------------------------------------------------------------------
     const storeReminderHtml = `
         <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; border: 1px solid #e2e8f0; border-radius: 16px; background-color: #ffffff;">
@@ -284,7 +326,7 @@ export async function executeRetailPriceUpdate({
       `;
 
     // -------------------------------------------------------------------------
-    // 2. TEMPLATE: 30-Minute Admin Escalation Email (Plain & understandable)
+    // 2. TEMPLATE: 30-Minute Admin Escalation Email (UNTOUCHED CC LIST)
     // -------------------------------------------------------------------------
     const adminEscalationHtml = `
         <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; color: #334155; line-height: 1.6;">
@@ -328,7 +370,7 @@ export async function executeRetailPriceUpdate({
         locationId,
         stationName: targetStationName,
         toEmail: storeEmail,
-        ccEmails: baseCCEmails,
+        ccEmails: uniqueBaseCCEmails,
         subject: `Reminder: Update Fuel Prices - ${targetStationName}`,
         html: storeReminderHtml,
         hasInfonet,
@@ -354,7 +396,6 @@ export async function executeRetailPriceUpdate({
     // Marketing compilation blocks
     let marketingRowsHtml = "";
 
-    // Compile changed rows into view engine
     for (const item of changedGradesList) {
       const displayOld =
         item.oldPrice !== null ? `${Number(item.oldPrice).toFixed(4)}¢` : "--";
@@ -372,7 +413,6 @@ export async function executeRetailPriceUpdate({
         `;
     }
 
-    // Compile unchanged rows into view engine
     for (const item of unchangedGradesList) {
       marketingRowsHtml += `
           <tr style="border-bottom: 1px solid #f1f5f9; background-color: #f8fafc;">
@@ -427,7 +467,7 @@ export async function executeRetailPriceUpdate({
 
     await emailQueue.add(`marketing-price-sync-${locationId}-${Date.now()}`, {
       to: "marketing@gen7fuel.com",
-    //   to: "daksh@gen7fuel.com",
+      cc: extraCCs, // Included permanent & store-based CCs
       subject: `Fuel Pricing Sync Summary: ${targetStationName}`,
       html: marketingReportHtml,
     });

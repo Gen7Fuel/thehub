@@ -387,4 +387,42 @@ describe('SelectTemplate schema — field validation', () => {
     const doc = new SelectTemplate(baseSelectTemplate())
     expect(doc.createdAt.getTime()).toBeGreaterThanOrEqual(before)
   })
+
+  it('accepts option with default cc and per-site overrides', () => {
+    const doc = new SelectTemplate(baseSelectTemplate({
+      name: 'Assigned To',
+      options: [
+        {
+          text: 'Daksh',
+          email: 'daksh@example.com',
+          cc: 'ana@example.com,michelle@example.com',
+          siteOverrides: [
+            { site: 'Rankin', to: 'rankin-daksh@example.com', cc: '' },
+            { site: 'Couchiching', to: '', cc: 'couchiching-cc@example.com' },
+          ],
+        },
+      ],
+    }))
+    expect(doc.validateSync()).toBeUndefined()
+    expect(doc.options[0].cc).toBe('ana@example.com,michelle@example.com')
+    expect(doc.options[0].siteOverrides).toHaveLength(2)
+    expect(doc.options[0].siteOverrides[0].site).toBe('Rankin')
+    expect(doc.options[0].siteOverrides[0].to).toBe('rankin-daksh@example.com')
+  })
+
+  it('accepts options with neither cc nor siteOverrides (backward compat)', () => {
+    const doc = new SelectTemplate(baseSelectTemplate({
+      options: [{ text: 'Created' }],
+    }))
+    expect(doc.validateSync()).toBeUndefined()
+    expect(doc.options[0].cc).toBeUndefined()
+    expect(doc.options[0].siteOverrides).toHaveLength(0)
+  })
+
+  it('rejects a siteOverride missing site', () => {
+    const doc = new SelectTemplate(baseSelectTemplate({
+      options: [{ text: 'Daksh', siteOverrides: [{ to: 'x@example.com' }] }],
+    }))
+    expect(doc.validateSync()?.errors['options.0.siteOverrides.0.site']).toBeDefined()
+  })
 })

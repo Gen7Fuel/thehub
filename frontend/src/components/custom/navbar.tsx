@@ -6,8 +6,10 @@ import axios from 'axios'
 import { getSocket } from "@/lib/websocket";
 import { triggerBackgroundSync } from "@/lib/utils"
 import { useAuth } from "@/context/AuthContext";
-import { HelpCircle, LogOut, Settings as SettingsIcon, LayoutDashboard, Home as HomeIcon, KeyRound, ExternalLink, Bell } from 'lucide-react'
+import { HelpCircle, LogOut, Settings as SettingsIcon, LayoutDashboard, Home as HomeIcon, KeyRound, ExternalLink, Bell, Fuel } from 'lucide-react'
 import { clearLocalDB } from "@/lib/orderRecIndexedDB";
+import { cn } from "@/lib/utils"
+import { NavbarMobileMenu, type MobileMenuItem, type MobileMenuState } from './navbarMobileMenu'
 import {
   Dialog,
   DialogContent,
@@ -23,8 +25,35 @@ export default function Navbar() {
   const matchRoute = useMatchRoute()
   const [isHelpOpen, setIsHelpOpen] = useState(false)
   const [forceLogoutMessage, setForceLogoutMessage] = useState<string | null>(null);
+  // Mobile hamburger menu (below md only). See navbarMobileMenu.tsx.
+  const [mobileMenuState, setMobileMenuState] = useState<MobileMenuState>('closed')
   // Inside your Navbar Component
   const [unreadCount, setUnreadCount] = useState(0);
+
+  const [showFuelTicker, setShowFuelTicker] = useState<boolean>(() => {
+    const savedState = localStorage.getItem('showFuelTicker');
+    // Default to false if not set in localStorage
+    return savedState ? savedState === 'true' : false;
+  });
+
+  useEffect(() => {
+    const handleTickerToggle = () => {
+      const savedState = localStorage.getItem('showFuelTicker');
+      setShowFuelTicker(savedState ? savedState === 'true' : false);
+    };
+
+    window.addEventListener('fuelTickerToggle', handleTickerToggle);
+    return () => {
+      window.removeEventListener('fuelTickerToggle', handleTickerToggle);
+    };
+  }, []);
+
+  const handleToggleFuelTicker = () => {
+    const newState = !showFuelTicker;
+    setShowFuelTicker(newState);
+    localStorage.setItem('showFuelTicker', String(newState));
+    window.dispatchEvent(new Event('fuelTickerToggle'));
+  };
 
   useEffect(() => {
     const fetchUnreadCount = async () => {
@@ -187,6 +216,81 @@ export default function Navbar() {
     // console.log("After update:",localStorage.getItem('token'));
   };
 
+  // Mobile-only menu contents (below md). Deliberately declared separately
+  // from the desktop button row below rather than sharing one config array:
+  // the desktop row is non-uniform (the fuel button has a hover tooltip and a
+  // variant switch, the bell has an absolutely-positioned badge, Dashboard
+  // has a responsive icon/label pair, Logout uses the default variant), so a
+  // shared array would need enough per-item escape hatches to be larger than
+  // the duplication — and every hatch is a chance to shift a desktop pixel.
+  // All the actual logic is shared by reference; only the gating expression
+  // and the handler name are repeated. If you add a button to the desktop
+  // row, add it here too — navbar.test.tsx asserts the two stay in parity.
+  const mobileMenuItems: MobileMenuItem[] = [
+    {
+      key: 'fuel-ticker',
+      icon: Fuel,
+      label: showFuelTicker ? 'Hide Fuel Price Ticker' : 'Show Fuel Price Ticker',
+      onSelect: handleToggleFuelTicker,
+      show: !!access?.toggleFuelPriceTicker,
+      // Stay open so the label and pill visibly flip — this is the one row
+      // users may tap twice, and closing would read as an accidental dismiss.
+      keepOpen: true,
+      trailing: (
+        <span
+          className={cn(
+            'rounded-full px-2 py-0.5 text-xs font-semibold',
+            showFuelTicker ? 'bg-slate-900 text-white' : 'bg-slate-100 text-slate-500'
+          )}
+        >
+          {showFuelTicker ? 'On' : 'Off'}
+        </span>
+      ),
+    },
+    {
+      key: 'notifications',
+      icon: Bell,
+      label: 'Notifications',
+      onSelect: () => navigate({ to: '/notification' }),
+      show: !!access?.notification?.value,
+      badge: unreadCount,
+    },
+    {
+      key: 'help',
+      icon: HelpCircle,
+      label: 'Help',
+      onSelect: () => setIsHelpOpen(true),
+    },
+    {
+      key: 'dashboard',
+      icon: LayoutDashboard,
+      label: 'Dashboard',
+      onSelect: () => navigate({ to: '/dashboard' }),
+      show: !!access?.dashboard,
+    },
+    {
+      key: 'settings',
+      icon: SettingsIcon,
+      label: 'Settings',
+      onSelect: handleSettings,
+      show: !!access?.settings?.value,
+    },
+    {
+      key: 'reset-password',
+      icon: KeyRound,
+      label: 'Reset Password',
+      onSelect: handlePasswordReset,
+      show: !!access?.passwordReset,
+    },
+    {
+      key: 'logout',
+      icon: LogOut,
+      label: 'Logout',
+      onSelect: handleLogout,
+      tone: 'danger',
+    },
+  ]
+
   // 1. Function to fetch the actual count from the server
   const refreshUnreadCount = useCallback(async () => {
     try {
@@ -312,6 +416,15 @@ export default function Navbar() {
   // 2. Extract the module slug from the URL (e.g., "infonet-report")
   const module_slug = location.pathname.split('/').filter(Boolean)[0] || '';
 
+  // Any in-app navigation dismisses the mobile menu — menu items, the Home
+  // link, browser back. Declared here rather than with the other effects
+  // above because it reads `location`, which isn't initialised until now.
+  // The functional guard makes it a no-op on mount and while already closed,
+  // so it never restarts an exit animation that's already running.
+  useEffect(() => {
+    setMobileMenuState((s) => (s === 'open' ? 'closing' : s))
+  }, [location.pathname]);
+
   const getDocContent = (slug: string) => {
     switch (slug) {
       case 'audit':
@@ -353,7 +466,15 @@ export default function Navbar() {
 
   return (
     // Navbar container
-    <div className="sticky top-0 left-0 w-full bg-white border-b border-dashed border-gray-300 z-10">
+    // `sticky ... z-10` creates a stacking context, so the mobile panel
+    // rendered inside it can never paint above the FuelPriceTicker (z-25) or
+    // MaintenanceBanner (z-40) siblings in _navbarLayout.tsx no matter what
+    // z-index the panel itself gets. Raising the whole navbar while the menu
+    // is visible is what lets the panel cover them, as it should.
+    <div className={cn(
+      "sticky top-0 left-0 w-full bg-white border-b border-dashed border-gray-300",
+      mobileMenuState === 'closed' ? "z-10" : "z-50"
+    )}>
       <div className="max-w-7xl mx-auto flex justify-between items-center p-2 relative">
 
         {/* Logo / Home Link */}
@@ -377,12 +498,45 @@ export default function Navbar() {
         {/* <h1 className="absolute left-1/2 transform -translate-x-1/2 text-lg font-bold">
           {headerText()}
         </h1> */}
-        <h1 className="hidden md:block absolute left-1/2 transform -translate-x-1/2 text-lg font-bold">
+        {/* Shown on mobile too now that the right side collapses to one
+            button. The `max-md:` variants keep the >=768px CSS identical to
+            what it was; below md the title is capped and truncated so a long
+            one ("Vendor Management") can't collide with the Home icon or the
+            hamburger even at 320px. */}
+        <h1 className="absolute left-1/2 transform -translate-x-1/2 text-lg font-bold max-md:max-w-[calc(100vw-8rem)] max-md:truncate max-md:text-base">
           {headerText()}
         </h1>
 
-        {/* Right-side navigation buttons */}
-        <span className="flex gap-4">
+        {/* Right-side navigation buttons (md and up; below that these all
+            move into the mobile menu mounted at the end of this container) */}
+        <span className="hidden md:flex gap-4 items-center">
+          {/* Fuel Price Ticker Toggle Button */}
+          {access?.toggleFuelPriceTicker && (
+            <div className="relative group flex items-center">
+              <Button
+                variant={showFuelTicker ? "default" : "outline"}
+                size="icon"
+                onClick={handleToggleFuelTicker}
+                className={`transition-colors ${
+                  showFuelTicker 
+                    ? "bg-slate-900 text-white hover:bg-slate-800" 
+                    : "text-slate-400 hover:text-slate-700"
+                }`}
+              >
+                <Fuel className="h-5 w-5" />
+              </Button>
+
+              {/* Tooltip rendered to the left of the button */}
+              <div className="absolute right-full mr-2 top-1/2 -translate-y-1/2 hidden group-hover:flex items-center z-50 pointer-events-none">
+                <div className="bg-slate-900 text-white text-xs rounded py-1 px-2.5 whitespace-nowrap shadow-md">
+                  {showFuelTicker ? "Hide Fuel Price Ticker" : "Show Fuel Price Ticker"}
+                </div>
+                {/* Small right-facing arrow pointing to the button */}
+                <div className="w-2 h-2 bg-slate-900 rotate-45 -ml-1"></div>
+              </div>
+            </div>
+          )}
+
           {/* Notification Button */}
           {access?.notification?.value && (
             <Button
@@ -428,6 +582,16 @@ export default function Navbar() {
             <LogOut className="h-5 w-5" />
           </Button>
         </span>
+
+        {/* Mobile hamburger + full-screen panel. Must stay the last child of
+            this `relative` container — the panel hangs off it with
+            `absolute top-full`. */}
+        <NavbarMobileMenu
+          state={mobileMenuState}
+          onStateChange={setMobileMenuState}
+          items={mobileMenuItems}
+          unreadCount={access?.notification?.value ? unreadCount : 0}
+        />
       </div>
       {/* Help Modal */}
       <Dialog open={isHelpOpen} onOpenChange={setIsHelpOpen}>

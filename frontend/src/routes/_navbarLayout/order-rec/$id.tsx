@@ -1264,7 +1264,20 @@ function RouteComponent() {
               </span>
             </AccordionTrigger>
             <AccordionContent>
-              <div className="overflow-x-auto">
+              {/*
+                max-h + overflow-y-auto turns this category's table into its own
+                bounded scroll panel (same pattern used for sticky headers
+                elsewhere in this codebase, e.g. cash-rec entries, dashboard,
+                cycle-count). Without a bounded height, overflow-x-auto alone
+                also promotes overflow-y to "auto" (a CSS quirk), which makes
+                this div a vertical scroll container that never actually
+                scrolls internally — trapping the "sticky top-0" header inside
+                it instead of letting it stick to the page scroll, so it
+                silently never sticks. Only one category can be open at a
+                time (Accordion type="single"), so a single bounded panel is
+                enough — no need to coordinate multiple sticky headers.
+              */}
+              <div className="overflow-x-auto overflow-y-auto max-h-[70vh]">
                 <table className="w-full border mb-2">
                   <thead>
                     <tr>
@@ -1329,7 +1342,13 @@ function RouteComponent() {
                     {cat.items.map((item: any, itemIdx: number) => (
                       <tr
                         key={itemIdx}
-                        className="cursor-pointer hover:bg-gray-100 transition-all"
+                        // Strict === true: docs predating this field (including
+                        // ones replayed from the offline cache) have undefined
+                        // here and must render clean, not flagged.
+                        className={`cursor-pointer transition-all ${item.offPlanogram === true
+                          ? "bg-red-50 hover:bg-red-100"
+                          : "hover:bg-gray-100"
+                          }`}
                         onClick={() => handleRowClick(catIdx, itemIdx, item.completed)}
                         style={{ height: '56px' }}
                       >
@@ -1339,6 +1358,16 @@ function RouteComponent() {
                           <span>{item.gtin}</span>
                           <span>{item.vin}</span>
                           <span className='font-bold'>{item.itemName}</span>
+                          {/* The row tint alone isn't enough: several cells below
+                              hardcode bg-cyan-100 and paint over it. */}
+                          {item.offPlanogram === true && (
+                            <span
+                              className="text-[10px] font-bold text-red-700 bg-red-100 rounded px-1 w-fit mt-1"
+                              title="This item is not on the site's planogram"
+                            >
+                              OFF PLANOGRAM
+                            </span>
+                          )}
                         </td>
                         {/* DYNAMIC STRAIN CELL */}
                         {cat.items.some((i: any) => i.strainName) && (

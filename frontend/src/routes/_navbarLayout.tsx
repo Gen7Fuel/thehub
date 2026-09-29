@@ -18,7 +18,7 @@ import { OfflineBanner } from "@/components/custom/OfflineBanner";
 import FuelPriceTicker from "@/components/custom/FuelPriceTicker";
 import { getSocket } from "@/lib/websocket";
 import axios from "axios";
-
+import { Toaster } from "sonner";
 import {
   createFileRoute,
   Outlet,
@@ -353,14 +353,31 @@ function RouteComponent() {
     navigate({ to: "/notification" });
   };
 
+  const [showTicker, setShowTicker] = useState<boolean>(() => {
+    const savedState = localStorage.getItem('showFuelTicker');
+    // Default to false if not set in localStorage
+    return savedState ? savedState === 'true' : false;
+  });
+
+  useEffect(() => {
+    const handleTickerToggle = () => {
+      const savedState = localStorage.getItem('showFuelTicker');
+      setShowTicker(savedState ? savedState === 'true' : false);
+    };
+
+    window.addEventListener('fuelTickerToggle', handleTickerToggle);
+    return () => {
+      window.removeEventListener('fuelTickerToggle', handleTickerToggle);
+    };
+  }, []);
+
   return (
     <div className="flex flex-col min-h-screen relative">
       <Navbar />
       <OfflineBanner />
 
       {/* 2. Real-time Permissions-Scoped Fuel Pricing Marquee */}
-      <FuelPriceTicker />
-
+      {showTicker && <FuelPriceTicker />}
       {showPopup && (
         <NotificationPopup
           message={`You have ${unreadCount} new notification${unreadCount > 1 ? "s" : ""} on the Hub.`}
@@ -368,6 +385,7 @@ function RouteComponent() {
           onView={handleView}
         />
       )}
+      <Toaster position="top-center" richColors />
 
       <div className="flex flex-col flex-1">
         <MaintenanceBanner onStatusChange={handleStatusChange} />

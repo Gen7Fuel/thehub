@@ -1,10 +1,27 @@
 const mongoose = require("mongoose");
 const { attachSiteAlias } = require("../utils/attachSiteAlias");
 
+// Sub-schema for individual daily operating hours
+const dayHoursSchema = new mongoose.Schema(
+  {
+    isClosed: { type: Boolean, default: false },
+    open: { type: String, default: "06:00" }, // 24-hour HH:mm string format
+    close: { type: String, default: "22:00" }, // 24-hour HH:mm string format
+  },
+  { _id: false }
+);
+
 // Define a clean sub-schema for granular device control
 const pushoverDeviceSchema = new mongoose.Schema({
   deviceName: { type: String, required: true },
-  notificationEnabled: { type: Boolean, default: true }
+  notificationEnabled: { type: Boolean, default: true },
+});
+
+// Sub-schema for a physical register/till at a site. Drives the PO create
+// form's per-site Register selector (frontend/src/routes/_navbarLayout/po/index.tsx) —
+// only shown once a site has 2+ of these configured.
+const registerSchema = new mongoose.Schema({
+  number: { type: String, required: true },
 });
 
 const locationSchema = new mongoose.Schema({
@@ -25,15 +42,33 @@ const locationSchema = new mongoose.Schema({
   fuelStationNumber: { type: String, unique: true },
   fuelCustomerName: { type: String },
   address: { type: String },
-  province: { type: String, required: true},
+  province: { type: String, required: true },
   defaultFuelRack: { type: mongoose.Schema.Types.ObjectId, ref: "FuelRack" },
   defaultFuelCarrier: { type: mongoose.Schema.Types.ObjectId, ref: "FuelCarrier" },
   availableGrades: [{ type: String, default: [] }],
   gasBuddyStationId: { type: String, required: false },
+  // Must exactly match this site's option text in GVM Unifi's pricing-modal
+  // location dropdown (https://live.gvmunifi.com/pricing) — GVM's dropdown
+  // doesn't expose a separate stable ID the way GasBuddy's stationId does.
+  gvmLocationName: { type: String, required: false },
 
   // --- Pushover Core Extensions ---
-  pushOverUserKey: { type: String, default: null }, 
-  devices: [pushoverDeviceSchema]
+  pushOverUserKey: { type: String, default: null },
+  devices: [pushoverDeviceSchema],
+
+  // --- Registers/Tills ---
+  registers: [registerSchema],
+
+  // --- Flexible Operating Hours Extension ---
+  storeHours: {
+    monday: { type: dayHoursSchema, default: () => ({}) },
+    tuesday: { type: dayHoursSchema, default: () => ({}) },
+    wednesday: { type: dayHoursSchema, default: () => ({}) },
+    thursday: { type: dayHoursSchema, default: () => ({}) },
+    friday: { type: dayHoursSchema, default: () => ({}) },
+    saturday: { type: dayHoursSchema, default: () => ({}) },
+    sunday: { type: dayHoursSchema, default: () => ({}) },
+  },
 });
 
 attachSiteAlias(locationSchema, "stationName");

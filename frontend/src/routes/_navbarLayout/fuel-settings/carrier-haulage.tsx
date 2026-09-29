@@ -1,6 +1,6 @@
 import { createFileRoute, useNavigate } from '@tanstack/react-router'
 import { useState, useEffect, useMemo } from 'react'
-import { Edit2, Trash2, Zap, Calendar, X, PlusCircle, RotateCcw, AlertTriangle, FileText, Search } from 'lucide-react'
+import { Edit2, Trash2, Zap, Calendar, X, PlusCircle, RotateCcw, AlertTriangle, FileText, Search, Info } from 'lucide-react'
 import CreatableSelect from 'react-select/creatable'
 import axios from 'axios'
 import { useAuth } from '@/context/AuthContext'
@@ -16,6 +16,7 @@ interface CarrierHaulageRow {
   'Type': string
   'Location': string
   'Pickup': string
+  'IsSplit': number | null
   'Live_Haulage': number | null
   'Live_Updated_At': string | null
   'Stg_Haulage': number | null
@@ -28,6 +29,7 @@ interface StagedNewHaulageEntry {
   location: string
   pickup: string
   haulage: number
+  isSplit: number
 }
 
 const customSelectStyles = {
@@ -72,6 +74,9 @@ export function RouteComponent() {
   const [formLocation, setFormLocation] = useState('')
   const [formPickup, setFormPickup] = useState('')
   const [formHaulageValue, setFormHaulageValue] = useState('')
+  const [formIsSplit, setFormIsSplit] = useState<boolean>(false);
+  const [formLocationA, setFormLocationA] = useState<string>('');
+  const [formLocationB, setFormLocationB] = useState<string>('');
 
   const HAULAGE_MAPPING = {
     "GAS": [
@@ -112,18 +117,6 @@ export function RouteComponent() {
     fetchHaulageData()
   }, [])
 
-  // Check if a saved update belongs to the current month
-  const isStagedInCurrentMonth = (dateStr: string | null) => {
-    if (!dateStr) return false
-    try {
-      const date = new Date(dateStr)
-      const now = new Date()
-      return date.getMonth() === now.getMonth() && date.getFullYear() === now.getFullYear()
-    } catch {
-      return false
-    }
-  }
-
   // --- FILTER AND SORT ENGINE ---
   const sortedAndFilteredData = useMemo(() => {
     const normalizedQuery = searchQuery.replace(/[-\s]/g, '').toUpperCase()
@@ -158,21 +151,42 @@ export function RouteComponent() {
 
   // Dropdown options extractors
   const uniqueCarriers = useMemo(() => Array.from(new Set(data.map(r => r['Carrier'].trim()))).sort(), [data])
-  // const uniqueTypes = useMemo(() => Array.from(new Set(data.map(r => r['Type'].trim()))).sort(), [data])
-  const uniqueLocations = useMemo(() => Array.from(new Set(data.map(r => r['Location'].trim()))).sort(), [data])
+  // const uniqueLocations = useMemo(() => Array.from(new Set(data.map(r => r['Location'].trim()))).sort(), [data])
+  const uniqueLocations = useMemo(() => {
+    const locationsSet = new Set<string>();
+
+    data.forEach(r => {
+      const rawLocation = r['Location']?.trim();
+      if (!rawLocation) return;
+
+      // Split by " & " if it's a split route, otherwise process normally
+      const parts = rawLocation.split(/\s*&\s*/);
+
+      parts.forEach(part => {
+        const cleanPart = part.trim();
+        if (cleanPart) {
+          locationsSet.add(cleanPart);
+        }
+      });
+    });
+
+    return Array.from(locationsSet).sort();
+  }, [data]);
   const uniquePickups = useMemo(() => Array.from(new Set(data.map(r => r['Pickup'].trim()))).sort(), [data])
 
-  const getRowKey = (row: CarrierHaulageRow) => {
-    return `${row['Carrier']}-${row['Type']}-${row['Location']}-${row['Pickup']}`
-  }
+ const getRowKey = (row: CarrierHaulageRow) => {
+    // Coerce IsSplit to a numeric value (1 or 0) for consistent key formatting
+    const splitVal = Number(row['IsSplit']) || 0;
+    return `${row['Carrier']}-${row['Type']}-${row['Location']}-${row['Pickup']}-${splitVal}`;
+  };
 
   // Edit Handlers
   const openEditDialog = (row: CarrierHaulageRow) => {
     setActiveDialogRow(row)
     const key = getRowKey(row)
 
-    // Default to scheduled price if one exists from this month, otherwise show live price
-    const baselineValue = (row['Stg_Haulage'] !== null && isStagedInCurrentMonth(row['Stg_Updated_At']))
+    // Default to scheduled price if Stg_Updated_At exists, otherwise show live price
+    const baselineValue = (row['Stg_Haulage'] !== null && row['Stg_Updated_At'] !== null)
       ? row['Stg_Haulage']
       : (row['Live_Haulage'] ?? 0)
 
@@ -203,8 +217,11 @@ export function RouteComponent() {
     setFormCarrier('')
     setFormType('')
     setFormLocation('')
+    setFormLocationA('')
+    setFormLocationB('')
     setFormPickup('')
     setFormHaulageValue('')
+    setFormIsSplit(false)
   }
 
   const closeCreationWizard = () => {
@@ -213,11 +230,83 @@ export function RouteComponent() {
     resetFormFields()
   }
 
+  // const handleAddEntryToStagingList = () => {
+  //   const haulageNum = parseFloat(formHaulageValue);
+  //   const selectedCategory = formType;
+
+  //   if (!formCarrier || !selectedCategory || !formLocation || !formPickup || isNaN(haulageNum)) {
+  //     alert("Please fill out all fields completely before adding.");
+  //     return;
+  //   }
+
+  //   if (!(selectedCategory in HAULAGE_MAPPING)) {
+  //     alert("Invalid category selected.");
+  //     return;
+  //   }
+
+  //   const entriesToPush = HAULAGE_MAPPING[selectedCategory as keyof typeof HAULAGE_MAPPING];
+
+  //   const carrierOriginal = formCarrier.trim();
+  //   const locationOriginal = formLocation.trim();
+  //   const pickupOriginal = formPickup.trim();
+
+  //   const carrierUpper = carrierOriginal.toUpperCase();
+  //   const locationUpper = locationOriginal.toUpperCase();
+  //   const pickupUpper = pickupOriginal.toUpperCase();
+
+  //   let addedCount = 0;
+
+  //   entriesToPush.forEach(item => {
+  //     const isDuplicate = newEntriesList.some(
+  //       e => e.carrier.toUpperCase() === carrierUpper &&
+  //         e.type === item.type &&
+  //         e.location.toUpperCase() === locationUpper &&
+  //         e.pickup.toUpperCase() === pickupUpper
+  //     ) || data.some(
+  //       r => r['Carrier'].trim().toUpperCase() === carrierUpper &&
+  //         r['Type'].trim().toUpperCase() === item.type &&
+  //         r['Location'].trim().toUpperCase() === locationUpper &&
+  //         r['Pickup'].trim().toUpperCase() === pickupUpper
+  //     );
+
+  //     if (!isDuplicate) {
+  //       setNewEntriesList(prev => [...prev, {
+  //         carrier: carrierOriginal,
+  //         type: item.type,
+  //         location: locationOriginal,
+  //         pickup: pickupOriginal,
+  //         haulage: haulageNum
+  //       }]);
+  //       addedCount++;
+  //     }
+  //   });
+
+  //   if (addedCount === 0) alert("These routes already exist in the system.");
+
+  //   setFormType('');
+  //   setFormHaulageValue('');
+  // };
+
   const handleAddEntryToStagingList = () => {
     const haulageNum = parseFloat(formHaulageValue);
     const selectedCategory = formType;
 
-    if (!formCarrier || !selectedCategory || !formLocation || !formPickup || isNaN(haulageNum)) {
+    // Store integer representation for backend payload: 1 for true, 0 for false
+    const splitVal = formIsSplit ? 1 : 0;
+
+    // Determine final location string based on split toggle
+    const finalLocation = formIsSplit
+      ? `${formLocationA.trim()} & ${formLocationB.trim()}`
+      : formLocation.trim();
+
+    // Validate inputs
+    if (
+      !formCarrier ||
+      !selectedCategory ||
+      !formPickup ||
+      isNaN(haulageNum) ||
+      (formIsSplit ? (!formLocationA || !formLocationB) : !formLocation)
+    ) {
       alert("Please fill out all fields completely before adding.");
       return;
     }
@@ -229,12 +318,10 @@ export function RouteComponent() {
 
     const entriesToPush = HAULAGE_MAPPING[selectedCategory as keyof typeof HAULAGE_MAPPING];
 
-    // Keep original values for the actual data object
     const carrierOriginal = formCarrier.trim();
-    const locationOriginal = formLocation.trim();
+    const locationOriginal = finalLocation;
     const pickupOriginal = formPickup.trim();
 
-    // Create uppercase versions specifically for duplication checks
     const carrierUpper = carrierOriginal.toUpperCase();
     const locationUpper = locationOriginal.toUpperCase();
     const pickupUpper = pickupOriginal.toUpperCase();
@@ -242,36 +329,46 @@ export function RouteComponent() {
     let addedCount = 0;
 
     entriesToPush.forEach(item => {
-      // Check for duplicates using the UPPERCASE versions
+      // Check duplicates against staging list & existing data (handling both boolean/number formats)
       const isDuplicate = newEntriesList.some(
         e => e.carrier.toUpperCase() === carrierUpper &&
           e.type === item.type &&
           e.location.toUpperCase() === locationUpper &&
-          e.pickup.toUpperCase() === pickupUpper
+          e.pickup.toUpperCase() === pickupUpper &&
+          Number(e.isSplit) === splitVal
       ) || data.some(
         r => r['Carrier'].trim().toUpperCase() === carrierUpper &&
           r['Type'].trim().toUpperCase() === item.type &&
           r['Location'].trim().toUpperCase() === locationUpper &&
-          r['Pickup'].trim().toUpperCase() === pickupUpper
+          r['Pickup'].trim().toUpperCase() === pickupUpper &&
+          (Number(r['IsSplit']) === splitVal || Boolean(r['IsSplit']) === formIsSplit)
       );
 
       if (!isDuplicate) {
         setNewEntriesList(prev => [...prev, {
-          carrier: carrierOriginal, // Send original casing
+          carrier: carrierOriginal,
           type: item.type,
-          location: locationOriginal, // Send original casing
-          pickup: pickupOriginal,     // Send original casing
-          haulage: haulageNum
+          location: locationOriginal,
+          pickup: pickupOriginal,
+          haulage: haulageNum,
+          isSplit: splitVal // Saved as 1 or 0
         }]);
         addedCount++;
       }
     });
 
-    if (addedCount === 0) alert("These routes already exist in the system.");
+    if (addedCount === 0) {
+      alert("These routes already exist in the system.");
+      return;
+    }
 
-    // Reset fields
+    // Reset form state after successful add
     setFormType('');
     setFormHaulageValue('');
+    setFormIsSplit(false);
+    setFormLocation('');
+    setFormLocationA('');
+    setFormLocationB('');
   };
 
   const removeStagedItemFromPreview = (index: number) => {
@@ -304,26 +401,30 @@ export function RouteComponent() {
 
   // Unified Save Changes Handler
   const handlePushUpdatesBatch = async (isImmediateAction: boolean) => {
-    const updatesPayload = []
-    const deletionsPayload = []
+    const updatesPayload = [];
+    const deletionsPayload = [];
 
     for (const row of data) {
-      const key = getRowKey(row)
+      const key = getRowKey(row);
+      const splitVal = Number(row['IsSplit']) || 0; // Standardize to 1 or 0
+
       if (deletedRows[key]) {
         deletionsPayload.push({
           carrier: row['Carrier'],
           type: row['Type'],
           location: row['Location'],
-          pickup: row['Pickup']
-        })
+          pickup: row['Pickup'],
+          isSplit: splitVal // <--- ADDED
+        });
       } else if (editedRows[key] !== undefined) {
         updatesPayload.push({
           carrier: row['Carrier'],
           type: row['Type'],
           location: row['Location'],
           pickup: row['Pickup'],
+          isSplit: splitVal, // <--- ADDED
           haulage: editedRows[key]
-        })
+        });
       }
     }
 
@@ -337,7 +438,7 @@ export function RouteComponent() {
           Authorization: `Bearer ${localStorage.getItem('token')}`,
           'X-Required-Permission': 'fuelSettings.haulage.edit'
         }
-      })
+      });
 
       if (res.status === 200) {
         alert(isImmediateAction ? "Changes applied live right now!" : "Changes saved and scheduled successfully.");
@@ -346,14 +447,14 @@ export function RouteComponent() {
         await fetchHaulageData();
       }
     } catch (err: any) {
-      console.error(err)
+      console.error(err);
       if (err.response?.status === 403) {
-        navigate({ to: '/no-access' })
-        return
+        navigate({ to: '/no-access' });
+        return;
       }
-      alert("Could not save your changes. Please try again.")
+      alert("Could not save your changes. Please try again.");
     }
-  }
+  };
 
   const formatToLocalTime = (utcString: string | null) => {
     if (!utcString) return '-'
@@ -371,9 +472,10 @@ export function RouteComponent() {
   const hasPendingChanges = Object.keys(editedRows).length > 0 || Object.keys(deletedRows).filter(k => deletedRows[k]).length > 0
   const totalStagedCount = Object.keys(editedRows).length + Object.keys(deletedRows).filter(k => deletedRows[k]).length
 
-  // Calculate next month name dynamically
+  // Calculate next month name dynamically without Date rollover bugs
   const scheduledMonthName = useMemo(() => {
     const nextMonth = new Date()
+    nextMonth.setDate(1)
     nextMonth.setMonth(nextMonth.getMonth() + 1)
     return nextMonth.toLocaleString('default', { month: 'long' })
   }, [])
@@ -397,7 +499,6 @@ export function RouteComponent() {
         </div>
 
         {/* CONTROLS CLUSTER */}
-
         {canEdit && (
           <div className="flex flex-col items-end gap-1.5 shrink-0">
             {/* DELETION ADVISORY BANNER */}
@@ -416,10 +517,11 @@ export function RouteComponent() {
               </button>
 
               <button
-                onClick={() => setIsLiveConfirmOpen(true)} // Changed from direct call
+                onClick={() => setIsLiveConfirmOpen(true)}
                 disabled={!hasPendingChanges}
-                className={`flex items-center gap-1.5 h-9 px-3 text-sm font-medium rounded-lg shadow-xs transition-all ${hasPendingChanges ? 'bg-red-600 text-white hover:bg-red-700 cursor-pointer' : 'bg-gray-100 text-gray-400 cursor-not-allowed'
-                  }`}
+                className={`flex items-center gap-1.5 h-9 px-3 text-sm font-medium rounded-lg shadow-xs transition-all ${
+                  hasPendingChanges ? 'bg-red-600 text-white hover:bg-red-700 cursor-pointer' : 'bg-gray-100 text-gray-400 cursor-not-allowed'
+                }`}
               >
                 <Zap className="w-4 h-4" />
                 Go Live Now ({totalStagedCount})
@@ -428,8 +530,9 @@ export function RouteComponent() {
               <button
                 onClick={() => setIsScheduleConfirmOpen(true)}
                 disabled={!hasPendingChanges}
-                className={`flex items-center gap-1.5 h-9 px-3 text-sm font-medium rounded-lg shadow-xs transition-all ${hasPendingChanges ? 'bg-amber-600 text-white hover:bg-amber-700 cursor-pointer' : 'bg-gray-100 text-gray-400 cursor-not-allowed'
-                  }`}
+                className={`flex items-center gap-1.5 h-9 px-3 text-sm font-medium rounded-lg shadow-xs transition-all ${
+                  hasPendingChanges ? 'bg-amber-600 text-white hover:bg-amber-700 cursor-pointer' : 'bg-gray-100 text-gray-400 cursor-not-allowed'
+                }`}
                 title={`Save updates to turn on automatically on the 1st of ${scheduledMonthName}.`}
               >
                 <Calendar className="w-4 h-4" />
@@ -464,8 +567,13 @@ export function RouteComponent() {
             <tr>
               <th className="p-4 bg-gray-50/90">Carrier</th>
               <th className="p-4 bg-gray-50/90">Type</th>
-              <th className="p-4 bg-gray-50/90">Location</th>
+              
+              {/* SPLIT LOCATION HEADERS */}
+              <th className="p-4 bg-gray-50/90">Primary Location</th>
+              <th className="p-4 bg-gray-50/90">Secondary Location</th>
+
               <th className="p-4 bg-gray-50/90">Pickup Terminal</th>
+              <th className="p-4 bg-gray-50/90">Is Split</th>
 
               {/* ALIGNED RATE AND DATE COLUMN GROUPS */}
               <th className="p-3 text-right bg-emerald-50/40 text-emerald-900 border-x">Current Haulage ($)</th>
@@ -481,7 +589,7 @@ export function RouteComponent() {
           <tbody className="divide-y divide-gray-100 text-sm">
             {sortedAndFilteredData.length === 0 ? (
               <tr>
-                <td colSpan={10} className="p-8 text-center text-sm text-gray-400 italic">No records found matching your search.</td>
+                <td colSpan={11} className="p-8 text-center text-sm text-gray-400 italic">No records found matching your search.</td>
               </tr>
             ) : (
               sortedAndFilteredData.map((row) => {
@@ -489,8 +597,8 @@ export function RouteComponent() {
                 const isStagedDeleted = !!deletedRows[key]
                 const hasUnsavedLocalEdit = editedRows[key] !== undefined
 
-                // Check if there is an active future price already stored on the database server
-                const hasValidStagingMonth = row['Stg_Updated_At'] !== null && isStagedInCurrentMonth(row['Stg_Updated_At'])
+                // Active staging relies directly on whether Stg_Updated_At is non-null
+                const hasValidStagingMonth = row['Stg_Updated_At'] !== null
                 const hasSurchargesDiff = row['Stg_Haulage'] !== row['Live_Haulage']
                 const isCommittedScheduleActive = hasValidStagingMonth && hasSurchargesDiff
 
@@ -506,6 +614,19 @@ export function RouteComponent() {
                   rowClassName = "bg-blue-50/20 hover:bg-blue-50/40 text-gray-900 transition-colors"
                 }
 
+                // LOCATION SPLIT LOGIC
+                const isSplit = Number(row['IsSplit'] ?? row['IsSplit']) === 1 || !!row['IsSplit']
+                const rawLocation = row['Location'] || ''
+                const hasAmpersand = rawLocation.includes('&')
+
+                const primaryLocation = isSplit && hasAmpersand
+                  ? rawLocation.split('&')[0].trim()
+                  : rawLocation
+
+                const secondaryLocation = isSplit && hasAmpersand
+                  ? rawLocation.split('&')[1]?.trim() || ''
+                  : ''
+
                 return (
                   <tr key={key} className={rowClassName}>
                     <td className="p-4 font-bold text-gray-900">{row['Carrier']}</td>
@@ -514,8 +635,29 @@ export function RouteComponent() {
                         {row['Type']}
                       </span>
                     </td>
-                    <td className="p-4 font-medium">{row['Location']}</td>
+
+                    {/* PRIMARY & SECONDARY LOCATION CELLS */}
+                    <td className="p-4 font-medium text-gray-900">{primaryLocation}</td>
+                    <td className="p-4 font-medium text-gray-500">
+                      {secondaryLocation ? (
+                        <span>{secondaryLocation}</span>
+                      ) : (
+                        <span className="text-gray-300 font-normal italic">-</span>
+                      )}
+                    </td>
+
                     <td className="p-4 text-gray-600">{row['Pickup']}</td>
+                    <td className="p-4 text-gray-600">
+                      {isSplit ? (
+                        <span className="px-2 py-0.5 rounded-full text-[10px] bg-purple-100 text-purple-700 font-bold border border-purple-200">
+                          Yes
+                        </span>
+                      ) : (
+                        <span className="px-2 py-0.5 rounded-full text-[10px] bg-gray-100 text-gray-500 font-medium border border-gray-200">
+                          No
+                        </span>
+                      )}
+                    </td>
 
                     {/* LIVE DISPLAY BLOCK */}
                     <td className="p-3 text-right font-mono font-bold bg-emerald-50/10 text-emerald-700 border-x">
@@ -554,7 +696,6 @@ export function RouteComponent() {
                     </td>
 
                     {/* ITEM ROW CONTROLS */}
-
                     {canEdit && (
                       <td className="p-4 text-center">
                         <div className="flex items-center justify-center gap-1">
@@ -583,34 +724,76 @@ export function RouteComponent() {
       </div>
 
       {/* DIALOG 1: PRICE CHANGE MODAL */}
-      {isEditDialogOpen && activeDialogRow && (
-        <div className="fixed inset-0 bg-black/40 backdrop-blur-xs flex items-center justify-center z-50">
-          <div className="bg-white border rounded-xl shadow-2xl w-full max-w-md p-6">
-            <div className="flex justify-between items-center mb-4 pb-2 border-b">
-              <h3 className="font-bold text-gray-900 text-base">Change Route Haulage Rate</h3>
-              <button onClick={() => setIsEditDialogOpen(false)} className="text-gray-400 hover:text-gray-600"><X className="w-5 h-5" /></button>
-            </div>
-            <div className="space-y-2 mb-6 bg-gray-50 p-4 rounded-lg text-xs text-gray-600 border">
-              <div><span className="font-semibold text-gray-500">Carrier:</span> {activeDialogRow['Carrier']}</div>
-              <div><span className="font-semibold text-gray-500">Route Type:</span> {activeDialogRow['Type']}</div>
-              <div><span className="font-semibold text-gray-500">Destination:</span> {activeDialogRow['Location']}</div>
-              <div><span className="font-semibold text-gray-500">Terminal:</span> {activeDialogRow['Pickup']}</div>
-            </div>
-            <div className="mb-6">
-              <label className="block text-sm font-medium text-gray-700 mb-2">Enter New Number Amount</label>
-              <input
-                type="number" step="0.0001"
-                className="w-full p-2.5 border rounded-lg font-mono focus:ring-2 focus:ring-blue-500"
-                value={dialogInputValue} onChange={(e) => setDialogInputValue(e.target.value)}
-              />
-            </div>
-            <div className="flex justify-end gap-3">
-              <button onClick={() => setIsEditDialogOpen(false)} className="px-4 py-2 border text-gray-700 rounded-lg text-sm">Cancel</button>
-              <button onClick={saveDialogEdit} className="px-4 py-2 bg-blue-600 text-white rounded-lg text-sm font-medium">Keep Change</button>
+      {isEditDialogOpen && activeDialogRow && (() => {
+        // Check IsSplit flag (handles both 1/0 numbers, strings "1"/"0", or boolean values)
+        const isSplitFlag = Number(activeDialogRow['IsSplit'] ?? activeDialogRow['IsSplit']) === 1;
+        const hasAmpersand = activeDialogRow['Location']?.includes('&');
+        const isSplitLocation = isSplitFlag || hasAmpersand;
+
+        const [primaryLoc, secondaryLoc] = hasAmpersand
+          ? activeDialogRow['Location'].split('&').map(s => s.trim())
+          : [activeDialogRow['Location'], null];
+
+        return (
+          <div className="fixed inset-0 bg-black/40 backdrop-blur-xs flex items-center justify-center z-50">
+            <div className="bg-white border rounded-xl shadow-2xl w-full max-w-md p-6">
+              <div className="flex justify-between items-center mb-4 pb-2 border-b">
+                <h3 className="font-bold text-gray-900 text-base">Change Route Haulage Rate</h3>
+                <button onClick={() => setIsEditDialogOpen(false)} className="text-gray-400 hover:text-gray-600">
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+
+              <div className="space-y-2 mb-6 bg-gray-50 p-4 rounded-lg text-xs text-gray-600 border">
+                <div><span className="font-semibold text-gray-500">Carrier:</span> {activeDialogRow['Carrier']}</div>
+                <div><span className="font-semibold text-gray-500">Route Type:</span> {activeDialogRow['Type']}</div>
+
+                {/* DYNAMIC DESTINATION DISPLAY BASED ON IsSplit COLUMN */}
+                {isSplitLocation && secondaryLoc ? (
+                  <>
+                    <div><span className="font-semibold text-gray-500">Primary Location:</span> {primaryLoc}</div>
+                    <div><span className="font-semibold text-gray-500">Secondary Location:</span> {secondaryLoc}</div>
+                  </>
+                ) : (
+                  <div><span className="font-semibold text-gray-500">Destination:</span> {activeDialogRow['Location']}</div>
+                )}
+
+                <div><span className="font-semibold text-gray-500">Terminal:</span> {activeDialogRow['Pickup']}</div>
+              </div>
+
+              <div className="mb-6 space-y-2">
+                <label className="block text-sm font-medium text-gray-700">Enter New Rate Amount ($)</label>
+                <input
+                  type="number"
+                  step="0.0001"
+                  className="w-full p-2.5 border rounded-lg font-mono focus:ring-2 focus:ring-blue-500 text-sm"
+                  value={dialogInputValue}
+                  onChange={(e) => setDialogInputValue(e.target.value)}
+                />
+
+                {/* DISCLAIMER FOR SPLIT LOCATIONS */}
+                {isSplitLocation && (
+                  <div className="flex items-start gap-2 p-2.5 bg-blue-50/80 border border-blue-200 rounded-lg text-blue-800 text-xs mt-2">
+                    <Info className="w-4 h-4 text-blue-600 shrink-0 mt-0.5" />
+                    <span>
+                      <strong>Note:</strong> The rate you are updating applies specifically to the <strong>Primary Location ({primaryLoc})</strong>.
+                    </span>
+                  </div>
+                )}
+              </div>
+
+              <div className="flex justify-end gap-3">
+                <button onClick={() => setIsEditDialogOpen(false)} className="px-4 py-2 border text-gray-700 rounded-lg text-sm">
+                  Cancel
+                </button>
+                <button onClick={saveDialogEdit} className="px-4 py-2 bg-blue-600 text-white rounded-lg text-sm font-medium">
+                  Keep Change
+                </button>
+              </div>
             </div>
           </div>
-        </div>
-      )}
+        );
+      })()}
 
       {/* DIALOG 2: WIZARD STEP 1 - BOOKWORKS SYSTEM AUDIT ALERT */}
       {wizardStep === 'warning' && (
@@ -637,14 +820,19 @@ export function RouteComponent() {
           <div className="bg-white border rounded-xl shadow-2xl w-full max-w-2xl p-6 flex flex-col max-h-[85vh]">
             <div className="flex justify-between items-center mb-4 pb-2 border-b">
               <h3 className="font-bold text-gray-900 text-base">Add New Shipping Routes</h3>
-              <button onClick={closeCreationWizard} className="text-gray-400 hover:text-gray-600"><X className="w-5 h-5" /></button>
+              <button onClick={closeCreationWizard} className="text-gray-400 hover:text-gray-600">
+                <X className="w-5 h-5" />
+              </button>
             </div>
 
             <div className="bg-gray-50/70 p-4 border rounded-xl grid grid-cols-2 gap-3 mb-4 text-xs">
+              {/* CARRIER NAME */}
               <div>
                 <label className="block font-bold text-gray-600 uppercase mb-1">Carrier Name</label>
                 <CreatableSelect
-                  isClearable styles={customSelectStyles} placeholder="Select or type company..."
+                  isClearable
+                  styles={customSelectStyles}
+                  placeholder="Select or type company..."
                   options={uniqueCarriers.map(c => ({ value: c, label: c }))}
                   onChange={opt => setFormCarrier(opt?.value || '')}
                   onCreateOption={val => setFormCarrier(val.trim().toUpperCase())}
@@ -652,6 +840,7 @@ export function RouteComponent() {
                 />
               </div>
 
+              {/* FUEL CATEGORY */}
               <div>
                 <label className="block font-bold text-gray-600 uppercase mb-1">Fuel Category</label>
                 <select
@@ -665,21 +854,70 @@ export function RouteComponent() {
                 </select>
               </div>
 
-              <div>
-                <label className="block font-bold text-gray-600 uppercase mb-1">Destination Location</label>
-                <CreatableSelect
-                  isClearable styles={customSelectStyles} placeholder="Select or type location..."
-                  options={uniqueLocations.map(l => ({ value: l, label: l }))}
-                  onChange={opt => setFormLocation(opt?.value || '')}
-                  onCreateOption={val => setFormLocation(val.trim().toUpperCase())}
-                  value={formLocation ? { value: formLocation, label: formLocation } : null}
-                />
+              {/* IS SPLIT TOGGLE */}
+              <div className="col-span-2 flex items-center gap-3 py-1">
+                <label className="relative inline-flex items-center cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={formIsSplit}
+                    onChange={(e) => setFormIsSplit(e.target.checked)}
+                    className="sr-only peer"
+                  />
+                  <div className="w-9 h-5 bg-gray-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-blue-600"></div>
+                </label>
+                <span className="font-bold text-gray-700 text-xs uppercase">Is Split Route?</span>
               </div>
 
-              <div>
+              {/* DYNAMIC DESTINATION LOCATION(S) */}
+              {!formIsSplit ? (
+                <div>
+                  <label className="block font-bold text-gray-600 uppercase mb-1">Destination Location</label>
+                  <CreatableSelect
+                    isClearable
+                    styles={customSelectStyles}
+                    placeholder="Select or type location..."
+                    options={uniqueLocations.map(l => ({ value: l, label: l }))}
+                    onChange={opt => setFormLocation(opt?.value || '')}
+                    onCreateOption={val => setFormLocation(val.trim().toUpperCase())}
+                    value={formLocation ? { value: formLocation, label: formLocation } : null}
+                  />
+                </div>
+              ) : (
+                <>
+                  <div>
+                    <label className="block font-bold text-gray-600 uppercase mb-1">Destination Location (Primary)</label>
+                    <CreatableSelect
+                      isClearable
+                      styles={customSelectStyles}
+                      placeholder="Select or type primary location..."
+                      options={uniqueLocations.map(l => ({ value: l, label: l }))}
+                      onChange={opt => setFormLocationA(opt?.value || '')}
+                      onCreateOption={val => setFormLocationA(val.trim().toUpperCase())}
+                      value={formLocationA ? { value: formLocationA, label: formLocationA } : null}
+                    />
+                  </div>
+                  <div>
+                    <label className="block font-bold text-gray-600 uppercase mb-1">Destination Location (Secondary)</label>
+                    <CreatableSelect
+                      isClearable
+                      styles={customSelectStyles}
+                      placeholder="Select or type secondary location..."
+                      options={uniqueLocations.map(l => ({ value: l, label: l }))}
+                      onChange={opt => setFormLocationB(opt?.value || '')}
+                      onCreateOption={val => setFormLocationB(val.trim().toUpperCase())}
+                      value={formLocationB ? { value: formLocationB, label: formLocationB } : null}
+                    />
+                  </div>
+                </>
+              )}
+
+              {/* PICKUP TERMINAL */}
+              <div className={formIsSplit ? 'col-span-2' : ''}>
                 <label className="block font-bold text-gray-600 uppercase mb-1">Pickup Terminal</label>
                 <CreatableSelect
-                  isClearable styles={customSelectStyles} placeholder="Select or type terminal..."
+                  isClearable
+                  styles={customSelectStyles}
+                  placeholder="Select or type terminal..."
                   options={uniquePickups.map(p => ({ value: p, label: p }))}
                   onChange={opt => setFormPickup(opt?.value || '')}
                   onCreateOption={val => setFormPickup(val.trim().toUpperCase())}
@@ -687,23 +925,40 @@ export function RouteComponent() {
                 />
               </div>
 
-              <div className="col-span-2">
-                <label className="block font-bold text-gray-600 uppercase mb-1">Haulage Rate Amount ($)</label>
-                <div className="flex gap-2">
-                  <input
-                    type="number" step="0.0001" placeholder="0.0000"
-                    className="w-full p-2 border rounded-lg bg-white font-mono h-[38px] text-sm"
-                    value={formHaulageValue} onChange={(e) => setFormHaulageValue(e.target.value)}
-                  />
-                  <button
-                    onClick={handleAddEntryToStagingList}
-                    className="px-4 py-2 bg-gray-900 text-white rounded-lg font-semibold hover:bg-gray-800 shrink-0 h-[38px]"
-                  >
-                    Add To Queue List
-                  </button>
-                </div>
+             {/* HAULAGE RATE & ADD BUTTON */}
+            <div className="col-span-2 space-y-2">
+              <label className="block font-bold text-gray-600 uppercase">
+                Haulage Rate ($)
+              </label>
+
+              <div className="flex gap-2">
+                <input
+                  type="number"
+                  step="0.0001"
+                  placeholder="0.0000"
+                  className="w-full p-2 border rounded-lg bg-white font-mono h-[38px] text-sm"
+                  value={formHaulageValue}
+                  onChange={(e) => setFormHaulageValue(e.target.value)}
+                />
+                <button
+                  onClick={handleAddEntryToStagingList}
+                  className="px-4 py-2 bg-gray-900 text-white rounded-lg font-semibold hover:bg-gray-800 shrink-0 h-[38px]"
+                >
+                  Add To Queue List
+                </button>
               </div>
+
+              {/* SPLIT ROUTE DISCLAIMER / HIGHLIGHT BLOCK */}
+              {formIsSplit && (
+                <div className="flex items-start gap-2 p-2.5 bg-blue-50/80 border border-blue-200 rounded-lg text-blue-800 text-xs">
+                  <Info className="w-4 h-4 text-blue-600 shrink-0 mt-0.5" />
+                  <span>
+                    <strong>Note:</strong> This rate applies specifically to the <strong>Primary Destination Location</strong>. To set the rate for the secondary location, create a second entry with the locations reversed.
+                  </span>
+                </div>
+              )}
             </div>
+          </div>
 
             {/* PREVIEW CONTAINER STAGING WINDOW */}
             <div className="flex-1 overflow-auto border rounded-xl p-2 bg-gray-50/30 flex flex-col min-h-[150px] mb-6">
@@ -712,19 +967,42 @@ export function RouteComponent() {
               </span>
 
               {newEntriesList.length === 0 ? (
-                <div className="flex-1 flex items-center justify-center text-xs text-gray-400 font-medium italic">No routes added to the temporary queue yet.</div>
+                <div className="flex-1 flex items-center justify-center text-xs text-gray-400 font-medium italic">
+                  No routes added to the temporary queue yet.
+                </div>
               ) : (
                 <div className="space-y-1.5">
                   {newEntriesList.map((entry, idx) => (
-                    <div key={idx} className="flex justify-between items-center bg-white border rounded-lg px-3 py-2 text-xs font-medium text-gray-700 shadow-xs">
-                      <div className="grid grid-cols-5 gap-2 flex-1 font-mono">
+                    <div
+                      key={idx}
+                      className="flex justify-between items-center bg-white border rounded-lg px-3 py-2 text-xs font-medium text-gray-700 shadow-xs"
+                    >
+                      <div className="grid grid-cols-6 gap-2 flex-1 font-mono items-center">
                         <span className="truncate font-bold text-gray-900">{entry.carrier}</span>
                         <span className="truncate text-blue-600">{entry.type}</span>
                         <span className="truncate text-gray-600 font-sans">{entry.location}</span>
                         <span className="truncate text-gray-500 font-sans">{entry.pickup}</span>
+                        
+                        {/* IS SPLIT DISPLAY: YES / NO BADGE */}
+                        <span className="text-center font-sans">
+                          {Number(entry.isSplit) === 1 ? (
+                            <span className="px-2 py-0.5 rounded-full text-[10px] bg-purple-100 text-purple-700 font-bold border border-purple-200">
+                              Yes
+                            </span>
+                          ) : (
+                            <span className="px-2 py-0.5 rounded-full text-[10px] bg-gray-100 text-gray-500 font-medium border border-gray-200">
+                              No
+                            </span>
+                          )}
+                        </span>
+
                         <span className="text-right text-emerald-600 font-bold">${entry.haulage.toFixed(4)}</span>
                       </div>
-                      <button onClick={() => removeStagedItemFromPreview(idx)} className="p-1 text-red-500 hover:bg-red-50 rounded ml-4 transition-colors">
+
+                      <button
+                        onClick={() => removeStagedItemFromPreview(idx)}
+                        className="p-1 text-red-500 hover:bg-red-50 rounded ml-4 transition-colors"
+                      >
                         <X className="w-4 h-4" />
                       </button>
                     </div>
@@ -734,10 +1012,17 @@ export function RouteComponent() {
             </div>
 
             <div className="flex justify-between items-center border-t pt-4">
-              <button onClick={closeCreationWizard} className="px-4 py-2 border text-gray-600 hover:bg-gray-50 rounded-lg text-sm font-medium">Cancel</button>
+              <button onClick={closeCreationWizard} className="px-4 py-2 border text-gray-600 hover:bg-gray-50 rounded-lg text-sm font-medium">
+                Cancel
+              </button>
               <button
-                onClick={handlePushNewEntriesToServer} disabled={newEntriesList.length === 0}
-                className={`px-5 py-2 text-sm font-medium rounded-lg shadow-sm transition-all ${newEntriesList.length > 0 ? 'bg-emerald-600 hover:bg-emerald-700 text-white cursor-pointer' : 'bg-gray-100 text-gray-400 cursor-not-allowed'}`}
+                onClick={handlePushNewEntriesToServer}
+                disabled={newEntriesList.length === 0}
+                className={`px-5 py-2 text-sm font-medium rounded-lg shadow-sm transition-all ${
+                  newEntriesList.length > 0
+                    ? 'bg-emerald-600 hover:bg-emerald-700 text-white cursor-pointer'
+                    : 'bg-gray-100 text-gray-400 cursor-not-allowed'
+                }`}
               >
                 Save and Add Routes ({newEntriesList.length})
               </button>

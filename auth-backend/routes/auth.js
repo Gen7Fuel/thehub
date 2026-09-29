@@ -92,6 +92,31 @@ router.post("/identify", async (req, res) => {
   }
 });
 
+// GET /login-auth/maintenance-status
+// Lightweight check for active maintenance state
+router.get("/maintenance-status", async (req, res) => {
+  try {
+    const ongoing = await Maintenance.findOne({ status: "ongoing" });
+
+    if (ongoing) {
+      return res.json({
+        active: true,
+        maintenance: {
+          status: "ongoing",
+          scheduleClose: ongoing.scheduleClose,
+          title: ongoing.name || "System Maintenance",
+          message: ongoing.description || "System is undergoing scheduled maintenance."
+        }
+      });
+    }
+
+    return res.json({ active: false, maintenance: null });
+  } catch (err) {
+    console.error("Error checking maintenance status in auth-backend:", err);
+    res.status(500).json({ message: "Server error" });
+  }
+});
+
 // router.post("/register", async (req, res) => {
 //   const { email, password, firstName, lastName, stationName } = req.body;
 

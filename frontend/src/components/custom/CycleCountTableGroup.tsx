@@ -16,6 +16,7 @@ interface Props {
   onInputChange: (id: string, field: "foh" | "boh", value: string) => void;
   onInputBlur: (id: string, field: "foh" | "boh", value: string) => void;
   getVarianceForItem: (catNum?: number) => number;
+  isScheduled?: boolean;
 }
 
 const CycleCountTableGroup: React.FC<Props> = ({
@@ -24,7 +25,8 @@ const CycleCountTableGroup: React.FC<Props> = ({
   isPriority,
   onInputChange,
   onInputBlur,
-  getVarianceForItem
+  getVarianceForItem,
+  isScheduled = false
 }) => {
   const [activeBarcodeItem, setActiveBarcodeItem] = useState<{ name: string, upc: string, image: string } | null>(null);
   const [openVarianceId, setOpenVarianceId] = useState<string | null>(null);
@@ -39,6 +41,10 @@ const CycleCountTableGroup: React.FC<Props> = ({
             <th className="px-4 py-4 w-28 text-center">BOH</th>
             <th className="px-4 py-4 w-28 text-center">FOH</th>
             <th className="px-4 py-4 w-20 text-center">Total Pks</th>
+            {/* Render only when isScheduled is true */}
+            {isScheduled && (
+              <th className="px-4 py-4 w-24 text-center">Expected Pks</th>
+            )}
           </tr>
         </thead>
         <tbody className="divide-y divide-gray-100">
@@ -110,7 +116,7 @@ const CycleCountTableGroup: React.FC<Props> = ({
 
                 {/* BOH Column */}
                 <td className="px-2 py-4 w-40">
-                  {item.pk_in_crt ? (
+                  {Boolean(item.pk_in_crt && item.pk_in_crt > 0) ? (
                     <MultiUnitInput
                       label="boh"
                       placeholder="BOH"
@@ -126,8 +132,9 @@ const CycleCountTableGroup: React.FC<Props> = ({
                       type="number"
                       min="0"
                       placeholder="BOH"
-                      className={`w-full h-12 text-center text-lg font-bold border-2 rounded-xl transition-all outline-none ${bohStr !== "" ? 'border-green-500 bg-green-50 text-green-700 shadow-inner' : 'border-red-200 bg-red-50/50 text-red-900'
-                        }`}
+                      className={`w-full h-12 text-center text-lg font-bold border-2 rounded-xl transition-all outline-none ${
+                        bohStr !== "" ? 'border-green-500 bg-green-50 text-green-700 shadow-inner' : 'border-red-200 bg-red-50/50 text-red-900'
+                      }`}
                       value={bohStr}
                       onChange={(e) => onInputChange(item.entryId, "boh", e.target.value)}
                       onBlur={(e) => onInputBlur(item.entryId, "boh", e.target.value)}
@@ -165,6 +172,13 @@ const CycleCountTableGroup: React.FC<Props> = ({
                 <td className={`px-4 py-4 text-center font-black text-xl rounded-xl ${isDone ? 'bg-green-50 text-green-700' : 'text-gray-300'}`}>
                   {isDone ? total : "--"}
                 </td>
+
+                {/* Render only when isScheduled is true */}
+                {isScheduled && (
+                  <td className="px-4 py-4 text-center font-bold text-gray-600 text-lg">
+                    {item.onHandCSO != null ? Math.round(Number(item.onHandCSO)) : "--"}
+                  </td>
+                )}
               </tr>
             );
           })}
@@ -173,22 +187,25 @@ const CycleCountTableGroup: React.FC<Props> = ({
 
       {/* --- BARCODE ZOOM DIALOG --- */}
       <Dialog open={!!activeBarcodeItem} onOpenChange={() => setActiveBarcodeItem(null)}>
-        <DialogContent className="sm:max-w-md rounded-3xl overflow-hidden p-0 border-none">
-          {/* Product Image Header */}
-          <div className="w-full h-48 bg-gray-50 relative border-b border-gray-100">
-            <div className="absolute top-4 left-0 right-0 text-center">
-              <span className="bg-white/80 backdrop-blur-sm px-3 py-1 rounded-full text-[9px] uppercase tracking-tighter font-black text-gray-500 shadow-sm border border-white/50">
-                Verify Product Identity
-              </span>
-            </div>
+        <DialogContent className="sm:max-w-md rounded-3xl overflow-hidden p-0 border-none bg-white">
+          
+          {/* Header Badge (Cleanly separated above the image container) */}
+          <div className="w-full pt-5 pb-2 text-center bg-white">
+            <span className="bg-gray-100 px-3 py-1 rounded-full text-[9px] uppercase tracking-tighter font-black text-gray-500 shadow-sm border border-gray-200/60 inline-block">
+              Verify Product Identity
+            </span>
+          </div>
+
+          {/* Product Image Container (Pure white background, no badge overlay) */}
+          <div className="w-full h-44 bg-white border-b border-gray-100 flex items-center justify-center">
             {activeBarcodeItem?.image ? (
               <img
                 src={activeBarcodeItem.image}
                 alt={activeBarcodeItem.name}
-                className="w-full h-full object-contain p-4" // object-contain ensures we see the whole product
+                className="w-full h-full object-contain px-6 pb-4" // object-contain ensures we see the whole product
               />
             ) : (
-              <div className="w-full h-full flex flex-col items-center justify-center text-gray-300">
+              <div className="w-full h-full flex flex-col items-center justify-center text-gray-300 bg-gray-50">
                 <ImageIcon className="w-12 h-12 mb-2 opacity-20" />
                 <span className="text-xs font-bold uppercase tracking-widest opacity-40">No Image Available</span>
               </div>

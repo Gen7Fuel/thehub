@@ -3,6 +3,7 @@ import { createFileRoute, useLoaderData, useNavigate, useSearch } from '@tanstac
 import { format } from 'date-fns'
 import { SitePicker } from '@/components/custom/sitePicker'
 import { DatePickerWithRange } from '@/components/custom/datePickerWithRange'
+import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 import '@/styles/tableGrid.css'
 import type { DateRange } from 'react-day-picker'
 import '@/styles/typewriter.css'
@@ -62,6 +63,9 @@ type CashSummaryTotals = {
   fuelPriceOverrides: number
   parsedItemSales: number
   depositTotal: number
+  gst?: number
+  pst?: number
+  salesTax?: number
   pennyRounding: number
   totalSales: number
   afdCredit: number
@@ -77,6 +81,7 @@ type CashSummaryTotals = {
   couponsAccepted: number
   giftCertificates?: number
   cashOffCoupons?: number
+  gasolineCoupons?: number
   otherCoupons?: number
   canadianCash: number
   cashOnHand: number
@@ -112,6 +117,62 @@ type EntriesResponse = {
 }
 
 type EntriesRow = { date: string; data: EntriesResponse | null }
+
+const fmt2 = (v: number | undefined | null) => {
+  if (typeof v === 'number' && Number.isFinite(v)) {
+    if (v < 0) {
+      return `(${Math.abs(v).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })})`;
+    }
+    return v.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  }
+  return '';
+}
+
+// Mirrors the Balance Check formula computed in backend/routes/cashRecRoutes.js:
+// totalPos + reportCanadianCash + couponsAccepted + giftCertificates + payouts
+//   - totalSales + totalReceivablesAmount + missedCpl + otherCoupons + gasolineCoupons + cashOffCoupons
+// Defined at module scope (not inside RouteComponent) so it keeps a stable
+// identity across renders instead of being recreated as a new component type
+// every time the route re-renders.
+const balanceCheckTerms = (data: EntriesResponse | null) => {
+  const t = data?.cashSummary?.totals
+  return [
+    { label: 'Total POS', value: t?.totalPos ?? 0, sign: 1 as const },
+    { label: 'CDN Cash', value: t?.report_canadian_cash ?? 0, sign: 1 as const },
+    { label: 'Coupons Accepted', value: t?.couponsAccepted ?? 0, sign: 1 as const },
+    { label: 'Gift Certificates', value: t?.giftCertificates ?? 0, sign: 1 as const },
+    { label: 'Payouts', value: t?.payouts ?? 0, sign: 1 as const },
+    { label: 'Total Sales', value: t?.totalSales ?? 0, sign: -1 as const },
+    { label: 'Total Receivables', value: data?.totalReceivablesAmount ?? 0, sign: 1 as const },
+    { label: 'Missed CPL', value: t?.missedCpl ?? 0, sign: 1 as const },
+    { label: 'Other Coupons', value: t?.otherCoupons ?? 0, sign: 1 as const },
+    { label: 'Gasoline Coupons', value: t?.gasolineCoupons ?? 0, sign: 1 as const },
+    { label: 'Cash Off Coupons', value: t?.cashOffCoupons ?? 0, sign: 1 as const },
+  ]
+}
+
+const BalanceCheckFormula = ({ data }: { data: EntriesResponse | null }) => {
+  const terms = balanceCheckTerms(data)
+  const op = (sign: number, first: boolean) => (first ? (sign < 0 ? '− ' : '') : (sign < 0 ? ' − ' : ' + '))
+  return (
+    <div className="typewriter-font text-left whitespace-normal max-w-[22rem]">
+      <div className="font-semibold">Balance Check</div>
+      <div>
+        {'= '}
+        {terms.map((t, i) => (
+          <span key={t.label}>{op(t.sign, i === 0)}{t.label}</span>
+        ))}
+      </div>
+      <div className="mt-1">
+        {'= '}
+        {terms.map((t, i) => (
+          <span key={t.label}>{op(t.sign, i === 0)}{fmt2(t.value)}</span>
+        ))}
+      </div>
+      <div className="mt-1 font-semibold">{'= '}{fmt2(data?.balanceCheck)}</div>
+    </div>
+  )
+}
 
 export const Route = createFileRoute('/_navbarLayout/cash-rec/entries')({
   // Default date to today (yyyy-MM-dd), mirror payouts.tsx behavior
@@ -194,16 +255,6 @@ function RouteComponent() {
   const fromObj = ymdToLocalDate(from)
   const toObj = ymdToLocalDate(to || from)
 
-  const fmt2 = (v: number | undefined | null) => {
-    if (typeof v === 'number' && Number.isFinite(v)) {
-      if (v < 0) {
-        return `(${Math.abs(v).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })})`;
-      }
-      return v.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-    }
-    return '';
-  }
-
   const copyCell = (e: React.MouseEvent<HTMLTableCellElement>) => {
     const raw = e.currentTarget.textContent?.trim() ?? ''
     if (!raw || raw === '-') return
@@ -274,6 +325,7 @@ function RouteComponent() {
                 <th className="px-1 py-1 text-center align-bottom h-24 bg-violet-50">DealGroup CPL Discounts</th>
                 <th className="px-1 py-1 text-center align-bottom h-24 bg-violet-50">Unsettled Prepays</th>
                 <th className="px-1 py-1 text-center align-bottom h-24 bg-violet-50">Item Sales</th>
+                <th className="px-1 py-1 text-center align-bottom h-24 bg-violet-50">Sales Tax</th>
                 <th className="px-1 py-1 text-center align-bottom h-24 bg-violet-50">Total Sales</th>
                 <th className="px-1 py-1 text-center align-bottom h-24 bg-violet-50">Fuel Sales</th>
                 <th className="px-1 py-1 text-center align-bottom h-24 bg-violet-50">AFD GC</th>
@@ -321,11 +373,12 @@ function RouteComponent() {
                       </>
                     )}
                     {/* Cash Summary totals */}
-                    <td className="px-2 py-2 text-right cursor-copy" onClick={copyCell}>{fmt2(data?.cashSummary?.totals.dealGroupCplDiscounts)}</td>
+                    <td className="px-2 py-2 text-right cursor-copy" onClick={copyCell}>{fmt2(data?.cashSummary?.totals.fuelPriceOverrides)}</td>
                     <td className="px-2 py-2 text-right cursor-copy" onClick={copyCell}>{data?.cashSummary?.unsettledPrepays == null ? '-' : fmt2(data?.cashSummary?.unsettledPrepays)}</td>
                     <td className="px-2 py-2 text-right cursor-copy" onClick={copyCell}>{fmt2(data?.cashSummary?.totals.item_sales)}</td>
+                    <td className="px-2 py-2 text-right cursor-copy" onClick={copyCell}>{fmt2(data?.cashSummary?.totals.salesTax ?? ((data?.cashSummary?.totals.gst ?? 0) + (data?.cashSummary?.totals.pst ?? 0)))}</td>
                     <td className="px-2 py-2 text-right cursor-copy" onClick={copyCell}>{fmt2(data?.cashSummary?.totals.totalSales)}</td>
-                    <td className="px-2 py-2 text-right cursor-copy" onClick={copyCell}>{fmt2((data?.cashSummary?.totals.totalSales ?? 0) - (data?.cashSummary?.totals.item_sales ?? 0))}</td>
+                    <td className="px-2 py-2 text-right cursor-copy" onClick={copyCell}>{fmt2((data?.cashSummary?.totals.fuelSales ?? 0) + (data?.cashSummary?.totals.fuelPriceOverrides ?? 0))}</td>
                     <td className="px-2 py-2 text-right cursor-copy" onClick={copyCell}>{fmt2(data?.cashSummary?.totals.afdGiftCard)}</td>
                     <td className="px-2 py-2 text-right cursor-copy" onClick={copyCell}>{fmt2(data?.cashSummary?.totals.totalPos)}</td>
                     <td className="px-2 py-2 text-right cursor-copy" onClick={copyCell}>{fmt2(data?.cashSummary?.totals.kioskGiftCard)}</td>
@@ -333,7 +386,7 @@ function RouteComponent() {
                     <td className="px-2 py-2 text-right cursor-copy" onClick={copyCell}>{fmt2(data?.cashSummary?.totals.payouts)}</td>
                     {/* <td className="px-2 py-2 text-right cursor-copy" onClick={copyCell}>{fmt2(data?.cashSummary?.totals.cpl_bulloch)}</td> */}
                     <td className="px-2 py-2 text-right cursor-copy" onClick={copyCell}>{fmt2(data?.cashSummary?.totals.missedCpl)}</td>
-                    <td className="px-2 py-2 text-right cursor-copy" onClick={copyCell}>{fmt2((data?.cashSummary?.totals.couponsAccepted ?? 0) + (data?.cashSummary?.totals.giftCertificates ?? 0) + (data?.cashSummary?.totals.cashOffCoupons ?? 0) + (data?.cashSummary?.totals.otherCoupons ?? 0))}</td>
+                    <td className="px-2 py-2 text-right cursor-copy" onClick={copyCell}>{fmt2((data?.cashSummary?.totals.couponsAccepted ?? 0) + (data?.cashSummary?.totals.giftCertificates ?? 0) + (data?.cashSummary?.totals.cashOffCoupons ?? 0) + (data?.cashSummary?.totals.gasolineCoupons ?? 0) + (data?.cashSummary?.totals.otherCoupons ?? 0))}</td>
                     <td className="px-2 py-2 text-right cursor-copy" onClick={copyCell}>{fmt2(data?.cashSummary?.totals.cash_back)}</td>
                     <td className="px-2 py-2 text-right cursor-copy" onClick={copyCell}>{fmt2(data?.cashSummary?.totals.report_canadian_cash)}</td>
 
@@ -365,7 +418,14 @@ function RouteComponent() {
                             (data?.cashSummary?.unsettledPrepays ?? 0)
                       )}
                     </td>
-                    <td className="px-2 py-2 text-right cursor-copy" onClick={copyCell}>{fmt2(data?.balanceCheck)}</td>
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <td className="px-2 py-2 text-right cursor-copy" onClick={copyCell}>{fmt2(data?.balanceCheck)}</td>
+                      </TooltipTrigger>
+                      <TooltipContent side="top" className="w-auto max-w-none">
+                        <BalanceCheckFormula data={data} />
+                      </TooltipContent>
+                    </Tooltip>
                     <td className="px-2 py-2 text-right cursor-copy" onClick={copyCell}>{fmt2(data?.bankStmtTrans)}</td>
                     <td className="px-2 py-2 text-right cursor-copy" onClick={copyCell}>{fmt2(data?.bankRecDay ?? data?.bankRec)}</td>
                   </tr>

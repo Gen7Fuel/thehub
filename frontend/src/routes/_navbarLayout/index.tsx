@@ -1,4 +1,5 @@
 import React from 'react'
+import { useState, useEffect } from "react";
 import { createFileRoute, Link } from '@tanstack/react-router'
 import { Button } from '@/components/ui/button'
 import { useAuth } from "@/context/AuthContext"
@@ -28,15 +29,52 @@ import {
   LifeBuoy,
   Settings,
   FileUp,
+  LayoutGrid,
+  FileBarChart,
 } from 'lucide-react'
 
 export const Route = createFileRoute('/_navbarLayout/')({
   component: App,
 })
 
+/**
+ * Custom hook to detect if current viewport width qualifies as Desktop/Tablet (>= 768px)
+ */
+function useIsDesktopOrTablet() {
+  const [isDesktop, setIsDesktop] = useState<boolean>(() => {
+    if (typeof window !== 'undefined') {
+      return window.innerWidth >= 1025; // Tailwind 'md' breakpoint
+    }
+    return true;
+  });
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+
+    const handleResize = () => {
+      setIsDesktop(window.innerWidth >= 1025);
+    };
+
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
+  }, []);
+
+  return isDesktop;
+}
+
 function App() {
   const { user } = useAuth();
   const access = user?.access || {}
+  const isDesktopOrTablet = useIsDesktopOrTablet();
+
+  // Determine permissions and target route dynamically based on screen resolution
+  const canShowFuelPricing = isDesktopOrTablet
+    ? Boolean(access?.fuelPricing?.value)
+    : Boolean(access?.fuelPricing?.setFuelPrice);
+
+  const fuelPricingTargetRoute = isDesktopOrTablet
+    ? '/fuel-pricing'
+    : '/fuel-pricing-mobile';
 
   return (
     <div className="min-h-screen bg-[#f8fafc]">
@@ -115,11 +153,14 @@ function App() {
               {access?.accounting?.atm && (
                 <NavButton to="/atm" label="ATM" icon={Banknote} theme="amber" />
               )}
+              {access?.accounting?.accountingReports?.value && (
+                <NavButton to="/accounting-reports" label="Reporting" icon={FileBarChart} theme="amber" />
+              )}
             </Section>
           )}
 
           {/* INVENTORY - INDIGO */}
-          {(access?.orderRec?.value || access?.cycleCount?.value || access?.vendor || access?.category || access?.writeOff?.value || access?.uploadInvoice?.value) && (
+          {(access?.orderRec?.value || access?.cycleCount?.value || access?.vendor || access?.category || access?.writeOff?.value || access?.uploadInvoice?.value || access?.planogram?.value) && (
             <Section 
               title="Inventory" 
               accentColor="border-t-indigo-500"
@@ -141,11 +182,21 @@ function App() {
               
               {/* NEW MODULE: Upload Invoice */}
               {access?.uploadInvoice?.value && (
-                <NavButton 
-                  to="/upload-invoice" 
-                  label="Upload Invoice" 
-                  icon={FileUp} 
-                  theme="indigo" 
+                <NavButton
+                  to="/upload-invoice"
+                  label="Upload Invoice"
+                  icon={FileUp}
+                  theme="indigo"
+                />
+              )}
+
+              {/* NEW MODULE: Planogram */}
+              {access?.planogram?.value && (
+                <NavButton
+                  to="/planogram"
+                  label="Planogram"
+                  icon={LayoutGrid}
+                  theme="indigo"
                 />
               )}
             </Section>
@@ -163,13 +214,13 @@ function App() {
           )}
 
           {/* FUEL OPERATIONS - SKY */}
-          {(access?.fuelManagement?.value || access?.fuelPricing?.value) && (
+          {(access?.fuelManagement?.workspace?.value || canShowFuelPricing || access?.fuelSettings?.value) && (
             <Section 
               title="Fuel Operations" 
               accentColor="border-t-sky-500"
               icon={<Fuel className="w-5 h-5 text-sky-600" />}
             >
-              {access?.fuelManagement?.value && (
+              {access?.fuelManagement?.workspace?.value && (
                 <NavButton 
                   to="/fuel-management/workspace" 
                   label="Fuel Order Mgmt" 
@@ -178,15 +229,18 @@ function App() {
                   search={{ site: user?.location || '' }} 
                 />
               )}
-              {access?.fuelPricing?.value && (
+              
+              {/* DYNAMIC FUEL PRICING NAV BUTTON */}
+              {canShowFuelPricing && (
                 <NavButton 
-                  to="/fuel-pricing" 
+                  to={fuelPricingTargetRoute} 
                   label="Fuel Pricing" 
                   icon={Coins} 
                   theme="sky" 
                   search={{ site: user?.location || '' }} 
                 />
               )}
+
               {access?.fuelSettings?.value && (
                 <NavButton 
                   to="/fuel-settings" 
@@ -205,13 +259,13 @@ function App() {
               icon={<GraduationCap className="w-5 h-5 text-violet-600" />}
             >
               {access?.training?.voiceAgent && (
-                <>
-                  <NavButton to="/ai-customer" label="AI Customer Chat" icon={MessageSquare} theme="violet" />
-                  <NavButton to="/ai-customer/mcq" label="MCQ" icon={FileText} theme="violet" />
-                </>
+                <NavButton to="/ai-customer" label="AI Customer Chat" icon={MessageSquare} theme="violet" />
               )}
               {access?.academy && (
-                <NavButton to="/academy" label="Academy" icon={GraduationCap} theme="violet" />
+                <>
+                  <NavButton to="/academy" label="Academy" icon={GraduationCap} theme="violet" />
+                  <NavButton to="/ai-customer/mcq" label="MCQ" icon={FileText} theme="violet" />
+                </>
               )}
             </Section>
           )}

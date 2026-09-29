@@ -6,6 +6,7 @@ import { InputOTP, InputOTPGroup, InputOTPSeparator, InputOTPSlot } from '@/comp
 import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Switch } from '@/components/ui/switch'
 import { createFileRoute, Link, useNavigate } from '@tanstack/react-router'
+import { useQuery } from '@tanstack/react-query'
 import { useAuth } from '@/context/AuthContext'
 import { useSite } from '@/context/SiteContext'
 import { useFormStore } from '@/store'
@@ -15,6 +16,7 @@ import { LocationPicker } from '@/components/custom/locationPicker';
 import { domain } from '@/lib/constants'
 import { Camera, ExternalLink } from 'lucide-react'
 import { getCachedArCustomers, saveCachedArCustomers } from '@/lib/arCustomersCache'
+import { getCachedLocations, saveCachedLocations } from '@/lib/locationsCache'
 
 interface Product {
   _id: string
@@ -35,19 +37,25 @@ interface QuickSelectCustomer {
   order: number
 }
 
+interface RegisterOption {
+  _id?: string
+  number: string
+}
+
+interface LocationWithRegisters {
+  _id: string
+  stationName: string
+  registers?: RegisterOption[]
+}
+
 const PRODUCTS_CACHE_KEY = 'po_cachedProducts'
 const QUICK_SELECT_CACHE_PREFIX = 'po_cachedQuickSelect_'
 
-// Sites with no PO Number / Fleet Card concept — the Number section is hidden
-// entirely and neither field is submitted with the purchase order.
-const NO_PO_NUMBER_SITES = ['Rankin', 'Sarnia', 'Walpole', 'Jocko Point', 'Charlies']
-
-// Fleet-card-only flow (no PO Number) with a "customer doesn't have their
-// card" opt-out that feeds fleet-card-coverage analytics. Dormant until we
-// flip FLEET_CARD_ONLY_ENABLED on for the real sites — fill in the site
-// names below when that day comes.
-const FLEET_CARD_ONLY_ENABLED = true
-const FLEET_CARD_ONLY_SITES: string[] = ['Test Lab']
+// Sites that keep the classic PO Number / Fleet Card toggle instead of the
+// fleet-card-only flow below. Wavers West/East use an externally issued
+// PO-number book with recycled numbers (see DUPLICATE_PO_ALLOWED_SITES in
+// backend/constants/poSites.js); Oliver/Osoyoos are excluded per ops request.
+const CLASSIC_PO_NUMBER_SITES = ['Wavers West', 'Wavers East', 'Oliver', 'Osoyoos']
 
 async function loader() {
   try {
@@ -71,6 +79,25 @@ async function loader() {
     } catch {
       return { products: [] }
     }
+  }
+}
+
+// Shares the ['locations'] react-query cache key with LocationPicker
+// (frontend/src/components/custom/locationPicker.tsx) — this is a cache-shared
+// read, not a duplicate network fetch, whichever component's query settles first.
+const fetchLocationsForRegisters = async (): Promise<LocationWithRegisters[]> => {
+  try {
+    const token = localStorage.getItem('token')
+    const response = await axios.get(`${domain}/api/locations`, {
+      headers: { Authorization: `Bearer ${token}` },
+      timeout: 5000,
+    })
+    saveCachedLocations(response.data)
+    return response.data
+  } catch (err) {
+    const cached = getCachedLocations<LocationWithRegisters>()
+    if (cached.length > 0) return cached
+    throw err
   }
 }
 
@@ -100,6 +127,9 @@ function RouteComponent() {
   const customerName = useFormStore((state) => state.customerName)
   const setCustomerName = useFormStore((state) => state.setCustomerName)
 
+  const customerNameSelected = useFormStore((state) => state.customerNameSelected)
+  const setCustomerNameSelected = useFormStore((state) => state.setCustomerNameSelected)
+
   const driverName = useFormStore((state) => state.driverName)
   const setDriverName = useFormStore((state) => state.setDriverName)
 
@@ -124,14 +154,36 @@ function RouteComponent() {
   const itemsDescription = useFormStore((state) => state.itemsDescription)
   const setItemsDescription = useFormStore((state) => state.setItemsDescription)
 
+  const register = useFormStore((state) => state.register)
+  const setRegister = useFormStore((state) => state.setRegister)
+
   const receipt = useFormStore((state) => state.receipt)
   const setReceipt = useFormStore((state) => state.setReceipt)
 
   const data = Route.useLoaderData()
   const stationName = useFormStore((state) => state.stationName)
   const setStationName = useFormStore((state) => state.setStationName)
-  const isNoPoNumberSite = NO_PO_NUMBER_SITES.includes(stationName)
-  const isFleetCardOnlySite = FLEET_CARD_ONLY_ENABLED && FLEET_CARD_ONLY_SITES.includes(stationName)
+  const isClassicPoNumberSite = CLASSIC_PO_NUMBER_SITES.includes(stationName)
+  const isFleetCardOnlySite = !isClassicPoNumberSite
+
+  // DB-driven per-site config (unlike isFleetCardOnlySite above, which is a
+  // hardcoded site-name array) — only sites with 2+ registers configured show
+  // the selector below.
+  const { data: locationsForRegisters } = useQuery({
+    queryKey: ['locations'],
+    queryFn: fetchLocationsForRegisters,
+    initialData: () => {
+      const cached = getCachedLocations<LocationWithRegisters>()
+      return cached.length > 0 ? cached : undefined
+    },
+    initialDataUpdatedAt: 0,
+  })
+
+  const currentSiteRegisters = useMemo(
+    () => locationsForRegisters?.find((l) => l.stationName === stationName)?.registers ?? [],
+    [locationsForRegisters, stationName]
+  )
+  const showRegisterSelector = currentSiteRegisters.length >= 2
 
   const [poError, setPoError] = useState<string>('')
   const [cardStatus, setCardStatus] = useState<string | null>(null)
@@ -157,7 +209,7 @@ function RouteComponent() {
 
   // Whether the Fleet Card OTP input is actually on screen right now —
   // either the classic toggle is set to 'fleet', or this is a
-  // FLEET_CARD_ONLY_SITES site and the customer hasn't opted out of having one.
+  // fleet-card-only site and the customer hasn't opted out of having one.
   const showingFleetCardInput = isFleetCardOnlySite ? !noFleetCard : numberType === 'fleet'
 
   const handleBlur = async () => {
@@ -172,11 +224,15 @@ function RouteComponent() {
 
     if (data.message) {
       setCustomerName('')
+      setCustomerNameSelected(false)
       setDriverName('')
       setVehicleInfo('')
       setLicensePlate('')
     } else {
+      // A verified fleet-card lookup is as trustworthy as picking from the
+      // AR customer dropdown — it comes straight from the backend record.
       setCustomerName(data.customerName)
+      setCustomerNameSelected(true)
       setDriverName(data.driverName)
       setVehicleInfo(data.vehicleMakeModel)
       setLicensePlate(data.numberPlate ?? '')
@@ -238,11 +294,16 @@ function RouteComponent() {
     const handleClickOutside = (e: MouseEvent) => {
       if (customerNameRef.current && !customerNameRef.current.contains(e.target as Node)) {
         setShowSuggestions(false)
+        // Clicking a suggestion is itself inside customerNameRef, so this never
+        // fires for a real pick — only for genuinely walking away from an
+        // unselected, hand-typed name. Clear it rather than leaving a stale
+        // free-typed value sitting in the box.
+        if (!customerNameSelected && customerName) setCustomerName('')
       }
     }
     document.addEventListener('mousedown', handleClickOutside)
     return () => document.removeEventListener('mousedown', handleClickOutside)
-  }, [])
+  }, [customerName, customerNameSelected])
 
   useEffect(() => {
     if (showingFleetCardInput) {
@@ -258,14 +319,21 @@ function RouteComponent() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [showingFleetCardInput])
 
-  // FLEET_CARD_ONLY_SITES use their own Fleet-Card-only flow (no PO Number
-  // toggle). Force-clear the "no fleet card" analytics flag whenever the
-  // active site isn't one of them, so it never leaks into an unrelated
-  // site's submission (e.g. user opted out, then switched to a regular site).
+  // Fleet-card-only sites use their own flow (no PO Number toggle). Force-clear
+  // the "no fleet card" analytics flag whenever the active site is a classic
+  // PO Number site, so it never leaks into an unrelated site's submission
+  // (e.g. user opted out, then switched to a CLASSIC_PO_NUMBER_SITES site).
   useEffect(() => {
     if (!isFleetCardOnlySite) setNoFleetCard(false)
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isFleetCardOnlySite])
+
+  // Never let a register selection survive a site switch — required with no
+  // default, so a stale value from a previous site must not silently carry over.
+  useEffect(() => {
+    setRegister('')
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [stationName])
 
   // Helpers for 5-digit numeric PO input
   const toFiveDigits = (s: string) => {
@@ -303,32 +371,38 @@ function RouteComponent() {
     setSelectedQuickCustomerId(null)
     setNumberType('po')
     setFleetCardNumber('')
-    setNoFleetCard(false)
+    setNoFleetCard(true) // back to the "no fleet card" rest state, not the blocking one
     setCardStatus(null)
   }
 
-  // NO_PO_NUMBER_SITES have no PO Number / Fleet Card concept. The store persists
-  // across client-side nav, so force-clear stale values the instant the active
-  // site becomes one of them (e.g. user typed something on another site, then switched).
+  // Sites other than CLASSIC_PO_NUMBER_SITES use the fleet-card-only flow (no PO
+  // Number). The store persists across client-side nav, so force-clear stale PO
+  // Number state the instant the active site becomes one of them (e.g. user typed
+  // a PO Number for a classic site, then switched sites). Also default the switch
+  // to "no fleet card" so a normal transaction isn't blocked out of the gate —
+  // most customers don't carry one; the cashier flips it on only when they do.
   useEffect(() => {
-    if (isNoPoNumberSite) {
-      resetNumberSection()
+    if (isFleetCardOnlySite) {
+      setNumberType('po')
       setPoNumber('')
       setPoError('')
+      setNoFleetCard(true)
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isNoPoNumberSite])
+  }, [isFleetCardOnlySite])
 
   const handleQuickCustomerTap = (qc: QuickSelectCustomer) => {
     if (selectedQuickCustomerId === qc._id) {
       resetNumberSection()
       setCustomerName('')
+      setCustomerNameSelected(false)
       return
     }
     setCustomerName(qc.name)
+    setCustomerNameSelected(true)
     setSelectedQuickCustomerId(qc._id)
     setShowSuggestions(false)
-    if (qc.fleetCardNumber && !isNoPoNumberSite) {
+    if (qc.fleetCardNumber) {
       setNumberType('fleet')
       setFleetCardNumber(qc.fleetCardNumber)
       setNoFleetCard(false)
@@ -336,7 +410,7 @@ function RouteComponent() {
     } else {
       setNumberType('po')
       setFleetCardNumber('')
-      setNoFleetCard(false)
+      setNoFleetCard(true) // this quick-select customer has no card on file
       setCardStatus(null)
     }
   }
@@ -359,7 +433,7 @@ function RouteComponent() {
   const firstWord = (name: string) => name.trim().split(' ')[0] || name
   const quickSelectLabel = (qc: QuickSelectCustomer) => qc.label || firstWord(qc.name)
 
-  // Shared by the classic PO/Fleet toggle and the FLEET_CARD_ONLY_SITES flow —
+  // Shared by the classic PO/Fleet toggle and the fleet-card-only flow —
   // same 16-digit OTP entry + live verify-on-change + status line either way.
   const renderFleetCardInput = () => (
     <div className="space-y-1">
@@ -436,11 +510,31 @@ function RouteComponent() {
         </div>
       </div>
 
+      {showRegisterSelector && (
+        <div className="space-y-2">
+          <h2 className="text-lg font-bold">Register</h2>
+          <Select name="register" value={register} onValueChange={(value) => setRegister(value)}>
+            <SelectTrigger className="w-[180px]">
+              <SelectValue placeholder="Select Register" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectGroup>
+                {currentSiteRegisters.map((r) => (
+                  <SelectItem key={r._id ?? r.number} value={r.number}>
+                    {r.number}
+                  </SelectItem>
+                ))}
+              </SelectGroup>
+            </SelectContent>
+          </Select>
+        </div>
+      )}
+
       {/* Number + Date on the same row */}
       <div className="flex items-start justify-between gap-4">
         <div className={`space-y-3 transition-opacity duration-500 ${selectedQuickCustomerId ? 'opacity-0 pointer-events-none' : 'opacity-100'}`}>
-          {/* NO_PO_NUMBER_SITES have no PO Number / Fleet Card entry */}
-          {!isNoPoNumberSite && isFleetCardOnlySite && (
+          {/* CLASSIC_PO_NUMBER_SITES keep the PO Number / Fleet Card toggle below */}
+          {isFleetCardOnlySite && (
             <>
               <h2 className="text-lg font-bold">Fleet Card</h2>
               <div className="flex items-center gap-2">
@@ -459,7 +553,7 @@ function RouteComponent() {
             </>
           )}
 
-          {!isNoPoNumberSite && !isFleetCardOnlySite && (
+          {isClassicPoNumberSite && (
             <>
               <h2 className="text-lg font-bold">Number</h2>
               <div className="flex rounded-md border border-input overflow-hidden w-fit">
@@ -540,7 +634,7 @@ function RouteComponent() {
       {/* Fleet Card number entry, on its own full-width row below Number + Date —
           the 16-slot OTP is too wide to share a row with the Date picker on
           narrower (tablet) viewports without overflowing. */}
-      {!isNoPoNumberSite && isFleetCardOnlySite && !noFleetCard && (
+      {isFleetCardOnlySite && !noFleetCard && (
         <div className={`transition-opacity duration-500 ${selectedQuickCustomerId ? 'opacity-0 pointer-events-none' : 'opacity-100'}`}>
           {renderFleetCardInput()}
         </div>
@@ -573,7 +667,7 @@ function RouteComponent() {
             name="customerName"
             value={customerName}
             autoComplete="off"
-            onChange={(e) => { setCustomerName(e.target.value); setShowSuggestions(true); if (selectedQuickCustomerId) resetNumberSection() }}
+            onChange={(e) => { setCustomerName(e.target.value); setCustomerNameSelected(false); setShowSuggestions(true); if (selectedQuickCustomerId) resetNumberSection() }}
             onFocus={() => setShowSuggestions(true)}
           />
           {showSuggestions && customerSuggestions.length > 0 && (
@@ -582,7 +676,7 @@ function RouteComponent() {
                 <li
                   key={c._id}
                   className="px-3 py-2 text-sm cursor-pointer hover:bg-gray-100"
-                  onMouseDown={() => { setCustomerName(c.name); setShowSuggestions(false); if (selectedQuickCustomerId) resetNumberSection() }}
+                  onMouseDown={() => { setCustomerName(c.name); setCustomerNameSelected(true); setShowSuggestions(false); if (selectedQuickCustomerId) resetNumberSection() }}
                 >
                   {c.name}
                 </li>
@@ -713,14 +807,14 @@ function RouteComponent() {
             className="bg-blue-600 hover:bg-blue-700 text-white"
             onClick={() => {
               // Only pad when the user is actually on the PO Number path for a site that shows it.
-              // NO_PO_NUMBER_SITES and FLEET_CARD_ONLY_SITES never show the PO Number path, and
-              // the Fleet Card path never touches poNumber — padding an untouched empty value to
-              // "00000" would submit a non-empty poNumber that collides with the backend's
-              // per-station unique index on every subsequent submission.
-              if (!isNoPoNumberSite && !isFleetCardOnlySite && numberType === 'po') setPoNumber(padFive(poNumber));
+              // Fleet-card-only sites never show the PO Number path, and the Fleet Card path
+              // never touches poNumber — padding an untouched empty value to "00000" would
+              // submit a non-empty poNumber that collides with the backend's per-station
+              // unique index on every subsequent submission.
+              if (isClassicPoNumberSite && numberType === 'po') setPoNumber(padFive(poNumber));
               fileInputRef.current?.click();
             }}
-            disabled={!!poError || !customerName || !driverName || (purchaseType === 'fuel' ? quantity === 0 : !itemsDescription) || (isFleetCardOnlySite ? (!noFleetCard && cardStatus !== 'active' && cardStatus !== 'offline') : (numberType === 'fleet' && cardStatus !== 'active' && cardStatus !== 'offline'))}
+            disabled={!!poError || !customerName || !customerNameSelected || !driverName || (purchaseType === 'fuel' ? quantity === 0 : !itemsDescription) || (isFleetCardOnlySite ? (!noFleetCard && cardStatus !== 'active' && cardStatus !== 'offline') : (numberType === 'fleet' && cardStatus !== 'active' && cardStatus !== 'offline')) || (showRegisterSelector && !register)}
           >
             <Camera className="mr-2 h-4 w-4" />
             Upload Receipt
