@@ -83,7 +83,7 @@ router.get('/', async (req, res) => {
 // });
 router.post('/', async (req, res) => {
   try {
-    const { title, description, date } = req.body || {};
+    const { title, description, date, site: bodySite, stationName } = req.body || {};
 
     if (!title || !String(title).trim()) {
       return res.status(400).json({ success: false, message: 'Title is required.' });
@@ -101,9 +101,10 @@ router.post('/', async (req, res) => {
       });
     }
 
-    const site = (req.user?.stationName || '').trim();
+    // Accept site passed from the frontend request body, fallback to req.user's stationName
+    const site = (bodySite || stationName || '').trim();
     if (!site) {
-      return res.status(400).json({ success: false, message: 'User has no associated site.' });
+      return res.status(400).json({ success: false, message: 'Site/station name is required.' });
     }
 
     const event = await Event.create({
@@ -130,7 +131,7 @@ router.post('/', async (req, res) => {
       const io = req.app.get('io');
       const senderEmail = (req.user?.email || '').trim().toLowerCase();
 
-      // Look up location using stationName or site field
+      // Look up target site location using the site passed in payload
       const locationDoc = await Location.findOne({
         $or: [{ stationName: site }, { site: site }]
       }).lean();
@@ -143,10 +144,10 @@ router.post('/', async (req, res) => {
           
         const storeEmail = locationDoc.email ? locationDoc.email.trim().toLowerCase() : null;
 
-        // Combine all store leadership emails to check if the sender is part of management
+        // Combine all store leadership emails to check if sender is part of management
         const allManagementEmails = [...managerEmails, ...(storeEmail ? [storeEmail] : [])];
 
-        // CHECK: If sender is NOT a manager or store email, proceed with notification
+        // CHECK: If sender is NOT a manager or store email for this site, send notification
         if (!allManagementEmails.includes(senderEmail)) {
           let recipientEmails = [];
 
