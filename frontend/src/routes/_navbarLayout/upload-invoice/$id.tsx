@@ -232,7 +232,7 @@ function RouteComponent() {
     mop &&
     (mop !== "check" || checkNumber) &&
     cost !== "" &&
-    cost > 0 &&
+    // cost > 0 &&
     invoiceImages.length > 0;
 
   const handleSubmit = async () => {
@@ -402,7 +402,7 @@ function RouteComponent() {
                 type="number"
                 placeholder="Amount ($)"
                 value={cost === "" ? "" : cost}
-                min="0"
+                // min="0"
                 step="0.01"
                 onChange={(e) =>
                   setCost(e.target.value === "" ? "" : Number(e.target.value))
