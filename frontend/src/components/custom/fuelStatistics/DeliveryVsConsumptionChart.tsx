@@ -40,6 +40,17 @@ interface DeliveryVsConsumptionChartProps {
   isLoading?: boolean;
 }
 
+export function shouldIncludeSalesGrade(
+  salesGrade: string,
+  selectedGrades: string[],
+) {
+  if (salesGrade === "Regular" && selectedGrades.includes("E15")) {
+    return true;
+  }
+
+  return selectedGrades.includes(salesGrade);
+}
+
 export function DeliveryVsConsumptionChart({
   orders,
   sales,
@@ -110,7 +121,7 @@ export function DeliveryVsConsumptionChart({
       if (!targetDay) return;
 
       (record.salesData || []).forEach((item) => {
-        if (!selectedGrades.includes(item.grade)) return;
+        if (!shouldIncludeSalesGrade(item.grade, selectedGrades)) return;
         const volume = Number(item.volume) || 0;
         targetDay.salesLtrs += volume;
         totalSales += volume;

@@ -53,6 +53,7 @@ import { VolumePipelineChart } from "@/components/custom/fuelStatistics/VolumePi
 import { DeliveryVsConsumptionChart } from "@/components/custom/fuelStatistics/DeliveryVsConsumptionChart";
 import { SupplierRackVolumeChart } from "@/components/custom/fuelStatistics/SupplierRackVolumeChart";
 import { CarrierBadgeAllocationChart } from "@/components/custom/fuelStatistics/CarrierBadgeAllocationChart";
+import { ScheduleComplianceExceptionCenter } from "@/components/custom/fuelStatistics/ScheduleComplianceExceptionCenter";
 
 export const Route = createFileRoute(
   "/_navbarLayout/fuel-management/statistics",
@@ -221,7 +222,16 @@ function FuelStatisticsComponent() {
     return current ? current.id : availableMonths[0]?.id;
   }, [availableMonths]);
 
-  const [fromMonth, setFromMonth] = useState<string>(currentMonthIso);
+  const defaultFromMonthIso = useMemo(() => {
+    const today = new Date();
+    if (today.getDate() === 1) {
+      return availableMonths[1]?.id ?? currentMonthIso;
+    }
+
+    return currentMonthIso;
+  }, [availableMonths, currentMonthIso]);
+
+  const [fromMonth, setFromMonth] = useState<string>(defaultFromMonthIso);
   const [toMonth, setToMonth] = useState<string>(currentMonthIso);
 
   const handleFromMonthChange = (val: string) => {
@@ -621,7 +631,7 @@ function FuelStatisticsComponent() {
       {/* MAIN CONTENT AREA */}
       <div className="w-full px-6 py-6 space-y-6">
         {/* GRADE FILTER TOOLBAR */}
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-white p-4 rounded-2xl border border-slate-200 shadow-sm">
+        <div className="sticky top-[140px] z-20 flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-white p-4 rounded-2xl border border-slate-200 shadow-sm">
           <div className="flex items-center gap-2">
             <Filter className="h-4 w-4 text-slate-500" />
             <span className="text-xs font-black uppercase text-slate-500 tracking-wider">
@@ -892,6 +902,25 @@ function FuelStatisticsComponent() {
             orders={rawOrdersResponse}
             selectedGrades={selectedGrades}
             getGradeTheme={getGradeTheme}
+            isLoading={isOrdersLoading}
+          />
+        </section>
+
+        <section className="space-y-3">
+          <div className="flex flex-col gap-1 sm:flex-row sm:items-end sm:justify-between">
+            <div>
+              <h2 className="text-lg font-black tracking-tight text-slate-800">
+                Schedule compliance and exceptions
+              </h2>
+            </div>
+            <p className="text-xs font-semibold text-slate-400">
+              Scores carrier delivery accuracy and surfaces cancelled orders.
+            </p>
+          </div>
+
+          <ScheduleComplianceExceptionCenter
+            orders={rawOrdersResponse}
+            selectedGrades={selectedGrades}
             isLoading={isOrdersLoading}
           />
         </section>
