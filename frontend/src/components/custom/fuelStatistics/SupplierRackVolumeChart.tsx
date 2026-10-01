@@ -27,6 +27,7 @@ interface EntityReference {
   supplierName?: string;
   rackName?: string;
   terminalName?: string;
+  rackLocation?: string;
 }
 
 export interface SupplierRackOrder {
@@ -43,6 +44,7 @@ export interface SupplierRackOrder {
 export interface VolumeShareDatum {
   id: string;
   name: string;
+  detail: string;
   litres: number;
   orderCount: number;
   grades: Record<string, number>;
@@ -95,10 +97,25 @@ function getEntityIdentity(
         ? entity.supplierName ?? entity.name
         : entity.rackName ?? entity.terminalName ?? entity.name) ||
       `Unnamed ${label}`;
+    const rack =
+      order.rack && typeof order.rack === "object" ? order.rack : null;
+    const supplier =
+      order.supplier && typeof order.supplier === "object"
+        ? order.supplier
+        : null;
+    const rackName =
+      rack?.rackName ?? rack?.terminalName ?? rack?.name ?? "Unassigned Rack";
+    const rackLocation = rack?.rackLocation;
+    const supplierName =
+      supplier?.supplierName ?? supplier?.name ?? "Unassigned Supplier";
 
     return {
       id: String(entity._id ?? `${dimension}:${name}`),
       name,
+      detail:
+        dimension === "supplier"
+          ? [rackName, rackLocation].filter(Boolean).join(" · ")
+          : [supplierName, rackLocation].filter(Boolean).join(" · "),
     };
   }
 
@@ -106,12 +123,14 @@ function getEntityIdentity(
     return {
       id: entity,
       name: `${label} ${entity.slice(-6)}`,
+      detail: "",
     };
   }
 
   return {
     id: `unassigned-${dimension}`,
     name: `Unassigned ${label}`,
+    detail: "",
   };
 }
 
@@ -135,14 +154,18 @@ export function aggregateSupplierRackVolumes(
 
     if (matchingItems.length === 0) return;
 
-    const { id, name } = getEntityIdentity(order, dimension);
+    const { id, name, detail } = getEntityIdentity(order, dimension);
     const current = entities.get(id) ?? {
       id,
       name,
+      detail,
       litres: 0,
       grades: {},
       orderIds: new Set<string>(),
     };
+    if (detail && !current.detail.includes(detail)) {
+      current.detail = current.detail ? `${current.detail}; ${detail}` : detail;
+    }
 
     matchingItems.forEach((item) => {
       const grade = item.grade!;
@@ -185,6 +208,11 @@ function VolumeShareTooltip({
           {datum.name}
         </p>
       </div>
+      {datum.detail && (
+        <p className="mb-1 truncate text-[10px] font-bold text-slate-400">
+          {datum.detail}
+        </p>
+      )}
       <p className="text-sm font-black text-slate-900">
         {formatLitres(datum.litres)}
       </p>
@@ -348,7 +376,9 @@ export function SupplierRackVolumeChart({
               </SelectItem>
               {chartData.map((item) => (
                 <SelectItem key={item.id} value={item.id}>
-                  {item.name} · {formatLitres(item.litres)}
+                  {item.name}
+                  {item.detail ? ` · ${item.detail}` : ""} ·{" "}
+                  {formatLitres(item.litres)}
                 </SelectItem>
               ))}
             </SelectContent>
@@ -437,6 +467,11 @@ export function SupplierRackVolumeChart({
                     {selectedEntity?.name ??
                       `All ${dimension === "supplier" ? "suppliers" : "racks"}`}
                   </p>
+                  {selectedEntity?.detail && (
+                    <p className="truncate text-[11px] font-bold text-slate-400">
+                      {selectedEntity.detail}
+                    </p>
+                  )}
                 </div>
                 <div className="shrink-0 text-left sm:text-right">
                   <p className="text-lg font-black text-blue-700">
@@ -510,6 +545,11 @@ export function SupplierRackVolumeChart({
                         <span className="truncate text-xs font-bold text-slate-700">
                           {item.name}
                         </span>
+                        {item.detail && (
+                          <span className="hidden truncate text-[10px] font-semibold text-slate-400 xl:inline">
+                            {item.detail}
+                          </span>
+                        )}
                         {active && (
                           <Check className="h-3.5 w-3.5 shrink-0 text-blue-600" />
                         )}

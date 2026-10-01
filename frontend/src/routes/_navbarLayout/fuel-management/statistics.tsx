@@ -52,6 +52,7 @@ import {
 import { VolumePipelineChart } from "@/components/custom/fuelStatistics/VolumePipelineChart";
 import { DeliveryVsConsumptionChart } from "@/components/custom/fuelStatistics/DeliveryVsConsumptionChart";
 import { SupplierRackVolumeChart } from "@/components/custom/fuelStatistics/SupplierRackVolumeChart";
+import { CarrierBadgeAllocationChart } from "@/components/custom/fuelStatistics/CarrierBadgeAllocationChart";
 
 export const Route = createFileRoute(
   "/_navbarLayout/fuel-management/statistics",
@@ -871,9 +872,6 @@ function FuelStatisticsComponent() {
         <section className="space-y-3">
           <div className="flex flex-col gap-1 sm:flex-row sm:items-end sm:justify-between">
             <div>
-              <p className="text-[10px] font-black uppercase tracking-[0.2em] text-blue-600">
-                Operations, Suppliers &amp; Racks
-              </p>
               <h2 className="text-lg font-black tracking-tight text-slate-800">
                 Supplier and rack utilization
               </h2>
@@ -884,6 +882,13 @@ function FuelStatisticsComponent() {
           </div>
 
           <SupplierRackVolumeChart
+            orders={rawOrdersResponse}
+            selectedGrades={selectedGrades}
+            getGradeTheme={getGradeTheme}
+            isLoading={isOrdersLoading}
+          />
+
+          <CarrierBadgeAllocationChart
             orders={rawOrdersResponse}
             selectedGrades={selectedGrades}
             getGradeTheme={getGradeTheme}

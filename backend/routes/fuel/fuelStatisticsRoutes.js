@@ -65,10 +65,10 @@ router.post("/pipeline-summary", async (req, res) => {
         station: { $in: validStationObjectIds },
         $or: dateFilters,
       },
-      "poNumber orderDate estimatedDeliveryDate currentStatus station items carrier supplier rack"
+      "poNumber orderDate estimatedDeliveryDate currentStatus station items carrier supplier rack badgeNo"
     )
       .populate("carrier", "name carrierName")
-      .populate("rack", "name rackName")
+      .populate("rack", "name rackName rackLocation")
       .populate("supplier", "name supplierName")
       .populate("station", "site stationName")
       .lean();
