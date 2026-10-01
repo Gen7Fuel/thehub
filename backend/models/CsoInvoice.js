@@ -118,7 +118,7 @@ const CsoInvoiceSchema = new mongoose.Schema(
     totalCost: {
       type: Number,
       required: true,
-      min: 0,
+      // min: 0,
     },
     // 🚀 Updated Images Field: Array of ImageMetadata subdocuments
     images: {
