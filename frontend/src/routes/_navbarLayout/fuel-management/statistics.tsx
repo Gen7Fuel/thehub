@@ -51,6 +51,7 @@ import {
 
 import { VolumePipelineChart } from "@/components/custom/fuelStatistics/VolumePipelineChart";
 import { DeliveryVsConsumptionChart } from "@/components/custom/fuelStatistics/DeliveryVsConsumptionChart";
+import { SupplierRackVolumeChart } from "@/components/custom/fuelStatistics/SupplierRackVolumeChart";
 
 export const Route = createFileRoute(
   "/_navbarLayout/fuel-management/statistics",
@@ -866,6 +867,29 @@ function FuelStatisticsComponent() {
             />
           </div>
         </div>
+
+        <section className="space-y-3">
+          <div className="flex flex-col gap-1 sm:flex-row sm:items-end sm:justify-between">
+            <div>
+              <p className="text-[10px] font-black uppercase tracking-[0.2em] text-blue-600">
+                Operations, Suppliers &amp; Racks
+              </p>
+              <h2 className="text-lg font-black tracking-tight text-slate-800">
+                Supplier and rack utilization
+              </h2>
+            </div>
+            <p className="text-xs font-semibold text-slate-400">
+              Uses the selected sites, reporting range, and fuel grades above.
+            </p>
+          </div>
+
+          <SupplierRackVolumeChart
+            orders={rawOrdersResponse}
+            selectedGrades={selectedGrades}
+            getGradeTheme={getGradeTheme}
+            isLoading={isOrdersLoading}
+          />
+        </section>
       </div>
 
       {/* INSPECT ORDERS DIALOG */}

@@ -5,11 +5,14 @@ const { fromZonedTime } = require("date-fns-tz");
 const { startOfMonth, endOfMonth, parseISO } = require("date-fns");
 
 // Reuse existing registered models safely
-const FuelOrder = mongoose.models.FuelOrder || require("../../models/Fuel/FuelOrder");
+const FuelOrder =
+  mongoose.models.FuelOrder || require("../../models/fuel/FuelOrder");
 const Location = mongoose.models.Location || require("../../models/Location");
-const FuelSales = mongoose.models.FuelSales || require("../../models/FuelSales");
+const FuelSales =
+  mongoose.models.FuelSales || require("../../models/fuel/FuelSales");
 const FuelSalesArchived =
-  mongoose.models.FuelSalesArchived || require("../../models/FuelSalesArchived");
+  mongoose.models.FuelSalesArchived ||
+  require("../../models/fuel/FuelSalesArchived");
 
 router.post("/pipeline-summary", async (req, res) => {
   try {
@@ -56,7 +59,7 @@ router.post("/pipeline-summary", async (req, res) => {
       };
     });
 
-    // 3. Query Orders and populate Carrier & Rack for Dialog Details
+    // 3. Query orders once and populate every relationship used by the charts.
     const orders = await FuelOrder.find(
       {
         station: { $in: validStationObjectIds },
@@ -66,6 +69,7 @@ router.post("/pipeline-summary", async (req, res) => {
     )
       .populate("carrier", "name carrierName")
       .populate("rack", "name rackName")
+      .populate("supplier", "name supplierName")
       .populate("station", "site stationName")
       .lean();
 
