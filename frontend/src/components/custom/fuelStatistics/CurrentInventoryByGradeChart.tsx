@@ -109,13 +109,13 @@ export function CurrentInventoryByGradeChart({
       };
 
       current.tanks.push(tank);
-      current.tankCapacity += Number(tank.tankCapacity) || 0;
-      current.minCapacity += Number(tank.minVolumeCapacity) || 0;
-      current.maxCapacity += Number(tank.maxVolumeCapacity) || 0;
 
       if (isFreshTank(tank)) {
         current.freshTanks.push(tank);
         current.liveVolume += Number(tank.currentVolume) || 0;
+        current.tankCapacity += Number(tank.tankCapacity) || 0;
+        current.minCapacity += Number(tank.minVolumeCapacity) || 0;
+        current.maxCapacity += Number(tank.maxVolumeCapacity) || 0;
       }
 
       summaryMap.set(grade, current);
@@ -216,12 +216,17 @@ export function CurrentInventoryByGradeChart({
           </div>
         </div>
 
-        <div className="grid grid-cols-1 gap-2 sm:grid-cols-5 xl:min-w-[760px]">
-          <InventoryMetric label="Live volume" value={formatLitres(totals.liveVolume)} />
-          <InventoryMetric label="Tank capacity" value={formatLitres(totals.tankCapacity)} />
-          <InventoryMetric label="Min capacity" value={formatLitres(totals.minCapacity)} />
-          <InventoryMetric label="Max capacity" value={formatLitres(totals.maxCapacity)} />
-          <InventoryMetric label="Available ullage" value={formatLitres(totals.availableUllage)} />
+        <div className="space-y-1 xl:min-w-[760px]">
+          <div className="grid grid-cols-1 gap-2 sm:grid-cols-5">
+            <InventoryMetric label="Live volume" value={formatLitres(totals.liveVolume)} />
+            <InventoryMetric label="Tank capacity" value={formatLitres(totals.tankCapacity)} />
+            <InventoryMetric label="Min capacity" value={formatLitres(totals.minCapacity)} />
+            <InventoryMetric label="Max capacity" value={formatLitres(totals.maxCapacity)} />
+            <InventoryMetric label="Available ullage" value={formatLitres(totals.availableUllage)} />
+          </div>
+          <p className="text-right text-[10px] font-bold uppercase tracking-wide text-slate-400">
+            Totals include active tanks with current/yesterday/manual readings only.
+          </p>
         </div>
       </div>
 
@@ -440,5 +445,6 @@ function MetricColumn({ label, value }: { label: string; value: string }) {
 }
 
 export default CurrentInventoryByGradeChart;
+
 
 
