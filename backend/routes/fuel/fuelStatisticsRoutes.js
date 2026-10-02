@@ -2,7 +2,7 @@ const express = require("express");
 const router = express.Router();
 const mongoose = require("mongoose");
 const { fromZonedTime } = require("date-fns-tz");
-const { startOfMonth, endOfMonth, parseISO } = require("date-fns");
+const { startOfMonth, endOfMonth, parseISO, addDays } = require("date-fns");
 
 // Reuse existing registered models safely
 const FuelOrder =
@@ -13,7 +13,76 @@ const FuelSales =
 const FuelSalesArchived =
   mongoose.models.FuelSalesArchived ||
   require("../../models/fuel/FuelSalesArchived");
+const FuelStationTank =
+  mongoose.models.FuelStationTank || require("../../models/fuel/FuelStationTank");
 
+
+function getStationLocalDate(timezone, offsetDays = 0) {
+  const formatter = new Intl.DateTimeFormat("en-CA", {
+    timeZone: timezone || "America/Toronto",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  });
+  const [year, month, day] = formatter.format(new Date()).split("-").map(Number);
+  return addDays(new Date(Date.UTC(year, month - 1, day)), offsetDays);
+}
+
+function getDayName(date) {
+  return new Intl.DateTimeFormat("en-US", { weekday: "long", timeZone: "UTC" }).format(date);
+}
+
+function removeSalesOutliers(volumes) {
+  if (volumes.length <= 2) return volumes;
+
+  return volumes.filter((value, index, self) => {
+    const others = self.filter((_, i) => i !== index);
+    const avgOfOthers = others.reduce((sum, item) => sum + item, 0) / others.length;
+
+    if (avgOfOthers <= 0) return value > 0;
+
+    return value >= avgOfOthers * 0.5 && value <= avgOfOthers * 1.5;
+  });
+}
+
+async function getSixWeekAverageSales(stationId, grade, targetDate) {
+  const dayOfWeek = getDayName(targetDate);
+  const startOfTarget = new Date(targetDate);
+  startOfTarget.setUTCHours(0, 0, 0, 0);
+
+  const query = {
+    stationId,
+    dayOfWeek,
+    date: { $lt: startOfTarget },
+  };
+
+  const [liveSales, archivedSales] = await Promise.all([
+    FuelSales.find(query).sort({ date: -1 }).limit(8).lean(),
+    FuelSalesArchived.find(query).sort({ date: -1 }).limit(8).lean(),
+  ]);
+
+  const salesByDate = new Map();
+  [...liveSales, ...archivedSales]
+    .sort((a, b) => new Date(b.date) - new Date(a.date))
+    .forEach((record) => {
+      const key = new Date(record.date).toISOString().split("T")[0];
+      if (!salesByDate.has(key)) salesByDate.set(key, record);
+    });
+
+  const volumes = Array.from(salesByDate.values())
+    .slice(0, 6)
+    .map((record) => {
+      const salesEntry = (record.salesData || []).find((item) => item.grade === grade);
+      return Number(salesEntry?.volume) || 0;
+    })
+    .filter((volume) => volume > 0);
+
+  const cleaned = removeSalesOutliers(volumes);
+  if (cleaned.length === 0) return 0;
+
+  const sample = cleaned.slice(0, 6);
+  return sample.reduce((sum, volume) => sum + volume, 0) / sample.length;
+}
 router.post("/pipeline-summary", async (req, res) => {
   try {
     const { stationIds, fromMonth, toMonth } = req.body;
@@ -80,6 +149,102 @@ router.post("/pipeline-summary", async (req, res) => {
   } catch (error) {
     console.error("Error fetching pipeline summary data:", error);
     res.status(500).json({ error: "Failed to fetch pipeline analytics data." });
+  }
+});
+
+
+router.post("/inventory-coverage", async (req, res) => {
+  try {
+    const { stationGradePairs, horizonDays = 14 } = req.body;
+
+    if (!Array.isArray(stationGradePairs) || stationGradePairs.length === 0) {
+      return res.json({ success: true, data: { byGrade: {}, forecastDays: [] } });
+    }
+
+    const normalizedPairs = stationGradePairs
+      .map((pair) => ({
+        stationId: String(pair.stationId || ""),
+        grade: String(pair.grade || ""),
+      }))
+      .filter((pair) => mongoose.Types.ObjectId.isValid(pair.stationId) && pair.grade);
+
+    if (normalizedPairs.length === 0) {
+      return res.json({ success: true, data: { byGrade: {}, forecastDays: [] } });
+    }
+
+    const uniqueStationIds = [...new Set(normalizedPairs.map((pair) => pair.stationId))];
+    const selectedStationObjectIds = uniqueStationIds.map((id) => new mongoose.Types.ObjectId(id));
+
+    const [locations, tanks] = await Promise.all([
+      Location.find({ _id: { $in: selectedStationObjectIds } }, "_id timezone").lean(),
+      FuelStationTank.find({ stationId: { $in: selectedStationObjectIds } }, "stationId grade").lean(),
+    ]);
+
+    const locationById = new Map(locations.map((location) => [String(location._id), location]));
+    const tankGradesByStation = new Map();
+    tanks.forEach((tank) => {
+      const stationId = String(tank.stationId);
+      if (!tankGradesByStation.has(stationId)) tankGradesByStation.set(stationId, new Set());
+      tankGradesByStation.get(stationId).add(tank.grade);
+    });
+
+    const uniquePairs = Array.from(
+      new Map(normalizedPairs.map((pair) => [`${pair.stationId}:${pair.grade}`, pair])).values(),
+    );
+    const safeHorizonDays = Math.min(Math.max(Number(horizonDays) || 14, 1), 30);
+    const byGrade = {};
+    const forecastDays = [];
+
+    for (let offset = 1; offset <= safeHorizonDays; offset += 1) {
+      const dayTotals = {};
+
+      await Promise.all(
+        uniquePairs.map(async ({ stationId, grade }) => {
+          const location = locationById.get(stationId);
+          const timezone = location?.timezone || "America/Toronto";
+          const targetDate = getStationLocalDate(timezone, offset);
+          const stationGrades = tankGradesByStation.get(stationId) || new Set();
+          const salesGrade = grade === "E15" && !stationGrades.has("E15") ? "Regular" : grade;
+          const averageSales = await getSixWeekAverageSales(stationId, salesGrade, targetDate);
+
+          byGrade[grade] = byGrade[grade] || { totalEstimatedSales: 0, forecast: [] };
+          byGrade[grade].totalEstimatedSales += averageSales;
+          byGrade[grade].forecast.push({
+            stationId,
+            date: targetDate.toISOString().split("T")[0],
+            dayOfWeek: getDayName(targetDate),
+            estimatedSales: Number(averageSales.toFixed(2)),
+          });
+
+          dayTotals[grade] = (dayTotals[grade] || 0) + averageSales;
+        }),
+      );
+
+      forecastDays.push({
+        offset,
+        grades: Object.fromEntries(
+          Object.entries(dayTotals).map(([grade, volume]) => [grade, Number(volume.toFixed(2))]),
+        ),
+      });
+    }
+
+    Object.keys(byGrade).forEach((grade) => {
+      byGrade[grade].averageDailySales = Number(
+        (byGrade[grade].totalEstimatedSales / safeHorizonDays).toFixed(2),
+      );
+      byGrade[grade].totalEstimatedSales = Number(byGrade[grade].totalEstimatedSales.toFixed(2));
+    });
+
+    res.json({
+      success: true,
+      data: {
+        byGrade,
+        forecastDays,
+      },
+    });
+  } catch (error) {
+    console.error("Error fetching inventory coverage forecast:", error);
+    res.status(500).json({ error: "Failed to fetch inventory coverage forecast." });
   }
 });
 
@@ -182,3 +347,6 @@ router.post("/sales-summary", async (req, res) => {
 });
 
 module.exports = router;
+
+
+

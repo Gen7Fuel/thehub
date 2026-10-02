@@ -1,5 +1,5 @@
 import { useState, useMemo, useEffect, useRef } from "react";
-import { createFileRoute } from "@tanstack/react-router";
+import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
 import axios from "axios";
 import { cn } from "@/lib/utils";
@@ -54,6 +54,7 @@ import { DeliveryVsConsumptionChart } from "@/components/custom/fuelStatistics/D
 import { SupplierRackVolumeChart } from "@/components/custom/fuelStatistics/SupplierRackVolumeChart";
 import { CarrierBadgeAllocationChart } from "@/components/custom/fuelStatistics/CarrierBadgeAllocationChart";
 import { ScheduleComplianceExceptionCenter } from "@/components/custom/fuelStatistics/ScheduleComplianceExceptionCenter";
+import { CurrentInventoryByGradeChart } from "@/components/custom/fuelStatistics/CurrentInventoryByGradeChart";
 
 export const Route = createFileRoute(
   "/_navbarLayout/fuel-management/statistics",
@@ -62,7 +63,10 @@ export const Route = createFileRoute(
 });
 
 const authHeader = {
-  headers: { Authorization: `Bearer ${localStorage.getItem("token")}` },
+  headers: {
+    Authorization: `Bearer ${localStorage.getItem("token")}`,
+    "X-Required-Permission": "fuelManagement.statistics",
+  },
 };
 
 // Removed Mid Grade
@@ -181,6 +185,7 @@ interface MonthOption {
 }
 
 function FuelStatisticsComponent() {
+  const navigate = useNavigate();
   const [stationSearch, setStationSearch] = useState("");
   const [selectedStationIds, setSelectedStationIds] = useState<string[]>([]);
   const [selectedGrades, setSelectedGrades] = useState<string[]>(ALL_GRADES);
@@ -248,14 +253,24 @@ function FuelStatisticsComponent() {
     }
   };
 
+  const handleAxiosErrorCheck = (err: unknown) => {
+    if (axios.isAxiosError(err) && err.response?.status === 403) {
+      navigate({ to: "/no-access" });
+      return true;
+    }
+    return false;
+  };
+
   // Fetch Locations
   const { data: locations = [] } = useQuery({
     queryKey: ["all-locations"],
     queryFn: async () => {
-      const res = await axios.get(
-        "/api/fuel-station-tanks/all-locations",
-        authHeader,
-      );
+      const res = await axios
+        .get("/api/fuel-station-tanks/all-locations", authHeader)
+        .catch((err) => {
+          if (handleAxiosErrorCheck(err)) return { data: { data: [] } };
+          throw err;
+        });
       return res.data;
     },
     retry: 2,
@@ -274,6 +289,65 @@ function FuelStatisticsComponent() {
     }
   }, [locations]);
 
+  const { data: rawTanksResponse = [], isLoading: isTanksLoading } = useQuery({
+    queryKey: ["fuel-tank-live-volumes"],
+    queryFn: async () => {
+      const res = await axios
+        .get("/api/fuel-station-tanks/sync-all-volumes", authHeader)
+        .catch((err) => {
+          if (handleAxiosErrorCheck(err)) return { data: [] };
+          throw err;
+        });
+      return res.data || [];
+    },
+  });
+
+  const activeTankCoveragePairs = useMemo(() => {
+    const selectedStations = new Set(selectedStationIds);
+    const pairs = new Map<string, { stationId: string; grade: string }>();
+
+    (rawTanksResponse || []).forEach((tank: any) => {
+      const stationId =
+        typeof tank.stationId === "string" ? tank.stationId : tank.stationId?._id;
+      const reading = tank.lastUpdatedVolumeReadingDateTime;
+      const isActive = Boolean(
+        reading && reading !== "No latest reading available" && stationId,
+      );
+
+      if (!isActive || !selectedStations.has(stationId) || !tank.grade) return;
+      if (!selectedGrades.includes(tank.grade) && !(tank.grade === "Regular" && selectedGrades.includes("E15"))) return;
+
+      pairs.set(`${stationId}:${tank.grade}`, { stationId, grade: tank.grade });
+    });
+
+    return Array.from(pairs.values());
+  }, [rawTanksResponse, selectedGrades, selectedStationIds]);
+
+  const {
+    data: inventoryCoverageResponse = { byGrade: {}, forecastDays: [] },
+    isLoading: isInventoryCoverageLoading,
+  } = useQuery({
+    queryKey: ["inventory-coverage", activeTankCoveragePairs],
+    queryFn: async () => {
+      if (activeTankCoveragePairs.length === 0) {
+        return { byGrade: {}, forecastDays: [] };
+      }
+      const res = await axios
+        .post(
+          "/api/fuel-statistics/inventory-coverage",
+          { stationGradePairs: activeTankCoveragePairs, horizonDays: 14 },
+          authHeader,
+        )
+        .catch((err) => {
+          if (handleAxiosErrorCheck(err)) {
+            return { data: { data: { byGrade: {}, forecastDays: [] } } };
+          }
+          throw err;
+        });
+      return res.data?.data || { byGrade: {}, forecastDays: [] };
+    },
+    enabled: activeTankCoveragePairs.length > 0,
+  });
   // Query Backend Pipeline Summary
   const { data: rawOrdersResponse = [], isLoading: isOrdersLoading } = useQuery(
     {
@@ -282,11 +356,16 @@ function FuelStatisticsComponent() {
         if (selectedStationIds.length === 0 || !fromMonth || !toMonth) {
           return [];
         }
-        const res = await axios.post(
-          "/api/fuel-statistics/pipeline-summary",
-          { stationIds: selectedStationIds, fromMonth, toMonth },
-          authHeader,
-        );
+        const res = await axios
+          .post(
+            "/api/fuel-statistics/pipeline-summary",
+            { stationIds: selectedStationIds, fromMonth, toMonth },
+            authHeader,
+          )
+          .catch((err) => {
+            if (handleAxiosErrorCheck(err)) return { data: { data: [] } };
+            throw err;
+          });
         return res.data?.data || [];
       },
       enabled:
@@ -300,11 +379,16 @@ function FuelStatisticsComponent() {
       if (selectedStationIds.length === 0 || !fromMonth || !toMonth) {
         return [];
       }
-      const res = await axios.post(
-        "/api/fuel-statistics/sales-summary",
-        { stationIds: selectedStationIds, fromMonth, toMonth },
-        authHeader,
-      );
+      const res = await axios
+        .post(
+          "/api/fuel-statistics/sales-summary",
+          { stationIds: selectedStationIds, fromMonth, toMonth },
+          authHeader,
+        )
+        .catch((err) => {
+          if (handleAxiosErrorCheck(err)) return { data: { data: [] } };
+          throw err;
+        });
       return res.data?.data || [];
     },
     enabled:
@@ -910,6 +994,27 @@ function FuelStatisticsComponent() {
           <div className="flex flex-col gap-1 sm:flex-row sm:items-end sm:justify-between">
             <div>
               <h2 className="text-lg font-black tracking-tight text-slate-800">
+                Current inventory
+              </h2>
+            </div>
+            <p className="text-xs font-semibold text-slate-400">
+              Uses the selected sites and fuel grades above.
+            </p>
+          </div>
+
+          <CurrentInventoryByGradeChart
+            tanks={rawTanksResponse}
+            selectedStationIds={selectedStationIds}
+            selectedGrades={selectedGrades}
+            getGradeTheme={getGradeTheme}
+            coverageForecast={inventoryCoverageResponse}
+            isLoading={isTanksLoading || isInventoryCoverageLoading}
+          />
+        </section>
+        <section className="space-y-3">
+          <div className="flex flex-col gap-1 sm:flex-row sm:items-end sm:justify-between">
+            <div>
+              <h2 className="text-lg font-black tracking-tight text-slate-800">
                 Schedule compliance and exceptions
               </h2>
             </div>
@@ -1026,3 +1131,5 @@ function FuelStatisticsComponent() {
     </div>
   );
 }
+
+
