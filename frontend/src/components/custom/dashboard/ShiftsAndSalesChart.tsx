@@ -20,7 +20,6 @@ import {
   CardTitle,
   CardContent,
   CardFooter,
-  CardDescription,
 } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
@@ -32,14 +31,66 @@ import { cn } from "@/lib/utils";
 interface ShiftsAndSalesChartProps {
   timesheetData: any[];
   className?: string;
+  canViewManagerHours?: boolean;
+}
+
+const MANAGER_APPROVED_COLOR = "#8b5cf6";
+const MANAGER_PENDING_COLOR = "#f97316";
+
+function getNumber(item: any, ...keys: string[]) {
+  for (const key of keys) {
+    const value = item?.[key];
+    if (value !== undefined && value !== null && value !== "") {
+      const numeric = Number(value);
+      return Number.isFinite(numeric) ? numeric : 0;
+    }
+  }
+  return 0;
+}
+
+function ChartToggle({
+  id,
+  checked,
+  onCheckedChange,
+  label,
+  compact = false,
+}: {
+  id: string;
+  checked: boolean;
+  onCheckedChange: (checked: boolean) => void;
+  label: string;
+  compact?: boolean;
+}) {
+  return (
+    <div
+      className={cn(
+        "flex items-center rounded-md border border-slate-200 bg-white shadow-sm",
+        compact ? "min-h-9 gap-1.5 px-2 py-1.5" : "min-h-10 gap-2 px-3 py-2",
+      )}
+    >
+      <Switch id={id} checked={checked} onCheckedChange={onCheckedChange} />
+      <Label
+        htmlFor={id}
+        className={cn(
+          "cursor-pointer whitespace-nowrap font-semibold text-slate-700",
+          compact ? "text-[11px]" : "text-xs",
+        )}
+      >
+        {label}
+      </Label>
+    </div>
+  );
 }
 
 export function ShiftsAndSalesChart({
   timesheetData,
   className,
+  canViewManagerHours = false,
 }: ShiftsAndSalesChartProps) {
   const [pageIndex, setPageIndex] = useState(0);
   const [showAllSales, setShowAllSales] = useState(false); // Default: inside sales only
+  const [showManagerHours, setShowManagerHours] = useState(false);
+  const includeManagers = canViewManagerHours && showManagerHours;
 
   // Dynamic config driving Tooltip & Legend labels
   const chartConfig = useMemo(
@@ -51,6 +102,14 @@ export function ShiftsAndSalesChart({
       pendingCost: {
         label: "Pending Shift Cost",
         color: "#eab308",
+      },
+      managerApprovedCost: {
+        label: "Manager Approved Cost",
+        color: MANAGER_APPROVED_COLOR,
+      },
+      managerPendingCost: {
+        label: "Manager Pending Cost",
+        color: MANAGER_PENDING_COLOR,
       },
       expectedCost: {
         label: "Avg Cost (By Day)",
@@ -79,6 +138,8 @@ export function ShiftsAndSalesChart({
       {
         approvedCost: number;
         pendingCost: number;
+        managerApprovedCost: number;
+        managerPendingCost: number;
         totalSales: number;
         dispenserSales: number;
         transactions: number;
@@ -101,6 +162,8 @@ export function ShiftsAndSalesChart({
         aggregatedMap.set(formattedDate, {
           approvedCost: 0,
           pendingCost: 0,
+          managerApprovedCost: 0,
+          managerPendingCost: 0,
           totalSales: Number(item.totalSales || item.sales || 0),
           dispenserSales: Number(item.dispenserSales || 0),
           transactions: Number(item.transactions || item.Transactions || 0),
@@ -111,11 +174,25 @@ export function ShiftsAndSalesChart({
       }
 
       const rec = aggregatedMap.get(formattedDate)!;
-      const approved = Number(
-        item.ApprovedLaborCost ?? item.approvedLaborCost ?? 0,
+      const approved = getNumber(
+        item,
+        "ApprovedLaborCost",
+        "approvedLaborCost",
       );
-      const pending = Number(
-        item.PendingLaborCost ?? item.pendingLaborCost ?? 0,
+      const pending = getNumber(
+        item,
+        "PendingLaborCost",
+        "pendingLaborCost",
+      );
+      const managerApproved = getNumber(
+        item,
+        "ManagerApprovedLaborCost",
+        "managerApprovedLaborCost",
+      );
+      const managerPending = getNumber(
+        item,
+        "ManagerPendingLaborCost",
+        "managerPendingLaborCost",
       );
 
       if (approved > 0 || pending > 0) {
@@ -137,6 +214,9 @@ export function ShiftsAndSalesChart({
           rec.pendingCost += cost;
         }
       }
+
+      rec.managerApprovedCost += managerApproved;
+      rec.managerPendingCost += managerPending;
     });
 
     // Sort chronologically and limit to the latest 60 days
@@ -151,7 +231,10 @@ export function ShiftsAndSalesChart({
         ? d.totalSales
         : Math.max(0, d.totalSales - d.dispenserSales);
 
-      const totalCost = d.approvedCost + d.pendingCost;
+      const totalCost =
+        d.approvedCost +
+        d.pendingCost +
+        (includeManagers ? d.managerApprovedCost + d.managerPendingCost : 0);
       if (activeSales > 0 && totalCost > 0) {
         const ratio = totalCost / activeSales;
         if (!dayRatiosMap.has(d.dayOfWeek)) {
@@ -172,7 +255,11 @@ export function ShiftsAndSalesChart({
         ? d.totalSales
         : Math.max(0, d.totalSales - d.dispenserSales);
 
-      const totalCost = Math.round(d.approvedCost + d.pendingCost);
+      const totalCost = Math.round(
+        d.approvedCost +
+          d.pendingCost +
+          (includeManagers ? d.managerApprovedCost + d.managerPendingCost : 0),
+      );
       const avgRatio = dayOfWeekAvgRatios.get(d.dayOfWeek) || 0;
       const expectedCost = Math.round(activeSales * avgRatio);
 
@@ -181,6 +268,12 @@ export function ShiftsAndSalesChart({
         day: d.dayLabel,
         approvedCost: Math.round(d.approvedCost),
         pendingCost: Math.round(d.pendingCost),
+        managerApprovedCost: includeManagers
+          ? Math.round(d.managerApprovedCost)
+          : 0,
+        managerPendingCost: includeManagers
+          ? Math.round(d.managerPendingCost)
+          : 0,
         totalCost,
         expectedCost,
         isOverTarget: totalCost > expectedCost && expectedCost > 0,
@@ -190,7 +283,7 @@ export function ShiftsAndSalesChart({
     });
 
     return { combinedData: processed };
-  }, [timesheetData, showAllSales]);
+  }, [timesheetData, showAllSales, includeManagers]);
 
   // 5-Day Pagination Window
   const pageSize = 5;
@@ -207,34 +300,36 @@ export function ShiftsAndSalesChart({
 
   return (
     <Card className={cn("w-full", className)}>
-      <CardHeader className="flex flex-row items-center justify-between pb-2 space-y-0">
+      <CardHeader className="flex flex-col gap-3 pb-2">
         <div>
           <CardTitle>Shifts Cost vs. Sales & Traffic</CardTitle>
-          <CardDescription>
-            Daily labor, sales, and traffic
-          </CardDescription>
         </div>
 
-        <div className="flex items-center gap-3">
-          {/* Toggle for All Sales vs Store-Only Sales */}
-          <div className="flex items-center space-x-2">
-            <Switch
+        <div className="flex w-full flex-wrap items-center justify-between gap-2">
+          <div className="flex flex-1 flex-wrap items-center gap-2">
+            <ChartToggle
               id="all-sales-toggle"
               checked={showAllSales}
               onCheckedChange={(checked) => {
                 setShowAllSales(checked);
                 setPageIndex(0);
               }}
+              label="All Sales"
             />
-            <Label
-              htmlFor="all-sales-toggle"
-              className="text-xs cursor-pointer font-medium whitespace-nowrap"
-            >
-              All Sales
-            </Label>
+
+            {canViewManagerHours && (
+              <ChartToggle
+                id="manager-hours-toggle"
+                checked={showManagerHours}
+                onCheckedChange={(checked) => {
+                  setShowManagerHours(checked);
+                  setPageIndex(0);
+                }}
+                label="Manager"
+              />
+            )}
           </div>
 
-          {/* Navigation Controls */}
           <div className="flex items-center gap-1">
             <Button
               variant="outline"
@@ -334,8 +429,29 @@ export function ShiftsAndSalesChart({
                 stackId="cost"
                 fill={chartConfig.pendingCost.color}
                 barSize={24}
-                radius={[4, 4, 0, 0]}
+                radius={includeManagers ? [0, 0, 0, 0] : [4, 4, 0, 0]}
               />
+              {includeManagers && (
+                <>
+                  <Bar
+                    yAxisId="left"
+                    dataKey="managerApprovedCost"
+                    name={chartConfig.managerApprovedCost.label}
+                    stackId="cost"
+                    fill={chartConfig.managerApprovedCost.color}
+                    barSize={24}
+                  />
+                  <Bar
+                    yAxisId="left"
+                    dataKey="managerPendingCost"
+                    name={chartConfig.managerPendingCost.label}
+                    stackId="cost"
+                    fill={chartConfig.managerPendingCost.color}
+                    barSize={24}
+                    radius={[4, 4, 0, 0]}
+                  />
+                </>
+              )}
 
               <Line
                 yAxisId="left"
@@ -382,7 +498,11 @@ export function ShiftsAndSalesChart({
 
         <div className="flex flex-wrap items-center justify-center gap-4 pt-4">
           {Object.entries(chartConfig)
-            .filter(([key]) => key !== "transactions" || showAllSales)
+            .filter(
+              ([key]) =>
+                (key !== "transactions" || showAllSales) &&
+                (!key.startsWith("manager") || includeManagers),
+            )
             .map(([key, config]) => (
               <div key={key} className="flex items-center gap-2">
                 <div
@@ -398,8 +518,9 @@ export function ShiftsAndSalesChart({
       </CardContent>
 
       <CardFooter className="text-xs text-muted-foreground">
-        Showing 5-day window ({safePageIndex * 5} - {(safePageIndex + 1) * 5} of{" "}
-        {combinedData.length} days)
+        Showing daily labor cost, selected sales, traffic, and day-of-week average
+        cost over a 5-day window ({safePageIndex * 5} -{" "}
+        {(safePageIndex + 1) * 5} of {combinedData.length} days).
       </CardFooter>
     </Card>
   );
@@ -411,10 +532,13 @@ export function ShiftsAndSalesChart({
 export function ShiftsAndSalesAggregatedChart({
   timesheetData,
   className,
+  canViewManagerHours = false,
 }: ShiftsAndSalesChartProps) {
   const [isMonthly, setIsMonthly] = useState(false);
   const [showAllSales, setShowAllSales] = useState(false); // Default: inside sales only
+  const [showManagerHours, setShowManagerHours] = useState(false);
   const [pageIndex, setPageIndex] = useState(0);
+  const includeManagers = canViewManagerHours && showManagerHours;
 
   // Dynamic config driving Tooltip & Legend labels
   const chartConfig = useMemo(
@@ -426,6 +550,14 @@ export function ShiftsAndSalesAggregatedChart({
       pendingCost: {
         label: "Pending Cost",
         color: "#f59e0b",
+      },
+      managerApprovedCost: {
+        label: "Manager Approved Cost",
+        color: MANAGER_APPROVED_COLOR,
+      },
+      managerPendingCost: {
+        label: "Manager Pending Cost",
+        color: MANAGER_PENDING_COLOR,
       },
       sales: {
         label: showAllSales ? "All Sales" : "In Store Sales",
@@ -448,6 +580,8 @@ export function ShiftsAndSalesAggregatedChart({
       {
         approvedCost: number;
         pendingCost: number;
+        managerApprovedCost: number;
+        managerPendingCost: number;
         sales: number;
         transactions: number;
         date: string;
@@ -470,6 +604,8 @@ export function ShiftsAndSalesAggregatedChart({
         dailyMap.set(formattedDate, {
           approvedCost: 0,
           pendingCost: 0,
+          managerApprovedCost: 0,
+          managerPendingCost: 0,
           sales: activeSales,
           transactions: Number(item.transactions || item.Transactions || 0),
           date: formattedDate,
@@ -477,11 +613,25 @@ export function ShiftsAndSalesAggregatedChart({
       }
 
       const rec = dailyMap.get(formattedDate)!;
-      const approved = Number(
-        item.ApprovedLaborCost ?? item.approvedLaborCost ?? 0,
+      const approved = getNumber(
+        item,
+        "ApprovedLaborCost",
+        "approvedLaborCost",
       );
-      const pending = Number(
-        item.PendingLaborCost ?? item.pendingLaborCost ?? 0,
+      const pending = getNumber(
+        item,
+        "PendingLaborCost",
+        "pendingLaborCost",
+      );
+      const managerApproved = getNumber(
+        item,
+        "ManagerApprovedLaborCost",
+        "managerApprovedLaborCost",
+      );
+      const managerPending = getNumber(
+        item,
+        "ManagerPendingLaborCost",
+        "managerPendingLaborCost",
       );
 
       if (approved > 0 || pending > 0) {
@@ -503,6 +653,9 @@ export function ShiftsAndSalesAggregatedChart({
           rec.pendingCost += cost;
         }
       }
+
+      rec.managerApprovedCost += managerApproved;
+      rec.managerPendingCost += managerPending;
     });
 
     const sortedDaily = Array.from(dailyMap.values()).sort(
@@ -516,6 +669,8 @@ export function ShiftsAndSalesAggregatedChart({
         {
           approvedCost: number;
           pendingCost: number;
+          managerApprovedCost: number;
+          managerPendingCost: number;
           sales: number;
           transactions: number;
           label: string;
@@ -540,6 +695,8 @@ export function ShiftsAndSalesAggregatedChart({
           monthGroups.set(monthKey, {
             approvedCost: 0,
             pendingCost: 0,
+            managerApprovedCost: 0,
+            managerPendingCost: 0,
             sales: 0,
             transactions: 0,
             label,
@@ -551,6 +708,8 @@ export function ShiftsAndSalesAggregatedChart({
         const m = monthGroups.get(monthKey)!;
         m.approvedCost += d.approvedCost;
         m.pendingCost += d.pendingCost;
+        m.managerApprovedCost += d.managerApprovedCost;
+        m.managerPendingCost += d.managerPendingCost;
         m.sales += d.sales;
         m.transactions += d.transactions;
         m.daysCount += 1;
@@ -563,6 +722,12 @@ export function ShiftsAndSalesAggregatedChart({
           label: m.label,
           approvedCost: Math.round(m.approvedCost),
           pendingCost: Math.round(m.pendingCost),
+          managerApprovedCost: includeManagers
+            ? Math.round(m.managerApprovedCost)
+            : 0,
+          managerPendingCost: includeManagers
+            ? Math.round(m.managerPendingCost)
+            : 0,
           sales: Math.round(m.sales),
           transactions: Math.round(m.transactions),
         }));
@@ -573,6 +738,8 @@ export function ShiftsAndSalesAggregatedChart({
         {
           approvedCost: number;
           pendingCost: number;
+          managerApprovedCost: number;
+          managerPendingCost: number;
           sales: number;
           transactions: number;
           mondayDateStr: string;
@@ -595,6 +762,8 @@ export function ShiftsAndSalesAggregatedChart({
           weekGroups.set(mondayKey, {
             approvedCost: 0,
             pendingCost: 0,
+            managerApprovedCost: 0,
+            managerPendingCost: 0,
             sales: 0,
             transactions: 0,
             mondayDateStr: mondayKey,
@@ -605,6 +774,8 @@ export function ShiftsAndSalesAggregatedChart({
         const w = weekGroups.get(mondayKey)!;
         w.approvedCost += d.approvedCost;
         w.pendingCost += d.pendingCost;
+        w.managerApprovedCost += d.managerApprovedCost;
+        w.managerPendingCost += d.managerPendingCost;
         w.sales += d.sales;
         w.transactions += d.transactions;
         w.daysCount += 1;
@@ -619,12 +790,18 @@ export function ShiftsAndSalesAggregatedChart({
             label: `W/O ${dateLabel}`,
             approvedCost: Math.round(w.approvedCost),
             pendingCost: Math.round(w.pendingCost),
+            managerApprovedCost: includeManagers
+              ? Math.round(w.managerApprovedCost)
+              : 0,
+            managerPendingCost: includeManagers
+              ? Math.round(w.managerPendingCost)
+              : 0,
             sales: Math.round(w.sales),
             transactions: Math.round(w.transactions),
           };
         });
     }
-  }, [timesheetData, isMonthly, showAllSales]);
+  }, [timesheetData, isMonthly, showAllSales, includeManagers]);
 
   // 5-Bar Pagination Window
   const pageSize = 5;
@@ -641,56 +818,52 @@ export function ShiftsAndSalesAggregatedChart({
 
   return (
     <Card className={cn("w-full", className)}>
-      <CardHeader className="flex flex-row items-center justify-between pb-2 space-y-0">
+      <CardHeader className="flex flex-col gap-3 pb-2">
         <div>
           <CardTitle>
             Shifts Cost vs. Sales
           </CardTitle>
-          <CardDescription>
-            {isMonthly
-              ? "Monthly metrics"
-              : "Weekly trends"}
-          </CardDescription>
         </div>
 
-        <div className="flex items-center gap-3">
-          {/* Toggle for All Sales vs Store Sales */}
-          <div className="flex items-center space-x-2">
-            <Switch
+        <div className="flex w-full flex-nowrap items-center justify-between gap-2">
+          <div className="flex min-w-0 flex-1 flex-nowrap items-center gap-1.5">
+            <ChartToggle
               id="aggregated-all-sales-toggle"
               checked={showAllSales}
               onCheckedChange={(checked) => {
                 setShowAllSales(checked);
                 setPageIndex(0);
               }}
+              label="All Sales"
+              compact
             />
-            <Label
-              htmlFor="aggregated-all-sales-toggle"
-              className="text-xs cursor-pointer font-medium whitespace-nowrap"
-            >
-              All Sales
-            </Label>
-          </div>
 
-          {/* Toggle for Monthly vs Weekly */}
-          <div className="flex items-center space-x-2">
-            <Switch
+            <ChartToggle
               id="monthly-toggle"
               checked={isMonthly}
               onCheckedChange={(checked) => {
                 setIsMonthly(checked);
                 setPageIndex(0);
               }}
+              label="Month"
+              compact
             />
-            <Label
-              htmlFor="monthly-toggle"
-              className="text-xs cursor-pointer font-medium"
-            >
-              Month
-            </Label>
+
+            {canViewManagerHours && (
+              <ChartToggle
+                id="aggregated-manager-hours-toggle"
+                checked={showManagerHours}
+                onCheckedChange={(checked) => {
+                  setShowManagerHours(checked);
+                  setPageIndex(0);
+                }}
+                label="Manager"
+                compact
+              />
+            )}
           </div>
 
-          <div className="flex items-center gap-1">
+          <div className="flex shrink-0 items-center gap-1">
             <Button
               variant="outline"
               size="icon"
@@ -778,8 +951,29 @@ export function ShiftsAndSalesAggregatedChart({
                 stackId="cost"
                 fill={chartConfig.pendingCost.color}
                 barSize={28}
-                radius={[4, 4, 0, 0]}
+                radius={includeManagers ? [0, 0, 0, 0] : [4, 4, 0, 0]}
               />
+              {includeManagers && (
+                <>
+                  <Bar
+                    yAxisId="left"
+                    dataKey="managerApprovedCost"
+                    name={chartConfig.managerApprovedCost.label}
+                    stackId="cost"
+                    fill={chartConfig.managerApprovedCost.color}
+                    barSize={28}
+                  />
+                  <Bar
+                    yAxisId="left"
+                    dataKey="managerPendingCost"
+                    name={chartConfig.managerPendingCost.label}
+                    stackId="cost"
+                    fill={chartConfig.managerPendingCost.color}
+                    barSize={28}
+                    radius={[4, 4, 0, 0]}
+                  />
+                </>
+              )}
 
               {/* Sales Line */}
               <Line
@@ -816,7 +1010,11 @@ export function ShiftsAndSalesAggregatedChart({
 
         <div className="flex flex-wrap items-center justify-center gap-4 pt-4">
           {Object.entries(chartConfig)
-            .filter(([key]) => key !== "transactions" || showAllSales)
+            .filter(
+              ([key]) =>
+                (key !== "transactions" || showAllSales) &&
+                (!key.startsWith("manager") || includeManagers),
+            )
             .map(([key, config]) => (
               <div key={key} className="flex items-center gap-2">
                 <div
@@ -832,8 +1030,9 @@ export function ShiftsAndSalesAggregatedChart({
       </CardContent>
 
       <CardFooter className="text-xs text-muted-foreground">
-        Showing 5 {isMonthly ? "months" : "weeks"} ({safePageIndex * 5} -{" "}
-        {(safePageIndex + 1) * 5} of {aggregatedList.length})
+        Showing 5 {isMonthly ? "complete months" : "complete weeks"} with
+        labor cost and selected sales ({safePageIndex * 5} -{" "}
+        {(safePageIndex + 1) * 5} of {aggregatedList.length}).
       </CardFooter>
     </Card>
   );
@@ -856,14 +1055,18 @@ const HOURS_VARIANCE_CONFIG = {
 interface ScheduledVsActualLaborChartProps {
   timesheetData: any[];
   className?: string;
+  canViewManagerHours?: boolean;
 }
 
 export function ScheduledVsActualLaborChart({
   timesheetData,
   className,
+  canViewManagerHours = false,
 }: ScheduledVsActualLaborChartProps) {
   const [isWeekly, setIsWeekly] = useState(false);
+  const [showManagerHours, setShowManagerHours] = useState(false);
   const [pageIndex, setPageIndex] = useState(0);
+  const includeManagers = canViewManagerHours && showManagerHours;
 
   const processedData = useMemo(() => {
     if (!timesheetData || timesheetData.length === 0) return [];
@@ -896,25 +1099,58 @@ export function ScheduledVsActualLaborChart({
       }
 
       const rec = dailyMap.get(formattedDate)!;
-      const schCost = Number(item.ScheduledCost ?? item.scheduledCost ?? 0);
-      const schHours = Number(item.ScheduledHours ?? item.scheduledHours ?? 0);
-      const approved = Number(
-        item.ApprovedLaborCost ?? item.approvedLaborCost ?? 0,
+      const schCost = getNumber(item, "ScheduledCost", "scheduledCost");
+      const schHours = getNumber(item, "ScheduledHours", "scheduledHours");
+      const managerSchCost = includeManagers
+        ? getNumber(item, "ManagerScheduledCost", "managerScheduledCost")
+        : 0;
+      const managerSchHours = includeManagers
+        ? getNumber(item, "ManagerScheduledHours", "managerScheduledHours")
+        : 0;
+      const approved = getNumber(
+        item,
+        "ApprovedLaborCost",
+        "approvedLaborCost",
       );
-      const pending = Number(
-        item.PendingLaborCost ?? item.pendingLaborCost ?? 0,
+      const pending = getNumber(
+        item,
+        "PendingLaborCost",
+        "pendingLaborCost",
       );
-      const totalHours = Number(
-        item.TotalHoursWorked ?? item.totalHoursWorked ?? item.hours ?? 0,
+      const managerApproved = includeManagers
+        ? getNumber(item, "ManagerApprovedLaborCost", "managerApprovedLaborCost")
+        : 0;
+      const managerPending = includeManagers
+        ? getNumber(item, "ManagerPendingLaborCost", "managerPendingLaborCost")
+        : 0;
+      const totalHours = getNumber(
+        item,
+        "TotalHoursWorked",
+        "totalHoursWorked",
+        "hours",
       );
+      const managerTotalHours = includeManagers
+        ? getNumber(
+            item,
+            "ManagerTotalHoursWorked",
+            "managerTotalHoursWorked",
+          )
+        : 0;
+      const splitActualCost = approved + pending + managerApproved + managerPending;
+      const fallbackActualCost =
+        getNumber(item, "ActualLaborCost", "ShiftCost") +
+        (includeManagers
+          ? getNumber(
+              item,
+              "ManagerActualLaborCost",
+              "managerActualLaborCost",
+            )
+          : 0);
 
-      rec.scheduledCost += schCost;
-      rec.scheduledHours += schHours;
-      rec.actualHours += totalHours;
-      rec.actualCost +=
-        approved + pending > 0
-          ? approved + pending
-          : Number(item.ActualLaborCost ?? item.ShiftCost ?? 0);
+      rec.scheduledCost += schCost + managerSchCost;
+      rec.scheduledHours += schHours + managerSchHours;
+      rec.actualHours += totalHours + managerTotalHours;
+      rec.actualCost += splitActualCost > 0 ? splitActualCost : fallbackActualCost;
     });
 
     const sortedDaily = Array.from(dailyMap.values()).sort(
@@ -975,7 +1211,7 @@ export function ScheduledVsActualLaborChart({
         hoursVariance: Math.round(d.actualHours - d.scheduledHours),
       }));
     }
-  }, [timesheetData, isWeekly]);
+  }, [timesheetData, isWeekly, includeManagers]);
 
   const pageSize = 5;
   const maxPages = Math.ceil(processedData.length / pageSize) || 1;
@@ -1015,30 +1251,34 @@ export function ScheduledVsActualLaborChart({
 
   return (
     <Card className={cn("w-full", className)}>
-      <CardHeader className="flex flex-row items-center justify-between pb-2 space-y-0">
+      <CardHeader className="flex flex-col gap-3 pb-2">
         <div>
           <CardTitle>Scheduled vs. Actual Variance</CardTitle>
-          <CardDescription>
-            Clean cost ($) and hours (h) delta tracking
-          </CardDescription>
         </div>
 
-        <div className="flex items-center gap-3">
-          <div className="flex items-center space-x-2">
-            <Switch
+        <div className="flex w-full flex-wrap items-center justify-between gap-2">
+          <div className="flex flex-1 flex-wrap items-center gap-2">
+            <ChartToggle
               id="weekly-schedule-variance-toggle"
               checked={isWeekly}
               onCheckedChange={(checked) => {
                 setIsWeekly(checked);
                 setPageIndex(0);
               }}
+              label="Weekly"
             />
-            <Label
-              htmlFor="weekly-schedule-variance-toggle"
-              className="text-xs cursor-pointer font-medium"
-            >
-              Weekly
-            </Label>
+
+            {canViewManagerHours && (
+              <ChartToggle
+                id="variance-manager-hours-toggle"
+                checked={showManagerHours}
+                onCheckedChange={(checked) => {
+                  setShowManagerHours(checked);
+                  setPageIndex(0);
+                }}
+                label="Manager"
+              />
+            )}
           </div>
 
           <div className="flex items-center gap-1">
@@ -1267,8 +1507,9 @@ export function ScheduledVsActualLaborChart({
       </CardContent>
 
       <CardFooter className="text-xs text-muted-foreground">
-        Showing 5 {isWeekly ? "weeks" : "days"} ({safePageIndex * 5} -{" "}
-        {(safePageIndex + 1) * 5} of {processedData.length})
+        Showing scheduled vs actual cost and hours for 5{" "}
+        {isWeekly ? "weeks" : "days"} ({safePageIndex * 5} -{" "}
+        {(safePageIndex + 1) * 5} of {processedData.length}).
       </CardFooter>
     </Card>
   );

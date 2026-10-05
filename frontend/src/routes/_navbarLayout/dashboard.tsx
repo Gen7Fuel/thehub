@@ -2680,7 +2680,14 @@ function RouteComponent() {
             {/* ======================= */}
             {/* Shifts & Scheduling     */}
             {/* ======================= */}
-            {!loadingSql && (
+            {!loadingSql &&
+              ![
+                "Wavers East",
+                "Wavers West",
+                "Oliver",
+                "Osoyoos",
+                "Sioux Valley",
+              ].includes(site) && (
               <section aria-labelledby="shifts-heading" className="mb-10">
                 <h2
                   id="shifts-heading"
@@ -2694,18 +2701,21 @@ function RouteComponent() {
                   <ShiftsAndSalesChart
                     timesheetData={timesheetData}
                     className="col-span-1"
+                    canViewManagerHours={!!access?.dashboard?.viewManagerHours}
                   />
 
                   {/* 2. Weekly / Monthly Aggregated Chart */}
                   <ShiftsAndSalesAggregatedChart
                     timesheetData={timesheetData}
                     className="col-span-1"
+                    canViewManagerHours={!!access?.dashboard?.viewManagerHours}
                   />
 
                   {/* 3. Scheduled vs. Actual Labor Chart */}
                   <ScheduledVsActualLaborChart
                     timesheetData={timesheetData}
                     className="col-span-1"
+                    canViewManagerHours={!!access?.dashboard?.viewManagerHours}
                   />
                 </div>
               </section>
