@@ -155,6 +155,16 @@ router.post("/", async (req, res) => {
       legacyDate = dateStrToLegacyDate(dateStr);
     }
 
+    // The form only shows the Register selector for sites with 2+ registers, so
+    // single-register sites submit no value. Fill it in server-side: the site's
+    // one configured register, or "1" when none are configured.
+    let resolvedRegister = register || '';
+    if (source === 'PO' && !resolvedRegister) {
+      const loc = await Location.findOne({ stationName }).select('registers').lean();
+      const registers = loc?.registers ?? [];
+      if (registers.length <= 1) resolvedRegister = registers[0]?.number || '1';
+    }
+
     const newOrder = new Transaction({
       source,
       date: legacyDate,
@@ -178,7 +188,7 @@ router.post("/", async (req, res) => {
       licensePlate: licensePlate || '',
       purchaseType: purchaseType || 'fuel',
       itemsDescription: itemsDescription || '',
-      register: register || '',
+      register: resolvedRegister,
     });
 
     const savedOrder = await newOrder.save();
