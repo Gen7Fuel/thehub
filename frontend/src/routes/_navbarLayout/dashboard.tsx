@@ -59,6 +59,7 @@ import { AuditSummaryChart } from "@/components/custom/dashboard/auditCharts";
 import { getPeriodKey } from "../_navbarLayout/audit/checklist/$id";
 import axios from "axios";
 import { getGradeTheme } from "./fuel-pricing"; // Adjust relative path as needed
+import { ArrowDownRight, ArrowUpRight, Minus, Table2 } from "lucide-react";
 
 // Define the dashboard route using TanStack Router
 export const Route = createFileRoute("/_navbarLayout/dashboard")({
@@ -102,6 +103,7 @@ import {
   PayablesDiscrepancyTable,
 } from "@/components/custom/dashboard/accountingCharts";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Button } from "@/components/ui/button";
 // import { Button } from '@/components/ui/button';
 // import OperationalTimelineCard from '@/components/custom/dashboard/operationalTimelineChart';
 // import { PayablesDiscrepancyChart, OverShortChart } from '@/components/custom/dashboard/accountingCharts';
@@ -278,6 +280,16 @@ interface SalesData {
   daily: any[];
   weekly: any[];
   cards: SalesCards;
+  salesByDate: Record<string, number>;
+}
+
+interface WeeklyOperationsRow {
+  start: string;
+  end: string;
+  fuelSalesLitres: number;
+  fuelGrowthPct: number | null;
+  itemSales: number;
+  itemGrowthPct: number | null;
 }
 
 interface BistroWowSales {
@@ -362,6 +374,66 @@ export function formatNumberCompact(value: number | undefined | null): string {
   }
 }
 
+const formatDashboardCurrency = (value: number | undefined | null) =>
+  `C$ ${Number(value ?? 0).toLocaleString(undefined, {
+    maximumFractionDigits: 0,
+  })}`;
+
+const formatDashboardLitres = (value: number | undefined | null) =>
+  `${Number(value ?? 0).toLocaleString(undefined, {
+    maximumFractionDigits: 0,
+  })} L`;
+
+const formatWeekRangeLabel = (start: string, end: string) => {
+  const startDate = new Date(`${start}T00:00:00`);
+  const endDate = new Date(`${end}T00:00:00`);
+
+  const startLabel = startDate.toLocaleDateString("en-US", {
+    month: "short",
+    day: "numeric",
+  });
+  const endLabel = endDate.toLocaleDateString("en-US", {
+    month: "short",
+    day: "numeric",
+    year: "numeric",
+  });
+
+  return `${startLabel} - ${endLabel}`;
+};
+
+const formatGrowthPct = (value: number | null) => {
+  if (value === null || !Number.isFinite(value)) return "N/A";
+  return `${value >= 0 ? "+" : ""}${value.toFixed(1)}%`;
+};
+
+const getGrowthTone = (value: number | null) => {
+  if (value === null || value === 0) return "text-slate-600 bg-slate-100";
+  return value > 0
+    ? "text-emerald-700 bg-emerald-50"
+    : "text-rose-700 bg-rose-50";
+};
+
+const GrowthBadge = ({ value }: { value: number | null }) => {
+  const Icon =
+    value === null || value === 0 ? Minus : value > 0 ? ArrowUpRight : ArrowDownRight;
+
+  return (
+    <span
+      className={`inline-flex items-center justify-end gap-1 rounded-full px-2.5 py-1 text-xs font-semibold ${getGrowthTone(
+        value,
+      )}`}
+    >
+      <Icon className="size-3.5" />
+      {formatGrowthPct(value)}
+    </span>
+  );
+};
+
+const calculateGrowthPct = (current: number, previous: number) => {
+  if (!previous) return null;
+  return ((current - previous) / previous) * 100;
+};
+
 interface BistroStackedChartRow {
   week: string; // "11-17"
   sales_130: number; // category 130 sales
@@ -400,6 +472,7 @@ function processOverShortData(data: OverShortChartItem[]) {
 
 function RouteComponent() {
   const { user } = useAuth();
+  const access = user?.access ?? {};
   const { selectedSite } = useSite();
   const [site, setSite] = useState(selectedSite || user?.location || "Rankin");
   const [_orderRecs, setOrderRecs] = useState<Record<string, any[]>>({});
@@ -452,6 +525,8 @@ function RouteComponent() {
   const [currentDate] = useState(new Date());
 
   const [showPasswordDialog, setShowPasswordDialog] = useState(false);
+  const [showWeeklyOperationsDialog, setShowWeeklyOperationsDialog] =
+    useState(false);
   const [hasAccess, setHasAccess] = useState(false);
   const [overShortData, setOverShortData] = useState<any[]>([]);
   const [fuelData, setFuelData] = useState<any[]>([]);
@@ -1499,6 +1574,82 @@ function RouteComponent() {
     Bistro: entry.Bistro ?? 0,
   }));
 
+  const weeklyOperationsRows = useMemo<WeeklyOperationsRow[]>(() => {
+    if (!salesData?.weekly?.length && !fuelData?.length) return [];
+
+    const fmt = (d: Date) => d.toISOString().slice(0, 10);
+    const addDays = (d: Date, n: number) => {
+      const nextDate = new Date(d);
+      nextDate.setDate(d.getDate() + n);
+      return nextDate;
+    };
+    const startOfWeek = (d: Date) => {
+      const day = d.getDay();
+      const diffToMon = day === 0 ? -6 : 1 - day;
+      const monday = new Date(d);
+      monday.setDate(d.getDate() + diffToMon);
+      monday.setHours(0, 0, 0, 0);
+      return monday;
+    };
+
+    const end = new Date();
+    end.setDate(end.getDate() - 1);
+    end.setHours(23, 59, 59, 999);
+
+    const baseWeekStart =
+      end.getDay() === 0 ? startOfWeek(end) : startOfWeek(addDays(end, -7));
+    const weeks = Array.from({ length: 5 }, (_, idx) => {
+      const start = addDays(baseWeekStart, (idx - 4) * 7);
+      const weekEnd = addDays(start, 6);
+      return {
+        start: fmt(start),
+        end: fmt(weekEnd),
+      };
+    });
+
+    const fuelByDate = fuelData.reduce<Record<string, number>>((acc, row) => {
+      const dateKey = String(row.businessDate || "").slice(0, 10);
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(dateKey)) return acc;
+      acc[dateKey] =
+        (acc[dateKey] ?? 0) + Number(row.fuelGradeSalesVolume ?? row.volume ?? 0);
+      return acc;
+    }, {});
+
+    const weeklyTotals = weeks.map((week) => {
+      const fuelSalesLitres = Object.entries(fuelByDate)
+        .filter(([dateKey]) => dateKey >= week.start && dateKey <= week.end)
+        .reduce((sum, [, litres]) => sum + litres, 0);
+      const itemSales = Object.entries(salesData?.salesByDate ?? {})
+        .filter(([dateKey]) => dateKey >= week.start && dateKey <= week.end)
+        .reduce((sum, [, sales]) => sum + sales, 0);
+
+      return {
+        ...week,
+        fuelSalesLitres,
+        itemSales,
+      };
+    });
+
+    return weeklyTotals
+      .slice(1)
+      .map((week, idx) => {
+        const previousWeek = weeklyTotals[idx];
+
+        return {
+          ...week,
+          fuelGrowthPct: calculateGrowthPct(
+            week.fuelSalesLitres,
+            previousWeek?.fuelSalesLitres ?? 0,
+          ),
+          itemGrowthPct: calculateGrowthPct(
+            week.itemSales,
+            previousWeek?.itemSales ?? 0,
+          ),
+        };
+      })
+      .reverse();
+  }, [fuelData, salesData?.salesByDate, salesData?.weekly]);
+
   // Build 7-day totals for the donut chart
   const donutCategories = [
     "FN",
@@ -1578,12 +1729,23 @@ function RouteComponent() {
               </section>
             ) : (
               <section aria-labelledby="overview-heading" className="mb-10">
-                <h2
-                  id="overview-heading"
-                  className="text-2xl font-bold mb-4 pl-4"
-                >
-                  Overview
-                </h2>
+                <div className="mb-4 flex items-center justify-between gap-3 px-4">
+                  <h2 id="overview-heading" className="text-2xl font-bold">
+                    Overview
+                  </h2>
+                  {access?.dashboard?.viewWeeklyStatistics && (
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      className="bg-white"
+                      onClick={() => setShowWeeklyOperationsDialog(true)}
+                    >
+                      <Table2 className="size-4" />
+                      View More
+                    </Button>
+                  )}
+                </div>
 
                 <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-6">
                   {/* Month-to-Month Sales Card */}
@@ -1714,6 +1876,134 @@ function RouteComponent() {
                     </div>
                   )}
                 </div>
+
+                <Dialog
+                  open={showWeeklyOperationsDialog}
+                  onOpenChange={setShowWeeklyOperationsDialog}
+                >
+                  <DialogContent className="max-h-[90vh] !w-[calc(100vw-1.5rem)] !max-w-[calc(100vw-1.5rem)] overflow-hidden rounded-lg bg-white p-0 sm:!w-[calc(100vw-3rem)] sm:!max-w-[calc(100vw-3rem)] xl:!w-[92vw] xl:!max-w-7xl">
+                    <DialogHeader className="border-b border-slate-200 bg-slate-50 px-4 py-4 sm:px-6">
+                      <DialogTitle className="flex items-center gap-2 text-lg font-bold text-slate-950">
+                        <Table2 className="size-5 text-slate-600" />
+                        Weekly Sales & Fuel Volume
+                      </DialogTitle>
+                      <DialogDescription>
+                        Past 4 completed Monday-Sunday weeks for {site}, with
+                        week-over-week growth against the previous full week.
+                      </DialogDescription>
+                    </DialogHeader>
+
+                    <div className="max-h-[72vh] overflow-y-auto p-4 sm:p-6">
+                      {weeklyOperationsRows.length === 0 ? (
+                        <div className="rounded-lg border border-dashed border-slate-300 bg-slate-50 px-4 py-8 text-center text-sm text-slate-600">
+                          Weekly sales and fuel volume data is not available yet.
+                        </div>
+                      ) : (
+                        <>
+                          <div className="hidden overflow-x-auto rounded-lg border border-slate-200 md:block">
+                            <table className="min-w-[920px] table-fixed divide-y divide-slate-200 text-sm xl:min-w-full">
+                              <colgroup>
+                                <col className="w-[28%]" />
+                                <col className="w-[20%]" />
+                                <col className="w-[14%]" />
+                                <col className="w-[20%]" />
+                                <col className="w-[18%]" />
+                              </colgroup>
+                              <thead className="bg-slate-50">
+                                <tr className="text-left text-xs font-semibold uppercase tracking-wide text-slate-500">
+                                  <th className="px-5 py-3">Week</th>
+                                  <th className="px-5 py-3 text-right">
+                                    Fuel Sales Litres
+                                  </th>
+                                  <th className="px-3 py-3 text-right">
+                                    WoW Growth (%)
+                                  </th>
+                                  <th className="px-5 py-3 text-right">
+                                    Item Sales
+                                  </th>
+                                  <th className="px-3 py-3 text-right">
+                                    WoW Growth (%)
+                                  </th>
+                                </tr>
+                              </thead>
+                              <tbody className="divide-y divide-slate-100 bg-white">
+                                {weeklyOperationsRows.map((row) => (
+                                  <tr
+                                    key={row.start}
+                                    className="transition-colors hover:bg-slate-50"
+                                  >
+                                    <td className="whitespace-nowrap px-5 py-4 font-semibold text-slate-950">
+                                      {formatWeekRangeLabel(row.start, row.end)}
+                                    </td>
+                                    <td className="whitespace-nowrap px-5 py-4 text-right font-mono font-semibold text-slate-900">
+                                      {formatDashboardLitres(row.fuelSalesLitres)}
+                                    </td>
+                                    <td className="whitespace-nowrap px-3 py-4 text-right">
+                                      <GrowthBadge value={row.fuelGrowthPct} />
+                                    </td>
+                                    <td className="whitespace-nowrap px-5 py-4 text-right font-mono font-semibold text-slate-900">
+                                      {formatDashboardCurrency(row.itemSales)}
+                                    </td>
+                                    <td className="whitespace-nowrap px-3 py-4 text-right">
+                                      <GrowthBadge value={row.itemGrowthPct} />
+                                    </td>
+                                  </tr>
+                                ))}
+                              </tbody>
+                            </table>
+                          </div>
+
+                          <div className="space-y-3 md:hidden">
+                            {weeklyOperationsRows.map((row) => (
+                              <div
+                                key={row.start}
+                                className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm"
+                              >
+                                <div className="mb-3 text-sm font-bold text-slate-950">
+                                  {formatWeekRangeLabel(row.start, row.end)}
+                                </div>
+                                <div className="grid grid-cols-2 gap-3 text-sm">
+                                  <div className="rounded-md bg-slate-50 p-3">
+                                    <div className="text-xs font-medium text-slate-500">
+                                      Fuel Litres
+                                    </div>
+                                    <div className="mt-1 font-mono font-semibold text-slate-950">
+                                      {formatDashboardLitres(row.fuelSalesLitres)}
+                                    </div>
+                                  </div>
+                                  <div className="rounded-md bg-slate-50 p-3">
+                                    <div className="text-xs font-medium text-slate-500">
+                                      Fuel Growth
+                                    </div>
+                                    <div className="mt-1">
+                                      <GrowthBadge value={row.fuelGrowthPct} />
+                                    </div>
+                                  </div>
+                                  <div className="rounded-md bg-slate-50 p-3">
+                                    <div className="text-xs font-medium text-slate-500">
+                                      Item Sales
+                                    </div>
+                                    <div className="mt-1 font-mono font-semibold text-slate-950">
+                                      {formatDashboardCurrency(row.itemSales)}
+                                    </div>
+                                  </div>
+                                  <div className="rounded-md bg-slate-50 p-3">
+                                    <div className="text-xs font-medium text-slate-500">
+                                      Item Growth
+                                    </div>
+                                    <div className="mt-1">
+                                      <GrowthBadge value={row.itemGrowthPct} />
+                                    </div>
+                                  </div>
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        </>
+                      )}
+                    </div>
+                  </DialogContent>
+                </Dialog>
               </section>
             )}
 
@@ -2716,9 +3006,20 @@ const fetchSalesData = async (rows: any) => {
     : 0;
 
   // Return updated cards
+  const salesByDate = Object.fromEntries(
+    Object.entries(byDate).map(([dateKey, row]) => [
+      dateKey,
+      Object.values(row).reduce(
+        (sum, value) => sum + (typeof value === "number" ? value : 0),
+        0,
+      ),
+    ]),
+  );
+
   return {
     daily,
     weekly,
+    salesByDate,
     cards: {
       month: {
         current: currentMonthSales,

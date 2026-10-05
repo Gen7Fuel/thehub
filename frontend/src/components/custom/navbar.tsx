@@ -266,7 +266,7 @@ export default function Navbar() {
       icon: LayoutDashboard,
       label: 'Dashboard',
       onSelect: () => navigate({ to: '/dashboard' }),
-      show: !!access?.dashboard,
+      show: !!access?.dashboard?.value,
     },
     {
       key: 'settings',
