@@ -558,7 +558,7 @@ export default function Navbar() {
           </Button>
           {/* Dashboard button, shown if user has access */}
           {/* {access.module_dashboard && ( //markpoint */}
-          {access?.dashboard && (
+          {access?.dashboard?.value && (
             <Button variant="outline" onClick={() => navigate({ to: '/dashboard' })}>
               <LayoutDashboard className="h-5 w-5 md:hidden" />
               <span className="hidden md:inline">Dashboard</span>
