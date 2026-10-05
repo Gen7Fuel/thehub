@@ -1,11 +1,13 @@
 import { useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { ChevronDown, ChevronRight, Plus, Trash2 } from "lucide-react";
+import { ChevronDown, ChevronRight, Plus, Trash2, Users } from "lucide-react";
 import { camelCaseToCapitalized } from "@/lib/utils";
+import { PermissionUsersDialog } from "@/components/custom/PermissionUsersDialog";
 
 interface PermissionNode {
   name: string;            // stored in camelCase in backend
+  permId?: number;         // assigned by backend once the node has been saved
   children: PermissionNode[];
   collapsed?: boolean;
 }
@@ -27,6 +29,7 @@ export function PermissionTree({
   // const [oldModuleName] = useState(permission.module_name);
   const [structure, setStructure] = useState<PermissionNode[]>(permission.structure || []);
   const [focusedPath, setFocusedPath] = useState<number[] | null>(null);
+  const [usersDialogNode, setUsersDialogNode] = useState<PermissionNode | null>(null);
   const isCamelCase = (str: string) => /^[a-z][A-Za-z0-9]*$/.test(str);
 
 
@@ -191,6 +194,15 @@ export function PermissionTree({
                 )}
               </div>
 
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={() => setUsersDialogNode(node)}
+                disabled={!node.permId}
+                title={node.permId ? "See users with this permission" : "Save the permission first"}
+              >
+                <Users size={14} /> See Users
+              </Button>
               <Button size="sm" variant="outline" onClick={() => addChildNode(currentPath)}>
                 <Plus size={14} />
               </Button>
@@ -249,6 +261,15 @@ export function PermissionTree({
           Save Changes
         </Button>
       </div>
+
+      <PermissionUsersDialog
+        permId={usersDialogNode?.permId ?? null}
+        permissionName={usersDialogNode ? camelCaseToCapitalized(usersDialogNode.name) : ""}
+        open={usersDialogNode !== null}
+        onOpenChange={(open) => {
+          if (!open) setUsersDialogNode(null);
+        }}
+      />
     </div>
   );
 }

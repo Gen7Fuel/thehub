@@ -104,6 +104,11 @@ const CashSummarySchema = new mongoose.Schema(
 
 CashSummarySchema.index({ site: 1, shift_number: 1, date: 1 }, { unique: true })
 
+// The unique index above can't serve the ~20 reporting queries that filter
+// { site, date-range } without a shift_number, since shift_number sits between
+// them. Equality field first, range field second.
+CashSummarySchema.index({ site: 1, date: 1 })
+
 const CashSummary = mongoose.model('CashSummary', CashSummarySchema)
 
 // Single report per site+day (notes + submitted state)

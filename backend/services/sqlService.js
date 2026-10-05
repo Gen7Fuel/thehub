@@ -592,55 +592,6 @@ async function getFuelPricingDate(date) {
 // }
 
 
-async function getFuelInventoryReportPreviousDay() {
-  try {
-    const pool = await getPool();
-    const result = await pool.request().query(`
-      SELECT [Date],[Station_Name],[Fuel_Grade],[Stick_L]
-      FROM [CSO].[FuelInventory]
-      WHERE [Date] = CAST(GETDATE() - 1 AS date)
-    `);
-    await sql.close();
-    return result.recordset;
-  } catch (err) {
-    console.error('SQL error:', err);
-    return [];
-  }
-}
-
-async function getFuelInventoryReportCurrentDay() {
-  try {
-    const pool = await getPool();
-    const result = await pool.request().query(`
-      WITH RankedInventory AS (
-        SELECT 
-            [Station_SK], 
-            [Fuel_Grade], 
-            TRY_CAST([Volume] AS DECIMAL(18, 2)) AS [Stick_L_Tank],
-            ROW_NUMBER() OVER (
-                PARTITION BY [Station_SK], [Fuel_Grade], [Tank_ID]
-                ORDER BY [Time] DESC
-            ) AS rnk
-        FROM [CSO].[CurrentFuelInv]
-        WHERE [Date_SK] = TRY_CONVERT(CHAR(8), GETDATE(), 112)
-      )
-      SELECT 
-            [Station_SK], 
-            [Fuel_Grade], 
-            SUM([Stick_L_tank]) AS [Stick_L] 
-      FROM RankedInventory
-      WHERE rnk = 1
-      GROUP BY [Station_SK], [Fuel_Grade]
-      ORDER BY [Station_SK]
-    `);
-    await sql.close();
-    return result.recordset;
-  } catch (err) {
-    console.error('SQL error:', err);
-    return [];
-  }
-}
-
 async function getFuelSupplierDiscounts() {
   try {
     const { getPool } = require('./sqlService'); // Adjust path if needed
@@ -714,13 +665,14 @@ async function getFuelCarrierHaulage() {
     const { getPool } = require('./sqlService'); // Adjust path if needed
     const pool = await getPool();
 
-    // FULL OUTER JOIN on all 4 composite keys: Carrier, Type, Location, and Pickup
+    // FULL OUTER JOIN on all 5 composite keys: Carrier, Type, Location, Pickup, and IsSplit
     const result = await pool.request().query(`
       SELECT 
         COALESCE(live.[Carrier], stg.[Carrier]) AS [Carrier],
         COALESCE(live.[Type], stg.[Type]) AS [Type],
         COALESCE(live.[Location], stg.[Location]) AS [Location],
         COALESCE(live.[Pickup], stg.[Pickup]) AS [Pickup],
+        COALESCE(live.[IsSplit], stg.[IsSplit]) AS [IsSplit],
         live.[Haulage] AS [Live_Haulage],
         live.[Updated At] AS [Live_Updated_At],
         stg.[Haulage] AS [Stg_Haulage],
@@ -731,6 +683,7 @@ async function getFuelCarrierHaulage() {
         AND live.[Type] = stg.[Type]
         AND live.[Location] = stg.[Location]
         AND live.[Pickup] = stg.[Pickup]
+        AND live.[IsSplit] = stg.[IsSplit]
     `);
 
     return result.recordset;
@@ -1372,7 +1325,16 @@ async function getSanitizationBackupData() {
           SELECT TOP 1 [URL] 
           FROM [CSO].[UPC Details] UD
           WHERE UD.[UPC] = CI.[UPC]
-        ) AS image_url
+        ) AS image_url,
+        (
+          SELECT TOP 1 PH.[Units_Per_Parent]
+          FROM [CSO].[UPC_Packaging_Hierarchy_Lookup] PH
+          WHERE PH.[UPC] = CI.[UPC]
+            AND PH.[Unit_Type] = 'PK'
+            AND PH.[Parent_Unit_Type] = 'CRT'
+            AND PH.[Units_Per_Parent] IS NOT NULL
+            AND MI.[Category ID] in (101,102,104,105)
+        ) AS pk_in_crt
       FROM LatestInventory CI
       LEFT JOIN [CSO].[Master_Item] MI 
         ON CI.[UPC] = MI.[UPC] AND CI.[Station_SK] = MI.[Station_SK]
@@ -2068,8 +2030,6 @@ module.exports = {
   getInventoryCategories,
   getAllSQLData,
   getBulkOnHandQtyCSO,
-  getFuelInventoryReportPreviousDay,
-  getFuelInventoryReportCurrentDay,
   getCategoriesFromSQL,
   getCategoryNumbersFromSQL,
   getInactiveMasterItems,

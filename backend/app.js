@@ -28,11 +28,13 @@ require('./cron_jobs/weeklyArReportCron') // cron job for weekly AR report email
 // require('./cron_jobs/productCategoryMappingCron'); //cron job for normalising the product categories
 require('./cron_jobs/itemBkSanitizationCron'); //cron job for sanitizing item backup data from SQL
 require('./cron_jobs/cycleCountReportCron'); //cron job for updating onHandCSO and unit prices for cycle count report, runs every morning at 3 AM
-require('./cron_jobs/cycleCountWeeklyInstanceCron'); //cron job for generating weekly cycle count instances, runs every Sunday at 3 AM
+// require('./cron_jobs/cycleCountWeeklyInstanceCron'); //cron job for generating weekly cycle count instances, runs every Sunday at 3 AM
+const { initWeeklyInstanceCron } = require('./cron_jobs/cycleCountWeeklyInstanceCron'); // Import initializer - cron job for generating weekly cycle count instances, runs every Sunday at 3 AM
 require('./cron_jobs/syncStgLiveFuelPriceCron'); //cron job for syncing staging to live fuel price tables on the 1st of every month at 12 AM EST in SSMS
 require('./cron_jobs/syncDailyStgLiveFuelCron'); //cron job for syncing staging to live fuel price tables daily at 5 AM EST in SSMS
 require('./cron_jobs/fetchBullochShiftsCron'); //cron job for fetching bulloch shift reports every 3 hours form the server
 require('./cron_jobs/autoSumitCashSummaryReportCron'); //cron job for auto submitting completed shifts to the accounting every morning 6.30 am EST
+require('./cron_jobs/postgresParquetExportCron.js'); //cron job for exporting postgres data to azure in parquet format
 
 // Route imports
 const authRoutes = require("./routes/auth");
@@ -71,6 +73,7 @@ const fuelSupplierRoutes = require("./routes/fuel/fuelSupplierRoutes");
 const fuelStationTankRoutes = require("./routes/fuel/fuelStationTankRoutes");
 const fuelOrderRoutes = require("./routes/fuel/fuelOrderRoutes");
 const fuelSaleRoutes = require("./routes/fuel/fuelSaleRoutes");
+const fuelStatisticsRoutes = require("./routes/fuel/fuelStatisticsRoutes");
 const fuelPriceRoutes = require("./routes/fuel/fuelPricingRoutes");
 const fuelSettingsRoutes = require("./routes/fuel/fuelSettingsRoutes");
 const accountingReportRoutes = require("./routes/accountingReportRoutes");
@@ -179,6 +182,7 @@ app.use('/api/fuel-racks', fuelRackRoutes);
 app.use('/api/fuel-suppliers', fuelSupplierRoutes);
 app.use('/api/fuel-station-tanks', fuelStationTankRoutes);
 app.use('/api/fuel-orders', fuelOrderRoutes);
+app.use('/api/fuel-statistics', fuelStatisticsRoutes);
 app.use('/api/fuel-sales', fuelSaleRoutes);
 app.use('/api/fuel-settings', fuelSettingsRoutes);
 app.use('/api/accounting-reports', accountingReportRoutes);
@@ -190,6 +194,7 @@ app.set("io", io);
 
 initPriceScheduleWorker(io);
 initCsoInvoiceWorker(io);
+initWeeklyInstanceCron(io); 
 
 const PORT = process.env.PORT || 5000;
 

@@ -6,7 +6,7 @@ function getActor(req) {
   return {
     userId: user._id || undefined,
     username: user.username || user.email || user.firstName || undefined,
-    role: user.role || undefined,
+    role: user.role.role_name || undefined,
     locationId: user.location || undefined,
     locationName: user.locationName || user.stationName || undefined,
   };
