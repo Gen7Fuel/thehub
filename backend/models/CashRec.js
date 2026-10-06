@@ -74,6 +74,14 @@ const BankStatementSchema = new mongoose.Schema(
     gblCredits: { type: [MiscDebitSchema], default: [] },
     // NEW: merchant fees (required on frontend)
     merchantFees: { type: Number },
+    // Intacct documents created for the merchant fee (see services/sageService.js).
+    // Written once, on the first fee edit; later edits never touch Intacct.
+    sageMerchantFee: {
+      claimedAt: { type: Date },
+      billKey: { type: String },
+      billAmount: { type: Number },
+      paymentKey: { type: String },
+    },
     gblCreditsFiltered: { type: Number },
     ontarioIntegratedTax: { type: Number },
     transferFrom: { type: Number },

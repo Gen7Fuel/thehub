@@ -51,6 +51,9 @@ const locationSchema = new mongoose.Schema({
   // location dropdown (https://live.gvmunifi.com/pricing) — GVM's dropdown
   // doesn't expose a separate stable ID the way GasBuddy's stationId does.
   gvmLocationName: { type: String, required: false },
+  // Key of this site's entity in Sage Intacct (company-config/entity). Already
+  // set on existing documents and read by Desk via /api/locations.
+  sageEntityKey: { type: String, required: false },
 
   // --- Pushover Core Extensions ---
   pushOverUserKey: { type: String, default: null },
