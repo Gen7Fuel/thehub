@@ -56,11 +56,12 @@ describe('buildPaymentPayload', () => {
     billKey: '4242',
   })
 
-  it('is a draft record-transfer payment from the site bank account', () => {
+  it('is a draft EFT (record transfer) payment from the site bank account', () => {
     expect(payment).toMatchObject({
       financialEntity: { id: 'CouchichingGen7LP SB' },
       vendor: { id: 'V00041' },
-      paymentMethod: 'recordTransfer',
+      paymentMethod: 'EFT',
+      description: 'Merch Fees Ded. by GBL',
       paymentDate: '2026-10-02',
       action: 'draft',
     })
