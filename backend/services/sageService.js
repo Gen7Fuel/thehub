@@ -4,14 +4,16 @@
  * Intacct's REST API has no "manual payment" object, so a merchant fee is
  * recorded as the two documents the UI's Manual Payment creates behind the
  * scenes: a submitted (posted) AP bill (supplier Global Payments, GL 52500) and a draft
- * AP payment (Record transfer from the site's bank account) applied to it.
+ * AP payment (Record transfer / EFT from the site's bank account) applied to it.
  */
 const SAGE_BASE = 'https://api.intacct.com/ia/api/v1/'
 
 const MERCHANT_FEE_VENDOR_ID = 'V00041' // Global Payments
 const MERCHANT_FEE_GL_ACCOUNT = '52500' // COGS - Merchant fees
 const MERCHANT_FEE_MEMO = 'Merch Fees Ded. by GBL'
-const PAYMENT_METHOD = 'recordTransfer'
+// The UI's "Record transfer" is stored as 'EFT' in the REST API (existing paid
+// merch-fee bills were paid with it); 'recordTransfer' is rejected as invalid.
+const PAYMENT_METHOD = 'EFT'
 // Canadian Sales Tax - SYS, with the "Zero Rate Services Purchase - CA" detail
 // the UI's Manual Payment applies to these lines. Intacct rejects the bill if
 // the tax solution or a line's tax detail is missing.
@@ -67,7 +69,7 @@ function buildPaymentPayload({ site, date, amount, bankAccountId, billKey }) {
     vendor: { id: MERCHANT_FEE_VENDOR_ID },
     paymentMethod: PAYMENT_METHOD,
     paymentDate: date,
-    description: buildInvoiceNumber(site, date),
+    description: MERCHANT_FEE_MEMO,
     // Saved as a draft payment for review in Intacct rather than submitted.
     action: 'draft',
     details: [
