@@ -41,6 +41,43 @@ async function getBOLPhoto() {
 
 const isYmd = (s) => typeof s === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(s)
 
+function buildAuthorName(user) {
+  if (user && (user.firstName || user.lastName)) {
+    return `${user.firstName || ''} ${user.lastName || ''}`.trim()
+  }
+  return (user && (user.name || user.email)) || 'System User'
+}
+
+function normalizeFuelItems(items) {
+  if (!Array.isArray(items)) return null
+
+  return items
+    .map((item) => ({
+      grade: String(item?.grade || '').trim(),
+      ltrs: Number(item?.ltrs || 0),
+    }))
+    .filter((item) => item.grade)
+    .map((item) => ({
+      grade: item.grade,
+      ltrs: Number.isFinite(item.ltrs) && item.ltrs >= 0 ? item.ltrs : 0,
+    }))
+}
+
+function buildRetainComment(retainItems) {
+  if (!Array.isArray(retainItems)) return ''
+
+  const lines = retainItems
+    .map((item) => ({
+      grade: String(item?.grade || '').trim(),
+      ltrs: Number(item?.ltrs || 0),
+    }))
+    .filter((item) => item.grade && Number.isFinite(item.ltrs) && item.ltrs > 0)
+    .map((item) => `${item.grade}: ${item.ltrs.toLocaleString('en-US')} L`)
+
+  if (!lines.length) return ''
+  return `Fuel retained during BOL link:\n${lines.join('\n')}`
+}
+
 async function findLocationForBolSite(site) {
   return Location.findOne({
     $or: [
@@ -330,11 +367,13 @@ router.post('/request-again', async (req, res) => {
   }
 });
 
-// GET /api/fuel-rec/:id/linkable-pos
+// GET /api/fuel-rec/:id/linkable-pos?daysBack=2
 router.get('/:id/linkable-pos', async (req, res) => {
   try {
     const id = String(req.params.id || '').trim()
     if (!id) return res.status(400).json({ error: 'id is required' })
+    const rawDaysBack = Number(req.query?.daysBack ?? 2)
+    const daysBack = Number.isFinite(rawDaysBack) ? Math.max(2, Math.min(60, Math.floor(rawDaysBack))) : 2
 
     const BOLPhoto = await getBOLPhoto()
     const bol = await BOLPhoto.findById(id).lean()
@@ -345,11 +384,24 @@ router.get('/:id/linkable-pos', async (req, res) => {
     if (!location) return res.status(404).json({ error: `Location not found for site '${bol.site}'` })
 
     const tz = location.timezone || 'America/Toronto'
-    const start = moment.tz(bol.date, tz).subtract(2, 'days').startOf('day').toDate()
+    const start = moment.tz(bol.date, tz).subtract(daysBack, 'days').startOf('day').toDate()
     const end = moment.tz(bol.date, tz).endOf('day').toDate()
+
+    const linkedOrder = bol.poLinked && bol.poNumber
+      ? await FuelOrder.findOne({
+          station: location._id,
+          poNumber: bol.poNumber,
+        })
+        .populate('carrier', 'carrierName')
+        .populate('supplier', 'supplierName')
+        .populate('rack', 'rackName rackLocation')
+        .populate('station', 'stationName timezone fuelStationNumber fuelCustomerName')
+        .lean()
+      : null
 
     const orders = await FuelOrder.find({
       station: location._id,
+      currentStatus: 'Delivered',
       bolLinked: { $ne: true },
       $or: [
         { estimatedDeliveryDate: { $gte: start, $lte: end } },
@@ -374,6 +426,7 @@ router.get('/:id/linkable-pos', async (req, res) => {
       to: bol.date,
       count: orders.length,
       orders,
+      linkedOrder,
     })
   } catch (e) {
     console.error('fuelRec.linkable-pos error:', e)
@@ -386,6 +439,8 @@ router.post('/:id/link-po', async (req, res) => {
   try {
     const id = String(req.params.id || '').trim()
     const fuelOrderId = String(req.body?.fuelOrderId || '').trim()
+    const updatedItems = normalizeFuelItems(req.body?.items)
+    const retainComment = buildRetainComment(req.body?.retainItems)
     if (!id || !fuelOrderId) return res.status(400).json({ error: 'id and fuelOrderId are required' })
 
     const BOLPhoto = await getBOLPhoto()
@@ -396,34 +451,101 @@ router.post('/:id/link-po', async (req, res) => {
     const location = await findLocationForBolSite(bol.site)
     if (!location) return res.status(404).json({ error: `Location not found for site '${bol.site}'` })
 
-    const order = await FuelOrder.findOneAndUpdate(
-      {
-        _id: fuelOrderId,
-        station: location._id,
-        bolLinked: { $ne: true },
-      },
-      {
-        $set: {
-          bolLinked: true,
-          bolNumber: String(bol.bolNumber).trim(),
-        },
-      },
-      { new: true }
-    )
+    const order = await FuelOrder.findOne({
+      _id: fuelOrderId,
+      station: location._id,
+      currentStatus: 'Delivered',
+      bolLinked: { $ne: true },
+    })
+
+    if (!order) {
+      return res.status(404).json({ error: 'Delivered fuel PO not found, already linked, or not part of this site' })
+    }
+
+    order.bolLinked = true
+    order.bolNumber = String(bol.bolNumber).trim()
+
+    if (updatedItems && updatedItems.length) {
+      order.items = updatedItems
+    }
+
+    if (retainComment) {
+      order.comments.push({
+        text: retainComment,
+        author: buildAuthorName(req.user),
+        timestamp: new Date(),
+      })
+    }
+
+    await order.save()
+
+    const populatedOrder = await FuelOrder.findById(order._id)
       .populate('carrier', 'carrierName')
       .populate('supplier', 'supplierName')
       .populate('rack', 'rackName rackLocation')
       .populate('station', 'stationName timezone fuelStationNumber fuelCustomerName')
       .lean()
 
-    if (!order) {
-      return res.status(404).json({ error: 'Fuel PO not found, already linked, or not part of this site' })
-    }
+    const updatedBol = await BOLPhoto.findByIdAndUpdate(
+      id,
+      {
+        $set: {
+          poLinked: true,
+          poNumber: populatedOrder.poNumber,
+        },
+      },
+      { new: true, lean: true }
+    )
 
-    return res.json({ linked: true, order })
+    return res.json({ linked: true, order: populatedOrder, bol: updatedBol })
   } catch (e) {
     console.error('fuelRec.link-po error:', e)
     return res.status(500).json({ error: 'Failed to link fuel PO' })
+  }
+})
+
+// POST /api/fuel-rec/:id/unlink-po
+router.post('/:id/unlink-po', async (req, res) => {
+  try {
+    const id = String(req.params.id || '').trim()
+    if (!id) return res.status(400).json({ error: 'id is required' })
+
+    const BOLPhoto = await getBOLPhoto()
+    const bol = await BOLPhoto.findById(id).lean()
+    if (!bol) return res.status(404).json({ error: 'BOL entry not found' })
+
+    const location = await findLocationForBolSite(bol.site)
+    if (!location) return res.status(404).json({ error: `Location not found for site '${bol.site}'` })
+
+    let order = null
+    if (bol.poNumber) {
+      order = await FuelOrder.findOneAndUpdate(
+        {
+          station: location._id,
+          poNumber: bol.poNumber,
+          bolNumber: bol.bolNumber,
+        },
+        {
+          $set: { bolLinked: false },
+          $unset: { bolNumber: '' },
+        },
+        { new: true }
+      ).lean()
+    }
+
+    const updatedBol = await BOLPhoto.findByIdAndUpdate(
+      id,
+      {
+        $set: { poLinked: false },
+        $unset: { poNumber: '' },
+      },
+      { new: true, lean: true }
+    )
+
+    return res.json({ unlinked: true, order, bol: updatedBol })
+  } catch (e) {
+    console.error('fuelRec.unlink-po error:', e)
+    return res.status(500).json({ error: 'Failed to unlink fuel PO' })
   }
 })
 

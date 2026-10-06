@@ -18,6 +18,9 @@ const BOLPhotoSchema = new mongoose.Schema(
     filename: { type: String, required: true },
     // Bill of Lading (BOL) number provided by user
     bolNumber: { type: String, required: true, trim: true },
+    // Fuel PO link state
+    poLinked: { type: Boolean, default: false },
+    poNumber: { type: String, trim: true },
     // Comments array
     comments: [
       {

@@ -87,6 +87,20 @@ describe('BOLPhoto schema — bolNumber trimming', () => {
   })
 })
 
+// ─── BOLPhoto schema — PO linking fields ─────────────────────────────────────
+
+describe('BOLPhoto schema — PO linking fields', () => {
+  it('defaults poLinked to false', () => {
+    const doc = new BOLPhoto(base())
+    expect(doc.poLinked).toBe(false)
+  })
+
+  it('trims linked poNumber', () => {
+    const doc = new BOLPhoto(base({ poLinked: true, poNumber: '  PO-1001  ' }))
+    expect(doc.poNumber).toBe('PO-1001')
+  })
+})
+
 // ─── BOLPhoto schema — comments subdocument ────────────────────────────────────
 
 describe('BOLPhoto schema — comments subdocument', () => {
