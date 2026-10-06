@@ -3,7 +3,7 @@
  *
  * Intacct's REST API has no "manual payment" object, so a merchant fee is
  * recorded as the two documents the UI's Manual Payment creates behind the
- * scenes: a posted AP bill (supplier Global Payments, GL 52500) and a draft
+ * scenes: a submitted (posted) AP bill (supplier Global Payments, GL 52500) and a draft
  * AP payment (Record transfer from the site's bank account) applied to it.
  */
 const SAGE_BASE = 'https://api.intacct.com/ia/api/v1/'
@@ -31,8 +31,10 @@ function buildBillPayload({ site, date, amount, entityId }) {
     createdDate: date,
     postingDate: date,
     dueDate: date,
-    // Bills default to draft; a payment can only be applied to a posted bill.
-    state: 'posted',
+    // Bills default to draft, and Intacct rejects 'posted' on create. 'submitted'
+    // is the API's equivalent of the UI's Submit, which posts the bill (a
+    // payment can only be applied to a posted bill).
+    state: 'submitted',
     lines: [
       {
         glAccount: { id: MERCHANT_FEE_GL_ACCOUNT },

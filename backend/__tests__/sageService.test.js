@@ -21,12 +21,12 @@ describe('buildInvoiceNumber', () => {
 describe('buildBillPayload', () => {
   const bill = buildBillPayload({ site: 'Couchiching', date: '2026-10-02', amount: 531.58, entityId: 'G160' })
 
-  it('is a posted bill to Global Payments', () => {
+  it('is a submitted (posted) bill to Global Payments', () => {
     expect(bill).toMatchObject({
       billNumber: 'Merch Fees Oct 02/2026 - Couchiching',
       vendor: { id: 'V00041' },
       postingDate: '2026-10-02',
-      state: 'posted',
+      state: 'submitted',
     })
   })
 
