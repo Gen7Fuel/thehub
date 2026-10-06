@@ -27,16 +27,21 @@ describe('buildBillPayload', () => {
       vendor: { id: 'V00041' },
       postingDate: '2026-10-02',
       state: 'submitted',
+      isTaxInclusive: false,
+      taxSolution: { key: '3' },
     })
   })
 
-  it('has one line on the merchant fees account at the site location', () => {
+  it('has one zero-rated line on the merchant fees account at the site location', () => {
     expect(bill.lines).toEqual([
       {
         glAccount: { id: '52500' },
         txnAmount: '531.58',
         memo: 'Merch Fees Ded. by GBL',
         dimensions: { location: { id: 'G160' } },
+        taxEntries: [
+          { baseTaxAmount: '0', txnTaxAmount: '0', taxRate: 0, purchasingTaxDetail: { key: '69' } },
+        ],
       },
     ])
   })

@@ -12,6 +12,11 @@ const MERCHANT_FEE_VENDOR_ID = 'V00041' // Global Payments
 const MERCHANT_FEE_GL_ACCOUNT = '52500' // COGS - Merchant fees
 const MERCHANT_FEE_MEMO = 'Merch Fees Ded. by GBL'
 const PAYMENT_METHOD = 'recordTransfer'
+// Canadian Sales Tax - SYS, with the "Zero Rate Services Purchase - CA" detail
+// the UI's Manual Payment applies to these lines. Intacct rejects the bill if
+// the tax solution or a line's tax detail is missing.
+const TAX_SOLUTION_KEY = '3'
+const TAX_DETAIL_KEY = '69'
 
 const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
 
@@ -35,12 +40,22 @@ function buildBillPayload({ site, date, amount, entityId }) {
     // is the API's equivalent of the UI's Submit, which posts the bill (a
     // payment can only be applied to a posted bill).
     state: 'submitted',
+    isTaxInclusive: false,
+    taxSolution: { key: TAX_SOLUTION_KEY },
     lines: [
       {
         glAccount: { id: MERCHANT_FEE_GL_ACCOUNT },
         txnAmount: amount.toFixed(2),
         memo: MERCHANT_FEE_MEMO,
         dimensions: { location: { id: entityId } },
+        taxEntries: [
+          {
+            baseTaxAmount: '0',
+            txnTaxAmount: '0',
+            taxRate: 0,
+            purchasingTaxDetail: { key: TAX_DETAIL_KEY },
+          },
+        ],
       },
     ],
   }
