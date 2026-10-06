@@ -1339,7 +1339,17 @@ function RouteComponent() {
                     </tr>
                   </thead>
                   <tbody>
-                    {cat.items.map((item: any, itemIdx: number) => (
+                    {/* Display-only A–Z sort. itemIdx stays the item's index in the
+                        stored array — every handler below addresses items by it. */}
+                    {cat.items
+                      .map((item: any, itemIdx: number) => ({ item, itemIdx }))
+                      .sort((a: { item: any }, b: { item: any }) =>
+                        (a.item.itemName ?? '').localeCompare(b.item.itemName ?? '', undefined, {
+                          numeric: true,
+                          sensitivity: 'base',
+                        })
+                      )
+                      .map(({ item, itemIdx }: { item: any; itemIdx: number }) => (
                       <tr
                         key={itemIdx}
                         // Strict === true: docs predating this field (including
