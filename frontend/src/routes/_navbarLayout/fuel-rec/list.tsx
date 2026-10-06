@@ -7,7 +7,7 @@ import { DatePickerWithRange } from '@/components/custom/datePickerWithRange'
 import { pdf, Document, Page, Image as PdfImage, StyleSheet } from '@react-pdf/renderer'
 import { Button } from '@/components/ui/button'
 import { useAuth } from '@/context/AuthContext'
-import { ClipboardCheck, Trash2, MessageSquareText, RefreshCcw, ExternalLink } from 'lucide-react'
+import { ClipboardCheck, Trash2, MessageSquareText, RefreshCcw, ExternalLink, Link2 } from 'lucide-react'
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { toast } from 'sonner'
 
@@ -29,6 +29,23 @@ type ListResponse = {
   to: string | null
   count: number
   entries: BOLPhoto[]
+}
+type FuelOrderCandidate = {
+  _id: string
+  poNumber: string
+  estimatedDeliveryDate?: string
+  originalDeliveryDate?: string
+  estimatedDeliveryWindow?: { start?: string; end?: string }
+  supplier?: { supplierName?: string }
+  carrier?: { carrierName?: string }
+  rack?: { rackName?: string; rackLocation?: string }
+  items?: Array<{ grade: string; ltrs: number }>
+}
+type LinkablePoResponse = {
+  from: string
+  to: string
+  count: number
+  orders: FuelOrderCandidate[]
 }
 
 const ymd = (d: Date) => format(d, 'yyyy-MM-dd')
@@ -144,6 +161,11 @@ function RouteComponent() {
   const [activeCommentEntry, setActiveCommentEntry] = React.useState<BOLPhoto | null>(null)
   const [commentText, setCommentText] = React.useState('')
   const [commentPending, setCommentPending] = React.useState(false)
+  const [activeLinkEntry, setActiveLinkEntry] = React.useState<BOLPhoto | null>(null)
+  const [linkableOrders, setLinkableOrders] = React.useState<FuelOrderCandidate[]>([])
+  const [linkRange, setLinkRange] = React.useState<{ from: string; to: string } | null>(null)
+  const [linkLoading, setLinkLoading] = React.useState(false)
+  const [linkPendingOrderId, setLinkPendingOrderId] = React.useState<string | null>(null)
 
   const requestAgain = async (e: BOLPhoto) => {
     try {
@@ -288,6 +310,71 @@ function RouteComponent() {
     }
   }
 
+  const openLinkDialog = async (e: BOLPhoto) => {
+    setActiveLinkEntry(e)
+    setLinkableOrders([])
+    setLinkRange(null)
+    setLinkLoading(true)
+    try {
+      const res = await fetch(`/api/fuel-rec/${encodeURIComponent(e._id)}/linkable-pos`, {
+        headers: {
+          Authorization: `Bearer ${localStorage.getItem('token') || ''}`,
+        },
+      })
+      if (!res.ok) {
+        const msg = await res.text().catch(() => '')
+        throw new Error(msg || `HTTP ${res.status}`)
+      }
+      const result = (await res.json()) as LinkablePoResponse
+      setLinkableOrders(result.orders || [])
+      setLinkRange({ from: result.from, to: result.to })
+    } catch (err) {
+      toast.error(`Failed to load POs: ${err instanceof Error ? err.message : String(err)}`)
+      setActiveLinkEntry(null)
+    } finally {
+      setLinkLoading(false)
+    }
+  }
+
+  const linkFuelPo = async (order: FuelOrderCandidate) => {
+    if (!activeLinkEntry) return
+    setLinkPendingOrderId(order._id)
+    try {
+      const res = await fetch(`/api/fuel-rec/${encodeURIComponent(activeLinkEntry._id)}/link-po`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${localStorage.getItem('token') || ''}`,
+        },
+        body: JSON.stringify({ fuelOrderId: order._id }),
+      })
+      if (!res.ok) {
+        const msg = await res.text().catch(() => '')
+        throw new Error(msg || `HTTP ${res.status}`)
+      }
+      toast.success(`Linked BOL ${activeLinkEntry.bolNumber || ''} to PO ${order.poNumber}`)
+      setLinkableOrders((prev) => prev.filter((x) => x._id !== order._id))
+      setActiveLinkEntry(null)
+    } catch (err) {
+      toast.error(`Link failed: ${err instanceof Error ? err.message : String(err)}`)
+    } finally {
+      setLinkPendingOrderId(null)
+    }
+  }
+
+  const formatOrderDate = (value?: string) => {
+    if (!value) return '—'
+    const parsed = new Date(value)
+    if (Number.isNaN(parsed.getTime())) return '—'
+    return format(parsed, 'MMM d, yyyy')
+  }
+
+  const formatOrderItems = (items?: FuelOrderCandidate['items']) => {
+    const visible = (items || []).filter((item) => Number(item.ltrs || 0) > 0)
+    if (!visible.length) return 'No fuel items'
+    return visible.map((item) => `${item.grade}: ${Number(item.ltrs || 0).toLocaleString()}L`).join(' | ')
+  }
+
   const handleCommentSave = async () => {
     if (!commentText.trim() || !activeCommentEntry) return
     setCommentPending(true)
@@ -407,6 +494,17 @@ function RouteComponent() {
                           </Button>
                         )}
 
+                        <Button
+                          variant="outline"
+                          size="icon"
+                          onClick={() => openLinkDialog(e)}
+                          disabled={pending.has(e._id)}
+                          title="Link PO"
+                          aria-label="Link PO"
+                        >
+                          <Link2 className="h-4 w-4" />
+                        </Button>
+
                         {access?.accounting?.fuelRec?.postBol &&
                           !e.comments?.some((c) => c.text.toLowerCase().includes('bol posted')) && (
                           <Button
@@ -507,6 +605,68 @@ function RouteComponent() {
                   {commentPending ? "Adding..." : "Add Comment"}
                 </Button>
               </div>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* 3. Link Fuel PO Dialog */}
+      <Dialog open={!!activeLinkEntry} onOpenChange={() => setActiveLinkEntry(null)}>
+        <DialogContent className="sm:max-w-[760px]">
+          <DialogHeader>
+            <DialogTitle>Link PO - {activeLinkEntry?.bolNumber || activeLinkEntry?.date}</DialogTitle>
+          </DialogHeader>
+
+          <div className="space-y-4">
+            <div className="text-sm text-slate-600">
+              {linkRange
+                ? `Showing unlinked fuel POs for ${activeLinkEntry?.site} from ${linkRange.from} to ${linkRange.to}.`
+                : `Loading unlinked fuel POs for ${activeLinkEntry?.site || 'this BOL'}...`}
+            </div>
+
+            {linkLoading ? (
+              <div className="py-10 text-center text-sm text-slate-500">Loading POs...</div>
+            ) : linkableOrders.length === 0 ? (
+              <div className="py-10 text-center text-sm text-slate-500">No unlinked fuel POs found for this window.</div>
+            ) : (
+              <div className="max-h-[440px] overflow-y-auto border rounded-md divide-y">
+                {linkableOrders.map((order) => (
+                  <div key={order._id} className="p-3 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                    <div className="min-w-0 space-y-1">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <span className="font-semibold text-slate-900">{order.poNumber}</span>
+                        <span className="text-xs text-slate-500">
+                          Delivery: {formatOrderDate(order.estimatedDeliveryDate || order.originalDeliveryDate)}
+                        </span>
+                        {(order.estimatedDeliveryWindow?.start || order.estimatedDeliveryWindow?.end) && (
+                          <span className="text-xs text-slate-500">
+                            {order.estimatedDeliveryWindow?.start || '--'} - {order.estimatedDeliveryWindow?.end || '--'}
+                          </span>
+                        )}
+                      </div>
+                      <div className="text-xs text-slate-600">
+                        {[order.supplier?.supplierName, order.carrier?.carrierName, order.rack?.rackName]
+                          .filter(Boolean)
+                          .join(' | ') || 'No supplier/carrier/rack details'}
+                      </div>
+                      <div className="text-xs text-slate-500">{formatOrderItems(order.items)}</div>
+                    </div>
+
+                    <Button
+                      size="sm"
+                      onClick={() => linkFuelPo(order)}
+                      disabled={linkPendingOrderId === order._id}
+                      className="shrink-0"
+                    >
+                      {linkPendingOrderId === order._id ? 'Linking...' : 'Link PO'}
+                    </Button>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            <div className="flex justify-end">
+              <Button variant="outline" onClick={() => setActiveLinkEntry(null)}>Close</Button>
             </div>
           </div>
         </DialogContent>

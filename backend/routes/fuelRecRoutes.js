@@ -3,9 +3,11 @@ const router = express.Router()
 const multer = require('multer')
 const upload = multer({ storage: multer.memoryStorage() })
 const Location = require("../models/Location");
+const FuelOrder = require("../models/fuel/FuelOrder");
 const { emailQueue } = require('../queues/emailQueue');
 const { pushNotification } = require("../services/notificationService");
 const { cdnUploadQueue } = require("../queues/cdnUploadQueue");
+const moment = require('moment-timezone');
 
 // JSON body parsing
 router.use(express.json({ limit: '1mb' }))
@@ -38,6 +40,15 @@ async function getBOLPhoto() {
 }
 
 const isYmd = (s) => typeof s === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(s)
+
+async function findLocationForBolSite(site) {
+  return Location.findOne({
+    $or: [
+      { stationName: site },
+      { site },
+    ],
+  }).select('stationName site timezone').lean()
+}
 
 // POST /api/fuel-rec/capture
 // body: { site: string, date: 'YYYY-MM-DD', photo: string, bolNumber: string }  // photo = filename from CDN
@@ -318,6 +329,103 @@ router.post('/request-again', async (req, res) => {
     return res.status(500).json({ error: 'Failed to send request' });
   }
 });
+
+// GET /api/fuel-rec/:id/linkable-pos
+router.get('/:id/linkable-pos', async (req, res) => {
+  try {
+    const id = String(req.params.id || '').trim()
+    if (!id) return res.status(400).json({ error: 'id is required' })
+
+    const BOLPhoto = await getBOLPhoto()
+    const bol = await BOLPhoto.findById(id).lean()
+    if (!bol) return res.status(404).json({ error: 'BOL entry not found' })
+    if (!isYmd(bol.date)) return res.status(400).json({ error: 'BOL date must be YYYY-MM-DD' })
+
+    const location = await findLocationForBolSite(bol.site)
+    if (!location) return res.status(404).json({ error: `Location not found for site '${bol.site}'` })
+
+    const tz = location.timezone || 'America/Toronto'
+    const start = moment.tz(bol.date, tz).subtract(2, 'days').startOf('day').toDate()
+    const end = moment.tz(bol.date, tz).endOf('day').toDate()
+
+    const orders = await FuelOrder.find({
+      station: location._id,
+      bolLinked: { $ne: true },
+      $or: [
+        { estimatedDeliveryDate: { $gte: start, $lte: end } },
+        { originalDeliveryDate: { $gte: start, $lte: end } },
+      ],
+    })
+      .populate('carrier', 'carrierName')
+      .populate('supplier', 'supplierName')
+      .populate('rack', 'rackName rackLocation')
+      .populate('station', 'stationName timezone fuelStationNumber fuelCustomerName')
+      .sort({ estimatedDeliveryDate: -1, originalDeliveryDate: -1, poNumber: 1 })
+      .lean()
+
+    return res.json({
+      bol: {
+        _id: bol._id,
+        site: bol.site,
+        date: bol.date,
+        bolNumber: bol.bolNumber,
+      },
+      from: moment(start).tz(tz).format('YYYY-MM-DD'),
+      to: bol.date,
+      count: orders.length,
+      orders,
+    })
+  } catch (e) {
+    console.error('fuelRec.linkable-pos error:', e)
+    return res.status(500).json({ error: 'Failed to load linkable fuel POs' })
+  }
+})
+
+// POST /api/fuel-rec/:id/link-po
+router.post('/:id/link-po', async (req, res) => {
+  try {
+    const id = String(req.params.id || '').trim()
+    const fuelOrderId = String(req.body?.fuelOrderId || '').trim()
+    if (!id || !fuelOrderId) return res.status(400).json({ error: 'id and fuelOrderId are required' })
+
+    const BOLPhoto = await getBOLPhoto()
+    const bol = await BOLPhoto.findById(id).lean()
+    if (!bol) return res.status(404).json({ error: 'BOL entry not found' })
+    if (!bol.bolNumber) return res.status(400).json({ error: 'BOL number is required before linking' })
+
+    const location = await findLocationForBolSite(bol.site)
+    if (!location) return res.status(404).json({ error: `Location not found for site '${bol.site}'` })
+
+    const order = await FuelOrder.findOneAndUpdate(
+      {
+        _id: fuelOrderId,
+        station: location._id,
+        bolLinked: { $ne: true },
+      },
+      {
+        $set: {
+          bolLinked: true,
+          bolNumber: String(bol.bolNumber).trim(),
+        },
+      },
+      { new: true }
+    )
+      .populate('carrier', 'carrierName')
+      .populate('supplier', 'supplierName')
+      .populate('rack', 'rackName rackLocation')
+      .populate('station', 'stationName timezone fuelStationNumber fuelCustomerName')
+      .lean()
+
+    if (!order) {
+      return res.status(404).json({ error: 'Fuel PO not found, already linked, or not part of this site' })
+    }
+
+    return res.json({ linked: true, order })
+  } catch (e) {
+    console.error('fuelRec.link-po error:', e)
+    return res.status(500).json({ error: 'Failed to link fuel PO' })
+  }
+})
 
 // DELETE /api/fuel-rec/:id
 router.delete('/:id', async (req, res) => {
