@@ -1092,7 +1092,7 @@ router.put("/verify-price-receipt", async (req, res) => {
           "Osoyoos",
           "Charlies",
         ];
-        const group2Stations = ["Couchiching", "Wavers West", "Wavers East"];
+        const group2Stations = ["Couchiching", "Wavers West", "Wavers East", "Sioux Valley"];
 
         if (group1Stations.includes(station)) {
           ccs.push("michelle@gen7fuel.com");
