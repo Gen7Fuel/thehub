@@ -2316,13 +2316,12 @@ router.get("/daily-report", async (req, res) => {
         "cci.updated_at" // Added updated_at column
       );
 
-    // 5. Find the most recent updated_at timestamp among items
+    // 5. Find the most recent updated_at timestamp among completed counts only
     let lastCountedAt = null;
     if (reportItems.length > 0) {
       const validTimestamps = reportItems
-        .map(i => i.updated_at)
-        .filter(Boolean)
-        .map(t => new Date(t).getTime());
+        .filter(i => Boolean(i.count_completed) && i.updated_at) // Filter only completed counts with timestamps
+        .map(i => new Date(i.updated_at).getTime());
 
       if (validTimestamps.length > 0) {
         const maxTimestamp = new Date(Math.max(...validTimestamps));
