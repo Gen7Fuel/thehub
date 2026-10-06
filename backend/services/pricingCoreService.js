@@ -218,7 +218,7 @@ export async function executeRetailPriceUpdate({
       // Station Group 1 Mapping
       const group1Stations = ["Silver Grizzly", "Oliver", "Osoyoos", "Charlies"];
       // Station Group 2 Mapping
-      const group2Stations = ["Couchiching", "Wavers West", "Wavers East"];
+      const group2Stations = ["Couchiching", "Wavers West", "Wavers East", "Sioux Valley"];
 
       if (group1Stations.includes(station)) {
         ccs.push("michelle@gen7fuel.com");
