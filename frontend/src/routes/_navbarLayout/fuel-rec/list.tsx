@@ -483,6 +483,8 @@ function RouteComponent() {
     return visible.map((item) => `${item.grade}: ${Number(item.ltrs || 0).toLocaleString()}L`).join(' | ')
   }
 
+  const activeBolImageUrl = activeLinkEntry ? `/cdn/download/${activeLinkEntry.filename}` : ''
+
   const handleCommentSave = async () => {
     if (!commentText.trim() || !activeCommentEntry) return
     setCommentPending(true)
@@ -721,113 +723,149 @@ function RouteComponent() {
 
       {/* 3. Link Fuel PO Dialog */}
       <Dialog open={!!activeLinkEntry} onOpenChange={() => setActiveLinkEntry(null)}>
-        <DialogContent className="sm:max-w-[760px]">
-          <DialogHeader>
-            <DialogTitle>Link PO - {activeLinkEntry?.bolNumber || activeLinkEntry?.date}</DialogTitle>
-          </DialogHeader>
-
-          <div className="space-y-4">
-            <div className="text-sm text-slate-600">
-              {linkRange
-                ? `Showing unlinked fuel POs for ${activeLinkEntry?.site} from ${linkRange.from} to ${linkRange.to}.`
-                : `Loading unlinked fuel POs for ${activeLinkEntry?.site || 'this BOL'}...`}
-            </div>
-
-            {activeLinkEntry?.poLinked || linkedOrder ? (
-              <div className="border rounded-md p-4 space-y-4">
-                <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-3">
-                  <div className="space-y-1 min-w-0">
-                    <div className="text-sm font-semibold text-emerald-700">
-                      Linked to PO {linkedOrder?.poNumber || activeLinkEntry?.poNumber}
-                    </div>
-                    {linkedOrder ? (
-                      <>
-                        <div className="text-xs text-slate-500">
-                          Delivery: {formatOrderDate(linkedOrder.estimatedDeliveryDate || linkedOrder.originalDeliveryDate)}
-                          {(linkedOrder.estimatedDeliveryWindow?.start || linkedOrder.estimatedDeliveryWindow?.end) &&
-                            ` | ${linkedOrder.estimatedDeliveryWindow?.start || '--'} - ${linkedOrder.estimatedDeliveryWindow?.end || '--'}`}
-                        </div>
-                        <div className="text-xs text-slate-600">
-                          {[linkedOrder.supplier?.supplierName, linkedOrder.carrier?.carrierName, linkedOrder.rack?.rackName]
-                            .filter(Boolean)
-                            .join(' | ') || 'No supplier/carrier/rack details'}
-                        </div>
-                        <div className="text-xs text-slate-500">{formatOrderItems(linkedOrder.items)}</div>
-                      </>
-                    ) : (
-                      <div className="text-xs text-slate-500">Order details could not be loaded, but this BOL is marked linked.</div>
-                    )}
-                  </div>
-
-                  <Button
-                    variant="destructive"
-                    size="sm"
-                    onClick={unlinkFuelPo}
-                    disabled={unlinkPending}
-                    className="shrink-0"
-                  >
-                    {unlinkPending ? 'Unlinking...' : 'Unlink'}
-                  </Button>
+        <DialogContent className="w-[100vw] h-[100vh] max-w-none max-h-none p-0 sm:rounded-none overflow-hidden">
+          <div className="grid h-full grid-cols-1 lg:grid-cols-[minmax(0,1.25fr)_minmax(420px,0.75fr)] bg-white">
+            <section className="min-h-0 border-r bg-slate-100 flex flex-col">
+              <div className="shrink-0 border-b bg-white px-5 py-4">
+                <DialogHeader>
+                  <DialogTitle>Link PO - {activeLinkEntry?.bolNumber || activeLinkEntry?.date}</DialogTitle>
+                </DialogHeader>
+                <div className="mt-1 text-xs text-slate-500">
+                  {activeLinkEntry?.site} | {activeLinkEntry?.date}
                 </div>
               </div>
-            ) : linkLoading ? (
-              <div className="py-10 text-center text-sm text-slate-500">Loading POs...</div>
-            ) : linkableOrders.length === 0 ? (
-              <div className="border rounded-md">
-                <div className="py-10 text-center text-sm text-slate-500">No unlinked fuel POs found for this window.</div>
-                <div className="border-t p-3 flex justify-end">
-                  <Button variant="outline" onClick={viewMoreHistorical} disabled={linkLoading}>
-                    View More Historical
-                  </Button>
+
+              <div className="min-h-0 flex-1 p-4">
+                <div className="h-full rounded-lg border bg-white overflow-hidden flex items-center justify-center">
+                  {activeBolImageUrl ? (
+                    <img
+                      src={activeBolImageUrl}
+                      alt={`BOL ${activeLinkEntry?.bolNumber || activeLinkEntry?.date} preview`}
+                      className="max-h-full max-w-full object-contain"
+                    />
+                  ) : (
+                    <div className="text-sm text-slate-400">BOL preview unavailable.</div>
+                  )}
                 </div>
               </div>
-            ) : (
-              <div className="border rounded-md overflow-hidden">
-                <div className="max-h-[440px] overflow-y-auto divide-y">
-                  {linkableOrders.map((order) => (
-                    <div key={order._id} className="p-3 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-                      <div className="min-w-0 space-y-1">
-                        <div className="flex flex-wrap items-center gap-2">
-                          <span className="font-semibold text-slate-900">{order.poNumber}</span>
-                          <span className="text-xs text-slate-500">
-                            Delivery: {formatOrderDate(order.estimatedDeliveryDate || order.originalDeliveryDate)}
-                          </span>
-                          {(order.estimatedDeliveryWindow?.start || order.estimatedDeliveryWindow?.end) && (
-                            <span className="text-xs text-slate-500">
-                              {order.estimatedDeliveryWindow?.start || '--'} - {order.estimatedDeliveryWindow?.end || '--'}
-                            </span>
-                          )}
+
+              <div className="shrink-0 border-t bg-white px-4 py-3 flex justify-end">
+                <Button variant="outline" onClick={() => window.open(activeBolImageUrl, '_blank')} disabled={!activeBolImageUrl}>
+                  <ExternalLink className="h-4 w-4 mr-2" /> Open Image
+                </Button>
+              </div>
+            </section>
+
+            <section className="min-h-0 flex flex-col">
+              <div className="shrink-0 border-b px-5 py-4">
+                <div className="text-sm font-semibold text-slate-900">
+                  {activeLinkEntry?.poLinked || linkedOrder ? 'Linked PO Details' : 'Select Fuel PO'}
+                </div>
+                <div className="mt-1 text-sm text-slate-600">
+                  {linkRange
+                    ? `Showing unlinked fuel POs from ${linkRange.from} to ${linkRange.to}.`
+                    : `Loading unlinked fuel POs for ${activeLinkEntry?.site || 'this BOL'}...`}
+                </div>
+              </div>
+
+              <div className="min-h-0 flex-1 overflow-y-auto p-5">
+                {activeLinkEntry?.poLinked || linkedOrder ? (
+                  <div className="border rounded-md p-4 space-y-4">
+                    <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-3">
+                      <div className="space-y-1 min-w-0">
+                        <div className="text-sm font-semibold text-emerald-700">
+                          Linked to PO {linkedOrder?.poNumber || activeLinkEntry?.poNumber}
                         </div>
-                        <div className="text-xs text-slate-600">
-                          {[order.supplier?.supplierName, order.carrier?.carrierName, order.rack?.rackName]
-                            .filter(Boolean)
-                            .join(' | ') || 'No supplier/carrier/rack details'}
-                        </div>
-                        <div className="text-xs text-slate-500">{formatOrderItems(order.items)}</div>
+                        {linkedOrder ? (
+                          <>
+                            <div className="text-xs text-slate-500">
+                              Delivery: {formatOrderDate(linkedOrder.estimatedDeliveryDate || linkedOrder.originalDeliveryDate)}
+                              {(linkedOrder.estimatedDeliveryWindow?.start || linkedOrder.estimatedDeliveryWindow?.end) &&
+                                ` | ${linkedOrder.estimatedDeliveryWindow?.start || '--'} - ${linkedOrder.estimatedDeliveryWindow?.end || '--'}`}
+                            </div>
+                            <div className="text-xs text-slate-600">
+                              {[linkedOrder.supplier?.supplierName, linkedOrder.carrier?.carrierName, linkedOrder.rack?.rackName]
+                                .filter(Boolean)
+                                .join(' | ') || 'No supplier/carrier/rack details'}
+                            </div>
+                            <div className="text-xs text-slate-500">{formatOrderItems(linkedOrder.items)}</div>
+                          </>
+                        ) : (
+                          <div className="text-xs text-slate-500">Order details could not be loaded, but this BOL is marked linked.</div>
+                        )}
                       </div>
 
                       <Button
+                        variant="destructive"
                         size="sm"
-                        onClick={() => openQuantityReview(order)}
-                        disabled={linkPendingOrderId === order._id}
+                        onClick={unlinkFuelPo}
+                        disabled={unlinkPending}
                         className="shrink-0"
                       >
-                        Link PO
+                        {unlinkPending ? 'Unlinking...' : 'Unlink'}
                       </Button>
                     </div>
-                  ))}
-                </div>
-                <div className="border-t p-3 flex justify-end">
-                  <Button variant="outline" onClick={viewMoreHistorical} disabled={linkLoading}>
-                    View More Historical
-                  </Button>
-                </div>
-              </div>
-            )}
+                  </div>
+                ) : linkLoading ? (
+                  <div className="py-10 text-center text-sm text-slate-500">Loading POs...</div>
+                ) : linkableOrders.length === 0 ? (
+                  <div className="border rounded-md">
+                    <div className="py-10 text-center text-sm text-slate-500">No unlinked fuel POs found for this window.</div>
+                    <div className="border-t p-3 flex justify-end">
+                      <Button variant="outline" onClick={viewMoreHistorical} disabled={linkLoading}>
+                        View More Historical
+                      </Button>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="border rounded-md overflow-hidden">
+                    <div className="divide-y">
+                      {linkableOrders.map((order) => (
+                        <div key={order._id} className="p-3 flex flex-col xl:flex-row xl:items-center justify-between gap-3">
+                          <div className="min-w-0 space-y-1">
+                            <div className="flex flex-wrap items-center gap-2">
+                              <span className="font-semibold text-slate-900">{order.poNumber}</span>
+                              <span className="text-xs text-slate-500">
+                                Delivery: {formatOrderDate(order.estimatedDeliveryDate || order.originalDeliveryDate)}
+                              </span>
+                              {(order.estimatedDeliveryWindow?.start || order.estimatedDeliveryWindow?.end) && (
+                                <span className="text-xs text-slate-500">
+                                  {order.estimatedDeliveryWindow?.start || '--'} - {order.estimatedDeliveryWindow?.end || '--'}
+                                </span>
+                              )}
+                            </div>
+                            <div className="text-xs text-slate-600">
+                              {[order.supplier?.supplierName, order.carrier?.carrierName, order.rack?.rackName]
+                                .filter(Boolean)
+                                .join(' | ') || 'No supplier/carrier/rack details'}
+                            </div>
+                            <div className="text-xs text-slate-500">{formatOrderItems(order.items)}</div>
+                          </div>
 
-            <div className="flex justify-end">
-              <Button variant="outline" onClick={() => setActiveLinkEntry(null)}>Close</Button>
-            </div>
+                          <Button
+                            size="sm"
+                            onClick={() => openQuantityReview(order)}
+                            disabled={linkPendingOrderId === order._id}
+                            className="shrink-0"
+                          >
+                            Link PO
+                          </Button>
+                        </div>
+                      ))}
+                    </div>
+                    <div className="border-t p-3 flex justify-end">
+                      <Button variant="outline" onClick={viewMoreHistorical} disabled={linkLoading}>
+                        View More Historical
+                      </Button>
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              <div className="shrink-0 border-t px-5 py-3 flex justify-end">
+                <Button variant="outline" onClick={() => setActiveLinkEntry(null)}>Close</Button>
+              </div>
+            </section>
           </div>
         </DialogContent>
       </Dialog>
