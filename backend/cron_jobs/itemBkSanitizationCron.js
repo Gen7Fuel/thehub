@@ -349,6 +349,7 @@ async function runSanitizeItemBk() {
         .update({ 
           active: false, 
           allow_cycle_count: false, // 👈 Ensures soft-deleted items don't appear in upcoming counts
+          on_hand_qty: 0, // 👈 Reset on-hand quantity to zero for soft-deleted items
           sync_date: db.fn.now() 
         });
 
