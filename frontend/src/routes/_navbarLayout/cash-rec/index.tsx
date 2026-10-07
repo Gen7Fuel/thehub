@@ -318,13 +318,14 @@ function RouteComponent() {
             const afdGiftCard = num(totals.afdGiftCard)
             const kioskGiftCard = num(totals.kioskGiftCard)
             const loyaltyCoupons = num(totals.couponsAccepted) + num(totals.giftCertificates) + num(totals.cashOffCoupons) + num(totals.gasolineCoupons) + num(totals.otherCoupons)
+            const salesTax = num(totals.salesTax);
 
-            const gblMonerisFuelSales = totalSales - itemSales - reportedCanadianCash - missedCpl
+            const gblMonerisFuelSales = totalSales - itemSales - reportedCanadianCash - missedCpl - salesTax
             const storeSales = itemSales
             const canadianCash = reportedCanadianCash
             const lotterySales = 0
             const lotteryPayouts = 0
-            const totalDollarSales = gblMonerisFuelSales + canadianCash + kardpollSales + storeSales + lotterySales + lotteryPayouts
+            const totalDollarSales = gblMonerisFuelSales + canadianCash + kardpollSales + storeSales + lotterySales + lotteryPayouts + salesTax
 
             const cashSafeDeposited = canadianCashCollected
             const tillOverShort = data.adjustedOverShort != null
@@ -396,6 +397,10 @@ function RouteComponent() {
                       <tr className="border-b border-gray-100 bg-emerald-50">
                         <td className="px-4 py-2.5 text-gray-600">Store Sales (40200)</td>
                         <td className="px-4 py-2.5 text-right font-medium text-gray-900 cursor-copy" onClick={copyCell}>${fmt2(storeSales)}</td>
+                      </tr>
+                      <tr className="border-b border-gray-100 bg-emerald-50">
+                        <td className="px-4 py-2.5 text-gray-600">Total Sales Tax (Information Purpose Only)</td>
+                        <td className="px-4 py-2.5 text-right font-medium text-gray-900 cursor-copy" onClick={copyCell}>${fmt2(salesTax)}</td>
                       </tr>
                       <tr className="border-b border-gray-100 bg-emerald-50">
                         <td className="px-4 py-2.5 text-gray-600">Lottery Sales (20440)</td>
