@@ -877,9 +877,19 @@ const FILTERABLE_COLUMNS = [
   { key: 'department', label: 'Department' },
   { key: 'grade', label: 'Grade' },
   { key: 'allow_cycle_count', label: 'Allow Count Status' },
+  { key: 'is_active', label: 'Active Status' },
+  { key: 'on_hand_qty', label: 'On Hand Qty' },
   { key: 'price_group', label: 'Price Group' },
   { key: 'promo_group', label: 'Promo Group' },
 ] as const
+
+const ON_HAND_FILTER_OPERATORS = [
+  { value: 'eq', label: 'Equal To' },
+  { value: 'gt', label: 'Greater Than' },
+  { value: 'lt', label: 'Less Than' },
+] as const
+
+type OnHandFilterOperator = typeof ON_HAND_FILTER_OPERATORS[number]['value']
 
 type ClearableNumber = number | null | "CLEAR";
 
@@ -909,6 +919,24 @@ const VIRTUAL_ROW_HEIGHT = 58
 const VIRTUAL_OVERSCAN = 12
 
 const formatDateValue = (value: string | null) => value ? new Date(value).toLocaleDateString() : '-'
+
+const formatFilterValue = (item: ItemBkRow, column: FilterKey) => {
+  const rawVal = item[column]
+
+  if (column === 'is_active') {
+    return rawVal === false ? 'Inactive' : 'Active'
+  }
+
+  if (rawVal === null || rawVal === undefined || rawVal === '') {
+    return '—'
+  }
+
+  if (typeof rawVal === 'boolean') {
+    return rawVal ? 'Yes' : 'No'
+  }
+
+  return String(rawVal)
+}
 
 // High performance memoized row element explicitly processing explicit cell distributions
 const ItemRow = memo(({
@@ -1095,6 +1123,8 @@ function RouteComponent() {
   const [isFilterDialogOpen, setIsFilterDialogOpen] = useState<boolean>(false)
   const [selectedFilterColumn, setSelectedFilterColumn] = useState<FilterKey>('categoryName')
   const [activeFilters, setActiveFilters] = useState<Record<string, string[]>>({})
+  const [onHandFilterOperator, setOnHandFilterOperator] = useState<OnHandFilterOperator>('lt')
+  const [onHandFilterValue, setOnHandFilterValue] = useState<string>("")
 
   useEffect(() => {
     const timeout = window.setTimeout(() => {
@@ -1161,13 +1191,7 @@ function RouteComponent() {
   const uniqueValuesForSelectedColumn = useMemo(() => {
     const valuesSet = new Set<string>()
     items.forEach(item => {
-      let val = item[selectedFilterColumn]
-      if (val === null || val === undefined || val === '') {
-        val = '—'
-      } else if (typeof val === 'boolean') {
-        val = val ? 'Yes' : 'No'
-      }
-      valuesSet.add(String(val))
+      valuesSet.add(formatFilterValue(item, selectedFilterColumn))
     })
     return Array.from(valuesSet).sort((a, b) => a.localeCompare(b))
   }, [items, selectedFilterColumn])
@@ -1196,6 +1220,28 @@ function RouteComponent() {
   const handleResetAllFilters = () => {
     setActiveFilters({})
     setSearchQuery("")
+    setOnHandFilterOperator('lt')
+    setOnHandFilterValue("")
+  }
+
+  const handleApplyOnHandFilter = () => {
+    const numericValue = Number(onHandFilterValue)
+    if (!onHandFilterValue.trim() || !Number.isFinite(numericValue)) return
+
+    setActiveFilters(prev => ({
+      ...prev,
+      on_hand_qty: [`${onHandFilterOperator}:${numericValue}`]
+    }))
+  }
+
+  const formatActiveFilterValue = (colKey: string, values: string[]) => {
+    if (colKey !== 'on_hand_qty') return values.join(', ')
+
+    const [operator, rawValue] = (values[0] || '').split(':')
+    const operatorLabel =
+      ON_HAND_FILTER_OPERATORS.find((option) => option.value === operator)?.label || operator
+
+    return `${operatorLabel} ${rawValue ?? ''}`.trim()
   }
 
   const isFilteringActive = useMemo(() => {
@@ -1215,16 +1261,19 @@ function RouteComponent() {
       }
 
       for (const [colKey, allowedValues] of Object.entries(activeFilters)) {
-        let rawVal = item[colKey as keyof ItemBkRow]
-        let mappedStr = ''
+        if (colKey === 'on_hand_qty') {
+          const [operator, rawValue] = (allowedValues[0] || '').split(':')
+          const filterValue = Number(rawValue)
+          const itemValue = Number(item.on_hand_qty || 0)
 
-        if (rawVal === null || rawVal === undefined || rawVal === '') {
-          mappedStr = '—'
-        } else if (typeof rawVal === 'boolean') {
-          mappedStr = rawVal ? 'Yes' : 'No'
-        } else {
-          mappedStr = String(rawVal)
+          if (!Number.isFinite(filterValue)) return false
+          if (operator === 'eq' && itemValue !== filterValue) return false
+          if (operator === 'gt' && itemValue <= filterValue) return false
+          if (operator === 'lt' && itemValue >= filterValue) return false
+          continue
         }
+
+        const mappedStr = formatFilterValue(item, colKey as FilterKey)
 
         if (!allowedValues.includes(mappedStr)) {
           return false
@@ -1547,7 +1596,7 @@ function RouteComponent() {
             return (
               <div key={colKey} className="flex items-center bg-blue-50 border border-blue-200 text-blue-700 px-2 py-0.5 rounded text-xs font-medium">
                 <span className="opacity-70 mr-1">{matchedCol?.label}:</span>
-                <span className="max-w-[120px] truncate">{values.join(', ')}</span>
+                <span className="max-w-[160px] truncate">{formatActiveFilterValue(colKey, values)}</span>
                 <button
                   onClick={() => setActiveFilters(prev => {
                     const copy = { ...prev }; delete copy[colKey]; return copy;
@@ -1697,7 +1746,9 @@ function RouteComponent() {
                 <div className="px-2 py-1.5 text-[11px] font-bold text-gray-400 uppercase tracking-wider">Select Column</div>
                 {FILTERABLE_COLUMNS.map((col) => {
                   const isCurrent = selectedFilterColumn === col.key
-                  const activeCount = activeFilters[col.key]?.length || 0
+                  const activeCount = col.key === 'on_hand_qty'
+                    ? (activeFilters[col.key]?.length ? 1 : 0)
+                    : activeFilters[col.key]?.length || 0
 
                   return (
                     <button
@@ -1724,7 +1775,9 @@ function RouteComponent() {
               <div className="w-2/3 p-4 flex flex-col overflow-hidden">
                 <div className="flex items-center justify-between mb-2">
                   <div className="text-[11px] font-bold text-gray-400 uppercase tracking-wider">
-                    Available Matches ({uniqueValuesForSelectedColumn.length})
+                    {selectedFilterColumn === 'on_hand_qty'
+                      ? 'Numeric Condition'
+                      : `Available Matches (${uniqueValuesForSelectedColumn.length})`}
                   </div>
                   {(activeFilters[selectedFilterColumn]?.length || 0) > 0 && (
                     <button
@@ -1736,29 +1789,81 @@ function RouteComponent() {
                   )}
                 </div>
 
-                <div className="flex-1 border rounded-lg bg-gray-50/30 overflow-y-auto divide-y">
-                  {uniqueValuesForSelectedColumn.map((value) => {
-                    const isChecked = (activeFilters[selectedFilterColumn] || []).includes(value)
+                {selectedFilterColumn === 'on_hand_qty' ? (
+                  <div className="flex-1 border rounded-lg bg-gray-50/30 p-4">
+                    <div className="grid grid-cols-2 gap-3">
+                      <div className="space-y-1.5">
+                        <label className="text-[11px] font-bold text-gray-400 uppercase tracking-wider">
+                          Condition
+                        </label>
+                        <select
+                          value={onHandFilterOperator}
+                          onChange={(event) => setOnHandFilterOperator(event.target.value as OnHandFilterOperator)}
+                          className="w-full rounded-lg border bg-white px-3 py-2 text-sm text-gray-800 focus:outline-none focus:ring-2 focus:ring-blue-100"
+                        >
+                          {ON_HAND_FILTER_OPERATORS.map((option) => (
+                            <option key={option.value} value={option.value}>
+                              {option.label}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
 
-                    return (
-                      <label
-                        key={value}
-                        className="flex items-center justify-between px-3 py-2.5 hover:bg-gray-50 cursor-pointer select-none text-xs text-gray-700 transition-colors"
-                      >
-                        <div className="flex items-center gap-2.5 min-w-0 flex-1">
-                          <input
-                            type="checkbox"
-                            checked={isChecked}
-                            onChange={() => handleToggleFilterValue(selectedFilterColumn, value)}
-                            className="rounded accent-blue-600 h-4 w-4 cursor-pointer shrink-0"
-                          />
-                          <span className="font-medium text-gray-900 truncate">{value}</span>
-                        </div>
-                        {isChecked && <Check className="h-4 w-4 text-blue-600 shrink-0 ml-2" />}
-                      </label>
-                    )
-                  })}
-                </div>
+                      <div className="space-y-1.5">
+                        <label className="text-[11px] font-bold text-gray-400 uppercase tracking-wider">
+                          Quantity
+                        </label>
+                        <input
+                          type="number"
+                          step="0.01"
+                          value={onHandFilterValue}
+                          onChange={(event) => setOnHandFilterValue(event.target.value)}
+                          placeholder="0"
+                          className="w-full rounded-lg border bg-white px-3 py-2 text-sm text-gray-800 focus:outline-none focus:ring-2 focus:ring-blue-100"
+                        />
+                      </div>
+                    </div>
+
+                    <button
+                      type="button"
+                      onClick={handleApplyOnHandFilter}
+                      disabled={!onHandFilterValue.trim() || !Number.isFinite(Number(onHandFilterValue))}
+                      className="mt-4 w-full rounded-lg bg-blue-600 px-4 py-2 text-xs font-bold text-white shadow-sm transition-colors hover:bg-blue-700 disabled:cursor-not-allowed disabled:bg-gray-300"
+                    >
+                      Apply On Hand Filter
+                    </button>
+
+                    {activeFilters.on_hand_qty?.length > 0 && (
+                      <div className="mt-3 rounded-lg border border-blue-100 bg-blue-50 px-3 py-2 text-xs font-medium text-blue-700">
+                        Current: {formatActiveFilterValue('on_hand_qty', activeFilters.on_hand_qty)}
+                      </div>
+                    )}
+                  </div>
+                ) : (
+                  <div className="flex-1 border rounded-lg bg-gray-50/30 overflow-y-auto divide-y">
+                    {uniqueValuesForSelectedColumn.map((value) => {
+                      const isChecked = (activeFilters[selectedFilterColumn] || []).includes(value)
+
+                      return (
+                        <label
+                          key={value}
+                          className="flex items-center justify-between px-3 py-2.5 hover:bg-gray-50 cursor-pointer select-none text-xs text-gray-700 transition-colors"
+                        >
+                          <div className="flex items-center gap-2.5 min-w-0 flex-1">
+                            <input
+                              type="checkbox"
+                              checked={isChecked}
+                              onChange={() => handleToggleFilterValue(selectedFilterColumn, value)}
+                              className="rounded accent-blue-600 h-4 w-4 cursor-pointer shrink-0"
+                            />
+                            <span className="font-medium text-gray-900 truncate">{value}</span>
+                          </div>
+                          {isChecked && <Check className="h-4 w-4 text-blue-600 shrink-0 ml-2" />}
+                        </label>
+                      )
+                    })}
+                  </div>
+                )}
               </div>
 
             </div>

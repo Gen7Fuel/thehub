@@ -6,6 +6,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Card } from "@/components/ui/card"
+import { DatePicker } from "@/components/custom/datePicker"
 import { useNavigate } from '@tanstack/react-router'
 import { getSocket } from "@/lib/websocket"
 import { getOrderRecStatusColor } from "@/lib/utils"
@@ -58,6 +59,9 @@ function RouteComponent() {
   const [currentComments, setCurrentComments] = useState<{ text: string, author: string, timestamp: string }[]>([])
   const [updateStatusOrderId, setUpdateStatusOrderId] = useState<string | null>(null);
   const [newStatus, setNewStatus] = useState<string>("");
+  const [invoiceId, setInvoiceId] = useState<string>("");
+  const [invoiceDate, setInvoiceDate] = useState<Date | undefined>(undefined);
+  const [invoiceValidationError, setInvoiceValidationError] = useState<string>("");
   const [pendingStatusAfterComment, setPendingStatusAfterComment] = useState<null | string>(null);
   const [dismissedComments, setDismissedComments] = useState<Record<string, string>>(
     () => JSON.parse(localStorage.getItem('orderRecChatDismissed') || '{}')
@@ -142,6 +146,14 @@ function RouteComponent() {
 
     if (!orderIdToUpdate || !newStatus) return;
 
+    const isInvoiceReceivedUpdate = newStatus === "Invoice Received";
+    const invoiceDateString = invoiceDate ? formatDateForStorage(invoiceDate) : "";
+
+    if (isInvoiceReceivedUpdate && (!invoiceId.trim() || !invoiceDateString)) {
+      setInvoiceValidationError("Invoice ID and invoice date are required.");
+      return;
+    }
+
     // 2. SPECIAL CASE: Not Placed → comment only
     if (!pendingStatusAfterComment && newStatus === "Not Placed") {
       setPendingStatusAfterComment("Not Placed");
@@ -159,7 +171,12 @@ function RouteComponent() {
           Authorization: `Bearer ${localStorage.getItem(`token`)}`,
           "X-Required-Permission": "orderRec.workflow"
         },
-        body: JSON.stringify({ status: newStatus }),
+        body: JSON.stringify({
+          status: newStatus,
+          ...(isInvoiceReceivedUpdate
+            ? { invoiceId: invoiceId.trim(), invoiceDate: invoiceDateString }
+            : {}),
+        }),
       });
 
       if (res.status === 403) {
@@ -187,6 +204,9 @@ function RouteComponent() {
       }
 
       setUpdateStatusOrderId(null);
+      setInvoiceId("");
+      setInvoiceDate(undefined);
+      setInvoiceValidationError("");
 
       // 3. Reset pendingStatusAfterComment if it was "Not Placed"
       if (pendingStatusAfterComment === "Not Placed") {
@@ -197,6 +217,13 @@ function RouteComponent() {
     } catch (err) {
       console.error("Error updating status:", err);
     }
+  };
+
+  const formatDateForStorage = (date: Date) => {
+    const year = date.getFullYear();
+    const month = String(date.getMonth() + 1).padStart(2, "0");
+    const day = String(date.getDate()).padStart(2, "0");
+    return `${year}-${month}-${day}`;
   };
 
 
@@ -744,6 +771,9 @@ function RouteComponent() {
                                     onUpdateStatus={() => {
                                       setUpdateStatusOrderId(rec._id);
                                       setNewStatus(rec.currentStatus);
+                                      setInvoiceId(rec.invoiceId || "");
+                                      setInvoiceDate(rec.invoiceDate ? new Date(`${rec.invoiceDate}T00:00:00`) : undefined);
+                                      setInvoiceValidationError("");
                                     }}
                                     lastPlacedOrder={vendorMeta?.lastPlacedOrder || undefined}
                                     leadTime={vendorMeta?.leadTime}
@@ -910,7 +940,13 @@ function RouteComponent() {
       </Dialog>
 
       {/* Status Update Dialog */}
-      <Dialog open={!!updateStatusOrderId} onOpenChange={() => setUpdateStatusOrderId(null)}>
+      <Dialog
+        open={!!updateStatusOrderId}
+        onOpenChange={() => {
+          setUpdateStatusOrderId(null);
+          setInvoiceValidationError("");
+        }}
+      >
         <DialogContent className="w-[350px] max-w-full">
           <DialogHeader>
             <DialogTitle>Update Status</DialogTitle>
@@ -928,7 +964,10 @@ function RouteComponent() {
 
             <Select
               value={newStatus}
-              onValueChange={setNewStatus}
+              onValueChange={(value) => {
+                setNewStatus(value);
+                setInvoiceValidationError("");
+              }}
               disabled={allowedStatuses.length === 0} // disable if no status can be selected
             >
               <SelectTrigger className="w-full">
@@ -942,10 +981,34 @@ function RouteComponent() {
                 ))}
               </SelectContent>
             </Select>
+
+            {newStatus === "Invoice Received" && (
+              <div className="flex flex-col gap-3 rounded-md border border-gray-200 p-3">
+                <div className="text-sm font-medium text-gray-700">Invoice Details</div>
+                <Input
+                  value={invoiceId}
+                  onChange={(e) => {
+                    setInvoiceId(e.target.value);
+                    setInvoiceValidationError("");
+                  }}
+                  placeholder="Invoice ID"
+                />
+                <DatePicker date={invoiceDate} setDate={setInvoiceDate} />
+                {invoiceValidationError && (
+                  <div className="text-sm text-red-600">{invoiceValidationError}</div>
+                )}
+              </div>
+            )}
           </div>
 
           <DialogFooter>
-            <Button variant="outline" onClick={() => setUpdateStatusOrderId(null)}>
+            <Button
+              variant="outline"
+              onClick={() => {
+                setUpdateStatusOrderId(null);
+                setInvoiceValidationError("");
+              }}
+            >
               Cancel
             </Button>
 
@@ -956,7 +1019,10 @@ function RouteComponent() {
                 }
                 await handleUpdateStatus(); // handle everything in the same function
               }}
-              disabled={allowedStatuses.length === 0} // disable button if no status allowed
+              disabled={
+                allowedStatuses.length === 0 ||
+                (newStatus === "Invoice Received" && (!invoiceId.trim() || !invoiceDate))
+              } // disable button if no status allowed
             >
               Update
             </Button>

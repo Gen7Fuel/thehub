@@ -36,6 +36,7 @@ async function buildDashboardData(csoCode, siteName) {
   const fuelStart = new Date(end); fuelStart.setDate(fuelStart.getDate() - 60);
   const transStart = new Date(end); transStart.setDate(transStart.getDate() - 14);
   const shiftStart = new Date(end); shiftStart.setDate(shiftStart.getDate() - 7);
+  const timesheetStart = new Date(end); timesheetStart.setDate(timesheetStart.getDate() - 59); // <--- Added
 
   const dates = {
     salesStart: fmt(salesStart),
@@ -46,6 +47,8 @@ async function buildDashboardData(csoCode, siteName) {
     transEnd: fmt(end),
     shiftStart: fmt(shiftStart),
     shiftEnd: fmt(end),
+    timesheetStart: fmt(timesheetStart), // <--- Included
+    timesheetEnd: fmt(end),              // <--- Included
   };
 
   const startDate = new Date(dates.shiftStart);

@@ -49,6 +49,12 @@ const payableSchema = new mongoose.Schema({
   date: {
     type: String, // "yyyy-mm-dd"
   },
+  // Draft AP bill created in Sage Intacct from this payable (Desk's
+  // "Create Intacct Entry"). Set once; its presence blocks creating another.
+  sageBill: {
+    key: { type: String },
+    createdAt: { type: Date },
+  },
 }, {
   timestamps: true // Adds createdAt and updatedAt fields automatically
 });

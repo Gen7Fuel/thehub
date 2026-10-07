@@ -7,6 +7,8 @@ const Transactions = require('../models/Transactions')
 const LotteryModule = require('../models/Lottery')
 const Lottery = LotteryModule?.Lottery || LotteryModule?.default || LotteryModule
 const Location = require('../models/Location')
+const sageService = require('../services/sageService')
+const { SITE_BANK_ACCOUNTS } = require('../constants/sageBankAccounts')
 
 const TIMEZONE = 'America/Toronto'
 
@@ -354,6 +356,65 @@ router.post('/bank-statement', express.json({ limit: '1mb' }), async (req, res) 
   }
 })
 
+// A claim older than this is treated as abandoned (e.g. the server died mid-call).
+const SAGE_CLAIM_TTL_MS = 2 * 60 * 1000
+
+/**
+ * Creates the Intacct bill + draft payment for a merchant fee, once per bank
+ * statement. Never throws: the fee is already saved, so any Intacct problem is
+ * reported back as { status: 'error', message } and retried on the next edit.
+ */
+async function recordMerchantFeeInIntacct({ site, date, nextDate, merchantFees, saved }) {
+  const existing = saved.sageMerchantFee || {}
+  if (existing.paymentKey) return { status: 'already-recorded' } // edits never change Intacct
+
+  const bankAccountId = SITE_BANK_ACCOUNTS[site]
+  if (!bankAccountId) return { status: 'skipped', message: `No Sage bank account configured for ${site}.` }
+  if (!(merchantFees > 0)) return { status: 'skipped', message: 'Merchant fees must be greater than 0 to record in Intacct.' }
+
+  // Claim atomically so the Enter + blur double-save (or two tabs) can't create two entries.
+  const claim = await BankStatement.updateOne(
+    {
+      site,
+      date: nextDate,
+      'sageMerchantFee.paymentKey': { $exists: false },
+      $or: [
+        { 'sageMerchantFee.claimedAt': { $exists: false } },
+        { 'sageMerchantFee.claimedAt': { $lt: new Date(Date.now() - SAGE_CLAIM_TTL_MS) } },
+      ],
+    },
+    { $set: { 'sageMerchantFee.claimedAt': new Date() } }
+  )
+  if (claim.modifiedCount === 0) return { status: 'skipped', message: 'Intacct entry already created or in progress.' }
+
+  try {
+    const loc = await Location.findOne({ $or: [{ site }, { stationName: site }] }).lean()
+    if (!loc?.sageEntityKey) throw new Error(`No Sage entity key configured for ${site}.`)
+
+    const token = await sageService.getSageToken()
+    const entityId = await sageService.resolveEntityId(token, loc.sageEntityKey)
+
+    // Resume after a half-finished earlier attempt: reuse the bill and its amount.
+    let billKey = existing.billKey
+    let amount = existing.billAmount
+    if (!billKey) {
+      amount = merchantFees
+      billKey = await sageService.createBill(token, entityId, { site, date, amount })
+      await BankStatement.updateOne(
+        { site, date: nextDate },
+        { $set: { 'sageMerchantFee.billKey': billKey, 'sageMerchantFee.billAmount': amount } }
+      )
+    }
+    const paymentKey = await sageService.createPayment(token, entityId, { site, date, amount, bankAccountId, billKey })
+    await BankStatement.updateOne({ site, date: nextDate }, { $set: { 'sageMerchantFee.paymentKey': paymentKey } })
+    return { status: 'created', billKey, paymentKey }
+  } catch (e) {
+    console.error('cashRecRoutes.merchant-fee-intacct error:', e)
+    await BankStatement.updateOne({ site, date: nextDate }, { $unset: { 'sageMerchantFee.claimedAt': '' } })
+    return { status: 'error', message: e.message }
+  }
+}
+
 router.patch('/bank-statement/merchant-fees', express.json(), async (req, res) => {
   try {
     const { site, date, merchantFees } = req.body || {}
@@ -367,7 +428,8 @@ router.patch('/bank-statement/merchant-fees', express.json(), async (req, res) =
       { $set: { merchantFees } },
       { new: true, upsert: true, setDefaultsOnInsert: true }
     ).lean()
-    return res.json({ saved: true, statement: saved })
+    const intacct = await recordMerchantFeeInIntacct({ site, date, nextDate, merchantFees, saved })
+    return res.json({ saved: true, statement: saved, intacct })
   } catch (e) {
     console.error('cashRecRoutes.update-merchant-fees error:', e)
     res.status(500).json({ error: 'Failed to update merchant fees' })

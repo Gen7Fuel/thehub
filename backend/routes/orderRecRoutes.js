@@ -894,8 +894,14 @@ const STATUS_HIERARCHY = ["Created", "Completed", "Not Placed", "Placed", "Deliv
 router.put('/:id/status', async (req, res) => {
   try {
     const { status } = req.body;
+    const invoiceId = typeof req.body.invoiceId === 'string' ? req.body.invoiceId.trim() : '';
+    const invoiceDate = typeof req.body.invoiceDate === 'string' ? req.body.invoiceDate.trim() : '';
     const orderRec = await OrderRec.findById(req.params.id);
     if (!orderRec) return res.status(404).json({ message: 'Not found' });
+
+    if (status === "Invoice Received" && (!invoiceId || !invoiceDate)) {
+      return res.status(400).json({ message: 'Invoice ID and invoice date are required.' });
+    }
 
     const currentStatus = orderRec.currentStatus || "Created";
     const currentIndex = STATUS_HIERARCHY.indexOf(currentStatus);
@@ -928,6 +934,11 @@ router.put('/:id/status', async (req, res) => {
         { _id: orderRec.vendor, location: orderRec.site },
         { lastPlacedOrder: new Date() }
       );
+    }
+
+    if (status === "Invoice Received") {
+      orderRec.invoiceId = invoiceId;
+      orderRec.invoiceDate = invoiceDate;
     }
 
     await orderRec.save();
