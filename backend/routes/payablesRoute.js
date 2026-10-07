@@ -83,6 +83,27 @@ router.put('/vendor-tags', async (req, res) => {
   }
 });
 
+// PUT the Intacct bill key created for a payable. Only the first call wins, so
+// a payable can't be linked to two Intacct entries.
+router.put('/:id/sage-bill', async (req, res) => {
+  try {
+    const key = typeof req.body?.key === 'string' ? req.body.key.trim() : '';
+    if (!key) return res.status(400).json({ error: 'key is required' });
+    const payable = await Payable.findOneAndUpdate(
+      { _id: req.params.id, 'sageBill.key': { $exists: false } },
+      { $set: { sageBill: { key, createdAt: new Date() } } },
+      { new: true }
+    ).lean();
+    if (!payable) {
+      const exists = await Payable.exists({ _id: req.params.id });
+      return res.status(exists ? 409 : 404).json({ error: exists ? 'An Intacct entry is already linked to this payable' : 'Payable not found' });
+    }
+    res.json({ sageBill: payable.sageBill });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
 // GET single payable by ID
 router.get('/:id', async (req, res) => {
   try {
