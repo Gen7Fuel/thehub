@@ -918,7 +918,19 @@ const frozenGradeBgStyles: Record<string, string> = {
 const VIRTUAL_ROW_HEIGHT = 58
 const VIRTUAL_OVERSCAN = 12
 
-const formatDateValue = (value: string | null) => value ? new Date(value).toLocaleDateString() : '-'
+const DATE_MONTH_LABELS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"]
+
+const formatDateValue = (value: string | null) => {
+  if (!value) return '-'
+
+  const match = String(value).match(/^(\d{4})-(\d{2})-(\d{2})/)
+  if (!match) return value
+
+  const [, year, month, day] = match
+  const monthLabel = DATE_MONTH_LABELS[Number(month) - 1]
+
+  return monthLabel ? `${day}-${monthLabel}-${year}` : value
+}
 
 const formatFilterValue = (item: ItemBkRow, column: FilterKey) => {
   const rawVal = item[column]
