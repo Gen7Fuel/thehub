@@ -723,8 +723,8 @@ function RouteComponent() {
 
       {/* 3. Link Fuel PO Dialog */}
       <Dialog open={!!activeLinkEntry} onOpenChange={() => setActiveLinkEntry(null)}>
-        <DialogContent className="w-[100vw] h-[100vh] max-w-none max-h-none p-0 sm:rounded-none overflow-hidden">
-          <div className="grid h-full grid-cols-1 lg:grid-cols-[minmax(0,1.25fr)_minmax(420px,0.75fr)] bg-white">
+        <DialogContent className="!w-[calc(100vw-2rem)] !max-w-[1500px] !h-[calc(100vh-2rem)] !max-h-[calc(100vh-2rem)] p-0 overflow-hidden">
+          <div className="grid h-full min-h-0 grid-cols-1 lg:grid-cols-[minmax(0,1fr)_minmax(360px,440px)] xl:grid-cols-[minmax(0,1.25fr)_minmax(420px,520px)] bg-white">
             <section className="min-h-0 border-r bg-slate-100 flex flex-col">
               <div className="shrink-0 border-b bg-white px-5 py-4">
                 <DialogHeader>
@@ -736,15 +736,17 @@ function RouteComponent() {
               </div>
 
               <div className="min-h-0 flex-1 p-4">
-                <div className="h-full rounded-lg border bg-white overflow-hidden flex items-center justify-center">
+                <div className="h-full rounded-lg border bg-white overflow-auto">
                   {activeBolImageUrl ? (
-                    <img
-                      src={activeBolImageUrl}
-                      alt={`BOL ${activeLinkEntry?.bolNumber || activeLinkEntry?.date} preview`}
-                      className="max-h-full max-w-full object-contain"
-                    />
+                    <div className="min-h-full min-w-full flex items-start justify-center p-4">
+                      <img
+                        src={activeBolImageUrl}
+                        alt={`BOL ${activeLinkEntry?.bolNumber || activeLinkEntry?.date} preview`}
+                        className="w-[145%] min-w-[900px] max-w-none h-auto object-contain"
+                      />
+                    </div>
                   ) : (
-                    <div className="text-sm text-slate-400">BOL preview unavailable.</div>
+                    <div className="h-full flex items-center justify-center text-sm text-slate-400">BOL preview unavailable.</div>
                   )}
                 </div>
               </div>
@@ -756,7 +758,7 @@ function RouteComponent() {
               </div>
             </section>
 
-            <section className="min-h-0 flex flex-col">
+            <section className="min-h-0 flex flex-col overflow-hidden">
               <div className="shrink-0 border-b px-5 py-4">
                 <div className="text-sm font-semibold text-slate-900">
                   {activeLinkEntry?.poLinked || linkedOrder ? 'Linked PO Details' : 'Select Fuel PO'}

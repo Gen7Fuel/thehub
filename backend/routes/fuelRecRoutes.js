@@ -75,7 +75,26 @@ function buildRetainComment(retainItems) {
     .map((item) => `${item.grade}: ${item.ltrs.toLocaleString('en-US')} L`)
 
   if (!lines.length) return ''
-  return `Fuel retained during BOL link:\n${lines.join('\n')}`
+  return `Fuel retained:\n${lines.join('\n')}`
+}
+
+function parseRetainComment(text) {
+  const commentText = String(text || '')
+  if (!commentText.startsWith('Fuel retained:')) return null
+
+  const retainedItems = []
+  for (const line of commentText.split('\n').slice(1)) {
+    const match = line.trim().match(/^(.+):\s*([\d,]+(?:\.\d+)?)\s*L$/)
+    if (!match) continue
+
+    const grade = match[1].trim()
+    const ltrs = Number(match[2].replace(/,/g, ''))
+    if (grade && Number.isFinite(ltrs) && ltrs > 0) {
+      retainedItems.push({ grade, ltrs })
+    }
+  }
+
+  return retainedItems.length ? retainedItems : null
 }
 
 async function findLocationForBolSite(site) {
@@ -519,18 +538,36 @@ router.post('/:id/unlink-po', async (req, res) => {
 
     let order = null
     if (bol.poNumber) {
-      order = await FuelOrder.findOneAndUpdate(
-        {
-          station: location._id,
-          poNumber: bol.poNumber,
-          bolNumber: bol.bolNumber,
-        },
-        {
-          $set: { bolLinked: false },
-          $unset: { bolNumber: '' },
-        },
-        { new: true }
-      ).lean()
+      order = await FuelOrder.findOne({
+        station: location._id,
+        poNumber: bol.poNumber,
+        bolNumber: bol.bolNumber,
+      })
+
+      if (order) {
+        const comments = Array.isArray(order.comments) ? order.comments : []
+        const retainCommentIndex = comments
+          .map((comment, index) => ({ comment, index, retainedItems: parseRetainComment(comment.text) }))
+          .filter((entry) => entry.retainedItems)
+          .pop()
+
+        if (retainCommentIndex) {
+          for (const retainedItem of retainCommentIndex.retainedItems) {
+            const orderItem = order.items.find((item) => item.grade === retainedItem.grade)
+            if (orderItem) {
+              orderItem.ltrs = Number(orderItem.ltrs || 0) + retainedItem.ltrs
+            } else {
+              order.items.push({ grade: retainedItem.grade, ltrs: retainedItem.ltrs })
+            }
+          }
+          order.comments.splice(retainCommentIndex.index, 1)
+        }
+
+        order.bolLinked = false
+        order.bolNumber = undefined
+        await order.save()
+        order = order.toObject()
+      }
     }
 
     const updatedBol = await BOLPhoto.findByIdAndUpdate(
