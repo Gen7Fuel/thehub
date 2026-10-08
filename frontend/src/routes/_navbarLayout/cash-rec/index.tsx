@@ -1,9 +1,11 @@
 import * as React from 'react'
 import { createFileRoute, useLoaderData, useNavigate, useSearch } from '@tanstack/react-router'
 import { useSite } from '@/context/SiteContext'
+import { useAuth } from '@/context/AuthContext'
 import { format } from 'date-fns'
 import { SitePicker } from '@/components/custom/sitePicker'
 import { DatePicker } from '@/components/custom/datePicker'
+import { buildOtherReceiptLines, otherReceiptTotal } from '@/lib/cashRecOtherReceipt'
 import '@/styles/typewriter.css'
 
 type Search = { site: string; date: string }
@@ -215,6 +217,9 @@ function RouteComponent() {
   const navigate = useNavigate({ from: Route.fullPath })
   const search = useSearch({ from: Route.id }) as Search
   const { selectedSite } = useSite()
+  const { user } = useAuth()
+  // Creating the Intacct entry needs its own permission (also enforced by the server).
+  const canCreateIntacctEntry = !!user?.access?.accounting?.cashRecIntacctEntry
 
   React.useEffect(() => {
     if (!search.site && selectedSite) navigate({ search: { ...search, site: selectedSite } })
@@ -225,6 +230,21 @@ function RouteComponent() {
   const [merchantFeesSaved, setMerchantFeesSaved] = React.useState<number | null>(null)
   const [merchantFeesNote, setMerchantFeesNote] = React.useState<{ kind: 'ok' | 'info' | 'error'; text: string } | null>(null)
   const savingFeesRef = React.useRef(false)
+
+  // The Intacct Other Receipt for this site + day: its key once created.
+  const [otherReceipt, setOtherReceipt] = React.useState<{ key: string | null; busy: boolean; error?: string }>({ key: null, busy: false })
+  React.useEffect(() => {
+    setOtherReceipt({ key: null, busy: false })
+    if (!site || !date) return
+    let stale = false
+    fetch(`/api/cash-rec/other-receipt?site=${encodeURIComponent(site)}&date=${encodeURIComponent(date)}`, {
+      headers: { Authorization: `Bearer ${localStorage.getItem('token') || ''}` },
+    })
+      .then((r) => (r.ok ? r.json() : null))
+      .then((b) => { if (!stale && b?.key) setOtherReceipt({ key: String(b.key), busy: false }) })
+      .catch(() => { /* offline: the button just stays available */ })
+    return () => { stale = true }
+  }, [site, date])
   // A saved value / Intacct note belongs to one site + day; don't carry it to another.
   React.useEffect(() => {
     setMerchantFeesSaved(null)
@@ -373,6 +393,57 @@ function RouteComponent() {
               ? bankRec
               : totalDollarSales - cashSafeDeposited + tillOverShort - gcRedemption - loyalty - unsettledPrepays + bankRec - arTotal - payTotal + miscCreditDescTotal
 
+            // Lines of the Intacct Other Receipt, from the figures shown above.
+            const otherReceiptLines = buildOtherReceiptLines({
+              gblMonerisFuelSales,
+              canadianCash,
+              kardpollSales,
+              storeSales,
+              lotterySales,
+              lotteryPayouts,
+              cashSafeDeposited,
+              tillOverShort,
+              gcRedemption,
+              loyalty,
+              unsettledPrepays: unsettledPrepays === 0 ? 0 : -unsettledPrepays,
+              bankRec,
+            })
+
+            const createOtherReceipt = async () => {
+              if (otherReceiptLines.length === 0) {
+                setOtherReceipt({ key: null, busy: false, error: 'Every line is zero, so there is nothing to enter in Intacct.' })
+                return
+              }
+              const ok = window.confirm(
+                `Create the Intacct Other Receipt for ${site} on ${date}?\n\n` +
+                `${otherReceiptLines.length} lines, total $${fmt2(otherReceiptTotal(otherReceiptLines))}.\n` +
+                'Other Receipts have no draft state, so it posts immediately. It can only be created once per site and day.\n' +
+                'A Bank Rec line is left out for sites without bank statement access.',
+              )
+              if (!ok) return
+              setOtherReceipt({ key: null, busy: true })
+              try {
+                const resp = await fetch('/api/cash-rec/other-receipt', {
+                  method: 'POST',
+                  headers: {
+                    'Content-Type': 'application/json',
+                    Authorization: `Bearer ${localStorage.getItem('token') || ''}`,
+                  },
+                  body: JSON.stringify({ site, date, lines: otherReceiptLines.map(({ key, glAccount, amount, memo }) => ({ key, glAccount, amount, memo })) }),
+                })
+                const body = await resp.json().catch(() => null)
+                if (resp.ok && body?.key) {
+                  setOtherReceipt({ key: String(body.key), busy: false })
+                } else if (resp.status === 409 && body?.key) {
+                  setOtherReceipt({ key: String(body.key), busy: false })
+                } else {
+                  setOtherReceipt({ key: null, busy: false, error: body?.error || `Failed (HTTP ${resp.status})` })
+                }
+              } catch (e) {
+                setOtherReceipt({ key: null, busy: false, error: e instanceof Error ? e.message : 'Failed to reach the server' })
+              }
+            }
+
             return (
               <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 typewriter-font">
                 <div className="rounded-xl border border-gray-200 shadow-sm overflow-hidden">
@@ -463,6 +534,22 @@ function RouteComponent() {
                       </tr>
                     </tbody>
                   </table>
+                </div>
+
+                <div className="lg:col-span-2 flex flex-wrap items-center gap-4">
+                  {otherReceipt.key ? (
+                    <span className="text-sm text-green-700">Intacct Other Receipt created (#{otherReceipt.key}).</span>
+                  ) : canCreateIntacctEntry && (
+                    <button
+                      type="button"
+                      disabled={otherReceipt.busy}
+                      onClick={() => void createOtherReceipt()}
+                      className="rounded-md bg-black px-4 py-2 text-sm font-medium text-white hover:bg-gray-800 disabled:opacity-50"
+                    >
+                      {otherReceipt.busy ? 'Creating…' : 'Create Intacct Entry'}
+                    </button>
+                  )}
+                  {otherReceipt.error && <span className="text-sm text-red-600">{otherReceipt.error}</span>}
                 </div>
               </div>
             )
