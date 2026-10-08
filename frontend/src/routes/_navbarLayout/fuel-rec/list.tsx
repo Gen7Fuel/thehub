@@ -7,7 +7,7 @@ import { DatePickerWithRange } from '@/components/custom/datePickerWithRange'
 import { pdf, Document, Page, Image as PdfImage, StyleSheet } from '@react-pdf/renderer'
 import { Button } from '@/components/ui/button'
 import { useAuth } from '@/context/AuthContext'
-import { ClipboardCheck, Trash2, MessageSquareText, RefreshCcw, ExternalLink, Link2 } from 'lucide-react'
+import { ClipboardCheck, Trash2, MessageSquareText, RefreshCcw, ExternalLink, Link2, ZoomIn, ZoomOut } from 'lucide-react'
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { toast } from 'sonner'
 
@@ -177,6 +177,7 @@ function RouteComponent() {
   const [reviewItems, setReviewItems] = React.useState<FuelOrderItem[]>([])
   const [retainItems, setRetainItems] = React.useState<FuelOrderItem[]>([])
   const [retainMode, setRetainMode] = React.useState(false)
+  const [bolZoom, setBolZoom] = React.useState(145)
 
   const requestAgain = async (e: BOLPhoto) => {
     try {
@@ -351,6 +352,7 @@ function RouteComponent() {
     setLinkRange(null)
     setLinkedOrder(null)
     setLinkDaysBack(2)
+    setBolZoom(145)
     try {
       await loadLinkableOrders(e, 2)
     } catch (err) {
@@ -484,6 +486,8 @@ function RouteComponent() {
   }
 
   const activeBolImageUrl = activeLinkEntry ? `/cdn/download/${activeLinkEntry.filename}` : ''
+  const zoomOutBol = () => setBolZoom((prev) => Math.max(75, prev - 25))
+  const zoomInBol = () => setBolZoom((prev) => Math.min(250, prev + 25))
 
   const handleCommentSave = async () => {
     if (!commentText.trim() || !activeCommentEntry) return
@@ -742,7 +746,8 @@ function RouteComponent() {
                       <img
                         src={activeBolImageUrl}
                         alt={`BOL ${activeLinkEntry?.bolNumber || activeLinkEntry?.date} preview`}
-                        className="w-[145%] min-w-[900px] max-w-none h-auto object-contain"
+                        className="max-w-none h-auto object-contain"
+                        style={{ width: `${bolZoom}%` }}
                       />
                     </div>
                   ) : (
@@ -751,7 +756,16 @@ function RouteComponent() {
                 </div>
               </div>
 
-              <div className="shrink-0 border-t bg-white px-4 py-3 flex justify-end">
+              <div className="shrink-0 border-t bg-white px-4 py-3 flex flex-wrap items-center justify-end gap-2">
+                <Button variant="outline" size="sm" onClick={zoomOutBol} disabled={!activeBolImageUrl || bolZoom <= 75}>
+                  <ZoomOut className="h-4 w-4 mr-2" /> Zoom Out
+                </Button>
+                <div className="h-9 min-w-16 px-3 rounded-md border bg-slate-50 text-xs font-semibold text-slate-600 flex items-center justify-center">
+                  {bolZoom}%
+                </div>
+                <Button variant="outline" size="sm" onClick={zoomInBol} disabled={!activeBolImageUrl || bolZoom >= 250}>
+                  <ZoomIn className="h-4 w-4 mr-2" /> Zoom In
+                </Button>
                 <Button variant="outline" onClick={() => window.open(activeBolImageUrl, '_blank')} disabled={!activeBolImageUrl}>
                   <ExternalLink className="h-4 w-4 mr-2" /> Open Image
                 </Button>
