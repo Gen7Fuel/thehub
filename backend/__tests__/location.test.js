@@ -37,3 +37,19 @@ describe('Location schema — registers field', () => {
     expect(err?.errors['registers.0.number']).toBeDefined()
   })
 })
+
+// ─── Bank statement access ────────────────────────────────────────────────────
+
+describe('Location schema — bankStmtAccess field', () => {
+  it('defaults to true for a new site', () => {
+    const loc = new Location(base())
+    expect(loc.validateSync()).toBeUndefined()
+    expect(loc.bankStmtAccess).toBe(true)
+  })
+
+  it('accepts an explicit false', () => {
+    const loc = new Location(base({ bankStmtAccess: false }))
+    expect(loc.validateSync()).toBeUndefined()
+    expect(loc.bankStmtAccess).toBe(false)
+  })
+})

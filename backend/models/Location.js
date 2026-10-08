@@ -51,6 +51,9 @@ const locationSchema = new mongoose.Schema({
   // location dropdown (https://live.gvmunifi.com/pricing) — GVM's dropdown
   // doesn't expose a separate stable ID the way GasBuddy's stationId does.
   gvmLocationName: { type: String, required: false },
+  // Whether this site has access to bank statements. True for every site except
+  // those switched off (see manual/backfill-bank-stmt-access.js for the initial set).
+  bankStmtAccess: { type: Boolean, default: true },
   // Key of this site's entity in Sage Intacct (company-config/entity). Already
   // set on existing documents and read by Desk via /api/locations.
   sageEntityKey: { type: String, required: false },
