@@ -81,6 +81,9 @@ const BankStatementSchema = new mongoose.Schema(
       billKey: { type: String },
       billAmount: { type: Number },
       paymentKey: { type: String },
+      // True between creating the payment and submitting it. Records written
+      // before payments were auto-submitted never have it, so they count as done.
+      submitPending: { type: Boolean },
     },
     gblCreditsFiltered: { type: Number },
     ontarioIntegratedTax: { type: Number },

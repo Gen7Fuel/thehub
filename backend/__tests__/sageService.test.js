@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'vitest'
+import { describe, it, expect, vi, afterEach } from 'vitest'
 import sageService from '../services/sageService.js'
 import bankAccounts from '../constants/sageBankAccounts.js'
 import CashRecModule from '../models/CashRec.js'
@@ -83,5 +83,36 @@ describe('BankStatement.sageMerchantFee', () => {
     const doc = new BankStatement({ site: 'Rankin', date: '2026-03-15' })
     expect(doc.sageMerchantFee?.paymentKey).toBeUndefined()
     expect(doc.sageMerchantFee?.billKey).toBeUndefined()
+  })
+})
+
+describe('submitPayment', () => {
+  const { submitPayment } = sageService
+
+  afterEach(() => vi.unstubAllGlobals())
+
+  it('posts the payment key to the submit workflow under the site entity', async () => {
+    const fetchMock = vi.fn().mockResolvedValue({ ok: true, status: 200, json: async () => ({ key: '135614', state: 'submitted' }) })
+    vi.stubGlobal('fetch', fetchMock)
+
+    await submitPayment('tok', 'G160', 135614)
+
+    const [url, init] = fetchMock.mock.calls[0]
+    expect(url).toBe('https://api.intacct.com/ia/api/v1/workflows/accounts-payable/payment/submit')
+    expect(init.method).toBe('POST')
+    expect(init.headers['X-IA-API-Param-Entity']).toBe('G160')
+    expect(JSON.parse(init.body)).toEqual({ key: '135614' })
+  })
+
+  it('throws with Sage’s message when the submit is rejected', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue({
+        ok: false,
+        status: 400,
+        json: async () => ({ 'ia::result': { 'ia::error': { message: 'Payload contains errors' } } }),
+      }),
+    )
+    await expect(submitPayment('tok', 'G160', '1')).rejects.toThrow(/Sage 400: Payload contains errors/)
   })
 })

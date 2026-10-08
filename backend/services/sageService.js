@@ -3,7 +3,7 @@
  *
  * Intacct's REST API has no "manual payment" object, so a merchant fee is
  * recorded as the two documents the UI's Manual Payment creates behind the
- * scenes: a submitted (posted) AP bill (supplier Global Payments, GL 52500) and a draft
+ * scenes: a submitted (posted) AP bill (supplier Global Payments, GL 52500) and a paid
  * AP payment (Record transfer / EFT from the site's bank account) applied to it.
  */
 const SAGE_BASE = 'https://api.intacct.com/ia/api/v1/'
@@ -70,7 +70,7 @@ function buildPaymentPayload({ site, date, amount, bankAccountId, billKey }) {
     paymentMethod: PAYMENT_METHOD,
     paymentDate: date,
     description: MERCHANT_FEE_MEMO,
-    // Saved as a draft payment for review in Intacct rather than submitted.
+    // Created as a draft, then submitted (see submitPayment) so it posts at once.
     action: 'draft',
     details: [
       {
@@ -154,6 +154,18 @@ async function createPayment(token, entityId, args) {
   return String(key)
 }
 
+/**
+ * Submits a draft payment so it posts: the payment becomes confirmed and its
+ * bill paid. Intacct won't change a payment's state by PATCH (or by an action
+ * field), so state changes go through the submit workflow.
+ */
+async function submitPayment(token, entityId, paymentKey) {
+  await sageRequest(token, 'POST', 'workflows/accounts-payable/payment/submit', {
+    entityId,
+    body: { key: String(paymentKey) },
+  })
+}
+
 module.exports = {
   buildInvoiceNumber,
   buildBillPayload,
@@ -162,4 +174,5 @@ module.exports = {
   resolveEntityId,
   createBill,
   createPayment,
+  submitPayment,
 }
