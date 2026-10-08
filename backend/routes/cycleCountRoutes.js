@@ -2859,36 +2859,9 @@ router.get('/current-inventory', async (req, res) => {
 
     const limitNum = limit ? parseInt(limit, 10) : null;
 
-    // 1️⃣ Get inventory from SQL
-    const inventory = await getCurrentInventory(site, limitNum); // inventory is array of objects with UPC
+    const inventory = await getCurrentInventory(site, limitNum);
 
-    // 2️⃣ Extract all UPCs from SQL inventory
-    const upcs = inventory.map(item => item.UPC);
-
-    // 3️⃣ Query MongoDB for cycle-counts matching these UPCs + site
-    // Assuming you have a Mongo collection called "CycleCount"
-    const cycleCounts = await CycleCount.find({
-      site,
-      upc_barcode: { $in: upcs }
-    }).select({ upc_barcode: 1, updatedAt: 1, foh: 1, boh: 1 }).lean();
-
-    // 4️⃣ Create a map for fast lookup
-    const cycleMap = new Map();
-    cycleCounts.forEach(c => {
-      cycleMap.set(c.upc_barcode, { updatedAt: c.updatedAt, foh: c.foh || 0, boh: c.boh || 0 });
-    });
-
-    // 5️⃣ Merge updatedAt and cycleCount into inventory
-    const enrichedInventory = inventory.map(item => {
-      const cycle = cycleMap.get(item.UPC);
-      return {
-        ...item,
-        updatedAt: cycle?.updatedAt || null,
-        cycleCount: cycle ? (cycle.foh + cycle.boh) : null
-      };
-    });
-
-    res.json({ site, inventory: enrichedInventory });
+    res.json({ site, inventory });
 
   } catch (err) {
     console.error(err);
