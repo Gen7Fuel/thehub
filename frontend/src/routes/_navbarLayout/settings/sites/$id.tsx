@@ -108,6 +108,7 @@ interface LocationForm {
   timezone: string;
   email: string;
   sellsLottery?: boolean;
+  bankStmtAccess?: boolean;
   managerEmails: string[];
   province: string;
   gasBuddyStationId?: string;
@@ -161,6 +162,7 @@ function RouteComponent() {
     timezone: "",
     email: "",
     sellsLottery: false,
+    bankStmtAccess: true,
     managerEmails: [],
     province: "",
     gasBuddyStationId: "",
@@ -241,6 +243,8 @@ function RouteComponent() {
         email: location.email || "",
         timezone: location.timezone || timezones[0],
         sellsLottery: !!location.sellsLottery,
+        // Unset (a site not yet backfilled) counts as on, like the schema default.
+        bankStmtAccess: location.bankStmtAccess !== false,
         managerEmails: location.managerEmails || [],
         province: location.province || "Ontario",
         gasBuddyStationId: location.gasBuddyStationId || "",
@@ -268,6 +272,7 @@ function RouteComponent() {
           ...formData,
           managerCode: otp,
           sellsLottery: !!formData.sellsLottery,
+          bankStmtAccess: formData.bankStmtAccess !== false,
         },
         {
           headers: { Authorization: `Bearer ${localStorage.getItem("token")}` },
@@ -597,6 +602,28 @@ function RouteComponent() {
                 >
                   <span
                     className={`inline-block w-3 h-3 bg-white rounded-full transform transition-transform duration-150 ${formData.sellsLottery ? "translate-x-5" : "translate-x-1"}`}
+                  />
+                </button>
+              </div>
+
+              {/* Bank Statement Access Toggle Group */}
+              <div className="flex items-center gap-2 bg-slate-50 border px-3 py-1.5 rounded-lg text-sm">
+                <span className="text-muted-foreground font-medium">
+                  Bank Statement Access
+                </span>
+                <button
+                  type="button"
+                  aria-pressed={formData.bankStmtAccess !== false}
+                  onClick={() =>
+                    setFormData({
+                      ...formData,
+                      bankStmtAccess: formData.bankStmtAccess === false,
+                    })
+                  }
+                  className={`relative inline-flex items-center h-5 rounded-full w-10 transition-colors duration-150 ${formData.bankStmtAccess !== false ? "bg-green-500" : "bg-gray-300"}`}
+                >
+                  <span
+                    className={`inline-block w-3 h-3 bg-white rounded-full transform transition-transform duration-150 ${formData.bankStmtAccess !== false ? "translate-x-5" : "translate-x-1"}`}
                   />
                 </button>
               </div>
