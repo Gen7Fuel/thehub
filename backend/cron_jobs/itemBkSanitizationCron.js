@@ -132,6 +132,14 @@ async function syncScheduledInstances(trx, newlyInsertedItems, removedItemIds, t
   }
 
   if (itemsToScheduleInsert.length > 0) {
+    await trx.raw(`
+      SELECT setval(
+        pg_get_serial_sequence('cycle_count_items', 'id'),
+        COALESCE((SELECT MAX(id) FROM cycle_count_items), 0) + 1,
+        false
+      )
+    `);
+
     // Insert in chunks with conflict resolution to prevent duplicate key errors
     const chunkSize = 1000;
     for (let i = 0; i < itemsToScheduleInsert.length; i += chunkSize) {
