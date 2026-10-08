@@ -113,7 +113,6 @@ const updateCycleCountCSO = async () => {
 
           if (Object.keys(updateFields).length > 0) {
             updateFields.sync_date = trx.fn.now();
-            updateFields.last_inv_date = yesterdayStr;
 
             await trx("item_bk")
               .where({ id: item.productId })

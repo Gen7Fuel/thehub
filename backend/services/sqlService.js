@@ -121,16 +121,29 @@ async function getCurrentInventory(site, limit = null) {
   try {
     // await sql.connect(sqlConfig);
     const pool = await getPool();
+    const request = pool.request();
+    request.input("site", sql.NVarChar, site);
+
     let query = `
-      SELECT ${limit ? `TOP ${limit}` : ''} [Item_Name]
-            ,[UPC-A (12 digits)] AS 'UPC'
-            ,[Category Name] as 'Category'
-            ,[On Hand Qty]
-      FROM [CSO].[Current_Inventory]
-      WHERE [Station] = '${site}'
+       SELECT ${limit ? `TOP ${limit}` : ''} CI.[Item_Name]
+            ,CI.[UPC-A (12 digits)] AS 'UPC'
+            ,CI.[Category Name] as 'Category'
+            ,CI.[On Hand Qty]
+            ,(
+              SELECT MAX([Last_Inv_Date]) 
+              FROM [CSO].[Inventory Balance] IB 
+              WHERE IB.[UPC] = CI.[UPC] AND IB.[Station_SK] = CI.[Station_SK]
+             ) AS last_inv_date
+            ,(
+              SELECT TOP 1 [URL] 
+              FROM [CSO].[UPC Details] UD
+              WHERE UD.[UPC] = CI.[UPC]
+            ) AS image_url
+      FROM [CSO].[Current_Inventory] CI
+      WHERE CI.[Station] = @site
     `;
 
-    const result = await pool.request().query(query);
+    const result = await request.query(query);
     // await sql.close();
     return result.recordset;
   } catch (err) {
