@@ -611,7 +611,7 @@ function RouteComponent() {
                 const body = await resp.json().catch(() => null)
                 setMerchantFeesSaved(parsed)
                 const intacct = body?.intacct
-                if (intacct?.status === 'created') setMerchantFeesNote({ kind: 'ok', text: 'Intacct: bill posted and draft payment created.' })
+                if (intacct?.status === 'created') setMerchantFeesNote({ kind: 'ok', text: 'Intacct: bill posted and payment made.' })
                 else if (intacct?.status === 'error') setMerchantFeesNote({ kind: 'error', text: `Fee saved, but Intacct failed: ${intacct.message}` })
                 else if (intacct?.status === 'skipped') setMerchantFeesNote({ kind: 'info', text: `Intacct: ${intacct.message}` })
                 else setMerchantFeesNote(null)

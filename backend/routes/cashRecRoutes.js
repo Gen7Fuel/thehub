@@ -366,7 +366,9 @@ const SAGE_CLAIM_TTL_MS = 2 * 60 * 1000
  */
 async function recordMerchantFeeInIntacct({ site, date, nextDate, merchantFees, saved }) {
   const existing = saved.sageMerchantFee || {}
-  if (existing.paymentKey) return { status: 'already-recorded' } // edits never change Intacct
+  // Done: edits never change Intacct. A payment that was created but not yet
+  // submitted (submitPending) is the one case that still needs finishing.
+  if (existing.paymentKey && !existing.submitPending) return { status: 'already-recorded' }
 
   const bankAccountId = SITE_BANK_ACCOUNTS[site]
   if (!bankAccountId) return { status: 'skipped', message: `No Sage bank account configured for ${site}.` }
@@ -377,10 +379,14 @@ async function recordMerchantFeeInIntacct({ site, date, nextDate, merchantFees, 
     {
       site,
       date: nextDate,
-      'sageMerchantFee.paymentKey': { $exists: false },
-      $or: [
-        { 'sageMerchantFee.claimedAt': { $exists: false } },
-        { 'sageMerchantFee.claimedAt': { $lt: new Date(Date.now() - SAGE_CLAIM_TTL_MS) } },
+      $and: [
+        { $or: [{ 'sageMerchantFee.paymentKey': { $exists: false } }, { 'sageMerchantFee.submitPending': true }] },
+        {
+          $or: [
+            { 'sageMerchantFee.claimedAt': { $exists: false } },
+            { 'sageMerchantFee.claimedAt': { $lt: new Date(Date.now() - SAGE_CLAIM_TTL_MS) } },
+          ],
+        },
       ],
     },
     { $set: { 'sageMerchantFee.claimedAt': new Date() } }
@@ -405,8 +411,19 @@ async function recordMerchantFeeInIntacct({ site, date, nextDate, merchantFees, 
         { $set: { 'sageMerchantFee.billKey': billKey, 'sageMerchantFee.billAmount': amount } }
       )
     }
-    const paymentKey = await sageService.createPayment(token, entityId, { site, date, amount, bankAccountId, billKey })
-    await BankStatement.updateOne({ site, date: nextDate }, { $set: { 'sageMerchantFee.paymentKey': paymentKey } })
+    // The payment is created as a draft and then submitted so it posts straight
+    // away (no review step). The key is saved first, flagged submitPending, so a
+    // failed submit is finished on the next save instead of creating a second payment.
+    let paymentKey = existing.paymentKey
+    if (!paymentKey) {
+      paymentKey = await sageService.createPayment(token, entityId, { site, date, amount, bankAccountId, billKey })
+      await BankStatement.updateOne(
+        { site, date: nextDate },
+        { $set: { 'sageMerchantFee.paymentKey': paymentKey, 'sageMerchantFee.submitPending': true } }
+      )
+    }
+    await sageService.submitPayment(token, entityId, paymentKey)
+    await BankStatement.updateOne({ site, date: nextDate }, { $set: { 'sageMerchantFee.submitPending': false } })
     return { status: 'created', billKey, paymentKey }
   } catch (e) {
     console.error('cashRecRoutes.merchant-fee-intacct error:', e)
