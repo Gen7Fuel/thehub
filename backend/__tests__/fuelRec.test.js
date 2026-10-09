@@ -95,9 +95,9 @@ describe('BOLPhoto schema — PO linking fields', () => {
     expect(doc.poLinked).toBe(false)
   })
 
-  it('trims linked poNumber', () => {
-    const doc = new BOLPhoto(base({ poLinked: true, poNumber: '  PO-1001  ' }))
-    expect(doc.poNumber).toBe('PO-1001')
+  it('stores linked poNumbers as an array', () => {
+    const doc = new BOLPhoto(base({ poLinked: true, poNumbers: ['PO-1001', 'PO-1002'] }))
+    expect(doc.poNumbers).toEqual(['PO-1001', 'PO-1002'])
   })
 })
 

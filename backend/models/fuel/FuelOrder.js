@@ -30,7 +30,7 @@ const fuelOrderSchema = new mongoose.Schema({
   carrier: { type: mongoose.Schema.Types.ObjectId, ref: "FuelCarrier" },
   station: { type: mongoose.Schema.Types.ObjectId, ref: "Location" },
   bolLinked: { type: Boolean, default: false },
-  bolNumber: { type: String, trim: true },
+  bolNumbers: { type: [String], default: [] },
   items: [{
     grade: String,
     ltrs: Number

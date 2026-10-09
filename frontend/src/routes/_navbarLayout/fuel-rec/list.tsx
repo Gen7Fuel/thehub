@@ -19,6 +19,7 @@ type BOLPhoto = {
   filename: string
   bolNumber?: string
   poLinked?: boolean
+  poNumbers?: string[]
   poNumber?: string
   createdAt?: string
   updatedAt?: string
@@ -42,6 +43,10 @@ type FuelOrderCandidate = {
   carrier?: { carrierName?: string }
   rack?: { rackName?: string; rackLocation?: string }
   items?: Array<{ grade: string; ltrs: number }>
+  bolLinked?: boolean
+  bolNumbers?: string[]
+  linkedToCurrentBol?: boolean
+  otherBolNumbers?: string[]
 }
 type FuelOrderItem = { grade: string; ltrs: number }
 type LinkablePoResponse = {
@@ -49,6 +54,7 @@ type LinkablePoResponse = {
   to: string
   count: number
   orders: FuelOrderCandidate[]
+  linkedOrders?: FuelOrderCandidate[]
   linkedOrder?: FuelOrderCandidate | null
 }
 
@@ -58,6 +64,12 @@ const parseYmd = (s?: string) => {
   const [y, m, d] = s.split('-').map(Number)
   return new Date(y, m - 1, d)
 }
+
+const getBolPoNumbers = (entry?: Pick<BOLPhoto, 'poNumbers' | 'poNumber'> | null) =>
+  Array.from(new Set([
+    ...(entry?.poNumbers || []),
+    ...(entry?.poNumber ? [entry.poNumber] : []),
+  ].map((value) => String(value || '').trim()).filter(Boolean)))
 
 export const Route = createFileRoute('/_navbarLayout/fuel-rec/list')({
   validateSearch: (search: Record<string, any>) => {
@@ -171,7 +183,7 @@ function RouteComponent() {
   const [linkLoading, setLinkLoading] = React.useState(false)
   const [linkPendingOrderId, setLinkPendingOrderId] = React.useState<string | null>(null)
   const [linkDaysBack, setLinkDaysBack] = React.useState(2)
-  const [linkedOrder, setLinkedOrder] = React.useState<FuelOrderCandidate | null>(null)
+  const [linkedOrders, setLinkedOrders] = React.useState<FuelOrderCandidate[]>([])
   const [unlinkPending, setUnlinkPending] = React.useState(false)
   const [reviewOrder, setReviewOrder] = React.useState<FuelOrderCandidate | null>(null)
   const [reviewItems, setReviewItems] = React.useState<FuelOrderItem[]>([])
@@ -339,7 +351,7 @@ function RouteComponent() {
       }
       const result = (await res.json()) as LinkablePoResponse
       setLinkableOrders(result.orders || [])
-      setLinkedOrder(result.linkedOrder || null)
+      setLinkedOrders(result.linkedOrders || (result.linkedOrder ? [result.linkedOrder] : []))
       setLinkRange({ from: result.from, to: result.to })
     } finally {
       setLinkLoading(false)
@@ -350,7 +362,7 @@ function RouteComponent() {
     setActiveLinkEntry(e)
     setLinkableOrders([])
     setLinkRange(null)
-    setLinkedOrder(null)
+    setLinkedOrders([])
     setLinkDaysBack(2)
     setBolZoom(145)
     try {
@@ -416,12 +428,14 @@ function RouteComponent() {
       const result = await res.json()
       toast.success(`Linked BOL ${activeLinkEntry.bolNumber || ''} to PO ${order.poNumber}`)
       setLinkableOrders((prev) => prev.filter((x) => x._id !== order._id))
-      setLinkedOrder(result.order || order)
+      const linked = result.order || order
+      setLinkedOrders((prev) => [...prev.filter((x) => x._id !== linked._id), linked])
+      const nextPoNumbers = Array.from(new Set([...getBolPoNumbers(activeLinkEntry), order.poNumber]))
       setEntries((prev) => prev.map((x) => x._id === activeLinkEntry._id
-        ? { ...x, poLinked: true, poNumber: order.poNumber }
+        ? { ...x, poLinked: true, poNumbers: nextPoNumbers, poNumber: undefined }
         : x
       ))
-      setActiveLinkEntry((prev) => prev ? { ...prev, poLinked: true, poNumber: order.poNumber } : prev)
+      setActiveLinkEntry((prev) => prev ? { ...prev, poLinked: true, poNumbers: nextPoNumbers, poNumber: undefined } : prev)
       closeQuantityReview()
     } catch (err) {
       toast.error(`Link failed: ${err instanceof Error ? err.message : String(err)}`)
@@ -441,28 +455,31 @@ function RouteComponent() {
     }
   }
 
-  const unlinkFuelPo = async () => {
+  const unlinkFuelPo = async (order: FuelOrderCandidate) => {
     if (!activeLinkEntry) return
     setUnlinkPending(true)
     try {
       const res = await fetch(`/api/fuel-rec/${encodeURIComponent(activeLinkEntry._id)}/unlink-po`, {
         method: 'POST',
         headers: {
+          'Content-Type': 'application/json',
           Authorization: `Bearer ${localStorage.getItem('token') || ''}`,
         },
+        body: JSON.stringify({ fuelOrderId: order._id }),
       })
       if (!res.ok) {
         const msg = await res.text().catch(() => '')
         throw new Error(msg || `HTTP ${res.status}`)
       }
-      toast.success(`Unlinked PO ${activeLinkEntry.poNumber || linkedOrder?.poNumber || ''}`)
+      toast.success(`Unlinked PO ${order.poNumber}`)
+      const nextPoNumbers = getBolPoNumbers(activeLinkEntry).filter((poNumber) => poNumber !== order.poNumber)
       setEntries((prev) => prev.map((x) => x._id === activeLinkEntry._id
-        ? { ...x, poLinked: false, poNumber: undefined }
+        ? { ...x, poLinked: nextPoNumbers.length > 0, poNumbers: nextPoNumbers, poNumber: undefined }
         : x
       ))
-      const nextEntry = { ...activeLinkEntry, poLinked: false, poNumber: undefined }
+      const nextEntry = { ...activeLinkEntry, poLinked: nextPoNumbers.length > 0, poNumbers: nextPoNumbers, poNumber: undefined }
       setActiveLinkEntry(nextEntry)
-      setLinkedOrder(null)
+      setLinkedOrders((prev) => prev.filter((x) => x._id !== order._id))
       setLinkDaysBack(2)
       await loadLinkableOrders(nextEntry, 2)
     } catch (err) {
@@ -613,8 +630,8 @@ function RouteComponent() {
                           size="icon"
                           onClick={() => openLinkDialog(e)}
                           disabled={pending.has(e._id)}
-                          title={e.poLinked ? `Linked to PO ${e.poNumber || ''}` : 'Link PO'}
-                          aria-label={e.poLinked ? `Linked to PO ${e.poNumber || ''}` : 'Link PO'}
+                          title={e.poLinked ? `Linked to PO${getBolPoNumbers(e).length === 1 ? ` ${getBolPoNumbers(e)[0]}` : 's'}` : 'Link PO'}
+                          aria-label={e.poLinked ? `Linked to PO${getBolPoNumbers(e).length === 1 ? ` ${getBolPoNumbers(e)[0]}` : 's'}` : 'Link PO'}
                           className={e.poLinked ? 'bg-emerald-600 hover:bg-emerald-700 text-white' : undefined}
                         >
                           <Link2 className="h-4 w-4" />
@@ -775,7 +792,7 @@ function RouteComponent() {
             <section className="min-h-0 flex flex-col overflow-hidden">
               <div className="shrink-0 border-b px-5 py-4">
                 <div className="text-sm font-semibold text-slate-900">
-                  {activeLinkEntry?.poLinked || linkedOrder ? 'Linked PO Details' : 'Select Fuel PO'}
+                  {linkedOrders.length > 0 ? 'Linked PO Details' : 'Select Fuel PO'}
                 </div>
                 <div className="mt-1 text-sm text-slate-600">
                   {linkRange
@@ -785,15 +802,18 @@ function RouteComponent() {
               </div>
 
               <div className="min-h-0 flex-1 overflow-y-auto p-5">
-                {activeLinkEntry?.poLinked || linkedOrder ? (
-                  <div className="border rounded-md p-4 space-y-4">
-                    <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-3">
-                      <div className="space-y-1 min-w-0">
-                        <div className="text-sm font-semibold text-emerald-700">
-                          Linked to PO {linkedOrder?.poNumber || activeLinkEntry?.poNumber}
-                        </div>
-                        {linkedOrder ? (
-                          <>
+                {linkedOrders.length > 0 && (
+                  <div className="border rounded-md overflow-hidden mb-4">
+                    <div className="bg-emerald-50 px-3 py-2 text-xs font-semibold text-emerald-700">
+                      Linked to this BOL
+                    </div>
+                    <div className="divide-y">
+                      {linkedOrders.map((linkedOrder) => (
+                        <div key={linkedOrder._id} className="p-3 flex flex-col xl:flex-row xl:items-center justify-between gap-3">
+                          <div className="space-y-1 min-w-0">
+                            <div className="text-sm font-semibold text-emerald-700">
+                              {linkedOrder.poNumber}
+                            </div>
                             <div className="text-xs text-slate-500">
                               Delivery: {formatOrderDate(linkedOrder.estimatedDeliveryDate || linkedOrder.originalDeliveryDate)}
                               {(linkedOrder.estimatedDeliveryWindow?.start || linkedOrder.estimatedDeliveryWindow?.end) &&
@@ -805,24 +825,24 @@ function RouteComponent() {
                                 .join(' | ') || 'No supplier/carrier/rack details'}
                             </div>
                             <div className="text-xs text-slate-500">{formatOrderItems(linkedOrder.items)}</div>
-                          </>
-                        ) : (
-                          <div className="text-xs text-slate-500">Order details could not be loaded, but this BOL is marked linked.</div>
-                        )}
-                      </div>
+                          </div>
 
-                      <Button
-                        variant="destructive"
-                        size="sm"
-                        onClick={unlinkFuelPo}
-                        disabled={unlinkPending}
-                        className="shrink-0"
-                      >
-                        {unlinkPending ? 'Unlinking...' : 'Unlink'}
-                      </Button>
+                          <Button
+                            variant="destructive"
+                            size="sm"
+                            onClick={() => unlinkFuelPo(linkedOrder)}
+                            disabled={unlinkPending}
+                            className="shrink-0"
+                          >
+                            {unlinkPending ? 'Unlinking...' : 'Unlink'}
+                          </Button>
+                        </div>
+                      ))}
                     </div>
                   </div>
-                ) : linkLoading ? (
+                )}
+
+                {linkLoading ? (
                   <div className="py-10 text-center text-sm text-slate-500">Loading POs...</div>
                 ) : linkableOrders.length === 0 ? (
                   <div className="border rounded-md">
@@ -855,6 +875,11 @@ function RouteComponent() {
                                 .filter(Boolean)
                                 .join(' | ') || 'No supplier/carrier/rack details'}
                             </div>
+                            {order.otherBolNumbers && order.otherBolNumbers.length > 0 && (
+                              <div className="text-xs font-semibold text-amber-700">
+                                Existing BOL linked: {order.otherBolNumbers.join(', ')}
+                              </div>
+                            )}
                             <div className="text-xs text-slate-500">{formatOrderItems(order.items)}</div>
                           </div>
 

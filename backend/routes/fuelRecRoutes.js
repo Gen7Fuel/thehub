@@ -78,9 +78,15 @@ function buildRetainComment(retainItems) {
   return `Fuel retained:\n${lines.join('\n')}`
 }
 
+function buildRetainCommentForBol(retainItems, bolNumber) {
+  const base = buildRetainComment(retainItems)
+  if (!base) return ''
+  return base.replace('Fuel retained:', `Fuel retained (${bolNumber}):`)
+}
+
 function parseRetainComment(text) {
   const commentText = String(text || '')
-  if (!commentText.startsWith('Fuel retained:')) return null
+  if (!commentText.startsWith('Fuel retained')) return null
 
   const retainedItems = []
   for (const line of commentText.split('\n').slice(1)) {
@@ -95,6 +101,35 @@ function parseRetainComment(text) {
   }
 
   return retainedItems.length ? retainedItems : null
+}
+
+function retainCommentMatchesBol(text, bolNumber) {
+  return String(text || '').startsWith(`Fuel retained (${bolNumber}):`)
+}
+
+function getLinkedPoNumbers(bol) {
+  return Array.from(new Set([
+    ...(Array.isArray(bol?.poNumbers) ? bol.poNumbers : []),
+    ...(bol?.poNumber ? [bol.poNumber] : []),
+  ].map((value) => String(value || '').trim()).filter(Boolean)))
+}
+
+function getLinkedBolNumbers(order) {
+  return Array.from(new Set([
+    ...(Array.isArray(order?.bolNumbers) ? order.bolNumbers : []),
+    ...(order?.bolNumber ? [order.bolNumber] : []),
+  ].map((value) => String(value || '').trim()).filter(Boolean)))
+}
+
+function decorateOrderForBol(order, currentBolNumber) {
+  const bolNumbers = getLinkedBolNumbers(order)
+  return {
+    ...order,
+    bolNumbers,
+    bolLinked: bolNumbers.length > 0,
+    linkedToCurrentBol: bolNumbers.includes(currentBolNumber),
+    otherBolNumbers: bolNumbers.filter((bolNumber) => bolNumber !== currentBolNumber),
+  }
 }
 
 async function findLocationForBolSite(site) {
@@ -406,22 +441,11 @@ router.get('/:id/linkable-pos', async (req, res) => {
     const start = moment.tz(bol.date, tz).subtract(daysBack, 'days').startOf('day').toDate()
     const end = moment.tz(bol.date, tz).endOf('day').toDate()
 
-    const linkedOrder = bol.poLinked && bol.poNumber
-      ? await FuelOrder.findOne({
-          station: location._id,
-          poNumber: bol.poNumber,
-        })
-        .populate('carrier', 'carrierName')
-        .populate('supplier', 'supplierName')
-        .populate('rack', 'rackName rackLocation')
-        .populate('station', 'stationName timezone fuelStationNumber fuelCustomerName')
-        .lean()
-      : null
+    const linkedPoNumbers = getLinkedPoNumbers(bol)
 
     const orders = await FuelOrder.find({
       station: location._id,
       currentStatus: 'Delivered',
-      bolLinked: { $ne: true },
       $or: [
         { estimatedDeliveryDate: { $gte: start, $lte: end } },
         { originalDeliveryDate: { $gte: start, $lte: end } },
@@ -434,18 +458,24 @@ router.get('/:id/linkable-pos', async (req, res) => {
       .sort({ estimatedDeliveryDate: -1, originalDeliveryDate: -1, poNumber: 1 })
       .lean()
 
+    const decoratedOrders = orders.map((order) => decorateOrderForBol(order, bol.bolNumber))
+    const linkedOrders = decoratedOrders.filter((order) => linkedPoNumbers.includes(order.poNumber) || order.linkedToCurrentBol)
+    const otherOrders = decoratedOrders.filter((order) => !linkedPoNumbers.includes(order.poNumber) && !order.linkedToCurrentBol)
+
     return res.json({
       bol: {
         _id: bol._id,
         site: bol.site,
         date: bol.date,
         bolNumber: bol.bolNumber,
+        poNumbers: linkedPoNumbers,
+        poLinked: linkedPoNumbers.length > 0,
       },
       from: moment(start).tz(tz).format('YYYY-MM-DD'),
       to: bol.date,
-      count: orders.length,
-      orders,
-      linkedOrder,
+      count: otherOrders.length,
+      orders: otherOrders,
+      linkedOrders,
     })
   } catch (e) {
     console.error('fuelRec.linkable-pos error:', e)
@@ -459,13 +489,13 @@ router.post('/:id/link-po', async (req, res) => {
     const id = String(req.params.id || '').trim()
     const fuelOrderId = String(req.body?.fuelOrderId || '').trim()
     const updatedItems = normalizeFuelItems(req.body?.items)
-    const retainComment = buildRetainComment(req.body?.retainItems)
     if (!id || !fuelOrderId) return res.status(400).json({ error: 'id and fuelOrderId are required' })
 
     const BOLPhoto = await getBOLPhoto()
     const bol = await BOLPhoto.findById(id).lean()
     if (!bol) return res.status(404).json({ error: 'BOL entry not found' })
     if (!bol.bolNumber) return res.status(400).json({ error: 'BOL number is required before linking' })
+    const retainComment = buildRetainCommentForBol(req.body?.retainItems, bol.bolNumber)
 
     const location = await findLocationForBolSite(bol.site)
     if (!location) return res.status(404).json({ error: `Location not found for site '${bol.site}'` })
@@ -474,15 +504,20 @@ router.post('/:id/link-po', async (req, res) => {
       _id: fuelOrderId,
       station: location._id,
       currentStatus: 'Delivered',
-      bolLinked: { $ne: true },
     })
 
     if (!order) {
-      return res.status(404).json({ error: 'Delivered fuel PO not found, already linked, or not part of this site' })
+      return res.status(404).json({ error: 'Delivered fuel PO not found or not part of this site' })
     }
 
-    order.bolLinked = true
-    order.bolNumber = String(bol.bolNumber).trim()
+    const existingBolNumbers = getLinkedBolNumbers(order)
+    if (existingBolNumbers.includes(String(bol.bolNumber).trim())) {
+      return res.status(400).json({ error: 'Fuel PO is already linked to this BOL' })
+    }
+
+    order.bolNumbers = [...existingBolNumbers, String(bol.bolNumber).trim()]
+    order.bolLinked = order.bolNumbers.length > 0
+    order.bolNumber = undefined
 
     if (updatedItems && updatedItems.length) {
       order.items = updatedItems
@@ -510,13 +545,14 @@ router.post('/:id/link-po', async (req, res) => {
       {
         $set: {
           poLinked: true,
-          poNumber: populatedOrder.poNumber,
+          poNumbers: Array.from(new Set([...getLinkedPoNumbers(bol), populatedOrder.poNumber])),
         },
+        $unset: { poNumber: '' },
       },
       { new: true, lean: true }
     )
 
-    return res.json({ linked: true, order: populatedOrder, bol: updatedBol })
+    return res.json({ linked: true, order: decorateOrderForBol(populatedOrder, bol.bolNumber), bol: updatedBol })
   } catch (e) {
     console.error('fuelRec.link-po error:', e)
     return res.status(500).json({ error: 'Failed to link fuel PO' })
@@ -527,7 +563,8 @@ router.post('/:id/link-po', async (req, res) => {
 router.post('/:id/unlink-po', async (req, res) => {
   try {
     const id = String(req.params.id || '').trim()
-    if (!id) return res.status(400).json({ error: 'id is required' })
+    const fuelOrderId = String(req.body?.fuelOrderId || '').trim()
+    if (!id || !fuelOrderId) return res.status(400).json({ error: 'id and fuelOrderId are required' })
 
     const BOLPhoto = await getBOLPhoto()
     const bol = await BOLPhoto.findById(id).lean()
@@ -536,48 +573,77 @@ router.post('/:id/unlink-po', async (req, res) => {
     const location = await findLocationForBolSite(bol.site)
     if (!location) return res.status(404).json({ error: `Location not found for site '${bol.site}'` })
 
-    let order = null
-    if (bol.poNumber) {
-      order = await FuelOrder.findOne({
-        station: location._id,
-        poNumber: bol.poNumber,
-        bolNumber: bol.bolNumber,
-      })
+    let order = await FuelOrder.findOne({
+      _id: fuelOrderId,
+      station: location._id,
+    })
 
-      if (order) {
-        const comments = Array.isArray(order.comments) ? order.comments : []
-        const retainCommentIndex = comments
+    if (order) {
+      const currentBolNumber = String(bol.bolNumber).trim()
+      const linkedBolNumbers = getLinkedBolNumbers(order)
+      if (!linkedBolNumbers.includes(currentBolNumber)) {
+        return res.status(400).json({ error: 'Fuel PO is not linked to this BOL' })
+      }
+
+      const comments = Array.isArray(order.comments) ? order.comments : []
+      let retainCommentIndex = comments
+        .map((comment, index) => ({ comment, index, retainedItems: parseRetainComment(comment.text), matchesBol: retainCommentMatchesBol(comment.text, currentBolNumber) }))
+        .filter((entry) => entry.retainedItems && entry.matchesBol)
+        .pop()
+
+      if (!retainCommentIndex) {
+        retainCommentIndex = comments
           .map((comment, index) => ({ comment, index, retainedItems: parseRetainComment(comment.text) }))
           .filter((entry) => entry.retainedItems)
           .pop()
-
-        if (retainCommentIndex) {
-          for (const retainedItem of retainCommentIndex.retainedItems) {
-            const orderItem = order.items.find((item) => item.grade === retainedItem.grade)
-            if (orderItem) {
-              orderItem.ltrs = Number(orderItem.ltrs || 0) + retainedItem.ltrs
-            } else {
-              order.items.push({ grade: retainedItem.grade, ltrs: retainedItem.ltrs })
-            }
-          }
-          order.comments.splice(retainCommentIndex.index, 1)
-        }
-
-        order.bolLinked = false
-        order.bolNumber = undefined
-        await order.save()
-        order = order.toObject()
       }
+
+      if (retainCommentIndex) {
+        for (const retainedItem of retainCommentIndex.retainedItems) {
+          const orderItem = order.items.find((item) => item.grade === retainedItem.grade)
+          if (orderItem) {
+            orderItem.ltrs = Number(orderItem.ltrs || 0) + retainedItem.ltrs
+          } else {
+            order.items.push({ grade: retainedItem.grade, ltrs: retainedItem.ltrs })
+          }
+        }
+        order.comments.splice(retainCommentIndex.index, 1)
+      }
+
+      order.bolNumbers = linkedBolNumbers.filter((bolNumber) => bolNumber !== currentBolNumber)
+      order.bolLinked = order.bolNumbers.length > 0
+      order.bolNumber = undefined
+      await order.save()
+      order = order.toObject()
+    }
+
+    const nextPoNumbers = getLinkedPoNumbers(bol).filter((poNumber) => !order || poNumber !== order.poNumber)
+    const bolUpdate = {
+      $set: {
+        poLinked: nextPoNumbers.length > 0,
+        poNumbers: nextPoNumbers,
+      },
+      $unset: { poNumber: '' },
+    }
+    if (!nextPoNumbers.length) {
+      bolUpdate.$set.poLinked = false
     }
 
     const updatedBol = await BOLPhoto.findByIdAndUpdate(
       id,
-      {
-        $set: { poLinked: false },
-        $unset: { poNumber: '' },
-      },
+      bolUpdate,
       { new: true, lean: true }
     )
+
+    if (order) {
+      const populated = await FuelOrder.findById(order._id)
+        .populate('carrier', 'carrierName')
+        .populate('supplier', 'supplierName')
+        .populate('rack', 'rackName rackLocation')
+        .populate('station', 'stationName timezone fuelStationNumber fuelCustomerName')
+        .lean()
+      order = decorateOrderForBol(populated, bol.bolNumber)
+      }
 
     return res.json({ unlinked: true, order, bol: updatedBol })
   } catch (e) {
