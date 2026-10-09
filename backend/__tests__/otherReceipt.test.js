@@ -3,7 +3,7 @@ import sageService from '../services/sageService.js'
 import linesModule from '../utils/otherReceiptLines.js'
 import CashRecSageEntry from '../models/CashRecSageEntry.js'
 
-const { sanitizeOtherReceiptLines } = linesModule
+const { sanitizeOtherReceiptLines, explainNonPositiveTotal } = linesModule
 const { buildOtherReceiptPayload, OTHER_RECEIPT_GL_ACCOUNTS } = sageService
 const allowedGlAccounts = OTHER_RECEIPT_GL_ACCOUNTS
 
@@ -114,5 +114,32 @@ describe('hasEffectiveAccess', () => {
     expect(hasEffectiveAccess({ role: {} }, 7)).toBe(false)
     expect(hasEffectiveAccess({ role: roleWith(7, true) }, undefined)).toBe(false)
     expect(hasEffectiveAccess(undefined, 7)).toBe(false)
+  })
+})
+
+describe('explainNonPositiveTotal', () => {
+  const raw = (bank) => [
+    { key: 'gbl', glAccount: '40010', amount: 14074.33 },
+    { key: 'canadianCash', glAccount: '40010', amount: 778.65 },
+    { key: 'store', glAccount: '40200', amount: 3506.92 },
+    { key: 'cashSafe', glAccount: '10011', amount: -778.65 },
+    { key: 'giftCard', glAccount: '52250', amount: -64.69 },
+    { key: 'bankRec', glAccount: '55050', amount: bank },
+  ]
+  const lines = (rows) => sanitizeOtherReceiptLines(rows, { allowedGlAccounts, bankStmtAccess: true }).lines
+
+  it('says the bank statement is not loaded when Bank Rec cancels the whole day', () => {
+    const rows = raw(-17516.56)
+    expect(explainNonPositiveTotal(lines(rows), rows)).toMatch(/bank statement .* not loaded/)
+  })
+
+  it('flags an oversized Bank Rec shortfall that leaves a negative total', () => {
+    const rows = raw(-20000)
+    expect(explainNonPositiveTotal(lines(rows), rows)).toMatch(/missing or incomplete/)
+  })
+
+  it('falls back to the generic message otherwise', () => {
+    const rows = [{ key: 'giftCard', glAccount: '52250', amount: -5 }]
+    expect(explainNonPositiveTotal(lines(rows), rows)).toMatch(/positive total.*-5\.00/)
   })
 })

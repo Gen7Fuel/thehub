@@ -9,7 +9,7 @@ const Lottery = LotteryModule?.Lottery || LotteryModule?.default || LotteryModul
 const Location = require('../models/Location')
 const sageService = require('../services/sageService')
 const CashRecSageEntry = require('../models/CashRecSageEntry')
-const { sanitizeOtherReceiptLines } = require('../utils/otherReceiptLines')
+const { sanitizeOtherReceiptLines, explainNonPositiveTotal } = require('../utils/otherReceiptLines')
 const { userHasPermission } = require('../utils/permissionAccess')
 const { SITE_BANK_ACCOUNTS } = require('../constants/sageBankAccounts')
 
@@ -481,7 +481,7 @@ router.post('/other-receipt', express.json(), async (req, res) => {
     // Intacct rejects an Other Receipt whose net total isn't positive (422).
     const netCents = lines.reduce((sum, l) => sum + Math.round(l.amount * 100), 0)
     if (netCents <= 0) {
-      return res.status(400).json({ error: `Intacct needs a positive total, but these lines net to ${(netCents / 100).toFixed(2)}. Check the amounts for this day.` })
+      return res.status(400).json({ error: explainNonPositiveTotal(lines, rawLines) })
     }
 
     // Claim the site + day atomically so a double click (or two users) can't create two receipts.
