@@ -5,7 +5,7 @@ import { useAuth } from '@/context/AuthContext'
 import { format } from 'date-fns'
 import { SitePicker } from '@/components/custom/sitePicker'
 import { DatePicker } from '@/components/custom/datePicker'
-import { buildOtherReceiptLines, otherReceiptTotal } from '@/lib/cashRecOtherReceipt'
+import { buildOtherReceiptLines, nightDepositAmounts, otherReceiptTotal } from '@/lib/cashRecOtherReceipt'
 import '@/styles/typewriter.css'
 
 type Search = { site: string; date: string }
@@ -407,6 +407,7 @@ function RouteComponent() {
               loyalty,
               unsettledPrepays: unsettledPrepays === 0 ? 0 : -unsettledPrepays,
               bankRec,
+              nightDeposits: nightDepositAmounts((data.bank as any)?.miscCredits),
             })
 
             const createOtherReceipt = async () => {

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { buildOtherReceiptLines, otherReceiptTotal } from '../cashRecOtherReceipt'
+import { buildOtherReceiptLines, nightDepositAmounts, otherReceiptTotal } from '../cashRecOtherReceipt'
 import type { CashRecFigures } from '../cashRecOtherReceipt'
 
 const zero: CashRecFigures = {
@@ -73,5 +73,34 @@ describe('buildOtherReceiptLines', () => {
 
   it('tags the Bank Rec line so the server can drop it', () => {
     expect(buildOtherReceiptLines({ ...zero, bankRec: 1 })[0].key).toBe('bankRec')
+  })
+})
+
+describe('night deposits', () => {
+  it('picks the NIGHT DEPOSIT credits, one amount per row', () => {
+    expect(
+      nightDepositAmounts([
+        { description: 'NIGHT DEPOSIT~~~', amount: 1049.65 },
+        { description: 'night deposit~~~', amount: 2003.3 },
+        { description: 'TNS CREDIT', amount: 50 },
+        { description: 'NIGHT DEPOSIT~~~', amount: 0 },
+      ]),
+    ).toEqual([1049.65, 2003.3])
+    expect(nightDepositAmounts(undefined)).toEqual([])
+  })
+
+  it('adds a positive 10011 "Cash deposit" line per deposit, after the safe line', () => {
+    const rows = buildOtherReceiptLines({
+      ...zero,
+      canadianCash: 778.65,
+      cashSafeDeposited: 778.65,
+      nightDeposits: [1049.65, 2003.3],
+    }).map((l) => [l.glAccount, l.amount, l.memo])
+    expect(rows).toEqual([
+      ['40010', 778.65, 'Cash Sales'],
+      ['10011', -778.65, 'Cash deposit'],
+      ['10011', 1049.65, 'Cash deposit'],
+      ['10011', 2003.3, 'Cash deposit'],
+    ])
   })
 })

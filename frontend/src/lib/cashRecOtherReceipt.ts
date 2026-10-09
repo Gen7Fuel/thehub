@@ -32,9 +32,21 @@ export interface CashRecFigures {
   unsettledPrepays: number
   /** Signed: negative is short. */
   bankRec: number
+  /** Amounts of the bank statement's NIGHT DEPOSIT misc credits, one per row. */
+  nightDeposits?: Array<number>
 }
 
 const cents = (n: number) => Math.round(n * 100)
+
+/** The NIGHT DEPOSIT credits among a bank statement's misc credits, one amount per row. */
+export function nightDepositAmounts(
+  miscCredits: ReadonlyArray<{ description?: unknown; amount?: unknown }> | null | undefined,
+): Array<number> {
+  return (miscCredits ?? [])
+    .filter((c) => typeof c.description === 'string' && c.description.toUpperCase().includes('NIGHT DEPOSIT'))
+    .map((c) => Number(c.amount) || 0)
+    .filter((n) => n > 0)
+}
 
 /** Lines in the order they appear on the entry; zero-value rows are left out. */
 export function buildOtherReceiptLines(f: CashRecFigures): Array<OtherReceiptLine> {
@@ -46,6 +58,8 @@ export function buildOtherReceiptLines(f: CashRecFigures): Array<OtherReceiptLin
     { key: 'lotterySales', glAccount: '20440', amount: f.lotterySales, memo: '' },
     { key: 'lotteryPayouts', glAccount: '20440', amount: f.lotteryPayouts, memo: '' },
     { key: 'cashSafe', glAccount: '10011', amount: -f.cashSafeDeposited, memo: 'Cash deposit' },
+    // Cash taken out of the store safe to the bank: a credit to the safe, one line per deposit.
+    ...(f.nightDeposits ?? []).map((amount) => ({ key: 'nightDeposit', glAccount: '10011', amount, memo: 'Cash deposit' })),
     {
       key: 'tillOverShort',
       glAccount: '55050',
