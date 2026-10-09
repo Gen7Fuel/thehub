@@ -497,6 +497,18 @@ async function syncOneAction(action: any): Promise<void> {
     console.log("✅ Synced and refreshed SAVE_EXTRA_NOTE order record:", latest.id);
   }
 
+  else if (action.type === "ADD_ORDER_REC_COMMENT") {
+    // A message written offline (e.g. a scanned item that isn't on the order rec).
+    const res = await axios.post(
+      `/api/order-rec/${action.orderId}/comments`,
+      { text: action.text, photos: [] },
+      { headers: authHeader }
+    );
+    const latest = { ...res.data, id: res.data._id, _id: res.data._id };
+    await saveOrderRec(latest);
+    console.log("✅ Synced ADD_ORDER_REC_COMMENT for order record:", latest.id);
+  }
+
   else {
     throw new Error(`Unknown pending action type: ${action.type}`);
   }

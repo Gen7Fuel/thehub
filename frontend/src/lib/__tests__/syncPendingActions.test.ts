@@ -342,3 +342,24 @@ describe('triggerBackgroundSync', () => {
     expect(mockGetPendingActionEntries).toHaveBeenCalled()
   })
 })
+
+describe('syncPendingActions — ADD_ORDER_REC_COMMENT', () => {
+  it('posts the queued message to the order rec and saves the refreshed record', async () => {
+    mockAxiosPost.mockResolvedValue({ data: { _id: 'rec-1', comments: [{ text: 'Not on this order rec: GTIN 1, count: 2' }] } })
+    mockGetPendingActionEntries
+      .mockResolvedValueOnce([
+        { key: 7, action: { type: 'ADD_ORDER_REC_COMMENT', orderId: 'rec-1', text: 'Not on this order rec: GTIN 1, count: 2' } },
+      ])
+      .mockResolvedValueOnce([])
+
+    await syncPendingActions()
+
+    expect(mockAxiosPost).toHaveBeenCalledWith(
+      '/api/order-rec/rec-1/comments',
+      { text: 'Not on this order rec: GTIN 1, count: 2', photos: [] },
+      expect.anything(),
+    )
+    expect(mockSaveOrderRec).toHaveBeenCalledWith(expect.objectContaining({ id: 'rec-1' }))
+    expect(mockDeletePendingAction).toHaveBeenCalledWith(7)
+  }, 10000)
+})
