@@ -478,6 +478,12 @@ router.post('/other-receipt', express.json(), async (req, res) => {
     if (error) return res.status(400).json({ error })
     if (lines.length === 0) return res.status(400).json({ error: 'Every line is zero or excluded, so there is nothing to enter.' })
 
+    // Intacct rejects an Other Receipt whose net total isn't positive (422).
+    const netCents = lines.reduce((sum, l) => sum + Math.round(l.amount * 100), 0)
+    if (netCents <= 0) {
+      return res.status(400).json({ error: `Intacct needs a positive total, but these lines net to ${(netCents / 100).toFixed(2)}. Check the amounts for this day.` })
+    }
+
     // Claim the site + day atomically so a double click (or two users) can't create two receipts.
     const existing = await CashRecSageEntry.findOne({ site, date }).lean()
     if (existing?.key) return res.status(409).json({ error: 'An Intacct entry already exists for this site and day.', key: existing.key })
