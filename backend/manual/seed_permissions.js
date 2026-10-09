@@ -103,6 +103,11 @@ const allPermissions = [
         "children": []
       },
       {
+        "permId": 80020,
+        "name": "cashRecIntacctEntry",
+        "children": []
+      },
+      {
         "permId": 80015,
         "name": "infonetReport",
         "children": []

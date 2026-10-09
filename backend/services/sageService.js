@@ -154,6 +154,55 @@ async function createPayment(token, entityId, args) {
   return String(key)
 }
 
+// ── Cash-rec Other Receipt ───────────────────────────────────────────────────
+
+// GL accounts a cash-rec line may post to (Hub's sales and deduction summaries).
+const OTHER_RECEIPT_GL_ACCOUNTS = ['40010', '40200', '20440', '10011', '52250', '52175', '55050']
+const UNDEPOSITED_FUNDS_GL_ACCOUNT = '10019'
+
+/**
+ * The Other Receipt for one cash-rec day. Same shape Desk's Cash Management
+ * sends. Other Receipts have no draft state: Intacct creates them as approved,
+ * which posts them. `lines` are { glAccount, amount, memo? }, amounts signed.
+ */
+function buildOtherReceiptPayload({ site, date, entityId, lines }) {
+  return {
+    payer: 'Daily Sales',
+    txnDate: date,
+    txnPaidDate: date,
+    description: `Cash Management - ${site} - ${date}`,
+    baseCurrency: 'CAD',
+    currency: 'CAD',
+    txnCurrency: 'CAD',
+    reconciliationState: 'uncleared',
+    isInclusiveTax: false,
+    undepositedGLAccount: { id: UNDEPOSITED_FUNDS_GL_ACCOUNT },
+    paymentMethod: 'eft', // the UI's "Record transfer"
+    depositDate: date,
+    exchangeRate: { date, typeId: null, rate: 1 },
+    lines: lines.map((l, i) => ({
+      status: 'active',
+      amount: l.amount.toFixed(2),
+      txnAmount: l.amount.toFixed(2),
+      ...(l.memo ? { description: l.memo } : {}),
+      lineNumber: i + 1,
+      isTax: false,
+      glAccount: { id: l.glAccount },
+      dimensions: { location: { id: entityId } },
+    })),
+  }
+}
+
+async function createOtherReceipt(token, entityId, args) {
+  const data = await sageRequest(token, 'POST', 'objects/cash-management/other-receipt', {
+    entityId,
+    body: buildOtherReceiptPayload({ ...args, entityId }),
+  })
+  const key = data?.['ia::result']?.key
+  if (!key) throw new Error('Sage did not return an other receipt key.')
+  return String(key)
+}
+
 /**
  * Submits a draft payment so it posts: the payment becomes confirmed and its
  * bill paid. Intacct won't change a payment's state by PATCH (or by an action
@@ -175,4 +224,7 @@ module.exports = {
   createBill,
   createPayment,
   submitPayment,
+  OTHER_RECEIPT_GL_ACCOUNTS,
+  buildOtherReceiptPayload,
+  createOtherReceipt,
 }

@@ -8,6 +8,9 @@ const LotteryModule = require('../models/Lottery')
 const Lottery = LotteryModule?.Lottery || LotteryModule?.default || LotteryModule
 const Location = require('../models/Location')
 const sageService = require('../services/sageService')
+const CashRecSageEntry = require('../models/CashRecSageEntry')
+const { sanitizeOtherReceiptLines, explainNonPositiveTotal } = require('../utils/otherReceiptLines')
+const { userHasPermission } = require('../utils/permissionAccess')
 const { SITE_BANK_ACCOUNTS } = require('../constants/sageBankAccounts')
 
 const TIMEZONE = 'America/Toronto'
@@ -431,6 +434,104 @@ async function recordMerchantFeeInIntacct({ site, date, nextDate, merchantFees, 
     return { status: 'error', message: e.message }
   }
 }
+
+// ── Intacct Other Receipt for a cash-rec day ─────────────────────────────────
+
+const YMD_RE = /^\d{4}-\d{2}-\d{2}$/
+
+// GET /other-receipt?site=&date= -> { key } (key is null until one is created)
+router.get('/other-receipt', async (req, res) => {
+  try {
+    const { site, date } = req.query
+    if (typeof site !== 'string' || !site || typeof date !== 'string' || !YMD_RE.test(date)) {
+      return res.status(400).json({ error: 'site and date (YYYY-MM-DD) are required' })
+    }
+    const entry = await CashRecSageEntry.findOne({ site, date }).lean()
+    res.json({ key: entry?.key || null })
+  } catch (e) {
+    console.error('cashRecRoutes.get-other-receipt error:', e)
+    res.status(500).json({ error: 'Failed to look up the Intacct entry' })
+  }
+})
+
+// POST /other-receipt { site, date, lines } -> creates the Other Receipt once per site + day.
+router.post('/other-receipt', express.json(), async (req, res) => {
+  // Creates a real, posted entry in Intacct, so it needs its own permission.
+  if (!userHasPermission(req.user, 'accounting.cashRecIntacctEntry')) {
+    return res.status(403).json({ error: 'You do not have permission to create Intacct entries.' })
+  }
+  const { site, date, lines: rawLines } = req.body || {}
+  if (typeof site !== 'string' || !site || typeof date !== 'string' || !YMD_RE.test(date)) {
+    return res.status(400).json({ error: 'site and date (YYYY-MM-DD) are required' })
+  }
+
+  let claimed = false
+  try {
+    const loc = await Location.findOne({ $or: [{ site }, { stationName: site }] }).lean()
+    if (!loc) return res.status(404).json({ error: `Unknown site ${site}` })
+    if (!loc.sageEntityKey) return res.status(400).json({ error: `No Sage entity key configured for ${site}.` })
+
+    const { lines, error } = sanitizeOtherReceiptLines(rawLines, {
+      allowedGlAccounts: sageService.OTHER_RECEIPT_GL_ACCOUNTS,
+      bankStmtAccess: loc.bankStmtAccess,
+    })
+    if (error) return res.status(400).json({ error })
+    if (lines.length === 0) return res.status(400).json({ error: 'Every line is zero or excluded, so there is nothing to enter.' })
+
+    // Intacct rejects an Other Receipt whose net total isn't positive (422).
+    const netCents = lines.reduce((sum, l) => sum + Math.round(l.amount * 100), 0)
+    if (netCents <= 0) {
+      return res.status(400).json({ error: explainNonPositiveTotal(lines, rawLines) })
+    }
+
+    // Claim the site + day atomically so a double click (or two users) can't create two receipts.
+    const existing = await CashRecSageEntry.findOne({ site, date }).lean()
+    if (existing?.key) return res.status(409).json({ error: 'An Intacct entry already exists for this site and day.', key: existing.key })
+    if (existing?.claimedAt && existing.claimedAt > new Date(Date.now() - SAGE_CLAIM_TTL_MS)) {
+      return res.status(409).json({ error: 'An Intacct entry is already being created for this site and day.' })
+    }
+    try {
+      if (existing) {
+        const reclaimed = await CashRecSageEntry.updateOne(
+          { site, date, key: { $exists: false }, claimedAt: existing.claimedAt },
+          { $set: { claimedAt: new Date() } }
+        )
+        if (reclaimed.modifiedCount === 0) return res.status(409).json({ error: 'An Intacct entry is already being created for this site and day.' })
+      } else {
+        await CashRecSageEntry.create({ site, date, claimedAt: new Date(), createdBy: req.user?.email || '' })
+      }
+      claimed = true
+    } catch (e) {
+      if (e?.code === 11000) return res.status(409).json({ error: 'An Intacct entry is already being created for this site and day.' })
+      throw e
+    }
+
+    let key
+    try {
+      const token = await sageService.getSageToken()
+      const entityId = await sageService.resolveEntityId(token, loc.sageEntityKey)
+      key = await sageService.createOtherReceipt(token, entityId, { site, date, lines })
+    } catch (e) {
+      console.error('cashRecRoutes.create-other-receipt (Intacct) error:', e)
+      // Nothing was created in Intacct, so release the claim and let the button be tried again.
+      if (claimed) await CashRecSageEntry.deleteOne({ site, date, key: { $exists: false } }).catch(() => {})
+      return res.status(502).json({ error: e.message || 'Failed to create the Intacct entry' })
+    }
+
+    const total = Math.round(lines.reduce((s, l) => s + Math.round(l.amount * 100), 0)) / 100
+    try {
+      await CashRecSageEntry.updateOne({ site, date }, { $set: { key, lineCount: lines.length, total, createdBy: req.user?.email || '' }, $unset: { claimedAt: '' } })
+    } catch (e) {
+      // The receipt exists in Intacct. Keep the claim so it can't be created twice.
+      console.error('cashRecRoutes.create-other-receipt (save key) error:', e)
+      return res.status(500).json({ error: `Created in Intacct (other receipt ${key}) but could not be saved in Hub. Do NOT create it again.`, key })
+    }
+    res.json({ key, lineCount: lines.length, total })
+  } catch (e) {
+    console.error('cashRecRoutes.create-other-receipt error:', e)
+    res.status(500).json({ error: e.message || 'Failed to create the Intacct entry' })
+  }
+})
 
 router.patch('/bank-statement/merchant-fees', express.json(), async (req, res) => {
   try {
