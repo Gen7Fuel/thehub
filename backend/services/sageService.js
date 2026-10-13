@@ -29,15 +29,18 @@ function buildInvoiceNumber(site, ymd) {
   return `Merch Fees ${MONTHS[Number(m[2]) - 1]} ${m[3]}/${m[1]} - ${site}`
 }
 
-function buildBillPayload({ site, date, amount, entityId }) {
-  const invoiceNumber = buildInvoiceNumber(site, date)
+// `date` is the cash-rec day the fee belongs to; `postDate` is when it posts in
+// Intacct, the day after (the bank takes the fee then). The bill is named for
+// the posting date.
+function buildBillPayload({ site, date, postDate = date, amount, entityId }) {
+  const invoiceNumber = buildInvoiceNumber(site, postDate)
   return {
     billNumber: invoiceNumber,
     vendor: { id: MERCHANT_FEE_VENDOR_ID },
     description: invoiceNumber,
-    createdDate: date,
-    postingDate: date,
-    dueDate: date,
+    createdDate: postDate,
+    postingDate: postDate,
+    dueDate: postDate,
     // Bills default to draft, and Intacct rejects 'posted' on create. 'submitted'
     // is the API's equivalent of the UI's Submit, which posts the bill (a
     // payment can only be applied to a posted bill).
@@ -63,12 +66,12 @@ function buildBillPayload({ site, date, amount, entityId }) {
   }
 }
 
-function buildPaymentPayload({ site, date, amount, bankAccountId, billKey }) {
+function buildPaymentPayload({ site, date, postDate = date, amount, bankAccountId, billKey }) {
   return {
     financialEntity: { id: bankAccountId },
     vendor: { id: MERCHANT_FEE_VENDOR_ID },
     paymentMethod: PAYMENT_METHOD,
-    paymentDate: date,
+    paymentDate: postDate,
     description: MERCHANT_FEE_MEMO,
     // Created as a draft, then submitted (see submitPayment) so it posts at once.
     action: 'draft',

@@ -408,7 +408,7 @@ async function recordMerchantFeeInIntacct({ site, date, nextDate, merchantFees, 
     let amount = existing.billAmount
     if (!billKey) {
       amount = merchantFees
-      billKey = await sageService.createBill(token, entityId, { site, date, amount })
+      billKey = await sageService.createBill(token, entityId, { site, date, postDate: nextDate, amount })
       await BankStatement.updateOne(
         { site, date: nextDate },
         { $set: { 'sageMerchantFee.billKey': billKey, 'sageMerchantFee.billAmount': amount } }
@@ -419,7 +419,7 @@ async function recordMerchantFeeInIntacct({ site, date, nextDate, merchantFees, 
     // failed submit is finished on the next save instead of creating a second payment.
     let paymentKey = existing.paymentKey
     if (!paymentKey) {
-      paymentKey = await sageService.createPayment(token, entityId, { site, date, amount, bankAccountId, billKey })
+      paymentKey = await sageService.createPayment(token, entityId, { site, date, postDate: nextDate, amount, bankAccountId, billKey })
       await BankStatement.updateOne(
         { site, date: nextDate },
         { $set: { 'sageMerchantFee.paymentKey': paymentKey, 'sageMerchantFee.submitPending': true } }

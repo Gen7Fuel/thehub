@@ -116,3 +116,28 @@ describe('submitPayment', () => {
     await expect(submitPayment('tok', 'G160', '1')).rejects.toThrow(/Sage 400: Payload contains errors/)
   })
 })
+
+describe('merchant fee posting date', () => {
+  it('posts the bill the day after and names it for the posting date', () => {
+    const bill = buildBillPayload({ site: 'Couchiching', date: '2026-10-02', postDate: '2026-10-03', amount: 10, entityId: 'G160' })
+    expect(bill).toMatchObject({
+      billNumber: 'Merch Fees Oct 03/2026 - Couchiching',
+      description: 'Merch Fees Oct 03/2026 - Couchiching',
+      createdDate: '2026-10-03',
+      postingDate: '2026-10-03',
+      dueDate: '2026-10-03',
+    })
+  })
+
+  it('dates the payment on the posting day', () => {
+    const payment = buildPaymentPayload({
+      site: 'Couchiching',
+      date: '2026-10-02',
+      postDate: '2026-10-03',
+      amount: 10,
+      bankAccountId: SITE_BANK_ACCOUNTS.Couchiching,
+      billKey: '1',
+    })
+    expect(payment.paymentDate).toBe('2026-10-03')
+  })
+})

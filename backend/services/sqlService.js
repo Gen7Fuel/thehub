@@ -1964,194 +1964,195 @@ async function getEmployeeTimesheetVsSalesChart(pool, csoCode, startDate, endDat
     // `);
     .query(`
       WITH CategorizedTimesheets AS (
-        SELECT 
-            CAST(t.[startDate] AS DATE) AS LaborDate,
-            t.[Station_SK],
-            t.[status],
-            t.[hours],
-            t.[earningDescription],
-            t.[position],
-            
-            -- Flag manager vs regular employee
-            CASE WHEN t.[position] LIKE '%Manager%' THEN 1 ELSE 0 END AS IsManager,
+          SELECT 
+              CAST(t.[startDate] AS DATE) AS LaborDate,
+              t.[Station_SK],
+              t.[status],
+              t.[hours],
+              t.[earningDescription],
+              t.[position],
+              
+              CASE WHEN t.[position] LIKE '%Manager%' THEN 1 ELSE 0 END AS IsManager,
 
-            -- Cost calculation for all valid earning types
-            CASE t.[earningDescription]
-                WHEN 'Holiday Pay 1.0'       THEN ISNULL(TRY_CAST(e.[employeeRate_Holiday_Pay_1_0] AS DECIMAL(18,4)), 0) * t.[hours]
-                WHEN 'ST Holiday Pay 1.0'    THEN ISNULL(TRY_CAST(e.[employeeRate_ST_Holiday_Pay_1_0] AS DECIMAL(18,4)), 0) * t.[hours]
-                WHEN 'Holiday Pay @1.5'      THEN ISNULL(TRY_CAST(e.[employeeRate_Holiday_Pay_1_5] AS DECIMAL(18,4)), 0) * t.[hours]
-                WHEN 'ST Holiday Pay @ 1.5'  THEN ISNULL(TRY_CAST(e.[employeeRate_ST_Holiday_Pay_1_5] AS DECIMAL(18,4)), 0) * t.[hours]
-                WHEN 'Overtime'             THEN ISNULL(TRY_CAST(e.[employeeRate_Overtime] AS DECIMAL(18,4)), 0) * t.[hours]
-                WHEN 'ST Overtime'          THEN ISNULL(TRY_CAST(e.[employeeRate_Overtime] AS DECIMAL(18,4)), 0) * t.[hours]
-                WHEN 'Regular Pay'          THEN ISNULL(TRY_CAST(e.[employeeRate_Regular_Pay] AS DECIMAL(18,4)), 0) * t.[hours]
-                WHEN 'ST Regular Pay'       THEN ISNULL(TRY_CAST(e.[employeeRate_ST_Regular_Pay] AS DECIMAL(18,4)), 0) * t.[hours]
-                WHEN 'Regular Salary'       THEN (ISNULL(TRY_CAST(e.[employeeRate_Regular_Salary] AS DECIMAL(18,4)), 0) / NULLIF(TRY_CAST(e.[hoursPerPay] AS DECIMAL(18,4)), 0)) * t.[hours]
-                WHEN 'ST Reg Salary'        THEN (ISNULL(TRY_CAST(e.[employeeRate_ST_Reg_Salary] AS DECIMAL(18,4)), 0) / NULLIF(TRY_CAST(e.[hoursPerPay] AS DECIMAL(18,4)), 0)) * t.[hours]
-                WHEN 'Sick - Unpaid Hrs'    THEN ISNULL(TRY_CAST(e.[employeeRate_Sick_Unpaid_Hrs] AS DECIMAL(18,4)), 0) * t.[hours]
-                WHEN 'Sick Hrs - Paid'      THEN ISNULL(TRY_CAST(e.[employeeRate_Sick_Hrs_Paid] AS DECIMAL(18,4)), 0) * t.[hours]
-                WHEN 'Gen7Callin Hrs'       THEN (ISNULL(TRY_CAST(e.[employeeRate_Regular_Pay] AS DECIMAL(18,4)), 0) + ISNULL(TRY_CAST(e.[employeeRate_Gen7Callin_Hrs] AS DECIMAL(18,4)), 0)) * t.[hours]
-                WHEN 'ST Gen7Callin Hrs'    THEN (ISNULL(TRY_CAST(e.[employeeRate_ST_Regular_Pay] AS DECIMAL(18,4)), 0) + ISNULL(TRY_CAST(e.[employeeRate_ST_Gen7Callin_Hrs] AS DECIMAL(18,4)), 0)) * t.[hours]
-                WHEN 'Training'             THEN COALESCE(TRY_CAST(e.[employeeRate_ST_Regular_Pay] AS DECIMAL(18,4)), TRY_CAST(e.[employeeRate_Regular_Pay] AS DECIMAL(18,4)), 0) * t.[hours]
-                WHEN 'Bereavement Hrs - Paid' THEN ISNULL(TRY_CAST(e.[employeeRate_Bereavement_Hrs_Paid] AS DECIMAL(18,4)), 0) * t.[hours]
-                ELSE 0
-            END AS ShiftCost,
+              CASE t.[earningDescription]
+                  WHEN 'Holiday Pay 1.0'       THEN ISNULL(TRY_CAST(e.[employeeRate_Holiday_Pay_1_0] AS DECIMAL(18,4)), 0) * t.[hours]
+                  WHEN 'ST Holiday Pay 1.0'    THEN ISNULL(TRY_CAST(e.[employeeRate_ST_Holiday_Pay_1_0] AS DECIMAL(18,4)), 0) * t.[hours]
+                  WHEN 'Holiday Pay @1.5'      THEN ISNULL(TRY_CAST(e.[employeeRate_Holiday_Pay_1_5] AS DECIMAL(18,4)), 0) * t.[hours]
+                  WHEN 'ST Holiday Pay @ 1.5'  THEN ISNULL(TRY_CAST(e.[employeeRate_ST_Holiday_Pay_1_5] AS DECIMAL(18,4)), 0) * t.[hours]
+                  WHEN 'Overtime'              THEN ISNULL(TRY_CAST(e.[employeeRate_Overtime] AS DECIMAL(18,4)), 0) * t.[hours]
+                  WHEN 'ST Overtime'           THEN ISNULL(TRY_CAST(e.[employeeRate_Overtime] AS DECIMAL(18,4)), 0) * t.[hours]
+                  WHEN 'Regular Pay'           THEN ISNULL(TRY_CAST(e.[employeeRate_Regular_Pay] AS DECIMAL(18,4)), 0) * t.[hours]
+                  WHEN 'ST Regular Pay'        THEN ISNULL(TRY_CAST(e.[employeeRate_ST_Regular_Pay] AS DECIMAL(18,4)), 0) * t.[hours]
+                  WHEN 'Regular Salary'        THEN (ISNULL(TRY_CAST(e.[employeeRate_Regular_Salary] AS DECIMAL(18,4)), 0) / NULLIF(TRY_CAST(e.[hoursPerPay] AS DECIMAL(18,4)), 0)) * t.[hours]
+                  WHEN 'ST Reg Salary'         THEN (ISNULL(TRY_CAST(e.[employeeRate_ST_Reg_Salary] AS DECIMAL(18,4)), 0) / NULLIF(TRY_CAST(e.[hoursPerPay] AS DECIMAL(18,4)), 0)) * t.[hours]
+                  WHEN 'Sick - Unpaid Hrs'     THEN ISNULL(TRY_CAST(e.[employeeRate_Sick_Unpaid_Hrs] AS DECIMAL(18,4)), 0) * t.[hours]
 
-            CASE WHEN t.[earningDescription] IN (
-                'Holiday Pay 1.0', 'ST Holiday Pay 1.0', 'Holiday Pay @1.5', 'ST Holiday Pay @ 1.5',
-                'Overtime', 'ST Overtime', 'Regular Pay', 'ST Regular Pay',
-                'Regular Salary', 'ST Reg Salary', 'Sick - Unpaid Hrs', 'Sick Hrs - Paid',
-                'Gen7Callin Hrs', 'ST Gen7Callin Hrs', 'Training', 'Bereavement Hrs - Paid'
-            ) THEN 1 ELSE 0 END AS IsValidEarningType,
+                  WHEN 'Sick Hrs - Paid' THEN
+                      CASE
+                          WHEN ISNULL(TRY_CAST(e.[employeeRate_Sick_Hrs_Paid] AS DECIMAL(18,4)), 0) > 100 THEN
+                              (
+                                  ISNULL(TRY_CAST(e.[employeeRate_Sick_Hrs_Paid] AS DECIMAL(18,4)), 0)
+                                  / NULLIF(TRY_CAST(e.[hoursPerPay] AS DECIMAL(18,4)), 0)
+                              ) * t.[hours]
+                          ELSE
+                              ISNULL(TRY_CAST(e.[employeeRate_Sick_Hrs_Paid] AS DECIMAL(18,4)), 0) * t.[hours]
+                      END
 
-            CASE 
-                WHEN t.[earningDescription] IN ('Holiday Pay 1.0', 'ST Holiday Pay 1.0') THEN 0
-                ELSE ISNULL(t.[hours], 0)
-            END AS EffectiveHours
+                  WHEN 'Gen7Callin Hrs'        THEN (ISNULL(TRY_CAST(e.[employeeRate_Regular_Pay] AS DECIMAL(18,4)), 0) + ISNULL(TRY_CAST(e.[employeeRate_Gen7Callin_Hrs] AS DECIMAL(18,4)), 0)) * t.[hours]
+                  WHEN 'ST Gen7Callin Hrs'     THEN (ISNULL(TRY_CAST(e.[employeeRate_ST_Regular_Pay] AS DECIMAL(18,4)), 0) + ISNULL(TRY_CAST(e.[employeeRate_ST_Gen7Callin_Hrs] AS DECIMAL(18,4)), 0)) * t.[hours]
+                  WHEN 'Training'              THEN COALESCE(TRY_CAST(e.[employeeRate_ST_Regular_Pay] AS DECIMAL(18,4)), TRY_CAST(e.[employeeRate_Regular_Pay] AS DECIMAL(18,4)), 0) * t.[hours]
+                  WHEN 'Bereavement Hrs - Paid' THEN ISNULL(TRY_CAST(e.[employeeRate_Bereavement_Hrs_Paid] AS DECIMAL(18,4)), 0) * t.[hours]
+                  ELSE 0
+              END AS ShiftCost,
 
-        FROM [Payworks].[Timesheets] t
-        INNER JOIN [Payworks].[Employees] e
-            ON CAST(t.[employeeId] AS NVARCHAR(100)) = e.[employeeId]
-        WHERE t.[startDate] >= CAST(@StartDate AS DATETIME)
-          AND t.[startDate] <= DATEADD(SECOND, -1, DATEADD(DAY, 1, CAST(@EndDate AS DATETIME)))
-          AND t.[Station_SK] = @StationSK
-          AND t.[Station_SK] IS NOT NULL
-          AND t.[DeletedAt] IS NULL
-          AND t.[status] <> 'Deleted'
-    ),
-    AggregatedTimesheets AS (
-        SELECT 
-            LaborDate,
-            Station_SK,
-            -- Regular Employees
-            SUM(CASE WHEN IsManager = 0 AND IsValidEarningType = 1 THEN EffectiveHours ELSE 0 END) AS TotalHoursWorked,
-            SUM(CASE WHEN IsManager = 0 THEN ShiftCost ELSE 0 END) AS ActualLaborCost,
-            SUM(CASE WHEN IsManager = 0 AND status IN ('Approved', 'Stat Pay') AND IsValidEarningType = 1 THEN EffectiveHours ELSE 0 END) AS ApprovedHoursWorked,
-            SUM(CASE WHEN IsManager = 0 AND status IN ('Approved', 'Stat Pay') THEN ShiftCost ELSE 0 END) AS ApprovedLaborCost,
-            SUM(CASE WHEN IsManager = 0 AND status = 'Pending' AND IsValidEarningType = 1 THEN EffectiveHours ELSE 0 END) AS PendingHoursWorked,
-            SUM(CASE WHEN IsManager = 0 AND status = 'Pending' THEN ShiftCost ELSE 0 END) AS PendingLaborCost,
-            
-            -- Managers
-            SUM(CASE WHEN IsManager = 1 AND IsValidEarningType = 1 THEN EffectiveHours ELSE 0 END) AS ManagerTotalHoursWorked,
-            SUM(CASE WHEN IsManager = 1 THEN ShiftCost ELSE 0 END) AS ManagerActualLaborCost,
-            SUM(CASE WHEN IsManager = 1 AND status IN ('Approved', 'Stat Pay') AND IsValidEarningType = 1 THEN EffectiveHours ELSE 0 END) AS ManagerApprovedHoursWorked,
-            SUM(CASE WHEN IsManager = 1 AND status IN ('Approved', 'Stat Pay') THEN ShiftCost ELSE 0 END) AS ManagerApprovedLaborCost,
-            SUM(CASE WHEN IsManager = 1 AND status = 'Pending' AND IsValidEarningType = 1 THEN EffectiveHours ELSE 0 END) AS ManagerPendingHoursWorked,
-            SUM(CASE WHEN IsManager = 1 AND status = 'Pending' THEN ShiftCost ELSE 0 END) AS ManagerPendingLaborCost
-        FROM CategorizedTimesheets
-        GROUP BY LaborDate, Station_SK
-    ),
-    CategorizedSchedules AS (
-        SELECT 
-            CAST(s.[startDateTime] AS DATE) AS ScheduleDate,
-            s.[Station_SK],
-            CASE WHEN s.[positionName] LIKE '%Manager%' THEN 1 ELSE 0 END AS IsManager,
-            DATEDIFF(MINUTE, s.[startDateTime], s.[endDateTime]) / 60.0 AS ScheduledHours,
-            (DATEDIFF(MINUTE, s.[startDateTime], s.[endDateTime]) / 60.0) * 
-                COALESCE(
-                    TRY_CAST(e.[employeeRate_ST_Regular_Pay] AS DECIMAL(18,4)), 
-                    TRY_CAST(e.[employeeRate_Regular_Pay] AS DECIMAL(18,4)), 
-                    0
-                ) AS ScheduledCost
-        FROM [Payworks].[ScheduleShifts] s
-        INNER JOIN [Payworks].[Employees] e
-            ON CAST(s.[employeeId] AS NVARCHAR(100)) = e.[employeeId]
-        WHERE s.[startDateTime] >= CAST(@StartDate AS DATETIME)
-          AND s.[startDateTime] <= DATEADD(SECOND, -1, DATEADD(DAY, 1, CAST(@EndDate AS DATETIME)))
-          AND s.[Station_SK] = @StationSK
-          AND s.[Station_SK] IS NOT NULL
-          AND (s.[isDeleted] IS NULL OR s.[isDeleted] = 0)
-    ),
-    AggregatedSchedules AS (
-        SELECT 
-            ScheduleDate,
-            Station_SK,
-            -- Regular Employees
-            SUM(CASE WHEN IsManager = 0 THEN ScheduledHours ELSE 0 END) AS ScheduledHours,
-            SUM(CASE WHEN IsManager = 0 THEN ScheduledCost ELSE 0 END) AS ScheduledCost,
-            -- Managers
-            SUM(CASE WHEN IsManager = 1 THEN ScheduledHours ELSE 0 END) AS ManagerScheduledHours,
-            SUM(CASE WHEN IsManager = 1 THEN ScheduledCost ELSE 0 END) AS ManagerScheduledCost
-        FROM CategorizedSchedules
-        GROUP BY ScheduleDate, Station_SK
-    ),
-    AggregatedStoreSales AS (
-        SELECT 
-            CAST([Date_SK] AS DATE) AS SalesDate,
-            [Station_SK],
-            SUM(ISNULL([Total_Sales], 0)) AS StoreSalesAmount
-        FROM [CSO].[TotalSales]
-        WHERE [Station_SK] = @StationSK
-          AND [Date_SK] >= @StartDate
-          AND [Date_SK] <= @EndDate
-        GROUP BY CAST([Date_SK] AS DATE), [Station_SK]
-    ),
-    AggregatedFuelSales AS (
-        SELECT 
+              CASE WHEN t.[earningDescription] IN (
+                  'Holiday Pay 1.0', 'ST Holiday Pay 1.0', 'Holiday Pay @1.5', 'ST Holiday Pay @ 1.5',
+                  'Overtime', 'ST Overtime', 'Regular Pay', 'ST Regular Pay',
+                  'Regular Salary', 'ST Reg Salary', 'Sick - Unpaid Hrs', 'Sick Hrs - Paid',
+                  'Gen7Callin Hrs', 'ST Gen7Callin Hrs', 'Training', 'Bereavement Hrs - Paid'
+              ) THEN 1 ELSE 0 END AS IsValidEarningType,
+
+              CASE 
+                  WHEN t.[earningDescription] IN ('Holiday Pay 1.0', 'ST Holiday Pay 1.0') THEN 0
+                  ELSE ISNULL(t.[hours], 0)
+              END AS EffectiveHours
+
+          FROM [Payworks].[Timesheets] t
+          INNER JOIN [Payworks].[Employees] e
+              ON CAST(t.[employeeId] AS NVARCHAR(100)) = e.[employeeId]
+          WHERE t.[startDate] >= CAST(@StartDate AS DATETIME)
+            AND t.[startDate] <= DATEADD(SECOND, -1, DATEADD(DAY, 1, CAST(@EndDate AS DATETIME)))
+            AND t.[Station_SK] = @StationSK
+            AND t.[Station_SK] IS NOT NULL
+            AND t.[DeletedAt] IS NULL
+            AND t.[status] <> 'Deleted'
+      ),
+      AggregatedTimesheets AS (
+          SELECT 
+              LaborDate,
+              Station_SK,
+              SUM(CASE WHEN IsManager = 0 AND IsValidEarningType = 1 THEN EffectiveHours ELSE 0 END) AS TotalHoursWorked,
+              SUM(CASE WHEN IsManager = 0 THEN ShiftCost ELSE 0 END) AS ActualLaborCost,
+              SUM(CASE WHEN IsManager = 0 AND status IN ('Approved', 'Stat Pay') AND IsValidEarningType = 1 THEN EffectiveHours ELSE 0 END) AS ApprovedHoursWorked,
+              SUM(CASE WHEN IsManager = 0 AND status IN ('Approved', 'Stat Pay') THEN ShiftCost ELSE 0 END) AS ApprovedLaborCost,
+              SUM(CASE WHEN IsManager = 0 AND status = 'Pending' AND IsValidEarningType = 1 THEN EffectiveHours ELSE 0 END) AS PendingHoursWorked,
+              SUM(CASE WHEN IsManager = 0 AND status = 'Pending' THEN ShiftCost ELSE 0 END) AS PendingLaborCost,
+              SUM(CASE WHEN IsManager = 1 AND IsValidEarningType = 1 THEN EffectiveHours ELSE 0 END) AS ManagerTotalHoursWorked,
+              SUM(CASE WHEN IsManager = 1 THEN ShiftCost ELSE 0 END) AS ManagerActualLaborCost,
+              SUM(CASE WHEN IsManager = 1 AND status IN ('Approved', 'Stat Pay') AND IsValidEarningType = 1 THEN EffectiveHours ELSE 0 END) AS ManagerApprovedHoursWorked,
+              SUM(CASE WHEN IsManager = 1 AND status IN ('Approved', 'Stat Pay') THEN ShiftCost ELSE 0 END) AS ManagerApprovedLaborCost,
+              SUM(CASE WHEN IsManager = 1 AND status = 'Pending' AND IsValidEarningType = 1 THEN EffectiveHours ELSE 0 END) AS ManagerPendingHoursWorked,
+              SUM(CASE WHEN IsManager = 1 AND status = 'Pending' THEN ShiftCost ELSE 0 END) AS ManagerPendingLaborCost
+          FROM CategorizedTimesheets
+          GROUP BY LaborDate, Station_SK
+      ),
+      CategorizedSchedules AS (
+          SELECT 
+              CAST(s.[startDateTime] AS DATE) AS ScheduleDate,
+              s.[Station_SK],
+              CASE WHEN s.[positionName] LIKE '%Manager%' THEN 1 ELSE 0 END AS IsManager,
+              DATEDIFF(MINUTE, s.[startDateTime], s.[endDateTime]) / 60.0 AS ScheduledHours,
+              (DATEDIFF(MINUTE, s.[startDateTime], s.[endDateTime]) / 60.0) *
+                  COALESCE(
+                      TRY_CAST(e.[employeeRate_ST_Regular_Pay] AS DECIMAL(18,4)),
+                      TRY_CAST(e.[employeeRate_Regular_Pay] AS DECIMAL(18,4)),
+                      TRY_CAST(e.[employeeRate_ST_Reg_Salary] AS DECIMAL(18,4)) / NULLIF(TRY_CAST(e.[hoursPerPay] AS DECIMAL(18,4)), 0),
+                      TRY_CAST(e.[employeeRate_Regular_Salary] AS DECIMAL(18,4)) / NULLIF(TRY_CAST(e.[hoursPerPay] AS DECIMAL(18,4)), 0),
+                      0
+                  ) AS ScheduledCost
+          FROM [Payworks].[ScheduleShifts] s
+          INNER JOIN [Payworks].[Employees] e
+              ON CAST(s.[employeeId] AS NVARCHAR(100)) = e.[employeeId]
+          WHERE s.[startDateTime] >= CAST(@StartDate AS DATETIME)
+            AND s.[startDateTime] <= DATEADD(SECOND, -1, DATEADD(DAY, 1, CAST(@EndDate AS DATETIME)))
+            AND s.[Station_SK] = @StationSK
+            AND s.[Station_SK] IS NOT NULL
+            AND (s.[isDeleted] IS NULL OR s.[isDeleted] = 0)
+      ),
+      AggregatedSchedules AS (
+          SELECT 
+              ScheduleDate,
+              Station_SK,
+              SUM(CASE WHEN IsManager = 0 THEN ScheduledHours ELSE 0 END) AS ScheduledHours,
+              SUM(CASE WHEN IsManager = 0 THEN ScheduledCost ELSE 0 END) AS ScheduledCost,
+              SUM(CASE WHEN IsManager = 1 THEN ScheduledHours ELSE 0 END) AS ManagerScheduledHours,
+              SUM(CASE WHEN IsManager = 1 THEN ScheduledCost ELSE 0 END) AS ManagerScheduledCost
+          FROM CategorizedSchedules
+          GROUP BY ScheduleDate, Station_SK
+      ),
+      AggregatedStoreSales AS (
+          SELECT 
+              CAST([Date_SK] AS DATE) AS SalesDate,
+              [Station_SK],
+              SUM(ISNULL([Total_Sales], 0)) AS StoreSalesAmount
+          FROM [CSO].[TotalSales]
+          WHERE [Station_SK] = @StationSK
+            AND [Date_SK] >= @StartDate
+            AND [Date_SK] <= @EndDate
+          GROUP BY CAST([Date_SK] AS DATE), [Station_SK]
+      ),
+      AggregatedFuelSales AS (
+          SELECT 
+              CAST(
+                CASE 
+                  WHEN LEN(CAST([Date_SK] AS VARCHAR(8))) = 8 AND CHARINDEX('-', CAST([Date_SK] AS VARCHAR(8))) = 0
+                  THEN STUFF(STUFF(CAST([Date_SK] AS VARCHAR(8)), 5, 0, '-'), 8, 0, '-')
+                  ELSE CAST([Date_SK] AS VARCHAR(10))
+                END AS DATE
+              ) AS FuelDate,
+              [Station_SK],
+              SUM(ISNULL([Sales_Amount], 0)) AS FuelSalesAmount
+          FROM [CSO].[FuelSummary]
+          WHERE [Station_SK] = @StationSK
+            AND [Date_SK] >= REPLACE(CAST(@StartDate AS VARCHAR(10)), '-', '')
+            AND [Date_SK] <= REPLACE(CAST(@EndDate AS VARCHAR(10)), '-', '')
+          GROUP BY 
             CAST(
               CASE 
                 WHEN LEN(CAST([Date_SK] AS VARCHAR(8))) = 8 AND CHARINDEX('-', CAST([Date_SK] AS VARCHAR(8))) = 0
                 THEN STUFF(STUFF(CAST([Date_SK] AS VARCHAR(8)), 5, 0, '-'), 8, 0, '-')
                 ELSE CAST([Date_SK] AS VARCHAR(10))
               END AS DATE
-            ) AS FuelDate,
-            [Station_SK],
-            SUM(ISNULL([Sales_Amount], 0)) AS FuelSalesAmount
-        FROM [CSO].[FuelSummary]
-        WHERE [Station_SK] = @StationSK
-          AND [Date_SK] >= REPLACE(CAST(@StartDate AS VARCHAR(10)), '-', '')
-          AND [Date_SK] <= REPLACE(CAST(@EndDate AS VARCHAR(10)), '-', '')
-        GROUP BY 
-          CAST(
-            CASE 
-              WHEN LEN(CAST([Date_SK] AS VARCHAR(8))) = 8 AND CHARINDEX('-', CAST([Date_SK] AS VARCHAR(8))) = 0
-              THEN STUFF(STUFF(CAST([Date_SK] AS VARCHAR(8)), 5, 0, '-'), 8, 0, '-')
-              ELSE CAST([Date_SK] AS VARCHAR(10))
-            END AS DATE
-          ), [Station_SK]
-    )
-    SELECT 
-        COALESCE(ts.LaborDate, sch.ScheduleDate) AS LaborDate,
-        COALESCE(ts.Station_SK, sch.Station_SK) AS Station_SK,
-        
-        -- Regular Employee Columns
-        ISNULL(sch.ScheduledHours, 0) AS ScheduledHours,
-        ISNULL(sch.ScheduledCost, 0) AS ScheduledCost,
-        ISNULL(sch.ManagerScheduledHours, 0) AS ManagerScheduledHours,
-        ISNULL(sch.ManagerScheduledCost, 0) AS ManagerScheduledCost,
-        ISNULL(ts.TotalHoursWorked, 0) AS TotalHoursWorked,
-        ISNULL(ts.ActualLaborCost, 0) AS ActualLaborCost,
-        ISNULL(ts.ManagerTotalHoursWorked, 0) AS ManagerTotalHoursWorked,
-        ISNULL(ts.ManagerActualLaborCost, 0) AS ManagerActualLaborCost,
-        ISNULL(ts.ApprovedHoursWorked, 0) AS ApprovedHoursWorked,
-        ISNULL(ts.ApprovedLaborCost, 0) AS ApprovedLaborCost,
-        ISNULL(ts.ManagerApprovedHoursWorked, 0) AS ManagerApprovedHoursWorked,
-        ISNULL(ts.ManagerApprovedLaborCost, 0) AS ManagerApprovedLaborCost,
-        ISNULL(ts.PendingHoursWorked, 0) AS PendingHoursWorked,
-        ISNULL(ts.PendingLaborCost, 0) AS PendingLaborCost,
-        ISNULL(ts.ManagerPendingHoursWorked, 0) AS ManagerPendingHoursWorked,
-        ISNULL(ts.ManagerPendingLaborCost, 0) AS ManagerPendingLaborCost,
-
-        -- Traffic & Sales Metrics
-        ISNULL(tr.[Number of Transaction ID], 0) AS transactions,
-        ISNULL(ss.StoreSalesAmount, 0) AS storeSales,
-        ISNULL(fs.FuelSalesAmount, 0) AS fuelSales,
-        (ISNULL(ss.StoreSalesAmount, 0) + ISNULL(fs.FuelSalesAmount, 0)) AS totalSales
-
-    FROM AggregatedTimesheets ts
-    FULL OUTER JOIN AggregatedSchedules sch
-        ON ts.Station_SK = sch.Station_SK
-      AND ts.LaborDate = sch.ScheduleDate
-    LEFT JOIN [CSO].[Daily Transaction Traffic View] tr
-        ON COALESCE(ts.Station_SK, sch.Station_SK) = tr.Station_SK 
-      AND COALESCE(ts.LaborDate, sch.ScheduleDate) = CAST(tr.[Date] AS DATE)
-    LEFT JOIN AggregatedStoreSales ss
-        ON COALESCE(ts.Station_SK, sch.Station_SK) = ss.Station_SK
-      AND COALESCE(ts.LaborDate, sch.ScheduleDate) = ss.SalesDate
-    LEFT JOIN AggregatedFuelSales fs
-        ON COALESCE(ts.Station_SK, sch.Station_SK) = fs.Station_SK
-      AND COALESCE(ts.LaborDate, sch.ScheduleDate) = fs.FuelDate
-    ORDER BY 
-        LaborDate ASC;
+            ), [Station_SK]
+      )
+      SELECT 
+          COALESCE(ts.LaborDate, sch.ScheduleDate) AS LaborDate,
+          COALESCE(ts.Station_SK, sch.Station_SK) AS Station_SK,
+          ISNULL(sch.ScheduledHours, 0) AS ScheduledHours,
+          ISNULL(sch.ScheduledCost, 0) AS ScheduledCost,
+          ISNULL(sch.ManagerScheduledHours, 0) AS ManagerScheduledHours,
+          ISNULL(sch.ManagerScheduledCost, 0) AS ManagerScheduledCost,
+          ISNULL(ts.TotalHoursWorked, 0) AS TotalHoursWorked,
+          ISNULL(ts.ActualLaborCost, 0) AS ActualLaborCost,
+          ISNULL(ts.ManagerTotalHoursWorked, 0) AS ManagerTotalHoursWorked,
+          ISNULL(ts.ManagerActualLaborCost, 0) AS ManagerActualLaborCost,
+          ISNULL(ts.ApprovedHoursWorked, 0) AS ApprovedHoursWorked,
+          ISNULL(ts.ApprovedLaborCost, 0) AS ApprovedLaborCost,
+          ISNULL(ts.ManagerApprovedHoursWorked, 0) AS ManagerApprovedHoursWorked,
+          ISNULL(ts.ManagerApprovedLaborCost, 0) AS ManagerApprovedLaborCost,
+          ISNULL(ts.PendingHoursWorked, 0) AS PendingHoursWorked,
+          ISNULL(ts.PendingLaborCost, 0) AS PendingLaborCost,
+          ISNULL(ts.ManagerPendingHoursWorked, 0) AS ManagerPendingHoursWorked,
+          ISNULL(ts.ManagerPendingLaborCost, 0) AS ManagerPendingLaborCost,
+          ISNULL(tr.[Number of Transaction ID], 0) AS transactions,
+          ISNULL(ss.StoreSalesAmount, 0) AS storeSales,
+          ISNULL(fs.FuelSalesAmount, 0) AS fuelSales,
+          (ISNULL(ss.StoreSalesAmount, 0) + ISNULL(fs.FuelSalesAmount, 0)) AS totalSales
+      FROM AggregatedTimesheets ts
+      FULL OUTER JOIN AggregatedSchedules sch
+          ON ts.Station_SK = sch.Station_SK
+        AND ts.LaborDate = sch.ScheduleDate
+      LEFT JOIN [CSO].[Daily Transaction Traffic View] tr
+          ON COALESCE(ts.Station_SK, sch.Station_SK) = tr.Station_SK 
+        AND COALESCE(ts.LaborDate, sch.ScheduleDate) = CAST(tr.[Date] AS DATE)
+      LEFT JOIN AggregatedStoreSales ss
+          ON COALESCE(ts.Station_SK, sch.Station_SK) = ss.Station_SK
+        AND COALESCE(ts.LaborDate, sch.ScheduleDate) = ss.SalesDate
+      LEFT JOIN AggregatedFuelSales fs
+          ON COALESCE(ts.Station_SK, sch.Station_SK) = fs.Station_SK
+        AND COALESCE(ts.LaborDate, sch.ScheduleDate) = fs.FuelDate
+      ORDER BY 
+          LaborDate ASC;
       `)
   return {
     timesheets: transactionsResult.recordset ?? [],

@@ -94,7 +94,15 @@ router.get('/all-data', async (req, res) => {
 
   try {
     // 1. Check Redis cache
-    const cacheKey = `dashboard:${siteParam}:allSqlData`;
+    const cacheKeyParts = [
+      'dashboard',
+      'v2',
+      siteParam || 'unknown-site',
+      csoCode || 'unknown-cso',
+      timesheetStart || 'no-timesheet-start',
+      timesheetEnd || 'no-timesheet-end',
+    ];
+    const cacheKey = cacheKeyParts.map(part => encodeURIComponent(String(part))).join(':');
     const cached = await redis.get(cacheKey);
     if (cached) {
       const parsed = JSON.parse(cached);
@@ -163,8 +171,15 @@ router.get('/all-data', async (req, res) => {
         ? Math.round(dispenserSalesByDate[rowDate] * 100) / 100 
         : 0;
 
+      const storeSales = Number(row.storeSales) || 0;
+      const fuelSales = Number(row.fuelSales) || 0;
+      const totalSales = Number(row.totalSales) || storeSales + fuelSales;
+
       return {
         ...row,
+        storeSales,
+        fuelSales,
+        totalSales,
         dispenserSales // Injected property
       };
     });

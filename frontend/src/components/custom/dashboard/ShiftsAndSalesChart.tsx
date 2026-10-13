@@ -48,6 +48,13 @@ function getNumber(item: any, ...keys: string[]) {
   return 0;
 }
 
+function getTotalSales(item: any) {
+  const totalSales = getNumber(item, "totalSales", "sales");
+  if (totalSales) return totalSales;
+
+  return getNumber(item, "storeSales") + getNumber(item, "fuelSales");
+}
+
 function ChartToggle({
   id,
   checked,
@@ -164,8 +171,8 @@ export function ShiftsAndSalesChart({
           pendingCost: 0,
           managerApprovedCost: 0,
           managerPendingCost: 0,
-          totalSales: Number(item.totalSales || item.sales || 0),
-          dispenserSales: Number(item.dispenserSales || 0),
+          totalSales: getTotalSales(item),
+          dispenserSales: getNumber(item, "dispenserSales"),
           transactions: Number(item.transactions || item.Transactions || 0),
           date: formattedDate,
           dayLabel,
@@ -594,8 +601,8 @@ export function ShiftsAndSalesAggregatedChart({
 
       const formattedDate = String(dateStr).slice(0, 10);
 
-      const totalSales = Number(item.totalSales || item.sales || 0);
-      const dispenserSales = Number(item.dispenserSales || 0);
+      const totalSales = getTotalSales(item);
+      const dispenserSales = getNumber(item, "dispenserSales");
       const activeSales = showAllSales
         ? totalSales
         : Math.max(0, totalSales - dispenserSales);
