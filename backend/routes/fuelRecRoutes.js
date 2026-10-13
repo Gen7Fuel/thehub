@@ -41,72 +41,6 @@ async function getBOLPhoto() {
 
 const isYmd = (s) => typeof s === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(s)
 
-function buildAuthorName(user) {
-  if (user && (user.firstName || user.lastName)) {
-    return `${user.firstName || ''} ${user.lastName || ''}`.trim()
-  }
-  return (user && (user.name || user.email)) || 'System User'
-}
-
-function normalizeFuelItems(items) {
-  if (!Array.isArray(items)) return null
-
-  return items
-    .map((item) => ({
-      grade: String(item?.grade || '').trim(),
-      ltrs: Number(item?.ltrs || 0),
-    }))
-    .filter((item) => item.grade)
-    .map((item) => ({
-      grade: item.grade,
-      ltrs: Number.isFinite(item.ltrs) && item.ltrs >= 0 ? item.ltrs : 0,
-    }))
-}
-
-function buildRetainComment(retainItems) {
-  if (!Array.isArray(retainItems)) return ''
-
-  const lines = retainItems
-    .map((item) => ({
-      grade: String(item?.grade || '').trim(),
-      ltrs: Number(item?.ltrs || 0),
-    }))
-    .filter((item) => item.grade && Number.isFinite(item.ltrs) && item.ltrs > 0)
-    .map((item) => `${item.grade}: ${item.ltrs.toLocaleString('en-US')} L`)
-
-  if (!lines.length) return ''
-  return `Fuel retained:\n${lines.join('\n')}`
-}
-
-function buildRetainCommentForBol(retainItems, bolNumber) {
-  const base = buildRetainComment(retainItems)
-  if (!base) return ''
-  return base.replace('Fuel retained:', `Fuel retained (${bolNumber}):`)
-}
-
-function parseRetainComment(text) {
-  const commentText = String(text || '')
-  if (!commentText.startsWith('Fuel retained')) return null
-
-  const retainedItems = []
-  for (const line of commentText.split('\n').slice(1)) {
-    const match = line.trim().match(/^(.+):\s*([\d,]+(?:\.\d+)?)\s*L$/)
-    if (!match) continue
-
-    const grade = match[1].trim()
-    const ltrs = Number(match[2].replace(/,/g, ''))
-    if (grade && Number.isFinite(ltrs) && ltrs > 0) {
-      retainedItems.push({ grade, ltrs })
-    }
-  }
-
-  return retainedItems.length ? retainedItems : null
-}
-
-function retainCommentMatchesBol(text, bolNumber) {
-  return String(text || '').startsWith(`Fuel retained (${bolNumber}):`)
-}
-
 function getLinkedPoNumbers(bol) {
   return Array.from(new Set([
     ...(Array.isArray(bol?.poNumbers) ? bol.poNumbers : []),
@@ -488,14 +422,12 @@ router.post('/:id/link-po', async (req, res) => {
   try {
     const id = String(req.params.id || '').trim()
     const fuelOrderId = String(req.body?.fuelOrderId || '').trim()
-    const updatedItems = normalizeFuelItems(req.body?.items)
     if (!id || !fuelOrderId) return res.status(400).json({ error: 'id and fuelOrderId are required' })
 
     const BOLPhoto = await getBOLPhoto()
     const bol = await BOLPhoto.findById(id).lean()
     if (!bol) return res.status(404).json({ error: 'BOL entry not found' })
     if (!bol.bolNumber) return res.status(400).json({ error: 'BOL number is required before linking' })
-    const retainComment = buildRetainCommentForBol(req.body?.retainItems, bol.bolNumber)
 
     const location = await findLocationForBolSite(bol.site)
     if (!location) return res.status(404).json({ error: `Location not found for site '${bol.site}'` })
@@ -518,18 +450,6 @@ router.post('/:id/link-po', async (req, res) => {
     order.bolNumbers = [...existingBolNumbers, String(bol.bolNumber).trim()]
     order.bolLinked = order.bolNumbers.length > 0
     order.bolNumber = undefined
-
-    if (updatedItems && updatedItems.length) {
-      order.items = updatedItems
-    }
-
-    if (retainComment) {
-      order.comments.push({
-        text: retainComment,
-        author: buildAuthorName(req.user),
-        timestamp: new Date(),
-      })
-    }
 
     await order.save()
 
@@ -583,31 +503,6 @@ router.post('/:id/unlink-po', async (req, res) => {
       const linkedBolNumbers = getLinkedBolNumbers(order)
       if (!linkedBolNumbers.includes(currentBolNumber)) {
         return res.status(400).json({ error: 'Fuel PO is not linked to this BOL' })
-      }
-
-      const comments = Array.isArray(order.comments) ? order.comments : []
-      let retainCommentIndex = comments
-        .map((comment, index) => ({ comment, index, retainedItems: parseRetainComment(comment.text), matchesBol: retainCommentMatchesBol(comment.text, currentBolNumber) }))
-        .filter((entry) => entry.retainedItems && entry.matchesBol)
-        .pop()
-
-      if (!retainCommentIndex) {
-        retainCommentIndex = comments
-          .map((comment, index) => ({ comment, index, retainedItems: parseRetainComment(comment.text) }))
-          .filter((entry) => entry.retainedItems)
-          .pop()
-      }
-
-      if (retainCommentIndex) {
-        for (const retainedItem of retainCommentIndex.retainedItems) {
-          const orderItem = order.items.find((item) => item.grade === retainedItem.grade)
-          if (orderItem) {
-            orderItem.ltrs = Number(orderItem.ltrs || 0) + retainedItem.ltrs
-          } else {
-            order.items.push({ grade: retainedItem.grade, ltrs: retainedItem.ltrs })
-          }
-        }
-        order.comments.splice(retainCommentIndex.index, 1)
       }
 
       order.bolNumbers = linkedBolNumbers.filter((bolNumber) => bolNumber !== currentBolNumber)

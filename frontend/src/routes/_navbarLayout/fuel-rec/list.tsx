@@ -187,8 +187,6 @@ function RouteComponent() {
   const [unlinkPending, setUnlinkPending] = React.useState(false)
   const [reviewOrder, setReviewOrder] = React.useState<FuelOrderCandidate | null>(null)
   const [reviewItems, setReviewItems] = React.useState<FuelOrderItem[]>([])
-  const [retainItems, setRetainItems] = React.useState<FuelOrderItem[]>([])
-  const [retainMode, setRetainMode] = React.useState(false)
   const [bolZoom, setBolZoom] = React.useState(145)
 
   const requestAgain = async (e: BOLPhoto) => {
@@ -380,32 +378,14 @@ function RouteComponent() {
     }))
     setReviewOrder(order)
     setReviewItems(items)
-    setRetainItems(items.map((item) => ({ grade: item.grade, ltrs: 0 })))
-    setRetainMode(false)
-  }
-
-  const updateReviewQty = (grade: string, value: string) => {
-    setReviewItems((prev) => prev.map((item) => item.grade === grade
-      ? { ...item, ltrs: Math.max(0, parseInt(value, 10) || 0) }
-      : item
-    ))
-  }
-
-  const updateRetainQty = (grade: string, value: string) => {
-    setRetainItems((prev) => prev.map((item) => item.grade === grade
-      ? { ...item, ltrs: Math.max(0, parseInt(value, 10) || 0) }
-      : item
-    ))
   }
 
   const closeQuantityReview = () => {
     setReviewOrder(null)
     setReviewItems([])
-    setRetainItems([])
-    setRetainMode(false)
   }
 
-  const linkFuelPo = async (order: FuelOrderCandidate, items: FuelOrderItem[], retain: FuelOrderItem[]) => {
+  const linkFuelPo = async (order: FuelOrderCandidate) => {
     if (!activeLinkEntry) return
     setLinkPendingOrderId(order._id)
     try {
@@ -417,8 +397,6 @@ function RouteComponent() {
         },
         body: JSON.stringify({
           fuelOrderId: order._id,
-          items,
-          retainItems: retain,
         }),
       })
       if (!res.ok) {
@@ -624,18 +602,19 @@ function RouteComponent() {
                             )}
                           </Button>
                         )}
-
-                        <Button
-                          variant={e.poLinked ? "default" : "outline"}
-                          size="icon"
-                          onClick={() => openLinkDialog(e)}
-                          disabled={pending.has(e._id)}
-                          title={e.poLinked ? `Linked to PO${getBolPoNumbers(e).length === 1 ? ` ${getBolPoNumbers(e)[0]}` : 's'}` : 'Link PO'}
-                          aria-label={e.poLinked ? `Linked to PO${getBolPoNumbers(e).length === 1 ? ` ${getBolPoNumbers(e)[0]}` : 's'}` : 'Link PO'}
-                          className={e.poLinked ? 'bg-emerald-600 hover:bg-emerald-700 text-white' : undefined}
-                        >
-                          <Link2 className="h-4 w-4" />
-                        </Button>
+                        {access?.accounting?.fuelRec?.linkPo && (
+                          <Button
+                            variant={e.poLinked ? "default" : "outline"}
+                            size="icon"
+                            onClick={() => openLinkDialog(e)}
+                            disabled={pending.has(e._id)}
+                            title={e.poLinked ? `Linked to PO${getBolPoNumbers(e).length === 1 ? ` ${getBolPoNumbers(e)[0]}` : 's'}` : 'Link PO'}
+                            aria-label={e.poLinked ? `Linked to PO${getBolPoNumbers(e).length === 1 ? ` ${getBolPoNumbers(e)[0]}` : 's'}` : 'Link PO'}
+                            className={e.poLinked ? 'bg-emerald-600 hover:bg-emerald-700 text-white' : undefined}
+                          >
+                            <Link2 className="h-4 w-4" />
+                          </Button>
+                        )}
 
                         {access?.accounting?.fuelRec?.postBol &&
                           !e.comments?.some((c) => c.text.toLowerCase().includes('bol posted')) && (
@@ -911,91 +890,39 @@ function RouteComponent() {
         </DialogContent>
       </Dialog>
 
-      {/* 4. Quantity Review / Retain Dialog */}
+      {/* 4. Quantity Review Dialog */}
       <Dialog open={!!reviewOrder} onOpenChange={(open) => !open && closeQuantityReview()}>
         <DialogContent className="sm:max-w-[640px]">
           <DialogHeader>
             <DialogTitle>
-              {retainMode ? 'Adjust Retain - ' : 'Confirm Quantities - '}
-              {reviewOrder?.poNumber}
+              Confirm Quantities - {reviewOrder?.poNumber}
             </DialogTitle>
           </DialogHeader>
 
-          {!retainMode ? (
-            <div className="space-y-4">
-              <div className="text-sm text-slate-600">
-                Confirm delivered quantities before linking this BOL to the selected PO.
-              </div>
-
-              <div className="border rounded-md divide-y">
-                {reviewItems.map((item) => (
-                  <div key={item.grade} className="flex items-center justify-between p-3 text-sm">
-                    <span className="font-semibold text-slate-700">{item.grade}</span>
-                    <span className="font-mono font-semibold">{Number(item.ltrs || 0).toLocaleString()} L</span>
-                  </div>
-                ))}
-              </div>
-
-              <div className="flex justify-end gap-2">
-                <Button variant="outline" onClick={closeQuantityReview}>Cancel</Button>
-                <Button variant="outline" onClick={() => setRetainMode(true)}>Retain</Button>
-                <Button
-                  onClick={() => reviewOrder && linkFuelPo(reviewOrder, reviewItems, [])}
-                  disabled={!reviewOrder || linkPendingOrderId === reviewOrder?._id}
-                >
-                  {linkPendingOrderId === reviewOrder?._id ? 'Linking...' : 'Confirm & Link'}
-                </Button>
-              </div>
+          <div className="space-y-4">
+            <div className="text-sm text-slate-600">
+              Review delivered quantities before linking this BOL to the selected PO.
             </div>
-          ) : (
-            <div className="space-y-4">
-              <div className="text-sm text-slate-600">
-                Edit actual delivered quantities if needed, and enter retained litres by grade. Retain values will be posted as a PO comment.
-              </div>
 
-              <div className="border rounded-md overflow-hidden">
-                <div className="grid grid-cols-[1fr_1fr_1fr] bg-slate-50 text-[11px] uppercase font-bold text-slate-500">
-                  <div className="p-2">Actual Qty</div>
-                  <div className="p-2 text-center">Grade</div>
-                  <div className="p-2">Retain Qty</div>
+            <div className="border rounded-md divide-y">
+              {reviewItems.map((item) => (
+                <div key={item.grade} className="flex items-center justify-between p-3 text-sm">
+                  <span className="font-semibold text-slate-700">{item.grade}</span>
+                  <span className="font-mono font-semibold">{Number(item.ltrs || 0).toLocaleString()} L</span>
                 </div>
-                <div className="divide-y">
-                  {reviewItems.map((item) => {
-                    const retain = retainItems.find((x) => x.grade === item.grade)
-                    return (
-                      <div key={item.grade} className="grid grid-cols-[1fr_1fr_1fr] items-center gap-2 p-2">
-                        <input
-                          type="number"
-                          min={0}
-                          value={item.ltrs}
-                          onChange={(e) => updateReviewQty(item.grade, e.target.value)}
-                          className="h-9 w-full rounded-md border px-2 text-sm font-mono"
-                        />
-                        <div className="text-center text-sm font-semibold text-slate-700">{item.grade}</div>
-                        <input
-                          type="number"
-                          min={0}
-                          value={retain?.ltrs || 0}
-                          onChange={(e) => updateRetainQty(item.grade, e.target.value)}
-                          className="h-9 w-full rounded-md border px-2 text-sm font-mono"
-                        />
-                      </div>
-                    )
-                  })}
-                </div>
-              </div>
-
-              <div className="flex justify-end gap-2">
-                <Button variant="outline" onClick={() => setRetainMode(false)}>Back</Button>
-                <Button
-                  onClick={() => reviewOrder && linkFuelPo(reviewOrder, reviewItems, retainItems)}
-                  disabled={!reviewOrder || linkPendingOrderId === reviewOrder?._id}
-                >
-                  {linkPendingOrderId === reviewOrder?._id ? 'Linking...' : 'Link'}
-                </Button>
-              </div>
+              ))}
             </div>
-          )}
+
+            <div className="flex justify-end gap-2">
+              <Button variant="outline" onClick={closeQuantityReview}>Cancel</Button>
+              <Button
+                onClick={() => reviewOrder && linkFuelPo(reviewOrder)}
+                disabled={!reviewOrder || linkPendingOrderId === reviewOrder?._id}
+              >
+                {linkPendingOrderId === reviewOrder?._id ? 'Linking...' : 'Confirm & Link'}
+              </Button>
+            </div>
+          </div>
         </DialogContent>
       </Dialog>
     </div>

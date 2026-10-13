@@ -12,6 +12,79 @@ const moment = require('moment-timezone');
 const { ConfidentialClientApplication } = require("@azure/msal-node");
 const { Client } = require("@microsoft/microsoft-graph-client");
 
+function buildRetainComment(retainItems) {
+  if (!Array.isArray(retainItems)) return '';
+
+  const lines = retainItems
+    .map((item) => ({
+      grade: String(item?.grade || '').trim(),
+      ltrs: Number(item?.ltrs || 0),
+    }))
+    .filter((item) => item.grade && Number.isFinite(item.ltrs) && item.ltrs > 0)
+    .map((item) => `${item.grade}: ${item.ltrs.toLocaleString('en-US')} L`);
+
+  if (!lines.length) return '';
+  return `Fuel retained:\n${lines.join('\n')}`;
+}
+
+const escapeRegex = (value) => String(value).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+
+const formatPODatePart = (dateStr) => {
+  const date = new Date(`${dateStr}T00:00:00`);
+  const mm = String(date.getMonth() + 1).padStart(2, '0');
+  const dd = String(date.getDate()).padStart(2, '0');
+  const yy = String(date.getFullYear()).slice(-2);
+  return `${mm}${dd}${yy}`;
+};
+
+const getDateOnly = (date) => {
+  if (!date) return '';
+  return new Date(date).toISOString().split('T')[0];
+};
+
+const getStationDisplayName = (station) =>
+  station?.fuelCustomerName || station?.stationName || station?.site || 'Station';
+
+const buildRetainQuantityLines = (retainItems) =>
+  retainItems
+    .map((item) => `${item.grade}: ${Number(item.ltrs || 0).toLocaleString('en-US')} L`)
+    .join('\n');
+
+async function getRetainPONumber({ sourceOrder, stationId, orderDate }) {
+  const sourceStationId = String(sourceOrder.station?._id || sourceOrder.station || '');
+
+  if (String(stationId) === sourceStationId) {
+    return {
+      poNumber: `${sourceOrder.poNumber}-RET`,
+      orderDate: getDateOnly(sourceOrder.orderDate)
+    };
+  }
+
+  const station = await Location.findById(stationId).select('fuelStationNumber').lean();
+  if (!station) {
+    const err = new Error('Retain delivery station not found.');
+    err.statusCode = 404;
+    throw err;
+  }
+
+  const basePoNumber = `NSP${formatPODatePart(orderDate)}-${String(station.fuelStationNumber).padStart(2, '0')}-RET`;
+  const retainOrders = await FuelOrder.find({
+    poNumber: { $regex: `^${escapeRegex(basePoNumber)}(?:-(\\d+))?$` }
+  }).select('poNumber').lean();
+
+  const maxRetainNumber = retainOrders.reduce((max, order) => {
+    if (order.poNumber === basePoNumber) return Math.max(max, 1);
+    const match = String(order.poNumber || '').match(/-RET-(\d+)$/);
+    const retainNumber = match ? Number(match[1]) : 0;
+    return Number.isFinite(retainNumber) ? Math.max(max, retainNumber) : max;
+  }, 0);
+
+  return {
+    poNumber: maxRetainNumber > 0 ? `${basePoNumber}-${maxRetainNumber + 1}` : basePoNumber,
+    orderDate
+  };
+}
+
 // Helper to format time for email body (e.g., 6-8pm)
 const formatEmailTime = (start, end) => {
   const getH = (t) => {
@@ -362,11 +435,14 @@ router.get('/check-existing', async (req, res) => {
     const station = await Location.findById(stationId).select('timezone').lean();
     const tz = station?.timezone || 'America/Toronto';
 
-    // 2. Define the start and end of that day in the STATION's timezone
-    // .startOf('day') gives 00:00:00.000 in local time
-    // .endOf('day') gives 23:59:59.999 in local time
-    const start = moment.tz(orderDate, tz).startOf('day').toDate();
-    const end = moment.tz(orderDate, tz).endOf('day').toDate();
+    // orderDate is saved from a date-only string with new Date(orderDate),
+    // which stores it at UTC midnight. Check that canonical UTC date window
+    // first, and also include the station-local window for older records that
+    // may have been saved with localized timestamps.
+    const utcStart = moment.utc(orderDate, 'YYYY-MM-DD').startOf('day').toDate();
+    const utcEnd = moment.utc(orderDate, 'YYYY-MM-DD').endOf('day').toDate();
+    const localStart = moment.tz(orderDate, tz).startOf('day').toDate();
+    const localEnd = moment.tz(orderDate, tz).endOf('day').toDate();
 
     // console.log(`[DEBUG] Checking existing orders for station ${stationId}`);
     // console.log(`[DEBUG] Timezone: ${tz} | Window: ${start.toISOString()} to ${end.toISOString()}`);
@@ -374,7 +450,10 @@ router.get('/check-existing', async (req, res) => {
     // 3. Query using the localized UTC window
     const existingOrders = await FuelOrder.find({
       station: stationId,
-      orderDate: { $gte: start, $lte: end }
+      $or: [
+        { orderDate: { $gte: utcStart, $lte: utcEnd } },
+        { orderDate: { $gte: localStart, $lte: localEnd } }
+      ]
     }).select('originalDeliveryDate poNumber');
 
     res.json({
@@ -529,6 +608,144 @@ router.post('/', async (req, res) => {
 
   } catch (err) {
     console.error("Workflow Error:", err);
+    res.status(500).json({ message: err.message });
+  }
+});
+
+router.get('/retain-po-number', async (req, res) => {
+  try {
+    const { sourceOrderId, stationId, orderDate } = req.query;
+
+    if (!sourceOrderId || !stationId || !orderDate) {
+      return res.status(400).json({ message: 'Missing retain PO lookup fields.' });
+    }
+
+    const sourceOrder = await FuelOrder.findById(sourceOrderId).lean();
+    if (!sourceOrder) return res.status(404).json({ message: 'Source order not found.' });
+
+    const result = await getRetainPONumber({ sourceOrder, stationId, orderDate });
+    res.json(result);
+  } catch (err) {
+    console.error('Retain PO lookup failed:', err);
+    res.status(err.statusCode || 500).json({ message: err.message });
+  }
+});
+
+router.post('/retain', async (req, res) => {
+  try {
+    const {
+      sourceOrderId,
+      stationId,
+      poNumber: requestedPoNumber,
+      orderDate,
+      deliveryDate,
+      startTime,
+      endTime,
+      items,
+      deliveredItems
+    } = req.body;
+
+    if (!sourceOrderId || !stationId || !orderDate || !deliveryDate || !startTime || !endTime) {
+      return res.status(400).json({ message: 'Missing required retain order fields.' });
+    }
+
+    const retainItems = Array.isArray(items)
+      ? items
+          .map((item) => ({
+            grade: String(item?.grade || '').trim(),
+            ltrs: Number(item?.ltrs || 0)
+          }))
+          .filter((item) => item.grade && Number.isFinite(item.ltrs) && item.ltrs > 0)
+      : [];
+
+    if (!retainItems.length) {
+      return res.status(400).json({ message: 'Retain order must include at least one fuel quantity.' });
+    }
+
+    const actualDeliveredItems = Array.isArray(deliveredItems)
+      ? deliveredItems
+          .map((item) => ({
+            grade: String(item?.grade || '').trim(),
+            ltrs: Math.max(0, Number(item?.ltrs || 0))
+          }))
+          .filter((item) => item.grade && Number.isFinite(item.ltrs))
+      : null;
+
+    const [sourceOrder, station, targetStation] = await Promise.all([
+      FuelOrder.findById(sourceOrderId),
+      Location.findById(stationId).select('timezone fuelCustomerName stationName site').lean(),
+      Location.findById(stationId).select('fuelCustomerName stationName site').lean()
+    ]);
+
+    if (!sourceOrder) return res.status(404).json({ message: 'Source order not found.' });
+    if (!station) return res.status(404).json({ message: 'Retain delivery station not found.' });
+
+    const sourceStation = await Location.findById(sourceOrder.station)
+      .select('fuelCustomerName stationName site')
+      .lean();
+    const retainPoData = await getRetainPONumber({
+      sourceOrder,
+      stationId,
+      orderDate
+    });
+    const poNumber = String(requestedPoNumber || retainPoData.poNumber).trim();
+    const retainOrderDate = retainPoData.orderDate;
+
+    if (!poNumber) {
+      return res.status(400).json({ message: 'Retain PO number is required.' });
+    }
+
+    const existing = await FuelOrder.findOne({ poNumber });
+    if (existing) return res.status(400).json({ message: `Duplicate PO: ${existing.poNumber}` });
+
+    const tz = station?.timezone || 'America/Toronto';
+    const stationMidnight = moment.tz(deliveryDate, tz).startOf('day').toDate();
+    const authorName = req.user ? `${req.user.firstName || ''} ${req.user.lastName || ''}`.trim() : 'System User';
+    const quantityLines = buildRetainQuantityLines(retainItems);
+    const targetStationName = getStationDisplayName(targetStation);
+    const sourceStationName = getStationDisplayName(sourceStation);
+
+    const retainOrder = new FuelOrder({
+      poNumber,
+      orderDate: new Date(retainOrderDate),
+      originalDeliveryDate: stationMidnight,
+      originalDeliveryWindow: { start: startTime, end: endTime },
+      estimatedDeliveryDate: stationMidnight,
+      estimatedDeliveryWindow: { start: startTime, end: endTime },
+      rack: sourceOrder.rack,
+      supplier: sourceOrder.supplier,
+      badgeNo: sourceOrder.badgeNo,
+      carrier: sourceOrder.carrier,
+      station: stationId,
+      items: retainItems,
+      currentStatus: 'Created',
+      statusHistory: [{ status: 'Created', timestamp: new Date() }],
+      comments: [{
+        text: `Fuel retain order created from ${sourceStationName} (${sourceOrder.poNumber})`,
+        author: authorName,
+        timestamp: new Date()
+      }]
+    });
+
+    const savedOrder = await retainOrder.save();
+    if (actualDeliveredItems) {
+      sourceOrder.items = actualDeliveredItems;
+    }
+    sourceOrder.currentStatus = 'Delivered';
+    sourceOrder.statusHistory.push({ status: 'Delivered', timestamp: new Date() });
+    sourceOrder.comments.push({
+      text: `Fuel Retain to ${targetStationName} (${poNumber}):\n${quantityLines}`,
+      author: authorName,
+      timestamp: new Date()
+    });
+    await sourceOrder.save();
+
+    res.status(201).json({
+      message: 'Retain order created.',
+      order: savedOrder
+    });
+  } catch (err) {
+    console.error('Retain order creation failed:', err);
     res.status(500).json({ message: err.message });
   }
 });
@@ -740,7 +957,8 @@ router.put('/:id', async (req, res) => {
       supplier,
       badgeNo,
       carrier,
-      comment 
+      comment,
+      retainItems
     } = req.body;
 
     const order = await FuelOrder.findById(req.params.id);
@@ -775,6 +993,15 @@ router.put('/:id', async (req, res) => {
     if (comment && comment.text.trim()) {
       order.comments.push({
         text: comment.text.trim(),
+        author: authorName,
+        timestamp: new Date()
+      });
+    }
+
+    const retainComment = buildRetainComment(retainItems);
+    if (retainComment) {
+      order.comments.push({
+        text: retainComment,
         author: authorName,
         timestamp: new Date()
       });

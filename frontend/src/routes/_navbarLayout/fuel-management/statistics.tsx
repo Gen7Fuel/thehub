@@ -20,6 +20,7 @@ import {
   CheckCircle2,
   ArrowRight,
   ExternalLink,
+  FileWarning,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -82,6 +83,8 @@ export const getStatusColor = (status: string) => {
       return "bg-green-100 text-green-700 border-green-200";
     case "Cancelled":
       return "bg-red-100 text-red-700 border-red-200";
+    case "BOL Missing":
+      return "bg-orange-100 text-orange-700 border-orange-200";
     default:
       return "bg-slate-100 text-slate-500";
   }
@@ -410,12 +413,14 @@ function FuelStatisticsComponent() {
     let inTransitLtrs = 0;
     let pipelineLtrs = 0;
     let cancelledLtrs = 0;
+    let bolMissingLtrs = 0;
 
     const categorized: Record<string, any[]> = {
       Delivered: [],
       "In Transit": [],
       Created: [],
       Cancelled: [],
+      "BOL Missing": [],
       All: [],
     };
 
@@ -439,12 +444,19 @@ function FuelStatisticsComponent() {
         } else if (status === "Cancelled") {
           cancelledLtrs += volume;
         }
+
+        if (status === "Delivered" && order.bolLinked !== true) {
+          bolMissingLtrs += volume;
+        }
       });
 
       if (hasMatchingGrade) {
         categorized.All.push(order);
         if (categorized[status]) {
           categorized[status].push(order);
+        }
+        if (status === "Delivered" && order.bolLinked !== true) {
+          categorized["BOL Missing"].push(order);
         }
       }
     });
@@ -455,10 +467,12 @@ function FuelStatisticsComponent() {
         inTransitLtrs,
         pipelineLtrs,
         cancelledLtrs,
+        bolMissingLtrs,
         deliveredCount: categorized.Delivered.length,
         inTransitCount: categorized["In Transit"].length,
         pipelineCount: categorized.Created.length,
         cancelledCount: categorized.Cancelled.length,
+        bolMissingCount: categorized["BOL Missing"].length,
         totalOrdersCount: categorized.All.length,
       },
       categorizedOrders: categorized,
@@ -509,18 +523,30 @@ function FuelStatisticsComponent() {
     ?.label.replace(" [Current]", "");
 
   // Orders displayed inside dialog
+  const getOrderBolNumbers = (order: any) =>
+    Array.isArray(order.bolNumbers)
+      ? order.bolNumbers.filter(Boolean).map((bol: any) => String(bol))
+      : [];
+
   const activeDialogOrders = useMemo(() => {
     if (!inspectModalStatus) return [];
     const list = categorizedOrders[inspectModalStatus] || [];
+    const normalizedSearch = poSearchFilter.toLowerCase();
     return list.filter(
-      (o: any) =>
-        o.poNumber.toLowerCase().includes(poSearchFilter.toLowerCase()) ||
+      (o: any) => {
+        const bolNumbers = getOrderBolNumbers(o);
+        return (
+        o.poNumber.toLowerCase().includes(normalizedSearch) ||
         (o.carrier?.carrierName ?? o.carrier?.name ?? "")
           .toLowerCase()
-          .includes(poSearchFilter.toLowerCase()) ||
+          .includes(normalizedSearch) ||
         (o.rack?.rackName ?? o.rack?.terminalName ?? "")
           .toLowerCase()
-          .includes(poSearchFilter.toLowerCase()),
+          .includes(normalizedSearch) ||
+        (inspectModalStatus === "Delivered" &&
+          bolNumbers.some((bol: string) => bol.toLowerCase().includes(normalizedSearch)))
+        );
+      },
     );
   }, [inspectModalStatus, categorizedOrders, poSearchFilter]);
 
@@ -764,8 +790,8 @@ function FuelStatisticsComponent() {
           </div>
         </div>
 
-        {/* TOP KPI SUMMARY CARDS (5-CARD GRID LAYOUT) */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-4">
+        {/* TOP KPI SUMMARY CARDS */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-4">
           {/* Delivered Card */}
           <Card
             onClick={() => setInspectModalStatus("Delivered")}
@@ -844,7 +870,7 @@ function FuelStatisticsComponent() {
             <CardContent className="p-6 flex items-center justify-between">
               <div className="space-y-1">
                 <p className="text-xs font-black uppercase tracking-wider text-amber-700 flex items-center gap-1">
-                  Scheduled / Pipeline{" "}
+                  Scheduled {" "}
                   <ExternalLink className="h-3 w-3 opacity-0 group-hover:opacity-100 transition-opacity" />
                 </p>
 
@@ -901,6 +927,41 @@ function FuelStatisticsComponent() {
                 </div>
                 <span className="text-[11px] font-black uppercase text-rose-800 bg-rose-100 px-2.5 py-0.5 rounded-full border border-rose-200">
                   {kpiMetrics.cancelledCount} Orders
+                </span>
+              </div>
+            </CardContent>
+          </Card>
+
+          {/* BOL Missing Card */}
+          <Card
+            onClick={() => setInspectModalStatus("BOL Missing")}
+            className="border-2 border-orange-100 bg-gradient-to-br from-orange-50/50 to-white shadow-sm hover:shadow-md hover:border-orange-300 transition-all cursor-pointer group"
+          >
+            <CardContent className="p-6 flex items-center justify-between">
+              <div className="space-y-1">
+                <p className="text-xs font-black uppercase tracking-wider text-orange-700 flex items-center gap-1">
+                  BOL Missing{" "}
+                  <ExternalLink className="h-3 w-3 opacity-0 group-hover:opacity-100 transition-opacity" />
+                </p>
+
+                <h3 className="text-2xl font-black text-slate-800 tracking-tight">
+                  {isOrdersLoading ? (
+                    "---"
+                  ) : (
+                    <AnimatedNumber
+                      value={kpiMetrics.bolMissingLtrs}
+                      suffix="Ltrs"
+                    />
+                  )}
+                </h3>
+              </div>
+
+              <div className="flex flex-col items-end gap-1">
+                <div className="bg-orange-500 p-3 rounded-2xl shadow-sm text-white">
+                  <FileWarning className="h-6 w-6" />
+                </div>
+                <span className="text-[11px] font-black uppercase text-orange-800 bg-orange-100 px-2.5 py-0.5 rounded-full border border-orange-200">
+                  {kpiMetrics.bolMissingCount} Orders
                 </span>
               </div>
             </CardContent>
@@ -1051,7 +1112,11 @@ function FuelStatisticsComponent() {
           <div className="relative my-2">
             <Search className="absolute left-3 top-3 h-4 w-4 text-slate-400" />
             <Input
-              placeholder="Search PO Number, Carrier, or Rack..."
+              placeholder={
+                inspectModalStatus === "Delivered"
+                  ? "Search PO Number, BOL Number, Carrier, or Rack..."
+                  : "Search PO Number, Carrier, or Rack..."
+              }
               className="pl-9 h-10 text-sm"
               value={poSearchFilter}
               onChange={(e) => setPoSearchFilter(e.target.value)}
@@ -1075,6 +1140,7 @@ function FuelStatisticsComponent() {
                   "Unassigned Rack";
                 const siteName =
                   order.station?.site ?? order.station?.stationName ?? "Store";
+                const bolNumbers = getOrderBolNumbers(order);
 
                 return (
                   <div
@@ -1104,6 +1170,25 @@ function FuelStatisticsComponent() {
                         <span>
                           <strong>Rack:</strong> {rackName}
                         </span>
+                        {inspectModalStatus === "Delivered" && (
+                          <span className="flex flex-wrap items-center gap-1">
+                            <strong>BOL:</strong>{" "}
+                            {bolNumbers.length > 0 ? (
+                              bolNumbers.map((bol: string) => (
+                                <span
+                                  key={bol}
+                                  className="rounded border border-emerald-200 bg-emerald-50 px-1.5 py-0.5 font-mono text-[11px] font-black text-emerald-700"
+                                >
+                                  {bol}
+                                </span>
+                              ))
+                            ) : (
+                              <span className="rounded border border-orange-200 bg-orange-50 px-1.5 py-0.5 text-[11px] font-black uppercase text-orange-700">
+                                Missing
+                              </span>
+                            )}
+                          </span>
+                        )}
                       </div>
                     </div>
 
