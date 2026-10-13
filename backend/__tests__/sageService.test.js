@@ -73,8 +73,8 @@ describe('buildPaymentPayload', () => {
 })
 
 describe('SITE_BANK_ACCOUNTS', () => {
-  it('has no entry for Silver Grizzly yet (its Intacct entry is skipped)', () => {
-    expect(SITE_BANK_ACCOUNTS['Silver Grizzly']).toBeUndefined()
+  it('maps Silver Grizzly to its Penticton bank account', () => {
+    expect(SITE_BANK_ACCOUNTS['Silver Grizzly']).toBe('Penticton Gen7 SB')
   })
 })
 
