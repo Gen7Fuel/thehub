@@ -30,12 +30,6 @@ vi.mock('@tanstack/react-router', async (importOriginal) => {
   }
 })
 
-// Permission for the Intacct button; tests flip this to check it is hidden without it.
-const mockAuth = { access: { accounting: { cashRecIntacctEntry: true } } as Record<string, any> }
-vi.mock('@/context/AuthContext', () => ({
-  useAuth: () => ({ user: { access: mockAuth.access } }),
-}))
-
 vi.mock('@/context/SiteContext', () => ({
   useSite: () => ({ selectedSite: '', setSelectedSite: vi.fn() }),
 }))
@@ -432,32 +426,15 @@ describe('Cash Rec Report — index.tsx', () => {
     )
   })
 
-  it('shows the Create Intacct Entry button to a user with the permission', async () => {
+  it('has no Create Intacct Entry button (entries are made from Desk now)', async () => {
     mockUseLoaderData.mockReturnValue(makeLoaderData())
     mockUseSearch.mockReturnValue({ site: 'Rankin', date: '2026-03-15' })
     renderWithSuspense(<CashRecReport />)
     await waitFor(
-      () => expect(screen.getByText('Create Intacct Entry')).toBeInTheDocument(),
+      () => expect(screen.getByText(/sales summary/i)).toBeInTheDocument(),
       { timeout: 5000 }
     )
-  })
-
-  it('hides the Create Intacct Entry button from a user without the permission', async () => {
-    const original = mockAuth.access
-    mockAuth.access = { accounting: { cashRecIntacctEntry: false } }
-    try {
-      mockUseLoaderData.mockReturnValue(makeLoaderData())
-      mockUseSearch.mockReturnValue({ site: 'Rankin', date: '2026-03-15' })
-      renderWithSuspense(<CashRecReport />)
-      // Wait until the summaries have rendered, then check the button is absent.
-      await waitFor(
-        () => expect(screen.getByText(/sales summary/i)).toBeInTheDocument(),
-        { timeout: 5000 }
-      )
-      expect(screen.queryByText('Create Intacct Entry')).not.toBeInTheDocument()
-    } finally {
-      mockAuth.access = original
-    }
+    expect(screen.queryByText('Create Intacct Entry')).not.toBeInTheDocument()
   })
 
   it('shows the Sales Summary section when site and data are present', async () => {
