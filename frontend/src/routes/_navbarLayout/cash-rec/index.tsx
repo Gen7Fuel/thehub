@@ -223,6 +223,14 @@ function RouteComponent() {
   const [merchantFeesEdit, setMerchantFeesEdit] = React.useState<boolean>(false)
   const [merchantFeesValue, setMerchantFeesValue] = React.useState<string>('')
   const [merchantFeesSaved, setMerchantFeesSaved] = React.useState<number | null>(null)
+  const [merchantFeesNote, setMerchantFeesNote] = React.useState<{ kind: 'ok' | 'info' | 'error'; text: string } | null>(null)
+  const savingFeesRef = React.useRef(false)
+
+  // A saved value / Intacct note belongs to one site + day; don't carry it to another.
+  React.useEffect(() => {
+    setMerchantFeesSaved(null)
+    setMerchantFeesNote(null)
+  }, [site, date])
 
   const copyCell = (e: React.MouseEvent<HTMLTableCellElement>) => {
     if ((e.target as HTMLElement).tagName === 'INPUT') return
@@ -311,13 +319,14 @@ function RouteComponent() {
             const afdGiftCard = num(totals.afdGiftCard)
             const kioskGiftCard = num(totals.kioskGiftCard)
             const loyaltyCoupons = num(totals.couponsAccepted) + num(totals.giftCertificates) + num(totals.cashOffCoupons) + num(totals.gasolineCoupons) + num(totals.otherCoupons)
+            const salesTax = num(totals.salesTax);
 
-            const gblMonerisFuelSales = totalSales - itemSales - reportedCanadianCash - missedCpl
+            const gblMonerisFuelSales = totalSales - itemSales - reportedCanadianCash - missedCpl - salesTax
             const storeSales = itemSales
             const canadianCash = reportedCanadianCash
             const lotterySales = 0
             const lotteryPayouts = 0
-            const totalDollarSales = gblMonerisFuelSales + canadianCash + kardpollSales + storeSales + lotterySales + lotteryPayouts
+            const totalDollarSales = gblMonerisFuelSales + canadianCash + kardpollSales + storeSales + lotterySales + lotteryPayouts + salesTax
 
             const cashSafeDeposited = canadianCashCollected
             const tillOverShort = data.adjustedOverShort != null
@@ -391,6 +400,10 @@ function RouteComponent() {
                         <td className="px-4 py-2.5 text-right font-medium text-gray-900 cursor-copy" onClick={copyCell}>${fmt2(storeSales)}</td>
                       </tr>
                       <tr className="border-b border-gray-100 bg-emerald-50">
+                        <td className="px-4 py-2.5 text-gray-600">Total Sales Tax (Information Purpose Only)</td>
+                        <td className="px-4 py-2.5 text-right font-medium text-gray-900 cursor-copy" onClick={copyCell}>${fmt2(salesTax)}</td>
+                      </tr>
+                      <tr className="border-b border-gray-100 bg-emerald-50">
                         <td className="px-4 py-2.5 text-gray-600">Lottery Sales (20440)</td>
                         <td className="px-4 py-2.5 text-right font-medium text-gray-900 cursor-copy" onClick={copyCell}>${fmt2(lotterySales)}</td>
                       </tr>
@@ -452,6 +465,7 @@ function RouteComponent() {
                     </tbody>
                   </table>
                 </div>
+
               </div>
             )
           })()}
@@ -586,10 +600,13 @@ function RouteComponent() {
             }
 
             const saveFees = async () => {
+              // Enter followed by blur would otherwise save (and hit Intacct) twice.
+              if (savingFeesRef.current) return
               const parsed = parseFloat(merchantFeesValue)
               if (!Number.isFinite(parsed)) { setMerchantFeesEdit(false); return }
+              savingFeesRef.current = true
               try {
-                await fetch('/api/cash-rec/bank-statement/merchant-fees', {
+                const resp = await fetch('/api/cash-rec/bank-statement/merchant-fees', {
                   method: 'PATCH',
                   headers: {
                     'Content-Type': 'application/json',
@@ -597,9 +614,19 @@ function RouteComponent() {
                   },
                   body: JSON.stringify({ site, date, merchantFees: parsed }),
                 })
+                if (!resp.ok) throw new Error(`HTTP ${resp.status}`)
+                const body = await resp.json().catch(() => null)
                 setMerchantFeesSaved(parsed)
+                const intacct = body?.intacct
+                if (intacct?.status === 'created') setMerchantFeesNote({ kind: 'ok', text: 'Intacct: bill posted and payment made.' })
+                else if (intacct?.status === 'error') setMerchantFeesNote({ kind: 'error', text: `Fee saved, but Intacct failed: ${intacct.message}` })
+                else if (intacct?.status === 'skipped') setMerchantFeesNote({ kind: 'info', text: `Intacct: ${intacct.message}` })
+                else setMerchantFeesNote(null)
               } catch (e) {
                 console.error('Failed to save merchant fees', e)
+                setMerchantFeesNote({ kind: 'error', text: 'Failed to save merchant fees.' })
+              } finally {
+                savingFeesRef.current = false
               }
               setMerchantFeesEdit(false)
             }
@@ -628,8 +655,13 @@ function RouteComponent() {
                             title="Double-click to edit"
                             className="cursor-pointer hover:bg-blue-50 rounded px-1"
                           >
-                            {displayFees !== null ? `$${fmt2(displayFees)}` : '-'}
+                            {displayFees !== null ? `${fmt2(displayFees)}` : '-'}
                           </span>
+                        )}
+                        {merchantFeesNote && !merchantFeesEdit && (
+                          <div className={`text-xs font-normal ${merchantFeesNote.kind === 'error' ? 'text-red-600' : merchantFeesNote.kind === 'ok' ? 'text-green-700' : 'text-gray-500'}`}>
+                            {merchantFeesNote.text}
+                          </div>
                         )}
                       </td>
                     </tr>

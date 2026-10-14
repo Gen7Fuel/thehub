@@ -245,6 +245,8 @@ jobs:
             export INTACCT_CLIENT_ID="${{ secrets.INTACCT_CLIENT_ID }}"
             export INTACCT_CLIENT_SECRET="${{ secrets.INTACCT_CLIENT_SECRET }}"
             export INTACCT_CALLBACK_URL="${{ secrets.INTACCT_CALLBACK_URL }}"
+            export SAGE_CLIENT_ID="${{ secrets.SAGE_CLIENT_ID }}"
+            export SAGE_CLIENT_SECRET="${{ secrets.SAGE_CLIENT_SECRET }}"
             export CDN_ADMIN_TOKEN="${{ secrets.CDN_ADMIN_TOKEN }}"
             export ACADEMY_ADMIN_TOKEN="${{ secrets.ACADEMY_ADMIN_TOKEN }}"
             export NEXT_PUBLIC_SUPABASE_URL="${{ secrets.NEXT_PUBLIC_SUPABASE_URL }}"
@@ -254,6 +256,9 @@ jobs:
             export PETROSOFT_PASSWORD="${{ secrets.PETROSOFT_PASSWORD }}"
             export GASBUDDY_EMAIL="${{ secrets.GASBUDDY_EMAIL }}"
             export GASBUDDY_PASSWORD="${{ secrets.GASBUDDY_PASSWORD }}"
+            export GVM_EMAIL="${{ secrets.GVM_EMAIL }}"
+            export GVM_PASSWORD="${{ secrets.GVM_PASSWORD }}"
+            export GVM_SYNC_ENABLED="${{ secrets.GVM_SYNC_ENABLED }}"
             export PUSHOVER_API_TOKEN="${{ secrets.PUSHOVER_API_TOKEN }}"
 
             # ---- 3. Infrastructure Isolation Guard ----

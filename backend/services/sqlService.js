@@ -102,7 +102,7 @@ async function getGradeVolumeFuelData(pool, csoCode, startDate, endDate) {
   const dbStartDate = formatDateForDB(startDate);
   const dbEndDate = formatDateForDB(endDate);
   const result = await pool.request().query(`
-    SELECT s.[Station_SK], s.[Date_SK] as 'businessDate', s.[FuelGradeID] as 'fuelGradeID', s.[Sales_Volume_LTR] as 'fuelGradeSalesVolume', s.[Description] as 'fuelGradeDescription'
+    SELECT s.[Station_SK], s.[Date_SK] as 'businessDate', s.[FuelGradeID] as 'fuelGradeID', s.[Sales_Volume_LTR] as 'fuelGradeSalesVolume', s.[Sales_Amount] as 'fuelSalesAmount', s.[Description] as 'fuelGradeDescription'
     FROM [CSO].[FuelSummary] s
     WHERE
       s.[Station_SK] = ${csoCode}
@@ -121,16 +121,29 @@ async function getCurrentInventory(site, limit = null) {
   try {
     // await sql.connect(sqlConfig);
     const pool = await getPool();
+    const request = pool.request();
+    request.input("site", sql.NVarChar, site);
+
     let query = `
-      SELECT ${limit ? `TOP ${limit}` : ''} [Item_Name]
-            ,[UPC-A (12 digits)] AS 'UPC'
-            ,[Category Name] as 'Category'
-            ,[On Hand Qty]
-      FROM [CSO].[Current_Inventory]
-      WHERE [Station] = '${site}'
+       SELECT ${limit ? `TOP ${limit}` : ''} CI.[Item_Name]
+            ,CI.[UPC-A (12 digits)] AS 'UPC'
+            ,CI.[Category Name] as 'Category'
+            ,CI.[On Hand Qty]
+            ,(
+              SELECT MAX([Last_Inv_Date]) 
+              FROM [CSO].[Inventory Balance] IB 
+              WHERE IB.[UPC] = CI.[UPC] AND IB.[Station_SK] = CI.[Station_SK]
+             ) AS last_inv_date
+            ,(
+              SELECT TOP 1 [URL] 
+              FROM [CSO].[UPC Details] UD
+              WHERE UD.[UPC] = CI.[UPC]
+            ) AS image_url
+      FROM [CSO].[Current_Inventory] CI
+      WHERE CI.[Station] = @site
     `;
 
-    const result = await pool.request().query(query);
+    const result = await request.query(query);
     // await sql.close();
     return result.recordset;
   } catch (err) {
@@ -227,12 +240,21 @@ async function getOnHandBulkCSOData(csoCode, gtins = [], targetDate) {
 
   try {
     const pool = await getPool();
+    const request = pool.request();
 
-    // Convert "2026-07-31" -> "20260731" locally
-    const targetDateSK = Number(formatDateForDB(targetDate));
+    // 1. Station_SK is INT in SQL schema
+    request.input("stationSK", sql.Int, parseInt(csoCode, 10));
 
-    // Sanitize GTINs for SQL IN clause
-    const formattedGtins = gtins.map(u => `'${String(u).replace(/'/g, "''")}'`).join(",");
+    // 2. Date_SK is DATE in SQL schema (format: "YYYY-MM-DD")
+    const formattedDate = new Date(targetDate).toISOString().split("T")[0];
+    request.input("targetDate", sql.Date, formattedDate);
+
+    // 3. GTIN is NVARCHAR(100) in SQL schema
+    const gtinParams = gtins.map((gtin, index) => {
+      const paramName = `gtin_${index}`;
+      request.input(paramName, sql.NVarChar(100), String(gtin).trim());
+      return `@${paramName}`;
+    });
 
     const query = `
       SELECT 
@@ -240,12 +262,12 @@ async function getOnHandBulkCSOData(csoCode, gtins = [], targetDate) {
           [On Hand Qty] AS qty,
           [Unit Retail] AS unitPrice
       FROM [CSO].[Current_Inventory]
-      WHERE [Station_SK] = '${String(csoCode).replace(/'/g, "''")}' 
-        AND [GTIN] IN (${formattedGtins})
-        AND [Date_SK] = ${targetDateSK}
+      WHERE [Station_SK] = @stationSK 
+        AND [GTIN] IN (${gtinParams.join(",")})
+        AND [Date_SK] = @targetDate
     `;
 
-    const result = await pool.request().query(query);
+    const result = await request.query(query);
 
     const data = {};
     for (const row of result.recordset) {
@@ -294,71 +316,36 @@ async function getBulkUnitPriceCSO(site, gtins = []) {
 }
 
 
-// let pool;
-
-// async function getPool() {
-//   try {
-//     if (!pool) {
-//       console.log("🔌 Creating new SQL connection pool...");
-//       pool = await sql.connect({
-//         server: process.env.SQL_SERVER,
-//         database: process.env.SQL_DB,
-//         user: process.env.SQL_USER,
-//         password: process.env.SQL_PASSWORD,
-//         pool: {
-//           max: 20,           // increase max connections
-//           min: 0,
-//           idleTimeoutMillis: 30000,
-//           acquireTimeoutMillis: 60000, // wait longer before abort
-//         },
-//         options: {
-//           encrypt: true,
-//           trustServerCertificate: false,
-//         },
-//       });
-
-//       // Optional: log when pool is closed
-//       pool.on('error', err => {
-//         console.error("SQL Pool Error:", err);
-//         pool = null; // force reconnect next time
-//       });
-//     }
-
-//     // 🔍 Check if pool is still healthy
-//     if (!pool.connected) {
-//       console.warn("SQL pool was disconnected — reconnecting...");
-//       pool = await sql.connect(pool.config);
-//     }
-
-//     return pool;
-//   } catch (err) {
-//     console.error("Failed to get SQL pool:", err);
-//     pool = null;
-//     throw err;
-//   }
-// }
-
 let pool = null;
 
-async function getPool() {
-  try {
-    if (!pool || !pool.connected) {
-      if (pool) {
-        try { await pool.close(); } catch { }
+async function getPool(retries = 3, delay = 5000) {
+  for (let attempt = 1; attempt <= retries; attempt++) {
+    try {
+      // Re-use active connection if healthy
+      if (pool && pool.connected) {
+        return pool;
       }
 
-      console.log("🔌 Creating new SQL connection pool...");
+      // Clean up dead pool if present
+      if (pool) {
+        try { await pool.close(); } catch { }
+        pool = null;
+      }
+
+      console.log(`🔌 [Attempt ${attempt}/${retries}] Creating new SQL connection pool...`);
+
       pool = await sql.connect({
         server: process.env.SQL_SERVER,
         database: process.env.SQL_DB,
         user: process.env.SQL_USER,
         password: process.env.SQL_PASSWORD,
-        requestTimeout: 60000, // 60s per query (default was 15s)
+        connectionTimeout: 60000, // 60s initial connection timeout (prevents 15s ETIMEOUT)
+        requestTimeout: 60000,    // 60s per query execution
         pool: {
-          max: 50, // increase if VPS can handle it
+          max: 50,
           min: 0,
-          idleTimeoutMillis: 60000, // more time for idle connections
-          acquireTimeoutMillis: 300000, // more time to acquire heavy queries
+          idleTimeoutMillis: 60000,
+          acquireTimeoutMillis: 30000,
         },
         options: {
           encrypt: true,
@@ -369,17 +356,68 @@ async function getPool() {
 
       pool.on("error", (err) => {
         console.error("SQL Pool Error:", err);
-        pool = null; // force reconnect next time
+        pool = null; // Force reset pool on error
       });
-    }
 
-    return pool;
-  } catch (err) {
-    console.error("Failed to get SQL pool:", err);
-    pool = null;
-    throw err;
+      return pool; // Connection succeeded
+
+    } catch (err) {
+      console.error(`❌ Connection attempt ${attempt} failed: ${err.message}`);
+      pool = null;
+
+      if (attempt < retries) {
+        console.log(`⏳ Retrying in ${delay / 1000} seconds...`);
+        await new Promise((resolve) => setTimeout(resolve, delay));
+        delay *= 2; // Exponential backoff (5s -> 10s -> 20s)
+      } else {
+        throw new Error(`Failed to establish SQL connection after ${retries} attempts: ${err.message}`);
+      }
+    }
   }
 }
+
+// let pool = null;
+
+// async function getPool() {
+//   try {
+//     if (!pool || !pool.connected) {
+//       if (pool) {
+//         try { await pool.close(); } catch { }
+//       }
+
+//       console.log("🔌 Creating new SQL connection pool...");
+//       pool = await sql.connect({
+//         server: process.env.SQL_SERVER,
+//         database: process.env.SQL_DB,
+//         user: process.env.SQL_USER,
+//         password: process.env.SQL_PASSWORD,
+//         requestTimeout: 60000, // 60s per query (default was 15s)
+//         pool: {
+//           max: 50, // increase if VPS can handle it
+//           min: 0,
+//           idleTimeoutMillis: 60000, // more time for idle connections
+//           acquireTimeoutMillis: 300000, // more time to acquire heavy queries
+//         },
+//         options: {
+//           encrypt: true,
+//           trustServerCertificate: false,
+//           enableArithAbort: true,
+//         },
+//       });
+
+//       pool.on("error", (err) => {
+//         console.error("SQL Pool Error:", err);
+//         pool = null; // force reconnect next time
+//       });
+//     }
+
+//     return pool;
+//   } catch (err) {
+//     console.error("Failed to get SQL pool:", err);
+//     pool = null;
+//     throw err;
+//   }
+// }
 
 async function getUPC_barcode(gtin) {
   try {
@@ -567,55 +605,6 @@ async function getFuelPricingDate(date) {
 // }
 
 
-async function getFuelInventoryReportPreviousDay() {
-  try {
-    const pool = await getPool();
-    const result = await pool.request().query(`
-      SELECT [Date],[Station_Name],[Fuel_Grade],[Stick_L]
-      FROM [CSO].[FuelInventory]
-      WHERE [Date] = CAST(GETDATE() - 1 AS date)
-    `);
-    await sql.close();
-    return result.recordset;
-  } catch (err) {
-    console.error('SQL error:', err);
-    return [];
-  }
-}
-
-async function getFuelInventoryReportCurrentDay() {
-  try {
-    const pool = await getPool();
-    const result = await pool.request().query(`
-      WITH RankedInventory AS (
-        SELECT 
-            [Station_SK], 
-            [Fuel_Grade], 
-            TRY_CAST([Volume] AS DECIMAL(18, 2)) AS [Stick_L_Tank],
-            ROW_NUMBER() OVER (
-                PARTITION BY [Station_SK], [Fuel_Grade], [Tank_ID]
-                ORDER BY [Time] DESC
-            ) AS rnk
-        FROM [CSO].[CurrentFuelInv]
-        WHERE [Date_SK] = TRY_CONVERT(CHAR(8), GETDATE(), 112)
-      )
-      SELECT 
-            [Station_SK], 
-            [Fuel_Grade], 
-            SUM([Stick_L_tank]) AS [Stick_L] 
-      FROM RankedInventory
-      WHERE rnk = 1
-      GROUP BY [Station_SK], [Fuel_Grade]
-      ORDER BY [Station_SK]
-    `);
-    await sql.close();
-    return result.recordset;
-  } catch (err) {
-    console.error('SQL error:', err);
-    return [];
-  }
-}
-
 async function getFuelSupplierDiscounts() {
   try {
     const { getPool } = require('./sqlService'); // Adjust path if needed
@@ -689,13 +678,14 @@ async function getFuelCarrierHaulage() {
     const { getPool } = require('./sqlService'); // Adjust path if needed
     const pool = await getPool();
 
-    // FULL OUTER JOIN on all 4 composite keys: Carrier, Type, Location, and Pickup
+    // FULL OUTER JOIN on all 5 composite keys: Carrier, Type, Location, Pickup, and IsSplit
     const result = await pool.request().query(`
       SELECT 
         COALESCE(live.[Carrier], stg.[Carrier]) AS [Carrier],
         COALESCE(live.[Type], stg.[Type]) AS [Type],
         COALESCE(live.[Location], stg.[Location]) AS [Location],
         COALESCE(live.[Pickup], stg.[Pickup]) AS [Pickup],
+        COALESCE(live.[IsSplit], stg.[IsSplit]) AS [IsSplit],
         live.[Haulage] AS [Live_Haulage],
         live.[Updated At] AS [Live_Updated_At],
         stg.[Haulage] AS [Stg_Haulage],
@@ -706,6 +696,7 @@ async function getFuelCarrierHaulage() {
         AND live.[Type] = stg.[Type]
         AND live.[Location] = stg.[Location]
         AND live.[Pickup] = stg.[Pickup]
+        AND live.[IsSplit] = stg.[IsSplit]
     `);
 
     return result.recordset;
@@ -1347,7 +1338,16 @@ async function getSanitizationBackupData() {
           SELECT TOP 1 [URL] 
           FROM [CSO].[UPC Details] UD
           WHERE UD.[UPC] = CI.[UPC]
-        ) AS image_url
+        ) AS image_url,
+        (
+          SELECT TOP 1 PH.[Units_Per_Parent]
+          FROM [CSO].[UPC_Packaging_Hierarchy_Lookup] PH
+          WHERE PH.[UPC] = CI.[UPC]
+            AND PH.[Unit_Type] = 'PK'
+            AND PH.[Parent_Unit_Type] = 'CRT'
+            AND PH.[Units_Per_Parent] IS NOT NULL
+            AND MI.[Category ID] in (101,102,104,105)
+        ) AS pk_in_crt
       FROM LatestInventory CI
       LEFT JOIN [CSO].[Master_Item] MI 
         ON CI.[UPC] = MI.[UPC] AND CI.[Station_SK] = MI.[Station_SK]
@@ -1538,6 +1538,181 @@ async function getFuelSalesRollupReport(csoCode, targetDate) {
 
 //   return result.recordset;
 // }
+// Function specifically for June 25-26 matching legacy cumulative calculation logic
+async function getFuelSalesTransactions25June(csoCode, targetDate) {
+  const pool = await getPool();
+  const formattedDateString = formatDateForDB(targetDate.toString());
+
+  const result = await pool.request()
+    .input("csoCode", sql.VarChar, csoCode)
+    .input("targetDate", sql.Char(8), formattedDateString)
+    .query(`
+      WITH date_range AS (
+          SELECT 
+            @targetDate AS start_date,
+            CONVERT(VARCHAR(8), DATEADD(day, 1, CONVERT(DATE, @targetDate, 112)), 112) AS end_date
+      ),
+
+      status_discount_transactions AS (
+          SELECT DISTINCT [Transaction ID]
+          FROM [CSO].[Stg_CashRegisterJournal]
+          CROSS JOIN date_range
+          WHERE [Date_SK] BETWEEN start_date AND end_date
+            AND [Station_SK] = @csoCode
+            AND [Item Description] = 'STATUS DISCOUNT'
+            AND [Transaction ID] IS NOT NULL
+      ),
+
+      extracted_fuel_sales AS (
+          SELECT 
+              s.[Date_SK],
+              s.[DateTime],
+              s.[Register ID],
+              s.[Transaction ID],
+              
+              CASE 
+                  WHEN s.[Event] LIKE '%Refund%' THEN -1 * ABS(s.[Sales Amount])
+                  ELSE s.[Sales Amount]
+              END AS sales_amount,
+              
+              CASE 
+                  WHEN s.[Event] LIKE '%Refund%' THEN -1 * ABS(s.[Sales Quantity])
+                  ELSE s.[Sales Quantity]
+              END AS sales_quantity,
+              
+              CASE 
+                  WHEN s.[Item Description] LIKE '%DYED%' THEN 'Dyed Diesel'
+                  WHEN s.[Item Description] LIKE '%DIESEL%' OR s.[Item Description] LIKE '%ULSD%' THEN 'Diesel'
+                  WHEN s.[Fuel Type] = 'REG' THEN 'Regular | E15'
+                  WHEN s.[Fuel Type] = 'PNL' THEN 'Premium'
+                  WHEN s.[Fuel Type] = 'MID' THEN 'Midgrade'
+                  ELSE COALESCE(s.[Fuel Type], 'Unknown Grade')
+              END AS final_grade,
+              CASE 
+                  WHEN d.[Transaction ID] IS NOT NULL THEN 'Treaty Sale'
+                  ELSE 'Non Treaty Sale'
+              END AS sale_category
+          FROM [CSO].[Stg_CashRegisterJournal] s
+          CROSS JOIN date_range
+          LEFT JOIN status_discount_transactions d ON s.[Transaction ID] = d.[Transaction ID]
+          WHERE s.[Date_SK] BETWEEN start_date AND end_date
+            AND s.[Station_SK] = @csoCode
+            AND (s.[Event] LIKE 'SaleEvent%' OR s.[Event] LIKE '%Refund%')
+            AND s.[Transaction Type] LIKE 'Fuel%'
+            AND s.[Sales Quantity] <> 0
+      )
+
+      SELECT 
+          [Date_SK],
+          [DateTime],
+          [Register ID],
+          [Transaction ID],
+          sale_category,
+          final_grade AS fuel_grade,
+          CAST(sales_amount AS DECIMAL(18,2)) AS sales_amount,
+          CAST(sales_quantity AS DECIMAL(18,4)) AS sales_quantity
+      FROM extracted_fuel_sales
+      WHERE sale_category = 'Treaty Sale'
+      ORDER BY 
+          [Date_SK] ASC,
+          [DateTime] ASC,
+          [Transaction ID] ASC;
+    `);
+
+  return result.recordset;
+}
+
+async function getFuelSalesRollupReportRange(csoCode, startDate, endDate) {
+  const pool = await getPool();
+  const formattedStartDate = formatDateForDB(startDate.toString());
+  const formattedEndDate = formatDateForDB(endDate.toString());
+
+  const result = await pool
+    .request()
+    .input("csoCode", sql.VarChar, csoCode)
+    .input("startDate", sql.Char(8), formattedStartDate)
+    .input("endDate", sql.Char(8), formattedEndDate)
+    .query(`
+      WITH date_range AS (
+          SELECT 
+            @startDate AS start_date,
+            @endDate AS end_date
+      ),
+
+      status_discount_transactions AS (
+          -- Track Date_SK and Transaction ID together (no Register ID)
+          SELECT DISTINCT 
+              [Date_SK],
+              [Transaction ID]
+          FROM [CSO].[Stg_CashRegisterJournal]
+          CROSS JOIN date_range
+          WHERE [Date_SK] BETWEEN start_date AND end_date
+            AND [Station_SK] = @csoCode
+            AND [Item Description] = 'STATUS DISCOUNT'
+            AND [Transaction ID] IS NOT NULL
+      ),
+
+      extracted_fuel_sales AS (
+          SELECT 
+              s.[Date_SK],
+              s.[DateTime],
+              s.[Register ID],
+              s.[Transaction ID],
+              
+              CASE 
+                  WHEN s.[Event] LIKE '%Refund%' THEN -1 * ABS(s.[Sales Amount])
+                  ELSE s.[Sales Amount]
+              END AS sales_amount,
+              
+              CASE 
+                  WHEN s.[Event] LIKE '%Refund%' THEN -1 * ABS(s.[Sales Quantity])
+                  ELSE s.[Sales Quantity]
+              END AS sales_quantity,
+              
+              CASE 
+                  WHEN s.[Item Description] LIKE '%DYED%' THEN 'Dyed Diesel'
+                  WHEN s.[Item Description] LIKE '%DIESEL%' OR s.[Item Description] LIKE '%ULSD%' THEN 'Diesel'
+                  WHEN s.[Fuel Type] = 'REG' THEN 'Regular'
+                  WHEN s.[Fuel Type] = 'PNL' THEN 'Premium'
+                  WHEN s.[Fuel Type] = 'MID' THEN 'Midgrade'
+                  ELSE COALESCE(s.[Fuel Type], 'Unknown Grade')
+              END AS final_grade,
+              CASE 
+                  WHEN d.[Transaction ID] IS NOT NULL THEN 'Treaty Sale'
+                  ELSE 'Non Treaty Sale'
+              END AS sale_category
+          FROM [CSO].[Stg_CashRegisterJournal] s
+          CROSS JOIN date_range
+          -- JOIN on Date_SK AND Transaction ID ONLY
+          LEFT JOIN status_discount_transactions d 
+                 ON s.[Transaction ID] = d.[Transaction ID] 
+                AND s.[Date_SK] = d.[Date_SK]
+          WHERE s.[Date_SK] BETWEEN start_date AND end_date
+            AND s.[Station_SK] = @csoCode
+            AND (s.[Event] LIKE 'SaleEvent%' OR s.[Event] LIKE '%Refund%')
+            AND s.[Transaction Type] LIKE 'Fuel%'
+            AND s.[Sales Quantity] <> 0
+      )
+
+      SELECT 
+          [Date_SK],
+          [DateTime],
+          [Register ID],
+          [Transaction ID],
+          sale_category,
+          final_grade AS fuel_grade,
+          CAST(sales_amount AS DECIMAL(18,2)) AS sales_amount,
+          CAST(sales_quantity AS DECIMAL(18,4)) AS sales_quantity
+      FROM extracted_fuel_sales
+      WHERE sale_category = 'Treaty Sale'
+      ORDER BY 
+          [Date_SK] ASC,
+          [DateTime] ASC,
+          [Transaction ID] ASC;
+    `);
+
+  return result.recordset;
+}
 
 function formatDateForDB(dateString) {
   // input: "2025-11-14"
@@ -1604,6 +1779,386 @@ async function getLatestCsoVendorsList() {
   }
 }
 
+/**
+ * Query timesheet labor costs and hours broken down by date and status.
+ */
+async function getEmployeeTimesheetVsSalesChart(pool, csoCode, startDate, endDate) {
+  // Determine End Date (default to today if not provided)
+  const targetEndDate = endDate ? new Date(endDate) : new Date();
+
+  // Calculate Start Date as the 1st day of the month, 5 months prior
+  const targetStartDate = new Date(targetEndDate);
+  targetStartDate.setMonth(targetStartDate.getMonth() - 10);
+  targetStartDate.setDate(1); // Force to the 1st of the month
+
+  const formattedStartDate = targetStartDate.toISOString().split("T")[0];
+  const formattedEndDate = targetEndDate.toISOString().split("T")[0];
+
+  const transactionsResult = await pool.request()
+    .input("StationSK", sql.Int, csoCode)
+    .input("StartDate", sql.Date, formattedStartDate)
+    .input("EndDate", sql.Date, formattedEndDate)
+    // .query(`
+    //   WITH CategorizedTimesheets AS (
+    //     SELECT 
+    //         CAST(t.[startDate] AS DATE) AS LaborDate,
+    //         t.[Station_SK],
+    //         t.[status],
+    //         t.[hours],
+    //         t.[earningDescription],
+            
+    //         -- Cost is calculated for all valid earning types (including Holiday Pay 1.0 / ST Holiday Pay 1.0)
+    //         CASE t.[earningDescription]
+    //             WHEN 'Holiday Pay 1.0'       THEN ISNULL(TRY_CAST(e.[employeeRate_Holiday_Pay_1_0] AS DECIMAL(18,4)), 0) * t.[hours]
+    //             WHEN 'ST Holiday Pay 1.0'    THEN ISNULL(TRY_CAST(e.[employeeRate_ST_Holiday_Pay_1_0] AS DECIMAL(18,4)), 0) * t.[hours]
+    //             WHEN 'Holiday Pay @1.5'      THEN ISNULL(TRY_CAST(e.[employeeRate_Holiday_Pay_1_5] AS DECIMAL(18,4)), 0) * t.[hours]
+    //             WHEN 'ST Holiday Pay @ 1.5'  THEN ISNULL(TRY_CAST(e.[employeeRate_ST_Holiday_Pay_1_5] AS DECIMAL(18,4)), 0) * t.[hours]
+    //             WHEN 'Overtime'             THEN ISNULL(TRY_CAST(e.[employeeRate_Overtime] AS DECIMAL(18,4)), 0) * t.[hours]
+    //             WHEN 'ST Overtime'          THEN ISNULL(TRY_CAST(e.[employeeRate_Overtime] AS DECIMAL(18,4)), 0) * t.[hours]
+    //             WHEN 'Regular Pay'          THEN ISNULL(TRY_CAST(e.[employeeRate_Regular_Pay] AS DECIMAL(18,4)), 0) * t.[hours]
+    //             WHEN 'ST Regular Pay'       THEN ISNULL(TRY_CAST(e.[employeeRate_ST_Regular_Pay] AS DECIMAL(18,4)), 0) * t.[hours]
+    //             WHEN 'Regular Salary'       THEN (ISNULL(TRY_CAST(e.[employeeRate_Regular_Salary] AS DECIMAL(18,4)), 0) / NULLIF(TRY_CAST(e.[hoursPerPay] AS DECIMAL(18,4)), 0)) * t.[hours]
+    //             WHEN 'ST Reg Salary'        THEN (ISNULL(TRY_CAST(e.[employeeRate_ST_Reg_Salary] AS DECIMAL(18,4)), 0) / NULLIF(TRY_CAST(e.[hoursPerPay] AS DECIMAL(18,4)), 0)) * t.[hours]
+    //             WHEN 'Sick - Unpaid Hrs'    THEN ISNULL(TRY_CAST(e.[employeeRate_Sick_Unpaid_Hrs] AS DECIMAL(18,4)), 0) * t.[hours]
+    //             WHEN 'Sick Hrs - Paid'      THEN ISNULL(TRY_CAST(e.[employeeRate_Sick_Hrs_Paid] AS DECIMAL(18,4)), 0) * t.[hours]
+    //             WHEN 'Gen7Callin Hrs'       THEN (ISNULL(TRY_CAST(e.[employeeRate_Regular_Pay] AS DECIMAL(18,4)), 0) + ISNULL(TRY_CAST(e.[employeeRate_Gen7Callin_Hrs] AS DECIMAL(18,4)), 0)) * t.[hours]
+    //             WHEN 'ST Gen7Callin Hrs'    THEN (ISNULL(TRY_CAST(e.[employeeRate_ST_Regular_Pay] AS DECIMAL(18,4)), 0) + ISNULL(TRY_CAST(e.[employeeRate_ST_Gen7Callin_Hrs] AS DECIMAL(18,4)), 0)) * t.[hours]
+    //             WHEN 'Training'             THEN COALESCE(TRY_CAST(e.[employeeRate_ST_Regular_Pay] AS DECIMAL(18,4)), TRY_CAST(e.[employeeRate_Regular_Pay] AS DECIMAL(18,4)), 0) * t.[hours]
+    //             WHEN 'Bereavement Hrs - Paid' THEN ISNULL(TRY_CAST(e.[employeeRate_Bereavement_Hrs_Paid] AS DECIMAL(18,4)), 0) * t.[hours]
+    //             ELSE 0
+    //         END AS ShiftCost,
+
+    //         -- Valid Earning Flag: 1 if earningDescription is tracked, else 0
+    //         CASE WHEN t.[earningDescription] IN (
+    //             'Holiday Pay 1.0', 'ST Holiday Pay 1.0', 'Holiday Pay @1.5', 'ST Holiday Pay @ 1.5',
+    //             'Overtime', 'ST Overtime', 'Regular Pay', 'ST Regular Pay',
+    //             'Regular Salary', 'ST Reg Salary', 'Sick - Unpaid Hrs', 'Sick Hrs - Paid',
+    //             'Gen7Callin Hrs', 'ST Gen7Callin Hrs', 'Training', 'Bereavement Hrs - Paid'
+    //         ) THEN 1 ELSE 0 END AS IsValidEarningType,
+
+    //         -- Hours are set to 0 ONLY for Holiday Pay 1.0 and ST Holiday Pay 1.0
+    //         CASE 
+    //             WHEN t.[earningDescription] IN ('Holiday Pay 1.0', 'ST Holiday Pay 1.0') THEN 0
+    //             ELSE ISNULL(t.[hours], 0)
+    //         END AS EffectiveHours
+
+    //     FROM [Payworks].[Timesheets] t
+    //     INNER JOIN [Payworks].[Employees] e
+    //         ON CAST(t.[employeeId] AS NVARCHAR(100)) = e.[employeeId]
+    //     WHERE t.[startDate] >= CAST(@StartDate AS DATETIME)
+    //       AND t.[startDate] <= DATEADD(SECOND, -1, DATEADD(DAY, 1, CAST(@EndDate AS DATETIME)))
+    //       AND t.[Station_SK] = @StationSK
+    //       AND t.[Station_SK] IS NOT NULL
+    //       AND (t.[position] NOT LIKE '%Manager%' OR t.[position] IS NULL)
+    //       AND t.[DeletedAt] IS NULL
+    //       AND t.[status] <> 'Deleted'
+    // ),
+    // AggregatedTimesheets AS (
+    //     SELECT 
+    //         LaborDate,
+    //         Station_SK,
+    //         SUM(CASE WHEN IsValidEarningType = 1 THEN EffectiveHours ELSE 0 END) AS TotalHoursWorked,
+    //         SUM(ShiftCost) AS ActualLaborCost,
+    //         SUM(CASE WHEN status IN ('Approved', 'Stat Pay') AND IsValidEarningType = 1 THEN EffectiveHours ELSE 0 END) AS ApprovedHoursWorked,
+    //         SUM(CASE WHEN status IN ('Approved', 'Stat Pay') THEN ShiftCost ELSE 0 END) AS ApprovedLaborCost,
+    //         SUM(CASE WHEN status = 'Pending' AND IsValidEarningType = 1 THEN EffectiveHours ELSE 0 END) AS PendingHoursWorked,
+    //         SUM(CASE WHEN status = 'Pending' THEN ShiftCost ELSE 0 END) AS PendingLaborCost
+    //     FROM CategorizedTimesheets
+    //     GROUP BY LaborDate, Station_SK
+    // ),
+    // CategorizedSchedules AS (
+    //     SELECT 
+    //         CAST(s.[startDateTime] AS DATE) AS ScheduleDate,
+    //         s.[Station_SK],
+    //         DATEDIFF(MINUTE, s.[startDateTime], s.[endDateTime]) / 60.0 AS ScheduledHours,
+    //         (DATEDIFF(MINUTE, s.[startDateTime], s.[endDateTime]) / 60.0) * 
+    //             COALESCE(
+    //                 TRY_CAST(e.[employeeRate_ST_Regular_Pay] AS DECIMAL(18,4)), 
+    //                 TRY_CAST(e.[employeeRate_Regular_Pay] AS DECIMAL(18,4)), 
+    //                 0
+    //             ) AS ScheduledCost
+    //     FROM [Payworks].[ScheduleShifts] s
+    //     INNER JOIN [Payworks].[Employees] e
+    //         ON CAST(s.[employeeId] AS NVARCHAR(100)) = e.[employeeId]
+    //     WHERE s.[startDateTime] >= CAST(@StartDate AS DATETIME)
+    //       AND s.[startDateTime] <= DATEADD(SECOND, -1, DATEADD(DAY, 1, CAST(@EndDate AS DATETIME)))
+    //       AND s.[Station_SK] = @StationSK
+    //       AND s.[Station_SK] IS NOT NULL
+    //       AND (s.[positionName] NOT LIKE '%Manager%' OR s.[positionName] IS NULL)
+    //       AND (s.[isDeleted] IS NULL OR s.[isDeleted] = 0)
+    // ),
+    // AggregatedSchedules AS (
+    //     SELECT 
+    //         ScheduleDate,
+    //         Station_SK,
+    //         SUM(ScheduledHours) AS ScheduledHours,
+    //         SUM(ScheduledCost) AS ScheduledCost
+    //     FROM CategorizedSchedules
+    //     GROUP BY ScheduleDate, Station_SK
+    // ),
+    // AggregatedStoreSales AS (
+    //     SELECT 
+    //         CAST([Date_SK] AS DATE) AS SalesDate,
+    //         [Station_SK],
+    //         SUM(ISNULL([Total_Sales], 0)) AS StoreSalesAmount
+    //     FROM [CSO].[TotalSales]
+    //     WHERE [Station_SK] = @StationSK
+    //       AND [Date_SK] >= @StartDate
+    //       AND [Date_SK] <= @EndDate
+    //     GROUP BY CAST([Date_SK] AS DATE), [Station_SK]
+    // ),
+    // AggregatedFuelSales AS (
+    //     SELECT 
+    //         CAST(
+    //           CASE 
+    //             WHEN LEN(CAST([Date_SK] AS VARCHAR(8))) = 8 AND CHARINDEX('-', CAST([Date_SK] AS VARCHAR(8))) = 0
+    //             THEN STUFF(STUFF(CAST([Date_SK] AS VARCHAR(8)), 5, 0, '-'), 8, 0, '-')
+    //             ELSE CAST([Date_SK] AS VARCHAR(10))
+    //           END AS DATE
+    //         ) AS FuelDate,
+    //         [Station_SK],
+    //         SUM(ISNULL([Sales_Amount], 0)) AS FuelSalesAmount
+    //     FROM [CSO].[FuelSummary]
+    //     WHERE [Station_SK] = @StationSK
+    //       AND [Date_SK] >= REPLACE(CAST(@StartDate AS VARCHAR(10)), '-', '')
+    //       AND [Date_SK] <= REPLACE(CAST(@EndDate AS VARCHAR(10)), '-', '')
+    //     GROUP BY 
+    //       CAST(
+    //         CASE 
+    //           WHEN LEN(CAST([Date_SK] AS VARCHAR(8))) = 8 AND CHARINDEX('-', CAST([Date_SK] AS VARCHAR(8))) = 0
+    //           THEN STUFF(STUFF(CAST([Date_SK] AS VARCHAR(8)), 5, 0, '-'), 8, 0, '-')
+    //           ELSE CAST([Date_SK] AS VARCHAR(10))
+    //         END AS DATE
+    //       ), [Station_SK]
+    // )
+    // SELECT 
+    //     COALESCE(ts.LaborDate, sch.ScheduleDate) AS LaborDate,
+    //     COALESCE(ts.Station_SK, sch.Station_SK) AS Station_SK,
+    //     ISNULL(sch.ScheduledHours, 0) AS ScheduledHours,
+    //     ISNULL(sch.ScheduledCost, 0) AS ScheduledCost,
+    //     ISNULL(ts.TotalHoursWorked, 0) AS TotalHoursWorked,
+    //     ISNULL(ts.ActualLaborCost, 0) AS ActualLaborCost,
+    //     ISNULL(ts.ApprovedHoursWorked, 0) AS ApprovedHoursWorked,
+    //     ISNULL(ts.ApprovedLaborCost, 0) AS ApprovedLaborCost,
+    //     ISNULL(ts.PendingHoursWorked, 0) AS PendingHoursWorked,
+    //     ISNULL(ts.PendingLaborCost, 0) AS PendingLaborCost,
+    //     ISNULL(tr.[Number of Transaction ID], 0) AS transactions,
+    //     ISNULL(ss.StoreSalesAmount, 0) AS storeSales,
+    //     ISNULL(fs.FuelSalesAmount, 0) AS fuelSales,
+    //     (ISNULL(ss.StoreSalesAmount, 0) + ISNULL(fs.FuelSalesAmount, 0)) AS totalSales
+    // FROM AggregatedTimesheets ts
+    // FULL OUTER JOIN AggregatedSchedules sch
+    //     ON ts.Station_SK = sch.Station_SK
+    //   AND ts.LaborDate = sch.ScheduleDate
+    // LEFT JOIN [CSO].[Daily Transaction Traffic View] tr
+    //     ON COALESCE(ts.Station_SK, sch.Station_SK) = tr.Station_SK 
+    //   AND COALESCE(ts.LaborDate, sch.ScheduleDate) = CAST(tr.[Date] AS DATE)
+    // LEFT JOIN AggregatedStoreSales ss
+    //     ON COALESCE(ts.Station_SK, sch.Station_SK) = ss.Station_SK
+    //   AND COALESCE(ts.LaborDate, sch.ScheduleDate) = ss.SalesDate
+    // LEFT JOIN AggregatedFuelSales fs
+    //     ON COALESCE(ts.Station_SK, sch.Station_SK) = fs.Station_SK
+    //   AND COALESCE(ts.LaborDate, sch.ScheduleDate) = fs.FuelDate
+    // ORDER BY 
+    //     LaborDate ASC;
+    // `);
+    .query(`
+      WITH CategorizedTimesheets AS (
+          SELECT 
+              CAST(t.[startDate] AS DATE) AS LaborDate,
+              t.[Station_SK],
+              t.[status],
+              t.[hours],
+              t.[earningDescription],
+              t.[position],
+              
+              CASE WHEN t.[position] LIKE '%Manager%' THEN 1 ELSE 0 END AS IsManager,
+
+              CASE t.[earningDescription]
+                  WHEN 'Holiday Pay 1.0'       THEN ISNULL(TRY_CAST(e.[employeeRate_Holiday_Pay_1_0] AS DECIMAL(18,4)), 0) * t.[hours]
+                  WHEN 'ST Holiday Pay 1.0'    THEN ISNULL(TRY_CAST(e.[employeeRate_ST_Holiday_Pay_1_0] AS DECIMAL(18,4)), 0) * t.[hours]
+                  WHEN 'Holiday Pay @1.5'      THEN ISNULL(TRY_CAST(e.[employeeRate_Holiday_Pay_1_5] AS DECIMAL(18,4)), 0) * t.[hours]
+                  WHEN 'ST Holiday Pay @ 1.5'  THEN ISNULL(TRY_CAST(e.[employeeRate_ST_Holiday_Pay_1_5] AS DECIMAL(18,4)), 0) * t.[hours]
+                  WHEN 'Overtime'              THEN ISNULL(TRY_CAST(e.[employeeRate_Overtime] AS DECIMAL(18,4)), 0) * t.[hours]
+                  WHEN 'ST Overtime'           THEN ISNULL(TRY_CAST(e.[employeeRate_Overtime] AS DECIMAL(18,4)), 0) * t.[hours]
+                  WHEN 'Regular Pay'           THEN ISNULL(TRY_CAST(e.[employeeRate_Regular_Pay] AS DECIMAL(18,4)), 0) * t.[hours]
+                  WHEN 'ST Regular Pay'        THEN ISNULL(TRY_CAST(e.[employeeRate_ST_Regular_Pay] AS DECIMAL(18,4)), 0) * t.[hours]
+                  WHEN 'Regular Salary'        THEN (ISNULL(TRY_CAST(e.[employeeRate_Regular_Salary] AS DECIMAL(18,4)), 0) / NULLIF(TRY_CAST(e.[hoursPerPay] AS DECIMAL(18,4)), 0)) * t.[hours]
+                  WHEN 'ST Reg Salary'         THEN (ISNULL(TRY_CAST(e.[employeeRate_ST_Reg_Salary] AS DECIMAL(18,4)), 0) / NULLIF(TRY_CAST(e.[hoursPerPay] AS DECIMAL(18,4)), 0)) * t.[hours]
+                  WHEN 'Sick - Unpaid Hrs'     THEN ISNULL(TRY_CAST(e.[employeeRate_Sick_Unpaid_Hrs] AS DECIMAL(18,4)), 0) * t.[hours]
+
+                  WHEN 'Sick Hrs - Paid' THEN
+                      CASE
+                          WHEN ISNULL(TRY_CAST(e.[employeeRate_Sick_Hrs_Paid] AS DECIMAL(18,4)), 0) > 100 THEN
+                              (
+                                  ISNULL(TRY_CAST(e.[employeeRate_Sick_Hrs_Paid] AS DECIMAL(18,4)), 0)
+                                  / NULLIF(TRY_CAST(e.[hoursPerPay] AS DECIMAL(18,4)), 0)
+                              ) * t.[hours]
+                          ELSE
+                              ISNULL(TRY_CAST(e.[employeeRate_Sick_Hrs_Paid] AS DECIMAL(18,4)), 0) * t.[hours]
+                      END
+
+                  WHEN 'Gen7Callin Hrs'        THEN (ISNULL(TRY_CAST(e.[employeeRate_Regular_Pay] AS DECIMAL(18,4)), 0) + ISNULL(TRY_CAST(e.[employeeRate_Gen7Callin_Hrs] AS DECIMAL(18,4)), 0)) * t.[hours]
+                  WHEN 'ST Gen7Callin Hrs'     THEN (ISNULL(TRY_CAST(e.[employeeRate_ST_Regular_Pay] AS DECIMAL(18,4)), 0) + ISNULL(TRY_CAST(e.[employeeRate_ST_Gen7Callin_Hrs] AS DECIMAL(18,4)), 0)) * t.[hours]
+                  WHEN 'Training'              THEN COALESCE(TRY_CAST(e.[employeeRate_ST_Regular_Pay] AS DECIMAL(18,4)), TRY_CAST(e.[employeeRate_Regular_Pay] AS DECIMAL(18,4)), 0) * t.[hours]
+                  WHEN 'Bereavement Hrs - Paid' THEN ISNULL(TRY_CAST(e.[employeeRate_Bereavement_Hrs_Paid] AS DECIMAL(18,4)), 0) * t.[hours]
+                  ELSE 0
+              END AS ShiftCost,
+
+              CASE WHEN t.[earningDescription] IN (
+                  'Holiday Pay 1.0', 'ST Holiday Pay 1.0', 'Holiday Pay @1.5', 'ST Holiday Pay @ 1.5',
+                  'Overtime', 'ST Overtime', 'Regular Pay', 'ST Regular Pay',
+                  'Regular Salary', 'ST Reg Salary', 'Sick - Unpaid Hrs', 'Sick Hrs - Paid',
+                  'Gen7Callin Hrs', 'ST Gen7Callin Hrs', 'Training', 'Bereavement Hrs - Paid'
+              ) THEN 1 ELSE 0 END AS IsValidEarningType,
+
+              CASE 
+                  WHEN t.[earningDescription] IN ('Holiday Pay 1.0', 'ST Holiday Pay 1.0') THEN 0
+                  ELSE ISNULL(t.[hours], 0)
+              END AS EffectiveHours
+
+          FROM [Payworks].[Timesheets] t
+          INNER JOIN [Payworks].[Employees] e
+              ON CAST(t.[employeeId] AS NVARCHAR(100)) = e.[employeeId]
+          WHERE t.[startDate] >= CAST(@StartDate AS DATETIME)
+            AND t.[startDate] <= DATEADD(SECOND, -1, DATEADD(DAY, 1, CAST(@EndDate AS DATETIME)))
+            AND t.[Station_SK] = @StationSK
+            AND t.[Station_SK] IS NOT NULL
+            AND t.[DeletedAt] IS NULL
+            AND t.[status] <> 'Deleted'
+      ),
+      AggregatedTimesheets AS (
+          SELECT 
+              LaborDate,
+              Station_SK,
+              SUM(CASE WHEN IsManager = 0 AND IsValidEarningType = 1 THEN EffectiveHours ELSE 0 END) AS TotalHoursWorked,
+              SUM(CASE WHEN IsManager = 0 THEN ShiftCost ELSE 0 END) AS ActualLaborCost,
+              SUM(CASE WHEN IsManager = 0 AND status IN ('Approved', 'Stat Pay') AND IsValidEarningType = 1 THEN EffectiveHours ELSE 0 END) AS ApprovedHoursWorked,
+              SUM(CASE WHEN IsManager = 0 AND status IN ('Approved', 'Stat Pay') THEN ShiftCost ELSE 0 END) AS ApprovedLaborCost,
+              SUM(CASE WHEN IsManager = 0 AND status = 'Pending' AND IsValidEarningType = 1 THEN EffectiveHours ELSE 0 END) AS PendingHoursWorked,
+              SUM(CASE WHEN IsManager = 0 AND status = 'Pending' THEN ShiftCost ELSE 0 END) AS PendingLaborCost,
+              SUM(CASE WHEN IsManager = 1 AND IsValidEarningType = 1 THEN EffectiveHours ELSE 0 END) AS ManagerTotalHoursWorked,
+              SUM(CASE WHEN IsManager = 1 THEN ShiftCost ELSE 0 END) AS ManagerActualLaborCost,
+              SUM(CASE WHEN IsManager = 1 AND status IN ('Approved', 'Stat Pay') AND IsValidEarningType = 1 THEN EffectiveHours ELSE 0 END) AS ManagerApprovedHoursWorked,
+              SUM(CASE WHEN IsManager = 1 AND status IN ('Approved', 'Stat Pay') THEN ShiftCost ELSE 0 END) AS ManagerApprovedLaborCost,
+              SUM(CASE WHEN IsManager = 1 AND status = 'Pending' AND IsValidEarningType = 1 THEN EffectiveHours ELSE 0 END) AS ManagerPendingHoursWorked,
+              SUM(CASE WHEN IsManager = 1 AND status = 'Pending' THEN ShiftCost ELSE 0 END) AS ManagerPendingLaborCost
+          FROM CategorizedTimesheets
+          GROUP BY LaborDate, Station_SK
+      ),
+      CategorizedSchedules AS (
+          SELECT 
+              CAST(s.[startDateTime] AS DATE) AS ScheduleDate,
+              s.[Station_SK],
+              CASE WHEN s.[positionName] LIKE '%Manager%' THEN 1 ELSE 0 END AS IsManager,
+              DATEDIFF(MINUTE, s.[startDateTime], s.[endDateTime]) / 60.0 AS ScheduledHours,
+              (DATEDIFF(MINUTE, s.[startDateTime], s.[endDateTime]) / 60.0) *
+                  COALESCE(
+                      TRY_CAST(e.[employeeRate_ST_Regular_Pay] AS DECIMAL(18,4)),
+                      TRY_CAST(e.[employeeRate_Regular_Pay] AS DECIMAL(18,4)),
+                      TRY_CAST(e.[employeeRate_ST_Reg_Salary] AS DECIMAL(18,4)) / NULLIF(TRY_CAST(e.[hoursPerPay] AS DECIMAL(18,4)), 0),
+                      TRY_CAST(e.[employeeRate_Regular_Salary] AS DECIMAL(18,4)) / NULLIF(TRY_CAST(e.[hoursPerPay] AS DECIMAL(18,4)), 0),
+                      0
+                  ) AS ScheduledCost
+          FROM [Payworks].[ScheduleShifts] s
+          INNER JOIN [Payworks].[Employees] e
+              ON CAST(s.[employeeId] AS NVARCHAR(100)) = e.[employeeId]
+          WHERE s.[startDateTime] >= CAST(@StartDate AS DATETIME)
+            AND s.[startDateTime] <= DATEADD(SECOND, -1, DATEADD(DAY, 1, CAST(@EndDate AS DATETIME)))
+            AND s.[Station_SK] = @StationSK
+            AND s.[Station_SK] IS NOT NULL
+            AND (s.[isDeleted] IS NULL OR s.[isDeleted] = 0)
+      ),
+      AggregatedSchedules AS (
+          SELECT 
+              ScheduleDate,
+              Station_SK,
+              SUM(CASE WHEN IsManager = 0 THEN ScheduledHours ELSE 0 END) AS ScheduledHours,
+              SUM(CASE WHEN IsManager = 0 THEN ScheduledCost ELSE 0 END) AS ScheduledCost,
+              SUM(CASE WHEN IsManager = 1 THEN ScheduledHours ELSE 0 END) AS ManagerScheduledHours,
+              SUM(CASE WHEN IsManager = 1 THEN ScheduledCost ELSE 0 END) AS ManagerScheduledCost
+          FROM CategorizedSchedules
+          GROUP BY ScheduleDate, Station_SK
+      ),
+      AggregatedStoreSales AS (
+          SELECT 
+              CAST([Date_SK] AS DATE) AS SalesDate,
+              [Station_SK],
+              SUM(ISNULL([Total_Sales], 0)) AS StoreSalesAmount
+          FROM [CSO].[TotalSales]
+          WHERE [Station_SK] = @StationSK
+            AND [Date_SK] >= @StartDate
+            AND [Date_SK] <= @EndDate
+          GROUP BY CAST([Date_SK] AS DATE), [Station_SK]
+      ),
+      AggregatedFuelSales AS (
+          SELECT 
+              CAST(
+                CASE 
+                  WHEN LEN(CAST([Date_SK] AS VARCHAR(8))) = 8 AND CHARINDEX('-', CAST([Date_SK] AS VARCHAR(8))) = 0
+                  THEN STUFF(STUFF(CAST([Date_SK] AS VARCHAR(8)), 5, 0, '-'), 8, 0, '-')
+                  ELSE CAST([Date_SK] AS VARCHAR(10))
+                END AS DATE
+              ) AS FuelDate,
+              [Station_SK],
+              SUM(ISNULL([Sales_Amount], 0)) AS FuelSalesAmount
+          FROM [CSO].[FuelSummary]
+          WHERE [Station_SK] = @StationSK
+            AND [Date_SK] >= REPLACE(CAST(@StartDate AS VARCHAR(10)), '-', '')
+            AND [Date_SK] <= REPLACE(CAST(@EndDate AS VARCHAR(10)), '-', '')
+          GROUP BY 
+            CAST(
+              CASE 
+                WHEN LEN(CAST([Date_SK] AS VARCHAR(8))) = 8 AND CHARINDEX('-', CAST([Date_SK] AS VARCHAR(8))) = 0
+                THEN STUFF(STUFF(CAST([Date_SK] AS VARCHAR(8)), 5, 0, '-'), 8, 0, '-')
+                ELSE CAST([Date_SK] AS VARCHAR(10))
+              END AS DATE
+            ), [Station_SK]
+      )
+      SELECT 
+          COALESCE(ts.LaborDate, sch.ScheduleDate) AS LaborDate,
+          COALESCE(ts.Station_SK, sch.Station_SK) AS Station_SK,
+          ISNULL(sch.ScheduledHours, 0) AS ScheduledHours,
+          ISNULL(sch.ScheduledCost, 0) AS ScheduledCost,
+          ISNULL(sch.ManagerScheduledHours, 0) AS ManagerScheduledHours,
+          ISNULL(sch.ManagerScheduledCost, 0) AS ManagerScheduledCost,
+          ISNULL(ts.TotalHoursWorked, 0) AS TotalHoursWorked,
+          ISNULL(ts.ActualLaborCost, 0) AS ActualLaborCost,
+          ISNULL(ts.ManagerTotalHoursWorked, 0) AS ManagerTotalHoursWorked,
+          ISNULL(ts.ManagerActualLaborCost, 0) AS ManagerActualLaborCost,
+          ISNULL(ts.ApprovedHoursWorked, 0) AS ApprovedHoursWorked,
+          ISNULL(ts.ApprovedLaborCost, 0) AS ApprovedLaborCost,
+          ISNULL(ts.ManagerApprovedHoursWorked, 0) AS ManagerApprovedHoursWorked,
+          ISNULL(ts.ManagerApprovedLaborCost, 0) AS ManagerApprovedLaborCost,
+          ISNULL(ts.PendingHoursWorked, 0) AS PendingHoursWorked,
+          ISNULL(ts.PendingLaborCost, 0) AS PendingLaborCost,
+          ISNULL(ts.ManagerPendingHoursWorked, 0) AS ManagerPendingHoursWorked,
+          ISNULL(ts.ManagerPendingLaborCost, 0) AS ManagerPendingLaborCost,
+          ISNULL(tr.[Number of Transaction ID], 0) AS transactions,
+          ISNULL(ss.StoreSalesAmount, 0) AS storeSales,
+          ISNULL(fs.FuelSalesAmount, 0) AS fuelSales,
+          (ISNULL(ss.StoreSalesAmount, 0) + ISNULL(fs.FuelSalesAmount, 0)) AS totalSales
+      FROM AggregatedTimesheets ts
+      FULL OUTER JOIN AggregatedSchedules sch
+          ON ts.Station_SK = sch.Station_SK
+        AND ts.LaborDate = sch.ScheduleDate
+      LEFT JOIN [CSO].[Daily Transaction Traffic View] tr
+          ON COALESCE(ts.Station_SK, sch.Station_SK) = tr.Station_SK 
+        AND COALESCE(ts.LaborDate, sch.ScheduleDate) = CAST(tr.[Date] AS DATE)
+      LEFT JOIN AggregatedStoreSales ss
+          ON COALESCE(ts.Station_SK, sch.Station_SK) = ss.Station_SK
+        AND COALESCE(ts.LaborDate, sch.ScheduleDate) = ss.SalesDate
+      LEFT JOIN AggregatedFuelSales fs
+          ON COALESCE(ts.Station_SK, sch.Station_SK) = fs.Station_SK
+        AND COALESCE(ts.LaborDate, sch.ScheduleDate) = fs.FuelDate
+      ORDER BY 
+          LaborDate ASC;
+      `)
+  return {
+    timesheets: transactionsResult.recordset ?? [],
+  };
+}
+
 async function getAllSQLData(csoCode, dates) {
   const pool = await getPool();
 
@@ -1611,12 +2166,14 @@ async function getAllSQLData(csoCode, dates) {
     salesStart, salesEnd,
     fuelStart, fuelEnd,
     transStart, transEnd,
-    shiftStart, shiftEnd
+    shiftStart, shiftEnd,
+    timesheetStart, timesheetEnd // <--- New Parameters
   } = dates;
 
   const queryNames = [
     "sales", "fuel", "transactions", "timePeriod",
     "tender", "shiftTimings", "bistroWoWSales", "top10Bistro",
+    "timesheets" // <--- Added
   ];
 
   async function runQuery(name, fn) {
@@ -1636,6 +2193,14 @@ async function getAllSQLData(csoCode, dates) {
   const shiftResult = await runQuery("shiftTimings", () => getShiftTransactionTimings(pool, csoCode, shiftStart, shiftEnd));
   const bistroResult = await runQuery("bistroWoWSales", () => getWeeklyBistroSales(pool, csoCode));
   const top10Result = await runQuery("top10Bistro", () => getTop10Bistro(pool, csoCode));
+  const timesheetsResult = await runQuery("timesheets", () => getEmployeeTimesheetVsSalesChart(pool, csoCode, timesheetStart, timesheetEnd));
+
+  const allResults = [
+    salesResult, fuelResult, transResult, periodResult, 
+    tenderResult, shiftResult, bistroResult, top10Result, timesheetsResult
+  ];
+  
+  const failedQueries = queryNames.filter((_, i) => allResults[i].status === "rejected");
 
   return {
     sales: salesResult.status === "fulfilled" ? salesResult.value : [],
@@ -1646,6 +2211,8 @@ async function getAllSQLData(csoCode, dates) {
     shiftTransactionTimings: shiftResult.status === "fulfilled" ? shiftResult.value : [],
     bistroWoWSales: bistroResult.status === "fulfilled" ? bistroResult.value : [],
     top10Bistro: top10Result.status === "fulfilled" ? top10Result.value : [],
+    employeeTimesheets: timesheetsResult.status === "fulfilled" ? timesheetsResult.value.timesheets : [], // <--- Included
+    _failedQueries: failedQueries,
   };
 }
 
@@ -1667,8 +2234,6 @@ module.exports = {
   getInventoryCategories,
   getAllSQLData,
   getBulkOnHandQtyCSO,
-  getFuelInventoryReportPreviousDay,
-  getFuelInventoryReportCurrentDay,
   getCategoriesFromSQL,
   getCategoryNumbersFromSQL,
   getInactiveMasterItems,
@@ -1694,4 +2259,6 @@ module.exports = {
   getFuelSalesRollupReport,
   getLatestCsoVendorsList,
   getCoreMarkPriceBookByUPCs,
+  getFuelSalesRollupReportRange,
+  getFuelSalesTransactions25June
 };

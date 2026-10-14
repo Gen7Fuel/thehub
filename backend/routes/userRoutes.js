@@ -118,6 +118,90 @@ router.get('/populate-roles', async (req, res) => {
   }
 });
 
+// GET route to list every user's effective value (role default, overridden by
+// their customPermissionsArray if present) for a single permId
+router.get('/by-permission/:permId', async (req, res) => {
+  try {
+    const permId = Number(req.params.permId);
+    if (!Number.isFinite(permId)) {
+      return res.status(400).json({ error: "Invalid permId" });
+    }
+
+    const users = await User.find()
+      .populate('role', 'role_name permissionsArray')
+      .select('firstName lastName email role customPermissionsArray')
+      .lean();
+
+    const result = users.map((user) => {
+      const override = user.customPermissionsArray?.find((p) => p.permId === permId);
+      const roleValue = user.role?.permissionsArray?.find((p) => p.permId === permId)?.value ?? false;
+      const value = override ? override.value : roleValue;
+
+      return {
+        _id: user._id,
+        firstName: user.firstName,
+        lastName: user.lastName,
+        email: user.email,
+        roleName: user.role?.role_name || null,
+        value,
+      };
+    });
+
+    result.sort((a, b) => `${a.firstName} ${a.lastName}`.localeCompare(`${b.firstName} ${b.lastName}`));
+
+    res.status(200).json(result);
+  } catch (error) {
+    console.error("Error fetching users by permission:", error);
+    res.status(500).json({ error: "Internal server error" });
+  }
+});
+
+// PUT route to set/clear a single permId override for a batch of users,
+// without touching any of their other permissions/overrides
+router.put('/by-permission/:permId', async (req, res) => {
+  try {
+    const permId = Number(req.params.permId);
+    const { changes } = req.body;
+
+    if (!Number.isFinite(permId)) {
+      return res.status(400).json({ error: "Invalid permId" });
+    }
+    if (!Array.isArray(changes)) {
+      return res.status(400).json({ error: "changes must be an array" });
+    }
+
+    const io = req.app.get("io");
+
+    for (const { userId, value } of changes) {
+      const user = await User.findById(userId).populate('role', 'permissionsArray');
+      if (!user) continue;
+
+      const roleValue = user.role?.permissionsArray?.find((p) => p.permId === permId)?.value ?? false;
+      const existingIdx = user.customPermissionsArray.findIndex((p) => p.permId === permId);
+
+      if (value === roleValue) {
+        // Matches the role default again -> no override needed
+        if (existingIdx === -1) continue;
+        user.customPermissionsArray.splice(existingIdx, 1);
+      } else if (existingIdx > -1) {
+        user.customPermissionsArray[existingIdx].value = value;
+      } else {
+        user.customPermissionsArray.push({ permId, value });
+      }
+
+      user.markModified('customPermissionsArray');
+      await user.save();
+
+      if (io) io.to(userId).emit("permissions-updated");
+    }
+
+    res.json({ success: true });
+  } catch (error) {
+    console.error("Error updating users by permission:", error);
+    res.status(500).json({ error: "Internal server error" });
+  }
+});
+
 // GET route to fetch a single user by userId
 router.get("/:userId", async (req, res) => {
   const { userId } = req.params;

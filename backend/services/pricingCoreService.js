@@ -5,7 +5,7 @@ const require = createRequire(import.meta.url);
 // 3. Now all of your existing require paths will work perfectly without crashing!
 const Location = require("../models/Location");
 const User = require("../models/User");
-const { gasBuddyQueue } = require("../queues/gasBuddyQueue"); 
+const { gasBuddyQueue } = require("../queues/gasBuddyQueue");
 const { emailQueue } = require("../queues/emailQueue");
 const { priceTimeoutQueue } = require("../queues/priceTimeoutQueue");
 const { fuelNotificationQueue } = require("../queues/fuelNotificationQueue");
@@ -158,39 +158,52 @@ export async function executeRetailPriceUpdate({
   }
 
   // --- In executeRetailPriceUpdate inside server file ---
-  try {
-    if (locationDoc.gasBuddyStationId) {
-      const normalizedPrices = {};
-      for (const [feCode, numericPrice] of Object.entries(prices)) {
-        if (feCode === "DYED") continue;
-        const gasBuddyLabel = GRADE_MAP[feCode];
-        if (
-          gasBuddyLabel &&
-          numericPrice !== undefined &&
-          numericPrice !== null &&
-          !isNaN(numericPrice)
-        ) {
-          // Convert dollar input (1.549) to cents (154.9) without float rounding errors
-          const priceInCents = Number((parseFloat(numericPrice) * 100).toFixed(1));
-          normalizedPrices[gasBuddyLabel] = priceInCents;
-        }
-      }
+  // Temporary stopping of gas buddy queing.
+  // try {
+  //   if (locationDoc.gasBuddyStationId) {
+  //     const normalizedPrices = {};
+  //     for (const [feCode, numericPrice] of Object.entries(prices)) {
+  //       if (feCode === "DYED") continue;
+  //       const gasBuddyLabel = GRADE_MAP[feCode];
+  //       if (
+  //         gasBuddyLabel &&
+  //         numericPrice !== undefined &&
+  //         numericPrice !== null &&
+  //         !isNaN(numericPrice)
+  //       ) {
+  //         // Convert dollar input (1.549) to cents (154.9) without float rounding errors.
+  //         // Keep this as a STRING — wrapping it in Number() drops the trailing ".0" for
+  //         // round prices (Number("154.0") === 154), so GasBuddy would sometimes receive
+  //         // "154" instead of "154.0" depending on the price, and its price input reacts
+  //         // to a value with no decimal point differently than one that has it.
+  //         const priceInCents = (parseFloat(numericPrice) * 100).toFixed(1);
+  //         normalizedPrices[gasBuddyLabel] = priceInCents;
+  //       }
+  //     }
 
-      if (Object.keys(normalizedPrices).length > 0) {
-        await gasBuddyQueue.add(
-          `gasbuddy-sync-${locationId}-${Date.now()}`,
-          {
-            gasBuddyStationId: locationDoc.gasBuddyStationId,
-            stationName,
-            prices: normalizedPrices,
-          },
-          { removeOnComplete: true, removeOnFail: false },
-        );
-      }
-    }
-  } catch (err) {
-    console.error("Non-blocking operational failure (GasBuddy):", err);
-  }
+  //     if (Object.keys(normalizedPrices).length > 0) {
+  //       await gasBuddyQueue.add(
+  //         `gasbuddy-sync-${locationId}-${Date.now()}`,
+  //         {
+  //           gasBuddyStationId: locationDoc.gasBuddyStationId,
+  //           stationName,
+  //           prices: normalizedPrices,
+  //         },
+  //         { removeOnComplete: true, removeOnFail: false },
+  //       );
+  //     }
+  //   }
+  // } catch (err) {
+  //   console.error("Non-blocking operational failure (GasBuddy):", err);
+  // }
+
+  // GVM Unifi price sync deliberately does NOT fire from here. It's
+  // triggered from the site's photo-verification step instead (see
+  // routes/fuel/fuelPricingRoutes.js, PUT /verify-price-receipt) — firing
+  // here (at publish time) would put the cardlock pumps' new price live
+  // before the cashier has even been notified to change the street-pump
+  // price in Bulloch, let alone done it. Syncing GVM to the verification
+  // step instead means both price sets change at roughly the same time.
 
   if (databaseWritesExecutedCount > 0) {
     const storeEmail = locationDoc.email;
@@ -200,12 +213,12 @@ export async function executeRetailPriceUpdate({
     // Helper: Build Dynamic Store & Permanent CC List
     // -------------------------------------------------------------------------
     const getStoreAndPermanentCCs = (station) => {
-      const ccs = ["kim@gen7fuel.com", "daksh@gen7fuel.com"];
+      const ccs = ["kporter@gen7fuel.com", "daksh@gen7fuel.com"];
 
       // Station Group 1 Mapping
       const group1Stations = ["Silver Grizzly", "Oliver", "Osoyoos", "Charlies"];
       // Station Group 2 Mapping
-      const group2Stations = ["Couchiching", "Wavers West", "Wavers East"];
+      const group2Stations = ["Couchiching", "Wavers West", "Wavers East", "Sioux Valley"];
 
       if (group1Stations.includes(station)) {
         ccs.push("michelle@gen7fuel.com");

@@ -13,6 +13,13 @@ type FormStore = {
     customerName: string;
     setCustomerName: (name: string) => void;
 
+    // Whether the current customerName came from an actual selection (dropdown
+    // pick, quick-select tap, or a verified fleet-card lookup) rather than being
+    // hand-typed — any edit to the text box flips this back to false. Gates
+    // submission so a free-typed name can never be submitted as a real AR customer.
+    customerNameSelected: boolean;
+    setCustomerNameSelected: (value: boolean) => void;
+
     driverName: string;
     setDriverName: (name: string) => void;
 
@@ -36,6 +43,12 @@ type FormStore = {
 
     itemsDescription: string;
     setItemsDescription: (s: string) => void;
+
+    // Which register/till the PO was rung through — only used at sites with
+    // 2+ registers configured. Deliberately no default value (unlike
+    // purchaseType/noFleetCard): the cashier must actively pick one.
+    register: string;
+    setRegister: (register: string) => void;
 
     resetForm: () => void;
 
@@ -120,7 +133,11 @@ type FormStore = {
 export const useFormStore = create<FormStore>((set) => ({
     fleetCardNumber: '',
     setFleetCardNumber: (fleetCardNumber) => set({ fleetCardNumber }),
-    noFleetCard: false,
+    // Defaults to "no fleet card" — most PO customers don't carry one, and the
+    // Upload Receipt button on fleet-card-only sites is gated on this being
+    // true or on a verified card, so defaulting false would block a normal
+    // transaction until the cashier proactively flipped the switch.
+    noFleetCard: true,
     setNoFleetCard: (noFleetCard) => set({ noFleetCard }),
     poNumber: '',
     setPoNumber: (poNumber) => set({ poNumber }),
@@ -128,6 +145,8 @@ export const useFormStore = create<FormStore>((set) => ({
     setStationName: (stationName) => set({ stationName }),
     customerName: '',
     setCustomerName: (customerName) => set({ customerName }),
+    customerNameSelected: false,
+    setCustomerNameSelected: (customerNameSelected) => set({ customerNameSelected }),
     driverName: '',
     setDriverName: (driverName) => set({ driverName }),
     vehicleInfo: '',
@@ -144,16 +163,19 @@ export const useFormStore = create<FormStore>((set) => ({
     setPurchaseType: (purchaseType) => set({ purchaseType }),
     itemsDescription: '',
     setItemsDescription: (itemsDescription) => set({ itemsDescription }),
+    register: '',
+    setRegister: (register) => set({ register }),
     receipt: null,
     setReceipt: (receipt) => set({ receipt }),
     signature: null,
     setSignature: (signature) => set({ signature }),
     resetForm: () => set({
         fleetCardNumber: '',
-        noFleetCard: false,
+        noFleetCard: true,
         poNumber: '',
         stationName: '',
         customerName: '',
+        customerNameSelected: false,
         driverName: '',
         vehicleInfo: '',
         licensePlate: '',
@@ -162,6 +184,7 @@ export const useFormStore = create<FormStore>((set) => ({
         fuelType: '',
         purchaseType: 'fuel',
         itemsDescription: '',
+        register: '',
         receipt: null,
         signature: null,
     }),

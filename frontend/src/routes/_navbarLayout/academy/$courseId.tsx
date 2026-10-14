@@ -19,7 +19,7 @@ import {
   verticalListSortingStrategy,
 } from '@dnd-kit/sortable'
 import { CSS } from '@dnd-kit/utilities'
-import { GripVertical } from 'lucide-react'
+import { GripVertical, Maximize2 } from 'lucide-react'
 
 // ─── Types ────────────────────────────────────────────────
 
@@ -261,6 +261,7 @@ function RouteComponent() {
               value={codeInput}
               onChange={(e) => setCodeInput(e.target.value.replace(/\D/g, '').slice(0, 4))}
               onKeyDown={(e) => { if (e.key === 'Enter') handleLookup() }}
+              autoFocus
               className="w-full rounded-2xl border-2 border-gray-200 px-4 py-3 text-center text-lg font-mono tracking-widest focus:outline-none focus:border-red-500 transition-colors"
             />
             {codeError && <p className="text-sm text-red-500 text-center">{codeError}</p>}
@@ -436,11 +437,23 @@ function VideoItemView({
   const isHls = !isEmbed && raw.includes('.m3u8')
 
   const videoRef = useRef<HTMLVideoElement>(null)
+  const containerRef = useRef<HTMLDivElement>(null)
   const hlsRef = useRef<Hls | null>(null)
   const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const hasCompletedRef = useRef(isCompleted)
   const savedSecondsRef = useRef<number>(0)
   const [markedWatched, setMarkedWatched] = useState(isCompleted)
+  const [isFullscreen, setIsFullscreen] = useState(false)
+
+  // Track fullscreen state so the video can be resized to fill the screen
+  // and so we know which element is currently fullscreen.
+  useEffect(() => {
+    function handleFullscreenChange() {
+      setIsFullscreen(document.fullscreenElement === containerRef.current)
+    }
+    document.addEventListener('fullscreenchange', handleFullscreenChange)
+    return () => document.removeEventListener('fullscreenchange', handleFullscreenChange)
+  }, [])
 
   const saveProgress = useCallback(
     (seconds: number) => {
@@ -515,6 +528,33 @@ function VideoItemView({
     }
   }
 
+  function handleTogglePlay() {
+    const v = videoRef.current
+    if (!v) return
+    if (v.paused) v.play()
+    else v.pause()
+  }
+
+  function handleFullscreen(e: React.MouseEvent) {
+    e.stopPropagation()
+    // Fullscreen the *wrapper div*, not the <video> itself. Browsers add
+    // their own native seek/control overlay only when a <video> element is
+    // directly the fullscreen target — fullscreening an ancestor avoids that
+    // overlay entirely, so clicks reach our onClick handler and toggle play/pause.
+    const container = containerRef.current as (HTMLDivElement & {
+      webkitRequestFullscreen?: () => void
+    }) | null
+    const v = videoRef.current as (HTMLVideoElement & {
+      webkitEnterFullscreen?: () => void
+    }) | null
+    if (container?.requestFullscreen) container.requestFullscreen()
+    else if (container?.webkitRequestFullscreen) container.webkitRequestFullscreen()
+    // iOS Safari doesn't support requestFullscreen on arbitrary elements, so
+    // fall back to <video>'s own native fullscreen entry point. That's an
+    // OS-level player with its own controls we can't remove or override.
+    else if (v?.webkitEnterFullscreen) v.webkitEnterFullscreen()
+  }
+
   return (
     <div className="space-y-3">
       <div className="rounded-2xl overflow-hidden border border-gray-100">
@@ -526,16 +566,30 @@ function VideoItemView({
             allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
           />
         ) : (
-          <video
-            ref={videoRef}
-            src={isHls ? undefined : src}
-            className="w-full aspect-video bg-black"
-            controls
-            onLoadedMetadata={handleLoadedMetadata}
-            onTimeUpdate={handleTimeUpdate}
-            onPause={handlePause}
-            onEnded={handleEnded}
-          />
+          <div
+            ref={containerRef}
+            className={isFullscreen ? 'relative flex items-center justify-center bg-black w-screen h-screen' : 'relative'}
+          >
+            <video
+              ref={videoRef}
+              src={isHls ? undefined : src}
+              className={isFullscreen ? 'max-w-full max-h-full bg-black cursor-pointer' : 'w-full aspect-video bg-black cursor-pointer'}
+              playsInline
+              onClick={handleTogglePlay}
+              onLoadedMetadata={handleLoadedMetadata}
+              onTimeUpdate={handleTimeUpdate}
+              onPause={handlePause}
+              onEnded={handleEnded}
+            />
+            <button
+              type="button"
+              onClick={handleFullscreen}
+              aria-label="Fullscreen"
+              className="absolute top-2 right-2 z-10 rounded-full bg-black/50 hover:bg-black/70 text-white p-1.5 transition-colors"
+            >
+              <Maximize2 className="w-4 h-4" />
+            </button>
+          </div>
         )}
       </div>
       {isEmbed && !markedWatched && (
@@ -741,7 +795,7 @@ function MCQItemView({
               <h3 className={`text-3xl font-black mb-4 uppercase tracking-tighter ${
                 theme === 'correct' ? 'text-green-600' : theme === 'close' ? 'text-orange-600' : 'text-red-600'
               }`}>
-                {theme === 'correct' ? 'Awesome!' : theme === 'close' ? 'Nice Try!' : 'Not Quite!'}
+                {theme === 'correct' ? 'Awesome!' : theme === 'close' ? 'Nice Try!' : 'Quick Warning'}
               </h3>
               <p className="text-gray-600 font-medium leading-relaxed">
                 {selectedOpt.feedback || (

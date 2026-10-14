@@ -5,7 +5,7 @@ import { Input } from '@/components/ui/input'
 import { Button } from '@/components/ui/button'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 // Added CheckCircle2 import
-import { Save, Loader2, Plus, Trash2, MapPin, Hash, Car, Truck, Zap, BookText, CheckCircle2 } from 'lucide-react'
+import { Save, Loader2, Plus, Trash2, MapPin, Hash, Car, Truck, Zap, BookText } from 'lucide-react'
 import axios from 'axios'
 import { useQuery } from '@tanstack/react-query'
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog"
@@ -14,9 +14,6 @@ import { toast } from "sonner"
 export const Route = createFileRoute('/_navbarLayout/fuel-management/manage/locations/$id')({
   component: LocationFuelComponent,
 })
-
-// Hardcoded target grades for checkboxes
-const ALL_GRADES = ["Regular", "Premium", "Mid Grade", "Diesel", "Dyed Diesel"];
 
 export const getGradeTheme = (grade: string) => {
   switch (grade) {
@@ -41,8 +38,14 @@ function LocationFuelComponent() {
   const [saving, setSaving] = useState(false)
   const queryClient = useQueryClient()
 
-  const { data: racks = [] } = useQuery({ queryKey: ['fuel-racks'], queryFn: async () => (await axios.get('/api/fuel-racks', { headers: { Authorization: `Bearer ${localStorage.getItem('token')}` } })).data })
-  const { data: carriers = [] } = useQuery({ queryKey: ['fuel-carriers'], queryFn: async () => (await axios.get('/api/fuel-carriers', { headers: { Authorization: `Bearer ${localStorage.getItem('token')}` } })).data })
+  const { data: racks = [] } = useQuery({ 
+    queryKey: ['fuel-racks'], 
+    queryFn: async () => (await axios.get('/api/fuel-racks', { headers: { Authorization: `Bearer ${localStorage.getItem('token')}` } })).data 
+  })
+  const { data: carriers = [] } = useQuery({ 
+    queryKey: ['fuel-carriers'], 
+    queryFn: async () => (await axios.get('/api/fuel-carriers', { headers: { Authorization: `Bearer ${localStorage.getItem('token')}` } })).data 
+  })
 
   const fetchData = async () => {
     setLoading(true)
@@ -50,11 +53,7 @@ function LocationFuelComponent() {
       const res = await axios.get(`/api/fuel-station-tanks/location/${id}`, {
         headers: { Authorization: `Bearer ${localStorage.getItem('token')}` }
       })
-      // Safeguard array instantiation on raw document returns
-      const loc = res.data.location;
-      if (!loc.availableGrades) loc.availableGrades = [];
-
-      setLocationData(loc)
+      setLocationData(res.data.location)
       setTanks(res.data.tanks)
     } catch (err) {
       console.error(err)
@@ -70,22 +69,6 @@ function LocationFuelComponent() {
     fetchData()
   }, [id])
 
-  // Multi-checkbox toggle processor logic
-  const handleToggleGrade = (grade: string) => {
-    const currentGrades = [...(locationData.availableGrades || [])];
-    if (currentGrades.includes(grade)) {
-      setLocationData({
-        ...locationData,
-        availableGrades: currentGrades.filter(g => g !== grade)
-      });
-    } else {
-      setLocationData({
-        ...locationData,
-        availableGrades: [...currentGrades, grade]
-      });
-    }
-  };
-
   const handleUpdateLocation = async () => {
     setSaving(true)
     const payload = {
@@ -94,7 +77,6 @@ function LocationFuelComponent() {
       defaultFuelRack: locationData.defaultFuelRack?._id || locationData.defaultFuelRack,
       defaultFuelCarrier: locationData.defaultFuelCarrier?._id || locationData.defaultFuelCarrier,
       fuelCustomerName: locationData.fuelCustomerName?._id || locationData.fuelCustomerName,
-      availableGrades: locationData.availableGrades || [] // Added parameter hook to save transmission
     }
 
     try {
@@ -232,39 +214,6 @@ function LocationFuelComponent() {
               {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
               Save Station Configuration
             </Button>
-          </div>
-        </div>
-
-        {/* New Row 3: Available Selling Grades Multi-Checkboxes UI Section */}
-        <div className="pt-4 border-t border-slate-100 flex flex-col gap-2">
-          <div>
-            <label className="text-[10px] font-bold uppercase text-slate-400 ml-1 block mb-2">
-              Available Grades For Selling
-            </label>
-
-            <div className="flex flex-wrap gap-x-6 gap-y-2 bg-white p-4 rounded-xl border border-slate-100">
-              {ALL_GRADES.map((grade: string) => {
-                const isChecked = locationData.availableGrades?.includes(grade);
-                return (
-                  <label key={grade} className="flex items-center gap-2 cursor-pointer group select-none">
-                    <div
-                      onClick={() => handleToggleGrade(grade)}
-                      className={`w-5 h-5 rounded border flex items-center justify-center transition-colors ${isChecked
-                          ? 'bg-blue-600 border-blue-600'
-                          : 'border-slate-300 bg-white group-hover:border-blue-400'
-                        }`}
-                    >
-                      {isChecked && (
-                        <CheckCircle2 className="h-3.5 w-3.5 text-white" />
-                      )}
-                    </div>
-                    <span className={`text-sm font-semibold transition-colors ${isChecked ? 'text-slate-900' : 'text-slate-500'}`}>
-                      {grade}
-                    </span>
-                  </label>
-                );
-              })}
-            </div>
           </div>
         </div>
       </div>

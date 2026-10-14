@@ -18,7 +18,7 @@ import { OfflineBanner } from "@/components/custom/OfflineBanner";
 import FuelPriceTicker from "@/components/custom/FuelPriceTicker";
 import { getSocket } from "@/lib/websocket";
 import axios from "axios";
-
+import { Toaster } from "sonner";
 import {
   createFileRoute,
   Outlet,
@@ -385,6 +385,7 @@ function RouteComponent() {
           onView={handleView}
         />
       )}
+      <Toaster position="top-center" richColors />
 
       <div className="flex flex-col flex-1">
         <MaintenanceBanner onStatusChange={handleStatusChange} />

@@ -117,3 +117,21 @@ describe('Payable schema — date field', () => {
     expect(doc.validateSync()).toBeUndefined()
   })
 })
+
+// ─── Intacct link ─────────────────────────────────────────────────────────────
+
+describe('Payable schema — sageBill', () => {
+  it('is empty by default, so a new payable can get an Intacct entry', () => {
+    const doc = new Payable(base())
+    expect(doc.sageBill?.key).toBeUndefined()
+    expect(doc.validateSync()).toBeUndefined()
+  })
+
+  it('stores the Intacct bill key and creation time', () => {
+    const createdAt = new Date('2026-10-07T12:00:00Z')
+    const doc = new Payable(base({ sageBill: { key: '135611', createdAt } }))
+    expect(doc.validateSync()).toBeUndefined()
+    expect(doc.sageBill.key).toBe('135611')
+    expect(doc.sageBill.createdAt).toEqual(createdAt)
+  })
+})

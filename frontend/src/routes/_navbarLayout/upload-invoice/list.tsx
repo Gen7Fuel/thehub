@@ -47,6 +47,13 @@ export interface ExecutionLog {
   executionStep?: string | null;
 }
 
+// 1. Define ImageMetaData type
+export interface ImageMetaData {
+  name: string;
+  laplacianScore?: number | null;
+  isBlur?: boolean;
+}
+
 interface InvoiceItem {
   _id: string;
   site?: { _id?: string; stationName?: string; csoCode?: string };
@@ -65,12 +72,25 @@ interface InvoiceItem {
     | "credit_card";
   checkNumber?: string | null;
   totalCost: number;
-  images: string[];
+  images: (string | ImageMetaData)[];
   status: "pending_api_upload" | "uploaded_to_cso" | "failed_cso_upload";
   csoUploadError?: string | null;
   logs?: ExecutionLog[];
   createdAt: string;
 }
+
+// Safe extractors for string vs object image formats
+const getImgName = (img: string | ImageMetaData | null): string => {
+  if (!img) return "";
+  return typeof img === "string" ? img : img.name;
+};
+
+const getImgMeta = (
+  img: string | ImageMetaData | null,
+): ImageMetaData | null => {
+  if (!img || typeof img === "string") return null;
+  return img;
+};
 
 // Helper: Format Date objects safely into YYYY-MM-DD strings
 const formatDateToString = (date?: Date): string => {
@@ -112,8 +132,10 @@ function RouteComponent() {
   );
   const [selectedLogsInvoice, setSelectedLogsInvoice] =
     useState<InvoiceItem | null>(null);
-  const [activeImage, setActiveImage] = useState<string | null>(null);
-
+  // Replace: const [activeImage, setActiveImage] = useState<string | null>(null);
+  const [activeImage, setActiveImage] = useState<string | ImageMetaData | null>(
+    null,
+  );
   // Expanded raw errors state for logs modal
   const [expandedRawErrors, setExpandedRawErrors] = useState<
     Record<number, boolean>
@@ -390,6 +412,8 @@ function RouteComponent() {
                               setSelectedInvoice(inv);
                               if (inv.images && inv.images.length > 0) {
                                 setActiveImage(inv.images[0]);
+                              } else {
+                                setActiveImage(null);
                               }
                             }}
                             className="w-8 h-8 rounded-lg text-indigo-600 bg-indigo-50 hover:bg-indigo-100 border-none"
@@ -480,18 +504,43 @@ function RouteComponent() {
                     <div className="space-y-2">
                       <div className="border border-slate-200 rounded-xl overflow-hidden bg-slate-900 h-72 flex items-center justify-center relative">
                         <img
-                          src={`/cdn/download/${activeImage}`}
+                          src={`/cdn/download/${getImgName(activeImage)}`}
                           alt="Invoice Document Copy"
                           className="max-h-full max-w-full object-contain"
                         />
+
+                        {/* Quality Badges - Visible ONLY to users with permission */}
+                        {canViewLogs && (
+                          <div className="absolute top-2 right-2 flex flex-col items-end gap-1">
+                            {getImgMeta(activeImage)?.isBlur && (
+                              <span className="bg-rose-600 text-white text-[10px] font-bold px-2 py-0.5 rounded shadow">
+                                Blurry Image
+                              </span>
+                            )}
+                            {getImgMeta(activeImage)?.laplacianScore !== null &&
+                              getImgMeta(activeImage)?.laplacianScore !==
+                                undefined && (
+                                <span className="bg-slate-800/90 text-slate-200 text-[10px] font-mono font-semibold px-2 py-0.5 rounded shadow border border-slate-700">
+                                  Laplacian:{" "}
+                                  {getImgMeta(
+                                    activeImage,
+                                  )?.laplacianScore?.toFixed(1)}
+                                </span>
+                              )}
+                          </div>
+                        )}
                       </div>
+
                       <Button
                         type="button"
                         variant="outline"
                         size="sm"
                         className="w-full flex items-center justify-center gap-2 text-xs font-medium text-slate-700 bg-white border-slate-200 hover:bg-slate-50"
                         onClick={() =>
-                          window.open(`/cdn/download/${activeImage}`, "_blank")
+                          window.open(
+                            `/cdn/download/${getImgName(activeImage)}`,
+                            "_blank",
+                          )
                         }
                       >
                         <ExternalLink className="w-3.5 h-3.5" /> Open in New Tab
@@ -503,25 +552,38 @@ function RouteComponent() {
                     </div>
                   )}
 
+                  {/* Thumbnail List */}
                   {selectedInvoice.images.length > 1 && (
                     <div className="flex gap-2 overflow-x-auto pb-2">
-                      {selectedInvoice.images.map((img, idx) => (
-                        <button
-                          key={idx}
-                          onClick={() => setActiveImage(img)}
-                          className={`w-16 h-16 rounded-lg overflow-hidden border-2 flex-shrink-0 bg-slate-100 ${
-                            activeImage === img
-                              ? "border-indigo-600"
-                              : "border-slate-200 opacity-60"
-                          }`}
-                        >
-                          <img
-                            src={`/cdn/download/${img}`}
-                            alt={`Thumbnail ${idx}`}
-                            className="w-full h-full object-cover"
-                          />
-                        </button>
-                      ))}
+                      {selectedInvoice.images.map((img, idx) => {
+                        const imgName = getImgName(img);
+                        const imgMeta = getImgMeta(img);
+                        const isActive = getImgName(activeImage) === imgName;
+
+                        return (
+                          <button
+                            key={idx}
+                            onClick={() => setActiveImage(img)}
+                            className={`w-16 h-16 rounded-lg overflow-hidden border-2 flex-shrink-0 bg-slate-100 relative ${
+                              isActive
+                                ? "border-indigo-600"
+                                : "border-slate-200 opacity-60"
+                            }`}
+                          >
+                            <img
+                              src={`/cdn/download/${imgName}`}
+                              alt={`Thumbnail ${idx}`}
+                              className="w-full h-full object-cover"
+                            />
+                            {/* Blur badge on thumbnail - Permission restricted */}
+                            {canViewLogs && imgMeta?.isBlur && (
+                              <span className="absolute bottom-0 inset-x-0 bg-rose-600/90 text-white text-[8px] font-bold text-center">
+                                Blur
+                              </span>
+                            )}
+                          </button>
+                        );
+                      })}
                     </div>
                   )}
                 </div>

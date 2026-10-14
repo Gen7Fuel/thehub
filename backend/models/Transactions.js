@@ -66,6 +66,14 @@ const transactionSchema = new mongoose.Schema({
     type: String,
     default: '',
   },
+  // Which physical register/till at the site the PO was rung through. Only
+  // collected at creation time (see backend/routes/purchaseOrder.js POST /) —
+  // not cross-validated against the site's configured Location.registers list.
+  register: {
+    type: String,
+    required: false,
+    default: '',
+  },
   quantity: {
     type: Number,
     required: false,

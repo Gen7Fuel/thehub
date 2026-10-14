@@ -214,13 +214,13 @@ function App() {
           )}
 
           {/* FUEL OPERATIONS - SKY */}
-          {(access?.fuelManagement?.value || canShowFuelPricing || access?.fuelSettings?.value) && (
+          {(access?.fuelManagement?.workspace?.value || canShowFuelPricing || access?.fuelSettings?.value) && (
             <Section 
               title="Fuel Operations" 
               accentColor="border-t-sky-500"
               icon={<Fuel className="w-5 h-5 text-sky-600" />}
             >
-              {access?.fuelManagement?.value && (
+              {access?.fuelManagement?.workspace?.value && (
                 <NavButton 
                   to="/fuel-management/workspace" 
                   label="Fuel Order Mgmt" 
@@ -259,13 +259,13 @@ function App() {
               icon={<GraduationCap className="w-5 h-5 text-violet-600" />}
             >
               {access?.training?.voiceAgent && (
-                <>
-                  <NavButton to="/ai-customer" label="AI Customer Chat" icon={MessageSquare} theme="violet" />
-                  <NavButton to="/ai-customer/mcq" label="MCQ" icon={FileText} theme="violet" />
-                </>
+                <NavButton to="/ai-customer" label="AI Customer Chat" icon={MessageSquare} theme="violet" />
               )}
               {access?.academy && (
-                <NavButton to="/academy" label="Academy" icon={GraduationCap} theme="violet" />
+                <>
+                  <NavButton to="/academy" label="Academy" icon={GraduationCap} theme="violet" />
+                  <NavButton to="/ai-customer/mcq" label="MCQ" icon={FileText} theme="violet" />
+                </>
               )}
             </Section>
           )}

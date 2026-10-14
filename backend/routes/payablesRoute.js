@@ -3,6 +3,7 @@ const router = express.Router();
 const mongoose = require('mongoose');
 const Payable = require('../models/Payables');
 const Safesheet = require('../models/Safesheet');
+const PayableVendorTag = require('../models/PayableVendorTag');
 const { logAction } = require('../middleware/actionLogger');
 const { getPermissionMap } = require('../utils/permissionStore');
 const { pushNotification } = require('../services/notificationService');
@@ -39,6 +40,65 @@ router.get('/', async (req, res) => {
       .sort({ createdAt: -1 });
     
     res.json(payables);
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// GET all vendor tags (payable vendor name -> Sage Intacct vendor).
+// Registered before '/:id' so "vendor-tags" isn't read as an id.
+router.get('/vendor-tags', async (req, res) => {
+  try {
+    const tags = await PayableVendorTag.find({})
+      .select('nameKey vendorName sageVendorId sageVendorName')
+      .lean();
+    res.json(tags);
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// PUT a vendor tag: set or change the Intacct vendor for a payable vendor name.
+router.put('/vendor-tags', async (req, res) => {
+  try {
+    const { vendorName, sageVendorId, sageVendorName } = req.body || {};
+    const name = typeof vendorName === 'string' ? vendorName.trim() : '';
+    const id = typeof sageVendorId === 'string' ? sageVendorId.trim() : '';
+    const sageName = typeof sageVendorName === 'string' ? sageVendorName.trim() : '';
+    if (!name || !id || !sageName) {
+      return res.status(400).json({ error: 'vendorName, sageVendorId and sageVendorName are required' });
+    }
+    const nameKey = PayableVendorTag.normalizeName(name);
+    const tag = await PayableVendorTag.findOneAndUpdate(
+      { nameKey },
+      {
+        $set: { sageVendorId: id, sageVendorName: sageName, taggedBy: req.user?.email || '' },
+        $setOnInsert: { vendorName: name },
+      },
+      { new: true, upsert: true, setDefaultsOnInsert: true }
+    ).lean();
+    res.json({ nameKey: tag.nameKey, vendorName: tag.vendorName, sageVendorId: tag.sageVendorId, sageVendorName: tag.sageVendorName });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// PUT the Intacct bill key created for a payable. Only the first call wins, so
+// a payable can't be linked to two Intacct entries.
+router.put('/:id/sage-bill', async (req, res) => {
+  try {
+    const key = typeof req.body?.key === 'string' ? req.body.key.trim() : '';
+    if (!key) return res.status(400).json({ error: 'key is required' });
+    const payable = await Payable.findOneAndUpdate(
+      { _id: req.params.id, 'sageBill.key': { $exists: false } },
+      { $set: { sageBill: { key, createdAt: new Date() } } },
+      { new: true }
+    ).lean();
+    if (!payable) {
+      const exists = await Payable.exists({ _id: req.params.id });
+      return res.status(exists ? 409 : 404).json({ error: exists ? 'An Intacct entry is already linked to this payable' : 'Payable not found' });
+    }
+    res.json({ sageBill: payable.sageBill });
   } catch (error) {
     res.status(500).json({ error: error.message });
   }

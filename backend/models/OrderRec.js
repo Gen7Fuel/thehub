@@ -79,6 +79,8 @@ const OrderReconciliationSchema = new mongoose.Schema({
   email: { type: String, default: 'mohammad@gen7fuel.com' }, // Creator's email
   orderPlaced: { type: Boolean, default: false },   // Whether the order has been placed
   delivered: { type: Boolean, default: false },     // Whether the order has been delivered
+  invoiceId: { type: String, default: '' },         // Invoice identifier entered when invoice is received
+  invoiceDate: { type: String, default: '' },       // Invoice date string entered when invoice is received
   currentStatus: { type: String, default: "Created" }, // Current status of the order rec
   statusHistory: {
     type: [StatusHistorySchema],

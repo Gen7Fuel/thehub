@@ -27,6 +27,11 @@ const payableSchema = new mongoose.Schema({
     enum: ['safe', 'till', 'cheque', 'on_account', 'other'], // Allowed payment methods
     lowercase: true // Store as lowercase
   },
+  register: {
+    type: String,
+    required: false,
+    default: '',
+  },
   amount: {
     type: Number,
     required: true,
@@ -44,6 +49,12 @@ const payableSchema = new mongoose.Schema({
   date: {
     type: String, // "yyyy-mm-dd"
   },
+  // Draft AP bill created in Sage Intacct from this payable (Desk's
+  // "Create Intacct Entry"). Set once; its presence blocks creating another.
+  sageBill: {
+    key: { type: String },
+    createdAt: { type: Date },
+  },
 }, {
   timestamps: true // Adds createdAt and updatedAt fields automatically
 });
@@ -52,6 +63,7 @@ const payableSchema = new mongoose.Schema({
 payableSchema.index({ vendorName: 1 });
 payableSchema.index({ location: 1 });
 payableSchema.index({ date: 1 });
+payableSchema.index({ location: 1, date: 1, register: 1 });
 
 // Create and export the Payable model
 const Payable = mongoose.model('Payable', payableSchema);

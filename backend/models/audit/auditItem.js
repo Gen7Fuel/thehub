@@ -33,4 +33,9 @@ const AuditItemSchema = new mongoose.Schema({
   orderCreated: { type: Boolean, default: false },
 });
 
+// Every read in auditTemplateRoutes filters by instance, or by instance+item
+// (the per-item upserts in the checklist submit loop). Leftmost prefix covers
+// the instance-only queries too.
+AuditItemSchema.index({ instance: 1, item: 1 });
+
 module.exports = mongoose.model('AuditItem', AuditItemSchema);

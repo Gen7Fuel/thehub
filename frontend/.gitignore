@@ -6,3 +6,5 @@ dist-ssr
 *.pem
 .tanstack/tmp/
 src/routeTree.gen.ts
+dev-dist/
+

@@ -153,7 +153,7 @@
 // }
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
-import { useEffect, useRef } from "react"; // Added useRef
+import { useEffect, useMemo, useRef, useState } from "react"; // Added useRef
 import { DatePicker } from '@/components/custom/datePicker';
 import { Select, SelectContent, SelectGroup, SelectItem, SelectLabel, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { createFileRoute, Link, useNavigate } from '@tanstack/react-router' // Added useNavigate
@@ -163,6 +163,8 @@ import { Textarea } from '@/components/ui/textarea'
 import { useAuth } from "@/context/AuthContext";
 import { Camera, Eye } from 'lucide-react'; // Added icons
 import { useSite } from "@/context/SiteContext";
+import { getCachedVendorTags, saveCachedVendorTags, suggestVendorTags } from '@/lib/payableVendorTagsCache'
+import type { VendorTagOption } from '@/lib/payableVendorTagsCache'
 
 export const Route = createFileRoute('/_navbarLayout/payables/')({
   component: RouteComponent,
@@ -196,6 +198,40 @@ function RouteComponent() {
     const site = selectedSite || user?.location
     if (site) setPayableLocation(site)
   }, [selectedSite, user?.location, setPayableLocation]);
+
+  // Vendor-name autocomplete: tagged vendor names (shared with Desk's tagging).
+  // Seeded from the offline cache, then refreshed. Free text is still allowed.
+  const [vendorTags, setVendorTags] = useState<VendorTagOption[]>(() => getCachedVendorTags())
+  const [showVendorSuggestions, setShowVendorSuggestions] = useState(false)
+  const vendorBoxRef = useRef<HTMLDivElement>(null)
+
+  useEffect(() => {
+    const token = localStorage.getItem('token')
+    if (!token) return
+    fetch('/api/payables/vendor-tags', { headers: { Authorization: `Bearer ${token}` } })
+      .then((res) => (res.ok ? res.json() : Promise.reject(res)))
+      .then((tags: unknown) => {
+        if (!Array.isArray(tags)) return
+        setVendorTags(tags as VendorTagOption[])
+        saveCachedVendorTags(tags as VendorTagOption[])
+      })
+      .catch(() => { /* offline or first load — keep whatever was cached */ })
+  }, [])
+
+  useEffect(() => {
+    const handleClickOutside = (e: MouseEvent) => {
+      if (vendorBoxRef.current && !vendorBoxRef.current.contains(e.target as Node)) {
+        setShowVendorSuggestions(false)
+      }
+    }
+    document.addEventListener('mousedown', handleClickOutside)
+    return () => document.removeEventListener('mousedown', handleClickOutside)
+  }, [])
+
+  const vendorSuggestions = useMemo(
+    () => suggestVendorTags(vendorTags, payableVendorName),
+    [vendorTags, payableVendorName]
+  )
 
   const handleCapture = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]
@@ -235,15 +271,31 @@ function RouteComponent() {
         />
 
         {/* Vendor Information Section */}
-        <div className="space-y-2">
+        <div ref={vendorBoxRef} className="relative space-y-2">
           <h2 className="text-lg font-bold">Vendor Information</h2>
           <Input
             type="text"
             placeholder="Vendor Name"
             value={payableVendorName}
-            onChange={(e) => setPayableVendorName(e.target.value)}
+            autoComplete="off"
+            onChange={(e) => { setPayableVendorName(e.target.value); setShowVendorSuggestions(true) }}
+            onFocus={() => setShowVendorSuggestions(true)}
             required
           />
+          {showVendorSuggestions && vendorSuggestions.length > 0 && (
+            <ul className="absolute z-50 w-full bg-white border border-gray-200 rounded-md shadow-md mt-1 max-h-48 overflow-y-auto">
+              {vendorSuggestions.map((t) => (
+                <li
+                  key={t.nameKey}
+                  className="px-3 py-2 text-sm cursor-pointer hover:bg-gray-100 flex items-center justify-between gap-3"
+                  onMouseDown={() => { setPayableVendorName(t.vendorName); setShowVendorSuggestions(false) }}
+                >
+                  <span>{t.vendorName}</span>
+                  <span className="text-xs text-gray-400">{t.sageVendorId}</span>
+                </li>
+              ))}
+            </ul>
+          )}
         </div>
 
         {/* Location Section */}

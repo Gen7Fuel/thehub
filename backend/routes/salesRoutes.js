@@ -84,45 +84,117 @@ const getMinutesFromMidnight = (input, referenceDateStr) => {
 router.get('/all-data', async (req, res) => {
   const {
     csoCode,
-    site: siteParam,  // sent by client to skip the Location lookup
+    site: siteParam,
     salesStart, salesEnd,
     fuelStart, fuelEnd,
     transStart, transEnd,
-    shiftStart, shiftEnd
+    shiftStart, shiftEnd,
+    timesheetStart, timesheetEnd
   } = req.query;
 
   try {
     // 1. Check Redis cache
-    const cacheKey = `dashboard:${siteParam}:allSqlData`;
+    const cacheKeyParts = [
+      'dashboard',
+      'v2',
+      siteParam || 'unknown-site',
+      csoCode || 'unknown-cso',
+      timesheetStart || 'no-timesheet-start',
+      timesheetEnd || 'no-timesheet-end',
+    ];
+    const cacheKey = cacheKeyParts.map(part => encodeURIComponent(String(part))).join(':');
     const cached = await redis.get(cacheKey);
     if (cached) {
       const parsed = JSON.parse(cached);
       return res.json(parsed);
     }
 
-    // 2. Cache miss — fetch from MSSQL + MongoDB
-    const startDate = new Date(shiftStart);
-    startDate.setHours(0, 0, 0, 0);
-    const endDate = new Date(shiftEnd);
-    endDate.setHours(23, 59, 59, 999);
+    // 2. Date Range Setup (Past 10 Months)
+    const targetEndDate = timesheetEnd ? new Date(timesheetEnd) : new Date();
+    const targetStartDate = new Date(targetEndDate);
+    targetStartDate.setMonth(targetStartDate.getMonth() - 10);
+    targetStartDate.setDate(1);
 
-    // Run SQL queries AND MongoDB shift queries in parallel — no sequential dependency
-    const [sqlResponse, reports, shifts] = await Promise.all([
-      getAllSQLData(csoCode, { salesStart, salesEnd, fuelStart, fuelEnd, transStart, transEnd, shiftStart, shiftEnd }),
-      CashSummaryReport.find({ site: siteParam, date: { $gte: startDate, $lte: endDate } }).lean(),
-      CashSummary.find({ site: siteParam, date: { $gte: startDate, $lte: endDate } }).lean(),
+    targetStartDate.setHours(0, 0, 0, 0);
+    targetEndDate.setHours(23, 59, 59, 999);
+
+    console.log(`\n🔍 [DEBUG] Fetching Mongo shifts for site: "${siteParam}"`);
+    console.log(`📅 [DEBUG] Range: ${targetStartDate.toISOString()} to ${targetEndDate.toISOString()}`);
+
+    // Fetch SQL & Mongo Data
+    const [sqlResponse, shifts] = await Promise.all([
+      getAllSQLData(csoCode, { 
+        salesStart, salesEnd, 
+        fuelStart, fuelEnd, 
+        transStart, transEnd, 
+        shiftStart, shiftEnd,
+        timesheetStart, timesheetEnd
+      }),
+      CashSummary.find({ 
+        site: siteParam, 
+        date: { $gte: targetStartDate, $lte: targetEndDate } 
+      }).lean(),
     ]);
 
-    const site = siteParam;
+    console.log(`📦 [DEBUG] Total MongoDB CashSummary shifts retrieved: ${shifts.length}`);
 
-    // Aggregate Mongo Shifts: Find Absolute Min Start / Max End per day
+    const { _failedQueries: failedQueries, ...sqlData } = sqlResponse;
+
+    // 3. Aggregate Dispenser Sales (AFD) from Mongo
+    const dispenserSalesByDate = {};
+
+    shifts.forEach((shift) => {
+      if (!shift.date) return;
+
+      // Extract raw YYYY-MM-DD cleanly regardless of timezone offset
+      const dateStr = String(shift.date).slice(0, 10);
+
+      const afdCredit = Number(shift.afdCredit) || 0;
+      const afdDebit = Number(shift.afdDebit) || 0;
+      const afdGiftCard = Number(shift.afdGiftCard) || 0;
+      const totalShiftAFD = afdCredit + afdDebit + afdGiftCard;
+
+      if (!dispenserSalesByDate[dateStr]) {
+        dispenserSalesByDate[dateStr] = 0;
+      }
+      dispenserSalesByDate[dateStr] += totalShiftAFD;
+    });
+
+    console.log("📊 [DEBUG] Aggregated Mongo Dispenser Sales by Date:", dispenserSalesByDate);
+
+    // 4. Merge into `employeeTimesheets`
+    const updatedEmployeeTimesheets = (sqlData.employeeTimesheets || []).map((row) => {
+      // Direct string extraction to avoid JS Date timezone shifting
+      const rowDate = row.LaborDate ? String(row.LaborDate).slice(0, 10) : null;
+
+      const dispenserSales = rowDate && dispenserSalesByDate[rowDate] 
+        ? Math.round(dispenserSalesByDate[rowDate] * 100) / 100 
+        : 0;
+
+      const storeSales = Number(row.storeSales) || 0;
+      const fuelSales = Number(row.fuelSales) || 0;
+      const totalSales = Number(row.totalSales) || storeSales + fuelSales;
+
+      return {
+        ...row,
+        storeSales,
+        fuelSales,
+        totalSales,
+        dispenserSales // Injected property
+      };
+    });
+
+    /* 
+    ====================================================================
+    COMMENTED OUT: Operational Timings logic retained for future reference
+    ====================================================================
     const mongoDailyTimings = {};
     shifts.forEach(s => {
       const dayKey = new Date(s.date).toISOString().split('T')[0];
 
       if (!mongoDailyTimings[dayKey]) {
         mongoDailyTimings[dayKey] = {
-          stationOpen: s.stationStart, // Format: "YYYY-MM-DD HH:mm"
+          stationOpen: s.stationStart,
           stationClose: s.stationEnd
         };
       } else {
@@ -135,24 +207,20 @@ router.get('/all-data', async (req, res) => {
       }
     });
 
-    // Final Merge, Normalization & Metrics Calculation
     const operationalTimings = [];
-    let current = new Date(startDate);
+    let current = new Date(targetStartDate);
 
-    while (current <= endDate) {
+    while (current <= targetEndDate) {
       const dateStr = current.toISOString().split('T')[0];
       const sqlDateSK = dateStr.replace(/-/g, '');
 
-      // Locate data for this specific date
-      const sqlRow = sqlResponse.shiftTransactionTimings.find(row => row.Date_SK === sqlDateSK) || {};
+      const sqlRow = sqlData.shiftTransactionTimings?.find(row => row.Date_SK === sqlDateSK) || {};
       const mongoRow = mongoDailyTimings[dateStr] || {};
-      const reportEntry = reports.find(r => new Date(r.date).toISOString().split('T')[0] === dateStr);
+      const reportEntry = reports?.find(r => new Date(r.date).toISOString().split('T')[0] === dateStr);
 
-      // Normalize raw inputs to standard JS Dates (or null)
       const normOpen = mongoRow.stationOpen ? new Date(mongoRow.stationOpen) : null;
       const normClose = mongoRow.stationClose ? new Date(mongoRow.stationClose) : null;
 
-      // Minutes from midnight for easier UI rendering (0 to 1440+)
       const openMin = getMinutesFromMidnight(normOpen, dateStr);
       const closeMin = getMinutesFromMidnight(normClose, dateStr);
       const regStartMin = getMinutesFromMidnight(sqlRow.firstRegTrans, dateStr);
@@ -172,14 +240,8 @@ router.get('/all-data', async (req, res) => {
         lastShiftLogout: sqlRow.lastShiftLogout || null,
         isSubmitted: reportEntry ? reportEntry.submitted : false,
 
-        // Metrics added back for "Store Activity Trend" section
         chartMetrics: {
-          openMin,
-          closeMin,
-          regStartMin,
-          regEndMin,
-          clStartMin,
-          clEndMin,
+          openMin, closeMin, regStartMin, regEndMin, clStartMin, clEndMin,
           isZombieShift: openMin !== null && openMin < 0,
           isMissingClose: normOpen && !normClose,
           hasActivityBeforeOpen: sqlRow.firstRegTrans && normOpen && (new Date(sqlRow.firstRegTrans) < normOpen)
@@ -188,16 +250,23 @@ router.get('/all-data', async (req, res) => {
 
       current.setDate(current.getDate() + 1);
     }
+    ====================================================================
+    */
 
-    // 3. Build response and cache it
+    // Log the last 3 rows sent to the frontend for direct verification
+    console.log("🚀 [DEBUG] Sample Updated Timesheets (Last 3 rows):");
+    console.dir(updatedEmployeeTimesheets.slice(-3), { depth: null });
+
     const responseData = {
-      ...sqlResponse,
-      operationalTimings,
+      ...sqlData,
+      employeeTimesheets: updatedEmployeeTimesheets,
+      operationalTimings: [],
       lastUpdated: new Date().toISOString(),
     };
 
-    // Cache for 25 hours (90000 seconds) — cron refreshes daily, buffer for missed runs
-    await redis.set(cacheKey, JSON.stringify(responseData), 'EX', 90000);
+    if (failedQueries.length === 0) {
+      await redis.set(cacheKey, JSON.stringify(responseData), 'EX', 90000);
+    }
 
     res.json(responseData);
 

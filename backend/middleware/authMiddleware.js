@@ -6,6 +6,27 @@ import chalk from "chalk";
 import pkg from "../utils/permissionStore.js";
 const { getPermissionMap } = pkg;
 
+// Maintenance state is read on every authenticated request but changes maybe
+// monthly, so it's cached briefly rather than queried each time. The TTL is
+// short enough that turning maintenance on takes effect almost immediately,
+// and it self-heals across processes without needing an invalidation signal.
+const MAINTENANCE_TTL_MS = 5000;
+let maintenanceCache = { value: null, checkedAt: 0 };
+
+const getOngoingMaintenance = async () => {
+  const now = Date.now();
+  if (now - maintenanceCache.checkedAt < MAINTENANCE_TTL_MS) {
+    return maintenanceCache.value;
+  }
+  const ongoing = await Maintenance.findOne({ status: "ongoing" }).lean();
+  maintenanceCache = { value: ongoing, checkedAt: now };
+  return ongoing;
+};
+
+// Per-request request logging is on by default to preserve existing behaviour;
+// set AUTH_REQUEST_LOG=false to drop it (Caddy already logs every request).
+const AUTH_REQUEST_LOG = process.env.AUTH_REQUEST_LOG !== "false";
+
 /**
  * Traverse the nested permission tree automatically respecting `value`
  * - keyPath: dot-separated string like "stationAudit.template"
@@ -98,15 +119,20 @@ const auth = async (req, res, next) => {
 
     // const user = await User.findById(decoded.id).select("-password");
     // if (!user) return res.status(401).json({ message: "User not found" });
-    const user = await User.findById(decoded.id).populate('role').select("-password");
+    const user = await User.findById(decoded.id).populate('role').select("-password").lean();
     if (!user) return res.status(401).json({ message: "User not found" });
+
+    // .lean() skips hydrating the user and role docs — including their whole
+    // permission subdocument arrays — but it also drops Mongoose's built-in
+    // `id` virtual, which route handlers read as req.user.id in ~14 places.
+    user.id = String(user._id);
 
     // const chalkPromise = import('chalk').catch(() => null)
 
     req.user = user;
 
     // --- NEW: INTEGRATED MAINTENANCE CHECK ---
-    const ongoing = await Maintenance.findOne({ status: "ongoing" });
+    const ongoing = await getOngoingMaintenance();
 
     if (ongoing) {
       // Allow the maintenance status route to pass through so the frontend can show the overlay
@@ -133,40 +159,40 @@ const auth = async (req, res, next) => {
       }
     }
 
-    // Timestamp: 2025-12-09 14:23 (UTC)
-    const pad = (n) => String(n).padStart(2, '0')
-    const now = new Date()
-    const ts = `${now.getUTCFullYear()}-${pad(now.getUTCMonth() + 1)}-${pad(now.getUTCDate())} ${pad(now.getUTCHours())}:${pad(now.getUTCMinutes())}`
+    if (AUTH_REQUEST_LOG) {
+      // Timestamp: 2025-12-09 14:23 (UTC)
+      const pad = (n) => String(n).padStart(2, '0')
+      const now = new Date()
+      const ts = `${now.getUTCFullYear()}-${pad(now.getUTCMonth() + 1)}-${pad(now.getUTCDate())} ${pad(now.getUTCHours())}:${pad(now.getUTCMinutes())}`
 
-    // Color badges by HTTP method
-    const methodBadge =
-      req.method === 'POST'
-        ? chalk.bgRed.white(` ${req.method} `)
-        : req.method === 'PUT'
-          ? chalk.bgMagenta.white(` ${req.method} `)
-          : req.method === 'PATCH'
-            ? chalk.bgCyan.black(` ${req.method} `)
-            : req.method === 'DELETE'
-              ? chalk.bgBlack.white(` ${req.method} `)
-              : chalk.bgYellow.black(` ${req.method} `)
+      // Color badges by HTTP method
+      const methodBadge =
+        req.method === 'POST'
+          ? chalk.bgRed.white(` ${req.method} `)
+          : req.method === 'PUT'
+            ? chalk.bgMagenta.white(` ${req.method} `)
+            : req.method === 'PATCH'
+              ? chalk.bgCyan.black(` ${req.method} `)
+              : req.method === 'DELETE'
+                ? chalk.bgBlack.white(` ${req.method} `)
+                : chalk.bgYellow.black(` ${req.method} `)
 
-    // console.log(`[${ts}] 🧑‍💻 ${req.user.firstName}: ${req.method} ${req.originalUrl}`);
+      const colorizeQuery = (url) => {
+        if (!url) return ''
+        return String(url)
+          .replace(/\?/g, chalk.yellowBright(' ? '))
+          .replace(/&/g, chalk.blueBright(' & '))
+      }
 
-    const colorizeQuery = (url) => {
-      if (!url) return ''
-      return String(url)
-        .replace(/\?/g, chalk.yellowBright(' ? '))
-        .replace(/&/g, chalk.blueBright(' & '))
+      const coloredUrl = colorizeQuery(req.originalUrl)
+
+      console.log(
+        chalk.bgWhite.black(` ${ts} `),
+        ` ${req.user.firstName} ${req.user.lastName} `,
+        methodBadge,
+        coloredUrl
+      )
     }
-
-    const coloredUrl = colorizeQuery(req.originalUrl)
-
-    console.log(
-      chalk.bgWhite.black(` ${ts} `),
-      ` ${req.user.firstName} ${req.user.lastName} `,
-      methodBadge,
-      coloredUrl
-    )
 
     // const chalk = (await chalkPromise)?.default
     // if (chalk) {

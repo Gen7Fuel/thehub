@@ -196,6 +196,7 @@ import { Switch } from "@/components/ui/switch";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
+import { MasterDetailShell } from "@/components/custom/masterDetailShell";
 
 export const Route = createFileRoute('/_navbarLayout/settings/users')({
   component: RouteComponent,
@@ -327,64 +328,64 @@ function RouteComponent() {
 
 
   return (
-    <div className="flex">
-      {/* LEFT PANEL */}
-      <aside className="flex flex-col w-1/4 p-4 border-r border-gray-300 border-dashed space-y-2">
-        {/* Search + Logout All */}
-        <div className="flex items-center gap-2 mb-4">
-          <Input
-            placeholder="Search users..."
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            className="flex-1"
-          />
-          <Button
-            className="bg-red-600 text-white hover:bg-red-500"
-            onClick={() => {
-              const loggedInIds = users.filter(u => u.is_loggedIn).map(u => u._id);
-              if (!loggedInIds.length) return alert("No users are currently logged in.");
+    <>
+      <MasterDetailShell
+        sidebar={
+          <>
+            {/* Search + Logout All */}
+            <div className="flex items-center gap-2 mb-4 w-full">
+              <Input
+                placeholder="Search users..."
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                className="flex-1"
+              />
+              <Button
+                className="bg-red-600 text-white hover:bg-red-500"
+                onClick={() => {
+                  const loggedInIds = users.filter(u => u.is_loggedIn).map(u => u._id);
+                  if (!loggedInIds.length) return alert("No users are currently logged in.");
 
-              // setLogoutUserIds(loggedInIds); // store for confirm dialog
-              setPassword("");
-              setShowPasswordDialog(true); // first ask for password
-            }}
-          >
-            Logout All Users
-          </Button>
-        </div>
-
-        {filteredUsers.map((user) => (
-          <div key={user._id} className="flex items-center justify-between w-full">
-            {user.is_active ? (
-              <Link
-                to="/settings/users/$userId"
-                params={{ userId: user._id }}
-                activeProps={{
-                  className: 'bg-gray-100 rounded-md' 
+                  // setLogoutUserIds(loggedInIds); // store for confirm dialog
+                  setPassword("");
+                  setShowPasswordDialog(true); // first ask for password
                 }}
-                className={`p-2 w-full text-left ${user.is_loggedIn ? "text-green-600 font-semibold" : ""
-                  }`}
               >
-                {user.firstName} {user.lastName}
-              </Link>
-            ) : (
-              <span className="p-2 w-full text-left text-gray-400 cursor-not-allowed">
-                {user.firstName} {user.lastName}
-              </span>
-            )}
-            <Switch
-              checked={user.is_active}
-              onCheckedChange={() => handleToggle(user._id, user.is_active)}
-            />
-          </div>
-        ))
-        }
-      </aside >
+                Logout All Users
+              </Button>
+            </div>
 
-      {/* RIGHT PANEL */}
-      < main className="w-3/4" >
+            {filteredUsers.map((user) => (
+              <div key={user._id} className="flex items-center justify-between w-full">
+                {user.is_active ? (
+                  <Link
+                    to="/settings/users/$userId"
+                    params={{ userId: user._id }}
+                    activeProps={{
+                      className: 'bg-gray-100 rounded-md'
+                    }}
+                    className={`p-2 w-full text-left ${user.is_loggedIn ? "text-green-600 font-semibold" : ""
+                      }`}
+                  >
+                    {user.firstName} {user.lastName}
+                  </Link>
+                ) : (
+                  <span className="p-2 w-full text-left text-gray-400 cursor-not-allowed">
+                    {user.firstName} {user.lastName}
+                  </span>
+                )}
+                <Switch
+                  checked={user.is_active}
+                  onCheckedChange={() => handleToggle(user._id, user.is_active)}
+                />
+              </div>
+            ))
+            }
+          </>
+        }
+      >
         <Outlet />
-      </main >
+      </MasterDetailShell>
 
       <Dialog open={showLogoutConfirmDialog} onOpenChange={setShowLogoutConfirmDialog}>
         <DialogContent>
@@ -427,8 +428,6 @@ function RouteComponent() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
-
-
-    </div >
+    </>
   );
 }

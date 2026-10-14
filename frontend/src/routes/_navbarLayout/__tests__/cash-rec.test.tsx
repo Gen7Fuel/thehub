@@ -426,6 +426,17 @@ describe('Cash Rec Report — index.tsx', () => {
     )
   })
 
+  it('has no Create Intacct Entry button (entries are made from Desk now)', async () => {
+    mockUseLoaderData.mockReturnValue(makeLoaderData())
+    mockUseSearch.mockReturnValue({ site: 'Rankin', date: '2026-03-15' })
+    renderWithSuspense(<CashRecReport />)
+    await waitFor(
+      () => expect(screen.getByText(/sales summary/i)).toBeInTheDocument(),
+      { timeout: 5000 }
+    )
+    expect(screen.queryByText('Create Intacct Entry')).not.toBeInTheDocument()
+  })
+
   it('shows the Sales Summary section when site and data are present', async () => {
     mockUseLoaderData.mockReturnValue(makeLoaderData())
     mockUseSearch.mockReturnValue({ site: 'Rankin', date: '2026-03-15' })

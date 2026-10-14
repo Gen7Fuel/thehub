@@ -21,7 +21,7 @@ const truncate = async () => {
   await getPg()(TABLE).truncate();
 };
 
-const EXCLUDED_CATEGORIES = [100, 101, 102, 103, 104, 105, 106, 107, 114, 115, 116, 117, 118, 119, 0, 998, 999];
+const EXCLUDED_CATEGORIES = [100, 101, 102, 103, 104, 105, 106, 107, 110, 111, 112, 113, 114, 115, 116, 117, 118, 119, 0, 998, 999];
 
 const getRankedItemsForSite = async (siteId) => {
   const db = getPg();

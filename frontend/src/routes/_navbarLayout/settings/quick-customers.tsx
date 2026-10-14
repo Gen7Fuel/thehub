@@ -1,6 +1,7 @@
 import { createFileRoute, Link, Outlet } from '@tanstack/react-router';
 import { slugify } from '@/lib/utils';
 import axios from "axios"
+import { MasterDetailShell } from "@/components/custom/masterDetailShell";
 
 export const Route = createFileRoute('/_navbarLayout/settings/quick-customers')({
   component: RouteComponent,
@@ -27,23 +28,24 @@ function RouteComponent() {
   };
 
   return (
-    <div className="flex">
-      <aside className="flex flex-col w-1/4 p-4 border-r border-gray-300 border-dashed justify-start items-end">
-        {locations.map((location) => (
-          <Link
-            key={location.stationName}
-            className="p-2"
-            to="/settings/quick-customers/$site"
-            params={{ site: slugify(location.stationName) }}
-            activeProps={activeProps}
-          >
-            {location.stationName}
-          </Link>
-        ))}
-      </aside>
-      <main className="w-3/4">
-        <Outlet />
-      </main>
-    </div>
+    <MasterDetailShell
+      sidebar={
+        <>
+          {locations.map((location) => (
+            <Link
+              key={location.stationName}
+              className="p-2 w-full"
+              to="/settings/quick-customers/$site"
+              params={{ site: slugify(location.stationName) }}
+              activeProps={activeProps}
+            >
+              {location.stationName}
+            </Link>
+          ))}
+        </>
+      }
+    >
+      <Outlet />
+    </MasterDetailShell>
   );
 }

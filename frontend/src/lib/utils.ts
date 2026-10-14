@@ -457,6 +457,35 @@ async function syncOneAction(action: any): Promise<void> {
     console.log("✅ Synced CREATE_PURCHASE_ORDER for", action.payload?.customerName);
   }
 
+  else if (action.type === "CREATE_PAYABLE") {
+    // Upload attachments (if any) sequentially, then resolve the station
+    // name captured at queue time to the location ObjectId the backend
+    // expects — both require the network, so both are deferred to here
+    // rather than done at submit time.
+    const imageFilenames: string[] = [];
+    for (let i = 0; i < (action.images?.length || 0); i++) {
+      const { filename } = await uploadBase64Image(action.images[i], `document_${Date.now()}_${i + 1}.jpg`);
+      imageFilenames.push(filename);
+    }
+
+    const locationsRes = await axios.get("/api/locations", { headers: authHeader });
+    const selectedLocation = (locationsRes.data || []).find(
+      (loc: any) => loc.stationName === action.payload.location
+    );
+    if (!selectedLocation) {
+      // Not an axios error, so isPermanentFailure() treats this as
+      // permanent — retrying can't fix a location name that doesn't exist.
+      throw new Error(`Location "${action.payload.location}" not found`);
+    }
+
+    await axios.post(
+      "/api/payables",
+      { ...action.payload, location: selectedLocation._id, images: imageFilenames },
+      { headers: { ...authHeader, "X-Required-Permission": "payables" } }
+    );
+    console.log("✅ Synced CREATE_PAYABLE for", action.payload?.vendorName);
+  }
+
   else if (action.type === "SAVE_EXTRA_NOTE") {
     const res = await axios.patch(
       `/api/order-rec/${action.orderId}`,
@@ -466,6 +495,18 @@ async function syncOneAction(action: any): Promise<void> {
     const latest = { ...res.data, id: res.data._id, _id: res.data._id };
     await saveOrderRec(latest);
     console.log("✅ Synced and refreshed SAVE_EXTRA_NOTE order record:", latest.id);
+  }
+
+  else if (action.type === "ADD_ORDER_REC_COMMENT") {
+    // A message written offline (e.g. a scanned item that isn't on the order rec).
+    const res = await axios.post(
+      `/api/order-rec/${action.orderId}/comments`,
+      { text: action.text, photos: [] },
+      { headers: authHeader }
+    );
+    const latest = { ...res.data, id: res.data._id, _id: res.data._id };
+    await saveOrderRec(latest);
+    console.log("✅ Synced ADD_ORDER_REC_COMMENT for order record:", latest.id);
   }
 
   else {
@@ -530,6 +571,13 @@ export async function syncPendingActions() {
       let madeProgress = false;
 
       for (const { key, action } of actionable) {
+        // Mark this one entry as actively uploading before the network call
+        // starts — list pages poll the queue from IndexedDB, so this is how
+        // they can show "Sending..." for the item in flight right now,
+        // distinct from the rest still waiting their turn (sync is strictly
+        // one-at-a-time; see the sequential `for` loop here).
+        await updatePendingAction(key, { syncing: true });
+
         try {
           await syncOneAction(action);
           await deletePendingAction(key); // remove ONLY this entry
@@ -538,12 +586,16 @@ export async function syncPendingActions() {
           if (isPermanentFailure(err)) {
             await updatePendingAction(key, {
               failed: true,
+              syncing: false,
               failureReason: describeSyncFailure(err),
               failedAt: Date.now(),
             });
             madeProgress = true; // resolved into a terminal state, not stuck
             console.error("🛑 Permanent failure, will not retry:", action.type, key, err);
           } else {
+            // Back to plain "pending" — the next pass (online event / 15s
+            // poll / triggerBackgroundSync()) will retry it.
+            await updatePendingAction(key, { syncing: false });
             console.warn("⚠️ Transient failure, left queued for retry:", action.type, key, err);
           }
         }

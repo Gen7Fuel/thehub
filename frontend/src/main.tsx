@@ -34,7 +34,9 @@ const router = createRouter({
   defaultPreload: 'intent',
   scrollRestoration: true,
   defaultStructuralSharing: true,
-  defaultPreloadStaleTime: 0,
+  // Not 0: that re-ran the target route's loader on every hover. Navigation
+  // still revalidates because defaultStaleTime is unset (defaults to 0).
+  defaultPreloadStaleTime: 1000 * 30,
 })
 
 // Render the app

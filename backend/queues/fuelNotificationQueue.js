@@ -3,7 +3,19 @@ const connection = require("../utils/redisClient");
 const Location = require("../models/Location");
 const { sendOperationalFuelAlarm } = require("../utils/sendPushOverNotification");
 
-const fuelNotificationQueue = new Queue("fuelNotificationQueue", { connection });
+const fuelNotificationQueue = new Queue("fuelNotificationQueue", {
+  connection,
+  defaultJobOptions: {
+    removeOnComplete: {
+      count: 20,
+      age: 1800, // Keep completed jobs for 30 minutes
+    },
+    removeOnFail: {
+      count: 100, // Keep up to 100 failed jobs
+      age: 259200, // Keep failed jobs for 3 days (72 hours)
+    },
+  },
+});
 
 const fuelNotificationWorker = new Worker(
   "fuelNotificationQueue",

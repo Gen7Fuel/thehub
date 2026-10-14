@@ -42,7 +42,7 @@ import Navbar from '../navbar'
 const FULL_ACCESS = {
   toggleFuelPriceTicker: true,
   notification: { value: true },
-  dashboard: true,
+  dashboard: { value: true, viewWeeklyStatistics: true },
   settings: { value: true },
   passwordReset: true,
 }

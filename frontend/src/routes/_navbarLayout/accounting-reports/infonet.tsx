@@ -154,6 +154,18 @@ function RouteComponent() {
         </CardHeader>
 
         <CardContent className="space-y-6">
+          {/* Report Requirement Info Banner */}
+          <div className="flex items-center gap-2.5 p-3.5 bg-blue-50 dark:bg-blue-950/30 border border-blue-200 dark:border-blue-800/50 rounded-lg text-blue-900 dark:text-blue-200 text-sm">
+            <Info className="h-4 w-4 shrink-0 text-blue-600 dark:text-blue-400" />
+            <span>
+              Please upload the{" "}
+              <strong className="font-semibold underline decoration-blue-300">
+                SA7081 report
+              </strong>{" "}
+              exported from the Infonet terminal.
+            </span>
+          </div>
+
           {/* Email Notification Banner */}
           <div className="flex items-center gap-2.5 p-3.5 bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800/50 rounded-lg text-amber-900 dark:text-amber-200 text-sm">
             <Mail className="h-4 w-4 shrink-0 text-amber-600 dark:text-amber-400" />

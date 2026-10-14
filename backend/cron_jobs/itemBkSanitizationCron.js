@@ -29,6 +29,132 @@ const isSame = (val1, val2) => {
   return normalize(val1) === normalize(val2);
 };
 
+/**
+ * Syncs newly inserted and soft-deleted/archived items with future scheduled cycle count instances.
+ * 
+ * @param {import('knex').Knex.Transaction} trx 
+ * @param {Array<Object>} newlyInsertedItems Array of inserted item_bk objects containing id, site, and filter attributes.
+ * @param {Array<number>} removedItemIds Array of item_bk IDs that were soft-deleted/archived.
+ * @param {string} todayDateStr YYYY-MM-DD date string.
+ */
+async function syncScheduledInstances(trx, newlyInsertedItems, removedItemIds, todayDateStr) {
+  // ----------------------------------------------------------------------
+  // STEP 1: REMOVE ARCHIVED/DELETED ITEMS FROM FUTURE UNCOMPLETED COUNTS
+  // ----------------------------------------------------------------------
+  if (removedItemIds && removedItemIds.length > 0) {
+    const removedCount = await trx("cycle_count_items")
+      .whereIn("product_id", removedItemIds)
+      .whereIn("instance_id", function () {
+        this.select("id")
+          .from("cycle_count_instance")
+          .where("date", ">", todayDateStr);
+      })
+      .andWhere("count_completed", false)
+      .del();
+
+    if (removedCount > 0) {
+      console.log(`[FUTURE COUNT PURGE] Removed ${removedCount} scheduled item entries from upcoming cycles.`);
+    }
+  }
+
+  // ----------------------------------------------------------------------
+  // STEP 2: EVALUATE NEWLY ADDED ITEMS AGAINST FUTURE SCHEDULED INSTANCES
+  // ----------------------------------------------------------------------
+  if (!newlyInsertedItems || newlyInsertedItems.length === 0) {
+    return;
+  }
+
+  // Get distinct sites where new items were added
+  const addedSites = [...new Set(newlyInsertedItems.map((item) => item.site))];
+
+  // Fetch future scheduled instances for these sites that have an active group assigned
+  const futureInstances = await trx("cycle_count_instance as cci")
+    .join("cycle_count_groups as ccg", "cci.group_id", "ccg.id")
+    .where("cci.is_scheduled", true)
+    .where("cci.date", ">", todayDateStr)
+    .whereIn("cci.site_mongo_id", addedSites)
+    .whereNotNull("cci.group_id")
+    .where("ccg.is_active", true)
+    .select(
+      "cci.id as instance_id",
+      "cci.site_mongo_id",
+      "cci.group_id",
+      "ccg.filter_column"
+    );
+
+  if (futureInstances.length === 0) {
+    console.log("[SCHEDULE SYNC] No future scheduled instances found for updated sites.");
+    return;
+  }
+
+  // Fetch filter values for all target group IDs
+  const groupIds = [...new Set(futureInstances.map((inst) => inst.group_id))];
+  const groupValuesRows = await trx("cycle_count_group_values")
+    .whereIn("group_id", groupIds)
+    .select("group_id", "value");
+
+  // Map group_id -> Set of allowed values (normalized to string)
+  const groupValuesMap = new Map();
+  for (const row of groupValuesRows) {
+    if (!groupValuesMap.has(row.group_id)) {
+      groupValuesMap.set(row.group_id, new Set());
+    }
+    groupValuesMap.get(row.group_id).add(String(row.value).trim());
+  }
+
+  const itemsToScheduleInsert = [];
+
+  // Match inserted items with future instances according to group rules
+  for (const instance of futureInstances) {
+    const allowedValues = groupValuesMap.get(instance.group_id);
+    if (!allowedValues || allowedValues.size === 0) continue;
+
+    const filterCol = instance.filter_column;
+
+    // Filter items matching site and group filter criteria
+    const matchingItems = newlyInsertedItems.filter((item) => {
+      if (item.site !== instance.site_mongo_id) return false;
+      const itemVal = item[filterCol];
+      if (itemVal === null || itemVal === undefined) return false;
+      return allowedValues.has(String(itemVal).trim());
+    });
+
+    for (const item of matchingItems) {
+      itemsToScheduleInsert.push({
+        instance_id: instance.instance_id,
+        product_id: item.id,
+        foh: null,
+        boh: null,
+        count_completed: false,
+        priority: false,
+      });
+    }
+  }
+
+  if (itemsToScheduleInsert.length > 0) {
+    if (typeof trx.raw === "function") {
+      await trx.raw(`
+        SELECT setval(
+          pg_get_serial_sequence('cycle_count_items', 'id'),
+          COALESCE((SELECT MAX(id) FROM cycle_count_items), 0) + 1,
+          false
+        )
+      `);
+    }
+
+    // Insert in chunks with conflict resolution to prevent duplicate key errors
+    const chunkSize = 1000;
+    for (let i = 0; i < itemsToScheduleInsert.length; i += chunkSize) {
+      const chunk = itemsToScheduleInsert.slice(i, i + chunkSize);
+      await trx("cycle_count_items")
+        .insert(chunk)
+        .onConflict(["instance_id", "product_id"])
+        .ignore();
+    }
+    console.log(`[SCHEDULE SYNC] Successfully attached ${itemsToScheduleInsert.length} newly qualified item mappings to future scheduled instances.`);
+  }
+}
+
 async function runSanitizeItemBk() {
   console.log("--- Starting Saturday Morning Item Sanitization Protocol ---");
   const db = getPg();
@@ -71,7 +197,7 @@ async function runSanitizeItemBk() {
                   .select("id", "site", "upc", "gtin", "upc_barcode", "description", 
                           "retail", "vendor_id", "vendor_name", "category_id", "department_id", 
                           "department", "price_group_id", "price_group", "promo_group_id", "promo_group", 
-                          "on_hand_qty", "last_inv_date", "active", "image_url");
+                          "on_hand_qty", "last_inv_date", "active", "image_url", "pk_in_crt");
 
   const pgMap = new Map(pgItems.map(item => [`${item.site}_${item.upc}`, item]));
 
@@ -141,6 +267,7 @@ async function runSanitizeItemBk() {
         active: true,
         allow_cycle_count: true,
         image_url: item?.image_url ?? null,
+        pk_in_crt: toNullableNumber(item?.pk_in_crt),
         sync_date: db.fn.now()
       };
 
@@ -148,12 +275,17 @@ async function runSanitizeItemBk() {
       pgMap.set(azureKey, newRow);
     } else {
       // SCENARIO B: Item exists in both -> VERIFY AND CORRECT SHIFTS
+      
+      // Determine resolved pk_in_crt: preserve Postgres value if SQL returns null/undefined
+      const incomingPkInCrt = toNullableNumber(item?.pk_in_crt);
+      const targetPkInCrt = incomingPkInCrt !== null ? incomingPkInCrt : toNullableNumber(match.pk_in_crt);
+
       const hasChanged =
         match.active !== true ||
         !isSame(match.gtin, gtin) ||
         !isSame(match.upc_barcode, item?.upc_barcode) ||
         !isSame(match.description, item?.Description) ||
-        !isSameNum(match.retail, item?.Retail) || // Use numeric evaluation for retail
+        !isSameNum(match.retail, item?.Retail) || 
         !isSame(match.vendor_id, item?.vendorId) ||
         !isSame(match.vendor_name, item?.vendorName) ||
         !isSameNum(match.category_id, categoryId) ||
@@ -163,9 +295,10 @@ async function runSanitizeItemBk() {
         !isSame(match.price_group, item?.priceGroup) ||
         !isSame(match.promo_group_id, item?.promoGroupId) ||
         !isSame(match.promo_group, item?.promoGroup) ||
-        !isSameNum(match.on_hand_qty, item?.onHandQty) || // 👈 FIX: Evaluate as numeric values
+        !isSameNum(match.on_hand_qty, item?.onHandQty) || 
         !isSame(match.last_inv_date, lastInvDate) ||
-        !isSame(match.image_url, item?.image_url);
+        !isSame(match.image_url, item?.image_url) ||
+        !isSameNum(match.pk_in_crt, targetPkInCrt);
 
       if (hasChanged) {
         rowsToUpdate.push({
@@ -186,6 +319,7 @@ async function runSanitizeItemBk() {
           on_hand_qty: toNullableNumber(item?.onHandQty),
           last_inv_date: lastInvDate,
           image_url: item?.image_url ?? null,
+          pk_in_crt: targetPkInCrt,
           active: true, // Auto-reactivate if it reappeared in system feed
           sync_date: db.fn.now()
         });
@@ -213,50 +347,66 @@ async function runSanitizeItemBk() {
 
   console.log(`Summary: Inserts: ${rowsToInsert.length} | Updates: ${rowsToUpdate.length} | Deletions & Logs: ${idsToRemove.length}`);
 
-  // Execute Deletions and Future Counts Purge
-  if (idsToRemove.length > 0) {
-    await db.transaction(async (trx) => {
+  let newlyInsertedItemsWithIds = [];
+
+  // Execute all mutations and sync logic inside a transaction wrapper
+  await db.transaction(async (trx) => {
+
+    // 1. Execute Soft Deletions and Logs
+    if (idsToRemove.length > 0) {
       await trx("item_bk")
         .whereIn("id", idsToRemove)
-        .update({ active: false, sync_date: db.fn.now() });
-
-      const removedCount = await trx("cycle_count_items")
-        .whereIn("product_id", idsToRemove)
-        .whereIn("instance_id", function () {
-          this.select("id")
-            .from("cycle_count_instance")
-            .where("date", ">", todayDateStr);
-        })
-        .andWhere("count_completed", false)
-        .del();
-
-      if (removedCount > 0) {
-        console.log(`[FUTURE COUNT PURGE] Removed ${removedCount} scheduled item entries from upcoming cycles.`);
-      }
+        .update({ 
+          active: false, 
+          allow_cycle_count: false, // 👈 Ensures soft-deleted items don't appear in upcoming counts
+          on_hand_qty: 0, // 👈 Reset on-hand quantity to zero for soft-deleted items
+          sync_date: db.fn.now() 
+        });
 
       const logChunks = chunkArray(logEntriesToInsert, 200);
       for (const batch of logChunks) {
         await trx("deleted_items_log").insert(batch);
       }
-    });
-    console.log(`Successfully soft-deleted ${idsToRemove.length} records and wrote to logs.`);
-  }
-
-  // Execute Inserts
-  if (rowsToInsert.length > 0) {
-    const insertChunks = chunkArray(rowsToInsert, 200);
-    for (const batch of insertChunks) {
-      await db("item_bk").insert(batch);
+      console.log(`Successfully soft-deleted ${idsToRemove.length} records and wrote to logs.`);
     }
-  }
 
-  // Execute Updates
-  if (rowsToUpdate.length > 0) {
-    for (const row of rowsToUpdate) {
-      const { id, ...data } = row;
-      await db("item_bk").where({ id }).update(data);
+    // 2. Execute Inserts and capture returned IDs with filter fields
+    if (rowsToInsert.length > 0) {
+      const insertChunks = chunkArray(rowsToInsert, 200);
+      for (const batch of insertChunks) {
+        const insertedBatch = await trx("item_bk")
+          .insert(batch)
+          .returning([
+            "id",
+            "site",
+            "category_id",
+            "department_id",
+            "department",
+            "vendor_id",
+            "vendor_name",
+            "price_group_id",
+            "price_group",
+            "promo_group_id",
+            "promo_group"
+          ]);
+
+        newlyInsertedItemsWithIds.push(...insertedBatch);
+      }
+      console.log(`Successfully inserted ${rowsToInsert.length} new records into item_bk.`);
     }
-  }
+
+    // 3. Execute Updates
+    if (rowsToUpdate.length > 0) {
+      for (const row of rowsToUpdate) {
+        const { id, ...data } = row;
+        await trx("item_bk").where({ id }).update(data);
+      }
+      console.log(`Successfully updated ${rowsToUpdate.length} existing records in item_bk.`);
+    }
+
+    // 4. Run Scheduled Instance Synchronization Protocol
+    await syncScheduledInstances(trx, newlyInsertedItemsWithIds, idsToRemove, todayDateStr);
+  });
 
   console.log("Sanitization complete.");
 }
@@ -281,4 +431,4 @@ cron.schedule("0 6 * * 6", async () => {
   timezone: "America/Toronto"
 });
 
-module.exports = { runSanitizeItemBk };
+module.exports = { runSanitizeItemBk, syncScheduledInstances };

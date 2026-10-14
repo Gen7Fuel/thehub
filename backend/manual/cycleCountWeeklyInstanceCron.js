@@ -1,7 +1,9 @@
 // scripts/runCycleCountUpdate.js
 require('dotenv').config();
 const mongoose = require('mongoose');
-const { runWeeklyInstanceCalculations } = require('../cron_jobs/cycleCountWeeklyInstanceCron'); // Importing the same function from the report cron for manual execution
+const http = require('http');
+const setupSocket = require('../socket');
+const { runWeeklyInstanceCalculations } = require('../cron_jobs/cycleCountWeeklyInstanceCron');
 
 async function run() {
   try {
@@ -11,7 +13,11 @@ async function run() {
     });
     console.log("Connected to MongoDB");
 
-    await runWeeklyInstanceCalculations();
+    // Initialize standalone Socket instance for manual execution pass
+    const server = http.createServer();
+    const io = setupSocket(server);
+
+    await runWeeklyInstanceCalculations(io);
 
     console.log("Done generating weekly cycle count instances.");
     process.exit(0);

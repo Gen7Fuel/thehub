@@ -834,7 +834,7 @@ import { LocationPicker } from '@/components/custom/locationPicker'
 import { useAuth } from "@/context/AuthContext"
 import { Dialog, DialogContent } from '@/components/ui/dialog'
 import * as XLSX from "xlsx";
-import { FileSpreadsheet } from "lucide-react"
+import { FileSpreadsheet, Trash2 } from "lucide-react"
 import Barcode from 'react-barcode'
 
 export const Route = createFileRoute('/_navbarLayout/cycle-count/manage/item-bk')({
@@ -877,16 +877,28 @@ const FILTERABLE_COLUMNS = [
   { key: 'department', label: 'Department' },
   { key: 'grade', label: 'Grade' },
   { key: 'allow_cycle_count', label: 'Allow Count Status' },
+  { key: 'is_active', label: 'Active Status' },
+  { key: 'on_hand_qty', label: 'On Hand Qty' },
   { key: 'price_group', label: 'Price Group' },
   { key: 'promo_group', label: 'Promo Group' },
 ] as const
+
+const ON_HAND_FILTER_OPERATORS = [
+  { value: 'eq', label: 'Equal To' },
+  { value: 'gt', label: 'Greater Than' },
+  { value: 'lt', label: 'Less Than' },
+] as const
+
+type OnHandFilterOperator = typeof ON_HAND_FILTER_OPERATORS[number]['value']
+
+type ClearableNumber = number | null | "CLEAR";
 
 // Payload layout for staging changes
 interface MassEditPayload {
   allow_cycle_count: boolean | null
   grade: string | null
-  pk_in_crt: number | null
-  crt_in_case: number | null
+  pk_in_crt: ClearableNumber
+  crt_in_case: ClearableNumber
 }
 
 type FilterKey = typeof FILTERABLE_COLUMNS[number]['key'];
@@ -906,7 +918,37 @@ const frozenGradeBgStyles: Record<string, string> = {
 const VIRTUAL_ROW_HEIGHT = 58
 const VIRTUAL_OVERSCAN = 12
 
-const formatDateValue = (value: string | null) => value ? new Date(value).toLocaleDateString() : '-'
+const DATE_MONTH_LABELS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"]
+
+const formatDateValue = (value: string | null) => {
+  if (!value) return '-'
+
+  const match = String(value).match(/^(\d{4})-(\d{2})-(\d{2})/)
+  if (!match) return value
+
+  const [, year, month, day] = match
+  const monthLabel = DATE_MONTH_LABELS[Number(month) - 1]
+
+  return monthLabel ? `${day}-${monthLabel}-${year}` : value
+}
+
+const formatFilterValue = (item: ItemBkRow, column: FilterKey) => {
+  const rawVal = item[column]
+
+  if (column === 'is_active') {
+    return rawVal === false ? 'Inactive' : 'Active'
+  }
+
+  if (rawVal === null || rawVal === undefined || rawVal === '') {
+    return '—'
+  }
+
+  if (typeof rawVal === 'boolean') {
+    return rawVal ? 'Yes' : 'No'
+  }
+
+  return String(rawVal)
+}
 
 // High performance memoized row element explicitly processing explicit cell distributions
 const ItemRow = memo(({
@@ -1093,6 +1135,8 @@ function RouteComponent() {
   const [isFilterDialogOpen, setIsFilterDialogOpen] = useState<boolean>(false)
   const [selectedFilterColumn, setSelectedFilterColumn] = useState<FilterKey>('categoryName')
   const [activeFilters, setActiveFilters] = useState<Record<string, string[]>>({})
+  const [onHandFilterOperator, setOnHandFilterOperator] = useState<OnHandFilterOperator>('lt')
+  const [onHandFilterValue, setOnHandFilterValue] = useState<string>("")
 
   useEffect(() => {
     const timeout = window.setTimeout(() => {
@@ -1159,13 +1203,7 @@ function RouteComponent() {
   const uniqueValuesForSelectedColumn = useMemo(() => {
     const valuesSet = new Set<string>()
     items.forEach(item => {
-      let val = item[selectedFilterColumn]
-      if (val === null || val === undefined || val === '') {
-        val = '—'
-      } else if (typeof val === 'boolean') {
-        val = val ? 'Yes' : 'No'
-      }
-      valuesSet.add(String(val))
+      valuesSet.add(formatFilterValue(item, selectedFilterColumn))
     })
     return Array.from(valuesSet).sort((a, b) => a.localeCompare(b))
   }, [items, selectedFilterColumn])
@@ -1194,6 +1232,28 @@ function RouteComponent() {
   const handleResetAllFilters = () => {
     setActiveFilters({})
     setSearchQuery("")
+    setOnHandFilterOperator('lt')
+    setOnHandFilterValue("")
+  }
+
+  const handleApplyOnHandFilter = () => {
+    const numericValue = Number(onHandFilterValue)
+    if (!onHandFilterValue.trim() || !Number.isFinite(numericValue)) return
+
+    setActiveFilters(prev => ({
+      ...prev,
+      on_hand_qty: [`${onHandFilterOperator}:${numericValue}`]
+    }))
+  }
+
+  const formatActiveFilterValue = (colKey: string, values: string[]) => {
+    if (colKey !== 'on_hand_qty') return values.join(', ')
+
+    const [operator, rawValue] = (values[0] || '').split(':')
+    const operatorLabel =
+      ON_HAND_FILTER_OPERATORS.find((option) => option.value === operator)?.label || operator
+
+    return `${operatorLabel} ${rawValue ?? ''}`.trim()
   }
 
   const isFilteringActive = useMemo(() => {
@@ -1213,16 +1273,19 @@ function RouteComponent() {
       }
 
       for (const [colKey, allowedValues] of Object.entries(activeFilters)) {
-        let rawVal = item[colKey as keyof ItemBkRow]
-        let mappedStr = ''
+        if (colKey === 'on_hand_qty') {
+          const [operator, rawValue] = (allowedValues[0] || '').split(':')
+          const filterValue = Number(rawValue)
+          const itemValue = Number(item.on_hand_qty || 0)
 
-        if (rawVal === null || rawVal === undefined || rawVal === '') {
-          mappedStr = '—'
-        } else if (typeof rawVal === 'boolean') {
-          mappedStr = rawVal ? 'Yes' : 'No'
-        } else {
-          mappedStr = String(rawVal)
+          if (!Number.isFinite(filterValue)) return false
+          if (operator === 'eq' && itemValue !== filterValue) return false
+          if (operator === 'gt' && itemValue <= filterValue) return false
+          if (operator === 'lt' && itemValue >= filterValue) return false
+          continue
         }
+
+        const mappedStr = formatFilterValue(item, colKey as FilterKey)
 
         if (!allowedValues.includes(mappedStr)) {
           return false
@@ -1300,53 +1363,91 @@ function RouteComponent() {
     setEditForm({ allow_cycle_count: null, grade: null, pk_in_crt: null, crt_in_case: null })
   }
 
+  const resetForm = () => {
+    setEditForm({
+      allow_cycle_count: null,
+      grade: null,
+      pk_in_crt: null,
+      crt_in_case: null,
+    });
+    setShowMassEditConfirm(false);
+  };
+
+  const onClose = () => {
+    resetForm();
+    handleCloseMassEdit();
+  };
+
   const handleExecuteMassEdit = async () => {
-    setIsUpdating(true)
+    setIsUpdating(true);
     try {
-      const res = await fetch('/api/cycle-count/item-bk/mass-edit', {
-        method: 'PUT',
+      // Build clean payload:
+      // "CLEAR" string translates to explicit null in backend payload
+      const updatesPayload: Record<string, any> = {};
+
+      if (editForm.allow_cycle_count !== null) {
+        updatesPayload.allow_cycle_count = editForm.allow_cycle_count;
+      }
+      if (editForm.grade !== null) {
+        updatesPayload.grade = editForm.grade;
+      }
+      if (editForm.pk_in_crt !== null) {
+        updatesPayload.pk_in_crt = editForm.pk_in_crt === "CLEAR" ? null : editForm.pk_in_crt;
+      }
+      if (editForm.crt_in_case !== null) {
+        updatesPayload.crt_in_case = editForm.crt_in_case === "CLEAR" ? null : editForm.crt_in_case;
+      }
+
+      const res = await fetch("/api/cycle-count/item-bk/mass-edit", {
+        method: "PUT",
         headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${localStorage.getItem("token") || ""}`,
-          'X-Required-Permission': 'cycleCount.manageCount',
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${localStorage.getItem("token") || ""}`,
+          "X-Required-Permission": "cycleCount.manageCount",
         },
         body: JSON.stringify({
           ids: selectedIds,
-          updates: Object.fromEntries(
-            Object.entries(editForm).filter(([_, v]) => v !== null)
-          )
-        })
-      })
+          updates: updatesPayload,
+        }),
+      });
 
       if (res.status === 403) {
-        navigate({ to: "/no-access" })
-        return
+        navigate({ to: "/no-access" });
+        return;
       }
 
       if (res.ok) {
-        const updatedRes = await fetch(`/api/cycle-count/item-bk?site=${encodeURIComponent(site)}`, {
-          headers: {
-            "Authorization": `Bearer ${localStorage.getItem("token") || ""}`,
-            "X-Required-Permission": "cycleCount.manageCount",
+        const updatedRes = await fetch(
+          `/api/cycle-count/item-bk?site=${encodeURIComponent(site)}`,
+          {
+            headers: {
+              Authorization: `Bearer ${localStorage.getItem("token") || ""}`,
+              "X-Required-Permission": "cycleCount.manageCount",
+            },
           }
-        });
-        if (updatedRes.status === 403) { navigate({ to: "/no-access" }); return; }
-        if (updatedRes.ok) {
-          const data = await updatedRes.json()
-          setItems(data.items || [])
+        );
+        if (updatedRes.status === 403) {
+          navigate({ to: "/no-access" });
+          return;
         }
-        setSelectedIds([])
-        handleCloseMassEdit()
+        if (updatedRes.ok) {
+          const data = await updatedRes.json();
+          setItems(data.items || []);
+        }
+        setSelectedIds([]);
+        onClose();
       } else {
-        const errData = await res.json()
-        alert(`Update failed: ${errData.message || 'Unknown Server Error'}`)
+        const errData = await res.json();
+        alert(`Update failed: ${errData.message || "Unknown Server Error"}`);
       }
     } catch (err) {
-      console.error("Critical failure updating bulk items:", err)
+      console.error("Critical failure updating bulk items:", err);
     } finally {
-      setIsUpdating(false)
+      setIsUpdating(false);
     }
-  }
+  };
+
+  const isFormDirty = Object.values(editForm).some((val) => val !== null);
 
   const exportToExcel = () => {
     // Flatten your filtered/grouped items to pass to the sheet mapping
@@ -1507,7 +1608,7 @@ function RouteComponent() {
             return (
               <div key={colKey} className="flex items-center bg-blue-50 border border-blue-200 text-blue-700 px-2 py-0.5 rounded text-xs font-medium">
                 <span className="opacity-70 mr-1">{matchedCol?.label}:</span>
-                <span className="max-w-[120px] truncate">{values.join(', ')}</span>
+                <span className="max-w-[160px] truncate">{formatActiveFilterValue(colKey, values)}</span>
                 <button
                   onClick={() => setActiveFilters(prev => {
                     const copy = { ...prev }; delete copy[colKey]; return copy;
@@ -1657,7 +1758,9 @@ function RouteComponent() {
                 <div className="px-2 py-1.5 text-[11px] font-bold text-gray-400 uppercase tracking-wider">Select Column</div>
                 {FILTERABLE_COLUMNS.map((col) => {
                   const isCurrent = selectedFilterColumn === col.key
-                  const activeCount = activeFilters[col.key]?.length || 0
+                  const activeCount = col.key === 'on_hand_qty'
+                    ? (activeFilters[col.key]?.length ? 1 : 0)
+                    : activeFilters[col.key]?.length || 0
 
                   return (
                     <button
@@ -1684,7 +1787,9 @@ function RouteComponent() {
               <div className="w-2/3 p-4 flex flex-col overflow-hidden">
                 <div className="flex items-center justify-between mb-2">
                   <div className="text-[11px] font-bold text-gray-400 uppercase tracking-wider">
-                    Available Matches ({uniqueValuesForSelectedColumn.length})
+                    {selectedFilterColumn === 'on_hand_qty'
+                      ? 'Numeric Condition'
+                      : `Available Matches (${uniqueValuesForSelectedColumn.length})`}
                   </div>
                   {(activeFilters[selectedFilterColumn]?.length || 0) > 0 && (
                     <button
@@ -1696,29 +1801,81 @@ function RouteComponent() {
                   )}
                 </div>
 
-                <div className="flex-1 border rounded-lg bg-gray-50/30 overflow-y-auto divide-y">
-                  {uniqueValuesForSelectedColumn.map((value) => {
-                    const isChecked = (activeFilters[selectedFilterColumn] || []).includes(value)
+                {selectedFilterColumn === 'on_hand_qty' ? (
+                  <div className="flex-1 border rounded-lg bg-gray-50/30 p-4">
+                    <div className="grid grid-cols-2 gap-3">
+                      <div className="space-y-1.5">
+                        <label className="text-[11px] font-bold text-gray-400 uppercase tracking-wider">
+                          Condition
+                        </label>
+                        <select
+                          value={onHandFilterOperator}
+                          onChange={(event) => setOnHandFilterOperator(event.target.value as OnHandFilterOperator)}
+                          className="w-full rounded-lg border bg-white px-3 py-2 text-sm text-gray-800 focus:outline-none focus:ring-2 focus:ring-blue-100"
+                        >
+                          {ON_HAND_FILTER_OPERATORS.map((option) => (
+                            <option key={option.value} value={option.value}>
+                              {option.label}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
 
-                    return (
-                      <label
-                        key={value}
-                        className="flex items-center justify-between px-3 py-2.5 hover:bg-gray-50 cursor-pointer select-none text-xs text-gray-700 transition-colors"
-                      >
-                        <div className="flex items-center gap-2.5 min-w-0 flex-1">
-                          <input
-                            type="checkbox"
-                            checked={isChecked}
-                            onChange={() => handleToggleFilterValue(selectedFilterColumn, value)}
-                            className="rounded accent-blue-600 h-4 w-4 cursor-pointer shrink-0"
-                          />
-                          <span className="font-medium text-gray-900 truncate">{value}</span>
-                        </div>
-                        {isChecked && <Check className="h-4 w-4 text-blue-600 shrink-0 ml-2" />}
-                      </label>
-                    )
-                  })}
-                </div>
+                      <div className="space-y-1.5">
+                        <label className="text-[11px] font-bold text-gray-400 uppercase tracking-wider">
+                          Quantity
+                        </label>
+                        <input
+                          type="number"
+                          step="0.01"
+                          value={onHandFilterValue}
+                          onChange={(event) => setOnHandFilterValue(event.target.value)}
+                          placeholder="0"
+                          className="w-full rounded-lg border bg-white px-3 py-2 text-sm text-gray-800 focus:outline-none focus:ring-2 focus:ring-blue-100"
+                        />
+                      </div>
+                    </div>
+
+                    <button
+                      type="button"
+                      onClick={handleApplyOnHandFilter}
+                      disabled={!onHandFilterValue.trim() || !Number.isFinite(Number(onHandFilterValue))}
+                      className="mt-4 w-full rounded-lg bg-blue-600 px-4 py-2 text-xs font-bold text-white shadow-sm transition-colors hover:bg-blue-700 disabled:cursor-not-allowed disabled:bg-gray-300"
+                    >
+                      Apply On Hand Filter
+                    </button>
+
+                    {activeFilters.on_hand_qty?.length > 0 && (
+                      <div className="mt-3 rounded-lg border border-blue-100 bg-blue-50 px-3 py-2 text-xs font-medium text-blue-700">
+                        Current: {formatActiveFilterValue('on_hand_qty', activeFilters.on_hand_qty)}
+                      </div>
+                    )}
+                  </div>
+                ) : (
+                  <div className="flex-1 border rounded-lg bg-gray-50/30 overflow-y-auto divide-y">
+                    {uniqueValuesForSelectedColumn.map((value) => {
+                      const isChecked = (activeFilters[selectedFilterColumn] || []).includes(value)
+
+                      return (
+                        <label
+                          key={value}
+                          className="flex items-center justify-between px-3 py-2.5 hover:bg-gray-50 cursor-pointer select-none text-xs text-gray-700 transition-colors"
+                        >
+                          <div className="flex items-center gap-2.5 min-w-0 flex-1">
+                            <input
+                              type="checkbox"
+                              checked={isChecked}
+                              onChange={() => handleToggleFilterValue(selectedFilterColumn, value)}
+                              className="rounded accent-blue-600 h-4 w-4 cursor-pointer shrink-0"
+                            />
+                            <span className="font-medium text-gray-900 truncate">{value}</span>
+                          </div>
+                          {isChecked && <Check className="h-4 w-4 text-blue-600 shrink-0 ml-2" />}
+                        </label>
+                      )
+                    })}
+                  </div>
+                )}
               </div>
 
             </div>
@@ -1804,18 +1961,20 @@ function RouteComponent() {
         </DialogContent>
       </Dialog>
 
-      {/* BULK EDIT DIALOG OVERLAY */}
+     {/* BULK EDIT DIALOG OVERLAY */}
       {isMassEditOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm animate-fade-in">
           <div className="bg-white rounded-xl shadow-xl w-full max-w-lg overflow-hidden flex flex-col mx-4 border max-h-[90vh]">
-
+            
             {/* Modal Title Banner */}
             <div className="p-4 border-b flex items-center justify-between bg-gray-50">
               <div>
                 <h3 className="font-bold text-gray-900 text-base">Bulk Edit Selection Matrix</h3>
-                <p className="text-xs text-gray-500">Modifying <span className="font-semibold text-blue-600">{selectedIds.length}</span> active row selections concurrently</p>
+                <p className="text-xs text-gray-500">
+                  Modifying <span className="font-semibold text-blue-600">{selectedIds.length}</span> active row selections concurrently
+                </p>
               </div>
-              <button onClick={handleCloseMassEdit} className="p-1 hover:bg-gray-200 rounded-lg text-gray-400 hover:text-gray-700 transition-colors">
+              <button onClick={onClose} className="p-1 hover:bg-gray-200 rounded-lg text-gray-400 hover:text-gray-700 transition-colors">
                 <X className="h-5 w-5" />
               </button>
             </div>
@@ -1824,29 +1983,35 @@ function RouteComponent() {
               <>
                 {/* Main Edit Parameters Panels */}
                 <div className="flex-1 overflow-y-auto p-4 space-y-5">
-
+                  
                   {/* Section 1: Cycle Count Eligibility */}
                   <div className="space-y-2">
                     <label className="text-xs font-bold text-gray-400 uppercase tracking-wider block">1. Allow Cycle Count Status</label>
                     <div className="grid grid-cols-3 gap-2">
                       <button
                         type="button"
-                        onClick={() => setEditForm(p => ({ ...p, allow_cycle_count: true }))}
-                        className={`p-2.5 border rounded-lg text-xs font-semibold transition-all ${editForm.allow_cycle_count === true ? 'bg-green-50 border-green-500 text-green-700 ring-2 ring-green-100' : 'bg-white hover:bg-gray-50 text-gray-700'}`}
+                        onClick={() => setEditForm((p) => ({ ...p, allow_cycle_count: true }))}
+                        className={`p-2.5 border rounded-lg text-xs font-semibold transition-all ${
+                          editForm.allow_cycle_count === true ? "bg-green-50 border-green-500 text-green-700 ring-2 ring-green-100" : "bg-white hover:bg-gray-50 text-gray-700"
+                        }`}
                       >
                         Enable Counting (Yes)
                       </button>
                       <button
                         type="button"
-                        onClick={() => setEditForm(p => ({ ...p, allow_cycle_count: false }))}
-                        className={`p-2.5 border rounded-lg text-xs font-semibold transition-all ${editForm.allow_cycle_count === false ? 'bg-red-50 border-red-500 text-red-700 ring-2 ring-red-100' : 'bg-white hover:bg-gray-50 text-gray-700'}`}
+                        onClick={() => setEditForm((p) => ({ ...p, allow_cycle_count: false }))}
+                        className={`p-2.5 border rounded-lg text-xs font-semibold transition-all ${
+                          editForm.allow_cycle_count === false ? "bg-red-50 border-red-500 text-red-700 ring-2 ring-red-100" : "bg-white hover:bg-gray-50 text-gray-700"
+                        }`}
                       >
                         Disable Counting (No)
                       </button>
                       <button
                         type="button"
-                        onClick={() => setEditForm(p => ({ ...p, allow_cycle_count: null }))}
-                        className={`p-2.5 border border-dashed rounded-lg text-xs font-medium text-gray-400 hover:bg-gray-50 ${editForm.allow_cycle_count === null ? 'bg-gray-50 border-gray-300 text-gray-600' : ''}`}
+                        onClick={() => setEditForm((p) => ({ ...p, allow_cycle_count: null }))}
+                        className={`p-2.5 border border-dashed rounded-lg text-xs font-medium text-gray-400 hover:bg-gray-50 ${
+                          editForm.allow_cycle_count === null ? "bg-gray-50 border-gray-300 text-gray-600" : ""
+                        }`}
                       >
                         Leave Unchanged
                       </button>
@@ -1857,20 +2022,24 @@ function RouteComponent() {
                   <div className="space-y-2">
                     <label className="text-xs font-bold text-gray-400 uppercase tracking-wider block">2. Target Product Grade</label>
                     <div className="grid grid-cols-4 gap-2">
-                      {['A', 'B', 'C'].map((g) => (
+                      {["A", "B", "C"].map((g) => (
                         <button
                           key={g}
                           type="button"
-                          onClick={() => setEditForm(p => ({ ...p, grade: g }))}
-                          className={`p-2.5 border rounded-lg text-xs font-bold transition-all ${editForm.grade === g ? 'bg-blue-600 border-blue-600 text-white shadow-sm' : 'bg-white hover:bg-gray-50 text-gray-700'}`}
+                          onClick={() => setEditForm((p) => ({ ...p, grade: g }))}
+                          className={`p-2.5 border rounded-lg text-xs font-bold transition-all ${
+                            editForm.grade === g ? "bg-blue-600 border-blue-600 text-white shadow-sm" : "bg-white hover:bg-gray-50 text-gray-700"
+                          }`}
                         >
                           Grade {g}
                         </button>
                       ))}
                       <button
                         type="button"
-                        onClick={() => setEditForm(p => ({ ...p, grade: null }))}
-                        className={`p-2.5 border border-dashed rounded-lg text-xs font-medium text-gray-400 hover:bg-gray-50 ${editForm.grade === null ? 'bg-gray-50 border-gray-300 text-gray-600' : ''}`}
+                        onClick={() => setEditForm((p) => ({ ...p, grade: null }))}
+                        className={`p-2.5 border border-dashed rounded-lg text-xs font-medium text-gray-400 hover:bg-gray-50 ${
+                          editForm.grade === null ? "bg-gray-50 border-gray-300 text-gray-600" : ""
+                        }`}
                       >
                         Unchanged
                       </button>
@@ -1879,53 +2048,140 @@ function RouteComponent() {
 
                   {/* Section 3: Ratio Controls (Packs in Crt & Crts in Case) */}
                   <div className="grid grid-cols-2 gap-4 pt-1">
+                    
+                    {/* Packs in Carton */}
                     <div className="space-y-1.5">
-                      <label className="text-xs font-bold text-gray-400 uppercase tracking-wider block">3. Packs in Crt</label>
-                      <input
-                        type="number"
-                        placeholder="Keep existing values"
-                        value={editForm.pk_in_crt ?? ""}
-                        onChange={(e) => setEditForm(p => ({ ...p, pk_in_crt: e.target.value === "" ? null : parseInt(e.target.value, 10) }))}
-                        className="w-full px-3 py-2 border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary/20 bg-gray-50/50 focus:bg-white"
-                      />
-                    </div>
-                    <div className="space-y-1.5">
-                      <label className="text-xs font-bold text-gray-400 uppercase tracking-wider block">4. Crt in Case</label>
-                      <input
-                        type="number"
-                        placeholder="Keep existing values"
-                        value={editForm.crt_in_case ?? ""}
-                        onChange={(e) => setEditForm(p => ({ ...p, crt_in_case: e.target.value === "" ? null : parseInt(e.target.value, 10) }))}
-                        className="w-full px-3 py-2 border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary/20 bg-gray-50/50 focus:bg-white"
-                      />
-                    </div>
-                  </div>
+                      <div className="flex justify-between items-center">
+                        <label className="text-xs font-bold text-gray-400 uppercase tracking-wider block">3. Packs in Crt</label>
+                        {editForm.pk_in_crt !== null && (
+                          <button
+                            type="button"
+                            onClick={() => setEditForm((p) => ({ ...p, pk_in_crt: null }))}
+                            className="text-[10px] text-gray-400 hover:text-gray-600 underline"
+                          >
+                            Reset
+                          </button>
+                        )}
+                      </div>
 
+                      <div className="flex gap-2">
+                        <input
+                          type="number"
+                          min="1"
+                          disabled={editForm.pk_in_crt === "CLEAR"}
+                          placeholder={editForm.pk_in_crt === "CLEAR" ? "Will be removed (null)" : "Keep existing values"}
+                          value={typeof editForm.pk_in_crt === "number" ? editForm.pk_in_crt : ""}
+                          onChange={(e) =>
+                            setEditForm((p) => ({
+                              ...p,
+                              pk_in_crt: e.target.value === "" ? null : parseInt(e.target.value, 10),
+                            }))
+                          }
+                          className={`w-full px-3 py-2 border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary/20 ${
+                            editForm.pk_in_crt === "CLEAR"
+                              ? "bg-red-50 text-red-700 border-red-300 placeholder-red-400 font-semibold"
+                              : "bg-gray-50/50 focus:bg-white"
+                          }`}
+                        />
+                        <button
+                          type="button"
+                          title="Remove Mapping (Set to Null)"
+                          onClick={() =>
+                            setEditForm((p) => ({
+                              ...p,
+                              pk_in_crt: p.pk_in_crt === "CLEAR" ? null : "CLEAR",
+                            }))
+                          }
+                          className={`px-2.5 py-2 border rounded-lg text-xs font-semibold flex items-center shrink-0 transition-colors ${
+                            editForm.pk_in_crt === "CLEAR"
+                              ? "bg-red-600 text-white border-red-600 shadow-sm"
+                              : "bg-white hover:bg-red-50 text-red-600 border-gray-200"
+                          }`}
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </button>
+                      </div>
+                    </div>
+
+                    {/* Cartons in Case */}
+                    <div className="space-y-1.5">
+                      <div className="flex justify-between items-center">
+                        <label className="text-xs font-bold text-gray-400 uppercase tracking-wider block">4. Crt in Case</label>
+                        {editForm.crt_in_case !== null && (
+                          <button
+                            type="button"
+                            onClick={() => setEditForm((p) => ({ ...p, crt_in_case: null }))}
+                            className="text-[10px] text-gray-400 hover:text-gray-600 underline"
+                          >
+                            Reset
+                          </button>
+                        )}
+                      </div>
+
+                      <div className="flex gap-2">
+                        <input
+                          type="number"
+                          min="1"
+                          disabled={editForm.crt_in_case === "CLEAR"}
+                          placeholder={editForm.crt_in_case === "CLEAR" ? "Will be removed (null)" : "Keep existing values"}
+                          value={typeof editForm.crt_in_case === "number" ? editForm.crt_in_case : ""}
+                          onChange={(e) =>
+                            setEditForm((p) => ({
+                              ...p,
+                              crt_in_case: e.target.value === "" ? null : parseInt(e.target.value, 10),
+                            }))
+                          }
+                          className={`w-full px-3 py-2 border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary/20 ${
+                            editForm.crt_in_case === "CLEAR"
+                              ? "bg-red-50 text-red-700 border-red-300 placeholder-red-400 font-semibold"
+                              : "bg-gray-50/50 focus:bg-white"
+                          }`}
+                        />
+                        <button
+                          type="button"
+                          title="Remove Mapping (Set to Null)"
+                          onClick={() =>
+                            setEditForm((p) => ({
+                              ...p,
+                              crt_in_case: p.crt_in_case === "CLEAR" ? null : "CLEAR",
+                            }))
+                          }
+                          className={`px-2.5 py-2 border rounded-lg text-xs font-semibold flex items-center shrink-0 transition-colors ${
+                            editForm.crt_in_case === "CLEAR"
+                              ? "bg-red-600 text-white border-red-600 shadow-sm"
+                              : "bg-white hover:bg-red-50 text-red-600 border-gray-200"
+                          }`}
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </button>
+                      </div>
+                    </div>
+
+                  </div>
                 </div>
 
-                {/* Main Edit Operational Footer Buttons */}
+                {/* Footer Buttons */}
                 <div className="p-3 border-t bg-gray-50 flex items-center justify-end gap-2 shrink-0">
                   <button
-                    onClick={handleCloseMassEdit}
+                    onClick={onClose}
                     className="px-4 py-2 rounded-lg border text-gray-700 hover:bg-gray-100 text-xs font-medium bg-white transition-colors"
                   >
                     Cancel Action
                   </button>
                   <button
                     type="button"
-                    disabled={Object.values(editForm).every(val => val === null)}
+                    disabled={!isFormDirty}
                     onClick={() => setShowMassEditConfirm(true)}
-                    className={`px-5 py-2 rounded-lg font-semibold text-xs text-white shadow-sm transition-all ${Object.values(editForm).every(val => val === null)
-                      ? 'bg-gray-300 cursor-not-allowed'
-                      : 'bg-primary hover:opacity-95'
-                      }`}
+                    className={`px-5 py-2 rounded-lg font-semibold text-xs text-white shadow-sm transition-all ${
+                      !isFormDirty ? "bg-gray-300 cursor-not-allowed" : "bg-primary hover:opacity-95"
+                    }`}
                   >
                     Review Target Modifications
                   </button>
                 </div>
               </>
             ) : (
-              /* STAGE 2: CONFIRMATION STAGE SCREEN VIEW */
+              /* STAGE 2: CONFIRMATION PREVIEW STAGE */
               <>
                 <div className="flex-1 p-6 space-y-4">
                   <div className="flex items-start gap-3 bg-amber-50 border border-amber-200 rounded-xl p-4 text-amber-900">
@@ -1947,27 +2203,48 @@ function RouteComponent() {
                       {editForm.allow_cycle_count !== null && (
                         <div className="flex justify-between items-center">
                           <span className="text-gray-500 font-medium">Allow Cycle Count:</span>
-                          <span className={`font-bold px-2 py-0.5 rounded ${editForm.allow_cycle_count ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'}`}>
-                            {editForm.allow_cycle_count ? 'Enabled (Yes)' : 'Disabled (No)'}
+                          <span
+                            className={`font-bold px-2 py-0.5 rounded ${
+                              editForm.allow_cycle_count ? "bg-green-100 text-green-800" : "bg-red-100 text-red-800"
+                            }`}
+                          >
+                            {editForm.allow_cycle_count ? "Enabled (Yes)" : "Disabled (No)"}
                           </span>
                         </div>
                       )}
+                      
                       {editForm.grade !== null && (
                         <div className="flex justify-between items-center">
                           <span className="text-gray-500 font-medium">Reclassify Grade:</span>
                           <span className="font-bold border px-2 py-0.5 rounded bg-white">Grade {editForm.grade}</span>
                         </div>
                       )}
+
+                      {/* Packs in Crt Preview */}
                       {editForm.pk_in_crt !== null && (
                         <div className="flex justify-between items-center">
-                          <span className="text-gray-500 font-medium">Overwrite Packs in Crt:</span>
-                          <span className="font-mono font-bold text-gray-900">{editForm.pk_in_crt}</span>
+                          <span className="text-gray-500 font-medium">Packs in Crt Mapping:</span>
+                          {editForm.pk_in_crt === "CLEAR" ? (
+                            <span className="font-bold bg-red-100 text-red-800 px-2 py-0.5 rounded border border-red-200">
+                              Remove Mapping (Set to Null)
+                            </span>
+                          ) : (
+                            <span className="font-mono font-bold text-gray-900">{editForm.pk_in_crt}</span>
+                          )}
                         </div>
                       )}
+
+                      {/* Crts in Case Preview */}
                       {editForm.crt_in_case !== null && (
                         <div className="flex justify-between items-center">
-                          <span className="text-gray-500 font-medium">Overwrite Crts in Case:</span>
-                          <span className="font-mono font-bold text-gray-900">{editForm.crt_in_case}</span>
+                          <span className="text-gray-500 font-medium">Crts in Case Mapping:</span>
+                          {editForm.crt_in_case === "CLEAR" ? (
+                            <span className="font-bold bg-red-100 text-red-800 px-2 py-0.5 rounded border border-red-200">
+                              Remove Mapping (Set to Null)
+                            </span>
+                          ) : (
+                            <span className="font-mono font-bold text-gray-900">{editForm.crt_in_case}</span>
+                          )}
                         </div>
                       )}
                     </div>
@@ -2000,11 +2277,9 @@ function RouteComponent() {
                 </div>
               </>
             )}
-
           </div>
         </div>
       )}
-
     </div>
-  )
+  );
 }

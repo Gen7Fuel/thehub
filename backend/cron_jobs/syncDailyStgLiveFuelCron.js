@@ -3,10 +3,12 @@ const mssql = require('mssql');
 const { getPool } = require('../services/sqlService');
 
 async function processDailyScheduledSync() {
-  const pool = await getPool();
-  const transaction = new mssql.Transaction(pool);
+  let transaction;
 
   try {
+    const pool = await getPool();
+    transaction = new mssql.Transaction(pool);
+
     await transaction.begin();
     console.log("Starting daily effective-date schedule sync for Station Discounts...");
 
@@ -51,7 +53,7 @@ async function processDailyScheduledSync() {
           upsertReq.input(cleanParamName(k), mssql.NVarChar, row[k] || null);
         });
         
-        // FIX: Explicitly ignore ANY columns containing dates or metadata timestamps
+        // Ignore date/metadata timestamp columns
         const skipColumns = [
           ...table.keys, 
           'Schedule_Effective_From', 
@@ -65,7 +67,7 @@ async function processDailyScheduledSync() {
         
         const dataColumns = Object.keys(row).filter(c => !skipColumns.includes(c));
 
-        // Bind value parameters safely using the configured types mapping object
+        // Bind value parameters using specified type map or fallback to NVarChar
         dataColumns.forEach(c => {
           const typeMapping = (table.valueTypes && table.valueTypes[c]) ? table.valueTypes[c] : mssql.NVarChar;
           upsertReq.input(cleanParamName(c), typeMapping, row[c]);
@@ -73,7 +75,7 @@ async function processDailyScheduledSync() {
 
         const updateSet = dataColumns.map(c => `[${c}] = @${cleanParamName(c)}`).join(', ');
 
-        // 3. Perform the live sync update/insert
+        // 3. Perform live sync update/insert
         await upsertReq.query(`
           UPDATE ${liveTableName} 
           SET ${updateSet}, [Updated_At] = GETDATE() 
@@ -113,15 +115,38 @@ async function processDailyScheduledSync() {
     await transaction.commit();
     console.log("Daily scheduled sync processed and updated cleanly.");
   } catch (err) {
-    await transaction.rollback();
-    console.error("Daily scheduled sync run failed. Rolling back changes:", err);
+    // Only attempt rollback if the transaction was successfully started
+    if (transaction && transaction._begun) {
+      try {
+        await transaction.rollback();
+      } catch (rollbackErr) {
+        console.error("Rollback failed:", rollbackErr);
+      }
+    }
+    console.error("Daily scheduled sync run failed:", err);
+    throw err; // Re-throw to propagate to the cron retry handler
   }
 }
 
-// Runs every single night at 12:05 AM America/Toronto time
-cron.schedule("5 0 * * *", () => {
+// Runs every night at 12:05 AM America/Toronto time
+cron.schedule("5 0 * * *", async () => {
   console.log("Running daily automatic setup target execution matches...");
-  processDailyScheduledSync();
+  
+  const maxCronRetries = 3;
+  for (let attempt = 1; attempt <= maxCronRetries; attempt++) {
+    try {
+      await processDailyScheduledSync();
+      break; // Exit loop on success
+    } catch (err) {
+      console.error(`Daily scheduled sync failed on attempt ${attempt}/${maxCronRetries}.`);
+      if (attempt < maxCronRetries) {
+        console.log("Waiting 30 seconds before retrying entire sync job...");
+        await new Promise(res => setTimeout(res, 30000));
+      } else {
+        console.error("CRITICAL: Daily scheduled sync completely failed after max retries.");
+      }
+    }
+  }
 }, {
   scheduled: true,
   timezone: "America/Toronto"

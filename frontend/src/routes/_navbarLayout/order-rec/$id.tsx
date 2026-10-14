@@ -1,7 +1,7 @@
 import { createFileRoute, useNavigate } from '@tanstack/react-router'
 import { Accordion, AccordionItem, AccordionTrigger, AccordionContent } from '@/components/ui/accordion'
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog'
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import axios from 'axios'
 import { Button } from '@/components/ui/button'
 import { camelCaseToTitleCase } from '@/lib/utils'
@@ -10,6 +10,8 @@ import ExcelJS from 'exceljs';
 import { Input } from '@/components/ui/input'
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip'
 import { OrderRecChat } from '@/components/custom/OrderRecChat'
+import { OrderRecScanner } from '@/components/custom/OrderRecScanner'
+import { buildMissingItemMessage, findItemByScan, lookupItemName, parseCount, toGtin14 } from '@/lib/orderRecScan'
 import { Trash2 } from 'lucide-react'
 import { getOrderRecStatusColor } from "@/lib/utils"
 import { getOrderRecById, saveOrderRec, savePendingAction, hasPendingActionsForId, deletePendingActionsForId } from "@/lib/orderRecIndexedDB"
@@ -38,6 +40,77 @@ function RouteComponent() {
   const [editItem, setEditItem] = useState<{ catIdx: number, itemIdx: number } | null>(null)
   const [notifying, setNotifying] = useState<boolean>(false)
   const [generatingTemplate, setGeneratingTemplate] = useState<boolean>(false)
+
+  // ── Barcode scanning ──────────────────────────────────────────────────────
+  const [scanning, setScanning] = useState(false)
+  const [scanStatus, setScanStatus] = useState('')
+  // A scanned item that isn't on this order rec, waiting for its count.
+  const [missingItem, setMissingItem] = useState<{ gtin: string; name: string | null } | null>(null)
+  const [missingCount, setMissingCount] = useState('')
+  const [missingError, setMissingError] = useState<string | null>(null)
+  const [missingSending, setMissingSending] = useState(false)
+  // Counts already sent this session, by GTIN, so a repeat scan doesn't ask again.
+  const sentMissingRef = useRef<Map<string, number>>(new Map())
+
+  const handleScan = async (code: string) => {
+    const found = findItemByScan(orderRec?.categories, code)
+    if (found) {
+      const item = orderRec.categories[found.catIdx].items[found.itemIdx]
+      if (item.completed) {
+        setScanStatus(`${item.itemName}: marked completed. Uncheck it to edit.`)
+        return
+      }
+      setScanStatus(`Found: ${item.itemName}`)
+      setEditItem(found)
+      return
+    }
+
+    const gtin = toGtin14(code)
+    const already = sentMissingRef.current.get(gtin)
+    if (already !== undefined) {
+      setScanStatus(`Already sent for ${gtin}: count ${already}`)
+      return
+    }
+    setScanStatus(`${gtin} is not on this order rec. Looking it up...`)
+    const name = await lookupItemName(code, orderRec?.site)
+    setScanStatus(`Not on this order rec: ${name ?? gtin}`)
+    setMissingCount('')
+    setMissingError(null)
+    setMissingItem({ gtin, name })
+  }
+
+  const submitMissingItem = async () => {
+    if (!missingItem) return
+    const count = parseCount(missingCount)
+    if (count === null) {
+      setMissingError('Enter the count as a whole number, 0 or more.')
+      return
+    }
+    const orderId = orderRec?._id || orderRec?.id
+    const text = buildMissingItemMessage({ ...missingItem, count })
+    setMissingSending(true)
+    setMissingError(null)
+    try {
+      if (await isActuallyOnline()) {
+        const res = await axios.post(
+          `/api/order-rec/${orderId}/comments`,
+          { text, photos: [] },
+          { headers: { Authorization: `Bearer ${localStorage.getItem('token')}` } }
+        )
+        setOrderRec((prev: any) => ({ ...prev, comments: res.data.comments }))
+        setScanStatus(`Sent: ${missingItem.name ?? missingItem.gtin}, count ${count}`)
+      } else {
+        await savePendingAction({ type: 'ADD_ORDER_REC_COMMENT', orderId, text, timestamp: Date.now() })
+        setScanStatus(`Offline: queued ${missingItem.name ?? missingItem.gtin}, count ${count}. It sends when you are back online.`)
+      }
+      sentMissingRef.current.set(missingItem.gtin, count)
+      setMissingItem(null)
+    } catch (err: any) {
+      setMissingError(err?.response?.data?.message || err?.message || 'Could not send the message. Try again.')
+    } finally {
+      setMissingSending(false)
+    }
+  }
 
   const navigate = useNavigate()
   // const [switchLoading, setSwitchLoading] = useState(false);
@@ -1231,6 +1304,62 @@ function RouteComponent() {
       </div>
 
 
+      <div className={`mb-4 max-w-2xl mx-auto ${scanning ? 'sticky top-0 z-30' : ''}`}>
+        {scanning ? (
+          <OrderRecScanner
+            onScan={handleScan}
+            paused={!!editItem || !!missingItem}
+            status={scanStatus}
+            onClose={() => setScanning(false)}
+          />
+        ) : (
+          <Button type="button" variant="outline" onClick={() => { setScanStatus(''); setScanning(true) }}>
+            Scan items
+          </Button>
+        )}
+      </div>
+
+      <Dialog open={!!missingItem} onOpenChange={(open: boolean) => !open && !missingSending && setMissingItem(null)}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Not on this order rec</DialogTitle>
+          </DialogHeader>
+          {missingItem && (
+            <form
+              className="space-y-3"
+              onSubmit={(e) => { e.preventDefault(); void submitMissingItem() }}
+            >
+              <p className="text-sm">
+                {missingItem.name ? <strong>{missingItem.name}</strong> : 'Unknown item'}
+                <br />
+                <span className="text-gray-500">GTIN {missingItem.gtin}</span>
+              </p>
+              <label className="block text-sm font-medium" htmlFor="missing-count">Inventory count</label>
+              <Input
+                id="missing-count"
+                type="number"
+                inputMode="numeric"
+                min={0}
+                step={1}
+                autoFocus
+                value={missingCount}
+                onChange={(e) => setMissingCount(e.target.value)}
+                disabled={missingSending}
+              />
+              {missingError && <p className="text-red-500 text-xs">{missingError}</p>}
+              <div className="flex justify-end gap-2">
+                <Button type="button" variant="outline" disabled={missingSending} onClick={() => setMissingItem(null)}>
+                  Cancel
+                </Button>
+                <Button type="submit" disabled={missingSending}>
+                  {missingSending ? 'Sending...' : 'Send message'}
+                </Button>
+              </div>
+            </form>
+          )}
+        </DialogContent>
+      </Dialog>
+
       <div className="mb-8 max-w-2xl mx-auto">
         <OrderRecChat
           orderRecId={orderRec._id || orderRec.id}
@@ -1264,7 +1393,20 @@ function RouteComponent() {
               </span>
             </AccordionTrigger>
             <AccordionContent>
-              <div className="overflow-x-auto">
+              {/*
+                max-h + overflow-y-auto turns this category's table into its own
+                bounded scroll panel (same pattern used for sticky headers
+                elsewhere in this codebase, e.g. cash-rec entries, dashboard,
+                cycle-count). Without a bounded height, overflow-x-auto alone
+                also promotes overflow-y to "auto" (a CSS quirk), which makes
+                this div a vertical scroll container that never actually
+                scrolls internally — trapping the "sticky top-0" header inside
+                it instead of letting it stick to the page scroll, so it
+                silently never sticks. Only one category can be open at a
+                time (Accordion type="single"), so a single bounded panel is
+                enough — no need to coordinate multiple sticky headers.
+              */}
+              <div className="overflow-x-auto overflow-y-auto max-h-[70vh]">
                 <table className="w-full border mb-2">
                   <thead>
                     <tr>
@@ -1326,7 +1468,17 @@ function RouteComponent() {
                     </tr>
                   </thead>
                   <tbody>
-                    {cat.items.map((item: any, itemIdx: number) => (
+                    {/* Display-only A–Z sort. itemIdx stays the item's index in the
+                        stored array — every handler below addresses items by it. */}
+                    {cat.items
+                      .map((item: any, itemIdx: number) => ({ item, itemIdx }))
+                      .sort((a: { item: any }, b: { item: any }) =>
+                        (a.item.itemName ?? '').localeCompare(b.item.itemName ?? '', undefined, {
+                          numeric: true,
+                          sensitivity: 'base',
+                        })
+                      )
+                      .map(({ item, itemIdx }: { item: any; itemIdx: number }) => (
                       <tr
                         key={itemIdx}
                         // Strict === true: docs predating this field (including

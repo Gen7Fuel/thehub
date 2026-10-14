@@ -1,6 +1,5 @@
 const cron = require("node-cron");
 const { emailQueue } = require("../queues/emailQueue");
-const { getFuelInventoryReportPreviousDay, getFuelInventoryReportCurrentDay } = require("../services/sqlService");
 const { generateFuelInventoryPDF } = require("../utils/pdfGenerator");
 const { getRankedFuelInventory } = require("../services/supaBaseService");
 // const mongoose = require("mongoose");
@@ -91,7 +90,6 @@ async function runFuelInventoryReportJobPreviousDay() {
     console.log("Running Fuel Inventory Report Cron Previous Day...");
 
     // 1️⃣ Get DB rows
-    // const rows = await getFuelInventoryReportPreviousDay();
     const rows = await getRankedFuelInventory();
 
     // // 2️⃣ Pivot/transform
@@ -137,7 +135,6 @@ async function runFuelInventoryReportJobCurrentDay() {
     console.log("Running Fuel Inventory Report Cron Current Day...");
 
     // 1️⃣ Get DB rows
-    // const rows = await getFuelInventoryReportCurrentDay();
     const rows = await getRankedFuelInventory();
 
     // 2️⃣ Pivot/transform

@@ -1,7 +1,7 @@
 import { openDB } from "idb";
 
 const DB_NAME = "dashboardDB";
-const VERSION = 1;
+const VERSION = 2; // 👈 Bumped to trigger upgrade block for existing users
 
 export const STORES = {
   SALES: "dashboard_sales",
@@ -12,6 +12,7 @@ export const STORES = {
   BISTRO_WOW_SALES: "dashboard_bistro_wow_sales",
   TOP_10_BISTRO: "dashboard_top_10_bistro",
   SHIFT_TIME_DETAILS: "dashboard_shift_time_details",
+  TIMESHEET: "dashboard_timesheet",
 };
 
 export const getDashboardDB = async () => {

@@ -8,6 +8,7 @@ import { Button } from '@/components/ui/button'
 import { ChevronLeft, ChevronRight, Camera, X } from 'lucide-react' // Added Chevrons
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { domain } from '@/lib/constants'
+import { compressImage } from '@/lib/compressImage'
 
 export const Route = createFileRoute('/_navbarLayout/payables/images')({
   component: RouteComponent,
@@ -80,15 +81,25 @@ function RouteComponent() {
   // }
 
   // 3. New: Handler for Native Camera
-  const handleCapture = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleCapture = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]
-    if (file) {
-      const reader = new FileReader()
-      reader.onloadend = () => {
-        setCurrentCapture(reader.result as string)
-      }
-      reader.readAsDataURL(file)
+    if (!file) return
+
+    // Compress before previewing/storing — invoice photos come straight off
+    // a phone camera and can be several MB uncompressed, which is slow to
+    // upload, especially with multiple images per payable.
+    let toRead: Blob = file
+    try {
+      toRead = await compressImage(file, 1600, 0.75)
+    } catch (err) {
+      console.error("Failed to compress invoice image, using original:", err)
     }
+
+    const reader = new FileReader()
+    reader.onloadend = () => {
+      setCurrentCapture(reader.result as string)
+    }
+    reader.readAsDataURL(toRead)
   }
 
   const openCamera = () => {

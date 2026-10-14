@@ -3,7 +3,19 @@ const connection = require("../utils/redisClient");
 const { processInvoiceAutomation } = require("../utils/csoInvoiceUpload");
 
 // Initialize a clean, distinct queue for invoice automation
-const csoInvoiceQueue = new Queue("csoInvoiceQueue", { connection });
+const csoInvoiceQueue = new Queue("csoInvoiceQueue", {
+  connection,
+  defaultJobOptions: {
+    removeOnComplete: {
+      count: 20,
+      age: 1800, // Keep completed jobs for 30 minutes
+    },
+    removeOnFail: {
+      count: 100, // Keep up to 100 failed jobs
+      age: 259200, // Keep failed jobs for 3 days (72 hours)
+    },
+  },
+});
 
 let csoInvoiceWorker = null;
 

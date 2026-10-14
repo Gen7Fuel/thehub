@@ -5,8 +5,8 @@ interface InventoryItem {
   UPC: string
   Category: string
   'On Hand Qty': number
-  updatedAt?: string
-  cycleCount?: number
+  last_inv_date?: string | null
+  image_url?: string | null
 }
 
 interface Category {

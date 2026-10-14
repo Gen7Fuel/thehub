@@ -1,4 +1,19 @@
 :3000 {
+    # Scoped to text-like types on purpose: a compressed response can't serve
+    # HTTP byte ranges, which academy video seeking (hls.js via /cdn/*) needs.
+    encode {
+        zstd
+        gzip
+        match {
+            header Content-Type text/*
+            header Content-Type application/json*
+            header Content-Type application/javascript*
+            header Content-Type application/manifest+json*
+            header Content-Type application/xml*
+            header Content-Type image/svg+xml*
+        }
+    }
+
     log {
         output stdout
         format console

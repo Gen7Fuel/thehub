@@ -41,6 +41,12 @@ const CycleCountItemSchema = new mongoose.Schema({
 // Ensure uniqueness on site + gtin combination
 CycleCountItemSchema.index({ site: 1, gtin: 1 }, { unique: true });
 
+// GET /daily-items runs both of these on every cycle-count page load. The
+// unique index above only helps as far as its `site` prefix, which still
+// leaves the whole site's inventory to scan.
+CycleCountItemSchema.index({ site: 1, displayDate: 1 });
+CycleCountItemSchema.index({ site: 1, flagged: 1 });
+
 /**
  * Static method to sort items by updatedAt (oldest first), then by category, then by name.
  * @param {Array} items - Array of cycle count items to sort.

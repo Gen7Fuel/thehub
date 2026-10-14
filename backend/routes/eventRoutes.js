@@ -1,9 +1,8 @@
 const express = require('express');
 const router = express.Router();
 const Event = require('../models/Event');
-const { emailQueue } = require('../queues/emailQueue');
-
-const MARKETING_EMAIL = 'mohammad@gen7fuel.com';
+const Location = require('../models/Location');
+const { pushNotification } = require('../services/notificationService');
 
 const escapeHtml = (s = '') =>
   String(s)
@@ -13,7 +12,7 @@ const escapeHtml = (s = '') =>
     .replace(/"/g, '&quot;')
     .replace(/'/g, '&#39;');
 
-// GET /api/events?site=... — list upcoming events for a site
+// GET /api/events?site=... — list ALL events (upcoming & historical) for a site
 router.get('/', async (req, res) => {
   try {
     const site = (req.query.site || req.user?.stationName || '').trim();
@@ -21,10 +20,8 @@ router.get('/', async (req, res) => {
       return res.status(400).json({ success: false, message: 'Site is required.' });
     }
 
-    // Today as YYYY-MM-DD in UTC (matches stored format).
-    const today = new Date().toISOString().slice(0, 10);
-
-    const events = await Event.find({ site, date: { $gte: today } })
+    // Return ALL events (past and future) sorted by date
+    const events = await Event.find({ site })
       .sort({ date: 1, createdAt: 1 })
       .lean();
 
@@ -35,10 +32,58 @@ router.get('/', async (req, res) => {
   }
 });
 
-// POST /api/events — create event for the user's site and notify marketing
+// POST /api/events — create event for the user's site
+// router.post('/', async (req, res) => {
+//   try {
+//     const { title, description, date } = req.body || {};
+
+//     if (!title || !String(title).trim()) {
+//       return res.status(400).json({ success: false, message: 'Title is required.' });
+//     }
+//     if (!date || !/^\d{4}-\d{2}-\d{2}$/.test(String(date))) {
+//       return res.status(400).json({ success: false, message: 'Date (YYYY-MM-DD) is required.' });
+//     }
+
+//     // Backend restriction: Prevent creating events in the past
+//     const today = new Date().toISOString().slice(0, 10);
+//     if (String(date) < today) {
+//       return res.status(400).json({ 
+//         success: false, 
+//         message: 'Cannot create events for past dates.' 
+//       });
+//     }
+
+//     const site = (req.user?.stationName || '').trim();
+//     if (!site) {
+//       return res.status(400).json({ success: false, message: 'User has no associated site.' });
+//     }
+
+//     const event = await Event.create({
+//       site,
+//       title: String(title).trim(),
+//       description: String(description || '').trim(),
+//       date: String(date),
+//       createdBy: {
+//         id: req.user._id,
+//         firstName: req.user.firstName || '',
+//         lastName: req.user.lastName || '',
+//         email: req.user.email || '',
+//       },
+//     });
+
+//     // =========================================================================
+//     // TODO: Add notification service trigger here (e.g., Push / In-App / Slack)
+//     // =========================================================================
+
+//     res.status(201).json({ success: true, data: event });
+//   } catch (error) {
+//     console.error('Event create error:', error);
+//     res.status(500).json({ success: false, message: 'Failed to create event.' });
+//   }
+// });
 router.post('/', async (req, res) => {
   try {
-    const { title, description, date } = req.body || {};
+    const { title, description, date, site: bodySite, stationName } = req.body || {};
 
     if (!title || !String(title).trim()) {
       return res.status(400).json({ success: false, message: 'Title is required.' });
@@ -47,9 +92,19 @@ router.post('/', async (req, res) => {
       return res.status(400).json({ success: false, message: 'Date (YYYY-MM-DD) is required.' });
     }
 
-    const site = (req.user?.stationName || '').trim();
+    // Backend restriction: Prevent creating events in the past
+    const today = new Date().toISOString().slice(0, 10);
+    if (String(date) < today) {
+      return res.status(400).json({ 
+        success: false, 
+        message: 'Cannot create events for past dates.' 
+      });
+    }
+
+    // Accept site passed from the frontend request body, fallback to req.user's stationName
+    const site = (bodySite || stationName || '').trim();
     if (!site) {
-      return res.status(400).json({ success: false, message: 'User has no associated site.' });
+      return res.status(400).json({ success: false, message: 'Site/station name is required.' });
     }
 
     const event = await Event.create({
@@ -57,6 +112,7 @@ router.post('/', async (req, res) => {
       title: String(title).trim(),
       description: String(description || '').trim(),
       date: String(date),
+      type: 'manual',
       createdBy: {
         id: req.user._id,
         firstName: req.user.firstName || '',
@@ -65,40 +121,79 @@ router.post('/', async (req, res) => {
       },
     });
 
-    // Queue marketing notification (non-blocking — failure logged, not propagated).
-    try {
-      const creatorName =
-        `${req.user.firstName || ''} ${req.user.lastName || ''}`.trim() || req.user.email || 'A site manager';
-      const subject = `New event at ${site}: ${event.title}`;
-      const html = `
-        <p>A new event has been added to The Hub.</p>
-        <table cellpadding="6" cellspacing="0" style="border-collapse:collapse;border:1px solid #e5e7eb;font-family:Arial,sans-serif;font-size:14px">
-          <tr><td><strong>Site</strong></td><td>${escapeHtml(site)}</td></tr>
-          <tr><td><strong>Date</strong></td><td>${escapeHtml(event.date)}</td></tr>
-          <tr><td><strong>Title</strong></td><td>${escapeHtml(event.title)}</td></tr>
-          <tr><td><strong>Description</strong></td><td>${escapeHtml(event.description) || '<em>(none)</em>'}</td></tr>
-          <tr><td><strong>Created by</strong></td><td>${escapeHtml(creatorName)}${req.user.email ? ` &lt;${escapeHtml(req.user.email)}&gt;` : ''}</td></tr>
-        </table>
-      `;
-      const text =
-        `A new event has been added to The Hub.\n\n` +
-        `Site: ${site}\n` +
-        `Date: ${event.date}\n` +
-        `Title: ${event.title}\n` +
-        `Description: ${event.description || '(none)'}\n` +
-        `Created by: ${creatorName}${req.user.email ? ` <${req.user.email}>` : ''}`;
+    // Send HTTP response immediately
+    res.status(201).json({ success: true, data: event });
 
-      await emailQueue.add('sendEventEmail', {
-        to: MARKETING_EMAIL,
-        subject,
-        text,
-        html,
-      });
-    } catch (mailErr) {
-      console.error('Failed to queue event notification email:', mailErr);
+    // =========================================================================
+    // Asynchronous Background Notification Dispatch
+    // =========================================================================
+    try {
+      const io = req.app.get('io');
+      const senderEmail = (req.user?.email || '').trim().toLowerCase();
+
+      // Look up target site location using the site passed in payload
+      const locationDoc = await Location.findOne({
+        $or: [{ stationName: site }, { site: site }]
+      }).lean();
+
+      if (locationDoc && io) {
+        // Collect manager emails and store email
+        const managerEmails = (locationDoc.managerEmails || [])
+          .filter(e => Boolean(e) && typeof e === 'string')
+          .map(e => e.trim().toLowerCase());
+          
+        const storeEmail = locationDoc.email ? locationDoc.email.trim().toLowerCase() : null;
+
+        // Combine all store leadership emails to check if sender is part of management
+        const allManagementEmails = [...managerEmails, ...(storeEmail ? [storeEmail] : [])];
+
+        // CHECK: If sender is NOT a manager or store email for this site, send notification
+        if (!allManagementEmails.includes(senderEmail)) {
+          let recipientEmails = [];
+
+          // Target managers first
+          if (managerEmails.length > 0) {
+            recipientEmails = managerEmails;
+          } else if (storeEmail) {
+            // Fallback: If no manager emails exist, notify store email
+            recipientEmails = [storeEmail];
+          }
+
+          // Exclude sender's own email and deduplicate
+          recipientEmails = [...new Set(recipientEmails)].filter(
+            email => email && email !== senderEmail
+          );
+
+          if (recipientEmails.length > 0) {
+            const senderName = `${req.user?.firstName || ''} ${req.user?.lastName || ''}`.trim() || 'A user';
+
+            // Extract month string (YYYY-MM) for calendar URL navigation
+            const monthStr = date.substring(0, 7);
+            const baseUrl = process.env.CLIENT_URL || 'http://app.gen7fuel.com';
+            const calendarUrl = `${baseUrl}/events?site=${encodeURIComponent(site)}&month=${monthStr}`;
+
+            await pushNotification({
+              io,
+              senderId: req.user._id,
+              recipientEmails,
+              slug: 'new-event-created',
+              fieldValues: {
+                senderName,
+                site,
+                eventTitle: event.title,
+                eventDate: event.date,
+                calendarUrl
+              },
+              subject: `New Event Created for ${site}: ${event.title}`,
+              type: 'system'
+            });
+          }
+        }
+      }
+    } catch (notifErr) {
+      console.error('Event creation notification background dispatch error:', notifErr);
     }
 
-    res.status(201).json({ success: true, data: event });
   } catch (error) {
     console.error('Event create error:', error);
     res.status(500).json({ success: false, message: 'Failed to create event.' });
@@ -113,10 +208,38 @@ router.delete('/:id', async (req, res) => {
       return res.status(404).json({ success: false, message: 'Event not found.' });
     }
 
+    // Get today's local date in YYYY-MM-DD format
+    const now = new Date();
+    const pad = (n) => String(n).padStart(2, '0');
+    const todayIso = `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}`;
+
+    // Prevent deletion of events scheduled for today or earlier
+    if (event.date <= todayIso) {
+      return res.status(400).json({ 
+        success: false, 
+        message: 'Events occurring today or in the past cannot be deleted.' 
+      });
+    }
+
+    // Prevent deletion of system-generated events
+    if (event.type === 'system') {
+      return res.status(400).json({ 
+        success: false, 
+        message: 'System-generated events cannot be deleted.' 
+      });
+    }
+
+    // Ownership and Admin Role Checks
     const isOwner = String(event.createdBy?.id) === String(req.user._id);
-    const isAdmin = !!req.user?.is_admin;
+    
+    // Check role_name from populated role or nested role object
+    const isAdmin = req.user?.role?.role_name === 'Admin' || !!req.user?.is_admin;
+
     if (!isOwner && !isAdmin) {
-      return res.status(403).json({ success: false, message: 'Not allowed to delete this event.' });
+      return res.status(403).json({ 
+        success: false, 
+        message: 'Events can only be deleted by the owner of the event or an Admin.' 
+      });
     }
 
     await event.deleteOne();
