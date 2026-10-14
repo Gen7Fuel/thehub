@@ -1,6 +1,7 @@
 const express = require('express')
 const router = express.Router()
 const ArCustomer = require('../models/ArCustomer')
+const { syncArCustomers } = require('../utils/arCustomerSync')
 
 // GET / — all customers sorted by name asc
 router.get('/', async (req, res) => {
@@ -88,29 +89,7 @@ router.post('/sync', async (req, res) => {
       return res.status(400).json({ error: 'No valid customer rows provided' })
     }
 
-    const ops = customers.map(({ customerId, name }) => ({
-      updateOne: {
-        filter: { customerId },
-        update: {
-          $set: { name },
-          $setOnInsert: { creditLimit: null, phone: '', email: '', notes: '' },
-        },
-        upsert: true,
-      },
-    }))
-
-    const result = await ArCustomer.bulkWrite(ops)
-
-    const customerIds = customers.map((c) => c.customerId)
-    const deleteResult = await ArCustomer.deleteMany({
-      customerId: { $nin: customerIds },
-    })
-
-    res.json({
-      created: result.upsertedCount,
-      updated: result.modifiedCount,
-      deleted: deleteResult.deletedCount,
-    })
+    res.json(await syncArCustomers(customers))
   } catch (error) {
     res.status(500).json({ error: error.message })
   }
