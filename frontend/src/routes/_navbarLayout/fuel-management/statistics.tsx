@@ -1182,6 +1182,10 @@ function FuelStatisticsComponent() {
                                   {bol}
                                 </span>
                               ))
+                            ) : order.bolLinked === true ? (
+                              <span className="rounded border border-emerald-200 bg-emerald-50 px-1.5 py-0.5 text-[11px] font-black uppercase text-emerald-700">
+                                Linked
+                              </span>
                             ) : (
                               <span className="rounded border border-orange-200 bg-orange-50 px-1.5 py-0.5 text-[11px] font-black uppercase text-orange-700">
                                 Missing
