@@ -376,6 +376,35 @@ async function getPool(retries = 3, delay = 5000) {
   }
 }
 
+/**
+ * Returns the AR customer master list maintained in SQL Server.
+ * Customer names must contain at least one alphabetic character; numeric-only
+ * or otherwise non-name rows are excluded before syncing to MongoDB.
+ */
+async function getArCustomersFromSQL() {
+  const sqlPool = await getPool();
+  const result = await sqlPool.request().query(`
+    SELECT [Customer ID], [Customer Name]
+    FROM [CSO].[AR_Customer]
+    WHERE [Customer ID] IS NOT NULL
+      AND [Customer Name] IS NOT NULL
+  `);
+
+  const customers = result.recordset
+    .map((row) => ({
+      customerId: String(row["Customer ID"]).trim(),
+      name: String(row["Customer Name"]).trim(),
+    }))
+    .filter(({ customerId, name }) =>
+      customerId.length > 0 && name.length > 0 && /[A-Za-z]/.test(name),
+    );
+
+  console.log(
+    `✅ Loaded ${customers.length} AR customers from SQL (${result.recordset.length - customers.length} filtered).`,
+  );
+  return customers;
+}
+
 // let pool = null;
 
 // async function getPool() {
@@ -2242,6 +2271,7 @@ module.exports = {
   getTop10Bistro,
   getInventoryOnHandForActiveUPCsAndStation,
   getPool,
+  getArCustomersFromSQL,
   getRefundTransactions,
   getShiftTransactionTimings,
   getBulkUnitPriceCSO,
