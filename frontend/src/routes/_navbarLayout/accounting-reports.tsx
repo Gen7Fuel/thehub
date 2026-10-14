@@ -87,7 +87,7 @@ function RouteComponent() {
         {hasApCustomer && (
           <Link to="/accounting-reports/ap-customer-report" activeOptions={{ exact: true }}>
             <Button {...(!isApCustomerActive && ({ variant: "outline" } as object))} className={hasInfonet || hasEOD || hasArCustomer ? "rounded-l-none" : ""}>
-              A/P Customer Reports
+              A/P Vendor Reports
             </Button>
           </Link>
         )}
