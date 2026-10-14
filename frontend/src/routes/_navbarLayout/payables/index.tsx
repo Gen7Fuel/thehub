@@ -207,8 +207,9 @@ function RouteComponent() {
 
   useEffect(() => {
     const token = localStorage.getItem('token')
-    if (!token) return
-    fetch('/api/payables/vendor-tags', { headers: { Authorization: `Bearer ${token}` } })
+    const site = selectedSite || user?.location
+    if (!token || !site) return
+    fetch(`/api/payables/vendor-options?location=${encodeURIComponent(site)}`, { headers: { Authorization: `Bearer ${token}` } })
       .then((res) => (res.ok ? res.json() : Promise.reject(res)))
       .then((tags: unknown) => {
         if (!Array.isArray(tags)) return
@@ -216,7 +217,7 @@ function RouteComponent() {
         saveCachedVendorTags(tags as VendorTagOption[])
       })
       .catch(() => { /* offline or first load — keep whatever was cached */ })
-  }, [])
+  }, [selectedSite, user?.location])
 
   useEffect(() => {
     const handleClickOutside = (e: MouseEvent) => {

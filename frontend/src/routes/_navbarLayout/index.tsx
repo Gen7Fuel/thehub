@@ -184,7 +184,7 @@ function App() {
               {access?.uploadInvoice?.value && (
                 <NavButton
                   to="/upload-invoice"
-                  label="Upload Invoice"
+                  label="Upload Merchandise Invoice"
                   icon={FileUp}
                   theme="indigo"
                 />

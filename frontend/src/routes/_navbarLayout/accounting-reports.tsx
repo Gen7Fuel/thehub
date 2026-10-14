@@ -19,6 +19,7 @@ function RouteComponent() {
   const isArCustomerActive = matchRoute({
     to: "/accounting-reports/ar-customer-report",
   });
+  const isApCustomerActive = matchRoute({ to: "/accounting-reports/ap-customer-report" });
 
   const { user } = useAuth();
   const access = user?.access || {};
@@ -30,6 +31,7 @@ function RouteComponent() {
   const hasArCustomer = Boolean(
     access?.accounting?.accountingReports?.arCustomerReport
   );
+  const hasApCustomer = Boolean(access?.accounting?.accountingReports?.apCustomerReport);
 
   return (
     <div className="pt-5 flex flex-col items-center">
@@ -43,7 +45,7 @@ function RouteComponent() {
           >
             <Button
               {...(!isInfonetActive && ({ variant: "outline" } as object))}
-              className={hasEOD || hasArCustomer ? "rounded-r-none" : ""}
+              className={hasEOD || hasArCustomer || hasApCustomer ? "rounded-r-none" : ""}
             >
               Infonet Reports
             </Button>
@@ -60,7 +62,7 @@ function RouteComponent() {
               {...(!idEODActive && ({ variant: "outline" } as object))}
               className={`
                 ${hasInfonet ? "rounded-l-none" : ""} 
-                ${hasArCustomer ? "rounded-r-none" : ""}
+                ${hasArCustomer || hasApCustomer ? "rounded-r-none" : ""}
               `.trim()}
             >
               EOD Reports
@@ -76,9 +78,16 @@ function RouteComponent() {
           >
             <Button
               {...(!isArCustomerActive && ({ variant: "outline" } as object))}
-              className={hasInfonet || hasEOD ? "rounded-l-none" : ""}
+              className={`${hasInfonet || hasEOD ? "rounded-l-none" : ""} ${hasApCustomer ? "rounded-r-none" : ""}`.trim()}
             >
               A/R Customer Reports
+            </Button>
+          </Link>
+        )}
+        {hasApCustomer && (
+          <Link to="/accounting-reports/ap-customer-report" activeOptions={{ exact: true }}>
+            <Button {...(!isApCustomerActive && ({ variant: "outline" } as object))} className={hasInfonet || hasEOD || hasArCustomer ? "rounded-l-none" : ""}>
+              A/P Vendor Reports
             </Button>
           </Link>
         )}
