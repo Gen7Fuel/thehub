@@ -1,14 +1,4 @@
 const PDFDocument = require('pdfkit');
-const https = require('https');
-const http = require('http');
-
-function downloadImage(url) {
-  return new Promise((resolve) => {
-    const client = url.startsWith('https:') ? https : http;
-    client.get(url, (response) => { const chunks = []; response.on('data', (c) => chunks.push(c)); response.on('end', () => resolve(Buffer.concat(chunks))); }).on('error', () => resolve(null));
-  });
-}
-
 const money = (value) => `$${Number(value || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 
 function generateApCustomerReportPdf({ siteDisplayName, startDate, endDate, groupedData }) {
@@ -63,27 +53,4 @@ function generateApCustomerReportPdf({ siteDisplayName, startDate, endDate, grou
   });
 }
 
-async function generatePayableImagesPdf({ vendorName, date, images, downloadBaseUrl, locationName, paymentMethod, amount, notes }) {
-  return new Promise(async (resolve, reject) => {
-    const doc = new PDFDocument({ size: 'A4', margin: 36 }); const chunks = [];
-    doc.on('data', (c) => chunks.push(c)); doc.on('end', () => resolve(Buffer.concat(chunks))); doc.on('error', reject);
-    doc.fontSize(24).font('Helvetica-Bold').fillColor('#111827').text('Payable', 40, 40);
-    doc.fontSize(12).font('Helvetica').fillColor('#6B7280');
-    const fields = [['Vendor', vendorName], ['Location', locationName || '-'], ['Payment Method', paymentMethod || '-'], ['Amount', money(amount)], ['Date', date || '-'], ['Notes', notes || '-']];
-    let fieldY = 105;
-    fields.forEach(([label, value]) => { doc.moveTo(40, fieldY + 25).lineTo(555, fieldY + 25).strokeColor('#E5E7EB').stroke(); doc.font('Helvetica').fillColor('#6B7280').text(label, 40, fieldY, { width: 125 }); doc.fillColor('#111827').text(String(value), 175, fieldY, { width: 360 }); fieldY += 38; });
-    if (!images.length) { doc.fontSize(11).fillColor('#6B7280').text('No invoice images were attached.', 40, fieldY + 20); doc.end(); return; }
-    for (let index = 0; index < images.length; index += 1) {
-      doc.addPage();
-      doc.fontSize(16).fillColor('#111827').text(`Attachment ${index + 1}`, 40, 40, { align: 'center', width: 515 });
-      const imageUrl = `${downloadBaseUrl}/${encodeURIComponent(images[index])}`;
-      const buffer = await downloadImage(imageUrl);
-      if (buffer?.length) doc.image(buffer, 52, 80, { fit: [491, 690], align: 'center', valign: 'center' });
-      else doc.fontSize(11).fillColor('#B91C1C').text('No image', 40, 100, { align: 'center', width: 515 });
-      doc.fontSize(10).fillColor('#6B7280').text(`Attachment ${index + 1} of ${images.length}`, 40, 790, { align: 'center', width: 515 });
-    }
-    doc.end();
-  });
-}
-
-module.exports = { generateApCustomerReportPdf, generatePayableImagesPdf };
+module.exports = { generateApCustomerReportPdf };

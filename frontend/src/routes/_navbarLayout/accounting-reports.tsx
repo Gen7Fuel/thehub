@@ -78,7 +78,7 @@ function RouteComponent() {
           >
             <Button
               {...(!isArCustomerActive && ({ variant: "outline" } as object))}
-              className={hasInfonet || hasEOD ? "rounded-l-none" : ""}
+              className={`${hasInfonet || hasEOD ? "rounded-l-none" : ""} ${hasApCustomer ? "rounded-r-none" : ""}`.trim()}
             >
               A/R Customer Reports
             </Button>

@@ -29,7 +29,6 @@ const {
 } = require("../utils/generateArCustomerReportPdf");
 const {
   generateApCustomerReportPdf,
-  generatePayableImagesPdf,
 } = require("../utils/generateApCustomerReportPdf");
 // Import your refactored PDF generator helpers
 const {
@@ -683,39 +682,6 @@ router.post("/ar-customer-report", async (req, res) => {
       error: "Failed to generate A/R customer report package.",
       details: error.message,
     });
-  }
-});
-
-router.get("/ap-customer-report/:payableId/images", async (req, res) => {
-  try {
-    const payable = await Payable.findById(req.params.payableId)
-      .populate("location", "stationName site")
-      .lean();
-    if (!payable) return res.status(404).json({ error: "Payable not found." });
-    const pdf = await generatePayableImagesPdf({
-      vendorName: payable.vendorName,
-      date: payable.date,
-      images: payable.images || [],
-      locationName: payable.location?.stationName || payable.location?.site,
-      paymentMethod: payable.paymentMethod,
-      amount: payable.amount,
-      notes: payable.notes,
-      downloadBaseUrl: "https://app.gen7fuel.com/cdn/download",
-    });
-    res
-      .type("application/pdf")
-      .set(
-        "Content-Disposition",
-        `inline; filename="AP_Invoices_${payable._id}.pdf"`,
-      )
-      .send(pdf);
-  } catch (error) {
-    res
-      .status(500)
-      .json({
-        error: "Failed to generate payable invoice PDF.",
-        details: error.message,
-      });
   }
 });
 
