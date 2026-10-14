@@ -7,10 +7,9 @@ const FuelCarrier = require('../../models/fuel/FuelCarrier');
 const FuelSupplier = require('../../models/fuel/FuelSupplier');
 const FuelRack = require('../../models/fuel/FuelRack');
 const { emailQueue } = require('../../queues/emailQueue');
+const { fuelOrderDraftQueue } = require('../../queues/fuelOrderDraftQueue');
 const moment = require('moment-timezone');
 // const { processUpcomingOrderNotifications } = require('../../cron_jobs/fuelOrderEODCron');
-const { ConfidentialClientApplication } = require("@azure/msal-node");
-const { Client } = require("@microsoft/microsoft-graph-client");
 
 function buildRetainComment(retainItems) {
   if (!Array.isArray(retainItems)) return '';
@@ -337,6 +336,7 @@ async function processUpcomingOrderNotifications() {
   await emailQueue.add("sendFuelOrderNotification", {
     to: ['Glenn@gpmcholdings.ca', 'kellie@gen7fuel.com', 'Mandy@gen7fuel.com', 'Brian@gpmcholdings.ca', 'kporter@gen7fuel.com'], // Standard recipients list
     cc: ['Ryan@gen7fuel.com', 'valerie@gen7fuel.com', 'nmiller@gen7fuel.com', 'nsporders@nspetroleum.ca'],
+    // to: 'daksh@gen7fuel.com', // Testing only
     subject: `Upcoming Fuel Deliveries - ${tomorrowStr} & ${dayAfterStr}`,
     html: masterHtml
   });
@@ -584,25 +584,23 @@ router.post('/', async (req, res) => {
       attachments: attachments
     };
 
-    // ... MSAL Authentication and POST to Graph ...
-    const msalConfig = {
-      auth: {
-        clientId: process.env.AZURE_CLIENT_ID,
-        authority: `https://login.microsoftonline.com/${process.env.AZURE_TENANT_ID}`,
-        clientSecret: process.env.AZURE_CLIENT_SECRET,
-      }
-    };
-    const cca = new ConfidentialClientApplication(msalConfig);
-    const authRes = await cca.acquireTokenByClientCredential({ scopes: ["https://graph.microsoft.com/.default"] });
-    const client = Client.init({ authProvider: (done) => done(null, authRes.accessToken) });
-
     const targetMailbox = "nsporders@nspetroleum.ca"; // Production
     // const targetMailbox = "daksh@gen7fuel.com"; // testing
-    await client.api(`/users/${targetMailbox}/mailFolders/drafts/messages`).post(draftPayload);
+    const draftJob = await fuelOrderDraftQueue.add(
+      `fuel-order-draft-${Date.now()}`,
+      {
+        draftPayload,
+        targetMailbox,
+        summary: `${formattedDate} ${combinedCustomerNames} Load`,
+        poNumbers,
+      },
+    );
 
     res.status(201).json({
-      message: "Order(s) created and grouped email draft pushed.",
+      message: "Order(s) created and email draft queued.",
       orders: savedOrders,
+      draftQueued: true,
+      draftJobId: draftJob.id,
       pushedTo: targetMailbox
     });
 
