@@ -7,6 +7,7 @@ import {
   fmtNumber,
   fmtNumberShowZero,
   recomputeCashOnHand,
+  orderSafesheetEntries,
   typeRank,
   getSortKey,
   fmtDateDisplay,
@@ -149,6 +150,36 @@ const makeEntry = (overrides: Partial<SafesheetEntry>): SafesheetEntry => ({
   cashExpenseOut: 0,
   cashDepositBank: 0,
   ...overrides,
+})
+
+describe('orderSafesheetEntries', () => {
+  it('moves the October 12 payout before October 13 and keeps the range opening and closing balances', () => {
+    const entries = [
+      makeEntry({ _id: 'bank', date: '2026-10-12T12:00:00', cashDepositBank: 765.65, cashOnHandSafe: 30526.01 }),
+      makeEntry({ _id: 'daily', date: '2026-10-13T12:00:00', cashIn: 5664, cashOnHandSafe: 36190.01 }),
+      makeEntry({ _id: 'payout', date: '2026-10-12T12:00:00', cashExpenseOut: 19964, cashOnHandSafe: 16226.01 }),
+    ]
+    const result = orderSafesheetEntries(entries, 0, false)
+    expect(result.map((e) => e._id)).toEqual(['payout', 'bank', 'daily'])
+    expect(result.map((e) => e.cashOnHandSafe)).toEqual([11327.66, 10562.01, 16226.01])
+    expect(entries.map((e) => e._id)).toEqual(['bank', 'daily', 'payout'])
+    expect(entries[0].cashOnHandSafe).toBe(30526.01)
+  })
+
+  it('uses assigned dates only when sorting is enabled and recomputes each balance', () => {
+    const entries = [
+      makeEntry({ _id: 'bank', date: '2026-10-12T12:00:00', assignedDate: '2026-10-14', cashDepositBank: 765.65, cashOnHandSafe: 30526.01 }),
+      makeEntry({ _id: 'daily', date: '2026-10-13T12:00:00', cashIn: 5664, cashOnHandSafe: 36190.01 }),
+    ]
+    expect(orderSafesheetEntries(entries, 0, false).map((e) => e._id)).toEqual(['bank', 'daily'])
+    const sorted = orderSafesheetEntries(entries, 0, true)
+    expect(sorted.map((e) => e._id)).toEqual(['daily', 'bank'])
+    expect(sorted.map((e) => e.cashOnHandSafe)).toEqual([36955.66, 36190.01])
+  })
+
+  it('handles an empty range', () => {
+    expect(orderSafesheetEntries([], 100, false)).toEqual([])
+  })
 })
 
 describe('recomputeCashOnHand', () => {
