@@ -77,8 +77,16 @@ export function FrontendUpdateBanner() {
         })
       }
 
-      // The query parameter ensures this user gesture cannot reuse a stale
-      // app-shell response, including on installed mobile PWAs.
+      // A precached app shell can survive a normal reload, including on an
+      // installed mobile PWA. Remove the old worker and its caches before
+      // navigating so this action is equivalent to a reliable hard refresh.
+      const registrations = await navigator.serviceWorker?.getRegistrations()
+      await Promise.all(registrations?.map((item) => item.unregister()) ?? [])
+      if ('caches' in window) {
+        const cacheNames = await window.caches.keys()
+        await Promise.all(cacheNames.map((cacheName) => window.caches.delete(cacheName)))
+      }
+
       window.location.replace(`${window.location.pathname}${window.location.search ? `${window.location.search}&` : '?'}update=${Date.now()}`)
     } finally {
       setRefreshing(false)
