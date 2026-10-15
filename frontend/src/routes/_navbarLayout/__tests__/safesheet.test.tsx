@@ -1,6 +1,6 @@
 import React from 'react'
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { render, screen, fireEvent, waitFor } from '@testing-library/react'
+import { render, screen, fireEvent, waitFor, within } from '@testing-library/react'
 import type { SafesheetEntry } from '@/lib/safesheetUtils'
 
 // ─── Hoisted mutable mocks ────────────────────────────────────────────────────
@@ -83,7 +83,9 @@ vi.mock('@/components/ui/switch', () => ({
 }))
 
 vi.mock('@/components/ui/calendar', () => ({
-  Calendar: () => <div data-testid="calendar" />,
+  Calendar: ({ onSelect }: any) => (
+    <button onClick={() => onSelect(new Date(2026, 2, 11))}>Assign March 11</button>
+  ),
 }))
 
 vi.mock('@/lib/utils', async (importOriginal) => {
@@ -134,6 +136,59 @@ describe('SafesheetRoute component', () => {
     mockUseAuth.mockReturnValue({ user: mockUserBase })
     mockUseSearch.mockReturnValue({ site: '', from: '2026-03-01', to: '2026-03-10' })
     global.fetch = vi.fn().mockResolvedValue({ ok: true, status: 200, json: vi.fn().mockResolvedValue({}) } as any)
+  })
+
+  it('refreshes sorted rows and balances after changing a deposit assigned date', async () => {
+    const before = makeMockSheet([
+      { description: 'Daily Deposit', cashIn: 3395.70, cashOnHandSafe: 31291.66 },
+      { description: 'Bank Deposit', cashDepositBank: 765.65, cashOnHandSafe: 30526.01 },
+      { description: 'Payout - Sams', date: '2026-03-11T10:00:00Z', cashExpenseOut: 19964, cashOnHandSafe: 10562.01 },
+    ])
+    // The range starts with an existing balance from earlier transactions.
+    before.initialBalance = 0
+    const after = {
+      ...before,
+      entries: [
+        before.entries[0],
+        { ...before.entries[2], cashOnHandSafe: 11327.66 },
+        { ...before.entries[1], assignedDate: '2026-03-11', cashOnHandSafe: 10562.01 },
+      ],
+    }
+    let assigned = false
+    const fetchMock = vi.fn().mockImplementation(async (_url, init) => {
+      if (init?.method === 'PUT') assigned = true
+      return { ok: true, status: 200, json: async () => assigned ? after : before }
+    })
+    global.fetch = fetchMock
+    mockUseSearch.mockReturnValue({ site: 'TestSite', from: '2026-03-10', to: '2026-03-12' })
+    mockUseAuth.mockReturnValue({ user: {
+      ...mockUserBase,
+      access: { accounting: { safesheet: { value: true, setAssignedDate: true } } },
+    } })
+    render(<SafesheetRoute />)
+    await screen.findByText('Bank Deposit')
+    fireEvent.click(screen.getByTestId('sort-switch'))
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledWith(
+      expect.stringContaining('sortAssigned=true'), expect.any(Object),
+    ))
+    await waitFor(() => expect(screen.queryByText('Loading...')).not.toBeInTheDocument())
+    const depositRow = screen.getByText('Bank Deposit').closest('tr')!
+    const calendarButton = within(depositRow).getAllByRole('button').find(
+      (button) => button.querySelector('.lucide-calendar-days'),
+    )!
+    fireEvent.click(calendarButton)
+    fireEvent.click(await screen.findByRole('button', { name: 'Assign March 11' }))
+    await waitFor(() => {
+      const payoutRow = screen.getByText('Payout - Sams').closest('tr')!
+      expect(within(payoutRow).getByText('11,327.66')).toBeInTheDocument()
+    })
+    const updateIndex = fetchMock.mock.calls.findIndex((call) => call[1]?.method === 'PUT')
+    expect(fetchMock.mock.calls[updateIndex + 1][0]).toContain('sortAssigned=true')
+    expect(fetchMock.mock.calls[updateIndex][1].body).toBe(JSON.stringify({ assignedDate: '2026-03-11' }))
+    const rows = screen.getAllByRole('row')
+    expect(rows.indexOf(screen.getByText('Payout - Sams').closest('tr')!)).toBeLessThan(
+      rows.indexOf(screen.getByText('Bank Deposit').closest('tr')!),
+    )
   })
 
   // ── Smoke test ───────────────────────────────────────────────────────────────

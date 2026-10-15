@@ -84,16 +84,17 @@ export const fmtNumberShowZero = (v?: number | null): string => {
 
 /**
  * Re-computes the cashOnHandSafe running balance for an ordered list of entries.
- * Used for optimistic UI updates after an inline cell edit.
+ * Uses integer cents to prevent rounding drift across rows.
  */
 export const recomputeCashOnHand = (
   entries: SafesheetEntry[],
   initialBalance: number,
 ): SafesheetEntry[] => {
-  let balance = initialBalance
+  const cents = (value: number) => Math.round(Number(value || 0) * 100)
+  let balance = cents(initialBalance)
   return entries.map((entry) => {
-    balance = balance + entry.cashIn - entry.cashExpenseOut - entry.cashDepositBank
-    return { ...entry, cashOnHandSafe: balance }
+    balance += cents(entry.cashIn) - cents(entry.cashExpenseOut) - cents(entry.cashDepositBank)
+    return { ...entry, cashOnHandSafe: balance / 100 }
   })
 }
 
@@ -127,4 +128,25 @@ export const getSortKey = (entry: {
   }
   const x = new Date(entry.date as string)
   return `${x.getFullYear()}-${pad(x.getMonth() + 1)}-${pad(x.getDate())}`
+}
+
+/** Sort the visible rows and recalculate balances from the range's opening balance. */
+export const orderSafesheetEntries = (
+  entries: SafesheetEntry[],
+  initialBalance: number,
+  useAssignedDate: boolean,
+): SafesheetEntry[] => {
+  if (!entries.length) return []
+  // The API balances include transactions before this range. Recover its
+  // opening balance before reordering, rather than using the sheet's initial balance.
+  const first = entries[0]
+  const cents = (value: number) => Math.round(Number(value || 0) * 100)
+  const openingBalance = first.cashOnHandSafe != null
+    ? (cents(first.cashOnHandSafe) - cents(first.cashIn) + cents(first.cashExpenseOut) + cents(first.cashDepositBank)) / 100
+    : initialBalance
+  const ordered = entries.map((entry, index) => ({ entry, index })).sort((a, b) => {
+    const key = (entry: SafesheetEntry) => getSortKey(useAssignedDate ? entry : { date: entry.date })
+    return key(a.entry).localeCompare(key(b.entry)) || typeRank(a.entry) - typeRank(b.entry) || a.index - b.index
+  }).map(({ entry }) => entry)
+  return recomputeCashOnHand(ordered, openingBalance)
 }
