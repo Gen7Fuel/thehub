@@ -2,6 +2,7 @@ const express = require('express');
 const router = express.Router();
 const mongoose = require('mongoose');
 const Payable = require('../models/Payables');
+const Location = require('../models/Location');
 const Safesheet = require('../models/Safesheet');
 const PayableVendorTag = require('../models/PayableVendorTag');
 const { logAction } = require('../middleware/actionLogger');
@@ -53,6 +54,34 @@ router.get('/vendor-tags', async (req, res) => {
       .select('nameKey vendorName sageVendorId sageVendorName')
       .lean();
     res.json(tags);
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// GET vendor autocomplete options for a site: global Sage tags plus every
+// historical vendor used by payables at that site.
+router.get('/vendor-options', async (req, res) => {
+  try {
+    const requestedLocation = String(req.query.location || '').trim();
+    if (!requestedLocation) return res.status(400).json({ error: 'location is required' });
+    const location = mongoose.isValidObjectId(requestedLocation)
+      ? await Location.findById(requestedLocation).select('_id').lean()
+      : await Location.findOne({ $or: [{ stationName: new RegExp(`^${requestedLocation.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`, 'i') }, { site: requestedLocation }] }).select('_id').lean();
+    if (!location) return res.status(404).json({ error: 'Location not found' });
+
+    const [tags, historicalNames] = await Promise.all([
+      PayableVendorTag.find({}).select('nameKey vendorName sageVendorId sageVendorName').lean(),
+      Payable.distinct('vendorName', { location: location._id, vendorName: { $type: 'string', $ne: '' } }),
+    ]);
+    const options = new Map();
+    tags.forEach((tag) => options.set(tag.nameKey, tag));
+    historicalNames.forEach((name) => {
+      const displayName = String(name).trim().replace(/\s+/g, ' ');
+      const nameKey = displayName.toLowerCase();
+      if (!options.has(nameKey)) options.set(nameKey, { nameKey, vendorName: displayName, sageVendorId: '', sageVendorName: '' });
+    });
+    res.json([...options.values()].sort((a, b) => a.vendorName.localeCompare(b.vendorName)));
   } catch (error) {
     res.status(500).json({ error: error.message });
   }
