@@ -253,9 +253,6 @@ router.get('/all-data', async (req, res) => {
     ====================================================================
     */
 
-    // Log the last 3 rows sent to the frontend for direct verification
-    console.log("🚀 [DEBUG] Sample Updated Timesheets (Last 3 rows):");
-    console.dir(updatedEmployeeTimesheets.slice(-3), { depth: null });
 
     const responseData = {
       ...sqlData,
