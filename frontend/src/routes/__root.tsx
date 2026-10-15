@@ -5,6 +5,7 @@ import { Button } from '@/components/ui/button'
 import { WifiOff } from 'lucide-react'
 import { useEffect } from 'react'
 import { prefetchLocations } from '@/lib/locationsCache'
+import { FrontendUpdateBanner } from '@/components/custom/FrontendUpdateBanner'
 
 // Matches the "couldn't fetch a lazy-loaded route chunk" error across
 // browsers (Chrome: "Failed to fetch dynamically imported module", Firefox:
@@ -52,6 +53,7 @@ function RootComponent() {
   return (
     <>
       <PwaInstallBanner />
+      <FrontendUpdateBanner />
       <Outlet />
       <TanStackRouterDevtools />
     </>
