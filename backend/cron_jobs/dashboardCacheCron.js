@@ -144,7 +144,22 @@ async function buildDashboardData(csoCode, siteName) {
  * result even when caching was skipped.
  */
 async function refreshSiteCache(siteName, csoCode) {
-  const cacheKey = `dashboard:${siteName}:allSqlData`;
+  // Keep this key in sync with GET /api/sql/all-data in salesRoutes.js.
+  // The dashboard reads the v2 key; the previous allSqlData key was never
+  // read by that route, so manual refreshes left the live dashboard stale.
+  const end = new Date();
+  end.setDate(end.getDate() - 1);
+  const timesheetStart = new Date(end);
+  timesheetStart.setDate(timesheetStart.getDate() - 59);
+  const fmt = (date) => date.toISOString().slice(0, 10);
+  const cacheKey = [
+    "dashboard",
+    "v2",
+    siteName || "unknown-site",
+    csoCode || "unknown-cso",
+    fmt(timesheetStart),
+    fmt(end),
+  ].map((part) => encodeURIComponent(String(part))).join(":");
   const { data, failedQueries } = await buildDashboardData(csoCode, siteName);
 
   if (failedQueries.length > 0) {

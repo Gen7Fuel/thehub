@@ -20,6 +20,7 @@ export const EDI_VENDORS_CONFIG: Record<
   // EDI enabled for ALL stores (no exclusions)
   "96239": { name: "Quota Core-Mark", excludedSites: [] },
   "721": { name: "Core-Mark", excludedSites: [] },
+  "10547": { name: "Saputo", excludedSites: [] },
 
   // EDI enabled for ALL stores EXCEPT these 4 (they can manually upload)
   "64990": {

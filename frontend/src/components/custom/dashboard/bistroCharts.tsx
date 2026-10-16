@@ -130,12 +130,20 @@ function BistroTooltip({ active, payload, label }: TooltipProps) {
                 labelText = "Hot Food Sales";
                 valueText = `$${item.value.toFixed(2).toLocaleString()}`;
                 break;
+              case "sales_131":
+                labelText = "Hidden Cafe Sales";
+                valueText = `$${item.value.toFixed(2).toLocaleString()}`;
+                break;
               case "units_130":
                 labelText = "Bakery Units";
                 valueText = item.value.toFixed(0).toLocaleString();
                 break;
               case "units_134":
                 labelText = "Hot Food Units";
+                valueText = item.value.toFixed(0).toLocaleString();
+                break;
+              case "units_131":
+                labelText = "Hidden Cafe Units";
                 valueText = item.value.toFixed(0).toLocaleString();
                 break;
               case "growth":
@@ -182,11 +190,14 @@ interface BistroStackedChartRow {
   sales_134: number;
   units_130: number;
   units_134: number;
+  sales_131: number;
+  units_131: number;
   growth: number | null;
 }
 
 interface BistroBarLineChartProps {
   data: BistroStackedChartRow[];
+  site: string;
   hideIcon?: boolean;
   className?: string;
   verticalAlign?: "top" | "bottom";
@@ -198,18 +209,22 @@ interface BistroBarLineChartProps {
 
 export function BistroBarLineChart({
   data,
+  site,
   hideIcon = false,
   className,
   verticalAlign = "top",
 }: BistroBarLineChartProps) {
 
-  const chartData = data
+  const chartData = data;
+  const showHiddenCafe = site === "Silver Grizzly";
 
   const config = [
     { dataKey: "sales_130", label: "Bakery Sales", stroke: "#bbfa47ff" },
     { dataKey: "sales_134", label: "Hot Food Sales", stroke: "#FF9F1C" },
+    ...(showHiddenCafe ? [{ dataKey: "sales_131", label: "Hidden Cafe Sales", stroke: "#14B8A6" }] : []),
     { dataKey: "units_130", label: "Bakery Units Sold", stroke: "#473affff" },
     { dataKey: "units_134", label: "Hot Food Units Sold", stroke: "#E84855" },
+    ...(showHiddenCafe ? [{ dataKey: "units_131", label: "Hidden Cafe Units Sold", stroke: "#0F766E" }] : []),
     { dataKey: "growth", label: "WoW Growth", stroke: "#a7035dff" },
   ];
 
@@ -266,6 +281,7 @@ export function BistroBarLineChart({
               barSize={22}
             // radius={[4, 4, 0, 0]}
             />
+            {showHiddenCafe && <Bar yAxisId="left" dataKey="sales_131" stackId="sales" fill="#14B8A6" barSize={22} />}
             <Bar
               yAxisId="left"
               dataKey="sales_134"
@@ -274,6 +290,7 @@ export function BistroBarLineChart({
               barSize={22}
             // radius={[4, 4, 0, 0]}
             />
+            {showHiddenCafe && <Bar yAxisId="left" dataKey="units_131" stackId="units" fill="#0F766E" barSize={22} />}
 
             {/* ===== UNITS STACK ===== */}
             <Bar
