@@ -607,7 +607,8 @@ router.patch("/:id/finalize", async (req, res) => {
     const location = await Location.findOne({ site: list.site });
 
     if (location) {
-      targetStationCsoCode = location.csoCode || "0";
+      // targetStationCsoCode = location.csoCode || "0";
+      targetStationCsoCode = '31750'; // Hardcoded for testing purposes
       const stationTimezone = location.timezone || "America/Toronto";
 
       // Convert UTC createdAt date to the station's exact local timezone

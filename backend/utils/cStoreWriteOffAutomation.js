@@ -55,6 +55,66 @@ async function syncWriteOffToCStore({
   });
 
   const page = await context.newPage();
+  let resolveUnknownItem;
+  let unknownItemDetected = false;
+
+  // An unknown UPC is reported through a native browser alert. If it is not
+  // accepted, the alert blocks the page and the automation appears to hang.
+  page.on("dialog", async (dialog) => {
+    const message = dialog.message();
+    console.warn(`⚠️ CStore dialog: ${message}`);
+    if (/unknown item/i.test(message)) {
+      unknownItemDetected = true;
+      if (resolveUnknownItem) resolveUnknownItem();
+    }
+    await dialog.accept();
+  });
+
+  // CSO saves a row asynchronously.  The Save button can return immediately
+  // while its AJAX lookup is still running, so the next item must not be
+  // entered until the grid has created the next blank edit row.
+  async function waitForCommittedEntry(previousCompletedEntryCount) {
+    await page.waitForFunction(
+      ({ previousCompletedEntryCount }) => {
+        const completedEntryCount = Array.from(
+          document.querySelectorAll('#oDGTableData > tbody > tr.dg-table-row'),
+        ).filter((entry) => {
+          const itemName = entry.querySelector('.selector_itemname')?.textContent.trim();
+          const quantity = entry.querySelector('.selector_quantity')?.textContent.trim();
+          const amount = entry.querySelector('.selector_amount')?.textContent.trim();
+          return Boolean(itemName && quantity && amount && amount !== "NaN");
+        }).length;
+
+        return completedEntryCount > previousCompletedEntryCount;
+      },
+      { previousCompletedEntryCount },
+      { timeout: 15000 },
+    );
+  }
+
+  async function readWriteOffTotals() {
+    return page.evaluate(() => {
+      const toAmount = (value) => {
+        const parsed = Number.parseFloat(String(value || "").replace(/,/g, ""));
+        return Number.isFinite(parsed) ? parsed : 0;
+      };
+      const reportRows = Array.from(
+        document.querySelectorAll(".tblReport tbody tr.even"),
+      );
+      const getTotal = (label) => {
+        const row = reportRows.find((candidate) =>
+          candidate.textContent.includes(label),
+        );
+        const inputs = row ? row.querySelectorAll("input") : [];
+        return toAmount(inputs[inputs.length - 1]?.value);
+      };
+
+      return {
+        today: getTotal("Today's Write-Offs:"),
+        mtd: getTotal("Write-Offs MTD:"),
+      };
+    });
+  }
 
   try {
     // 1. Auth Gateway
@@ -101,10 +161,52 @@ async function syncWriteOffToCStore({
     await page.waitForLoadState("networkidle");
     await page.waitForTimeout(3000);
 
+    // Capture the totals before adding this batch. Blank CSO inputs represent
+    // zero, so normalize them before comparing the post-save values.
+    const totalsBefore = await readWriteOffTotals();
+    console.log(
+      `📊 Write-off totals before save: Today=${totalsBefore.today} | MTD=${totalsBefore.mtd}`,
+    );
+
+    // CSO initially positions the editor on row 0, even when the selected
+    // date already has saved entries. Move the grid cursor to the first empty
+    // row so this batch is appended instead of editing the first existing row.
+    const dataRows = page.locator("#oDGTableData > tbody > tr.dg-table-row");
+    const existingEntryCount = await page.evaluate(() =>
+      Array.from(
+        document.querySelectorAll("#oDGTableData > tbody > tr.dg-table-row"),
+      ).filter((entry) => {
+        const itemName = entry.querySelector(".selector_itemname")?.textContent.trim();
+        const quantity = entry.querySelector(".selector_quantity")?.textContent.trim();
+        const amount = entry.querySelector(".selector_amount")?.textContent.trim();
+        return Boolean(itemName && quantity && amount && amount !== "NaN");
+      }).length,
+    );
+    if (existingEntryCount > 0) {
+      // The last rendered grid row is the blank append row. Selecting it is
+      // more reliable than fnDGMoveToRow(), which can leave the editor on row
+      // zero when the page was loaded with existing entries.
+      await dataRows.last().click({ force: true });
+    } else {
+      await page.evaluate(() => {
+        if (typeof window.fnDGMoveToRow === "function") {
+          window.fnDGMoveToRow(0);
+        } else {
+          throw new Error("CSO grid row navigation is unavailable.");
+        }
+      });
+    }
+    await page.waitForTimeout(500);
+
     // 4. Loop and Process Each Item into the #oDGTableEdit Grid
     for (let index = 0; index < items.length; index++) {
       const item = items[index];
-      const { upc_barcode, reason, quantity } = item;
+      unknownItemDetected = false;
+      // WriteOff stores the field as `qty`; normalize it to the value used by
+      // the CStore grid so the input never receives the literal string
+      // "undefined".
+      const { upc_barcode, reason, qty } = item;
+      const quantity = qty;
 
       console.log(
         `\n⏳ Processing Item [${index + 1}/${items.length}] - UPC: ${upc_barcode}`,
@@ -112,18 +214,25 @@ async function syncWriteOffToCStore({
 
       // Step A: Select "Enter UPC / PLU" from "Enter By" Dropdown
       const enterByTd = page.locator('#oDGTableEdit td[ebindex="item"]');
-      await enterByTd.click();
+      // Petrosoft's legacy combo box opens only from its arrow image. Clicking
+      // the wrapper span leaves the option table in the DOM but hidden.
+      await enterByTd.locator("span table img").click({ force: true });
       await page.waitForTimeout(300);
 
-      const upcOption = page.locator('div[style*="z-index"] table td', {
+      // Scope the option to the active edit cell.  A global selector can find
+      // hidden selector menus belonging to already-committed rows.
+      const upcOption = enterByTd.locator('div[style*="z-index"] table td', {
         hasText: /^Enter UPC \/ PLU$/i,
       });
 
-      if (await upcOption.isVisible()) {
-        await upcOption.click();
-      } else {
-        await page.keyboard.press("Escape");
-      }
+      await upcOption.waitFor({ state: "visible", timeout: 3000 });
+      await upcOption.click();
+      await page.waitForFunction(() => {
+        const input = document.querySelector(
+          '#oDGTableEdit td[ebindex="item"] input',
+        );
+        return input?.value?.trim() === "Enter UPC / PLU";
+      }, undefined, { timeout: 3000 });
       await page.waitForTimeout(300);
 
       // Step B: Focus Parent Cell to render the UPC input visible
@@ -159,31 +268,45 @@ async function syncWriteOffToCStore({
       // Wait buffer for product lookup AJAX response
       await page.waitForTimeout(2500);
 
+      // The unknown-item alert is raised during the UPC lookup, before the
+      // row-level Save handler runs. Skip immediately so we do not populate
+      // the rest of an invalid row or trigger the valid-UPC alert.
+      if (unknownItemDetected) {
+        console.warn(`⚠️ UPC ${upc_barcode} was not found; skipping item.`);
+        await page.evaluate(() => {
+          if (typeof window.fnDGButtonRevert === "function") {
+            window.fnDGButtonRevert();
+          }
+        });
+        await page.waitForTimeout(500);
+        continue;
+      }
+
       // Step C: Select Reason
       if (reason) {
         const reasonCell = page.locator('#oDGTableEdit td[ebindex="reason"]');
-        await reasonCell.click();
+        await reasonCell.locator("span table img").click({ force: true });
         await page.waitForTimeout(300);
 
-        const reasonOption = page.locator('div[style*="z-index"] table td', {
+        const reasonOption = reasonCell.locator(
+          'div[style*="z-index"] table td',
+          {
           hasText: new RegExp(`^${reason.trim()}$`, "i"),
-        });
+          },
+        );
 
-        if (await reasonOption.isVisible()) {
-          await reasonOption.click();
-        } else {
-          const fallbackOption = page.locator(
-            'div[style*="z-index"] table td',
-            {
-              hasText: /^Spoilage$/i,
-            },
-          );
-          if (await fallbackOption.isVisible()) {
-            await fallbackOption.click();
-          } else {
-            await page.keyboard.press("Escape");
-          }
-        }
+        await reasonOption.waitFor({ state: "visible", timeout: 3000 });
+        await reasonOption.click();
+        await page.waitForFunction(
+          (expectedReason) => {
+            const input = document.querySelector(
+              '#oDGTableEdit td[ebindex="reason"] input',
+            );
+            return input?.value?.trim().toLowerCase() === expectedReason;
+          },
+          reason.trim().toLowerCase(),
+          { timeout: 3000 },
+        );
       }
 
       // Step D: Enter Quantity
@@ -226,15 +349,92 @@ async function syncWriteOffToCStore({
       );
 
       // Step F: Save Item Row
+      const previousCompletedEntryCount = await page.evaluate(() =>
+        Array.from(
+          document.querySelectorAll('#oDGTableData > tbody > tr.dg-table-row'),
+        ).filter((entry) => {
+          const itemName = entry.querySelector('.selector_itemname')?.textContent.trim();
+          const quantity = entry.querySelector('.selector_quantity')?.textContent.trim();
+          const amount = entry.querySelector('.selector_amount')?.textContent.trim();
+          return Boolean(itemName && quantity && amount && amount !== "NaN");
+        }).length,
+      );
       const enterBtn = page.locator("#oDGTableEdit #dgButtonSave");
-      await enterBtn.click({ force: true });
+      await enterBtn.waitFor({ state: "visible", timeout: 5000 });
+      const unknownItem = new Promise((resolve) => {
+        resolveUnknownItem = resolve;
+      });
+      await enterBtn.click();
 
-      // Wait for table commit
-      await page.waitForTimeout(1500);
+      // The CSO handler performs an async UPC validation before it calls the
+      // actual grid save.  Waiting only a fixed delay lets the next iteration
+      // overwrite the current edit row.  Wait for the committed row instead.
+      const commitResult = await Promise.race([
+        waitForCommittedEntry(previousCompletedEntryCount).then(() => "saved"),
+        unknownItem.then(() => "unknown"),
+      ]);
+      resolveUnknownItem = undefined;
+
+      if (commitResult === "unknown") {
+        console.warn(`⚠️ UPC ${upc_barcode} was not found; skipping item.`);
+        // CSO can leave reason/quantity/time populated after the alert while
+        // clearing only the UPC. Reset the edit row before continuing so its
+        // next save cannot trigger "You should enter a valid UPC".
+        await page.evaluate(() => {
+          if (typeof window.fnDGButtonRevert === "function") {
+            window.fnDGButtonRevert();
+          }
+        });
+        await page.waitForFunction(() => {
+          const upcInput = document.querySelector(
+            '#oDGTableEdit td[ebindex="upc"] input',
+          );
+          return !upcInput || upcInput.value.trim() === "";
+        }, undefined, { timeout: 5000 });
+        await page.waitForTimeout(500);
+        continue;
+      }
       console.log(`✅ Item ${upc_barcode} added to grid successfully.`);
     }
 
-    // 5. Final Snapshot Capture
+    // 5. Save the completed write-off in CStoreOffice.
+    const saveButton = page.locator("#Add_href");
+    await saveButton.waitFor({ state: "visible", timeout: 10000 });
+    await saveButton.click();
+
+    // Saving is handled by the legacy page JavaScript and may not navigate.
+    // Give its request/UI update time to complete before capturing the result.
+    await page.waitForTimeout(3000);
+
+    await page.waitForFunction(
+      ({ todayBefore, mtdBefore }) => {
+        const toAmount = (value) => {
+          const parsed = Number.parseFloat(String(value || "").replace(/,/g, ""));
+          return Number.isFinite(parsed) ? parsed : 0;
+        };
+        const rows = Array.from(
+          document.querySelectorAll(".tblReport tbody tr.even"),
+        );
+        const getTotal = (label) => {
+          const row = rows.find((candidate) => candidate.textContent.includes(label));
+          const inputs = row ? row.querySelectorAll("input") : [];
+          return toAmount(inputs[inputs.length - 1]?.value);
+        };
+
+        return getTotal("Today's Write-Offs:") > todayBefore &&
+          getTotal("Write-Offs MTD:") > mtdBefore;
+      },
+      { todayBefore: totalsBefore.today, mtdBefore: totalsBefore.mtd },
+      { timeout: 15000 },
+    );
+
+    const totalsAfter = await readWriteOffTotals();
+    console.log(
+      `✅ Write-off totals verified: Today=${totalsAfter.today} | MTD=${totalsAfter.mtd}`,
+    );
+    console.log(`💾 CStore write-off saved for List: ${listNumber}`);
+
+    // 6. Final Snapshot Capture (after Save)
     const debugDir = path.join(process.cwd(), "temp_automation_snapshots");
     if (!fs.existsSync(debugDir)) {
       fs.mkdirSync(debugDir, { recursive: true });
