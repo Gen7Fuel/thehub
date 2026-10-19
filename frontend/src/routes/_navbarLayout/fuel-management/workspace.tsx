@@ -469,6 +469,7 @@ function WorkspaceComponent() {
               location={locData}
               date={selectedDate}
               racks={racks}
+              locations={locations}
             />
           ))
         )}
@@ -481,10 +482,12 @@ function StationStrip({
   location,
   date,
   racks,
+  locations,
 }: {
   location: any;
   date: Date;
   racks: any[];
+  locations: any[];
 }) {
   const { user } = useAuth();
   const access = user?.access || {};
@@ -1277,6 +1280,7 @@ function StationStrip({
           locationId={location._id}
           onEditSchedule={openRescheduleFromStatus}
           onEditQty={openEditQtyFromStatus}
+          locations={locations}
         />
       )}
 
@@ -1648,6 +1652,7 @@ export function UpdateStatusDialog({
   locationId,
   onEditSchedule,
   onEditQty,
+  locations = [],
 }: any) {
   const [pendingStatus, setPendingStatus] = useState<string | null>(
     initialStep ? "Delivered" : null,
@@ -1656,6 +1661,18 @@ export function UpdateStatusDialog({
     "schedule" | "quantities" | "final"
   >(initialStep || "schedule");
   const [cancelReason, setCancelReason] = useState("");
+  const [retainDialogOpen, setRetainDialogOpen] = useState(false);
+  const [retainActualItems, setRetainActualItems] = useState<any[]>([]);
+  const [retainItems, setRetainItems] = useState<any[]>([]);
+  const [retainPreviewOpen, setRetainPreviewOpen] = useState(false);
+  const [retainDeliveryDate, setRetainDeliveryDate] = useState("");
+  const [retainStartTime, setRetainStartTime] = useState("");
+  const [retainEndTime, setRetainEndTime] = useState("");
+  const [retainStationId, setRetainStationId] = useState("");
+  const [retainOrderDate, setRetainOrderDate] = useState("");
+  const [retainPoNumber, setRetainPoNumber] = useState("");
+  const [dropAtOtherStation, setDropAtOtherStation] = useState(false);
+  const [retainPreviewItems, setRetainPreviewItems] = useState<any[]>([]);
 
   const queryClient = useQueryClient();
 
@@ -1693,8 +1710,104 @@ export function UpdateStatusDialog({
         setConfirmStep("schedule");
       }
       setCancelReason("");
+      setRetainDialogOpen(false);
+      setRetainPreviewOpen(false);
+      setRetainActualItems([]);
+      setRetainItems([]);
+      setRetainPreviewItems([]);
+      setDropAtOtherStation(false);
+      setRetainStationId(order.station?._id || order.station || "");
+      setRetainOrderDate(getISODateOnly(order.orderDate));
+      setRetainPoNumber(`${order.poNumber}-RET`);
+      setRetainDeliveryDate("");
+      setRetainStartTime("");
+      setRetainEndTime("");
     }
   }, [open, initialStep]);
+
+  const getStationId = (station: any) => {
+    if (!station) return "";
+    return typeof station === "string" ? station : station._id;
+  };
+
+  const originalStationId = getStationId(order.station);
+  const selectedRetainStation = locations.find(
+    (location: any) => location._id === retainStationId,
+  ) || (dropAtOtherStation ? null : order.station);
+  const retainedPositiveItems = retainPreviewItems.filter(
+    (item) => Number(item.ltrs || 0) > 0,
+  );
+
+  const openRetainPreview = () => {
+    const positiveRetainItems = retainItems
+      .filter((item) => Number(item.ltrs || 0) > 0)
+      .map((item) => ({
+        grade: item.grade,
+        ltrs: Number(item.ltrs || 0),
+      }));
+
+    if (!positiveRetainItems.length) {
+      mutation.mutate({
+        status: "Delivered",
+        items: retainActualItems,
+      });
+      return;
+    }
+
+    setRetainPreviewItems(positiveRetainItems);
+    setRetainStationId(originalStationId);
+    setDropAtOtherStation(false);
+    setRetainDialogOpen(false);
+    setRetainPreviewOpen(true);
+  };
+
+  useEffect(() => {
+    if (!retainPreviewOpen || !retainStationId) return;
+
+    const nextOrderDate = dropAtOtherStation
+      ? format(new Date(), "yyyy-MM-dd")
+      : getISODateOnly(order.orderDate);
+    setRetainOrderDate(nextOrderDate);
+
+    let cancelled = false;
+    axios
+      .get(
+        `/api/fuel-orders/retain-po-number?sourceOrderId=${order._id}&stationId=${retainStationId}&orderDate=${nextOrderDate}`,
+        authHeader,
+      )
+      .then((res) => {
+        if (cancelled) return;
+        setRetainPoNumber(res.data.poNumber || "");
+        setRetainOrderDate(res.data.orderDate || nextOrderDate);
+      })
+      .catch((err) => {
+        if (cancelled) return;
+        setRetainPoNumber("");
+        alert(err?.response?.data?.message || "Failed to calculate retain PO number.");
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [
+    retainPreviewOpen,
+    retainStationId,
+    dropAtOtherStation,
+    retainDeliveryDate,
+    order._id,
+    order.orderDate,
+  ]);
+
+  useEffect(() => {
+    if (!retainDeliveryDate) {
+      setRetainStartTime("");
+      setRetainEndTime("");
+      return;
+    }
+
+    setRetainStartTime((current) => current || "08:00");
+    setRetainEndTime((current) => current || "10:00");
+  }, [retainDeliveryDate]);
 
   const currentIndex = statuses.findIndex((s) => s.id === order.currentStatus);
 
@@ -1709,13 +1822,19 @@ export function UpdateStatusDialog({
     mutationFn: async ({
       status,
       commentText,
+      items,
     }: {
       status: string;
       commentText?: string;
+      items?: any[];
+      retainItems?: any[];
     }) => {
       const payload: any = { currentStatus: status };
       if (commentText?.trim()) {
         payload.comment = { text: commentText.trim() };
+      }
+      if (items) {
+        payload.items = items;
       }
       return axios.put(`/api/fuel-orders/${order._id}`, payload, authHeader);
     },
@@ -1727,7 +1846,7 @@ export function UpdateStatusDialog({
 
       // 2. Only trigger the heavy tank re-calculation query if the status
       // reached a volume-altering terminal endpoint ('Cancelled' )
-      if (variables.status === "Cancelled") {
+      if (variables.status === "Cancelled" || variables.status === "Delivered") {
         queryClient.invalidateQueries({
           queryKey: ["station-tanks", locationId],
         });
@@ -1737,6 +1856,74 @@ export function UpdateStatusDialog({
       onOpenChange(false);
     },
   });
+
+  const retainOrderMutation = useMutation({
+    mutationFn: async () => {
+      return axios.post(
+        "/api/fuel-orders/retain",
+        {
+          sourceOrderId: order._id,
+          stationId: retainStationId,
+          poNumber: retainPoNumber.trim(),
+          orderDate: retainOrderDate,
+          deliveryDate: retainDeliveryDate,
+          startTime: retainStartTime,
+          endTime: retainEndTime,
+          items: retainedPositiveItems,
+          deliveredItems: retainActualItems,
+        },
+        authHeader,
+      );
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({
+        queryKey: ["workspace-orders", locationId],
+      });
+      setRetainPreviewOpen(false);
+      onOpenChange(false);
+    },
+    onError: (err: any) => {
+      alert(err?.response?.data?.message || "Failed to create retain order.");
+    },
+  });
+
+  const sortOrderItems = (items: any[] = []) =>
+    [...items].sort((a, b) => {
+      return (
+        (gradeConfig[a.grade]?.priority || 99) -
+        (gradeConfig[b.grade]?.priority || 99)
+      );
+    });
+
+  const openRetainDialog = () => {
+    const sortedItems = sortOrderItems(order.items || []).map((item) => ({
+      grade: item.grade,
+      ltrs: Number(item.ltrs || 0),
+    }));
+    setRetainActualItems(sortedItems);
+    setRetainItems(sortedItems.map((item) => ({ grade: item.grade, ltrs: 0 })));
+    setRetainDialogOpen(true);
+  };
+
+  const updateRetainActualQty = (grade: string, value: string) => {
+    setRetainActualItems((prev) =>
+      prev.map((item) =>
+        item.grade === grade
+          ? { ...item, ltrs: Math.max(0, parseInt(value, 10) || 0) }
+          : item,
+      ),
+    );
+  };
+
+  const updateRetainQty = (grade: string, value: string) => {
+    setRetainItems((prev) =>
+      prev.map((item) =>
+        item.grade === grade
+          ? { ...item, ltrs: Math.max(0, parseInt(value, 10) || 0) }
+          : item,
+      ),
+    );
+  };
 
   const renderStep = () => {
     if (pendingStatus === "Cancelled") {
@@ -1870,14 +2057,24 @@ export function UpdateStatusDialog({
                   </div>
                 ))}
               </div>
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => onEditQty(order)}
-                className="w-full mt-4 h-8 text-[10px] font-black uppercase border-blue-200 text-blue-600"
-              >
-                Adjust Quantities
-              </Button>
+              <div className="grid grid-cols-2 gap-2 mt-4">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => onEditQty(order)}
+                  className="h-8 text-[10px] font-black uppercase border-blue-200 text-blue-600"
+                >
+                  Adjust Quantities
+                </Button>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={openRetainDialog}
+                  className="h-8 text-[10px] font-black uppercase border-amber-200 text-amber-700 hover:bg-amber-50"
+                >
+                  Retain
+                </Button>
+              </div>
             </div>
             <Button
               onClick={() => setConfirmStep("final")}
@@ -1912,83 +2109,385 @@ export function UpdateStatusDialog({
   };
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-[400px]">
-        <DialogHeader>
-          <DialogTitle className="text-xl font-black uppercase italic tracking-tight">
-            {pendingStatus ? "Verify Details" : "Update Status"}
-          </DialogTitle>
-          <p className="text-[10px] font-bold text-slate-400 uppercase">
-            PO: {order.poNumber}
-          </p>
-        </DialogHeader>
+    <>
+      <Dialog open={open} onOpenChange={onOpenChange}>
+        <DialogContent className="sm:max-w-[400px]">
+          <DialogHeader>
+            <DialogTitle className="text-xl font-black uppercase italic tracking-tight">
+              {pendingStatus ? "Verify Details" : "Update Status"}
+            </DialogTitle>
+            <p className="text-[10px] font-bold text-slate-400 uppercase">
+              PO: {order.poNumber}
+            </p>
+          </DialogHeader>
 
-        <div className="py-4">
-          {!pendingStatus ? (
-            <div className="flex flex-col gap-3">
-              {statuses.map((status, index) => {
-                const isCurrent = order.currentStatus === status.id;
-                const isDisabled =
-                  order.currentStatus === "Cancelled" ||
-                  index !== currentIndex + 1;
+          <div className="py-4">
+            {!pendingStatus ? (
+              <div className="flex flex-col gap-3">
+                {statuses.map((status, index) => {
+                  const isCurrent = order.currentStatus === status.id;
+                  const isDisabled =
+                    order.currentStatus === "Cancelled" ||
+                    index !== currentIndex + 1;
 
-                return (
+                  return (
+                    <Button
+                      key={status.id}
+                      variant={isCurrent ? "default" : "outline"}
+                      disabled={isDisabled || mutation.isPending}
+                      onClick={() => setPendingStatus(status.id)}
+                      className={`h-16 justify-start gap-4 border-2 transition-all ${
+                        isCurrent
+                          ? "border-blue-600 bg-blue-50/50 text-blue-700"
+                          : "hover:border-blue-300"
+                      }`}
+                    >
+                      <status.icon className={`h-6 w-6 ${status.color}`} />
+                      <div className="flex flex-col items-start">
+                        <span className="font-black uppercase text-xs tracking-widest">
+                          {status.label}
+                        </span>
+                        {isCurrent && (
+                          <span className="text-[10px] font-bold opacity-60">
+                            CURRENT POSITION
+                          </span>
+                        )}
+                        {isDisabled && !isCurrent && (
+                          <span className="text-[10px] font-bold text-slate-300">
+                            LOCKED
+                          </span>
+                        )}
+                      </div>
+                    </Button>
+                  );
+                })}
+
+                {order.currentStatus === "Created" && (
                   <Button
-                    key={status.id}
-                    variant={isCurrent ? "default" : "outline"}
-                    disabled={isDisabled || mutation.isPending}
-                    onClick={() => setPendingStatus(status.id)}
-                    className={`h-16 justify-start gap-4 border-2 transition-all ${
-                      isCurrent
-                        ? "border-blue-600 bg-blue-50/50 text-blue-700"
-                        : "hover:border-blue-300"
-                    }`}
+                    variant="outline"
+                    onClick={() => setPendingStatus("Cancelled")}
+                    disabled={mutation.isPending}
+                    className="h-16 justify-start gap-4 border-2 border-dashed border-red-200 hover:border-red-400 hover:bg-red-50/30 text-red-600 transition-all rounded-xl mt-1"
                   >
-                    <status.icon className={`h-6 w-6 ${status.color}`} />
+                    <XCircle className="h-6 w-6 text-red-500" />
                     <div className="flex flex-col items-start">
                       <span className="font-black uppercase text-xs tracking-widest">
-                        {status.label}
+                        Cancel Order
                       </span>
-                      {isCurrent && (
-                        <span className="text-[10px] font-bold opacity-60">
-                          CURRENT POSITION
-                        </span>
-                      )}
-                      {isDisabled && !isCurrent && (
-                        <span className="text-[10px] font-bold text-slate-300">
-                          LOCKED
-                        </span>
-                      )}
+                      <span className="text-[10px] font-bold text-red-400">
+                        AVAILABLE ONLY IN CREATED STATUS
+                      </span>
                     </div>
                   </Button>
+                )}
+              </div>
+            ) : (
+              renderStep()
+            )}
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={retainDialogOpen} onOpenChange={setRetainDialogOpen}>
+        <DialogContent className="sm:max-w-[640px]">
+          <DialogHeader>
+            <DialogTitle className="text-xl font-black uppercase italic tracking-tight">
+              Retain Fuel - {order.poNumber}
+            </DialogTitle>
+            <p className="text-xs font-semibold text-slate-500">
+              Update actual delivered litres and enter retained litres by grade.
+            </p>
+          </DialogHeader>
+
+          <div className="border rounded-md overflow-hidden">
+            <div className="grid grid-cols-[1fr_1fr_1fr] bg-slate-50 text-[11px] uppercase font-bold text-slate-500">
+              <div className="p-2">Actual Qty</div>
+              <div className="p-2 text-center">Grade</div>
+              <div className="p-2">Retain Qty</div>
+            </div>
+            <div className="divide-y">
+              {retainActualItems.map((item) => {
+                const retain = retainItems.find((x) => x.grade === item.grade);
+                return (
+                  <div key={item.grade} className="grid grid-cols-[1fr_1fr_1fr] items-center gap-2 p-2">
+                    <Input
+                      type="number"
+                      min={0}
+                      value={item.ltrs}
+                      onChange={(e) => updateRetainActualQty(item.grade, e.target.value)}
+                      className="h-9 w-full rounded-md border px-2 text-sm font-mono"
+                    />
+                    <div className="text-center text-sm font-semibold text-slate-700">{item.grade}</div>
+                    <Input
+                      type="number"
+                      min={0}
+                      value={retain?.ltrs || 0}
+                      onChange={(e) => updateRetainQty(item.grade, e.target.value)}
+                      className="h-9 w-full rounded-md border px-2 text-sm font-mono"
+                    />
+                  </div>
                 );
               })}
+            </div>
+          </div>
 
-              {order.currentStatus === "Created" && (
-                <Button
-                  variant="outline"
-                  onClick={() => setPendingStatus("Cancelled")}
-                  disabled={mutation.isPending}
-                  className="h-16 justify-start gap-4 border-2 border-dashed border-red-200 hover:border-red-400 hover:bg-red-50/30 text-red-600 transition-all rounded-xl mt-1"
-                >
-                  <XCircle className="h-6 w-6 text-red-500" />
-                  <div className="flex flex-col items-start">
-                    <span className="font-black uppercase text-xs tracking-widest">
-                      Cancel Order
-                    </span>
-                    <span className="text-[10px] font-bold text-red-400">
-                      AVAILABLE ONLY IN CREATED STATUS
-                    </span>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setRetainDialogOpen(false)}>
+              Cancel
+            </Button>
+            <Button
+              disabled={mutation.isPending}
+              onClick={openRetainPreview}
+              className="bg-green-600 hover:bg-green-700"
+            >
+              {mutation.isPending ? (
+                <Loader2 className="h-4 w-4 animate-spin" />
+              ) : (
+                "Confirm Retain & Preview PO"
+              )}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={retainPreviewOpen} onOpenChange={setRetainPreviewOpen}>
+        <DialogContent className="!w-[calc(100vw-2rem)] !max-w-[1500px] !h-[calc(100vh-2rem)] !max-h-[calc(100vh-2rem)] flex flex-col p-0 overflow-hidden">
+          <DialogHeader className="p-6 pb-3 border-b">
+            <DialogTitle className="text-xl font-black uppercase italic tracking-tight">
+              Retain PO Preview - {retainPoNumber}
+            </DialogTitle>
+            <p className="text-xs font-semibold text-slate-500">
+              Confirm the retained fuel order before creating the new PO.
+            </p>
+          </DialogHeader>
+
+          <div className="grid grid-cols-1 lg:grid-cols-[minmax(0,1fr)_minmax(360px,440px)] xl:grid-cols-[minmax(0,1.25fr)_minmax(420px,520px)] min-h-0 flex-1 bg-white">
+            <div className="order-2 lg:order-2 border-l p-4 overflow-y-auto space-y-4 bg-white">
+              <div className="rounded-lg border bg-slate-50 p-3 space-y-3">
+                <div>
+                  <label className="text-[10px] font-black uppercase text-slate-500">
+                    PO Number
+                  </label>
+                  <Input
+                    value={retainPoNumber}
+                    onChange={(e) => setRetainPoNumber(e.target.value)}
+                    className="mt-1 font-mono font-bold"
+                  />
+                </div>
+
+                <div className="grid grid-cols-2 gap-2">
+                  <div>
+                    <label className="text-[10px] font-black uppercase text-slate-500">
+                      Order Date
+                    </label>
+                    <Input value={retainOrderDate} readOnly className="mt-1" />
                   </div>
-                </Button>
+                  <div>
+                    <label className="text-[10px] font-black uppercase text-slate-500">
+                      Delivery Date
+                    </label>
+                    <Input
+                      type="date"
+                      value={retainDeliveryDate}
+                      onChange={(e) => setRetainDeliveryDate(e.target.value)}
+                      className="mt-1"
+                    />
+                  </div>
+                  <div className="col-span-2">
+                    <label className="text-[10px] font-black uppercase text-slate-500">
+                      Drop Station
+                    </label>
+                    <Input
+                      value={selectedRetainStation?.fuelCustomerName || selectedRetainStation?.stationName || ""}
+                      readOnly
+                      className="mt-1"
+                    />
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-2 gap-2">
+                  <div>
+                    <label className="text-[10px] font-black uppercase text-slate-500">
+                      Start Time
+                    </label>
+                    <Input
+                      type="time"
+                      value={retainStartTime}
+                      onChange={(e) => setRetainStartTime(e.target.value)}
+                      className="mt-1"
+                    />
+                  </div>
+                  <div>
+                    <label className="text-[10px] font-black uppercase text-slate-500">
+                      End Time
+                    </label>
+                    <Input
+                      type="time"
+                      value={retainEndTime}
+                      onChange={(e) => setRetainEndTime(e.target.value)}
+                      className="mt-1"
+                    />
+                  </div>
+                </div>
+
+                <label className="flex items-center gap-2 text-sm font-bold text-slate-700">
+                  <Checkbox
+                    checked={dropAtOtherStation}
+                    onCheckedChange={(checked) => {
+                      const enabled = checked === true;
+                      setDropAtOtherStation(enabled);
+                      setRetainStationId(enabled ? "" : originalStationId);
+                    }}
+                  />
+                  Drop at other station
+                </label>
+
+                {dropAtOtherStation && (
+                  <div>
+                    <label className="text-[10px] font-black uppercase text-slate-500">
+                      Select Station
+                    </label>
+                    <Select value={retainStationId} onValueChange={setRetainStationId}>
+                      <SelectTrigger className="mt-1">
+                        <SelectValue placeholder="Choose drop station" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {locations.map((location: any) => (
+                          <SelectItem key={location._id} value={location._id}>
+                            {location.fuelCustomerName || location.stationName}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                )}
+              </div>
+
+              <div className="rounded-lg border overflow-hidden">
+                <div className="bg-slate-50 p-2 text-[11px] font-black uppercase text-slate-500">
+                  Retained Quantities
+                </div>
+                <div className="divide-y">
+                  {retainedPositiveItems.map((item) => (
+                    <div key={item.grade} className="flex justify-between p-2 text-sm">
+                      <span className="font-semibold text-slate-600">{item.grade}</span>
+                      <span className="font-mono font-black">{Number(item.ltrs).toLocaleString()} L</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </div>
+
+            <div className="order-1 lg:order-1 min-h-0 bg-slate-100">
+              {selectedRetainStation && retainDeliveryDate ? (
+                <PDFViewer
+                  width="100%"
+                  height="100%"
+                  showToolbar={false}
+                  style={{ border: "none" }}
+                >
+                  <POPreviewDocument
+                    data={{
+                      deliveryDate: retainDeliveryDate,
+                      poNumber: retainPoNumber,
+                      badgeNo: order.badgeNo || "",
+                      startTime: retainStartTime,
+                      endTime: retainEndTime,
+                      items: retainedPositiveItems,
+                    }}
+                    selectedStation={selectedRetainStation}
+                    carrierName={order.carrier?.carrierName}
+                    rackName={order.rack?.rackName}
+                    rackLocation={order.rack?.rackLocation}
+                    carrierBookworksId={order.carrier?.carrierId}
+                    supplierBookworksId={
+                      order.supplier?.supplierBadges?.find(
+                        (badge: any) => badge.badgeNumber === order.badgeNo,
+                      )?.accountingId || "N/A"
+                    }
+                  />
+                </PDFViewer>
+              ) : (
+                <div className="h-full flex items-center justify-center p-8 text-center">
+                  <div className="rounded-lg border bg-white px-6 py-5 shadow-sm">
+                    <FileText className="h-8 w-8 mx-auto mb-3 text-slate-300" />
+                    <div className="text-sm font-bold text-slate-700">
+                      Add the delivery date to view PO
+                    </div>
+                    <div className="mt-1 text-xs text-slate-500">
+                      The delivery window will default to 8:00 AM - 10:00 AM.
+                    </div>
+                  </div>
+                </div>
               )}
             </div>
-          ) : (
-            renderStep()
-          )}
-        </div>
-      </DialogContent>
-    </Dialog>
+          </div>
+
+          <DialogFooter className="p-4 border-t bg-white">
+            <Button
+              variant="outline"
+              onClick={() => setRetainPreviewOpen(false)}
+              disabled={retainOrderMutation.isPending}
+            >
+              Back
+            </Button>
+            {selectedRetainStation && retainDeliveryDate && (
+              <PDFDownloadLink
+                document={
+                  <POPreviewDocument
+                    data={{
+                      deliveryDate: retainDeliveryDate,
+                      poNumber: retainPoNumber,
+                      badgeNo: order.badgeNo || "",
+                      startTime: retainStartTime,
+                      endTime: retainEndTime,
+                      items: retainedPositiveItems,
+                    }}
+                    selectedStation={selectedRetainStation}
+                    carrierName={order.carrier?.carrierName}
+                    rackName={order.rack?.rackName}
+                    rackLocation={order.rack?.rackLocation}
+                    carrierBookworksId={order.carrier?.carrierId}
+                    supplierBookworksId={
+                      order.supplier?.supplierBadges?.find(
+                        (badge: any) => badge.badgeNumber === order.badgeNo,
+                      )?.accountingId || "N/A"
+                    }
+                  />
+                }
+                fileName={`Fuel Order Form ${retainPoNumber}.pdf`}
+              >
+                {({ loading }) => (
+                  <Button variant="outline" disabled={loading || retainOrderMutation.isPending}>
+                    <Download className="h-4 w-4 mr-2" />
+                    {loading ? "Preparing..." : "Download PDF"}
+                  </Button>
+                )}
+              </PDFDownloadLink>
+            )}
+            <Button
+              onClick={() => retainOrderMutation.mutate()}
+              disabled={
+                retainOrderMutation.isPending ||
+                !retainStationId ||
+                !retainPoNumber ||
+                !retainDeliveryDate ||
+                !retainStartTime ||
+                !retainEndTime ||
+                retainedPositiveItems.length === 0
+              }
+              className="bg-green-600 hover:bg-green-700"
+            >
+              {retainOrderMutation.isPending ? (
+                <Loader2 className="h-4 w-4 animate-spin" />
+              ) : (
+                "Confirm & Push Order"
+              )}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    </>
   );
 }
 

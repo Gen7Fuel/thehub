@@ -7,7 +7,7 @@ import { DatePickerWithRange } from '@/components/custom/datePickerWithRange'
 import { pdf, Document, Page, Image as PdfImage, StyleSheet } from '@react-pdf/renderer'
 import { Button } from '@/components/ui/button'
 import { useAuth } from '@/context/AuthContext'
-import { ClipboardCheck, Trash2, MessageSquareText, RefreshCcw, ExternalLink } from 'lucide-react'
+import { ClipboardCheck, Trash2, MessageSquareText, RefreshCcw, ExternalLink, Link2, ZoomIn, ZoomOut } from 'lucide-react'
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { toast } from 'sonner'
 
@@ -18,6 +18,9 @@ type BOLPhoto = {
   date: string // YYYY-MM-DD
   filename: string
   bolNumber?: string
+  poLinked?: boolean
+  poNumbers?: string[]
+  poNumber?: string
   createdAt?: string
   updatedAt?: string
   comments?: Array<{ text: string; createdAt: string; user?: string }>
@@ -30,6 +33,30 @@ type ListResponse = {
   count: number
   entries: BOLPhoto[]
 }
+type FuelOrderCandidate = {
+  _id: string
+  poNumber: string
+  estimatedDeliveryDate?: string
+  originalDeliveryDate?: string
+  estimatedDeliveryWindow?: { start?: string; end?: string }
+  supplier?: { supplierName?: string }
+  carrier?: { carrierName?: string }
+  rack?: { rackName?: string; rackLocation?: string }
+  items?: Array<{ grade: string; ltrs: number }>
+  bolLinked?: boolean
+  bolNumbers?: string[]
+  linkedToCurrentBol?: boolean
+  otherBolNumbers?: string[]
+}
+type FuelOrderItem = { grade: string; ltrs: number }
+type LinkablePoResponse = {
+  from: string
+  to: string
+  count: number
+  orders: FuelOrderCandidate[]
+  linkedOrders?: FuelOrderCandidate[]
+  linkedOrder?: FuelOrderCandidate | null
+}
 
 const ymd = (d: Date) => format(d, 'yyyy-MM-dd')
 const parseYmd = (s?: string) => {
@@ -37,6 +64,12 @@ const parseYmd = (s?: string) => {
   const [y, m, d] = s.split('-').map(Number)
   return new Date(y, m - 1, d)
 }
+
+const getBolPoNumbers = (entry?: Pick<BOLPhoto, 'poNumbers' | 'poNumber'> | null) =>
+  Array.from(new Set([
+    ...(entry?.poNumbers || []),
+    ...(entry?.poNumber ? [entry.poNumber] : []),
+  ].map((value) => String(value || '').trim()).filter(Boolean)))
 
 export const Route = createFileRoute('/_navbarLayout/fuel-rec/list')({
   validateSearch: (search: Record<string, any>) => {
@@ -144,6 +177,17 @@ function RouteComponent() {
   const [activeCommentEntry, setActiveCommentEntry] = React.useState<BOLPhoto | null>(null)
   const [commentText, setCommentText] = React.useState('')
   const [commentPending, setCommentPending] = React.useState(false)
+  const [activeLinkEntry, setActiveLinkEntry] = React.useState<BOLPhoto | null>(null)
+  const [linkableOrders, setLinkableOrders] = React.useState<FuelOrderCandidate[]>([])
+  const [linkRange, setLinkRange] = React.useState<{ from: string; to: string } | null>(null)
+  const [linkLoading, setLinkLoading] = React.useState(false)
+  const [linkPendingOrderId, setLinkPendingOrderId] = React.useState<string | null>(null)
+  const [linkDaysBack, setLinkDaysBack] = React.useState(2)
+  const [linkedOrders, setLinkedOrders] = React.useState<FuelOrderCandidate[]>([])
+  const [unlinkPending, setUnlinkPending] = React.useState(false)
+  const [reviewOrder, setReviewOrder] = React.useState<FuelOrderCandidate | null>(null)
+  const [reviewItems, setReviewItems] = React.useState<FuelOrderItem[]>([])
+  const [bolZoom, setBolZoom] = React.useState(145)
 
   const requestAgain = async (e: BOLPhoto) => {
     try {
@@ -288,6 +332,158 @@ function RouteComponent() {
     }
   }
 
+  const loadLinkableOrders = async (e: BOLPhoto, daysBack: number) => {
+    setLinkLoading(true)
+    try {
+      const res = await fetch(
+        `/api/fuel-rec/${encodeURIComponent(e._id)}/linkable-pos?daysBack=${encodeURIComponent(String(daysBack))}`,
+        {
+          headers: {
+            Authorization: `Bearer ${localStorage.getItem('token') || ''}`,
+          },
+        }
+      )
+      if (!res.ok) {
+        const msg = await res.text().catch(() => '')
+        throw new Error(msg || `HTTP ${res.status}`)
+      }
+      const result = (await res.json()) as LinkablePoResponse
+      setLinkableOrders(result.orders || [])
+      setLinkedOrders(result.linkedOrders || (result.linkedOrder ? [result.linkedOrder] : []))
+      setLinkRange({ from: result.from, to: result.to })
+    } finally {
+      setLinkLoading(false)
+    }
+  }
+
+  const openLinkDialog = async (e: BOLPhoto) => {
+    setActiveLinkEntry(e)
+    setLinkableOrders([])
+    setLinkRange(null)
+    setLinkedOrders([])
+    setLinkDaysBack(2)
+    setBolZoom(145)
+    try {
+      await loadLinkableOrders(e, 2)
+    } catch (err) {
+      toast.error(`Failed to load POs: ${err instanceof Error ? err.message : String(err)}`)
+      setActiveLinkEntry(null)
+    }
+  }
+
+  const openQuantityReview = (order: FuelOrderCandidate) => {
+    const items = (order.items || []).map((item) => ({
+      grade: item.grade,
+      ltrs: Number(item.ltrs || 0),
+    }))
+    setReviewOrder(order)
+    setReviewItems(items)
+  }
+
+  const closeQuantityReview = () => {
+    setReviewOrder(null)
+    setReviewItems([])
+  }
+
+  const linkFuelPo = async (order: FuelOrderCandidate) => {
+    if (!activeLinkEntry) return
+    setLinkPendingOrderId(order._id)
+    try {
+      const res = await fetch(`/api/fuel-rec/${encodeURIComponent(activeLinkEntry._id)}/link-po`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${localStorage.getItem('token') || ''}`,
+        },
+        body: JSON.stringify({
+          fuelOrderId: order._id,
+        }),
+      })
+      if (!res.ok) {
+        const msg = await res.text().catch(() => '')
+        throw new Error(msg || `HTTP ${res.status}`)
+      }
+      const result = await res.json()
+      toast.success(`Linked BOL ${activeLinkEntry.bolNumber || ''} to PO ${order.poNumber}`)
+      setLinkableOrders((prev) => prev.filter((x) => x._id !== order._id))
+      const linked = result.order || order
+      setLinkedOrders((prev) => [...prev.filter((x) => x._id !== linked._id), linked])
+      const nextPoNumbers = Array.from(new Set([...getBolPoNumbers(activeLinkEntry), order.poNumber]))
+      setEntries((prev) => prev.map((x) => x._id === activeLinkEntry._id
+        ? { ...x, poLinked: true, poNumbers: nextPoNumbers, poNumber: undefined }
+        : x
+      ))
+      setActiveLinkEntry((prev) => prev ? { ...prev, poLinked: true, poNumbers: nextPoNumbers, poNumber: undefined } : prev)
+      closeQuantityReview()
+    } catch (err) {
+      toast.error(`Link failed: ${err instanceof Error ? err.message : String(err)}`)
+    } finally {
+      setLinkPendingOrderId(null)
+    }
+  }
+
+  const viewMoreHistorical = async () => {
+    if (!activeLinkEntry) return
+    const nextDaysBack = linkDaysBack + 5
+    setLinkDaysBack(nextDaysBack)
+    try {
+      await loadLinkableOrders(activeLinkEntry, nextDaysBack)
+    } catch (err) {
+      toast.error(`Failed to load more POs: ${err instanceof Error ? err.message : String(err)}`)
+    }
+  }
+
+  const unlinkFuelPo = async (order: FuelOrderCandidate) => {
+    if (!activeLinkEntry) return
+    setUnlinkPending(true)
+    try {
+      const res = await fetch(`/api/fuel-rec/${encodeURIComponent(activeLinkEntry._id)}/unlink-po`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${localStorage.getItem('token') || ''}`,
+        },
+        body: JSON.stringify({ fuelOrderId: order._id }),
+      })
+      if (!res.ok) {
+        const msg = await res.text().catch(() => '')
+        throw new Error(msg || `HTTP ${res.status}`)
+      }
+      toast.success(`Unlinked PO ${order.poNumber}`)
+      const nextPoNumbers = getBolPoNumbers(activeLinkEntry).filter((poNumber) => poNumber !== order.poNumber)
+      setEntries((prev) => prev.map((x) => x._id === activeLinkEntry._id
+        ? { ...x, poLinked: nextPoNumbers.length > 0, poNumbers: nextPoNumbers, poNumber: undefined }
+        : x
+      ))
+      const nextEntry = { ...activeLinkEntry, poLinked: nextPoNumbers.length > 0, poNumbers: nextPoNumbers, poNumber: undefined }
+      setActiveLinkEntry(nextEntry)
+      setLinkedOrders((prev) => prev.filter((x) => x._id !== order._id))
+      setLinkDaysBack(2)
+      await loadLinkableOrders(nextEntry, 2)
+    } catch (err) {
+      toast.error(`Unlink failed: ${err instanceof Error ? err.message : String(err)}`)
+    } finally {
+      setUnlinkPending(false)
+    }
+  }
+
+  const formatOrderDate = (value?: string) => {
+    if (!value) return '—'
+    const parsed = new Date(value)
+    if (Number.isNaN(parsed.getTime())) return '—'
+    return format(parsed, 'MMM d, yyyy')
+  }
+
+  const formatOrderItems = (items?: FuelOrderCandidate['items']) => {
+    const visible = (items || []).filter((item) => Number(item.ltrs || 0) > 0)
+    if (!visible.length) return 'No fuel items'
+    return visible.map((item) => `${item.grade}: ${Number(item.ltrs || 0).toLocaleString()}L`).join(' | ')
+  }
+
+  const activeBolImageUrl = activeLinkEntry ? `/cdn/download/${activeLinkEntry.filename}` : ''
+  const zoomOutBol = () => setBolZoom((prev) => Math.max(75, prev - 25))
+  const zoomInBol = () => setBolZoom((prev) => Math.min(250, prev + 25))
+
   const handleCommentSave = async () => {
     if (!commentText.trim() || !activeCommentEntry) return
     setCommentPending(true)
@@ -406,6 +602,19 @@ function RouteComponent() {
                             )}
                           </Button>
                         )}
+                        {access?.accounting?.fuelRec?.linkPo && (
+                          <Button
+                            variant={e.poLinked ? "default" : "outline"}
+                            size="icon"
+                            onClick={() => openLinkDialog(e)}
+                            disabled={pending.has(e._id)}
+                            title={e.poLinked ? `Linked to PO${getBolPoNumbers(e).length === 1 ? ` ${getBolPoNumbers(e)[0]}` : 's'}` : 'Link PO'}
+                            aria-label={e.poLinked ? `Linked to PO${getBolPoNumbers(e).length === 1 ? ` ${getBolPoNumbers(e)[0]}` : 's'}` : 'Link PO'}
+                            className={e.poLinked ? 'bg-emerald-600 hover:bg-emerald-700 text-white' : undefined}
+                          >
+                            <Link2 className="h-4 w-4" />
+                          </Button>
+                        )}
 
                         {access?.accounting?.fuelRec?.postBol &&
                           !e.comments?.some((c) => c.text.toLowerCase().includes('bol posted')) && (
@@ -507,6 +716,211 @@ function RouteComponent() {
                   {commentPending ? "Adding..." : "Add Comment"}
                 </Button>
               </div>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* 3. Link Fuel PO Dialog */}
+      <Dialog open={!!activeLinkEntry} onOpenChange={() => setActiveLinkEntry(null)}>
+        <DialogContent className="!w-[calc(100vw-2rem)] !max-w-[1500px] !h-[calc(100vh-2rem)] !max-h-[calc(100vh-2rem)] p-0 overflow-hidden">
+          <div className="grid h-full min-h-0 grid-cols-1 lg:grid-cols-[minmax(0,1fr)_minmax(360px,440px)] xl:grid-cols-[minmax(0,1.25fr)_minmax(420px,520px)] bg-white">
+            <section className="min-h-0 border-r bg-slate-100 flex flex-col">
+              <div className="shrink-0 border-b bg-white px-5 py-4">
+                <DialogHeader>
+                  <DialogTitle>Link PO - {activeLinkEntry?.bolNumber || activeLinkEntry?.date}</DialogTitle>
+                </DialogHeader>
+                <div className="mt-1 text-xs text-slate-500">
+                  {activeLinkEntry?.site} | {activeLinkEntry?.date}
+                </div>
+              </div>
+
+              <div className="min-h-0 flex-1 p-4">
+                <div className="h-full rounded-lg border bg-white overflow-auto">
+                  {activeBolImageUrl ? (
+                    <div className="min-h-full min-w-full flex items-start justify-center p-4">
+                      <img
+                        src={activeBolImageUrl}
+                        alt={`BOL ${activeLinkEntry?.bolNumber || activeLinkEntry?.date} preview`}
+                        className="max-w-none h-auto object-contain"
+                        style={{ width: `${bolZoom}%` }}
+                      />
+                    </div>
+                  ) : (
+                    <div className="h-full flex items-center justify-center text-sm text-slate-400">BOL preview unavailable.</div>
+                  )}
+                </div>
+              </div>
+
+              <div className="shrink-0 border-t bg-white px-4 py-3 flex flex-wrap items-center justify-end gap-2">
+                <Button variant="outline" size="sm" onClick={zoomOutBol} disabled={!activeBolImageUrl || bolZoom <= 75}>
+                  <ZoomOut className="h-4 w-4 mr-2" /> Zoom Out
+                </Button>
+                <div className="h-9 min-w-16 px-3 rounded-md border bg-slate-50 text-xs font-semibold text-slate-600 flex items-center justify-center">
+                  {bolZoom}%
+                </div>
+                <Button variant="outline" size="sm" onClick={zoomInBol} disabled={!activeBolImageUrl || bolZoom >= 250}>
+                  <ZoomIn className="h-4 w-4 mr-2" /> Zoom In
+                </Button>
+                <Button variant="outline" onClick={() => window.open(activeBolImageUrl, '_blank')} disabled={!activeBolImageUrl}>
+                  <ExternalLink className="h-4 w-4 mr-2" /> Open Image
+                </Button>
+              </div>
+            </section>
+
+            <section className="min-h-0 flex flex-col overflow-hidden">
+              <div className="shrink-0 border-b px-5 py-4">
+                <div className="text-sm font-semibold text-slate-900">
+                  {linkedOrders.length > 0 ? 'Linked PO Details' : 'Select Fuel PO'}
+                </div>
+                <div className="mt-1 text-sm text-slate-600">
+                  {linkRange
+                    ? `Showing unlinked fuel POs from ${linkRange.from} to ${linkRange.to}.`
+                    : `Loading unlinked fuel POs for ${activeLinkEntry?.site || 'this BOL'}...`}
+                </div>
+              </div>
+
+              <div className="min-h-0 flex-1 overflow-y-auto p-5">
+                {linkedOrders.length > 0 && (
+                  <div className="border rounded-md overflow-hidden mb-4">
+                    <div className="bg-emerald-50 px-3 py-2 text-xs font-semibold text-emerald-700">
+                      Linked to this BOL
+                    </div>
+                    <div className="divide-y">
+                      {linkedOrders.map((linkedOrder) => (
+                        <div key={linkedOrder._id} className="p-3 flex flex-col xl:flex-row xl:items-center justify-between gap-3">
+                          <div className="space-y-1 min-w-0">
+                            <div className="text-sm font-semibold text-emerald-700">
+                              {linkedOrder.poNumber}
+                            </div>
+                            <div className="text-xs text-slate-500">
+                              Delivery: {formatOrderDate(linkedOrder.estimatedDeliveryDate || linkedOrder.originalDeliveryDate)}
+                              {(linkedOrder.estimatedDeliveryWindow?.start || linkedOrder.estimatedDeliveryWindow?.end) &&
+                                ` | ${linkedOrder.estimatedDeliveryWindow?.start || '--'} - ${linkedOrder.estimatedDeliveryWindow?.end || '--'}`}
+                            </div>
+                            <div className="text-xs text-slate-600">
+                              {[linkedOrder.supplier?.supplierName, linkedOrder.carrier?.carrierName, linkedOrder.rack?.rackName]
+                                .filter(Boolean)
+                                .join(' | ') || 'No supplier/carrier/rack details'}
+                            </div>
+                            <div className="text-xs text-slate-500">{formatOrderItems(linkedOrder.items)}</div>
+                          </div>
+
+                          <Button
+                            variant="destructive"
+                            size="sm"
+                            onClick={() => unlinkFuelPo(linkedOrder)}
+                            disabled={unlinkPending}
+                            className="shrink-0"
+                          >
+                            {unlinkPending ? 'Unlinking...' : 'Unlink'}
+                          </Button>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {linkLoading ? (
+                  <div className="py-10 text-center text-sm text-slate-500">Loading POs...</div>
+                ) : linkableOrders.length === 0 ? (
+                  <div className="border rounded-md">
+                    <div className="py-10 text-center text-sm text-slate-500">No unlinked fuel POs found for this window.</div>
+                    <div className="border-t p-3 flex justify-end">
+                      <Button variant="outline" onClick={viewMoreHistorical} disabled={linkLoading}>
+                        View More Historical
+                      </Button>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="border rounded-md overflow-hidden">
+                    <div className="divide-y">
+                      {linkableOrders.map((order) => (
+                        <div key={order._id} className="p-3 flex flex-col xl:flex-row xl:items-center justify-between gap-3">
+                          <div className="min-w-0 space-y-1">
+                            <div className="flex flex-wrap items-center gap-2">
+                              <span className="font-semibold text-slate-900">{order.poNumber}</span>
+                              <span className="text-xs text-slate-500">
+                                Delivery: {formatOrderDate(order.estimatedDeliveryDate || order.originalDeliveryDate)}
+                              </span>
+                              {(order.estimatedDeliveryWindow?.start || order.estimatedDeliveryWindow?.end) && (
+                                <span className="text-xs text-slate-500">
+                                  {order.estimatedDeliveryWindow?.start || '--'} - {order.estimatedDeliveryWindow?.end || '--'}
+                                </span>
+                              )}
+                            </div>
+                            <div className="text-xs text-slate-600">
+                              {[order.supplier?.supplierName, order.carrier?.carrierName, order.rack?.rackName]
+                                .filter(Boolean)
+                                .join(' | ') || 'No supplier/carrier/rack details'}
+                            </div>
+                            {order.otherBolNumbers && order.otherBolNumbers.length > 0 && (
+                              <div className="text-xs font-semibold text-amber-700">
+                                Existing BOL linked: {order.otherBolNumbers.join(', ')}
+                              </div>
+                            )}
+                            <div className="text-xs text-slate-500">{formatOrderItems(order.items)}</div>
+                          </div>
+
+                          <Button
+                            size="sm"
+                            onClick={() => openQuantityReview(order)}
+                            disabled={linkPendingOrderId === order._id}
+                            className="shrink-0"
+                          >
+                            Link PO
+                          </Button>
+                        </div>
+                      ))}
+                    </div>
+                    <div className="border-t p-3 flex justify-end">
+                      <Button variant="outline" onClick={viewMoreHistorical} disabled={linkLoading}>
+                        View More Historical
+                      </Button>
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              <div className="shrink-0 border-t px-5 py-3 flex justify-end">
+                <Button variant="outline" onClick={() => setActiveLinkEntry(null)}>Close</Button>
+              </div>
+            </section>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* 4. Quantity Review Dialog */}
+      <Dialog open={!!reviewOrder} onOpenChange={(open) => !open && closeQuantityReview()}>
+        <DialogContent className="sm:max-w-[640px]">
+          <DialogHeader>
+            <DialogTitle>
+              Confirm Quantities - {reviewOrder?.poNumber}
+            </DialogTitle>
+          </DialogHeader>
+
+          <div className="space-y-4">
+            <div className="text-sm text-slate-600">
+              Review delivered quantities before linking this BOL to the selected PO.
+            </div>
+
+            <div className="border rounded-md divide-y">
+              {reviewItems.map((item) => (
+                <div key={item.grade} className="flex items-center justify-between p-3 text-sm">
+                  <span className="font-semibold text-slate-700">{item.grade}</span>
+                  <span className="font-mono font-semibold">{Number(item.ltrs || 0).toLocaleString()} L</span>
+                </div>
+              ))}
+            </div>
+
+            <div className="flex justify-end gap-2">
+              <Button variant="outline" onClick={closeQuantityReview}>Cancel</Button>
+              <Button
+                onClick={() => reviewOrder && linkFuelPo(reviewOrder)}
+                disabled={!reviewOrder || linkPendingOrderId === reviewOrder?._id}
+              >
+                {linkPendingOrderId === reviewOrder?._id ? 'Linking...' : 'Confirm & Link'}
+              </Button>
             </div>
           </div>
         </DialogContent>
