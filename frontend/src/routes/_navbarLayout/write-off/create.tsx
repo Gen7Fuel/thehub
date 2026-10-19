@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { createFileRoute, useNavigate } from '@tanstack/react-router';
 import { useAuth } from "@/context/AuthContext";
+import { useSite } from "@/context/SiteContext";
 import { SitePicker } from '@/components/custom/sitePicker';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
@@ -13,7 +14,7 @@ import { DatePicker } from '@/components/custom/datePicker';
 
 export const Route = createFileRoute('/_navbarLayout/write-off/create')({
   component: RouteComponent,
-  validateSearch: (search: { site: string }) => ({ site: search.site }),
+  validateSearch: (search: Record<string, unknown>) => ({ site: search.site as string | undefined }),
   loaderDeps: ({ search: { site } }) => ({ site }),
 });
 
@@ -46,8 +47,10 @@ export const REASON_COLORS: Record<string, string> = {
 
 function RouteComponent() {
   const { user } = useAuth();
+  const { selectedSite } = useSite();
   const { site } = Route.useSearch();
   const navigate = useNavigate({ from: Route.fullPath });
+  const currentSite = selectedSite || site || user?.location || '';
 
   const [draftList, setDraftList] = useState<WriteOffItem[]>([]);
   const [isDialogOpen, setIsDialogOpen] = useState(false);
@@ -73,10 +76,10 @@ function RouteComponent() {
   maxExpiry.setDate(today.getDate() + 20); // 20 days from now
 
   useEffect(() => {
-    if (!site && user?.location) {
-      navigate({ search: { site: user.location } });
+    if (currentSite && site !== currentSite) {
+      navigate({ search: (prev: any) => ({ ...prev, site: currentSite }), replace: true });
     }
-  }, [site, user?.location]);
+  }, [site, currentSite, navigate]);
 
   // useEffect(() => {
   //   const delay = setTimeout(async () => {
@@ -107,12 +110,12 @@ function RouteComponent() {
   useEffect(() => {
     const delay = setTimeout(async () => {
       // Check if we have a valid text query string and an active site string before sending
-      if (formQuery.length > 2 && site) {
+      if (formQuery.length > 2 && currentSite) {
         setIsSearching(true);
         try {
           const res = await axios.get(`/api/cycle-count/search`, {
             params: {
-              site: site, // Sends the plain text string name like "Sarnia" or "Jocko Point"
+              site: currentSite, // Sends the plain text string name like "Sarnia" or "Jocko Point"
               q: formQuery
             },
             headers: {
@@ -133,7 +136,7 @@ function RouteComponent() {
     }, 300);
 
     return () => clearTimeout(delay);
-  }, [formQuery, site, navigate]); // Matches the name string field context beautifully // Swapped dependency array watch context to look at site
+  }, [formQuery, currentSite, navigate]); // Matches the name string field context beautifully // Swapped dependency array watch context to look at site
 
   const selectFromSearch = (item: any) => {
     setFormData({
@@ -187,7 +190,7 @@ function RouteComponent() {
 
     try {
       const res = await axios.post('/api/write-off', {
-        site,
+        site: currentSite,
         submittedBy: user?.email,
         items: draftList, // Backend will split these
         timestamp: Date.now()
@@ -204,7 +207,7 @@ function RouteComponent() {
 
       setDraftList([]);
       // Optional: navigate to the dashboard to see the new lists
-      navigate({ to: '/write-off' });
+      navigate({ to: '/write-off', search: { site: currentSite } });
     } catch (e: any) {
       if (e.response?.status === 403) navigate({ to: "/no-access" });
       alert("Submission failed. Please try again.");
@@ -218,7 +221,7 @@ function RouteComponent() {
       <div className="flex items-center justify-between bg-white p-4 rounded-xl border border-slate-200 shadow-sm gap-4">
         {/* Site Picker pinned to the left */}
         <div className="shrink-0">
-          <SitePicker value={site} onValueChange={(s) => navigate({ search: { site: s } })} />
+          <SitePicker value={currentSite} onValueChange={(s) => navigate({ search: (prev: any) => ({ ...prev, site: s }), replace: true })} />
         </div>
 
         {/* Warning Message centered with equal gaps */}

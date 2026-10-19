@@ -14,7 +14,7 @@ function RouteComponent() {
     // Determine the path
     let targetPath = "/no-access";
     if (user?.access?.writeOff?.create) targetPath = "/write-off/create";
-    else if (user?.access?.writeOff?.requests) targetPath = "/write-off/requests";
+    else if (user?.access?.writeOff?.requests?.value) targetPath = "/write-off/requests";
 
     // Navigate and preserve user location if possible
     navigate({

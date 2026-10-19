@@ -4,7 +4,7 @@ import { createFileRoute, useNavigate } from '@tanstack/react-router'
 import { getStatusStyles } from "./requests"
 import { REASON_COLORS, REASONS } from './create'
 import { Button } from '@/components/ui/button'
-import { MessageSquareText, MessageSquarePlus } from "lucide-react";
+import { MessageSquareText, MessageSquarePlus, Pencil } from "lucide-react";
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { Calendar, Package, CheckCircle2, CheckSquare, Square, Minus, Plus } from 'lucide-react'
 import Barcode from 'react-barcode'
@@ -14,6 +14,12 @@ import { Input } from '@/components/ui/input';
 
 export const Route = createFileRoute('/_navbarLayout/write-off/$id')({
   component: RouteComponent,
+  validateSearch: (search: Record<string, unknown>) => ({
+    site: search.site as string | undefined,
+    type: search.type as 'WO' | 'ATE' | 'BT' | undefined,
+    from: search.from as string | undefined,
+    to: search.to as string | undefined,
+  }),
   // This ensures the loader runs every time you visit the page
   staleTime: 0, 
   gcTime: 0,
@@ -34,9 +40,22 @@ function RouteComponent() {
 
   // Inside WriteOffDetailsPage component
   const [editItem, setEditItem] = useState<any | null>(null);
+  const [upcItem, setUpcItem] = useState<any | null>(null);
+  const [upcValue, setUpcValue] = useState('');
 
   const isATE = writeOff.listType === 'ATE';
   const isBT = writeOff.listType === 'BT';
+  const canViewCost = Boolean(user?.access?.writeOff?.requests?.list?.viewWritOffCost);
+  const canViewMissingStatus = Boolean(user?.access?.writeOff?.requests?.list?.viewMissingStatus);
+  const canPushMissingItems = Boolean(user?.access?.writeOff?.requests?.list?.pushMissingItems);
+  const canViewSubmissionProof = Boolean(user?.access?.writeOff?.requests?.list?.viewCsoSubmissionProof);
+  const canUpdateMissingUpc = Boolean(user?.access?.writeOff?.requests?.list?.updateMissingItemsUpc);
+  const isSubmitted = Boolean(writeOff.submitted);
+  const hasCostData = isSubmitted && writeOff.items.some((item: any) => item.writeOffCost !== undefined && item.writeOffCost !== null);
+  const hasFoundData = isSubmitted && writeOff.items.some((item: any) => item.found !== undefined && item.found !== null);
+  const totalWriteOffCost = writeOff.items.reduce((total: number, item: any) => total + (Number(item.writeOffCost) || 0), 0);
+  const showCostColumn = !isATE && !isBT && canViewCost && hasCostData && totalWriteOffCost > 0;
+  const showMissingStatusColumn = !isATE && !isBT && canViewMissingStatus && hasFoundData;
 
   // State for Comments
   const [viewCommentsItemId, setViewCommentsItemId] = useState<string | null>(null);
@@ -148,12 +167,37 @@ function RouteComponent() {
           }
         }
       );
-      setWriteOff(res.data);
+      // Finalize queues background automation and may return an empty/legacy
+      // response body. Preserve the loaded write-off shape so the page can
+      // render immediately without losing `items`.
+      setWriteOff((current: any) => ({
+        ...current,
+        ...(res.data && !Array.isArray(res.data) ? res.data : {}),
+        submitted: true,
+      }));
       // Optional: add a success toast notification here
     } catch (err: any) {
       if (err.response?.status === 403) return navigate({ to: "/no-access" });
       console.error("Finalization failed", err);
     }
+  };
+
+  const handleUpdateMissingUpc = async (e: React.FormEvent) => {
+    e.preventDefault();
+    try {
+      const res = await axios.patch(`/api/write-off/${writeOff._id}/items/${upcItem._id}/upc`, { upc_barcode: upcValue }, { headers: { Authorization: `Bearer ${localStorage.getItem('token')}`, 'X-Required-Permission': 'writeOff.requests.list.updateMissingItemsUpc' } });
+      setWriteOff(res.data);
+      setUpcItem(null);
+    } catch (err: any) { alert(err.response?.data?.error || 'Failed to update UPC.'); }
+  };
+
+  const handleResubmitMissing = async () => {
+    if (!window.confirm('Resubmit all missing items to CStore?')) return;
+    try {
+      const res = await axios.patch(`/api/write-off/${writeOff._id}/resubmit-missing`, {}, { headers: { Authorization: `Bearer ${localStorage.getItem('token')}`, 'X-Required-Permission': 'writeOff.requests.list.pushMissingItems' } });
+      setWriteOff(res.data);
+      window.alert('Your request is queued. Check back in a few minutes to view the current status.');
+    } catch (err: any) { alert(err.response?.data?.error || 'Failed to resubmit missing items.'); }
   };
 
   // Helper to determine if the page should be read-only
@@ -259,7 +303,31 @@ function RouteComponent() {
             </div>
           </div>
 
-          <div className="flex items-center">
+          <div className="flex items-center gap-3">
+            {showCostColumn && (
+              <div className="mr-2 text-right">
+                <div className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Total Write-Off Cost</div>
+                <div className="text-lg font-bold text-slate-800">${totalWriteOffCost.toFixed(2)}</div>
+              </div>
+            )}
+            {!isATE && !isBT && canViewSubmissionProof && writeOff.csoSubmissionProof && (
+              <Button
+                variant="outline"
+                className="h-12 rounded-xl font-bold text-xs uppercase tracking-wide"
+                onClick={() => window.open(`/cdn/download/${encodeURIComponent(writeOff.csoSubmissionProof)}`, '_blank', 'noopener,noreferrer')}
+              >
+                View Submission Proof
+              </Button>
+            )}
+            {!isATE && !isBT && canPushMissingItems && isSubmitted && hasFoundData && writeOff.items.some((item: any) => item.found === false) && (
+              <Button
+                variant="outline"
+                className="h-12 rounded-xl font-bold text-xs uppercase tracking-wide border-amber-300 text-amber-700 hover:bg-amber-50"
+                onClick={handleResubmitMissing}
+              >
+                Push Missing Items
+              </Button>
+            )}
             <Button
               // Button is disabled if:
               // 1. The overall list status isn't 'Complete' (meaning items are still pending)
@@ -511,6 +579,12 @@ function RouteComponent() {
                   <th className="px-6 py-4 text-xs font-semibold text-slate-500 uppercase tracking-wide">
                     Reason
                   </th>
+                  {showCostColumn && (
+                    <th className="px-6 py-4 text-xs font-semibold text-slate-500 uppercase tracking-wide text-right">Cost</th>
+                  )}
+                  {showMissingStatusColumn && (
+                    <th className="px-6 py-4 text-xs font-semibold text-slate-500 uppercase tracking-wide text-center">Found</th>
+                  )}
                   <th className="px-6 py-4 text-xs font-semibold text-slate-500 uppercase tracking-wide text-right">
                     Action
                   </th>
@@ -605,7 +679,29 @@ function RouteComponent() {
                       </div>
                     </td>
 
+                    {showCostColumn && (
+                      <td className="px-6 py-4 text-right font-semibold text-slate-700">
+                        ${Number(item.writeOffCost || 0).toFixed(2)}
+                      </td>
+                    )}
+                    {showMissingStatusColumn && (
+                      <td className="px-6 py-4 text-center">
+                        <span className={`px-2.5 py-1 rounded-full text-[10px] font-bold uppercase border ${item.found === true
+                          ? 'bg-green-100 border-green-200 text-green-700'
+                          : 'bg-red-100 border-red-200 text-red-700'
+                          }`}>
+                          {item.found === true ? 'Found' : 'Missing'}
+                        </span>
+                      </td>
+                    )}
+
                     <td className="px-6 py-4 text-right">
+                      <div className="flex items-center justify-end gap-2">
+                      {canUpdateMissingUpc && isLocked && item.found === false && (
+                        <button type="button" className="p-1.5 rounded-md text-slate-400 hover:text-slate-700 hover:bg-slate-100" onClick={(e) => { e.stopPropagation(); setUpcItem(item); setUpcValue(item.upc_barcode || ''); }} title="Update UPC">
+                          <Pencil size={16} />
+                        </button>
+                      )}
                       <button
                         type="button"
                         onClick={(e) => {
@@ -621,6 +717,7 @@ function RouteComponent() {
                           <Square size={28} className="text-slate-300" strokeWidth={2} />
                         )}
                       </button>
+                      </div>
                     </td>
                   </tr>
                 ))}
@@ -639,6 +736,17 @@ function RouteComponent() {
           <div className="flex justify-center items-center py-4">
             {barcodeValue && <Barcode value={barcodeValue} />}
           </div>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={!!upcItem} onOpenChange={(open) => !open && setUpcItem(null)}>
+        <DialogContent className="sm:max-w-sm">
+          <DialogHeader><DialogTitle>Update Missing UPC</DialogTitle></DialogHeader>
+          {upcItem && <form onSubmit={handleUpdateMissingUpc} className="space-y-4">
+            <p className="text-sm text-slate-500">Enter the corrected UPC for {upcItem.name}.</p>
+            <Input value={upcValue} onChange={(e) => setUpcValue(e.target.value)} autoFocus required />
+            <DialogFooter><Button type="submit">Save UPC</Button></DialogFooter>
+          </form>}
         </DialogContent>
       </Dialog>
 

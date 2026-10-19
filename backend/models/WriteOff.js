@@ -29,6 +29,8 @@ const WriteOffItemSchema = new mongoose.Schema({
     default: null
   },
   comments: { type: [CommentSchema], default: [] }, // Comments Schema
+  found: { type: Boolean },
+  writeOffCost: { type: Number },
 });
 
 const WriteOffListSchema = new mongoose.Schema({
@@ -39,6 +41,13 @@ const WriteOffListSchema = new mongoose.Schema({
   items: [WriteOffItemSchema],
   createdAt: { type: Date, default: Date.now },
   submitted: { type: Boolean, default: false },
+  submittedAt: { type: Date },
+  csoSubmissionStatus: {
+    type: String,
+    enum: ['pending', 'error', 'success'],
+    default: 'pending'
+  },
+  csoSubmissionProof: { type: String },
   listType: { type: String, enum: ['WO', 'ATE', 'BT'], default: 'WO' }
 });
 

@@ -1,7 +1,10 @@
 const fs = require("fs");
-const path = require("path");
 const { chromium } = require("playwright-extra");
 const stealth = require("puppeteer-extra-plugin-stealth")();
+const WriteOff = require("../models/WriteOff");
+const User = require("../models/User");
+const { pushNotification } = require("../services/notificationService");
+const { emailQueue } = require("../queues/emailQueue");
 
 chromium.use(stealth);
 
@@ -13,6 +16,8 @@ chromium.use(stealth);
  * @param {string} params.formattedDate - Date string in 'MM/DD/YYYY' format.
  * @param {string} params.formattedTime - Time string in 'HH:mm:ss' format.
  * @param {string} params.listNumber - List reference ID.
+ * @param {string} params.writeOffId - MongoDB WriteOff document ID.
+ * @param {Object} params.io - Socket.IO server instance.
  * @param {Array<Object>} params.items - Array of items from MongoDB [{ upc_barcode, reason, quantity }].
  */
 async function syncWriteOffToCStore({
@@ -20,8 +25,12 @@ async function syncWriteOffToCStore({
   formattedDate,
   formattedTime,
   listNumber,
+  writeOffId,
+  io,
   items = [],
+  missingOnly = false,
 }) {
+  if (missingOnly) items = items.filter((item) => item.found === false);
   console.log(
     `🤖 Starting CStore Write-Off Automation for List: ${listNumber}...`,
   );
@@ -55,6 +64,80 @@ async function syncWriteOffToCStore({
   });
 
   const page = await context.newPage();
+
+  async function updateWriteOff(update) {
+    if (!writeOffId) return;
+    await WriteOff.findByIdAndUpdate(writeOffId, update);
+  }
+
+  async function uploadProof(buffer, originalName) {
+    const formData = new FormData();
+    formData.append(
+      "file",
+      new Blob([buffer], { type: "image/png" }),
+      originalName,
+    );
+    const response = await fetch("http://cdn:5001/cdn/upload", {
+      method: "POST",
+      body: formData,
+    });
+    if (!response.ok) throw new Error(`CDN upload failed: ${response.status}`);
+    const result = await response.json();
+    return result.filename;
+  }
+
+  async function notifyAutomationIssue({ allItemsMissing, proofFilename, errorMessage }) {
+    try {
+      if (!allItemsMissing) {
+        const proofUrl = proofFilename
+          ? `https://app.gen7fuel.com/cdn/download/${proofFilename}`
+          : "";
+        await emailQueue.add(`writeoff-error-${Date.now()}`, {
+          to: "daksh@gen7fuel.com",
+          subject: `🚨 CStore Write-Off Automation Failure: ${listNumber}`,
+          html: `
+            <div style="font-family:Arial,sans-serif;max-width:600px;margin:0 auto;padding:20px;border:1px solid #f87171;border-radius:16px;background:#fff">
+              <h2 style="color:#991b1b">⚠️ CStore Write-Off Automation Failure</h2>
+              <p>A technical exception interrupted the automated CStore write-off process.</p>
+              <p><strong>List:</strong> ${listNumber}</p>
+              <p><strong>Error:</strong> ${errorMessage || "Unknown automation error"}</p>
+              ${proofUrl ? `<p><a href="${proofUrl}">View diagnostic screenshot</a></p>` : ""}
+            </div>`,
+        });
+        return;
+      }
+      if (!io) return;
+      const categoryUsers = await User.find({ is_active: true })
+        .populate("role", "role_name name")
+        .select("email role");
+      const categoryEmails = categoryUsers
+        .filter((user) => /inventory\s*team/i.test(user.role?.role_name || user.role?.name || ""))
+        .map((user) => user.email)
+        .filter(Boolean);
+      const recipients = allItemsMissing
+        ? ["daksh@gen7fuel.com", "grayson@gen7fuel.com", ...categoryEmails]
+        : ["daksh@gen7fuel.com"];
+
+      await pushNotification({
+        io,
+        recipientEmails: [...new Set(recipients)],
+        slug: "write-off-cso-automation-error",
+        subject: `CStore Write-Off Items Not Found: ${listNumber}`,
+        fieldValues: {
+          listNumber,
+          proofFilename,
+          message: "All write-off items were missing from CStoreOffice.",
+        },
+      });
+    } catch (notificationError) {
+      console.error("❌ Failed to send write-off automation notification:", notificationError);
+    }
+  }
+
+  await updateWriteOff({
+    submittedAt: new Date(),
+    csoSubmissionStatus: "pending",
+  });
   let resolveUnknownItem;
   let unknownItemDetected = false;
 
@@ -116,6 +199,19 @@ async function syncWriteOffToCStore({
     });
   }
 
+  async function readCompletedEntryCount() {
+    return page.evaluate(() =>
+      Array.from(
+        document.querySelectorAll("#oDGTableData > tbody > tr.dg-table-row"),
+      ).filter((entry) => {
+        const itemName = entry.querySelector(".selector_itemname")?.textContent.trim();
+        const quantity = entry.querySelector(".selector_quantity")?.textContent.trim();
+        const amount = entry.querySelector(".selector_amount")?.textContent.trim();
+        return Boolean(itemName && quantity && amount && amount !== "NaN");
+      }).length,
+    );
+  }
+
   try {
     // 1. Auth Gateway
     const loginUrl = "https://03.cstoreoffice.com";
@@ -172,16 +268,7 @@ async function syncWriteOffToCStore({
     // date already has saved entries. Move the grid cursor to the first empty
     // row so this batch is appended instead of editing the first existing row.
     const dataRows = page.locator("#oDGTableData > tbody > tr.dg-table-row");
-    const existingEntryCount = await page.evaluate(() =>
-      Array.from(
-        document.querySelectorAll("#oDGTableData > tbody > tr.dg-table-row"),
-      ).filter((entry) => {
-        const itemName = entry.querySelector(".selector_itemname")?.textContent.trim();
-        const quantity = entry.querySelector(".selector_quantity")?.textContent.trim();
-        const amount = entry.querySelector(".selector_amount")?.textContent.trim();
-        return Boolean(itemName && quantity && amount && amount !== "NaN");
-      }).length,
-    );
+    const existingEntryCount = await readCompletedEntryCount();
     if (existingEntryCount > 0) {
       // The last rendered grid row is the blank append row. Selecting it is
       // more reliable than fnDGMoveToRow(), which can leave the editor on row
@@ -199,6 +286,7 @@ async function syncWriteOffToCStore({
     await page.waitForTimeout(500);
 
     // 4. Loop and Process Each Item into the #oDGTableEdit Grid
+    let successfullyAddedCount = 0;
     for (let index = 0; index < items.length; index++) {
       const item = items[index];
       unknownItemDetected = false;
@@ -273,6 +361,10 @@ async function syncWriteOffToCStore({
       // the rest of an invalid row or trigger the valid-UPC alert.
       if (unknownItemDetected) {
         console.warn(`⚠️ UPC ${upc_barcode} was not found; skipping item.`);
+        await WriteOff.findOneAndUpdate(
+          { _id: writeOffId, "items._id": item._id },
+          { $set: { "items.$.found": false } },
+        );
         await page.evaluate(() => {
           if (typeof window.fnDGButtonRevert === "function") {
             window.fnDGButtonRevert();
@@ -281,6 +373,15 @@ async function syncWriteOffToCStore({
         await page.waitForTimeout(500);
         continue;
       }
+
+      await WriteOff.findOneAndUpdate(
+        { _id: writeOffId, "items._id": item._id },
+        {
+          $set: {
+            "items.$.found": true,
+          },
+        },
+      );
 
       // Step C: Select Reason
       if (reason) {
@@ -348,6 +449,29 @@ async function syncWriteOffToCStore({
         { value: formattedTime },
       );
 
+      // Total Retail Value is rendered in the active editor row after the
+      // quantity is entered. Read the exact amount cell before committing;
+      // the committed table does not consistently retain the same selectors.
+      await page.waitForFunction(() => {
+        const cell = document.querySelector(
+          '#oDGTableEdit td[ebindex="amount"]',
+        );
+        return Boolean(cell?.textContent.trim() && cell.textContent.trim() !== "NaN");
+      }, undefined, { timeout: 5000 });
+      const costText = await page
+        .locator('#oDGTableEdit td[ebindex="amount"]')
+        .textContent();
+      const parsedCost = Number.parseFloat(String(costText || "").replace(/,/g, ""));
+      await WriteOff.findOneAndUpdate(
+        { _id: writeOffId, "items._id": item._id },
+        {
+          $set: {
+            "items.$.found": true,
+            "items.$.writeOffCost": Number.isFinite(parsedCost) ? parsedCost : 0,
+          },
+        },
+      );
+
       // Step F: Save Item Row
       const previousCompletedEntryCount = await page.evaluate(() =>
         Array.from(
@@ -394,7 +518,9 @@ async function syncWriteOffToCStore({
         await page.waitForTimeout(500);
         continue;
       }
+
       console.log(`✅ Item ${upc_barcode} added to grid successfully.`);
+      successfullyAddedCount += 1;
     }
 
     // 5. Save the completed write-off in CStoreOffice.
@@ -407,7 +533,7 @@ async function syncWriteOffToCStore({
     await page.waitForTimeout(3000);
 
     await page.waitForFunction(
-      ({ todayBefore, mtdBefore }) => {
+      ({ todayBefore, mtdBefore, completedEntriesBeforeSave, successfullyAddedCount }) => {
         const toAmount = (value) => {
           const parsed = Number.parseFloat(String(value || "").replace(/,/g, ""));
           return Number.isFinite(parsed) ? parsed : 0;
@@ -421,10 +547,31 @@ async function syncWriteOffToCStore({
           return toAmount(inputs[inputs.length - 1]?.value);
         };
 
-        return getTotal("Today's Write-Offs:") > todayBefore &&
+        const completedEntriesAfterSave = Array.from(
+          document.querySelectorAll("#oDGTableData > tbody > tr.dg-table-row"),
+        ).filter((entry) => {
+          const itemName = entry.querySelector(".selector_itemname")?.textContent.trim();
+          const quantity = entry.querySelector(".selector_quantity")?.textContent.trim();
+          const amount = entry.querySelector(".selector_amount")?.textContent.trim();
+          return Boolean(itemName && quantity && amount && amount !== "NaN");
+        }).length;
+
+        const totalsIncreased =
+          getTotal("Today's Write-Offs:") > todayBefore &&
           getTotal("Write-Offs MTD:") > mtdBefore;
+        const entriesAdded = completedEntriesAfterSave > completedEntriesBeforeSave;
+
+        // If every requested UPC was unknown, there is intentionally no new
+        // row or total to verify. Treat that as a completed no-op instead of
+        // reporting a false automation failure.
+        return successfullyAddedCount === 0 || totalsIncreased || entriesAdded;
       },
-      { todayBefore: totalsBefore.today, mtdBefore: totalsBefore.mtd },
+      {
+        todayBefore: totalsBefore.today,
+        mtdBefore: totalsBefore.mtd,
+        completedEntriesBeforeSave: existingEntryCount,
+        successfullyAddedCount,
+      },
       { timeout: 15000 },
     );
 
@@ -434,22 +581,23 @@ async function syncWriteOffToCStore({
     );
     console.log(`💾 CStore write-off saved for List: ${listNumber}`);
 
-    // 6. Final Snapshot Capture (after Save)
-    const debugDir = path.join(process.cwd(), "temp_automation_snapshots");
-    if (!fs.existsSync(debugDir)) {
-      fs.mkdirSync(debugDir, { recursive: true });
+    // 6. Final Snapshot Capture (after Save), kept in memory and uploaded
+    // directly to CDN without writing a local project/temp file.
+    const timestamp = Date.now();
+    const screenshotBuffer = await page.screenshot({ fullPage: true });
+    const screenshotName = `WO_FINAL_${listNumber}_${targetStationCsoCode}_${timestamp}.png`;
+
+    const proofFilename = await uploadProof(screenshotBuffer, screenshotName);
+    const allItemsMissing = items.length > 0 && successfullyAddedCount === 0;
+    await updateWriteOff({
+      csoSubmissionStatus: allItemsMissing ? "error" : "success",
+      csoSubmissionProof: proofFilename,
+    });
+    if (allItemsMissing) {
+      await notifyAutomationIssue({ allItemsMissing: true, proofFilename });
     }
 
-    const timestamp = Date.now();
-    const screenshotPath = path.join(
-      debugDir,
-      `WO_FINAL_${listNumber}_${targetStationCsoCode}_${timestamp}.png`,
-    );
-
-    await page.screenshot({ path: screenshotPath, fullPage: true });
-    console.log(`📸 Final output snapshot saved locally to: ${screenshotPath}`);
-
-    return { success: true, screenshotPath };
+    return { success: true, proofFilename };
   } catch (error) {
     console.error(
       `❌ CStore Write-Off Sync Error for List ${listNumber}:`,
@@ -457,16 +605,21 @@ async function syncWriteOffToCStore({
     );
 
     try {
-      const debugDir = path.join(process.cwd(), "temp_automation_snapshots");
-      if (!fs.existsSync(debugDir)) fs.mkdirSync(debugDir, { recursive: true });
-      const errPath = path.join(
-        debugDir,
-        `ERR_WO_${listNumber}_${Date.now()}.png`,
-      );
-      await page.screenshot({ path: errPath, fullPage: true });
-      console.log(`📸 Failure snapshot saved to: ${errPath}`);
+      const errorBuffer = await page.screenshot({ fullPage: true });
+      const errorName = `ERR_WO_${listNumber}_${Date.now()}.png`;
+      const proofFilename = await uploadProof(errorBuffer, errorName);
+      await updateWriteOff({
+        csoSubmissionStatus: "error",
+        csoSubmissionProof: proofFilename,
+      });
+      await notifyAutomationIssue({
+        allItemsMissing: false,
+        proofFilename,
+        errorMessage: error.message,
+      });
     } catch (ssErr) {
       console.error("Could not write local failure snapshot:", ssErr);
+      await updateWriteOff({ csoSubmissionStatus: "error" });
     }
 
     throw error;

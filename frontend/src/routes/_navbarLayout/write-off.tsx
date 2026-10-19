@@ -38,7 +38,7 @@ function RouteComponent() {
 
         {/* Workflow tab button, shown only if user has workflow access */}
         {/* {access.component_order_rec_workflow && ( //markpoint */}
-        {access?.writeOff?.requests && (
+        {access?.writeOff?.requests?.value && (
           <Link to="/write-off/requests">
             <Button
               {...(isRequestsActive ? {} : { variant: 'outline' } as object)}
