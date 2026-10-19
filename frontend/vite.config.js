@@ -36,6 +36,14 @@ export default defineConfig({
       },
       workbox: {
         globPatterns: ['**/*.{js,css,html,ico,png,svg,woff2}'],
+        skipWaiting: true,
+        clientsClaim: true,
+        runtimeCaching: [
+          {
+            urlPattern: /\/version\.json(?:\?.*)?$/,
+            handler: 'NetworkOnly',
+          },
+        ],
         // `null` (the previous value) disables the SPA offline fallback
         // entirely: a hard reload/deep link, or a route whose code-split
         // chunk hasn't been fetched into memory yet in the current tab

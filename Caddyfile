@@ -21,6 +21,16 @@
     }
     
     root * /usr/share/caddy/dist_current
+
+    # The app shell and update metadata must always be revalidated. Hashed
+    # Vite assets remain cacheable because their filenames change per build.
+    @frontendUpdateFiles {
+        path /index.html /version.json /sw.js /workbox-*.js /manifest.webmanifest
+    }
+    header @frontendUpdateFiles Cache-Control "no-store, no-cache, must-revalidate, max-age=0"
+    header @frontendUpdateFiles Pragma "no-cache"
+    header @frontendUpdateFiles Expires "0"
+
     file_server
 
     # === AUTH routes ===

@@ -1086,8 +1086,15 @@ async function getTop10Bistro(pool, csoCode) {
     FROM [CSO].[Sales] s
     JOIN [CSO].[ItemBookCSO] item
         ON s.[Item_BK] = item.[Item_BK]
-    WHERE item.[Cat #] IN (130, 134)
-      AND s.[Station_Code] = @csoCode
+    WHERE s.[Station_Code] = @csoCode
+      AND (
+        item.[Cat #] IN (130, 134)
+        OR (
+          @csoCode = 62182
+          AND item.[Cat #] = 131
+          AND item.[CRDep] = 1001
+        )
+      )
       AND CAST(s.[Date] AS DATE) BETWEEN @StartDate AND @EndDate
     GROUP BY
         s.Station_Code,

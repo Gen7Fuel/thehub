@@ -54,6 +54,9 @@ type CashSummaryTotals = {
   fuelPriceOverrides: number
   parsedItemSales: number
   depositTotal: number
+  gst?: number
+  pst?: number
+  salesTax?: number
   pennyRounding: number
   totalSales: number
   afdCredit: number
@@ -319,6 +322,8 @@ function RouteComponent() {
             const afdGiftCard = num(totals.afdGiftCard)
             const kioskGiftCard = num(totals.kioskGiftCard)
             const loyaltyCoupons = num(totals.couponsAccepted) + num(totals.giftCertificates) + num(totals.cashOffCoupons) + num(totals.gasolineCoupons) + num(totals.otherCoupons)
+            const gst = num(totals.gst)
+            const rst = num(totals.pst)
             const salesTax = num(totals.salesTax);
 
             const gblMonerisFuelSales = totalSales - itemSales - reportedCanadianCash - missedCpl - salesTax
@@ -400,8 +405,12 @@ function RouteComponent() {
                         <td className="px-4 py-2.5 text-right font-medium text-gray-900 cursor-copy" onClick={copyCell}>${fmt2(storeSales)}</td>
                       </tr>
                       <tr className="border-b border-gray-100 bg-emerald-50">
-                        <td className="px-4 py-2.5 text-gray-600">Total Sales Tax (Information Purpose Only)</td>
-                        <td className="px-4 py-2.5 text-right font-medium text-gray-900 cursor-copy" onClick={copyCell}>${fmt2(salesTax)}</td>
+                        <td className="px-4 py-2.5 text-gray-600">GST (Information Purpose Only)</td>
+                        <td className="px-4 py-2.5 text-right font-medium text-gray-900 cursor-copy" onClick={copyCell}>${fmt2(gst)}</td>
+                      </tr>
+                      <tr className="border-b border-gray-100 bg-emerald-50">
+                        <td className="px-4 py-2.5 text-gray-600">RST (Information Purpose Only)</td>
+                        <td className="px-4 py-2.5 text-right font-medium text-gray-900 cursor-copy" onClick={copyCell}>${fmt2(rst)}</td>
                       </tr>
                       <tr className="border-b border-gray-100 bg-emerald-50">
                         <td className="px-4 py-2.5 text-gray-600">Lottery Sales (20440)</td>

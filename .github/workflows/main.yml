@@ -77,7 +77,12 @@ jobs:
           npm run build
 
       - id: version
-        run: echo "version=$(date +%Y%m%d%H%M%S)-${GITHUB_SHA::7}" >> $GITHUB_OUTPUT
+        run: |
+          VERSION="$(date -u +%Y%m%d%H%M%S)-${GITHUB_SHA::7}"
+          echo "version=${VERSION}" >> "$GITHUB_OUTPUT"
+          printf '{"version":"%s","commit":"%s","builtAt":"%s"}\n' \
+            "$VERSION" "${GITHUB_SHA}" "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
+            > frontend/dist/version.json
 
       - name: Upload Frontend Artifact
         uses: actions/upload-artifact@v4

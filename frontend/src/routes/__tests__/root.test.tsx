@@ -13,6 +13,10 @@ vi.mock('@/components/custom/PwaInstallBanner', () => ({
   PwaInstallBanner: () => null,
 }))
 
+vi.mock('@/components/custom/FrontendUpdateBanner', () => ({
+  FrontendUpdateBanner: () => null,
+}))
+
 vi.mock('@tanstack/react-router-devtools', () => ({
   TanStackRouterDevtools: () => null,
 }))

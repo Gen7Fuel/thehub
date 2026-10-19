@@ -18,9 +18,7 @@ import {
   parseYmd,
   fmtNumber,
   fmtNumberShowZero,
-  recomputeCashOnHand,
-  typeRank,
-  getSortKey,
+  orderSafesheetEntries,
   fmtDateDisplay,
 } from '@/lib/safesheetUtils'
 
@@ -249,7 +247,7 @@ export default function RouteComponent() {
     return isNaN(n) ? 0 : n
   }
 
-  // recomputeCashOnHand is imported from @/lib/safesheetUtils
+  // Balances are calculated by the API over the complete sheet.
 
   // Add Cash In via dialog
   const submitAddCashIn = async () => {
@@ -304,7 +302,7 @@ export default function RouteComponent() {
       if (site && from && to) {
         try {
           const ref = await fetch(
-            `/api/safesheets/site/${encodeURIComponent(site)}?from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}`,
+            `/api/safesheets/site/${encodeURIComponent(site)}?from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}&sortAssigned=${switchValue ? 'true' : 'false'}`,
             {
               headers: {
                 Authorization: `Bearer ${localStorage.getItem('token')}`,
@@ -378,7 +376,7 @@ export default function RouteComponent() {
       if (site && from && to) {
         try {
           const ref = await fetch(
-            `/api/safesheets/site/${encodeURIComponent(site)}?from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}`,
+            `/api/safesheets/site/${encodeURIComponent(site)}?from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}&sortAssigned=${switchValue ? 'true' : 'false'}`,
             {
               headers: {
                 Authorization: `Bearer ${localStorage.getItem('token')}`,
@@ -409,7 +407,7 @@ export default function RouteComponent() {
   // UPDATE ENTRY
   const updateEntry = async (
     entryId: string,
-    field: 'description' | 'cashIn' | 'cashExpenseOut' | 'cashDepositBank' | 'photo',
+    field: 'description' | 'cashIn' | 'cashExpenseOut' | 'cashDepositBank' | 'photo' | 'assignedDate',
     value: any,
   ) => {
     if (!site) return
@@ -440,7 +438,7 @@ export default function RouteComponent() {
       if (site && from && to) {
         try {
           const ref = await fetch(
-            `/api/safesheets/site/${encodeURIComponent(site)}?from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}`,
+            `/api/safesheets/site/${encodeURIComponent(site)}?from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}&sortAssigned=${switchValue ? 'true' : 'false'}`,
             {
               headers: {
                 Authorization: `Bearer ${localStorage.getItem('token')}`,
@@ -537,16 +535,6 @@ export default function RouteComponent() {
       value = value === '' ? 0 : Number(value.replace(/,/g, ''))
     }
 
-    // optimistic UI
-    setSheet((prev) => {
-      if (!prev) return prev
-      const updatedEntries = prev.entries.map((entry) =>
-        entry._id === entryId ? { ...entry, [field]: value } : entry,
-      )
-      const recomputed = recomputeCashOnHand(updatedEntries, prev.initialBalance)
-      return { ...prev, entries: recomputed }
-    })
-
     await updateEntry(entryId, field, value)
     setEditingCell(null)
   }
@@ -590,14 +578,13 @@ export default function RouteComponent() {
     setPhotoTargetEntry(null)
   }
 
-  // format and sort display entries
+  // Sort by the displayed calendar day and recalculate balances in that order.
   const formattedEntries = useMemo(() => {
     if (!sheet) return [];
-    const entries = sheet.entries.map((e, idx) => {
+    return orderSafesheetEntries(sheet.entries, sheet.initialBalance, switchValue).map((e) => {
       const d = new Date(e.date);
       return {
         ...e,
-        _originalIndex: idx,
         dateDisplay: fmtDateDisplay(d),
         cashInDisplay: fmtNumber(e.cashIn),
         cashExpenseOutDisplay: fmtNumber(e.cashExpenseOut),
@@ -606,19 +593,6 @@ export default function RouteComponent() {
       };
     });
 
-    if (!switchValue) return entries;
-
-    // getSortKey and typeRank are imported from @/lib/safesheetUtils
-    // Sort by sort key, then by type rank, then by original index
-    return [...entries].sort((a, b) => {
-      const ka = getSortKey(a);
-      const kb = getSortKey(b);
-      if (ka !== kb) return ka.localeCompare(kb);
-      const ra = typeRank(a);
-      const rb = typeRank(b);
-      if (ra !== rb) return ra - rb;
-      return a._originalIndex - b._originalIndex;
-    });
   }, [sheet, switchValue]);
 
   return (
@@ -929,7 +903,7 @@ export default function RouteComponent() {
                                   )}
                                     {/* Calendar Modal */}
                                     <Dialog
-                                      open={showCalendarModal}
+                                      open={showCalendarModal && calendarModalEntryId === e._id}
                                       onOpenChange={(open) => {
                                         setShowCalendarModal(open);
                                         if (!open) setCalendarModalEntryId(null);
@@ -943,33 +917,7 @@ export default function RouteComponent() {
                                             // Format as YYYY-MM-DD (local date only)
                                             const d = new Date(date);
                                             const dateStr = `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
-                                            try {
-                                              const body = { assignedDate: dateStr };
-                                              const res = await fetch(`/api/safesheets/site/${site}/entries/${calendarModalEntryId}`, {
-                                                method: 'PUT',
-                                                headers: {
-                                                  'Content-Type': 'application/json',
-                                                  Authorization: `Bearer ${localStorage.getItem('token')}`,
-                                                  'X-Required-Permission': 'accounting.safesheet',
-                                                },
-                                                body: JSON.stringify(body),
-                                              });
-                                              if (res.ok) {
-                                                setSheet((prev) => {
-                                                  if (!prev) return prev;
-                                                  return {
-                                                    ...prev,
-                                                    entries: prev.entries.map(entry =>
-                                                      entry._id === calendarModalEntryId
-                                                        ? { ...entry, assignedDate: dateStr }
-                                                        : entry
-                                                    )
-                                                  };
-                                                });
-                                              }
-                                            } catch (err) {
-                                              console.error('Failed to update assigned date', err);
-                                            }
+                                            await updateEntry(calendarModalEntryId, 'assignedDate', dateStr);
                                             setShowCalendarModal(false);
                                             setCalendarModalEntryId(null);
                                         }}
