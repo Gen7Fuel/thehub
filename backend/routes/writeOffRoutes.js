@@ -1,14 +1,86 @@
 const express = require('express');
 const router = express.Router();
 const WriteOff = require('../models/WriteOff');
+const WriteOffCart = require('../models/WriteOffCart');
+const User = require('../models/User');
 const Location = require('../models/Location');
 const { getBulkOnHandQtyCSO } = require('../services/sqlService');
 const { emailQueue } = require('../queues/emailQueue');
 const { pushNotification } = require('../services/notificationService');
 const { writeOffAutomationQueue } = require("../queues/writeOffAutomationQueue");
+const { getPg } = require("../config/pg");
 const moment = require("moment-timezone");
 
 // GET /api/write-off/list?site=RANKIN
+router.get('/work-list', async (req, res) => {
+  try {
+    if (!req.query.site) return res.status(400).json({ error: 'Site is required' });
+    const workList = await WriteOffCart.findOne({ site: req.query.site }).lean();
+    const location = await Location.findOne({ $or: [{ stationName: req.query.site }, { site: req.query.site }] }).select('timezone').lean();
+    res.json({ ...(workList || { site: req.query.site, items: [] }), siteTimezone: location?.timezone || 'America/Toronto' });
+  } catch (error) {
+    res.status(500).json({ error: 'Error fetching write-off work list' });
+  }
+});
+
+router.post('/work-list', async (req, res) => {
+  try {
+    const { site, item } = req.body;
+    if (!site || !item) return res.status(400).json({ error: 'Site and item are required' });
+    const workList = await WriteOffCart.findOneAndUpdate(
+      { site },
+      { $push: { items: item } },
+      { new: true, upsert: true, runValidators: true, setDefaultsOnInsert: true }
+    );
+    res.status(201).json(workList);
+  } catch (error) {
+    res.status(400).json({ error: error.message });
+  }
+});
+
+router.put('/work-list/:itemId', async (req, res) => {
+  try {
+    const { site, ...updates } = req.body;
+    if (!site) return res.status(400).json({ error: 'Site is required' });
+    const allowed = ['gtin', 'upc_barcode', 'name', 'qty', 'onHandAtWriteOff', 'reason', 'isManualEntry', 'expiryDate', 'markdownAction'];
+    const itemUpdates = Object.fromEntries(Object.entries(updates).filter(([key]) => allowed.includes(key)));
+    const workList = await WriteOffCart.findOneAndUpdate(
+      { site, 'items._id': req.params.itemId },
+      { $set: Object.fromEntries(Object.entries(itemUpdates).map(([key, value]) => [`items.$.${key}`, value])) },
+      { new: true, runValidators: true }
+    );
+    if (!workList) return res.status(404).json({ error: 'Work-list item not found' });
+    res.json(workList);
+  } catch (error) {
+    res.status(400).json({ error: error.message });
+  }
+});
+
+router.delete('/work-list/:itemId', async (req, res) => {
+  try {
+    if (!req.query.site) return res.status(400).json({ error: 'Site is required' });
+    const workList = await WriteOffCart.findOneAndUpdate(
+      { site: req.query.site },
+      { $pull: { items: { _id: req.params.itemId } } },
+      { new: true }
+    );
+    if (!workList) return res.status(404).json({ error: 'Work list not found' });
+    res.json(workList);
+  } catch (error) {
+    res.status(500).json({ error: 'Error removing work-list item' });
+  }
+});
+
+router.delete('/work-list', async (req, res) => {
+  try {
+    if (!req.query.site) return res.status(400).json({ error: 'Site is required' });
+    const workList = await WriteOffCart.findOneAndUpdate({ site: req.query.site }, { $set: { items: [] } }, { new: true });
+    res.json(workList || { site: req.query.site, items: [] });
+  } catch (error) {
+    res.status(500).json({ error: 'Error clearing write-off work list' });
+  }
+});
+
 router.get('/list', async (req, res) => {
   const { site, listType, from, to } = req.query; // Accept listType (WO or ATE)
 
@@ -48,8 +120,22 @@ router.get('/:id', async (req, res) => {
     const record = await WriteOff.findById(req.params.id);
     if (!record) return res.status(404).json({ error: "Record not found" });
 
-    res.json(record);
+    const values = [...new Set((record.items || []).flatMap((item) => [item.upc_barcode, item.gtin].filter(Boolean).map(String)))];
+    const recordLocation = await Location.findOne({ $or: [{ stationName: record.site }, { site: record.site }] }).select('_id');
+    const itemBookSite = recordLocation?._id?.toString() || String(record.site);
+    const rows = values.length ? await getPg()('item_bk')
+      .select('site', 'upc', 'upc_barcode', 'gtin', 'description', 'image_url')
+      .where('site', itemBookSite)
+      .where((query) => query.whereIn('upc', values).orWhereIn('upc_barcode', values).orWhereIn('gtin', values)) : [];
+    const byValue = new Map();
+    rows.forEach((row) => [row.upc, row.upc_barcode, row.gtin].filter(Boolean).forEach((value) => byValue.set(String(value), row)));
+    const items = record.items.map((item) => {
+      const book = byValue.get(String(item.upc_barcode)) || byValue.get(String(item.gtin));
+      return { ...item.toObject(), image_url: book?.image_url || null, itemBookName: book?.description || null, itemBookGtin: book?.gtin || null };
+    });
+    res.json({ ...record.toObject(), items });
   } catch (error) {
+    console.error('Error enriching write-off item details:', error);
     res.status(500).json({ error: "Error fetching record details" });
   }
 });
@@ -142,60 +228,14 @@ router.post('/', async (req, res) => {
       createdLists.push(btList.listNumber);
     }
 
-    //     // --- EMAIL QUEUE PLACEHOLDER ---
-    //     // Logic for adding to email queue will go here later
-    //     // here need seperate email templates if the list has write off items then only it will be sent to the category teams
-    //     // else no email to category team and manager email if both then 2 links if one the one link
-    //     // --------------------------------
+    // The work list is only a draft. Clear it after all requested write-off
+    // documents have been saved successfully so a failed submission does not
+    // destroy the user's draft.
+    await WriteOffCart.findOneAndUpdate(
+      { site },
+      { $set: { items: [] } }
+    );
 
-    //     const location = await Location.findOne({ stationName: site });
-    //     const storeEmail = location?.email;
-
-    //     if (!storeEmail) {
-    //       console.error(`No email found for site: ${site}. Email skipped.`);
-    //     } else {
-
-    //       const emailRecipients = {
-    //         store: storeEmail,
-    //         primaryCC: ["daksh@gen7fuel.com", "grayson@gen7fuel.com"],
-    //         categoryTeam: ["daksh@gen7fuel.com", "vasu@gen7fuel.com", "Saeid@gen7fuel.com", "zyannic@bosservicesltd.com", "grayson@gen7fuel.com"]
-    //       };
-    //       // --- LOGIC FOR STORE (Receives Combined WO, ATE, BT) ---
-    //       if (woMongoId || ateMongoId || btMongoId) {
-    //         await emailQueue.add("sendWriteOffEmail", {
-    //           to: emailRecipients.store,
-    //           subject: `Inventory Lists Generated: ${site}`,
-    //           html: generateEmailHTML(site, woMongoId, ateMongoId, btMongoId),
-    //           cc: emailRecipients.primaryCC
-    //         });
-    //       }
-
-    //       // --- LOGIC FOR CATEGORY TEAM (Receives ONLY ATE and BT) ---
-    //       // We trigger this only if at least one of them exists
-    //       if (ateMongoId || btMongoId) {
-    //         const catSubject = (ateMongoId && btMongoId)
-    //           ? `Bistro & ATE Review Required: ${site}`
-    //           : (ateMongoId ? `ATE Review Required: ${site}` : `Bistro Approval Required: ${site}`);
-
-    //         await emailQueue.add("sendWriteOffEmail", {
-    //           // to: "daksh@gen7fuel.com", // Primary contact
-    //           to: "grayson@gen7fuel.com", // Primary contact
-    //           subject: catSubject,
-    //           html: generateEmailHTML(site, null, ateMongoId, btMongoId), // woMongoId is explicitly null
-    //           cc: emailRecipients.categoryTeam.filter(e => e !== "grayson@gen7fuel.com")
-    //         });
-    //       }
-    //     }
-    //     res.status(201).json({
-    //       success: true,
-    //       lists: createdLists
-    //     });
-
-    //   } catch (err) {
-    //     console.error("Creation Error:", err);
-    //     res.status(500).json({ error: "Server failed to process write-off lists" });
-    //   }
-    // });
     // 8. Fetch Location for Manager Emails
     const location = await Location.findOne({ site });
 
@@ -212,9 +252,17 @@ router.post('/', async (req, res) => {
       storeTo = location.email;
     }
 
+    const categoryUsers = await User.find({ is_active: true })
+      .populate("role", "role_name name")
+      .select("email role");
+    const categoryEmails = categoryUsers
+      .filter((user) => /inventory\s*team/i.test(user.role?.role_name || user.role?.name || ""))
+      .map((user) => user.email)
+      .filter(Boolean);
+
     const emailRecipients = {
       primaryCC: ["daksh@gen7fuel.com", "grayson@gen7fuel.com"],
-      categoryTeam: ["daksh@gen7fuel.com", "vasu@gen7fuel.com", "frank@gen7fuel.com", "Saeid@gen7fuel.com", "zyannic@bosservicesltd.com", "grayson@gen7fuel.com"]
+      categoryTeam: categoryEmails
     };
     // --- NOTIFICATION TRIGGER LOGIC ---
     const io = req.app.get("io");
