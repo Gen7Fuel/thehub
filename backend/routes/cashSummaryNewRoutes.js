@@ -430,9 +430,9 @@ router.get('/over-short', async (req, res) => {
       // B. Calculate Adjusted Reported Cash (Expected)
       let adjustedReported = totals.report_canadian_cash;
 
-      const isWavers = ['Wavers West', 'Wavers East'].includes(site);
+      const isManitoba = ['Wavers West', 'Wavers East', 'Sioux Valley'].includes(site);
 
-      if (sellsLottery && lotteryMap[dateStr] && !isWavers) {
+      if (sellsLottery && lotteryMap[dateStr] && !isManitoba) {
         const lotto = lotteryMap[dateStr];
 
         const onlineOverShort = (totals.shiftOnlineTotal || 0) - (
