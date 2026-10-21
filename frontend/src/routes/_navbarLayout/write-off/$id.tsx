@@ -43,7 +43,7 @@ function RouteComponent() {
   // that display-only metadata when applying their responses locally.
   const mergeWriteOffResponse = (next: any) => {
     if (!next || !Array.isArray(next.items)) return next;
-    const existingItems = new Map(
+    const existingItems = new Map<string, any>(
       (writeOff.items || []).map((item: any) => [String(item._id), item])
     );
     return {

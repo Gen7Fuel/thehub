@@ -312,6 +312,7 @@ router.get('/list', async (req, res) => {
 router.post('/request-again', async (req, res) => {
   const site = String(req.body?.site || '').trim();
   const date = String(req.body?.date || '').trim();
+  const requesterEmail = req.user?.email;
 
   try {
     const location = await Location.findOne(
@@ -324,7 +325,7 @@ router.post('/request-again', async (req, res) => {
     // Identify Recipients
     const managerEmails = location.managerEmails || [];
     const primaryRecipients = managerEmails.length > 0 ? managerEmails : [location.email];
-    const internalCCs = ['daksh@gen7fuel.com', 'mohammad@gen7fuel.com'];
+    const internalCCs = [requesterEmail, 'daksh@gen7fuel.com', 'mohammad@gen7fuel.com'];
 
     // Dynamic data for the template placeholders
     const redirectUrl = `https://app.gen7fuel.com/fuel-rec?site=${encodeURIComponent(location.stationName)}&date=${date}`;
