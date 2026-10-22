@@ -2,6 +2,7 @@
 import { createFileRoute, useNavigate, Link } from '@tanstack/react-router'
 import { useEffect, useState } from 'react'
 import { SitePicker } from '@/components/custom/sitePicker'
+import { useAuth } from '@/context/AuthContext'
 
 type sftpSearch = {
   site: string
@@ -64,6 +65,8 @@ export const Route = createFileRoute('/_navbarLayout/sftp')({
 })
 
 function RouteComponent() {
+  const { user } = useAuth()
+  const canViewJsonApiResponse = Boolean(user?.access?.viewJsonApiResponse)
   const { files } = Route.useLoaderData() as { files: sftpFile[] }
   const [content, setContent] = useState<string | null>(null)
   const [metrics, setMetrics] = useState<sftpMetrics| null>(null)
@@ -187,6 +190,14 @@ function RouteComponent() {
             <option value="br">BR files</option>
           </select>
         </div>
+        {canViewJsonApiResponse && (
+          <Link
+            to="/sftp-shift-summary"
+            className="rounded border px-3 py-2 text-sm hover:bg-muted"
+          >
+            Shift Summary JSON
+          </Link>
+        )}
       </div>
       <div className="flex gap-6">
         {/* Sidebar */}
