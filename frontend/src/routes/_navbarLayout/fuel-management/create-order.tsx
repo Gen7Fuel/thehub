@@ -307,6 +307,7 @@ function CreateFuelOrder() {
     rackId: string,
     currentStationId?: string,
     passedCarrierId?: string,
+    notifyCarrierFallback = false,
   ) => {
     try {
       const rackRes = await axios.get(`/api/fuel-racks/${rackId}`, authHeader);
@@ -324,8 +325,16 @@ function CreateFuelOrder() {
       setCarriers(rackCarriers);
 
       // 1. Logistics Defaults (Supplier & Badge)
+      // The rack endpoints populate defaultSupplier, so it may be either an
+      // ObjectId string or the populated supplier object. Normalize it before
+      // matching against the supplier list; otherwise we incorrectly fall
+      // back to the first supplier for racks with multiple suppliers.
+      const defaultSupplierId =
+        typeof rack.defaultSupplier === "object"
+          ? rack.defaultSupplier?._id
+          : rack.defaultSupplier;
       const defaultSup =
-        rackSuppliers.find((s: any) => s._id === rack.defaultSupplier) ||
+        rackSuppliers.find((s: any) => s._id === defaultSupplierId) ||
         rackSuppliers[0];
       const defaultBadge =
         defaultSup?.supplierBadges?.find((b: any) => b.isDefault) ||
@@ -346,6 +355,12 @@ function CreateFuelOrder() {
       const finalCarrierId = isAllowed
         ? carrierToVerify
         : rackCarriers[0]?._id || "";
+
+      if (notifyCarrierFallback && carrierToVerify && !isAllowed) {
+        alert(
+          "The default carrier of the station is not associated with the selected rack. Changing the carrier to an available carrier for that rack.",
+        );
+      }
 
       setFormData((prev) => {
         // 3. Update all active splits with the new Rack's dynamically evaluated grades
@@ -1913,7 +1928,7 @@ function CreateFuelOrder() {
                   <Select
                     value={formData.rackId}
                     onValueChange={(v) => {
-                      handleRackChange(v);
+                      handleRackChange(v, undefined, undefined, true);
                       setPreSelectedFields((prev) =>
                         prev.filter((f) => f !== "rackId"),
                       );
