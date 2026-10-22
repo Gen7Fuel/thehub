@@ -8,7 +8,7 @@ const { mockNavigate, mockUseSearch, mockUseLoaderData, mockUser } = vi.hoisted(
   mockNavigate: vi.fn(),
   mockUseSearch: vi.fn().mockReturnValue({ site: '', type: 'WO' }),
   mockUseLoaderData: vi.fn().mockReturnValue({ data: [], accessDenied: false }),
-  mockUser: { email: 'test@example.com', location: 'Rankin', access: { writeOff: { create: true, requests: true } } },
+  mockUser: { email: 'test@example.com', location: 'Rankin', access: { writeOff: { create: true, requests: { value: true } } } },
 }))
 
 // ─── Module mocks ──────────────────────────────────────────────────────────────
@@ -149,7 +149,7 @@ describe('Write-Off index — permission-based redirect', () => {
   })
 
   it('navigates to /write-off/requests when user only has requests permission', async () => {
-    mockUser.access = { writeOff: { create: false, requests: true } } as any
+    mockUser.access = { writeOff: { create: false, requests: { value: true } } } as any
     renderWithSuspense(<IndexComponent />)
     await waitFor(
       () => expect(mockNavigate).toHaveBeenCalledWith(
@@ -158,7 +158,7 @@ describe('Write-Off index — permission-based redirect', () => {
       { timeout: 5000 }
     )
     // Restore
-    mockUser.access = { writeOff: { create: true, requests: true } } as any
+    mockUser.access = { writeOff: { create: true, requests: { value: true } } } as any
   })
 
   it('navigates to /no-access when user has no permissions', async () => {
@@ -171,7 +171,7 @@ describe('Write-Off index — permission-based redirect', () => {
       { timeout: 5000 }
     )
     // Restore
-    mockUser.access = { writeOff: { create: true, requests: true } } as any
+    mockUser.access = { writeOff: { create: true, requests: { value: true } } } as any
   })
 
   it('passes site from user.location in search params', async () => {
