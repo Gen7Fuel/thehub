@@ -23,7 +23,7 @@ interface WriteOffItem {
   gtin?: string;
   upc_barcode: string;
   name: string;
-  qty: number;
+  qty: number | '';
   onHandAtWriteOff?: number;
   reason: string;
   isManualEntry?: boolean;
@@ -424,8 +424,8 @@ function RouteComponent() {
                       <Input
                         type="number"
                         min="1"
-                        value={formData.qty}
-                        onChange={(e) => setFormData({ ...formData, qty: Number(e.target.value) })}
+                        value={formData.qty ?? ''}
+                        onChange={(e) => setFormData({ ...formData, qty: e.target.value === '' ? '' : Number(e.target.value) })}
                       />
                     </div>
 
@@ -545,7 +545,7 @@ function RouteComponent() {
             <div className="flex items-center gap-3">{formData.name && <div className="h-14 w-14 rounded-lg overflow-hidden border bg-white flex items-center justify-center">{formData.image_url ? <img src={formData.image_url} alt={formData.name} className="h-full w-full object-cover" /> : <ImageIcon className="h-5 w-5 text-slate-400" />}</div>}<p className="font-semibold text-slate-900">{formData.name || 'Manual product entry'}</p></div>
             <Input placeholder="Product name" value={formData.name || ''} onChange={(e) => setFormData({ ...formData, name: e.target.value })} />
             {entryMode === 'regular' && <Input placeholder="UPC barcode" value={formData.upc_barcode || ''} onChange={(e) => setFormData({ ...formData, upc_barcode: e.target.value })} />}
-            <div className="grid grid-cols-2 gap-3"><Input type="number" min="1" placeholder="Quantity" value={formData.qty || 1} onChange={(e) => setFormData({ ...formData, qty: Number(e.target.value) })} /><Select value={formData.reason} onValueChange={(v) => setFormData({ ...formData, reason: v })}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent>{REASONS.filter((r) => entryMode === 'bistro' ? r !== 'About to Expire' : true).map((r) => <SelectItem key={r} value={r}>{r}</SelectItem>)}</SelectContent></Select></div>
+            <div className="grid grid-cols-2 gap-3"><Input type="number" min="1" placeholder="Quantity" value={formData.qty ?? ''} onChange={(e) => setFormData({ ...formData, qty: e.target.value === '' ? '' : Number(e.target.value) })} /><Select value={formData.reason} onValueChange={(v) => setFormData({ ...formData, reason: v })}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent>{REASONS.filter((r) => entryMode === 'bistro' ? r !== 'About to Expire' : true).map((r) => <SelectItem key={r} value={r}>{r}</SelectItem>)}</SelectContent></Select></div>
             {formData.reason === 'About to Expire' && <DatePicker date={expiryDate} setDate={setExpiryDate as any} />}
             <Button type="button" className="w-full h-11" onClick={addItemToList} disabled={!formData.name || !formData.upc_barcode}>Add to list</Button>
           </div>}
